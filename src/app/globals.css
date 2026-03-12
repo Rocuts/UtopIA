@@ -1,26 +1,145 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-cyan: #00e5ff;
+  --color-brand-blue: #0A192F;
+  --color-brand-amber: #F59E0B;
+  --color-brand-bg: #030712;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core Colors */
+  --background: #030712; /* Deep space black */
+  --foreground: #f8fafc; /* Slate 50 */
+  
+  /* Brand accents */
+  --cyan-primary: #00e5ff;
+  --cyan-glow: rgba(0, 229, 255, 0.2);
+  --blue-deep: #0f172a;
+  --amber-accent: #f59e0b;
+  
+  /* Surfaces / Glassmorphism */
+  --surface-base: var(--background);
+  --surface-panel: rgba(15, 23, 42, 0.4);
+  --surface-panel-hover: rgba(30, 41, 59, 0.6);
+  --surface-border: rgba(148, 163, 184, 0.08);
+  --surface-border-hover: rgba(148, 163, 184, 0.15);
+  --surface-border-solid: rgba(148, 163, 184, 0.2);
+  
+  /* Spacing & Radii */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+  --radius-full: 9999px;
+
+  /* Typography Scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  --text-5xl: 3rem;
+  --text-6xl: 3.75rem;
+  --text-7xl: 4.5rem;
+
+  /* Z-index layers */
+  --z-bg: -10;
+  --z-canvas: -5;
+  --z-base: 1;
+  --z-glass: 10;
+  --z-sticky: 40;
+  --z-modal: 50;
+  --z-popover: 100;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Respect user preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+/* Global Glass Panel Utility */
+.glass-panel {
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.glass-panel:hover {
+  background: var(--surface-panel-hover);
+  border-color: var(--surface-border-hover);
+}
+
+/* Gradients */
+.text-gradient {
+  background: linear-gradient(to right, var(--foreground), #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.text-gradient-cyan {
+  background: linear-gradient(to right, var(--cyan-primary), #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Focus Visibility for A11y */
+*:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 4px;
+}
+
+::selection {
+  background: var(--cyan-glow);
+  color: var(--cyan-primary);
+}
+
+/* Custom Markdown Styling for the Chat AI Responses */
+.prose {
+  color: var(--foreground);
+}
+.prose p {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+.prose strong {
+  color: #fff;
+  font-weight: 600;
+}
+.prose ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.prose ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.prose li {
+  margin-bottom: 0.5rem;
+}
+.prose a {
+  color: var(--cyan-primary);
+  text-decoration: underline;
 }
