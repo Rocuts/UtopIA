@@ -1,5 +1,5 @@
 /**
- * Tavily Web Search — AI-optimized search for legal documentation.
+ * Tavily Web Search — AI-optimized search for Colombian tax and accounting documentation.
  * Used as a fallback when local RAG doesn't have sufficient context.
  *
  * Tavily returns pre-ranked, AI-ready snippets with relevance scores,
@@ -19,22 +19,21 @@ export interface WebSearchResponse {
   searchedAt: string;
 }
 
-// Trusted legal domains for domain-filtered searches
-const LEGAL_DOMAINS = [
-  'law.cornell.edu',
-  'congress.gov',
-  'supremecourt.gov',
-  'dol.gov',
-  'eeoc.gov',
-  'osha.gov',
-  'uscis.gov',
-  'nlrb.gov',
-  'ftc.gov',
-  'justice.gov',
-  'usa.gov',
-  'findlaw.com',
-  'nolo.com',
-  'legalmatch.com',
+// Trusted Colombian tax, accounting, and regulatory domains
+const TAX_ACCOUNTING_DOMAINS = [
+  'dian.gov.co',
+  'secretariasenado.gov.co',
+  'funcionpublica.gov.co',
+  'minhacienda.gov.co',
+  'superfinanciera.gov.co',
+  'ctcp.gov.co',
+  'jcc.gov.co',
+  'supersociedades.gov.co',
+  'actualicese.com',
+  'gerencie.com',
+  'ambitojuridico.com',
+  'consultorcontable.com',
+  'accounter.co',
 ];
 
 export async function searchWeb(
@@ -48,14 +47,14 @@ export async function searchWeb(
   const apiKey = process.env.TAVILY_API_KEY;
 
   if (!apiKey) {
-    console.warn('⚠️ TAVILY_API_KEY not set. Web search disabled.');
+    console.warn('TAVILY_API_KEY not set. Web search disabled.');
     return { results: [], query, searchedAt: new Date().toISOString() };
   }
 
   const {
     maxResults = 5,
     searchDepth = 'advanced',
-    includeDomains = LEGAL_DOMAINS,
+    includeDomains = TAX_ACCOUNTING_DOMAINS,
   } = options ?? {};
 
   try {
@@ -64,7 +63,7 @@ export async function searchWeb(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         api_key: apiKey,
-        query: `US labor law: ${query}`,
+        query: `normativa tributaria contable Colombia: ${query}`,
         search_depth: searchDepth,
         include_domains: includeDomains,
         max_results: maxResults,

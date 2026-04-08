@@ -13,9 +13,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ context });
   } catch (error: any) {
-    console.error("❌ Error in RAG tool endpoint:", error);
+    console.error("Error in RAG tool endpoint:", error);
     return NextResponse.json(
-      { error: "Internal server error searching legal documents." },
+      { error: "Internal server error searching tax and accounting documents." },
       { status: 500 }
     );
   }

@@ -9,73 +9,145 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ ERROR: OPENAI_API_KEY not found in .env.local.");
+  console.error("ERROR: OPENAI_API_KEY not found in .env.local.");
   process.exit(1);
 }
 
-const docsPath = path.join(process.cwd(), 'src', 'data', 'legal_docs');
+const docsPath = path.join(process.cwd(), 'src', 'data', 'tax_docs');
 const vectorStorePath = path.join(process.cwd(), 'src', 'data', 'vector_store');
 
-// Map filenames to human-readable contextual prefixes.
-// This is a 2025-2026 best practice ("contextual retrieval") —
-// each chunk carries a short summary of its parent document so the
-// embedding and the LLM both know which law/regulation the chunk belongs to.
-const DOC_CONTEXT_MAP: Record<string, string> = {
-  'flsa_summary_2026.md':
-    'From the Fair Labor Standards Act (FLSA) — covers minimum wage, overtime, tipped employees, exempt/non-exempt classification, child labor, and wage theft.',
-  'eeoc_summary_2026.md':
-    'From the EEOC / Title VII / ADA / ADEA — covers employment discrimination, harassment, hostile work environment, wrongful termination, and reasonable accommodations.',
-  'osha_summary_2026.md':
-    'From OSHA — covers workplace safety rights, injury reporting, workers compensation, whistleblower protections, and employer safety obligations.',
-  'immigration_employment_2026.md':
-    'From Immigration & Employment Law — covers worker protections regardless of status, U/T Visas, H-1B/H-2A/H-2B visas, I-9/E-Verify, and ICE enforcement policies.',
-  'personal_injury_auto_accidents_2026.md':
-    'From Personal Injury & Auto Accidents — covers fault/no-fault states, PIP, comparative negligence, rideshare liability, statute of limitations, and undocumented immigrant rights in accident cases.',
-};
+const docsOnly = process.argv.includes('--docs-only');
 
-function getContextPrefix(filename: string): string {
-  return DOC_CONTEXT_MAP[filename] || `From document: ${filename}`;
+// ---------------------------------------------------------------------------
+// Frontmatter parser (no external dependency)
+// ---------------------------------------------------------------------------
+
+function parseFrontmatter(text: string): { metadata: Record<string, string>; content: string } {
+  const match = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  if (!match) return { metadata: {}, content: text };
+  const metadata: Record<string, string> = {};
+  match[1].split('\n').forEach(line => {
+    const [key, ...rest] = line.split(':');
+    if (key && rest.length) metadata[key.trim()] = rest.join(':').trim();
+  });
+  return { metadata, content: match[2] };
 }
 
-async function ingestData() {
-  console.log('📚 Starting legal document ingestion (U.S. 2026)...');
-  console.log('🔄 Using contextual retrieval prefixes for improved search accuracy.\n');
+// ---------------------------------------------------------------------------
+// Context prefix from frontmatter metadata
+// ---------------------------------------------------------------------------
 
-  const docs: Document[] = [];
-  const files = fs.readdirSync(docsPath).filter(f => f.endsWith('.md'));
+function getContextPrefix(metadata: Record<string, string>, filename: string): string {
+  const { type, number, year, entity } = metadata;
 
-  const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 1000,
-    chunkOverlap: 250,
-  });
-
-  for (const file of files) {
-    const filePath = path.join(docsPath, file);
-    const text = fs.readFileSync(filePath, 'utf-8');
-    const contextPrefix = getContextPrefix(file);
-
-    const textChunks = await textSplitter.splitText(text);
-
-    for (const chunk of textChunks) {
-      // Prepend contextual prefix so the embedding captures document-level meaning
-      const enrichedContent = `[${contextPrefix}]\n\n${chunk}`;
-      docs.push(
-        new Document({
-          pageContent: enrichedContent,
-          metadata: {
-            source: file,
-            context: contextPrefix,
-          },
-        })
-      );
+  if (type && number && year) {
+    switch (type) {
+      case 'ley':
+        return `Ley ${number} de ${year} — Normativa tributaria colombiana aprobada por el Congreso.`;
+      case 'decreto':
+        return `Decreto ${number} de ${year} — Decreto reglamentario expedido por la Presidencia.`;
+      case 'resolucion':
+        if (entity === 'dian') {
+          return `Resolución DIAN ${number} de ${year} — Regulación administrativa de la DIAN.`;
+        }
+        return `Resolución ${entity ? entity.toUpperCase() + ' ' : ''}${number} de ${year}.`;
+      case 'circular':
+        return `Circular ${entity ? entity.toUpperCase() + ' ' : ''}${number} de ${year} — Instrucciones operativas.`;
+      case 'decision':
+        return `Decisión CAN ${number} — Normativa de la Comunidad Andina de Naciones.`;
+      case 'estatuto':
+        return 'Estatuto Tributario de Colombia — Código fiscal principal.';
+      default:
+        break;
     }
-
-    console.log(`  ✅ ${file} → ${textChunks.length} chunks (with context prefix)`);
   }
 
-  console.log(`\n📄 ${files.length} documents loaded → ${docs.length} enriched chunks total.`);
+  if (type === 'estatuto') {
+    return 'Estatuto Tributario de Colombia — Código fiscal principal.';
+  }
 
-  console.log('🧠 Generating embeddings via OpenAI (text-embedding-3-small)...');
+  // Fallback: use title from frontmatter or filename
+  if (metadata.title) return metadata.title;
+  return `Documento: ${filename}`;
+}
+
+// ---------------------------------------------------------------------------
+// Main ingestion
+// ---------------------------------------------------------------------------
+
+async function ingestData() {
+  console.log('Starting Colombian tax/accounting document ingestion...');
+  console.log('Using contextual retrieval prefixes from frontmatter.\n');
+
+  if (docsOnly) {
+    console.log('Mode: --docs-only (processing tax_docs only)\n');
+  }
+
+  if (!fs.existsSync(docsPath)) {
+    console.log(`Creating tax_docs directory at: ${docsPath}`);
+    fs.mkdirSync(docsPath, { recursive: true });
+  }
+
+  const allFiles = fs.readdirSync(docsPath).filter(f => f.endsWith('.md') || f.endsWith('.txt'));
+
+  if (allFiles.length === 0) {
+    console.log('No documents found in tax_docs directory. Please add Colombian tax documents and run again.');
+    console.log(`Expected path: ${docsPath}`);
+    return;
+  }
+
+  console.log(`Found ${allFiles.length} files in tax_docs/\n`);
+
+  const textSplitter = new RecursiveCharacterTextSplitter({
+    chunkSize: 1500,
+    chunkOverlap: 300,
+  });
+
+  const docs: Document[] = [];
+  let processed = 0;
+  let skipped = 0;
+
+  for (const file of allFiles) {
+    try {
+      const filePath = path.join(docsPath, file);
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const { metadata, content } = parseFrontmatter(raw);
+      const contextPrefix = getContextPrefix(metadata, file);
+
+      const textChunks = await textSplitter.splitText(content);
+
+      for (const chunk of textChunks) {
+        const enrichedContent = `[${contextPrefix}]\n\n${chunk}`;
+        docs.push(
+          new Document({
+            pageContent: enrichedContent,
+            metadata: {
+              source: file,
+              docType: metadata.type || 'unknown',
+              entity: metadata.entity || 'unknown',
+              year: metadata.year || 'unknown',
+              number: metadata.number || '',
+              context: contextPrefix,
+            },
+          })
+        );
+      }
+
+      processed++;
+
+      // Progress log every 20 files
+      if (processed % 20 === 0) {
+        console.log(`  Processed ${processed}/${allFiles.length} files (${docs.length} chunks so far)...`);
+      }
+    } catch (err) {
+      skipped++;
+      console.warn(`  WARN: Skipping ${file} — ${(err as Error).message}`);
+    }
+  }
+
+  console.log(`\nProcessed ${processed} files (${skipped} skipped) -> ${docs.length} enriched chunks total.`);
+
+  console.log('Generating embeddings via OpenAI (text-embedding-3-small)...');
   const embeddings = new OpenAIEmbeddings({
     modelName: 'text-embedding-3-small',
   });
@@ -87,10 +159,12 @@ async function ingestData() {
   }
 
   await vectorStore.save(vectorStorePath);
-  console.log(`💾 Vector database persisted at: ${vectorStorePath}`);
-  console.log('🚀 RAG system ready. Chunks include contextual prefixes for better retrieval.');
+  console.log(`\nVector database persisted at: ${vectorStorePath}`);
+  console.log(`Total chunks: ${docs.length}`);
+  console.log('RAG system ready. Chunks include contextual prefixes for better retrieval.');
 }
 
 ingestData().catch((error) => {
-  console.error('❌ Error during ingestion:', error);
+  console.error('Error during ingestion:', error);
+  process.exit(1);
 });

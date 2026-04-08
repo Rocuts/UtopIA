@@ -32,16 +32,58 @@ export function invalidateVectorStore(): void {
 }
 
 /**
- * Perform similarity search with configurable k.
+ * Perform similarity search with configurable k and optional metadata filters.
  * Returns formatted context string ready for LLM consumption.
  */
-export async function searchDocuments(query: string, k: number = 5): Promise<string> {
+export async function searchDocuments(
+  query: string,
+  k: number = 8,
+  filter?: { docType?: string; entity?: string; year?: string }
+): Promise<string> {
   const store = await getVectorStore();
-  const results = await store.similaritySearch(query, k);
 
-  if (results.length === 0) return 'No relevant legal documents found.';
+  let results;
+
+  if (filter && (filter.docType || filter.entity || filter.year)) {
+    results = await store.similaritySearch(query, k, (doc) => {
+      if (filter.docType && doc.metadata.docType !== filter.docType) return false;
+      if (filter.entity && doc.metadata.entity !== filter.entity) return false;
+      if (filter.year && doc.metadata.year !== filter.year) return false;
+      return true;
+    });
+  } else {
+    results = await store.similaritySearch(query, k);
+  }
+
+  if (results.length === 0) return 'No relevant tax or accounting documents found.';
 
   return results
-    .map(doc => `Source: [${doc.metadata.source || 'Legal Document'}]\n${doc.pageContent}`)
+    .map(doc => `Source: [${doc.metadata.source || 'Tax/Accounting Document'}]\n${doc.pageContent}`)
     .join('\n\n---\n\n');
+}
+
+/**
+ * Returns aggregate statistics about the vector store contents.
+ */
+export async function getStoreStats(): Promise<{
+  totalDocs: number;
+  byType: Record<string, number>;
+  byEntity: Record<string, number>;
+}> {
+  const store = await getVectorStore();
+  const allDocs = store.docstore._docs;
+
+  const byType: Record<string, number> = {};
+  const byEntity: Record<string, number> = {};
+  let totalDocs = 0;
+
+  for (const [, doc] of allDocs) {
+    totalDocs++;
+    const docType = doc.metadata.docType || 'unknown';
+    const entity = doc.metadata.entity || 'unknown';
+    byType[docType] = (byType[docType] || 0) + 1;
+    byEntity[entity] = (byEntity[entity] || 0) + 1;
+  }
+
+  return { totalDocs, byType, byEntity };
 }

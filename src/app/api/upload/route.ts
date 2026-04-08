@@ -11,26 +11,47 @@ const vectorStorePath = path.join(process.cwd(), 'src', 'data', 'vector_store');
 const uploadsPath = path.join(process.cwd(), 'src', 'data', 'uploads');
 
 // Supported file types and their text extractors
-function extractText(buffer: Buffer, filename: string): string {
+async function extractText(buffer: Buffer, filename: string): Promise<string> {
   const ext = path.extname(filename).toLowerCase();
 
   if (ext === '.txt' || ext === '.md') {
     return buffer.toString('utf-8');
   }
 
-  // For other text-based formats, attempt UTF-8 decode
-  if (['.csv', '.json', '.html', '.xml'].includes(ext)) {
+  // Text-based formats: attempt UTF-8 decode
+  if (['.csv', '.json', '.xml'].includes(ext)) {
     return buffer.toString('utf-8');
   }
 
-  throw new Error(`Unsupported file type: ${ext}. Supported: .txt, .md, .csv, .json, .html, .xml`);
+  // PDF support via pdf-parse
+  if (ext === '.pdf') {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    const result = await parser.getText();
+    return result.text;
+  }
+
+  // Excel support via xlsx
+  if (ext === '.xlsx') {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheets: string[] = [];
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(sheet);
+      sheets.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+    }
+    return sheets.join('\n\n');
+  }
+
+  throw new Error(`Unsupported file type: ${ext}. Supported: .txt, .md, .csv, .json, .pdf, .xlsx, .xml`);
 }
 
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
-    const contextLabel = (formData.get('context') as string) || 'User uploaded document';
+    const contextLabel = (formData.get('context') as string) || 'Documento cargado por el usuario';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
@@ -45,7 +66,7 @@ export async function POST(req: Request) {
     let text: string;
 
     try {
-      text = extractText(buffer, file.name);
+      text = await extractText(buffer, file.name);
     } catch (err: any) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
@@ -61,7 +82,7 @@ export async function POST(req: Request) {
     });
 
     const chunks = await textSplitter.splitText(text);
-    const contextPrefix = `[User Document: ${contextLabel} — File: ${file.name}]`;
+    const contextPrefix = `[Documento Contable/Tributario: ${contextLabel} — Archivo: ${file.name}]`;
 
     const docs = chunks.map(
       (chunk) =>
@@ -111,7 +132,7 @@ export async function POST(req: Request) {
       message: `Document "${file.name}" processed into ${docs.length} chunks and added to the knowledge base.`,
     });
   } catch (error: any) {
-    console.error('❌ Error in upload API:', error);
+    console.error('Error in upload API:', error);
     return NextResponse.json(
       { error: 'Internal server error processing file upload.' },
       { status: 500 }

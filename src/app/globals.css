@@ -1,31 +1,38 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-cyan: #00e5ff;
-  --color-brand-blue: #0A192F;
-  --color-brand-amber: #F59E0B;
-  --color-brand-bg: #030712;
+  --color-brand-primary: #1e3a5f;
+  --color-brand-blue: #111827;
+  --color-brand-accent: #d4a017;
+  --color-brand-bg: #0a0f1a;
 }
 
 :root {
   /* Core Colors */
-  --background: #030712; /* Deep space black */
-  --foreground: #f8fafc; /* Slate 50 */
-  
+  --background: #111827; /* Warm dark */
+  --foreground: #f8fafc; /* Warm white */
+
   /* Brand accents */
-  --cyan-primary: #00e5ff;
-  --cyan-glow: rgba(0, 229, 255, 0.2);
-  --blue-deep: #0f172a;
-  --amber-accent: #f59e0b;
-  
+  --primary: #1e3a5f;
+  --primary-light: #2d5a8e;
+  --accent: #d4a017;
+  --accent-light: #f0c040;
+  --accent-glow: rgba(212, 160, 23, 0.2);
+  --blue-deep: #0a0f1a;
+
+  /* Status colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
   /* Surfaces / Glassmorphism */
   --surface-base: var(--background);
-  --surface-panel: rgba(15, 23, 42, 0.4);
-  --surface-panel-hover: rgba(30, 41, 59, 0.6);
+  --surface-panel: rgba(17, 24, 39, 0.6);
+  --surface-panel-hover: rgba(30, 58, 95, 0.4);
   --surface-border: rgba(148, 163, 184, 0.08);
-  --surface-border-hover: rgba(148, 163, 184, 0.15);
+  --surface-border-hover: rgba(212, 160, 23, 0.2);
   --surface-border-solid: rgba(148, 163, 184, 0.2);
-  
+
   /* Spacing & Radii */
   --radius-xs: 0.25rem;
   --radius-sm: 0.5rem;
@@ -96,8 +103,8 @@ body {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
-.text-gradient-cyan {
-  background: linear-gradient(to right, var(--cyan-primary), #60a5fa);
+.text-gradient-accent {
+  background: linear-gradient(to right, var(--accent), var(--accent-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -105,13 +112,13 @@ body {
 
 /* Focus Visibility for A11y */
 *:focus-visible {
-  outline: 2px solid var(--cyan-primary);
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 
 ::selection {
-  background: var(--cyan-glow);
-  color: var(--cyan-primary);
+  background: var(--accent-glow);
+  color: var(--accent);
 }
 
 /* Custom Markdown Styling for the Chat AI Responses */
@@ -140,6 +147,6 @@ body {
   margin-bottom: 0.5rem;
 }
 .prose a {
-  color: var(--cyan-primary);
+  color: var(--accent);
   text-decoration: underline;
 }

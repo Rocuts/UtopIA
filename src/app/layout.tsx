@@ -3,23 +3,22 @@ import './globals.css';
 import SmoothScroll from '@/components/layout/SmoothScroll';
 import { LanguageProvider } from '@/context/LanguageContext';
 
-// (Metadata remains unchanged, just layout component changes)
 export const metadata: Metadata = {
-  title: 'AiVocate | U.S. Labor Law Guidance for Every Worker',
-  description: 'Confidential, AI-powered guidance on U.S. labor rights for all workers. Workplace injuries, wage disputes, discrimination, and wrongful termination — available 24/7 in English and Spanish.',
-  metadataBase: new URL('https://aivocate.com'),
+  title: 'UtopIA | Consultoría Contable & Tributaria Potenciada por IA',
+  description: 'Consultoría contable y tributaria potenciada por inteligencia artificial para firmas contables en Colombia. Defensa DIAN, devoluciones, due diligence y análisis financiero.',
+  metadataBase: new URL('https://utopia-ai.co'),
   alternates: {
     canonical: '/',
     languages: {
+      'es-CO': '/',
       'en-US': '/',
-      'es-US': '/',
     },
   },
   openGraph: {
-    title: 'AiVocate | U.S. Labor Law Guidance for Every Worker',
-    description: 'Confidential, AI-powered guidance on U.S. labor rights for all workers. Workplace injuries, wage claims, discrimination, and more — available 24/7.',
-    url: 'https://aivocate.com',
-    siteName: 'AiVocate',
+    title: 'UtopIA | Consultoría Contable & Tributaria Potenciada por IA',
+    description: 'Defensa tributaria, devoluciones, due diligence y análisis financiero — con la precisión de la IA y el criterio de un experto. Para firmas contables en Colombia.',
+    url: 'https://utopia-ai.co',
+    siteName: 'UtopIA',
     images: [
       {
         url: '/og-image.jpg',
@@ -27,14 +26,14 @@ export const metadata: Metadata = {
         height: 630,
       },
     ],
-    locale: 'en_US',
-    alternateLocale: 'es_US',
+    locale: 'es_CO',
+    alternateLocale: 'en_US',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'AiVocate | U.S. Labor Law Guidance for Every Worker',
-    description: 'Confidential guidance on U.S. labor rights for all workers. Workers\' compensation, wage disputes, discrimination, and wrongful termination.',
+    title: 'UtopIA | Consultoría Contable & Tributaria Potenciada por IA',
+    description: 'Defensa tributaria, devoluciones, due diligence y análisis financiero para firmas contables en Colombia. Potenciado por inteligencia artificial.',
     images: ['/twitter-image.jpg'],
   },
   robots: {
@@ -56,8 +55,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="antialiased font-sans" suppressHydrationWarning>
-      <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)] selection:bg-[var(--cyan-glow)] selection:text-[var(--cyan-primary)]">
+    <html lang="es" className="antialiased font-sans" suppressHydrationWarning>
+      <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)] selection:bg-[var(--accent)]/20 selection:text-[var(--accent)]">
         <LanguageProvider>
           <SmoothScroll>
             {children}

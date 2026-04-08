@@ -42,3 +42,9 @@ next-env.d.ts
 
 # user uploaded documents
 src/data/uploads/
+
+# Source PDFs (337MB+ legal docs — processed into vector store, not needed in repo)
+/Documentacion/
+
+# Generated vector store (rebuild with: npm run db:ingest)
+src/data/vector_store/

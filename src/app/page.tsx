@@ -8,10 +8,11 @@ import { FAQ } from "@/components/sections/FAQ";
 import { CTA } from "@/components/sections/CTA";
 import { Footer } from "@/components/layout/Footer";
 import { ChatWidget } from "@/components/sections/ChatWidget";
+import { ScrollGradient } from "@/components/layout/ScrollGradient";
 
 export default function Home() {
   return (
-    <>
+    <ScrollGradient>
       <Header />
       <main className="flex flex-col min-h-screen">
         <Hero />
@@ -24,6 +25,6 @@ export default function Home() {
         <CTA />
       </main>
       <Footer />
-    </>
+    </ScrollGradient>
   );
 }

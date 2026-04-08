@@ -11,9 +11,9 @@ const GlassPanel = forwardRef<HTMLDivElement, GlassPanelProps>(
       <div
         ref={ref}
         className={cn(
-          "bg-[rgba(15,23,42,0.4)] border border-[rgba(148,163,184,0.08)] backdrop-blur-[12px] shadow-[0_4px_30px_rgba(0,0,0,0.1)] rounded-2xl",
+          "bg-[rgba(10,15,26,0.5)] border border-[rgba(212,160,23,0.08)] backdrop-blur-[12px] shadow-[0_4px_30px_rgba(0,0,0,0.15)] rounded-2xl",
           {
-            "transition-all duration-300 hover:bg-[rgba(30,41,59,0.6)] hover:border-[rgba(148,163,184,0.15)]": hoverEffect,
+            "transition-all duration-300 hover:bg-[rgba(30,58,95,0.3)] hover:border-[rgba(212,160,23,0.2)]": hoverEffect,
           },
           className
         )}
