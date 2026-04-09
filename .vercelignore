@@ -1,0 +1,8 @@
+node_modules
+.next
+Documentacion
+src/data/vector_store
+src/data/tax_docs
+src/data/uploads
+*.pem
+.env*
