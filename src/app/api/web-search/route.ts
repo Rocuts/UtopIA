@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
+import { webSearchRequestSchema } from '@/lib/validation/schemas';
 
 /**
  * POST /api/web-search
@@ -8,14 +9,14 @@ import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
  */
 export async function POST(req: Request) {
   try {
-    const { query } = await req.json();
+    const body = await req.json();
+    const parsed = webSearchRequestSchema.safeParse(body);
 
-    if (!query) {
-      return NextResponse.json({ error: 'Query is required.' }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query.' }, { status: 400 });
     }
 
-    const searchResponse = await searchWeb(query);
-
+    const searchResponse = await searchWeb(parsed.data.query);
     const formattedContext = formatSearchResultsForLLM(searchResponse.results);
 
     return NextResponse.json({
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
       searchedAt: searchResponse.searchedAt,
     });
   } catch (error) {
-    console.error('❌ Error in web search route:', error);
+    console.error('Web search error.');
     return NextResponse.json(
       { error: 'Internal server error during web search.' },
       { status: 500 }

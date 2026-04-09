@@ -7,6 +7,7 @@ import { Mic, Send, Bot, User, Volume2, ShieldAlert, Trash2, X, PhoneOff, Paperc
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { useLanguage } from '@/context/LanguageContext';
 import { useRealtimeAPI } from '@/hooks/useRealtimeAPI';
 import { RiskGauge } from '@/components/ui/RiskGauge';
@@ -21,6 +22,18 @@ import { Canvas } from '@react-three/fiber';
 import { Environment, ContactShadows } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { InteractiveOrb } from '@/components/ui/InteractiveOrb';
+
+// Safe UUID/ID generator fallback for non-secure contexts (LAN access without HTTPS)
+const generateId = () => {
+  try {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+  } catch (err) {
+    // Ignore and use fallback
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+};
 
 interface ChatMessage {
   id: string;
@@ -48,6 +61,7 @@ export function ChatWidget() {
   const [useCase, setUseCase] = useState('dian-defense');
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voiceMode, setVoiceMode] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -82,12 +96,24 @@ export function ChatWidget() {
   }, [language]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    // Use rAF to ensure DOM has painted the new content before scrolling
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
   };
 
+  // Scroll on every message change and when typing indicator appears
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping, messageLog]);
+  }, [messages, isTyping]);
+
+  // Also scroll after images/content inside messages finish rendering
+  useEffect(() => {
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
+  }, [messages]);
 
   const simulateResponse = async (newMessages: ChatMessage[]) => {
     setIsTyping(true);
@@ -108,7 +134,7 @@ export function ChatWidget() {
       const data = await response.json();
 
       const assistantMsg: ChatMessage = {
-        id: Math.random().toString(),
+        id: generateId(),
         role: 'assistant',
         content: data.content,
         webSearchUsed: data.webSearchUsed || false,
@@ -138,7 +164,7 @@ export function ChatWidget() {
       setMessages(prev => [
         ...prev,
         {
-          id: Math.random().toString(),
+          id: generateId(),
           role: 'assistant',
           content: t.chatAi.errorMsg
         }
@@ -152,7 +178,7 @@ export function ChatWidget() {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const userMsg: ChatMessage = { id: Math.random().toString(), role: 'user', content: input };
+    const userMsg: ChatMessage = { id: generateId(), role: 'user', content: input };
     const newMessages = [...messages, userMsg];
 
     setMessages(newMessages);
@@ -171,7 +197,7 @@ export function ChatWidget() {
   };
 
   const handleClearChat = () => {
-    setMessages([{ id: Math.random().toString(), role: 'assistant', content: INITIAL_MSG[language] }]);
+    setMessages([{ id: generateId(), role: 'assistant', content: INITIAL_MSG[language] }]);
     setLatestRiskAssessment(null);
   };
 
@@ -217,22 +243,22 @@ export function ChatWidget() {
       setMessages(prev => [
         ...prev,
         {
-          id: Math.random().toString(),
+          id: generateId(),
           role: 'assistant',
           content: language === 'es'
             ? `He procesado su documento **"${file.name}"** (${data.chunks} fragmentos). Ahora puedo responder preguntas basadas en su contenido. ¿Qué desea consultar?`
             : `I've processed your document **"${file.name}"** (${data.chunks} chunks). I can now answer questions based on its content. What would you like to know?`,
         },
       ]);
-    } catch (error: any) {
+    } catch {
       setMessages(prev => [
         ...prev,
         {
-          id: Math.random().toString(),
+          id: generateId(),
           role: 'assistant',
           content: language === 'es'
-            ? `No pude procesar el archivo: ${error.message}`
-            : `Could not process file: ${error.message}`,
+            ? 'No pude procesar el archivo. Verifica el formato e intenta de nuevo.'
+            : 'Could not process the file. Please check the format and try again.',
         },
       ]);
     } finally {
@@ -329,17 +355,8 @@ export function ChatWidget() {
         )}
 
         {/* Dynamic Main View: Text Chat vs Voice Orb */}
-        <div className="flex-1 overflow-y-auto flex flex-col relative bg-[var(--background)] styled-scrollbar scroll-smooth">
-          <AnimatePresence mode="wait">
-            {voiceMode ? (
-              <motion.div
-                key="voice"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.4 }}
-                className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#0a0f1a]/20 to-[#d4a017]/5"
-              >
+        {voiceMode ? (
+          <div data-lenis-prevent className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#0a0f1a]/20 to-[#d4a017]/5 overflow-y-auto">
                 {/* 3D Orb Canvas */}
                 <div className="w-full h-[350px] mb-6 relative rounded-2xl overflow-hidden bg-[#0a0f1a] border border-[#d4a017]/20">
                   <Canvas camera={{ position: [0, 0, 5], fov: 45 }} gl={{ antialias: false }}>
@@ -397,15 +414,15 @@ export function ChatWidget() {
                     <PhoneOff className="w-6 h-6" />
                   </Button>
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="chat"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                className="flex-1 p-4 sm:p-6 flex flex-col gap-6 w-full"
-              >
+          </div>
+        ) : (
+          <div
+            ref={scrollContainerRef}
+            data-lenis-prevent
+            className="flex-1 min-h-0 overflow-y-auto styled-scrollbar"
+            style={{ overscrollBehavior: 'contain' }}
+          >
+            <div className="p-4 sm:p-6 flex flex-col gap-6 w-full">
                 {messages.map((msg) => (
                   <motion.div
                     key={msg.id}
@@ -435,7 +452,7 @@ export function ChatWidget() {
                               </span>
                             </div>
                           )}
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                             {msg.content}
                           </ReactMarkdown>
                           {msg.riskAssessment && (
@@ -476,11 +493,10 @@ export function ChatWidget() {
                     </div>
                   </motion.div>
                 )}
-                <div ref={messagesEndRef} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+        )}
 
         {/* Chat Input */}
         {!voiceMode && (

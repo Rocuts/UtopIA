@@ -40,25 +40,38 @@ export async function searchDocuments(
   k: number = 8,
   filter?: { docType?: string; entity?: string; year?: string }
 ): Promise<string> {
+  // Bounds-check inputs
+  const safeQuery = query.slice(0, 2000);
+  const safeK = Math.max(1, Math.min(k, 20));
+
   const store = await getVectorStore();
 
   let results;
 
   if (filter && (filter.docType || filter.entity || filter.year)) {
-    results = await store.similaritySearch(query, k, (doc) => {
+    results = await store.similaritySearch(safeQuery, safeK, (doc) => {
       if (filter.docType && doc.metadata.docType !== filter.docType) return false;
       if (filter.entity && doc.metadata.entity !== filter.entity) return false;
       if (filter.year && doc.metadata.year !== filter.year) return false;
       return true;
     });
   } else {
-    results = await store.similaritySearch(query, k);
+    results = await store.similaritySearch(safeQuery, safeK);
   }
 
-  if (results.length === 0) return 'No relevant tax or accounting documents found.';
+  if (results.length === 0) {
+    return 'NO_RESULTS: No se encontraron documentos relevantes en la base de conocimiento local. No inventes información — usa search_web o indica al usuario que no encontraste resultados confiables.';
+  }
 
   return results
-    .map(doc => `Source: [${doc.metadata.source || 'Tax/Accounting Document'}]\n${doc.pageContent}`)
+    .map((doc, i) => {
+      const m = doc.metadata;
+      const source = m.source || 'Documento tributario';
+      const docType = m.docType && m.docType !== 'unknown' ? ` | Tipo: ${m.docType}` : '';
+      const year = m.year && m.year !== 'unknown' ? ` | Año: ${m.year}` : '';
+      const entity = m.entity && m.entity !== 'unknown' ? ` | Entidad: ${m.entity.toUpperCase()}` : '';
+      return `[Resultado ${i + 1} — Fuente: ${source}${docType}${year}${entity}]\n${doc.pageContent}`;
+    })
     .join('\n\n---\n\n');
 }
 

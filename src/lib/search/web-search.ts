@@ -57,16 +57,20 @@ export async function searchWeb(
     includeDomains = TAX_ACCOUNTING_DOMAINS,
   } = options ?? {};
 
+  // Clamp query length to prevent API abuse
+  const safeQuery = query.slice(0, 1000);
+
   try {
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10_000), // 10s timeout
       body: JSON.stringify({
         api_key: apiKey,
-        query: `normativa tributaria contable Colombia: ${query}`,
+        query: `normativa tributaria contable Colombia: ${safeQuery}`,
         search_depth: searchDepth,
         include_domains: includeDomains,
-        max_results: maxResults,
+        max_results: Math.min(maxResults, 10),
         include_answer: false,
         include_raw_content: false,
       }),
@@ -74,7 +78,7 @@ export async function searchWeb(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Tavily API error: ${response.status}`, errorText);
+      console.error(`Tavily API error: ${response.status}`);
       return { results: [], query, searchedAt: new Date().toISOString() };
     }
 
@@ -95,7 +99,7 @@ export async function searchWeb(
       searchedAt: new Date().toISOString(),
     };
   } catch (error) {
-    console.error('Web search failed:', error);
+    console.error('Web search failed.');
     return { results: [], query, searchedAt: new Date().toISOString() };
   }
 }

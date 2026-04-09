@@ -33,10 +33,23 @@ export function useRealtimeAPI(): RealtimeAPIResult {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<Uint8Array | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
 
   const stopSession = useCallback(() => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    // Stop all media tracks (release microphone)
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    // Clean up audio element
+    if (audioElRef.current) {
+      audioElRef.current.srcObject = null;
+      audioElRef.current = null;
     }
     if (pcRef.current) {
       pcRef.current.close();
@@ -46,6 +59,9 @@ export function useRealtimeAPI(): RealtimeAPIResult {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
+    analyserRef.current = null;
+    dataArrayRef.current = null;
+    dcRef.current = null;
     setIsConnected(false);
     setIsConnecting(false);
     setVolume(0);
@@ -82,6 +98,7 @@ export function useRealtimeAPI(): RealtimeAPIResult {
       // Ensure audio plays when model speaks
       const audioEl = document.createElement('audio');
       audioEl.autoplay = true;
+      audioElRef.current = audioEl;
       pc.ontrack = (e) => {
         if (e.streams[0]) {
           audioEl.srcObject = e.streams[0];
@@ -104,20 +121,33 @@ export function useRealtimeAPI(): RealtimeAPIResult {
       let ms: MediaStream;
       try {
         ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (e) {
+      } catch {
         throw new Error('Microphone permission denied');
       }
+      mediaStreamRef.current = ms;
       pc.addTrack(ms.getTracks()[0]);
 
       // 4. Setup Data Channel for Events/Tools
       const dc = pc.createDataChannel('oai-events');
       dcRef.current = dc;
       dc.onmessage = async (e) => {
-        const realtimeEvent = JSON.parse(e.data);
+        let realtimeEvent;
+        try {
+          realtimeEvent = JSON.parse(e.data);
+        } catch {
+          console.error('Invalid realtime event data');
+          return;
+        }
 
         // Handle tool calls
         if (realtimeEvent.type === 'response.function_call_arguments.done') {
-          const args = JSON.parse(realtimeEvent.arguments);
+          let args;
+          try {
+            args = JSON.parse(realtimeEvent.arguments);
+          } catch {
+            console.error('Invalid tool call arguments');
+            return;
+          }
 
           if (realtimeEvent.name === 'search_tax_docs') {
             setMessageLog(prev => [...prev, `📚 RAG: ${args.query}`]);
@@ -206,6 +236,30 @@ export function useRealtimeAPI(): RealtimeAPIResult {
             };
             dc.send(JSON.stringify(eventInfo));
             dc.send(JSON.stringify({ type: 'response.create' }));
+          } else if (realtimeEvent.name === 'get_tax_calendar') {
+            setMessageLog(prev => [...prev, `📅 Calendario: dígito ${args.nitLastDigit}, año ${args.year}`]);
+
+            try {
+              const calendarRes = await fetch('/api/tools/calendar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(args)
+              });
+              const calendarData = await calendarRes.json();
+
+              const eventInfo = {
+                type: 'conversation.item.create',
+                item: {
+                  type: 'function_call_output',
+                  call_id: realtimeEvent.call_id,
+                  output: JSON.stringify(calendarData)
+                }
+              };
+              dc.send(JSON.stringify(eventInfo));
+              dc.send(JSON.stringify({ type: 'response.create' }));
+            } catch (err) {
+              console.error("Error running tax calendar tool", err);
+            }
           }
         }
       };
@@ -272,6 +326,21 @@ export function useRealtimeAPI(): RealtimeAPIResult {
                   },
                   required: ['topic']
                 }
+              },
+              {
+                type: 'function',
+                name: 'get_tax_calendar',
+                description: 'Obtiene el calendario tributario colombiano personalizado para un NIT específico. Realiza múltiples búsquedas web dirigidas para encontrar las fechas EXACTAS de vencimiento. Usar cuando el usuario pregunte por calendario tributario, plazos, o fechas de vencimiento. EXTRAER el último dígito del NIT de lo que el usuario dijo.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    nitLastDigit: { type: 'number', description: 'Último dígito del NIT (0-9), ANTES del dígito de verificación. Ej: NIT 860001317-4 → último dígito es 7.' },
+                    year: { type: 'number', description: 'Año del calendario (ej: 2026).' },
+                    taxpayerType: { type: 'string', enum: ['persona_juridica', 'persona_natural', 'gran_contribuyente'], description: 'Tipo de contribuyente.' },
+                    city: { type: 'string', description: 'Ciudad/municipio para ICA, predial. Ej: "Bogotá", "Medellín".' }
+                  },
+                  required: ['nitLastDigit', 'year', 'taxpayerType']
+                }
               }
             ],
             tool_choice: 'auto'
@@ -305,9 +374,10 @@ export function useRealtimeAPI(): RealtimeAPIResult {
       setIsConnected(true);
       setError(null);
 
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to start session');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start session';
+      console.error('Realtime session error.');
+      setError(message);
       stopSession();
     } finally {
       setIsConnecting(false);

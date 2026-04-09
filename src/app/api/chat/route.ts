@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { redactPII } from '@/lib/security/pii-filter';
+import { redactPII, extractNITContext, type NITContext } from '@/lib/security/pii-filter';
 import { searchDocuments } from '@/lib/rag/vectorstore';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
 import { calculateSanction, type SanctionResult, type SanctionCalculation } from '@/lib/tools/sanction-calculator';
 import { analyzeDocument } from '@/lib/tools/document-analyzer';
 import { generateDianResponse, type DianResponseRequest } from '@/lib/tools/dian-response-generator';
 import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
+import { chatRequestSchema } from '@/lib/validation/schemas';
+import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -232,6 +234,43 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_tax_calendar',
+      description:
+        'Get the Colombian tax filing calendar personalized for a specific NIT. ' +
+        'Performs MULTIPLE targeted web searches to find EXACT filing dates for this taxpayer. ' +
+        'Use when: (1) User asks about tax calendar, filing deadlines, or "calendario tributario", ' +
+        '(2) User provides a NIT and wants personalized filing dates, ' +
+        '(3) User asks "cuándo debo declarar?" or "plazos" or deadline questions. ' +
+        'Searches national obligations (renta, IVA, retención, exógena) and municipal obligations. ' +
+        'Returns results filtered for the specific NIT last digit.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nitLastDigit: {
+            type: 'number',
+            description: 'Last digit of the NIT number (0-9), BEFORE the check digit. E.g., for NIT 860001317-4 the last digit is 7. Use the taxpayer context if available.',
+          },
+          year: {
+            type: 'number',
+            description: 'Year for the tax calendar (e.g., 2026).',
+          },
+          taxpayerType: {
+            type: 'string',
+            enum: ['persona_juridica', 'persona_natural', 'gran_contribuyente'],
+            description: 'Type of taxpayer. NITs starting with 8 or 9 are typically persona_juridica. Use the taxpayer context if available.',
+          },
+          city: {
+            type: 'string',
+            description: 'Municipality/city for municipal tax obligations (ICA, predial, retención ICA). E.g., "Bogotá", "Medellín", "Cali". If the user mentions a city, pass it here. If not specified, the tool searches major cities.',
+          },
+        },
+        required: ['nitLastDigit', 'year', 'taxpayerType'],
+      },
+    },
+  },
 ];
 
 // Use case context additions for specialized guidance
@@ -295,13 +334,28 @@ You are helping transform accounting data into actionable financial intelligence
 
 export async function POST(req: Request) {
   try {
-    const { messages, language = 'es', useCase = '' } = await req.json();
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json({ error: 'Invalid messages.' }, { status: 400 });
+    const body = await req.json();
+    const parsed = chatRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid request format.' },
+        { status: 400 }
+      );
+    }
+
+    const { messages, language, useCase } = parsed.data;
+
+    // Extract NIT context from conversation BEFORE PII redaction
+    const rawUserMessage = messages[messages.length - 1].content;
+    let nitContext: NITContext | null = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        nitContext = extractNITContext(messages[i].content);
+        if (nitContext) break;
+      }
     }
 
     // Redact PII from the latest user message
-    const rawUserMessage = messages[messages.length - 1].content;
     const lastUserMessage = redactPII(rawUserMessage);
     messages[messages.length - 1].content = lastUserMessage;
 
@@ -323,6 +377,20 @@ export async function POST(req: Request) {
     // Use case specific context
     const useCaseContext = USE_CASE_CONTEXT[useCase] || '';
 
+    // Build taxpayer context from extracted NIT (injected into system prompt)
+    let taxpayerContext = '';
+    if (nitContext) {
+      const typeLabel = nitContext.presumedType === 'persona_juridica'
+        ? 'Persona Jurídica' : 'Persona Natural';
+      taxpayerContext =
+        '\nTAXPAYER CONTEXT (extracted from user NIT — personalize your response):\n' +
+        '- Último dígito del NIT: ' + nitContext.lastDigit + '\n' +
+        '- Últimos dos dígitos del NIT: ' + nitContext.lastTwoDigits + '\n' +
+        '- Dígito de verificación: ' + (nitContext.checkDigit !== null ? nitContext.checkDigit : 'No proporcionado') + '\n' +
+        '- Tipo presunto: ' + typeLabel + '\n' +
+        '- YOU ALREADY KNOW the NIT last digit is ' + nitContext.lastDigit + '. Personalize ALL deadlines and obligations for this digit ONLY.\n';
+    }
+
     const systemPrompt = `
 You are **UtopIA**, an expert AI assistant specialized in Colombian accounting, tax law, and financial analysis. You operate as a senior advisor for accounting firms, combining deep knowledge of:
 
@@ -343,10 +411,29 @@ BEHAVIOR RULES:
 - Always assess risk level: BAJO (low), MEDIO (medium), ALTO (high), CRITICO (critical)
 - Format responses with clear sections, bullet points, and actionable next steps
 
+ANTI-HALLUCINATION RULES (CRITICAL — NEVER VIOLATE):
+- ONLY cite article numbers, deadlines, percentages, or UVT values if they appear VERBATIM in the retrieved documents or web search results.
+- If search_tax_docs returns "NO_RESULTS" and search_web also returns no results, you MUST tell the user: "No encontré información confiable sobre este tema en mis fuentes. Te recomiendo consultar directamente en dian.gov.co o con un Contador Público certificado."
+- NEVER invent article numbers, decree numbers, resolution numbers, or legal citations.
+- NEVER guess sanction percentages, deadlines, or UVT amounts — use the calculate_sanction tool for calculations.
+- If retrieved documents provide partial information, clearly state what is confirmed vs. what requires verification.
+- Prefer saying "No tengo certeza sobre este punto específico" over generating plausible-sounding but unverified guidance.
+
+PERSONALIZATION RULES (CRITICAL — ALWAYS FOLLOW):
+- When a NIT is provided or available in the TAXPAYER CONTEXT below, personalize ALL responses for that specific NIT.
+- For filing deadlines: show ONLY the specific dates for the NIT's last digit, NOT a generic table with all 10 digits.
+- NEVER respond with "verifique según el último dígito de su NIT" or send the user to search elsewhere when you KNOW the NIT digit — USE IT to give specific, actionable dates.
+- For calendar/deadline questions: ALWAYS use the \`get_tax_calendar\` tool for comprehensive, targeted searches.
+- Structure calendar responses as organized tables sorted chronologically: Mes | Obligación | Fecha Límite | Base Legal.
+- Classify obligations as: Nacional (DIAN) vs. Municipal. Include both when the user asks for "todas las obligaciones".
+- Highlight upcoming deadlines (within 30 days from today) prominently.
+- When presenting tax information, be SPECIFIC and ACTIONABLE — the user chose UtopIA to get expert answers, not generic guidance they could find themselves.
+
+${taxpayerContext}
 CRITICAL: You are an AI assistant, not a certified public accountant. Always recommend validation by a CPA (Contador Publico) for final decisions.
 
 TOOL USAGE — MULTI-TIER SYSTEM:
-You have access to SIX tools. Use them strategically:
+You have access to SEVEN tools. Use them strategically:
 
 **Tier 1 — \`search_tax_docs\` (Local RAG Database):**
 1. ALWAYS call this tool FIRST before answering any tax or accounting question.
@@ -365,6 +452,9 @@ You have access to SIX tools. Use them strategically:
 10. \`analyze_document\`: Use when discussing uploaded documents or when the user wants document analysis. Retrieves document text from RAG and analyzes it.
 11. \`draft_dian_response\`: Use when the user needs a formal response to a DIAN requirement. Collect the necessary information from the conversation first.
 12. \`assess_risk\`: Use when the user asks about risk level, case severity, or when the situation warrants a risk evaluation. Include the risk assessment in your response.
+
+**Calendar & Deadlines:**
+13. \`get_tax_calendar\`: Use when the user asks about filing deadlines, calendario tributario, or tax schedules. This performs MULTIPLE targeted web searches for the SPECIFIC NIT digit and taxpayer type, returning comprehensive calendar data from trusted sources. ALWAYS prefer this over generic \`search_web\` calls for calendar/deadline questions. Use the taxpayer context to set the correct NIT digit and type. IMPORTANT: If the user mentions a city (Bogotá, Medellín, Cali, etc.), pass it as the \`city\` parameter for targeted municipal tax searches (ICA, predial). If the user asks for "todas las obligaciones" including municipal but doesn't specify a city, ASK which city/municipality they operate in before calling the tool — municipal calendars vary significantly by city.
 
 ${useCaseContext}
 
@@ -420,8 +510,8 @@ ${langInstruction}
 
           try {
             if (toolCall.function.name === 'search_tax_docs') {
-              // Tier 1: Local RAG search
-              const context = await searchDocuments(args.query, 5);
+              // Tier 1: Local RAG search — k=12 for comprehensive legal context
+              const context = await searchDocuments(args.query, 12);
               currentMessages.push({
                 role: 'tool',
                 tool_call_id: toolCall.id,
@@ -430,7 +520,7 @@ ${langInstruction}
 
             } else if (toolCall.function.name === 'search_web') {
               // Tier 2: Internet search via Tavily
-              console.log(`Web search (round ${round + 1}): "${args.query}"`);
+              console.log(`Web search (round ${round + 1})`);
               const searchResponse = await searchWeb(args.query);
               const formatted = formatSearchResultsForLLM(searchResponse.results);
               webSearchUsed = true;
@@ -440,12 +530,12 @@ ${langInstruction}
               currentMessages.push({
                 role: 'tool',
                 tool_call_id: toolCall.id,
-                content: formatted || 'No relevant web results found. Provide guidance based on your general tax and accounting expertise.',
+                content: formatted || 'NO_RESULTS: No se encontraron resultados relevantes en fuentes web colombianas. NO inventes información. Indica al usuario que no encontraste fuentes confiables y recomienda consultar dian.gov.co o un Contador Público.',
               });
 
             } else if (toolCall.function.name === 'calculate_sanction') {
               // Tier 3: Sanction calculator
-              console.log(`Sanction calculation (round ${round + 1}): type="${args.type}"`);
+              console.log(`Sanction calculation (round ${round + 1})`);
               const result = calculateSanction(args as SanctionCalculation);
               sanctionCalculation = result;
               currentMessages.push({
@@ -456,7 +546,7 @@ ${langInstruction}
 
             } else if (toolCall.function.name === 'analyze_document') {
               // Tier 3: Document analyzer — retrieve from RAG then analyze
-              console.log(`Document analysis (round ${round + 1}): query="${args.query}"`);
+              console.log(`Document analysis (round ${round + 1})`);
               const docText = await searchDocuments(args.query, 8);
               const analysis = await analyzeDocument(docText, args.filename);
               currentMessages.push({
@@ -467,7 +557,7 @@ ${langInstruction}
 
             } else if (toolCall.function.name === 'draft_dian_response') {
               // Tier 3: DIAN response generator
-              console.log(`DIAN response draft (round ${round + 1}): type="${args.requirementType}"`);
+              console.log(`DIAN response draft (round ${round + 1})`);
               const draft = await generateDianResponse(args as DianResponseRequest);
               currentMessages.push({
                 role: 'tool',
@@ -486,6 +576,22 @@ ${langInstruction}
                 content: JSON.stringify(assessment, null, 2),
               });
 
+            } else if (toolCall.function.name === 'get_tax_calendar') {
+              // Calendar: multiple targeted web searches for NIT-specific dates
+              console.log(`Tax calendar lookup (round ${round + 1})`);
+              const calendarResult = await getTaxCalendar(
+                args.nitLastDigit,
+                args.year,
+                args.taxpayerType,
+                args.city
+              );
+              webSearchUsed = true;
+              currentMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(calendarResult, null, 2),
+              });
+
             } else {
               currentMessages.push({
                 role: 'tool',
@@ -493,12 +599,12 @@ ${langInstruction}
                 content: `Unknown tool: ${toolCall.function.name}`,
               });
             }
-          } catch (toolError: any) {
-            console.error(`Tool "${toolCall.function.name}" failed:`, toolError);
+          } catch (toolError) {
+            console.error(`Tool "${toolCall.function.name}" failed.`);
             currentMessages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: `Error executing ${toolCall.function.name}: ${toolError.message || 'Unknown error'}. Please provide guidance based on your expertise.`,
+              content: `Error al ejecutar ${toolCall.function.name}. Informa al usuario que hubo un problema técnico consultando las fuentes y sugiere reformular la pregunta.`,
             });
           }
         }
@@ -567,8 +673,8 @@ ${langInstruction}
         : undefined,
     });
 
-  } catch (error: any) {
-    console.error("Error in chat API route:", error);
+  } catch (error) {
+    console.error("Chat API error.");
     return NextResponse.json(
       { error: "Internal server error during consultation." },
       { status: 500 }

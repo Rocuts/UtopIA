@@ -67,6 +67,21 @@ export async function GET() {
               },
               required: ['topic']
             }
+          },
+          {
+            type: 'function',
+            name: 'get_tax_calendar',
+            description: 'Obtiene el calendario tributario colombiano personalizado para un NIT específico. Realiza múltiples búsquedas web dirigidas para encontrar las fechas EXACTAS de vencimiento. Usar cuando: (1) el usuario pregunte por calendario tributario o plazos, (2) el usuario mencione un NIT y quiera saber sus fechas, (3) preguntas como "cuándo debo declarar?". EXTRAER el último dígito del NIT de lo que el usuario dijo (antes del dígito de verificación).',
+            parameters: {
+              type: 'object',
+              properties: {
+                nitLastDigit: { type: 'number', description: 'Último dígito del NIT (0-9), ANTES del dígito de verificación. Ej: NIT 860001317-4 → último dígito es 7.' },
+                year: { type: 'number', description: 'Año del calendario tributario (ej: 2026).' },
+                taxpayerType: { type: 'string', enum: ['persona_juridica', 'persona_natural', 'gran_contribuyente'], description: 'Tipo de contribuyente. NITs que empiezan con 8 o 9 son típicamente persona_juridica.' },
+                city: { type: 'string', description: 'Ciudad/municipio para obligaciones municipales (ICA, predial). Ej: "Bogotá", "Medellín". Si el usuario no la menciona, PREGUNTAR antes de llamar esta herramienta.' }
+              },
+              required: ['nitLastDigit', 'year', 'taxpayerType']
+            }
           }
         ],
         tool_choice: 'auto',
@@ -94,6 +109,8 @@ export async function GET() {
           7. BILINGUAL (AUTO-DETECT): Respond fluently in the SAME language the user speaks to you. If they speak English, respond in English. If they speak Spanish, respond in Spanish. Match their language naturally and immediately.
           8. DISCLAIMER: You are an AI assistant, not a certified public accountant (Contador Público). Always recommend validation by a CPA for final decisions.
           9. SCOPE: If after clarifying questions a topic is truly outside Colombian tax/accounting/financial law, briefly provide any useful general guidance you can, then recommend a specialized professional. Never just say "I can't help with that" — always offer something useful.
+          10. PERSONALIZATION: When the user mentions a NIT, extract the last digit (BEFORE the check digit) and use it to personalize ALL deadlines and obligations. Example: NIT 860001317-4 → last digit is 7, check digit is 4. NEVER give generic "verifique según su NIT" responses — you HEARD the NIT, so USE IT to give specific dates.
+          11. TAX CALENDAR: When asked about filing deadlines or "calendario tributario", ALWAYS use the get_tax_calendar tool with the extracted NIT digit. Present dates as a clear, organized list ONLY for that specific digit. Classify obligations as Nacional (DIAN) vs. Municipal. Never present a generic table with all 10 digits.
         `,
       }),
     });
@@ -108,10 +125,10 @@ export async function GET() {
     return NextResponse.json({
       client_secret: data.client_secret.value,
     });
-  } catch (error: any) {
-    console.error('Error generating ephemeral token:', error);
+  } catch (error) {
+    console.error('Realtime token generation error.');
     return NextResponse.json(
-      { error: 'Failed to generate ephemeral token' },
+      { error: 'Failed to generate ephemeral token.' },
       { status: 500 }
     );
   }

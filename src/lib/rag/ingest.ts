@@ -99,8 +99,17 @@ async function ingestData() {
   console.log(`Found ${allFiles.length} files in tax_docs/\n`);
 
   const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 1500,
-    chunkOverlap: 300,
+    chunkSize: 3000,
+    chunkOverlap: 600,
+    separators: [
+      '\n## ',    // H2 headers (article boundaries)
+      '\n### ',   // H3 headers (sub-sections)
+      '\n#### ',  // H4 headers
+      '\n\n',     // Paragraph breaks
+      '\n',       // Line breaks
+      '. ',       // Sentence boundaries
+      ' ',        // Words
+    ],
   });
 
   const docs: Document[] = [];
@@ -150,6 +159,7 @@ async function ingestData() {
   console.log('Generating embeddings via OpenAI (text-embedding-3-small)...');
   const embeddings = new OpenAIEmbeddings({
     modelName: 'text-embedding-3-small',
+    batchSize: 200, // Prevent "maximum request size is 300000 tokens" error
   });
 
   const vectorStore = await HNSWLib.fromDocuments(docs, embeddings);

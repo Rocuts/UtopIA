@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* Chat scrollbar */
+.styled-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.styled-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.styled-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(212, 160, 23, 0.2);
+  border-radius: 3px;
+}
+.styled-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 160, 23, 0.4);
+}
+.styled-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 160, 23, 0.2) transparent;
+}
+
 @theme {
   --color-brand-primary: #1e3a5f;
   --color-brand-blue: #111827;

@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
 import { searchDocuments } from '@/lib/rag/vectorstore';
+import { ragRequestSchema } from '@/lib/validation/schemas';
 
 export async function POST(req: Request) {
   try {
-    const { query } = await req.json();
+    const body = await req.json();
+    const parsed = ragRequestSchema.safeParse(body);
 
-    if (!query) {
-      return NextResponse.json({ error: 'Query is required.' }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query.' }, { status: 400 });
     }
 
-    const context = await searchDocuments(query, 5);
+    const context = await searchDocuments(parsed.data.query, 5);
 
     return NextResponse.json({ context });
-  } catch (error: any) {
-    console.error("Error in RAG tool endpoint:", error);
+  } catch (error) {
+    console.error('RAG endpoint error.');
     return NextResponse.json(
-      { error: "Internal server error searching tax and accounting documents." },
+      { error: 'Internal server error searching documents.' },
       { status: 500 }
     );
   }
