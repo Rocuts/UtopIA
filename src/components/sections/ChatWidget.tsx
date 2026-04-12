@@ -522,7 +522,7 @@ export function ChatWidget() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.md,.csv,.json,.html,.xml"
+                accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx"
                 onChange={handleFileUpload}
                 className="hidden"
               />
