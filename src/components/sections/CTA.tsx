@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { motion } from 'motion/react';
 import { Button } from "@/components/ui/Button";
 import { useLanguage } from '@/context/LanguageContext';
@@ -40,9 +41,11 @@ export function CTA() {
             viewport={{ once: true, amount: 0.3 }}
             transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
           >
-            <Button size="lg" className="w-full sm:w-auto text-base px-10">
-              {t.cta.btn1}
-            </Button>
+            <Link href="/workspace">
+              <Button size="lg" className="w-full sm:w-auto text-base px-10">
+                {t.cta.btn1}
+              </Button>
+            </Link>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -50,7 +53,12 @@ export function CTA() {
             viewport={{ once: true, amount: 0.3 }}
             transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
           >
-            <Button size="lg" variant="secondary" className="w-full sm:w-auto text-base px-10">
+            <Button
+              size="lg"
+              variant="secondary"
+              className="w-full sm:w-auto text-base px-10"
+              onClick={() => document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })}
+            >
               {t.cta.btn2}
             </Button>
           </motion.div>

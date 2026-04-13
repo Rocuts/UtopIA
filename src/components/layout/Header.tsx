@@ -36,7 +36,15 @@ export function Header() {
     )}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl h-16 flex items-center justify-between">
         <Link href="/" className="text-lg font-bold tracking-tight text-[#0a0a0a] flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#0a0a0a]" />
+          {/* Logo Neo-Minimalista con inversión de color inteligente cuando el fondo pierde oscuridad */}
+          <img 
+            src="/logo-modern.png" 
+            alt="UtopIA Logo" 
+            className={cn(
+              "w-7 h-7 rounded-sm object-cover transition-all duration-300",
+              scrolled && "invert hue-rotate-180"
+            )} 
+          />
           UtopIA.
         </Link>
 
@@ -85,11 +93,11 @@ export function Header() {
             </button>
           </div>
 
-          <Button size="sm" className="hidden lg:inline-flex" onClick={() => {
-              document.getElementById('ai-consult')?.scrollIntoView({ behavior: 'smooth' });
-          }}>
-            {t.footer.talkToAi}
-          </Button>
+          <Link href="/workspace">
+            <Button size="sm" className="hidden lg:inline-flex">
+              {t.footer.talkToAi}
+            </Button>
+          </Link>
         </div>
       </div>
     </header>

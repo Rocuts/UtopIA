@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { Suspense, useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'motion/react';
 import { Button } from '@/components/ui/Button';
@@ -97,11 +98,11 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", ...NOVA_SPRING, delay: 0.15 }}
         >
-          <Button size="lg" className="w-full sm:w-auto" onClick={() => {
-            document.getElementById('ai-consult')?.scrollIntoView({ behavior: 'smooth' });
-          }}>
-            {t.hero.cta1}
-          </Button>
+          <Link href="/workspace" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full">
+              {t.hero.cta1}
+            </Button>
+          </Link>
           <Button size="lg" variant="secondary" className="w-full sm:w-auto" onClick={() => {
             document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' });
           }}>
