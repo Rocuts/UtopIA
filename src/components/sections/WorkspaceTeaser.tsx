@@ -13,7 +13,6 @@ import {
   PanelRight,
 } from 'lucide-react';
 import { GlassPanel } from '@/components/ui/GlassPanel';
-import { Badge } from '@/components/ui/Badge';
 import { useLanguage } from '@/context/LanguageContext';
 
 const NOVA_SPRING = { stiffness: 400, damping: 25 };
@@ -31,9 +30,11 @@ export function WorkspaceTeaser() {
           viewport={{ once: true }}
           transition={{ type: 'spring', ...NOVA_SPRING }}
         >
-          <Badge variant="solid" className="mb-4">
+          <span className="inline-flex items-center gap-2 text-xs tracking-widest uppercase text-[#a3a3a3] font-medium">
+            <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
             {language === 'es' ? 'Workspace Profesional' : 'Professional Workspace'}
-          </Badge>
+            <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
+          </span>
         </motion.div>
         <motion.h2
           initial={{ opacity: 0, y: 12 }}
