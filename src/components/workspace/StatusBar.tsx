@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
+import Link from 'next/link';
 import {
   PanelLeftOpen,
   PanelLeftClose,
@@ -8,6 +9,7 @@ import {
   PanelRightClose,
   FileText,
   Globe,
+  ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
@@ -76,8 +78,17 @@ export function StatusBar({
       className="h-12 bg-white border-b border-[#e5e5e5] flex items-center px-3 shrink-0 z-30"
       role="banner"
     >
-      {/* Left: sidebar toggle + logo */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Left: back button + sidebar toggle + logo */}
+      <div className="flex items-center gap-1 shrink-0">
+        <Link
+          href="/"
+          className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+          aria-label={language === 'es' ? 'Volver al inicio' : 'Back to home'}
+          title={language === 'es' ? 'Volver al inicio' : 'Back to home'}
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Link>
+        <div className="w-px h-4 bg-[#e5e5e5] mx-0.5" />
         <button
           onClick={onToggleSidebar}
           className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
