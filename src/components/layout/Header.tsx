@@ -35,16 +35,7 @@ export function Header() {
       }
     )}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl h-16 flex items-center justify-between">
-        <Link href="/" className="text-lg font-bold tracking-tight text-[#0a0a0a] flex items-center gap-2">
-          {/* Logo Neo-Minimalista con inversión de color inteligente cuando el fondo pierde oscuridad */}
-          <img 
-            src="/logo-modern.png" 
-            alt="UtopIA Logo" 
-            className={cn(
-              "w-7 h-7 rounded-sm object-cover transition-all duration-300",
-              scrolled && "invert hue-rotate-180"
-            )} 
-          />
+        <Link href="/" className="text-lg font-bold tracking-tight text-[#0a0a0a]">
           UtopIA.
         </Link>
 
