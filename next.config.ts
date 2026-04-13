@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['hnswlib-node'],
+  serverExternalPackages: ['hnswlib-node', 'pdf-parse'],
   allowedDevOrigins: ['localhost', '192.168.40.67'],
   async headers() {
     return [
