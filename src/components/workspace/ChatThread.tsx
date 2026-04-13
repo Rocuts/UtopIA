@@ -26,6 +26,7 @@ import { RiskGauge } from '@/components/ui/RiskGauge';
 import { DocumentPreview } from '@/components/ui/DocumentPreview';
 import { cn } from '@/lib/utils';
 import {
+  loadConversation,
   saveConversation,
   generateConversationId,
   inferTitle,
@@ -390,14 +391,28 @@ export function ChatThread({
 
   // State
   const [conversationId] = useState(() => externalConversationId || generateConversationId());
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: INITIAL_MSG[language],
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    // Try to load an existing conversation
+    const saved = loadConversation(externalConversationId);
+    if (saved && saved.messages.length > 0) {
+      return saved.messages.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: '', // Not stored in saved format
+        webSearchUsed: m.webSearchUsed,
+      }));
+    }
+    // New conversation: start with welcome message
+    return [
+      {
+        id: '1',
+        role: 'assistant' as const,
+        content: INITIAL_MSG[language],
+        timestamp: new Date().toISOString(),
+      },
+    ];
+  });
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);

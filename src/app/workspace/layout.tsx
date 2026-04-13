@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { WorkspaceProvider, useWorkspace } from '@/context/WorkspaceContext';
 import { Sidebar } from '@/components/workspace/Sidebar';
 import { StatusBar } from '@/components/workspace/StatusBar';
 import { AnalysisPanel } from '@/components/workspace/AnalysisPanel';
+import { CommandPalette } from '@/components/workspace/CommandPalette';
 import { exportConversationPDF } from '@/lib/export/pdf-export';
 import { inferTitle, listConversations } from '@/lib/storage/conversation-history';
 import type { UploadedDocument as WorkspaceUploadedDoc } from '@/components/workspace/types';
@@ -21,7 +22,11 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
     activeUseCase,
     uploadedDocuments,
     riskAssessment,
+    setActiveCase,
+    startNewConsultation,
   } = useWorkspace();
+
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   // Auto-collapse sidebar on mobile
   useEffect(() => {
@@ -36,6 +41,18 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
     return () => mql.removeEventListener('change', handleChange);
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Global Cmd+K / Ctrl+K listener for command palette
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Convert workspace documents to AnalysisPanel format
@@ -67,6 +84,36 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
     });
   }, [activeCase, language]);
 
+  // Clear conversation -> return to dashboard
+  const handleClearConversation = useCallback(() => {
+    setActiveCase(null);
+  }, [setActiveCase]);
+
+  // Command palette action handler
+  const handleCommandAction = useCallback(
+    (actionId: string) => {
+      if (actionId === 'new-consultation') {
+        startNewConsultation();
+      } else if (actionId === 'export-pdf') {
+        handleExportPDF();
+      } else if (actionId === 'clear-chat') {
+        setActiveCase(null);
+      } else if (actionId === 'dian-defense') {
+        startNewConsultation('dian-defense');
+      } else if (actionId === 'tax-refund') {
+        startNewConsultation('tax-refund');
+      } else if (actionId === 'due-diligence') {
+        startNewConsultation('due-diligence');
+      } else if (actionId === 'financial-intel') {
+        startNewConsultation('financial-intelligence');
+      } else if (actionId.startsWith('recent-')) {
+        const conversationId = actionId.replace('recent-', '');
+        setActiveCase(conversationId);
+      }
+    },
+    [startNewConsultation, setActiveCase, handleExportPDF]
+  );
+
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-white">
       <StatusBar
@@ -91,9 +138,18 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
           riskAssessment={riskAssessment}
           uploadedDocuments={analysisDocs}
           onExportPDF={handleExportPDF}
+          onClearConversation={handleClearConversation}
           language={language}
         />
       </div>
+
+      {/* Command Palette (modal overlay) */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        language={language}
+        onAction={handleCommandAction}
+      />
     </div>
   );
 }

@@ -104,7 +104,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 function DashboardOverview() {
   const { language, t } = useLanguage();
-  const { setActiveUseCase, setActiveCase } = useWorkspace();
+  const { setActiveCase, startNewConsultation } = useWorkspace();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [stats, setStats] = useState<ReturnType<typeof getConversationStats> | null>(null);
 
@@ -121,9 +121,7 @@ function DashboardOverview() {
   };
 
   const handleQuickAction = (useCaseId: string) => {
-    setActiveUseCase(useCaseId);
-    // In the future, this would also create a new conversation
-    // and set it as active. For now we just set the use case.
+    startNewConsultation(useCaseId);
   };
 
   const wt = t.workspace;
@@ -254,7 +252,7 @@ function DashboardOverview() {
               <MessageSquare className="w-8 h-8 text-[#d4d4d4] mx-auto mb-3" />
               <p className="text-sm text-[#a3a3a3] mb-4">{wt.noCases}</p>
               <button
-                onClick={() => setActiveCase(null)}
+                onClick={() => startNewConsultation()}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-sm text-sm font-medium bg-[#d4a017] hover:bg-[#b8901a] text-white transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -351,6 +349,7 @@ export default function WorkspacePage() {
 
   return activeCase ? (
     <ChatThread
+      key={activeCase}
       conversationId={activeCase}
       useCase={activeUseCase}
       language={language}

@@ -55,14 +55,23 @@ const USE_CASE_LABELS: Record<string, Record<string, string>> = {
 
 export function Sidebar() {
   const { language, t } = useLanguage();
-  const { sidebarOpen, toggleSidebar, activeCase, setActiveCase } = useWorkspace();
+  const { sidebarOpen, toggleSidebar, activeCase, setActiveCase, startNewConsultation, conversationListVersion } = useWorkspace();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterUseCase, setFilterUseCase] = useState<string | null>(null);
 
   useEffect(() => {
     setConversations(listConversations());
-  }, []);
+  }, [conversationListVersion]);
+
+  // Refresh conversation list periodically while a conversation is active
+  useEffect(() => {
+    if (!activeCase) return;
+    const interval = setInterval(() => {
+      setConversations(listConversations());
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeCase]);
 
   const filteredConversations = useMemo(() => {
     let result = conversations;
@@ -145,7 +154,7 @@ export function Sidebar() {
       {/* New Consultation Button */}
       <div className="px-2 pt-3 pb-2 shrink-0">
         <button
-          onClick={() => setActiveCase(null)}
+          onClick={() => startNewConsultation()}
           className={cn(
             'w-full flex items-center gap-2 rounded-sm text-sm font-medium transition-colors',
             'bg-[#d4a017] hover:bg-[#b8901a] text-white',

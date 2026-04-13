@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { generateConversationId } from '@/lib/storage/conversation-history';
 
 export interface UploadedDocument {
   id: string;
@@ -31,6 +32,9 @@ export interface WorkspaceState {
   setActiveUseCase: (uc: string) => void;
   addDocument: (doc: UploadedDocument) => void;
   setRiskAssessment: (data: RiskAssessmentData | null) => void;
+  startNewConsultation: (useCase?: string) => void;
+  conversationListVersion: number;
+  refreshConversationList: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
@@ -42,6 +46,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [activeUseCase, setActiveUseCaseState] = useState('dian-defense');
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [riskAssessment, setRiskAssessmentState] = useState<RiskAssessmentData | null>(null);
+  const [conversationListVersion, setConversationListVersion] = useState(0);
 
   const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
   const toggleAnalysisPanel = useCallback(() => setAnalysisPanelOpen(prev => !prev), []);
@@ -52,6 +57,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const setRiskAssessment = useCallback((data: RiskAssessmentData | null) => {
     setRiskAssessmentState(data);
+  }, []);
+
+  const startNewConsultation = useCallback((useCase?: string) => {
+    const newId = generateConversationId();
+    setActiveCaseState(newId);
+    if (useCase) setActiveUseCaseState(useCase);
+    setUploadedDocuments([]);
+    setRiskAssessmentState(null);
+  }, []);
+
+  const refreshConversationList = useCallback(() => {
+    setConversationListVersion(prev => prev + 1);
   }, []);
 
   return (
@@ -69,6 +86,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setActiveUseCase,
         addDocument,
         setRiskAssessment,
+        startNewConsultation,
+        conversationListVersion,
+        refreshConversationList,
       }}
     >
       {children}
