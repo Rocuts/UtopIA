@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -10,6 +11,8 @@ import { useLanguage } from "@/context/LanguageContext";
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const { language, setLanguage, t } = useLanguage();
+  const pathname = usePathname();
+  const isWorkspace = pathname.startsWith('/workspace');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,6 +22,9 @@ export function Header() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Workspace pages have their own layout with status bar — do not render the marketing header
+  if (isWorkspace) return null;
 
   return (
     <header className={cn(

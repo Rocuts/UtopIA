@@ -1,8 +1,20 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
+import { Document } from '@langchain/core/documents';
 import path from 'path';
 
-const vectorStorePath = path.join(process.cwd(), 'src', 'data', 'vector_store');
+/**
+ * Returns the correct storage path depending on the runtime environment.
+ * Vercel serverless functions have a read-only filesystem except for /tmp.
+ */
+function getStoragePath(subdir: string): string {
+  if (process.env.VERCEL) {
+    return path.join('/tmp', subdir);
+  }
+  return path.join(process.cwd(), 'src', 'data', subdir);
+}
+
+const vectorStorePath = getStoragePath('vector_store');
 
 let cachedStore: HNSWLib | null = null;
 let cachedEmbeddings: OpenAIEmbeddings | null = null;
@@ -10,6 +22,10 @@ let cachedEmbeddings: OpenAIEmbeddings | null = null;
 /**
  * Returns a singleton HNSWLib vector store instance.
  * Loads from disk once, then serves from memory on subsequent calls.
+ *
+ * On Vercel (read-only filesystem), gracefully falls back to an empty
+ * in-memory vector store if the persisted store cannot be loaded.
+ * This ensures the chat endpoint degrades to NO_RESULTS instead of crashing.
  */
 export async function getVectorStore(): Promise<HNSWLib> {
   if (cachedStore) return cachedStore;
@@ -19,9 +35,28 @@ export async function getVectorStore(): Promise<HNSWLib> {
     openAIApiKey: process.env.OPENAI_API_KEY,
   });
 
-  cachedStore = await HNSWLib.load(vectorStorePath, cachedEmbeddings);
+  try {
+    cachedStore = await HNSWLib.load(vectorStorePath, cachedEmbeddings);
+  } catch (error) {
+    console.warn(
+      '[vectorstore] Could not load persisted vector store from disk. ' +
+      'Creating empty in-memory store as fallback. ' +
+      'RAG searches will return NO_RESULTS until documents are uploaded. ' +
+      `Path attempted: ${vectorStorePath}`,
+      error instanceof Error ? error.message : error
+    );
+    // Create an empty in-memory store so downstream code never crashes
+    cachedStore = await HNSWLib.fromDocuments(
+      [new Document({ pageContent: '', metadata: { _placeholder: true } })],
+      cachedEmbeddings
+    );
+  }
+
   return cachedStore;
 }
+
+/** Re-export getStoragePath for use by other modules (e.g. upload route). */
+export { getStoragePath };
 
 /**
  * Invalidate the cached store (e.g., after re-ingestion or document upload).
@@ -34,11 +69,16 @@ export function invalidateVectorStore(): void {
 /**
  * Perform similarity search with configurable k and optional metadata filters.
  * Returns formatted context string ready for LLM consumption.
+ *
+ * @param query  - The search query text (max 2000 chars).
+ * @param k      - Number of results to return (1-20, default 8).
+ * @param filter - Optional metadata filter. Supports `docType`, `entity`, `year`,
+ *                 and a generic `type` field (e.g. `{ type: 'user_upload' }`).
  */
 export async function searchDocuments(
   query: string,
   k: number = 8,
-  filter?: { docType?: string; entity?: string; year?: string }
+  filter?: { docType?: string; entity?: string; year?: string; type?: string }
 ): Promise<string> {
   // Bounds-check inputs
   const safeQuery = query.slice(0, 2000);
@@ -48,11 +88,12 @@ export async function searchDocuments(
 
   let results;
 
-  if (filter && (filter.docType || filter.entity || filter.year)) {
+  if (filter && (filter.docType || filter.entity || filter.year || filter.type)) {
     results = await store.similaritySearch(safeQuery, safeK, (doc) => {
       if (filter.docType && doc.metadata.docType !== filter.docType) return false;
       if (filter.entity && doc.metadata.entity !== filter.entity) return false;
       if (filter.year && doc.metadata.year !== filter.year) return false;
+      if (filter.type && doc.metadata.type !== filter.type) return false;
       return true;
     });
   } else {

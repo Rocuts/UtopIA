@@ -93,8 +93,10 @@ export async function analyzeDocument(
 ): Promise<DocumentAnalysis> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  // Truncate very long documents to avoid token limits
-  const maxChars = 12000;
+  // Truncate very long documents to stay within gpt-4o-mini's 128k context.
+  // 60,000 chars (~15-20k tokens) ensures full tax returns and financial
+  // statements are analyzed without truncation in most cases.
+  const maxChars = 60_000;
   const truncatedText = documentText.length > maxChars
     ? documentText.substring(0, maxChars) + '\n\n[... documento truncado por longitud ...]'
     : documentText;

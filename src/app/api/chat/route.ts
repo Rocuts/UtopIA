@@ -343,7 +343,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { messages, language, useCase } = parsed.data;
+    const { messages, language, useCase, documentContext } = parsed.data;
 
     // Extract NIT context from conversation BEFORE PII redaction
     const rawUserMessage = messages[messages.length - 1].content;
@@ -545,9 +545,18 @@ ${langInstruction}
               });
 
             } else if (toolCall.function.name === 'analyze_document') {
-              // Tier 3: Document analyzer — retrieve from RAG then analyze
+              // Tier 3: Document analyzer
+              // If documentContext was sent with the request (from a recent upload),
+              // use it directly instead of doing a RAG search. This avoids the
+              // indirection of searching for content we already have.
               console.log(`Document analysis (round ${round + 1})`);
-              const docText = await searchDocuments(args.query, 8);
+              let docText: string;
+              if (documentContext) {
+                docText = documentContext;
+              } else {
+                // Fall back to RAG search, filtering to user uploads for relevance
+                docText = await searchDocuments(args.query, 8, { type: 'user_upload' });
+              }
               const analysis = await analyzeDocument(docText, args.filename);
               currentMessages.push({
                 role: 'tool',

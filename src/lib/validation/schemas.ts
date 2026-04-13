@@ -15,6 +15,8 @@ export const chatRequestSchema = z.object({
   useCase: z
     .enum(['dian-defense', 'tax-refund', 'due-diligence', 'financial-intelligence', ''])
     .default(''),
+  /** Optional full document text passed from the upload flow for direct analysis. */
+  documentContext: z.string().max(100_000).optional(),
 });
 
 // ---- RAG route ----
@@ -49,6 +51,7 @@ export const uploadContextSchema = z
 // ---- Allowed upload extensions ----
 export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   '.txt', '.md', '.csv', '.json', '.xml', '.pdf', '.xlsx',
+  '.jpg', '.jpeg', '.png',
 ]);
 
 export const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB

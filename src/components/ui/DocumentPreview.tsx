@@ -16,6 +16,7 @@ interface DocumentPreviewProps {
   textPreview?: string;
   onRemove?: () => void;
   className?: string;
+  language?: 'es' | 'en';
 }
 
 function formatFileSize(bytes: number): string {
@@ -65,6 +66,7 @@ export function DocumentPreview({
   textPreview,
   onRemove,
   className,
+  language = 'es',
 }: DocumentPreviewProps) {
   const [expanded, setExpanded] = useState(false);
   const config = STATUS_CONFIG[status];
@@ -103,7 +105,7 @@ export function DocumentPreview({
             <StatusIcon
               className={cn('w-3 h-3 mr-1', { 'animate-spin': isAnimated })}
             />
-            {config.label.es}
+            {config.label[language]}
           </Badge>
 
           <div className="flex items-center gap-1 shrink-0">

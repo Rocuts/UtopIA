@@ -26,8 +26,9 @@
 /* --- Tailwind v4 Theme Tokens --- */
 @theme {
   --color-brand-primary: #0a0a0a;
-  --color-brand-accent: #0a0a0a;
+  --color-brand-accent: #d4a017;
   --color-brand-bg: #ffffff;
+  --color-accent-gold: #d4a017;
 }
 
 /* --- Novaforge CSS Custom Properties --- */
@@ -43,6 +44,12 @@
   --accent-light: #262626;
   --accent-glow: rgba(10, 10, 10, 0.06);
   --blue-deep: #fafafa;
+
+  /* Gold accent system — from 3D scene to 2D UI */
+  --accent-gold: #d4a017;
+  --accent-gold-hover: #b8901a;
+  --accent-gold-light: #fef9ee;
+  --accent-gold-glow: rgba(212, 160, 23, 0.1);
 
   /* Status (functional — preserved) */
   --success: #22c55e;
@@ -82,6 +89,17 @@
   --text-5xl: 3rem;
   --text-6xl: 3.75rem;
   --text-7xl: 4.5rem;
+
+  /* Workspace surface levels — three-depth spatial hierarchy */
+  --surface-sidebar: #fafafa;
+  --surface-content: #ffffff;
+  --surface-panel-alt: #f5f5f5;
+
+  /* Workspace-specific */
+  --workspace-sidebar-width: 260px;
+  --workspace-sidebar-collapsed: 48px;
+  --workspace-panel-width: 360px;
+  --workspace-statusbar-height: 48px;
 
   /* Z-index layers */
   --z-bg: -10;
@@ -199,3 +217,32 @@ body {
   padding-left: 1rem;
   color: #525252;
 }
+
+/* --- Workspace Layout Utilities --- */
+.workspace-sidebar { width: var(--workspace-sidebar-width); }
+.workspace-sidebar-collapsed { width: var(--workspace-sidebar-collapsed); }
+.workspace-panel { width: var(--workspace-panel-width); }
+
+/* Analysis panel scroll */
+.analysis-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+.analysis-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.analysis-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.analysis-scroll::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 2px;
+}
+.analysis-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+/* --- Prose Workspace (tighter spacing for chat) --- */
+.prose-workspace p { margin-bottom: 0.75rem; line-height: 1.65; }
+.prose-workspace ul { margin-bottom: 0.75rem; }
+.prose-workspace li { margin-bottom: 0.25rem; }

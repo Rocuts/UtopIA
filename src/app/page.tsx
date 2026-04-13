@@ -7,7 +7,7 @@ import { Trust } from "@/components/sections/Trust";
 import { FAQ } from "@/components/sections/FAQ";
 import { CTA } from "@/components/sections/CTA";
 import { Footer } from "@/components/layout/Footer";
-import { ChatWidget } from "@/components/sections/ChatWidget";
+import { WorkspaceTeaser } from "@/components/sections/WorkspaceTeaser";
 import { ScrollGradient } from "@/components/layout/ScrollGradient";
 
 export default function Home() {
@@ -16,7 +16,7 @@ export default function Home() {
       <Header />
       <main className="flex flex-col min-h-screen">
         <Hero />
-        <ChatWidget />
+        <WorkspaceTeaser />
         <Services />
         <Methodology />
         <Metrics />
