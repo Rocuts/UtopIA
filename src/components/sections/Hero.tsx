@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Suspense, useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'motion/react';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { useLanguage } from '@/context/LanguageContext';
 
 const Canvas = dynamic(() => import('@react-three/fiber').then((mod) => mod.Canvas), {
@@ -68,9 +67,11 @@ export function Hero() {
           transition={{ type: "spring", ...NOVA_SPRING }}
           className="mb-8"
         >
-          <Badge variant="solid" className="mb-4">
+          <span className="inline-flex items-center gap-2 text-xs tracking-widest uppercase text-[#a3a3a3] font-medium">
+            <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
             {t.hero.badge}
-          </Badge>
+            <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
+          </span>
         </motion.div>
 
         <motion.h1
