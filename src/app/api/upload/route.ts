@@ -16,9 +16,17 @@ const uploadsPath = getStoragePath('uploads');
 const MAGIC_BYTES: Record<string, number[]> = {
   '.pdf':  [0x25, 0x50, 0x44, 0x46],              // %PDF
   '.xlsx': [0x50, 0x4B, 0x03, 0x04],              // PK (ZIP archive)
+  '.xls':  [0xD0, 0xCF, 0x11, 0xE0],              // MS Compound File (OLE2)
+  '.doc':  [0xD0, 0xCF, 0x11, 0xE0],              // MS Compound File (OLE2)
+  '.docx': [0x50, 0x4B, 0x03, 0x04],              // PK (ZIP archive, same as xlsx)
   '.jpg':  [0xFF, 0xD8, 0xFF],                     // JPEG SOI marker
   '.jpeg': [0xFF, 0xD8, 0xFF],                     // JPEG SOI marker
   '.png':  [0x89, 0x50, 0x4E, 0x47],              // PNG header
+  '.gif':  [0x47, 0x49, 0x46],                     // GIF87a / GIF89a
+  '.webp': [0x52, 0x49, 0x46, 0x46],              // RIFF (WebP container)
+  '.bmp':  [0x42, 0x4D],                           // BM
+  '.tiff': [0x49, 0x49],                           // II (little-endian TIFF)
+  '.tif':  [0x49, 0x49],                           // II (little-endian TIFF)
 };
 
 function validateMagicBytes(buffer: Buffer, ext: string): boolean {
@@ -42,6 +50,12 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.tiff': 'image/tiff',
+    '.tif': 'image/tiff',
+    '.heic': 'image/heic',
   };
   const mime = mimeMap[ext] || 'image/png';
   const base64 = buffer.toString('base64');
@@ -90,8 +104,41 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   }
 
   // --- Image files: OCR via OpenAI Vision API ---
-  if (['.jpg', '.jpeg', '.png'].includes(ext)) {
+  if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.heic'].includes(ext)) {
     return extractTextFromImage(buffer, filename);
+  }
+
+  // --- Word documents (.docx) ---
+  if (ext === '.docx') {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer });
+    if (!result.value.trim()) {
+      throw new Error('El documento Word esta vacio o no contiene texto extraible.');
+    }
+    return result.value;
+  }
+
+  // --- Old Word format (.doc) ---
+  if (ext === '.doc') {
+    try {
+      const mammoth = await import('mammoth');
+      const result = await mammoth.extractRawText({ buffer });
+      if (result.value.trim()) return result.value;
+    } catch {
+      // mammoth has limited .doc support — fall through to error
+    }
+    throw new Error(
+      'DOC_FORMAT: El formato .doc (Word 97-2003) tiene soporte limitado. ' +
+      'Por favor guarde el archivo como .docx (Word moderno) e intentelo de nuevo.'
+    );
+  }
+
+  // --- Old Excel format (.xls) ---
+  if (ext === '.xls') {
+    throw new Error(
+      'XLS_FORMAT: El formato .xls (Excel 97-2003) no esta soportado. ' +
+      'Por favor guarde el archivo como .xlsx (Excel moderno) e intentelo de nuevo.'
+    );
   }
 
   if (ext === '.txt' || ext === '.md') {

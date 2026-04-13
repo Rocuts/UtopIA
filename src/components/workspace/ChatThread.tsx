@@ -638,6 +638,7 @@ export function ChatThread({
       setUploadedDocs(prev => prev.filter(d => d.uploadedAt !== newDoc.uploadedAt));
       const errorMsg = uploadError instanceof Error ? uploadError.message : '';
       const isScannedPdf = errorMsg.includes('SCANNED_PDF');
+      const isOldFormat = errorMsg.includes('DOC_FORMAT') || errorMsg.includes('XLS_FORMAT');
       setMessages(prev => [
         ...prev,
         {
@@ -647,6 +648,10 @@ export function ChatThread({
             ? (language === 'es'
               ? 'Este PDF parece ser una **imagen escaneada** y no contiene texto extraíble. Para analizarlo, suba capturas de cada página como imágenes (`.jpg` o `.png`) y UtopIA extraerá el texto automáticamente con OCR.'
               : 'This PDF appears to be a **scanned image** and contains no extractable text. To analyze it, upload screenshots of each page as images (`.jpg` or `.png`) and UtopIA will extract the text automatically via OCR.')
+            : isOldFormat
+            ? (language === 'es'
+              ? 'Este archivo usa un **formato antiguo** (`.doc` o `.xls`). Por favor guárdelo como **`.docx`** o **`.xlsx`** (formato moderno) e inténtelo de nuevo.'
+              : 'This file uses an **old format** (`.doc` or `.xls`). Please save it as **`.docx`** or **`.xlsx`** (modern format) and try again.')
             : (language === 'es'
               ? `No pude procesar el archivo${errorMsg ? ': ' + errorMsg : ''}. Verifique el formato e intente de nuevo.`
               : `Could not process the file${errorMsg ? ': ' + errorMsg : ''}. Please check the format and try again.`),
@@ -861,7 +866,7 @@ export function ChatThread({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx"
+            accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.heic"
             onChange={handleFileSelect}
             className="hidden"
             aria-label={language === 'es' ? 'Subir documento' : 'Upload document'}

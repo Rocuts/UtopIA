@@ -50,8 +50,10 @@ export const uploadContextSchema = z
 
 // ---- Allowed upload extensions ----
 export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
-  '.txt', '.md', '.csv', '.json', '.xml', '.pdf', '.xlsx',
-  '.jpg', '.jpeg', '.png',
+  '.txt', '.md', '.csv', '.json', '.xml', '.pdf',
+  '.xlsx', '.xls',
+  '.doc', '.docx',
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp', '.heic',
 ]);
 
 export const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
