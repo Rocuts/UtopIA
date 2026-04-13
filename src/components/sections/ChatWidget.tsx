@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Button } from '@/components/ui/Button';
-import { Mic, Send, Bot, User, Volume2, ShieldAlert, Trash2, X, PhoneOff, Paperclip, FileText, CheckCircle, Loader2, Globe, FileDown } from 'lucide-react';
+import { Mic, Send, Bot, User, ShieldAlert, Trash2, Paperclip, FileText, CheckCircle, Loader2, Globe, FileDown, PhoneOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,7 +23,8 @@ import { Environment, ContactShadows } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { InteractiveOrb } from '@/components/ui/InteractiveOrb';
 
-// Safe UUID/ID generator fallback for non-secure contexts (LAN access without HTTPS)
+const NOVA_SPRING = { stiffness: 400, damping: 25 };
+
 const generateId = () => {
   try {
     if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
@@ -69,10 +70,8 @@ export function ChatWidget() {
   const [conversationId] = useState(() => generateConversationId());
   const [latestRiskAssessment, setLatestRiskAssessment] = useState<ChatMessage['riskAssessment'] | null>(null);
 
-  // Initialize Realtime API hook
   const { isConnecting, isConnected, error, volume, startSession, stopSession, messageLog } = useRealtimeAPI();
 
-  // Use case labels
   const useCaseLabels = {
     es: {
       'dian-defense': 'Defensa DIAN',
@@ -88,7 +87,6 @@ export function ChatWidget() {
     },
   };
 
-  // Sync initial message if language changes globally and no chat happened
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'assistant') {
       setMessages([{ id: '1', role: 'assistant', content: INITIAL_MSG[language] }]);
@@ -98,18 +96,15 @@ export function ChatWidget() {
   const scrollToBottom = () => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    // Use rAF to ensure DOM has painted the new content before scrolling
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
   };
 
-  // Scroll on every message change and when typing indicator appears
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  // Also scroll after images/content inside messages finish rendering
   useEffect(() => {
     const timer = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timer);
@@ -121,15 +116,11 @@ export function ChatWidget() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages, language, useCase }),
       });
 
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
+      if (!response.ok) throw new Error('Network response was not ok');
 
       const data = await response.json();
 
@@ -147,7 +138,6 @@ export function ChatWidget() {
 
       setMessages(prev => {
         const updated = [...prev, assistantMsg];
-        // Persist conversation to localStorage
         saveConversation({
           id: conversationId,
           title: inferTitle(updated),
@@ -163,11 +153,7 @@ export function ChatWidget() {
       console.error("Error consultando al agente:", error);
       setMessages(prev => [
         ...prev,
-        {
-          id: generateId(),
-          role: 'assistant',
-          content: t.chatAi.errorMsg
-        }
+        { id: generateId(), role: 'assistant', content: t.chatAi.errorMsg }
       ]);
     } finally {
       setIsTyping(false);
@@ -228,16 +214,10 @@ export function ChatWidget() {
     formData.append('context', file.name);
 
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
-      }
+      if (!response.ok) throw new Error(data.error || 'Upload failed');
 
       setUploadedFiles(prev => [...prev, file.name]);
       setMessages(prev => [
@@ -270,50 +250,46 @@ export function ChatWidget() {
   return (
     <section id="ai-consult" className="py-16 md:py-24 relative container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
       <div className="text-center mb-10">
-        <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4">
-          {t.chat.title.split(' ').map((word: string, i: number, arr: string[]) =>
-            i === arr.length - 2 || i === arr.length - 1 ? <span key={i} className="text-gradient">{word} </span> : <span key={i}>{word} </span>
-          )}
+        <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4 text-[#0a0a0a]">
+          {t.chat.title}
         </h2>
-        <p className="text-lg text-foreground/70 mb-4">
+        <p className="text-lg text-[#525252] mb-4">
           {t.chat.confidential}
         </p>
-        <div className="flex items-center justify-center gap-2 text-sm text-[#f59e0b] bg-[#f59e0b]/10 w-fit mx-auto px-4 py-2 rounded-full border border-[#f59e0b]/20">
+        <div className="flex items-center justify-center gap-2 text-sm text-[#525252] bg-[#fafafa] w-fit mx-auto px-4 py-2 rounded-sm border border-[#e5e5e5]">
           <ShieldAlert className="w-4 h-4" />
           <span>{t.chat.demoTag}</span>
         </div>
       </div>
 
-      <GlassPanel className="flex flex-col h-[600px] overflow-hidden rounded-2xl border-[var(--surface-border-solid)] shadow-[0_0_40px_rgba(212,160,23,0.05)] relative z-10 bg-[var(--background)]">
+      <GlassPanel className="flex flex-col h-[600px] overflow-hidden rounded-sm relative z-10 bg-white">
 
         {!hasAcceptedTerms && (
-          <div className="absolute inset-0 z-50 bg-[var(--background)]/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
-            <GlassPanel className="max-w-md p-8 border-[var(--surface-border-solid)] bg-[var(--surface-panel)] rounded-2xl shadow-xl">
-              <ShieldAlert className="w-12 h-12 text-[#d4a017] mx-auto mb-4" />
-              <h3 className="text-xl font-bold mb-4">{t.chatAi.disclaimerTitle}</h3>
-              <p className="text-sm text-foreground/80 mb-6 leading-relaxed">
+          <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+            <div className="max-w-md p-8 border border-[#e5e5e5] bg-white rounded-sm">
+              <ShieldAlert className="w-10 h-10 text-[#0a0a0a] mx-auto mb-4" />
+              <h3 className="text-lg font-bold mb-4 text-[#0a0a0a]">{t.chatAi.disclaimerTitle}</h3>
+              <p className="text-sm text-[#525252] mb-6 leading-relaxed">
                 {t.chatAi.disclaimerText}
               </p>
-              <Button
-                onClick={() => setHasAcceptedTerms(true)}
-                className="w-full"
-              >
+              <Button onClick={() => setHasAcceptedTerms(true)} className="w-full">
                 {t.chatAi.acceptBtn}
               </Button>
-            </GlassPanel>
+            </div>
           </div>
         )}
 
         {/* Chat Header */}
-        <div className="p-4 border-b border-[var(--surface-border)] flex items-center justify-between bg-[var(--background)]/90 z-20">
+        <div className="p-4 border-b border-[#e5e5e5] flex items-center justify-between bg-white z-20">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full bg-[#0a0f1a] border border-[#d4a017]/30 flex items-center justify-center relative transition-all ${voiceMode ? 'shadow-[0_0_15px_rgba(212,160,23,0.8)]' : ''}`}>
-              <Bot className="w-5 h-5 text-[#d4a017]" />
-              <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[var(--background)] ${isConnected ? 'bg-[#d4a017]' : 'bg-[#10b981]'}`} />
+            <div className="w-8 h-8 rounded-sm bg-[#0a0a0a] flex items-center justify-center">
+              <Bot className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground text-sm">UtopIA</h3>
-              <p className="text-xs text-[#d4a017]">{voiceMode ? (isConnecting ? t.chatAi.voiceConnecting : t.chatAi.voiceListening) : t.chatAi.status}</p>
+              <h3 className="font-medium text-[#0a0a0a] text-sm">UtopIA</h3>
+              <p className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+                {voiceMode ? (isConnecting ? t.chatAi.voiceConnecting : t.chatAi.voiceListening) : t.chatAi.status}
+              </p>
             </div>
           </div>
 
@@ -321,18 +297,18 @@ export function ChatWidget() {
             <select
               value={useCase}
               onChange={(e) => setUseCase(e.target.value)}
-              className="hidden md:block bg-[var(--surface-panel)] border border-[var(--surface-border-solid)] text-foreground text-xs rounded-md px-2 py-1 outline-none focus:border-[#d4a017]/50"
+              className="hidden md:block bg-white border border-[#e5e5e5] text-[#0a0a0a] text-xs rounded-sm px-2 py-1 outline-none focus:border-[#0a0a0a]"
             >
               {Object.entries(useCaseLabels[language]).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
-            <Button onClick={handleExportPDF} variant="ghost" size="sm" className="hidden md:inline-flex text-xs text-foreground/60 hover:text-[#d4a017] border border-transparent hover:border-[#d4a017]/30" disabled={messages.length <= 1}>
-              <FileDown className="w-4 h-4 mr-2" />
+            <Button onClick={handleExportPDF} variant="ghost" size="sm" className="hidden md:inline-flex text-xs" disabled={messages.length <= 1}>
+              <FileDown className="w-3.5 h-3.5 mr-1.5" />
               PDF
             </Button>
-            <Button onClick={handleClearChat} variant="ghost" size="sm" className="hidden md:inline-flex text-xs text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30">
-              <Trash2 className="w-4 h-4 mr-2" />
+            <Button onClick={handleClearChat} variant="ghost" size="sm" className="hidden md:inline-flex text-xs text-[#ef4444] hover:text-[#ef4444] hover:bg-[#fef2f2]">
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
               {t.chatAi.clear}
             </Button>
           </div>
@@ -340,14 +316,14 @@ export function ChatWidget() {
 
         {/* Uploaded files indicator */}
         {uploadedFiles.length > 0 && (
-          <div className="px-4 py-2 border-b border-[var(--surface-border)] bg-[#d4a017]/5 flex items-center gap-2 flex-wrap z-20">
-            <FileText className="w-3.5 h-3.5 text-[#d4a017] shrink-0" />
-            <span className="text-xs text-foreground/60">
+          <div className="px-4 py-2 border-b border-[#e5e5e5] bg-[#fafafa] flex items-center gap-2 flex-wrap z-20">
+            <FileText className="w-3.5 h-3.5 text-[#525252] shrink-0" />
+            <span className="text-xs text-[#a3a3a3]">
               {language === 'es' ? 'Documentos cargados:' : 'Loaded documents:'}
             </span>
             {uploadedFiles.map((name, i) => (
-              <span key={i} className="text-xs bg-[#d4a017]/10 text-[#d4a017] px-2 py-0.5 rounded-full border border-[#d4a017]/20 flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" />
+              <span key={i} className="text-xs bg-white text-[#0a0a0a] px-2 py-0.5 rounded-sm border border-[#e5e5e5] flex items-center gap-1">
+                <CheckCircle className="w-3 h-3 text-[#22c55e]" />
                 {name}
               </span>
             ))}
@@ -356,11 +332,10 @@ export function ChatWidget() {
 
         {/* Dynamic Main View: Text Chat vs Voice Orb */}
         {voiceMode ? (
-          <div data-lenis-prevent className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#0a0f1a]/20 to-[#d4a017]/5 overflow-y-auto">
-                {/* 3D Orb Canvas */}
-                <div className="w-full h-[350px] mb-6 relative rounded-2xl overflow-hidden bg-[#0a0f1a] border border-[#d4a017]/20">
+          <div data-lenis-prevent className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 bg-[#fafafa] overflow-y-auto">
+                <div className="w-full h-[350px] mb-6 relative rounded-sm overflow-hidden bg-[#0a0a0a] border border-[#e5e5e5]">
                   <Canvas camera={{ position: [0, 0, 5], fov: 45 }} gl={{ antialias: false }}>
-                    <color attach="background" args={['#0a0f1a']} />
+                    <color attach="background" args={['#0a0a0a']} />
                     <ambientLight intensity={0.1} />
                     <directionalLight position={[10, 10, 5]} intensity={1} color="#ffffff" />
                     <directionalLight position={[-10, -10, -5]} intensity={2} color="#d4a017" />
@@ -382,24 +357,24 @@ export function ChatWidget() {
                 </div>
 
                 <div className="text-center w-full max-w-sm">
-                  <h4 className="text-xl font-bold mb-2 text-foreground">
+                  <h4 className="text-lg font-bold mb-2 text-[#0a0a0a]">
                     {isConnecting ? t.chatAi.voiceConnectingTitle : t.chatAi.voiceTitle}
                   </h4>
-                  <p className="text-sm text-foreground/60 mb-6 min-h-[40px]">
-                    {error ? <span className="text-red-400">{error}</span> :
+                  <p className="text-sm text-[#525252] mb-6 min-h-[40px]">
+                    {error ? <span className="text-[#ef4444]">{error}</span> :
                      isConnected ? t.chatAi.voiceActive :
                      t.chatAi.voiceMicPermission}
                   </p>
 
-                  {/* Tool Action Logs */}
-                  <div className="h-12 overflow-hidden mb-6 flex flex-col justify-end text-xs font-mono text-[#d4a017]/80">
+                  <div className="h-12 overflow-hidden mb-6 flex flex-col justify-end text-xs font-[family-name:var(--font-geist-mono)] text-[#a3a3a3]">
                     <AnimatePresence>
                       {messageLog.slice(-2).map((log, i) => (
                         <motion.div
                           key={i}
-                          initial={{ opacity: 0, y: 10 }}
+                          initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0 }}
+                          transition={{ type: "spring", ...NOVA_SPRING }}
                         >
                           {'>'} {log}
                         </motion.div>
@@ -409,9 +384,9 @@ export function ChatWidget() {
 
                   <Button
                     onClick={toggleRecording}
-                    className="rounded-full w-16 h-16 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] mx-auto flex items-center justify-center"
+                    className="rounded-sm w-14 h-14 bg-[#ef4444] text-white hover:bg-[#dc2626] mx-auto flex items-center justify-center"
                   >
-                    <PhoneOff className="w-6 h-6" />
+                    <PhoneOff className="w-5 h-5" />
                   </Button>
                 </div>
           </div>
@@ -419,35 +394,36 @@ export function ChatWidget() {
           <div
             ref={scrollContainerRef}
             data-lenis-prevent
-            className="flex-1 min-h-0 overflow-y-auto styled-scrollbar"
+            className="flex-1 min-h-0 overflow-y-auto styled-scrollbar bg-white"
             style={{ overscrollBehavior: 'contain' }}
           >
-            <div className="p-4 sm:p-6 flex flex-col gap-6 w-full">
+            <div className="p-4 sm:p-6 flex flex-col gap-4 w-full">
                 {messages.map((msg) => (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "spring", ...NOVA_SPRING }}
+                    className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                   >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 ${
-                      msg.role === 'user' ? 'bg-[#d4a017]/20 text-[#d4a017]' : 'bg-[#0a0f1a] border border-[#d4a017]/30 text-white'
+                    <div className={`w-7 h-7 rounded-sm flex items-center justify-center shrink-0 mt-0.5 ${
+                      msg.role === 'user' ? 'bg-[#fafafa] border border-[#e5e5e5] text-[#525252]' : 'bg-[#0a0a0a] text-white'
                     }`}>
-                      {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                      {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                     </div>
-                    <div className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-5 py-3.5 text-sm sm:text-base leading-relaxed ${
+                    <div className={`max-w-[85%] sm:max-w-[80%] rounded-sm px-4 py-3 text-sm leading-relaxed ${
                       msg.role === 'user'
-                        ? 'bg-[#d4a017] text-[#0a0f1a] rounded-tr-sm shadow-[0_4px_15px_rgba(212,160,23,0.2)] font-medium'
-                        : 'bg-[#0a0f1a]/80 border border-[var(--surface-border-solid)] text-foreground/90 rounded-tl-sm shadow-sm prose prose-invert prose-p:leading-relaxed prose-pre:bg-[#0a0f1a] prose-pre:border prose-pre:border-[var(--surface-border-solid)] max-w-none'
+                        ? 'bg-[#0a0a0a] text-white'
+                        : 'bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a] prose max-w-none'
                     }`}>
                       {msg.role === 'user' ? (
                         msg.content
                       ) : (
                         <>
                           {msg.webSearchUsed && (
-                            <div className="flex items-center gap-1.5 text-xs text-[#8b5cf6] mb-2 pb-2 border-b border-[#8b5cf6]/20">
+                            <div className="flex items-center gap-1.5 text-xs text-[#525252] mb-2 pb-2 border-b border-[#e5e5e5]">
                               <Globe className="w-3.5 h-3.5" />
-                              <span className="font-medium">
+                              <span className="font-medium font-[family-name:var(--font-geist-mono)]">
                                 {language === 'es' ? 'Información complementada con búsqueda web' : 'Enhanced with web search'}
                               </span>
                             </div>
@@ -456,14 +432,14 @@ export function ChatWidget() {
                             {msg.content}
                           </ReactMarkdown>
                           {msg.riskAssessment && (
-                            <div className="mt-4 pt-4 border-t border-[var(--surface-border)] flex flex-col items-center gap-2">
+                            <div className="mt-4 pt-4 border-t border-[#e5e5e5] flex flex-col items-center gap-2">
                               <RiskGauge
                                 level={msg.riskAssessment.level}
                                 score={msg.riskAssessment.score}
                                 className="scale-90"
                               />
                               {msg.riskAssessment.factors.length > 0 && (
-                                <ul className="text-xs text-foreground/60 list-disc list-inside mt-2 space-y-1 w-full">
+                                <ul className="text-xs text-[#525252] list-disc list-inside mt-2 space-y-1 w-full">
                                   {msg.riskAssessment.factors.slice(0, 3).map((f, i) => (
                                     <li key={i}>{f.description}</li>
                                   ))}
@@ -481,15 +457,16 @@ export function ChatWidget() {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex gap-4"
+                    transition={{ type: "spring", ...NOVA_SPRING }}
+                    className="flex gap-3"
                   >
-                    <div className="w-8 h-8 rounded-full bg-[#0a0f1a] border border-[#d4a017]/30 flex items-center justify-center shrink-0 mt-1 text-white">
-                      <Bot className="w-4 h-4" />
+                    <div className="w-7 h-7 rounded-sm bg-[#0a0a0a] flex items-center justify-center shrink-0 mt-0.5 text-white">
+                      <Bot className="w-3.5 h-3.5" />
                     </div>
-                    <div className="bg-[#0a0f1a]/80 border border-[var(--surface-border-solid)] rounded-2xl rounded-tl-sm px-5 py-4 flex items-center gap-1.5 self-start shadow-sm">
-                      <span className="w-2 h-2 rounded-full bg-[#d4a017]/60 animate-bounce" />
-                      <span className="w-2 h-2 rounded-full bg-[#d4a017]/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 rounded-full bg-[#d4a017]/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="bg-[#fafafa] border border-[#e5e5e5] rounded-sm px-4 py-3 flex items-center gap-1.5 self-start">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#a3a3a3] animate-bounce" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#a3a3a3] animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#a3a3a3] animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
                   </motion.div>
                 )}
@@ -501,24 +478,24 @@ export function ChatWidget() {
         {/* Chat Input */}
         {!voiceMode && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-[var(--background)] border-t border-[var(--surface-border)] relative z-20"
+            transition={{ type: "spring", ...NOVA_SPRING }}
+            className="p-4 bg-white border-t border-[#e5e5e5] relative z-20"
           >
             <form
               onSubmit={handleSubmit}
-              className="flex items-end gap-3 bg-[var(--surface-panel)] border border-[var(--surface-border-solid)] rounded-2xl p-2 focus-within:border-[#d4a017]/50 focus-within:ring-1 focus-within:ring-[#d4a017]/30 transition-all"
+              className="flex items-end gap-2 bg-white border border-[#e5e5e5] rounded-sm p-1.5 focus-within:border-[#0a0a0a] transition-colors"
             >
               <button
                 type="button"
                 onClick={toggleRecording}
-                className={`p-3 rounded-xl flex items-center justify-center shrink-0 transition-all bg-[var(--background)] text-foreground/50 hover:text-[#d4a017] hover:bg-[#d4a017]/10 hover:shadow-[0_0_15px_rgba(212,160,23,0.2)]`}
+                className="p-2.5 rounded-sm flex items-center justify-center shrink-0 transition-colors text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]"
                 title={t.chatAi.voiceButtonTitle}
               >
-                <Mic className="w-5 h-5" />
+                <Mic className="w-4 h-4" />
               </button>
 
-              {/* File upload button */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -530,10 +507,10 @@ export function ChatWidget() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="p-3 rounded-xl flex items-center justify-center shrink-0 transition-all bg-[var(--background)] text-foreground/50 hover:text-[#d4a017] hover:bg-[#d4a017]/10 hover:shadow-[0_0_15px_rgba(212,160,23,0.2)] disabled:opacity-50"
+                className="p-2.5 rounded-sm flex items-center justify-center shrink-0 transition-colors text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] disabled:opacity-50"
                 title={language === 'es' ? 'Subir documento' : 'Upload document'}
               >
-                {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
               </button>
 
               <textarea
@@ -541,7 +518,7 @@ export function ChatWidget() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={t.chat.inputPlaceholder}
-                className="flex-1 bg-transparent border-none focus:ring-0 text-foreground text-sm sm:text-base resize-none py-3 px-2 outline-none min-h-[44px] max-h-[120px]"
+                className="flex-1 bg-transparent border-none focus:ring-0 text-[#0a0a0a] text-sm resize-none py-2.5 px-2 outline-none min-h-[40px] max-h-[120px] placeholder:text-[#a3a3a3]"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -553,12 +530,12 @@ export function ChatWidget() {
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="p-3 rounded-xl bg-[#d4a017] text-[#0a0f1a] shrink-0 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#f0c040] hover:shadow-[0_0_15px_rgba(212,160,23,0.4)] transition-all"
+                className="p-2.5 rounded-sm bg-[#0a0a0a] text-white shrink-0 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#262626] transition-colors"
               >
-                <Send className="w-5 h-5" />
+                <Send className="w-4 h-4" />
               </button>
             </form>
-            <p className="text-center text-xs text-foreground/40 mt-3 font-mono">
+            <p className="text-center text-xs text-[#a3a3a3] mt-3 font-[family-name:var(--font-geist-mono)]">
                {t.chat.disclaimer}
             </p>
           </motion.div>

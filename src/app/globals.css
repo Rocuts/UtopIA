@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
-/* Chat scrollbar */
+/* ============================================================
+   NOVAFORGE DESIGN SYSTEM — Vercel-Style Brutalismo Moderno
+   ============================================================ */
+
+/* --- Scrollbar: Neutral, minimal --- */
 .styled-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
@@ -8,59 +12,65 @@
   background: transparent;
 }
 .styled-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(212, 160, 23, 0.2);
-  border-radius: 3px;
+  background: #d4d4d4;
+  border-radius: 2px;
 }
 .styled-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(212, 160, 23, 0.4);
+  background: #a3a3a3;
 }
 .styled-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(212, 160, 23, 0.2) transparent;
+  scrollbar-color: #d4d4d4 transparent;
 }
 
+/* --- Tailwind v4 Theme Tokens --- */
 @theme {
-  --color-brand-primary: #1e3a5f;
-  --color-brand-blue: #111827;
-  --color-brand-accent: #d4a017;
-  --color-brand-bg: #0a0f1a;
+  --color-brand-primary: #0a0a0a;
+  --color-brand-accent: #0a0a0a;
+  --color-brand-bg: #ffffff;
 }
 
+/* --- Novaforge CSS Custom Properties --- */
 :root {
-  /* Core Colors */
-  --background: #111827; /* Warm dark */
-  --foreground: #f8fafc; /* Warm white */
+  /* Core */
+  --background: #ffffff;
+  --foreground: #0a0a0a;
 
-  /* Brand accents */
-  --primary: #1e3a5f;
-  --primary-light: #2d5a8e;
-  --accent: #d4a017;
-  --accent-light: #f0c040;
-  --accent-glow: rgba(212, 160, 23, 0.2);
-  --blue-deep: #0a0f1a;
+  /* Monochrome brand */
+  --primary: #0a0a0a;
+  --primary-light: #171717;
+  --accent: #0a0a0a;
+  --accent-light: #262626;
+  --accent-glow: rgba(10, 10, 10, 0.06);
+  --blue-deep: #fafafa;
 
-  /* Status colors */
-  --success: #10b981;
-  --warning: #f59e0b;
+  /* Status (functional — preserved) */
+  --success: #22c55e;
+  --warning: #eab308;
   --danger: #ef4444;
 
-  /* Surfaces / Glassmorphism */
+  /* Surfaces — no glass, no blur */
   --surface-base: var(--background);
-  --surface-panel: rgba(17, 24, 39, 0.6);
-  --surface-panel-hover: rgba(30, 58, 95, 0.4);
-  --surface-border: rgba(148, 163, 184, 0.08);
-  --surface-border-hover: rgba(212, 160, 23, 0.2);
-  --surface-border-solid: rgba(148, 163, 184, 0.2);
+  --surface-panel: #ffffff;
+  --surface-panel-hover: #fafafa;
+  --surface-border: #e5e5e5;
+  --surface-border-hover: #d4d4d4;
+  --surface-border-solid: #e5e5e5;
 
-  /* Spacing & Radii */
-  --radius-xs: 0.25rem;
-  --radius-sm: 0.5rem;
-  --radius-md: 1rem;
-  --radius-lg: 1.5rem;
-  --radius-xl: 2rem;
-  --radius-full: 9999px;
+  /* Text hierarchy */
+  --text-primary: #0a0a0a;
+  --text-secondary: #525252;
+  --text-tertiary: #a3a3a3;
 
-  /* Typography Scale */
+  /* Radii — hard-edged, max 4px */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-full: 4px;
+
+  /* Typography scale */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -83,7 +93,7 @@
   --z-popover: 100;
 }
 
-/* Respect user preferences */
+/* --- Reduced Motion --- */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
@@ -93,6 +103,7 @@
   }
 }
 
+/* --- Base Body --- */
 body {
   background-color: var(--background);
   color: var(--foreground);
@@ -101,55 +112,54 @@ body {
   line-height: 1.6;
 }
 
-/* Global Glass Panel Utility */
+/* --- Panel Utility (replaces glass-panel) ---
+   Same class name to avoid breaking existing components.
+   No backdrop-filter, no box-shadow. Solid border only.  */
 .glass-panel {
   background: var(--surface-panel);
   border: 1px solid var(--surface-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  transition: border-color 0.1s ease;
 }
 .glass-panel:hover {
-  background: var(--surface-panel-hover);
   border-color: var(--surface-border-hover);
 }
 
-/* Gradients */
+/* --- Dot Grid Background --- */
+.dot-grid {
+  background-image: radial-gradient(circle, #d4d4d4 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* --- Text Gradient → Solid (Novaforge kills gradients) --- */
 .text-gradient {
-  background: linear-gradient(to right, var(--foreground), #94a3b8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--foreground);
 }
 .text-gradient-accent {
-  background: linear-gradient(to right, var(--accent), var(--accent-light));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--foreground);
 }
 
-/* Focus Visibility for A11y */
+/* --- Focus — A11y --- */
 *:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
 }
 
+/* --- Selection --- */
 ::selection {
-  background: var(--accent-glow);
-  color: var(--accent);
+  background: #0a0a0a;
+  color: #ffffff;
 }
 
-/* Custom Markdown Styling for the Chat AI Responses */
+/* --- Prose / Markdown (Chat AI Responses) --- */
 .prose {
   color: var(--foreground);
 }
 .prose p {
   margin-bottom: 1rem;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 .prose strong {
-  color: #fff;
+  color: #0a0a0a;
   font-weight: 600;
 }
 .prose ul {
@@ -166,6 +176,26 @@ body {
   margin-bottom: 0.5rem;
 }
 .prose a {
-  color: var(--accent);
+  color: #0a0a0a;
   text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.prose a:hover {
+  text-decoration-thickness: 2px;
+}
+.prose pre {
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-x: auto;
+}
+.prose code {
+  font-size: 0.875em;
+}
+.prose blockquote {
+  border-left: 2px solid #e5e5e5;
+  padding-left: 1rem;
+  color: #525252;
 }

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { HTMLAttributes, forwardRef } from "react";
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: 'outline' | 'glow' | 'accent';
+  variant?: 'outline' | 'solid' | 'muted';
 }
 
 const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
@@ -11,11 +11,11 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
       <span
         ref={ref}
         className={cn(
-          "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider",
+          "inline-flex items-center rounded-sm px-2.5 py-0.5 text-xs font-medium tracking-wide",
           {
-            "border border-[var(--surface-border-solid)] text-foreground/80": variant === 'outline',
-            "bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 shadow-[0_0_8px_rgba(212,160,23,0.15)]": variant === 'glow',
-            "bg-[var(--primary)]/20 text-[var(--accent)]": variant === 'accent',
+            "border border-[#e5e5e5] text-[#525252]": variant === 'outline',
+            "bg-[#0a0a0a] text-white": variant === 'solid',
+            "bg-[#fafafa] text-[#525252] border border-[#e5e5e5]": variant === 'muted',
           },
           className
         )}

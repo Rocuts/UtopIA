@@ -22,52 +22,58 @@ export function Header() {
 
   return (
     <header className={cn(
-      "fixed top-0 w-full z-[var(--z-sticky)] transition-all duration-300 border-b",
+      "fixed top-0 w-full z-[var(--z-sticky)] transition-colors duration-100 border-b",
       {
-        "bg-[var(--background)]/80 backdrop-blur-md border-[var(--surface-border)]": scrolled,
+        "bg-white/80 backdrop-blur-sm border-[#e5e5e5]": scrolled,
         "bg-transparent border-transparent": !scrolled,
       }
     )}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl h-20 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold tracking-tighter text-foreground flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-[#d4a017] shadow-[0_0_10px_rgba(212,160,23,0.6)]" />
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl h-16 flex items-center justify-between">
+        <Link href="/" className="text-lg font-bold tracking-tight text-[#0a0a0a] flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#0a0a0a]" />
           UtopIA.
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
-          <Link href="#services" className="text-sm font-medium text-foreground/80 hover:text-[#d4a017] transition-colors">
+          <Link href="#services" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
             {t.nav.services}
           </Link>
-          <Link href="#methodology" className="text-sm font-medium text-foreground/80 hover:text-[#d4a017] transition-colors">
+          <Link href="#methodology" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
             {t.nav.methodology}
           </Link>
-          <Link href="#metrics" className="text-sm font-medium text-foreground/80 hover:text-[#d4a017] transition-colors">
+          <Link href="#metrics" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
             {t.nav.results}
           </Link>
-          <Link href="#faq" className="text-sm font-medium text-foreground/80 hover:text-[#d4a017] transition-colors">
+          <Link href="#faq" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
             {t.nav.faq}
           </Link>
-          <Link href="/dashboard" className="text-sm font-medium text-foreground/80 hover:text-[#d4a017] transition-colors flex items-center gap-1.5">
+          <Link href="/dashboard" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors flex items-center gap-1.5">
             <LayoutDashboard className="w-4 h-4" />
             {t.nav.dashboard}
           </Link>
         </nav>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center bg-[#0a0f1a]/80 border border-[var(--surface-border-solid)] rounded-full p-1 w-24 relative shadow-inner">
-            <div
-              className="absolute h-[calc(100%-8px)] w-[41px] bg-[#d4a017] rounded-full top-[4px] shadow-[0_0_10px_rgba(212,160,23,0.4)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-              style={{ left: language === 'es' ? '4px' : '48px' }}
-            />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center border border-[#e5e5e5] rounded-sm p-0.5 relative">
             <button
               onClick={() => setLanguage('es')}
-              className={`flex-1 flex items-center justify-center z-10 text-xs font-semibold py-1 transition-colors ${language === 'es' ? 'text-[#0a0f1a]' : 'text-foreground/60 hover:text-foreground'}`}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+                language === 'es'
+                  ? 'bg-[#0a0a0a] text-white'
+                  : 'text-[#a3a3a3] hover:text-[#0a0a0a]'
+              )}
             >
               ES
             </button>
             <button
               onClick={() => setLanguage('en')}
-              className={`flex-1 flex items-center justify-center z-10 text-xs font-semibold py-1 transition-colors ${language === 'en' ? 'text-[#0a0f1a]' : 'text-foreground/60 hover:text-foreground'}`}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+                language === 'en'
+                  ? 'bg-[#0a0a0a] text-white'
+                  : 'text-[#a3a3a3] hover:text-[#0a0a0a]'
+              )}
             >
               EN
             </button>

@@ -31,9 +31,11 @@ import {
 } from '@/lib/storage/conversation-history';
 import { exportConversationPDF } from '@/lib/export/pdf-export';
 
+const NOVA_SPRING = { stiffness: 400, damping: 25 };
+
 const RISK_COLORS: Record<RiskLevel, string> = {
-  bajo: '#10b981',
-  medio: '#f59e0b',
+  bajo: '#22c55e',
+  medio: '#eab308',
   alto: '#f97316',
   critico: '#ef4444',
 };
@@ -85,7 +87,6 @@ export default function DashboardPage() {
     );
   };
 
-  // Determine the dominant risk level for the gauge
   const dominantRisk: RiskLevel = stats
     ? (Object.entries(stats.riskCounts).sort((a, b) => b[1] - a[1])[0]?.[0] as RiskLevel) || 'bajo'
     : 'bajo';
@@ -95,23 +96,23 @@ export default function DashboardPage() {
   const d = t.dashboard;
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pt-24 pb-16">
+    <div className="min-h-screen bg-white pt-24 pb-16">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
           <div className="flex items-center gap-4">
             <Link
               href="/"
-              className="p-2 rounded-xl text-foreground/50 hover:text-[#d4a017] hover:bg-[#d4a017]/10 transition-colors"
+              className="p-2 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-3">
-                <LayoutDashboard className="w-7 h-7 text-[#d4a017]" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#0a0a0a] flex items-center gap-3">
+                <LayoutDashboard className="w-6 h-6" />
                 {d.title}
               </h1>
-              <p className="text-sm text-foreground/50 mt-1">{d.subtitle}</p>
+              <p className="text-sm text-[#a3a3a3] mt-1">{d.subtitle}</p>
             </div>
           </div>
           <Link href="/#ai-consult">
@@ -123,70 +124,74 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-[#e5e5e5] border border-[#e5e5e5] rounded-sm overflow-hidden mb-10">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ type: "spring", ...NOVA_SPRING, delay: 0.05 }}
+            className="bg-white"
           >
-            <GlassPanel className="p-6" hoverEffect>
+            <GlassPanel className="p-6 border-0 rounded-none" hoverEffect>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-[#d4a017]/10 border border-[#d4a017]/20 flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-[#d4a017]" />
+                <div className="w-9 h-9 rounded-sm bg-[#fafafa] border border-[#e5e5e5] flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-[#0a0a0a]" />
                 </div>
-                <span className="text-sm text-foreground/60">{d.totalCases}</span>
+                <span className="text-sm text-[#a3a3a3]">{d.totalCases}</span>
               </div>
-              <p className="text-3xl font-bold text-foreground">{stats?.total ?? 0}</p>
+              <p className="text-3xl font-bold text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">{stats?.total ?? 0}</p>
             </GlassPanel>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
+            className="bg-white"
           >
-            <GlassPanel className="p-6" hoverEffect>
+            <GlassPanel className="p-6 border-0 rounded-none" hoverEffect>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-[#10b981]" />
+                <div className="w-9 h-9 rounded-sm bg-[#f0fdf4] border border-[#e5e5e5] flex items-center justify-center">
+                  <CheckCircle className="w-4 h-4 text-[#22c55e]" />
                 </div>
-                <span className="text-sm text-foreground/60">{d.lowRisk}</span>
+                <span className="text-sm text-[#a3a3a3]">{d.lowRisk}</span>
               </div>
-              <p className="text-3xl font-bold text-foreground">{stats?.riskCounts.bajo ?? 0}</p>
+              <p className="text-3xl font-bold text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">{stats?.riskCounts.bajo ?? 0}</p>
             </GlassPanel>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ type: "spring", ...NOVA_SPRING, delay: 0.15 }}
+            className="bg-white"
           >
-            <GlassPanel className="p-6" hoverEffect>
+            <GlassPanel className="p-6 border-0 rounded-none" hoverEffect>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-[#f97316]/10 border border-[#f97316]/20 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-[#f97316]" />
+                <div className="w-9 h-9 rounded-sm bg-[#fff7ed] border border-[#e5e5e5] flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4 text-[#f97316]" />
                 </div>
-                <span className="text-sm text-foreground/60">{d.highRisk}</span>
+                <span className="text-sm text-[#a3a3a3]">{d.highRisk}</span>
               </div>
-              <p className="text-3xl font-bold text-foreground">
+              <p className="text-3xl font-bold text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">
                 {(stats?.riskCounts.alto ?? 0) + (stats?.riskCounts.critico ?? 0)}
               </p>
             </GlassPanel>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ type: "spring", ...NOVA_SPRING, delay: 0.2 }}
+            className="bg-white"
           >
-            <GlassPanel className="p-6 flex flex-col items-center justify-center" hoverEffect>
+            <GlassPanel className="p-6 flex flex-col items-center justify-center border-0 rounded-none" hoverEffect>
               <RiskGauge
                 level={dominantRisk}
                 label={language === 'es' ? undefined : undefined}
                 score={conversations.length > 0 ? riskScore[dominantRisk] : 0}
                 className="scale-75 -my-2"
               />
-              <span className="text-xs text-foreground/50 mt-1">{d.riskOverview}</span>
+              <span className="text-xs text-[#a3a3a3] mt-1">{d.riskOverview}</span>
             </GlassPanel>
           </motion.div>
         </div>
@@ -194,30 +199,24 @@ export default function DashboardPage() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
           {[
-            { icon: Shield, label: d.actionDian, href: '/#ai-consult', color: '#1e3a5f' },
-            { icon: TrendingUp, label: d.actionRefund, href: '/#ai-consult', color: '#10b981' },
-            { icon: BarChart3, label: d.actionIntelligence, href: '/#ai-consult', color: '#d4a017' },
+            { icon: Shield, label: d.actionDian, href: '/#ai-consult' },
+            { icon: TrendingUp, label: d.actionRefund, href: '/#ai-consult' },
+            { icon: BarChart3, label: d.actionIntelligence, href: '/#ai-consult' },
           ].map((action, i) => (
             <motion.div
               key={action.label}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + i * 0.1 }}
+              transition={{ type: "spring", ...NOVA_SPRING, delay: 0.25 + i * 0.05 }}
             >
               <Link href={action.href}>
-                <GlassPanel
-                  className="p-5 flex items-center gap-4 cursor-pointer"
-                  hoverEffect
-                >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${action.color}15`, border: `1px solid ${action.color}30` }}
-                  >
-                    <action.icon className="w-6 h-6" style={{ color: action.color }} />
+                <GlassPanel className="p-5 flex items-center gap-4 cursor-pointer" hoverEffect>
+                  <div className="w-10 h-10 rounded-sm flex items-center justify-center shrink-0 bg-[#fafafa] border border-[#e5e5e5]">
+                    <action.icon className="w-5 h-5 text-[#0a0a0a]" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{action.label}</p>
-                    <p className="text-xs text-foreground/50">{d.startNow}</p>
+                    <p className="text-sm font-medium text-[#0a0a0a]">{action.label}</p>
+                    <p className="text-xs text-[#a3a3a3]">{d.startNow}</p>
                   </div>
                 </GlassPanel>
               </Link>
@@ -227,8 +226,8 @@ export default function DashboardPage() {
 
         {/* Conversation List */}
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Clock className="w-5 h-5 text-[#d4a017]" />
+          <h2 className="text-lg font-bold text-[#0a0a0a] flex items-center gap-2">
+            <Clock className="w-4 h-4" />
             {d.recentCases}
           </h2>
         </div>
@@ -239,8 +238,8 @@ export default function DashboardPage() {
             animate={{ opacity: 1 }}
           >
             <GlassPanel className="p-12 text-center">
-              <MessageSquare className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-              <p className="text-foreground/50 mb-4">{d.noCases}</p>
+              <MessageSquare className="w-10 h-10 text-[#d4d4d4] mx-auto mb-4" />
+              <p className="text-[#a3a3a3] mb-4">{d.noCases}</p>
               <Link href="/#ai-consult">
                 <Button size="sm">
                   <Plus className="w-4 h-4 mr-2" />
@@ -250,76 +249,70 @@ export default function DashboardPage() {
             </GlassPanel>
           </motion.div>
         ) : (
-          <div className="space-y-3">
+          <div className="border border-[#e5e5e5] rounded-sm overflow-hidden divide-y divide-[#e5e5e5]">
             <AnimatePresence>
               {conversations.map((conv, i) => (
                 <motion.div
                   key={conv.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  transition={{ delay: i * 0.05 }}
+                  transition={{ type: "spring", ...NOVA_SPRING, delay: i * 0.03 }}
+                  className="bg-white"
                 >
-                  <GlassPanel className="p-5" hoverEffect>
+                  <div className="p-5 hover:bg-[#fafafa] transition-colors">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                      {/* Risk indicator */}
                       <div
                         className="w-2 h-2 rounded-full shrink-0 hidden sm:block"
-                        style={{
-                          backgroundColor: RISK_COLORS[conv.riskLevel],
-                          boxShadow: `0 0 8px ${RISK_COLORS[conv.riskLevel]}`,
-                        }}
+                        style={{ backgroundColor: RISK_COLORS[conv.riskLevel] }}
                       />
 
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">
+                        <p className="text-sm font-medium text-[#0a0a0a] truncate">
                           {conv.title}
                         </p>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <Badge variant="accent" className="text-[10px]">
+                          <Badge variant="muted" className="text-[10px]">
                             {USE_CASE_LABELS[language]?.[conv.useCase] ?? conv.useCase}
                           </Badge>
                           <span
-                            className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+                            className="text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-sm border font-[family-name:var(--font-geist-mono)]"
                             style={{
                               color: RISK_COLORS[conv.riskLevel],
-                              borderColor: `${RISK_COLORS[conv.riskLevel]}50`,
-                              backgroundColor: `${RISK_COLORS[conv.riskLevel]}10`,
+                              borderColor: '#e5e5e5',
+                              backgroundColor: '#fafafa',
                             }}
                           >
                             {conv.riskLevel.toUpperCase()}
                           </span>
-                          <span className="text-xs text-foreground/40">
+                          <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
                             {conv.messages.length} {d.messages}
                           </span>
                         </div>
                       </div>
 
-                      {/* Date */}
-                      <span className="text-xs text-foreground/40 shrink-0">
+                      <span className="text-xs text-[#a3a3a3] shrink-0 font-[family-name:var(--font-geist-mono)]">
                         {formatDate(conv.updatedAt)}
                       </span>
 
-                      {/* Actions */}
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => handleExport(conv)}
-                          className="p-2 rounded-lg text-foreground/40 hover:text-[#d4a017] hover:bg-[#d4a017]/10 transition-colors"
+                          className="p-2 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
                           title={d.exportPdf}
                         >
                           <FileDown className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(conv.id)}
-                          className="p-2 rounded-lg text-foreground/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                          className="p-2 rounded-sm text-[#a3a3a3] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
                           title={d.delete}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                  </GlassPanel>
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>

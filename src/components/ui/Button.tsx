@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'glass' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -12,15 +12,14 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap rounded-full text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+          "inline-flex items-center justify-center whitespace-nowrap rounded-sm text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
           {
-            "bg-[var(--accent)] text-[#0f172a] hover:bg-[#e0b030] hover:shadow-[0_0_15px_rgba(212,160,23,0.4)] font-semibold": variant === 'primary',
-            "bg-transparent border border-[var(--primary)] text-foreground hover:bg-[var(--primary)]/10 hover:text-[var(--accent)]": variant === 'secondary',
-            "glass-panel text-foreground hover:text-[var(--accent)]": variant === 'glass',
-            "hover:bg-[var(--primary)]/10 text-foreground hover:text-[var(--accent)]": variant === 'ghost',
-            "h-9 px-4 py-2": size === 'sm',
-            "h-11 px-6 sm:h-12 sm:px-8 py-2": size === 'md',
-            "h-14 px-8 text-base": size === 'lg',
+            "bg-[#0a0a0a] text-white hover:bg-[#262626]": variant === 'primary',
+            "bg-white text-[#0a0a0a] border border-[#e5e5e5] hover:bg-[#fafafa] hover:border-[#d4d4d4]": variant === 'secondary',
+            "bg-transparent text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]": variant === 'ghost',
+            "h-8 px-3 text-xs": size === 'sm',
+            "h-10 px-5": size === 'md',
+            "h-12 px-8 text-base": size === 'lg',
           },
           className
         )}

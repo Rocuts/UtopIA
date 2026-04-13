@@ -3,9 +3,12 @@
 import { motion, useScroll, useTransform, useSpring } from 'motion/react';
 import { useRef, ReactNode } from 'react';
 
+/* Novaforge spring: stiff, robotic, instant feel */
+const NOVA_SPRING = { stiffness: 400, damping: 25 };
+
 interface ParallaxWrapperProps {
   children: ReactNode;
-  speed?: number; // -1 to 1, negative = slower, positive = faster
+  speed?: number;
   className?: string;
   offset?: ['start end' | 'start start' | 'end start' | 'end end' | 'center center', 'start end' | 'start start' | 'end start' | 'end end' | 'center center'];
 }
@@ -24,7 +27,7 @@ export function ParallaxWrapper({
   });
 
   const rawY = useTransform(scrollYProgress, [0, 1], [speed * -100, speed * 100]);
-  const y = useSpring(rawY, { stiffness: 100, damping: 30, mass: 0.5 });
+  const y = useSpring(rawY, NOVA_SPRING);
 
   return (
     <div ref={ref} className={className}>
@@ -35,7 +38,6 @@ export function ParallaxWrapper({
   );
 }
 
-// Staggered reveal animation for children entering viewport
 interface RevealProps {
   children: ReactNode;
   className?: string;
@@ -49,7 +51,7 @@ export function Reveal({
   className,
   delay = 0,
   direction = 'up',
-  distance = 40,
+  distance = 24,
 }: RevealProps) {
   const directionMap = {
     up: { x: 0, y: distance },
@@ -67,8 +69,9 @@ export function Reveal({
       whileInView={{ opacity: 1, x: 0, y: 0 }}
       viewport={{ once: true, amount: 0.2 }}
       transition={{
-        duration: 0.7,
-        ease: [0.25, 0.1, 0.25, 1],
+        type: "spring",
+        stiffness: 400,
+        damping: 25,
         delay,
       }}
     >
@@ -77,14 +80,12 @@ export function Reveal({
   );
 }
 
-// Counter animation for metrics
 interface CountUpProps {
   target: string;
   className?: string;
 }
 
 export function CountUp({ target, className }: CountUpProps) {
-  // Extract numeric value and prefix/suffix
   const match = target.match(/^([^\d]*)([\d.]+)(.*)$/);
   if (!match) return <span className={className}>{target}</span>;
 
@@ -130,7 +131,7 @@ function CountUpNumber({ target, decimals }: { target: number; decimals: number 
 }
 
 function CountUpInner({ target, decimals }: { target: number; decimals: number }) {
-  const value = useSpring(0, { stiffness: 50, damping: 20 });
+  const value = useSpring(0, NOVA_SPRING);
   const ref = useRef<HTMLSpanElement>(null);
   const hasAnimated = useRef(false);
 

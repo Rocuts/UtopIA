@@ -11,7 +11,7 @@ export type DocStatus = 'uploading' | 'processing' | 'ready' | 'error';
 
 interface DocumentPreviewProps {
   filename: string;
-  size: number; // bytes
+  size: number;
   status: DocStatus;
   textPreview?: string;
   onRemove?: () => void;
@@ -26,29 +26,33 @@ function formatFileSize(bytes: number): string {
 
 const STATUS_CONFIG: Record<
   DocStatus,
-  { icon: typeof FileText; color: string; label: { es: string; en: string }; variant: 'outline' | 'glow' | 'accent' }
+  { icon: typeof FileText; color: string; bgColor: string; label: { es: string; en: string }; variant: 'outline' | 'solid' | 'muted' }
 > = {
   uploading: {
     icon: Loader2,
-    color: '#d4a017',
+    color: '#525252',
+    bgColor: '#fafafa',
     label: { es: 'Subiendo', en: 'Uploading' },
     variant: 'outline',
   },
   processing: {
     icon: Loader2,
-    color: '#8b5cf6',
+    color: '#525252',
+    bgColor: '#fafafa',
     label: { es: 'Procesando', en: 'Processing' },
-    variant: 'accent',
+    variant: 'muted',
   },
   ready: {
     icon: CheckCircle,
-    color: '#10b981',
+    color: '#22c55e',
+    bgColor: '#f0fdf4',
     label: { es: 'Listo', en: 'Ready' },
-    variant: 'glow',
+    variant: 'outline',
   },
   error: {
     icon: AlertCircle,
     color: '#ef4444',
+    bgColor: '#fef2f2',
     label: { es: 'Error', en: 'Error' },
     variant: 'outline',
   },
@@ -69,38 +73,32 @@ export function DocumentPreview({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -10, scale: 0.98 }}
-      transition={{ duration: 0.3 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
       <GlassPanel
-        className={cn(
-          'p-4 border-[var(--surface-border-solid)]',
-          className
-        )}
+        className={cn('p-4', className)}
         hoverEffect
       >
         <div className="flex items-center gap-3">
-          {/* File icon */}
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: `${config.color}15`, border: `1px solid ${config.color}30` }}
+            className="w-10 h-10 rounded-sm flex items-center justify-center shrink-0 border"
+            style={{ backgroundColor: config.bgColor, borderColor: '#e5e5e5' }}
           >
             <FileText className="w-5 h-5" style={{ color: config.color }} />
           </div>
 
-          {/* File info */}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{filename}</p>
-            <p className="text-xs text-foreground/50">{formatFileSize(size)}</p>
+            <p className="text-sm font-medium text-[#0a0a0a] truncate">{filename}</p>
+            <p className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">{formatFileSize(size)}</p>
           </div>
 
-          {/* Status badge */}
           <Badge
             variant={config.variant}
-            className="shrink-0 text-[10px]"
-            style={{ color: config.color, borderColor: `${config.color}50` }}
+            className="shrink-0"
+            style={{ color: config.color }}
           >
             <StatusIcon
               className={cn('w-3 h-3 mr-1', { 'animate-spin': isAnimated })}
@@ -108,12 +106,11 @@ export function DocumentPreview({
             {config.label.es}
           </Badge>
 
-          {/* Actions */}
           <div className="flex items-center gap-1 shrink-0">
             {textPreview && status === 'ready' && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-1.5 rounded-lg text-foreground/40 hover:text-[#d4a017] hover:bg-[#d4a017]/10 transition-colors"
+                className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
                 aria-label={expanded ? 'Collapse preview' : 'Expand preview'}
               >
                 {expanded ? (
@@ -126,7 +123,7 @@ export function DocumentPreview({
             {onRemove && (
               <button
                 onClick={onRemove}
-                className="p-1.5 rounded-lg text-foreground/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
                 aria-label="Remove document"
               >
                 <X className="w-4 h-4" />
@@ -135,18 +132,17 @@ export function DocumentPreview({
           </div>
         </div>
 
-        {/* Collapsible text preview */}
         <AnimatePresence>
           {expanded && textPreview && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
               className="overflow-hidden"
             >
-              <div className="mt-3 pt-3 border-t border-[var(--surface-border)]">
-                <pre className="text-xs text-foreground/60 font-mono whitespace-pre-wrap max-h-[200px] overflow-y-auto leading-relaxed styled-scrollbar">
+              <div className="mt-3 pt-3 border-t border-[#e5e5e5]">
+                <pre className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)] whitespace-pre-wrap max-h-[200px] overflow-y-auto leading-relaxed styled-scrollbar">
                   {textPreview.slice(0, 2000)}
                   {textPreview.length > 2000 && '\n...'}
                 </pre>

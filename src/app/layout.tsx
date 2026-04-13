@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import SmoothScroll from '@/components/layout/SmoothScroll';
 import { LanguageProvider } from '@/context/LanguageContext';
@@ -55,8 +57,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" className="antialiased font-sans" suppressHydrationWarning>
-      <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)] selection:bg-[var(--accent)]/20 selection:text-[var(--accent)]">
+    <html lang="es" className={`${GeistSans.variable} ${GeistMono.variable} antialiased`} suppressHydrationWarning>
+      <body className="min-h-screen bg-white text-[#0a0a0a] font-[family-name:var(--font-geist-sans)]">
         <LanguageProvider>
           <SmoothScroll>
             {children}

@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useLanguage } from '@/context/LanguageContext';
 
-// Lazy load the 3D canvas so we don't block the main thread
 const Canvas = dynamic(() => import('@react-three/fiber').then((mod) => mod.Canvas), {
   ssr: false,
 });
 const HeroScene = dynamic(() => import('@/components/canvas/HeroScene'), { ssr: false });
+
+const NOVA_SPRING = { stiffness: 400, damping: 25 };
 
 export function Hero() {
   const { t } = useLanguage();
@@ -22,37 +23,34 @@ export function Hero() {
     offset: ['start start', 'end start'],
   });
 
-  // Background moves slower (parallax depth)
   const bgY = useSpring(
     useTransform(scrollYProgress, [0, 1], [0, 80]),
-    { stiffness: 100, damping: 30 }
+    NOVA_SPRING
   );
 
-  // Foreground text moves up faster and fades out
   const contentY = useSpring(
     useTransform(scrollYProgress, [0, 1], [0, -120]),
-    { stiffness: 100, damping: 30 }
+    NOVA_SPRING
   );
   const contentOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
-  const contentScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.95]);
+  const contentScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.97]);
 
   return (
-    <section ref={sectionRef} className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden w-full pt-20">
+    <section ref={sectionRef} className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden w-full pt-20 bg-white">
 
-      {/* Background 3D Layer with Fallback — moves slower on scroll */}
+      {/* Background 3D Layer */}
       <motion.div
-        className="absolute inset-0 z-[var(--z-canvas)] bg-[var(--background)]"
+        className="absolute inset-0 z-[var(--z-canvas)] bg-white"
         style={{ y: bgY, willChange: 'transform' }}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(212,160,23,0.06)_0%,transparent_50%)]" />
-        <Suspense fallback={<div className="w-full h-full bg-[var(--background)]" />}>
+        <Suspense fallback={<div className="w-full h-full bg-white" />}>
           <Canvas camera={{ position: [0, 0, 5], fov: 45 }} dpr={[1, 2]}>
             <HeroScene />
           </Canvas>
         </Suspense>
       </motion.div>
 
-      {/* Foreground Content Layer — parallax + fade + scale */}
+      {/* Foreground Content */}
       <motion.div
         className="relative z-[var(--z-base)] container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl flex flex-col items-center text-center"
         style={{
@@ -64,46 +62,47 @@ export function Hero() {
       >
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
+          transition={{ type: "spring", ...NOVA_SPRING }}
           className="mb-8"
         >
-          <Badge variant="glow" className="mb-4">
+          <Badge variant="solid" className="mb-4">
             {t.hero.badge}
           </Badge>
         </motion.div>
 
         <motion.h1
-          className="text-balance text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tighter mb-6 text-foreground whitespace-pre-wrap"
-          initial={{ opacity: 0, y: 20 }}
+          className="text-balance font-bold tracking-tighter mb-6 text-[#0a0a0a]"
+          style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', lineHeight: 0.95 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
+          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.05 }}
         >
           {t.hero.title}
         </motion.h1>
 
         <motion.p
-          className="text-balance mt-4 text-lg sm:text-xl text-foreground/70 max-w-2xl mx-auto mb-10"
-          initial={{ opacity: 0, y: 20 }}
+          className="text-balance mt-4 text-lg sm:text-xl text-[#525252] max-w-2xl mx-auto mb-10"
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
         >
           {t.hero.subtitle}
         </motion.p>
 
         <motion.div
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
-          initial={{ opacity: 0, y: 20 }}
+          className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full sm:w-auto"
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }}
+          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.15 }}
         >
-          <Button size="lg" className="w-full sm:w-auto shadow-[0_0_20px_rgba(212,160,23,0.3)]" onClick={() => {
+          <Button size="lg" className="w-full sm:w-auto" onClick={() => {
             document.getElementById('ai-consult')?.scrollIntoView({ behavior: 'smooth' });
           }}>
             {t.hero.cta1}
           </Button>
-          <Button size="lg" variant="glass" className="w-full sm:w-auto" onClick={() => {
+          <Button size="lg" variant="secondary" className="w-full sm:w-auto" onClick={() => {
             document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' });
           }}>
             {t.hero.cta2}
@@ -112,8 +111,8 @@ export function Hero() {
 
       </motion.div>
 
-      {/* Bottom Fade */}
-      <div className="absolute bottom-0 w-full h-32 bg-gradient-to-t from-[var(--background)] to-transparent pointer-events-none z-[var(--z-base)]" />
+      {/* Bottom border line instead of gradient fade */}
+      <div className="absolute bottom-0 w-full h-px bg-[#e5e5e5]" />
     </section>
   );
 }
