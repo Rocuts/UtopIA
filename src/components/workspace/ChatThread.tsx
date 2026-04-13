@@ -168,7 +168,20 @@ function CollapsibleSection({
   );
 }
 
-function TypingIndicator({ language }: { language: 'es' | 'en' }) {
+/** Progress status messages for SSE streaming */
+const PROGRESS_LABELS: Record<string, { es: string; en: string }> = {
+  classifying: { es: 'Clasificando su consulta...', en: 'Classifying your query...' },
+  enhancing: { es: 'Mejorando su pregunta...', en: 'Enhancing your question...' },
+  routing: { es: 'Consultando agentes especializados...', en: 'Consulting specialized agents...' },
+  agent_working: { es: 'Investigando...', en: 'Researching...' },
+  synthesizing: { es: 'Sintetizando respuesta...', en: 'Synthesizing response...' },
+};
+
+function TypingIndicator({ language, progressStatus }: { language: 'es' | 'en'; progressStatus?: string }) {
+  const label = progressStatus && PROGRESS_LABELS[progressStatus]
+    ? PROGRESS_LABELS[progressStatus][language]
+    : (language === 'es' ? 'Analizando su consulta...' : 'Analyzing your consultation...');
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -185,7 +198,7 @@ function TypingIndicator({ language }: { language: 'es' | 'en' }) {
           style={{ transformOrigin: 'left' }}
         />
         <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
-          {language === 'es' ? 'Analizando su consulta...' : 'Analyzing your consultation...'}
+          {label}
         </span>
       </div>
     </motion.div>
@@ -420,6 +433,7 @@ export function ChatThread({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
   const [documentContext, setDocumentContext] = useState('');
+  const [progressStatus, setProgressStatus] = useState<string | undefined>(undefined);
 
   // Refs
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -478,8 +492,13 @@ export function ChatThread({
   // API call
   // ---------------------------------------------------------------------------
 
+  /**
+   * Parse SSE stream from the orchestrated chat endpoint.
+   * Falls back to JSON parsing for legacy (non-streaming) responses.
+   */
   const sendMessage = async (allMessages: ChatMessage[]) => {
     setIsTyping(true);
+    setProgressStatus(undefined);
     try {
       const payload = {
         messages: allMessages.map(m => ({ id: m.id, role: m.role, content: m.content })),
@@ -490,13 +509,63 @@ export function ChatThread({
 
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Stream': 'true',
+        },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error('Network response was not ok');
 
-      const data = await response.json();
+      const contentType = response.headers.get('Content-Type') || '';
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+
+      if (contentType.includes('text/event-stream') && response.body) {
+        // ---- SSE streaming mode (orchestrated) ----
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from the buffer
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+          let currentEvent = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              const jsonStr = line.slice(6);
+              try {
+                const eventData = JSON.parse(jsonStr);
+                if (currentEvent === 'progress') {
+                  setProgressStatus(eventData.type);
+                } else if (currentEvent === 'result') {
+                  data = eventData;
+                } else if (currentEvent === 'error') {
+                  throw new Error(eventData.error || 'Stream error');
+                }
+              } catch (e) {
+                if (e instanceof SyntaxError) continue; // skip malformed JSON
+                throw e;
+              }
+            }
+          }
+        }
+      } else {
+        // ---- JSON mode (legacy) ----
+        data = await response.json();
+      }
+
+      if (!data) throw new Error('No response data received');
 
       const assistantMsg: ChatMessage = {
         id: generateId(),
@@ -542,6 +611,7 @@ export function ChatThread({
       ]);
     } finally {
       setIsTyping(false);
+      setProgressStatus(undefined);
     }
   };
 
@@ -735,7 +805,7 @@ export function ChatThread({
           )}
 
           <AnimatePresence>
-            {isTyping && <TypingIndicator language={language} />}
+            {isTyping && <TypingIndicator language={language} progressStatus={progressStatus} />}
           </AnimatePresence>
 
           <div ref={messagesEndRef} />

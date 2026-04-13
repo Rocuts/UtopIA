@@ -30,6 +30,12 @@ export interface ChatMessage {
   webSearchUsed?: boolean;
   riskAssessment?: RiskAssessmentData;
   sanctionCalculation?: SanctionCalculation;
+  /** Cost tier used by the orchestrator (T1/T2/T3) */
+  tier?: string;
+  /** Which specialist agents handled this message */
+  agentsUsed?: string[];
+  /** The enhanced query produced by the prompt engineer agent */
+  enhancedQuery?: string;
 }
 
 export interface LegalReference {

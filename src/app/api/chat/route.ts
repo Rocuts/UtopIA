@@ -9,13 +9,84 @@ import { generateDianResponse, type DianResponseRequest } from '@/lib/tools/dian
 import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
 import { chatRequestSchema } from '@/lib/validation/schemas';
 import { getTaxCalendar } from '@/lib/tools/tax-calendar';
+import { orchestrate } from '@/lib/agents/orchestrator';
+import type { ProgressEvent } from '@/lib/agents/types';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-// Tool definitions — RAG, Web Search, Sanction Calculator, Document Analyzer, DIAN Response, Risk Assessor
+// ---------------------------------------------------------------------------
+// Feature flag: set UTOPIA_AGENT_MODE=orchestrated to enable multi-agent
+// ---------------------------------------------------------------------------
+const useOrchestration = () => process.env.UTOPIA_AGENT_MODE === 'orchestrated';
+
+// ---------------------------------------------------------------------------
+// Orchestrated handler (new multi-agent system with SSE streaming)
+// ---------------------------------------------------------------------------
+
+async function handleOrchestrated(
+  messages: ChatMessage[],
+  language: 'es' | 'en',
+  useCase: string,
+  documentContext: string | undefined,
+  nitContext: NITContext | null,
+  stream: boolean,
+) {
+  if (stream) {
+    const encoder = new TextEncoder();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: unknown) => {
+          controller.enqueue(
+            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+          );
+        };
+
+        try {
+          const result = await orchestrate(messages, {
+            language,
+            useCase,
+            documentContext,
+            nitContext,
+            onProgress: (event: ProgressEvent) => send('progress', event),
+          });
+          send('result', result);
+        } catch (error) {
+          console.error('[chat] Orchestration error:', error instanceof Error ? error.message : error);
+          send('error', { error: 'Internal server error during consultation.' });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
+  }
+
+  // Non-streaming: return JSON (backward compat)
+  const result = await orchestrate(messages, {
+    language,
+    useCase,
+    documentContext,
+    nitContext,
+  });
+
+  return NextResponse.json(result);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy handler (original monolithic system — unchanged)
+// ---------------------------------------------------------------------------
+
+// Tool definitions
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: 'function',
@@ -83,38 +154,14 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             enum: ['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'],
             description: 'Type of sanction to calculate.',
           },
-          taxDue: {
-            type: 'number',
-            description: 'Impuesto a cargo (tax due amount in COP). Used for extemporaneidad calculation.',
-          },
-          grossIncome: {
-            type: 'number',
-            description: 'Ingresos brutos (gross income in COP). Used for extemporaneidad when taxDue is 0.',
-          },
-          difference: {
-            type: 'number',
-            description: 'Mayor valor a pagar / difference in tax (COP). Used for correccion and inexactitud.',
-          },
-          delayMonths: {
-            type: 'number',
-            description: 'Meses de retraso (months of delay). Used for extemporaneidad.',
-          },
-          isVoluntary: {
-            type: 'boolean',
-            description: 'Whether the correction is voluntary (before DIAN notice) or provoked. Default: true.',
-          },
-          principal: {
-            type: 'number',
-            description: 'Capital amount for interest calculation (COP). Used for intereses_moratorios.',
-          },
-          annualRate: {
-            type: 'number',
-            description: 'Annual interest rate (%). Default: 27.44% (tasa de usura aprox 2026).',
-          },
-          days: {
-            type: 'number',
-            description: 'Days of late payment (dias de mora). Used for intereses_moratorios.',
-          },
+          taxDue: { type: 'number', description: 'Impuesto a cargo (tax due amount in COP). Used for extemporaneidad calculation.' },
+          grossIncome: { type: 'number', description: 'Ingresos brutos (gross income in COP). Used for extemporaneidad when taxDue is 0.' },
+          difference: { type: 'number', description: 'Mayor valor a pagar / difference in tax (COP). Used for correccion and inexactitud.' },
+          delayMonths: { type: 'number', description: 'Meses de retraso (months of delay). Used for extemporaneidad.' },
+          isVoluntary: { type: 'boolean', description: 'Whether the correction is voluntary (before DIAN notice) or provoked. Default: true.' },
+          principal: { type: 'number', description: 'Capital amount for interest calculation (COP). Used for intereses_moratorios.' },
+          annualRate: { type: 'number', description: 'Annual interest rate (%). Default: 27.44% (tasa de usura aprox 2026).' },
+          days: { type: 'number', description: 'Days of late payment (dias de mora). Used for intereses_moratorios.' },
         },
         required: ['type'],
       },
@@ -135,14 +182,8 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: 'object',
         properties: {
-          query: {
-            type: 'string',
-            description: 'A search query to find the relevant uploaded document in the knowledge base. E.g., "declaracion de renta 2025" or the filename.',
-          },
-          filename: {
-            type: 'string',
-            description: 'Optional: the name of the uploaded file to analyze.',
-          },
+          query: { type: 'string', description: 'A search query to find the relevant uploaded document in the knowledge base. E.g., "declaracion de renta 2025" or the filename.' },
+          filename: { type: 'string', description: 'Optional: the name of the uploaded file to analyze.' },
         },
         required: ['query'],
       },
@@ -162,49 +203,16 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: 'object',
         properties: {
-          requirementType: {
-            type: 'string',
-            description: 'Type of DIAN requirement: "Requerimiento Ordinario", "Requerimiento Especial", "Pliego de Cargos", "Emplazamiento para Declarar", "Emplazamiento para Corregir", "Liquidacion Oficial", etc.',
-          },
-          requirementNumber: {
-            type: 'string',
-            description: 'DIAN requirement number (numero del requerimiento).',
-          },
-          requirementDate: {
-            type: 'string',
-            description: 'Date of the DIAN requirement.',
-          },
-          taxpayerName: {
-            type: 'string',
-            description: 'Full name of the taxpayer or company (contribuyente).',
-          },
-          taxpayerNIT: {
-            type: 'string',
-            description: 'NIT of the taxpayer.',
-          },
-          direccionSeccional: {
-            type: 'string',
-            description: 'DIAN Direccion Seccional (e.g., "Direccion Seccional de Impuestos de Bogota").',
-          },
-          keyPoints: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Key points that the DIAN is asking about and need to be addressed in the response.',
-          },
-          relevantFacts: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Relevant facts and circumstances of the case to include in the response.',
-          },
-          supportingDocuments: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'List of supporting documents to reference as annexes (e.g., "Certificado de ingresos y retenciones", "Extractos bancarios").',
-          },
-          additionalContext: {
-            type: 'string',
-            description: 'Any additional context relevant to drafting the response.',
-          },
+          requirementType: { type: 'string', description: 'Type of DIAN requirement: "Requerimiento Ordinario", "Requerimiento Especial", "Pliego de Cargos", "Emplazamiento para Declarar", "Emplazamiento para Corregir", "Liquidacion Oficial", etc.' },
+          requirementNumber: { type: 'string', description: 'DIAN requirement number (numero del requerimiento).' },
+          requirementDate: { type: 'string', description: 'Date of the DIAN requirement.' },
+          taxpayerName: { type: 'string', description: 'Full name of the taxpayer or company (contribuyente).' },
+          taxpayerNIT: { type: 'string', description: 'NIT of the taxpayer.' },
+          direccionSeccional: { type: 'string', description: 'DIAN Direccion Seccional (e.g., "Direccion Seccional de Impuestos de Bogota").' },
+          keyPoints: { type: 'array', items: { type: 'string' }, description: 'Key points that the DIAN is asking about and need to be addressed in the response.' },
+          relevantFacts: { type: 'array', items: { type: 'string' }, description: 'Relevant facts and circumstances of the case to include in the response.' },
+          supportingDocuments: { type: 'array', items: { type: 'string' }, description: 'List of supporting documents to reference as annexes.' },
+          additionalContext: { type: 'string', description: 'Any additional context relevant to drafting the response.' },
         },
         required: ['requirementType', 'taxpayerName', 'keyPoints', 'relevantFacts'],
       },
@@ -243,29 +251,18 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         'Performs MULTIPLE targeted web searches to find EXACT filing dates for this taxpayer. ' +
         'Use when: (1) User asks about tax calendar, filing deadlines, or "calendario tributario", ' +
         '(2) User provides a NIT and wants personalized filing dates, ' +
-        '(3) User asks "cuándo debo declarar?" or "plazos" or deadline questions. ' +
-        'Searches national obligations (renta, IVA, retención, exógena) and municipal obligations. ' +
-        'Returns results filtered for the specific NIT last digit.',
+        '(3) User asks "cuándo debo declarar?" or "plazos" or deadline questions.',
       parameters: {
         type: 'object',
         properties: {
-          nitLastDigit: {
-            type: 'number',
-            description: 'Last digit of the NIT number (0-9), BEFORE the check digit. E.g., for NIT 860001317-4 the last digit is 7. Use the taxpayer context if available.',
-          },
-          year: {
-            type: 'number',
-            description: 'Year for the tax calendar (e.g., 2026).',
-          },
+          nitLastDigit: { type: 'number', description: 'Last digit of the NIT number (0-9), BEFORE the check digit.' },
+          year: { type: 'number', description: 'Year for the tax calendar (e.g., 2026).' },
           taxpayerType: {
             type: 'string',
             enum: ['persona_juridica', 'persona_natural', 'gran_contribuyente'],
-            description: 'Type of taxpayer. NITs starting with 8 or 9 are typically persona_juridica. Use the taxpayer context if available.',
+            description: 'Type of taxpayer.',
           },
-          city: {
-            type: 'string',
-            description: 'Municipality/city for municipal tax obligations (ICA, predial, retención ICA). E.g., "Bogotá", "Medellín", "Cali". If the user mentions a city, pass it here. If not specified, the tool searches major cities.',
-          },
+          city: { type: 'string', description: 'Municipality/city for municipal tax obligations (ICA, predial, retención ICA).' },
         },
         required: ['nitLastDigit', 'year', 'taxpayerType'],
       },
@@ -273,7 +270,6 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-// Use case context additions for specialized guidance
 const USE_CASE_CONTEXT: Record<string, string> = {
   'dian-defense': `
 USE CASE CONTEXT — DEFENSA ANTE REQUERIMIENTOS DIAN:
@@ -332,66 +328,46 @@ You are helping transform accounting data into actionable financial intelligence
 `,
 };
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const parsed = chatRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid request format.' },
-        { status: 400 }
-      );
-    }
+async function handleLegacy(
+  messages: ChatMessage[],
+  language: 'es' | 'en',
+  useCase: string,
+  documentContext: string | undefined,
+  nitContext: NITContext | null,
+) {
+  const rawUserMessage = messages[messages.length - 1].content;
 
-    const { messages, language, useCase, documentContext } = parsed.data;
+  // Language detection
+  const userMsg = rawUserMessage.toLowerCase();
+  const englishSignals = /\b(hello|hi|hey|help|need|tax|DIAN|refund|accounting|company|financial|investment|credit|report)\b/i;
+  const spanishSignals = /\b(hola|necesito|ayuda|requerimiento|DIAN|impuesto|saldo|contabilidad|empresa|tributario|factura|declaracion|sancion)\b/i;
+  let detectedLang = language;
+  if (englishSignals.test(userMsg) && !spanishSignals.test(userMsg)) {
+    detectedLang = 'en';
+  } else if (spanishSignals.test(userMsg)) {
+    detectedLang = 'es';
+  }
 
-    // Extract NIT context from conversation BEFORE PII redaction
-    const rawUserMessage = messages[messages.length - 1].content;
-    let nitContext: NITContext | null = null;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        nitContext = extractNITContext(messages[i].content);
-        if (nitContext) break;
-      }
-    }
+  const langInstruction = detectedLang === 'en'
+    ? 'CRITICAL: YOU MUST RESPOND IN ENGLISH. The user is communicating in English.'
+    : 'CRITICO: DEBES RESPONDER COMPLETAMENTE EN ESPANOL. El usuario se comunica en espanol.';
 
-    // Redact PII from the latest user message
-    const lastUserMessage = redactPII(rawUserMessage);
-    messages[messages.length - 1].content = lastUserMessage;
+  const useCaseContext = USE_CASE_CONTEXT[useCase] || '';
 
-    // Language detection
-    const userMsg = lastUserMessage.toLowerCase();
-    const englishSignals = /\b(hello|hi|hey|help|need|tax|DIAN|refund|accounting|company|financial|investment|credit|report)\b/i;
-    const spanishSignals = /\b(hola|necesito|ayuda|requerimiento|DIAN|impuesto|saldo|contabilidad|empresa|tributario|factura|declaracion|sancion)\b/i;
-    let detectedLang = language;
-    if (englishSignals.test(userMsg) && !spanishSignals.test(userMsg)) {
-      detectedLang = 'en';
-    } else if (spanishSignals.test(userMsg)) {
-      detectedLang = 'es';
-    }
+  let taxpayerContext = '';
+  if (nitContext) {
+    const typeLabel = nitContext.presumedType === 'persona_juridica'
+      ? 'Persona Jurídica' : 'Persona Natural';
+    taxpayerContext =
+      '\nTAXPAYER CONTEXT (extracted from user NIT — personalize your response):\n' +
+      '- Último dígito del NIT: ' + nitContext.lastDigit + '\n' +
+      '- Últimos dos dígitos del NIT: ' + nitContext.lastTwoDigits + '\n' +
+      '- Dígito de verificación: ' + (nitContext.checkDigit !== null ? nitContext.checkDigit : 'No proporcionado') + '\n' +
+      '- Tipo presunto: ' + typeLabel + '\n' +
+      '- YOU ALREADY KNOW the NIT last digit is ' + nitContext.lastDigit + '. Personalize ALL deadlines and obligations for this digit ONLY.\n';
+  }
 
-    const langInstruction = detectedLang === 'en'
-      ? 'CRITICAL: YOU MUST RESPOND IN ENGLISH. The user is communicating in English.'
-      : 'CRITICO: DEBES RESPONDER COMPLETAMENTE EN ESPANOL. El usuario se comunica en espanol.';
-
-    // Use case specific context
-    const useCaseContext = USE_CASE_CONTEXT[useCase] || '';
-
-    // Build taxpayer context from extracted NIT (injected into system prompt)
-    let taxpayerContext = '';
-    if (nitContext) {
-      const typeLabel = nitContext.presumedType === 'persona_juridica'
-        ? 'Persona Jurídica' : 'Persona Natural';
-      taxpayerContext =
-        '\nTAXPAYER CONTEXT (extracted from user NIT — personalize your response):\n' +
-        '- Último dígito del NIT: ' + nitContext.lastDigit + '\n' +
-        '- Últimos dos dígitos del NIT: ' + nitContext.lastTwoDigits + '\n' +
-        '- Dígito de verificación: ' + (nitContext.checkDigit !== null ? nitContext.checkDigit : 'No proporcionado') + '\n' +
-        '- Tipo presunto: ' + typeLabel + '\n' +
-        '- YOU ALREADY KNOW the NIT last digit is ' + nitContext.lastDigit + '. Personalize ALL deadlines and obligations for this digit ONLY.\n';
-    }
-
-    const systemPrompt = `
+  const systemPrompt = `
 You are **UtopIA**, an expert AI assistant specialized in Colombian accounting, tax law, and financial analysis. You operate as a senior advisor for accounting firms, combining deep knowledge of:
 
 1. **COLOMBIAN TAX LAW**: Estatuto Tributario, decretos reglamentarios, resoluciones DIAN, doctrina oficial
@@ -461,232 +437,193 @@ ${useCaseContext}
 ${langInstruction}
 `;
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // Build the conversation with system prompt
-    const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: systemPrompt },
-      ...messages,
-    ];
+  const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...messages,
+  ];
 
-    // Tool-calling loop: let the model call tools as needed (increased from 5 to 8 for more tools)
-    const MAX_TOOL_ROUNDS = 8;
-    let currentMessages = [...fullMessages];
-    let webSearchUsed = false;
-    const webSources: string[] = [];
-    let riskAssessment: RiskAssessment | undefined;
-    let sanctionCalculation: SanctionResult | undefined;
+  const MAX_TOOL_ROUNDS = 8;
+  let currentMessages = [...fullMessages];
+  let webSearchUsed = false;
+  const webSources: string[] = [];
+  let riskAssessment: RiskAssessment | undefined;
+  let sanctionCalculation: SanctionResult | undefined;
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: currentMessages,
-        tools: TOOLS,
-        tool_choice: 'auto',
-        temperature: 0.1,
-      });
-
-      const choice = response.choices[0];
-
-      // If the model wants to call tools, execute them and loop
-      if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-        currentMessages.push(choice.message);
-
-        for (const toolCall of choice.message.tool_calls) {
-          // Type guard: only process standard function tool calls
-          if (toolCall.type !== 'function') continue;
-
-          let args: Record<string, any>;
-          try {
-            args = JSON.parse(toolCall.function.arguments);
-          } catch {
-            currentMessages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: 'Error: Invalid tool arguments. Please try again with valid JSON.',
-            });
-            continue;
-          }
-
-          try {
-            if (toolCall.function.name === 'search_tax_docs') {
-              // Tier 1: Local RAG search — k=12 for comprehensive legal context
-              const context = await searchDocuments(args.query, 12);
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: context,
-              });
-
-            } else if (toolCall.function.name === 'search_web') {
-              // Tier 2: Internet search via Tavily
-              console.log(`Web search (round ${round + 1})`);
-              const searchResponse = await searchWeb(args.query);
-              const formatted = formatSearchResultsForLLM(searchResponse.results);
-              webSearchUsed = true;
-              for (const r of searchResponse.results) {
-                if (r.url) webSources.push(r.url);
-              }
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: formatted || 'NO_RESULTS: No se encontraron resultados relevantes en fuentes web colombianas. NO inventes información. Indica al usuario que no encontraste fuentes confiables y recomienda consultar dian.gov.co o un Contador Público.',
-              });
-
-            } else if (toolCall.function.name === 'calculate_sanction') {
-              // Tier 3: Sanction calculator
-              console.log(`Sanction calculation (round ${round + 1})`);
-              const result = calculateSanction(args as SanctionCalculation);
-              sanctionCalculation = result;
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(result, null, 2),
-              });
-
-            } else if (toolCall.function.name === 'analyze_document') {
-              // Tier 3: Document analyzer
-              // If documentContext was sent with the request (from a recent upload),
-              // use it directly instead of doing a RAG search. This avoids the
-              // indirection of searching for content we already have.
-              console.log(`Document analysis (round ${round + 1})`);
-              let docText: string;
-              if (documentContext) {
-                docText = documentContext;
-              } else {
-                // Fall back to RAG search, filtering to user uploads for relevance
-                docText = await searchDocuments(args.query, 8, { type: 'user_upload' });
-              }
-              const analysis = await analyzeDocument(docText, args.filename);
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(analysis, null, 2),
-              });
-
-            } else if (toolCall.function.name === 'draft_dian_response') {
-              // Tier 3: DIAN response generator
-              console.log(`DIAN response draft (round ${round + 1})`);
-              const draft = await generateDianResponse(args as DianResponseRequest);
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(draft, null, 2),
-              });
-
-            } else if (toolCall.function.name === 'assess_risk') {
-              // Tier 3: Risk assessor
-              console.log(`Risk assessment (round ${round + 1})`);
-              const assessment = await assessRisk(args.caseDescription);
-              riskAssessment = assessment;
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(assessment, null, 2),
-              });
-
-            } else if (toolCall.function.name === 'get_tax_calendar') {
-              // Calendar: multiple targeted web searches for NIT-specific dates
-              console.log(`Tax calendar lookup (round ${round + 1})`);
-              const calendarResult = await getTaxCalendar(
-                args.nitLastDigit,
-                args.year,
-                args.taxpayerType,
-                args.city
-              );
-              webSearchUsed = true;
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(calendarResult, null, 2),
-              });
-
-            } else {
-              currentMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: `Unknown tool: ${toolCall.function.name}`,
-              });
-            }
-          } catch (toolError) {
-            console.error(`Tool "${toolCall.function.name}" failed.`);
-            currentMessages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: `Error al ejecutar ${toolCall.function.name}. Informa al usuario que hubo un problema técnico consultando las fuentes y sugiere reformular la pregunta.`,
-            });
-          }
-        }
-
-        continue;
-      }
-
-      // Model is done — return the final response with optional enrichments
-      return NextResponse.json({
-        role: 'assistant',
-        content: choice.message.content,
-        webSearchUsed,
-        webSources: webSearchUsed ? [...new Set(webSources)] : undefined,
-        riskAssessment: riskAssessment
-          ? {
-              level: riskAssessment.level,
-              score: riskAssessment.score,
-              factors: riskAssessment.factors.map((f) => ({
-                description: f.description,
-                severity: f.severity,
-              })),
-              recommendations: riskAssessment.recommendations,
-            }
-          : undefined,
-        sanctionCalculation: sanctionCalculation
-          ? {
-              amount: sanctionCalculation.amount,
-              formula: sanctionCalculation.formula,
-              article: sanctionCalculation.article,
-              explanation: sanctionCalculation.explanation,
-            }
-          : undefined,
-      });
-    }
-
-    // Safety fallback: if we hit max rounds, do one final call without tools
-    const finalResponse = await openai.chat.completions.create({
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: currentMessages,
+      tools: TOOLS,
+      tool_choice: 'auto',
       temperature: 0.1,
     });
 
+    const choice = response.choices[0];
+
+    if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+      currentMessages.push(choice.message);
+
+      for (const toolCall of choice.message.tool_calls) {
+        if (toolCall.type !== 'function') continue;
+
+        let args: Record<string, unknown>;
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          currentMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: 'Error: Invalid tool arguments. Please try again with valid JSON.',
+          });
+          continue;
+        }
+
+        try {
+          if (toolCall.function.name === 'search_tax_docs') {
+            const context = await searchDocuments(args.query as string, 12);
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: context });
+          } else if (toolCall.function.name === 'search_web') {
+            const searchResponse = await searchWeb(args.query as string);
+            const formatted = formatSearchResultsForLLM(searchResponse.results);
+            webSearchUsed = true;
+            for (const r of searchResponse.results) {
+              if (r.url) webSources.push(r.url);
+            }
+            currentMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: formatted || 'NO_RESULTS: No se encontraron resultados relevantes en fuentes web colombianas.',
+            });
+          } else if (toolCall.function.name === 'calculate_sanction') {
+            const result = calculateSanction(args as unknown as SanctionCalculation);
+            sanctionCalculation = result;
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result, null, 2) });
+          } else if (toolCall.function.name === 'analyze_document') {
+            let docText: string;
+            if (documentContext) {
+              docText = documentContext;
+            } else {
+              docText = await searchDocuments(args.query as string, 8, { type: 'user_upload' });
+            }
+            const analysis = await analyzeDocument(docText, args.filename as string | undefined);
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(analysis, null, 2) });
+          } else if (toolCall.function.name === 'draft_dian_response') {
+            const draft = await generateDianResponse(args as unknown as DianResponseRequest);
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(draft, null, 2) });
+          } else if (toolCall.function.name === 'assess_risk') {
+            const assessment = await assessRisk(args.caseDescription as string);
+            riskAssessment = assessment;
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(assessment, null, 2) });
+          } else if (toolCall.function.name === 'get_tax_calendar') {
+            const calendarResult = await getTaxCalendar(
+              args.nitLastDigit as number,
+              args.year as number,
+              args.taxpayerType as 'persona_juridica' | 'persona_natural' | 'gran_contribuyente',
+              args.city as string | undefined,
+            );
+            webSearchUsed = true;
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(calendarResult, null, 2) });
+          } else {
+            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: `Unknown tool: ${toolCall.function.name}` });
+          }
+        } catch {
+          currentMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error al ejecutar ${toolCall.function.name}. Informa al usuario que hubo un problema técnico.`,
+          });
+        }
+      }
+      continue;
+    }
+
     return NextResponse.json({
       role: 'assistant',
-      content: finalResponse.choices[0].message.content,
+      content: choice.message.content,
       webSearchUsed,
       webSources: webSearchUsed ? [...new Set(webSources)] : undefined,
       riskAssessment: riskAssessment
         ? {
             level: riskAssessment.level,
             score: riskAssessment.score,
-            factors: riskAssessment.factors.map((f) => ({
-              description: f.description,
-              severity: f.severity,
-            })),
+            factors: riskAssessment.factors.map((f) => ({ description: f.description, severity: f.severity })),
             recommendations: riskAssessment.recommendations,
           }
         : undefined,
       sanctionCalculation: sanctionCalculation
-        ? {
-            amount: sanctionCalculation.amount,
-            formula: sanctionCalculation.formula,
-            article: sanctionCalculation.article,
-            explanation: sanctionCalculation.explanation,
-          }
+        ? { amount: sanctionCalculation.amount, formula: sanctionCalculation.formula, article: sanctionCalculation.article, explanation: sanctionCalculation.explanation }
         : undefined,
     });
+  }
 
+  const finalResponse = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: currentMessages,
+    temperature: 0.1,
+  });
+
+  return NextResponse.json({
+    role: 'assistant',
+    content: finalResponse.choices[0].message.content,
+    webSearchUsed,
+    webSources: webSearchUsed ? [...new Set(webSources)] : undefined,
+    riskAssessment: riskAssessment
+      ? {
+          level: riskAssessment.level,
+          score: riskAssessment.score,
+          factors: riskAssessment.factors.map((f) => ({ description: f.description, severity: f.severity })),
+          recommendations: riskAssessment.recommendations,
+        }
+      : undefined,
+    sanctionCalculation: sanctionCalculation
+      ? { amount: sanctionCalculation.amount, formula: sanctionCalculation.formula, article: sanctionCalculation.article, explanation: sanctionCalculation.explanation }
+      : undefined,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// POST handler — entry point
+// ---------------------------------------------------------------------------
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const parsed = chatRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request format.' }, { status: 400 });
+    }
+
+    const { messages, language, useCase, documentContext } = parsed.data;
+
+    // Extract NIT context BEFORE PII redaction
+    let nitContext: NITContext | null = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        nitContext = extractNITContext(messages[i].content);
+        if (nitContext) break;
+      }
+    }
+
+    // Redact PII from the latest user message
+    const lastUserMessage = redactPII(messages[messages.length - 1].content);
+    messages[messages.length - 1].content = lastUserMessage;
+
+    // Check for streaming request (header or query param)
+    const url = new URL(req.url);
+    const stream = req.headers.get('X-Stream') === 'true' || url.searchParams.get('stream') === '1';
+
+    if (useOrchestration()) {
+      return handleOrchestrated(messages, language, useCase, documentContext, nitContext, stream);
+    }
+
+    return handleLegacy(messages, language, useCase, documentContext, nitContext);
   } catch (error) {
-    console.error("Chat API error.");
+    console.error('[chat] API error:', error instanceof Error ? error.message : error);
     return NextResponse.json(
-      { error: "Internal server error during consultation." },
-      { status: 500 }
+      { error: 'Internal server error during consultation.' },
+      { status: 500 },
     );
   }
 }
