@@ -41,14 +41,14 @@ const SECTORS = [
   'Comercio',
   'Servicios',
   'Manufactura',
-  'Tecnologia',
-  'Construccion',
+  'Tecnología',
+  'Construcción',
   'Salud',
-  'Educacion',
+  'Educación',
   'Agropecuario',
   'Transporte',
   'Financiero',
-  'Minero-energetico',
+  'Minero-energético',
   'Inmobiliario',
   'Otro',
 ];
@@ -58,14 +58,14 @@ const NIIF_GROUPS = [
     value: 1 as const,
     label: 'Grupo 1 -- NIIF Plenas',
     description:
-      'Emisores de valores, entidades de interes publico, entidades con activos > 30.000 SMLMV o empleados > 200.',
+      'Emisores de valores, entidades de interés público, entidades con activos > 30.000 SMLMV o empleados > 200.',
     badge: null,
   },
   {
     value: 2 as const,
     label: 'Grupo 2 -- NIIF para PYMES',
     description:
-      'Empresas que no son emisores ni de interes publico, con activos entre 500 y 30.000 SMLMV o 11-200 empleados.',
+      'Empresas que no son emisores ni de interés público, con activos entre 500 y 30.000 SMLMV o 11-200 empleados.',
     badge: 'RECOMENDADO',
   },
   {
@@ -83,15 +83,15 @@ const OUTPUT_OPTIONS: Array<{
   description: string;
 }> = [
   { key: 'financialStatements', label: 'Estados Financieros NIIF', description: 'Balance, P&L, Cambios en patrimonio, Flujo de efectivo' },
-  { key: 'kpiDashboard', label: 'Dashboard Estrategico', description: 'KPIs clave: liquidez, rentabilidad, endeudamiento' },
-  { key: 'cashFlowProjection', label: 'Flujo de Caja Proyectado', description: 'Proyeccion a 12 meses con escenarios' },
-  { key: 'breakevenAnalysis', label: 'Punto de Equilibrio', description: 'Calculo de punto de equilibrio operativo' },
-  { key: 'notesToFinancialStatements', label: '13 Notas a los EEFF', description: 'Notas completas segun NIIF/NIC 1' },
-  { key: 'shareholdersMinutes', label: 'Acta de Asamblea', description: 'Borrador del acta para aprobacion de estados financieros' },
-  { key: 'auditPipeline', label: 'Auditoria Especializada', description: '4 auditores paralelos: NIIF, Tributario, Legal, Fiscal' },
-  { key: 'metaAudit', label: 'Meta-auditoria de Calidad', description: '12 dimensiones: ISO 25012, ISO 42001, IASB' },
-  { key: 'excelExport', label: 'Exportacion Excel', description: 'Archivo .xlsx con multiples hojas y formato corporativo' },
-  { key: 'comparativeAnalysis', label: 'Analisis Comparativo', description: 'Variaciones interperiodo con analisis de tendencias' },
+  { key: 'kpiDashboard', label: 'Dashboard Estratégico', description: 'KPIs clave: liquidez, rentabilidad, endeudamiento' },
+  { key: 'cashFlowProjection', label: 'Flujo de Caja Proyectado', description: 'Proyección a 12 meses con escenarios' },
+  { key: 'breakevenAnalysis', label: 'Punto de Equilibrio', description: 'Cálculo de punto de equilibrio operativo' },
+  { key: 'notesToFinancialStatements', label: '13 Notas a los EEFF', description: 'Notas completas según NIIF/NIC 1' },
+  { key: 'shareholdersMinutes', label: 'Acta de Asamblea', description: 'Borrador del acta para aprobación de estados financieros' },
+  { key: 'auditPipeline', label: 'Auditoría Especializada', description: '4 auditores paralelos: NIIF, Tributario, Legal, Fiscal' },
+  { key: 'metaAudit', label: 'Meta-auditoría de Calidad', description: '12 dimensiones: ISO 25012, ISO 42001, IASB' },
+  { key: 'excelExport', label: 'Exportación Excel', description: 'Archivo .xlsx con multiples hojas y formato corporativo' },
+  { key: 'comparativeAnalysis', label: 'Análisis Comparativo', description: 'Variaciones interperiodo con análisis de tendencias' },
 ];
 
 const DEFAULT_COMPANY: CompanyMetadata = {
@@ -132,7 +132,7 @@ const DEFAULT_VALUES: NiifReportIntakeType = {
 // ─── Field label mapping for confidence tracking ────────────────────────────
 
 const FIELD_LABELS: Record<string, string> = {
-  name: 'Razon Social',
+  name: 'Razón Social',
   nit: 'NIT',
   entityType: 'Tipo de Sociedad',
   sector: 'Sector',
@@ -303,7 +303,7 @@ function ValidationCard({
           >
             {equationValid ? 'OK' : 'ERROR'}
           </div>
-          <div className="text-[10px] text-[#737373]">Ecuacion Patrimonial</div>
+          <div className="text-[10px] text-[#737373]">Ecuación Patrimonial</div>
         </div>
       </div>
     </motion.div>
@@ -476,7 +476,7 @@ export function NiifReportIntake() {
           </h3>
         </div>
         <p className="text-sm text-[#737373]">
-          UtopIA extrae automaticamente los datos de su archivo
+          UtopIA extrae automáticamente los datos de su archivo
         </p>
       </div>
 
@@ -484,7 +484,7 @@ export function NiifReportIntake() {
         <>
           <FileUploadZone
             onUpload={handleUpload}
-            label="Arrastre su archivo aqui o haga clic para seleccionar"
+            label="Arrastre su archivo aquí o haga clic para seleccionar"
             sublabel="CSV, XLSX, XLS, PDF, DOCX -- Max 25MB"
             accept=".csv,.xlsx,.xls,.pdf,.docx"
             maxSizeMB={25}
@@ -560,13 +560,13 @@ export function NiifReportIntake() {
           <Building2 className="w-4 h-4 text-[#D4A017]" />
           <h3 className="text-sm font-semibold text-[#0a0a0a]">Datos de la Empresa</h3>
         </div>
-        <p className="text-xs text-[#737373]">Informacion de la entidad reportante.</p>
+        <p className="text-xs text-[#737373]">Información de la entidad reportante.</p>
       </div>
 
       {/* Razon Social -- full width */}
       <div>
         <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
-          Razon Social <span className="text-[#DC2626]">*</span>
+          Razón Social <span className="text-[#DC2626]">*</span>
           <ConfidenceDot level={getFieldConfidence('name')} />
         </label>
         <input
@@ -682,7 +682,7 @@ export function NiifReportIntake() {
             type="text"
             value={values.company.city ?? ''}
             onChange={(e) => updateCompany('city', e.target.value)}
-            placeholder="Ej: Bogota D.C."
+            placeholder="Ej: Bogotá D.C."
             className={cn(
               'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] focus:outline-none focus:ring-1',
               fieldBorderClass('city', !!values.company.city),
@@ -770,7 +770,7 @@ export function NiifReportIntake() {
                 fieldBorderClass('fiscalPeriod', !!values.fiscalPeriod),
               )}
             >
-              <option value="">Seleccionar ano</option>
+              <option value="">Seleccionar año</option>
               {years.map((y) => (
                 <option key={y} value={String(y)}>
                   {y}
@@ -849,7 +849,7 @@ export function NiifReportIntake() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Settings2 className="w-4 h-4 text-[#D4A017]" />
-          <h3 className="text-sm font-semibold text-[#0a0a0a]">Configuracion del Reporte</h3>
+          <h3 className="text-sm font-semibold text-[#0a0a0a]">Configuración del Reporte</h3>
         </div>
         <p className="text-xs text-[#737373]">
           Seleccione los entregables que desea generar. Todos estan habilitados por defecto.
@@ -908,7 +908,7 @@ export function NiifReportIntake() {
         <textarea
           value={values.specialInstructions ?? ''}
           onChange={(e) => updateField('specialInstructions', e.target.value)}
-          placeholder="Ej: Enfatizar el analisis de cartera morosa, incluir simulacion de provision..."
+          placeholder="Ej: Enfatizar el análisis de cartera morosa, incluir simulación de provisión..."
           rows={3}
           className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] resize-none focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
         />
@@ -947,7 +947,7 @@ export function NiifReportIntake() {
     },
     {
       id: 'config',
-      label: 'Configuracion',
+      label: 'Configuración',
       isValid: Object.values(values.outputOptions).some(Boolean),
       component: step3Config,
     },

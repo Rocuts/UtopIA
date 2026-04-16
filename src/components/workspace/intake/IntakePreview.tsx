@@ -28,15 +28,15 @@ interface IntakePreviewProps {
 const CASE_LABELS: Record<CaseType, string> = {
   general_chat: 'Chat General',
   dian_defense: 'Defensa DIAN',
-  tax_refund: 'Devolucion de Impuestos',
+  tax_refund: 'Devolución de Impuestos',
   due_diligence: 'Due Diligence',
   financial_intel: 'Inteligencia Financiera',
   niif_report: 'Reporte NIIF Integral',
-  tax_planning: 'Planeacion Tributaria',
+  tax_planning: 'Planeación Tributaria',
   transfer_pricing: 'Precios de Transferencia',
-  business_valuation: 'Valoracion Empresarial',
-  fiscal_audit_opinion: 'Dictamen de Revisoria Fiscal',
-  tax_reconciliation: 'Conciliacion Fiscal',
+  business_valuation: 'Valoración Empresarial',
+  fiscal_audit_opinion: 'Dictamen de Revisoría Fiscal',
+  tax_reconciliation: 'Conciliación Fiscal',
   feasibility_study: 'Estudio de Factibilidad',
 };
 
@@ -44,7 +44,7 @@ const ACT_LABELS: Record<string, string> = {
   requerimiento_ordinario: 'Requerimiento Ordinario',
   requerimiento_especial: 'Requerimiento Especial',
   pliego_cargos: 'Pliego de Cargos',
-  liquidacion_oficial: 'Liquidacion Oficial',
+  liquidacion_oficial: 'Liquidación Oficial',
   emplazamiento: 'Emplazamiento',
   otro: 'Otro',
 };
@@ -52,38 +52,38 @@ const ACT_LABELS: Record<string, string> = {
 const TAX_TYPE_LABELS: Record<string, string> = {
   iva: 'IVA saldo a favor',
   renta: 'Renta saldo a favor',
-  retencion: 'Retencion en la fuente',
+  retencion: 'Retención en la fuente',
 };
 
 const PURPOSE_LABELS: Record<string, string> = {
-  credito: 'Solicitud de credito',
-  inversion: 'Atraccion de inversion',
+  credito: 'Solicitud de crédito',
+  inversion: 'Atracción de inversión',
   venta: 'Venta de empresa',
-  fusion: 'Fusion / Adquisicion',
-  otro: 'Otro proposito',
+  fusion: 'Fusión / Adquisición',
+  otro: 'Otro propósito',
 };
 
 const ANALYSIS_LABELS: Record<string, string> = {
   cash_flow: 'Flujo de Caja',
   breakeven: 'Punto de Equilibrio',
-  dcf_valuation: 'Valoracion DCF',
+  dcf_valuation: 'Valoración DCF',
   cost_structure: 'Estructura de Costos',
   profitability: 'Rentabilidad',
-  tax_simulation: 'Simulacion Tributaria',
-  merger_scenario: 'Escenario de Fusion',
+  tax_simulation: 'Simulación Tributaria',
+  merger_scenario: 'Escenario de Fusión',
 };
 
 const OUTPUT_LABELS: Record<keyof NiifOutputOptions, string> = {
   financialStatements: 'Estados Financieros NIIF',
-  kpiDashboard: 'Dashboard Estrategico',
+  kpiDashboard: 'Dashboard Estratégico',
   cashFlowProjection: 'Flujo de Caja Proyectado',
   breakevenAnalysis: 'Punto de Equilibrio',
   notesToFinancialStatements: '13 Notas a los EEFF',
   shareholdersMinutes: 'Acta de Asamblea',
-  auditPipeline: 'Auditoria Especializada',
-  metaAudit: 'Meta-auditoria de Calidad',
-  excelExport: 'Exportacion Excel',
-  comparativeAnalysis: 'Analisis Comparativo',
+  auditPipeline: 'Auditoría Especializada',
+  metaAudit: 'Meta-auditoría de Calidad',
+  excelExport: 'Exportación Excel',
+  comparativeAnalysis: 'Análisis Comparativo',
 };
 
 function formatCOP(amount: number | undefined): string {
@@ -106,7 +106,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function PipelineVisualization() {
   const agents = [
-    { label: 'Analista NIIF', sublabel: 'Clasificacion y medicion' },
+    { label: 'Analista NIIF', sublabel: 'Clasificación y medición' },
     { label: 'Director Estrategia', sublabel: 'KPIs y proyecciones' },
     { label: 'Gobierno Corporativo', sublabel: 'Cumplimiento y actas' },
   ];
@@ -183,7 +183,7 @@ function ChatTierInfo({ caseType }: { caseType: CaseType }) {
       tier: 'T3 Multi-Experto',
       tools: ['search_docs', 'search_web', 'calculate_sanction', 'draft_dian_response', 'assess_risk'],
       time: '30-60 segundos',
-      description: 'Consulta paralela con especialistas tributario, contable y de documentos, con sintesis final.',
+      description: 'Consulta paralela con especialistas tributario, contable y de documentos, con síntesis final.',
     },
     tax_refund: {
       tier: 'T2 Especializado',
@@ -195,13 +195,13 @@ function ChatTierInfo({ caseType }: { caseType: CaseType }) {
       tier: 'T3 Multi-Experto',
       tools: ['search_docs', 'search_web', 'analyze_document', 'assess_risk'],
       time: '45-90 segundos',
-      description: 'Analisis paralelo contable, tributario y estrategico con evaluacion de riesgo.',
+      description: 'Análisis paralelo contable, tributario y estratégico con evaluación de riesgo.',
     },
     financial_intel: {
       tier: 'T2 Especializado',
       tools: ['search_docs', 'analyze_document', 'assess_risk'],
       time: '20-40 segundos',
-      description: 'Analisis financiero especializado con herramientas de calculo.',
+      description: 'Análisis financiero especializado con herramientas de cálculo.',
     },
   };
 
@@ -210,7 +210,7 @@ function ChatTierInfo({ caseType }: { caseType: CaseType }) {
   return (
     <div className="space-y-3">
       <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide">
-        Configuracion del Agente
+        Configuración del Agente
       </h4>
       <div className="rounded-lg border border-[#e5e5e5] p-3 space-y-2">
         <div className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
       <div className="rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-4">
         <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">{CASE_LABELS[caseType]}</h3>
         <p className="text-xs text-[#737373]">
-          Revise la informacion antes de iniciar. Puede volver a pasos anteriores para editar.
+          Revise la información antes de iniciar. Puede volver a pasos anteriores para editar.
         </p>
       </div>
 
@@ -297,8 +297,8 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
 
         {caseType === 'due_diligence' && 'purpose' in data && (
           <>
-            <SummaryRow label="Proposito" value={PURPOSE_LABELS[(data as { purpose: string }).purpose] ?? '-'} />
-            {'companyName' in data && <SummaryRow label="Razon Social" value={(data as { companyName: string }).companyName} />}
+            <SummaryRow label="Propósito" value={PURPOSE_LABELS[(data as { purpose: string }).purpose] ?? '-'} />
+            {'companyName' in data && <SummaryRow label="Razón Social" value={(data as { companyName: string }).companyName} />}
             {'nit' in data && <SummaryRow label="NIT" value={(data as { nit: string }).nit} />}
             {'entityType' in data && <SummaryRow label="Tipo Sociedad" value={(data as { entityType: string }).entityType} />}
             {'niifGroup' in data && <SummaryRow label="Grupo NIIF" value={`Grupo ${(data as { niifGroup: number }).niifGroup}`} />}
@@ -308,7 +308,7 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
         {caseType === 'financial_intel' && 'analyses' in data && (
           <>
             <SummaryRow
-              label="Analisis"
+              label="Análisis"
               value={(data as { analyses: string[] }).analyses.map((a) => ANALYSIS_LABELS[a] ?? a).join(', ')}
             />
             {'period' in data && <SummaryRow label="Periodo" value={(data as { period: string }).period} />}
@@ -324,7 +324,7 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
               const d = data as Partial<NiifReportIntake>;
               return (
                 <>
-                  <SummaryRow label="Razon Social" value={d.company?.name ?? '-'} />
+                  <SummaryRow label="Razón Social" value={d.company?.name ?? '-'} />
                   <SummaryRow label="NIT" value={d.company?.nit ?? '-'} />
                   <SummaryRow label="Tipo Sociedad" value={d.company?.entityType ?? '-'} />
                   {d.company?.sector && <SummaryRow label="Sector" value={d.company.sector} />}
@@ -367,7 +367,7 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
       {isNiif && (
         <div className="rounded-lg border border-[#e5e5e5] p-3 space-y-2">
           <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide">
-            Informacion del Modelo
+            Información del Modelo
           </h4>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center gap-2">
@@ -390,8 +390,8 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
       <div className="flex items-start gap-2 rounded-lg bg-[#f5f5f5] p-3">
         <Lock className="w-3.5 h-3.5 text-[#737373] mt-0.5 shrink-0" />
         <p className="text-[11px] text-[#737373] leading-relaxed">
-          Su informacion sera procesada de forma segura. Datos sensibles como NIT, cedula y correos
-          son redactados automaticamente antes del envio al modelo de IA.
+          Su información será procesada de forma segura. Datos sensibles como NIT, cédula y correos
+          son redactados automáticamente antes del envío al modelo de IA.
         </p>
       </div>
     </div>

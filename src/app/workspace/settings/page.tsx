@@ -30,7 +30,7 @@ export default function SettingsPage() {
               <Settings className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-[#0a0a0a]">Configuracion</h1>
+              <h1 className="text-lg font-bold text-[#0a0a0a]">Configuración</h1>
               <p className="text-xs text-[#a3a3a3]">Conecte sus ERPs y configure la plataforma</p>
             </div>
           </div>
@@ -42,6 +42,8 @@ export default function SettingsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.04 }}
           className="flex gap-1 border-b border-[#e5e5e5]"
+          role="tablist"
+          aria-label="Secciones de configuración"
         >
           {tabs.map(tab => {
             const Icon = tab.icon;
@@ -49,6 +51,11 @@ export default function SettingsPage() {
             return (
               <button
                 key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`tabpanel-${tab.key}`}
+                id={`tab-${tab.key}`}
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
                   'flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-colors relative',
@@ -77,14 +84,20 @@ export default function SettingsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.08 }}
         >
-          {activeTab === 'integraciones' && <ERPConnector />}
-          {activeTab === 'preferencias' && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <SlidersHorizontal className="w-8 h-8 text-[#d4d4d4]" />
-              <p className="text-sm text-[#a3a3a3]">Preferencias de la plataforma</p>
-              <p className="text-xs text-[#d4d4d4]">Proximamente: idioma, moneda, formatos de exportacion</p>
-            </div>
-          )}
+          <div
+            role="tabpanel"
+            id={`tabpanel-${activeTab}`}
+            aria-labelledby={`tab-${activeTab}`}
+          >
+            {activeTab === 'integraciones' && <ERPConnector />}
+            {activeTab === 'preferencias' && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <SlidersHorizontal className="w-8 h-8 text-[#d4d4d4]" />
+                <p className="text-sm text-[#a3a3a3]">Preferencias de la plataforma</p>
+                <p className="text-xs text-[#d4d4d4]">Próximamente: idioma, moneda, formatos de exportación</p>
+              </div>
+            )}
+          </div>
         </motion.div>
       </div>
     </div>

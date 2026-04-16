@@ -49,11 +49,11 @@ const SPRING = { stiffness: 400, damping: 25 };
 
 const INITIAL_MSG: Record<string, Record<string, string>> = {
   general: {
-    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoria contable, tributaria y financiera colombiana.\n\nPuede:\n- **Hacer cualquier pregunta** sobre contabilidad, NIIF, impuestos o finanzas\n- **Subir documentos** (PDF, Excel, Word, imagenes) usando el boton 📎 o arrastrando al chat\n- **Analizar extractos bancarios**, facturas, balances de prueba y mas\n\n¿En que puedo ayudarle?',
+    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoría contable, tributaria y financiera colombiana.\n\nPuede:\n- **Hacer cualquier pregunta** sobre contabilidad, NIIF, impuestos o finanzas\n- **Subir documentos** (PDF, Excel, Word, imágenes) usando el botón 📎 o arrastrando al chat\n- **Analizar extractos bancarios**, facturas, balances de prueba y más\n\n¿En qué puedo ayudarle?',
     en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting, tax and financial consulting.\n\nYou can:\n- **Ask any question** about accounting, IFRS, taxes or finance\n- **Upload documents** (PDF, Excel, Word, images) using the 📎 button or dragging to the chat\n- **Analyze bank statements**, invoices, trial balances and more\n\nHow can I help you?',
   },
   default: {
-    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoria contable y tributaria colombiana. ¿En que puedo ayudarle hoy?',
+    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoría contable y tributaria colombiana. ¿En qué puedo ayudarle hoy?',
     en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting and tax consulting. How can I help you today?',
   },
 };
@@ -155,11 +155,11 @@ function CaseHeader({
     'tax-refund': 'Devoluciones',
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Inteligencia Financiera',
-    'tax-planning': 'Planeacion Tributaria',
+    'tax-planning': 'Planeación Tributaria',
     'transfer-pricing': 'Precios de Transferencia',
-    'business-valuation': 'Valoracion Empresarial',
+    'business-valuation': 'Valoración Empresarial',
     'fiscal-audit-opinion': 'Dictamen Rev. Fiscal',
-    'tax-reconciliation': 'Conciliacion Fiscal',
+    'tax-reconciliation': 'Conciliación Fiscal',
     'feasibility-study': 'Estudio de Factibilidad',
   };
   const icons: Record<string, string> = {
@@ -203,6 +203,7 @@ function PipelineBanner({
   if (vizState.collapsed) {
     return (
       <button
+        type="button"
         onClick={onToggle}
         className="w-full px-6 py-2 border-b border-[#e5e5e5] bg-[#fafafa] flex items-center gap-2 text-xs text-[#525252] hover:bg-[#f5f5f5] transition-colors"
       >
@@ -231,6 +232,7 @@ function PipelineBanner({
         </div>
       )}
       <button
+        type="button"
         onClick={onToggle}
         className="text-[10px] text-[#a3a3a3] hover:text-[#525252] mt-1"
       >
@@ -284,9 +286,12 @@ function UserMessage({ message }: { message: ChatMessage }) {
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs font-medium text-[#525252]">Usted</span>
-        <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+        <time
+          dateTime={message.timestamp}
+          className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]"
+        >
           {formatTime(message.timestamp)}
-        </span>
+        </time>
       </div>
       <p className="text-sm text-[#0a0a0a] leading-relaxed whitespace-pre-wrap">{message.content}</p>
     </motion.div>
@@ -308,7 +313,7 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
         <span className="text-xs font-medium text-[#0a0a0a]">UtopIA</span>
         <span className="text-[#a3a3a3] text-xs">\u00B7</span>
         <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
-          {language === 'es' ? 'Analisis' : 'Analysis'}
+          {language === 'es' ? 'Análisis' : 'Analysis'}
         </span>
         {message.tier && (
           <>
@@ -316,9 +321,12 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
             <DSBadge variant="tier" tier={message.tier as AgentTier} label="" size="sm" />
           </>
         )}
-        <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] ml-auto">
+        <time
+          dateTime={message.timestamp}
+          className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] ml-auto"
+        >
           {formatTime(message.timestamp)}
-        </span>
+        </time>
       </div>
 
       {/* Web search indicator */}
@@ -326,7 +334,7 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
         <div className="flex items-center gap-1.5 px-6 py-2 border-b border-[#e5e5e5] bg-white">
           <Globe className="w-3.5 h-3.5 text-[#525252]" />
           <span className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)]">
-            {language === 'es' ? 'Complementado con busqueda web' : 'Enhanced with web search'}
+            {language === 'es' ? 'Complementado con búsqueda web' : 'Enhanced with web search'}
           </span>
         </div>
       )}
@@ -372,7 +380,7 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
       {/* Sanction Calculation */}
       {message.sanctionCalculation && (
         <CollapsibleSection
-          title={language === 'es' ? 'Calculo de Sancion' : 'Sanction Calculation'}
+          title={language === 'es' ? 'Cálculo de Sanción' : 'Sanction Calculation'}
           icon={Calculator}
           defaultOpen
         >
@@ -804,10 +812,10 @@ export function ChatWorkspace({
           >
             <Upload className="w-8 h-8 text-[#d4a017]" />
             <p className="text-sm font-medium text-[#0a0a0a]">
-              {language === 'es' ? 'Suelte su documento aqui' : 'Drop your document here'}
+              {language === 'es' ? 'Suelte su documento aquí' : 'Drop your document here'}
             </p>
             <p className="text-xs text-[#a3a3a3]">
-              PDF, Excel, Word, CSV, imagenes
+              PDF, Excel, Word, CSV, imágenes
             </p>
           </motion.div>
         )}
@@ -826,7 +834,13 @@ export function ChatWorkspace({
         className="flex-1 min-h-0 overflow-y-auto styled-scrollbar bg-white"
         style={{ overscrollBehavior: 'contain' }}
       >
-        <div className="flex flex-col w-full">
+        <div
+          className="flex flex-col w-full"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Historial de mensajes"
+        >
           {messages.map(msg =>
             msg.role === 'user'
               ? <UserMessage key={msg.id} message={msg} />
@@ -858,7 +872,7 @@ export function ChatWorkspace({
                   transition={{ duration: isConnecting ? 1 : 0.3, repeat: Infinity, ease: 'easeInOut' }}
                 />
               </div>
-              <button onClick={toggleVoice} className="absolute bottom-1 right-1 p-1 rounded bg-[#ef4444]/90 text-white hover:bg-[#ef4444] transition-colors" aria-label="Detener voz">
+              <button type="button" onClick={toggleVoice} className="absolute bottom-1 right-1 p-1 rounded bg-[#ef4444]/90 text-white hover:bg-[#ef4444] transition-colors" aria-label="Detener voz">
                 <MicOff className="w-3 h-3" />
               </button>
             </div>
@@ -881,7 +895,7 @@ export function ChatWorkspace({
                 <div key={`${doc.filename}-${i}`} className="flex items-center gap-1.5 bg-white border border-[#e5e5e5] rounded px-2 py-1 shrink-0">
                   <FileText className="w-3 h-3 text-[#525252]" />
                   <span className="text-xs text-[#0a0a0a] max-w-[120px] truncate">{doc.filename}</span>
-                  <button onClick={() => removeDocument(doc.filename)} className="p-0.5 text-[#a3a3a3] hover:text-[#ef4444] transition-colors" aria-label={`Remover ${doc.filename}`}>
+                  <button type="button" onClick={() => removeDocument(doc.filename)} className="p-0.5 text-[#a3a3a3] hover:text-[#ef4444] transition-colors" aria-label={`Remover ${doc.filename}`}>
                     <X className="w-3 h-3" />
                   </button>
                 </div>
@@ -894,7 +908,7 @@ export function ChatWorkspace({
       {/* Input area */}
       <div className="p-4 bg-white border-t border-[#e5e5e5] relative z-20">
         <form onSubmit={handleSubmit} className="flex items-end gap-2 bg-white border border-[#e5e5e5] rounded-lg p-1.5 focus-within:border-[#0a0a0a] transition-colors">
-          <button type="button" onClick={toggleVoice} className={cn('p-2.5 rounded flex items-center justify-center shrink-0 transition-colors', voiceMode ? 'text-[#ef4444] bg-[#fef2f2]' : 'text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]')} aria-label={voiceMode ? 'Detener voz' : 'Voz'}>
+          <button type="button" onClick={toggleVoice} className={cn('p-2.5 rounded flex items-center justify-center shrink-0 transition-colors', voiceMode ? 'text-[#ef4444] bg-[#fef2f2]' : 'text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]')} aria-pressed={voiceMode} aria-label={voiceMode ? 'Detener voz' : 'Voz'}>
             {voiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
           <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.heic" onChange={handleFileSelect} className="hidden" />
@@ -912,6 +926,7 @@ export function ChatWorkspace({
               : (useCase === 'general' ? 'Type your question or upload a document...' : 'Ask a question about this case...')}
             disabled={isTyping}
             className="flex-1 bg-transparent border-none focus:ring-0 text-[#0a0a0a] text-sm resize-none py-2.5 px-2 outline-none min-h-[40px] max-h-[120px] placeholder:text-[#a3a3a3] disabled:opacity-50"
+            aria-label={language === 'es' ? 'Escribir mensaje' : 'Type message'}
           />
           <button type="submit" disabled={!input.trim() || isTyping} className="p-2.5 rounded bg-[#0a0a0a] text-white shrink-0 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#262626] transition-colors" aria-label="Enviar">
             <Send className="w-4 h-4" />

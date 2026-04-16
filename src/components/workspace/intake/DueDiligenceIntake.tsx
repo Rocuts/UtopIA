@@ -27,32 +27,32 @@ import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtrac
 const PURPOSES = [
   {
     value: 'credito' as const,
-    label: 'Solicitud de Credito',
-    description: 'Evaluacion financiera para respaldo de solicitud crediticia.',
+    label: 'Solicitud de Crédito',
+    description: 'Evaluación financiera para respaldo de solicitud crediticia.',
     icon: CreditCard,
   },
   {
     value: 'inversion' as const,
-    label: 'Atraccion de Inversion',
-    description: 'Analisis para presentar a inversionistas potenciales.',
+    label: 'Atracción de Inversión',
+    description: 'Análisis para presentar a inversionistas potenciales.',
     icon: TrendingUp,
   },
   {
     value: 'venta' as const,
     label: 'Venta de Empresa',
-    description: 'Due diligence previo a la enajenacion de participaciones.',
+    description: 'Due diligence previo a la enajenación de participaciones.',
     icon: Store,
   },
   {
     value: 'fusion' as const,
-    label: 'Fusion / Adquisicion',
-    description: 'Evaluacion integral para proceso de integracion empresarial.',
+    label: 'Fusión / Adquisición',
+    description: 'Evaluación integral para proceso de integración empresarial.',
     icon: GitMerge,
   },
   {
     value: 'otro' as const,
-    label: 'Otro Proposito',
-    description: 'Analisis para otro requerimiento especifico.',
+    label: 'Otro Propósito',
+    description: 'Análisis para otro requerimiento específico.',
     icon: HelpCircle,
   },
 ];
@@ -64,12 +64,12 @@ const NIIF_GROUPS = [
   {
     value: 1 as const,
     label: 'Grupo 1 -- NIIF Plenas',
-    description: 'Emisores de valores, entidades de interes publico, empresas grandes.',
+    description: 'Emisores de valores, entidades de interés público, empresas grandes.',
   },
   {
     value: 2 as const,
     label: 'Grupo 2 -- NIIF para PYMES',
-    description: 'Mediana y pequena empresa que no cumplan requisitos de Grupo 1.',
+    description: 'Mediana y pequeña empresa que no cumplan requisitos de Grupo 1.',
   },
   {
     value: 3 as const,
@@ -195,10 +195,10 @@ export function DueDiligenceIntake() {
               <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-[#16A34A]/80">
-              {detected} de {totalFields} campos detectados automaticamente
+              {detected} de {totalFields} campos detectados automáticamente
             </p>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
             Subir otro archivo
           </button>
         </div>
@@ -220,20 +220,21 @@ export function DueDiligenceIntake() {
             <AlertCircle className="w-4 h-4 text-[#EF4444]" />
             <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={25}
-          label="Arrastre su archivo aqui"
+          label="Arrastre su archivo aquí"
           sublabel="Estados financieros, certificados de existencia, declaraciones"
         />
       )}
 
       {extractionState.status === 'idle' && (
         <button
+          type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
         >
@@ -248,8 +249,8 @@ export function DueDiligenceIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Proposito del Due Diligence</h3>
-        <p className="text-xs text-[#737373]">Seleccione la razon principal de la evaluacion.</p>
+        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Propósito del Due Diligence</h3>
+        <p className="text-xs text-[#737373]">Seleccione la razón principal de la evaluación.</p>
       </div>
       <div className="space-y-3">
         {PURPOSES.map((purpose) => {
@@ -300,7 +301,7 @@ export function DueDiligenceIntake() {
     <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Datos de la Empresa</h3>
-        <p className="text-xs text-[#737373]">Informacion basica de la entidad a evaluar.</p>
+        <p className="text-xs text-[#737373]">Información básica de la entidad a evaluar.</p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
             <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
@@ -318,7 +319,7 @@ export function DueDiligenceIntake() {
       {/* Razon Social */}
       <div>
         <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Razon Social <ConfidenceDot level={extractedConfidence.companyName} /> <span className="text-[#DC2626] ml-1">*</span>
+          Razón Social <ConfidenceDot level={extractedConfidence.companyName} /> <span className="text-[#DC2626] ml-1">*</span>
         </label>
         <input
           type="text"
@@ -445,7 +446,7 @@ export function DueDiligenceIntake() {
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Documentos de Soporte</h3>
         <p className="text-xs text-[#737373]">
-          Adjunte documentos adicionales para el analisis.
+          Adjunte documentos adicionales para el análisis.
         </p>
       </div>
 
@@ -456,12 +457,12 @@ export function DueDiligenceIntake() {
           <span className="text-xs font-semibold text-[#525252]">Documentos recomendados</span>
         </div>
         {[
-          'Estados financieros (ultimo periodo)',
+          'Estados financieros (último periodo)',
           'Balances de prueba',
           'Declaraciones de renta',
-          'Certificado de existencia y representacion',
+          'Certificado de existencia y representación',
           'RUT actualizado',
-          'Certificado de composicion accionaria',
+          'Certificado de composición accionaria',
           'Contratos relevantes',
         ].map((doc) => (
           <div key={doc} className="flex items-center gap-2 text-[11px] text-[#737373]">
@@ -474,7 +475,7 @@ export function DueDiligenceIntake() {
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
         label="Estados financieros y documentos corporativos"
-        sublabel="PDF, DOCX, XLSX, imagenes -- Max 25MB"
+        sublabel="PDF, DOCX, XLSX, imágenes -- Max 25MB"
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={25}
       />
@@ -496,7 +497,7 @@ export function DueDiligenceIntake() {
 
   const steps: WizardStep[] = [
     { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
-    { id: 'purpose', label: 'Proposito', isValid: !!values.purpose, component: step1 },
+    { id: 'purpose', label: 'Propósito', isValid: !!values.purpose, component: step1 },
     {
       id: 'company',
       label: 'Empresa',

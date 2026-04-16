@@ -87,19 +87,19 @@ interface ProviderCard {
 }
 
 const COLOMBIAN_PROVIDERS: ProviderCard[] = [
-  { id: 'alegra', name: 'Alegra', country: 'colombia', description: 'Facturacion electronica y contabilidad en la nube', color: '#3B82F6', authType: 'Email + API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Contactos'] },
-  { id: 'siigo', name: 'Siigo', country: 'colombia', description: 'ERP contable y facturacion DIAN para PYMES', color: '#16A34A', authType: 'Usuario + Access Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Movimientos'] },
-  { id: 'helisa', name: 'Helisa', country: 'colombia', description: 'Sistema integral de gestion empresarial', color: '#7C3AED', authType: 'HMAC Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Movimientos'] },
-  { id: 'world_office', name: 'World Office', country: 'colombia', description: 'ERP contable con facturacion electronica', color: '#4F46E5', authType: 'JWT Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas'] },
+  { id: 'alegra', name: 'Alegra', country: 'colombia', description: 'Facturación electrónica y contabilidad en la nube', color: '#3B82F6', authType: 'Email + API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Contactos'] },
+  { id: 'siigo', name: 'Siigo', country: 'colombia', description: 'ERP contable y facturación DIAN para PYMES', color: '#16A34A', authType: 'Usuario + Access Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Movimientos'] },
+  { id: 'helisa', name: 'Helisa', country: 'colombia', description: 'Sistema integral de gestión empresarial', color: '#7C3AED', authType: 'HMAC Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Movimientos'] },
+  { id: 'world_office', name: 'World Office', country: 'colombia', description: 'ERP contable con facturación electrónica', color: '#4F46E5', authType: 'JWT Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas'] },
   { id: 'contapyme', name: 'ContaPyme', country: 'colombia', description: 'Contabilidad simplificada para microempresas', color: '#0D9488', authType: 'API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance'] },
 ];
 
 const INTERNATIONAL_PROVIDERS: ProviderCard[] = [
-  { id: 'sap_b1', name: 'SAP Business One', country: 'international', description: 'ERP empresarial para medianas empresas', color: '#0070F2', authType: 'Usuario + Contrasena + DB', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
-  { id: 'dynamics_365', name: 'Dynamics 365', country: 'international', description: 'Suite de gestion empresarial Microsoft', color: '#0078D4', authType: 'OAuth 2.0 (Azure AD)', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
-  { id: 'quickbooks', name: 'QuickBooks Online', country: 'international', description: 'Contabilidad en la nube para pequenas empresas', color: '#2CA01C', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
+  { id: 'sap_b1', name: 'SAP Business One', country: 'international', description: 'ERP empresarial para medianas empresas', color: '#0070F2', authType: 'Usuario + Contraseña + DB', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
+  { id: 'dynamics_365', name: 'Dynamics 365', country: 'international', description: 'Suite de gestión empresarial Microsoft', color: '#0078D4', authType: 'OAuth 2.0 (Azure AD)', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
+  { id: 'quickbooks', name: 'QuickBooks Online', country: 'international', description: 'Contabilidad en la nube para pequeñas empresas', color: '#2CA01C', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
   { id: 'xero', name: 'Xero', country: 'international', description: 'Plataforma contable global en la nube', color: '#13B5EA', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
-  { id: 'odoo', name: 'Odoo', country: 'international', description: 'ERP modular de codigo abierto', color: '#714B67', authType: 'URL + Usuario + Contrasena', supportsPUC: true, supportsDIAN: false, capabilities: ['PUC', 'Balance', 'Facturas', 'Movimientos', 'Contactos'] },
+  { id: 'odoo', name: 'Odoo', country: 'international', description: 'ERP modular de código abierto', color: '#714B67', authType: 'URL + Usuario + Contraseña', supportsPUC: true, supportsDIAN: false, capabilities: ['PUC', 'Balance', 'Facturas', 'Movimientos', 'Contactos'] },
 ];
 
 type ConnectionStatus = 'idle' | 'testing' | 'connecting' | 'connected' | 'error';
@@ -108,7 +108,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   PUC: 'Plan de Cuentas',
   DIAN: 'Reportes DIAN',
   Balance: 'Balance de Prueba',
-  Facturas: 'Facturacion',
+  Facturas: 'Facturación',
   Movimientos: 'Movimientos',
   Contactos: 'Terceros',
 };
@@ -128,13 +128,13 @@ function getFieldsForProvider(provider: ERPProvider): FieldDef[] {
   switch (provider) {
     case 'alegra':
       return [
-        { key: 'username', label: 'Email de Alegra', placeholder: 'usuario@empresa.com', required: true, hint: 'El email con el que inicia sesion en Alegra' },
-        { key: 'apiToken', label: 'API Token', placeholder: 'Token de la configuracion de Alegra', secret: true, required: true, hint: 'Encuentre su API Token en Alegra > Configuracion > Integraciones' },
+        { key: 'username', label: 'Email de Alegra', placeholder: 'usuario@empresa.com', required: true, hint: 'El email con el que inicia sesión en Alegra' },
+        { key: 'apiToken', label: 'API Token', placeholder: 'Token de la configuración de Alegra', secret: true, required: true, hint: 'Encuentre su API Token en Alegra > Configuración > Integraciones' },
       ];
     case 'siigo':
       return [
         { key: 'username', label: 'Usuario (email)', placeholder: 'usuario@empresa.com', required: true },
-        { key: 'apiKey', label: 'Access Key', placeholder: 'Clave de acceso de Siigo', secret: true, required: true, hint: 'Configuracion > Alianzas e Integraciones > Credenciales' },
+        { key: 'apiKey', label: 'Access Key', placeholder: 'Clave de acceso de Siigo', secret: true, required: true, hint: 'Configuración > Alianzas e Integraciones > Credenciales' },
       ];
     case 'helisa':
       return [
@@ -144,24 +144,24 @@ function getFieldsForProvider(provider: ERPProvider): FieldDef[] {
     case 'world_office':
       return [
         { key: 'baseUrl', label: 'URL del tenant', placeholder: 'https://miempresa.worldoffice.cloud', required: true },
-        { key: 'apiToken', label: 'JWT Token', placeholder: 'Token de Configuracion General > API', secret: true, required: true },
+        { key: 'apiToken', label: 'JWT Token', placeholder: 'Token de Configuración General > API', secret: true, required: true },
       ];
     case 'contapyme':
       return [
         { key: 'baseUrl', label: 'URL del servidor', placeholder: 'https://miempresa.contapyme.com', required: true },
-        { key: 'apiToken', label: 'API Token', placeholder: 'Token de autenticacion', secret: true, required: true },
+        { key: 'apiToken', label: 'API Token', placeholder: 'Token de autenticación', secret: true, required: true },
       ];
     case 'sap_b1':
       return [
         { key: 'baseUrl', label: 'URL del Service Layer', placeholder: 'https://servidor:50000', required: true },
         { key: 'username', label: 'Usuario SAP', placeholder: 'manager', required: true },
-        { key: 'password', label: 'Contrasena', placeholder: '', secret: true, required: true },
+        { key: 'password', label: 'Contraseña', placeholder: '', secret: true, required: true },
         { key: 'databaseName', label: 'Base de datos (CompanyDB)', placeholder: 'SBODEMOCO', required: true },
       ];
     case 'dynamics_365':
       return [
         { key: 'tenantId', label: 'Tenant ID (Azure AD)', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', required: true },
-        { key: 'clientId', label: 'Client ID', placeholder: 'ID de aplicacion registrada en Azure', required: true },
+        { key: 'clientId', label: 'Client ID', placeholder: 'ID de aplicación registrada en Azure', required: true },
         { key: 'clientSecret', label: 'Client Secret', placeholder: '', secret: true, required: true },
         { key: 'companyId', label: 'Company ID (BC)', placeholder: 'ID de la empresa en Business Central', required: true },
       ];
@@ -170,21 +170,21 @@ function getFieldsForProvider(provider: ERPProvider): FieldDef[] {
         { key: 'clientId', label: 'Client ID', placeholder: 'ID de app en developer.intuit.com', required: true },
         { key: 'clientSecret', label: 'Client Secret', placeholder: '', secret: true, required: true },
         { key: 'refreshToken', label: 'Refresh Token', placeholder: 'Token de refresco OAuth', secret: true, required: true },
-        { key: 'companyId', label: 'Realm ID (Company)', placeholder: 'ID numerico de la empresa', required: true },
+        { key: 'companyId', label: 'Realm ID (Company)', placeholder: 'ID numérico de la empresa', required: true },
       ];
     case 'xero':
       return [
         { key: 'clientId', label: 'Client ID', placeholder: 'ID de app en developer.xero.com', required: true },
         { key: 'clientSecret', label: 'Client Secret', placeholder: '', secret: true, required: true },
         { key: 'refreshToken', label: 'Refresh Token', placeholder: 'Token OAuth', secret: true, required: true },
-        { key: 'tenantId', label: 'Tenant ID (xero-tenant-id)', placeholder: 'ID de la organizacion Xero', required: true },
+        { key: 'tenantId', label: 'Tenant ID (xero-tenant-id)', placeholder: 'ID de la organización Xero', required: true },
       ];
     case 'odoo':
       return [
         { key: 'baseUrl', label: 'URL de Odoo', placeholder: 'https://miempresa.odoo.com', required: true },
         { key: 'databaseName', label: 'Base de datos', placeholder: 'miempresa-production', required: true },
         { key: 'username', label: 'Usuario (email)', placeholder: 'admin@empresa.com', required: true },
-        { key: 'password', label: 'Contrasena o API Key', placeholder: '', secret: true, required: true },
+        { key: 'password', label: 'Contraseña o API Key', placeholder: '', secret: true, required: true },
       ];
   }
 }
@@ -222,14 +222,14 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Error al probar la conexion');
+        throw new Error(data.error || 'Error al probar la conexión');
       }
 
       setStatus('idle');
       setError('');
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : 'Error de conexion');
+      setError(err instanceof Error ? err.message : 'Error de conexión');
     }
   };
 
@@ -250,14 +250,14 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Error de conexion');
+        throw new Error(data.error || 'Error de conexión');
       }
 
       setStatus('connected');
       setTimeout(() => onConnected(fields), 1200);
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : 'Error de conexion');
+      setError(err instanceof Error ? err.message : 'Error de conexión');
     }
   };
 
@@ -272,6 +272,9 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="connect-form-title"
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -281,9 +284,9 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5]">
           <div className="flex items-center gap-2">
             <Plug className="w-4 h-4 text-[#D4A017]" />
-            <h3 className="text-sm font-semibold text-[#0a0a0a]">Conectar {provider.name}</h3>
+            <h3 id="connect-form-title" className="text-sm font-semibold text-[#0a0a0a]">Conectar {provider.name}</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={onClose} className="p-1 text-[#a3a3a3] hover:text-[#525252] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -299,7 +302,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
           ) : (
             <>
               <p className="text-xs text-[#a3a3a3]">
-                Autenticacion: <span className="text-[#525252] font-medium">{provider.authType}</span>
+                Autenticación: <span className="text-[#525252] font-medium">{provider.authType}</span>
               </p>
 
               {fieldDefs.map(field => (
@@ -329,18 +332,20 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
         {/* Actions */}
         {status !== 'connected' && (
           <div className="px-6 py-4 border-t border-[#e5e5e5] flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
               Cancelar
             </button>
             <button
+              type="button"
               onClick={handleTest}
               disabled={!allRequiredFilled || status === 'testing' || status === 'connecting'}
               className="px-4 py-2 rounded-lg text-xs font-medium border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {status === 'testing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {status === 'testing' ? 'Probando...' : 'Probar conexion'}
+              {status === 'testing' ? 'Probando...' : 'Probar conexión'}
             </button>
             <button
+              type="button"
               onClick={handleConnect}
               disabled={!allRequiredFilled || status === 'connecting' || status === 'testing'}
               className={cn(
@@ -378,6 +383,9 @@ function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalP
       onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="disconnect-modal-title"
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -388,17 +396,18 @@ function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalP
             <div className="w-8 h-8 rounded-lg bg-[#FEF2F2] flex items-center justify-center">
               <Trash2 className="w-4 h-4 text-[#DC2626]" />
             </div>
-            <h3 className="text-sm font-semibold text-[#0a0a0a]">Desconectar {providerName}?</h3>
+            <h3 id="disconnect-modal-title" className="text-sm font-semibold text-[#0a0a0a]">¿Desconectar {providerName}?</h3>
           </div>
           <p className="text-xs text-[#a3a3a3]">
-            Se eliminaran las credenciales almacenadas. Debera volver a conectar para sincronizar datos.
+            Se eliminarán las credenciales almacenadas. Deberá volver a conectar para sincronizar datos.
           </p>
         </div>
         <div className="px-6 py-4 border-t border-[#e5e5e5] flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
             Cancelar
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#DC2626] hover:bg-[#B91C1C] text-white transition-colors"
           >
@@ -451,14 +460,14 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Error de sincronizacion');
+        throw new Error(data.error || 'Error de sincronización');
       }
 
       const count = data.recordCount ?? 0;
       setResult({ success: true, recordCount: count });
       onSyncComplete(count);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error de sincronizacion');
+      setError(err instanceof Error ? err.message : 'Error de sincronización');
       setResult({ success: false, recordCount: 0 });
     } finally {
       setSyncing(false);
@@ -481,6 +490,9 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sync-modal-title"
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -490,9 +502,9 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5]">
           <div className="flex items-center gap-2">
             <Download className="w-4 h-4 text-[#D4A017]" />
-            <h3 className="text-sm font-semibold text-[#0a0a0a]">Sincronizar {provider.name}</h3>
+            <h3 id="sync-modal-title" className="text-sm font-semibold text-[#0a0a0a]">Sincronizar {provider.name}</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={onClose} className="p-1 text-[#a3a3a3] hover:text-[#525252] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -510,6 +522,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={handleCreateReport}
                 className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
               >
@@ -542,7 +555,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
 
               {/* Year selector */}
               <div>
-                <label className="block text-xs font-medium text-[#525252] mb-1">Periodo (ano)</label>
+                <label className="block text-xs font-medium text-[#525252] mb-1">Periodo (año)</label>
                 <select
                   value={year}
                   onChange={e => setYear(Number(e.target.value))}
@@ -567,10 +580,11 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
         {/* Actions */}
         {!result?.success && (
           <div className="px-6 py-4 border-t border-[#e5e5e5] flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
               Cancelar
             </button>
             <button
+              type="button"
               onClick={handleSync}
               disabled={syncing || !anySelected}
               className={cn(
@@ -581,7 +595,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
               )}
             >
               {syncing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {syncing ? 'Sincronizando...' : 'Iniciar Sincronizacion'}
+              {syncing ? 'Sincronizando...' : 'Iniciar Sincronización'}
             </button>
           </div>
         )}
@@ -658,7 +672,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
       {isConnected && connection.lastSync && (
         <div className="flex items-center gap-1.5 mt-2 text-[10px] text-[#16A34A]">
           <RefreshCw className="w-3 h-3" />
-          Ultima sync: {formatSyncDate(connection.lastSync)}
+          Última sync: {formatSyncDate(connection.lastSync)}
         </div>
       )}
 
@@ -677,6 +691,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
         {isConnected ? (
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={onSync}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
             >
@@ -684,6 +699,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
               Sincronizar
             </button>
             <button
+              type="button"
               onClick={onDisconnect}
               className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
               title="Desconectar"
@@ -693,6 +709,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
           </div>
         ) : (
           <button
+            type="button"
             onClick={onConnect}
             className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] hover:bg-[#FFFBEB] transition-all"
           >

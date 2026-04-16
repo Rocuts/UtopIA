@@ -95,7 +95,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
           <div>
             <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
             <p className="text-xs text-[#a3a3a3]">
-              UtopIA extrae automaticamente los datos de su archivo y pre-llena el formulario
+              UtopIA extrae automáticamente los datos de su archivo y pre-llena el formulario
             </p>
           </div>
 
@@ -108,18 +108,18 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
                   <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
                 </div>
                 <p className="text-xs text-[#16A34A]/80">
-                  {detected} de {totalFields} campos detectados automaticamente
+                  {detected} de {totalFields} campos detectados automáticamente
                 </p>
                 {extractionState.extracted.isTrialBalance && (
                   <div className="mt-2 pt-2 border-t border-[#22C55E]/20 text-xs text-[#16A34A]/80 space-y-0.5">
                     {extractionState.extracted.accountsDetected && <p>Cuentas detectadas: {extractionState.extracted.accountsDetected}</p>}
                     {extractionState.extracted.equationValid !== undefined && (
-                      <p>Ecuacion patrimonial: {extractionState.extracted.equationValid ? 'Valida' : 'Con discrepancias'}</p>
+                      <p>Ecuación patrimonial: {extractionState.extracted.equationValid ? 'Válida' : 'Con discrepancias'}</p>
                     )}
                   </div>
                 )}
               </div>
-              <button onClick={() => { resetExtraction(); }} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+              <button type="button" onClick={() => { resetExtraction(); }} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
                 Subir otro archivo
               </button>
             </div>
@@ -141,20 +141,21 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
                 <AlertCircle className="w-4 h-4 text-[#EF4444]" />
                 <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
               </div>
-              <button onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+              <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
             </div>
           ) : (
             <FileUploadZone
               accept=".csv,.xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png"
               onUpload={uploadAndExtract}
               maxSizeMB={25}
-              label="Arrastre su archivo aqui"
+              label="Arrastre su archivo aquí"
               sublabel="Balance de prueba, estados financieros, acto administrativo, declaraciones"
             />
           )}
 
           {extractionState.status === 'idle' && (
             <button
+              type="button"
               onClick={() => { setSkippedUpload(true); setCurrentStep(1); }}
               className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
             >
@@ -191,7 +192,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
-                Razon Social * <ConfidenceDot level={confidence.name} />
+                Razón Social * <ConfidenceDot level={confidence.name} />
               </label>
               <input type="text" value={company.name} onChange={e => setCompany(c => ({ ...c, name: e.target.value }))}
                 className={cn('w-full border rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors',
@@ -234,7 +235,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
               </label>
               <input type="text" value={company.city} onChange={e => setCompany(c => ({ ...c, city: e.target.value }))}
                 className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors"
-                placeholder="Bogota" />
+                placeholder="Bogotá" />
             </div>
             <div>
               <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
@@ -242,7 +243,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
               </label>
               <input type="text" value={company.sector} onChange={e => setCompany(c => ({ ...c, sector: e.target.value }))}
                 className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors"
-                placeholder="Ej: Tecnologia, Comercio" />
+                placeholder="Ej: Tecnología, Comercio" />
             </div>
           </div>
 
@@ -275,7 +276,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
               <span className="text-xs font-semibold text-[#0a0a0a] uppercase tracking-wider">Empresa</span>
             </div>
             <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <div><span className="text-[#a3a3a3]">Razon Social:</span> <span className="text-[#0a0a0a] font-medium">{company.name || '—'}</span></div>
+              <div><span className="text-[#a3a3a3]">Razón Social:</span> <span className="text-[#0a0a0a] font-medium">{company.name || '—'}</span></div>
               <div><span className="text-[#a3a3a3]">NIT:</span> <span className="text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">{company.nit || '—'}</span></div>
               <div><span className="text-[#a3a3a3]">Tipo:</span> <span className="text-[#0a0a0a]">{company.entityType}</span></div>
               <div><span className="text-[#a3a3a3]">Periodo:</span> <span className="text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">{period}</span></div>
@@ -285,7 +286,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
           {/* Pipeline */}
           <div className="bg-white border border-[#e5e5e5] rounded-xl p-4">
             <span className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider font-[family-name:var(--font-geist-mono)]">
-              Pipeline que se ejecutara
+              Pipeline que se ejecutará
             </span>
             <div className="flex items-center gap-2 mt-3 overflow-x-auto styled-scrollbar pb-2">
               {agents.map((agent, i) => (
@@ -306,7 +307,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
             <span>~3-5 min</span>
           </div>
           <p className="text-[10px] text-[#a3a3a3]">
-            Su informacion es redactada (PII) antes de enviarse al LLM
+            Su información es redactada (PII) antes de enviarse al LLM
           </p>
         </div>
       ),

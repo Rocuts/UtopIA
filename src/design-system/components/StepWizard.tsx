@@ -40,40 +40,56 @@ export function StepWizard({
     <div className={cn('flex flex-col h-full', className)}>
       {/* Progress bar */}
       <div className="px-6 pt-6 pb-4 shrink-0">
-        <div className="flex items-center gap-2 mb-3">
-          {steps.map((step, i) => (
-            <div key={step.id} className="flex items-center gap-2 flex-1">
-              <div className="flex items-center gap-2 flex-1">
-                <div
-                  className={cn(
-                    'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors',
-                    i < currentStep && 'bg-[#0a0a0a] text-white',
-                    i === currentStep && 'bg-[#D4A017] text-white',
-                    i > currentStep && 'bg-[#f5f5f5] text-[#a3a3a3] border border-[#e5e5e5]',
-                  )}
+        <nav aria-label="Pasos del formulario">
+          <ol className="flex items-center gap-2 mb-3">
+            {steps.map((step, i) => {
+              const completionState =
+                i < currentStep
+                  ? 'completado'
+                  : i === currentStep
+                    ? 'actual'
+                    : 'pendiente';
+              return (
+                <li
+                  key={step.id}
+                  className="flex items-center gap-2 flex-1"
+                  aria-current={currentStep === i ? 'step' : undefined}
+                  aria-label={`Paso ${i + 1}: ${step.label} (${completionState})`}
                 >
-                  {i < currentStep ? '\u2713' : i + 1}
-                </div>
-                <span
-                  className={cn(
-                    'text-xs font-medium hidden sm:block truncate',
-                    i === currentStep ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]',
+                  <div className="flex items-center gap-2 flex-1">
+                    <div
+                      className={cn(
+                        'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors',
+                        i < currentStep && 'bg-[#0a0a0a] text-white',
+                        i === currentStep && 'bg-[#D4A017] text-white',
+                        i > currentStep && 'bg-[#f5f5f5] text-[#a3a3a3] border border-[#e5e5e5]',
+                      )}
+                    >
+                      {i < currentStep ? '\u2713' : i + 1}
+                    </div>
+                    <span
+                      className={cn(
+                        'text-xs font-medium hidden sm:block truncate',
+                        i === currentStep ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]',
+                      )}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div
+                      aria-hidden="true"
+                      className={cn(
+                        'h-px flex-1 min-w-[16px]',
+                        i < currentStep ? 'bg-[#0a0a0a]' : 'bg-[#e5e5e5]',
+                      )}
+                    />
                   )}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {i < steps.length - 1 && (
-                <div
-                  className={cn(
-                    'h-px flex-1 min-w-[16px]',
-                    i < currentStep ? 'bg-[#0a0a0a]' : 'bg-[#e5e5e5]',
-                  )}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
       </div>
 
       {/* Step content */}
@@ -94,6 +110,7 @@ export function StepWizard({
       {/* Navigation */}
       <div className="px-6 py-4 border-t border-[#e5e5e5] flex items-center justify-between shrink-0">
         <button
+          type="button"
           onClick={onBack}
           disabled={isFirst}
           className={cn(
@@ -109,6 +126,7 @@ export function StepWizard({
 
         {isLast ? (
           <button
+            type="button"
             onClick={onSubmit}
             disabled={!current.isValid}
             className={cn(
@@ -123,6 +141,7 @@ export function StepWizard({
           </button>
         ) : (
           <button
+            type="button"
             onClick={onNext}
             disabled={!current.isValid}
             className={cn(

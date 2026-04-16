@@ -52,7 +52,7 @@ const CATEGORIES: ServiceCategory[] = [
     items: [
       { id: 'dian_defense', icon: Shield, labelEs: 'Defensa DIAN', labelEn: 'DIAN Defense', descEs: 'Requerimientos y sanciones', descEn: 'Requirements & sanctions' },
       { id: 'tax_refund', icon: TrendingUp, labelEs: 'Devoluciones', labelEn: 'Tax Refunds', descEs: 'Saldos a favor IVA/Renta', descEn: 'IVA/Income refunds' },
-      { id: 'tax_planning', icon: Calculator, labelEs: 'Planeacion Tributaria', labelEn: 'Tax Planning', descEs: 'Optimizacion fiscal legal', descEn: 'Legal tax optimization' },
+      { id: 'tax_planning', icon: Calculator, labelEs: 'Planeación Tributaria', labelEn: 'Tax Planning', descEs: 'Optimización fiscal legal', descEn: 'Legal tax optimization' },
       { id: 'transfer_pricing', icon: Globe, labelEs: 'Precios Transferencia', labelEn: 'Transfer Pricing', descEs: 'Arts. 260-1 a 260-11 E.T.', descEn: 'Arts. 260-1 to 260-11 E.T.' },
     ],
   },
@@ -63,7 +63,7 @@ const CATEGORIES: ServiceCategory[] = [
     color: '#0EA5E9',
     items: [
       { id: 'fiscal_audit_opinion', icon: ClipboardCheck, labelEs: 'Dictamen Rev. Fiscal', labelEn: 'Fiscal Audit Opinion', descEs: 'NIA 700, Ley 43/1990', descEn: 'NIA 700, Law 43/1990' },
-      { id: 'tax_reconciliation', icon: GitCompareArrows, labelEs: 'Conciliacion Fiscal', labelEn: 'Tax Reconciliation', descEs: 'NIIF-fiscal + NIC 12', descEn: 'IFRS-tax + IAS 12' },
+      { id: 'tax_reconciliation', icon: GitCompareArrows, labelEs: 'Conciliación Fiscal', labelEn: 'Tax Reconciliation', descEs: 'NIIF-fiscal + NIC 12', descEn: 'IFRS-tax + IAS 12' },
     ],
   },
   {
@@ -73,8 +73,8 @@ const CATEGORIES: ServiceCategory[] = [
     color: '#10B981',
     items: [
       { id: 'financial_intel', icon: BarChart3, labelEs: 'Inteligencia Financiera', labelEn: 'Financial Intelligence', descEs: 'Flujo de caja, DCF, breakeven', descEn: 'Cash flow, DCF, breakeven' },
-      { id: 'business_valuation', icon: DollarSign, labelEs: 'Valoracion Empresarial', labelEn: 'Business Valuation', descEs: 'WACC, multiplos, NIIF 13', descEn: 'WACC, multiples, IFRS 13' },
-      { id: 'due_diligence', icon: FileSearch, labelEs: 'Due Diligence', labelEn: 'Due Diligence', descEs: 'Credito, inversion, venta', descEn: 'Credit, investment, sale' },
+      { id: 'business_valuation', icon: DollarSign, labelEs: 'Valoración Empresarial', labelEn: 'Business Valuation', descEs: 'WACC, múltiplos, NIIF 13', descEn: 'WACC, multiples, IFRS 13' },
+      { id: 'due_diligence', icon: FileSearch, labelEs: 'Due Diligence', labelEn: 'Due Diligence', descEs: 'Crédito, inversión, venta', descEn: 'Credit, investment, sale' },
     ],
   },
   {
@@ -104,6 +104,9 @@ export function WelcomeScreen() {
   return (
     <div className="h-full overflow-y-auto styled-scrollbar">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-5">
+        <h1 className="sr-only">
+          {es ? 'UtopIA — Consultoría Contable y Tributaria' : 'UtopIA — Accounting & Tax Consulting'}
+        </h1>
 
         {/* Header */}
         <motion.div {...fadeUp(0)} className="flex items-center gap-2.5">
@@ -187,11 +190,11 @@ export function WelcomeScreen() {
                   >
                     <CatIcon className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wide">
+                  <h2 className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wide">
                     {es ? cat.roleEs : cat.roleEn}
-                  </span>
+                  </h2>
                   <span className="text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] ml-auto">
-                    {cat.items.length} {cat.items.length === 1 ? 'modulo' : 'modulos'}
+                    {cat.items.length} {cat.items.length === 1 ? 'módulo' : 'módulos'}
                   </span>
                 </div>
 

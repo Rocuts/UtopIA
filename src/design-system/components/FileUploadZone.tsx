@@ -34,7 +34,7 @@ export function FileUploadZone({
   accept = '.csv,.xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png',
   onUpload,
   maxSizeMB = 25,
-  label = 'Arrastre su archivo aqui',
+  label = 'Arrastre su archivo aquí',
   sublabel = 'o haga clic para seleccionar',
   disabled = false,
   className,
@@ -125,7 +125,7 @@ export function FileUploadZone({
         role="button"
         tabIndex={0}
         aria-label={label}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
       >
         <input
           ref={inputRef}
@@ -134,6 +134,7 @@ export function FileUploadZone({
           onChange={handleSelect}
           className="hidden"
           disabled={disabled}
+          aria-hidden="true"
         />
 
         <AnimatePresence mode="wait">
@@ -212,6 +213,7 @@ export function FileUploadZone({
               {f.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />}
               {f.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-[#EF4444] shrink-0" />}
               <button
+                type="button"
                 onClick={e => { e.stopPropagation(); removeFile(f.name); }}
                 className="p-0.5 text-[#a3a3a3] hover:text-[#EF4444] transition-colors"
                 aria-label={`Remover ${f.name}`}

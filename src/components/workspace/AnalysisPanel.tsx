@@ -55,7 +55,7 @@ const SEVERITY_COLORS: Record<AuditSeverity, string> = {
 };
 
 const SEVERITY_LABELS: Record<AuditSeverity, string> = {
-  critico: 'Critico',
+  critico: 'Crítico',
   alto: 'Alto',
   medio: 'Medio',
   bajo: 'Bajo',
@@ -73,21 +73,21 @@ const DOMAIN_LABELS: Record<AuditDomain, string> = {
   niif: 'NIIF',
   tributario: 'Tributario',
   legal: 'Legal',
-  revisoria: 'Revisoria Fiscal',
+  revisoria: 'Revisoría Fiscal',
 };
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
   general_chat: 'Chat General',
   dian_defense: 'Defensa DIAN',
-  tax_refund: 'Devolucion de Saldos',
+  tax_refund: 'Devolución de Saldos',
   due_diligence: 'Due Diligence',
   financial_intel: 'Inteligencia Financiera',
   niif_report: 'Reporte NIIF',
-  tax_planning: 'Planeacion Tributaria',
+  tax_planning: 'Planeación Tributaria',
   transfer_pricing: 'Precios de Transferencia',
-  business_valuation: 'Valoracion Empresarial',
+  business_valuation: 'Valoración Empresarial',
   fiscal_audit_opinion: 'Dictamen Rev. Fiscal',
-  tax_reconciliation: 'Conciliacion Fiscal',
+  tax_reconciliation: 'Conciliación Fiscal',
   feasibility_study: 'Estudio de Factibilidad',
 };
 
@@ -531,7 +531,7 @@ export function AnalysisPanel({
         </p>
         <div className="border-t border-[#e5e5e5] pt-3">
           <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-2">
-            Referencias Rapidas
+            Referencias Rápidas
           </h4>
           <div className="space-y-1.5">
             {WELCOME_CITATIONS.map((c, i) => (
@@ -616,7 +616,7 @@ export function AnalysisPanel({
           <h3 className="text-sm font-medium text-[#0a0a0a]">Lo que analizaremos</h3>
         </div>
         <p className="text-xs text-[#525252] leading-relaxed">
-          Complete el formulario de ingreso para que nuestros agentes de IA puedan preparar un analisis personalizado.
+          Complete el formulario de ingreso para que nuestros agentes de IA puedan preparar un análisis personalizado.
         </p>
 
         <div className="space-y-2">
@@ -624,10 +624,10 @@ export function AnalysisPanel({
             Capacidades habilitadas
           </h4>
           {[
-            'Busqueda normativa en base documental',
-            'Busqueda web en tiempo real',
-            'Calculo de sanciones y plazos',
-            'Evaluacion de nivel de riesgo',
+            'Búsqueda normativa en base documental',
+            'Búsqueda web en tiempo real',
+            'Cálculo de sanciones y plazos',
+            'Evaluación de nivel de riesgo',
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-2">
               <CheckCircle2 className="w-3 h-3 text-[#22c55e] shrink-0" />
@@ -697,11 +697,11 @@ export function AnalysisPanel({
             </div>
             <div className="flex items-start gap-2">
               <DSBadge variant="tier" tier="T2" label="T2" size="sm" />
-              <span className="text-[10px] text-[#525252]">Especialista unico con herramientas</span>
+              <span className="text-[10px] text-[#525252]">Especialista único con herramientas</span>
             </div>
             <div className="flex items-start gap-2">
               <DSBadge variant="tier" tier="T3" label="T3" size="sm" />
-              <span className="text-[10px] text-[#525252]">Multi-expertos en paralelo + sintesis</span>
+              <span className="text-[10px] text-[#525252]">Multi-expertos en paralelo + síntesis</span>
             </div>
           </div>
         </CollapsibleSection>
@@ -816,6 +816,7 @@ export function AnalysisPanel({
                   </div>
                   {onRemoveDocument && (
                     <button
+                      type="button"
                       onClick={() => onRemoveDocument(doc.filename)}
                       className="p-1 text-[#a3a3a3] hover:text-[#ef4444] transition-colors"
                       aria-label={`Eliminar ${doc.filename}`}
@@ -849,7 +850,7 @@ export function AnalysisPanel({
             <p className="text-xs font-medium text-[#0a0a0a]">
               {pipelineState.mode === 'running' && 'Generando reporte...'}
               {pipelineState.mode === 'auditing' && 'Auditando...'}
-              {pipelineState.mode === 'quality' && 'Evaluacion de calidad...'}
+              {pipelineState.mode === 'quality' && 'Evaluación de calidad...'}
             </p>
             <p className="text-[10px] text-[#a3a3a3]">
               {pipelineState.mode === 'running' && `Etapa ${pipelineState.currentStage + 1} de ${pipelineState.stageLabels.length}`}
@@ -913,7 +914,7 @@ export function AnalysisPanel({
                 size="md"
               />
               <p className="text-[10px] text-[#a3a3a3] text-center">
-                Calificacion general basada en 12 dimensiones de calidad
+                Calificación general basada en 12 dimensiones de calidad
               </p>
 
               {/* 12 dimensions expander */}
@@ -949,7 +950,7 @@ export function AnalysisPanel({
         {/* Audit Findings Summary */}
         {intelligencePanelData.findings.length > 0 && (
           <CollapsibleSection
-            title="Hallazgos de Auditoria"
+            title="Hallazgos de Auditoría"
             icon={AlertTriangle}
             count={intelligencePanelData.findings.length}
           >
@@ -1105,7 +1106,7 @@ export function AnalysisPanel({
             size="sm"
             className="w-full justify-center gap-1.5 text-[#ef4444] hover:text-[#ef4444] hover:bg-[#fef2f2]"
           >
-            Limpiar conversacion
+            Limpiar conversación
           </Button>
         )}
       </div>
@@ -1136,6 +1137,7 @@ export function AnalysisPanel({
         {isOpen && (
           <motion.aside
             ref={panelRef}
+            id="analysis-panel"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -1157,6 +1159,7 @@ export function AnalysisPanel({
                 </h2>
               </div>
               <button
+                type="button"
                 onClick={onToggle}
                 className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
                 aria-label="Cerrar panel"

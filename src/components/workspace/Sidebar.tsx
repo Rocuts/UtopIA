@@ -79,7 +79,7 @@ const CASE_TYPE_ITEMS: CaseTypeItem[] = [
   {
     key: 'tax_planning',
     icon: Calculator,
-    label: { es: 'Planeacion Tributaria', en: 'Tax Planning' },
+    label: { es: 'Planeación Tributaria', en: 'Tax Planning' },
     shortcut: 'P',
   },
   {
@@ -91,7 +91,7 @@ const CASE_TYPE_ITEMS: CaseTypeItem[] = [
   {
     key: 'business_valuation',
     icon: DollarSign,
-    label: { es: 'Valoracion Empresarial', en: 'Business Valuation' },
+    label: { es: 'Valoración Empresarial', en: 'Business Valuation' },
     shortcut: 'V',
   },
   {
@@ -103,7 +103,7 @@ const CASE_TYPE_ITEMS: CaseTypeItem[] = [
   {
     key: 'tax_reconciliation',
     icon: GitCompareArrows,
-    label: { es: 'Conciliacion Fiscal', en: 'Tax Reconciliation' },
+    label: { es: 'Conciliación Fiscal', en: 'Tax Reconciliation' },
     shortcut: 'C',
   },
   {
@@ -132,9 +132,9 @@ const USE_CASE_LABELS: Record<string, Record<string, string>> = {
     'financial-report': 'NIIF',
     'tax-planning': 'Plan. Tributaria',
     'transfer-pricing': 'Precios Transfer.',
-    'business-valuation': 'Valoracion',
-    'fiscal-audit-opinion': 'Revisoria',
-    'tax-reconciliation': 'Conciliacion',
+    'business-valuation': 'Valoración',
+    'fiscal-audit-opinion': 'Revisoría',
+    'tax-reconciliation': 'Conciliación',
     'feasibility-study': 'Factibilidad',
   },
   en: {
@@ -299,6 +299,7 @@ export function Sidebar() {
 
   return (
     <motion.aside
+      id="workspace-sidebar"
       initial={false}
       animate={{ width: isExpanded ? 272 : 48 }}
       transition={{ type: 'spring', ...NOVA_SPRING }}
@@ -353,6 +354,7 @@ export function Sidebar() {
         {/* Nueva Consulta button */}
         <div className="px-2 pt-3 pb-2">
           <button
+            type="button"
             onClick={handleNewConsultation}
             className={cn(
               'w-full flex items-center gap-2 rounded-sm text-sm font-medium transition-colors',
@@ -385,6 +387,7 @@ export function Sidebar() {
 
           {/* Chat General — skip intake, go straight to chat */}
           <button
+            type="button"
             onClick={() => {
               setActiveCaseType('general_chat');
               startNewConsultation('general');
@@ -423,9 +426,17 @@ export function Sidebar() {
               const Icon = item.icon;
               const label = item.label[language] || item.label.es;
 
+              const fullLabel =
+                item.key === 'financial_intel'
+                  ? language === 'es'
+                    ? 'Inteligencia Financiera'
+                    : 'Financial Intelligence'
+                  : label;
+
               return (
                 <li key={item.key}>
                   <button
+                    type="button"
                     onClick={() => openIntakeForType(item.key)}
                     className={cn(
                       'w-full flex items-center gap-2 rounded-sm text-[13px] transition-colors relative',
@@ -434,9 +445,15 @@ export function Sidebar() {
                         ? 'bg-[#FEF9EC] border-l-2 border-l-[#D4A017]'
                         : 'hover:bg-[#fafafa] border-l-2 border-l-transparent',
                     )}
-                    aria-label={label}
-                    aria-current={isActive ? 'true' : undefined}
-                    title={!isExpanded ? label : undefined}
+                    aria-label={fullLabel}
+                    aria-current={isActive ? 'page' : undefined}
+                    title={
+                      item.key === 'financial_intel'
+                        ? fullLabel
+                        : !isExpanded
+                          ? label
+                          : undefined
+                    }
                   >
                     <Icon
                       className={cn(
@@ -457,6 +474,7 @@ export function Sidebar() {
                           {label}
                         </span>
                         <kbd
+                          aria-hidden="true"
                           className={cn(
                             'text-[10px] font-[family-name:var(--font-geist-mono)] px-1.5 py-0.5 rounded',
                             'bg-[#f5f5f5] text-[#a3a3a3] border border-[#e5e5e5]',
@@ -484,6 +502,7 @@ export function Sidebar() {
 
             return (
               <button
+                type="button"
                 onClick={() => openIntakeForType(ELITE_ITEM.key)}
                 className={cn(
                   'w-full flex items-center gap-2 rounded-sm text-[13px] transition-colors relative',
@@ -493,7 +512,7 @@ export function Sidebar() {
                     : 'bg-gradient-to-r from-[#FEF9EC] to-[#FDF0C4]/30 hover:from-[#FDF0C4]/50 hover:to-[#FDF0C4]/40 border-l-2 border-l-transparent',
                 )}
                 aria-label={label}
-                aria-current={isActive ? 'true' : undefined}
+                aria-current={isActive ? 'page' : undefined}
                 title={!isExpanded ? label : undefined}
               >
                 <Icon
@@ -518,6 +537,7 @@ export function Sidebar() {
                       ELITE
                     </span>
                     <kbd
+                      aria-hidden="true"
                       className={cn(
                         'text-[10px] font-[family-name:var(--font-geist-mono)] px-1.5 py-0.5 rounded',
                         'bg-[#f5f5f5] text-[#a3a3a3] border border-[#e5e5e5]',
@@ -555,6 +575,7 @@ export function Sidebar() {
               placeholder={
                 language === 'es' ? 'Buscar casos...' : 'Search cases...'
               }
+              aria-label={language === 'es' ? 'Buscar casos' : 'Search cases'}
               className="w-full bg-[#fafafa] border border-[#e5e5e5] rounded-sm pl-8 pr-3 py-1.5 text-xs text-[#0a0a0a] placeholder:text-[#a3a3a3] outline-none focus:border-[#0a0a0a] transition-colors"
             />
           </div>
@@ -595,6 +616,7 @@ export function Sidebar() {
                   return (
                     <motion.button
                       key={conv.id}
+                      type="button"
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -8 }}
@@ -613,7 +635,7 @@ export function Sidebar() {
                           ? 'bg-white shadow-sm border-l-2 border-l-[#D4A017] border border-[#e5e5e5]'
                           : 'hover:bg-[#fafafa] border-l-2 border-l-transparent border border-transparent',
                       )}
-                      aria-current={isActiveCaseItem ? 'true' : undefined}
+                      aria-current={isActiveCaseItem ? 'page' : undefined}
                       title={conv.title}
                     >
                       {isExpanded ? (
@@ -670,24 +692,26 @@ export function Sidebar() {
       {/* ── Section 4: Bottom ────────────────────────────────────────────────── */}
       <div className="border-t border-[#e5e5e5] p-2 shrink-0 space-y-0.5">
         <button
+          type="button"
           onClick={() => router.push('/workspace/settings')}
           className={cn(
             'w-full flex items-center gap-2 rounded-sm text-xs text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors',
             isExpanded ? 'px-2.5 py-2 justify-start' : 'p-2 justify-center',
           )}
-          aria-label={language === 'es' ? 'Configuracion' : 'Settings'}
-          title={!isExpanded ? (language === 'es' ? 'Configuracion' : 'Settings') : undefined}
+          aria-label={language === 'es' ? 'Configuración' : 'Settings'}
+          title={!isExpanded ? (language === 'es' ? 'Configuración' : 'Settings') : undefined}
         >
           {isExpanded ? (
             <>
               <Settings className="w-4 h-4 shrink-0" />
-              <span>{language === 'es' ? 'Configuracion' : 'Settings'}</span>
+              <span>{language === 'es' ? 'Configuración' : 'Settings'}</span>
             </>
           ) : (
             <Settings className="w-4 h-4" />
           )}
         </button>
         <button
+          type="button"
           onClick={toggleSidebar}
           className={cn(
             'w-full flex items-center gap-2 rounded-sm text-xs text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors',

@@ -18,21 +18,21 @@ const TAX_TYPES = [
   {
     value: 'iva' as const,
     label: 'IVA Saldo a Favor',
-    description: 'Devolucion o compensacion de saldos a favor en IVA.',
+    description: 'Devolución o compensación de saldos a favor en IVA.',
     reference: 'Arts. 850-865 E.T. / Decreto 1625 de 2016 (DUR) / Res. DIAN 000151/2012',
     icon: Receipt,
   },
   {
     value: 'renta' as const,
     label: 'Renta Saldo a Favor',
-    description: 'Devolucion de saldos originados en declaracion de renta.',
+    description: 'Devolución de saldos originados en declaración de renta.',
     reference: 'Arts. 850-865 E.T. / Art. 854 E.T.',
     icon: Landmark,
   },
   {
     value: 'retencion' as const,
-    label: 'Retencion en la Fuente',
-    description: 'Devolucion por exceso de retenciones practicadas.',
+    label: 'Retención en la Fuente',
+    description: 'Devolución por exceso de retenciones practicadas.',
     reference: 'Arts. 850-865 E.T. / Art. 861 E.T.',
     icon: Banknote,
   },
@@ -155,7 +155,7 @@ export function TaxRefundIntake() {
       <div>
         <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
         <p className="text-xs text-[#a3a3a3]">
-          Cargue la declaracion tributaria o solicitud de devolucion
+          Cargue la declaración tributaria o solicitud de devolución
         </p>
       </div>
 
@@ -167,10 +167,10 @@ export function TaxRefundIntake() {
               <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-[#16A34A]/80">
-              {detected} de {totalFields} campos detectados automaticamente
+              {detected} de {totalFields} campos detectados automáticamente
             </p>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
             Subir otro archivo
           </button>
         </div>
@@ -192,20 +192,21 @@ export function TaxRefundIntake() {
             <AlertCircle className="w-4 h-4 text-[#EF4444]" />
             <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={25}
-          label="Arrastre su archivo aqui"
-          sublabel="Declaraciones tributarias, solicitudes de devolucion"
+          label="Arrastre su archivo aquí"
+          sublabel="Declaraciones tributarias, solicitudes de devolución"
         />
       )}
 
       {extractionState.status === 'idle' && (
         <button
+          type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
         >
@@ -220,7 +221,7 @@ export function TaxRefundIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipo de Devolucion</h3>
+        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipo de Devolución</h3>
         <p className="text-xs text-[#737373]">Seleccione el tipo de saldo a favor que desea solicitar.</p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
@@ -288,7 +289,7 @@ export function TaxRefundIntake() {
     <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Detalles de la Solicitud</h3>
-        <p className="text-xs text-[#737373]">Informacion del periodo y monto a solicitar.</p>
+        <p className="text-xs text-[#737373]">Información del periodo y monto a solicitar.</p>
       </div>
 
       {/* Periodo */}
@@ -325,12 +326,12 @@ export function TaxRefundIntake() {
       {/* Ya radicado? */}
       <div>
         <label className="block text-xs font-medium text-[#525252] mb-2">
-          Ya radico la solicitud ante la DIAN?
+          ¿Ya radicó la solicitud ante la DIAN?
         </label>
         <div className="flex gap-3">
           {[
-            { value: true, label: 'Si, ya radique' },
-            { value: false, label: 'No, aun no' },
+            { value: true, label: 'Sí, ya radiqué' },
+            { value: false, label: 'No, aún no' },
           ].map((opt) => (
             <button
               key={String(opt.value)}
@@ -353,7 +354,7 @@ export function TaxRefundIntake() {
       {values.alreadyFiled && (
         <div>
           <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-            Numero de radicado <ConfidenceDot level={extractedConfidence.filingNumber} />
+            Número de radicado <ConfidenceDot level={extractedConfidence.filingNumber} />
           </label>
           <input
             type="text"
@@ -380,7 +381,7 @@ export function TaxRefundIntake() {
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
         label="Declaraciones tributarias y soportes"
-        sublabel="PDF, DOCX, XLSX, imagenes -- Max 25MB"
+        sublabel="PDF, DOCX, XLSX, imágenes -- Max 25MB"
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={25}
       />

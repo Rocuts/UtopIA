@@ -223,9 +223,12 @@ function UserMessage({ message }: { message: ChatMessage }) {
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs font-medium text-[#525252]">You</span>
-        <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+        <time
+          dateTime={message.timestamp}
+          className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]"
+        >
           {formatTime(message.timestamp)}
-        </span>
+        </time>
       </div>
       <p className="text-sm text-[#0a0a0a] leading-relaxed whitespace-pre-wrap">{message.content}</p>
     </motion.div>
@@ -248,12 +251,15 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
         <span className="text-xs font-medium text-[#0a0a0a]">UtopIA</span>
         <span className="text-[#a3a3a3] text-xs">·</span>
         <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
-          {language === 'es' ? 'Analisis' : 'Analysis'}
+          {language === 'es' ? 'Análisis' : 'Analysis'}
         </span>
         <span className="text-[#a3a3a3] text-xs">·</span>
-        <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+        <time
+          dateTime={message.timestamp}
+          className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]"
+        >
           {formatTime(message.timestamp)}
-        </span>
+        </time>
       </div>
 
       {/* Web search indicator */}
@@ -261,7 +267,7 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
         <div className="flex items-center gap-1.5 px-6 py-2 border-b border-[#e5e5e5] bg-white">
           <Globe className="w-3.5 h-3.5 text-[#525252]" />
           <span className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)]">
-            {language === 'es' ? 'Complementado con busqueda web' : 'Enhanced with web search'}
+            {language === 'es' ? 'Complementado con búsqueda web' : 'Enhanced with web search'}
           </span>
         </div>
       )}
@@ -331,7 +337,7 @@ function AssistantMessage({ message, language }: { message: ChatMessage; languag
       {/* Sanction calculation section */}
       {message.sanctionCalculation && (
         <CollapsibleSection
-          title={language === 'es' ? 'Calculo de Sancion' : 'Sanction Calculation'}
+          title={language === 'es' ? 'Cálculo de Sanción' : 'Sanction Calculation'}
           icon={Calculator}
           defaultOpen
         >
@@ -728,7 +734,7 @@ export function ChatThread({
           role: 'assistant',
           content:
             language === 'es'
-              ? `He procesado su documento **"${file.name}"** (${data.chunks} fragmentos). Ahora puedo responder preguntas basadas en su contenido. ¿Que desea consultar?`
+              ? `He procesado su documento **"${file.name}"** (${data.chunks} fragmentos). Ahora puedo responder preguntas basadas en su contenido. ¿Qué desea consultar?`
               : `I've processed your document **"${file.name}"** (${data.chunks} chunks). I can now answer questions based on its content. What would you like to know?`,
           timestamp: new Date().toISOString(),
         },
@@ -745,7 +751,7 @@ export function ChatThread({
           role: 'assistant',
           content: isScannedPdf
             ? (language === 'es'
-              ? 'Este PDF parece ser una **imagen escaneada** y no fue posible extraer el texto automaticamente. Intente subir capturas de cada pagina como imagenes (`.jpg` o `.png`) para que UtopIA las procese con OCR.'
+              ? 'Este PDF parece ser una **imagen escaneada** y no fue posible extraer el texto automáticamente. Intente subir capturas de cada página como imágenes (`.jpg` o `.png`) para que UtopIA las procese con OCR.'
               : 'This PDF appears to be a **scanned image** and automatic text extraction failed. Try uploading screenshots of each page as images (`.jpg` or `.png`) so UtopIA can process them with OCR.')
             : isOldFormat
             ? (language === 'es'
@@ -820,7 +826,7 @@ export function ChatThread({
           >
             <Upload className="w-8 h-8 text-[#d4a017]" />
             <p className="text-sm font-medium text-[#0a0a0a]">
-              {language === 'es' ? 'Suelte su documento aqui' : 'Drop your document here'}
+              {language === 'es' ? 'Suelte su documento aquí' : 'Drop your document here'}
             </p>
             <p className="text-xs text-[#a3a3a3]">PDF, Excel, CSV, TXT, JSON, XML</p>
           </motion.div>
@@ -834,7 +840,13 @@ export function ChatThread({
         className="flex-1 min-h-0 overflow-y-auto styled-scrollbar bg-white"
         style={{ overscrollBehavior: 'contain' }}
       >
-        <div className="flex flex-col w-full">
+        <div
+          className="flex flex-col w-full"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Historial de mensajes"
+        >
           {messages.map(msg =>
             msg.role === 'user' ? (
               <UserMessage key={msg.id} message={msg} />
@@ -883,6 +895,7 @@ export function ChatThread({
                 />
               </div>
               <button
+                type="button"
                 onClick={toggleVoice}
                 className="absolute bottom-1 right-1 p-1 rounded-sm bg-[#ef4444]/90 text-white hover:bg-[#ef4444] transition-colors"
                 aria-label={language === 'es' ? 'Detener voz' : 'Stop voice'}
@@ -932,6 +945,7 @@ export function ChatThread({
                   <FileText className="w-3 h-3 text-[#525252]" />
                   <span className="text-xs text-[#0a0a0a] max-w-[120px] truncate">{doc.filename}</span>
                   <button
+                    type="button"
                     onClick={() => removeDocument(doc.filename)}
                     className="p-0.5 text-[#a3a3a3] hover:text-[#ef4444] transition-colors"
                     aria-label={`Remove ${doc.filename}`}
@@ -966,6 +980,7 @@ export function ChatThread({
                 ? 'text-[#ef4444] bg-[#fef2f2]'
                 : 'text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]',
             )}
+            aria-pressed={voiceMode}
             aria-label={voiceMode ? (language === 'es' ? 'Detener voz' : 'Stop voice') : t.chatAi.voiceButtonTitle}
           >
             {voiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}

@@ -90,9 +90,12 @@ export function StatusBar({
         </Link>
         <div className="w-px h-4 bg-[#e5e5e5] mx-0.5" />
         <button
+          type="button"
           onClick={onToggleSidebar}
           className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
           aria-label={sidebarOpen ? (language === 'es' ? 'Cerrar sidebar' : 'Close sidebar') : (language === 'es' ? 'Abrir sidebar' : 'Open sidebar')}
+          aria-expanded={sidebarOpen}
+          aria-controls="workspace-sidebar"
         >
           {sidebarOpen ? (
             <PanelLeftClose className="w-4 h-4" />
@@ -143,6 +146,7 @@ export function StatusBar({
         {/* Document count */}
         {documentCount > 0 && (
           <button
+            type="button"
             onClick={onToggleAnalysisPanel}
             className="flex items-center gap-1 px-2 py-1 rounded-sm text-[#525252] hover:bg-[#fafafa] transition-colors"
             aria-label={`${documentCount} ${language === 'es' ? 'documentos' : 'documents'}`}
@@ -154,6 +158,7 @@ export function StatusBar({
 
         {/* Analysis panel toggle */}
         <button
+          type="button"
           onClick={onToggleAnalysisPanel}
           className={cn(
             'p-1.5 rounded-sm transition-colors',
@@ -164,13 +169,15 @@ export function StatusBar({
           aria-label={
             analysisPanelOpen
               ? language === 'es'
-                ? 'Cerrar panel de analisis'
+                ? 'Cerrar panel de análisis'
                 : 'Close analysis panel'
               : language === 'es'
-                ? 'Abrir panel de analisis'
+                ? 'Abrir panel de análisis'
                 : 'Open analysis panel'
           }
           aria-pressed={analysisPanelOpen}
+          aria-expanded={analysisPanelOpen}
+          aria-controls="analysis-panel"
         >
           {analysisPanelOpen ? (
             <PanelRightClose className="w-4 h-4" />
@@ -181,9 +188,10 @@ export function StatusBar({
 
         {/* Language toggle */}
         <button
+          type="button"
           onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
           className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors flex items-center gap-1"
-          aria-label={language === 'es' ? 'Switch to English' : 'Cambiar a Espanol'}
+          aria-label={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
         >
           <Globe className="w-3.5 h-3.5" />
           <span className="text-[10px] font-[family-name:var(--font-geist-mono)] uppercase">

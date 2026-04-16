@@ -37,43 +37,43 @@ const ANALYSIS_TYPES: Array<{
   {
     value: 'cash_flow',
     label: 'Flujo de Caja',
-    description: 'Analisis y proyeccion del flujo de efectivo operativo, de inversion y financiamiento.',
+    description: 'Análisis y proyección del flujo de efectivo operativo, de inversión y financiamiento.',
     icon: TrendingUp,
   },
   {
     value: 'breakeven',
     label: 'Punto de Equilibrio',
-    description: 'Calculo del volumen de ventas necesario para cubrir costos fijos y variables.',
+    description: 'Cálculo del volumen de ventas necesario para cubrir costos fijos y variables.',
     icon: Target,
   },
   {
     value: 'dcf_valuation',
-    label: 'Valoracion DCF',
-    description: 'Valoracion por flujos de caja descontados con tasa WACC.',
+    label: 'Valoración DCF',
+    description: 'Valoración por flujos de caja descontados con tasa WACC.',
     icon: BarChart3,
   },
   {
     value: 'cost_structure',
     label: 'Estructura de Costos',
-    description: 'Desglose y analisis de costos fijos, variables y semi-variables.',
+    description: 'Desglose y análisis de costos fijos, variables y semi-variables.',
     icon: PieChart,
   },
   {
     value: 'profitability',
     label: 'Rentabilidad',
-    description: 'Margenes, ROE, ROA, EBITDA y otros indicadores de rendimiento.',
+    description: 'Márgenes, ROE, ROA, EBITDA y otros indicadores de rendimiento.',
     icon: Percent,
   },
   {
     value: 'tax_simulation',
-    label: 'Simulacion Tributaria',
-    description: 'Proyeccion de carga fiscal y escenarios de planeacion tributaria.',
+    label: 'Simulación Tributaria',
+    description: 'Proyección de carga fiscal y escenarios de planeación tributaria.',
     icon: Calculator,
   },
   {
     value: 'merger_scenario',
-    label: 'Escenario de Fusion',
-    description: 'Modelado financiero de escenarios de integracion empresarial.',
+    label: 'Escenario de Fusión',
+    description: 'Modelado financiero de escenarios de integración empresarial.',
     icon: GitMerge,
   },
 ];
@@ -198,18 +198,18 @@ export function FinancialIntelIntake() {
               <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-[#16A34A]/80">
-              {detected} de {totalFields} campos detectados automaticamente
+              {detected} de {totalFields} campos detectados automáticamente
             </p>
             {extractionState.extracted.isTrialBalance && (
               <div className="mt-2 pt-2 border-t border-[#22C55E]/20 text-xs text-[#16A34A]/80 space-y-0.5">
                 {extractionState.extracted.accountsDetected && <p>Cuentas detectadas: {extractionState.extracted.accountsDetected}</p>}
                 {extractionState.extracted.equationValid !== undefined && (
-                  <p>Ecuacion patrimonial: {extractionState.extracted.equationValid ? 'Valida' : 'Con discrepancias'}</p>
+                  <p>Ecuación patrimonial: {extractionState.extracted.equationValid ? 'Válida' : 'Con discrepancias'}</p>
                 )}
               </div>
             )}
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
             Subir otro archivo
           </button>
         </div>
@@ -231,20 +231,21 @@ export function FinancialIntelIntake() {
             <AlertCircle className="w-4 h-4 text-[#EF4444]" />
             <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={25}
-          label="Arrastre su archivo aqui"
+          label="Arrastre su archivo aquí"
           sublabel="Estados financieros, balances de prueba, datos de soporte"
         />
       )}
 
       {extractionState.status === 'idle' && (
         <button
+          type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
         >
@@ -259,9 +260,9 @@ export function FinancialIntelIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipos de Analisis</h3>
+        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipos de Análisis</h3>
         <p className="text-xs text-[#737373]">
-          Seleccione uno o mas tipos de analisis financiero. Minimo 1 requerido.
+          Seleccione uno o más tipos de análisis financiero. Minimo 1 requerido.
         </p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
@@ -315,7 +316,7 @@ export function FinancialIntelIntake() {
       </div>
       {values.analyses.length > 0 && (
         <p className="text-xs text-[#D4A017] font-medium">
-          {values.analyses.length} analisis seleccionado{values.analyses.length > 1 ? 's' : ''}
+          {values.analyses.length} análisis seleccionado{values.analyses.length > 1 ? 's' : ''}
           {extractedConfidence.analyses && <ConfidenceDot level={extractedConfidence.analyses} />}
         </p>
       )}
@@ -328,13 +329,13 @@ export function FinancialIntelIntake() {
     <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Detalles y Documentos</h3>
-        <p className="text-xs text-[#737373]">Periodo de analisis, pregunta especifica y documentos soporte.</p>
+        <p className="text-xs text-[#737373]">Periodo de análisis, pregunta específica y documentos soporte.</p>
       </div>
 
       {/* Periodo */}
       <div>
         <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Periodo de analisis <ConfidenceDot level={extractedConfidence.period} /> <span className="text-[#DC2626] ml-1">*</span>
+          Periodo de análisis <ConfidenceDot level={extractedConfidence.period} /> <span className="text-[#DC2626] ml-1">*</span>
         </label>
         <input
           type="month"
@@ -347,7 +348,7 @@ export function FinancialIntelIntake() {
       {/* Pregunta especifica */}
       <div>
         <label className="block text-xs font-medium text-[#525252] mb-1.5">
-          Pregunta o instruccion especifica{' '}
+          Pregunta o instrucción específica{' '}
           <span className="text-[#a3a3a3] font-normal">-- opcional, max 500 caracteres</span>
         </label>
         <textarea
@@ -396,7 +397,7 @@ export function FinancialIntelIntake() {
     { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
     {
       id: 'analyses',
-      label: 'Analisis',
+      label: 'Análisis',
       isValid: values.analyses.length >= 1,
       component: step1,
     },
@@ -416,7 +417,7 @@ export function FinancialIntelIntake() {
       onNext={() => setStep((s) => Math.min(s + 1, steps.length - 1))}
       onBack={() => setStep((s) => Math.max(s - 1, 0))}
       onSubmit={handleSubmit}
-      submitLabel="Iniciar Analisis"
+      submitLabel="Iniciar Análisis"
       className="h-full"
     />
   );

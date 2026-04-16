@@ -121,6 +121,12 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-white">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-white focus:text-[#0a0a0a] focus:rounded focus:shadow-lg focus:border focus:border-[#0a0a0a]"
+      >
+        {language === 'es' ? 'Saltar al contenido principal' : 'Skip to main content'}
+      </a>
       <StatusBar
         caseId={activeCase ? `TC-${activeCase.slice(5, 13)}` : null}
         useCase={activeUseCase}
@@ -133,19 +139,23 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
         language={language}
       />
       <div className="flex-1 flex min-h-0">
-        <Sidebar />
-        <main className="flex-1 min-w-0 overflow-hidden flex flex-col bg-white">
+        <div id="workspace-sidebar" className="contents">
+          <Sidebar />
+        </div>
+        <main id="main-content" className="flex-1 min-w-0 overflow-hidden flex flex-col bg-white">
           {children}
         </main>
-        <AnalysisPanel
-          isOpen={analysisPanelOpen}
-          onToggle={toggleAnalysisPanel}
-          riskAssessment={riskAssessment}
-          uploadedDocuments={analysisDocs}
-          onExportPDF={handleExportPDF}
-          onClearConversation={handleClearConversation}
-          language={language}
-        />
+        <div id="analysis-panel" className="contents">
+          <AnalysisPanel
+            isOpen={analysisPanelOpen}
+            onToggle={toggleAnalysisPanel}
+            riskAssessment={riskAssessment}
+            uploadedDocuments={analysisDocs}
+            onExportPDF={handleExportPDF}
+            onClearConversation={handleClearConversation}
+            language={language}
+          />
+        </div>
       </div>
 
       {/* Intake Modal */}

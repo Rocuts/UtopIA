@@ -28,42 +28,42 @@ const ACT_TYPES = [
   {
     value: 'requerimiento_ordinario' as const,
     label: 'Requerimiento Ordinario',
-    description: 'Solicitud de informacion o aclaracion por parte de la DIAN.',
+    description: 'Solicitud de información o aclaración por parte de la DIAN.',
     icon: FileSearch,
   },
   {
     value: 'requerimiento_especial' as const,
     label: 'Requerimiento Especial',
-    description: 'Propuesta de modificacion de la declaracion tributaria.',
+    description: 'Propuesta de modificación de la declaración tributaria.',
     icon: FileWarning,
   },
   {
     value: 'pliego_cargos' as const,
     label: 'Pliego de Cargos',
-    description: 'Formulacion de cargos por presunta infraccion tributaria.',
+    description: 'Formulación de cargos por presunta infracción tributaria.',
     icon: AlertTriangle,
   },
   {
     value: 'liquidacion_oficial' as const,
-    label: 'Liquidacion Oficial',
-    description: 'Determinacion oficial del impuesto por parte de la DIAN.',
+    label: 'Liquidación Oficial',
+    description: 'Determinación oficial del impuesto por parte de la DIAN.',
     icon: FileCheck,
   },
   {
     value: 'emplazamiento' as const,
     label: 'Emplazamiento',
-    description: 'Citacion previa al requerimiento especial para corregir.',
+    description: 'Citación previa al requerimiento especial para corregir.',
     icon: Clock,
   },
   {
     value: 'otro' as const,
     label: 'Otro Acto Administrativo',
-    description: 'Resolucion sancion, auto de archivo u otro acto DIAN.',
+    description: 'Resolución sanción, auto de archivo u otro acto DIAN.',
     icon: HelpCircle,
   },
 ];
 
-const TAX_OPTIONS = ['IVA', 'Renta', 'Retencion', 'ICA', 'Otro'] as const;
+const TAX_OPTIONS = ['IVA', 'Renta', 'Retención', 'ICA', 'Otro'] as const;
 const TAX_VALUES = ['iva', 'renta', 'retencion', 'ica', 'otro'] as const;
 
 const DEFAULT_VALUES: DianDefenseIntakeType = {
@@ -211,7 +211,7 @@ export function DianDefenseIntake() {
       <div>
         <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
         <p className="text-xs text-[#a3a3a3]">
-          Cargue el requerimiento, liquidacion o acto administrativo de la DIAN
+          Cargue el requerimiento, liquidación o acto administrativo de la DIAN
         </p>
       </div>
 
@@ -223,10 +223,10 @@ export function DianDefenseIntake() {
               <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-[#16A34A]/80">
-              {detected} de {totalFields} campos detectados automaticamente
+              {detected} de {totalFields} campos detectados automáticamente
             </p>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
             Subir otro archivo
           </button>
         </div>
@@ -248,20 +248,21 @@ export function DianDefenseIntake() {
             <AlertCircle className="w-4 h-4 text-[#EF4444]" />
             <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
           </div>
-          <button onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={25}
-          label="Arrastre su archivo aqui"
+          label="Arrastre su archivo aquí"
           sublabel="Requerimientos, liquidaciones, actos administrativos DIAN"
         />
       )}
 
       {extractionState.status === 'idle' && (
         <button
+          type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
         >
@@ -341,7 +342,7 @@ export function DianDefenseIntake() {
     <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Detalles del Caso</h3>
-        <p className="text-xs text-[#737373]">Proporcione la informacion relevante del acto administrativo.</p>
+        <p className="text-xs text-[#737373]">Proporcione la información relevante del acto administrativo.</p>
       </div>
 
       {/* Impuestos involucrados */}
@@ -415,7 +416,7 @@ export function DianDefenseIntake() {
       {/* Fecha limite de respuesta */}
       <div>
         <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Fecha limite de respuesta <ConfidenceDot level={extractedConfidence.responseDeadline} /> <span className="text-[#DC2626] ml-1">*</span>
+          Fecha límite de respuesta <ConfidenceDot level={extractedConfidence.responseDeadline} /> <span className="text-[#DC2626] ml-1">*</span>
         </label>
         <input
           type="date"
@@ -428,7 +429,7 @@ export function DianDefenseIntake() {
       {/* Numero de expediente */}
       <div>
         <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Numero de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-[#a3a3a3] font-normal ml-1">-- opcional</span>
+          Número de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-[#a3a3a3] font-normal ml-1">-- opcional</span>
         </label>
         <input
           type="text"
@@ -454,7 +455,7 @@ export function DianDefenseIntake() {
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
         label="Actos administrativos, declaraciones y soportes"
-        sublabel="PDF, DOCX, XLSX, imagenes -- Max 25MB"
+        sublabel="PDF, DOCX, XLSX, imágenes -- Max 25MB"
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={25}
       />

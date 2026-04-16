@@ -48,7 +48,7 @@ export interface LegalReference {
 export const USE_CASE_LABELS = {
   es: {
     'dian-defense': 'Defensa DIAN',
-    'tax-refund': 'Devolucion de Saldos',
+    'tax-refund': 'Devolución de Saldos',
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Inteligencia Financiera',
   },

@@ -22,7 +22,7 @@ const AUDITORS = [
   'Auditor NIIF',
   'Auditor Tributario',
   'Auditor Legal',
-  'Revisoria Fiscal',
+  'Revisoría Fiscal',
 ];
 
 const OUTPUTS = [
