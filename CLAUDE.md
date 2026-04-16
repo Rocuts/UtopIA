@@ -58,6 +58,12 @@ The codebase has two independent multi-agent systems:
 - Findings are consolidated with a weighted compliance score (NIIF 30%, Tax 25%, Legal 20%, Fiscal 25%)
 - Entry point: `POST /api/financial-audit` with SSE streaming. `maxDuration: 300s`
 
+**4. Preprocessing + Export** (deterministic, no LLM)
+- `src/lib/preprocessing/trial-balance.ts`: parses CSV/Excel trial balances, filters auxiliaries, sums by PUC class, detects discrepancies (e.g. missing accounts like 1120 Ahorros), validates patrimonial equation. Outputs clean data + validation report for agents
+- `src/lib/export/excel-export.ts`: generates multi-tab .xlsx (Balance, P&L, KPIs, Validation, Summary) using ExcelJS with corporate formatting
+- `POST /api/financial-report/export`: full pipeline (preprocess → 3 agents → Excel) or export-only mode. Returns downloadable .xlsx
+- The upload route (`/api/upload`) auto-detects trial balance CSVs and prepends a validation report to the extracted text
+
 ### Tool System
 
 Tools are defined in `src/lib/agents/tools/registry.ts` (OpenAI function-calling format) and implemented in `src/lib/tools/`. Each specialist agent gets a subset via `getToolsForAgent()`. Available tools: `search_docs`, `search_web`, `calculate_sanction`, `analyze_document`, `draft_dian_response`, `assess_risk`, `get_tax_calendar`.

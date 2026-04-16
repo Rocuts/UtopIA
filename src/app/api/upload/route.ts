@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
@@ -311,11 +312,34 @@ export async function POST(req: Request) {
       // Non-critical on Vercel's read-only filesystem
     }
 
+    // -----------------------------------------------------------------
+    // Trial balance preprocessing — if the file looks like accounting
+    // data (CSV/Excel with account codes), run arithmetic validation
+    // and prepend the validation report to the extracted text.
+    // -----------------------------------------------------------------
+    let validationReport: string | undefined;
+    if (['.csv', '.xlsx', '.xls'].includes(ext)) {
+      try {
+        const rows = parseTrialBalanceCSV(text);
+        if (rows.length > 10) { // Threshold: at least 10 accounts to be a trial balance
+          const preprocessed = preprocessTrialBalance(rows);
+          if (preprocessed.auxiliaryCount > 0) {
+            validationReport = preprocessed.validationReport;
+            // Prepend validation report so agents receive validated data
+            text = `${preprocessed.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+          }
+        }
+      } catch {
+        // Non-critical: if preprocessing fails, the raw text still works
+      }
+    }
+
     return NextResponse.json({
       success: true,
       filename: file.name,
       chunks: chunksCount,
       extractedText: text,
+      validationReport,
       message: chunksCount > 0
         ? `Documento "${file.name}" procesado en ${chunksCount} fragmentos e indexado.`
         : `Documento "${file.name}" procesado exitosamente. Texto extraido disponible para consulta.`,
