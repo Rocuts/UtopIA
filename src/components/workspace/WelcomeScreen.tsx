@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   Shield,
   TrendingUp,
@@ -14,32 +13,31 @@ import {
   ClipboardCheck,
   GitCompareArrows,
   Lightbulb,
-  Upload,
   ArrowRight,
   ChevronRight,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useLanguage } from '@/context/LanguageContext';
 import type { CaseType } from '@/types/platform';
 
-// ─── Animation config ────────────────────────────────────────────────────────
-
 const SPRING = { stiffness: 400, damping: 25 };
-
-// ─── Data ────────────────────────────────────────────────────────────────────
 
 interface ServiceItem {
   id: CaseType;
   icon: React.ComponentType<{ className?: string }>;
   labelEs: string;
   labelEn: string;
+  descEs: string;
+  descEn: string;
 }
 
 interface ServiceCategory {
   roleEs: string;
   roleEn: string;
   icon: React.ComponentType<{ className?: string }>;
+  color: string;
   items: ServiceItem[];
 }
 
@@ -48,431 +46,166 @@ const CATEGORIES: ServiceCategory[] = [
     roleEs: 'Tributarista',
     roleEn: 'Tax Specialist',
     icon: Shield,
+    color: '#6366F1',
     items: [
-      { id: 'dian_defense', icon: Shield, labelEs: 'Defensa DIAN', labelEn: 'DIAN Defense' },
-      { id: 'tax_refund', icon: TrendingUp, labelEs: 'Devoluciones', labelEn: 'Tax Refunds' },
-      { id: 'tax_planning', icon: Calculator, labelEs: 'Planeacion Tributaria', labelEn: 'Tax Planning' },
-      { id: 'transfer_pricing', icon: Globe, labelEs: 'Precios de Transferencia', labelEn: 'Transfer Pricing' },
+      { id: 'dian_defense', icon: Shield, labelEs: 'Defensa DIAN', labelEn: 'DIAN Defense', descEs: 'Requerimientos y sanciones', descEn: 'Requirements & sanctions' },
+      { id: 'tax_refund', icon: TrendingUp, labelEs: 'Devoluciones', labelEn: 'Tax Refunds', descEs: 'Saldos a favor IVA/Renta', descEn: 'IVA/Income refunds' },
+      { id: 'tax_planning', icon: Calculator, labelEs: 'Planeacion Tributaria', labelEn: 'Tax Planning', descEs: 'Optimizacion fiscal legal', descEn: 'Legal tax optimization' },
+      { id: 'transfer_pricing', icon: Globe, labelEs: 'Precios Transferencia', labelEn: 'Transfer Pricing', descEs: 'Arts. 260-1 a 260-11 E.T.', descEn: 'Arts. 260-1 to 260-11 E.T.' },
     ],
   },
   {
     roleEs: 'Contador',
     roleEn: 'Accountant',
     icon: ClipboardCheck,
+    color: '#0EA5E9',
     items: [
-      { id: 'fiscal_audit_opinion', icon: ClipboardCheck, labelEs: 'Dictamen Revisoria Fiscal', labelEn: 'Fiscal Audit Opinion' },
-      { id: 'tax_reconciliation', icon: GitCompareArrows, labelEs: 'Conciliacion Fiscal', labelEn: 'Tax Reconciliation' },
+      { id: 'fiscal_audit_opinion', icon: ClipboardCheck, labelEs: 'Dictamen Rev. Fiscal', labelEn: 'Fiscal Audit Opinion', descEs: 'NIA 700, Ley 43/1990', descEn: 'NIA 700, Law 43/1990' },
+      { id: 'tax_reconciliation', icon: GitCompareArrows, labelEs: 'Conciliacion Fiscal', labelEn: 'Tax Reconciliation', descEs: 'NIIF-fiscal + NIC 12', descEn: 'IFRS-tax + IAS 12' },
     ],
   },
   {
     roleEs: 'Analista Financiero',
     roleEn: 'Financial Analyst',
     icon: BarChart3,
+    color: '#10B981',
     items: [
-      { id: 'financial_intel', icon: BarChart3, labelEs: 'Inteligencia Financiera', labelEn: 'Financial Intelligence' },
-      { id: 'business_valuation', icon: DollarSign, labelEs: 'Valoracion Empresarial', labelEn: 'Business Valuation' },
-      { id: 'due_diligence', icon: FileSearch, labelEs: 'Due Diligence Financiero', labelEn: 'Financial Due Diligence' },
+      { id: 'financial_intel', icon: BarChart3, labelEs: 'Inteligencia Financiera', labelEn: 'Financial Intelligence', descEs: 'Flujo de caja, DCF, breakeven', descEn: 'Cash flow, DCF, breakeven' },
+      { id: 'business_valuation', icon: DollarSign, labelEs: 'Valoracion Empresarial', labelEn: 'Business Valuation', descEs: 'WACC, multiplos, NIIF 13', descEn: 'WACC, multiples, IFRS 13' },
+      { id: 'due_diligence', icon: FileSearch, labelEs: 'Due Diligence', labelEn: 'Due Diligence', descEs: 'Credito, inversion, venta', descEn: 'Credit, investment, sale' },
     ],
   },
   {
     roleEs: 'Economista',
     roleEn: 'Economist',
     icon: Lightbulb,
+    color: '#F59E0B',
     items: [
-      { id: 'feasibility_study', icon: Lightbulb, labelEs: 'Estudio de Factibilidad', labelEn: 'Feasibility Study' },
+      { id: 'feasibility_study', icon: Lightbulb, labelEs: 'Estudio Factibilidad', labelEn: 'Feasibility Study', descEs: 'VPN, TIR, riesgo', descEn: 'NPV, IRR, risk' },
     ],
   },
 ];
-
-const ACCEPTED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.png', '.jpg', '.jpeg'];
-const ACCEPTED_MIME_TYPES = [
-  'text/csv',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'image/png',
-  'image/jpeg',
-];
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export function WelcomeScreen() {
   const { language } = useLanguage();
   const { openIntakeForType, startNewConsultation, setActiveCaseType } = useWorkspace();
   const prefersReduced = useReducedMotion();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadFileName, setUploadFileName] = useState('');
-
   const es = language === 'es';
 
-  // ─── File handling ───────────────────────────────────────────────────────
-
-  const handleFile = useCallback(async (file: File) => {
-    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-    const isAccepted = ACCEPTED_EXTENSIONS.includes(ext) || ACCEPTED_MIME_TYPES.includes(file.type);
-    if (!isAccepted) {
-      setUploadState('error');
-      setUploadFileName(file.name);
-      setTimeout(() => setUploadState('idle'), 3000);
-      return;
-    }
-
-    setUploadState('uploading');
-    setUploadFileName(file.name);
-
-    // Detect trial balance files and route to NIIF pipeline
-    const isTrialBalance =
-      (ext === '.csv' || ext === '.xlsx' || ext === '.xls') &&
-      /balance|balanza|comprobacion|trial|puc/i.test(file.name);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('context', file.name);
-      const response = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (!response.ok) throw new Error('Upload failed');
-
-      setUploadState('success');
-
-      // Auto-route: trial balance files go to NIIF Report pipeline
-      if (isTrialBalance) {
-        setTimeout(() => {
-          openIntakeForType('niif_report');
-          setUploadState('idle');
-        }, 800);
-      } else {
-        setTimeout(() => setUploadState('idle'), 2000);
-      }
-    } catch {
-      setUploadState('error');
-      setTimeout(() => setUploadState('idle'), 3000);
-    }
-  }, [openIntakeForType]);
-
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  const onDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  }, []);
-
-  const onDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) await handleFile(file);
-  }, [handleFile]);
-
-  const onFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) await handleFile(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  }, [handleFile]);
-
-  // ─── Animation helpers ─────────────────────────────────────────────────
-
-  const fadeUp = (delay: number) =>
-    prefersReduced
-      ? {}
-      : {
-          initial: { opacity: 0, y: 10 },
-          animate: { opacity: 1, y: 0 },
-          transition: { type: 'spring' as const, ...SPRING, delay },
-        };
-
-  // ─── Render ────────────────────────────────────────────────────────────
+  const fadeUp = (delay: number) => ({
+    initial: prefersReduced ? {} : { opacity: 0, y: 12 },
+    animate: { opacity: 1, y: 0 },
+    transition: { type: 'spring' as const, ...SPRING, delay: prefersReduced ? 0 : delay },
+  });
 
   return (
     <div className="h-full overflow-y-auto styled-scrollbar">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-5">
 
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <motion.div
-          {...fadeUp(0)}
-          className="flex items-center gap-2.5"
-        >
-          <img
-            src="/logo-modern.png"
-            alt="UtopIA"
-            className="w-8 h-8 rounded-lg object-cover invert hue-rotate-180"
-          />
-          <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">
-            UtopIA.
-          </span>
+        {/* Header */}
+        <motion.div {...fadeUp(0)} className="flex items-center gap-2.5">
+          <img src="/logo-modern.png" alt="UtopIA" className="w-8 h-8 rounded-lg object-cover invert hue-rotate-180" />
+          <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">UtopIA.</span>
           <span className="text-xs text-[#a3a3a3] ml-1 hidden sm:inline">
-            {es
-              ? 'Su firma contable, potenciada por IA'
-              : 'Your accounting firm, powered by AI'}
+            {es ? 'Su firma contable, potenciada por IA' : 'Your accounting firm, powered by AI'}
           </span>
         </motion.div>
 
-        {/* ── Section 1: Smart Drop Zone ─────────────────────────────── */}
-        <motion.div {...fadeUp(0.05)}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept={ACCEPTED_EXTENSIONS.join(',')}
-            onChange={onFileInputChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            className={cn(
-              'w-full rounded-lg border-2 border-dashed p-5 sm:p-6 transition-all duration-200 cursor-pointer',
-              'flex flex-col items-center justify-center gap-2 text-center',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]/50 focus-visible:ring-offset-2',
-              isDragOver
-                ? 'border-[#D4A017] bg-[#FEF9EC] shadow-[0_0_0_3px_rgba(212,160,23,0.1)]'
-                : 'border-[#e5e5e5] bg-[#fafafa] hover:border-[#D4A017]/40 hover:bg-[#FEF9EC]/30',
-            )}
-          >
-            <AnimatePresence mode="wait">
-              {uploadState === 'idle' && (
-                <motion.div
-                  key="idle"
-                  initial={false}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-col items-center gap-2"
-                >
-                  <div className={cn(
-                    'w-10 h-10 rounded-full flex items-center justify-center transition-colors',
-                    isDragOver ? 'bg-[#D4A017]/15 text-[#D4A017]' : 'bg-[#e5e5e5]/60 text-[#737373]',
-                  )}>
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[#0a0a0a]">
-                      {es
-                        ? 'Suelte su archivo aqui — UtopIA detecta automaticamente que hacer'
-                        : 'Drop your file here — UtopIA auto-detects what to do'}
-                    </p>
-                    <p className="text-xs text-[#a3a3a3] mt-1">
-                      CSV, XLSX, PDF, DOCX, PNG, JPG
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-              {uploadState === 'uploading' && (
-                <motion.div
-                  key="uploading"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-3"
-                >
-                  <div className="w-4 h-4 border-2 border-[#D4A017] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm text-[#525252]">
-                    {es ? 'Procesando' : 'Processing'} {uploadFileName}...
-                  </span>
-                </motion.div>
-              )}
-              {uploadState === 'success' && (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 text-emerald-600"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm font-medium">
-                    {es ? 'Archivo procesado' : 'File processed'}: {uploadFileName}
-                  </span>
-                </motion.div>
-              )}
-              {uploadState === 'error' && (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 text-red-500"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  <span className="text-sm font-medium">
-                    {es ? 'Error al procesar' : 'Processing error'}: {uploadFileName}
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </button>
-        </motion.div>
-
-        {/* ── Chat General Quick Access ────────────────────────────── */}
-        <motion.button
-          {...fadeUp(0.07)}
-          type="button"
-          onClick={() => {
-            setActiveCaseType('general_chat');
-            startNewConsultation('general');
-          }}
-          className={cn(
-            'w-full rounded-lg border p-4 text-left transition-all group',
-            'bg-white border-[#e5e5e5] hover:border-[#0a0a0a] hover:shadow-sm',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/20 focus-visible:ring-offset-2',
-          )}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#0a0a0a] flex items-center justify-center shrink-0">
-              <Upload className="w-4 h-4 text-white hidden" />
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <span className="text-sm font-semibold text-[#0a0a0a]">
-                {es ? 'Chat General' : 'General Chat'}
-              </span>
-              <p className="text-xs text-[#a3a3a3] mt-0.5">
-                {es
-                  ? 'Pregunte sobre contabilidad, tributaria, NIIF o cualquier tema profesional'
-                  : 'Ask about accounting, tax, NIIF or any professional topic'}
-              </p>
-            </div>
-            <ArrowRight className="w-4 h-4 text-[#d4d4d4] group-hover:text-[#0a0a0a] transition-colors shrink-0" />
-          </div>
-        </motion.button>
-
-        {/* ── Section 2: NIIF Elite Hero Card ────────────────────────── */}
-        <motion.button
-          {...fadeUp(0.1)}
-          type="button"
-          onClick={() => openIntakeForType('niif_report')}
-          className={cn(
-            'w-full rounded-lg border p-5 sm:p-6 text-left transition-all group',
-            'bg-gradient-to-r from-[#FEF9EC] via-[#FDF0C4]/50 to-[#FEF9EC]',
-            'border-[#D4A017]/30 hover:border-[#D4A017] hover:shadow-[0_0_12px_rgba(212,160,23,0.12)]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]/50 focus-visible:ring-offset-2',
-          )}
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
-            {/* Left: Copy */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Sparkles className="w-4 h-4 text-[#D4A017]" />
-                <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[#D4A017]/15 text-[#D4A017] uppercase tracking-wider">
-                  ELITE
-                </span>
-              </div>
-              <h2 className="text-base font-bold text-[#7D5B0C] mb-1">
-                {es ? 'Reporte NIIF Elite' : 'NIIF Elite Report'}
-              </h2>
-              <p className="text-xs text-[#7D5B0C]/70 leading-relaxed">
-                {es
-                  ? 'Reporte financiero corporativo completo con auditoria regulatoria y meta-auditoria de calidad.'
-                  : 'Complete corporate financial report with regulatory audit and quality meta-audit.'}
-              </p>
-              <p className="text-[10px] font-[family-name:var(--font-geist-mono)] text-[#D4A017]/80 mt-2">
-                3 {es ? 'agentes' : 'agents'} + 4 {es ? 'auditores' : 'auditors'} + meta-auditor
-              </p>
-            </div>
-
-            {/* Right: Pipeline visualization */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0" aria-hidden="true">
-              {/* 3 Agent circles */}
-              <div className="flex items-center">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={`agent-${i}`}
-                    className="w-6 h-6 rounded-full border-2 border-[#D4A017]/40 bg-[#D4A017]/10 flex items-center justify-center -ml-1.5 first:ml-0"
-                  >
-                    <span className="text-[8px] font-bold text-[#D4A017]">A</span>
-                  </div>
-                ))}
-              </div>
-              <ChevronRight className="w-3.5 h-3.5 text-[#D4A017]/40" />
-              {/* 4 Auditor circles */}
-              <div className="flex items-center">
-                {[0, 1, 2, 3].map((i) => (
-                  <div
-                    key={`auditor-${i}`}
-                    className="w-6 h-6 rounded-full border-2 border-[#D4A017]/40 bg-[#D4A017]/10 flex items-center justify-center -ml-1.5 first:ml-0"
-                  >
-                    <span className="text-[8px] font-bold text-[#D4A017]">R</span>
-                  </div>
-                ))}
-              </div>
-              <ChevronRight className="w-3.5 h-3.5 text-[#D4A017]/40" />
-              {/* 1 Meta-auditor circle */}
-              <div className="w-7 h-7 rounded-full border-2 border-[#D4A017] bg-[#D4A017]/20 flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-[#D4A017]" />
-              </div>
-
-              {/* CTA arrow */}
-              <div className="w-8 h-8 rounded-full bg-[#D4A017] flex items-center justify-center ml-1 group-hover:bg-[#b8880f] transition-colors">
-                <ArrowRight className="w-4 h-4 text-white" />
-              </div>
-            </div>
-          </div>
-        </motion.button>
-
-        {/* ── Section 3: Service Categories Grid ─────────────────────── */}
+        {/* Top row: Chat General + NIIF Elite */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {CATEGORIES.map((category, catIndex) => {
-            const CatIcon = category.icon;
+          {/* Chat General */}
+          <motion.button
+            {...fadeUp(0.04)}
+            type="button"
+            onClick={() => { setActiveCaseType('general_chat'); startNewConsultation('general'); }}
+            className="rounded-xl border border-[#e5e5e5] bg-white p-5 text-left transition-all group hover:border-[#0a0a0a] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/20"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#0a0a0a] flex items-center justify-center shrink-0">
+                <MessageSquare className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold text-[#0a0a0a]">Chat General</span>
+                <p className="text-[11px] text-[#a3a3a3] mt-0.5">
+                  {es ? 'Consultas libres sobre contabilidad, tributaria y NIIF' : 'Open queries on accounting, tax, and IFRS'}
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#d4d4d4] group-hover:text-[#0a0a0a] transition-colors shrink-0" />
+            </div>
+          </motion.button>
+
+          {/* NIIF Elite */}
+          <motion.button
+            {...fadeUp(0.06)}
+            type="button"
+            onClick={() => openIntakeForType('niif_report')}
+            className="rounded-xl border border-[#D4A017]/30 bg-gradient-to-r from-[#FEF9EC] to-[#FDF0C4]/40 p-5 text-left transition-all group hover:border-[#D4A017] hover:shadow-[0_0_12px_rgba(212,160,23,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]/30"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#D4A017]/15 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-[#D4A017]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-[#7D5B0C]">Reporte NIIF Elite</span>
+                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#D4A017]/15 text-[#D4A017] uppercase tracking-wider">ELITE</span>
+                </div>
+                <p className="text-[10px] text-[#D4A017]/70 font-[family-name:var(--font-geist-mono)] mt-0.5">
+                  3 agentes + 4 auditores + meta-auditor
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#D4A017]/40 group-hover:text-[#D4A017] transition-colors shrink-0" />
+            </div>
+          </motion.button>
+        </div>
+
+        {/* Category Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {CATEGORIES.map((cat, catIdx) => {
+            const CatIcon = cat.icon;
             return (
               <motion.div
-                key={category.roleEs}
-                {...fadeUp(0.15 + catIndex * 0.04)}
-                className="rounded-lg border border-[#e5e5e5] bg-white"
+                key={cat.roleEs}
+                {...fadeUp(0.1 + catIdx * 0.04)}
+                className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden"
               >
                 {/* Category header */}
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#f5f5f5]">
-                  <div className="w-6 h-6 rounded flex items-center justify-center bg-[#fafafa] text-[#525252]">
+                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#f5f5f5]">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${cat.color}12`, color: cat.color }}
+                  >
                     <CatIcon className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-semibold text-[#0a0a0a] uppercase tracking-wide">
-                    {es ? category.roleEs : category.roleEn}
+                  <span className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wide">
+                    {es ? cat.roleEs : cat.roleEn}
+                  </span>
+                  <span className="text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] ml-auto">
+                    {cat.items.length} {cat.items.length === 1 ? 'modulo' : 'modulos'}
                   </span>
                 </div>
 
-                {/* Service items */}
-                <div className="px-1.5 py-1.5">
-                  {category.items.map((item) => {
-                    const ItemIcon = item.icon;
-                    const isEliteLink = item.id === 'niif_report';
-
-                    // Skip rendering NIIF in the Contador category since it has its own hero card
-                    // but we keep any elite link reference
+                {/* Items */}
+                <div className="divide-y divide-[#f5f5f5]">
+                  {cat.items.map(item => {
+                    const Icon = item.icon;
                     return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => openIntakeForType(item.id)}
-                        className={cn(
-                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors group/item',
-                          'hover:bg-[#fafafa] focus-visible:outline-none focus-visible:bg-[#fafafa] focus-visible:ring-1 focus-visible:ring-[#e5e5e5]',
-                        )}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[#fafafa] transition-colors group focus-visible:outline-none focus-visible:bg-[#fafafa]"
                       >
-                        <ItemIcon className="w-3.5 h-3.5 text-[#a3a3a3] group-hover/item:text-[#525252] transition-colors shrink-0" />
-                        <span className="text-sm text-[#525252] group-hover/item:text-[#0a0a0a] transition-colors truncate">
-                          {es ? item.labelEs : item.labelEn}
-                        </span>
-                        {isEliteLink && (
-                          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-[#D4A017]/10 text-[#D4A017] ml-auto shrink-0">
-                            ELITE
+                        <Icon className="w-3.5 h-3.5 text-[#a3a3a3] shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium text-[#0a0a0a]">
+                            {es ? item.labelEs : item.labelEn}
                           </span>
-                        )}
-                        <ChevronRight className="w-3 h-3 text-[#d4d4d4] group-hover/item:text-[#a3a3a3] transition-colors ml-auto shrink-0" />
+                          <span className="text-[10px] text-[#a3a3a3] ml-2">
+                            {es ? item.descEs : item.descEn}
+                          </span>
+                        </div>
+                        <ChevronRight className="w-3 h-3 text-[#e5e5e5] group-hover:text-[#a3a3a3] transition-colors shrink-0" />
                       </button>
                     );
                   })}
@@ -481,7 +214,6 @@ export function WelcomeScreen() {
             );
           })}
         </div>
-
       </div>
     </div>
   );
