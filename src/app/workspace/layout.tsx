@@ -120,7 +120,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-white">
+    <div data-lenis-prevent className="h-screen w-screen overflow-hidden flex flex-col bg-white">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-white focus:text-[#0a0a0a] focus:rounded focus:shadow-lg focus:border focus:border-[#0a0a0a]"
