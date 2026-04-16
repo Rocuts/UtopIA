@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
-import { getStoragePath } from '@/lib/rag/vectorstore';
+import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
@@ -288,72 +288,16 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------------------
-    // Vectorization (RAG) — best-effort, NON-CRITICAL.
-    // The primary value is the extracted text returned to the frontend
-    // (which gets injected into AI conversation via documentContext).
-    // If vectorization fails (e.g. native hnswlib-node unavailable on
-    // Vercel), the upload still succeeds.
+    // Vectorization (RAG) — uses centralized store with automatic
+    // HNSWLib → MemoryVectorStore fallback. Non-critical: if it fails
+    // entirely, the extracted text still reaches agents via documentContext.
     // -----------------------------------------------------------------
-    let chunksCount = 0;
-    try {
-      const { RecursiveCharacterTextSplitter } = await import('@langchain/textsplitters');
-      const { Document } = await import('@langchain/core/documents');
-      const { OpenAIEmbeddings } = await import('@langchain/openai');
-      const { HNSWLib } = await import('@langchain/community/vectorstores/hnswlib');
-      const { invalidateVectorStore } = await import('@/lib/rag/vectorstore');
-
-      const vectorStorePath = getStoragePath('vector_store');
-
-      const textSplitter = new RecursiveCharacterTextSplitter({
-        chunkSize: 1000,
-        chunkOverlap: 250,
-      });
-
-      const chunks = await textSplitter.splitText(text);
-      const contextPrefix = `[Documento Contable/Tributario: ${contextLabel} — Archivo: ${file.name}]`;
-
-      const docs = chunks.map(
-        (chunk) =>
-          new Document({
-            pageContent: `${contextPrefix}\n\n${chunk}`,
-            metadata: {
-              source: file.name,
-              context: contextLabel,
-              type: 'user_upload',
-              uploadedAt: new Date().toISOString(),
-            },
-          })
-      );
-
-      const embeddings = new OpenAIEmbeddings({
-        modelName: 'text-embedding-3-small',
-        openAIApiKey: process.env.OPENAI_API_KEY,
-      });
-
-      let vectorStore: InstanceType<typeof HNSWLib>;
-      try {
-        vectorStore = await HNSWLib.load(vectorStorePath, embeddings);
-      } catch {
-        vectorStore = await HNSWLib.fromDocuments([], embeddings);
-      }
-
-      await vectorStore.addDocuments(docs);
-
-      try {
-        await vectorStore.save(vectorStorePath);
-      } catch (saveError) {
-        console.warn('[upload] Could not persist vector store:', saveError instanceof Error ? saveError.message : saveError);
-      }
-
+    const chunksCount = await addDocumentsToStore([text], {
+      source: file.name,
+      context: contextLabel,
+    });
+    if (chunksCount > 0) {
       invalidateVectorStore();
-      chunksCount = docs.length;
-    } catch (vectorError) {
-      // Vectorization failed — this is acceptable. The extracted text
-      // still reaches the AI via documentContext injection.
-      console.warn(
-        '[upload] Vectorization skipped (non-critical):',
-        vectorError instanceof Error ? vectorError.message : vectorError,
-      );
     }
 
     // Save file copy (best-effort, non-critical)
