@@ -58,6 +58,12 @@ The codebase has two independent multi-agent systems:
 - Findings are consolidated with a weighted compliance score (NIIF 30%, Tax 25%, Legal 20%, Fiscal 25%)
 - Entry point: `POST /api/financial-audit` with SSE streaming. `maxDuration: 300s`
 
+**5. Quality Meta-Auditor** (`src/lib/agents/financial/quality/agent.ts`) — best practices validation
+- Single agent evaluates the ENTIRE pipeline output against 12 quality dimensions
+- Frameworks: IASB Conceptual Framework, IFRS 18 readiness, ISO 25012 (data quality), ISO 42001 (AI governance), CTCP Colombia
+- Scores: overall grade (A+ to F), per-dimension scores, IFRS 18 readiness, data quality metrics, AI governance metrics
+- Entry point: `POST /api/financial-quality`. Accepts report + auditReport + preprocessed
+
 **4. Preprocessing + Export** (deterministic, no LLM)
 - `src/lib/preprocessing/trial-balance.ts`: parses CSV/Excel trial balances, filters auxiliaries, sums by PUC class, detects discrepancies (e.g. missing accounts like 1120 Ahorros), validates patrimonial equation. Outputs clean data + validation report for agents
 - `src/lib/export/excel-export.ts`: generates multi-tab .xlsx (Balance, P&L, KPIs, Validation, Summary) using ExcelJS with corporate formatting

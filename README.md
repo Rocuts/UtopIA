@@ -668,6 +668,7 @@ La aplicación corre en `http://localhost:3000`. El modo de voz requiere permiso
 | `/api/financial-report` | POST | Pipeline financiero NIIF: 3 agentes secuenciales → reporte consolidado. SSE streaming. `maxDuration: 300s` |
 | `/api/financial-audit` | POST | Pipeline de auditoría: 4 auditores en paralelo → hallazgos + opinión + score. SSE streaming. `maxDuration: 300s` |
 | `/api/financial-report/export` | POST | Pipeline completo + exportación Excel: preprocess → 3 agentes → `.xlsx` descargable. También acepta un report existente |
+| `/api/financial-quality` | POST | Meta-auditor de calidad: evalúa todo el pipeline contra 12 dimensiones (IASB, IFRS 18, ISO 25012, ISO 42001, CTCP). Grade A+ a F |
 | `/api/upload` | POST | Sube documentos (PDF, DOCX, XLSX, imágenes con OCR), procesa e incorpora al vector store |
 | `/api/rag` | POST | Consulta directa al vector store — retorna los k chunks más relevantes |
 | `/api/web-search` | POST | Búsqueda web filtrada por dominios de confianza |
