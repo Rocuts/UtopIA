@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server';
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
-import { Document } from '@langchain/core/documents';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
-import { invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
+import { getStoragePath } from '@/lib/rag/vectorstore';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 
-const vectorStorePath = getStoragePath('vector_store');
 const uploadsPath = getStoragePath('uploads');
 
 // Magic byte signatures for validated file types
@@ -292,81 +287,94 @@ export async function POST(req: Request) {
       );
     }
 
-    // Split into chunks with contextual prefix
-    const textSplitter = new RecursiveCharacterTextSplitter({
-      chunkSize: 1000,
-      chunkOverlap: 250,
-    });
-
-    const chunks = await textSplitter.splitText(text);
-    const contextPrefix = `[Documento Contable/Tributario: ${contextLabel} — Archivo: ${file.name}]`;
-
-    const docs = chunks.map(
-      (chunk) =>
-        new Document({
-          pageContent: `${contextPrefix}\n\n${chunk}`,
-          metadata: {
-            source: file.name,
-            context: contextLabel,
-            type: 'user_upload',
-            uploadedAt: new Date().toISOString(),
-          },
-        })
-    );
-
-    // Load existing vector store and add the new documents
-    const embeddings = new OpenAIEmbeddings({
-      modelName: 'text-embedding-3-small',
-      openAIApiKey: process.env.OPENAI_API_KEY,
-    });
-
-    let vectorStore: HNSWLib;
+    // -----------------------------------------------------------------
+    // Vectorization (RAG) — best-effort, NON-CRITICAL.
+    // The primary value is the extracted text returned to the frontend
+    // (which gets injected into AI conversation via documentContext).
+    // If vectorization fails (e.g. native hnswlib-node unavailable on
+    // Vercel), the upload still succeeds.
+    // -----------------------------------------------------------------
+    let chunksCount = 0;
     try {
-      vectorStore = await HNSWLib.load(vectorStorePath, embeddings);
-    } catch {
-      // If no store exists yet, create a fresh one
-      vectorStore = await HNSWLib.fromDocuments([], embeddings);
-    }
+      const { RecursiveCharacterTextSplitter } = await import('@langchain/textsplitters');
+      const { Document } = await import('@langchain/core/documents');
+      const { OpenAIEmbeddings } = await import('@langchain/openai');
+      const { HNSWLib } = await import('@langchain/community/vectorstores/hnswlib');
+      const { invalidateVectorStore } = await import('@/lib/rag/vectorstore');
 
-    // Add new documents to existing store
-    await vectorStore.addDocuments(docs);
+      const vectorStorePath = getStoragePath('vector_store');
 
-    // Persist vector store -- uses /tmp on Vercel (ephemeral but functional
-    // within the invocation and warm-start window).
-    try {
-      await vectorStore.save(vectorStorePath);
-    } catch (saveError) {
+      const textSplitter = new RecursiveCharacterTextSplitter({
+        chunkSize: 1000,
+        chunkOverlap: 250,
+      });
+
+      const chunks = await textSplitter.splitText(text);
+      const contextPrefix = `[Documento Contable/Tributario: ${contextLabel} — Archivo: ${file.name}]`;
+
+      const docs = chunks.map(
+        (chunk) =>
+          new Document({
+            pageContent: `${contextPrefix}\n\n${chunk}`,
+            metadata: {
+              source: file.name,
+              context: contextLabel,
+              type: 'user_upload',
+              uploadedAt: new Date().toISOString(),
+            },
+          })
+      );
+
+      const embeddings = new OpenAIEmbeddings({
+        modelName: 'text-embedding-3-small',
+        openAIApiKey: process.env.OPENAI_API_KEY,
+      });
+
+      let vectorStore: InstanceType<typeof HNSWLib>;
+      try {
+        vectorStore = await HNSWLib.load(vectorStorePath, embeddings);
+      } catch {
+        vectorStore = await HNSWLib.fromDocuments([], embeddings);
+      }
+
+      await vectorStore.addDocuments(docs);
+
+      try {
+        await vectorStore.save(vectorStorePath);
+      } catch (saveError) {
+        console.warn('[upload] Could not persist vector store:', saveError instanceof Error ? saveError.message : saveError);
+      }
+
+      invalidateVectorStore();
+      chunksCount = docs.length;
+    } catch (vectorError) {
+      // Vectorization failed — this is acceptable. The extracted text
+      // still reaches the AI via documentContext injection.
       console.warn(
-        '[upload] Could not persist vector store to disk. Documents are available in-memory for this invocation.',
-        saveError instanceof Error ? saveError.message : saveError
+        '[upload] Vectorization skipped (non-critical):',
+        vectorError instanceof Error ? vectorError.message : vectorError,
       );
     }
 
-    // Invalidate the in-memory cache so the next search picks up new docs
-    invalidateVectorStore();
-
-    // Save a copy of the original file for reference (best-effort, non-critical)
+    // Save file copy (best-effort, non-critical)
     try {
       if (!fs.existsSync(uploadsPath)) {
         fs.mkdirSync(uploadsPath, { recursive: true });
       }
       const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
-    } catch (fileSaveError) {
-      // Non-critical: the document is already indexed in the vector store.
-      // On Vercel /tmp may have limited space; this is acceptable to skip.
-      console.warn(
-        '[upload] Could not save file copy to disk. This is non-critical.',
-        fileSaveError instanceof Error ? fileSaveError.message : fileSaveError
-      );
+    } catch {
+      // Non-critical on Vercel's read-only filesystem
     }
 
     return NextResponse.json({
       success: true,
       filename: file.name,
-      chunks: docs.length,
+      chunks: chunksCount,
       extractedText: text,
-      message: `Document "${file.name}" processed into ${docs.length} chunks and added to the knowledge base.`,
+      message: chunksCount > 0
+        ? `Documento "${file.name}" procesado en ${chunksCount} fragmentos e indexado.`
+        : `Documento "${file.name}" procesado exitosamente. Texto extraido disponible para consulta.`,
     });
   } catch (error) {
     console.error('[upload] Unhandled error:', error instanceof Error ? error.message : error);
