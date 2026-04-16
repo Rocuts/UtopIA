@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import type { ERPProvider } from '@/lib/erp/types';
+import { ERPLogo } from './ERPLogo';
 
 // ─── Storage helpers ─────────────────────────────────────────────────────────
 
@@ -639,16 +640,15 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
           : 'border-[#e5e5e5] bg-white hover:border-[#d4d4d4] hover:shadow-sm',
       )}
     >
-      {/* Header: brand avatar + name + status */}
+      {/* Header: brand logo + name + status */}
       <div className="flex items-start gap-3">
         <div
           className={cn(
-            'w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0',
+            'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 overflow-hidden',
             isConnected && 'ring-2 ring-[#22C55E]/30',
           )}
-          style={{ backgroundColor: provider.color }}
         >
-          {provider.name[0]}
+          <ERPLogo provider={provider.id} size={36} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
