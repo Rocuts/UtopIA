@@ -1,684 +1,393 @@
-# UtopIA — Plataforma AI para Contadores
+<p align="center">
+  <img src="public/logo-modern.png" alt="UtopIA" width="80" style="border-radius: 16px" />
+</p>
 
-> Tu firma contable potenciada por Inteligencia Artificial
+<h1 align="center">UtopIA</h1>
 
-## ¿Qué es UtopIA?
+<p align="center">
+  <strong>Plataforma de Inteligencia Profesional para Firmas Contables Colombianas</strong>
+</p>
 
-UtopIA es una plataforma de asesoría contable, tributaria y financiera potenciada por inteligencia artificial, diseñada específicamente para el mercado colombiano. Combina la precisión de modelos de lenguaje avanzados con una base de conocimiento especializada en normativa tributaria, doctrina DIAN y estándares NIIF.
+<p align="center">
+  <code>3 agentes NIIF</code> · <code>4 auditores en paralelo</code> · <code>meta-auditor IFRS 18</code> · <code>12 dimensiones de calidad</code>
+</p>
 
-La plataforma utiliza RAG (Retrieval-Augmented Generation) sobre documentos normativos curados, búsqueda web en tiempo real y herramientas de análisis para ofrecer respuestas contextuales, precisas y con citación de fuentes.
+<p align="center">
+  Next.js 16 · React 19 · TypeScript · OpenAI · LangChain · Tailwind CSS 4 · Motion
+</p>
+
+---
+
+## Que es UtopIA
+
+UtopIA es una plataforma de inteligencia contable, tributaria y financiera que transforma datos contables en bruto en reportes financieros de nivel corporativo. Combina orquestacion multi-agente, RAG sobre normativa colombiana curada, busqueda web en tiempo real y un pipeline de 8 nodos (3 agentes + 4 auditores + meta-auditor) para producir estados financieros NIIF, analisis estrategico, gobierno corporativo, auditoria y calificacion de calidad — todo en un solo flujo automatizado.
+
+La plataforma no es un chatbot con una caja de texto. Es un **centro de comando profesional** con flujos de intake estructurados, visualizacion de pipeline en tiempo real y un panel de inteligencia contextual que actua como co-piloto permanente.
+
+---
+
+## Arquitectura de la Plataforma
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          FRONTEND · 3 PANELES                          │
+│                                                                         │
+│  ┌──────────┐  ┌──────────────────────────────────┐  ┌──────────────┐  │
+│  │NAVIGATOR │  │           MAIN WORKSPACE          │  │ INTELLIGENCE │  │
+│  │          │  │                                    │  │    PANEL     │  │
+│  │ 5+1 Case │  │  Welcome · Chat · Pipeline · Docs │  │              │  │
+│  │  Types   │  │                                    │  │  7 Estados   │  │
+│  │          │  │  Intake Modal (5 formularios)      │  │  Contextuales│  │
+│  │ Case     │  │  Pipeline Monitor (8 nodos)        │  │              │  │
+│  │ List     │  │  Document Viewer (nav + export)    │  │  Risk · Cite │  │
+│  │          │  │                                    │  │  Audit · QA  │  │
+│  └──────────┘  └──────────────────────────────────┘  └──────────────┘  │
+│       240px              Flexible                         340px         │
+│                                                                         │
+│  StatusBar ─────────────────────────────────────────────────────────── │
+│  CommandPalette (Cmd+K) ─────────────────────────────────────────────  │
+│  Toast Notifications ────────────────────────────────────────────────  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                              SSE Streaming
+                                    │
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           BACKEND · 5 PIPELINES                        │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  PIPELINE 1 · Chat Multi-Agente (Orchestrator-Workers)         │   │
+│  │  Classifier (T1/T2/T3) → Enhancer → Specialists → Synthesizer │   │
+│  │  2 agentes: Tributario (6 tools) + Contable (4 tools)          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  PIPELINE 2 · Reporte NIIF Elite (Secuencial, gpt-5.4-mini)   │   │
+│  │  Analista NIIF → Director Estrategia → Gobierno Corporativo    │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  PIPELINE 3 · Auditoria (4 en paralelo, Promise.allSettled)    │   │
+│  │  [NIIF] [Tributario] [Legal] [Revisoria Fiscal]                │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  PIPELINE 4 · Meta-Auditor de Calidad (12 dimensiones)         │   │
+│  │  IASB · IFRS 18 · ISO 25012 · ISO 42001 · CTCP                │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  PIPELINE 5 · Preprocesamiento + Excel (Deterministico)        │   │
+│  │  PUC Parser → Ecuacion Patrimonial → ExcelJS (5 tabs)          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  RAG (HNSWLib) · Tavily Web Search · PII Redaction · Zod Validation   │
+│  WebRTC Voice · OCR (GPT-4o Vision) · i18n (es/en)                    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
 
 ## Casos de Uso
 
-### 1. Defensa ante Requerimientos DIAN
+### 1. Defensa DIAN
 
-Cuando un contribuyente recibe un requerimiento ordinario, requerimiento especial o liquidación oficial, UtopIA analiza el acto administrativo, identifica los artículos del Estatuto Tributario aplicables, calcula plazos de respuesta y sugiere argumentos de defensa con base en la doctrina DIAN y jurisprudencia del Consejo de Estado. Incluye cálculo automático de sanciones y sus reducciones.
+Intake estructurado de 4 pasos: tipo de acto administrativo, impuestos involucrados, monto en disputa, documentos soporte. El sistema analiza con base en el Estatuto Tributario, calcula sanciones (Arts. 641/644/647/634), evalua riesgo (0-100) y genera borradores de respuesta en formato oficial DIAN.
 
-### 2. Devolución de Saldos a Favor
+### 2. Devoluciones de Saldos a Favor
 
-UtopIA guía al contribuyente paso a paso en el proceso de solicitud de devolución (Arts. 850–865 E.T.): verificación de requisitos, preparación de documentos soporte, cálculo de plazos, y seguimiento del trámite ante la DIAN. Identifica riesgos de verificación y auditoría asociados a la solicitud.
+Formulario guiado para IVA, renta o retencion en la fuente (Arts. 850-865 E.T.). Incluye verificacion de requisitos, preparacion de expediente tecnico, analisis de riesgo de verificacion y seguimiento del tramite.
 
-### 3. Preparación para Inversión, Crédito o Venta
+### 3. Due Diligence Financiero
 
-Para procesos de due diligence financiero, UtopIA genera análisis de indicadores financieros (liquidez, rentabilidad, endeudamiento, actividad), identifica contingencias tributarias y laborales, y prepara un diagnóstico integral de la situación financiera de la empresa con base en estados financieros bajo NIIF.
+Diagnostico integral para credito, inversion, venta o fusion. Analisis de indicadores NIIF (liquidez, rentabilidad, endeudamiento), identificacion de contingencias tributarias y laborales, y reporte estructurado por grupo NIIF (1, 2, 3).
 
-### 4. Inteligencia Financiera para Decisiones
+### 4. Inteligencia Financiera
 
-UtopIA realiza análisis de flujo de caja, punto de equilibrio, valoración por DCF y múltiplos, y simulaciones de escenarios tributarios para apoyar la toma de decisiones estratégicas. Calcula el impacto fiscal de operaciones como fusiones, escisiones, dividendos y enajenación de activos.
+Seleccion multiple de analisis: flujo de caja, punto de equilibrio, valoracion DCF, estructura de costos, indicadores de rentabilidad, simulacion tributaria, escenarios de fusion. Cada analisis genera outputs especificos con formulas, graficos y recomendaciones.
 
-### 5. Reporte Financiero NIIF (Elite Corporativa)
+### 5. Reporte NIIF Elite — El Producto Estrella
 
-UtopIA genera un reporte financiero consolidado de nivel corporativo a partir de datos contables en bruto (CSV, balances de prueba, exportaciones de ERP). Un pipeline secuencial de 3 agentes especializados produce:
-
-1. **Estados Financieros NIIF**: Balance General, Estado de Resultados Integral, Flujo de Efectivo (método indirecto) y Cambios en el Patrimonio — con clasificación automática del PUC (Clases 1 a 7) y verificación de ecuación patrimonial.
-2. **Análisis Estratégico**: Dashboard ejecutivo con 4 KPIs (Razón Corriente, Margen Neto, ROA, Nivel de Endeudamiento), punto de equilibrio, flujo de caja proyectado trimestral y 3 recomendaciones estratégicas priorizadas.
-3. **Gobierno Corporativo**: 13 Notas a los Estados Financieros conforme a NIC 1 y borrador del Acta de Asamblea General Ordinaria de Accionistas (con distribución de utilidades, reserva legal y cierre formal).
-
-El reporte consolidado se entrega como un único documento Markdown listo para exportar a PDF.
-
-## Stack Técnico
-
-| Capa | Tecnología |
-|------|------------|
-| Framework | Next.js 16 (App Router), React 19, TypeScript |
-| LLM | OpenAI `gpt-4o-mini` (chat + agentes), `gpt-5.4-mini` (pipeline financiero), `gpt-4o` (OCR vía Vision API), `gpt-4o-realtime-preview` (voz), `text-embedding-3-small` (embeddings) |
-| Orquestación | Sistema multi-agente propio: Orchestrator-Workers con Cost Tiers (chat) + Pipeline Secuencial de 3 agentes + 4 auditores paralelos + meta-auditor de calidad |
-| Preprocesamiento | Validación aritmética determinista de balances de prueba (PUC colombiano, clases 1-7) |
-| Exportación | ExcelJS (`.xlsx` profesional), jsPDF (conversaciones) |
-| RAG | LangChain (splitter, embeddings, document loaders), HNSWLib-node (vector store) |
-| Búsqueda Web | Tavily API con filtrado por dominio (dian.gov.co, estatuto.co, actualicese.com, etc.) |
-| Voz | OpenAI Realtime API sobre WebRTC |
-| UI | Tailwind CSS 4, Motion, React Three Fiber + drei + postprocessing |
-| i18n | Contexto personalizado (es/en) con persistencia en localStorage |
-
----
-
-## Arquitectura Multi-Agente
-
-UtopIA implementa un sistema de orquestación multi-agente basado en el patrón **Orchestrator-Workers** con **Cost Tiers inteligentes**. Este diseño está basado en las best practices 2026 de OpenAI (Agents SDK), Anthropic (Orchestrator-Workers pattern) y Google (Compositional Function Calling).
-
-### ¿Por qué multi-agente?
-
-El usuario promedio no sabe de prompt engineering. Escribe cosas como *"tengo un problema con la DIAN"* y espera una respuesta de nivel profesional. El sistema multi-agente resuelve esto automáticamente:
-
-1. **Mejora la pregunta** sin que el usuario lo note
-2. **Enruta al experto correcto** según el dominio
-3. **Combina expertos** cuando la consulta cruza dominios
-
-### Flujo Completo
+El unico sistema en Colombia que combina **8 nodos de procesamiento** en un solo pipeline automatizado:
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        Usuario escribe mensaje                       │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  PII Extractor      │  Extrae contexto NIT antes
-                    │  + PII Redactor     │  de redactar datos sensibles
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                ┌──────────────────────────────┐
-                │        CLASSIFIER            │
-                │                              │
-                │  Regex pre-filter (T1 obvios) │
-                │  + GPT-4o-mini (T2/T3)       │
-                │                              │
-                │  Determina:                  │
-                │  • Tier: T1 / T2 / T3        │
-                │  • Dominios: tax, accounting │
-                │  • Intent + confidence       │
-                └──────┬───────┬───────┬───────┘
-                       │       │       │
-              ┌────────┘       │       └────────┐
-              ▼                ▼                 ▼
-    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-    │     T1       │  │     T2       │  │     T3       │
-    │  Respuesta   │  │  Un solo     │  │  Múltiples   │
-    │  directa     │  │  especialista│  │  especialistas│
-    │  (1 LLM call)│  │              │  │  en paralelo │
-    └──────────────┘  └──────┬───────┘  └──────┬───────┘
-                             │                 │
-                             ▼                 ▼
-                    ┌──────────────────────────────┐
-                    │      PROMPT ENHANCER          │
-                    │                              │
-                    │  Transforma:                 │
-                    │  "tengo un problema con la   │
-                    │   DIAN"                      │
-                    │         ▼                    │
-                    │  "Analizar la situación del  │
-                    │   contribuyente frente a un  │
-                    │   proceso DIAN. Identificar: │
-                    │   tipo de requerimiento      │
-                    │   (Arts. 684-719 E.T.),      │
-                    │   plazos vigentes, nivel de  │
-                    │   riesgo y estrategia de     │
-                    │   defensa recomendada."      │
-                    │                              │
-                    │  Para T3: genera sub-queries │
-                    │  específicos por dominio     │
-                    └──────────┬───────────────────┘
-                               │
-                  ┌────────────┴────────────┐
-                  ▼                         ▼
-     ┌────────────────────┐   ┌────────────────────────┐
-     │   AGENTE TRIBUTARIO│   │   AGENTE CONTABLE      │
-     │                    │   │                        │
-     │   6 herramientas:  │   │   4 herramientas:      │
-     │   • search_docs    │   │   • search_docs        │
-     │   • search_web     │   │   • search_web         │
-     │   • calculate_     │   │   • analyze_document   │
-     │     sanction       │   │   • assess_risk        │
-     │   • draft_dian_    │   │                        │
-     │     response       │   │   Dominio:             │
-     │   • assess_risk    │   │   NIIF/IFRS, NIC, CTCP │
-     │   • get_tax_       │   │   estados financieros, │
-     │     calendar       │   │   ratios, due diligence│
-     │                    │   │   proyecciones         │
-     │   Dominio:         │   │                        │
-     │   E.T., DIAN,      │   └───────────┬────────────┘
-     │   sanciones,       │               │
-     │   devoluciones,    │               │
-     │   facturación      │               │
-     └────────┬───────────┘               │
-              │                           │
-              └─────────┬─────────────────┘
-                        │
-                        ▼  (solo T3)
-              ┌──────────────────────┐
-              │    SYNTHESIZER       │
-              │                     │
-              │  Combina respuestas  │
-              │  de ambos agentes:   │
-              │  • Elimina           │
-              │    redundancia       │
-              │  • Destaca conexiones│
-              │    tributario-       │
-              │    contables         │
-              │  • Unifica           │
-              │    recomendaciones   │
-              └──────────┬───────────┘
-                         │
-                         ▼
-              ┌──────────────────────┐
-              │   Respuesta final    │
-              │   al usuario         │
-              │   (SSE streaming     │
-              │    con indicadores)  │
-              └──────────────────────┘
-```
+FASE 1 · Generacion Secuencial (gpt-5.4-mini, 400K contexto)
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Agente 1    │ ──→ │  Agente 2    │ ──→ │  Agente 3    │
+│  Analista    │     │  Director de │     │  Gobierno    │
+│  NIIF        │     │  Estrategia  │     │  Corporativo │
+└──────────────┘     └──────────────┘     └──────────────┘
 
-### Cost Tiers — Inteligencia en el gasto
+FASE 2 · Auditoria en Paralelo (Promise.allSettled)
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│   NIIF   │ │Tributario│ │  Legal   │ │Revisoria │
+│ Contable │ │          │ │Societario│ │  Fiscal  │
+└──────────┘ └──────────┘ └──────────┘ └──────────┘
 
-No todas las preguntas necesitan el pipeline completo. El Classifier determina automáticamente cuánto procesamiento requiere cada mensaje:
-
-| Tier | Cuándo se activa | LLM Calls | Latencia | Ejemplo |
-|------|------------------|-----------|----------|---------|
-| **T1** | Saludos, agradecimientos, confirmaciones, meta-preguntas | 1 | ~1s | *"Hola"*, *"Gracias"*, *"¿Qué servicios ofreces?"* |
-| **T2** | Consulta clara de un solo dominio (tributario O contable) | 2-3 | ~3-5s | *"¿Cómo calculo la sanción por extemporaneidad?"* |
-| **T3** | Consulta que cruza dominios tributario Y contable | 4-5 | ~5-8s | *"Tengo un requerimiento DIAN, ¿cómo afecta mis estados financieros?"* |
-
-**T1 es más barato que el sistema anterior** (sin system prompt de 462 líneas). **T2 tiene costo similar.** **T3 cuesta ~40% más pero produce respuestas significativamente superiores** al combinar dos expertos especializados.
-
-El Classifier incluye un **regex pre-filter** que detecta saludos y confirmaciones obvias (`"hola"`, `"gracias"`, `"ok"`) **sin hacer ningún LLM call** — costo cero para mensajes triviales.
-
-### El Prompt Enhancer — El arma secreta
-
-Este es el componente que más valor agrega. Los usuarios no saben prompt engineering, pero el Prompt Enhancer transforma sus preguntas vagas en consultas de nivel profesional:
-
-| Lo que escribe el usuario | Lo que recibe el agente especialista |
-|---------------------------|--------------------------------------|
-| *"tengo un problema con la DIAN"* | *"Analizar la situación tributaria del contribuyente frente a un proceso con la DIAN. Identificar: tipo de requerimiento o acto administrativo (Arts. 684-719 E.T.), plazos de respuesta vigentes, nivel de riesgo, y estrategia de defensa."* |
-| *"cuánto me toca pagar de multa?"* | *"Calcular la sanción tributaria aplicable al contribuyente (persona jurídica, NIT último dígito 7). Determinar: tipo de sanción (extemporaneidad Art. 641, corrección Art. 644, inexactitud Art. 647), monto en COP con base en UVT 2026 ($52.374), y opciones de reducción."* |
-| *"necesito revisar mis finanzas para un crédito"* | *"Preparar análisis de due diligence financiero para solicitud de crédito bancario. Incluir: indicadores de liquidez, endeudamiento y rentabilidad; revisión de estados financieros bajo NIIF; identificación de contingencias tributarias; y cumplimiento con certificados de paz y salvo."* |
-
-**Regla crítica**: El Enhancer NUNCA cambia la intención del usuario. Solo agrega especificidad, contexto legal y estructura.
-
-Para consultas **T3** (multi-dominio), el Enhancer también genera **sub-queries** separados por dominio:
-
-```json
-{
-  "enhanced": "Analizar las implicaciones de un requerimiento DIAN sobre los estados financieros...",
-  "subQueries": [
-    {
-      "domain": "tax",
-      "query": "Analizar requerimiento DIAN Art. 684, sanciones aplicables, estrategia de defensa"
-    },
-    {
-      "domain": "accounting",
-      "query": "Reconocimiento NIIF de contingencia fiscal (NIC 37), impacto en estados financieros"
-    }
-  ]
-}
-```
-
-Cada sub-query va al agente especialista correspondiente, y el **Synthesizer** combina las respuestas en una narrativa coherente.
-
-### Agentes Especialistas
-
-#### Agente Tributario (`tax-agent.ts`)
-
-Experto en derecho tributario colombiano con acceso a 6 herramientas:
-
-| Herramienta | Función |
-|-------------|---------|
-| `search_docs` | Búsqueda RAG en la base de conocimiento normativa local |
-| `search_web` | Búsqueda en fuentes web de confianza (dian.gov.co, actualicese.com, etc.) |
-| `calculate_sanction` | Cálculo de sanciones: extemporaneidad (Art. 641), corrección (Art. 644), inexactitud (Art. 647), intereses moratorios (Art. 634) |
-| `draft_dian_response` | Generación de borradores de respuesta a requerimientos DIAN en formato oficial |
-| `assess_risk` | Evaluación de riesgo tributario (bajo/medio/alto/crítico, score 0-100) |
-| `get_tax_calendar` | Calendario tributario personalizado por último dígito del NIT |
-
-**Reglas anti-alucinación**: Solo cita artículos que aparecen VERBATIM en los resultados de búsqueda. Nunca inventa números de artículos, porcentajes ni valores UVT.
-
-#### Agente Contable (`accounting-agent.ts`)
-
-Experto en estándares contables y análisis financiero con acceso a 4 herramientas:
-
-| Herramienta | Función |
-|-------------|---------|
-| `search_docs` | Búsqueda RAG en NIIF, NIC y normativa CTCP |
-| `search_web` | Búsqueda en fuentes web (ctcp.gov.co, actualicese.com, etc.) |
-| `analyze_document` | Análisis de documentos financieros subidos por el usuario |
-| `assess_risk` | Evaluación de riesgo contable y financiero |
-
-**Especialidades**: NIIF/IFRS (Grupo 1), NIIF para PYMES (Grupo 2), indicadores financieros, flujo de caja, due diligence, presupuestos y proyecciones.
-
-### SSE Streaming — Indicadores de Progreso en Tiempo Real
-
-El usuario no ve una pantalla en blanco mientras los agentes trabajan. El sistema usa **Server-Sent Events (SSE)** para mostrar progreso:
-
-```
-"Clasificando su consulta..."        → Classifier determinando tier
-"Mejorando su pregunta..."           → Prompt Enhancer trabajando
-"Consultando agentes especializados..." → Agentes ejecutando herramientas
-"Investigando..."                    → Agente usando search_docs/search_web
-"Sintetizando respuesta..."          → Synthesizer combinando outputs (T3)
-```
-
-### Feature Flag — Rollout Seguro
-
-El sistema multi-agente se activa con una variable de entorno:
-
-```bash
-UTOPIA_AGENT_MODE=orchestrated  # Nuevo sistema multi-agente
-UTOPIA_AGENT_MODE=legacy        # Sistema monolítico anterior (default)
-```
-
-Esto permite activar/desactivar el nuevo sistema desde Vercel sin redeploy, y hacer rollback instantáneo si algo falla.
-
----
-
-## Pipeline de Reporte Financiero NIIF
-
-Además del sistema de chat multi-agente, UtopIA incluye un **pipeline secuencial dedicado** para generación de reportes financieros de nivel élite corporativa. Este pipeline opera de forma independiente al chat, con su propio endpoint (`/api/financial-report`) y tres agentes especializados coordinados por un orquestador secuencial.
-
-### ¿Por qué un pipeline separado?
-
-El chat multi-agente es ideal para preguntas y respuestas interactivas. Pero un reporte financiero consolidado requiere un flujo diferente:
-
-- **Secuencial, no paralelo**: cada agente necesita la salida del anterior como input
-- **Orientado a documento, no a conversación**: la salida es un reporte estructurado, no una respuesta de chat
-- **Alto volumen de tokens**: los estados financieros + análisis + documentos legales pueden superar los 15.000 tokens de salida
-
-### Flujo del Pipeline
-
-```
-┌─────────────────────────────────────────────────┐
-│  Datos Brutos (CSV / Balance de Prueba / ERP)   │
-│  + Metadatos de empresa (NIT, razón social, etc.)│
-└──────────────────────┬──────────────────────────┘
-                       │
-                       ▼ Stage 1
+FASE 3 · Meta-Auditoria de Calidad
 ┌──────────────────────────────────────────────────┐
-│  AGENTE 1: Analista Contable NIIF                │
-│                                                  │
-│  Entrada: Datos contables en bruto               │
-│  Proceso:                                        │
-│  • Mapeo de cuentas PUC (Clases 1 a 7)          │
-│  • Clasificación NIIF (Corriente/No Corriente)   │
-│  • Verificación ecuación patrimonial             │
-│                                                  │
-│  Salida:                                         │
-│  ├── Estado de Situación Financiera              │
-│  ├── Estado de Resultados Integral               │
-│  ├── Estado de Flujos de Efectivo (Indirecto)    │
-│  ├── Estado de Cambios en el Patrimonio          │
-│  └── Notas Técnicas de Variaciones               │
-└──────────────────────┬───────────────────────────┘
-                       │ output feeds ▼
-                       ▼ Stage 2
-┌──────────────────────────────────────────────────┐
-│  AGENTE 2: Director de Estrategia Financiera     │
-│                                                  │
-│  Entrada: 4 Estados Financieros del Agente 1     │
-│  Proceso:                                        │
-│  • Cálculo de KPIs con fórmulas sustituidas      │
-│  • Break-even con estructura de costos            │
-│  • Proyección trimestral conservadora (10-15%)   │
-│                                                  │
-│  Salida:                                         │
-│  ├── Dashboard Ejecutivo (4 KPIs + complementos) │
-│  ├── Análisis de Punto de Equilibrio              │
-│  ├── Flujo de Caja Proyectado (3 meses)          │
-│  └── 3 Recomendaciones Estratégicas               │
-└──────────────────────┬───────────────────────────┘
-                       │ output feeds ▼
-                       ▼ Stage 3
-┌──────────────────────────────────────────────────┐
-│  AGENTE 3: Especialista en Gobierno Corporativo  │
-│                                                  │
-│  Entrada: Salidas de Agentes 1 + 2               │
-│  Proceso:                                        │
-│  • Notas conforme NIC 1 (párrafos 112-138)       │
-│  • Acta según Ley 1258/2008 o C.Co.              │
-│  • Distribución de utilidades + reserva legal     │
-│                                                  │
-│  Salida:                                         │
-│  ├── 13 Notas a los Estados Financieros           │
-│  └── Acta de Asamblea Ordinaria (lista para firma)│
-└──────────────────────┬───────────────────────────┘
-                       │
-                       ▼ Stage 4
-┌──────────────────────────────────────────────────┐
-│  ORQUESTADOR: Consolidación Final                │
-│                                                  │
-│  Une las 3 salidas en un reporte maestro único   │
-│  con portada, metadatos y disclaimer legal       │
-│                                                  │
-│  Salida: Reporte Markdown consolidado             │
-│  (Parte I: EEFF + Parte II: KPIs + Parte III:    │
-│   Gobierno Corporativo)                           │
+│  IASB · IFRS 18 · ISO 25012 · ISO 42001 · CTCP  │
+│  12 Dimensiones → Grade A+ a F                   │
 └──────────────────────────────────────────────────┘
 ```
 
-### Modelo Utilizado
+**Output del pipeline completo:**
 
-El pipeline usa **GPT-5.4 mini** (`gpt-5.4-mini`) en lugar de GPT-4o-mini por tres razones:
-
-| Característica | GPT-4o-mini | GPT-5.4 mini |
-|---------------|-------------|--------------|
-| Contexto | 128K tokens | 400K tokens |
-| Input cost | $0.15/1M tokens | $0.75/1M tokens |
-| Output cost | $0.60/1M tokens | $4.50/1M tokens |
-| Calidad en tareas estructuradas | Buena | Superior |
-
-Los 400K tokens de contexto son críticos para el Agente 3, que recibe toda la salida acumulada de los agentes anteriores. La calidad superior en tareas estructuradas (tablas, fórmulas, documentos legales) justifica el costo adicional frente a `gpt-4o-mini`.
-
-### Uso del API
-
-```bash
-# POST /api/financial-report
-# Header: X-Stream: true (para SSE) o sin él (para JSON)
-curl -X POST http://localhost:3000/api/financial-report \
-  -H "Content-Type: application/json" \
-  -H "X-Stream: true" \
-  -d '{
-    "rawData": "código,cuenta,débitos,créditos,saldo\n1105,Caja,0,0,15000000\n1110,Bancos,0,0,85000000\n...",
-    "company": {
-      "name": "Mi Empresa SAS",
-      "nit": "900.123.456-7",
-      "entityType": "SAS",
-      "sector": "Tecnología",
-      "niifGroup": 2,
-      "fiscalPeriod": "2025",
-      "comparativePeriod": "2024",
-      "city": "Bogotá",
-      "legalRepresentative": "Juan Pérez",
-      "accountant": "María García"
-    },
-    "language": "es",
-    "instructions": "Enfocarse en la liquidez y el ciclo de conversión de efectivo"
-  }'
-```
-
-### Eventos SSE del Pipeline
-
-El endpoint soporta **Server-Sent Events** para mostrar progreso en tiempo real:
-
-```
-event: progress
-data: {"type":"stage_start","stage":1,"label":"Analista Contable NIIF — Procesando datos"}
-
-event: progress
-data: {"type":"stage_progress","stage":1,"detail":"Clasificando cuentas y mapeando estructura NIIF..."}
-
-event: progress
-data: {"type":"stage_complete","stage":1,"label":"Estados financieros NIIF generados"}
-
-event: progress
-data: {"type":"stage_start","stage":2,"label":"Director de Estrategia — Analizando KPIs"}
-...
-
-event: result
-data: { "company": {...}, "niifAnalysis": {...}, "strategicAnalysis": {...}, "governance": {...}, "consolidatedReport": "..." }
-```
-
-### Parámetros de Empresa
-
-| Campo | Requerido | Descripción |
-|-------|-----------|-------------|
-| `name` | Sí | Razón social |
-| `nit` | Sí | NIT con dígito de verificación |
-| `fiscalPeriod` | Sí | Período fiscal (ej: "2025") |
-| `entityType` | No | SAS, SA, LTDA, etc. (default: SAS para acta) |
-| `sector` | No | Sector económico (para benchmarking de KPIs) |
-| `niifGroup` | No | 1 (Plenas), 2 (PYMES), 3 (Simplificada) — default: 2 |
-| `comparativePeriod` | No | Período comparativo para variaciones |
-| `city` | No | Ciudad para el acta de asamblea |
-| `legalRepresentative` | No | Nombre del representante legal |
-| `fiscalAuditor` | No | Nombre del revisor fiscal |
-| `accountant` | No | Nombre del contador público |
+| Entregable | Fuente |
+|------------|--------|
+| 4 Estados Financieros NIIF (Balance, P&G, Flujo Efectivo, Cambios Patrimonio) | Agente 1 |
+| Dashboard Estrategico (4 KPIs: Razon Corriente, Margen Neto, ROA, Endeudamiento) | Agente 2 |
+| Flujo de Caja Proyectado (3 trimestres, conservador) | Agente 2 |
+| Punto de Equilibrio Operativo y Financiero | Agente 2 |
+| 13 Notas a los Estados Financieros (NIC 1 par. 112-138) | Agente 3 |
+| Acta de Asamblea General Ordinaria (Ley 1258/2008, lista para firma) | Agente 3 |
+| Informe de Auditoria con hallazgos por severidad | 4 Auditores |
+| Opinion Formal tipo NIA 700 (favorable / con salvedades / desfavorable) | Revisor Fiscal |
+| Calificacion de Calidad A+ a F (12 dimensiones) | Meta-Auditor |
+| Excel Profesional (.xlsx, 5 pestanas con formato corporativo) | ExcelJS |
 
 ---
 
-## Pipeline de Auditoría Financiera (4 Auditores en Paralelo)
+## Stack Tecnico
 
-El sistema de auditoría valida la salida del pipeline financiero contra **toda la normativa colombiana 2026**. A diferencia del pipeline de reportes (secuencial), los 4 auditores corren **en paralelo** (`Promise.allSettled`) porque evalúan aspectos independientes del mismo reporte.
-
-### Arquitectura
-
-```
-Reporte Financiero (salida del pipeline de 3 agentes)
-        │
-        ├──→ Auditor NIIF/Contable        ─┐
-        │    NIC/NIIF, Decretos 2420/2496   │
-        │                                   │
-        ├──→ Auditor Tributario             │  EN PARALELO
-        │    Estatuto Tributario 2026,       │  (Promise.allSettled)
-        │    DIAN, UVT $52.374              │
-        │                                   │
-        ├──→ Auditor Legal/Societario       │
-        │    Ley 1258/2008, C.Co.,          │
-        │    Ley 222/1995                   │
-        │                                   │
-        └──→ Auditor Revisoría Fiscal      ─┘
-             NIA/ISA, Ley 43/1990,
-             Materialidad, Going Concern
-                       │
-                       ▼
-              Consolidador de Auditoría
-              ┌─────────────────────────┐
-              │ • Score ponderado 0-100 │
-              │ • Hallazgos por severidad│
-              │ • Opinión formal         │
-              │ • Dictamen del revisor   │
-              └─────────────────────────┘
-```
-
-### Los 4 Auditores
-
-| Auditor | Dominio | Normativa Base | Peso en Score |
-|---------|---------|----------------|---------------|
-| **NIIF/Contable** | Estados financieros | NIC 1-41, NIIF 1-17, CTCP, Decretos 2420/2496 | 30% |
-| **Tributario** | Cumplimiento fiscal | Estatuto Tributario (840+ arts.), Resoluciones DIAN | 25% |
-| **Legal/Societario** | Gobierno corporativo | Ley 1258/2008 (SAS), C.Co., Ley 222/1995, SuperSociedades | 20% |
-| **Revisoría Fiscal** | Aseguramiento | NIA 200-706, Ley 43/1990, NIC 10/37/570 | 25% |
-
-### Estructura de Hallazgos
-
-Cada hallazgo tiene severidad, referencia normativa exacta, recomendación e impacto:
-
-```json
-{
-  "code": "TRIB-003",
-  "severity": "alto",
-  "domain": "tributario",
-  "title": "Tarifa de renta incorrecta",
-  "description": "Se aplica tarifa del 33% cuando la vigente para PJ en 2026 es 35%",
-  "normReference": "Art. 240 E.T., modificado por Ley 2277 de 2022",
-  "recommendation": "Recalcular provisión de impuesto de renta con tarifa del 35%",
-  "impact": "Subestimación de $X en provisión de impuesto, riesgo de sanción por inexactitud Art. 647 E.T."
-}
-```
-
-**Severidades:** `critico` > `alto` > `medio` > `bajo` > `informativo`
-
-### Opinión de Auditoría
-
-El Auditor de Revisoría Fiscal emite una opinión formal tipo NIA 700:
-
-| Opinión | Cuándo | Score |
-|---------|--------|-------|
-| **Favorable** (limpia) | EEFF razonables, sin incorrecciones materiales | 90-100 |
-| **Con Salvedades** | Incorrecciones materiales pero no generalizadas | 75-89 |
-| **Desfavorable** | Incorrecciones materiales Y generalizadas | 40-74 |
-| **Abstención** | Evidencia insuficiente para opinar | 0-39 |
-
-### Uso del API
-
-```bash
-# POST /api/financial-audit
-# Recibe la salida de /api/financial-report como input
-curl -X POST http://localhost:3000/api/financial-audit \
-  -H "Content-Type: application/json" \
-  -H "X-Stream: true" \
-  -d '{
-    "report": { ...output de /api/financial-report... },
-    "language": "es",
-    "auditFocus": "Enfocarse en la conciliación fiscal y el tratamiento de inventarios"
-  }'
-```
-
-### Flujo Completo: Reporte + Auditoría
-
-```bash
-# 1. Generar reporte financiero
-REPORT=$(curl -s -X POST localhost:3000/api/financial-report \
-  -H "Content-Type: application/json" \
-  -d '{"rawData":"...", "company":{...}, "language":"es"}')
-
-# 2. Auditar el reporte
-curl -X POST localhost:3000/api/financial-audit \
-  -H "Content-Type: application/json" \
-  -d "{\"report\": $REPORT, \"language\": \"es\"}"
-```
+| Capa | Tecnologia |
+|------|------------|
+| **Framework** | Next.js 16 (App Router, Turbopack), React 19, TypeScript strict |
+| **LLM** | OpenAI `gpt-4o-mini` (chat), `gpt-5.4-mini` (pipeline, 400K ctx), `gpt-4o` (OCR), `gpt-4o-realtime-preview` (voz) |
+| **Orquestacion** | Multi-agente propio: Orchestrator-Workers + Pipeline Secuencial + Auditoria Paralela + Meta-Auditor |
+| **Preprocesamiento** | Validador aritmetico determinista (PUC colombiano, clases 1-7, ecuacion patrimonial) |
+| **Exportacion** | ExcelJS (`.xlsx` profesional, 5 tabs), jsPDF (conversaciones) |
+| **RAG** | LangChain + HNSWLib-node (vector store), `text-embedding-3-small` |
+| **Busqueda Web** | Tavily API con filtrado por dominio (dian.gov.co, actualicese.com, etc.) |
+| **Voz** | OpenAI Realtime API sobre WebRTC |
+| **UI** | Tailwind CSS 4, Motion (Framer Motion v12), Lucide React, React Three Fiber |
+| **Design System** | 12 componentes primitivos propios, token system, barrel export |
+| **i18n** | Contexto personalizado (es/en) con persistencia localStorage |
+| **Seguridad** | PII redaction, CSP headers, Zod schemas, rate limiting, magic bytes validation |
 
 ---
 
-## Preprocesador de Balance de Prueba + Exportación Excel
+## Frontend — Centro de Comando Profesional
 
-### Preprocesador Aritmético (`src/lib/preprocessing/trial-balance.ts`)
+### Design System (`src/design-system/`)
 
-Módulo **100% determinista** (cero LLM) que valida los datos contables ANTES de enviarlos a los agentes. Compatible con ERPs colombianos (Siigo, World Office, Helisa, ContaPyme).
+Sistema de diseno autocontenido con tokens y 12 componentes primitivos:
 
-```
-CSV/Excel del ERP
-       │
-       ▼
-  parseTrialBalanceCSV()
-  • Detecta separador automáticamente (, ; tab)
-  • Identifica columnas por nombre (código, débito, crédito, saldo)
-  • Maneja formato colombiano ($1.234.567,89) y anglosajón (1,234,567.89)
-       │
-       ▼
-  preprocessTrialBalance()
-  • Filtra auxiliares/transaccionales (ignora Clases, Grupos, Cuentas)
-  • Suma por clase PUC (1 a 7)
-  • Compara totales calculados vs reportados
-  • Detecta cuentas omitidas (ej: 1120 Ahorros)
-  • Valida ecuación patrimonial (A = P + E)
-       │
-       ▼
-  Output:
-  ├── validationReport — Markdown con tabla de discrepancias
-  ├── cleanData — CSV limpio de auxiliares validados
-  ├── summary — totales por clase + utilidad neta + ecuación
-  └── discrepancies[] — ubicación, causa probable, diferencia
-```
+| Componente | Proposito |
+|------------|-----------|
+| `DSBadge` | Variantes: risk (critico/alto/medio/bajo), tier (T1/T2/T3), grade (A+ a F), status |
+| `RiskMeter` | Barra horizontal animada 0-100 con color por severidad |
+| `ScoreGauge` | Arco circular SVG con grade central y score, animacion al montar |
+| `AgentPipelineViz` | Grafo de nodos con flechas, T2 lineal, T3 con bifurcacion paralela |
+| `FileUploadZone` | Drag & drop con estados idle/dragover/uploading/success/error |
+| `StepWizard` | Barra de progreso + navegacion de pasos + validacion |
+| `CitationBadge` | Pill de referencia normativa con tooltip y drawer |
+| `FindingCard` | Hallazgo de auditoria con barra de severidad, expandible |
+| `StreamingText` | Cursor parpadeante durante streaming SSE |
+| `ProgressRing` | Progreso circular SVG animado |
+| `Toast` | Provider + hook, 4 variantes, auto-dismiss, stack vertical |
+| `DataTable` | Tabla sortable con formatter COP colombiano |
 
-**Regla de Oro**: Si el total de la Clase 1 del reporte ≠ suma de auxiliares → se priorizan los auxiliares y se informa qué cuenta falta.
+Todos los componentes respetan `prefers-reduced-motion` y soportan dark mode via CSS variables.
 
-El preprocesador se ejecuta automáticamente cuando se sube un CSV/Excel al endpoint `/api/upload` (si detecta +10 cuentas contables). El informe de validación se antepone al texto extraído para que los agentes reciban datos pre-validados.
+### Workspace — 4 Modos
 
-### Exportador Excel (`src/lib/export/excel-export.ts`)
+**WELCOME** — Pantalla de bienvenida con 5 cards de entrada. NIIF Elite con gradiente dorado prominente.
 
-Motor de exportación profesional usando **ExcelJS** (ya incluido en dependencias, sin Python):
+**CHAT** — Para Defensa DIAN, Devoluciones, Due Diligence e Inteligencia Financiera:
+- Case header sticky con tipo, ID, datos clave
+- Agent Pipeline Visualizer (SSE-driven): muestra Classifier → Enhancer → Agents → Synthesizer en tiempo real
+- Rich response cards con CitationBadge inline, RiskMeter, Sanction Calculator, DIAN Draft
+- Colapsa a summary bar al completar
 
-| Pestaña | Contenido | Datos |
-|---------|-----------|-------|
-| **Balance NIIF** | Activo/Pasivo/Patrimonio con códigos PUC | Preprocesados (aritmética exacta) |
-| **Estado Resultados** | Ingresos/Costos/Gastos → Utilidad Neta | Preprocesados |
-| **KPIs** | Dashboard estratégico completo | Agente 2 |
-| **Validación** | Discrepancias, banderas rojo/verde | Preprocesador |
-| **Resumen** | Reporte consolidado completo | Pipeline completo |
+**PIPELINE** — Para NIIF Elite:
+- Monitor en tiempo real de 3 fases (agentes, auditores, meta-auditor)
+- ProgressRing con porcentaje global
+- Streaming preview del reporte mientras se genera
+- Al completar: Document Viewer con navegacion lateral por secciones
 
-Formato corporativo: paleta UtopIA, moneda COP (`"$"#,##0.00`), negritas en totales, filas alternadas, bordes.
+**RESULT** — Visor de documento profesional:
+- Navegacion lateral con scroll suave a secciones
+- Action bar sticky: Excel .xlsx, PDF, Markdown, Nuevo Reporte
+- Tipografia profesional, tablas HTML con formato COP
 
-### Endpoint `/api/financial-report/export`
+### Sistema de Intake (5 formularios estructurados)
 
-Dos modos de operación:
+Cada tipo de caso tiene un formulario guiado con StepWizard:
 
-```bash
-# Modo 1: Pipeline completo (preprocess → 3 agentes → .xlsx)
-curl -X POST localhost:3000/api/financial-report/export \
-  -H "Content-Type: application/json" \
-  -d '{"rawData":"...", "company":{...}, "language":"es"}' \
-  --output Reporte_UtopIA.xlsx
+| Caso | Pasos | Highlights |
+|------|-------|-----------|
+| **Defensa DIAN** | 4 | 6 radio cards para tipo de acto, multi-select de impuestos, calculo de fecha limite |
+| **Devoluciones** | 4 | 3 cards con referencia legal (Arts. 850-865 E.T.), campo condicional de radicado |
+| **Due Diligence** | 4 | NIT auto-format (XXX.XXX.XXX-X), selector de grupo NIIF con descripcion |
+| **Inteligencia Fin.** | 3 | Toggle cards multi-select con preview de outputs esperados |
+| **NIIF Elite** | 5 | Company metadata, grupo NIIF (3 cards stacked), balance de prueba con validacion patrimonial, 10 toggle cards de output, pipeline preview |
 
-# Modo 2: Solo exportar un reporte existente
-curl -X POST localhost:3000/api/financial-report/export \
-  -H "Content-Type: application/json" \
-  -d '{"report": {...salida de /api/financial-report...}}' \
-  --output Reporte_UtopIA.xlsx
-```
+Cada formulario incluye:
+- `useIntakePersistence` hook con auto-guardado (500ms debounce)
+- `IntakePreview` como paso final con visualizacion del pipeline que se ejecutara
+- Aviso de redaccion PII antes de envio al LLM
+
+### Panel de Inteligencia (7 estados contextuales)
+
+El panel derecho nunca esta vacio. Se adapta automaticamente:
+
+| Estado | Que muestra |
+|--------|-------------|
+| Sin caso activo | Referencias clave colombianas, guia de inicio |
+| Case type seleccionado | Articulos relevantes por tipo (E.T., NIC, NIIF) |
+| Durante intake | "Lo que analizaremos" — preview de outputs en tiempo real |
+| Chat en progreso | Tier badge, pipeline compacto, accion actual, timer |
+| Chat completo | RiskMeter, CitationBadges, documentos, acciones |
+| Pipeline NIIF corriendo | Stage dots animados, auditor dots, ProgressRing |
+| Pipeline NIIF completo | ScoreGauge, 12 dimensiones, hallazgos por dominio, export |
+
+### Case Navigator (Sidebar)
+
+- Brand header con UtopIA wordmark
+- "Nueva Consulta" button (dorado)
+- 5+1 case type selector con shortcut keys (D, R, U, I, N)
+- NIIF Elite con gradiente dorado permanente + badge "ELITE"
+- Lista de casos agrupada: Hoy / Esta Semana / Anteriores
+- Risk dot por caso (verde/amarillo/naranja/rojo)
+- Colapsa a icon rail de 48px
 
 ---
 
-## Meta-Auditor de Calidad y Best Practices 2026
+## Backend — Orquestacion Multi-Agente
 
-El **Quality Meta-Auditor** es el agente de cierre del sistema. No revisa los números (eso lo hacen los 4 auditores) ni genera estados financieros (eso lo hacen los 3 agentes). Evalúa la **calidad del proceso completo** contra los marcos de referencia internacionales y colombianos vigentes a 2026.
+### Pipeline 1: Chat (Orchestrator-Workers)
 
-### Marcos de Referencia Evaluados
-
-| Marco | Qué evalúa | Fuente |
-|-------|-----------|--------|
-| **IASB Conceptual Framework** | Relevancia, representación fiel, comparabilidad, verificabilidad, oportunidad, comprensibilidad | IFRS Foundation |
-| **NIIF 18** (eff. 2027) | Nuevos subtotales obligatorios (utilidad operacional, utilidad antes de financiación), MRDG, clasificación por categorías | IASB, abril 2024 |
-| **ISO/IEC 25012** | Calidad de datos: completitud, exactitud, consistencia, actualidad, validez | ISO |
-| **ISO/IEC 42001** | Gobernanza IA: trazabilidad, explicabilidad, anti-alucinación, supervisión humana | ISO |
-| **CTCP + Decreto 2420/2496** | Marco técnico normativo NIIF en Colombia | CTCP Colombia |
-
-### Las 12 Dimensiones de Calidad
-
-| # | Dimensión | Marco | Qué revisa |
-|---|-----------|-------|-----------|
-| D1 | Completitud del Reporte | ISO 25012 | 4 EEFF + notas + acta + KPIs + punto de equilibrio + proyecciones |
-| D2 | Exactitud Aritmética | ISO 25012 | Ecuación patrimonial, consistencia P&L↔Balance, flujo↔caja |
-| D3 | Consistencia Interna | ISO 25012 | No contradicciones entre estados, notas referencian cifras correctas |
-| D4 | Presentación NIIF | NIC 1 / NIIF 18 | Clasificación, subtotales, partidas mínimas, preparación NIIF 18 |
-| D5 | Calidad de Notas | NIC 1 par. 112-138 | Políticas sustanciales, juicios y estimaciones, contingencias |
-| D6 | Análisis Estratégico | Best Practices | Fórmulas con números, interpretación contextual, proyecciones conservadoras |
-| D7 | Gobierno Corporativo | Ley 1258/2008, C.Co. | Acta formal, quórum, reserva legal, distribución |
-| D8 | Trazabilidad | ISO 42001 | Cada cifra rastreable a datos de entrada |
-| D9 | Anti-Alucinación | ISO 42001 | Normas citadas existen, cifras provienen de input, tarifas vigentes |
-| D10 | Supervisión Humana | ISO 42001 | Disclaimers IA, recomendación validación CPA, espacios para firma |
-| D11 | Formato y Exportabilidad | Best Practices | Markdown limpio, tablas alineadas, moneda consistente, exportable |
-| D12 | Preparación IFRS 18 | NIIF 18 (2027) | Subtotales operacional/financiación, MRDG identificadas, clasificación compatible |
-
-### Grading
-
-| Grade | Score | Significado |
-|-------|-------|-------------|
-| **A+** | 95-100 | Calidad de élite — listo para publicación |
-| **A** | 90-94 | Excelente — ajustes cosméticos |
-| **B** | 80-89 | Bueno — algunas mejoras identificadas |
-| **C** | 70-79 | Aceptable — mejoras sustanciales necesarias |
-| **D** | 60-69 | Deficiente — requiere retrabajo |
-| **F** | <60 | Inaceptable — no cumple estándares mínimos |
-
-### Uso del API
-
-```bash
-# Evaluar calidad del reporte + auditoría
-curl -X POST localhost:3000/api/financial-quality \
-  -H "Content-Type: application/json" \
-  -d '{
-    "report": { ...salida de /api/financial-report... },
-    "auditReport": { ...salida de /api/financial-audit... },
-    "preprocessed": { ...salida del preprocesador... },
-    "language": "es"
-  }'
+```
+Usuario → PII Redactor → Classifier (T1/T2/T3) → Prompt Enhancer
+                                                         │
+                                            ┌────────────┴────────────┐
+                                            ▼                         ▼
+                                   Agente Tributario         Agente Contable
+                                   (6 herramientas)          (4 herramientas)
+                                            │                         │
+                                            └────────────┬────────────┘
+                                                         ▼ (solo T3)
+                                                    Synthesizer
+                                                         │
+                                                         ▼
+                                                   SSE Streaming
 ```
 
-### Flujo Completo End-to-End
+**Cost Tiers:**
 
-```bash
-# 1. Generar reporte financiero (3 agentes secuenciales)
-REPORT=$(curl -s POST localhost:3000/api/financial-report -d '...')
+| Tier | Cuando | LLM Calls | Latencia |
+|------|--------|-----------|----------|
+| **T1** | Saludos, meta-preguntas | 1 | ~1s |
+| **T2** | Consulta de un dominio | 2-3 | ~3-5s |
+| **T3** | Consulta multi-dominio | 4-5 | ~5-8s |
 
-# 2. Auditar contra normativa colombiana (4 auditores en paralelo)
-AUDIT=$(curl -s POST localhost:3000/api/financial-audit -d "{\"report\":$REPORT}")
+**Herramientas disponibles:**
 
-# 3. Evaluar calidad del proceso completo (meta-auditor)
-QUALITY=$(curl -s POST localhost:3000/api/financial-quality \
-  -d "{\"report\":$REPORT, \"auditReport\":$AUDIT}")
+| Herramienta | Funcion | Agentes |
+|-------------|---------|---------|
+| `search_docs` | RAG sobre base normativa local | Tributario, Contable |
+| `search_web` | Busqueda Tavily en fuentes confiables | Tributario, Contable |
+| `calculate_sanction` | Sanciones Arts. 641/644/647/634 | Tributario |
+| `draft_dian_response` | Borradores de respuesta DIAN | Tributario |
+| `assess_risk` | Evaluacion de riesgo 0-100 | Tributario, Contable |
+| `get_tax_calendar` | Calendario por ultimo digito NIT | Tributario |
+| `analyze_document` | Analisis de documentos subidos | Contable |
 
-# 4. Exportar a Excel profesional
-curl POST localhost:3000/api/financial-report/export \
-  -d "{\"report\":$REPORT}" --output Reporte_UtopIA.xlsx
+### Pipeline 2: Reporte NIIF (Secuencial)
+
+3 agentes con `gpt-5.4-mini` (400K contexto). Cada agente recibe la salida del anterior:
+
+| Agente | Entrada | Salida |
+|--------|---------|--------|
+| **Analista NIIF** | Datos brutos + PUC mapping | 4 EEFF + notas tecnicas |
+| **Director Estrategia** | 4 EEFF | KPIs + breakeven + cash flow + recomendaciones |
+| **Gobierno Corporativo** | Todo lo anterior | 13 notas NIC 1 + acta de asamblea |
+
+### Pipeline 3: Auditoria (4 en paralelo)
+
+| Auditor | Normativa | Peso |
+|---------|-----------|------|
+| **NIIF/Contable** | NIC 1-41, NIIF 1-17, CTCP, Decretos 2420/2496 | 30% |
+| **Tributario** | Estatuto Tributario (840+ arts.), DIAN | 25% |
+| **Legal/Societario** | Ley 1258/2008, C.Co., Ley 222/1995 | 20% |
+| **Revisoria Fiscal** | NIA 200-706, Ley 43/1990 | 25% |
+
+Severidades: `critico` > `alto` > `medio` > `bajo` > `informativo`
+
+Opinion formal tipo NIA 700: Favorable (90-100) · Con Salvedades (75-89) · Desfavorable (40-74) · Abstencion (0-39)
+
+### Pipeline 4: Meta-Auditor de Calidad
+
+12 dimensiones evaluadas contra marcos internacionales:
+
+| # | Dimension | Marco |
+|---|-----------|-------|
+| D1 | Completitud del Reporte | ISO 25012 |
+| D2 | Exactitud Aritmetica | ISO 25012 |
+| D3 | Consistencia Interna | ISO 25012 |
+| D4 | Presentacion NIIF | NIC 1 / NIIF 18 |
+| D5 | Calidad de Notas | NIC 1 par. 112-138 |
+| D6 | Analisis Estrategico | Best Practices |
+| D7 | Gobierno Corporativo | Ley 1258/2008 |
+| D8 | Trazabilidad | ISO 42001 |
+| D9 | Anti-Alucinacion | ISO 42001 |
+| D10 | Supervision Humana | ISO 42001 |
+| D11 | Formato y Exportabilidad | Best Practices |
+| D12 | Preparacion IFRS 18 | NIIF 18 (eff. 2027) |
+
+Grades: **A+** (95-100) · **A** (90-94) · **B** (80-89) · **C** (70-79) · **D** (60-69) · **F** (<60)
+
+### Pipeline 5: Preprocesamiento + Excel
+
+**Preprocesador** (cero LLM): parsea CSV/Excel de ERPs colombianos (Siigo, World Office, Helisa, ContaPyme), filtra auxiliares, suma por clase PUC, valida ecuacion patrimonial (A = P + E), detecta cuentas omitidas.
+
+**Excel Export** (ExcelJS): 5 pestanas con formato corporativo:
+
+| Pestana | Contenido |
+|---------|-----------|
+| Balance NIIF | Activo/Pasivo/Patrimonio con codigos PUC |
+| Estado Resultados | Ingresos/Costos/Gastos → Utilidad Neta |
+| KPIs | Dashboard estrategico completo |
+| Validacion | Discrepancias, banderas rojo/verde |
+| Resumen | Reporte consolidado |
+
+---
+
+## API Endpoints
+
+| Endpoint | Metodo | Descripcion | Duracion |
+|----------|--------|-------------|----------|
+| `/api/chat` | POST | Chat multi-agente (SSE con `X-Stream: true`) | Default |
+| `/api/financial-report` | POST | Pipeline NIIF: 3 agentes secuenciales, SSE | 300s |
+| `/api/financial-audit` | POST | 4 auditores en paralelo, SSE | 300s |
+| `/api/financial-quality` | POST | Meta-auditor 12 dimensiones | Default |
+| `/api/financial-report/export` | POST | Pipeline completo → `.xlsx` descargable | 300s |
+| `/api/upload` | POST | Ingesta documentos (PDF, DOCX, XLSX, imagenes OCR) | Default |
+| `/api/rag` | POST | Consulta directa al vector store | Default |
+| `/api/web-search` | POST | Busqueda Tavily filtrada | Default |
+| `/api/realtime` | GET | Token efimero para voz WebRTC | Default |
+| `/api/tools/sanction` | POST | Calculadora de sanciones tributarias | Default |
+| `/api/tools/calendar` | POST/GET | Calendario tributario por NIT | Default |
+
+### SSE Events
+
+```
+// /api/chat
+{ type: 'status',   message: string }
+{ type: 'tier',     tier: 'T1' | 'T2' | 'T3' }
+{ type: 'domains',  domains: string[] }
+{ type: 'tool',     name: string, agent: string }
+{ type: 'content',  delta: string }
+{ type: 'done',     riskLevel?, riskScore?, citations? }
+
+// /api/financial-report
+{ type: 'stage_start',    stage: 1|2|3, label: string }
+{ type: 'stage_progress', stage: 1|2|3, detail: string }
+{ type: 'stage_complete', stage: 1|2|3, label: string }
+{ type: 'audit_start',    auditor: string }
+{ type: 'audit_complete', auditor: string, findings: number }
+{ type: 'quality_score',  grade: string, score: number }
+{ type: 'result',         report: FinancialReport }
 ```
 
 ---
@@ -687,201 +396,184 @@ curl POST localhost:3000/api/financial-report/export \
 
 ```
 src/
-├── app/api/
-│   ├── chat/route.ts             # Entry point — feature flag → orchestrated/legacy
-│   ├── financial-report/
-│   │   ├── route.ts              # ★ Pipeline financiero NIIF (3 agentes secuenciales, SSE)
-│   │   └── export/route.ts       # ★ Preprocess + pipeline + Excel export (.xlsx)
-│   ├── financial-audit/route.ts  # ★ Pipeline de auditoría (4 auditores en paralelo, SSE)
-│   ├── financial-quality/route.ts # ★ Meta-auditor de calidad (12 dimensiones, IFRS 18)
-│   ├── realtime/route.ts         # Token efímero para voz WebRTC
-│   ├── upload/route.ts           # Ingesta de documentos (PDF, DOCX, XLSX, imágenes OCR)
-│   ├── rag/route.ts              # Consulta directa al vector store
-│   ├── web-search/route.ts       # Búsqueda web Tavily
-│   └── tools/
-│       ├── sanction/route.ts     # Calculadora de sanciones (API directa)
-│       └── calendar/route.ts     # Calendario tributario (API directa)
+├── app/
+│   ├── page.tsx                    # Landing page con PipelineShowcase
+│   ├── workspace/
+│   │   ├── layout.tsx              # Shell: StatusBar + 3 paneles + IntakeModal + Cmd+K
+│   │   └── page.tsx                # Router: Welcome | Chat | Pipeline
+│   └── api/
+│       ├── chat/                   # Chat multi-agente (SSE)
+│       ├── financial-report/       # Pipeline NIIF (SSE) + export Excel
+│       ├── financial-audit/        # 4 auditores paralelos (SSE)
+│       ├── financial-quality/      # Meta-auditor 12 dimensiones
+│       ├── upload/                 # Ingesta documentos + OCR
+│       ├── rag/                    # Vector store query
+│       ├── web-search/             # Tavily
+│       ├── realtime/               # WebRTC token
+│       └── tools/                  # Sancion + Calendario
 │
-├── lib/
-│   ├── agents/                   # ★ SISTEMA MULTI-AGENTE
-│   │   ├── types.ts              # Tipos compartidos (QueryClassification, EnhancedQuery, etc.)
-│   │   ├── classifier.ts         # Clasificador T1/T2/T3 (regex + LLM)
-│   │   ├── prompt-enhancer.ts    # Agente de prompt engineering
-│   │   ├── orchestrator.ts       # Coordinador central del flujo
-│   │   ├── synthesizer.ts        # Sintetizador multi-agente (solo T3)
-│   │   ├── specialists/
-│   │   │   ├── base-agent.ts     # Clase base con tool-calling loop reutilizable
-│   │   │   ├── tax-agent.ts      # Agente especialista tributario
-│   │   │   └── accounting-agent.ts # Agente especialista contable
-│   │   ├── tools/
-│   │   │   └── registry.ts       # Registro centralizado de herramientas
-│   │   ├── prompts/
-│   │   │   ├── classifier.prompt.ts
-│   │   │   ├── enhancer.prompt.ts
-│   │   │   ├── tax-agent.prompt.ts
-│   │   │   ├── accounting-agent.prompt.ts
-│   │   │   └── synthesizer.prompt.ts
-│   │   │
-│   │   └── financial/             # ★ PIPELINE FINANCIERO NIIF + AUDITORIA
-│   │       ├── types.ts           # Tipos del pipeline (request, stages, report)
-│   │       ├── orchestrator.ts    # Coordinador secuencial de 3 agentes
-│   │       ├── agents/
-│   │       │   ├── niif-analyst.ts        # Agente 1: Estados financieros NIIF
-│   │       │   ├── strategy-director.ts   # Agente 2: KPIs y proyecciones
-│   │       │   └── governance-specialist.ts # Agente 3: Gobierno corporativo
-│   │       ├── prompts/
-│   │       │   ├── niif-analyst.prompt.ts
-│   │       │   ├── strategy-director.prompt.ts
-│   │       │   └── governance-specialist.prompt.ts
-│   │       ├── quality/            # ★ META-AUDITOR DE CALIDAD
-│   │       │   ├── types.ts       # QualityAssessment, QualityDimension
-│   │       │   ├── prompt.ts      # 12-dimension evaluation prompt (IASB, IFRS 18, ISO)
-│   │       │   └── agent.ts       # Quality audit execution + parsing
-│   │       │
-│   │       └── audit/             # ★ PIPELINE DE AUDITORIA (4 en paralelo)
-│   │           ├── types.ts       # Findings, severities, audit report types
-│   │           ├── orchestrator.ts # Parallel executor + consolidator
-│   │           ├── agents/
-│   │           │   ├── niif-auditor.ts     # Auditor 1: NIC/NIIF compliance
-│   │           │   ├── tax-auditor.ts      # Auditor 2: Estatuto Tributario
-│   │           │   ├── legal-auditor.ts    # Auditor 3: Ley comercial
-│   │           │   └── fiscal-reviewer.ts  # Auditor 4: Revisoría fiscal (NIA)
-│   │           └── prompts/
-│   │               ├── niif-auditor.prompt.ts
-│   │               ├── tax-auditor.prompt.ts
-│   │               ├── legal-auditor.prompt.ts
-│   │               └── fiscal-reviewer.prompt.ts
-│   │
-│   ├── tools/                    # Implementaciones de herramientas
-│   │   ├── sanction-calculator.ts    # Cálculo de sanciones (Arts. 641/644/647/634)
-│   │   ├── document-analyzer.ts      # Análisis de documentos con GPT-4o-mini
-│   │   ├── dian-response-generator.ts # Borradores de respuesta DIAN
-│   │   ├── risk-assessor.ts          # Evaluación de riesgo (0-100)
-│   │   └── tax-calendar.ts           # Calendario tributario + búsqueda web
-│   │
-│   ├── rag/
-│   │   ├── ingest.ts             # Pipeline de ingesta batch
-│   │   └── vectorstore.ts        # HNSWLib singleton + similarity search
-│   ├── search/web-search.ts      # Cliente Tavily con filtrado de dominios
-│   ├── preprocessing/
-│   │   └── trial-balance.ts      # ★ Validación aritmética determinista (PUC, auxiliares)
-│   ├── export/
-│   │   ├── pdf-export.ts         # Exportación PDF de conversaciones
-│   │   └── excel-export.ts       # ★ Exportación Excel financiero (5 tabs, ExcelJS)
-│   ├── security/pii-filter.ts    # Redacción PII (NIT, CC, emails, teléfonos)
-│   ├── storage/conversation-history.ts # Persistencia localStorage
-│   └── validation/schemas.ts     # Validación Zod de requests
+├── design-system/                  # ★ Sistema de diseno propio
+│   ├── tokens.ts                   # Colores, spacing, radius, shadow, font, animation
+│   ├── index.ts                    # Barrel export
+│   └── components/                 # 12 componentes primitivos
+│       ├── Badge.tsx               # Risk/Tier/Grade/Status variants
+│       ├── RiskMeter.tsx           # Barra animada 0-100
+│       ├── ScoreGauge.tsx          # Arco SVG circular
+│       ├── AgentPipelineViz.tsx    # Grafo de nodos T2/T3
+│       ├── FileUploadZone.tsx      # Drag & drop con estados
+│       ├── StepWizard.tsx          # Wizard de pasos con validacion
+│       ├── CitationBadge.tsx       # Pill normativa con tooltip
+│       ├── FindingCard.tsx         # Hallazgo expandible
+│       ├── StreamingText.tsx       # Cursor streaming
+│       ├── ProgressRing.tsx        # Progreso circular
+│       ├── Toast.tsx               # Notificaciones
+│       └── DataTable.tsx           # Tabla sortable
 │
-├── hooks/
-│   └── useRealtimeAPI.ts         # Orquestación WebRTC + data channel
+├── types/
+│   └── platform.ts                 # ★ 30+ tipos compartidos (Case, Intake, Pipeline, Audit)
 │
-├── components/workspace/
-│   ├── ChatThread.tsx            # Chat UI principal (SSE streaming)
-│   ├── AnalysisPanel.tsx         # Panel de análisis (riesgo, documentos)
-│   ├── Sidebar.tsx               # Historial de conversaciones
-│   ├── StatusBar.tsx             # Barra de estado
-│   └── types.ts                  # Tipos del workspace
+├── components/
+│   ├── workspace/
+│   │   ├── Sidebar.tsx             # ★ Case Navigator (5+1 types, grouped list)
+│   │   ├── ChatWorkspace.tsx       # ★ Chat con pipeline viz + rich cards
+│   │   ├── PipelineWorkspace.tsx   # ★ Monitor NIIF Elite + document viewer
+│   │   ├── WelcomeScreen.tsx       # ★ Pantalla de entrada
+│   │   ├── AnalysisPanel.tsx       # ★ Intelligence Panel (7 estados)
+│   │   ├── WorkspaceLayout.tsx     # ★ 3-panel layout
+│   │   ├── ChatThread.tsx          # Chat legacy (preservado)
+│   │   ├── CommandPalette.tsx      # Cmd+K
+│   │   ├── StatusBar.tsx           # Barra superior
+│   │   ├── types.ts                # Tipos workspace legacy
+│   │   └── intake/                 # ★ Sistema de intake
+│   │       ├── IntakeModal.tsx     # Overlay full-screen
+│   │       ├── IntakePreview.tsx   # Pre-flight summary
+│   │       ├── DianDefenseIntake.tsx
+│   │       ├── TaxRefundIntake.tsx
+│   │       ├── DueDiligenceIntake.tsx
+│   │       ├── FinancialIntelIntake.tsx
+│   │       ├── NiifReportIntake.tsx    # 5 pasos, el mas completo
+│   │       └── useIntakePersistence.ts # Auto-save hook
+│   ├── sections/                   # Landing page
+│   │   ├── PipelineShowcase.tsx    # ★ Visualizacion del pipeline 8 nodos
+│   │   ├── Hero.tsx
+│   │   ├── Services.tsx
+│   │   └── ...
+│   └── ui/                         # Componentes UI base
 │
 ├── context/
-│   ├── WorkspaceContext.tsx       # Estado global del workspace
-│   └── LanguageContext.tsx        # Internacionalización
+│   ├── WorkspaceContext.tsx         # ★ Estado global (extended: caseType, mode, pipeline, intake)
+│   └── LanguageContext.tsx          # i18n (es/en)
+│
+├── lib/
+│   ├── agents/                     # Orquestacion multi-agente
+│   │   ├── orchestrator.ts         # Chat orchestrator (T1/T2/T3)
+│   │   ├── classifier.ts          # Cost tier classifier
+│   │   ├── prompt-enhancer.ts      # Query enhancement
+│   │   ├── synthesizer.ts          # T3 response merger
+│   │   ├── specialists/            # Base + Tax + Accounting agents
+│   │   ├── tools/registry.ts       # Tool definitions
+│   │   ├── prompts/                # System prompts
+│   │   └── financial/              # Pipeline NIIF + Auditoria + Quality
+│   │       ├── orchestrator.ts     # 3-agent sequential
+│   │       ├── agents/             # NIIF, Strategy, Governance
+│   │       ├── audit/              # 4 parallel auditors
+│   │       └── quality/            # 12-dimension meta-auditor
+│   ├── tools/                      # Tool implementations
+│   ├── rag/                        # HNSWLib + ingestion
+│   ├── preprocessing/              # Trial balance validator
+│   ├── export/                     # Excel + PDF export
+│   ├── security/                   # PII filter
+│   ├── search/                     # Tavily client
+│   └── validation/                 # Zod schemas
+│
+├── hooks/
+│   └── useRealtimeAPI.ts           # WebRTC voice
 │
 └── data/
-    ├── tax_docs/                 # ~25 documentos tributarios colombianos (markdown)
-    ├── calendars/                # Calendarios tributarios estructurados
-    │   ├── nacional-2026.ts
-    │   ├── municipal-2026.ts
-    │   └── types.ts
-    └── vector_store/             # Índice HNSWLib persistido
+    ├── tax_docs/                   # ~25 documentos normativos (markdown)
+    ├── calendars/                  # Calendarios tributarios
+    └── vector_store/               # Indice HNSWLib persistido
 ```
 
-## Instalación y Configuración
+---
+
+## Instalacion
 
 ```bash
-# Clonar el repositorio
 git clone https://github.com/Rocuts/UtopIA.git
 cd UtopIA
-
-# Instalar dependencias
 npm install
-
-# Configurar variables de entorno
-# Crear .env.local con:
-#   OPENAI_API_KEY=sk-...
-#   TAVILY_API_KEY=tvly-...
-#   UTOPIA_AGENT_MODE=orchestrated    # o "legacy" para modo anterior
-
-# Construir el vector store desde los documentos tributarios
-npm run db:ingest
-
-# Iniciar servidor de desarrollo
-npm run dev
 ```
 
-La aplicación corre en `http://localhost:3000`. El modo de voz requiere permisos de micrófono y una clave OpenAI con acceso a la Realtime API.
+### Variables de Entorno
 
-## API Endpoints
+Crear `.env.local`:
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/chat` | POST | Chat con orquestador multi-agente. Soporta SSE streaming (`X-Stream: true`) y JSON |
-| `/api/financial-report` | POST | Pipeline financiero NIIF: 3 agentes secuenciales → reporte consolidado. SSE streaming. `maxDuration: 300s` |
-| `/api/financial-audit` | POST | Pipeline de auditoría: 4 auditores en paralelo → hallazgos + opinión + score. SSE streaming. `maxDuration: 300s` |
-| `/api/financial-report/export` | POST | Pipeline completo + exportación Excel: preprocess → 3 agentes → `.xlsx` descargable. También acepta un report existente |
-| `/api/financial-quality` | POST | Meta-auditor de calidad: evalúa todo el pipeline contra 12 dimensiones (IASB, IFRS 18, ISO 25012, ISO 42001, CTCP). Grade A+ a F |
-| `/api/upload` | POST | Sube documentos (PDF, DOCX, XLSX, imágenes con OCR), procesa e incorpora al vector store |
-| `/api/rag` | POST | Consulta directa al vector store — retorna los k chunks más relevantes |
-| `/api/web-search` | POST | Búsqueda web filtrada por dominios de confianza |
-| `/api/realtime` | GET | Genera token efímero para sesión de voz WebRTC con OpenAI Realtime API |
-| `/api/tools/sanction` | POST | Cálculo directo de sanciones tributarias |
-| `/api/tools/calendar` | POST | Calendario tributario personalizado por NIT |
+```bash
+OPENAI_API_KEY=sk-...           # Requerido: todos los LLM calls
+TAVILY_API_KEY=tvly-...         # Requerido: busqueda web
+UTOPIA_AGENT_MODE=orchestrated  # orchestrated (multi-agente) | legacy (monolitico)
+```
 
-## Fuentes de Datos
+### Comandos
 
-La base de conocimiento de UtopIA incluye:
+```bash
+npm run dev          # Servidor de desarrollo (localhost:3000)
+npm run build        # Build de produccion (Turbopack)
+npm run lint         # ESLint
+npm run db:ingest    # Ingestar documentos al vector store
+```
 
-- **Estatuto Tributario**: resumen ejecutivo con tarifas, deducciones, procedimiento y sanciones vigentes para 2026 (UVT $52.374).
-- **Procedimiento DIAN**: guía detallada de requerimientos, liquidaciones oficiales, régimen sancionatorio y recursos de defensa.
-- **NIIF Colombia**: clasificación por grupos (1, 2, 3), estándares clave, políticas contables y presentación de estados financieros.
-- **Facturación Electrónica**: marco legal, tipos de documentos, requisitos técnicos y errores comunes.
-- **Análisis Financiero**: indicadores, flujo de caja, punto de equilibrio y due diligence.
-- **Decretos y resoluciones**: ~25 documentos normativos curados (2019-2025).
+Validar cambios: `npx tsc --noEmit` + `npm run build`. No hay test framework configurado.
 
-Los documentos son ingresados al vector store mediante el comando `npm run db:ingest`. Los usuarios pueden subir documentos adicionales en tiempo de ejecución a través de `/api/upload` (PDF, DOCX, XLSX, imágenes con OCR vía GPT-4o Vision).
+---
 
 ## Seguridad
 
-- **Redacción PII**: NIT, cédula, emails, teléfonos, tarjetas y cuentas bancarias se redactan antes de enviar al LLM
-- **Extracción NIT contextual**: Se extrae el último dígito del NIT para personalización ANTES de la redacción
-- **Content Security Policy**: Restricción a APIs de confianza (OpenAI, Tavily)
-- **Validación Zod**: Todos los inputs validados con schemas estrictos
-- **Headers de seguridad**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy
-- **Magic bytes**: Validación de tipos de archivo por firma binaria (previene spoofing de extensiones)
+| Capa | Implementacion |
+|------|---------------|
+| **PII** | Redaccion de NIT, cedula, emails, telefonos, tarjetas antes de cada LLM call |
+| **NIT Context** | Extraccion del ultimo digito ANTES de la redaccion para personalizacion |
+| **CSP** | Content Security Policy restrictiva a OpenAI + Tavily APIs |
+| **Validacion** | Zod schemas estrictos en todos los endpoints |
+| **Rate Limiting** | Per-IP, per-endpoint en middleware |
+| **Headers** | X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy |
+| **File Validation** | Magic bytes para prevenir spoofing de extensiones |
+| **CSRF** | Origin checking en middleware |
 
-## Contribución
+---
 
-1. Fork del repositorio.
-2. Crear rama feature: `git checkout -b feature/mi-mejora`.
-3. Commits con mensajes descriptivos en español.
-4. Push a la rama: `git push origin feature/mi-mejora`.
-5. Crear Pull Request describiendo los cambios.
+## Contribucion
 
-### Agregar documentos a la base de conocimiento
-
-1. Crear archivo `.md` en `src/data/tax_docs/` con frontmatter YAML (type, number, year, entity, title).
-2. Usar formato con headers claros (`##`, `###`) y citar artículos específicos del E.T. donde aplique.
-3. Ejecutar `npm run db:ingest` para reconstruir el vector store.
+```bash
+git checkout -b feature/mi-mejora
+# ... hacer cambios ...
+npx tsc --noEmit && npm run build  # Validar
+git commit -m "feat: descripcion del cambio"
+git push origin feature/mi-mejora
+# Crear Pull Request
+```
 
 ### Agregar un nuevo agente especialista
 
-1. Crear archivo de prompt en `src/lib/agents/prompts/nuevo-agent.prompt.ts`.
-2. Crear agente en `src/lib/agents/specialists/nuevo-agent.ts` extendiendo `BaseSpecialist`.
-3. Registrar herramientas en `src/lib/agents/tools/registry.ts`.
-4. Agregar el agente al mapa `SPECIALISTS` en `src/lib/agents/orchestrator.ts`.
-5. Actualizar el Classifier para reconocer el nuevo dominio.
+1. Prompt en `src/lib/agents/prompts/`
+2. Agente en `src/lib/agents/specialists/` extendiendo `BaseSpecialist`
+3. Herramientas en `src/lib/agents/tools/registry.ts`
+4. Registrar en `SPECIALISTS` en `orchestrator.ts`
+
+### Agregar documentos a la base de conocimiento
+
+1. Crear `.md` en `src/data/tax_docs/` con frontmatter YAML
+2. Ejecutar `npm run db:ingest`
+
+---
 
 ## Disclaimer
 
-UtopIA es una herramienta de apoyo para profesionales contables y tributarios. **No reemplaza el criterio profesional del contador público** ni constituye asesoría tributaria vinculante. Las respuestas generadas por la IA pueden contener imprecisiones y deben ser verificadas contra la normativa vigente antes de ser utilizadas en actuaciones ante la DIAN u otras autoridades. El usuario es responsable de validar toda información antes de aplicarla a casos reales.
+UtopIA es una herramienta de apoyo para profesionales contables y tributarios. **No reemplaza el criterio profesional del contador publico** ni constituye asesoria tributaria vinculante. Las respuestas generadas por la IA deben ser verificadas contra la normativa vigente antes de ser utilizadas en actuaciones oficiales. La informacion normativa tiene como base el Estatuto Tributario, la doctrina DIAN y los estandares NIIF vigentes a 2026.
 
-La información normativa tiene como base el Estatuto Tributario, la doctrina DIAN y los estándares NIIF vigentes a 2026. Las normas tributarias cambian frecuentemente — consulte siempre las fuentes oficiales actualizadas.
+---
+
+<p align="center">
+  <sub>Built with precision by <strong>Johan Rocuts</strong> · Powered by OpenAI · Made for Colombia</sub>
+</p>
