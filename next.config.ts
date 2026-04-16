@@ -1,7 +1,25 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['hnswlib-node', 'pdf-parse'],
+  // CommonJS / native modules that must NOT be bundled by webpack/turbopack.
+  serverExternalPackages: ['hnswlib-node', 'pdf-parse', 'mammoth', 'exceljs', 'jspdf'],
+
+  // File tracing hints for Vercel Fluid Compute.
+  // - Includes: ensures native binaries of hnswlib-node ship with the function bundle.
+  // - Excludes: keeps the 285 MB persisted vector index out of the bundle. In MVP the
+  //   store is local-only (dev); on Vercel it falls back to MemoryVectorStore. When we
+  //   move to a managed vector DB (Upstash Vector / Neon pgvector), these stay as is.
+  outputFileTracingIncludes: {
+    '/api/**/*': ['./node_modules/hnswlib-node/build/**/*'],
+  },
+  outputFileTracingExcludes: {
+    '/api/**/*': [
+      './src/data/vector_store/**/*',
+      './src/data/uploads/**/*',
+      './Documentacion/**/*',
+    ],
+  },
+
   allowedDevOrigins: ['localhost', '192.168.40.67'],
   async headers() {
     return [

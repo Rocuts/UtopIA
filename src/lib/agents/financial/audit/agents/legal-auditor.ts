@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import OpenAI from 'openai';
+import { MODELS } from '@/lib/config/models';
 import { buildLegalAuditorPrompt } from '../prompts/legal-auditor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import type { CompanyInfo } from '../../types';
@@ -21,7 +22,7 @@ export async function runLegalAuditor(
   const response = await withRetry(
     () =>
       openai.chat.completions.create({
-        model: 'gpt-5.4-mini',
+        model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildLegalAuditorPrompt(company, language) },
           { role: 'user', content: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}` },

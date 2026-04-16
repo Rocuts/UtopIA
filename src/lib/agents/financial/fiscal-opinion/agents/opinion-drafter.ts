@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import OpenAI from 'openai';
+import { MODELS } from '@/lib/config/models';
 import { buildOpinionDrafterPrompt } from '../prompts/opinion-drafter.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import type { CompanyInfo } from '../../types';
@@ -38,7 +39,7 @@ export async function runOpinionDrafter(
   const response = await withRetry(
     () =>
       openai.chat.completions.create({
-        model: 'gpt-5.4-mini',
+        model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildOpinionDrafterPrompt(company, language) },
           {

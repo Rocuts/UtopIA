@@ -70,25 +70,33 @@ const CALCULATE_SANCTION: OpenAI.Chat.Completions.ChatCompletionTool = {
   function: {
     name: 'calculate_sanction',
     description:
-      'Calculate Colombian tax sanctions and interest. Types: ' +
-      'extemporaneidad (Art. 641), correccion (Art. 644), inexactitud (Art. 647), intereses_moratorios (Art. 634). ' +
-      'UVT 2026 = $52,374 COP. Minimum sanction = 10 UVT = $523,740 COP.',
+      'Calcula sanciones e intereses tributarios colombianos. Tipos: ' +
+      'extemporaneidad (Art. 641 ET), correccion (Art. 644 ET), inexactitud (Art. 647 ET con reducciones Arts. 640/709), intereses_moratorios (Arts. 634-635 ET con INTERÉS DIARIO COMPUESTO). ' +
+      'UVT 2026 = $52.374 COP. Sanción mínima = 10 UVT = $523.740 COP.',
     parameters: {
       type: 'object',
       properties: {
         type: {
           type: 'string',
           enum: ['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'],
-          description: 'Type of sanction to calculate.',
+          description: 'Tipo de sanción.',
         },
-        taxDue: { type: 'number', description: 'Impuesto a cargo (COP). For extemporaneidad.' },
-        grossIncome: { type: 'number', description: 'Ingresos brutos (COP). For extemporaneidad when taxDue is 0.' },
-        difference: { type: 'number', description: 'Difference in tax (COP). For correccion/inexactitud.' },
-        delayMonths: { type: 'number', description: 'Months of delay. For extemporaneidad.' },
-        isVoluntary: { type: 'boolean', description: 'Voluntary correction (before DIAN notice)? Default: true.' },
-        principal: { type: 'number', description: 'Capital amount (COP). For intereses_moratorios.' },
-        annualRate: { type: 'number', description: 'Annual rate (%). Default: 27.44%.' },
-        days: { type: 'number', description: 'Days of late payment. For intereses_moratorios.' },
+        taxDue: { type: 'number', description: 'Impuesto a cargo (COP). Para extemporaneidad.' },
+        grossIncome: { type: 'number', description: 'Ingresos brutos (COP). Para extemporaneidad cuando taxDue = 0.' },
+        difference: { type: 'number', description: 'Diferencia (COP). Para correccion e inexactitud.' },
+        delayMonths: { type: 'number', description: 'Meses de retraso. Para extemporaneidad.' },
+        isVoluntary: { type: 'boolean', description: 'SOLO para "correccion": voluntaria (10%) antes de requerimiento especial vs. provocada (20%). Default: true.' },
+        inexactitudReduction: {
+          type: 'string',
+          enum: ['none', 'art_709_half', 'art_709_quarter', 'art_640_50', 'art_640_75'],
+          description: 'SOLO para "inexactitud". Reducción aplicable sobre la base del 100%: none (plena), art_709_half (1/2 por aceptación post-requerimiento), art_709_quarter (1/4 por aceptación antes de ampliación), art_640_50 (gradualidad 50% sin antecedentes 4 años), art_640_75 (gradualidad 75% sin antecedentes 2 años). Default: none.',
+        },
+        principal: { type: 'number', description: 'Capital (COP). Para intereses_moratorios.' },
+        annualRate: {
+          type: 'number',
+          description: 'Tasa efectiva anual (%): tasa de usura vigente del mes de mora MENOS 2 pp (Art. 635 ET). Obtener de certificación Superfinanciera. Si no se provee, usa fallback solo para estimación.',
+        },
+        days: { type: 'number', description: 'Días de mora. Para intereses_moratorios.' },
       },
       required: ['type'],
     },

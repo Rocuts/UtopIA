@@ -43,6 +43,8 @@ export interface TaxCalendarResult {
 function formatNationalDeadlines(deadlines: NationalDeadline[]): string {
   if (deadlines.length === 0) return '';
 
+  const anyUnverified = deadlines.some((d) => d.verified !== true);
+
   // Group by obligation
   const grouped = new Map<string, NationalDeadline[]>();
   for (const d of deadlines) {
@@ -51,11 +53,25 @@ function formatNationalDeadlines(deadlines: NationalDeadline[]): string {
     grouped.get(key)!.push(d);
   }
 
-  const lines: string[] = ['## Obligaciones Nacionales (datos locales verificados)\n'];
+  const headerLines = anyUnverified
+    ? [
+        '## Obligaciones Nacionales',
+        '',
+        '⚠️ **FECHAS ESTIMADAS — NO OFICIALES.** Las fechas marcadas con ⚠️ son ' +
+          'inferencias por patrón histórico del calendario tributario y NO provienen del ' +
+          'decreto oficial DIAN del año. Verifica SIEMPRE contra el decreto oficial antes de ' +
+          'presentar declaraciones — presentar en fecha incorrecta acarrea sanción por ' +
+          'extemporaneidad (Art. 641 E.T., 5% mensual sobre el impuesto a cargo).',
+        '',
+      ]
+    : ['## Obligaciones Nacionales (verificadas contra decreto oficial)', ''];
+
+  const lines: string[] = [...headerLines];
   for (const [obligation, entries] of grouped) {
     lines.push(`### ${obligation}`);
     for (const e of entries) {
-      const dateStr = e.dueDate === 'pendiente' ? '⚠️ Pendiente de confirmar' : e.dueDate;
+      const verifiedFlag = e.verified === true ? '' : ' ⚠️';
+      const dateStr = e.dueDate === 'pendiente' ? '⚠️ Pendiente de confirmar' : `${e.dueDate}${verifiedFlag}`;
       lines.push(`- **${e.period}**: ${dateStr} | Base: ${e.legalBasis}${e.notes ? ` | ${e.notes}` : ''}`);
     }
     lines.push('');
@@ -163,8 +179,11 @@ export async function getTaxCalendar(
 
   // ── Step 3: Build result ──
   const cityLabel = city || 'no especificada';
+  const hasUnverifiedLocal = localNational.some((d) => d.verified !== true);
   const dataSource = hasLocalNational
-    ? 'DATOS LOCALES VERIFICADOS (fuente primaria) + búsqueda web (verificación)'
+    ? hasUnverifiedLocal
+      ? 'DATOS LOCALES HEURÍSTICOS (fechas inferidas por patrón, NO oficiales) + búsqueda web de respaldo'
+      : 'DATOS LOCALES VERIFICADOS (fuente primaria) + búsqueda web (verificación)'
     : 'BÚSQUEDA WEB (no hay datos locales para este año)';
 
   return {
@@ -186,15 +205,24 @@ export async function getTaxCalendar(
       `FUENTE DE DATOS: ${dataSource}\n\n` +
       `INSTRUCCIÓN: Presenta el calendario tributario ${year} para último dígito NIT ${nitLastDigit} (${typeLabel}).\n` +
       `Ciudad: ${cityLabel}.\n\n` +
+      (hasUnverifiedLocal
+        ? `⚠️ ADVERTENCIA OBLIGATORIA: las fechas locales son ESTIMADAS por patrón histórico, NO provienen del decreto oficial. DEBES:\n` +
+          `  1. Incluir visiblemente el aviso: "Fecha estimada — verificar contra el decreto oficial DIAN antes de presentar".\n` +
+          `  2. Priorizar los resultados de BÚSQUEDA WEB con fuente dian.gov.co si aportan fechas oficiales diferentes.\n` +
+          `  3. Recomendar al usuario consultar https://www.dian.gov.co para confirmar.\n\n`
+        : ``) +
       `PRIORIDAD DE DATOS:\n` +
-      `1. Usa los DATOS LOCALES como fuente principal (ya están filtrados para este NIT).\n` +
-      `2. Usa la BÚSQUEDA WEB para verificar o complementar datos faltantes.\n` +
+      (hasUnverifiedLocal
+        ? `1. La BÚSQUEDA WEB con fuente oficial DIAN tiene PRIORIDAD sobre los datos locales heurísticos.\n` +
+          `2. Usa los datos locales solo como referencia secundaria.\n`
+        : `1. Usa los DATOS LOCALES como fuente principal (ya están filtrados para este NIT).\n` +
+          `2. Usa la BÚSQUEDA WEB para verificar o complementar datos faltantes.\n`) +
       `3. Si hay conflicto entre local y web, menciona ambos y recomienda verificar en dian.gov.co.\n\n` +
       `FORMATO: Presenta DOS tablas separadas:\n` +
       `1. **OBLIGACIONES NACIONALES (DIAN)**: Columnas: Mes | Obligación | Fecha Límite | Base Legal\n` +
       `2. **OBLIGACIONES MUNICIPALES${city ? ' — ' + city : ''}**: Columnas: Mes | Obligación | Fecha Límite | Régimen | Observaciones\n\n` +
       `REGLAS:\n` +
-      `- Fechas marcadas como "pendiente" → indica "Pendiente de confirmar en la fuente oficial".\n` +
+      `- Fechas marcadas como "pendiente" o con ⚠️ → indica "Pendiente de confirmar en la fuente oficial".\n` +
       `- Incluye régimen ICA (bimestral/anual, común/simplificado).\n` +
       `- Si no se especificó ciudad, muestra datos de las ciudades principales disponibles.\n` +
       `- Cita fuentes para datos de búsqueda web.`,

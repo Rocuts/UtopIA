@@ -19,7 +19,7 @@ const TAX_TYPES = [
     value: 'iva' as const,
     label: 'IVA Saldo a Favor',
     description: 'Devolucion o compensacion de saldos a favor en IVA.',
-    reference: 'Arts. 850-865 E.T. / Decreto 963 de 2024',
+    reference: 'Arts. 850-865 E.T. / Decreto 1625 de 2016 (DUR) / Res. DIAN 000151/2012',
     icon: Receipt,
   },
   {

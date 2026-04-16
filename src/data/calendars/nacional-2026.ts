@@ -2,16 +2,25 @@
  * CALENDARIO TRIBUTARIO NACIONAL 2026
  * ====================================
  * Año gravable: 2025 | Declaración y pago: 2026
- * UVT 2026: $52,374 COP (Res. DIAN 000238, 15-dic-2025)
+ * UVT 2026: $52.374 COP (Res. DIAN 000238, 15-dic-2025)
  *
- * FUENTE: Decreto del calendario tributario (publicado ~diciembre 2025).
- *         Las fechas marcadas como "pendiente" requieren verificación.
+ * ⚠️ ADVERTENCIA CRÍTICA — FECHAS NO OFICIALES ⚠️
+ * =================================================
+ * Todas las fechas de este archivo son ESTIMACIONES BASADAS EN PATRONES
+ * HISTÓRICOS del calendario tributario colombiano. El decreto oficial del
+ * calendario 2026 aún NO ha sido cargado. NO DEBEN presentarse al usuario
+ * como fechas definitivas.
  *
- * ACTUALIZACIÓN ANUAL:
- * 1. Cuando la DIAN publique el decreto del calendario, actualizar las fechas
- * 2. Cambiar `verified` a true para cada fecha confirmada
- * 3. Actualizar el campo `nationalDecree`
- * 4. Actualizar `lastUpdated`
+ * CONSECUENCIA: presentar una fecha estimada al usuario como oficial puede
+ * generar multa por extemporaneidad (Art. 641 ET, 5% mensual). Toda
+ * respuesta debe incluir la advertencia: "Fecha estimada — verificar contra
+ * el decreto oficial de la DIAN antes de presentar la declaración".
+ *
+ * ACTUALIZACIÓN ANUAL (cuando el decreto se publique):
+ * 1. Actualizar cada fecha con la del decreto oficial.
+ * 2. Cambiar `verified` a true para cada fecha confirmada.
+ * 3. Actualizar el campo `nationalDecree` en index.ts.
+ * 4. Actualizar `lastUpdated`.
  */
 
 import type { NationalDeadline } from './types';

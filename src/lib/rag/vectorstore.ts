@@ -3,6 +3,7 @@ import { Document } from '@langchain/core/documents';
 import type { VectorStore } from '@langchain/core/vectorstores';
 import path from 'path';
 import fs from 'fs';
+import { MODELS } from '@/lib/config/models';
 
 // ---------------------------------------------------------------------------
 // Storage paths
@@ -41,11 +42,12 @@ function getReadablePath(subdir: string): string {
 let cachedStore: VectorStore | null = null;
 let cachedEmbeddings: OpenAIEmbeddings | null = null;
 let usingMemoryFallback = false;
+let backendStatus: 'hnswlib' | 'memory_empty' | 'memory_hydrated' | 'uninitialized' = 'uninitialized';
 
 function getEmbeddings(): OpenAIEmbeddings {
   if (!cachedEmbeddings) {
     cachedEmbeddings = new OpenAIEmbeddings({
-      modelName: 'text-embedding-3-small',
+      modelName: MODELS.EMBEDDINGS,
       openAIApiKey: process.env.OPENAI_API_KEY,
     });
   }
@@ -53,9 +55,25 @@ function getEmbeddings(): OpenAIEmbeddings {
 }
 
 /**
- * Try loading HNSWLib (native C++). If it fails (e.g. on Vercel serverless
- * where the native binary isn't available), fall back to MemoryVectorStore
- * (pure JS, works everywhere but is ephemeral).
+ * Returns the current vector-store backend status.
+ * Used by observability endpoints to diagnose RAG health in production.
+ */
+export function getBackendStatus(): typeof backendStatus {
+  return backendStatus;
+}
+
+/**
+ * Backend loading strategy:
+ *   1. HNSWLib.load(vector_store/) — fast, persistent, requires native addon and
+ *      a pre-built index. Works in local dev where `npm run db:ingest` was run.
+ *   2. MemoryVectorStore — pure JS fallback. On Vercel the persisted index isn't
+ *      bundled (285 MB > 250 MB function limit), so we end up here. Empty by
+ *      default; specialists automatically fall back to search_web when
+ *      searchDocuments returns NO_RESULTS.
+ *
+ * When the product graduates from MVP this should switch to a managed vector
+ * DB (Upstash Vector, Neon pgvector) via the Vercel Marketplace so RAG works
+ * in production without a 285 MB bundle.
  */
 async function createStore(): Promise<VectorStore> {
   const embeddings = getEmbeddings();
@@ -65,33 +83,28 @@ async function createStore(): Promise<VectorStore> {
   try {
     const { HNSWLib } = await import('@langchain/community/vectorstores/hnswlib');
     const store = await HNSWLib.load(vectorStorePath, embeddings);
+    backendStatus = 'hnswlib';
     console.log('[vectorstore] Loaded HNSWLib from disk:', vectorStorePath);
     return store;
   } catch (hnswError) {
-    console.warn(
-      '[vectorstore] HNSWLib unavailable:',
-      hnswError instanceof Error ? hnswError.message : hnswError,
-    );
+    const msg = hnswError instanceof Error ? hnswError.message : String(hnswError);
+    if (process.env.VERCEL) {
+      console.warn('[vectorstore] HNSWLib unavailable on Vercel (expected in MVP):', msg);
+    } else {
+      console.warn('[vectorstore] HNSWLib unavailable. Run `npm run db:ingest` to build the local index:', msg);
+    }
   }
 
   // Attempt 2: MemoryVectorStore (pure JS, no native deps, ephemeral)
-  try {
-    const { MemoryVectorStore } = await import('@langchain/classic/vectorstores/memory');
-    const store = new MemoryVectorStore(embeddings);
-    usingMemoryFallback = true;
-    console.log('[vectorstore] Using MemoryVectorStore fallback (ephemeral, no native deps).');
-    return store;
-  } catch (memError) {
-    console.warn(
-      '[vectorstore] MemoryVectorStore also failed:',
-      memError instanceof Error ? memError.message : memError,
-    );
-  }
-
-  // Attempt 3: Bare minimum — empty placeholder that won't crash
   const { MemoryVectorStore } = await import('@langchain/classic/vectorstores/memory');
+  const store = new MemoryVectorStore(embeddings);
   usingMemoryFallback = true;
-  return new MemoryVectorStore(embeddings);
+  backendStatus = 'memory_empty';
+  console.warn(
+    '[vectorstore] Using empty MemoryVectorStore fallback. RAG searches will return NO_RESULTS; ' +
+      'agents should fall back to search_web. This is expected on Vercel until a managed vector DB is wired in.',
+  );
+  return store;
 }
 
 /**
@@ -203,7 +216,10 @@ export async function searchDocuments(
   }
 
   if (results.length === 0) {
-    return 'NO_RESULTS: No se encontraron documentos relevantes en la base de conocimiento local. No inventes información — usa search_web o indica al usuario que no encontraste resultados confiables.';
+    const reason = backendStatus === 'memory_empty'
+      ? 'El índice RAG no está disponible en este entorno (MVP sin vector DB externa).'
+      : 'La consulta no produjo coincidencias relevantes en los documentos indexados.';
+    return `NO_RESULTS: ${reason} ACCIÓN OBLIGATORIA: invoca la tool "search_web" con una query enfocada en normativa colombiana (ej: "Art. 240 ET Ley 2277/2022 site:dian.gov.co") para obtener fuentes oficiales. NO inventes citas ni artículos.`;
   }
 
   return results

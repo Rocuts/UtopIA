@@ -41,8 +41,12 @@ export const sanctionRequestSchema = z.object({
   grossIncome: z.number().nonnegative().optional(),
   difference: z.number().nonnegative().optional(),
   delayMonths: z.number().int().nonnegative().max(240).optional(),
+  /** Sólo para correccion: voluntaria (10%) vs provocada (20%). */
   isVoluntary: z.boolean().optional(),
+  /** Sólo para inexactitud: reducciones Arts. 640 y 709 ET. */
+  inexactitudReduction: z.enum(['none', 'art_709_half', 'art_709_quarter', 'art_640_50', 'art_640_75']).optional(),
   principal: z.number().nonnegative().optional(),
+  /** Tasa efectiva anual (%): tasa de usura vigente - 2 pp. Art. 635 ET. */
   annualRate: z.number().min(0).max(100).optional(),
   days: z.number().int().nonnegative().max(3_650).optional(),
 });

@@ -21,6 +21,12 @@ export interface NationalDeadline {
   legalBasis: string;
   /** Notas adicionales */
   notes?: string;
+  /**
+   * Indica si la fecha fue confirmada contra el decreto oficial DIAN publicado.
+   * `false` (default) = fecha inferida por patrón histórico (NO oficial).
+   * Cualquier respuesta al usuario DEBE incluir disclaimer cuando verified=false.
+   */
+  verified?: boolean;
 }
 
 // --- Municipal ---

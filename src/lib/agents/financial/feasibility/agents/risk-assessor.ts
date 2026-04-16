@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import OpenAI from 'openai';
+import { MODELS } from '@/lib/config/models';
 import { buildRiskAssessorPrompt } from '../prompts/risk-assessor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import type {
@@ -42,7 +43,7 @@ export async function runRiskAssessor(
   const response = await withRetry(
     () =>
       openai.chat.completions.create({
-        model: 'gpt-5.4-mini',
+        model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },

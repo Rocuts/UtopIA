@@ -1,25 +1,39 @@
 /**
  * Calculadora de Sanciones e Intereses Tributarios — Colombia
  *
- * Implements Colombian tax sanction calculations based on the Estatuto Tributario:
- * - Sancion por extemporaneidad (Art. 641 E.T.)
- * - Sancion por correccion (Art. 644 E.T.)
- * - Sancion por inexactitud (Art. 647 E.T.)
- * - Intereses moratorios (Art. 634 E.T.)
+ * Implementa los cálculos del Estatuto Tributario colombiano:
+ * - Sanción por extemporaneidad (Art. 641 E.T.)
+ * - Sanción por corrección (Art. 644 E.T.)
+ * - Sanción por inexactitud (Art. 647 E.T.) con reducciones Arts. 640 y 709 E.T.
+ * - Intereses moratorios (Arts. 634 y 635 E.T.) — INTERÉS COMPUESTO DIARIO.
  *
- * UVT 2026 = $52,374 COP (Resolución DIAN 000238 del 15-dic-2025)
- * UVT 2025 = $49,799 COP (valor anterior, ya no vigente)
+ * UVT 2026 = $52.374 COP (Resolución DIAN 000238 del 15-dic-2025).
+ *
+ * IMPORTANTE — tasa de interés:
+ * El Art. 635 E.T. exige aplicar la "tasa de usura menos 2 puntos porcentuales"
+ * vigente para el mes de la mora (publicada mensualmente por la Superfinanciera
+ * de Colombia). El valor por defecto es solo un fallback para demostración;
+ * en producción el caller DEBE pasar la tasa vigente del período.
  */
 
-// UVT value for 2026 (Resolución DIAN 000238 del 15 de diciembre de 2025)
 const UVT_2026 = 52_374;
 
-// Minimum sanction: 10 UVT
 const MIN_SANCTION_UVT = 10;
-const MIN_SANCTION = MIN_SANCTION_UVT * UVT_2026; // $523,740 COP
+const MIN_SANCTION = MIN_SANCTION_UVT * UVT_2026; // $523.740 COP
 
-// Default annual interest rate (tasa de usura aproximada 2026)
-const DEFAULT_ANNUAL_RATE = 27.44;
+/**
+ * Fallback únicamente para demos. En producción pasar la tasa de usura
+ * vigente certificada por la Superfinanciera para el mes de la mora,
+ * MENOS 2 puntos porcentuales (Art. 635 E.T. modificado por Ley 1819/2016).
+ */
+const DEFAULT_ANNUAL_RATE_EA = 25.44;
+
+export type InexactitudReduction =
+  | 'none'            // Liquidación oficial firme — sanción plena 100%
+  | 'art_709_half'    // Art. 709 E.T.: reducción a la mitad por aceptación tras requerimiento especial
+  | 'art_709_quarter' // Art. 709 E.T.: reducción a un cuarto por aceptación antes de ampliación
+  | 'art_640_50'      // Art. 640 E.T.: reducción 50% por gradualidad (sin antecedentes 4 años)
+  | 'art_640_75';     // Art. 640 E.T.: reducción 75% por gradualidad (sin antecedentes 2 años)
 
 export interface SanctionCalculation {
   type: 'extemporaneidad' | 'correccion' | 'inexactitud' | 'intereses_moratorios';
@@ -28,7 +42,10 @@ export interface SanctionCalculation {
   difference?: number;
   delayMonths?: number;
   isVoluntary?: boolean;
+  /** Reducciones aplicables Art. 647 — Arts. 640 / 709 ET. */
+  inexactitudReduction?: InexactitudReduction;
   principal?: number;
+  /** Tasa de usura - 2pp vigente (efectiva anual, %). Ver Art. 635 ET. */
   annualRate?: number;
   days?: number;
 }
@@ -191,102 +208,135 @@ function calcCorreccion(params: SanctionCalculation): SanctionResult {
 }
 
 /**
- * Sancion por inexactitud — Art. 647 E.T.
+ * Sanción por inexactitud — Art. 647 E.T.
  *
- * 100% of the difference in tax due (o menor saldo a favor).
- * Reduced to 50% if corrected before liquidacion oficial de revision.
+ * Base: 100% del mayor valor a pagar o menor saldo a favor.
  *
- * Minimum sanction: 10 UVT.
+ * Reducciones aplicables (se aplican sobre la base del 100%):
+ *   - Art. 709 E.T. (corrección provocada): mitad si se acepta en respuesta al
+ *     requerimiento especial; un cuarto si se acepta antes de la ampliación.
+ *   - Art. 640 E.T. (gradualidad): 50% o 75% si el contribuyente no tiene
+ *     antecedentes sancionatorios del mismo tipo en los últimos 2 o 4 años
+ *     respectivamente, según el caso.
+ *
+ * Sanción mínima: 10 UVT (Art. 639 E.T.).
  */
 function calcInexactitud(params: SanctionCalculation): SanctionResult {
-  const { difference = 0, isVoluntary = true } = params;
-  const rate = isVoluntary ? 0.50 : 1.00;
-  const rateLabel = isVoluntary ? '50%' : '100%';
-  const context = isVoluntary
-    ? 'con aceptacion y correccion antes de la liquidacion oficial de revision (sancion reducida)'
-    : 'determinada en liquidacion oficial de revision';
+  const { difference = 0, inexactitudReduction = 'none' } = params;
 
-  let amount = Math.round(difference * rate);
-  const formula = `${formatCOP(difference)} x ${rateLabel} = ${formatCOP(amount)}`;
+  // Base: 100% de la diferencia (Art. 647 inciso 1º E.T.)
+  const base = difference;
+
+  // Factor de reducción sobre la base del 100%
+  const reductionMap: Record<InexactitudReduction, { factor: number; label: string; article: string }> = {
+    none:           { factor: 1.00, label: '100% (plena)',          article: 'Art. 647 E.T.' },
+    art_709_half:   { factor: 0.50, label: '50% (reducida)',        article: 'Art. 709 E.T.' },
+    art_709_quarter:{ factor: 0.25, label: '25% (reducida)',        article: 'Art. 709 E.T.' },
+    art_640_50:     { factor: 0.50, label: '50% por gradualidad',   article: 'Art. 640 E.T.' },
+    art_640_75:     { factor: 0.25, label: '25% por gradualidad',   article: 'Art. 640 E.T.' },
+  };
+  const { factor, label, article } = reductionMap[inexactitudReduction];
+
+  let amount = Math.round(base * factor);
+  const formula = `${formatCOP(base)} x ${label} = ${formatCOP(amount)}`;
 
   let explanation =
-    `La sancion por inexactitud ${context} se calcula como el ${rateLabel} sobre la diferencia ` +
-    `de ${formatCOP(difference)}, resultando en ${formatCOP(amount)}.`;
+    `La sanción por inexactitud (Art. 647 E.T.) parte de una base del 100% sobre la diferencia ` +
+    `de ${formatCOP(difference)}. ` +
+    (inexactitudReduction === 'none'
+      ? `No se aplica reducción, por lo que la sanción es ${formatCOP(amount)}.`
+      : `Se aplica la reducción del ${article} (${label}), resultando en ${formatCOP(amount)}.`);
 
   if (amount < MIN_SANCTION) {
     amount = MIN_SANCTION;
-    explanation += ` Ajustado a la sancion minima de 10 UVT (${formatCOP(MIN_SANCTION)}).`;
+    explanation += ` Ajustado a la sanción mínima de 10 UVT (${formatCOP(MIN_SANCTION)}).`;
   }
 
   return {
-    type: 'Sancion por Inexactitud',
+    type: 'Sanción por Inexactitud',
     amount,
     amountFormatted: formatCOP(amount),
     formula: amount === MIN_SANCTION
-      ? `${formula} -> Ajustado a sancion minima: ${formatCOP(MIN_SANCTION)}`
+      ? `${formula} -> Ajustado a sanción mínima: ${formatCOP(MIN_SANCTION)}`
       : formula,
-    article: 'Art. 647 del Estatuto Tributario',
+    article: 'Art. 647 E.T. (con reducciones Arts. 640 y 709 E.T. cuando apliquen)',
     explanation,
     recommendations: [
-      isVoluntary
-        ? 'Al aceptar antes de la liquidacion oficial, la sancion se reduce al 50%. Esta es la opcion mas favorable.'
-        : 'La sancion plena del 100% aplica cuando hay liquidacion oficial. Evalue recursos legales.',
-      'Revise si la inexactitud se origina en diferencias de criterio (Art. 647 paragrafo) que podrian reducir o eliminar la sancion.',
-      'Documente todas las pruebas que sustenten las cifras declaradas originalmente.',
-      'Considere la posibilidad de una conciliacion contencioso-administrativa si el caso lo amerita.',
-      'Evalue la reduccion de sanciones del Art. 640 E.T. por gradualidad.',
+      'Verifique si la inexactitud se origina en diferencias de criterio interpretativo — el parágrafo del Art. 647 E.T. puede eliminar la sanción en ese caso.',
+      'Evalúe Art. 709 E.T.: aceptación total de los hechos del requerimiento especial reduce la sanción a la mitad o a un cuarto según el momento.',
+      'Evalúe Art. 640 E.T.: sin antecedentes en 2/4 años aplica reducción adicional del 75%/50%.',
+      'Documente exhaustivamente las pruebas que sustentan la cifra declarada originalmente.',
+      'Considere conciliación contencioso-administrativa (Art. 101 Ley 2277/2022) si hay litigio en curso.',
     ],
     details: {
       difference,
-      isVoluntary,
-      rate: rateLabel,
+      inexactitudReduction,
+      effectiveRate: label,
       minSanction: MIN_SANCTION,
     },
   };
 }
 
 /**
- * Intereses moratorios — Art. 634 E.T.
+ * Intereses moratorios — Arts. 634 y 635 E.T. (modificado por Ley 1819/2016).
  *
- * Apply the tasa de usura (bank interest rate) on the outstanding principal.
- * Calculated on a daily basis: (principal * dailyRate * days)
+ * Fórmula correcta: INTERÉS DIARIO COMPUESTO sobre la tasa de usura -2 pp
+ * vigente en el mes de la mora.
+ *
+ *   Interés = Principal × [ (1 + iEA)^(d/365) − 1 ]
+ *
+ * donde:
+ *   iEA = (tasa de usura vigente − 2 pp) / 100, expresada como efectiva anual.
+ *   d   = número de días de mora.
+ *
+ * NOTA: la tasa de usura cambia mes a mes (publicada por Superfinanciera).
+ * Si la mora cruza varios meses, lo técnicamente correcto es segmentar por
+ * mes y aplicar la tasa de cada período; esta función asume una única tasa
+ * para simplificar. El caller es responsable de pasar la tasa vigente.
  */
 function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
   const {
     principal = 0,
-    annualRate = DEFAULT_ANNUAL_RATE,
+    annualRate = DEFAULT_ANNUAL_RATE_EA,
     days = 30,
   } = params;
 
-  const dailyRate = annualRate / 100 / 365;
-  const amount = Math.round(principal * dailyRate * days);
-  const formula = `${formatCOP(principal)} x (${annualRate}% / 365) x ${days} dias = ${formatCOP(amount)}`;
+  const iEA = annualRate / 100;
+  // Interés compuesto diario: (1 + iEA)^(d/365) - 1
+  const factor = Math.pow(1 + iEA, days / 365) - 1;
+  const amount = Math.round(principal * factor);
+  const dailyEquivalent = (Math.pow(1 + iEA, 1 / 365) - 1) * 100;
+
+  const formula =
+    `${formatCOP(principal)} × [ (1 + ${annualRate}%)^(${days}/365) − 1 ] = ${formatCOP(amount)}`;
 
   const explanation =
-    `Los intereses moratorios se calculan sobre un capital de ${formatCOP(principal)} ` +
-    `a la tasa efectiva anual del ${annualRate}% (tasa de usura vigente), ` +
-    `equivalente a una tasa diaria de ${(dailyRate * 100).toFixed(6)}%, ` +
-    `por ${days} dias de mora, resultando en ${formatCOP(amount)}.`;
+    `Los intereses moratorios se calculan con INTERÉS DIARIO COMPUESTO (Art. 635 E.T.) ` +
+    `sobre un capital de ${formatCOP(principal)}, a una tasa efectiva anual del ${annualRate}% ` +
+    `(= tasa de usura vigente del período − 2 puntos porcentuales). Tasa diaria equivalente: ` +
+    `${dailyEquivalent.toFixed(6)}%. Por ${days} días de mora, el factor acumulado es ` +
+    `${(factor * 100).toFixed(4)}%, resultando en ${formatCOP(amount)}.`;
 
   return {
     type: 'Intereses Moratorios',
     amount,
     amountFormatted: formatCOP(amount),
     formula,
-    article: 'Art. 634 del Estatuto Tributario',
+    article: 'Arts. 634 y 635 E.T. (interés diario compuesto)',
     explanation,
     recommendations: [
-      'Los intereses moratorios se causan dia a dia. Pague lo antes posible para minimizar el monto.',
-      'Verifique la tasa de usura vigente certificada por la Superfinanciera para el periodo de mora.',
-      'Los intereses moratorios son deducibles del impuesto sobre la renta en ciertos casos.',
-      'Considere solicitar facilidades de pago (Art. 814 E.T.) si el monto total es significativo.',
-      'Recuerde que los intereses se calculan sobre el impuesto o retencion a cargo, no sobre las sanciones.',
+      'Los intereses moratorios se causan día a día de forma compuesta. Pague lo antes posible para minimizar.',
+      'La tasa aplicable es la tasa de usura vigente del mes de mora MENOS 2 puntos porcentuales (Art. 635 E.T. mod. Ley 1819/2016). Consulte la certificación mensual de la Superfinanciera.',
+      'Si la mora abarca varios meses, aplique la tasa vigente de cada mes por separado — esta función asume una única tasa.',
+      'Considere facilidades de pago (Art. 814 E.T.) si el monto total es significativo.',
+      'Los intereses se liquidan sobre el impuesto o retención a cargo — NO sobre las sanciones.',
     ],
     details: {
       principal,
       annualRate,
-      dailyRate: Number((dailyRate * 100).toFixed(6)),
+      dailyEquivalentPct: Number(dailyEquivalent.toFixed(6)),
       days,
+      compoundFactorPct: Number((factor * 100).toFixed(4)),
     },
   };
 }

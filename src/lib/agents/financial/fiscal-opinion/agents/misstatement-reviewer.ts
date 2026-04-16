@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import OpenAI from 'openai';
+import { MODELS } from '@/lib/config/models';
 import { buildMisstatementReviewerPrompt } from '../prompts/misstatement-reviewer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import type { CompanyInfo } from '../../types';
@@ -31,7 +32,7 @@ export async function runMisstatementReviewer(
   const response = await withRetry(
     () =>
       openai.chat.completions.create({
-        model: 'gpt-5.4-mini',
+        model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildMisstatementReviewerPrompt(company, language) },
           { role: 'user', content: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}` },

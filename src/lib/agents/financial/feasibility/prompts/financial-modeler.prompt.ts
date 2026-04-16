@@ -58,15 +58,25 @@ ${project.department ? `- **Departamento:** ${project.department}` : ''}
 
 ${taxContext}
 
-### Depreciacion Fiscal (Art. 137 ET — Linea Recta)
-| Tipo de Activo | Vida Util Fiscal | Tasa Anual |
-|----------------|-----------------|------------|
-| Construcciones y edificaciones | 20 anos | 5% |
-| Maquinaria y equipo | 10 anos | 10% |
-| Equipo de oficina | 10 anos | 10% |
-| Equipo de computacion | 5 anos | 20% |
-| Vehiculos | 5 anos | 20% |
-| Equipo de comunicaciones | 5 anos | 20% |
+### Depreciacion Fiscal — Tasas Maximas Art. 137 ET (Linea Recta)
+Tasas maximas anuales reglamentadas por el Decreto 1625/2016 tras Ley 1819/2016:
+
+| Tipo de Activo | Vida Util Minima | Tasa Anual Maxima |
+|----------------|-----------------|-------------------|
+| Construcciones y edificaciones | 45 anos | 2,22% |
+| Acueductos, plantas y redes | 40 anos | 2,50% |
+| Vias de comunicacion | 40 anos | 2,50% |
+| Flota y equipo aereo | 30 anos | 3,33% |
+| Flota y equipo ferreo | 20 anos | 5,00% |
+| Maquinaria y equipo | 10 anos | 10,00% |
+| Muebles y enseres / Equipo de oficina | 10 anos | 10,00% |
+| Flota y equipo de transporte terrestre (vehiculos) | 10 anos | 10,00% |
+| Equipo medico cientifico | 8 anos | 12,50% |
+| Equipo de computacion | 5 anos | 20,00% |
+| Redes de procesamiento de datos | 5 anos | 20,00% |
+| Equipo de comunicaciones | 5 anos | 20,00% |
+
+IMPORTANTE: estas son tasas MAXIMAS. La empresa puede depreciar en un plazo mayor si su estudio tecnico lo sustenta. Si NIIF usa vidas utiles distintas, se origina diferencia temporaria -> impuesto diferido (NIC 12 / Art. 772-1 ET).
 
 ### Formulas de Evaluacion
 
@@ -233,20 +243,25 @@ function buildTaxContext(project: ProjectInfo): string {
   }
 
   if (project.isEconomiaNaranja) {
-    incentives.push(`### Incentivo Economia Naranja
-- Renta exenta hasta por 7 anos (si el beneficio fue originalmente otorgado bajo Ley 1834/2017)
-- Requisitos: ingresos brutos < 80.000 UVT ($4.189.920.000 COP), minimo 3 empleados
-- Actividades cubiertas: industrias culturales, creativas, software, videojuegos, audiovisuales
-- Base legal: Art. 235-2 numeral 1 ET (verificar vigencia)`);
+    incentives.push(`### Economia Naranja — DERECHO ADQUIRIDO UNICAMENTE
+- AVISO NORMATIVO: El regimen Economia Naranja (Art. 235-2 numeral 1 ET, Ley 1834/2017) fue DEROGADO para nuevos contribuyentes por la Ley 2277/2022.
+- Solo aplica como DERECHO ADQUIRIDO para empresas que obtuvieron la calificacion antes del 30 de junio de 2022 y mantienen los requisitos.
+- Requisitos (legacy): ingresos brutos < 80.000 UVT, minimo 3 empleados, actividades culturales/creativas certificadas.
+- Accion obligatoria: verificar resolucion de calificacion vigente y fecha de otorgamiento ANTES de aplicar este beneficio.`);
   }
 
   if (incentives.length === 0) {
-    incentives.push(`### Incentivos Tributarios Potenciales (evaluar aplicabilidad)
-- **Art. 256 ET:** Descuento tributario del 30% de inversiones en I+D+i (aprobado por Colciencias/MinCiencias)
-- **ZOMAC:** Tarifa progresiva 0%/25%/50%/100% de tarifa general (si municipio aplica)
-- **Zonas Francas:** Tarifa del 20% + exencion arancelaria (requiere Plan Maestro)
-- **Economia Naranja:** Renta exenta hasta 7 anos (sectores creativos, verificar vigencia)
-- **Mega-inversiones (Art. 235-4 ET):** Tarifa 27% para inversiones > 30M UVT`);
+    incentives.push(`### Incentivos Tributarios Vigentes 2026 (evaluar aplicabilidad)
+- **Descuento I+D+i (Art. 256 ET):** 30% del valor invertido como descuento del impuesto a cargo (Ley 2277/2022). Requiere calificacion MinCiencias/CNBT. Tope 25% del impuesto a cargo depurado, carry-forward 4 anos.
+- **Descuento inversiones ambientales (Art. 255 ET):** 25% del valor invertido. Requiere certificacion ambiental.
+- **ZOMAC:** Tarifa progresiva 0%/25%/50%/100% de la tarifa general segun antiguedad (solo si el municipio esta en listado ZOMAC vigente).
+- **Zonas Francas (Art. 240-1 ET mod. Ley 2277/2022):** Tarifa dual — 20% sobre renta por exportaciones (requiere Plan de Internacionalizacion aprobado por MinCIT) y 35% sobre el resto.
+- **CHC (Compania Holding Colombiana, Arts. 894-898 ET):** Dividendos de filiales extranjeras exentos si cumple requisitos.
+
+REGIMENES DEROGADOS (NO PROPONER para nuevos proyectos):
+- Megainversiones (Arts. 235-3 y 235-4 ET): derogado por Ley 2277/2022. Solo derecho adquirido con contrato de estabilidad anterior a dic-2022.
+- Economia Naranja: derogado por Ley 2277/2022 para nuevos contribuyentes.
+- Renta Exenta Desarrollo del Campo: derogado por Ley 2277/2022.`);
   }
 
   return incentives.join('\n\n');

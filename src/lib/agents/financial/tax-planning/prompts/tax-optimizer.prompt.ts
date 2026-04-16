@@ -28,33 +28,43 @@ Analizar la estructura tributaria actual de la empresa, identificar oportunidade
 
 ## BASE NORMATIVA COLOMBIANA 2026 (USAR EXACTAMENTE ESTOS ARTICULOS)
 
-### Tarifas del Impuesto de Renta
+### Tarifas del Impuesto de Renta (vigentes 2026 tras Ley 2277/2022)
 
 | Regimen | Base Legal | Tarifa | Requisitos Clave |
 |---------|-----------|--------|------------------|
-| **Regimen Ordinario PJ** | Art. 240 ET | 35% | Tarifa general para personas juridicas |
-| **Regimen SIMPLE** | Arts. 903-916 ET | 1,8% - 14,5% | Tarifas consolidadas por sector; ingresos brutos <= 100.000 UVT ($5.237.400.000 COP en 2026) |
-| **Zonas Francas** | Art. 240-1 ET | 20% | Tarifa preferencial; requisitos de empleo e inversion; plan maestro aprobado por CIZF |
-| **ZOMAC** | Art. 237 Ley 1819/2016 | Progresiva: 0% -> 25% -> 50% -> 100% de tarifa general | Micro/pequenas 0% (primeros 5 anos), 25% (siguientes 5), 50% (siguientes 5), 100% despues |
-| **Economia Naranja** | Art. 235-2 ET, Num. 1 | 0% (renta exenta 7 anos) | Minimo 3 empleados; ingresos < 80.000 UVT; actividades culturales/creativas certificadas |
+| **Regimen Ordinario PJ** | Art. 240 ET | 35% | Tarifa general personas juridicas |
+| **Puntos adicionales sector financiero** | Art. 240 par. 2 ET | +5 pp (= 40% total) hasta renta gravable <= 120.000 UVT | Establecimientos de credito, aseguradoras, reaseguradoras, comisionistas de bolsa (Ley 2277/2022) |
+| **Regimen SIMPLE** | Arts. 903-916 ET | 1,2% - 8,3% segun grupo | Ingresos brutos <= 100.000 UVT ($5.237.400.000 en 2026). Grupo I (comercio/tiendas): 1,2%-5,7%; Grupo II (actividades industriales): 1,6%-5,7%; Grupo III (servicios profesionales/consultoria): 3,7%-8,3%; Grupo IV (educacion/salud): 3,7%-8,3% |
+| **Zonas Francas** | Art. 240-1 ET (mod. Ley 2277/2022) | 20% solo sobre renta por exportaciones (requiere plan de internacionalizacion); 35% sobre renta no exportadora | Tarifa dual post-2023: exige plan aprobado por MinCIT |
+| **ZOMAC** | Art. 237 Ley 1819/2016 | Progresiva 0% -> 25% -> 50% -> 100% de tarifa general | Micro/pequenas 0% (anos 1-5), 25% (6-10), 50% (11-15), 100% (16+) |
+| **CHC (Holding)** | Arts. 894-898 ET | Dividendos de filiales extranjeras exentos; enajenacion de participaciones a no residentes no gravada | Requisitos Art. 894 ET: participacion >=10%, periodo >=12 meses |
 
-### Descuentos Tributarios
+### Regimenes DEROGADOS (NO usar como estrategia vigente)
+
+| Regimen Derogado | Estado | Accion recomendada |
+|------------------|--------|--------------------|
+| **Megainversiones** (Arts. 235-3 y 235-4 ET) | DEROGADO por Art. 96 Ley 2277/2022 | Solo aplica como derecho adquirido para proyectos con contrato de estabilidad firmado antes de 31-dic-2022. NO ofrecer para nuevos proyectos. |
+| **Economia Naranja** (Art. 235-2 Num. 1 ET) | DEROGADO por Ley 2277/2022 para nuevos contribuyentes | Derecho adquirido solo para empresas calificadas antes del 30-jun-2022. Verificar resolucion de calificacion vigente. |
+| **Renta Exenta Desarrollo del Campo** (Art. 235-2 Num. 2 ET) | DEROGADO por Ley 2277/2022 | Idem: derecho adquirido con calificacion previa. |
+
+### Descuentos Tributarios (vigentes 2026)
 
 | Descuento | Base Legal | Porcentaje | Condiciones |
 |-----------|-----------|------------|-------------|
-| **I+D+i** | Art. 256 ET | 25% del valor invertido como descuento de renta | Proyectos calificados por CNBT o Colciencias; limite 25% del impuesto a cargo |
-| **Inversiones Ambientales** | Art. 255 ET | 25% del valor invertido | Certificacion de autoridad ambiental; inversiones en control y mejora del medio ambiente |
-| **Donaciones** | Art. 257 ET | 25% del valor donado | Entidades sin animo de lucro del regimen especial; limite 25% del impuesto |
-| **IVA en bienes de capital** | Art. 258-1 ET | Descuento del IVA pagado | Adquisicion de bienes de capital; distribuido en 3 anos |
+| **I+D+i** | Art. 256 ET (mod. Ley 2277/2022) | **30%** del valor invertido como descuento | Proyectos calificados por MinCiencias/CNBT. Tope: no puede exceder 25% del impuesto a cargo depurado. Carry-forward 4 anos del excedente no aplicado (Art. 258 ET). |
+| **Inversiones Ambientales** | Art. 255 ET | 25% del valor invertido | Certificacion de autoridad ambiental competente. Tope 25% del impuesto a cargo. Carry-forward 4 anos. |
+| **Donaciones a ESAL** | Art. 257 ET | 25% del valor donado | Entidades Regimen Tributario Especial (Art. 19 ET). Tope 25% del impuesto a cargo. |
+| **IVA en bienes de capital productivos** | Art. 258-1 ET | 100% del IVA pagado como descuento | Unicamente para bienes de capital vinculados a actividad productora de renta. Toma en el ano de pago. |
 
-### Dividendos (Ano Gravable 2026)
+### Dividendos (Ano Gravable 2026 — reforma Ley 2277/2022 Art. 3)
 
-| Concepto | Base Legal | Tarifa |
-|----------|-----------|--------|
-| **Dividendos PF residente (gravados)** | Art. 242 ET | Tarifas marginales: 0% hasta 1.090 UVT, 19% entre 1.090 y 1.700 UVT, luego escala hasta 39% |
-| **Dividendos PF residente (no gravados)** | Art. 242 ET | 10% sobre monto que exceda 300 UVT |
-| **Dividendos PJ receptora nacional** | Art. 49 ET | No constitutivos de renta si cumplen Art. 49 ET (primera distribucion) |
-| **Dividendos no constitutivos** | Art. 32 ET, Art. 49 ET | Exentos en cabeza de sociedad nacional receptora |
+| Concepto | Base Legal | Tratamiento |
+|----------|-----------|-------------|
+| **Dividendos no gravados a PF residente** | Art. 242 ET (mod. Ley 2277/2022) | Se INTEGRAN a la cedula general del beneficiario y tributan con la tarifa marginal progresiva (0% a 39%, Art. 241 ET). Retencion en la fuente 15% sobre el monto que exceda 1.090 UVT. |
+| **Dividendos gravados a PF residente** | Art. 242 ET | Tarifa 35% (tarifa PJ) sobre el dividendo GRAVADO, y el remanente se integra a la cedula general. |
+| **Dividendos a PF no residente y sucesiones** | Art. 245 ET (mod. Ley 2277/2022) | 20% (antes 10%) sobre dividendos no gravados a no residentes. |
+| **Dividendos a PJ nacional receptora** | Art. 242-1 ET | Retencion 10% en la fuente trasladable al beneficiario final. NO constituyen renta (Art. 49 ET) si provienen de utilidades ya gravadas en cabeza de la sociedad. |
+| **Dividendos via holding CHC** | Arts. 894-898 ET | Dividendos de filiales extranjeras hacia la CHC: exentos (si cumple requisitos). |
 
 ### Estructuras Societarias (Holdings)
 
@@ -82,11 +92,12 @@ Analizar la estructura tributaria actual de la empresa, identificar oportunidade
 - Determina el impuesto a cargo estimado actual
 
 ### Paso 2: Identificacion de Oportunidades
-- Evalua elegibilidad para regimenes preferenciales (SIMPLE, Zona Franca, ZOMAC, Economia Naranja)
-- Identifica descuentos tributarios no aprovechados (I+D+i, ambientales, donaciones)
-- Analiza optimizacion de estructura societaria (holding, escision, fusion)
-- Evalua estrategias de diferimiento de ingresos y aceleracion de deducciones
-- Considera beneficios por ubicacion geografica (ZOMAC, zonas francas)
+- Evalua elegibilidad para regimenes preferenciales VIGENTES (SIMPLE, Zona Franca con plan de internacionalizacion, ZOMAC, CHC).
+- NO propongas regimenes DEROGADOS (Megainversiones, Economia Naranja, Renta Exenta Campo) salvo que haya derecho adquirido documentado.
+- Identifica descuentos tributarios no aprovechados (I+D+i 30%, ambientales 25%, donaciones 25%, IVA bienes de capital 100%).
+- Analiza optimizacion de estructura societaria (holding CHC, escision, fusion).
+- Evalua diferimiento de ingresos y aceleracion de deducciones dentro del marco legal.
+- Considera beneficios por ubicacion geografica (ZOMAC vigente).
 
 ### Paso 3: Cuantificacion de Estrategias
 Para CADA estrategia propuesta:
@@ -118,13 +129,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 \`\`\`
 
 ## REGLAS ANTI-ALUCINACION (OBLIGATORIO)
-- SOLO cita articulos del Estatuto Tributario que EXISTAN. No inventes numeros de articulos.
-- Usa las tarifas EXACTAS indicadas arriba (35% ordinario, 20% zona franca, etc.). NO aproximes.
+- SOLO cita articulos del Estatuto Tributario que EXISTAN y esten VIGENTES. Verifica que no hayan sido derogados por la Ley 2277/2022.
+- Usa las tarifas EXACTAS indicadas arriba. NO aproximes ni inventes rangos.
+- NUNCA propongas Megainversiones ni Economia Naranja como beneficios vigentes — fueron derogados por la Ley 2277/2022 y solo sobreviven como derecho adquirido.
+- La tabla de dividendos Art. 242 ET vigente es la post-Ley 2277/2022: integracion a cedula general + retencion 15% sobre exceso de 1.090 UVT. La escala antigua (10% sobre exceso de 300 UVT) quedo derogada.
+- Descuento I+D+i Art. 256 ET = 30% (no 25%), tras Ley 2277/2022.
+- Regimen SIMPLE: tarifas 1,2% a 8,3% segun grupo. NUNCA menciones 14,5% como techo.
 - Si no tienes datos suficientes para calcular un ahorro, indica "Se requiere informacion adicional: [dato faltante]" en lugar de inventar cifras.
-- El UVT 2026 es EXACTAMENTE $52.374 COP. No uses otro valor.
+- El UVT 2026 es EXACTAMENTE $52.374 COP.
 - Todas las cifras monetarias en formato colombiano: $1.234.567,89 (punto miles, coma decimales).
-- Si una estrategia tiene riesgos legales, mencionalo explicitamente. NO presentes opciones ilegales como "optimizacion".
-- Diferencia claramente entre ELUSION fiscal (legal, planeacion tributaria) y EVASION fiscal (ilegal).
+- Diferencia ELUSION (legal) vs EVASION (ilegal). Nunca propongas lo segundo.
 
 ${langInstruction}`;
 }

@@ -28,6 +28,13 @@ const COLORS = {
 
 const FONT_MAIN = 'Calibri';
 
+// Colombian currency format codes.
+// The [$-es-CO] LCID prefix forces Excel to render with Colombian locale rules:
+//   thousands separator = "."  |  decimal separator = ","
+// producing: $1.234.567,89  (regardless of the viewer's OS regional settings).
+const NUM_FMT_COP = '[$-es-CO]"$"#,##0.00';
+const NUM_FMT_COP_INT = '[$-es-CO]"$"#,##0';
+
 // ---------------------------------------------------------------------------
 // Main export function
 // ---------------------------------------------------------------------------
@@ -283,9 +290,9 @@ function addValidationSheet(wb: ExcelJS.Workbook, prep: PreprocessedBalance): vo
     r.getCell(1).value = c.code;
     r.getCell(2).value = c.name;
     r.getCell(3).value = c.auxiliaryTotal;
-    r.getCell(3).numFmt = '#,##0.00';
+    r.getCell(3).numFmt = NUM_FMT_COP;
     r.getCell(4).value = c.reportedTotal ?? 'N/A';
-    if (typeof r.getCell(4).value === 'number') r.getCell(4).numFmt = '#,##0.00';
+    if (typeof r.getCell(4).value === 'number') r.getCell(4).numFmt = NUM_FMT_COP;
     r.getCell(5).value = c.discrepancy > 1 ? 'DISCREPANCIA' : 'OK';
     r.getCell(5).font = {
       name: FONT_MAIN, bold: true,
@@ -312,7 +319,7 @@ function addValidationSheet(wb: ExcelJS.Workbook, prep: PreprocessedBalance): vo
       ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true };
       ws.getRow(row).getCell(2).value = d.description;
       ws.getRow(row).getCell(3).value = d.difference;
-      ws.getRow(row).getCell(3).numFmt = '#,##0.00';
+      ws.getRow(row).getCell(3).numFmt = NUM_FMT_COP;
       row++;
     }
   }
@@ -399,11 +406,11 @@ function addAccountRow(
   r.getCell(2).value = name;
   r.getCell(2).font = { name: FONT_MAIN, size: 9 };
   r.getCell(3).value = balance;
-  r.getCell(3).numFmt = '"$"#,##0.00';
+  r.getCell(3).numFmt = NUM_FMT_COP;
   r.getCell(3).font = { name: FONT_MAIN, size: 9 };
   if (previousBalance !== undefined) {
     r.getCell(4).value = previousBalance;
-    r.getCell(4).numFmt = '"$"#,##0.00';
+    r.getCell(4).numFmt = NUM_FMT_COP;
     r.getCell(4).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
   }
 
@@ -422,7 +429,7 @@ function addTotalRow(ws: ExcelJS.Worksheet, row: number, label: string, amount: 
   r.getCell(2).value = label;
   r.getCell(2).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.darkNavy } };
   r.getCell(3).value = amount;
-  r.getCell(3).numFmt = '"$"#,##0.00';
+  r.getCell(3).numFmt = NUM_FMT_COP;
   r.getCell(3).font = { name: FONT_MAIN, bold: true, size: 10 };
 
   // Top border for total rows
