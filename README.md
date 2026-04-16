@@ -247,7 +247,7 @@ SMMLV 2026: $1,423,500 COP. Incentivos modelados: ZOMAC (tarifa progresiva 0%→
 | **RAG** | LangChain + HNSWLib-node (vector store), `text-embedding-3-small` |
 | **Busqueda Web** | Tavily API con filtrado por dominio (dian.gov.co, actualicese.com, etc.) |
 | **Voz** | OpenAI Realtime API sobre WebRTC |
-| **UI** | Tailwind CSS 4, Motion (Framer Motion v12), Lucide React, React Three Fiber |
+| **UI** | Tailwind CSS 4, Motion (Framer Motion v12), Lenis (smooth scroll, root mode), Lucide React, React Three Fiber |
 | **Design System** | 12 componentes primitivos propios, token system, barrel export |
 | **i18n** | Contexto personalizado (es/en) con persistencia localStorage |
 | **Seguridad** | PII redaction, CSP headers, Zod schemas, rate limiting, magic bytes validation |

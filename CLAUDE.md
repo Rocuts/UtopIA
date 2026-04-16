@@ -134,3 +134,8 @@ Tools are defined in `src/lib/agents/tools/registry.ts` (OpenAI function-calling
 - New specialist agents extend `BaseSpecialist`, get a prompt file, and register in `SPECIALISTS` map in `orchestrator.ts` + `AGENT_TOOLS` map in `registry.ts`
 - New financial pipeline agents are standalone functions in `src/lib/agents/financial/agents/`, wired in `src/lib/agents/financial/orchestrator.ts`
 - New audit agents follow the same pattern in `src/lib/agents/financial/audit/agents/`, wired in the audit orchestrator. Each auditor outputs structured JSON findings parsed by `parseAuditorOutput()`
+
+## Layout Gotchas
+
+- **Lenis smooth scroll is global.** `src/app/layout.tsx` wraps the whole app with `<SmoothScroll>` → `ReactLenis root`. Lenis hijacks wheel events at the document level to drive smooth scrolling. Any subtree that relies on internal `overflow-y-auto` containers (e.g. the workspace shell `src/app/workspace/layout.tsx`, fullscreen modals) **must** carry `data-lenis-prevent` on an ancestor or wheel events never reach the scrollable child and mouse-wheel scroll dies silently. The workspace shell root `<div>` already has it — preserve it when editing that layout.
+- Do not diagnose dead-wheel-scroll bugs by blaming `overflow-hidden`. `overflow-hidden` does not intercept wheel events; Lenis does. Check `data-lenis-prevent` placement first.
