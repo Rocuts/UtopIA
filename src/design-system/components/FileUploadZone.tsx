@@ -134,7 +134,9 @@ export function FileUploadZone({
           onChange={handleSelect}
           className="hidden"
           disabled={disabled}
-          aria-hidden="true"
+          aria-label={label}
+          aria-describedby={sublabel ? 'file-upload-hint' : undefined}
+          tabIndex={-1}
         />
 
         <AnimatePresence mode="wait">

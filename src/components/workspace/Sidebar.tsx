@@ -400,6 +400,7 @@ export function Sidebar() {
               isExpanded ? 'px-3 py-2 justify-start' : 'p-2 justify-center',
             )}
             aria-label="Chat General"
+            aria-current={activeCaseType === 'general_chat' ? 'page' : undefined}
             title={!isExpanded ? 'Chat General' : undefined}
           >
             <MessageSquare className="w-4 h-4 shrink-0" />

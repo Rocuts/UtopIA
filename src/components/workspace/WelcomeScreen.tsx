@@ -116,7 +116,9 @@ export function WelcomeScreen() {
             {es ? 'Su firma contable, potenciada por IA' : 'Your accounting firm, powered by AI'}
           </span>
           <button
+            type="button"
             onClick={() => router.push('/workspace/settings')}
+            aria-label={es ? 'Conectar un ERP' : 'Connect an ERP'}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-[#525252] border border-[#e5e5e5] hover:border-[#D4A017] hover:text-[#D4A017] transition-colors"
           >
             <Plug className="w-3.5 h-3.5" />

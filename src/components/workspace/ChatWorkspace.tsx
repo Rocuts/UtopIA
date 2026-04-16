@@ -911,7 +911,7 @@ export function ChatWorkspace({
           <button type="button" onClick={toggleVoice} className={cn('p-2.5 rounded flex items-center justify-center shrink-0 transition-colors', voiceMode ? 'text-[#ef4444] bg-[#fef2f2]' : 'text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]')} aria-pressed={voiceMode} aria-label={voiceMode ? 'Detener voz' : 'Voz'}>
             {voiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
-          <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.heic" onChange={handleFileSelect} className="hidden" />
+          <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.heic" onChange={handleFileSelect} className="hidden" aria-label={language === 'es' ? 'Seleccionar archivo para cargar' : 'Select file to upload'} />
           <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-2.5 rounded flex items-center justify-center shrink-0 transition-colors text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] disabled:opacity-50" aria-label="Subir documento">
             <Upload className="w-4 h-4" />
           </button>

@@ -711,6 +711,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
           <button
             type="button"
             onClick={onConnect}
+            aria-label={`Conectar ${provider.name}`}
             className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] hover:bg-[#FFFBEB] transition-all"
           >
             Conectar
