@@ -83,7 +83,7 @@ export async function orchestrate(
   messages: ChatMessage[],
   options: OrchestrateOptions,
 ): Promise<OrchestrateResult> {
-  const { language, useCase, documentContext, nitContext, onProgress } = options;
+  const { language, useCase, documentContext, nitContext, erpConnections, onProgress } = options;
 
   const lastMessage = messages[messages.length - 1].content;
   const conversationHistory = messages.slice(0, -1).map((m) => ({
@@ -127,6 +127,7 @@ export async function orchestrate(
     useCase,
     documentContext,
     nitContext,
+    erpConnections,
     conversationHistory,
     onProgress,
   };

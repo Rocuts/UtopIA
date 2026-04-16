@@ -60,6 +60,8 @@ export interface SpecialistContext {
   documentContext?: string;
   nitContext: NITContext | null;
   conversationHistory: { role: string; content: string }[];
+  /** Connected ERP integrations for real-time accounting data */
+  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
   /** Callback for streaming progress events */
   onProgress?: (event: ProgressEvent) => void;
 }
@@ -91,6 +93,8 @@ export interface OrchestrateOptions {
   useCase: string;
   documentContext?: string;
   nitContext: NITContext | null;
+  /** Connected ERP integrations for real-time accounting data */
+  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
   /** SSE progress callback */
   onProgress?: (event: ProgressEvent) => void;
 }

@@ -17,6 +17,11 @@ export const chatRequestSchema = z.object({
     .default(''),
   /** Optional full document text passed from the upload flow for direct analysis. */
   documentContext: z.string().max(100_000).optional(),
+  /** Connected ERP integrations — provider + credentials only (no UI metadata). */
+  erpConnections: z.array(z.object({
+    provider: z.string(),
+    credentials: z.record(z.string(), z.string()),
+  })).optional(),
 });
 
 // ---- RAG route ----

@@ -188,15 +188,53 @@ const GET_TAX_CALENDAR: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
+const QUERY_ERP: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'query_erp',
+    description:
+      'Consulta datos contables en tiempo real desde el ERP conectado del usuario. ' +
+      'Usa esta herramienta cuando el usuario pregunte sobre datos financieros reales de su empresa: ' +
+      'balances, facturas, movimientos contables, terceros, o plan de cuentas. ' +
+      'NO la uses para preguntas teoricas o normativas — solo para datos reales de la empresa.',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['trial_balance', 'invoices', 'journal_entries', 'contacts', 'chart_of_accounts'],
+          description:
+            'Tipo de datos a consultar: trial_balance (balance de prueba), invoices (facturas), ' +
+            'journal_entries (movimientos contables), contacts (terceros/clientes/proveedores), ' +
+            'chart_of_accounts (plan de cuentas PUC)',
+        },
+        period: {
+          type: 'string',
+          description:
+            'Periodo fiscal: "2025" (año completo), "2025-Q1" (trimestre), "2025-06" (mes). ' +
+            'Usar para trial_balance y chart_of_accounts.',
+        },
+        dateFrom: { type: 'string', description: 'Fecha inicio ISO (YYYY-MM-DD). Para invoices y journal_entries.' },
+        dateTo: { type: 'string', description: 'Fecha fin ISO (YYYY-MM-DD). Para invoices y journal_entries.' },
+        accountCode: {
+          type: 'string',
+          description: 'Codigo de cuenta PUC para filtrar (ej: "41" para ingresos, "52" para gastos de ventas).',
+        },
+      },
+      required: ['type'],
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Agent -> Tool mapping
 // ---------------------------------------------------------------------------
 
 const AGENT_TOOLS = {
-  tax: [SEARCH_DOCS, SEARCH_WEB, CALCULATE_SANCTION, ANALYZE_DOCUMENT, ASSESS_RISK, GET_TAX_CALENDAR],
-  accounting: [SEARCH_DOCS, SEARCH_WEB, ANALYZE_DOCUMENT, ASSESS_RISK],
+  tax: [SEARCH_DOCS, SEARCH_WEB, CALCULATE_SANCTION, ANALYZE_DOCUMENT, ASSESS_RISK, GET_TAX_CALENDAR, QUERY_ERP],
+  accounting: [SEARCH_DOCS, SEARCH_WEB, ANALYZE_DOCUMENT, ASSESS_RISK, QUERY_ERP],
   documents: [SEARCH_DOCS, SEARCH_WEB, ANALYZE_DOCUMENT, ASSESS_RISK],
-  strategy: [SEARCH_DOCS, SEARCH_WEB, CALCULATE_SANCTION, ANALYZE_DOCUMENT, DRAFT_DIAN_RESPONSE, ASSESS_RISK, GET_TAX_CALENDAR],
+  strategy: [SEARCH_DOCS, SEARCH_WEB, CALCULATE_SANCTION, ANALYZE_DOCUMENT, DRAFT_DIAN_RESPONSE, ASSESS_RISK, GET_TAX_CALENDAR, QUERY_ERP],
 } as const;
 
 export type AgentName = keyof typeof AGENT_TOOLS;
@@ -211,6 +249,7 @@ export function getToolsForAgent(agent: AgentName): OpenAI.Chat.Completions.Chat
 
 export interface ToolExecContext {
   documentContext?: string;
+  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
 }
 
 export interface ToolExecResult {
@@ -221,6 +260,8 @@ export interface ToolExecResult {
     webSources?: string[];
     riskAssessment?: RiskAssessment;
     sanctionCalculation?: SanctionResult;
+    erpProvider?: string;
+    erpRecordCount?: number;
   };
 }
 
@@ -291,6 +332,16 @@ export async function executeTool(
       return {
         content: JSON.stringify(result, null, 2),
         meta: { webSearchUsed: true },
+      };
+    }
+
+    case 'query_erp': {
+      const { queryERP } = await import('@/lib/tools/erp-query');
+      const connections = (ctx.erpConnections || []) as import('@/lib/tools/erp-query').ERPConnectionInfo[];
+      const result = await queryERP(args as any, connections);
+      return {
+        content: result.content,
+        meta: { erpProvider: result.provider, erpRecordCount: result.recordCount },
       };
     }
 

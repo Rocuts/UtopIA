@@ -63,7 +63,10 @@ export abstract class BaseSpecialist {
     let riskAssessment: SpecialistResult['riskAssessment'] | undefined;
     let sanctionCalculation: SpecialistResult['sanctionCalculation'] | undefined;
 
-    const toolExecCtx: ToolExecContext = { documentContext: ctx.documentContext };
+    const toolExecCtx: ToolExecContext = {
+      documentContext: ctx.documentContext,
+      erpConnections: ctx.erpConnections,
+    };
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       // Retry the LLM call on transient failures (rate limit, 5xx, network)

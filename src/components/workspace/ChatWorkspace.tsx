@@ -526,10 +526,24 @@ export function ChatWorkspace({
     setVizState({ visible: false, collapsed: false, tier: 'T1', nodes: [], toolLog: [] });
 
     try {
+      // Read ERP connections from localStorage (provider + credentials only)
+      let erpConnections: Array<{ provider: string; credentials: Record<string, string> }> = [];
+      try {
+        const raw = localStorage.getItem('utopia_erp_connections');
+        if (raw) {
+          const decoded = JSON.parse(decodeURIComponent(atob(raw)));
+          erpConnections = decoded.map((c: { provider: string; credentials: Record<string, string> }) => ({
+            provider: c.provider,
+            credentials: c.credentials,
+          }));
+        }
+      } catch { /* ignore malformed data */ }
+
       const payload = {
         messages: allMessages.map(m => ({ id: m.id, role: m.role, content: m.content })),
         language, useCase,
         ...(documentContext ? { documentContext } : {}),
+        ...(erpConnections.length > 0 ? { erpConnections } : {}),
       };
 
       const response = await fetch('/api/chat', {

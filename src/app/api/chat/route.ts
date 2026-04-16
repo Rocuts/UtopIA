@@ -33,6 +33,7 @@ async function handleOrchestrated(
   documentContext: string | undefined,
   nitContext: NITContext | null,
   stream: boolean,
+  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>,
 ) {
   if (stream) {
     const encoder = new TextEncoder();
@@ -50,6 +51,7 @@ async function handleOrchestrated(
             useCase,
             documentContext,
             nitContext,
+            erpConnections,
             onProgress: (event: ProgressEvent) => send('progress', event),
           });
           send('result', result);
@@ -77,6 +79,7 @@ async function handleOrchestrated(
     useCase,
     documentContext,
     nitContext,
+    erpConnections,
   });
 
   return NextResponse.json(result);
@@ -634,7 +637,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid request format.' }, { status: 400 });
     }
 
-    const { messages, language, useCase, documentContext } = parsed.data;
+    const { messages, language, useCase, documentContext, erpConnections } = parsed.data;
 
     // Extract NIT context BEFORE PII redaction
     let nitContext: NITContext | null = null;
@@ -654,7 +657,7 @@ export async function POST(req: Request) {
     const stream = req.headers.get('X-Stream') === 'true' || url.searchParams.get('stream') === '1';
 
     if (useOrchestration()) {
-      return handleOrchestrated(messages, language, useCase, documentContext, nitContext, stream);
+      return handleOrchestrated(messages, language, useCase, documentContext, nitContext, stream, erpConnections);
     }
 
     return handleLegacy(messages, language, useCase, documentContext, nitContext);

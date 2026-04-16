@@ -46,6 +46,7 @@ Analyze the user's message and conversation context to determine:
 5. If the user asks about procedures, defense, or action plans → include "strategy" domain
 6. A document analysis request alone is T2 with domain ["documents"]
 7. A document analysis WITH tax/accounting interpretation is T3 with ["documents", "tax"] or ["documents", "accounting"]
+8. If the user asks about REAL company data from their ERP/accounting system → route to **accounting** (T2 minimum). Signals: "como nos fue", "ingresos del Q3", "facturas de", "balance de prueba real", "cuanto vendimos", "movimientos de la cuenta", "datos del ERP", "nuestras ventas", "cuantas facturas", "saldo de la cuenta", "terceros activos", "plan de cuentas". These are queries about the user's own financial data, NOT theoretical questions.
 
 ## Intent Labels (examples)
 - greeting, thanks, meta_question
@@ -53,6 +54,7 @@ Analyze the user's message and conversation context to determine:
 - niif_recognition, financial_ratios, depreciation, cost_analysis, budget_projection
 - document_analysis, document_extraction, document_summary
 - dian_defense, risk_assessment, action_plan, refund_strategy, compliance_review
+- erp_balance_query, erp_invoice_query, erp_journal_query, erp_contacts_query, erp_chart_query
 
 ## Output Format
 Respond with ONLY a JSON object (no markdown, no explanation):
