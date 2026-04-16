@@ -134,7 +134,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
       />
       <div className="flex-1 flex min-h-0">
         <Sidebar />
-        <main className="flex-1 min-w-0 overflow-hidden bg-white">
+        <main className="flex-1 min-w-0 overflow-hidden flex flex-col bg-white">
           {children}
         </main>
         <AnalysisPanel

@@ -619,7 +619,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
   return (
     <div
       className={cn(
-        'flex flex-col p-5 rounded-xl border transition-all',
+        'flex flex-col p-4 rounded-xl border transition-all',
         isConnected
           ? 'border-[#22C55E]/30 bg-[#F0FDF4]'
           : 'border-[#e5e5e5] bg-white hover:border-[#d4d4d4] hover:shadow-sm',
@@ -629,7 +629,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
       <div className="flex items-start gap-3">
         <div
           className={cn(
-            'w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0',
+            'w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0',
             isConnected && 'ring-2 ring-[#22C55E]/30',
           )}
           style={{ backgroundColor: provider.color }}
@@ -656,55 +656,49 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
 
       {/* Connected: last sync */}
       {isConnected && connection.lastSync && (
-        <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-[#16A34A]">
+        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-[#16A34A]">
           <RefreshCw className="w-3 h-3" />
           Ultima sync: {formatSyncDate(connection.lastSync)}
         </div>
       )}
 
-      {/* Capabilities — readable list */}
-      <div className="flex-1 mt-3">
-        <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-1.5">Datos disponibles</p>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          {provider.capabilities.map(cap => (
-            <div key={cap} className="flex items-center gap-1.5">
-              <Check className="w-3 h-3 shrink-0" style={{ color: provider.color }} />
-              <span className="text-[11px] text-[#525252]">{CAPABILITY_LABELS[cap] || cap}</span>
-            </div>
-          ))}
-        </div>
+      {/* Capabilities */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5 flex-1">
+        {provider.capabilities.map(cap => (
+          <span key={cap} className="inline-flex items-center gap-1 text-[11px] text-[#525252]">
+            <Check className="w-3 h-3 shrink-0" style={{ color: provider.color }} />
+            {CAPABILITY_LABELS[cap] || cap}
+          </span>
+        ))}
       </div>
 
-      {/* Footer: auth + action */}
-      <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
+      {/* Action */}
+      <div className="mt-2.5">
         {isConnected ? (
           <div className="flex items-center gap-2">
             <button
               onClick={onSync}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
             >
               <RefreshCw className="w-3 h-3" />
               Sincronizar
             </button>
             <button
               onClick={onDisconnect}
-              className="p-2 rounded-lg text-[#a3a3a3] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
+              className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
               title="Desconectar"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         ) : (
-          <>
-            <p className="text-[10px] text-[#a3a3a3] mb-2.5">Autenticacion: {provider.authType}</p>
-            <button
-              onClick={onConnect}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] hover:bg-[#FFFBEB] transition-all"
-            >
-              Conectar
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </>
+          <button
+            onClick={onConnect}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] hover:bg-[#FFFBEB] transition-all"
+          >
+            Conectar
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
     </div>

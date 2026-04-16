@@ -17,7 +17,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="h-full overflow-y-auto styled-scrollbar">
+    <div className="flex-1 min-h-0 overflow-y-auto styled-scrollbar">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6">
         {/* Header */}
         <motion.div
