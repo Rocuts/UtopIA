@@ -47,9 +47,15 @@ import type { AgentNode, AgentTier } from '@/types/platform';
 
 const SPRING = { stiffness: 400, damping: 25 };
 
-const INITIAL_MSG = {
-  es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoria contable y tributaria colombiana. ¿En que puedo ayudarle hoy?',
-  en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting and tax consulting. How can I help you today?',
+const INITIAL_MSG: Record<string, Record<string, string>> = {
+  general: {
+    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoria contable, tributaria y financiera colombiana.\n\nPuede:\n- **Hacer cualquier pregunta** sobre contabilidad, NIIF, impuestos o finanzas\n- **Subir documentos** (PDF, Excel, Word, imagenes) usando el boton 📎 o arrastrando al chat\n- **Analizar extractos bancarios**, facturas, balances de prueba y mas\n\n¿En que puedo ayudarle?',
+    en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting, tax and financial consulting.\n\nYou can:\n- **Ask any question** about accounting, IFRS, taxes or finance\n- **Upload documents** (PDF, Excel, Word, images) using the 📎 button or dragging to the chat\n- **Analyze bank statements**, invoices, trial balances and more\n\nHow can I help you?',
+  },
+  default: {
+    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoria contable y tributaria colombiana. ¿En que puedo ayudarle hoy?',
+    en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting and tax consulting. How can I help you today?',
+  },
 };
 
 function generateId(): string {
@@ -144,16 +150,30 @@ function CaseHeader({
   language: 'es' | 'en';
 }) {
   const labels: Record<string, string> = {
+    'general': 'Chat General',
     'dian-defense': 'Defensa DIAN',
     'tax-refund': 'Devoluciones',
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Inteligencia Financiera',
+    'tax-planning': 'Planeacion Tributaria',
+    'transfer-pricing': 'Precios de Transferencia',
+    'business-valuation': 'Valoracion Empresarial',
+    'fiscal-audit-opinion': 'Dictamen Rev. Fiscal',
+    'tax-reconciliation': 'Conciliacion Fiscal',
+    'feasibility-study': 'Estudio de Factibilidad',
   };
   const icons: Record<string, string> = {
+    'general': '\uD83D\uDCAC',
     'dian-defense': '\u2696\uFE0F',
     'tax-refund': '\uD83D\uDD04',
     'due-diligence': '\uD83D\uDD0D',
     'financial-intelligence': '\uD83D\uDCCA',
+    'tax-planning': '\uD83E\uDDEE',
+    'transfer-pricing': '\uD83C\uDF10',
+    'business-valuation': '\uD83D\uDCB0',
+    'fiscal-audit-opinion': '\uD83D\uDCCB',
+    'tax-reconciliation': '\uD83D\uDD00',
+    'feasibility-study': '\uD83D\uDCA1',
   };
 
   return (
@@ -432,7 +452,7 @@ export function ChatWorkspace({
     return [{
       id: '1',
       role: 'assistant' as const,
-      content: INITIAL_MSG[language],
+      content: (INITIAL_MSG[useCase === 'general' ? 'general' : 'default'] ?? INITIAL_MSG.default)[language],
       timestamp: new Date().toISOString(),
     }];
   });
@@ -476,7 +496,7 @@ export function ChatWorkspace({
       setMessages([{
         id: '1',
         role: 'assistant',
-        content: INITIAL_MSG[language],
+        content: (INITIAL_MSG[useCase === 'general' ? 'general' : 'default'] ?? INITIAL_MSG.default)[language],
         timestamp: new Date().toISOString(),
       }]);
     }
@@ -772,6 +792,9 @@ export function ChatWorkspace({
             <p className="text-sm font-medium text-[#0a0a0a]">
               {language === 'es' ? 'Suelte su documento aqui' : 'Drop your document here'}
             </p>
+            <p className="text-xs text-[#a3a3a3]">
+              PDF, Excel, Word, CSV, imagenes
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -870,7 +893,9 @@ export function ChatWorkspace({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={language === 'es' ? 'Haga una pregunta sobre este caso...' : 'Ask a question about this case...'}
+            placeholder={language === 'es'
+              ? (useCase === 'general' ? 'Escriba su consulta o suba un documento...' : 'Haga una pregunta sobre este caso...')
+              : (useCase === 'general' ? 'Type your question or upload a document...' : 'Ask a question about this case...')}
             disabled={isTyping}
             className="flex-1 bg-transparent border-none focus:ring-0 text-[#0a0a0a] text-sm resize-none py-2.5 px-2 outline-none min-h-[40px] max-h-[120px] placeholder:text-[#a3a3a3] disabled:opacity-50"
           />
