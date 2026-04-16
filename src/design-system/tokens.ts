@@ -1,0 +1,102 @@
+// ─── UtopIA Design System Tokens ──────────────────────────────────────────────
+// Single source of truth for all visual tokens used across the platform.
+
+export const tokens = {
+  color: {
+    brand: {
+      gold: {
+        50:  '#FEF9EC',
+        100: '#FDF0C4',
+        200: '#FBE08A',
+        300: '#F8CA4F',
+        400: '#F5B41A',
+        500: '#D4A017',
+        600: '#A87C10',
+        700: '#7D5B0C',
+        800: '#523C08',
+        900: '#2A1E04',
+      },
+    },
+    risk: {
+      critical: { bg: '#FEF2F2', border: '#FECACA', text: '#DC2626', dot: '#EF4444' },
+      high:     { bg: '#FFF7ED', border: '#FED7AA', text: '#EA580C', dot: '#F97316' },
+      medium:   { bg: '#FFFBEB', border: '#FDE68A', text: '#D97706', dot: '#F59E0B' },
+      low:      { bg: '#F0FDF4', border: '#BBF7D0', text: '#16A34A', dot: '#22C55E' },
+      info:     { bg: '#EFF6FF', border: '#BFDBFE', text: '#2563EB', dot: '#3B82F6' },
+    },
+    grade: {
+      'A+': '#059669',
+      'A':  '#16A34A',
+      'B':  '#2563EB',
+      'C':  '#D97706',
+      'D':  '#EA580C',
+      'F':  '#DC2626',
+    } as Record<string, string>,
+    tier: {
+      T1: { label: 'Directo',       color: '#6366F1', bg: '#EEF2FF' },
+      T2: { label: 'Especializado', color: '#0EA5E9', bg: '#F0F9FF' },
+      T3: { label: 'Multi-Experto', color: '#D4A017', bg: '#FEF9EC' },
+    },
+    neutral: {
+      0:   '#FFFFFF',
+      50:  '#FAFAFA',
+      100: '#F5F5F5',
+      200: '#E5E5E5',
+      300: '#D4D4D4',
+      400: '#A3A3A3',
+      500: '#737373',
+      600: '#525252',
+      700: '#404040',
+      800: '#262626',
+      900: '#171717',
+      950: '#0A0A0A',
+    },
+  },
+  spacing: {
+    1:  '4px',
+    2:  '8px',
+    3:  '12px',
+    4:  '16px',
+    6:  '24px',
+    8:  '32px',
+    12: '48px',
+    16: '64px',
+  },
+  radius: {
+    sm:   '4px',
+    md:   '8px',
+    lg:   '12px',
+    xl:   '16px',
+    full: '9999px',
+  },
+  shadow: {
+    sm:   '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    md:   '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+    lg:   '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+    gold: '0 0 0 2px #D4A017',
+  },
+  font: {
+    mono: '"JetBrains Mono", "Fira Code", monospace',
+    sans: 'var(--font-sans)',
+    sizes: {
+      xs:   '11px',
+      sm:   '13px',
+      base: '14px',
+      md:   '15px',
+      lg:   '17px',
+      xl:   '20px',
+      '2xl': '24px',
+      '3xl': '30px',
+    },
+  },
+  animation: {
+    fast:   '150ms ease-out',
+    normal: '250ms ease-out',
+    slow:   '400ms ease-out',
+    spring: 'spring(1, 80, 10)',
+  },
+} as const;
+
+export type RiskSeverityKey = keyof typeof tokens.color.risk;
+export type GradeKey = keyof typeof tokens.color.grade;
+export type TierKey = keyof typeof tokens.color.tier;

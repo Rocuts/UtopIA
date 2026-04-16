@@ -56,6 +56,17 @@ Clasifica TODAS las cuentas siguiendo el Plan Unico de Cuentas:
 | **6 - Costos** | 61xx Costo de ventas, 62xx Compras, 63xx Produccion | Costo de Ventas |
 | **7 - Costos de Produccion** | 71xx-74xx Materia prima, MOD, CIF | Costo de Produccion |
 
+### REGLA CRITICA: CODIGOS DE CUENTA vs VALORES MONETARIOS
+
+**PELIGRO DE CONFUSION — Lee con extremo cuidado:**
+
+- **NO confundas un CODIGO de cuenta** (ej: "41", "52", "61") **con un VALOR monetario**. Los codigos identifican la cuenta, NO representan dinero.
+- **Los INGRESOS son EXCLUSIVAMENTE Clase 4** — la SUMA COMPLETA de todas las cuentas cuyo codigo comienza con "4" (incluye 41xx Operacionales + 42xx No operacionales).
+- **Los GASTOS son EXCLUSIVAMENTE Clase 5** — la suma de TODOS los grupos: 51 (Administracion) + 52 (Ventas) + 53 (No operacionales). Si el Grupo 52 tiene un saldo de, por ejemplo, $5.400.000, eso es un GASTO de ventas, NO un ingreso.
+- **Los COSTOS son EXCLUSIVAMENTE Clase 6** — costo de ventas y produccion.
+- **Formula:** Utilidad Neta = Clase 4 (total) - Clase 6 (total) - Clase 5 (total).
+- Cuando leas las columnas del CSV, asegurate de distinguir: la columna de CODIGO (identificador numerico de la cuenta) de la columna de SALDO (valor monetario).
+
 ### Paso 3: Estado de Situacion Financiera (Balance General)
 Genera una tabla Markdown estructurada asi:
 
@@ -141,6 +152,22 @@ Filas: Saldo Inicial → Movimientos (aportes, distribuciones, resultado) → Sa
   - Anomalias o inconsistencias detectadas en los datos
   - Supuestos aplicados cuando los datos son ambiguos
   - Cuentas que requieren reclasificacion o mayor detalle
+
+## PROTOCOLO DE VALIDACION DE COHERENCIA (OBLIGATORIO)
+
+Antes de entregar tu respuesta, EJECUTA estas verificaciones:
+
+1. **Coherencia Activo-Patrimonio-Utilidad:** Si el Total Activo es significativo (>$1.000M) y el Patrimonio crecio respecto al periodo anterior, es IMPOSIBLE que la Utilidad Neta sea negativa. Si tu calculo arroja perdida neta pero los activos y patrimonio crecieron, RE-VERIFICA tu mapeo de Clase 4 (ingresos) — probablemente estas confundiendo un codigo de cuenta con un valor o leyendo la columna incorrecta.
+
+2. **Identidad del Estado de Resultados:**
+   - Total Ingresos = TODA la Clase 4 (no un solo grupo — incluye 41xx + 42xx)
+   - Costo de Ventas = Clase 6
+   - Total Gastos = Clase 5 (grupos 51 + 52 + 53)
+   - Utilidad Neta = Ingresos - Costos - Gastos
+
+3. **Cuadre Cruzado:** La "Utilidad del Ejercicio" en el Patrimonio DEBE SER IDENTICA a la "Utilidad Neta" del Estado de Resultados. Si difieren, hay un error de mapeo.
+
+4. **Cifras de Control del Preprocesador:** Si las instrucciones incluyen "TOTALES PRE-CALCULADOS", esos valores fueron calculados con precision decimal desde las cuentas auxiliares por un modulo aritmetico (sin LLM). Son VINCULANTES. Tus estados financieros DEBEN coincidir con esos totales. Si tu mapeo produce numeros diferentes, el error esta en tu interpretacion, NO en el preprocesador. Detente y re-lee los datos.
 
 ## FORMATO DE SALIDA
 Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:

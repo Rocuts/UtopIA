@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { financialReportRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateFinancialReport } from '@/lib/agents/financial/orchestrator';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 
 // ---------------------------------------------------------------------------
@@ -29,21 +30,51 @@ export async function POST(req: Request) {
 
     const { rawData, company, language, instructions } = parsed.data;
 
+    // Preprocess trial balance for arithmetic validation and binding constraints
+    const rows = parseTrialBalanceCSV(rawData);
+    const preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+
+    // Enhance data with validation report and clean auxiliary data
+    const enhancedData = preprocessed
+      ? `${preprocessed.validationReport}\n\n---\n\nDATOS LIMPIOS (auxiliares validados):\n${preprocessed.cleanData}`
+      : rawData;
+
+    // Build binding constraints from pre-computed totals
+    let enhancedInstructions = instructions || '';
+    if (preprocessed) {
+      const s = preprocessed.summary;
+      const fmt = (n: number) => (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      enhancedInstructions += `\n\nTOTALES PRE-CALCULADOS (VINCULANTES — precision decimal desde auxiliares):
+- Total Activos (Clase 1): ${fmt(s.totalAssets)}
+- Total Pasivos (Clase 2): ${fmt(s.totalLiabilities)}
+- Total Patrimonio (Clase 3): ${fmt(s.totalEquity)}
+- Total Ingresos (Clase 4): ${fmt(s.totalRevenue)}
+- Total Gastos (Clase 5): ${fmt(s.totalExpenses)}
+- Total Costos de Ventas (Clase 6): ${fmt(s.totalCosts)}
+- Costos de Produccion (Clase 7): ${fmt(s.totalProduction)}
+- Utilidad Neta Calculada: ${fmt(s.netIncome)}
+- Ecuacion Patrimonial: ${s.equationBalanced ? 'CUADRA' : 'NO CUADRA'}
+REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.`;
+      if (preprocessed.discrepancies.length > 0) {
+        enhancedInstructions += '\nADVERTENCIA: Discrepancias aritmeticas detectadas. USA totales de auxiliares, NO los reportados.';
+      }
+    }
+
     // Check for streaming request
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(rawData, company, language, instructions);
+      return handleStreaming(enhancedData, company, language, enhancedInstructions);
     }
 
     // Non-streaming: run the full pipeline and return JSON
     const report = await orchestrateFinancialReport({
-      rawData,
+      rawData: enhancedData,
       company,
       language,
-      instructions,
+      instructions: enhancedInstructions,
     });
 
     return NextResponse.json(report);

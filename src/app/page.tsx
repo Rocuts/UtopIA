@@ -8,6 +8,7 @@ import { FAQ } from "@/components/sections/FAQ";
 import { CTA } from "@/components/sections/CTA";
 import { Footer } from "@/components/layout/Footer";
 import { WorkspaceTeaser } from "@/components/sections/WorkspaceTeaser";
+import { PipelineShowcase } from "@/components/sections/PipelineShowcase";
 import { ScrollGradient } from "@/components/layout/ScrollGradient";
 
 export default function Home() {
@@ -17,6 +18,7 @@ export default function Home() {
       <main className="flex flex-col min-h-screen">
         <Hero />
         <WorkspaceTeaser />
+        <PipelineShowcase />
         <Services />
         <Methodology />
         <Metrics />

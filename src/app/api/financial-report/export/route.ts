@@ -60,10 +60,25 @@ export async function POST(req: Request) {
       ? `${preprocessed.validationReport}\n\n---\n\nDATOS LIMPIOS (auxiliares validados):\n${preprocessed.cleanData}`
       : rawData;
 
-    // Build instructions with discrepancy warnings
+    // Build binding constraints from pre-computed totals
     let enhancedInstructions = instructions || '';
-    if (preprocessed && preprocessed.discrepancies.length > 0) {
-      enhancedInstructions += '\n\nADVERTENCIA DEL PREPROCESADOR: Se detectaron discrepancias aritmeticas. USA los totales calculados desde auxiliares, NO los totales reportados. Revisa la seccion de Discrepancias en el informe de validacion.';
+    if (preprocessed) {
+      const s = preprocessed.summary;
+      const fmt = (n: number) => (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      enhancedInstructions += `\n\nTOTALES PRE-CALCULADOS (VINCULANTES — precision decimal desde auxiliares):
+- Total Activos (Clase 1): ${fmt(s.totalAssets)}
+- Total Pasivos (Clase 2): ${fmt(s.totalLiabilities)}
+- Total Patrimonio (Clase 3): ${fmt(s.totalEquity)}
+- Total Ingresos (Clase 4): ${fmt(s.totalRevenue)}
+- Total Gastos (Clase 5): ${fmt(s.totalExpenses)}
+- Total Costos de Ventas (Clase 6): ${fmt(s.totalCosts)}
+- Costos de Produccion (Clase 7): ${fmt(s.totalProduction)}
+- Utilidad Neta Calculada: ${fmt(s.netIncome)}
+- Ecuacion Patrimonial: ${s.equationBalanced ? 'CUADRA' : 'NO CUADRA'}
+REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.`;
+      if (preprocessed.discrepancies.length > 0) {
+        enhancedInstructions += '\nADVERTENCIA: Discrepancias aritmeticas detectadas. USA totales de auxiliares, NO los reportados.';
+      }
     }
 
     // Step 2: Run the 3-agent financial pipeline

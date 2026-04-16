@@ -2,6 +2,15 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { generateConversationId } from '@/lib/storage/conversation-history';
+import type {
+  CaseType,
+  WorkspaceMode,
+  PipelineState,
+  IntelligencePanelData,
+  IntakeFormUnion,
+} from '@/types/platform';
+
+// ─── Preserved existing types ─────────────────────────────────────────────────
 
 export interface UploadedDocument {
   id: string;
@@ -19,7 +28,10 @@ export interface RiskAssessmentData {
   recommendations: string[];
 }
 
+// ─── State shape ──────────────────────────────────────────────────────────────
+
 export interface WorkspaceState {
+  // Existing state (preserved)
   sidebarOpen: boolean;
   analysisPanelOpen: boolean;
   activeCase: string | null;
@@ -35,11 +47,49 @@ export interface WorkspaceState {
   startNewConsultation: (useCase?: string) => void;
   conversationListVersion: number;
   refreshConversationList: () => void;
+
+  // New state for platform transformation
+  activeCaseType: CaseType | null;
+  activeMode: WorkspaceMode;
+  pipelineState: PipelineState;
+  intelligencePanelData: IntelligencePanelData;
+  intakeDrafts: Partial<Record<CaseType, Partial<IntakeFormUnion>>>;
+  intakeModalOpen: boolean;
+
+  // New setters
+  setActiveCaseType: (ct: CaseType | null) => void;
+  setActiveMode: (mode: WorkspaceMode) => void;
+  setPipelineState: (ps: PipelineState | ((prev: PipelineState) => PipelineState)) => void;
+  setIntelligencePanelData: (data: IntelligencePanelData | ((prev: IntelligencePanelData) => IntelligencePanelData)) => void;
+  setIntakeDraft: (caseType: CaseType, draft: Partial<IntakeFormUnion>) => void;
+  clearIntakeDraft: (caseType: CaseType) => void;
+  setIntakeModalOpen: (open: boolean) => void;
+  openIntakeForType: (ct: CaseType) => void;
 }
+
+// ─── Default pipeline state ───────────────────────────────────────────────────
+
+const DEFAULT_PIPELINE_STATE: PipelineState = {
+  mode: 'idle',
+  currentStage: 0,
+  stageLabels: ['Analista NIIF', 'Director de Estrategia', 'Gobierno Corporativo'],
+  completedStages: [],
+  auditorsStarted: [],
+  auditorsComplete: [],
+  auditFindings: {},
+};
+
+const DEFAULT_INTELLIGENCE_DATA: IntelligencePanelData = {
+  citations: [],
+  findings: [],
+};
+
+// ─── Context ──────────────────────────────────────────────────────────────────
 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  // Existing state
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [analysisPanelOpen, setAnalysisPanelOpen] = useState(false);
   const [activeCase, setActiveCaseState] = useState<string | null>(null);
@@ -48,6 +98,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [riskAssessment, setRiskAssessmentState] = useState<RiskAssessmentData | null>(null);
   const [conversationListVersion, setConversationListVersion] = useState(0);
 
+  // New state
+  const [activeCaseType, setActiveCaseTypeState] = useState<CaseType | null>(null);
+  const [activeMode, setActiveModeState] = useState<WorkspaceMode>('chat');
+  const [pipelineState, setPipelineStateInternal] = useState<PipelineState>(DEFAULT_PIPELINE_STATE);
+  const [intelligencePanelData, setIntelligencePanelDataInternal] = useState<IntelligencePanelData>(DEFAULT_INTELLIGENCE_DATA);
+  const [intakeDrafts, setIntakeDrafts] = useState<Partial<Record<CaseType, Partial<IntakeFormUnion>>>>({});
+  const [intakeModalOpen, setIntakeModalOpen] = useState(false);
+
+  // Existing methods
   const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
   const toggleAnalysisPanel = useCallback(() => setAnalysisPanelOpen(prev => !prev), []);
   const setActiveCase = useCallback((id: string | null) => setActiveCaseState(id), []);
@@ -71,9 +130,69 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setConversationListVersion(prev => prev + 1);
   }, []);
 
+  // New methods
+  const setActiveCaseType = useCallback((ct: CaseType | null) => {
+    setActiveCaseTypeState(ct);
+    if (ct) {
+      // Map CaseType to legacy useCase string for backward compat
+      const CASE_TYPE_TO_USE_CASE: Record<CaseType, string> = {
+        dian_defense: 'dian-defense',
+        tax_refund: 'tax-refund',
+        due_diligence: 'due-diligence',
+        financial_intel: 'financial-intelligence',
+        niif_report: 'financial-report',
+      };
+      setActiveUseCaseState(CASE_TYPE_TO_USE_CASE[ct]);
+    }
+  }, []);
+
+  const setActiveMode = useCallback((mode: WorkspaceMode) => {
+    setActiveModeState(mode);
+  }, []);
+
+  const setPipelineState = useCallback(
+    (ps: PipelineState | ((prev: PipelineState) => PipelineState)) => {
+      setPipelineStateInternal(ps);
+    },
+    [],
+  );
+
+  const setIntelligencePanelData = useCallback(
+    (data: IntelligencePanelData | ((prev: IntelligencePanelData) => IntelligencePanelData)) => {
+      setIntelligencePanelDataInternal(data);
+    },
+    [],
+  );
+
+  const setIntakeDraft = useCallback((caseType: CaseType, draft: Partial<IntakeFormUnion>) => {
+    setIntakeDrafts(prev => ({ ...prev, [caseType]: draft }));
+  }, []);
+
+  const clearIntakeDraft = useCallback((caseType: CaseType) => {
+    setIntakeDrafts(prev => {
+      const next = { ...prev };
+      delete next[caseType];
+      return next;
+    });
+  }, []);
+
+  const openIntakeForType = useCallback((ct: CaseType) => {
+    setActiveCaseTypeState(ct);
+    const CASE_TYPE_TO_USE_CASE: Record<CaseType, string> = {
+      dian_defense: 'dian-defense',
+      tax_refund: 'tax-refund',
+      due_diligence: 'due-diligence',
+      financial_intel: 'financial-intelligence',
+      niif_report: 'financial-report',
+    };
+    setActiveUseCaseState(CASE_TYPE_TO_USE_CASE[ct]);
+    setIntakeModalOpen(true);
+  }, []);
+
   return (
     <WorkspaceContext.Provider
       value={{
+        // Existing
         sidebarOpen,
         analysisPanelOpen,
         activeCase,
@@ -89,6 +208,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         startNewConsultation,
         conversationListVersion,
         refreshConversationList,
+
+        // New
+        activeCaseType,
+        activeMode,
+        pipelineState,
+        intelligencePanelData,
+        intakeDrafts,
+        intakeModalOpen,
+        setActiveCaseType,
+        setActiveMode,
+        setPipelineState,
+        setIntelligencePanelData,
+        setIntakeDraft,
+        clearIntakeDraft,
+        setIntakeModalOpen,
+        openIntakeForType,
       }}
     >
       {children}

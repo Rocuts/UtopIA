@@ -7,9 +7,17 @@ import { Sidebar } from '@/components/workspace/Sidebar';
 import { StatusBar } from '@/components/workspace/StatusBar';
 import { AnalysisPanel } from '@/components/workspace/AnalysisPanel';
 import { CommandPalette } from '@/components/workspace/CommandPalette';
+import { ToastProvider } from '@/design-system/components/Toast';
+import { IntakeModal } from '@/components/workspace/intake/IntakeModal';
 import { exportConversationPDF } from '@/lib/export/pdf-export';
 import { inferTitle, listConversations } from '@/lib/storage/conversation-history';
 import type { UploadedDocument as WorkspaceUploadedDoc } from '@/components/workspace/types';
+
+function IntakeModalLoader() {
+  const { intakeModalOpen } = useWorkspace();
+  if (!intakeModalOpen) return null;
+  return <IntakeModal />;
+}
 
 function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const { language } = useLanguage();
@@ -39,16 +47,15 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
     handleChange(mql);
     mql.addEventListener('change', handleChange);
     return () => mql.removeEventListener('change', handleChange);
-    // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Global Cmd+K / Ctrl+K listener for command palette
+  // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
+        setCommandPaletteOpen(prev => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -84,12 +91,10 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
     });
   }, [activeCase, language]);
 
-  // Clear conversation -> return to dashboard
   const handleClearConversation = useCallback(() => {
     setActiveCase(null);
   }, [setActiveCase]);
 
-  // Command palette action handler
   const handleCommandAction = useCallback(
     (actionId: string) => {
       if (actionId === 'new-consultation') {
@@ -143,7 +148,10 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
         />
       </div>
 
-      {/* Command Palette (modal overlay) */}
+      {/* Intake Modal */}
+      <IntakeModalLoader />
+
+      {/* Command Palette */}
       <CommandPalette
         isOpen={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
@@ -154,14 +162,16 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function WorkspaceLayout({
+export default function WorkspaceLayoutRoot({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <WorkspaceProvider>
-      <WorkspaceShell>{children}</WorkspaceShell>
+      <ToastProvider>
+        <WorkspaceShell>{children}</WorkspaceShell>
+      </ToastProvider>
     </WorkspaceProvider>
   );
 }
