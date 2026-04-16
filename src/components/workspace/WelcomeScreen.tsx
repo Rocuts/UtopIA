@@ -16,7 +16,9 @@ import {
   ArrowRight,
   ChevronRight,
   MessageSquare,
+  Plug,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -89,6 +91,7 @@ const CATEGORIES: ServiceCategory[] = [
 export function WelcomeScreen() {
   const { language } = useLanguage();
   const { openIntakeForType, startNewConsultation, setActiveCaseType } = useWorkspace();
+  const router = useRouter();
   const prefersReduced = useReducedMotion();
   const es = language === 'es';
 
@@ -109,6 +112,13 @@ export function WelcomeScreen() {
           <span className="text-xs text-[#a3a3a3] ml-1 hidden sm:inline">
             {es ? 'Su firma contable, potenciada por IA' : 'Your accounting firm, powered by AI'}
           </span>
+          <button
+            onClick={() => router.push('/workspace/settings')}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-[#525252] border border-[#e5e5e5] hover:border-[#D4A017] hover:text-[#D4A017] transition-colors"
+          >
+            <Plug className="w-3.5 h-3.5" />
+            {es ? 'Conectar ERP' : 'Connect ERP'}
+          </button>
         </motion.div>
 
         {/* Top row: Chat General + NIIF Elite */}

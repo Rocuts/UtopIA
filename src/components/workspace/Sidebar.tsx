@@ -19,7 +19,9 @@ import {
   ClipboardCheck,
   GitCompareArrows,
   Lightbulb,
+  Settings,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -235,6 +237,7 @@ export function Sidebar() {
     setActiveCaseType,
   } = useWorkspace();
 
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -665,7 +668,25 @@ export function Sidebar() {
       </div>
 
       {/* ── Section 4: Bottom ────────────────────────────────────────────────── */}
-      <div className="border-t border-[#e5e5e5] p-2 shrink-0">
+      <div className="border-t border-[#e5e5e5] p-2 shrink-0 space-y-0.5">
+        <button
+          onClick={() => router.push('/workspace/settings')}
+          className={cn(
+            'w-full flex items-center gap-2 rounded-sm text-xs text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors',
+            isExpanded ? 'px-2.5 py-2 justify-start' : 'p-2 justify-center',
+          )}
+          aria-label={language === 'es' ? 'Configuracion' : 'Settings'}
+          title={!isExpanded ? (language === 'es' ? 'Configuracion' : 'Settings') : undefined}
+        >
+          {isExpanded ? (
+            <>
+              <Settings className="w-4 h-4 shrink-0" />
+              <span>{language === 'es' ? 'Configuracion' : 'Settings'}</span>
+            </>
+          ) : (
+            <Settings className="w-4 h-4" />
+          )}
+        </button>
         <button
           onClick={toggleSidebar}
           className={cn(
