@@ -77,6 +77,7 @@ const DOMAIN_LABELS: Record<AuditDomain, string> = {
 };
 
 const CASE_TYPE_LABELS: Record<CaseType, string> = {
+  general_chat: 'Chat General',
   dian_defense: 'Defensa DIAN',
   tax_refund: 'Devolucion de Saldos',
   due_diligence: 'Due Diligence',
@@ -92,6 +93,10 @@ const CASE_TYPE_LABELS: Record<CaseType, string> = {
 
 // Quick reference citations per case type
 const CASE_TYPE_CITATIONS: Record<CaseType, Citation[]> = {
+  general_chat: [
+    { article: 'Art. 641 E.T.', source: 'Estatuto Tributario', normText: 'Sancion por extemporaneidad en la presentacion de declaraciones tributarias.' },
+    { article: 'NIC 1', source: 'NIIF / IAS', normText: 'Presentacion de estados financieros de proposito general.' },
+  ],
   dian_defense: [
     { article: 'Art. 705 E.T.', source: 'Estatuto Tributario', normText: 'Termino para notificar el requerimiento especial. El requerimiento debera notificarse dentro de los tres (3) anos siguientes a la fecha de vencimiento del plazo para declarar.' },
     { article: 'Art. 703 E.T.', source: 'Estatuto Tributario', normText: 'El requerimiento especial como requisito previo a la liquidacion de revision.' },

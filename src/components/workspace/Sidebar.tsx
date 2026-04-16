@@ -122,6 +122,7 @@ const ELITE_ITEM: CaseTypeItem = {
 
 const USE_CASE_LABELS: Record<string, Record<string, string>> = {
   es: {
+    'general': 'General',
     'dian-defense': 'DIAN',
     'tax-refund': 'Devoluciones',
     'due-diligence': 'Due Diligence',
@@ -135,6 +136,7 @@ const USE_CASE_LABELS: Record<string, Record<string, string>> = {
     'feasibility-study': 'Factibilidad',
   },
   en: {
+    'general': 'General',
     'dian-defense': 'DIAN',
     'tax-refund': 'Refunds',
     'due-diligence': 'Due Diligence',
@@ -229,6 +231,8 @@ export function Sidebar() {
     activeCaseType,
     setIntakeModalOpen,
     openIntakeForType,
+    startNewConsultation,
+    setActiveCaseType,
   } = useWorkspace();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -372,6 +376,35 @@ export function Sidebar() {
                 className="truncate"
               >
                 {language === 'es' ? 'Nueva Consulta' : 'New Consultation'}
+              </motion.span>
+            )}
+          </button>
+
+          {/* Chat General — skip intake, go straight to chat */}
+          <button
+            onClick={() => {
+              setActiveCaseType('general_chat');
+              startNewConsultation('general');
+            }}
+            className={cn(
+              'w-full flex items-center gap-2 rounded-sm text-sm font-medium transition-colors mt-1.5',
+              activeCaseType === 'general_chat'
+                ? 'bg-[#0a0a0a] text-white'
+                : 'bg-[#fafafa] border border-[#e5e5e5] text-[#525252] hover:bg-[#f5f5f5]',
+              isExpanded ? 'px-3 py-2 justify-start' : 'p-2 justify-center',
+            )}
+            aria-label="Chat General"
+            title={!isExpanded ? 'Chat General' : undefined}
+          >
+            <MessageSquare className="w-4 h-4 shrink-0" />
+            {isExpanded && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.05 }}
+                className="truncate"
+              >
+                Chat General
               </motion.span>
             )}
           </button>

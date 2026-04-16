@@ -136,6 +136,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (ct) {
       // Map CaseType to legacy useCase string for backward compat
       const CASE_TYPE_TO_USE_CASE: Record<CaseType, string> = {
+        general_chat: 'general',
         dian_defense: 'dian-defense',
         tax_refund: 'tax-refund',
         due_diligence: 'due-diligence',
@@ -185,6 +186,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const openIntakeForType = useCallback((ct: CaseType) => {
     setActiveCaseTypeState(ct);
     const CASE_TYPE_TO_USE_CASE: Record<CaseType, string> = {
+      general_chat: 'general',
       dian_defense: 'dian-defense',
       tax_refund: 'tax-refund',
       due_diligence: 'due-diligence',

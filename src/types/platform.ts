@@ -1,6 +1,7 @@
 // ─── Case Management ─────────────────────────────────────────────────────────
 
 export type CaseType =
+  | 'general_chat'
   | 'dian_defense'
   | 'tax_refund'
   | 'due_diligence'

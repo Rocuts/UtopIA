@@ -26,6 +26,7 @@ interface IntakePreviewProps {
 // ─── Label Maps ──────────────────────────────────────────────────────────────
 
 const CASE_LABELS: Record<CaseType, string> = {
+  general_chat: 'Chat General',
   dian_defense: 'Defensa DIAN',
   tax_refund: 'Devolucion de Impuestos',
   due_diligence: 'Due Diligence',

@@ -15,6 +15,7 @@ import type { CaseType } from '@/types/platform';
 // ─── Case Type Titles ────────────────────────────────────────────────────────
 
 const TITLES: Record<CaseType, string> = {
+  general_chat: 'Chat General',
   dian_defense: 'Nueva Defensa DIAN',
   tax_refund: 'Nueva Devolucion de Impuestos',
   due_diligence: 'Nuevo Due Diligence',
@@ -65,6 +66,8 @@ export function IntakeModal() {
 
   const renderIntakeForm = () => {
     switch (activeCaseType) {
+      case 'general_chat':
+        return null; // General chat skips intake
       case 'dian_defense':
         return <DianDefenseIntake />;
       case 'tax_refund':

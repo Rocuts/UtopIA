@@ -99,7 +99,7 @@ const ACCEPTED_MIME_TYPES = [
 
 export function WelcomeScreen() {
   const { language } = useLanguage();
-  const { openIntakeForType } = useWorkspace();
+  const { openIntakeForType, startNewConsultation, setActiveCaseType } = useWorkspace();
   const prefersReduced = useReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -316,6 +316,41 @@ export function WelcomeScreen() {
             </AnimatePresence>
           </button>
         </motion.div>
+
+        {/* ── Chat General Quick Access ────────────────────────────── */}
+        <motion.button
+          {...fadeUp(0.07)}
+          type="button"
+          onClick={() => {
+            setActiveCaseType('general_chat');
+            startNewConsultation('general');
+          }}
+          className={cn(
+            'w-full rounded-lg border p-4 text-left transition-all group',
+            'bg-white border-[#e5e5e5] hover:border-[#0a0a0a] hover:shadow-sm',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/20 focus-visible:ring-offset-2',
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[#0a0a0a] flex items-center justify-center shrink-0">
+              <Upload className="w-4 h-4 text-white hidden" />
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-semibold text-[#0a0a0a]">
+                {es ? 'Chat General' : 'General Chat'}
+              </span>
+              <p className="text-xs text-[#a3a3a3] mt-0.5">
+                {es
+                  ? 'Pregunte sobre contabilidad, tributaria, NIIF o cualquier tema profesional'
+                  : 'Ask about accounting, tax, NIIF or any professional topic'}
+              </p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-[#d4d4d4] group-hover:text-[#0a0a0a] transition-colors shrink-0" />
+          </div>
+        </motion.button>
 
         {/* ── Section 2: NIIF Elite Hero Card ────────────────────────── */}
         <motion.button
