@@ -244,6 +244,109 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   throw new Error('Unsupported file type.');
 }
 
+// ---------------------------------------------------------------------------
+// Smart Document Classifier — zero LLM, keyword heuristics
+// ---------------------------------------------------------------------------
+
+type DetectedCaseType =
+  | 'niif_report'
+  | 'dian_defense'
+  | 'tax_refund'
+  | 'due_diligence'
+  | 'tax_planning'
+  | 'transfer_pricing'
+  | 'business_valuation'
+  | 'fiscal_audit_opinion'
+  | 'tax_reconciliation'
+  | 'feasibility_study'
+  | 'financial_intel'
+  | null;
+
+function classifyDocument(text: string, filename: string, ext: string): DetectedCaseType {
+  const lower = text.toLowerCase();
+  const fname = filename.toLowerCase();
+
+  // Trial balance / balance de prueba → NIIF Report
+  if (ext === '.csv' || ext === '.xlsx' || ext === '.xls') {
+    const accountPatterns = /\b(1[0-9]{3}|2[0-9]{3}|3[0-9]{3}|4[0-9]{3}|5[0-9]{3}|6[0-9]{3}|7[0-9]{3})\b/g;
+    const matches = lower.match(accountPatterns);
+    if (matches && matches.length > 10) return 'niif_report';
+    if (fname.includes('balance') || fname.includes('prueba') || fname.includes('trial')) return 'niif_report';
+    if (fname.includes('puc') || fname.includes('auxiliar')) return 'niif_report';
+  }
+
+  // DIAN acts
+  if (lower.includes('requerimiento ordinario') || lower.includes('requerimiento especial')
+      || lower.includes('liquidacion oficial') || lower.includes('pliego de cargos')
+      || lower.includes('emplazamiento para declarar')
+      || (lower.includes('dian') && lower.includes('requerimiento'))) {
+    return 'dian_defense';
+  }
+
+  // Tax refund
+  if ((lower.includes('saldo a favor') || lower.includes('devolucion'))
+      && (lower.includes('iva') || lower.includes('renta') || lower.includes('retencion'))) {
+    return 'tax_refund';
+  }
+
+  // Transfer pricing
+  if (lower.includes('precios de transferencia') || lower.includes('plena competencia')
+      || lower.includes('arm') || lower.includes('vinculado economico')
+      || lower.includes('formato 1125') || lower.includes('art. 260')) {
+    return 'transfer_pricing';
+  }
+
+  // Tax reconciliation
+  if (lower.includes('conciliacion fiscal') || lower.includes('formato 2516')
+      || lower.includes('impuesto diferido') || lower.includes('diferencias temporarias')
+      || lower.includes('art. 772')) {
+    return 'tax_reconciliation';
+  }
+
+  // Fiscal audit / revisoria
+  if (lower.includes('dictamen') || lower.includes('revisoria fiscal')
+      || lower.includes('revisor fiscal') || lower.includes('nia 700')
+      || lower.includes('empresa en marcha') || lower.includes('going concern')) {
+    return 'fiscal_audit_opinion';
+  }
+
+  // Valuation
+  if (lower.includes('valoracion') || lower.includes('valuation')
+      || lower.includes('flujo descontado') || lower.includes('dcf')
+      || lower.includes('multiplos') || lower.includes('ebitda')) {
+    return 'business_valuation';
+  }
+
+  // Due diligence
+  if (lower.includes('due diligence') || lower.includes('debida diligencia')
+      || (lower.includes('diagnostico') && lower.includes('financiero'))) {
+    return 'due_diligence';
+  }
+
+  // Feasibility
+  if (lower.includes('factibilidad') || lower.includes('feasibility')
+      || lower.includes('estudio de mercado') || lower.includes('vpn')
+      || (lower.includes('tir') && lower.includes('inversion'))) {
+    return 'feasibility_study';
+  }
+
+  // Tax planning
+  if (lower.includes('planeacion tributaria') || lower.includes('optimizacion fiscal')
+      || lower.includes('regimen simple') || lower.includes('zona franca')
+      || lower.includes('zomac') || lower.includes('beneficio tributario')) {
+    return 'tax_planning';
+  }
+
+  // Financial statements / EEFF → could be NIIF report or financial intel
+  if (lower.includes('estado de situacion financiera') || lower.includes('estado de resultados')
+      || lower.includes('balance general') || lower.includes('flujo de efectivo')
+      || (lower.includes('activo') && lower.includes('pasivo') && lower.includes('patrimonio'))) {
+    return 'niif_report';
+  }
+
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -334,12 +437,21 @@ export async function POST(req: Request) {
       }
     }
 
+    // -----------------------------------------------------------------
+    // Smart document classification — detect what case type this file
+    // is best suited for so the frontend can auto-suggest the right flow.
+    // Uses keyword heuristics (zero LLM) for instant detection.
+    // -----------------------------------------------------------------
+    const detectedCaseType = classifyDocument(text, file.name, ext);
+
     return NextResponse.json({
       success: true,
       filename: file.name,
       chunks: chunksCount,
       extractedText: text,
       validationReport,
+      detectedCaseType,
+      isTrialBalance: !!validationReport,
       message: chunksCount > 0
         ? `Documento "${file.name}" procesado en ${chunksCount} fragmentos e indexado.`
         : `Documento "${file.name}" procesado exitosamente. Texto extraido disponible para consulta.`,
