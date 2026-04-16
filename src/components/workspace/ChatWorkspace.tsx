@@ -420,7 +420,7 @@ function UserMessage({ message }: { message: ChatMessage }) {
           {formatTime(message.timestamp)}
         </time>
       </div>
-      <p className="text-sm text-[#0a0a0a] leading-relaxed whitespace-pre-wrap">{message.content}</p>
+      <p className="text-sm text-[#0a0a0a] leading-relaxed whitespace-pre-wrap">{message.content ?? ''}</p>
     </motion.div>
   );
 }
@@ -647,8 +647,9 @@ function AssistantMessage({
   canRegenerate,
   onRegenerate,
 }: AssistantMessageProps) {
-  const legalRefs = extractLegalReferences(message.content);
-  const hasContent = !!message.content.trim();
+  const safeContent = typeof message.content === 'string' ? message.content : '';
+  const legalRefs = extractLegalReferences(safeContent);
+  const hasContent = !!safeContent.trim();
 
   // Error message with Retry button
   if (message.errorKind) {
@@ -670,7 +671,7 @@ function AssistantMessage({
             <p className="text-xs font-medium text-[#dc2626] mb-1">
               {language === 'es' ? 'No se pudo completar la consulta' : 'Could not complete the query'}
             </p>
-            <p className="text-sm text-[#7f1d1d] leading-relaxed">{message.content}</p>
+            <p className="text-sm text-[#7f1d1d] leading-relaxed">{safeContent}</p>
             {message.onRetry && (
               <button
                 type="button"
@@ -743,7 +744,7 @@ function AssistantMessage({
                 ),
               }}
             >
-              {message.content}
+              {safeContent}
             </ReactMarkdown>
           ) : (
             <span className="sr-only">
@@ -907,15 +908,18 @@ export function ChatWorkspace({
   const [conversationId] = useState(() => externalConversationId || generateConversationId());
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = loadConversation(externalConversationId);
-    if (saved && saved.messages.length > 0) {
-      return saved.messages.map(m => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        timestamp: '',
-        webSearchUsed: m.webSearchUsed,
-      }));
-    }
+    const cleaned = saved && Array.isArray(saved.messages)
+      ? saved.messages
+          .filter(m => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant'))
+          .map(m => ({
+            id: m.id || generateId(),
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            timestamp: '',
+            webSearchUsed: m.webSearchUsed,
+          }))
+      : [];
+    if (cleaned.length > 0) return cleaned;
     return [{
       id: '1',
       role: 'assistant' as const,
