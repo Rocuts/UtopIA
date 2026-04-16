@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { motion } from 'motion/react';
 import {
   CreditCard,
   TrendingUp,
@@ -8,6 +9,9 @@ import {
   GitMerge,
   HelpCircle,
   Info,
+  Upload,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StepWizard, FileUploadZone } from '@/design-system';
@@ -16,6 +20,7 @@ import type { DueDiligenceIntake as DueDiligenceIntakeType } from '@/types/platf
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useIntakePersistence } from './useIntakePersistence';
 import { IntakePreview } from './IntakePreview';
+import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtraction';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -95,12 +100,26 @@ function formatNIT(raw: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 10)}`;
 }
 
+// ─── Confidence Dot ─────────────────────────────────────────────────────────
+
+function ConfidenceDot({ level }: { level?: FieldConfidence }) {
+  if (!level || level === 'none') return null;
+  return (
+    <span
+      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')}
+      title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
+    />
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function DueDiligenceIntake() {
   const { startNewConsultation, setIntakeModalOpen, clearIntakeDraft, setActiveMode } =
     useWorkspace();
+  const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
   const [step, setStep] = useState(0);
+  const [skippedUpload, setSkippedUpload] = useState(false);
   const [values, setValues] = useIntakePersistence('due_diligence', DEFAULT_VALUES);
 
   const updateField = useCallback(
@@ -110,9 +129,33 @@ export function DueDiligenceIntake() {
     [setValues],
   );
 
-  const handleUpload = useCallback(async (_file: File) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-  }, []);
+  // Pre-fill from extraction
+  useEffect(() => {
+    if (extractionState.status === 'done' && extractionState.extracted) {
+      const ext = extractionState.extracted;
+
+      // Company name
+      if (ext.company.name) updateField('companyName', ext.company.name);
+
+      // NIT
+      if (ext.company.nit) updateField('nit', ext.company.nit);
+
+      // Entity type
+      if (ext.company.entityType) {
+        const et = ext.company.entityType.toUpperCase();
+        if (et === 'SAS' || et === 'SA' || et === 'LTDA' || et === 'SCS') {
+          updateField('entityType', et as DueDiligenceIntakeType['entityType']);
+        }
+      }
+
+      // NIIF group
+      if (ext.niifGroup) updateField('niifGroup', ext.niifGroup);
+
+      // Auto-advance to review step
+      const timer = setTimeout(() => setStep(1), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [extractionState.status, extractionState.extracted, updateField]);
 
   const handleSubmit = useCallback(() => {
     startNewConsultation('due-diligence');
@@ -121,7 +164,86 @@ export function DueDiligenceIntake() {
     setIntakeModalOpen(false);
   }, [startNewConsultation, setActiveMode, clearIntakeDraft, setIntakeModalOpen]);
 
-  // ─── Step 1: Proposito ─────────────────────────────────────────────────────
+  // Confidence tracking
+  const confidence = extractionState.extracted?.confidence ?? {};
+  const extractedConfidence: Record<string, FieldConfidence> = {};
+  if (extractionState.status === 'done' && extractionState.extracted) {
+    if (confidence.name) extractedConfidence.companyName = confidence.name;
+    if (confidence.nit) extractedConfidence.nit = confidence.nit;
+    if (confidence.entityType) extractedConfidence.entityType = confidence.entityType;
+    if (confidence.niifGroup && confidence.niifGroup !== 'none') extractedConfidence.niifGroup = confidence.niifGroup;
+  }
+  const detected = Object.values(extractedConfidence).filter(c => c === 'high' || c === 'medium').length;
+  const totalFields = 4;
+
+  // ─── Step 1: Upload Document ──────────────────────────────────────────────
+
+  const stepUpload = (
+    <div className="space-y-4 pb-6">
+      <div>
+        <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
+        <p className="text-xs text-[#a3a3a3]">
+          Cargue estados financieros, certificado de existencia o declaraciones
+        </p>
+      </div>
+
+      {extractionState.status === 'done' && extractionState.extracted ? (
+        <div className="space-y-3">
+          <div className="border border-[#22C55E]/30 bg-[#F0FDF4] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="w-4 h-4 text-[#22C55E]" />
+              <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
+            </div>
+            <p className="text-xs text-[#16A34A]/80">
+              {detected} de {totalFields} campos detectados automaticamente
+            </p>
+          </div>
+          <button onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+            Subir otro archivo
+          </button>
+        </div>
+      ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
+        <div className="border border-[#D4A017]/30 bg-[#FEF9EC] rounded-xl p-6 text-center">
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+            <Upload className="w-6 h-6 text-[#D4A017] mx-auto" />
+          </motion.div>
+          <p className="text-sm text-[#7D5B0C] mt-2 font-medium">
+            {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
+          </p>
+          <div className="w-48 h-1.5 bg-[#D4A017]/20 rounded-full overflow-hidden mx-auto mt-3">
+            <motion.div className="h-full bg-[#D4A017] rounded-full" animate={{ width: `${extractionState.progress}%` }} />
+          </div>
+        </div>
+      ) : extractionState.status === 'error' ? (
+        <div className="border border-[#EF4444]/30 bg-[#FEF2F2] rounded-xl p-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-[#EF4444]" />
+            <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
+          </div>
+          <button onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+        </div>
+      ) : (
+        <FileUploadZone
+          accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
+          onUpload={uploadAndExtract}
+          maxSizeMB={25}
+          label="Arrastre su archivo aqui"
+          sublabel="Estados financieros, certificados de existencia, declaraciones"
+        />
+      )}
+
+      {extractionState.status === 'idle' && (
+        <button
+          onClick={() => { setSkippedUpload(true); setStep(1); }}
+          className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
+        >
+          Llenar manualmente sin documento
+        </button>
+      )}
+    </div>
+  );
+
+  // ─── Step 2: Proposito ─────────────────────────────────────────────────────
 
   const step1 = (
     <div className="space-y-4">
@@ -172,19 +294,31 @@ export function DueDiligenceIntake() {
     </div>
   );
 
-  // ─── Step 2: Datos de la Empresa ───────────────────────────────────────────
+  // ─── Step 3: Datos de la Empresa ───────────────────────────────────────────
 
   const step2 = (
     <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Datos de la Empresa</h3>
         <p className="text-xs text-[#737373]">Informacion basica de la entidad a evaluar.</p>
+        {detected > 0 && !skippedUpload && (
+          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
+            <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
+            <span className="text-xs text-[#16A34A] font-medium">
+              {detected} de {totalFields} campos auto-detectados
+            </span>
+            <span className="text-[10px] text-[#16A34A]/60 ml-auto flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> alta
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] ml-1" /> inferido
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Razon Social */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5">
-          Razon Social <span className="text-[#DC2626]">*</span>
+        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
+          Razon Social <ConfidenceDot level={extractedConfidence.companyName} /> <span className="text-[#DC2626] ml-1">*</span>
         </label>
         <input
           type="text"
@@ -197,8 +331,8 @@ export function DueDiligenceIntake() {
 
       {/* NIT */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5">
-          NIT <span className="text-[#DC2626]">*</span>
+        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
+          NIT <ConfidenceDot level={extractedConfidence.nit} /> <span className="text-[#DC2626] ml-1">*</span>
         </label>
         <input
           type="text"
@@ -212,7 +346,9 @@ export function DueDiligenceIntake() {
 
       {/* Tipo de Entidad */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-2">Tipo de Sociedad</label>
+        <label className="block text-xs font-medium text-[#525252] mb-2 flex items-center gap-0.5">
+          Tipo de Sociedad <ConfidenceDot level={extractedConfidence.entityType} />
+        </label>
         <div className="flex flex-wrap gap-2">
           {ENTITY_TYPES.map((label, i) => {
             const val = ENTITY_VALUES[i];
@@ -238,7 +374,9 @@ export function DueDiligenceIntake() {
 
       {/* Grupo NIIF */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-2">Grupo NIIF</label>
+        <label className="block text-xs font-medium text-[#525252] mb-2 flex items-center gap-0.5">
+          Grupo NIIF <ConfidenceDot level={extractedConfidence.niifGroup} />
+        </label>
         <div className="space-y-2">
           {NIIF_GROUPS.map((group) => {
             const selected = values.niifGroup === group.value;
@@ -300,14 +438,14 @@ export function DueDiligenceIntake() {
     </div>
   );
 
-  // ─── Step 3: Documentos ────────────────────────────────────────────────────
+  // ─── Step 4: Documentos ────────────────────────────────────────────────────
 
   const step3 = (
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Documentos de Soporte</h3>
         <p className="text-xs text-[#737373]">
-          Adjunte los documentos disponibles para el analisis.
+          Adjunte documentos adicionales para el analisis.
         </p>
       </div>
 
@@ -334,7 +472,7 @@ export function DueDiligenceIntake() {
       </div>
 
       <FileUploadZone
-        onUpload={handleUpload}
+        onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
         label="Estados financieros y documentos corporativos"
         sublabel="PDF, DOCX, XLSX, imagenes -- Max 25MB"
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
@@ -343,13 +481,13 @@ export function DueDiligenceIntake() {
     </div>
   );
 
-  // ─── Step 4: Preview ───────────────────────────────────────────────────────
+  // ─── Step 5: Preview ───────────────────────────────────────────────────────
 
   const step4 = (
     <IntakePreview
       caseType="due_diligence"
       data={values}
-      onBack={() => setStep(2)}
+      onBack={() => setStep(3)}
       onSubmit={handleSubmit}
     />
   );
@@ -357,6 +495,7 @@ export function DueDiligenceIntake() {
   // ─── Wizard Steps ──────────────────────────────────────────────────────────
 
   const steps: WizardStep[] = [
+    { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
     { id: 'purpose', label: 'Proposito', isValid: !!values.purpose, component: step1 },
     {
       id: 'company',
