@@ -8,6 +8,12 @@ import {
   BarChart3,
   Sparkles,
   ArrowRight,
+  Calculator,
+  Globe,
+  DollarSign,
+  ClipboardCheck,
+  GitCompareArrows,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -67,6 +73,54 @@ const ENTRY_CARDS: EntryCard[] = [
     descEs: 'Reporte financiero corporativo completo: 3 agentes + 4 auditores + meta-auditoria IFRS 18. Excel profesional.',
     descEn: 'Complete corporate financial report: 3 agents + 4 auditors + IFRS 18 meta-audit. Professional Excel.',
     elite: true,
+  },
+  {
+    id: 'tax_planning',
+    icon: Calculator,
+    labelEs: 'Planeacion Tributaria',
+    labelEn: 'Tax Planning',
+    descEs: 'Optimizacion fiscal integral: regimen SIMPLE vs ordinario, zonas francas, ZOMAC, dividendos, descuentos I+D+i (Art. 256 E.T.).',
+    descEn: 'Comprehensive tax optimization: SIMPLE vs ordinary regime, free zones, ZOMAC, dividends, R&D discounts.',
+  },
+  {
+    id: 'transfer_pricing',
+    icon: Globe,
+    labelEs: 'Precios de Transferencia',
+    labelEn: 'Transfer Pricing',
+    descEs: 'Documentacion comprobatoria, analisis de plena competencia y Formato 1125 DIAN (Arts. 260-1 a 260-11 E.T.).',
+    descEn: 'Supporting documentation, arm\'s length analysis and DIAN Format 1125 (Arts. 260-1 to 260-11 E.T.).',
+  },
+  {
+    id: 'business_valuation',
+    icon: DollarSign,
+    labelEs: 'Valoracion Empresarial',
+    labelEn: 'Business Valuation',
+    descEs: 'DCF con parametros colombianos (TES, EMBI, WACC), multiplos de mercado y activos netos ajustados NIIF 13.',
+    descEn: 'DCF with Colombian parameters (TES, EMBI, WACC), market multiples and IFRS 13 adjusted net assets.',
+  },
+  {
+    id: 'fiscal_audit_opinion',
+    icon: ClipboardCheck,
+    labelEs: 'Dictamen de Revisoria Fiscal',
+    labelEn: 'Fiscal Audit Opinion',
+    descEs: 'Opinion formal NIA 700: empresa en marcha, errores materiales, cumplimiento Ley 43/1990, carta de gerencia.',
+    descEn: 'Formal NIA 700 opinion: going concern, material misstatement, Law 43/1990 compliance, management letter.',
+  },
+  {
+    id: 'tax_reconciliation',
+    icon: GitCompareArrows,
+    labelEs: 'Conciliacion Fiscal',
+    labelEn: 'Tax Reconciliation',
+    descEs: 'Puente NIIF-fiscal, impuesto diferido NIC 12, Formato 2516 DIAN listo para transmision electronica.',
+    descEn: 'IFRS-to-tax bridge, NIC 12 deferred tax, DIAN Format 2516 ready for electronic submission.',
+  },
+  {
+    id: 'feasibility_study',
+    icon: Lightbulb,
+    labelEs: 'Estudio de Factibilidad',
+    labelEn: 'Feasibility Study',
+    descEs: 'Estudio de mercado, modelo financiero (VPN, TIR, WACC colombiano), analisis de riesgo e incentivos ZOMAC/ZF.',
+    descEn: 'Market study, financial model (NPV, IRR, Colombian WACC), risk analysis and ZOMAC/FZ incentives.',
   },
 ];
 

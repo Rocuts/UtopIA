@@ -6,6 +6,12 @@ export type CaseType =
   | 'due_diligence'
   | 'financial_intel'
   | 'niif_report'
+  | 'tax_planning'
+  | 'transfer_pricing'
+  | 'business_valuation'
+  | 'fiscal_audit_opinion'
+  | 'tax_reconciliation'
+  | 'feasibility_study'
 
 export type CaseStatus =
   | 'intake'
@@ -65,6 +71,12 @@ export type IntakeFormUnion =
   | DueDiligenceIntake
   | FinancialIntelIntake
   | NiifReportIntake
+  | TaxPlanningIntake
+  | TransferPricingIntake
+  | BusinessValuationIntake
+  | FiscalAuditOpinionIntake
+  | TaxReconciliationIntake
+  | FeasibilityStudyIntake
 
 export interface DianDefenseIntake {
   caseType: 'dian_defense'
@@ -154,6 +166,109 @@ export interface NiifOutputOptions {
   metaAudit: boolean
   excelExport: boolean
   comparativeAnalysis: boolean
+}
+
+// ─── New Module Intakes ───────────────────────────────────────────────────────
+
+export interface TaxPlanningIntake {
+  caseType: 'tax_planning'
+  company: CompanyMetadata
+  currentRegime: 'ordinario' | 'simple' | 'zona_franca' | 'zomac' | 'otro'
+  annualRevenue?: number
+  currentTaxBurden?: number
+  objectives: Array<
+    | 'minimize_renta'
+    | 'optimize_iva'
+    | 'dividend_planning'
+    | 'holding_structure'
+    | 'tax_benefits'
+    | 'international_planning'
+    | 'succession'
+  >
+  hasRelatedParties: boolean
+  period: string
+  specialInstructions?: string
+}
+
+export interface TransferPricingIntake {
+  caseType: 'transfer_pricing'
+  company: CompanyMetadata
+  grossEquity: number
+  grossRevenue: number
+  relatedParties: Array<{
+    name: string
+    country: string
+    relationship: 'matriz' | 'subordinada' | 'sucursal' | 'vinculado_economico'
+    transactionTypes: Array<'bienes' | 'servicios' | 'financiamiento' | 'intangibles' | 'garantias'>
+    annualAmount: number
+  }>
+  period: string
+  hasCurrentDocumentation: boolean
+  specialInstructions?: string
+}
+
+export interface BusinessValuationIntake {
+  caseType: 'business_valuation'
+  company: CompanyMetadata
+  purpose: 'venta' | 'fusion' | 'adquisicion' | 'aporte_especie' | 'sucesion' | 'impairment' | 'litigio' | 'otro'
+  methodologies: Array<'dcf' | 'multiplos_mercado' | 'activos_netos' | 'dividendos' | 'opciones_reales'>
+  historicalPeriods: number
+  projectionYears: number
+  hasFinancialStatements: boolean
+  specialInstructions?: string
+}
+
+export interface FiscalAuditOpinionIntake {
+  caseType: 'fiscal_audit_opinion'
+  company: CompanyMetadata
+  period: string
+  comparativePeriod?: string
+  opinionScope: 'plena' | 'limitada' | 'revision'
+  areasOfFocus: Array<
+    | 'going_concern'
+    | 'revenue_recognition'
+    | 'inventory'
+    | 'related_parties'
+    | 'contingencies'
+    | 'subsequent_events'
+    | 'estimates'
+  >
+  materialityThreshold?: number
+  hasInternalControl: boolean
+  specialInstructions?: string
+}
+
+export interface TaxReconciliationIntake {
+  caseType: 'tax_reconciliation'
+  company: CompanyMetadata
+  period: string
+  niifGroup: 1 | 2 | 3
+  reconciledTaxes: Array<'renta' | 'iva' | 'retencion' | 'ica' | 'cree'>
+  hasNiifFinancials: boolean
+  hasFiscalDeclarations: boolean
+  knownDifferences?: string
+  specialInstructions?: string
+}
+
+export interface FeasibilityStudyIntake {
+  caseType: 'feasibility_study'
+  projectName: string
+  projectType: 'nueva_empresa' | 'expansion' | 'nuevo_producto' | 'inversion_inmobiliaria' | 'franquicia' | 'tecnologia' | 'otro'
+  sector: string
+  estimatedInvestment: number
+  location: string
+  projectionYears: number
+  analyses: Array<
+    | 'market_study'
+    | 'technical_feasibility'
+    | 'financial_model'
+    | 'risk_analysis'
+    | 'legal_framework'
+    | 'environmental_impact'
+    | 'social_impact'
+  >
+  fundingSource: 'propio' | 'credito' | 'inversion' | 'mixto'
+  specialInstructions?: string
 }
 
 // ─── Agent & Pipeline ─────────────────────────────────────────────────────────

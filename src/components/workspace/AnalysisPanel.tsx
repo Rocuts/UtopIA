@@ -82,6 +82,12 @@ const CASE_TYPE_LABELS: Record<CaseType, string> = {
   due_diligence: 'Due Diligence',
   financial_intel: 'Inteligencia Financiera',
   niif_report: 'Reporte NIIF',
+  tax_planning: 'Planeacion Tributaria',
+  transfer_pricing: 'Precios de Transferencia',
+  business_valuation: 'Valoracion Empresarial',
+  fiscal_audit_opinion: 'Dictamen Rev. Fiscal',
+  tax_reconciliation: 'Conciliacion Fiscal',
+  feasibility_study: 'Estudio de Factibilidad',
 };
 
 // Quick reference citations per case type
@@ -111,6 +117,36 @@ const CASE_TYPE_CITATIONS: Record<CaseType, Citation[]> = {
     { article: 'NIC 1', source: 'NIIF / IAS', normText: 'Presentacion de estados financieros. Establece las bases para la presentacion de los estados financieros de proposito general.' },
     { article: 'NIC 8', source: 'NIIF / IAS', normText: 'Politicas contables, cambios en estimaciones contables y errores.' },
     { article: 'Dec. 2420/2015', source: 'Decreto', normText: 'Decreto Unico Reglamentario de las Normas de Contabilidad, de Informacion Financiera y de Aseguramiento de la Informacion.' },
+  ],
+  tax_planning: [
+    { article: 'Art. 240 E.T.', source: 'Estatuto Tributario', normText: 'Tarifa general del impuesto sobre la renta para personas juridicas: 35% (2026).' },
+    { article: 'Arts. 903-916 E.T.', source: 'Estatuto Tributario', normText: 'Regimen SIMPLE de Tributacion. Regimen alternativo voluntario que integra renta, ICA y consumo.' },
+    { article: 'Art. 256 E.T.', source: 'Estatuto Tributario', normText: 'Descuento por inversiones en investigacion, desarrollo tecnologico e innovacion (30%).' },
+  ],
+  transfer_pricing: [
+    { article: 'Art. 260-1 E.T.', source: 'Estatuto Tributario', normText: 'Criterio de vinculacion para efectos del regimen de precios de transferencia.' },
+    { article: 'Art. 260-2 E.T.', source: 'Estatuto Tributario', normText: 'Principio de plena competencia (arm\'s length) en operaciones con vinculados.' },
+    { article: 'Art. 260-5 E.T.', source: 'Estatuto Tributario', normText: 'Documentacion comprobatoria obligatoria para precios de transferencia.' },
+  ],
+  business_valuation: [
+    { article: 'NIIF 13', source: 'NIIF / IFRS', normText: 'Medicion del valor razonable. Define valor razonable, establece un marco para su medicion con jerarquia de 3 niveles.' },
+    { article: 'NIC 36', source: 'NIIF / IAS', normText: 'Deterioro del valor de los activos. Valor recuperable = max(valor razonable - costos de venta, valor en uso).' },
+    { article: 'Art. 90 E.T.', source: 'Estatuto Tributario', normText: 'Determinacion del valor comercial de bienes para efectos fiscales. Desviacion > 15% permite ajuste DIAN.' },
+  ],
+  fiscal_audit_opinion: [
+    { article: 'NIA 700', source: 'Normas Internacionales de Auditoria', normText: 'Formacion de la opinion y emision del informe de auditoria sobre los estados financieros.' },
+    { article: 'Art. 207 C.Co.', source: 'Codigo de Comercio', normText: 'Funciones del revisor fiscal: 10 funciones estatutarias obligatorias.' },
+    { article: 'Ley 43/1990', source: 'Ley', normText: 'Reglamentacion de la profesion de contador publico. Requisitos, deberes y sanciones.' },
+  ],
+  tax_reconciliation: [
+    { article: 'Art. 772-1 E.T.', source: 'Estatuto Tributario', normText: 'Conciliacion fiscal. Los contribuyentes obligados a llevar contabilidad deben conciliar las diferencias entre la aplicacion de los marcos tecnicos normativos contables y las disposiciones del Estatuto Tributario.' },
+    { article: 'NIC 12', source: 'NIIF / IAS', normText: 'Impuesto a las ganancias. Tratamiento contable del impuesto corriente y diferido generado por diferencias temporarias.' },
+    { article: 'Formato 2516', source: 'DIAN', normText: 'Reporte de conciliacion fiscal para personas juridicas. Transmision electronica obligatoria si ingresos >= 45,000 UVT.' },
+  ],
+  feasibility_study: [
+    { article: 'Ley 2069/2020', source: 'Ley', normText: 'Ley de Emprendimiento. Marco regulatorio para el crecimiento, consolidacion y sostenibilidad de empresas.' },
+    { article: 'Ley 590/2000', source: 'Ley', normText: 'Clasificacion MIPYME: micro (<= 10 trabajadores), pequena (11-50), mediana (51-200).' },
+    { article: 'Art. 240-1 E.T.', source: 'Estatuto Tributario', normText: 'Tarifa para usuarios de zona franca: 20% sobre renta liquida gravable.' },
   ],
 };
 

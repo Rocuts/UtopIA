@@ -9,6 +9,7 @@ import { TaxRefundIntake } from './TaxRefundIntake';
 import { DueDiligenceIntake } from './DueDiligenceIntake';
 import { FinancialIntelIntake } from './FinancialIntelIntake';
 import { NiifReportIntake } from './NiifReportIntake';
+import { GenericPipelineIntake } from './GenericPipelineIntake';
 import type { CaseType } from '@/types/platform';
 
 // ─── Case Type Titles ────────────────────────────────────────────────────────
@@ -19,6 +20,12 @@ const TITLES: Record<CaseType, string> = {
   due_diligence: 'Nuevo Due Diligence',
   financial_intel: 'Nueva Inteligencia Financiera',
   niif_report: 'Nuevo Reporte NIIF Integral',
+  tax_planning: 'Nueva Planeacion Tributaria',
+  transfer_pricing: 'Nuevo Estudio de Precios de Transferencia',
+  business_valuation: 'Nueva Valoracion Empresarial',
+  fiscal_audit_opinion: 'Nuevo Dictamen de Revisoria Fiscal',
+  tax_reconciliation: 'Nueva Conciliacion Fiscal',
+  feasibility_study: 'Nuevo Estudio de Factibilidad',
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -68,6 +75,18 @@ export function IntakeModal() {
         return <FinancialIntelIntake />;
       case 'niif_report':
         return <NiifReportIntake />;
+      case 'tax_planning':
+        return <GenericPipelineIntake caseType="tax_planning" useCase="tax-planning" title="Planeacion Tributaria" subtitle="Optimice la carga fiscal de su empresa con estrategias legales basadas en el E.T. 2026" agents={['Optimizador Tributario', 'Analista Impacto NIIF', 'Validador de Cumplimiento']} />;
+      case 'transfer_pricing':
+        return <GenericPipelineIntake caseType="transfer_pricing" useCase="transfer-pricing" title="Precios de Transferencia" subtitle="Documentacion comprobatoria y analisis de plena competencia (Arts. 260-1 a 260-11 E.T.)" agents={['Analista TP', 'Analisis de Comparables', 'Documentacion DIAN']} />;
+      case 'business_valuation':
+        return <GenericPipelineIntake caseType="business_valuation" useCase="business-valuation" title="Valoracion Empresarial" subtitle="Valoracion profesional por DCF, multiplos de mercado y activos netos ajustados (NIIF 13)" agents={['Modelador DCF', 'Comparables de Mercado', 'Sintetizador de Valoracion']} />;
+      case 'fiscal_audit_opinion':
+        return <GenericPipelineIntake caseType="fiscal_audit_opinion" useCase="fiscal-audit-opinion" title="Dictamen de Revisoria Fiscal" subtitle="Opinion formal tipo NIA 700 con evaluacion de empresa en marcha, errores materiales y cumplimiento" agents={['Evaluador Empresa en Marcha', 'Revisor de Errores Materiales', 'Verificador de Cumplimiento', 'Redactor de Dictamen']} />;
+      case 'tax_reconciliation':
+        return <GenericPipelineIntake caseType="tax_reconciliation" useCase="tax-reconciliation" title="Conciliacion Fiscal" subtitle="Conciliacion NIIF-fiscal con calculo de impuesto diferido (Art. 772-1 E.T., Formato 2516)" agents={['Identificador de Diferencias', 'Calculador de Impuesto Diferido']} />;
+      case 'feasibility_study':
+        return <GenericPipelineIntake caseType="feasibility_study" useCase="feasibility-study" title="Estudio de Factibilidad" subtitle="Estudio de mercado, modelo financiero (VPN, TIR, WACC) y analisis de riesgo para proyectos colombianos" agents={['Analista de Mercado', 'Modelador Financiero', 'Evaluador de Riesgo']} />;
       default:
         return null;
     }

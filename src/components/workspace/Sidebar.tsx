@@ -13,6 +13,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquare,
+  Calculator,
+  Globe,
+  DollarSign,
+  ClipboardCheck,
+  GitCompareArrows,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
@@ -68,6 +74,42 @@ const CASE_TYPE_ITEMS: CaseTypeItem[] = [
     label: { es: 'Inteligencia Fin.', en: 'Financial Intel.' },
     shortcut: 'I',
   },
+  {
+    key: 'tax_planning',
+    icon: Calculator,
+    label: { es: 'Planeacion Tributaria', en: 'Tax Planning' },
+    shortcut: 'P',
+  },
+  {
+    key: 'transfer_pricing',
+    icon: Globe,
+    label: { es: 'Precios Transferencia', en: 'Transfer Pricing' },
+    shortcut: 'T',
+  },
+  {
+    key: 'business_valuation',
+    icon: DollarSign,
+    label: { es: 'Valoracion Empresarial', en: 'Business Valuation' },
+    shortcut: 'V',
+  },
+  {
+    key: 'fiscal_audit_opinion',
+    icon: ClipboardCheck,
+    label: { es: 'Dictamen Rev. Fiscal', en: 'Fiscal Audit Opinion' },
+    shortcut: 'F',
+  },
+  {
+    key: 'tax_reconciliation',
+    icon: GitCompareArrows,
+    label: { es: 'Conciliacion Fiscal', en: 'Tax Reconciliation' },
+    shortcut: 'C',
+  },
+  {
+    key: 'feasibility_study',
+    icon: Lightbulb,
+    label: { es: 'Estudio Factibilidad', en: 'Feasibility Study' },
+    shortcut: 'E',
+  },
 ];
 
 const ELITE_ITEM: CaseTypeItem = {
@@ -85,6 +127,12 @@ const USE_CASE_LABELS: Record<string, Record<string, string>> = {
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Inteligencia',
     'financial-report': 'NIIF',
+    'tax-planning': 'Plan. Tributaria',
+    'transfer-pricing': 'Precios Transfer.',
+    'business-valuation': 'Valoracion',
+    'fiscal-audit-opinion': 'Revisoria',
+    'tax-reconciliation': 'Conciliacion',
+    'feasibility-study': 'Factibilidad',
   },
   en: {
     'dian-defense': 'DIAN',
@@ -92,6 +140,12 @@ const USE_CASE_LABELS: Record<string, Record<string, string>> = {
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Intelligence',
     'financial-report': 'NIIF',
+    'tax-planning': 'Tax Plan.',
+    'transfer-pricing': 'Transfer Pr.',
+    'business-valuation': 'Valuation',
+    'fiscal-audit-opinion': 'Fiscal Audit',
+    'tax-reconciliation': 'Reconciliation',
+    'feasibility-study': 'Feasibility',
   },
 };
 

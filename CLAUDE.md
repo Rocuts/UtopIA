@@ -64,6 +64,36 @@ The codebase has two independent multi-agent systems:
 - Scores: overall grade (A+ to F), per-dimension scores, IFRS 18 readiness, data quality metrics, AI governance metrics
 - Entry point: `POST /api/financial-quality`. Accepts report + auditReport + preprocessed
 
+**6. Tax Planning Pipeline** (`src/lib/agents/financial/tax-planning/orchestrator.ts`)
+- Three agents run **sequentially**: Tax Optimizer → NIIF Impact Analyst → Compliance Validator
+- Covers: Art. 240 ET (35%), SIMPLE (Arts. 903-916), Zonas Francas, ZOMAC, Art. 256/255 discounts, dividends (Art. 242), holdings (CHC)
+- Entry point: `POST /api/tax-planning` with SSE streaming. `maxDuration: 300s`
+
+**7. Transfer Pricing Pipeline** (`src/lib/agents/financial/transfer-pricing/orchestrator.ts`)
+- Three agents run **sequentially**: TP Analyst → Comparable Analysis → Documentation Writer
+- Covers: Arts. 260-1 to 260-11 ET, Decreto 2120/2017, 6 methods (PC/PR/CN/PD/ML/MUT), Formato 1125 DIAN
+- Entry point: `POST /api/transfer-pricing` with SSE streaming. `maxDuration: 300s`
+
+**8. Business Valuation Pipeline** (`src/lib/agents/financial/valuation/orchestrator.ts`)
+- **Hybrid**: DCF Modeler + Market Comparables run **in parallel** → Valuation Synthesizer **sequential**
+- Covers: NIIF 13, NIC 36, Art. 90 ET, TES/EMBI/WACC colombiano, SuperSociedades guidelines
+- Entry point: `POST /api/business-valuation` with SSE streaming. `maxDuration: 300s`
+
+**9. Fiscal Audit Opinion Pipeline** (`src/lib/agents/financial/fiscal-opinion/orchestrator.ts`)
+- **Hybrid**: Going Concern + Material Misstatement + Compliance run **in parallel** → Opinion Drafter **sequential**
+- Covers: NIA 200-706, Ley 43/1990, Art. 207-209 C.Co., Ley 222/1995, dictamen formal colombiano
+- Entry point: `POST /api/fiscal-audit-opinion` with SSE streaming. `maxDuration: 300s`
+
+**10. Tax Reconciliation Pipeline** (`src/lib/agents/financial/tax-reconciliation/orchestrator.ts`)
+- Two agents run **sequentially**: Difference Identifier → Deferred Tax Calculator
+- Covers: Art. 772-1 ET, Formato 2516 DIAN, NIC 12, Decreto 2235/2017, 35% tax rate
+- Entry point: `POST /api/tax-reconciliation` with SSE streaming. `maxDuration: 300s`
+
+**11. Feasibility Study Pipeline** (`src/lib/agents/financial/feasibility/orchestrator.ts`)
+- Three agents run **sequentially**: Market Analyst → Financial Modeler → Risk Assessor
+- Covers: DNP methodology, Ley 2069/2020, WACC colombiano, ZOMAC/ZF incentives, MIPYME classification
+- Entry point: `POST /api/feasibility-study` with SSE streaming. `maxDuration: 300s`
+
 **4. Preprocessing + Export** (deterministic, no LLM)
 - `src/lib/preprocessing/trial-balance.ts`: parses CSV/Excel trial balances, filters auxiliaries, sums by PUC class, detects discrepancies (e.g. missing accounts like 1120 Ahorros), validates patrimonial equation. Outputs clean data + validation report for agents
 - `src/lib/export/excel-export.ts`: generates multi-tab .xlsx (Balance, P&L, KPIs, Validation, Summary) using ExcelJS with corporate formatting

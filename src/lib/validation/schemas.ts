@@ -80,6 +80,87 @@ export const financialReportRequestSchema = z.object({
   instructions: z.string().max(2_000).optional(),
 });
 
+// ---- Tax planning route ----
+export const taxPlanningRequestSchema = z.object({
+  rawData: z.string().min(1, 'Financial data is required').max(200_000, 'Data too large'),
+  company: companyInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+  currentRegime: z
+    .enum(['ordinario', 'simple', 'zona_franca', 'zomac', 'economia_naranja'])
+    .optional(),
+  grossRevenue: z.number().nonnegative().optional(),
+  employeeCount: z.number().int().nonnegative().optional(),
+});
+
+// ---- Business valuation route ----
+export const businessValuationRequestSchema = z.object({
+  financialData: z.string().min(1, 'Financial data is required').max(200_000, 'Data too large'),
+  company: companyInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+  purpose: z.string().max(500).optional(),
+});
+
+// ---- Transfer pricing route ----
+export const transferPricingPartySchema = z.object({
+  name: z.string().min(1).max(200),
+  taxId: z.string().min(1).max(30),
+  jurisdiction: z.string().min(1).max(100),
+  relationshipType: z.string().max(200).optional(),
+  isTaxHaven: z.boolean().optional(),
+});
+
+export const controlledTransactionSchema = z.object({
+  description: z.string().min(1).max(500),
+  type: z.enum(['bienes', 'servicios', 'intangibles', 'financieras', 'otros']),
+  amount: z.number().nonnegative(),
+  relatedParty: z.string().min(1).max(200),
+  direction: z.enum(['importacion', 'exportacion']),
+});
+
+export const transferPricingRequestSchema = z.object({
+  rawData: z.string().min(1, 'Intercompany transaction data is required').max(200_000, 'Data too large'),
+  company: companyInfoSchema,
+  relatedParties: z.array(transferPricingPartySchema).max(50).optional(),
+  controlledTransactions: z.array(controlledTransactionSchema).max(100).optional(),
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+});
+
+// ---- Tax reconciliation route ----
+export const taxReconciliationRequestSchema = z.object({
+  rawData: z.string().min(1, 'Raw accounting data is required').max(200_000, 'Data too large'),
+  company: companyInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+});
+
+// ---- Feasibility study route ----
+export const projectInfoSchema = z.object({
+  projectName: z.string().min(1, 'Project name is required').max(200),
+  description: z.string().min(1, 'Project description is required').max(5_000),
+  sector: z.string().min(1, 'Sector is required').max(100),
+  ciiu: z.string().max(20).optional(),
+  city: z.string().max(100).optional(),
+  department: z.string().max(100).optional(),
+  estimatedInvestment: z.number().nonnegative().optional(),
+  evaluationHorizon: z.number().int().min(1).max(30).optional(),
+  companySize: z.enum(['micro', 'pequena', 'mediana', 'grande']).optional(),
+  promoterName: z.string().max(200).optional(),
+  nit: z.string().max(20).optional(),
+  isZomac: z.boolean().optional(),
+  isZonaFranca: z.boolean().optional(),
+  isEconomiaNaranja: z.boolean().optional(),
+});
+
+export const feasibilityStudyRequestSchema = z.object({
+  projectData: z.string().min(1, 'Project description is required').max(200_000, 'Data too large'),
+  project: projectInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+});
+
 // ---- Financial audit route ----
 export const financialAuditRequestSchema = z.object({
   report: z.object({
@@ -92,4 +173,23 @@ export const financialAuditRequestSchema = z.object({
   }),
   language: z.enum(['es', 'en']).default('es'),
   auditFocus: z.string().max(2_000).optional(),
+});
+
+// ---- Fiscal audit opinion (Dictamen del Revisor Fiscal) route ----
+export const fiscalAuditOpinionRequestSchema = z.object({
+  report: z.object({
+    company: companyInfoSchema,
+    niifAnalysis: z.object({ fullContent: z.string() }),
+    strategicAnalysis: z.object({ fullContent: z.string() }),
+    governance: z.object({ fullContent: z.string() }),
+    consolidatedReport: z.string().min(1, 'Consolidated report is required'),
+    generatedAt: z.string(),
+  }),
+  auditReport: z.object({
+    consolidatedReport: z.string(),
+    overallScore: z.number(),
+    opinionType: z.string(),
+  }).optional(),
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
 });

@@ -141,6 +141,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         due_diligence: 'due-diligence',
         financial_intel: 'financial-intelligence',
         niif_report: 'financial-report',
+        tax_planning: 'tax-planning',
+        transfer_pricing: 'transfer-pricing',
+        business_valuation: 'business-valuation',
+        fiscal_audit_opinion: 'fiscal-audit-opinion',
+        tax_reconciliation: 'tax-reconciliation',
+        feasibility_study: 'feasibility-study',
       };
       setActiveUseCaseState(CASE_TYPE_TO_USE_CASE[ct]);
     }
@@ -184,6 +190,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       due_diligence: 'due-diligence',
       financial_intel: 'financial-intelligence',
       niif_report: 'financial-report',
+      tax_planning: 'tax-planning',
+      transfer_pricing: 'transfer-pricing',
+      business_valuation: 'business-valuation',
+      fiscal_audit_opinion: 'fiscal-audit-opinion',
+      tax_reconciliation: 'tax-reconciliation',
+      feasibility_study: 'feasibility-study',
     };
     setActiveUseCaseState(CASE_TYPE_TO_USE_CASE[ct]);
     setIntakeModalOpen(true);

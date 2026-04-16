@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <code>3 agentes NIIF</code> · <code>4 auditores en paralelo</code> · <code>meta-auditor IFRS 18</code> · <code>12 dimensiones de calidad</code>
+  <code>11 pipelines multi-agente</code> · <code>18+ agentes especializados</code> · <code>17 API endpoints</code> · <code>11 tipos de caso</code>
 </p>
 
 <p align="center">
@@ -144,6 +144,94 @@ FASE 3 · Meta-Auditoria de Calidad
 | Opinion Formal tipo NIA 700 (favorable / con salvedades / desfavorable) | Revisor Fiscal |
 | Calificacion de Calidad A+ a F (12 dimensiones) | Meta-Auditor |
 | Excel Profesional (.xlsx, 5 pestanas con formato corporativo) | ExcelJS |
+
+---
+
+## Nuevos Modulos Profesionales (2026)
+
+### 6. Planeacion Tributaria — Tributarista Senior
+
+Pipeline secuencial de 3 agentes que analiza la carga fiscal actual y genera estrategias de optimizacion legales:
+
+| Agente | Funcion | Normativa |
+|--------|---------|-----------|
+| **Optimizador Tributario** | Analisis de estructura fiscal, estrategias de ahorro | Art. 240 ET (35%), SIMPLE (903-916), ZF (240-1, 20%), ZOMAC, Economia Naranja |
+| **Analista Impacto NIIF** | Efectos contables de cada estrategia | NIC 12 (diferido), NIC 37 (provisiones), NIIF 10 (consolidacion) |
+| **Validador Cumplimiento** | Riesgo regulatorio y anti-abuso | Art. 869 ET (GAAR), Art. 118-1 (subcapitalizacion), Art. 631-5 (beneficiario real) |
+
+Cubre: SIMPLE vs ordinario, zonas francas, ZOMAC, dividendos (Art. 242), holdings CHC, descuentos I+D+i (Art. 256, 30%), inversiones ambientales (Art. 255, 25%), tasa minima 15% (Pilar 2 OCDE).
+
+### 7. Precios de Transferencia — Tributarista Senior
+
+Pipeline secuencial de 3 agentes para documentacion comprobatoria DIAN:
+
+| Agente | Funcion | Normativa |
+|--------|---------|-----------|
+| **Analista TP** | Caracterizacion de transacciones, analisis funcional (FAR), seleccion de metodo | Arts. 260-1 a 260-11 ET, 6 metodos (PC/PR/CN/PU/MC/MTU) |
+| **Analisis de Comparables** | Benchmarking, rango intercuartil, ajustes | OCDE Guidelines 2022, Art. 260-4 ET (mediana), bases de datos |
+| **Documentacion DIAN** | Informe Local, Master File, Formato 1125 | Art. 260-5 ET, Decreto 2120/2017, BEPS Accion 13 |
+
+Umbrales 2026: patrimonio bruto >= 100,000 UVT ($5,237M) O ingresos brutos >= 61,000 UVT ($3,195M). Sanciones hasta 25,000 UVT ($1,309M).
+
+### 8. Valoracion Empresarial — Analista Financiero Senior
+
+Pipeline hibrido (paralelo + sintesis) de 3 agentes:
+
+```
+[Modelador DCF]    ──┐
+                     ├──→ [Sintetizador de Valoracion]
+[Comparables Mdo.] ──┘
+```
+
+| Agente | Funcion | Normativa |
+|--------|---------|-----------|
+| **Modelador DCF** | FCF proyectado, WACC colombiano, valor terminal Gordon | TES 10Y, EMBI, CAPM, Art. 90 ET, NIC 36 |
+| **Comparables de Mercado** | EV/EBITDA, P/E, P/BV, ajustes colombianos | NIIF 13 (jerarquia 3 niveles), SuperSociedades |
+| **Sintetizador** | Opinion consolidada, ponderacion, rango (bajo/medio/alto) | NIIF 13 (highest and best use), Art. 90 ET |
+
+WACC = (E/V) x Ke + (D/V) x Kd x (1-35%). Ajustes: descuento por tamano (15-30%), iliquidez (20-35%), prima de control (20-40%).
+
+### 9. Dictamen de Revisoria Fiscal — Contador Senior
+
+Pipeline hibrido de 4 agentes (3 paralelos + 1 secuencial):
+
+```
+[Empresa en Marcha]    ──┐
+[Errores Materiales]   ──┼──→ [Redactor de Dictamen]
+[Cumplimiento Legal]   ──┘
+```
+
+| Agente | Funcion | Normativa |
+|--------|---------|-----------|
+| **Evaluador Empresa en Marcha** | NIA 570, indicadores de riesgo, Ley 1116/2006 | Art. 457 C.Co., NIC 1 par. 25-26, NIC 10 |
+| **Revisor Errores Materiales** | Materialidad (5% utilidad / 1% activos), misstatements | NIA 315, 320, 330, 450, 500, NIC 8, NIC 37 |
+| **Verificador Cumplimiento** | 10 funciones estatutarias, SAGRILAFT, independencia | Art. 207-209 C.Co., Ley 43/1990, Ley 222/1995 |
+| **Redactor de Dictamen** | Opinion formal colombiana lista para firma | NIA 700-706, Ley 43/1990 Art. 10, tarjeta profesional |
+
+Opiniones: Favorable (limpia) · Con Salvedades · Desfavorable · Abstencion. Incluye carta de gerencia con recomendaciones.
+
+### 10. Conciliacion Fiscal — Contador + Tributarista
+
+Pipeline secuencial de 2 agentes:
+
+| Agente | Funcion | Normativa |
+|--------|---------|-----------|
+| **Identificador de Diferencias** | Analisis NIIF vs fiscal por 5 categorias, clasificacion temporal/permanente | Art. 772-1 ET, Formato 2516, Decreto 2235/2017, Art. 21-1 ET |
+| **Calculador Impuesto Diferido** | DTA/DTL por diferencia, worksheet, tasa efectiva, journal entries | NIC 12 (par. 15-88), tarifa 35% (Art. 240 ET) |
+
+5 categorias: ingresos (NIIF 15 vs Art. 28 ET), costos/deducciones (NIC 16/38 vs Art. 137 ET), activos (NIIF 13 vs Art. 69 ET), pasivos (NIIF 9 vs fiscal), patrimonio (ORI, superavit). Transmision Formato 2516 obligatoria si ingresos >= 45,000 UVT ($2,357M).
+
+### 11. Estudio de Factibilidad — Economista Senior
+
+Pipeline secuencial de 3 agentes:
+
+| Agente | Funcion | Parametros |
+|--------|---------|-----------|
+| **Analista de Mercado** | TAM/SAM/SOM, 5 Fuerzas de Porter, demanda, barreras | DANE CIIU Rev. 4, MIPYME (Ley 590/2000), Ley 2069/2020 |
+| **Modelador Financiero** | Pro-forma 5-10 anos, VPN, TIR, WACC, punto equilibrio | TES 10Y, EMBI, IBR, Art. 240 ET, ZOMAC/ZF/Naranja |
+| **Evaluador de Riesgo** | Matriz 5x5, VPN ajustado, Monte Carlo, go/no-go | Riesgo politico, cambiario (TRM), legal (ANLA), ESG |
+
+SMMLV 2026: $1,423,500 COP. Incentivos modelados: ZOMAC (tarifa progresiva 0%→100%), Zonas Francas (20%), Economia Naranja (exencion 7 anos), Art. 256 (descuento I+D 30%).
 
 ---
 
@@ -362,6 +450,12 @@ Grades: **A+** (95-100) · **A** (90-94) · **B** (80-89) · **C** (70-79) · **
 | `/api/financial-audit` | POST | 4 auditores en paralelo, SSE | 300s |
 | `/api/financial-quality` | POST | Meta-auditor 12 dimensiones | Default |
 | `/api/financial-report/export` | POST | Pipeline completo → `.xlsx` descargable | 300s |
+| `/api/tax-planning` | POST | Planeacion tributaria: 3 agentes secuenciales, SSE | 300s |
+| `/api/transfer-pricing` | POST | Precios de transferencia: 3 agentes secuenciales, SSE | 300s |
+| `/api/business-valuation` | POST | Valoracion empresarial: 2 paralelos + sintesis, SSE | 300s |
+| `/api/fiscal-audit-opinion` | POST | Dictamen revisoria fiscal: 3 paralelos + drafter, SSE | 300s |
+| `/api/tax-reconciliation` | POST | Conciliacion fiscal: 2 agentes secuenciales, SSE | 300s |
+| `/api/feasibility-study` | POST | Estudio de factibilidad: 3 agentes secuenciales, SSE | 300s |
 | `/api/upload` | POST | Ingesta documentos (PDF, DOCX, XLSX, imagenes OCR) | Default |
 | `/api/rag` | POST | Consulta directa al vector store | Default |
 | `/api/web-search` | POST | Busqueda Tavily filtrada | Default |

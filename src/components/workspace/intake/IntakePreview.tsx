@@ -31,6 +31,12 @@ const CASE_LABELS: Record<CaseType, string> = {
   due_diligence: 'Due Diligence',
   financial_intel: 'Inteligencia Financiera',
   niif_report: 'Reporte NIIF Integral',
+  tax_planning: 'Planeacion Tributaria',
+  transfer_pricing: 'Precios de Transferencia',
+  business_valuation: 'Valoracion Empresarial',
+  fiscal_audit_opinion: 'Dictamen de Revisoria Fiscal',
+  tax_reconciliation: 'Conciliacion Fiscal',
+  feasibility_study: 'Estudio de Factibilidad',
 };
 
 const ACT_LABELS: Record<string, string> = {
