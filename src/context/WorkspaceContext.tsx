@@ -8,6 +8,7 @@ import type {
   PipelineState,
   IntelligencePanelData,
   IntakeFormUnion,
+  NiifReportIntake,
 } from '@/types/platform';
 
 // ─── Preserved existing types ─────────────────────────────────────────────────
@@ -55,6 +56,7 @@ export interface WorkspaceState {
   intelligencePanelData: IntelligencePanelData;
   intakeDrafts: Partial<Record<CaseType, Partial<IntakeFormUnion>>>;
   intakeModalOpen: boolean;
+  pipelineInput: NiifReportIntake | null;
 
   // New setters
   setActiveCaseType: (ct: CaseType | null) => void;
@@ -65,6 +67,7 @@ export interface WorkspaceState {
   clearIntakeDraft: (caseType: CaseType) => void;
   setIntakeModalOpen: (open: boolean) => void;
   openIntakeForType: (ct: CaseType) => void;
+  setPipelineInput: (input: NiifReportIntake | null) => void;
 }
 
 // ─── Default pipeline state ───────────────────────────────────────────────────
@@ -105,6 +108,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [intelligencePanelData, setIntelligencePanelDataInternal] = useState<IntelligencePanelData>(DEFAULT_INTELLIGENCE_DATA);
   const [intakeDrafts, setIntakeDrafts] = useState<Partial<Record<CaseType, Partial<IntakeFormUnion>>>>({});
   const [intakeModalOpen, setIntakeModalOpen] = useState(false);
+  const [pipelineInput, setPipelineInputState] = useState<NiifReportIntake | null>(null);
 
   // Existing methods
   const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
@@ -183,6 +187,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const setPipelineInput = useCallback((input: NiifReportIntake | null) => {
+    setPipelineInputState(input);
+  }, []);
+
   const openIntakeForType = useCallback((ct: CaseType) => {
     setActiveCaseTypeState(ct);
     const CASE_TYPE_TO_USE_CASE: Record<CaseType, string> = {
@@ -230,6 +238,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         intelligencePanelData,
         intakeDrafts,
         intakeModalOpen,
+        pipelineInput,
         setActiveCaseType,
         setActiveMode,
         setPipelineState,
@@ -238,6 +247,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         clearIntakeDraft,
         setIntakeModalOpen,
         openIntakeForType,
+        setPipelineInput,
       }}
     >
       {children}

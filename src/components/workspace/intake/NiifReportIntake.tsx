@@ -340,8 +340,14 @@ function DetectionSummary({
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function NiifReportIntake() {
-  const { startNewConsultation, setIntakeModalOpen, clearIntakeDraft, setActiveMode } =
-    useWorkspace();
+  const {
+    startNewConsultation,
+    setIntakeModalOpen,
+    clearIntakeDraft,
+    setActiveMode,
+    setPipelineInput,
+    setPipelineState,
+  } = useWorkspace();
   const [step, setStep] = useState(0);
   const [values, setValues] = useIntakePersistence('niif_report', DEFAULT_VALUES);
   const [sectorOpen, setSectorOpen] = useState(false);
@@ -389,7 +395,7 @@ export function NiifReportIntake() {
           company: updatedCompany,
           fiscalPeriod: extracted.fiscalPeriod ?? prev.fiscalPeriod,
           niifGroup: extracted.niifGroup ?? prev.niifGroup,
-          rawData: extracted.isTrialBalance ? 'trial_balance_uploaded' : extracted.rawText || prev.rawData,
+          rawData: extracted.rawText || prev.rawData,
         };
       });
 
@@ -442,11 +448,40 @@ export function NiifReportIntake() {
   }, []);
 
   const handleSubmit = useCallback(() => {
+    const extractedRaw =
+      extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
+    const resolvedRawData = (extractedRaw || values.rawData || '').trim();
+
+    const finalIntake: NiifReportIntakeType = {
+      ...values,
+      rawData: resolvedRawData,
+    };
+
     startNewConsultation('financial-report');
+    setPipelineInput(finalIntake);
+    setPipelineState({
+      mode: 'running',
+      currentStage: 1,
+      stageLabels: ['Analista NIIF', 'Director de Estrategia', 'Gobierno Corporativo'],
+      completedStages: [],
+      auditorsStarted: [],
+      auditorsComplete: [],
+      auditFindings: {},
+      startedAt: new Date(),
+    });
     setActiveMode('pipeline');
     clearIntakeDraft('niif_report');
     setIntakeModalOpen(false);
-  }, [startNewConsultation, setActiveMode, clearIntakeDraft, setIntakeModalOpen]);
+  }, [
+    values,
+    extractionState,
+    startNewConsultation,
+    setPipelineInput,
+    setPipelineState,
+    setActiveMode,
+    clearIntakeDraft,
+    setIntakeModalOpen,
+  ]);
 
   // Generate year options
   const currentYear = new Date().getFullYear();

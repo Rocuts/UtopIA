@@ -11,6 +11,7 @@ import {
   Clock,
   CheckCircle,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -21,7 +22,16 @@ import { useLanguage } from '@/context/LanguageContext';
 import { StreamingText } from '@/design-system/components/StreamingText';
 import { DSBadge } from '@/design-system/components/Badge';
 import { ProgressRing } from '@/design-system/components/ProgressRing';
-import type { NiifReportIntake, PipelineState, FinancialReport, ReportSection } from '@/types/platform';
+import type { PipelineState, FinancialReport, ReportSection, QualityGrade } from '@/types/platform';
+import type {
+  FinancialReport as BackendFinancialReport,
+  FinancialProgressEvent,
+} from '@/lib/agents/financial/types';
+import type {
+  AuditReport as BackendAuditReport,
+  AuditProgressEvent,
+  AuditDomain,
+} from '@/lib/agents/financial/audit/types';
 
 const SPRING = { stiffness: 400, damping: 25 };
 
@@ -38,8 +48,97 @@ const AUDITOR_LABELS: Record<string, string> = {
   revisoria: 'Rev. Fiscal',
 };
 
-interface PipelineWorkspaceProps {
-  intake?: NiifReportIntake;
+interface SSEHandlers {
+  progress?: (event: unknown) => void;
+  result?: (event: unknown) => void;
+  error?: (event: unknown) => void;
+}
+
+async function consumeSSE(response: Response, signal: AbortSignal, handlers: SSEHandlers) {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = 'message';
+  let currentData = '';
+
+  try {
+    while (true) {
+      if (signal.aborted) {
+        reader.cancel();
+        return;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newlineIdx;
+      while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newlineIdx).replace(/\r$/, '');
+        buffer = buffer.slice(newlineIdx + 1);
+
+        if (line === '') {
+          if (currentData) {
+            try {
+              const parsed = JSON.parse(currentData);
+              const handler = handlers[currentEvent as keyof SSEHandlers];
+              handler?.(parsed);
+            } catch {
+              // Skip malformed event
+            }
+          }
+          currentEvent = 'message';
+          currentData = '';
+        } else if (line.startsWith('event:')) {
+          currentEvent = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          currentData = line.slice(5).trim();
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as Error)?.name !== 'AbortError') throw err;
+  }
+}
+
+function splitReportIntoSections(markdown: string): ReportSection[] {
+  if (!markdown) return [];
+  const lines = markdown.split('\n');
+  const sections: ReportSection[] = [];
+  let currentTitle: string | null = null;
+  let currentLines: string[] = [];
+  let order = 0;
+
+  const pushCurrent = () => {
+    if (currentTitle !== null) {
+      sections.push({
+        id: `sec-${order}`,
+        title: currentTitle || `Sección ${order + 1}`,
+        content: currentLines.join('\n').trim(),
+        order,
+      });
+      order += 1;
+    }
+  };
+
+  for (const line of lines) {
+    const h1 = line.match(/^#\s+(.+)$/);
+    const h2 = line.match(/^##\s+(.+)$/);
+    const heading = h1?.[1] ?? h2?.[1];
+    if (heading) {
+      pushCurrent();
+      currentTitle = heading.trim();
+      currentLines = [line];
+    } else {
+      if (currentTitle === null) {
+        currentTitle = '';
+        currentLines = [];
+      }
+      currentLines.push(line);
+    }
+  }
+  pushCurrent();
+  return sections.filter((s) => s.content.length > 0);
 }
 
 function StageNode({ index, state, label, sublabel }: {
@@ -294,11 +393,212 @@ function ReportViewer({ content, sections }: { content: string; sections: Report
   );
 }
 
-export function PipelineWorkspace({ intake }: PipelineWorkspaceProps) {
-  const { pipelineState } = useWorkspace();
+export function PipelineWorkspace() {
+  const { pipelineState, setPipelineState, pipelineInput } = useWorkspace();
   const [streamedContent, setStreamedContent] = useState('');
   const [report, setReport] = useState<FinancialReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { language } = useLanguage();
+  const lastProcessedInputRef = useRef<typeof pipelineInput>(null);
+
+  useEffect(() => {
+    if (!pipelineInput || lastProcessedInputRef.current === pipelineInput) return;
+    lastProcessedInputRef.current = pipelineInput;
+    setError(null);
+    setReport(null);
+    setStreamedContent('');
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        // ─── Phase 1: Financial Report ─────────────────────────────────────
+        const phase1Body = {
+          rawData: pipelineInput.rawData,
+          company: {
+            name: pipelineInput.company.name,
+            nit: pipelineInput.company.nit,
+            entityType: pipelineInput.company.entityType,
+            sector: pipelineInput.company.sector,
+            city: pipelineInput.company.city,
+            legalRepresentative: pipelineInput.company.legalRepresentative,
+            fiscalAuditor: pipelineInput.company.fiscalAuditor,
+            accountant: pipelineInput.company.accountant,
+            niifGroup: pipelineInput.niifGroup,
+            fiscalPeriod: pipelineInput.fiscalPeriod,
+            comparativePeriod: pipelineInput.comparativePeriod,
+          },
+          language,
+          instructions: pipelineInput.specialInstructions,
+        };
+
+        const phase1Res = await fetch('/api/financial-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
+          body: JSON.stringify(phase1Body),
+          signal: controller.signal,
+        });
+
+        if (!phase1Res.ok) {
+          const errBody = await phase1Res.text().catch(() => '');
+          throw new Error(`Reporte NIIF falló (HTTP ${phase1Res.status}): ${errBody.slice(0, 300)}`);
+        }
+
+        const phase1Box: { value: BackendFinancialReport | null } = { value: null };
+
+        await consumeSSE(phase1Res, controller.signal, {
+          progress: (raw) => {
+            const evt = raw as FinancialProgressEvent;
+            if (evt.type === 'stage_start' && evt.stage <= 3) {
+              setPipelineState((prev) => ({
+                ...prev,
+                mode: 'running',
+                currentStage: evt.stage as 1 | 2 | 3,
+              }));
+            } else if (evt.type === 'stage_complete' && evt.stage <= 3) {
+              const stageNum = evt.stage;
+              setPipelineState((prev) => ({
+                ...prev,
+                completedStages: prev.completedStages.includes(stageNum)
+                  ? prev.completedStages
+                  : [...prev.completedStages, stageNum],
+              }));
+            } else if (evt.type === 'stage_progress') {
+              setStreamedContent((prev) => prev + (prev ? '\n\n' : '') + `**${evt.detail}**`);
+            }
+          },
+          result: (raw) => {
+            phase1Box.value = raw as BackendFinancialReport;
+          },
+          error: (raw) => {
+            const { detail } = raw as { detail?: string };
+            throw new Error(detail || 'Error en reporte financiero');
+          },
+        });
+
+        const phase1Report = phase1Box.value;
+        if (!phase1Report) throw new Error('El endpoint de reporte no devolvió un resultado.');
+
+        // Ensure all 3 stages are marked complete even if events were missed
+        setPipelineState((prev) => ({
+          ...prev,
+          completedStages: [1, 2, 3],
+          currentStage: 3,
+        }));
+
+        // ─── Phase 2: Audit (if enabled) ──────────────────────────────────
+        const phase2Box: { value: BackendAuditReport | null } = { value: null };
+        if (pipelineInput.outputOptions.auditPipeline) {
+          setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
+
+          const phase2Res = await fetch('/api/financial-audit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
+            body: JSON.stringify({
+              report: phase1Report,
+              language,
+            }),
+            signal: controller.signal,
+          });
+
+          if (!phase2Res.ok) {
+            const errBody = await phase2Res.text().catch(() => '');
+            throw new Error(`Auditoría falló (HTTP ${phase2Res.status}): ${errBody.slice(0, 300)}`);
+          }
+
+          await consumeSSE(phase2Res, controller.signal, {
+            progress: (raw) => {
+              const evt = raw as AuditProgressEvent;
+              if (evt.type === 'auditor_start') {
+                const domain = evt.domain;
+                setPipelineState((prev) => ({
+                  ...prev,
+                  auditorsStarted: prev.auditorsStarted.includes(domain)
+                    ? prev.auditorsStarted
+                    : [...prev.auditorsStarted, domain],
+                }));
+              } else if (evt.type === 'auditor_complete' || evt.type === 'auditor_failed') {
+                const domain = evt.domain as AuditDomain;
+                setPipelineState((prev) => ({
+                  ...prev,
+                  auditorsComplete: prev.auditorsComplete.includes(domain)
+                    ? prev.auditorsComplete
+                    : [...prev.auditorsComplete, domain],
+                }));
+              }
+            },
+            result: (raw) => {
+              phase2Box.value = raw as BackendAuditReport;
+            },
+            error: (raw) => {
+              const { detail } = raw as { detail?: string };
+              throw new Error(detail || 'Error en auditoría');
+            },
+          });
+
+          if (phase2Box.value) {
+            const findingCounts: Record<string, number> = {};
+            for (const r of phase2Box.value.auditorResults) {
+              findingCounts[r.domain] = r.findings.length;
+            }
+            setPipelineState((prev) => ({
+              ...prev,
+              auditFindings: findingCounts,
+              auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
+            }));
+          }
+        }
+
+        // ─── Phase 3: Quality Meta-Audit (if enabled) ─────────────────────
+        if (pipelineInput.outputOptions.metaAudit) {
+          setPipelineState((prev) => ({ ...prev, mode: 'quality' }));
+
+          const phase3Res = await fetch('/api/financial-quality', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              report: phase1Report,
+              auditReport: phase2Box.value,
+              language,
+            }),
+            signal: controller.signal,
+          });
+
+          if (phase3Res.ok) {
+            const quality = (await phase3Res.json()) as {
+              grade?: QualityGrade;
+              score?: number;
+            };
+            setPipelineState((prev) => ({
+              ...prev,
+              qualityGrade: quality.grade,
+              qualityScore: quality.score,
+            }));
+          }
+        }
+
+        // ─── Finalize ─────────────────────────────────────────────────────
+        const consolidated = phase1Report.consolidatedReport;
+        setReport({
+          content: consolidated,
+          sections: splitReportIntoSections(consolidated),
+        });
+        setPipelineState((prev) => ({
+          ...prev,
+          mode: 'complete',
+          completedAt: new Date(),
+        }));
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        const msg = err instanceof Error ? err.message : 'Error desconocido';
+        setError(msg);
+        setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
+      }
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, [pipelineInput, language, setPipelineState]);
 
   const isRunning = pipelineState.mode !== 'idle' && pipelineState.mode !== 'complete';
   const isComplete = pipelineState.mode === 'complete';
@@ -310,6 +610,22 @@ export function PipelineWorkspace({ intake }: PipelineWorkspaceProps) {
   return (
     <div className="h-full flex flex-col overflow-y-auto styled-scrollbar">
       <PipelineMonitor state={pipelineState} />
+
+      {error && (
+        <div className="mx-6 my-4 rounded-lg border border-[#EF4444] bg-[#FEF2F2] px-4 py-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-[#EF4444] shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-[#DC2626]">Error en el pipeline</div>
+            <p className="text-xs text-[#737373] whitespace-pre-wrap break-words">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {!pipelineInput && !isRunning && (
+        <div className="flex-1 flex items-center justify-center text-sm text-[#a3a3a3] px-6 text-center">
+          No hay pipeline activo. Inicie un nuevo reporte desde &quot;Nueva Consulta&quot;.
+        </div>
+      )}
 
       {/* Live streaming preview */}
       {streamedContent && (
@@ -327,7 +643,7 @@ export function PipelineWorkspace({ intake }: PipelineWorkspaceProps) {
         </div>
       )}
 
-      {!streamedContent && isRunning && (
+      {!streamedContent && isRunning && !error && (
         <div className="flex-1 flex items-center justify-center text-sm text-[#a3a3a3]">
           <motion.div
             animate={{ opacity: [0.5, 1, 0.5] }}
