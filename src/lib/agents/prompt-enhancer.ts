@@ -56,11 +56,12 @@ ${userMessage}`,
       subQueries?: { domain?: string; query?: string }[];
     };
 
+    const VALID_DOMAINS: Set<string> = new Set(['tax', 'accounting', 'documents', 'strategy']);
     const subQueries =
       classification.tier === 'T3' && parsed.subQueries
         ? parsed.subQueries
             .filter((sq): sq is { domain: string; query: string } =>
-              Boolean(sq.domain && sq.query && (sq.domain === 'tax' || sq.domain === 'accounting')),
+              Boolean(sq.domain && sq.query && VALID_DOMAINS.has(sq.domain)),
             )
             .map((sq) => ({ domain: sq.domain as AgentDomain, query: sq.query }))
         : undefined;

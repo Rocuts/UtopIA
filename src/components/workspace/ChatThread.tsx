@@ -681,15 +681,26 @@ export function ChatThread({
 
       if (!response.ok) throw new Error(data.error || 'Upload failed');
 
+      const fullText = data.extractedText || '';
       const finishedDoc: UploadedDocument = {
         ...newDoc,
         chunks: data.chunks || 0,
-        textPreview: data.extractedText?.slice(0, 2000),
+        textPreview: fullText.slice(0, 2000),
+        extractedText: fullText,
       };
-      setUploadedDocs(prev =>
-        prev.map(d => (d.filename === file.name && d.uploadedAt === newDoc.uploadedAt ? finishedDoc : d)),
-      );
-      setDocumentContext(prev => prev + (prev ? '\n\n' : '') + (data.extractedText || ''));
+      setUploadedDocs(prev => {
+        const updated = prev.map(d =>
+          d.filename === file.name && d.uploadedAt === newDoc.uploadedAt ? finishedDoc : d,
+        );
+        // Rebuild documentContext from all documents with extracted text
+        setDocumentContext(
+          updated
+            .filter(d => d.extractedText)
+            .map(d => d.extractedText)
+            .join('\n\n'),
+        );
+        return updated;
+      });
       onDocumentUploaded?.(finishedDoc);
 
       setMessages(prev => [
@@ -716,8 +727,8 @@ export function ChatThread({
           role: 'assistant',
           content: isScannedPdf
             ? (language === 'es'
-              ? 'Este PDF parece ser una **imagen escaneada** y no contiene texto extraíble. Para analizarlo, suba capturas de cada página como imágenes (`.jpg` o `.png`) y UtopIA extraerá el texto automáticamente con OCR.'
-              : 'This PDF appears to be a **scanned image** and contains no extractable text. To analyze it, upload screenshots of each page as images (`.jpg` or `.png`) and UtopIA will extract the text automatically via OCR.')
+              ? 'Este PDF parece ser una **imagen escaneada** y no fue posible extraer el texto automaticamente. Intente subir capturas de cada pagina como imagenes (`.jpg` o `.png`) para que UtopIA las procese con OCR.'
+              : 'This PDF appears to be a **scanned image** and automatic text extraction failed. Try uploading screenshots of each page as images (`.jpg` or `.png`) so UtopIA can process them with OCR.')
             : isOldFormat
             ? (language === 'es'
               ? 'Este archivo usa un **formato antiguo** (`.doc` o `.xls`). Por favor guárdelo como **`.docx`** o **`.xlsx`** (formato moderno) e inténtelo de nuevo.'
@@ -734,7 +745,17 @@ export function ChatThread({
   };
 
   const removeDocument = (filename: string) => {
-    setUploadedDocs(prev => prev.filter(d => d.filename !== filename));
+    setUploadedDocs(prev => {
+      const remaining = prev.filter(d => d.filename !== filename);
+      // Rebuild documentContext from remaining documents
+      setDocumentContext(
+        remaining
+          .filter(d => d.extractedText)
+          .map(d => d.extractedText)
+          .join('\n\n'),
+      );
+      return remaining;
+    });
   };
 
   // Drag and drop

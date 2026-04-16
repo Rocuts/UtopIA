@@ -37,6 +37,52 @@ function validateMagicBytes(buffer: Buffer, ext: string): boolean {
 }
 
 /**
+ * Extract text from a scanned (image-only) PDF using OpenAI Responses API.
+ * Sends the PDF as a file input to gpt-4o for OCR across all pages.
+ *
+ * @param buffer   - Raw PDF bytes.
+ * @param filename - Original filename.
+ * @returns Extracted text from all pages.
+ */
+async function extractTextFromScannedPDF(buffer: Buffer, filename: string): Promise<string> {
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 120_000, // 2 min timeout for large scanned PDFs
+  });
+  const base64 = buffer.toString('base64');
+
+  const response = await openai.responses.create({
+    model: 'gpt-4o',
+    input: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text:
+              'Este es un documento PDF escaneado con informacion contable/tributaria colombiana. ' +
+              'Extrae TODO el texto de TODAS las paginas. Preserva la estructura de tablas usando markdown tables. ' +
+              'Incluye todos los numeros, fechas, NITs y referencias legales exactamente como aparecen. ' +
+              'Si una pagina no tiene texto, omitela. Procesa TODAS las paginas del documento.',
+          },
+          {
+            type: 'input_file',
+            filename: filename,
+            file_data: `data:application/pdf;base64,${base64}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const extracted = response.output_text?.trim();
+  if (!extracted) {
+    throw new Error('No se pudo extraer texto del PDF escaneado.');
+  }
+  return extracted;
+}
+
+/**
  * Extract text from an image file using OpenAI Vision API (OCR).
  * Sends the image as base64 to gpt-4o for high-quality text extraction.
  *
@@ -61,7 +107,10 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
   const base64 = buffer.toString('base64');
   const dataUrl = `data:${mime};base64,${base64}`;
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 90_000, // 90s timeout for image OCR
+  });
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
@@ -80,7 +129,7 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
         ],
       },
     ],
-    max_tokens: 4096,
+    max_tokens: 8192,
   });
 
   const extracted = response.choices[0]?.message?.content?.trim();
@@ -156,18 +205,25 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
     const text = result.text;
 
     // Detect scanned / image-only PDFs: if extracted text is suspiciously
-    // short relative to file size, warn the user.
-    // Heuristic: a typical text page yields ~2000+ chars; if we get < 50
-    // chars per estimated page (assuming ~100KB/page for scanned PDFs),
-    // the PDF is likely image-based.
+    // short relative to file size, the PDF is likely image-based.
+    // Instead of rejecting, try OCR via GPT-4o Responses API.
     const estimatedPages = Math.max(1, Math.ceil(buffer.length / 100_000));
     const charsPerPage = text.trim().length / estimatedPages;
     if (text.trim().length < 50 || charsPerPage < 50) {
-      throw new Error(
-        'SCANNED_PDF: Este PDF parece ser una imagen escaneada y no contiene texto extraible. ' +
-        'Para analizarlo, sube capturas de pantalla de cada pagina como imagenes (.jpg o .png) ' +
-        'y UtopIA extraera el texto automaticamente con OCR.'
-      );
+      try {
+        return await extractTextFromScannedPDF(buffer, filename);
+      } catch (ocrError) {
+        console.warn(
+          '[upload] Scanned PDF OCR failed, falling back to error:',
+          ocrError instanceof Error ? ocrError.message : ocrError,
+        );
+        throw new Error(
+          'SCANNED_PDF: Este PDF parece ser una imagen escaneada. ' +
+          'No fue posible extraer el texto automaticamente. ' +
+          'Intente subir capturas de cada pagina como imagenes (.jpg o .png) ' +
+          'para que UtopIA las procese con OCR.'
+        );
+      }
     }
 
     return text;

@@ -4,6 +4,7 @@
 
 import OpenAI from 'openai';
 import { CLASSIFIER_PROMPT } from '@/lib/agents/prompts/classifier.prompt';
+import { withRetry } from '@/lib/agents/utils/retry';
 import type { QueryClassification, CostTier, AgentDomain } from '@/lib/agents/types';
 
 // ---------------------------------------------------------------------------
@@ -45,27 +46,36 @@ export async function classifyQuery(
     .map((m) => `${m.role}: ${m.content.slice(0, 200)}`)
     .join('\n');
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: CLASSIFIER_PROMPT },
-      {
-        role: 'user',
-        content: `Use case hint: ${useCase || 'none'}
+  let raw: string;
+  try {
+    const response = await withRetry(
+      () =>
+        openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: CLASSIFIER_PROMPT },
+            {
+              role: 'user',
+              content: `Use case hint: ${useCase || 'none'}
 
 Recent conversation:
 ${recentContext || '(new conversation)'}
 
 Current user message:
 ${userMessage}`,
-      },
-    ],
-    response_format: { type: 'json_object' },
-    temperature: 0,
-    max_tokens: 150,
-  });
-
-  const raw = response.choices[0].message.content || '{}';
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0,
+          max_tokens: 150,
+        }),
+      { label: 'classifier', maxAttempts: 3 },
+    );
+    raw = response.choices[0].message.content || '{}';
+  } catch (llmError) {
+    console.warn('[classifier] LLM call failed after retries:', llmError instanceof Error ? llmError.message : llmError);
+    return { tier: 'T2', domains: ['tax'] as AgentDomain[], intent: 'classifier_error_fallback', confidence: 0.3 };
+  }
 
   try {
     const parsed = JSON.parse(raw) as {
@@ -76,8 +86,9 @@ ${userMessage}`,
     };
 
     const tier = (['T1', 'T2', 'T3'].includes(parsed.tier || '') ? parsed.tier : 'T2') as CostTier;
+    const VALID_DOMAINS: Set<string> = new Set(['tax', 'accounting', 'documents', 'strategy']);
     const validDomains = (parsed.domains || []).filter(
-      (d): d is AgentDomain => d === 'tax' || d === 'accounting',
+      (d): d is AgentDomain => VALID_DOMAINS.has(d),
     );
 
     // Ensure T2/T3 have at least one domain

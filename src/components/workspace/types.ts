@@ -6,6 +6,8 @@ export interface UploadedDocument {
   chunks: number;
   uploadedAt: string;
   textPreview?: string;
+  /** Full extracted text — used to rebuild documentContext on removal */
+  extractedText?: string;
 }
 
 export interface RiskAssessmentData {

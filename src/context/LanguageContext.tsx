@@ -12,16 +12,23 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  // Use lazy initialization or effect to avoid hydration mismatch, but for Next.js app router 
-  // keeping it simple as state.
-  const [language, setLanguageState] = useState<Language>('en');
+  // Default to 'es' for SSR (Colombian-focused app). Client-side detection runs in useEffect.
+  const [language, setLanguageState] = useState<Language>('es');
 
-  // Sync with localStorage on client side
+  // On mount: 1) check localStorage, 2) detect browser locale, 3) fallback to 'es'
   useEffect(() => {
+    // Priority 1: user's explicit previous choice
     const saved = localStorage.getItem('language') as Language;
     if (saved && (saved === 'en' || saved === 'es')) {
       setLanguageState(saved);
+      return;
     }
+
+    // Priority 2: detect browser/device language
+    const browserLang = navigator.language || (navigator as unknown as { userLanguage?: string }).userLanguage || '';
+    const detected: Language = browserLang.startsWith('es') ? 'es' : browserLang.startsWith('en') ? 'en' : 'es';
+    setLanguageState(detected);
+    localStorage.setItem('language', detected);
   }, []);
 
   const setLanguage = (lang: Language) => {

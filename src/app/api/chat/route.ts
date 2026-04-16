@@ -439,8 +439,33 @@ ${langInstruction}
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+  // Build message list — inject uploaded document content so the AI always
+  // has access to it, not only when it calls the analyze_document tool.
+  const docInjection: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  if (documentContext && documentContext.trim()) {
+    const DOC_PREVIEW_LIMIT = 30_000;
+    const truncated = documentContext.length > DOC_PREVIEW_LIMIT;
+    const preview = truncated
+      ? documentContext.slice(0, DOC_PREVIEW_LIMIT)
+      : documentContext;
+    docInjection.push({
+      role: 'system',
+      content:
+        'DOCUMENTO CARGADO POR EL USUARIO — CONTENIDO EXTRAIDO:\n' +
+        'El usuario ha subido un documento. A continuacion se encuentra el texto extraido. ' +
+        'DEBES usar esta informacion para responder cualquier pregunta sobre el documento del usuario. ' +
+        'Si necesitas un analisis estructurado mas profundo (cifras clave, riesgos, articulos relevantes), ' +
+        'usa la herramienta analyze_document.\n\n' +
+        preview +
+        (truncated
+          ? '\n\n[... documento truncado por longitud. Para el analisis completo usa la herramienta analyze_document ...]'
+          : ''),
+    });
+  }
+
   const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
+    ...docInjection,
     ...messages,
   ];
 

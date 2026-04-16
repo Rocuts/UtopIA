@@ -10,6 +10,8 @@ import { enhancePrompt } from './prompt-enhancer';
 import { synthesizeResponses } from './synthesizer';
 import { taxAgent } from './specialists/tax-agent';
 import { accountingAgent } from './specialists/accounting-agent';
+import { documentAgent } from './specialists/document-agent';
+import { strategyAgent } from './specialists/strategy-agent';
 import type {
   OrchestrateOptions,
   OrchestrateResult,
@@ -26,6 +28,8 @@ interface ChatMessage {
 const SPECIALISTS = {
   tax: taxAgent,
   accounting: accountingAgent,
+  documents: documentAgent,
+  strategy: strategyAgent,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -48,9 +52,13 @@ async function handleT1(
       {
         role: 'system',
         content: `You are UtopIA, a friendly AI assistant for Colombian accounting and tax advisory. ${langInstruction}
-Keep responses concise and helpful. If the user greets you, greet them back warmly and offer to help with their tax or accounting questions.
+Keep responses concise and helpful. If the user greets you, greet them back warmly and offer to help.
 If the user thanks you, acknowledge and ask if there's anything else.
-If the user asks what you can do, briefly describe: tax consultations, sanction calculations, DIAN defense, document analysis, financial intelligence, and tax calendar.`,
+If the user asks what you can do, briefly describe your 4 specialist capabilities:
+1. **Tributario**: Consultas sobre Estatuto Tributario, IVA, renta, retenciones, facturacion electronica, calendario tributario
+2. **Contable**: Normas NIIF/IFRS, analisis financiero, indicadores, presupuestos, revisoria fiscal
+3. **Documental**: Analisis de documentos subidos — declaraciones, requerimientos, estados financieros, facturas
+4. **Estrategia**: Defensa ante DIAN, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones`,
       },
       ...messages.slice(-6),
     ],
@@ -133,25 +141,60 @@ export async function orchestrate(
     // ----- T2: Single specialist -----
     const agent = SPECIALISTS[domains[0]];
     const query = enhanced.enhanced;
-    const result = await agent.execute(query, specialistCtx);
 
-    finalContent = result.content;
-    allWebSearchUsed = result.webSearchUsed;
-    allWebSources.push(...result.webSources);
-    finalRisk = result.riskAssessment;
-    finalSanction = result.sanctionCalculation;
+    try {
+      const result = await agent.execute(query, specialistCtx);
+      finalContent = result.content;
+      allWebSearchUsed = result.webSearchUsed;
+      allWebSources.push(...result.webSources);
+      finalRisk = result.riskAssessment;
+      finalSanction = result.sanctionCalculation;
+    } catch (agentError) {
+      console.error(`[orchestrator] ${agent.displayName} failed:`, agentError instanceof Error ? agentError.message : agentError);
+      finalContent = language === 'es'
+        ? 'Hubo un problema tecnico al procesar su consulta. Por favor intente de nuevo en unos segundos. Si el problema persiste, reformule su pregunta.'
+        : 'There was a technical issue processing your query. Please try again in a few seconds. If the problem persists, try rephrasing your question.';
+    }
   } else {
-    // ----- T3: Multiple specialists in parallel -----
+    // ----- T3: Multiple specialists in parallel with individual failure recovery -----
     const tasks = domains.map(async (domain) => {
       const agent = SPECIALISTS[domain];
-      // Use domain-specific sub-query if available, otherwise the enhanced query
       const subQuery =
         enhanced.subQueries?.find((sq) => sq.domain === domain)?.query || enhanced.enhanced;
-      const result = await agent.execute(subQuery, specialistCtx);
-      return { agent: agent.displayName, domain, result };
+      try {
+        const result = await agent.execute(subQuery, specialistCtx);
+        return { agent: agent.displayName, domain, result, failed: false as const };
+      } catch (agentError) {
+        console.error(`[orchestrator] ${agent.displayName} failed in T3:`, agentError instanceof Error ? agentError.message : agentError);
+        return {
+          agent: agent.displayName,
+          domain,
+          result: {
+            content: `[${agent.displayName} no pudo completar el analisis por un error tecnico.]`,
+            webSearchUsed: false,
+            webSources: [] as string[],
+          } as SpecialistResult,
+          failed: true as const,
+        };
+      }
     });
 
     const results = await Promise.all(tasks);
+
+    // If ALL agents failed, return error message
+    if (results.every((r) => r.failed)) {
+      finalContent = language === 'es'
+        ? 'Todos los agentes especializados tuvieron problemas tecnicos. Por favor intente de nuevo.'
+        : 'All specialist agents encountered technical issues. Please try again.';
+      onProgress?.({ type: 'done' });
+      return {
+        role: 'assistant',
+        content: finalContent,
+        tier: classification.tier,
+        agentsUsed: [],
+        webSearchUsed: false,
+      };
+    }
 
     // Collect metadata from all specialists
     for (const { result } of results) {

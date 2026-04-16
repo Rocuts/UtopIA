@@ -8,7 +8,15 @@ import type { NITContext } from '@/lib/security/pii-filter';
 // Query Classification
 // ---------------------------------------------------------------------------
 
-export type AgentDomain = 'tax' | 'accounting';
+/**
+ * Agent domains — each maps to a specialist agent.
+ *
+ * - tax:        Colombian tax law, sanctions, calendar, E.T. articles
+ * - accounting: NIIF/IFRS, CTCP, financial statements, ratios
+ * - documents:  Deep analysis of uploaded docs, OCR extraction, cross-referencing
+ * - strategy:   DIAN defense, risk management, compliance planning, action plans
+ */
+export type AgentDomain = 'tax' | 'accounting' | 'documents' | 'strategy';
 
 export type CostTier = 'T1' | 'T2' | 'T3';
 
@@ -36,6 +44,7 @@ export interface EnhancedQuery {
     amounts?: number[];
     dates?: string[];
     institutions?: string[];
+    documentNames?: string[];
   };
   /** For T3: per-domain sub-queries */
   subQueries?: { domain: AgentDomain; query: string }[];
