@@ -10,7 +10,7 @@ import {
   ChevronRight,
   X,
   RefreshCw,
-  Database,
+  Check,
   Globe,
   Shield,
   Trash2,
@@ -78,6 +78,8 @@ interface ProviderCard {
   id: ERPProvider;
   name: string;
   country: 'colombia' | 'international';
+  description: string;
+  color: string;
   authType: string;
   supportsPUC: boolean;
   supportsDIAN: boolean;
@@ -85,22 +87,31 @@ interface ProviderCard {
 }
 
 const COLOMBIAN_PROVIDERS: ProviderCard[] = [
-  { id: 'alegra', name: 'Alegra', country: 'colombia', authType: 'Email + API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Contactos'] },
-  { id: 'siigo', name: 'Siigo', country: 'colombia', authType: 'Usuario + Access Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Movimientos'] },
-  { id: 'helisa', name: 'Helisa', country: 'colombia', authType: 'HMAC Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Movimientos'] },
-  { id: 'world_office', name: 'World Office', country: 'colombia', authType: 'JWT Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas'] },
-  { id: 'contapyme', name: 'ContaPyme', country: 'colombia', authType: 'API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance'] },
+  { id: 'alegra', name: 'Alegra', country: 'colombia', description: 'Facturacion electronica y contabilidad en la nube', color: '#3B82F6', authType: 'Email + API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Contactos'] },
+  { id: 'siigo', name: 'Siigo', country: 'colombia', description: 'ERP contable y facturacion DIAN para PYMES', color: '#16A34A', authType: 'Usuario + Access Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas', 'Movimientos'] },
+  { id: 'helisa', name: 'Helisa', country: 'colombia', description: 'Sistema integral de gestion empresarial', color: '#7C3AED', authType: 'HMAC Key', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Movimientos'] },
+  { id: 'world_office', name: 'World Office', country: 'colombia', description: 'ERP contable con facturacion electronica', color: '#4F46E5', authType: 'JWT Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance', 'Facturas'] },
+  { id: 'contapyme', name: 'ContaPyme', country: 'colombia', description: 'Contabilidad simplificada para microempresas', color: '#0D9488', authType: 'API Token', supportsPUC: true, supportsDIAN: true, capabilities: ['PUC', 'DIAN', 'Balance'] },
 ];
 
 const INTERNATIONAL_PROVIDERS: ProviderCard[] = [
-  { id: 'sap_b1', name: 'SAP Business One', country: 'international', authType: 'Usuario + Contrasena + DB', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
-  { id: 'dynamics_365', name: 'Dynamics 365', country: 'international', authType: 'OAuth 2.0 (Azure AD)', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
-  { id: 'quickbooks', name: 'QuickBooks Online', country: 'international', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
-  { id: 'xero', name: 'Xero', country: 'international', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
-  { id: 'odoo', name: 'Odoo', country: 'international', authType: 'URL + Usuario + Contrasena', supportsPUC: true, supportsDIAN: false, capabilities: ['PUC', 'Balance', 'Facturas', 'Movimientos', 'Contactos'] },
+  { id: 'sap_b1', name: 'SAP Business One', country: 'international', description: 'ERP empresarial para medianas empresas', color: '#0070F2', authType: 'Usuario + Contrasena + DB', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
+  { id: 'dynamics_365', name: 'Dynamics 365', country: 'international', description: 'Suite de gestion empresarial Microsoft', color: '#0078D4', authType: 'OAuth 2.0 (Azure AD)', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Movimientos', 'Contactos'] },
+  { id: 'quickbooks', name: 'QuickBooks Online', country: 'international', description: 'Contabilidad en la nube para pequenas empresas', color: '#2CA01C', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
+  { id: 'xero', name: 'Xero', country: 'international', description: 'Plataforma contable global en la nube', color: '#13B5EA', authType: 'OAuth 2.0', supportsPUC: false, supportsDIAN: false, capabilities: ['Balance', 'Facturas', 'Contactos'] },
+  { id: 'odoo', name: 'Odoo', country: 'international', description: 'ERP modular de codigo abierto', color: '#714B67', authType: 'URL + Usuario + Contrasena', supportsPUC: true, supportsDIAN: false, capabilities: ['PUC', 'Balance', 'Facturas', 'Movimientos', 'Contactos'] },
 ];
 
 type ConnectionStatus = 'idle' | 'testing' | 'connecting' | 'connected' | 'error';
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  PUC: 'Plan de Cuentas',
+  DIAN: 'Reportes DIAN',
+  Balance: 'Balance de Prueba',
+  Facturas: 'Facturacion',
+  Movimientos: 'Movimientos',
+  Contactos: 'Terceros',
+};
 
 // ─── Field definitions ───────────────────────────────────────────────────────
 
@@ -608,85 +619,92 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 p-4 rounded-xl border transition-all',
+        'flex flex-col p-5 rounded-xl border transition-all',
         isConnected
           ? 'border-[#22C55E]/30 bg-[#F0FDF4]'
-          : 'border-[#e5e5e5] bg-white hover:border-[#D4A017]/40 hover:shadow-sm',
+          : 'border-[#e5e5e5] bg-white hover:border-[#d4d4d4] hover:shadow-sm',
       )}
     >
-      {/* Top row: icon + name + status */}
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          'w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
-          isConnected
-            ? 'bg-[#22C55E]/15 text-[#16A34A]'
-            : 'bg-[#fafafa] text-[#525252]',
-        )}>
-          {isConnected ? <CheckCircle className="w-4.5 h-4.5" /> : <Database className="w-4.5 h-4.5" />}
+      {/* Header: brand avatar + name + status */}
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            'w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0',
+            isConnected && 'ring-2 ring-[#22C55E]/30',
+          )}
+          style={{ backgroundColor: provider.color }}
+        >
+          {provider.name[0]}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-[#0a0a0a]">{provider.name}</span>
             <span className={cn(
-              'text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-              isConnected
-                ? 'bg-[#22C55E]/15 text-[#16A34A]'
-                : 'bg-[#f5f5f5] text-[#a3a3a3]',
+              'inline-flex items-center gap-1 text-[10px] font-medium shrink-0',
+              isConnected ? 'text-[#16A34A]' : 'text-[#a3a3a3]',
             )}>
+              <span className={cn(
+                'w-1.5 h-1.5 rounded-full',
+                isConnected ? 'bg-[#22C55E]' : 'bg-[#d4d4d4]',
+              )} />
               {isConnected ? 'Conectado' : 'No conectado'}
             </span>
           </div>
-          <p className="text-[10px] text-[#a3a3a3]">{provider.authType}</p>
+          <p className="text-[11px] text-[#737373] mt-0.5 leading-snug">{provider.description}</p>
         </div>
       </div>
 
-      {/* Connected info */}
+      {/* Connected: last sync */}
       {isConnected && connection.lastSync && (
-        <p className="text-[10px] text-[#a3a3a3] flex items-center gap-1">
+        <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-[#16A34A]">
           <RefreshCw className="w-3 h-3" />
           Ultima sync: {formatSyncDate(connection.lastSync)}
-        </p>
+        </div>
       )}
 
-      {/* Capabilities */}
-      <div className="flex flex-wrap gap-1">
-        {provider.capabilities.map(cap => (
-          <span
-            key={cap}
-            className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f5f5f5] text-[#525252] border border-[#e5e5e5]"
-          >
-            {cap}
-          </span>
-        ))}
+      {/* Capabilities — readable list */}
+      <div className="flex-1 mt-3">
+        <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-wider mb-1.5">Datos disponibles</p>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          {provider.capabilities.map(cap => (
+            <div key={cap} className="flex items-center gap-1.5">
+              <Check className="w-3 h-3 shrink-0" style={{ color: provider.color }} />
+              <span className="text-[11px] text-[#525252]">{CAPABILITY_LABELS[cap] || cap}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-2 pt-1">
+      {/* Footer: auth + action */}
+      <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
         {isConnected ? (
-          <>
+          <div className="flex items-center gap-2">
             <button
               onClick={onSync}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
             >
               <RefreshCw className="w-3 h-3" />
-              Sincronizar ahora
+              Sincronizar
             </button>
             <button
               onClick={onDisconnect}
-              className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
+              className="p-2 rounded-lg text-[#a3a3a3] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
               title="Desconectar"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
-          </>
+          </div>
         ) : (
-          <button
-            onClick={onConnect}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] transition-colors"
-          >
-            Conectar
-            <ChevronRight className="w-3 h-3" />
-          </button>
+          <>
+            <p className="text-[10px] text-[#a3a3a3] mb-2.5">Autenticacion: {provider.authType}</p>
+            <button
+              onClick={onConnect}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] hover:bg-[#FFFBEB] transition-all"
+            >
+              Conectar
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </>
         )}
       </div>
     </div>
