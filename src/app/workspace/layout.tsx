@@ -142,7 +142,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <div id="workspace-sidebar" className="contents">
           <Sidebar />
         </div>
-        <main id="main-content" className="flex-1 min-w-0 overflow-hidden flex flex-col bg-white">
+        <main id="main-content" className="flex-1 min-w-0 flex flex-col bg-white">
           {children}
         </main>
         <div id="analysis-panel" className="contents">
