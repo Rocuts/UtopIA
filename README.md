@@ -42,7 +42,9 @@ El reporte consolidado se entrega como un único documento Markdown listo para e
 |------|------------|
 | Framework | Next.js 16 (App Router), React 19, TypeScript |
 | LLM | OpenAI `gpt-4o-mini` (chat + agentes), `gpt-5.4-mini` (pipeline financiero), `gpt-4o` (OCR vía Vision API), `gpt-4o-realtime-preview` (voz), `text-embedding-3-small` (embeddings) |
-| Orquestación | Sistema multi-agente propio: Orchestrator-Workers con Cost Tiers (chat) + Pipeline Secuencial de 3 agentes (reportes financieros) |
+| Orquestación | Sistema multi-agente propio: Orchestrator-Workers con Cost Tiers (chat) + Pipeline Secuencial de 3 agentes + 4 auditores paralelos + meta-auditor de calidad |
+| Preprocesamiento | Validación aritmética determinista de balances de prueba (PUC colombiano, clases 1-7) |
+| Exportación | ExcelJS (`.xlsx` profesional), jsPDF (conversaciones) |
 | RAG | LangChain (splitter, embeddings, document loaders), HNSWLib-node (vector store) |
 | Búsqueda Web | Tavily API con filtrado por dominio (dian.gov.co, estatuto.co, actualicese.com, etc.) |
 | Voz | OpenAI Realtime API sobre WebRTC |
@@ -536,14 +538,162 @@ curl -X POST localhost:3000/api/financial-audit \
 
 ---
 
+## Preprocesador de Balance de Prueba + Exportación Excel
+
+### Preprocesador Aritmético (`src/lib/preprocessing/trial-balance.ts`)
+
+Módulo **100% determinista** (cero LLM) que valida los datos contables ANTES de enviarlos a los agentes. Compatible con ERPs colombianos (Siigo, World Office, Helisa, ContaPyme).
+
+```
+CSV/Excel del ERP
+       │
+       ▼
+  parseTrialBalanceCSV()
+  • Detecta separador automáticamente (, ; tab)
+  • Identifica columnas por nombre (código, débito, crédito, saldo)
+  • Maneja formato colombiano ($1.234.567,89) y anglosajón (1,234,567.89)
+       │
+       ▼
+  preprocessTrialBalance()
+  • Filtra auxiliares/transaccionales (ignora Clases, Grupos, Cuentas)
+  • Suma por clase PUC (1 a 7)
+  • Compara totales calculados vs reportados
+  • Detecta cuentas omitidas (ej: 1120 Ahorros)
+  • Valida ecuación patrimonial (A = P + E)
+       │
+       ▼
+  Output:
+  ├── validationReport — Markdown con tabla de discrepancias
+  ├── cleanData — CSV limpio de auxiliares validados
+  ├── summary — totales por clase + utilidad neta + ecuación
+  └── discrepancies[] — ubicación, causa probable, diferencia
+```
+
+**Regla de Oro**: Si el total de la Clase 1 del reporte ≠ suma de auxiliares → se priorizan los auxiliares y se informa qué cuenta falta.
+
+El preprocesador se ejecuta automáticamente cuando se sube un CSV/Excel al endpoint `/api/upload` (si detecta +10 cuentas contables). El informe de validación se antepone al texto extraído para que los agentes reciban datos pre-validados.
+
+### Exportador Excel (`src/lib/export/excel-export.ts`)
+
+Motor de exportación profesional usando **ExcelJS** (ya incluido en dependencias, sin Python):
+
+| Pestaña | Contenido | Datos |
+|---------|-----------|-------|
+| **Balance NIIF** | Activo/Pasivo/Patrimonio con códigos PUC | Preprocesados (aritmética exacta) |
+| **Estado Resultados** | Ingresos/Costos/Gastos → Utilidad Neta | Preprocesados |
+| **KPIs** | Dashboard estratégico completo | Agente 2 |
+| **Validación** | Discrepancias, banderas rojo/verde | Preprocesador |
+| **Resumen** | Reporte consolidado completo | Pipeline completo |
+
+Formato corporativo: paleta UtopIA, moneda COP (`"$"#,##0.00`), negritas en totales, filas alternadas, bordes.
+
+### Endpoint `/api/financial-report/export`
+
+Dos modos de operación:
+
+```bash
+# Modo 1: Pipeline completo (preprocess → 3 agentes → .xlsx)
+curl -X POST localhost:3000/api/financial-report/export \
+  -H "Content-Type: application/json" \
+  -d '{"rawData":"...", "company":{...}, "language":"es"}' \
+  --output Reporte_UtopIA.xlsx
+
+# Modo 2: Solo exportar un reporte existente
+curl -X POST localhost:3000/api/financial-report/export \
+  -H "Content-Type: application/json" \
+  -d '{"report": {...salida de /api/financial-report...}}' \
+  --output Reporte_UtopIA.xlsx
+```
+
+---
+
+## Meta-Auditor de Calidad y Best Practices 2026
+
+El **Quality Meta-Auditor** es el agente de cierre del sistema. No revisa los números (eso lo hacen los 4 auditores) ni genera estados financieros (eso lo hacen los 3 agentes). Evalúa la **calidad del proceso completo** contra los marcos de referencia internacionales y colombianos vigentes a 2026.
+
+### Marcos de Referencia Evaluados
+
+| Marco | Qué evalúa | Fuente |
+|-------|-----------|--------|
+| **IASB Conceptual Framework** | Relevancia, representación fiel, comparabilidad, verificabilidad, oportunidad, comprensibilidad | IFRS Foundation |
+| **NIIF 18** (eff. 2027) | Nuevos subtotales obligatorios (utilidad operacional, utilidad antes de financiación), MRDG, clasificación por categorías | IASB, abril 2024 |
+| **ISO/IEC 25012** | Calidad de datos: completitud, exactitud, consistencia, actualidad, validez | ISO |
+| **ISO/IEC 42001** | Gobernanza IA: trazabilidad, explicabilidad, anti-alucinación, supervisión humana | ISO |
+| **CTCP + Decreto 2420/2496** | Marco técnico normativo NIIF en Colombia | CTCP Colombia |
+
+### Las 12 Dimensiones de Calidad
+
+| # | Dimensión | Marco | Qué revisa |
+|---|-----------|-------|-----------|
+| D1 | Completitud del Reporte | ISO 25012 | 4 EEFF + notas + acta + KPIs + punto de equilibrio + proyecciones |
+| D2 | Exactitud Aritmética | ISO 25012 | Ecuación patrimonial, consistencia P&L↔Balance, flujo↔caja |
+| D3 | Consistencia Interna | ISO 25012 | No contradicciones entre estados, notas referencian cifras correctas |
+| D4 | Presentación NIIF | NIC 1 / NIIF 18 | Clasificación, subtotales, partidas mínimas, preparación NIIF 18 |
+| D5 | Calidad de Notas | NIC 1 par. 112-138 | Políticas sustanciales, juicios y estimaciones, contingencias |
+| D6 | Análisis Estratégico | Best Practices | Fórmulas con números, interpretación contextual, proyecciones conservadoras |
+| D7 | Gobierno Corporativo | Ley 1258/2008, C.Co. | Acta formal, quórum, reserva legal, distribución |
+| D8 | Trazabilidad | ISO 42001 | Cada cifra rastreable a datos de entrada |
+| D9 | Anti-Alucinación | ISO 42001 | Normas citadas existen, cifras provienen de input, tarifas vigentes |
+| D10 | Supervisión Humana | ISO 42001 | Disclaimers IA, recomendación validación CPA, espacios para firma |
+| D11 | Formato y Exportabilidad | Best Practices | Markdown limpio, tablas alineadas, moneda consistente, exportable |
+| D12 | Preparación IFRS 18 | NIIF 18 (2027) | Subtotales operacional/financiación, MRDG identificadas, clasificación compatible |
+
+### Grading
+
+| Grade | Score | Significado |
+|-------|-------|-------------|
+| **A+** | 95-100 | Calidad de élite — listo para publicación |
+| **A** | 90-94 | Excelente — ajustes cosméticos |
+| **B** | 80-89 | Bueno — algunas mejoras identificadas |
+| **C** | 70-79 | Aceptable — mejoras sustanciales necesarias |
+| **D** | 60-69 | Deficiente — requiere retrabajo |
+| **F** | <60 | Inaceptable — no cumple estándares mínimos |
+
+### Uso del API
+
+```bash
+# Evaluar calidad del reporte + auditoría
+curl -X POST localhost:3000/api/financial-quality \
+  -H "Content-Type: application/json" \
+  -d '{
+    "report": { ...salida de /api/financial-report... },
+    "auditReport": { ...salida de /api/financial-audit... },
+    "preprocessed": { ...salida del preprocesador... },
+    "language": "es"
+  }'
+```
+
+### Flujo Completo End-to-End
+
+```bash
+# 1. Generar reporte financiero (3 agentes secuenciales)
+REPORT=$(curl -s POST localhost:3000/api/financial-report -d '...')
+
+# 2. Auditar contra normativa colombiana (4 auditores en paralelo)
+AUDIT=$(curl -s POST localhost:3000/api/financial-audit -d "{\"report\":$REPORT}")
+
+# 3. Evaluar calidad del proceso completo (meta-auditor)
+QUALITY=$(curl -s POST localhost:3000/api/financial-quality \
+  -d "{\"report\":$REPORT, \"auditReport\":$AUDIT}")
+
+# 4. Exportar a Excel profesional
+curl POST localhost:3000/api/financial-report/export \
+  -d "{\"report\":$REPORT}" --output Reporte_UtopIA.xlsx
+```
+
+---
+
 ## Arquitectura de Archivos
 
 ```
 src/
 ├── app/api/
 │   ├── chat/route.ts             # Entry point — feature flag → orchestrated/legacy
-│   ├── financial-report/route.ts # ★ Pipeline financiero NIIF (3 agentes secuenciales, SSE)
+│   ├── financial-report/
+│   │   ├── route.ts              # ★ Pipeline financiero NIIF (3 agentes secuenciales, SSE)
+│   │   └── export/route.ts       # ★ Preprocess + pipeline + Excel export (.xlsx)
 │   ├── financial-audit/route.ts  # ★ Pipeline de auditoría (4 auditores en paralelo, SSE)
+│   ├── financial-quality/route.ts # ★ Meta-auditor de calidad (12 dimensiones, IFRS 18)
 │   ├── realtime/route.ts         # Token efímero para voz WebRTC
 │   ├── upload/route.ts           # Ingesta de documentos (PDF, DOCX, XLSX, imágenes OCR)
 │   ├── rag/route.ts              # Consulta directa al vector store
@@ -583,6 +733,11 @@ src/
 │   │       │   ├── niif-analyst.prompt.ts
 │   │       │   ├── strategy-director.prompt.ts
 │   │       │   └── governance-specialist.prompt.ts
+│   │       ├── quality/            # ★ META-AUDITOR DE CALIDAD
+│   │       │   ├── types.ts       # QualityAssessment, QualityDimension
+│   │       │   ├── prompt.ts      # 12-dimension evaluation prompt (IASB, IFRS 18, ISO)
+│   │       │   └── agent.ts       # Quality audit execution + parsing
+│   │       │
 │   │       └── audit/             # ★ PIPELINE DE AUDITORIA (4 en paralelo)
 │   │           ├── types.ts       # Findings, severities, audit report types
 │   │           ├── orchestrator.ts # Parallel executor + consolidator
@@ -608,6 +763,11 @@ src/
 │   │   ├── ingest.ts             # Pipeline de ingesta batch
 │   │   └── vectorstore.ts        # HNSWLib singleton + similarity search
 │   ├── search/web-search.ts      # Cliente Tavily con filtrado de dominios
+│   ├── preprocessing/
+│   │   └── trial-balance.ts      # ★ Validación aritmética determinista (PUC, auxiliares)
+│   ├── export/
+│   │   ├── pdf-export.ts         # Exportación PDF de conversaciones
+│   │   └── excel-export.ts       # ★ Exportación Excel financiero (5 tabs, ExcelJS)
 │   ├── security/pii-filter.ts    # Redacción PII (NIT, CC, emails, teléfonos)
 │   ├── storage/conversation-history.ts # Persistencia localStorage
 │   └── validation/schemas.ts     # Validación Zod de requests
