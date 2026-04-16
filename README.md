@@ -432,6 +432,110 @@ data: { "company": {...}, "niifAnalysis": {...}, "strategicAnalysis": {...}, "go
 
 ---
 
+## Pipeline de Auditoría Financiera (4 Auditores en Paralelo)
+
+El sistema de auditoría valida la salida del pipeline financiero contra **toda la normativa colombiana 2026**. A diferencia del pipeline de reportes (secuencial), los 4 auditores corren **en paralelo** (`Promise.allSettled`) porque evalúan aspectos independientes del mismo reporte.
+
+### Arquitectura
+
+```
+Reporte Financiero (salida del pipeline de 3 agentes)
+        │
+        ├──→ Auditor NIIF/Contable        ─┐
+        │    NIC/NIIF, Decretos 2420/2496   │
+        │                                   │
+        ├──→ Auditor Tributario             │  EN PARALELO
+        │    Estatuto Tributario 2026,       │  (Promise.allSettled)
+        │    DIAN, UVT $52.374              │
+        │                                   │
+        ├──→ Auditor Legal/Societario       │
+        │    Ley 1258/2008, C.Co.,          │
+        │    Ley 222/1995                   │
+        │                                   │
+        └──→ Auditor Revisoría Fiscal      ─┘
+             NIA/ISA, Ley 43/1990,
+             Materialidad, Going Concern
+                       │
+                       ▼
+              Consolidador de Auditoría
+              ┌─────────────────────────┐
+              │ • Score ponderado 0-100 │
+              │ • Hallazgos por severidad│
+              │ • Opinión formal         │
+              │ • Dictamen del revisor   │
+              └─────────────────────────┘
+```
+
+### Los 4 Auditores
+
+| Auditor | Dominio | Normativa Base | Peso en Score |
+|---------|---------|----------------|---------------|
+| **NIIF/Contable** | Estados financieros | NIC 1-41, NIIF 1-17, CTCP, Decretos 2420/2496 | 30% |
+| **Tributario** | Cumplimiento fiscal | Estatuto Tributario (840+ arts.), Resoluciones DIAN | 25% |
+| **Legal/Societario** | Gobierno corporativo | Ley 1258/2008 (SAS), C.Co., Ley 222/1995, SuperSociedades | 20% |
+| **Revisoría Fiscal** | Aseguramiento | NIA 200-706, Ley 43/1990, NIC 10/37/570 | 25% |
+
+### Estructura de Hallazgos
+
+Cada hallazgo tiene severidad, referencia normativa exacta, recomendación e impacto:
+
+```json
+{
+  "code": "TRIB-003",
+  "severity": "alto",
+  "domain": "tributario",
+  "title": "Tarifa de renta incorrecta",
+  "description": "Se aplica tarifa del 33% cuando la vigente para PJ en 2026 es 35%",
+  "normReference": "Art. 240 E.T., modificado por Ley 2277 de 2022",
+  "recommendation": "Recalcular provisión de impuesto de renta con tarifa del 35%",
+  "impact": "Subestimación de $X en provisión de impuesto, riesgo de sanción por inexactitud Art. 647 E.T."
+}
+```
+
+**Severidades:** `critico` > `alto` > `medio` > `bajo` > `informativo`
+
+### Opinión de Auditoría
+
+El Auditor de Revisoría Fiscal emite una opinión formal tipo NIA 700:
+
+| Opinión | Cuándo | Score |
+|---------|--------|-------|
+| **Favorable** (limpia) | EEFF razonables, sin incorrecciones materiales | 90-100 |
+| **Con Salvedades** | Incorrecciones materiales pero no generalizadas | 75-89 |
+| **Desfavorable** | Incorrecciones materiales Y generalizadas | 40-74 |
+| **Abstención** | Evidencia insuficiente para opinar | 0-39 |
+
+### Uso del API
+
+```bash
+# POST /api/financial-audit
+# Recibe la salida de /api/financial-report como input
+curl -X POST http://localhost:3000/api/financial-audit \
+  -H "Content-Type: application/json" \
+  -H "X-Stream: true" \
+  -d '{
+    "report": { ...output de /api/financial-report... },
+    "language": "es",
+    "auditFocus": "Enfocarse en la conciliación fiscal y el tratamiento de inventarios"
+  }'
+```
+
+### Flujo Completo: Reporte + Auditoría
+
+```bash
+# 1. Generar reporte financiero
+REPORT=$(curl -s -X POST localhost:3000/api/financial-report \
+  -H "Content-Type: application/json" \
+  -d '{"rawData":"...", "company":{...}, "language":"es"}')
+
+# 2. Auditar el reporte
+curl -X POST localhost:3000/api/financial-audit \
+  -H "Content-Type: application/json" \
+  -d "{\"report\": $REPORT, \"language\": \"es\"}"
+```
+
+---
+
 ## Arquitectura de Archivos
 
 ```
@@ -439,6 +543,7 @@ src/
 ├── app/api/
 │   ├── chat/route.ts             # Entry point — feature flag → orchestrated/legacy
 │   ├── financial-report/route.ts # ★ Pipeline financiero NIIF (3 agentes secuenciales, SSE)
+│   ├── financial-audit/route.ts  # ★ Pipeline de auditoría (4 auditores en paralelo, SSE)
 │   ├── realtime/route.ts         # Token efímero para voz WebRTC
 │   ├── upload/route.ts           # Ingesta de documentos (PDF, DOCX, XLSX, imágenes OCR)
 │   ├── rag/route.ts              # Consulta directa al vector store
@@ -467,17 +572,30 @@ src/
 │   │   │   ├── accounting-agent.prompt.ts
 │   │   │   └── synthesizer.prompt.ts
 │   │   │
-│   │   └── financial/             # ★ PIPELINE FINANCIERO NIIF
+│   │   └── financial/             # ★ PIPELINE FINANCIERO NIIF + AUDITORIA
 │   │       ├── types.ts           # Tipos del pipeline (request, stages, report)
 │   │       ├── orchestrator.ts    # Coordinador secuencial de 3 agentes
 │   │       ├── agents/
 │   │       │   ├── niif-analyst.ts        # Agente 1: Estados financieros NIIF
 │   │       │   ├── strategy-director.ts   # Agente 2: KPIs y proyecciones
 │   │       │   └── governance-specialist.ts # Agente 3: Gobierno corporativo
-│   │       └── prompts/
-│   │           ├── niif-analyst.prompt.ts
-│   │           ├── strategy-director.prompt.ts
-│   │           └── governance-specialist.prompt.ts
+│   │       ├── prompts/
+│   │       │   ├── niif-analyst.prompt.ts
+│   │       │   ├── strategy-director.prompt.ts
+│   │       │   └── governance-specialist.prompt.ts
+│   │       └── audit/             # ★ PIPELINE DE AUDITORIA (4 en paralelo)
+│   │           ├── types.ts       # Findings, severities, audit report types
+│   │           ├── orchestrator.ts # Parallel executor + consolidator
+│   │           ├── agents/
+│   │           │   ├── niif-auditor.ts     # Auditor 1: NIC/NIIF compliance
+│   │           │   ├── tax-auditor.ts      # Auditor 2: Estatuto Tributario
+│   │           │   ├── legal-auditor.ts    # Auditor 3: Ley comercial
+│   │           │   └── fiscal-reviewer.ts  # Auditor 4: Revisoría fiscal (NIA)
+│   │           └── prompts/
+│   │               ├── niif-auditor.prompt.ts
+│   │               ├── tax-auditor.prompt.ts
+│   │               ├── legal-auditor.prompt.ts
+│   │               └── fiscal-reviewer.prompt.ts
 │   │
 │   ├── tools/                    # Implementaciones de herramientas
 │   │   ├── sanction-calculator.ts    # Cálculo de sanciones (Arts. 641/644/647/634)
@@ -548,6 +666,7 @@ La aplicación corre en `http://localhost:3000`. El modo de voz requiere permiso
 |----------|--------|-------------|
 | `/api/chat` | POST | Chat con orquestador multi-agente. Soporta SSE streaming (`X-Stream: true`) y JSON |
 | `/api/financial-report` | POST | Pipeline financiero NIIF: 3 agentes secuenciales → reporte consolidado. SSE streaming. `maxDuration: 300s` |
+| `/api/financial-audit` | POST | Pipeline de auditoría: 4 auditores en paralelo → hallazgos + opinión + score. SSE streaming. `maxDuration: 300s` |
 | `/api/upload` | POST | Sube documentos (PDF, DOCX, XLSX, imágenes con OCR), procesa e incorpora al vector store |
 | `/api/rag` | POST | Consulta directa al vector store — retorna los k chunks más relevantes |
 | `/api/web-search` | POST | Búsqueda web filtrada por dominios de confianza |

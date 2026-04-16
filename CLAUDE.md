@@ -50,6 +50,14 @@ The codebase has two independent multi-agent systems:
 - Uses `gpt-5.4-mini` (400K context) instead of `gpt-4o-mini`
 - Entry point: `POST /api/financial-report` with SSE streaming. `maxDuration: 300s`
 
+**3. Audit Pipeline** (`src/lib/agents/financial/audit/orchestrator.ts`) — regulatory validation
+- Four auditors run **in parallel** (`Promise.allSettled`): NIIF, Tax, Legal, Fiscal Reviewer
+- Validates the output of the Financial Pipeline against Colombian 2026 regulations
+- Each auditor produces structured findings (`AuditFinding[]`) with severity, norm reference, recommendation, impact
+- The Fiscal Reviewer emits a formal audit opinion (favorable / con_salvedades / desfavorable / abstension)
+- Findings are consolidated with a weighted compliance score (NIIF 30%, Tax 25%, Legal 20%, Fiscal 25%)
+- Entry point: `POST /api/financial-audit` with SSE streaming. `maxDuration: 300s`
+
 ### Tool System
 
 Tools are defined in `src/lib/agents/tools/registry.ts` (OpenAI function-calling format) and implemented in `src/lib/tools/`. Each specialist agent gets a subset via `getToolsForAgent()`. Available tools: `search_docs`, `search_web`, `calculate_sanction`, `analyze_document`, `draft_dian_response`, `assess_risk`, `get_tax_calendar`.
@@ -83,3 +91,4 @@ Tools are defined in `src/lib/agents/tools/registry.ts` (OpenAI function-calling
 - Anti-hallucination rules are embedded in every specialist prompt — agents must only cite sources found in search results
 - New specialist agents extend `BaseSpecialist`, get a prompt file, and register in `SPECIALISTS` map in `orchestrator.ts` + `AGENT_TOOLS` map in `registry.ts`
 - New financial pipeline agents are standalone functions in `src/lib/agents/financial/agents/`, wired in `src/lib/agents/financial/orchestrator.ts`
+- New audit agents follow the same pattern in `src/lib/agents/financial/audit/agents/`, wired in the audit orchestrator. Each auditor outputs structured JSON findings parsed by `parseAuditorOutput()`

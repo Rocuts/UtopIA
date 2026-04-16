@@ -79,3 +79,17 @@ export const financialReportRequestSchema = z.object({
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),
 });
+
+// ---- Financial audit route ----
+export const financialAuditRequestSchema = z.object({
+  report: z.object({
+    company: companyInfoSchema,
+    niifAnalysis: z.object({ fullContent: z.string() }),
+    strategicAnalysis: z.object({ fullContent: z.string() }),
+    governance: z.object({ fullContent: z.string() }),
+    consolidatedReport: z.string().min(1, 'Consolidated report is required'),
+    generatedAt: z.string(),
+  }),
+  language: z.enum(['es', 'en']).default('es'),
+  auditFocus: z.string().max(2_000).optional(),
+});
