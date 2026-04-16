@@ -175,6 +175,10 @@ const PROGRESS_LABELS: Record<string, { es: string; en: string }> = {
   routing: { es: 'Consultando agentes especializados...', en: 'Consulting specialized agents...' },
   agent_working: { es: 'Investigando...', en: 'Researching...' },
   synthesizing: { es: 'Sintetizando respuesta...', en: 'Synthesizing response...' },
+  // Financial report pipeline stages
+  stage_start: { es: 'Iniciando etapa del reporte financiero...', en: 'Starting financial report stage...' },
+  stage_progress: { es: 'Procesando reporte financiero...', en: 'Processing financial report...' },
+  stage_complete: { es: 'Etapa completada...', en: 'Stage completed...' },
 };
 
 function TypingIndicator({ language, progressStatus }: { language: 'es' | 'en'; progressStatus?: string }) {

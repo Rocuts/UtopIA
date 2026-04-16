@@ -13,7 +13,7 @@ export const chatRequestSchema = z.object({
     .max(50, 'Too many messages in conversation'),
   language: z.enum(['es', 'en']).default('es'),
   useCase: z
-    .enum(['dian-defense', 'tax-refund', 'due-diligence', 'financial-intelligence', ''])
+    .enum(['dian-defense', 'tax-refund', 'due-diligence', 'financial-intelligence', 'financial-report', ''])
     .default(''),
   /** Optional full document text passed from the upload flow for direct analysis. */
   documentContext: z.string().max(100_000).optional(),
@@ -57,3 +57,25 @@ export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
 ]);
 
 export const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
+
+// ---- Financial report route ----
+export const companyInfoSchema = z.object({
+  name: z.string().min(1, 'Company name is required').max(200),
+  nit: z.string().min(1, 'NIT is required').max(20),
+  entityType: z.string().max(50).optional(),
+  sector: z.string().max(100).optional(),
+  niifGroup: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+  fiscalPeriod: z.string().min(1, 'Fiscal period is required').max(20),
+  comparativePeriod: z.string().max(20).optional(),
+  city: z.string().max(100).optional(),
+  legalRepresentative: z.string().max(200).optional(),
+  fiscalAuditor: z.string().max(200).optional(),
+  accountant: z.string().max(200).optional(),
+});
+
+export const financialReportRequestSchema = z.object({
+  rawData: z.string().min(1, 'Raw accounting data is required').max(200_000, 'Data too large'),
+  company: companyInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+});

@@ -26,13 +26,23 @@ Para procesos de due diligence financiero, UtopIA genera análisis de indicadore
 
 UtopIA realiza análisis de flujo de caja, punto de equilibrio, valoración por DCF y múltiplos, y simulaciones de escenarios tributarios para apoyar la toma de decisiones estratégicas. Calcula el impacto fiscal de operaciones como fusiones, escisiones, dividendos y enajenación de activos.
 
+### 5. Reporte Financiero NIIF (Elite Corporativa)
+
+UtopIA genera un reporte financiero consolidado de nivel corporativo a partir de datos contables en bruto (CSV, balances de prueba, exportaciones de ERP). Un pipeline secuencial de 3 agentes especializados produce:
+
+1. **Estados Financieros NIIF**: Balance General, Estado de Resultados Integral, Flujo de Efectivo (método indirecto) y Cambios en el Patrimonio — con clasificación automática del PUC (Clases 1 a 7) y verificación de ecuación patrimonial.
+2. **Análisis Estratégico**: Dashboard ejecutivo con 4 KPIs (Razón Corriente, Margen Neto, ROA, Nivel de Endeudamiento), punto de equilibrio, flujo de caja proyectado trimestral y 3 recomendaciones estratégicas priorizadas.
+3. **Gobierno Corporativo**: 13 Notas a los Estados Financieros conforme a NIC 1 y borrador del Acta de Asamblea General Ordinaria de Accionistas (con distribución de utilidades, reserva legal y cierre formal).
+
+El reporte consolidado se entrega como un único documento Markdown listo para exportar a PDF.
+
 ## Stack Técnico
 
 | Capa | Tecnología |
 |------|------------|
 | Framework | Next.js 16 (App Router), React 19, TypeScript |
-| LLM | OpenAI `gpt-4o-mini` (chat + agentes), `gpt-4o` (OCR vía Vision API), `gpt-4o-realtime-preview` (voz), `text-embedding-3-small` (embeddings) |
-| Orquestación | Sistema multi-agente propio (Orchestrator-Workers con Cost Tiers) |
+| LLM | OpenAI `gpt-4o-mini` (chat + agentes), `gpt-5.4-mini` (pipeline financiero), `gpt-4o` (OCR vía Vision API), `gpt-4o-realtime-preview` (voz), `text-embedding-3-small` (embeddings) |
+| Orquestación | Sistema multi-agente propio: Orchestrator-Workers con Cost Tiers (chat) + Pipeline Secuencial de 3 agentes (reportes financieros) |
 | RAG | LangChain (splitter, embeddings, document loaders), HNSWLib-node (vector store) |
 | Búsqueda Web | Tavily API con filtrado por dominio (dian.gov.co, estatuto.co, actualicese.com, etc.) |
 | Voz | OpenAI Realtime API sobre WebRTC |
@@ -259,12 +269,176 @@ Esto permite activar/desactivar el nuevo sistema desde Vercel sin redeploy, y ha
 
 ---
 
+## Pipeline de Reporte Financiero NIIF
+
+Además del sistema de chat multi-agente, UtopIA incluye un **pipeline secuencial dedicado** para generación de reportes financieros de nivel élite corporativa. Este pipeline opera de forma independiente al chat, con su propio endpoint (`/api/financial-report`) y tres agentes especializados coordinados por un orquestador secuencial.
+
+### ¿Por qué un pipeline separado?
+
+El chat multi-agente es ideal para preguntas y respuestas interactivas. Pero un reporte financiero consolidado requiere un flujo diferente:
+
+- **Secuencial, no paralelo**: cada agente necesita la salida del anterior como input
+- **Orientado a documento, no a conversación**: la salida es un reporte estructurado, no una respuesta de chat
+- **Alto volumen de tokens**: los estados financieros + análisis + documentos legales pueden superar los 15.000 tokens de salida
+
+### Flujo del Pipeline
+
+```
+┌─────────────────────────────────────────────────┐
+│  Datos Brutos (CSV / Balance de Prueba / ERP)   │
+│  + Metadatos de empresa (NIT, razón social, etc.)│
+└──────────────────────┬──────────────────────────┘
+                       │
+                       ▼ Stage 1
+┌──────────────────────────────────────────────────┐
+│  AGENTE 1: Analista Contable NIIF                │
+│                                                  │
+│  Entrada: Datos contables en bruto               │
+│  Proceso:                                        │
+│  • Mapeo de cuentas PUC (Clases 1 a 7)          │
+│  • Clasificación NIIF (Corriente/No Corriente)   │
+│  • Verificación ecuación patrimonial             │
+│                                                  │
+│  Salida:                                         │
+│  ├── Estado de Situación Financiera              │
+│  ├── Estado de Resultados Integral               │
+│  ├── Estado de Flujos de Efectivo (Indirecto)    │
+│  ├── Estado de Cambios en el Patrimonio          │
+│  └── Notas Técnicas de Variaciones               │
+└──────────────────────┬───────────────────────────┘
+                       │ output feeds ▼
+                       ▼ Stage 2
+┌──────────────────────────────────────────────────┐
+│  AGENTE 2: Director de Estrategia Financiera     │
+│                                                  │
+│  Entrada: 4 Estados Financieros del Agente 1     │
+│  Proceso:                                        │
+│  • Cálculo de KPIs con fórmulas sustituidas      │
+│  • Break-even con estructura de costos            │
+│  • Proyección trimestral conservadora (10-15%)   │
+│                                                  │
+│  Salida:                                         │
+│  ├── Dashboard Ejecutivo (4 KPIs + complementos) │
+│  ├── Análisis de Punto de Equilibrio              │
+│  ├── Flujo de Caja Proyectado (3 meses)          │
+│  └── 3 Recomendaciones Estratégicas               │
+└──────────────────────┬───────────────────────────┘
+                       │ output feeds ▼
+                       ▼ Stage 3
+┌──────────────────────────────────────────────────┐
+│  AGENTE 3: Especialista en Gobierno Corporativo  │
+│                                                  │
+│  Entrada: Salidas de Agentes 1 + 2               │
+│  Proceso:                                        │
+│  • Notas conforme NIC 1 (párrafos 112-138)       │
+│  • Acta según Ley 1258/2008 o C.Co.              │
+│  • Distribución de utilidades + reserva legal     │
+│                                                  │
+│  Salida:                                         │
+│  ├── 13 Notas a los Estados Financieros           │
+│  └── Acta de Asamblea Ordinaria (lista para firma)│
+└──────────────────────┬───────────────────────────┘
+                       │
+                       ▼ Stage 4
+┌──────────────────────────────────────────────────┐
+│  ORQUESTADOR: Consolidación Final                │
+│                                                  │
+│  Une las 3 salidas en un reporte maestro único   │
+│  con portada, metadatos y disclaimer legal       │
+│                                                  │
+│  Salida: Reporte Markdown consolidado             │
+│  (Parte I: EEFF + Parte II: KPIs + Parte III:    │
+│   Gobierno Corporativo)                           │
+└──────────────────────────────────────────────────┘
+```
+
+### Modelo Utilizado
+
+El pipeline usa **GPT-5.4 mini** (`gpt-5.4-mini`) en lugar de GPT-4o-mini por tres razones:
+
+| Característica | GPT-4o-mini | GPT-5.4 mini |
+|---------------|-------------|--------------|
+| Contexto | 128K tokens | 400K tokens |
+| Input cost | $0.15/1M tokens | $0.75/1M tokens |
+| Output cost | $0.60/1M tokens | $4.50/1M tokens |
+| Calidad en tareas estructuradas | Buena | Superior |
+
+Los 400K tokens de contexto son críticos para el Agente 3, que recibe toda la salida acumulada de los agentes anteriores. La calidad superior en tareas estructuradas (tablas, fórmulas, documentos legales) justifica el costo adicional frente a `gpt-4o-mini`.
+
+### Uso del API
+
+```bash
+# POST /api/financial-report
+# Header: X-Stream: true (para SSE) o sin él (para JSON)
+curl -X POST http://localhost:3000/api/financial-report \
+  -H "Content-Type: application/json" \
+  -H "X-Stream: true" \
+  -d '{
+    "rawData": "código,cuenta,débitos,créditos,saldo\n1105,Caja,0,0,15000000\n1110,Bancos,0,0,85000000\n...",
+    "company": {
+      "name": "Mi Empresa SAS",
+      "nit": "900.123.456-7",
+      "entityType": "SAS",
+      "sector": "Tecnología",
+      "niifGroup": 2,
+      "fiscalPeriod": "2025",
+      "comparativePeriod": "2024",
+      "city": "Bogotá",
+      "legalRepresentative": "Juan Pérez",
+      "accountant": "María García"
+    },
+    "language": "es",
+    "instructions": "Enfocarse en la liquidez y el ciclo de conversión de efectivo"
+  }'
+```
+
+### Eventos SSE del Pipeline
+
+El endpoint soporta **Server-Sent Events** para mostrar progreso en tiempo real:
+
+```
+event: progress
+data: {"type":"stage_start","stage":1,"label":"Analista Contable NIIF — Procesando datos"}
+
+event: progress
+data: {"type":"stage_progress","stage":1,"detail":"Clasificando cuentas y mapeando estructura NIIF..."}
+
+event: progress
+data: {"type":"stage_complete","stage":1,"label":"Estados financieros NIIF generados"}
+
+event: progress
+data: {"type":"stage_start","stage":2,"label":"Director de Estrategia — Analizando KPIs"}
+...
+
+event: result
+data: { "company": {...}, "niifAnalysis": {...}, "strategicAnalysis": {...}, "governance": {...}, "consolidatedReport": "..." }
+```
+
+### Parámetros de Empresa
+
+| Campo | Requerido | Descripción |
+|-------|-----------|-------------|
+| `name` | Sí | Razón social |
+| `nit` | Sí | NIT con dígito de verificación |
+| `fiscalPeriod` | Sí | Período fiscal (ej: "2025") |
+| `entityType` | No | SAS, SA, LTDA, etc. (default: SAS para acta) |
+| `sector` | No | Sector económico (para benchmarking de KPIs) |
+| `niifGroup` | No | 1 (Plenas), 2 (PYMES), 3 (Simplificada) — default: 2 |
+| `comparativePeriod` | No | Período comparativo para variaciones |
+| `city` | No | Ciudad para el acta de asamblea |
+| `legalRepresentative` | No | Nombre del representante legal |
+| `fiscalAuditor` | No | Nombre del revisor fiscal |
+| `accountant` | No | Nombre del contador público |
+
+---
+
 ## Arquitectura de Archivos
 
 ```
 src/
 ├── app/api/
 │   ├── chat/route.ts             # Entry point — feature flag → orchestrated/legacy
+│   ├── financial-report/route.ts # ★ Pipeline financiero NIIF (3 agentes secuenciales, SSE)
 │   ├── realtime/route.ts         # Token efímero para voz WebRTC
 │   ├── upload/route.ts           # Ingesta de documentos (PDF, DOCX, XLSX, imágenes OCR)
 │   ├── rag/route.ts              # Consulta directa al vector store
@@ -286,12 +460,24 @@ src/
 │   │   │   └── accounting-agent.ts # Agente especialista contable
 │   │   ├── tools/
 │   │   │   └── registry.ts       # Registro centralizado de herramientas
-│   │   └── prompts/
-│   │       ├── classifier.prompt.ts
-│   │       ├── enhancer.prompt.ts
-│   │       ├── tax-agent.prompt.ts
-│   │       ├── accounting-agent.prompt.ts
-│   │       └── synthesizer.prompt.ts
+│   │   ├── prompts/
+│   │   │   ├── classifier.prompt.ts
+│   │   │   ├── enhancer.prompt.ts
+│   │   │   ├── tax-agent.prompt.ts
+│   │   │   ├── accounting-agent.prompt.ts
+│   │   │   └── synthesizer.prompt.ts
+│   │   │
+│   │   └── financial/             # ★ PIPELINE FINANCIERO NIIF
+│   │       ├── types.ts           # Tipos del pipeline (request, stages, report)
+│   │       ├── orchestrator.ts    # Coordinador secuencial de 3 agentes
+│   │       ├── agents/
+│   │       │   ├── niif-analyst.ts        # Agente 1: Estados financieros NIIF
+│   │       │   ├── strategy-director.ts   # Agente 2: KPIs y proyecciones
+│   │       │   └── governance-specialist.ts # Agente 3: Gobierno corporativo
+│   │       └── prompts/
+│   │           ├── niif-analyst.prompt.ts
+│   │           ├── strategy-director.prompt.ts
+│   │           └── governance-specialist.prompt.ts
 │   │
 │   ├── tools/                    # Implementaciones de herramientas
 │   │   ├── sanction-calculator.ts    # Cálculo de sanciones (Arts. 641/644/647/634)
@@ -361,6 +547,7 @@ La aplicación corre en `http://localhost:3000`. El modo de voz requiere permiso
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
 | `/api/chat` | POST | Chat con orquestador multi-agente. Soporta SSE streaming (`X-Stream: true`) y JSON |
+| `/api/financial-report` | POST | Pipeline financiero NIIF: 3 agentes secuenciales → reporte consolidado. SSE streaming. `maxDuration: 300s` |
 | `/api/upload` | POST | Sube documentos (PDF, DOCX, XLSX, imágenes con OCR), procesa e incorpora al vector store |
 | `/api/rag` | POST | Consulta directa al vector store — retorna los k chunks más relevantes |
 | `/api/web-search` | POST | Búsqueda web filtrada por dominios de confianza |

@@ -7,6 +7,7 @@ import {
   TrendingUp,
   FileSearch,
   BarChart3,
+  FileSpreadsheet,
   MessageSquare,
   Clock,
   ArrowRight,
@@ -42,12 +43,14 @@ const USE_CASE_LABELS: Record<string, Record<string, string>> = {
     'tax-refund': 'Devoluciones',
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Inteligencia Financiera',
+    'financial-report': 'Reporte Financiero NIIF',
   },
   en: {
     'dian-defense': 'DIAN Defense',
     'tax-refund': 'Tax Refund',
     'due-diligence': 'Due Diligence',
     'financial-intelligence': 'Financial Intelligence',
+    'financial-report': 'NIIF Financial Report',
   },
 };
 
@@ -56,6 +59,7 @@ const USE_CASE_ICONS: Record<string, React.ComponentType<{ className?: string }>
   'tax-refund': TrendingUp,
   'due-diligence': FileSearch,
   'financial-intelligence': BarChart3,
+  'financial-report': FileSpreadsheet,
 };
 
 interface QuickAction {
@@ -99,6 +103,14 @@ const QUICK_ACTIONS: QuickAction[] = [
     labelEn: 'Financial Intelligence',
     descEs: 'Convierta contabilidad en decisiones',
     descEn: 'Turn accounting into decisions',
+  },
+  {
+    id: 'financial-report',
+    icon: FileSpreadsheet,
+    labelEs: 'Reporte Financiero NIIF',
+    labelEn: 'NIIF Financial Report',
+    descEs: 'Estados financieros, KPIs y gobierno corporativo',
+    descEn: 'Financial statements, KPIs & corporate governance',
   },
 ];
 

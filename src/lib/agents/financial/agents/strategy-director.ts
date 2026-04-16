@@ -1,0 +1,83 @@
+// ---------------------------------------------------------------------------
+// Agente 2: Director de Estrategia Financiera (KPIs & Projections)
+// ---------------------------------------------------------------------------
+
+import OpenAI from 'openai';
+import { buildStrategyDirectorPrompt } from '../prompts/strategy-director.prompt';
+import { withRetry } from '@/lib/agents/utils/retry';
+import type {
+  CompanyInfo,
+  NiifAnalysisResult,
+  StrategicAnalysisResult,
+  FinancialProgressEvent,
+} from '../types';
+
+/**
+ * Takes the NIIF financial statements from Agent 1 and produces
+ * KPIs, break-even analysis, cash flow projections, and strategic recommendations.
+ */
+export async function runStrategyDirector(
+  niifOutput: NiifAnalysisResult,
+  company: CompanyInfo,
+  language: 'es' | 'en',
+  onProgress?: (event: FinancialProgressEvent) => void,
+): Promise<StrategicAnalysisResult> {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const systemPrompt = buildStrategyDirectorPrompt(company, language);
+
+  const userContent = [
+    'ESTADOS FINANCIEROS NIIF GENERADOS POR EL ANALISTA CONTABLE:',
+    '',
+    niifOutput.fullContent,
+  ].join('\n');
+
+  onProgress?.({ type: 'stage_progress', stage: 2, detail: 'Calculando KPIs y punto de equilibrio...' });
+
+  const response = await withRetry(
+    () =>
+      openai.chat.completions.create({
+        model: 'gpt-5.4-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        temperature: 0.1,
+        max_tokens: 6144,
+      }),
+    { label: 'strategy_director', maxAttempts: 3 },
+  );
+
+  const fullContent = response.choices[0].message.content || '';
+
+  const sections = parseSections(fullContent);
+
+  return {
+    kpiDashboard: sections['1. DASHBOARD EJECUTIVO DE KPIs'] || sections['1'] || '',
+    breakEvenAnalysis: sections['2. ANALISIS DE PUNTO DE EQUILIBRIO'] || sections['2'] || '',
+    projectedCashFlow: sections['3'] || findSectionByPrefix(sections, '3.') || '',
+    strategicRecommendations: sections['4. RECOMENDACIONES ESTRATEGICAS'] || sections['4'] || '',
+    fullContent,
+  };
+}
+
+function parseSections(content: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
+  const matches = [...content.matchAll(pattern)];
+
+  for (let i = 0; i < matches.length; i++) {
+    const key = matches[i][1].trim();
+    const start = matches[i].index! + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
+    sections[key] = content.slice(start, end).trim();
+    const numMatch = key.match(/^(\d+)/);
+    if (numMatch) sections[numMatch[1]] = sections[key];
+  }
+
+  return sections;
+}
+
+function findSectionByPrefix(sections: Record<string, string>, prefix: string): string {
+  const key = Object.keys(sections).find((k) => k.startsWith(prefix));
+  return key ? sections[key] : '';
+}

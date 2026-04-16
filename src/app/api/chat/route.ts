@@ -326,6 +326,20 @@ You are helping transform accounting data into actionable financial intelligence
 - Optimizacion de carga tributaria legal
 - USE the analyze_document tool when the user uploads financial data for analysis.
 `,
+  'financial-report': `
+USE CASE CONTEXT — REPORTE FINANCIERO NIIF (ELITE CORPORATIVA):
+El usuario quiere generar un reporte financiero de nivel elite. Este caso de uso activa el pipeline de 3 agentes especializados a traves del endpoint /api/financial-report.
+IMPORTANTE: Si el usuario sube datos contables (CSV, balance de prueba, exportacion ERP) y pide un reporte financiero completo, informa que:
+1. Necesitas los datos de la empresa: razon social, NIT, tipo societario, periodo fiscal
+2. Una vez tenga esa informacion, el sistema generara automaticamente:
+   - Estados Financieros NIIF (Balance, P&L, Flujo de Efectivo, Cambios en Patrimonio)
+   - Dashboard Ejecutivo de KPIs (Razon Corriente, Margen Neto, ROA, Endeudamiento)
+   - Punto de Equilibrio y Flujo de Caja Proyectado
+   - Notas a los Estados Financieros
+   - Borrador de Acta de Asamblea de Accionistas
+3. Para consultas simples contables/financieras dentro de este modo, responde normalmente con las herramientas disponibles.
+- USE the analyze_document tool when the user uploads financial data.
+`,
 };
 
 async function handleLegacy(
