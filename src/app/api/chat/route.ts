@@ -682,7 +682,7 @@ export async function POST(req: Request) {
     const stream = req.headers.get('X-Stream') === 'true' || url.searchParams.get('stream') === '1';
 
     if (useOrchestration()) {
-      return handleOrchestrated(messages, language, useCase, documentContext, nitContext, stream, erpConnections);
+      return handleOrchestrated(req, messages, language, useCase, documentContext, nitContext, stream, erpConnections);
     }
 
     return handleLegacy(messages, language, useCase, documentContext, nitContext);

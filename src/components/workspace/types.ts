@@ -38,6 +38,10 @@ export interface ChatMessage {
   agentsUsed?: string[];
   /** The enhanced query produced by the prompt engineer agent */
   enhancedQuery?: string;
+  /** When set, this message renders as a typed error with an optional Retry button */
+  errorKind?: 'network' | 'timeout' | 'rate_limit' | 'server' | 'unknown';
+  /** Callback for the inline Retry button on error messages */
+  onRetry?: () => void;
 }
 
 export interface LegalReference {
