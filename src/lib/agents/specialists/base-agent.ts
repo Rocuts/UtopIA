@@ -16,9 +16,18 @@ export abstract class BaseSpecialist {
   /** Build the system prompt for this specialist */
   abstract buildSystemPrompt(ctx: SpecialistContext): string;
 
+  /** Whether this specialist should stream its final reply to the caller. */
+  get supportsStreaming(): boolean {
+    return true;
+  }
+
   /**
    * Run the specialist on a query within the given context.
    * Manages the OpenAI tool-calling loop internally with retry on transient failures.
+   *
+   * When `ctx.onStreamToken` is provided AND this specialist is the sole responder
+   * (no downstream synthesizer), its final, post-tool-calls completion is streamed
+   * token-by-token through the callback.
    */
   async execute(query: string, ctx: SpecialistContext): Promise<SpecialistResult> {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -68,21 +77,108 @@ export abstract class BaseSpecialist {
       erpConnections: ctx.erpConnections,
     };
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      // Retry the LLM call on transient failures (rate limit, 5xx, network)
-      const response = await withRetry(
-        () =>
-          openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages,
-            tools,
-            tool_choice: 'auto',
-            temperature: 0.1,
-          }),
-        { label: `${this.name}_round_${round}`, maxAttempts: 3 },
-      );
+    const shouldStream = !!ctx.onStreamToken && this.supportsStreaming;
 
-      const choice = response.choices[0];
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      ctx.abortSignal?.throwIfAborted?.();
+
+      let choice: OpenAI.Chat.Completions.ChatCompletion['choices'][number];
+
+      if (shouldStream) {
+        // Streaming path — stream tokens AND accumulate tool_calls if present.
+        // Tool-call rounds won't emit content deltas; only the final answer streams to the user.
+        const streamResp = await withRetry(
+          () =>
+            openai.chat.completions.create(
+              {
+                model: 'gpt-4o-mini',
+                messages,
+                tools,
+                tool_choice: 'auto',
+                temperature: 0.1,
+                stream: true,
+              },
+              { signal: ctx.abortSignal },
+            ),
+          { label: `${this.name}_round_${round}_stream`, maxAttempts: 3, signal: ctx.abortSignal },
+        );
+
+        let acc = '';
+        let finishReason: OpenAI.Chat.Completions.ChatCompletion['choices'][number]['finish_reason'] | null = null;
+        // Partial tool_call objects keyed by index (OpenAI delta format).
+        const toolCallAcc: Record<number, {
+          id?: string;
+          type: 'function';
+          function: { name: string; arguments: string };
+        }> = {};
+
+        for await (const chunk of streamResp) {
+          ctx.abortSignal?.throwIfAborted?.();
+          const delta = chunk.choices[0]?.delta;
+          const fr = chunk.choices[0]?.finish_reason;
+          if (fr) finishReason = fr;
+
+          if (delta?.content) {
+            acc += delta.content;
+            ctx.onStreamToken?.(delta.content);
+          }
+
+          if (delta?.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index;
+              if (!toolCallAcc[idx]) {
+                toolCallAcc[idx] = {
+                  id: tc.id,
+                  type: 'function',
+                  function: { name: '', arguments: '' },
+                };
+              }
+              if (tc.id) toolCallAcc[idx].id = tc.id;
+              if (tc.function?.name) toolCallAcc[idx].function.name += tc.function.name;
+              if (tc.function?.arguments) toolCallAcc[idx].function.arguments += tc.function.arguments;
+            }
+          }
+        }
+
+        const aggregatedToolCalls = Object.keys(toolCallAcc)
+          .map(k => toolCallAcc[Number(k)])
+          .filter(tc => tc.id && tc.function.name);
+
+        choice = {
+          index: 0,
+          finish_reason: finishReason ?? (aggregatedToolCalls.length > 0 ? 'tool_calls' : 'stop'),
+          logprobs: null,
+          message: {
+            role: 'assistant',
+            content: acc || null,
+            refusal: null,
+            tool_calls: aggregatedToolCalls.length > 0
+              ? aggregatedToolCalls.map(tc => ({
+                  id: tc.id!,
+                  type: 'function' as const,
+                  function: { name: tc.function.name, arguments: tc.function.arguments },
+                }))
+              : undefined,
+          } as OpenAI.Chat.Completions.ChatCompletionMessage,
+        };
+      } else {
+        // Non-streaming path (unchanged)
+        const response = await withRetry(
+          () =>
+            openai.chat.completions.create(
+              {
+                model: 'gpt-4o-mini',
+                messages,
+                tools,
+                tool_choice: 'auto',
+                temperature: 0.1,
+              },
+              { signal: ctx.abortSignal },
+            ),
+          { label: `${this.name}_round_${round}`, maxAttempts: 3, signal: ctx.abortSignal },
+        );
+        choice = response.choices[0];
+      }
 
       if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
         messages.push(choice.message);
@@ -161,15 +257,51 @@ export abstract class BaseSpecialist {
       };
     }
 
-    // Safety fallback: max rounds hit, do one final call without tools
+    // Safety fallback: max rounds hit, do one final call without tools.
+    // Stream the fallback too so the user gets tokens even if the model ran out of rounds.
+    if (shouldStream) {
+      const streamResp = await withRetry(
+        () =>
+          openai.chat.completions.create(
+            {
+              model: 'gpt-4o-mini',
+              messages,
+              temperature: 0.1,
+              stream: true,
+            },
+            { signal: ctx.abortSignal },
+          ),
+        { label: `${this.name}_final_stream`, maxAttempts: 2, signal: ctx.abortSignal },
+      );
+      let acc = '';
+      for await (const chunk of streamResp) {
+        ctx.abortSignal?.throwIfAborted?.();
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          acc += delta;
+          ctx.onStreamToken?.(delta);
+        }
+      }
+      return {
+        content: acc,
+        webSearchUsed,
+        webSources: [...new Set(webSources)],
+        riskAssessment,
+        sanctionCalculation,
+      };
+    }
+
     const finalResponse = await withRetry(
       () =>
-        openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages,
-          temperature: 0.1,
-        }),
-      { label: `${this.name}_final`, maxAttempts: 2 },
+        openai.chat.completions.create(
+          {
+            model: 'gpt-4o-mini',
+            messages,
+            temperature: 0.1,
+          },
+          { signal: ctx.abortSignal },
+        ),
+      { label: `${this.name}_final`, maxAttempts: 2, signal: ctx.abortSignal },
     );
 
     return {

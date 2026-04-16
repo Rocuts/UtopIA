@@ -27,6 +27,7 @@ const useOrchestration = () => process.env.UTOPIA_AGENT_MODE === 'orchestrated';
 // ---------------------------------------------------------------------------
 
 async function handleOrchestrated(
+  req: Request,
   messages: ChatMessage[],
   language: 'es' | 'en',
   useCase: string,
@@ -37,13 +38,27 @@ async function handleOrchestrated(
 ) {
   if (stream) {
     const encoder = new TextEncoder();
+    // Forward the request's abort signal (e.g. client disconnects or hits Stop)
+    // to in-flight OpenAI calls.
+    const abortSignal = req.signal;
+
     const readableStream = new ReadableStream({
       async start(controller) {
+        let closed = false;
         const send = (event: string, data: unknown) => {
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-          );
+          if (closed) return;
+          try {
+            controller.enqueue(
+              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+            );
+          } catch {
+            closed = true;
+          }
         };
+
+        // If the client disconnects, stop enqueueing
+        const onAbort = () => { closed = true; };
+        abortSignal.addEventListener('abort', onAbort);
 
         try {
           const result = await orchestrate(messages, {
@@ -53,13 +68,23 @@ async function handleOrchestrated(
             nitContext,
             erpConnections,
             onProgress: (event: ProgressEvent) => send('progress', event),
+            onStreamToken: (delta: string) => send('content', { delta }),
+            abortSignal,
           });
           send('result', result);
         } catch (error) {
-          console.error('[chat] Orchestration error:', error instanceof Error ? error.message : error);
-          send('error', { error: 'Internal server error during consultation.' });
+          const isAbort = error instanceof Error && (
+            error.name === 'AbortError' ||
+            /abort/i.test(error.message)
+          );
+          if (!isAbort) {
+            console.error('[chat] Orchestration error:', error instanceof Error ? error.message : error);
+            send('error', { error: 'Internal server error during consultation.' });
+          }
         } finally {
-          controller.close();
+          abortSignal.removeEventListener('abort', onAbort);
+          closed = true;
+          try { controller.close(); } catch { /* already closed */ }
         }
       },
     });

@@ -39,6 +39,8 @@ const SPECIALISTS = {
 async function handleT1(
   messages: ChatMessage[],
   language: 'es' | 'en',
+  onStreamToken?: (delta: string) => void,
+  abortSignal?: AbortSignal,
 ): Promise<OrchestrateResult> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -46,25 +48,59 @@ async function handleT1(
     ? 'Respond in English.'
     : 'Responde en espanol.';
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: `You are UtopIA, a friendly AI assistant for Colombian accounting and tax advisory. ${langInstruction}
+  const systemPrompt = `You are UtopIA, a friendly AI assistant for Colombian accounting and tax advisory. ${langInstruction}
 Keep responses concise and helpful. If the user greets you, greet them back warmly and offer to help.
 If the user thanks you, acknowledge and ask if there's anything else.
 If the user asks what you can do, briefly describe your 4 specialist capabilities:
 1. **Tributario**: Consultas sobre Estatuto Tributario, IVA, renta, retenciones, facturacion electronica, calendario tributario
 2. **Contable**: Normas NIIF/IFRS, analisis financiero, indicadores, presupuestos, revisoria fiscal
 3. **Documental**: Analisis de documentos subidos — declaraciones, requerimientos, estados financieros, facturas
-4. **Estrategia**: Defensa ante DIAN, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones`,
+4. **Estrategia**: Defensa ante DIAN, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones`;
+
+  if (onStreamToken) {
+    const streamResp = await openai.chat.completions.create(
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages.slice(-6),
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+        stream: true,
       },
-      ...messages.slice(-6),
-    ],
-    temperature: 0.3,
-    max_tokens: 500,
-  });
+      { signal: abortSignal },
+    );
+    let acc = '';
+    for await (const chunk of streamResp) {
+      abortSignal?.throwIfAborted?.();
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        acc += delta;
+        onStreamToken(delta);
+      }
+    }
+    return {
+      role: 'assistant',
+      content: acc,
+      tier: 'T1',
+      agentsUsed: [],
+      webSearchUsed: false,
+    };
+  }
+
+  const response = await openai.chat.completions.create(
+    {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.slice(-6),
+      ],
+      temperature: 0.3,
+      max_tokens: 500,
+    },
+    { signal: abortSignal },
+  );
 
   return {
     role: 'assistant',
@@ -83,7 +119,16 @@ export async function orchestrate(
   messages: ChatMessage[],
   options: OrchestrateOptions,
 ): Promise<OrchestrateResult> {
-  const { language, useCase, documentContext, nitContext, erpConnections, onProgress } = options;
+  const {
+    language,
+    useCase,
+    documentContext,
+    nitContext,
+    erpConnections,
+    onProgress,
+    onStreamToken,
+    abortSignal,
+  } = options;
 
   const lastMessage = messages[messages.length - 1].content;
   const conversationHistory = messages.slice(0, -1).map((m) => ({
@@ -98,10 +143,10 @@ export async function orchestrate(
   const classification = await classifyQuery(lastMessage, conversationHistory, useCase);
 
   // -----------------------------------------------------------------------
-  // Step 2: T1 — Direct response (cheap, fast)
+  // Step 2: T1 — Direct response (cheap, fast) — streams directly
   // -----------------------------------------------------------------------
   if (classification.tier === 'T1') {
-    const result = await handleT1(messages, language);
+    const result = await handleT1(messages, language, onStreamToken, abortSignal);
     onProgress?.({ type: 'done' });
     return result;
   }
@@ -122,7 +167,10 @@ export async function orchestrate(
   const agentNames = domains.map((d) => SPECIALISTS[d].displayName);
   onProgress?.({ type: 'routing', agents: agentNames });
 
-  const specialistCtx: SpecialistContext = {
+  // Base specialist context — streaming is wired per path below:
+  // - T2 (single specialist): forward token stream directly
+  // - T3 (parallel specialists): DON'T stream specialist outputs; stream the synthesizer instead
+  const baseSpecialistCtx: SpecialistContext = {
     language,
     useCase,
     documentContext,
@@ -130,6 +178,7 @@ export async function orchestrate(
     erpConnections,
     conversationHistory,
     onProgress,
+    abortSignal,
   };
 
   let finalContent: string;
@@ -139,12 +188,15 @@ export async function orchestrate(
   let finalSanction: SpecialistResult['sanctionCalculation'] | undefined;
 
   if (classification.tier === 'T2' || domains.length === 1) {
-    // ----- T2: Single specialist -----
+    // ----- T2: Single specialist — stream its final reply -----
     const agent = SPECIALISTS[domains[0]];
     const query = enhanced.enhanced;
 
     try {
-      const result = await agent.execute(query, specialistCtx);
+      const result = await agent.execute(query, {
+        ...baseSpecialistCtx,
+        onStreamToken,
+      });
       finalContent = result.content;
       allWebSearchUsed = result.webSearchUsed;
       allWebSources.push(...result.webSources);
@@ -157,13 +209,14 @@ export async function orchestrate(
         : 'There was a technical issue processing your query. Please try again in a few seconds. If the problem persists, try rephrasing your question.';
     }
   } else {
-    // ----- T3: Multiple specialists in parallel with individual failure recovery -----
+    // ----- T3: Multiple specialists in parallel — stream only the synthesizer -----
     const tasks = domains.map(async (domain) => {
       const agent = SPECIALISTS[domain];
       const subQuery =
         enhanced.subQueries?.find((sq) => sq.domain === domain)?.query || enhanced.enhanced;
       try {
-        const result = await agent.execute(subQuery, specialistCtx);
+        // Specialists in T3 run silently (no token streaming) — only synthesizer streams.
+        const result = await agent.execute(subQuery, baseSpecialistCtx);
         return { agent: agent.displayName, domain, result, failed: false as const };
       } catch (agentError) {
         console.error(`[orchestrator] ${agent.displayName} failed in T3:`, agentError instanceof Error ? agentError.message : agentError);
@@ -212,12 +265,14 @@ export async function orchestrate(
       }
     }
 
-    // Synthesize outputs
+    // Synthesize outputs — streams its final merged answer to the user
     onProgress?.({ type: 'synthesizing' });
     finalContent = await synthesizeResponses({
       originalQuery: enhanced.enhanced,
       specialistOutputs: results.map(({ agent, result }) => ({ agent, result })),
       language,
+      onStreamToken,
+      abortSignal,
     });
   }
 

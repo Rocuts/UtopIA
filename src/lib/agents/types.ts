@@ -64,6 +64,10 @@ export interface SpecialistContext {
   erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
   /** Callback for streaming progress events */
   onProgress?: (event: ProgressEvent) => void;
+  /** Callback for streaming partial content tokens (used on final reply only) */
+  onStreamToken?: (delta: string) => void;
+  /** Abort signal used to cancel in-flight OpenAI calls when the user stops */
+  abortSignal?: AbortSignal;
 }
 
 export interface SpecialistResult {
@@ -97,6 +101,10 @@ export interface OrchestrateOptions {
   erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
   /** SSE progress callback */
   onProgress?: (event: ProgressEvent) => void;
+  /** SSE content-delta callback — receives partial tokens from the final reply */
+  onStreamToken?: (delta: string) => void;
+  /** Abort signal for canceling in-flight calls when the user hits Stop */
+  abortSignal?: AbortSignal;
 }
 
 export interface OrchestrateResult {
