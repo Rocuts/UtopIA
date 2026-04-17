@@ -14,6 +14,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildQualityAuditorPrompt } from './prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../utils/finish-reason-check';
 import type { FinancialReport } from '../types';
 import type { AuditReport } from '../audit/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -69,6 +70,8 @@ export async function runQualityAudit(input: QualityAuditInput): Promise<Quality
       }),
     { label: 'quality_auditor', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'quality_auditor');
 
   const fullReport = result.text || '';
   return parseQualityAssessment(fullReport);

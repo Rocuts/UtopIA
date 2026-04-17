@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildValuationSynthesizerPrompt } from '../prompts/valuation-synthesizer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { ValuationSynthesisResult, ValuationProgressEvent } from '../types';
 
@@ -51,6 +52,8 @@ ${comparablesContent}`;
       }),
     { label: 'valuation_synthesizer', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'valuation_synthesizer');
 
   const fullContent = result.text || '';
   const sections = parseSections(fullContent);

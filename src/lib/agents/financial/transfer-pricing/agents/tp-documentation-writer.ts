@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildTPDocumentationPrompt } from '../prompts/tp-documentation.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   TPAnalysisResult,
@@ -62,6 +63,8 @@ export async function runTPDocumentationWriter(
       }),
     { label: 'tp_documentation_writer', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'tp_documentation_writer');
 
   const fullContent = result.text || '';
 

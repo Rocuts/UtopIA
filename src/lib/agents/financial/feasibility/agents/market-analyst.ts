@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildMarketAnalystPrompt } from '../prompts/market-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { ProjectInfo, MarketAnalysisResult, FeasibilityProgressEvent } from '../types';
 
 /**
@@ -46,6 +47,8 @@ export async function runMarketAnalyst(
       }),
     { label: 'market_analyst', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'market_analyst');
 
   const fullContent = result.text || '';
 

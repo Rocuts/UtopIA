@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildRiskAssessorPrompt } from '../prompts/risk-assessor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type {
   ProjectInfo,
   MarketAnalysisResult,
@@ -52,6 +53,8 @@ export async function runRiskAssessor(
       }),
     { label: 'risk_assessor', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'risk_assessor');
 
   const fullContent = result.text || '';
 

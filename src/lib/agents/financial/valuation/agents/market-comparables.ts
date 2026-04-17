@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildMarketComparablesPrompt } from '../prompts/market-comparables.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { MarketComparablesResult, ValuationProgressEvent } from '../types';
 
@@ -51,6 +52,8 @@ export async function runMarketComparables(
       }),
     { label: 'market_comparables', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'market_comparables');
 
   const fullContent = result.text || '';
   const sections = parseSections(fullContent);

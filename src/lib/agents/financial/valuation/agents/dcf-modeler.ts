@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildDcfModelerPrompt } from '../prompts/dcf-modeler.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { DcfModelResult, ValuationProgressEvent } from '../types';
 
@@ -51,6 +52,8 @@ export async function runDcfModeler(
       }),
     { label: 'dcf_modeler', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'dcf_modeler');
 
   const fullContent = result.text || '';
   const sections = parseSections(fullContent);

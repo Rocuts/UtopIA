@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildDeferredTaxCalculatorPrompt } from '../prompts/deferred-tax-calculator.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   DifferenceIdentifierResult,
@@ -51,6 +52,8 @@ export async function runDeferredTaxCalculator(
       }),
     { label: 'deferred_tax_calculator', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'deferred_tax_calculator');
 
   const fullContent = result.text || '';
 

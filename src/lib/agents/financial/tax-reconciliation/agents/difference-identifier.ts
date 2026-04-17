@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildDifferenceIdentifierPrompt } from '../prompts/difference-identifier.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { DifferenceIdentifierResult, TaxReconciliationProgressEvent } from '../types';
 
@@ -51,6 +52,8 @@ export async function runDifferenceIdentifier(
       }),
     { label: 'difference_identifier', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'difference_identifier');
 
   const fullContent = result.text || '';
 

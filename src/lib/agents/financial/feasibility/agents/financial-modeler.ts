@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildFinancialModelerPrompt } from '../prompts/financial-modeler.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { ProjectInfo, MarketAnalysisResult, FinancialModelResult, FeasibilityProgressEvent } from '../types';
 
 /**
@@ -41,6 +42,8 @@ export async function runFinancialModeler(
       }),
     { label: 'financial_modeler', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'financial_modeler');
 
   const fullContent = result.text || '';
 

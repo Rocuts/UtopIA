@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildComparableAnalystPrompt } from '../prompts/comparable-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { TPAnalysisResult, ComparableAnalysisResult, TPProgressEvent } from '../types';
 
@@ -51,6 +52,8 @@ export async function runComparableAnalyst(
       }),
     { label: 'comparable_analyst', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'comparable_analyst');
 
   const fullContent = result.text || '';
 
