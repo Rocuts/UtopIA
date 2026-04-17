@@ -87,7 +87,7 @@ export function IntakeModal() {
 
   return (
     <AnimatePresence>
-      {intakeModalOpen && activeCaseType && (
+      {intakeModalOpen && activeCaseType && activeCaseType !== 'general_chat' && (
         <motion.div
           key="intake-overlay"
           initial={{ opacity: 0 }}

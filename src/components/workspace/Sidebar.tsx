@@ -21,7 +21,7 @@ import {
   Lightbulb,
   Settings,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -238,8 +238,13 @@ export function Sidebar() {
   } = useWorkspace();
 
   const router = useRouter();
+  const pathname = usePathname();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const goWorkspace = useCallback(() => {
+    if (pathname !== '/workspace') router.push('/workspace');
+  }, [pathname, router]);
 
   useEffect(() => {
     setConversations(listConversations());
@@ -283,16 +288,23 @@ export function Sidebar() {
       const ct = shortcutMap[e.key.toLowerCase()];
       if (ct) {
         e.preventDefault();
+        goWorkspace();
         openIntakeForType(ct);
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openIntakeForType]);
+  }, [openIntakeForType, goWorkspace]);
 
   const handleNewConsultation = useCallback(() => {
-    setIntakeModalOpen(true);
-  }, [setIntakeModalOpen]);
+    // Reset to the welcome screen so the user picks a fresh case type.
+    // Without this, clicking from /workspace/settings opened the intake modal
+    // with stale activeCaseType (e.g. 'general_chat') and an empty body.
+    setIntakeModalOpen(false);
+    setActiveCaseType(null);
+    setActiveCase(null);
+    goWorkspace();
+  }, [setIntakeModalOpen, setActiveCaseType, setActiveCase, goWorkspace]);
 
   const wt = t.workspace;
   const isExpanded = sidebarOpen;
@@ -389,8 +401,10 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => {
+              setIntakeModalOpen(false);
               setActiveCaseType('general_chat');
               startNewConsultation('general');
+              goWorkspace();
             }}
             className={cn(
               'w-full flex items-center gap-2 rounded-sm text-sm font-medium transition-colors mt-1.5',
@@ -438,7 +452,10 @@ export function Sidebar() {
                 <li key={item.key}>
                   <button
                     type="button"
-                    onClick={() => openIntakeForType(item.key)}
+                    onClick={() => {
+                      goWorkspace();
+                      openIntakeForType(item.key);
+                    }}
                     className={cn(
                       'w-full flex items-center gap-2 rounded-sm text-[13px] transition-colors relative',
                       isExpanded ? 'px-3 py-1.5' : 'p-2 justify-center',
@@ -504,7 +521,10 @@ export function Sidebar() {
             return (
               <button
                 type="button"
-                onClick={() => openIntakeForType(ELITE_ITEM.key)}
+                onClick={() => {
+                  goWorkspace();
+                  openIntakeForType(ELITE_ITEM.key);
+                }}
                 className={cn(
                   'w-full flex items-center gap-2 rounded-sm text-[13px] transition-colors relative',
                   isExpanded ? 'px-3 py-1.5' : 'p-2 justify-center',
@@ -626,7 +646,10 @@ export function Sidebar() {
                         ...NOVA_SPRING,
                         delay: i * 0.02,
                       }}
-                      onClick={() => setActiveCase(conv.id)}
+                      onClick={() => {
+                        setActiveCase(conv.id);
+                        goWorkspace();
+                      }}
                       className={cn(
                         'w-full flex items-center gap-2 rounded-sm transition-all mb-0.5',
                         isExpanded
