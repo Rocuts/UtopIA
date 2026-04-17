@@ -204,3 +204,140 @@ export function getConversationStats() {
 
   return { total, riskCounts, useCaseCounts };
 }
+
+// ─── Reportes financieros persistidos ──────────────────────────────────────
+//
+// Clave paralela a `utopia_conversations` / `utopia_conversation_docs`. Aqui
+// almacenamos el reporte completo, su data cruda (XLSX/CSV extraido) y los
+// turnos del chat de seguimiento (`ReportFollowUpChat`).
+//
+// Limites por reporte:
+// - `rawData`: recortado a 100 KB.
+// - `consolidatedReport`: recortado a 200 KB.
+// - `turns`: sin tope (los mensajes suelen ser chicos vs. rawData).
+// - FIFO de maximo `MAX_STORED_REPORTS` registros en total.
+// ---------------------------------------------------------------------------
+
+export const STORED_REPORTS_KEY = 'utopia_reports_v1';
+
+const MAX_RAW_DATA_CHARS = 100_000;
+const MAX_CONSOLIDATED_CHARS = 200_000;
+const MAX_STORED_REPORTS = 3;
+
+/**
+ * Forma de un registro de reporte. Mantenemos el shape plano para permitir
+ * migraciones futuras sin depender del tipo backend `FinancialReport`.
+ *
+ * `report` es `unknown` porque el layer de storage no debe arrastrar imports
+ * de `@/lib/agents/financial/types` (mismo patron que `StoredDocument`).
+ */
+export interface StoredReportRecord {
+  conversationId: string;
+  createdAt: string;
+  updatedAt: string;
+  companyName: string;
+  companyNit: string;
+  fiscalPeriod: string;
+  /** Reporte completo del pipeline. `unknown` para no filtrar tipos backend aqui. */
+  report: unknown;
+  rawData: string;
+  turns: unknown[];
+}
+
+function getAllReports(): StoredReportRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORED_REPORTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as StoredReportRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistReports(records: StoredReportRecord[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORED_REPORTS_KEY, JSON.stringify(records));
+  } catch (err) {
+    // Quota exceeded u otro fallo: no rompemos el flujo de UI.
+    console.error('Failed to persist reports:', err);
+  }
+}
+
+/**
+ * Recorta los campos grandes del registro para respetar los topes.
+ * No toca `turns` (se asume que son mensajes de texto cortos).
+ */
+function capRecord(record: StoredReportRecord): StoredReportRecord {
+  let rawData = record.rawData ?? '';
+  if (rawData.length > MAX_RAW_DATA_CHARS) {
+    rawData = rawData.slice(0, MAX_RAW_DATA_CHARS);
+  }
+  let report = record.report;
+  if (report && typeof report === 'object' && 'consolidatedReport' in report) {
+    const consolidated = (report as { consolidatedReport?: unknown }).consolidatedReport;
+    if (typeof consolidated === 'string' && consolidated.length > MAX_CONSOLIDATED_CHARS) {
+      report = {
+        ...(report as Record<string, unknown>),
+        consolidatedReport: consolidated.slice(0, MAX_CONSOLIDATED_CHARS),
+      };
+    }
+  }
+  return { ...record, rawData, report };
+}
+
+/**
+ * Persiste un reporte (nuevo o actualizado por `conversationId`). Aplica
+ * capping de tamanos y luego FIFO: conserva solo los ultimos N ordenados
+ * por `updatedAt` descendente.
+ */
+export function saveReport(record: StoredReportRecord): void {
+  if (!record.conversationId) return;
+  const all = getAllReports();
+  const idx = all.findIndex((r) => r.conversationId === record.conversationId);
+  const updated: StoredReportRecord = capRecord({
+    ...record,
+    updatedAt: new Date().toISOString(),
+  });
+  if (idx >= 0) {
+    all[idx] = updated;
+  } else {
+    all.unshift(updated);
+  }
+  all.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const pruned = all.slice(0, MAX_STORED_REPORTS);
+  persistReports(pruned);
+}
+
+export function loadReport(conversationId: string): StoredReportRecord | null {
+  if (!conversationId) return null;
+  const all = getAllReports();
+  return all.find((r) => r.conversationId === conversationId) ?? null;
+}
+
+export function listReports(): StoredReportRecord[] {
+  return getAllReports().sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
+/**
+ * Recorta la lista a los `maxCount` reportes mas recientes. Util si el
+ * consumer cambia el tope en runtime. Si no se pasa `maxCount` usa el
+ * default interno (`MAX_STORED_REPORTS`).
+ */
+export function pruneReports(maxCount?: number): void {
+  const limit = typeof maxCount === 'number' && maxCount > 0 ? maxCount : MAX_STORED_REPORTS;
+  const all = getAllReports().sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+  persistReports(all.slice(0, limit));
+}
+
+export function deleteReport(conversationId: string): void {
+  if (!conversationId) return;
+  const all = getAllReports().filter((r) => r.conversationId !== conversationId);
+  persistReports(all);
+}

@@ -1,7 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { generateConversationId } from '@/lib/storage/conversation-history';
+import {
+  generateConversationId,
+  saveReport,
+  listReports,
+  type StoredReportRecord,
+} from '@/lib/storage/conversation-history';
 import type {
   CaseType,
   WorkspaceMode,
@@ -10,6 +15,8 @@ import type {
   IntakeFormUnion,
   NiifReportIntake,
 } from '@/types/platform';
+import type { FinancialReport, CompanyInfo } from '@/lib/agents/financial/types';
+import type { ReportIterationTurn } from '@/components/workspace/types';
 
 // ─── Preserved existing types ─────────────────────────────────────────────────
 
@@ -58,6 +65,9 @@ export interface WorkspaceState {
   intakeModalOpen: boolean;
   pipelineInput: NiifReportIntake | null;
 
+  // Reporte financiero mas reciente completado (backend report + turnos del chat de seguimiento)
+  lastCompletedReport: LastCompletedReport | null;
+
   // New setters
   setActiveCaseType: (ct: CaseType | null) => void;
   setActiveMode: (mode: WorkspaceMode) => void;
@@ -68,6 +78,24 @@ export interface WorkspaceState {
   setIntakeModalOpen: (open: boolean) => void;
   openIntakeForType: (ct: CaseType) => void;
   setPipelineInput: (input: NiifReportIntake | null) => void;
+
+  /** Reemplaza el reporte completado actual y lo persiste en localStorage (FIFO). */
+  setLastCompletedReport: (data: LastCompletedReport | null) => void;
+  /**
+   * Actualiza los turnos del chat de seguimiento para un `conversationId` dado.
+   * Si coincide con el reporte activo, tambien actualiza el estado en memoria.
+   */
+  updateReportTurns: (conversationId: string, turns: ReportIterationTurn[]) => void;
+}
+
+// ─── Reporte completado (expuesto al shell) ───────────────────────────────────
+
+export interface LastCompletedReport {
+  report: FinancialReport;
+  rawData: string;
+  company: CompanyInfo;
+  conversationId: string;
+  turns: ReportIterationTurn[];
 }
 
 // ─── Default pipeline state ───────────────────────────────────────────────────
@@ -109,6 +137,31 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [intakeDrafts, setIntakeDrafts] = useState<Partial<Record<CaseType, Partial<IntakeFormUnion>>>>({});
   const [intakeModalOpen, setIntakeModalOpen] = useState(false);
   const [pipelineInput, setPipelineInputState] = useState<NiifReportIntake | null>(null);
+  // Hidratar el reporte mas reciente desde localStorage al crear el state.
+  // `listReports()` ya chequea `typeof window === 'undefined'` y retorna [] en SSR,
+  // asi que es seguro usarlo como inicializador lazy en un 'use client' component.
+  // Este provider es 'use client', por lo que el hook solo corre en el cliente.
+  const [lastCompletedReport, setLastCompletedReportState] = useState<LastCompletedReport | null>(
+    () => {
+      try {
+        const all = listReports();
+        const latest = all[0];
+        if (!latest) return null;
+        const report = latest.report as FinancialReport | null;
+        if (!report || typeof report.consolidatedReport !== 'string') return null;
+        return {
+          report,
+          rawData: latest.rawData,
+          company: report.company,
+          conversationId: latest.conversationId,
+          turns: (latest.turns as ReportIterationTurn[] | undefined) ?? [],
+        };
+      } catch {
+        // Si el storage esta corrupto, ignoramos — el usuario empieza vacio.
+        return null;
+      }
+    },
+  );
 
   // Existing methods
   const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
@@ -191,6 +244,64 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setPipelineInputState(input);
   }, []);
 
+  /**
+   * Reemplaza el reporte completado actual. Si `data` no es null, tambien
+   * se persiste en localStorage via `saveReport` (FIFO, ultimos 3).
+   */
+  const setLastCompletedReport = useCallback((data: LastCompletedReport | null) => {
+    setLastCompletedReportState(data);
+    if (!data) return;
+    try {
+      const record: StoredReportRecord = {
+        conversationId: data.conversationId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        companyName: data.company.name,
+        companyNit: data.company.nit,
+        fiscalPeriod: data.company.fiscalPeriod,
+        report: data.report,
+        rawData: data.rawData,
+        turns: data.turns,
+      };
+      saveReport(record);
+    } catch (err) {
+      console.error('Failed to save report to localStorage:', err);
+    }
+  }, []);
+
+  /**
+   * Actualiza los turnos del chat de seguimiento para un `conversationId`
+   * dado. Si coincide con el reporte activo, actualiza el estado en memoria
+   * y persiste. Si no coincide, solo persiste (caso raro: reporte historico).
+   */
+  const updateReportTurns = useCallback(
+    (conversationId: string, turns: ReportIterationTurn[]) => {
+      setLastCompletedReportState((prev) => {
+        if (prev && prev.conversationId === conversationId) {
+          const next: LastCompletedReport = { ...prev, turns };
+          try {
+            saveReport({
+              conversationId,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              companyName: next.company.name,
+              companyNit: next.company.nit,
+              fiscalPeriod: next.company.fiscalPeriod,
+              report: next.report,
+              rawData: next.rawData,
+              turns,
+            });
+          } catch (err) {
+            console.error('Failed to update report turns in localStorage:', err);
+          }
+          return next;
+        }
+        return prev;
+      });
+    },
+    [],
+  );
+
   const openIntakeForType = useCallback((ct: CaseType) => {
     setActiveCaseTypeState(ct);
     const CASE_TYPE_TO_USE_CASE: Record<CaseType, string> = {
@@ -239,6 +350,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         intakeDrafts,
         intakeModalOpen,
         pipelineInput,
+        lastCompletedReport,
         setActiveCaseType,
         setActiveMode,
         setPipelineState,
@@ -248,6 +360,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setIntakeModalOpen,
         openIntakeForType,
         setPipelineInput,
+        setLastCompletedReport,
+        updateReportTurns,
       }}
     >
       {children}

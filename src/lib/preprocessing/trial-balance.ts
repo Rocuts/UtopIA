@@ -1,11 +1,21 @@
 // ---------------------------------------------------------------------------
 // Trial Balance Preprocessor — deterministic arithmetic validation
 // ---------------------------------------------------------------------------
-// Parses CSV/Excel trial balance data, filters to auxiliary/transactional
-// accounts, sums by PUC class, validates totals, and detects discrepancies.
+// Parses CSV/Excel trial balance data, filters a leaf set of accounts (the
+// most granular level per PUC code), sums by PUC class, validates totals,
+// cross-checks la ecuacion patrimonial y la utilidad del ejercicio, y emite
+// un contrato de totales vinculantes (controlTotals) + desglose de patrimonio
+// (equityBreakdown) que los agentes del pipeline financiero consumen como
+// anclas anti-alucinacion.
 //
-// NO LLM — pure computation. Runs before the financial pipeline so agents
-// receive clean, pre-validated data with arithmetic guarantees.
+// NO LLM — computacion pura. Corre antes del pipeline financiero para que los
+// agentes reciban datos limpios con garantias aritmeticas.
+//
+// Convenciones:
+//   Clase 1 = Activo, 2 = Pasivo, 3 = Patrimonio, 4 = Ingresos, 5 = Gastos,
+//   6 = Costos de Ventas, 7 = Costos de Produccion.
+//   Niveles: Clase (1 digito), Grupo (2), Cuenta (4), Subcuenta (6),
+//   Auxiliar (8+).
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -67,12 +77,54 @@ export interface Discrepancy {
   description: string;
 }
 
+/**
+ * Totales de control — contrato numerico vinculante para los agentes.
+ * Todos los campos son requeridos (0 si ausentes en la entrada).
+ */
+export interface ControlTotals {
+  activo: number;
+  activoCorriente: number;
+  activoNoCorriente: number;
+  pasivo: number;
+  pasivoCorriente: number;
+  pasivoNoCorriente: number;
+  patrimonio: number;
+  ingresos: number;
+  /** Gastos (Clase 5) + Costos (Clases 6 y 7) */
+  gastos: number;
+  /** Ingresos - Gastos */
+  utilidadNeta: number;
+}
+
+/**
+ * Desglose del patrimonio (Clase 3). Todos los campos son opcionales:
+ * solo se emiten si la cuenta/subcuenta existe en el balance.
+ */
+export interface EquityBreakdown {
+  /** 3105 — Capital autorizado */
+  capitalAutorizado?: number;
+  /** 3115 + 3120 — Capital suscrito y pagado / Aporte de socios */
+  capitalSuscritoPagado?: number;
+  /** 3305 — Reserva legal */
+  reservaLegal?: number;
+  /** 3310-3395 — Otras reservas agregadas */
+  otrasReservas?: number;
+  /** 3605 — Utilidad del ejercicio */
+  utilidadEjercicio?: number;
+  /** 3610 + 3705 + 3710 — Utilidades acumuladas / resultados de ejercicios anteriores */
+  utilidadesAcumuladas?: number;
+}
+
 export interface PreprocessedBalance {
   /** Fiscal period (if detected) */
   period: string | null;
   /** All PUC classes with validated totals */
   classes: PUCClass[];
-  /** Summary figures */
+  /**
+   * Resumen agregado legacy (mantenido por compatibilidad con consumers
+   * existentes: excel-export, api/financial-report, api/financial-report/export,
+   * agents/financial/quality).
+   */
   summary: {
     totalAssets: number;        // Clase 1
     totalLiabilities: number;   // Clase 2
@@ -85,8 +137,20 @@ export interface PreprocessedBalance {
     equationBalance: number;    // Assets - Liabilities - Equity (should be ≈ 0)
     equationBalanced: boolean;
   };
-  /** Detected discrepancies */
+  /**
+   * Totales de control — contrato numerico nuevo, vinculante para agentes.
+   * Ver ControlTotals.
+   */
+  controlTotals: ControlTotals;
+  /** Desglose del patrimonio por sub-cuenta principal. */
+  equityBreakdown: EquityBreakdown;
+  /** Detected discrepancies (Discrepancy[] estructuradas). */
   discrepancies: Discrepancy[];
+  /**
+   * Cuentas PUC importantes faltantes o con saldo 0 inesperado.
+   * Lista de mensajes legibles.
+   */
+  missingAccounts: string[];
   /** Number of auxiliary accounts processed */
   auxiliaryCount: number;
   /** Total accounts in the raw data */
@@ -96,6 +160,9 @@ export interface PreprocessedBalance {
   /** Clean CSV-like text for the NIIF analyst agent */
   cleanData: string;
 }
+
+/** Alias de compatibilidad hacia atras. */
+export type PreprocessedBalanceData = PreprocessedBalance;
 
 // ---------------------------------------------------------------------------
 // PUC class names
@@ -109,6 +176,53 @@ const PUC_CLASS_NAMES: Record<number, string> = {
   5: 'Gastos',
   6: 'Costos de Ventas',
   7: 'Costos de Produccion',
+};
+
+// ---------------------------------------------------------------------------
+// PUC — clasificacion corriente / no corriente (Decreto 2650/1993 ajustado)
+// ---------------------------------------------------------------------------
+// Activo corriente (realizable en <= 12 meses):
+//   11 Disponible, 12 Inversiones (corto plazo — la norma permite ajuste fino,
+//   pero para efectos de sumario conservador se incluyen por defecto), 13
+//   Deudores, 14 Inventarios, 15 seria Propiedades, planta y equipo — NO es
+//   corriente; se excluye. Aqui usamos 11, 12, 13, 14.
+// Activo NO corriente: 15 (PP&E), 16 Intangibles, 17 Diferidos, 18 Otros
+//   activos, 19 Valorizaciones.
+// Nota: la norma permite que inversiones de largo plazo vayan a 1205+ como
+//   no corriente. Sin sub-clasificacion explicita preferimos conservador:
+//   todo 12 queda en corriente. Si el input trae nivel suficiente, el agente
+//   puede re-clasificar.
+// ---------------------------------------------------------------------------
+const ACTIVO_CORRIENTE_GROUPS = new Set(['11', '12', '13', '14']);
+const ACTIVO_NO_CORRIENTE_GROUPS = new Set(['15', '16', '17', '18', '19']);
+
+// Pasivo corriente (exigible en <= 12 meses):
+//   21 Obligaciones financieras (corto plazo en teoria — aqui conservador,
+//   todo 21 va a corriente salvo que venga sub-clasificado), 22 Proveedores,
+//   23 Cuentas por pagar, 24 Impuestos, 25 Obligaciones laborales, 26
+//   Pasivos estimados (corriente por defecto).
+// Pasivo NO corriente: 27 Diferidos, 28 Otros pasivos, 29 Bonos y papeles
+//   comerciales de largo plazo.
+// ---------------------------------------------------------------------------
+const PASIVO_CORRIENTE_GROUPS = new Set(['21', '22', '23', '24', '25', '26']);
+const PASIVO_NO_CORRIENTE_GROUPS = new Set(['27', '28', '29']);
+
+// ---------------------------------------------------------------------------
+// Subcuentas importantes para findMissingAccounts (D6)
+// ---------------------------------------------------------------------------
+// Mapa: codigo subcuenta -> { nombre, grupo padre }
+// Si el grupo padre tiene saldo > 0 y la subcuenta no aparece, se reporta.
+const IMPORTANT_SUBCUENTAS: Record<string, { name: string; parentGroup: string }> = {
+  '1105': { name: 'Caja', parentGroup: '11' },
+  '1110': { name: 'Bancos', parentGroup: '11' },
+  '1120': { name: 'Cuentas de ahorro', parentGroup: '11' },
+  '1435': { name: 'Mercancias no fabricadas por la empresa', parentGroup: '14' },
+  '2365': { name: 'Retencion en la fuente', parentGroup: '23' },
+  '2408': { name: 'IVA por pagar', parentGroup: '24' },
+  '3105': { name: 'Capital autorizado', parentGroup: '31' },
+  '3115': { name: 'Capital suscrito y pagado', parentGroup: '31' },
+  '3305': { name: 'Reserva legal', parentGroup: '33' },
+  '3605': { name: 'Utilidad del ejercicio', parentGroup: '36' },
 };
 
 // ---------------------------------------------------------------------------
@@ -148,9 +262,10 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
     const code = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
     if (!code || !/^\d/.test(code)) continue; // skip non-account rows
 
-    const debit = parseNumber(cols[debitIdx]);
-    const credit = parseNumber(cols[creditIdx]);
-    const rawBalance = balanceIdx !== -1 ? parseNumber(cols[balanceIdx]) : null;
+    const debit = safeNumber(parseNumber(cols[debitIdx]));
+    const credit = safeNumber(parseNumber(cols[creditIdx]));
+    const rawBalance = balanceIdx !== -1 ? parseNumber(cols[balanceIdx]) : NaN;
+    const hasRawBalance = !Number.isNaN(rawBalance);
 
     // Determine level
     let level = levelIdx !== -1 ? (cols[levelIdx] || '').trim() : inferLevel(code);
@@ -168,7 +283,7 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
     // Calculate balance: use provided balance, or debit - credit for asset/expense classes
     const classCode = parseInt(code[0], 10);
     let balance: number;
-    if (rawBalance !== null) {
+    if (hasRawBalance) {
       balance = rawBalance;
     } else {
       // Classes 1, 5, 6, 7 are debit-nature; classes 2, 3, 4 are credit-nature
@@ -187,7 +302,7 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
       debit,
       credit,
       balance,
-      previousBalance: prevBalIdx !== -1 ? parseNumber(cols[prevBalIdx]) : undefined,
+      previousBalance: prevBalIdx !== -1 ? safeNumberOrUndefined(parseNumber(cols[prevBalIdx])) : undefined,
     });
   }
 
@@ -202,13 +317,45 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
  * Process parsed account rows into a validated, structured balance.
  */
 export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalance {
-  // Separate leaf accounts (auxiliaries/transactional) from summary rows
-  const leafRows = rows.filter((r) => r.transactional || r.level === 'Auxiliar');
+  // -------------------------------------------------------------------------
+  // 1. Calcular el conjunto de "leaf rows" (hojas) — la base de toda suma.
+  // Regla:
+  //   (a) Auxiliar (8+ digitos o flag transactional=true) siempre cuenta.
+  //   (b) Subcuenta (6 digitos) cuenta SI no existe ningun Auxiliar con codigo
+  //       que empiece por el codigo de esta Subcuenta. Esto captura
+  //       Subcuentas exportadas sin detalle — caso clasico: 1120 Ahorros
+  //       solo a nivel Subcuenta, sin 8 digitos debajo.
+  //   (c) Si para un mismo prefijo PUC coexisten Subcuenta y Auxiliar,
+  //       preferimos Auxiliar (es el nivel mas detallado y la regla clasica
+  //       del parser previo).
+  // -------------------------------------------------------------------------
+  const auxiliarRows = rows.filter((r) => r.transactional || r.level === 'Auxiliar');
+  const subcuentaRows = rows.filter((r) => r.level === 'Subcuenta');
+
+  // Para cada Subcuenta, verificar si tiene descendencia entre auxiliares.
+  const orphanSubcuentas: RawAccountRow[] = [];
+  for (const sub of subcuentaRows) {
+    const hasAuxiliarDescendant = auxiliarRows.some(
+      (aux) => aux.code !== sub.code && aux.code.startsWith(sub.code),
+    );
+    if (!hasAuxiliarDescendant) {
+      orphanSubcuentas.push(sub);
+    }
+  }
+
+  // Evitar dobles conteos: si un codigo aparece en ambos grupos, auxiliar gana.
+  const auxiliarCodes = new Set(auxiliarRows.map((r) => r.code));
+  const leafRows: RawAccountRow[] = [
+    ...auxiliarRows,
+    ...orphanSubcuentas.filter((r) => !auxiliarCodes.has(r.code)),
+  ];
+
   const classRows = rows.filter((r) => r.level === 'Clase');
 
-  // Group by PUC class
+  // -------------------------------------------------------------------------
+  // 2. Agrupar leafs por clase PUC (1..7)
+  // -------------------------------------------------------------------------
   const classMap = new Map<number, { leaves: RawAccountRow[]; reportedRow: RawAccountRow | null }>();
-
   for (let c = 1; c <= 7; c++) {
     classMap.set(c, { leaves: [], reportedRow: null });
   }
@@ -227,7 +374,9 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     }
   }
 
-  // Build validated classes
+  // -------------------------------------------------------------------------
+  // 3. Construir clases validadas + detectar discrepancias por clase
+  // -------------------------------------------------------------------------
   const classes: PUCClass[] = [];
   const discrepancies: Discrepancy[] = [];
 
@@ -238,8 +387,7 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
 
     // Report discrepancy if > $1 (floating point tolerance)
     if (reportedTotal !== null && discrepancy > 1) {
-      // Try to find which accounts might be missing
-      const missingDesc = findMissingAccounts(rows, classCode, data.leaves);
+      const missingDesc = findMissingAccountsForClass(rows, classCode, data.leaves);
       discrepancies.push({
         location: `Clase ${classCode} (${PUC_CLASS_NAMES[classCode]})`,
         reported: reportedTotal,
@@ -258,7 +406,6 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
       isLeaf: true,
     }));
 
-    // Sort accounts by code
     accounts.sort((a, b) => a.code.localeCompare(b.code));
 
     classes.push({
@@ -271,7 +418,9 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     });
   }
 
-  // Calculate summary (using VALIDATED auxiliary totals, not reported)
+  // -------------------------------------------------------------------------
+  // 4. Calcular summary legacy
+  // -------------------------------------------------------------------------
   const getClassTotal = (c: number) => classes.find((cl) => cl.code === c)?.auxiliaryTotal ?? 0;
 
   const totalAssets = getClassTotal(1);
@@ -283,42 +432,243 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   const totalProduction = getClassTotal(7);
   const netIncome = totalRevenue - totalExpenses - totalCosts;
   const equationBalance = totalAssets - totalLiabilities - totalEquity;
-  // Tolerance of $100 for floating point
   const equationBalanced = Math.abs(equationBalance) < 100;
 
-  if (!equationBalanced) {
+  // -------------------------------------------------------------------------
+  // 5. Calcular controlTotals (contrato nuevo D4)
+  // -------------------------------------------------------------------------
+  const activoCorriente = sumLeavesByGroupPrefixes(leafRows, '1', ACTIVO_CORRIENTE_GROUPS);
+  const activoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '1', ACTIVO_NO_CORRIENTE_GROUPS);
+  const pasivoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_CORRIENTE_GROUPS);
+  const pasivoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_NO_CORRIENTE_GROUPS);
+
+  const controlTotals: ControlTotals = {
+    activo: totalAssets,
+    activoCorriente,
+    activoNoCorriente,
+    pasivo: totalLiabilities,
+    pasivoCorriente,
+    pasivoNoCorriente,
+    patrimonio: totalEquity,
+    ingresos: totalRevenue,
+    // Contrato: gastos = Clase 5 + Clase 6 (costos). Clase 7 (costos de
+    // produccion) se suma tambien aqui porque representa costo imputable
+    // al estado de resultados.
+    gastos: totalExpenses + totalCosts + totalProduction,
+    utilidadNeta: totalRevenue - (totalExpenses + totalCosts + totalProduction),
+  };
+
+  // -------------------------------------------------------------------------
+  // 6. Calcular equityBreakdown (D3)
+  // -------------------------------------------------------------------------
+  const equityBreakdown = extractEquityBreakdown(rows, discrepancies);
+
+  // -------------------------------------------------------------------------
+  // 7. Checks cruzados (D5): ecuacion patrimonial, consistencia utilidad,
+  //    totales en 0 con filas existentes
+  // -------------------------------------------------------------------------
+  const ECUACION_TOL = 1000; // COP
+  if (Math.abs(controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio)) > ECUACION_TOL) {
+    const diff = controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio);
     discrepancies.push({
       location: 'Ecuacion Patrimonial',
+      reported: controlTotals.pasivo + controlTotals.patrimonio,
+      calculated: controlTotals.activo,
+      difference: diff,
+      description: `Ecuacion patrimonial descuadrada: Activo $${formatCOP(controlTotals.activo)} != Pasivo $${formatCOP(controlTotals.pasivo)} + Patrimonio $${formatCOP(controlTotals.patrimonio)} (diferencia $${formatCOP(diff)})`,
+    });
+  } else if (!equationBalanced) {
+    // Tolerancia mas estricta (100 COP) — avisamos pero sin el prefijo duro.
+    discrepancies.push({
+      location: 'Ecuacion Patrimonial (tolerancia fina)',
       reported: 0,
       calculated: equationBalance,
       difference: equationBalance,
-      description: `Activo ($${formatCOP(totalAssets)}) - Pasivo ($${formatCOP(totalLiabilities)}) - Patrimonio ($${formatCOP(totalEquity)}) = $${formatCOP(equationBalance)}. La ecuacion NO cuadra.`,
+      description: `Activo ($${formatCOP(totalAssets)}) - Pasivo ($${formatCOP(totalLiabilities)}) - Patrimonio ($${formatCOP(totalEquity)}) = $${formatCOP(equationBalance)}. Diferencia menor a $${ECUACION_TOL} (posible redondeo).`,
     });
   }
 
+  // Cross-check utilidad P&L vs utilidad del ejercicio en patrimonio
+  const UTIL_TOL = 1000; // COP
+  if (equityBreakdown.utilidadEjercicio !== undefined) {
+    const diffUtil = controlTotals.utilidadNeta - equityBreakdown.utilidadEjercicio;
+    if (Math.abs(diffUtil) > UTIL_TOL) {
+      discrepancies.push({
+        location: 'Consistencia Utilidad',
+        reported: equityBreakdown.utilidadEjercicio,
+        calculated: controlTotals.utilidadNeta,
+        difference: diffUtil,
+        description: `Utilidad neta P&L $${formatCOP(controlTotals.utilidadNeta)} difiere de Utilidad del ejercicio en patrimonio $${formatCOP(equityBreakdown.utilidadEjercicio)} (diferencia $${formatCOP(diffUtil)})`,
+      });
+    }
+  }
+
+  // Totales en 0 con filas existentes (posible fallo de parseo)
+  for (let c = 1; c <= 6; c++) {
+    const classData = classMap.get(c);
+    const classTotal = getClassTotal(c);
+    const hasClassRows = rows.some((r) => r.code.startsWith(String(c)));
+    if (classTotal === 0 && hasClassRows && classData && classData.leaves.length === 0) {
+      discrepancies.push({
+        location: `Clase ${c} (${PUC_CLASS_NAMES[c]})`,
+        reported: 0,
+        calculated: 0,
+        difference: 0,
+        description: `Advertencia: Total de Clase ${c} es $0 pero existen filas con codigo ${c}xxx en la entrada. Posible fallo de parseo de numeros o niveles.`,
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 8. missingAccounts (D6): cuentas y subcuentas PUC importantes ausentes
+  // -------------------------------------------------------------------------
+  const missingAccounts = buildMissingAccounts(rows, leafRows, classes);
+
+  // -------------------------------------------------------------------------
+  // 9. Informe de validacion + datos limpios
+  // -------------------------------------------------------------------------
   const auxiliaryCount = leafRows.length;
-  const validationReport = buildValidationReport(classes, discrepancies, {
+  const summary = {
     totalAssets, totalLiabilities, totalEquity, totalRevenue,
     totalExpenses, totalCosts, totalProduction, netIncome,
     equationBalance, equationBalanced,
-  }, auxiliaryCount, rows.length);
+  };
+  const validationReport = buildValidationReport(
+    classes,
+    discrepancies,
+    missingAccounts,
+    summary,
+    controlTotals,
+    equityBreakdown,
+    auxiliaryCount,
+    rows.length,
+  );
 
   const cleanData = buildCleanData(classes);
 
   return {
     period: null,
     classes,
-    summary: {
-      totalAssets, totalLiabilities, totalEquity, totalRevenue,
-      totalExpenses, totalCosts, totalProduction, netIncome,
-      equationBalance, equationBalanced,
-    },
+    summary,
+    controlTotals,
+    equityBreakdown,
     discrepancies,
+    missingAccounts,
     auxiliaryCount,
     totalRowCount: rows.length,
     validationReport,
     cleanData,
   };
+}
+
+// ---------------------------------------------------------------------------
+// equityBreakdown (D3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extrae el desglose de patrimonio a partir de todas las filas (no solo leafs).
+ * Preferimos el nivel mas agregado que sume correctamente. Si 3105 y 310505
+ * conviven con saldos distintos, usamos 3105 y emitimos discrepancia.
+ */
+export function extractEquityBreakdown(
+  rows: RawAccountRow[],
+  discrepancies: Discrepancy[],
+): EquityBreakdown {
+  const breakdown: EquityBreakdown = {};
+
+  // Helper: suma filas que comienzan por prefijo exacto, preferentemente al
+  // nivel indicado. Si el nivel preferido existe y los descendientes suman
+  // distinto, preferimos el nivel preferido y emitimos discrepancia.
+  const sumPreferring = (
+    prefix: string,
+    preferredLevel: 'Cuenta' | 'Subcuenta',
+    label: string,
+  ): number | undefined => {
+    const preferred = rows.find((r) => r.code === prefix && r.level === preferredLevel);
+    const descendants = rows.filter(
+      (r) => r.code !== prefix && r.code.startsWith(prefix) && r.balance !== 0,
+    );
+
+    if (preferred && preferred.balance !== 0) {
+      if (descendants.length > 0) {
+        const descSum = descendants
+          .filter((r) => r.level === 'Auxiliar' || r.level === 'Subcuenta')
+          .reduce((s, r) => s + r.balance, 0);
+        if (descSum !== 0 && Math.abs(descSum - preferred.balance) > 1) {
+          discrepancies.push({
+            location: `Patrimonio ${prefix} ${label}`,
+            reported: preferred.balance,
+            calculated: descSum,
+            difference: descSum - preferred.balance,
+            description: `Saldo agregado (${prefix}) $${formatCOP(preferred.balance)} difiere de la suma de descendientes $${formatCOP(descSum)}. Se prefiere nivel agregado.`,
+          });
+        }
+      }
+      return preferred.balance;
+    }
+
+    // Sin nivel preferido: usamos descendientes (leaf-like) como fallback.
+    const descSum = descendants
+      .filter((r) => r.level === 'Auxiliar' || r.level === 'Subcuenta' || r.transactional)
+      .reduce((s, r) => s + r.balance, 0);
+    return descSum !== 0 ? descSum : undefined;
+  };
+
+  // 3105 — Capital autorizado
+  const v3105 = sumPreferring('3105', 'Cuenta', 'Capital autorizado');
+  if (v3105 !== undefined) breakdown.capitalAutorizado = v3105;
+
+  // 3115 + 3120 — Capital suscrito y pagado (+ Aporte de socios si existe)
+  const v3115 = sumPreferring('3115', 'Cuenta', 'Capital suscrito y pagado');
+  const v3120 = sumPreferring('3120', 'Cuenta', 'Aporte de socios');
+  const capSuscrito = (v3115 ?? 0) + (v3120 ?? 0);
+  if (v3115 !== undefined || v3120 !== undefined) {
+    breakdown.capitalSuscritoPagado = capSuscrito;
+  }
+
+  // 3305 — Reserva legal
+  const v3305 = sumPreferring('3305', 'Cuenta', 'Reserva legal');
+  if (v3305 !== undefined) breakdown.reservaLegal = v3305;
+
+  // 3310..3395 — Otras reservas (agregadas). Sumamos a nivel Cuenta (4 digitos)
+  // que empiezan por 33 pero no sean 3305. Si no hay Cuenta, caemos a subcuentas
+  // del grupo 33 excluyendo prefijo 3305.
+  let otrasReservasTotal = 0;
+  let otrasReservasFound = false;
+  const cuentasGrupo33 = rows.filter(
+    (r) => r.level === 'Cuenta' && r.code.startsWith('33') && r.code !== '3305' && r.balance !== 0,
+  );
+  if (cuentasGrupo33.length > 0) {
+    otrasReservasTotal = cuentasGrupo33.reduce((s, r) => s + r.balance, 0);
+    otrasReservasFound = true;
+  } else {
+    const hojas33 = rows.filter(
+      (r) =>
+        (r.level === 'Auxiliar' || r.level === 'Subcuenta' || r.transactional) &&
+        r.code.startsWith('33') &&
+        !r.code.startsWith('3305') &&
+        r.balance !== 0,
+    );
+    if (hojas33.length > 0) {
+      otrasReservasTotal = hojas33.reduce((s, r) => s + r.balance, 0);
+      otrasReservasFound = true;
+    }
+  }
+  if (otrasReservasFound) breakdown.otrasReservas = otrasReservasTotal;
+
+  // 3605 — Utilidad del ejercicio
+  const v3605 = sumPreferring('3605', 'Cuenta', 'Utilidad del ejercicio');
+  if (v3605 !== undefined) breakdown.utilidadEjercicio = v3605;
+
+  // 3610 + 3705 + 3710 — Utilidades acumuladas / ejercicios anteriores
+  const v3610 = sumPreferring('3610', 'Cuenta', 'Utilidades acumuladas');
+  const v3705 = sumPreferring('3705', 'Cuenta', 'Utilidad ejercicios anteriores');
+  const v3710 = sumPreferring('3710', 'Cuenta', 'Perdida ejercicios anteriores');
+  if (v3610 !== undefined || v3705 !== undefined || v3710 !== undefined) {
+    breakdown.utilidadesAcumuladas = (v3610 ?? 0) + (v3705 ?? 0) + (v3710 ?? 0);
+  }
+
+  return breakdown;
 }
 
 // ---------------------------------------------------------------------------
@@ -346,30 +696,116 @@ function parseLine(line: string, separator: string): string[] {
   return result;
 }
 
-function parseNumber(val: string | undefined): number {
-  if (!val) return 0;
-  // Remove currency symbols, thousands separators (both . and ,)
-  // Colombian format: 1.234.567,89 → handle both formats
-  let cleaned = val.trim().replace(/['"$\sCOP]/gi, '');
-  if (!cleaned) return 0;
+/**
+ * parseNumber — robusto contra formatos diversos de ERP colombianos.
+ *
+ * Soporta:
+ *  - Envoltura `(...)` como negativo (convencion contable: credit balance).
+ *  - Prefijo/sufijo `-` como negativo (incluye `1234-` estilo mainframe).
+ *  - Simbolos de moneda y etiquetas: `$`, `COP`, `USD`, espacios.
+ *  - Formato colombiano: `1.234.567,89` (. miles, , decimal).
+ *  - Formato US: `1,234,567.89` (, miles, . decimal).
+ *  - Entrada solo con `.` o solo con `,`: heuristica por numero de digitos
+ *    despues del ultimo separador (<=2 digitos => decimal).
+ *  - Entradas invalidas: retorna NaN (permite al caller distinguir "no es
+ *    numero" de 0). Para el contrato publico historico (debit/credit en
+ *    parseTrialBalanceCSV) se envuelve con safeNumber().
+ *
+ * Devuelve: number | NaN.
+ */
+export function parseNumber(val: string | undefined): number {
+  if (val === undefined || val === null) return NaN;
+  // Normalizacion: trim + remover $, COP, USD, espacios internos y comillas.
+  let cleaned = String(val).trim();
+  if (cleaned.length === 0) return NaN;
 
-  // Detect format: if last separator is comma and has exactly 2 digits after → Colombian
-  const lastComma = cleaned.lastIndexOf(',');
-  const lastDot = cleaned.lastIndexOf('.');
+  // Remover simbolos/etiquetas monetarias (case-insensitive) y comillas.
+  cleaned = cleaned
+    .replace(/\b(COP|USD|EUR)\b/gi, '')
+    .replace(/[$€£'"\s]/g, '')
+    .trim();
+  if (cleaned.length === 0) return NaN;
 
-  if (lastComma > lastDot && lastComma === cleaned.length - 3) {
-    // Colombian format: 1.234.567,89
-    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-  } else if (lastDot > lastComma && lastDot === cleaned.length - 3) {
-    // US format: 1,234,567.89
-    cleaned = cleaned.replace(/,/g, '');
-  } else {
-    // No decimals or ambiguous — remove all non-numeric except dots
-    cleaned = cleaned.replace(/,/g, '');
+  // Detectar envoltura (...) como negativo.
+  let isNegative = false;
+  if (/^\(.*\)$/.test(cleaned)) {
+    isNegative = true;
+    cleaned = cleaned.slice(1, -1).trim();
   }
 
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
+  // Sufijo '-' (e.g. "1234-") o prefijo '-' (e.g. "-1234").
+  if (cleaned.endsWith('-')) {
+    isNegative = !isNegative;
+    cleaned = cleaned.slice(0, -1).trim();
+  }
+  if (cleaned.startsWith('-')) {
+    isNegative = !isNegative;
+    cleaned = cleaned.slice(1).trim();
+  }
+  // Prefijo '+' opcional.
+  if (cleaned.startsWith('+')) {
+    cleaned = cleaned.slice(1).trim();
+  }
+
+  if (cleaned.length === 0) return NaN;
+
+  // Si quedan caracteres no numericos salvo . y , es invalido.
+  if (!/^[\d.,]+$/.test(cleaned)) return NaN;
+
+  const hasDot = cleaned.includes('.');
+  const hasComma = cleaned.includes(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  const lastComma = cleaned.lastIndexOf(',');
+
+  let normalized: string;
+
+  if (hasDot && hasComma) {
+    // Ambos separadores: el ultimo es el decimal.
+    if (lastComma > lastDot) {
+      // Colombian: 1.234.567,89
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US: 1,234,567.89
+      normalized = cleaned.replace(/,/g, '');
+    }
+  } else if (hasDot) {
+    // Solo '.': si <=2 digitos despues del ultimo punto => decimal; si no, miles.
+    const digitsAfter = cleaned.length - lastDot - 1;
+    const occurrences = (cleaned.match(/\./g) || []).length;
+    if (occurrences === 1 && digitsAfter <= 2) {
+      // decimal
+      normalized = cleaned;
+    } else {
+      // miles — remover todos los puntos
+      normalized = cleaned.replace(/\./g, '');
+    }
+  } else if (hasComma) {
+    // Solo ',': si <=2 digitos despues de la ultima coma => decimal; si no, miles.
+    const digitsAfter = cleaned.length - lastComma - 1;
+    const occurrences = (cleaned.match(/,/g) || []).length;
+    if (occurrences === 1 && digitsAfter <= 2) {
+      normalized = cleaned.replace(',', '.');
+    } else {
+      normalized = cleaned.replace(/,/g, '');
+    }
+  } else {
+    // Solo digitos.
+    normalized = cleaned;
+  }
+
+  const num = parseFloat(normalized);
+  if (Number.isNaN(num)) return NaN;
+  return isNegative ? -num : num;
+}
+
+/** Convierte NaN en 0 — para campos historicos donde se espera number. */
+function safeNumber(val: number): number {
+  return Number.isNaN(val) ? 0 : val;
+}
+
+/** Convierte NaN en undefined — para campos opcionales. */
+function safeNumberOrUndefined(val: number): number | undefined {
+  return Number.isNaN(val) ? undefined : val;
 }
 
 function findColumnIndex(headers: string[], candidates: string[]): number {
@@ -394,24 +830,28 @@ function normalizeLevel(level: string): string {
   const l = level.toLowerCase().trim();
   if (l.includes('clase') || l === 'class') return 'Clase';
   if (l.includes('grupo') || l === 'group') return 'Grupo';
-  if (l.includes('cuenta') || l === 'account') return 'Cuenta';
   if (l.includes('sub')) return 'Subcuenta';
   if (l.includes('auxiliar') || l.includes('aux') || l.includes('detalle')) return 'Auxiliar';
+  if (l.includes('cuenta') || l === 'account') return 'Cuenta';
   return level;
 }
 
-function findMissingAccounts(allRows: RawAccountRow[], classCode: number, leafRows: RawAccountRow[]): string {
-  // Find group/account-level rows that might contain accounts not in the leaves
+/**
+ * Busca discrepancias por clase: grupos/cuentas con saldo != 0 pero sin hojas.
+ * Legacy — se usa para la descripcion textual en discrepancies por clase.
+ */
+function findMissingAccountsForClass(
+  allRows: RawAccountRow[],
+  classCode: number,
+  leafRows: RawAccountRow[],
+): string {
   const classPrefix = String(classCode);
   const groupRows = allRows.filter(
     (r) => r.code.startsWith(classPrefix) && (r.level === 'Grupo' || r.level === 'Cuenta') && r.balance !== 0,
   );
 
-  const leafCodes = new Set(leafRows.map((r) => r.code));
   const missing: string[] = [];
-
   for (const group of groupRows) {
-    // Check if this group has any leaf children
     const hasChildren = leafRows.some((l) => l.code.startsWith(group.code) && l.code !== group.code);
     if (!hasChildren && group.balance !== 0) {
       missing.push(`${group.code} ${group.name} ($${formatCOP(group.balance)})`);
@@ -424,6 +864,96 @@ function findMissingAccounts(allRows: RawAccountRow[], classCode: number, leafRo
   return '';
 }
 
+/**
+ * Construye la lista missingAccounts (D6) — cuentas y subcuentas PUC
+ * importantes que deberian existir pero no aparecen (o aparecen en 0).
+ *
+ * Reglas:
+ *  1. Para cada subcuenta en IMPORTANT_SUBCUENTAS, si el grupo padre tiene
+ *     saldo > 0 pero la subcuenta no aparece entre las hojas o tiene saldo 0,
+ *     se reporta.
+ *  2. Tambien se reportan grupos/cuentas con saldo reportado > 0 pero sin
+ *     hojas descendientes (caso tradicional: ERP exporto Grupo pero no
+ *     detalle).
+ */
+function buildMissingAccounts(
+  allRows: RawAccountRow[],
+  leafRows: RawAccountRow[],
+  classes: PUCClass[],
+): string[] {
+  const out: string[] = [];
+  const leafByCode = new Map<string, RawAccountRow>();
+  for (const r of leafRows) leafByCode.set(r.code, r);
+
+  // Saldo total por grupo (2 digitos) — usando hojas (que ya consideran
+  // subcuentas huerfanas).
+  const groupTotals = new Map<string, number>();
+  for (const r of leafRows) {
+    if (r.code.length >= 2) {
+      const grp = r.code.slice(0, 2);
+      groupTotals.set(grp, (groupTotals.get(grp) ?? 0) + r.balance);
+    }
+  }
+
+  // (1) Subcuentas importantes ausentes
+  for (const [subCode, meta] of Object.entries(IMPORTANT_SUBCUENTAS)) {
+    const parentTotal = groupTotals.get(meta.parentGroup) ?? 0;
+    if (Math.abs(parentTotal) <= 1) continue; // grupo padre sin actividad
+
+    // Buscar la subcuenta o cualquier hoja bajo su prefijo.
+    const hasHere = leafRows.some((l) => l.code === subCode);
+    const hasBelow = leafRows.some((l) => l.code.startsWith(subCode) && l.code !== subCode);
+    const rowAtSub = allRows.find((r) => r.code === subCode);
+    const subBalance = rowAtSub?.balance ?? 0;
+
+    if (!hasHere && !hasBelow) {
+      out.push(
+        `Subcuenta PUC esperada ausente: ${subCode} ${meta.name} (grupo ${meta.parentGroup} tiene saldo $${formatCOP(parentTotal)} — la subcuenta deberia aportar parte).`,
+      );
+    } else if (hasHere && Math.abs(subBalance) < 1 && !hasBelow) {
+      out.push(
+        `Subcuenta PUC ${subCode} ${meta.name} presente pero con saldo $0 (grupo ${meta.parentGroup} = $${formatCOP(parentTotal)}). Verificar.`,
+      );
+    }
+  }
+
+  // (2) Grupos/cuentas a nivel superior con saldo pero sin hojas descendientes
+  for (const cl of classes) {
+    const classPrefix = String(cl.code);
+    const groupsAndAccounts = allRows.filter(
+      (r) =>
+        r.code.startsWith(classPrefix) &&
+        (r.level === 'Grupo' || r.level === 'Cuenta') &&
+        r.balance !== 0,
+    );
+    for (const g of groupsAndAccounts) {
+      const hasLeafBelow = leafRows.some(
+        (l) => l.code.startsWith(g.code) && l.code !== g.code,
+      );
+      if (!hasLeafBelow) {
+        out.push(
+          `${g.level} ${g.code} ${g.name} con saldo $${formatCOP(g.balance)} sin hojas (auxiliares/subcuentas) debajo. Revisar exportacion del ERP.`,
+        );
+      }
+    }
+  }
+
+  return out;
+}
+
+function sumLeavesByGroupPrefixes(
+  leafRows: RawAccountRow[],
+  classDigit: string,
+  groupSet: Set<string>,
+): number {
+  return leafRows.reduce((sum, r) => {
+    if (!r.code.startsWith(classDigit)) return sum;
+    const grp = r.code.length >= 2 ? r.code.slice(0, 2) : r.code;
+    if (groupSet.has(grp)) return sum + r.balance;
+    return sum;
+  }, 0);
+}
+
 function formatCOP(amount: number): string {
   const abs = Math.abs(amount);
   const formatted = abs.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -433,38 +963,59 @@ function formatCOP(amount: number): string {
 function buildValidationReport(
   classes: PUCClass[],
   discrepancies: Discrepancy[],
+  missingAccounts: string[],
   summary: PreprocessedBalance['summary'],
+  controlTotals: ControlTotals,
+  equityBreakdown: EquityBreakdown,
   auxCount: number,
   totalCount: number,
 ): string {
   const lines: string[] = [];
   lines.push('# INFORME DE VALIDACION ARITMETICA DEL BALANCE DE PRUEBA');
   lines.push('');
-  lines.push(`**Cuentas totales:** ${totalCount} | **Auxiliares procesados:** ${auxCount}`);
+  lines.push(`**Cuentas totales:** ${totalCount} | **Hojas procesadas (aux + subcuentas huerfanas):** ${auxCount}`);
   lines.push('');
   lines.push('## Resumen por Clase PUC');
   lines.push('');
-  lines.push('| Clase | Nombre | Total Auxiliares | Total Reportado | Discrepancia |');
-  lines.push('|-------|--------|-----------------|-----------------|--------------|');
+  lines.push('| Clase | Nombre | Total Hojas | Total Reportado | Discrepancia |');
+  lines.push('|-------|--------|-------------|-----------------|--------------|');
 
   for (const c of classes) {
     const reported = c.reportedTotal !== null ? `$${formatCOP(c.reportedTotal)}` : 'N/A';
     const disc = c.discrepancy > 1 ? `$${formatCOP(c.discrepancy)}` : 'OK';
-    const flag = c.discrepancy > 1 ? ' ⚠' : '';
+    const flag = c.discrepancy > 1 ? ' !!' : '';
     lines.push(`| ${c.code} | ${c.name} | $${formatCOP(c.auxiliaryTotal)} | ${reported} | ${disc}${flag} |`);
   }
 
   lines.push('');
+  lines.push('## Totales de Control (Contrato Vinculante)');
+  lines.push('');
+  lines.push(`- **Activo Total:** $${formatCOP(controlTotals.activo)} (corriente $${formatCOP(controlTotals.activoCorriente)} + no corriente $${formatCOP(controlTotals.activoNoCorriente)})`);
+  lines.push(`- **Pasivo Total:** $${formatCOP(controlTotals.pasivo)} (corriente $${formatCOP(controlTotals.pasivoCorriente)} + no corriente $${formatCOP(controlTotals.pasivoNoCorriente)})`);
+  lines.push(`- **Patrimonio Total:** $${formatCOP(controlTotals.patrimonio)}`);
+  lines.push(`- **Ingresos:** $${formatCOP(controlTotals.ingresos)}`);
+  lines.push(`- **Gastos+Costos:** $${formatCOP(controlTotals.gastos)}`);
+  lines.push(`- **Utilidad Neta:** $${formatCOP(controlTotals.utilidadNeta)}`);
+  lines.push('');
   lines.push('## Ecuacion Patrimonial');
   lines.push('');
-  lines.push(`- **Activo Total:** $${formatCOP(summary.totalAssets)}`);
-  lines.push(`- **Pasivo Total:** $${formatCOP(summary.totalLiabilities)}`);
-  lines.push(`- **Patrimonio Total:** $${formatCOP(summary.totalEquity)}`);
-  lines.push(`- **Verificacion:** Activo - Pasivo - Patrimonio = $${formatCOP(summary.equationBalance)}`);
+  lines.push(`- **Activo - (Pasivo + Patrimonio) = $${formatCOP(controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio))}**`);
   lines.push(`- **Estado:** ${summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'}`);
-  lines.push('');
-  lines.push(`- **Utilidad Neta Calculada:** $${formatCOP(summary.netIncome)}`);
-  lines.push(`  (Ingresos $${formatCOP(summary.totalRevenue)} - Gastos $${formatCOP(summary.totalExpenses)} - Costos $${formatCOP(summary.totalCosts)})`);
+
+  // Desglose de patrimonio (si hay datos)
+  const eb = equityBreakdown;
+  const hasEB = Object.keys(eb).length > 0;
+  if (hasEB) {
+    lines.push('');
+    lines.push('## Desglose de Patrimonio');
+    lines.push('');
+    if (eb.capitalAutorizado !== undefined) lines.push(`- **Capital autorizado (3105):** $${formatCOP(eb.capitalAutorizado)}`);
+    if (eb.capitalSuscritoPagado !== undefined) lines.push(`- **Capital suscrito y pagado (3115+3120):** $${formatCOP(eb.capitalSuscritoPagado)}`);
+    if (eb.reservaLegal !== undefined) lines.push(`- **Reserva legal (3305):** $${formatCOP(eb.reservaLegal)}`);
+    if (eb.otrasReservas !== undefined) lines.push(`- **Otras reservas (3310-3395):** $${formatCOP(eb.otrasReservas)}`);
+    if (eb.utilidadEjercicio !== undefined) lines.push(`- **Utilidad del ejercicio (3605):** $${formatCOP(eb.utilidadEjercicio)}`);
+    if (eb.utilidadesAcumuladas !== undefined) lines.push(`- **Utilidades acumuladas (3610+3705+3710):** $${formatCOP(eb.utilidadesAcumuladas)}`);
+  }
 
   if (discrepancies.length > 0) {
     lines.push('');
@@ -478,10 +1029,19 @@ function buildValidationReport(
       lines.push(`- **Nota:** ${d.description}`);
       lines.push('');
     }
-    lines.push('> **REGLA DE ORO:** Se priorizan los totales calculados desde auxiliares sobre los totales reportados.');
+    lines.push('> **REGLA DE ORO:** Se priorizan los totales calculados desde hojas sobre los totales reportados.');
   } else {
     lines.push('');
-    lines.push('*No se detectaron discrepancias. Los totales reportados coinciden con la suma de auxiliares.*');
+    lines.push('*No se detectaron discrepancias. Los totales reportados coinciden con la suma de hojas.*');
+  }
+
+  if (missingAccounts.length > 0) {
+    lines.push('');
+    lines.push('## Cuentas PUC Importantes Faltantes o Con Saldo 0');
+    lines.push('');
+    for (const m of missingAccounts) {
+      lines.push(`- ${m}`);
+    }
   }
 
   return lines.join('\n');
@@ -499,3 +1059,30 @@ function buildCleanData(classes: PUCClass[]): string {
 
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Test assertions (snippet inline — NO LLM, NO ejecutable en runtime)
+// ---------------------------------------------------------------------------
+// Las siguientes aserciones se usaron durante desarrollo para validar
+// parseNumber. Estan comentadas y no corren en produccion.
+// ---------------------------------------------------------------------------
+/*
+import assert from 'node:assert';
+// Caso colombiano normal
+assert.strictEqual(parseNumber('1.234.567,89'), 1234567.89);
+// Parentesis como negativo
+assert.strictEqual(parseNumber('(1.234,56)'), -1234.56);
+// Prefijo - con decimal US
+assert.strictEqual(parseNumber('-1234.56'), -1234.56);
+// Formato US
+assert.strictEqual(parseNumber('1,234,567.89'), 1234567.89);
+// Con simbolos de moneda
+assert.strictEqual(parseNumber('$ 1.234,56 COP'), 1234.56);
+// Sufijo - (mainframe)
+assert.strictEqual(parseNumber('1234-'), -1234);
+// Input vacio / whitespace => NaN
+assert.ok(Number.isNaN(parseNumber(' ')));
+assert.ok(Number.isNaN(parseNumber('')));
+// Texto no numerico => NaN
+assert.ok(Number.isNaN(parseNumber('N/A')));
+*/

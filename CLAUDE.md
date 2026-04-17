@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is UtopIA
 
-UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** routing through the **Vercel AI Gateway** (default `openai/gpt-4o-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
+UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** routing through the **Vercel AI Gateway** (default `openai/gpt-5.4-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
 
 ## Commands
 
@@ -26,9 +26,10 @@ Required in `.env.local`:
 - `UTOPIA_AGENT_MODE` — `orchestrated` (multi-agent) or `legacy` (monolithic). Controls which handler `/api/chat` uses
 
 Optional model overrides (all route through the Gateway; pass `provider/model` strings):
-- `OPENAI_MODEL_CHAT` (default `openai/gpt-4o-mini`) — chat orchestrator, specialists, synthesizer
-- `OPENAI_MODEL_FINANCIAL` (default `openai/gpt-4o-mini`) — financial/audit/tax/valuation/etc. pipelines
-- `OPENAI_MODEL_OCR` (default `openai/gpt-4o`) — PDF/image OCR in `/api/upload`
+- `OPENAI_MODEL_CHAT` (default `openai/gpt-5.4-mini`) — chat orchestrator, specialists, synthesizer
+- `OPENAI_MODEL_FINANCIAL` (default `openai/gpt-5.4-mini`) — financial/audit/tax/valuation/etc. pipelines
+- `OPENAI_MODEL_CLASSIFIER` (default `openai/gpt-5.4-mini`) — query classifier (T1/T2/T3 routing)
+- `OPENAI_MODEL_OCR` (default `openai/gpt-5.4`) — PDF/image OCR in `/api/upload` (full model, not mini, for accuracy on accounting docs)
 - Others in `src/lib/config/models.ts`
 
 `process.env.VERCEL` is checked in `src/lib/rag/vectorstore.ts` to fall back from HNSWLib to MemoryVectorStore on Vercel's read-only filesystem.
@@ -37,7 +38,7 @@ Optional model overrides (all route through the Gateway; pass `provider/model` s
 
 - **All AI SDK calls** use plain string model IDs (`'openai/gpt-4o-mini'`) which AI SDK v6 auto-resolves through the Gateway (see `node_modules/ai/src/model/resolve-model.ts`). **Never** pass an `apiKey` option or instantiate an OpenAI client — the provider is `gateway` by default.
 - Models come from `src/lib/config/models.ts` (`MODELS.CHAT`, `MODELS.FINANCIAL_PIPELINE`, `MODELS.OCR`, etc.). Change model IDs in ONE place; envs override per-key.
-- Migration contract followed by every existing call: `openai.chat.completions.create` → `generateText` / `streamText`, `max_tokens` → `maxOutputTokens`, `response.choices[0].message.content` → `result.text`, `response_format: { type: 'json_object' }` removed (instead the system prompt ends with `"\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences."`). See `docs/AI_SDK_MIGRATION.md`.
+- Migration contract followed by every existing call: `openai.chat.completions.create` → `generateText` / `streamText`, `max_tokens` → `maxOutputTokens`, `response.choices[0].message.content` → `result.text`. For structured outputs, prefer `experimental_output: Output.object({ schema: zodSchema })` on `generateText` (see `src/lib/agents/classifier.ts` for the canonical pattern). The older "append `'Respond ONLY with valid JSON.'` to the system prompt" trick is acceptable for lift-and-shift but less reliable. See `docs/AI_SDK_MIGRATION.md`.
 - Realtime voice is the one exception — still uses direct `fetch('https://api.openai.com/v1/realtime/sessions', ...)` because the Gateway does not expose the Realtime API.
 
 ## Architecture

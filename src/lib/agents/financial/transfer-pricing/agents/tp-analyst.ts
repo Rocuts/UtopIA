@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildTPAnalystPrompt } from '../prompts/tp-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { TPAnalysisResult, TPProgressEvent } from '../types';
 
@@ -55,6 +56,8 @@ export async function runTPAnalyst(
       }),
     { label: 'tp_analyst', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'tp_analyst');
 
   const fullContent = result.text || '';
 

@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildComplianceValidatorPrompt } from '../prompts/compliance-validator.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   TaxOptimizerResult,
@@ -56,6 +57,8 @@ export async function runComplianceValidator(
       }),
     { label: 'compliance_validator', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'compliance_validator');
 
   const fullContent = result.text || '';
 

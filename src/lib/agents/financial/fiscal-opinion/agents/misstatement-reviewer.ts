@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildMisstatementReviewerPrompt } from '../prompts/misstatement-reviewer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   MisstatementResult,
@@ -40,6 +41,8 @@ export async function runMisstatementReviewer(
       }),
     { label: 'misstatement_reviewer', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'misstatement_reviewer');
 
   const fullContent = result.text || '';
 

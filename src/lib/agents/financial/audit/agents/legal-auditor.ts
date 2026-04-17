@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildLegalAuditorPrompt } from '../prompts/legal-auditor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
 
@@ -30,6 +31,8 @@ export async function runLegalAuditor(
       }),
     { label: 'legal_auditor', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'legal_auditor');
 
   const fullContent = result.text || '';
   const { score, findings, summary } = parseAuditorOutput(fullContent, 'legal');

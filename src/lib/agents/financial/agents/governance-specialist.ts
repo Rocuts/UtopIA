@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildGovernancePrompt } from '../prompts/governance-specialist.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -17,17 +18,29 @@ import type {
 /**
  * Takes the outputs from Agent 1 (NIIF) and Agent 2 (Strategy) to produce
  * Notes to Financial Statements and Shareholder Assembly Minutes.
+ *
+ * @param niifOutput      Output del Agente 1.
+ * @param strategyOutput  Output del Agente 2.
+ * @param company         Metadata de la empresa.
+ * @param language        es | en
+ * @param instructions    Instrucciones adicionales del usuario (propagacion A2).
+ * @param bindingTotals   Totales vinculantes pre-calculados — se antepone al
+ *                        contexto para que las Notas citen cifras correctas.
  */
 export async function runGovernanceSpecialist(
   niifOutput: NiifAnalysisResult,
   strategyOutput: StrategicAnalysisResult,
   company: CompanyInfo,
   language: 'es' | 'en',
+  instructions: string | undefined,
+  bindingTotals: string,
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<GovernanceResult> {
   const systemPrompt = buildGovernancePrompt(company, language);
 
   const userContent = [
+    bindingTotals,
+    '',
     '=== ESTADOS FINANCIEROS NIIF (Agente 1) ===',
     '',
     niifOutput.fullContent,
@@ -35,7 +48,11 @@ export async function runGovernanceSpecialist(
     '=== ANALISIS ESTRATEGICO (Agente 2) ===',
     '',
     strategyOutput.fullContent,
-  ].join('\n');
+    '',
+    instructions ? `INSTRUCCIONES ADICIONALES DEL USUARIO:\n${instructions}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   onProgress?.({ type: 'stage_progress', stage: 3, detail: 'Redactando notas contables y acta de asamblea...' });
 
@@ -48,10 +65,14 @@ export async function runGovernanceSpecialist(
           { role: 'user', content: userContent },
         ],
         temperature: 0.1,
-        maxOutputTokens: 8192,
+        // 16384: notas NIIF completas + acta de asamblea requieren margen amplio.
+        maxOutputTokens: 16384,
+        seed: 42,
       }),
     { label: 'governance_specialist', maxAttempts: 3 },
   );
+
+  assertFinishedCleanlyOrThrow(result, 'Governance Specialist');
 
   const fullContent = result.text || '';
 

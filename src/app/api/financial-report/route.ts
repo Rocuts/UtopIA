@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { financialReportRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateFinancialReport } from '@/lib/agents/financial/orchestrator';
-import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
+import {
+  parseTrialBalanceCSV,
+  preprocessTrialBalance,
+  type PreprocessedBalance,
+} from '@/lib/preprocessing/trial-balance';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 
 // ---------------------------------------------------------------------------
@@ -30,9 +34,18 @@ export async function POST(req: Request) {
 
     const { rawData, company, language, instructions } = parsed.data;
 
-    // Preprocess trial balance for arithmetic validation and binding constraints
-    const rows = parseTrialBalanceCSV(rawData);
-    const preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+    // Si el cliente nos paso un PreprocessedBalance completo (desde /api/upload),
+    // lo reusamos. Asi evitamos re-parsear el CSV y garantizamos que los totales
+    // vinculantes que vio el usuario en el upload son exactamente los que
+    // alimentan al orchestrator. Fallback: re-preprocesamos on-the-fly.
+    const bodyPreprocessed = (body as { preprocessed?: PreprocessedBalance | null }).preprocessed;
+    let preprocessed: PreprocessedBalance | undefined;
+    if (bodyPreprocessed && typeof bodyPreprocessed === 'object') {
+      preprocessed = bodyPreprocessed;
+    } else {
+      const rows = parseTrialBalanceCSV(rawData);
+      preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+    }
 
     // Enhance data with validation report and clean auxiliary data
     const enhancedData = preprocessed
@@ -66,16 +79,19 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(enhancedData, company, language, enhancedInstructions);
+      return handleStreaming(enhancedData, company, language, enhancedInstructions, preprocessed);
     }
 
     // Non-streaming: run the full pipeline and return JSON
-    const report = await orchestrateFinancialReport({
-      rawData: enhancedData,
-      company,
-      language,
-      instructions: enhancedInstructions,
-    });
+    const report = await orchestrateFinancialReport(
+      {
+        rawData: enhancedData,
+        company,
+        language,
+        instructions: enhancedInstructions,
+      },
+      { preprocessed },
+    );
 
     return NextResponse.json(report);
   } catch (error) {
@@ -99,6 +115,7 @@ function handleStreaming(
   company: Parameters<typeof orchestrateFinancialReport>[0]['company'],
   language: 'es' | 'en',
   instructions: string | undefined,
+  preprocessed: PreprocessedBalance | undefined,
 ) {
   const encoder = new TextEncoder();
 
@@ -117,6 +134,7 @@ function handleStreaming(
             onProgress: (event: FinancialProgressEvent) => {
               send('progress', event);
             },
+            preprocessed,
           },
         );
         send('result', report);

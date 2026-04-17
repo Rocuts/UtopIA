@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildNiifImpactPrompt } from '../prompts/niif-impact.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   TaxOptimizerResult,
@@ -50,6 +51,8 @@ export async function runNiifImpactAnalyst(
       }),
     { label: 'niif_impact_analyst', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'niif_impact_analyst');
 
   const fullContent = result.text || '';
 

@@ -94,6 +94,19 @@ export interface GovernanceResult {
 }
 
 // ---------------------------------------------------------------------------
+// Post-render validation result (D2/D3)
+// ---------------------------------------------------------------------------
+
+export interface ReportValidationResult {
+  /** Whether the report passes all hard checks */
+  ok: boolean;
+  /** Hard failures that block the report from being surfaced as-is */
+  errors: string[];
+  /** Soft issues (warnings) worth surfacing to the UI */
+  warnings: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Consolidated Output
 // ---------------------------------------------------------------------------
 
@@ -110,6 +123,8 @@ export interface FinancialReport {
   consolidatedReport: string;
   /** Timestamp */
   generatedAt: string;
+  /** Post-render validation result (placeholders, sections, numeric sanity). */
+  validation?: ReportValidationResult;
 }
 
 // ---------------------------------------------------------------------------

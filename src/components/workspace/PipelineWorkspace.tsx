@@ -12,6 +12,7 @@ import {
   CheckCircle,
   Loader2,
   AlertTriangle,
+  Check,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -22,16 +23,19 @@ import { useLanguage } from '@/context/LanguageContext';
 import { StreamingText } from '@/design-system/components/StreamingText';
 import { DSBadge } from '@/design-system/components/Badge';
 import { ProgressRing } from '@/design-system/components/ProgressRing';
+import { ReportFollowUpChat } from './ReportFollowUpChat';
 import type { PipelineState, FinancialReport, ReportSection, QualityGrade } from '@/types/platform';
 import type {
   FinancialReport as BackendFinancialReport,
   FinancialProgressEvent,
+  CompanyInfo,
 } from '@/lib/agents/financial/types';
 import type {
   AuditReport as BackendAuditReport,
   AuditProgressEvent,
   AuditDomain,
 } from '@/lib/agents/financial/audit/types';
+import type { ReportIterationTurn } from './types';
 
 const SPRING = { stiffness: 400, damping: 25 };
 
@@ -310,8 +314,47 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
   );
 }
 
-function ReportViewer({ content, sections }: { content: string; sections: ReportSection[] }) {
+// ─── ReportViewer ───────────────────────────────────────────────────────────
+// Props:
+// - content / sections: prosa renderizable (existente).
+// - report / rawData / company: reporte backend + data cruda para Excel
+//   export y chat de seguimiento.
+// - conversationId: id estable del reporte (persistencia).
+// - onReset: resetea el estado del pipeline al padre (Nuevo Reporte).
+// - onPatchReport: mutador del markdown consolidado + sections viewer.
+// - initialTurns / onTurnsChange: persistencia del chat de seguimiento.
+
+interface ReportViewerProps {
+  content: string;
+  sections: ReportSection[];
+  report?: BackendFinancialReport;
+  rawData?: string;
+  company?: CompanyInfo;
+  language: 'es' | 'en';
+  conversationId?: string;
+  initialTurns?: ReportIterationTurn[];
+  onReset?: () => void;
+  onPatchReport?: (newConsolidatedMarkdown: string) => void;
+  onTurnsChange?: (turns: ReportIterationTurn[]) => void;
+}
+
+function ReportViewer({
+  content,
+  sections,
+  report,
+  rawData,
+  company,
+  language,
+  conversationId,
+  initialTurns,
+  onReset,
+  onPatchReport,
+  onTurnsChange,
+}: ReportViewerProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
   const contentRef = useRef<HTMLDivElement>(null);
 
   const scrollToSection = useCallback((sectionId: string) => {
@@ -320,18 +363,162 @@ function ReportViewer({ content, sections }: { content: string; sections: Report
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  // ─── Descargar Excel ─────────────────────────────────────────────────────
+  // POST /api/financial-report/export con { report, rawData } — el endpoint
+  // responde con un .xlsx binario (Content-Disposition: attachment).
+  const handleDownloadExcel = useCallback(async () => {
+    if (!report || isExportingExcel) return;
+    setIsExportingExcel(true);
+    setExportError(null);
+    try {
+      const res = await fetch('/api/financial-report/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report, rawData }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? ' — ' + errBody.slice(0, 200) : ''}`);
+      }
+
+      // Extraer nombre sugerido del header (si existe).
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] || `Reporte_Financiero_UtopIA_${Date.now()}.xlsx`;
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      setExportError(
+        language === 'es'
+          ? `No se pudo generar el Excel: ${msg}`
+          : `Could not generate Excel: ${msg}`,
+      );
+    } finally {
+      setIsExportingExcel(false);
+    }
+  }, [report, rawData, isExportingExcel, language]);
+
+  // ─── Exportar PDF ────────────────────────────────────────────────────────
+  // MVP: window.print() + hoja de estilos @media print inyectada abajo.
+  const handlePrintPdf = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  }, []);
+
+  // ─── Copiar Markdown ─────────────────────────────────────────────────────
+  // Preferimos navigator.clipboard; fallback a textarea + execCommand.
+  const handleCopy = useCallback(async () => {
+    const markdown =
+      report?.consolidatedReport ||
+      (sections.length > 0 ? sections.map((s) => s.content).join('\n\n') : content);
+    if (!markdown) return;
+
+    const showDone = () => {
+      setCopyState('done');
+      window.setTimeout(() => setCopyState('idle'), 1500);
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(markdown);
+        showDone();
+        return;
+      }
+    } catch {
+      // fallback abajo
+    }
+
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = markdown;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showDone();
+    } catch {
+      setCopyState('error');
+      window.setTimeout(() => setCopyState('idle'), 1500);
+    }
+  }, [report, sections, content]);
+
+  // ─── Nuevo reporte ────────────────────────────────────────────────────────
+  const handleReset = useCallback(() => {
+    onReset?.();
+  }, [onReset]);
+
+  const copyLabel =
+    copyState === 'done'
+      ? language === 'es' ? 'Copiado' : 'Copied'
+      : copyState === 'error'
+        ? language === 'es' ? 'No se pudo copiar' : 'Copy failed'
+        : language === 'es' ? 'Copiar' : 'Copy';
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full report-viewer-root">
+      {/* Print stylesheet — oculta cromos (sidebar, statusbar, nav, action bar,
+          follow-up panel) y deja solo la prosa del reporte al imprimir/PDF. */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 1.5cm;
+          }
+          html,
+          body {
+            background: #ffffff !important;
+          }
+          #workspace-sidebar,
+          #analysis-panel,
+          .statusbar,
+          [data-role='statusbar'],
+          .report-action-bar,
+          .report-toc,
+          .report-followup,
+          .no-print {
+            display: none !important;
+          }
+          .report-viewer-root {
+            height: auto !important;
+            display: block !important;
+          }
+          .report-prose-root {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+          }
+          .report-prose-root .prose {
+            color: #000 !important;
+            font-size: 11pt !important;
+          }
+        }
+      `}</style>
+
       {/* Document navigation */}
       {sections.length > 0 && (
-        <nav className="w-[200px] shrink-0 border-r border-[#e5e5e5] overflow-y-auto styled-scrollbar py-4 hidden lg:block">
+        <nav className="report-toc w-[200px] shrink-0 border-r border-[#e5e5e5] overflow-y-auto styled-scrollbar py-4 hidden lg:block">
           <h3 className="px-4 text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider mb-2 font-[family-name:var(--font-geist-mono)]">
-            Contenido
+            {language === 'es' ? 'Contenido' : 'Contents'}
           </h3>
           <ul className="space-y-0.5">
-            {sections.map(s => (
+            {sections.map((s) => (
               <li key={s.id}>
                 <button
+                  type="button"
                   onClick={() => scrollToSection(s.id)}
                   className={cn(
                     'w-full text-left px-4 py-1.5 text-xs transition-colors',
@@ -351,30 +538,81 @@ function ReportViewer({ content, sections }: { content: string; sections: Report
       {/* Document content */}
       <div ref={contentRef} className="flex-1 overflow-y-auto styled-scrollbar">
         {/* Action bar */}
-        <div className="sticky top-0 z-10 bg-white border-b border-[#e5e5e5] px-6 py-3 flex items-center gap-2 flex-wrap">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#D4A017] text-white text-xs font-medium hover:bg-[#A87C10] transition-colors">
-            <Download className="w-3.5 h-3.5" />
-            Descargar Excel .xlsx
+        <div className="report-action-bar sticky top-0 z-10 bg-white border-b border-[#e5e5e5] px-6 py-3 flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleDownloadExcel}
+            disabled={isExportingExcel || !report}
+            aria-label={language === 'es' ? 'Descargar Excel' : 'Download Excel'}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
+              isExportingExcel || !report
+                ? 'bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed'
+                : 'bg-[#D4A017] text-white hover:bg-[#A87C10]',
+            )}
+          >
+            {isExportingExcel ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            {isExportingExcel
+              ? language === 'es' ? 'Generando...' : 'Generating...'
+              : language === 'es' ? 'Descargar Excel .xlsx' : 'Download Excel .xlsx'}
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">
+          <button
+            type="button"
+            onClick={handlePrintPdf}
+            aria-label={language === 'es' ? 'Exportar a PDF (Imprimir)' : 'Export to PDF (Print)'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors"
+          >
             <FileText className="w-3.5 h-3.5" />
-            Exportar PDF
+            {language === 'es' ? 'Exportar PDF' : 'Export PDF'}
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors">
-            <Copy className="w-3.5 h-3.5" />
-            Copiar Markdown
+          <button
+            type="button"
+            onClick={handleCopy}
+            aria-label={language === 'es' ? 'Copiar reporte como Markdown' : 'Copy report as Markdown'}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
+              copyState === 'done'
+                ? 'border-[#BBF7D0] bg-[#F0FDF4] text-[#16A34A]'
+                : copyState === 'error'
+                  ? 'border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]'
+                  : 'border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa]',
+            )}
+          >
+            {copyState === 'done' ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+            {copyLabel}
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors ml-auto">
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!onReset}
+            aria-label={language === 'es' ? 'Crear un nuevo reporte' : 'Create a new report'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors ml-auto disabled:text-[#a3a3a3] disabled:cursor-not-allowed"
+          >
             <RotateCcw className="w-3.5 h-3.5" />
-            Nuevo Reporte
+            {language === 'es' ? 'Nuevo Reporte' : 'New Report'}
           </button>
         </div>
 
+        {exportError && (
+          <div className="mx-6 my-3 rounded border border-[#EF4444] bg-[#FEF2F2] px-3 py-2 flex items-start gap-2 text-xs text-[#DC2626]">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="whitespace-pre-wrap break-words">{exportError}</span>
+          </div>
+        )}
+
         {/* Report content */}
-        <div className="px-8 py-6 max-w-4xl mx-auto">
+        <div className="report-prose-root px-8 py-6 max-w-4xl mx-auto">
           <div className="prose prose-sm max-w-none text-[#0a0a0a] prose-headings:text-[#0a0a0a] prose-headings:font-semibold prose-p:leading-relaxed prose-a:text-[#D4A017] prose-strong:text-[#0a0a0a] prose-table:border prose-table:border-[#e5e5e5] prose-th:bg-[#fafafa] prose-th:px-3 prose-th:py-2 prose-th:text-xs prose-th:font-medium prose-td:px-3 prose-td:py-2 prose-td:text-sm prose-td:border-t prose-td:border-[#f5f5f5]">
             {sections.length > 0 ? (
-              sections.map(s => (
+              sections.map((s) => (
                 <div key={s.id} id={`report-section-${s.id}`} className="mb-8">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                     {s.content}
@@ -388,18 +626,75 @@ function ReportViewer({ content, sections }: { content: string; sections: Report
             )}
           </div>
         </div>
+
+        {/* Chat de seguimiento — solo si tenemos el reporte backend + data cruda + empresa. */}
+        {report && rawData !== undefined && company && (
+          <div className="report-followup">
+            <ReportFollowUpChat
+              report={report}
+              rawData={rawData}
+              company={company}
+              language={language}
+              conversationId={conversationId}
+              initialTurns={initialTurns}
+              onTurnsChange={onTurnsChange}
+              onPatchReport={onPatchReport}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 export function PipelineWorkspace() {
-  const { pipelineState, setPipelineState, pipelineInput } = useWorkspace();
+  const {
+    pipelineState,
+    setPipelineState,
+    pipelineInput,
+    setPipelineInput,
+    lastCompletedReport,
+    setLastCompletedReport,
+    updateReportTurns,
+  } = useWorkspace();
   const [streamedContent, setStreamedContent] = useState('');
   const [report, setReport] = useState<FinancialReport | null>(null);
+  // Backend report + data cruda + info empresa: necesario para Excel export
+  // y para el chat de seguimiento. Se hidrata desde `lastCompletedReport`
+  // al montar para preservar el viewer tras refresh.
+  const [backendReport, setBackendReport] = useState<BackendFinancialReport | null>(
+    lastCompletedReport?.report ?? null,
+  );
+  const [rawData, setRawData] = useState<string>(lastCompletedReport?.rawData ?? '');
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(
+    lastCompletedReport?.company ?? null,
+  );
+  const [conversationId, setConversationId] = useState<string>(
+    lastCompletedReport?.conversationId ?? '',
+  );
+  const [initialTurns, setInitialTurns] = useState<ReportIterationTurn[]>(
+    lastCompletedReport?.turns ?? [],
+  );
   const [error, setError] = useState<string | null>(null);
   const { language } = useLanguage();
   const lastProcessedInputRef = useRef<typeof pipelineInput>(null);
+
+  // Si al montar existe un reporte completado pero el pipelineState no marca
+  // 'complete' (p.ej. primera carga tras hidratar desde storage), lo forzamos.
+  const hydratedPipelineRef = useRef(false);
+  useEffect(() => {
+    if (hydratedPipelineRef.current) return;
+    hydratedPipelineRef.current = true;
+    if (lastCompletedReport && !report) {
+      const consolidated = lastCompletedReport.report.consolidatedReport;
+      setReport({
+        content: consolidated,
+        sections: splitReportIntoSections(consolidated),
+      });
+      setPipelineState((prev) => ({ ...prev, mode: 'complete' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!pipelineInput || lastProcessedInputRef.current === pipelineInput) return;
@@ -582,6 +877,24 @@ export function PipelineWorkspace() {
           content: consolidated,
           sections: splitReportIntoSections(consolidated),
         });
+
+        // Persistencia: backend report + data cruda + empresa + conv id.
+        // `phase1Report.company` es canonico (viene del endpoint); lo usamos
+        // para garantizar fiscalPeriod/nit estables en el chat de seguimiento.
+        const nextConvId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        setBackendReport(phase1Report);
+        setRawData(pipelineInput.rawData);
+        setCompanyInfo(phase1Report.company);
+        setConversationId(nextConvId);
+        setInitialTurns([]);
+        setLastCompletedReport({
+          report: phase1Report,
+          rawData: pipelineInput.rawData,
+          company: phase1Report.company,
+          conversationId: nextConvId,
+          turns: [],
+        });
+
         setPipelineState((prev) => ({
           ...prev,
           mode: 'complete',
@@ -598,13 +911,90 @@ export function PipelineWorkspace() {
     return () => {
       controller.abort();
     };
-  }, [pipelineInput, language, setPipelineState]);
+  }, [pipelineInput, language, setPipelineState, setLastCompletedReport]);
 
   const isRunning = pipelineState.mode !== 'idle' && pipelineState.mode !== 'complete';
   const isComplete = pipelineState.mode === 'complete';
 
+  // ─── Handlers para acciones del ReportViewer ────────────────────────────
+  // "Nuevo Reporte": limpia el reporte en memoria y reabre el form.
+  const handleReset = useCallback(() => {
+    setReport(null);
+    setBackendReport(null);
+    setRawData('');
+    setCompanyInfo(null);
+    setConversationId('');
+    setInitialTurns([]);
+    setStreamedContent('');
+    setError(null);
+    lastProcessedInputRef.current = null;
+    setPipelineInput(null);
+    setPipelineState((prev) => ({
+      ...prev,
+      mode: 'idle',
+      currentStage: 0,
+      completedStages: [],
+      auditorsStarted: [],
+      auditorsComplete: [],
+      auditFindings: {},
+      qualityGrade: undefined,
+      qualityScore: undefined,
+      startedAt: undefined,
+      completedAt: undefined,
+    }));
+  }, [setPipelineInput, setPipelineState]);
+
+  // "Aplicar al reporte": muta consolidatedReport + re-splits sections + persiste.
+  const handlePatchReport = useCallback(
+    (newMd: string) => {
+      setReport({
+        content: newMd,
+        sections: splitReportIntoSections(newMd),
+      });
+      setBackendReport((prev) => {
+        if (!prev) return prev;
+        const next: BackendFinancialReport = { ...prev, consolidatedReport: newMd };
+        // Persistir el nuevo estado completo.
+        if (companyInfo && conversationId) {
+          setLastCompletedReport({
+            report: next,
+            rawData,
+            company: companyInfo,
+            conversationId,
+            turns: initialTurns,
+          });
+        }
+        return next;
+      });
+    },
+    [companyInfo, conversationId, rawData, initialTurns, setLastCompletedReport],
+  );
+
+  // Persistencia de turnos del chat de seguimiento.
+  const handleTurnsChange = useCallback(
+    (turns: ReportIterationTurn[]) => {
+      if (!conversationId) return;
+      updateReportTurns(conversationId, turns);
+    },
+    [conversationId, updateReportTurns],
+  );
+
   if (isComplete && report) {
-    return <ReportViewer content={report.content} sections={report.sections} />;
+    return (
+      <ReportViewer
+        content={report.content}
+        sections={report.sections}
+        report={backendReport ?? undefined}
+        rawData={rawData || undefined}
+        company={companyInfo ?? undefined}
+        language={language}
+        conversationId={conversationId || undefined}
+        initialTurns={initialTurns}
+        onReset={handleReset}
+        onPatchReport={handlePatchReport}
+        onTurnsChange={handleTurnsChange}
+      />
+    );
   }
 
   return (

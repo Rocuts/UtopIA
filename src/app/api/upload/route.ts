@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
-import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
+import {
+  parseTrialBalanceCSV,
+  preprocessTrialBalance,
+  type PreprocessedBalance,
+} from '@/lib/preprocessing/trial-balance';
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
@@ -484,17 +488,23 @@ export async function POST(req: Request) {
     // Trial balance preprocessing — if the file looks like accounting
     // data (CSV/Excel with account codes), run arithmetic validation
     // and prepend the validation report to the extracted text.
+    //
+    // Tambien devolvemos el objeto PreprocessedBalance completo en la
+    // respuesta para que el cliente pueda re-enviarlo a /api/financial-report
+    // sin re-parsear — asi el orchestrator reusa los totales vinculantes.
     // -----------------------------------------------------------------
     let validationReport: string | undefined;
+    let preprocessed: PreprocessedBalance | null = null;
     if (['.csv', '.xlsx', '.xls'].includes(ext)) {
       try {
         const rows = parseTrialBalanceCSV(text);
         if (rows.length > 10) { // Threshold: at least 10 accounts to be a trial balance
-          const preprocessed = preprocessTrialBalance(rows);
-          if (preprocessed.auxiliaryCount > 0) {
-            validationReport = preprocessed.validationReport;
+          const pp = preprocessTrialBalance(rows);
+          if (pp.auxiliaryCount > 0) {
+            preprocessed = pp;
+            validationReport = pp.validationReport;
             // Prepend validation report so agents receive validated data
-            text = `${preprocessed.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+            text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
           }
         }
       } catch {
@@ -517,6 +527,13 @@ export async function POST(req: Request) {
       validationReport,
       detectedCaseType,
       isTrialBalance: !!validationReport,
+      /**
+       * PreprocessedBalance completo: el cliente lo puede re-enviar a
+       * /api/financial-report como `preprocessed` para que el orchestrator
+       * reuse los totales vinculantes sin re-parsear el CSV. `null` si
+       * el archivo no es un balance de prueba.
+       */
+      preprocessed,
       message: chunksCount > 0
         ? `Documento "${file.name}" procesado en ${chunksCount} fragmentos e indexado.`
         : `Documento "${file.name}" procesado exitosamente. Texto extraido disponible para consulta.`,

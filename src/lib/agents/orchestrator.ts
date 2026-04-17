@@ -33,21 +33,35 @@ const SPECIALISTS = {
   strategy: strategyAgent,
 } as const;
 
-// Mismo limite que base-agent.ts — mantener en sincronia.
-const DOC_PREVIEW_LIMIT = 80_000;
+// Limites de inyeccion del documento cargado. El chat general opera con
+// 30k chars (equilibrio coste/señal), pero el follow-up chat del financial-
+// report necesita ~80 KB porque carga el reporte completo + CSV original.
+const DOC_PREVIEW_LIMIT_DEFAULT = 30_000;
+const DOC_PREVIEW_LIMIT_FINANCIAL = 80_000;
+
+function getDocPreviewLimit(useCase: string | undefined): number {
+  return useCase === 'financial-report'
+    ? DOC_PREVIEW_LIMIT_FINANCIAL
+    : DOC_PREVIEW_LIMIT_DEFAULT;
+}
 
 /**
  * Construye el mensaje system con el documento cargado por el usuario.
  * Formato identico al de BaseSpecialist para que T1/T2/T3 vean el mismo shape.
  * Devuelve null si no hay documento.
+ *
+ * El limite depende del `useCase`: `financial-report` recibe 80_000 chars
+ * para que quepa el reporte consolidado + el CSV original; el resto usa 30_000.
  */
 function buildDocInjectionMessage(
   documentContext: string | undefined,
+  useCase: string | undefined,
 ): { role: 'system'; content: string } | null {
   if (!documentContext || !documentContext.trim()) return null;
-  const truncated = documentContext.length > DOC_PREVIEW_LIMIT;
+  const limit = getDocPreviewLimit(useCase);
+  const truncated = documentContext.length > limit;
   const preview = truncated
-    ? documentContext.slice(0, DOC_PREVIEW_LIMIT)
+    ? documentContext.slice(0, limit)
     : documentContext;
   return {
     role: 'system',
@@ -71,6 +85,7 @@ async function handleT1(
   messages: ChatMessage[],
   language: 'es' | 'en',
   documentContext: string | undefined,
+  useCase: string | undefined,
   onStreamToken?: (delta: string) => void,
   abortSignal?: AbortSignal,
 ): Promise<OrchestrateResult> {
@@ -88,7 +103,8 @@ If the user asks what you can do, briefly describe your 4 specialist capabilitie
 4. **Estrategia**: Defensa ante DIAN, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones`;
 
   // Inyectar el documento si existe, usando el mismo shape que BaseSpecialist.
-  const docMsg = buildDocInjectionMessage(documentContext);
+  // El limite es useCase-aware (80k para financial-report, 30k default).
+  const docMsg = buildDocInjectionMessage(documentContext, useCase);
   const baseMessages = [
     { role: 'system' as const, content: systemPrompt },
     ...(docMsg ? [docMsg] : []),
@@ -177,7 +193,7 @@ export async function orchestrate(
   // Step 2: T1 — Direct response (cheap, fast) — streams directly
   // -----------------------------------------------------------------------
   if (classification.tier === 'T1') {
-    const result = await handleT1(messages, language, documentContext, onStreamToken, abortSignal);
+    const result = await handleT1(messages, language, documentContext, useCase, onStreamToken, abortSignal);
     onProgress?.({ type: 'done' });
     return result;
   }

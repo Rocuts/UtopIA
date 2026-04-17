@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildTaxOptimizerPrompt } from '../prompts/tax-optimizer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { TaxOptimizerResult, TaxPlanningProgressEvent } from '../types';
 
@@ -51,6 +52,8 @@ export async function runTaxOptimizer(
       }),
     { label: 'tax_optimizer', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'tax_optimizer');
 
   const fullContent = result.text || '';
 

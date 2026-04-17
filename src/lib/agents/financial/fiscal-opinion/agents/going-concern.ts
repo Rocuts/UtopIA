@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildGoingConcernPrompt } from '../prompts/going-concern.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   GoingConcernResult,
@@ -39,6 +40,8 @@ export async function runGoingConcernEvaluator(
       }),
     { label: 'going_concern_evaluator', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'going_concern_evaluator');
 
   const fullContent = result.text || '';
 

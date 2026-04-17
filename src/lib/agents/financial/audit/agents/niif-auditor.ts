@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildNiifAuditorPrompt } from '../prompts/niif-auditor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
 
@@ -30,6 +31,8 @@ export async function runNiifAuditor(
       }),
     { label: 'niif_auditor', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'niif_auditor');
 
   const fullContent = result.text || '';
   const { score, findings, summary } = parseAuditorOutput(fullContent, 'niif');

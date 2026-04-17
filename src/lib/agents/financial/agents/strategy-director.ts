@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildStrategyDirectorPrompt } from '../prompts/strategy-director.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -16,20 +17,34 @@ import type {
 /**
  * Takes the NIIF financial statements from Agent 1 and produces
  * KPIs, break-even analysis, cash flow projections, and strategic recommendations.
+ *
+ * @param niifOutput    Output del Agente 1.
+ * @param company       Metadata de la empresa.
+ * @param language      es | en
+ * @param instructions  Instrucciones adicionales del usuario (propagacion A2).
+ * @param bindingTotals Bloque Markdown con totales vinculantes. Se antepone
+ *                      al contexto para que el Agente 2 NO divague sobre cifras.
  */
 export async function runStrategyDirector(
   niifOutput: NiifAnalysisResult,
   company: CompanyInfo,
   language: 'es' | 'en',
+  instructions: string | undefined,
+  bindingTotals: string,
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<StrategicAnalysisResult> {
   const systemPrompt = buildStrategyDirectorPrompt(company, language);
 
   const userContent = [
-    'ESTADOS FINANCIEROS NIIF GENERADOS POR EL ANALISTA CONTABLE:',
+    bindingTotals,
     '',
+    'ANALISIS NIIF DEL AGENTE 1:',
     niifOutput.fullContent,
-  ].join('\n');
+    '',
+    instructions ? `INSTRUCCIONES ADICIONALES DEL USUARIO:\n${instructions}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   onProgress?.({ type: 'stage_progress', stage: 2, detail: 'Calculando KPIs y punto de equilibrio...' });
 
@@ -42,10 +57,15 @@ export async function runStrategyDirector(
           { role: 'user', content: userContent },
         ],
         temperature: 0.1,
-        maxOutputTokens: 6144,
+        // 16384: KPIs + proyecciones + recomendaciones + break-even caben;
+        // 6144 era muy justo y cortaba el flujo proyectado.
+        maxOutputTokens: 16384,
+        seed: 42,
       }),
     { label: 'strategy_director', maxAttempts: 3 },
   );
+
+  assertFinishedCleanlyOrThrow(result, 'Strategy Director');
 
   const fullContent = result.text || '';
 

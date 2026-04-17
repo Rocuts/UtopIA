@@ -1,12 +1,14 @@
 // ---------------------------------------------------------------------------
 // Financial Orchestrator — sequential pipeline coordinator
 // ---------------------------------------------------------------------------
-// Pipeline: Raw Data -> Agent 1 (NIIF) -> Agent 2 (Strategy) -> Agent 3 (Governance) -> Consolidation
+// Pipeline: Raw Data -> Preprocess -> Agent 1 (NIIF) -> Agent 2 (Strategy) -> Agent 3 (Governance) -> Consolidation -> Validate
 // ---------------------------------------------------------------------------
 
 import { runNiifAnalyst } from './agents/niif-analyst';
 import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
+import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
+import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
 import type {
   FinancialReportRequest,
   FinancialReport,
@@ -15,16 +17,229 @@ import type {
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
+  /**
+   * Resultado del preprocesador (si el caller ya lo corrio, p.ej. /api/upload
+   * o /api/financial-report). Si se omite, el orchestrator corre el preprocess
+   * internamente (es idempotente). Usamos `unknown` porque Agente A3 esta
+   * extendiendo el shape y no queremos acoplarnos rigido aqui.
+   */
+  preprocessed?: unknown;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers de extraccion defensiva — Agente A3 esta ampliando el shape del
+// preprocesador. Leemos con optional chaining y caemos al shape legado.
+// ---------------------------------------------------------------------------
+
+function deriveControlTotals(preprocessed: unknown): ControlTotalsInput | undefined {
+  if (!preprocessed || typeof preprocessed !== 'object') return undefined;
+  const pp = preprocessed as {
+    controlTotals?: ControlTotalsInput;
+    summary?: {
+      totalAssets?: number;
+      totalLiabilities?: number;
+      totalEquity?: number;
+      totalRevenue?: number;
+      totalExpenses?: number;
+      netIncome?: number;
+    };
+  };
+
+  // Preferir el nuevo shape (Agente A3) si esta disponible
+  if (pp.controlTotals) return pp.controlTotals;
+
+  // Fallback al shape legado (`summary`)
+  if (pp.summary) {
+    return {
+      activo: pp.summary.totalAssets,
+      pasivo: pp.summary.totalLiabilities,
+      patrimonio: pp.summary.totalEquity,
+      ingresos: pp.summary.totalRevenue,
+      gastos: pp.summary.totalExpenses,
+      utilidadNeta: pp.summary.netIncome,
+    };
+  }
+
+  return undefined;
+}
+
+function deriveEquityBreakdown(
+  preprocessed: unknown,
+): Record<string, number | undefined> | undefined {
+  if (!preprocessed || typeof preprocessed !== 'object') return undefined;
+  const pp = preprocessed as {
+    equityBreakdown?: {
+      capitalAutorizado?: number;
+      capitalSuscritoPagado?: number;
+      reservaLegal?: number;
+      otrasReservas?: number;
+      utilidadEjercicio?: number;
+      utilidadesAcumuladas?: number;
+    };
+  };
+  return pp.equityBreakdown;
+}
+
+function deriveDiscrepancies(preprocessed: unknown): string[] {
+  if (!preprocessed || typeof preprocessed !== 'object') return [];
+  const pp = preprocessed as { discrepancies?: unknown[] };
+  if (!Array.isArray(pp.discrepancies)) return [];
+  const out: string[] = [];
+  for (const d of pp.discrepancies) {
+    if (typeof d === 'string') {
+      out.push(d);
+    } else if (d && typeof d === 'object') {
+      const asObj = d as { description?: string; location?: string };
+      if (asObj.description) {
+        out.push(asObj.location ? `${asObj.location}: ${asObj.description}` : asObj.description);
+      }
+    }
+  }
+  return out;
+}
+
+/** Formatea un monto en COP con separador punto-miles y coma-decimal. */
+function fmtCop(n: number | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString('es-CO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return (n < 0 ? '-$' : '$') + formatted;
+}
+
+/**
+ * Construye el bloque Markdown "TOTALES VINCULANTES" que se inyecta a los 3
+ * agentes. Este bloque es la fuente de verdad: los agentes deben citar estas
+ * cifras textualmente y no re-calcularlas.
+ */
+function buildBindingTotalsBlock(preprocessed: unknown): string {
+  const totals = deriveControlTotals(preprocessed);
+  const equity = deriveEquityBreakdown(preprocessed);
+  const discrepancies = deriveDiscrepancies(preprocessed);
+
+  if (!totals) {
+    // Si no hay preprocesado, devolvemos un bloque minimo explicito para
+    // que el agente sepa que no tiene anclas numericas pre-calculadas.
+    return [
+      'TOTALES VINCULANTES (pre-calculados por UtopIA — NO los modifiques):',
+      '- No se pudo pre-calcular totales vinculantes desde los datos recibidos.',
+      '  Usa las cifras de los auxiliares y declaralo explicitamente en las',
+      '  notas tecnicas.',
+    ].join('\n');
+  }
+
+  const lines: string[] = [];
+  lines.push('TOTALES VINCULANTES (pre-calculados por UtopIA — NO los modifiques):');
+  lines.push(`- Total Activo: ${fmtCop(totals.activo)} COP`);
+  if (typeof totals.activoCorriente === 'number') {
+    lines.push(`  - Activo Corriente: ${fmtCop(totals.activoCorriente)} COP`);
+  }
+  if (typeof totals.activoNoCorriente === 'number') {
+    lines.push(`  - Activo No Corriente: ${fmtCop(totals.activoNoCorriente)} COP`);
+  }
+  lines.push(`- Total Pasivo: ${fmtCop(totals.pasivo)} COP`);
+  if (typeof totals.pasivoCorriente === 'number') {
+    lines.push(`  - Pasivo Corriente: ${fmtCop(totals.pasivoCorriente)} COP`);
+  }
+  if (typeof totals.pasivoNoCorriente === 'number') {
+    lines.push(`  - Pasivo No Corriente: ${fmtCop(totals.pasivoNoCorriente)} COP`);
+  }
+  lines.push(`- Total Patrimonio: ${fmtCop(totals.patrimonio)} COP`);
+  lines.push(`- Total Ingresos: ${fmtCop(totals.ingresos)} COP`);
+  lines.push(`- Total Gastos: ${fmtCop(totals.gastos)} COP`);
+  lines.push(`- Utilidad Neta (P&L): ${fmtCop(totals.utilidadNeta)} COP`);
+
+  if (equity) {
+    const desglose: string[] = [];
+    if (typeof equity.capitalAutorizado === 'number')
+      desglose.push(`capital autorizado ${fmtCop(equity.capitalAutorizado)}`);
+    if (typeof equity.capitalSuscritoPagado === 'number')
+      desglose.push(`capital suscrito ${fmtCop(equity.capitalSuscritoPagado)}`);
+    if (typeof equity.reservaLegal === 'number')
+      desglose.push(`reserva legal ${fmtCop(equity.reservaLegal)}`);
+    if (typeof equity.otrasReservas === 'number')
+      desglose.push(`otras reservas ${fmtCop(equity.otrasReservas)}`);
+    if (typeof equity.utilidadEjercicio === 'number')
+      desglose.push(`utilidad del ejercicio ${fmtCop(equity.utilidadEjercicio)}`);
+    if (typeof equity.utilidadesAcumuladas === 'number')
+      desglose.push(`utilidades acumuladas ${fmtCop(equity.utilidadesAcumuladas)}`);
+    if (desglose.length > 0) {
+      lines.push(`- Desglose patrimonio: ${desglose.join(', ')}`);
+    }
+  }
+
+  if (discrepancies.length > 0) {
+    lines.push('- Discrepancias detectadas:');
+    for (const d of discrepancies.slice(0, 10)) {
+      lines.push(`  * ${d}`);
+    }
+    if (discrepancies.length > 10) {
+      lines.push(`  * ...y ${discrepancies.length - 10} mas.`);
+    }
+  } else {
+    lines.push('- Discrepancias detectadas: ninguna.');
+  }
+
+  lines.push('');
+  lines.push(
+    'REGLA: Estos totales son VINCULANTES. Tus estados financieros y notas DEBEN reflejarlos exactamente.',
+  );
+
+  return lines.join('\n');
+}
+
+/**
+ * Heuristica no-fatal: verifica si el output del Agente 1 cita alguno de los
+ * totales numericos vinculantes. Si no, el orchestrator emite un warning via
+ * onProgress (sin abortar — los Agentes 2/3 aun tienen el bindingTotals).
+ */
+function niifOutputMentionsBindingTotals(
+  fullContent: string,
+  preprocessed: unknown,
+): boolean {
+  const totals = deriveControlTotals(preprocessed);
+  if (!totals) return true; // no hay anclas -> no podemos invalidar
+
+  const candidates: number[] = [
+    totals.activo,
+    totals.pasivo,
+    totals.patrimonio,
+    totals.utilidadNeta,
+  ].filter(
+    (n): n is number => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) > 1,
+  );
+
+  if (candidates.length === 0) return true;
+
+  // Comparamos contra el texto sin espacios (para tolerar "$ 1.234.567" etc.)
+  const text = fullContent.replace(/\s+/g, '');
+  for (const val of candidates) {
+    const asInt = Math.round(Math.abs(val)).toString();
+    const withDotThousands = asInt.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const withCommaThousands = asInt.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const variants = [asInt, withDotThousands, withCommaThousands];
+    for (const v of variants) {
+      if (v.length >= 3 && text.includes(v)) return true;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
 
 /**
  * Execute the full financial reporting pipeline.
  *
  * Sequential flow with SSE progress events:
- * 1. NIIF Analyst processes raw data → 4 financial statements
- * 2. Strategy Director interprets statements → KPIs, projections, recommendations
- * 3. Governance Specialist produces legal docs → notes + assembly minutes
- * 4. Orchestrator consolidates everything into one master report
+ * 0. Preprocess raw data (idempotent) -> binding totals
+ * 1. NIIF Analyst processes raw data -> 4 financial statements
+ * 2. Strategy Director interprets statements -> KPIs, projections, recommendations
+ * 3. Governance Specialist produces legal docs -> notes + assembly minutes
+ * 4. Orchestrator consolidates everything -> post-render validation
  */
 export async function orchestrateFinancialReport(
   request: FinancialReportRequest,
@@ -34,15 +249,55 @@ export async function orchestrateFinancialReport(
   const { onProgress } = options;
 
   // ---------------------------------------------------------------------------
+  // Stage 0: Preprocess (idempotente) — genera los totales vinculantes
+  // ---------------------------------------------------------------------------
+  let preprocessed: unknown = options.preprocessed;
+  if (!preprocessed) {
+    try {
+      const rows = parseTrialBalanceCSV(rawData);
+      if (rows.length > 0) {
+        preprocessed = preprocessTrialBalance(rows);
+      }
+    } catch (err) {
+      // No-fatal: seguimos sin bindingTotals si el CSV es exotico.
+      console.warn(
+        '[financial-orchestrator] Preprocess fallo, continuando sin bindingTotals:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
+
+  // ---------------------------------------------------------------------------
   // Stage 1: NIIF Analyst
   // ---------------------------------------------------------------------------
   onProgress?.({
     type: 'stage_start',
     stage: 1,
-    label: 'Analista Contable NIIF — Procesando datos y construyendo estados financieros',
+    label:
+      'Analista Contable NIIF — Procesando datos y construyendo estados financieros',
   });
 
-  const niifResult = await runNiifAnalyst(rawData, company, language, instructions, onProgress);
+  const niifResult = await runNiifAnalyst(
+    rawData,
+    company,
+    language,
+    instructions,
+    bindingTotalsBlock,
+    onProgress,
+  );
+
+  // Sanity-check no-fatal: el Agente 1 deberia citar las cifras vinculantes.
+  if (!niifOutputMentionsBindingTotals(niifResult.fullContent, preprocessed)) {
+    onProgress?.({
+      type: 'stage_progress',
+      stage: 1,
+      detail:
+        'Advertencia: el output NIIF no cita ninguno de los totales vinculantes pre-calculados. ' +
+        'Los Agentes 2 y 3 recibiran igualmente los bindingTotals.',
+    });
+  }
 
   onProgress?.({
     type: 'stage_complete',
@@ -59,7 +314,14 @@ export async function orchestrateFinancialReport(
     label: 'Director de Estrategia — Analizando KPIs y proyecciones',
   });
 
-  const strategyResult = await runStrategyDirector(niifResult, company, language, onProgress);
+  const strategyResult = await runStrategyDirector(
+    niifResult,
+    company,
+    language,
+    instructions,
+    bindingTotalsBlock,
+    onProgress,
+  );
 
   onProgress?.({
     type: 'stage_complete',
@@ -81,6 +343,8 @@ export async function orchestrateFinancialReport(
     strategyResult,
     company,
     language,
+    instructions,
+    bindingTotalsBlock,
     onProgress,
   );
 
@@ -91,7 +355,7 @@ export async function orchestrateFinancialReport(
   });
 
   // ---------------------------------------------------------------------------
-  // Stage 4: Consolidation
+  // Stage 4: Consolidation + post-render validation
   // ---------------------------------------------------------------------------
   onProgress?.({
     type: 'stage_start',
@@ -107,6 +371,10 @@ export async function orchestrateFinancialReport(
     language,
   );
 
+  // Validator: placeholders + secciones + sanity numerica + ecuacion patrimonial.
+  const controlTotals = deriveControlTotals(preprocessed);
+  const validation = validateConsolidatedReport(consolidatedReport, controlTotals);
+
   const report: FinancialReport = {
     company,
     niifAnalysis: niifResult,
@@ -114,6 +382,7 @@ export async function orchestrateFinancialReport(
     governance: governanceResult,
     consolidatedReport,
     generatedAt: new Date().toISOString(),
+    validation,
   };
 
   onProgress?.({
@@ -121,6 +390,20 @@ export async function orchestrateFinancialReport(
     stage: 4,
     label: 'Reporte consolidado listo',
   });
+
+  if (!validation.ok) {
+    const errMsg = 'Validacion fallida: ' + validation.errors.join('; ');
+    onProgress?.({ type: 'error', message: errMsg });
+    throw new Error(errMsg);
+  }
+
+  if (validation.warnings.length > 0) {
+    onProgress?.({
+      type: 'stage_progress',
+      stage: 4,
+      detail: 'Advertencias: ' + validation.warnings.slice(0, 3).join(' | '),
+    });
+  }
 
   onProgress?.({ type: 'done', report });
 

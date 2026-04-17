@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildOpinionDrafterPrompt } from '../prompts/opinion-drafter.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   GoingConcernResult,
@@ -60,6 +61,8 @@ export async function runOpinionDrafter(
       }),
     { label: 'opinion_drafter', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'opinion_drafter');
 
   const fullContent = result.text || '';
 

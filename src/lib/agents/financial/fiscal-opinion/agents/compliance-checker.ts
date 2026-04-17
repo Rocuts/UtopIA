@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildComplianceCheckerPrompt } from '../prompts/compliance-checker.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   ComplianceResult,
@@ -40,6 +41,8 @@ export async function runComplianceChecker(
       }),
     { label: 'compliance_checker', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'compliance_checker');
 
   const fullContent = result.text || '';
 

@@ -20,23 +20,24 @@ function envModel(key: string, fallback: string): string {
 
 export const MODELS = {
   /** Chat orchestrator, classifier, synthesizer, specialists (tool-calling loop). */
-  CHAT: envModel('OPENAI_MODEL_CHAT', 'openai/gpt-4o-mini'),
+  CHAT: envModel('OPENAI_MODEL_CHAT', 'openai/gpt-5.4-mini'),
 
   /**
    * Financial pipelines (NIIF report, audit, tax-planning, transfer-pricing,
    * valuation, fiscal-opinion, tax-reconciliation, feasibility, quality).
    * Needs large context for trial balances and structured markdown output.
    */
-  FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'openai/gpt-4o-mini'),
+  FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'openai/gpt-5.4-mini'),
 
   /** Classifier / lightweight routing. */
-  CLASSIFIER: envModel('OPENAI_MODEL_CLASSIFIER', 'openai/gpt-4o-mini'),
+  CLASSIFIER: envModel('OPENAI_MODEL_CLASSIFIER', 'openai/gpt-5.4-mini'),
 
   /** Prompt enhancer / synthesizer. */
-  SYNTHESIZER: envModel('OPENAI_MODEL_SYNTHESIZER', 'openai/gpt-4o-mini'),
+  SYNTHESIZER: envModel('OPENAI_MODEL_SYNTHESIZER', 'openai/gpt-5.4-mini'),
 
-  /** OCR / vision (PDF escaneado, imágenes). Requires multimodal. */
-  OCR: envModel('OPENAI_MODEL_OCR', 'openai/gpt-4o'),
+  /** OCR / vision (PDF escaneado, imágenes). Usa el modelo completo — precisión
+   *  sobre balances de prueba y facturas es crítica, y la ruta se llama poco. */
+  OCR: envModel('OPENAI_MODEL_OCR', 'openai/gpt-5.4'),
 
   /** Realtime voice API. Se mantiene en OpenAI directo (el gateway aún no expone la Realtime API). */
   REALTIME: envModel('OPENAI_MODEL_REALTIME', 'gpt-4o-realtime-preview-2024-12-17'),

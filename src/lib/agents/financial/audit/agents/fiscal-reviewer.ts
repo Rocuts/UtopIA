@@ -6,6 +6,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildFiscalReviewerPrompt } from '../prompts/fiscal-reviewer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { AuditorResult, AuditFinding, AuditOpinionType, AuditProgressEvent } from '../types';
 
@@ -30,6 +31,8 @@ export async function runFiscalReviewer(
       }),
     { label: 'fiscal_reviewer', maxAttempts: 3 },
   );
+
+  assertFinishedCleanly(result, 'fiscal_reviewer');
 
   const fullContent = result.text || '';
   const { score, findings, summary } = parseAuditorOutput(fullContent, 'revisoria');

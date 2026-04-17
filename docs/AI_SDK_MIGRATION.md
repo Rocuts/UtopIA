@@ -45,7 +45,7 @@ const text = response.choices[0].message.content || '';
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 const { text } = await generateText({
-  model: MODELS.FINANCIAL_PIPELINE, // resolves to 'openai/gpt-4o-mini'
+  model: MODELS.FINANCIAL_PIPELINE, // resolves to 'openai/gpt-5.4-mini'
   messages: [...],
   temperature: 0.05,
   maxOutputTokens: 8192, // renamed
@@ -54,7 +54,9 @@ const { text } = await generateText({
 
 - `max_tokens` → `maxOutputTokens`
 - `response.choices[0].message.content` → `result.text`
-- `response_format: { type: 'json_object' }` is **removed**. The system prompt instead ends with: `"\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences."` Parsing still uses `JSON.parse(text)`.
+- `response_format: { type: 'json_object' }` is **removed**. Two replacement patterns depending on the call site:
+  - **Preferred (new code, schema-validated):** `experimental_output: Output.object({ schema: zodSchema })` on `generateText`. Access the parsed+validated object as `result.experimental_output`. The classifier (`src/lib/agents/classifier.ts`) is the canonical example — no manual JSON parsing, no brittle prompt instruction.
+  - **Lift-and-shift (used during the initial migration):** drop `response_format` and end the system prompt with `"\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences."`, then `JSON.parse(text)`. Acceptable for files that produce Markdown with an incidental JSON section; not ideal for tight structured outputs.
 - `withRetry(...)` wrapper is preserved; only the inner call changes.
 - Never instantiate an OpenAI client in migrated code. Never pass `apiKey`. The Gateway uses `AI_GATEWAY_API_KEY` (dev) or `VERCEL_OIDC_TOKEN` (prod) automatically.
 
@@ -121,7 +123,7 @@ Errors use `{ type: 'error-text', value: ... }` so the model can react different
 
 | Case | Implementation |
 |------|----------------|
-| Image OCR (jpg/png/webp) | `generateText` with `{ type: 'image', image: dataUrl }`, `MODELS.OCR` (defaults to `openai/gpt-4o`) |
+| Image OCR (jpg/png/webp) | `generateText` with `{ type: 'image', image: dataUrl }`, `MODELS.OCR` (defaults to `openai/gpt-5.4`) |
 | Scanned PDF OCR | `generateText` with `{ type: 'file', data: buffer, mediaType: 'application/pdf' }`. Replaces the old `openai.responses.create` + `input_file` path (Responses API is not exposed via Gateway as of 2026-04). |
 
 Timeouts that used to live on the OpenAI client (`timeout: 90_000`) become `abortSignal: AbortSignal.timeout(90_000)` passed into `generateText`.

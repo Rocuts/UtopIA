@@ -67,3 +67,31 @@ export const USE_CASE_LABELS = {
 } as const;
 
 export type UseCase = keyof typeof USE_CASE_LABELS.es;
+
+// ─── Reporte financiero — iteracion via chat de seguimiento ──────────────
+
+/**
+ * Turno dentro del chat de seguimiento ("follow-up") adjunto a un reporte
+ * financiero completado. Los turnos son UI-first: se acumulan en memoria en
+ * el componente `ReportFollowUpChat` y se persisten (junto al reporte) via
+ * `WorkspaceContext.lastCompletedReport` y `conversation-history`.
+ */
+export interface ReportIterationTurn {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  /** True mientras se esta agregando delta via SSE. */
+  streaming?: boolean;
+  /**
+   * Parche detectado en la respuesta del agente mediante el sentinel
+   * `<<<PATCH_REPORT>>> ... <<<END_PATCH>>>`. `summary` es el mensaje visible;
+   * `newConsolidatedMarkdown` es el nuevo reporte propuesto.
+   */
+  patch?: {
+    newConsolidatedMarkdown: string;
+    summary: string;
+  };
+  /** True si el usuario ya aplico el parche al reporte. */
+  applied?: boolean;
+}
