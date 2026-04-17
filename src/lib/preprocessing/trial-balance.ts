@@ -97,6 +97,29 @@ export interface ControlTotals {
 }
 
 /**
+ * Resultado de la validacion aritmetica del balance de prueba.
+ *
+ * `blocking = true` indica que los numeros son inconsistentes al punto de no
+ * poder generar un reporte confiable. El orchestrator financiero debe abortar
+ * la Fase 1 y devolver `reasons` + `suggestedAccounts` al usuario para que
+ * corrija el Excel antes de reintentar.
+ *
+ * `adjustments` documenta reparaciones aplicadas al vuelo (p.ej. reinyeccion
+ * de la utilidad del ejercicio cuando el ERP esta antes del cierre). Son
+ * informativas — el reporte se genera con los totales ya ajustados.
+ */
+export interface ValidationResult {
+  /** Si true, el pipeline no debe generar un reporte. */
+  blocking: boolean;
+  /** Descripciones legibles de por que no cuadra la ecuacion patrimonial. */
+  reasons: string[];
+  /** Cuentas o grupos que el usuario deberia revisar en el archivo original. */
+  suggestedAccounts: string[];
+  /** Ajustes aplicados al vuelo (informativos, no bloquean). */
+  adjustments: string[];
+}
+
+/**
  * Desglose del patrimonio (Clase 3). Todos los campos son opcionales:
  * solo se emiten si la cuenta/subcuenta existe en el balance.
  */
@@ -144,6 +167,12 @@ export interface PreprocessedBalance {
   controlTotals: ControlTotals;
   /** Desglose del patrimonio por sub-cuenta principal. */
   equityBreakdown: EquityBreakdown;
+  /**
+   * Validacion aritmetica del balance: si `validation.blocking === true`, el
+   * orchestrator debe abortar la Fase 1 y pedirle al usuario corregir el
+   * archivo en vez de generar un reporte mediocre.
+   */
+  validation: ValidationResult;
   /** Detected discrepancies (Discrepancy[] estructuradas). */
   discrepancies: Discrepancy[];
   /**
@@ -259,7 +288,12 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseLine(lines[i], separator);
-    const code = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
+    const rawCode = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
+    // Normalizacion PUC: algunos ERPs exportan codigos con puntos/guiones
+    // (p.ej. "1.1.05.01" o "11-05-01"). Los agrupamos a digitos contiguos
+    // para que inferLevel pueda decidir el nivel correctamente. Si el codigo
+    // queda vacio o no empieza por digito, saltamos la fila.
+    const code = rawCode.replace(/[.\-\s]/g, '');
     if (!code || !/^\d/.test(code)) continue; // skip non-account rows
 
     const debit = safeNumber(parseNumber(cols[debitIdx]));
@@ -425,14 +459,48 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
 
   const totalAssets = getClassTotal(1);
   const totalLiabilities = getClassTotal(2);
-  const totalEquity = getClassTotal(3);
+  const totalEquityRaw = getClassTotal(3);
   const totalRevenue = getClassTotal(4);
   const totalExpenses = getClassTotal(5);
   const totalCosts = getClassTotal(6);
   const totalProduction = getClassTotal(7);
-  const netIncome = totalRevenue - totalExpenses - totalCosts;
-  const equationBalance = totalAssets - totalLiabilities - totalEquity;
-  const equationBalanced = Math.abs(equationBalance) < 100;
+  const netIncome = totalRevenue - totalExpenses - totalCosts - totalProduction;
+
+  // -------------------------------------------------------------------------
+  // 4.1. Auto-reparacion: reinyeccion de utilidad del ejercicio en patrimonio
+  // -------------------------------------------------------------------------
+  // Caso comun: un ERP colombiano que exporta el balance ANTES del cierre del
+  // ejercicio deja Clase 3 solo con capital + reservas + resultados anteriores.
+  // La utilidad del ejercicio vive en Clase 4/5/6/7 (P&L) y aun no fue
+  // trasladada a 3605. El resultado: Activo != Pasivo + Patrimonio por una
+  // cantidad aprox = netIncome.
+  //
+  // Si detectamos ese patron, reinyectamos la utilidad al patrimonio para que
+  // el balance cuadre y el reporte sea correcto. Documentamos el ajuste en
+  // validation.adjustments para que el agente NIIF lo cite en notas.
+  // -------------------------------------------------------------------------
+  const adjustments: string[] = [];
+  const validationReasons: string[] = [];
+  const suggestedAccounts: string[] = [];
+  let totalEquity = totalEquityRaw;
+
+  const shortfallBeforeReinject = totalAssets - totalLiabilities - totalEquity;
+  const RECONCILE_TOL = Math.max(Math.abs(totalAssets) * 0.001, 1000); // 0.1% del activo o $1K
+
+  if (
+    netIncome !== 0 &&
+    Math.abs(shortfallBeforeReinject - netIncome) < RECONCILE_TOL &&
+    Math.abs(shortfallBeforeReinject) > RECONCILE_TOL
+  ) {
+    totalEquity = totalEquityRaw + netIncome;
+    adjustments.push(
+      `Se reinyecto la utilidad del ejercicio (${formatCOP(netIncome)} COP) al ` +
+        `Total Patrimonio. El balance exportado parece estar ANTES del cierre ` +
+        `contable: Clase 3 solo incluia capital, reservas y resultados anteriores ` +
+        `(${formatCOP(totalEquityRaw)} COP). Tras el traslado a 3605, la ecuacion ` +
+        `patrimonial cuadra.`,
+    );
+  }
 
   // -------------------------------------------------------------------------
   // 5. Calcular controlTotals (contrato nuevo D4)
@@ -441,6 +509,9 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   const activoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '1', ACTIVO_NO_CORRIENTE_GROUPS);
   const pasivoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_CORRIENTE_GROUPS);
   const pasivoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_NO_CORRIENTE_GROUPS);
+
+  const equationBalance = totalAssets - totalLiabilities - totalEquity;
+  const equationBalanced = Math.abs(equationBalance) < 100;
 
   const controlTotals: ControlTotals = {
     activo: totalAssets,
@@ -455,7 +526,7 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     // produccion) se suma tambien aqui porque representa costo imputable
     // al estado de resultados.
     gastos: totalExpenses + totalCosts + totalProduction,
-    utilidadNeta: totalRevenue - (totalExpenses + totalCosts + totalProduction),
+    utilidadNeta: netIncome,
   };
 
   // -------------------------------------------------------------------------
@@ -468,15 +539,57 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   //    totales en 0 con filas existentes
   // -------------------------------------------------------------------------
   const ECUACION_TOL = 1000; // COP
-  if (Math.abs(controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio)) > ECUACION_TOL) {
-    const diff = controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio);
+  // Tolerancia critica para bloqueo: 1% del activo o $100K (lo mayor). Por
+  // encima de esto los numeros no son defendibles y preferimos abortar.
+  const BLOCKING_TOL = Math.max(Math.abs(controlTotals.activo) * 0.01, 100_000);
+  const equationDiff = controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio);
+
+  if (Math.abs(equationDiff) > ECUACION_TOL) {
     discrepancies.push({
       location: 'Ecuacion Patrimonial',
       reported: controlTotals.pasivo + controlTotals.patrimonio,
       calculated: controlTotals.activo,
-      difference: diff,
-      description: `Ecuacion patrimonial descuadrada: Activo $${formatCOP(controlTotals.activo)} != Pasivo $${formatCOP(controlTotals.pasivo)} + Patrimonio $${formatCOP(controlTotals.patrimonio)} (diferencia $${formatCOP(diff)})`,
+      difference: equationDiff,
+      description: `Ecuacion patrimonial descuadrada: Activo $${formatCOP(controlTotals.activo)} != Pasivo $${formatCOP(controlTotals.pasivo)} + Patrimonio $${formatCOP(controlTotals.patrimonio)} (diferencia $${formatCOP(equationDiff)})`,
     });
+
+    // Si el descuadre supera la tolerancia de bloqueo, construimos razones
+    // y sugerencias accionables para el usuario.
+    if (Math.abs(equationDiff) > BLOCKING_TOL) {
+      validationReasons.push(
+        `La ecuacion contable no cuadra: Activo (${formatCOP(controlTotals.activo)}) ` +
+          `!= Pasivo (${formatCOP(controlTotals.pasivo)}) + Patrimonio ` +
+          `(${formatCOP(controlTotals.patrimonio)}). Diferencia: ${formatCOP(equationDiff)}.`,
+      );
+
+      // Diagnostico heuristico: si el descuadre ~ netIncome significa que la
+      // utilidad no esta en Clase 3 pero tampoco pudimos reinyectarla (ej.
+      // porque la detectamos en patron diferente).
+      if (netIncome !== 0 && Math.abs(equationDiff - netIncome) < BLOCKING_TOL * 0.5) {
+        validationReasons.push(
+          `El descuadre (${formatCOP(equationDiff)}) coincide aproximadamente con ` +
+            `la utilidad del ejercicio (${formatCOP(netIncome)}). Posiblemente el ` +
+            `balance fue exportado antes del cierre y la utilidad no fue trasladada ` +
+            `a la cuenta 3605.`,
+        );
+        suggestedAccounts.push('3605 — Utilidad del ejercicio (Clase 3)');
+      }
+
+      // Si Patrimonio es sospechosamente bajo, sugerir revisar cuentas 31xx/33xx
+      if (Math.abs(controlTotals.patrimonio) < Math.abs(controlTotals.activo) * 0.01) {
+        validationReasons.push(
+          `El Total Patrimonio (${formatCOP(controlTotals.patrimonio)}) es menor al ` +
+            `1% del Total Activo, lo cual es inusual. Revisa si faltan cuentas de ` +
+            `capital (31xx), reservas (33xx) o resultados acumulados (37xx) en el Excel.`,
+        );
+        suggestedAccounts.push(
+          '3105 — Capital autorizado',
+          '3115 — Capital suscrito y pagado',
+          '3305 — Reserva legal',
+          '3705 — Utilidades acumuladas / Resultados de ejercicios anteriores',
+        );
+      }
+    }
   } else if (!equationBalanced) {
     // Tolerancia mas estricta (100 COP) — avisamos pero sin el prefijo duro.
     discrepancies.push({
@@ -533,6 +646,19 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     totalExpenses, totalCosts, totalProduction, netIncome,
     equationBalance, equationBalanced,
   };
+
+  // -------------------------------------------------------------------------
+  // 10. Construir ValidationResult final
+  // -------------------------------------------------------------------------
+  // Deduplica sugerencias conservando orden de aparicion
+  const dedupedSuggestions = Array.from(new Set(suggestedAccounts));
+  const validation: ValidationResult = {
+    blocking: validationReasons.length > 0,
+    reasons: validationReasons,
+    suggestedAccounts: dedupedSuggestions,
+    adjustments,
+  };
+
   const validationReport = buildValidationReport(
     classes,
     discrepancies,
@@ -552,6 +678,7 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     summary,
     controlTotals,
     equityBreakdown,
+    validation,
     discrepancies,
     missingAccounts,
     auxiliaryCount,
@@ -816,14 +943,26 @@ function findColumnIndex(headers: string[], candidates: string[]): number {
   return -1;
 }
 
+/**
+ * Infiere el nivel PUC a partir del numero de digitos del codigo (ya
+ * normalizado, sin puntos ni guiones). Convencion PUC colombiano:
+ *   1 digito  -> Clase       (1, 2, 3, 4, 5, 6, 7)
+ *   2 digitos -> Grupo       (11 Disponible, 13 Deudores, etc.)
+ *   4 digitos -> Cuenta      (1105 Caja, 1110 Bancos)
+ *   6 digitos -> Subcuenta   (110505 Caja general)
+ *   8+ dig.   -> Auxiliar    (nivel mas granular del libro mayor)
+ *
+ * Longitudes intermedias (3, 5, 7) son atipicas pero algunos ERPs las
+ * exportan. Las mapeamos al nivel PUC mas cercano por arriba para no
+ * perderlas: 3 -> Grupo, 5 -> Cuenta, 7 -> Subcuenta.
+ */
 function inferLevel(code: string): string {
-  switch (code.length) {
-    case 1: return 'Clase';
-    case 2: return 'Grupo';
-    case 4: return 'Cuenta';
-    case 6: return 'Subcuenta';
-    default: return code.length >= 6 ? 'Auxiliar' : 'Cuenta';
-  }
+  const len = code.length;
+  if (len === 1) return 'Clase';
+  if (len === 2 || len === 3) return 'Grupo';
+  if (len === 4 || len === 5) return 'Cuenta';
+  if (len === 6 || len === 7) return 'Subcuenta';
+  return 'Auxiliar'; // 8+ digitos
 }
 
 function normalizeLevel(level: string): string {

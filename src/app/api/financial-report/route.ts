@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { financialReportRequestSchema } from '@/lib/validation/schemas';
-import { orchestrateFinancialReport } from '@/lib/agents/financial/orchestrator';
+import {
+  orchestrateFinancialReport,
+  BalanceValidationError,
+} from '@/lib/agents/financial/orchestrator';
 import {
   parseTrialBalanceCSV,
   preprocessTrialBalance,
@@ -96,6 +99,19 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
 
     return NextResponse.json(report);
   } catch (error) {
+    if (error instanceof BalanceValidationError) {
+      // 422 Unprocessable Entity: el archivo es valido estructuralmente pero
+      // los numeros no permiten generar un reporte. El usuario debe corregir.
+      return NextResponse.json(
+        {
+          error: 'El balance de prueba tiene inconsistencias criticas.',
+          code: 'BALANCE_VALIDATION_FAILED',
+          reasons: error.reasons,
+          suggestedAccounts: error.suggestedAccounts,
+        },
+        { status: 422 },
+      );
+    }
     console.error(
       '[financial-report] API error:',
       error instanceof Error ? error.message : error,
@@ -140,22 +156,44 @@ function handleStreaming(
         );
         send('result', report);
       } catch (error) {
-        console.error(
-          '[financial-report] Pipeline error:',
-          error instanceof Error ? error.message : error,
-        );
-        // Traduce errores conocidos del Gateway (billing, quota, model, auth)
-        // al idioma del usuario y agrega un `code` para que la UI pueda
-        // diferenciar "el LLM rebote" de "tu cuenta no tiene tarjeta".
-        const friendly = toFriendlyError(error, language);
-        send('error', {
-          error:
+        if (error instanceof BalanceValidationError) {
+          // El balance no cuadra — no gastamos tokens en un reporte mediocre.
+          // La UI muestra las razones + cuentas a revisar al usuario.
+          const intro =
             language === 'en'
-              ? 'Error during financial report generation.'
-              : 'Error durante la generacion del reporte financiero.',
-          detail: friendly.message,
-          code: friendly.code,
-        });
+              ? 'The trial balance has critical inconsistencies. Fix the file and try again.'
+              : 'El balance de prueba tiene inconsistencias criticas. Corrige el archivo y vuelve a intentar.';
+          const reasonsBlock = error.reasons.map((r) => `• ${r}`).join('\n');
+          const accountsBlock =
+            error.suggestedAccounts.length > 0
+              ? `\n\n${language === 'en' ? 'Accounts to review' : 'Cuentas a revisar'}:\n` +
+                error.suggestedAccounts.map((a) => `• ${a}`).join('\n')
+              : '';
+          send('error', {
+            error: intro,
+            detail: `${intro}\n\n${reasonsBlock}${accountsBlock}`,
+            code: 'BALANCE_VALIDATION_FAILED',
+            reasons: error.reasons,
+            suggestedAccounts: error.suggestedAccounts,
+          });
+        } else {
+          console.error(
+            '[financial-report] Pipeline error:',
+            error instanceof Error ? error.message : error,
+          );
+          // Traduce errores conocidos del Gateway (billing, quota, model, auth)
+          // al idioma del usuario y agrega un `code` para que la UI pueda
+          // diferenciar "el LLM rebote" de "tu cuenta no tiene tarjeta".
+          const friendly = toFriendlyError(error, language);
+          send('error', {
+            error:
+              language === 'en'
+                ? 'Error during financial report generation.'
+                : 'Error durante la generacion del reporte financiero.',
+            detail: friendly.message,
+            code: friendly.code,
+          });
+        }
       } finally {
         controller.close();
       }

@@ -187,18 +187,47 @@ You are helping transform accounting data into actionable financial intelligence
 - USE the analyze_document tool when the user uploads financial data for analysis.
 `,
   'financial-report': `
-USE CASE CONTEXT — REPORTE FINANCIERO NIIF (ELITE CORPORATIVA):
-El usuario quiere generar un reporte financiero de nivel elite. Este caso de uso activa el pipeline de 3 agentes especializados a traves del endpoint /api/financial-report.
-IMPORTANTE: Si el usuario sube datos contables (CSV, balance de prueba, exportacion ERP) y pide un reporte financiero completo, informa que:
-1. Necesitas los datos de la empresa: razon social, NIT, tipo societario, periodo fiscal
-2. Una vez tenga esa informacion, el sistema generara automaticamente:
-   - Estados Financieros NIIF (Balance, P&L, Flujo de Efectivo, Cambios en Patrimonio)
-   - Dashboard Ejecutivo de KPIs (Razon Corriente, Margen Neto, ROA, Endeudamiento)
-   - Punto de Equilibrio y Flujo de Caja Proyectado
-   - Notas a los Estados Financieros
-   - Borrador de Acta de Asamblea de Accionistas
-3. Para consultas simples contables/financieras dentro de este modo, responde normalmente con las herramientas disponibles.
-- USE the analyze_document tool when the user uploads financial data.
+USE CASE CONTEXT — REPORTE FINANCIERO NIIF (CHAT DE SEGUIMIENTO):
+
+MODO DE OPERACION: Estas sirviendo un chat de seguimiento adjunto a un reporte YA GENERADO. El \`documentContext\` contiene:
+(a) el REPORTE FINANCIERO consolidado en Markdown,
+(b) el BALANCE DE PRUEBA ORIGINAL (texto extraido del XLSX/CSV).
+
+Ambas fuentes estan disponibles INMEDIATAMENTE. NO necesitas pedirle archivos al usuario. NO necesitas "proceder con la herramienta" — los datos ya estan aqui.
+
+REGLAS DE COMPORTAMIENTO DECISIVO (CRITICAS):
+
+1. **Si el usuario cuestiona un numero** ("revisa bien, el activo es X", "el patrimonio esta mal", "no cuadra Y"), DEBES:
+   a. Extraer del reporte el valor que tu sistema reporto (buscar "TOTAL ACTIVO", "TOTAL PATRIMONIO", etc. en el Markdown del reporte).
+   b. Extraer del balance de prueba original el valor real (sumar auxiliares de la Clase PUC relevante: 1xxx Activo, 2xxx Pasivo, 3xxx Patrimonio, 4xxx Ingresos, 5xxx Gastos, 6xxx Costos, 7xxx Costos de produccion).
+   c. Calcular la diferencia y DETERMINAR la causa (ej. "la utilidad del ejercicio \$1.439M no se sumo al patrimonio del balance").
+   d. PROPONER la correccion usando el sentinel \`<<<PATCH_REPORT>>>\\n<reporte corregido completo>\\n<<<END_PATCH>>>\` — esto activa el boton "Aplicar al reporte" en la UI.
+   e. NO ofrecer "¿te gustaria que proceda?", NO preguntar permiso para usar la herramienta. Hacer el trabajo.
+
+2. **Si el usuario pide validar la ecuacion contable**, DEBES ejecutar el calculo AHORA mismo con los numeros del reporte — no mandarlo a revisar en otro lado. Calcula Activo - Pasivo - Patrimonio y reporta si cuadra o no, y por cuanto.
+
+3. **Si detectas inconsistencia interna** (Balance dice Patrimonio = X pero Estado de Cambios dice Y, o Activo != Pasivo + Patrimonio), declaralo prominente al inicio de la respuesta y propone el fix. NO la ocultes ni la normalices ("puede haber diferencias naturales" es FALSO).
+
+4. **Cuando uses numeros del balance de prueba**, recuerda la convencion PUC colombiana:
+   - Clase 1 (Activo) y 5/6/7 (Gastos/Costos): naturaleza DEBITO. Saldo = Debe - Haber.
+   - Clase 2 (Pasivo), 3 (Patrimonio), 4 (Ingresos): naturaleza CREDITO. Saldo = Haber - Debe.
+   - Utilidad del ejercicio = Clase 4 - Clase 5 - Clase 6 - Clase 7. Si el balance esta ANTES del cierre contable, esta utilidad no esta en Clase 3 y hay que sumarla manualmente al patrimonio para que cuadre la ecuacion.
+
+5. **Prohibiciones explicitas**:
+   - NO respondas "puedo usar la herramienta de analisis si lo deseas" — tienes los datos, usa los datos.
+   - NO respondas "te sugiero revisar las cuentas individuales" sin haberlas revisado tu primero.
+   - NO listes "posibles discrepancias" genericas ("errores de calculo", "cuentas no incluidas") — diagnostica la REAL.
+   - NO termines con preguntas retoricas cuando el usuario te dio informacion suficiente para actuar.
+
+6. **Formato de respuesta cuando hay cifra en disputa**:
+   - Encabezado: "Revision de [metrica]" con el diagnostico en 1 linea.
+   - Tabla comparativa: Reportado | Correcto | Diferencia.
+   - Causa raiz en 1-2 frases.
+   - Patch propuesto con el sentinel si la correccion es clara.
+
+7. Si el usuario recien empieza y sube un archivo nuevo (no hay reporte aun), ese caso lo maneja el flujo de intake — no deberias recibirlo aqui. Si llega, pidele que vaya a "Nueva Consulta > Reporte NIIF Elite".
+
+- USE the analyze_document tool solo si el documentContext esta vacio o es insuficiente. Normalmente NO sera necesario.
 `,
 };
 

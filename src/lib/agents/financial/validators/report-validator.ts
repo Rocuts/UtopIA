@@ -115,6 +115,30 @@ function extractTotalsMentions(
 }
 
 /**
+ * Extrae el monto del TOTAL "headline" de una seccion (ej. `TOTAL ACTIVO`
+ * en el Balance). A diferencia de `extractTotalsMentions`, este helper busca
+ * lineas que matcheen el patron EXACTO (ej. excluyendo "Total Activo
+ * Corriente") y retorna el ultimo numero de la primera linea que matchee —
+ * que en el formato Markdown de tabla `| TOTAL ACTIVO | $xxx |` es el monto.
+ */
+function extractHeadlineTotal(markdown: string, pattern: RegExp): number | null {
+  const lines = markdown.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\*+/g, '').trim();
+    if (!pattern.test(line)) continue;
+    const nums = line.match(
+      /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g,
+    );
+    if (!nums) continue;
+    for (let i = nums.length - 1; i >= 0; i--) {
+      const n = parseCopAmount(nums[i]);
+      if (n !== null && n !== 0) return n;
+    }
+  }
+  return null;
+}
+
+/**
  * Valida el reporte consolidado:
  * 1. Rechaza placeholders literales (`$[___]`, `[Fecha]`, etc.) — HARD FAIL.
  * 2. Verifica que existen las 3 secciones maestras (PARTE I/II/III) — HARD FAIL.
@@ -228,18 +252,60 @@ export function validateConsolidatedReport(
   }
 
   // -----------------------------------------------------------------------
-  // 4) Accounting equation mention — WARNING
+  // 4) Accounting equation INTERNAL consistency — HARD FAIL
   // -----------------------------------------------------------------------
-  // Buscamos al menos un parrafo (bloque separado por \n\n) que mencione los tres.
-  const paragraphs = consolidatedMarkdown.split(/\n{2,}/);
-  const hasEquationMention = paragraphs.some((p) => {
-    const lower = p.toLowerCase();
-    return lower.includes('activo') && lower.includes('pasivo') && lower.includes('patrimonio');
-  });
-  if (!hasEquationMention) {
-    warnings.push(
-      'Ningun parrafo menciona Activo, Pasivo y Patrimonio juntos (ecuacion patrimonial).',
-    );
+  // Extraemos los montos que el propio reporte reporta como Total Activo,
+  // Total Pasivo y Total Patrimonio y verificamos que cumplan la ecuacion
+  // contable fundamental: Activo = Pasivo + Patrimonio. Si descuadra >1% del
+  // activo, el reporte es internamente inconsistente (ej. el Balance dice
+  // Patrimonio = $42.720 mientras el Estado de Cambios dice $1.439M) y NO
+  // sirve. Fallamos duro antes de mostrarselo al usuario.
+  // Matchea "TOTAL ACTIVO" (con o sin ":" o "|") pero NO "Total Activo Corriente"
+  // ni "Total Activo No Corriente" que son subtotales. El `\s*$` asegura que el
+  // label termine ahi (antes del numero).
+  const reportedAssets = extractHeadlineTotal(
+    consolidatedMarkdown,
+    /total\s+(?:de\s+)?activo(?:s)?\s*(?:\||:|$|\s{2,})/i,
+  );
+  const reportedLiabilities = extractHeadlineTotal(
+    consolidatedMarkdown,
+    /total\s+(?:de\s+)?pasivo(?:s)?\s*(?:\||:|$|\s{2,})/i,
+  );
+  const reportedEquity = extractHeadlineTotal(
+    consolidatedMarkdown,
+    /total\s+(?:del?\s+)?patrimonio\s*(?:\||:|$|\s{2,})/i,
+  );
+
+  if (
+    reportedAssets !== null &&
+    reportedLiabilities !== null &&
+    reportedEquity !== null
+  ) {
+    const equationDiff = reportedAssets - (reportedLiabilities + reportedEquity);
+    const absAssets = Math.abs(reportedAssets);
+    const INTERNAL_TOL_PCT = 0.01; // 1%
+    const INTERNAL_TOL_ABS = 10_000; // $10K — evita falsos positivos
+    const pct = absAssets > 0 ? Math.abs(equationDiff) / absAssets : 0;
+    if (pct > INTERNAL_TOL_PCT && Math.abs(equationDiff) > INTERNAL_TOL_ABS) {
+      errors.push(
+        `Ecuacion contable interna descuadrada en el reporte: Total Activo ` +
+          `${formatCop(reportedAssets)} != Total Pasivo ${formatCop(reportedLiabilities)} + ` +
+          `Total Patrimonio ${formatCop(reportedEquity)} (diferencia ${formatCop(equationDiff)}, ` +
+          `${(pct * 100).toFixed(2)}% del activo). El reporte es internamente inconsistente.`,
+      );
+    }
+  } else {
+    // No encontramos los 3 totales → caemos al check anterior (mencion en parrafo)
+    const paragraphs = consolidatedMarkdown.split(/\n{2,}/);
+    const hasEquationMention = paragraphs.some((p) => {
+      const lower = p.toLowerCase();
+      return lower.includes('activo') && lower.includes('pasivo') && lower.includes('patrimonio');
+    });
+    if (!hasEquationMention) {
+      warnings.push(
+        'Ningun parrafo menciona Activo, Pasivo y Patrimonio juntos (ecuacion patrimonial).',
+      );
+    }
   }
 
   // -----------------------------------------------------------------------

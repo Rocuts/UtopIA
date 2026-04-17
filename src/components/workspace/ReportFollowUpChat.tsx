@@ -83,14 +83,14 @@ const COPY = {
 
 const STARTER_CHIPS = {
   es: [
-    'Completa las cifras faltantes del patrimonio',
-    'Explica por qué la utilidad neta es negativa',
-    'Valida la ecuación Activo = Pasivo + Patrimonio',
+    'Valida la ecuación Activo = Pasivo + Patrimonio y corrige si descuadra',
+    'Revisa el patrimonio vs balance de prueba y propón corrección',
+    'Verifica cada total contra las cuentas del balance original',
   ],
   en: [
-    'Fill in the missing equity figures',
-    'Explain why net income is negative',
-    'Validate the equation Assets = Liabilities + Equity',
+    'Validate Assets = Liabilities + Equity and fix if off-balance',
+    'Review equity vs trial balance and propose correction',
+    'Verify each total against the original trial balance accounts',
   ],
 } as const;
 

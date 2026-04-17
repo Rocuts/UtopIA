@@ -98,6 +98,57 @@ function deriveDiscrepancies(preprocessed: unknown): string[] {
   return out;
 }
 
+/**
+ * Extrae el `ValidationResult` del preprocesador usando tipado defensivo
+ * (mismo patron que `deriveControlTotals`). Si la forma no matchea o faltan
+ * campos, retorna un ValidationResult por defecto no-bloqueante.
+ */
+function deriveValidation(preprocessed: unknown): {
+  blocking: boolean;
+  reasons: string[];
+  suggestedAccounts: string[];
+  adjustments: string[];
+} {
+  const empty = { blocking: false, reasons: [], suggestedAccounts: [], adjustments: [] };
+  if (!preprocessed || typeof preprocessed !== 'object') return empty;
+  const pp = preprocessed as {
+    validation?: {
+      blocking?: boolean;
+      reasons?: unknown[];
+      suggestedAccounts?: unknown[];
+      adjustments?: unknown[];
+    };
+  };
+  const v = pp.validation;
+  if (!v) return empty;
+  const asStringArray = (arr: unknown): string[] =>
+    Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+  return {
+    blocking: Boolean(v.blocking),
+    reasons: asStringArray(v.reasons),
+    suggestedAccounts: asStringArray(v.suggestedAccounts),
+    adjustments: asStringArray(v.adjustments),
+  };
+}
+
+/**
+ * Error especifico para descuadres del balance que NO deben producir reporte.
+ * `/api/financial-report` lo captura y devuelve un 422 con el detalle para que
+ * el UI muestre la lista de cuentas a revisar en el archivo original.
+ */
+export class BalanceValidationError extends Error {
+  readonly reasons: string[];
+  readonly suggestedAccounts: string[];
+
+  constructor(reasons: string[], suggestedAccounts: string[]) {
+    const joined = reasons.join(' ') || 'El balance de prueba no cuadra.';
+    super(joined);
+    this.name = 'BalanceValidationError';
+    this.reasons = reasons;
+    this.suggestedAccounts = suggestedAccounts;
+  }
+}
+
 /** Formatea un monto en COP con separador punto-miles y coma-decimal. */
 function fmtCop(n: number | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
@@ -265,6 +316,34 @@ export async function orchestrateFinancialReport(
         err instanceof Error ? err.message : err,
       );
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stage 0.5: Gate de validacion aritmetica
+  // ---------------------------------------------------------------------------
+  // Si el preprocesador marco el balance como "blocking" (p.ej. la ecuacion
+  // Activo = Pasivo + Patrimonio descuadra >1%), abortamos aqui en vez de
+  // gastar tokens generando un reporte que sera incorrecto. El usuario recibe
+  // razones y cuentas sugeridas para corregir el Excel.
+  //
+  // Si el preprocesador aplico auto-reparaciones (p.ej. reinyeccion de la
+  // utilidad del ejercicio), las reportamos como progreso informativo.
+  // ---------------------------------------------------------------------------
+  const balanceValidation = deriveValidation(preprocessed);
+  if (balanceValidation.adjustments.length > 0) {
+    for (const adj of balanceValidation.adjustments) {
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail: `Ajuste automatico: ${adj}`,
+      });
+    }
+  }
+  if (balanceValidation.blocking) {
+    throw new BalanceValidationError(
+      balanceValidation.reasons,
+      balanceValidation.suggestedAccounts,
+    );
   }
 
   const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
