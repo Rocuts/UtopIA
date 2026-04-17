@@ -106,7 +106,7 @@ export async function orchestrateTaxReconciliation(
     label: 'Reporte de conciliacion fiscal consolidado listo',
   });
 
-  onProgress?.({ type: 'done', report });
+  onProgress?.({ type: 'done' });
 
   return report;
 }

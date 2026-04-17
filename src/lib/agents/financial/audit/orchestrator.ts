@@ -199,7 +199,7 @@ export async function orchestrateAudit(
     generatedAt: new Date().toISOString(),
   };
 
-  onProgress?.({ type: 'done', report: auditReport });
+  onProgress?.({ type: 'done' });
 
   return auditReport;
 }

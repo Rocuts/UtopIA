@@ -157,7 +157,7 @@ export async function orchestrateFiscalOpinion(
     generatedAt: new Date().toISOString(),
   };
 
-  onProgress?.({ type: 'done', report: fiscalOpinionReport });
+  onProgress?.({ type: 'done' });
 
   return fiscalOpinionReport;
 }

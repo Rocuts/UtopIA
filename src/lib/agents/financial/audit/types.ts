@@ -116,4 +116,4 @@ export type AuditProgressEvent =
   | { type: 'auditor_complete'; domain: AuditDomain; name: string; score: number }
   | { type: 'auditor_failed'; domain: AuditDomain; name: string; error: string }
   | { type: 'consolidating' }
-  | { type: 'done'; report: AuditReport };
+  | { type: 'done' };

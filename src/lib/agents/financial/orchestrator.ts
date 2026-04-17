@@ -484,7 +484,7 @@ export async function orchestrateFinancialReport(
     });
   }
 
-  onProgress?.({ type: 'done', report });
+  onProgress?.({ type: 'done' });
 
   return report;
 }

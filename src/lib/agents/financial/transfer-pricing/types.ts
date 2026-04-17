@@ -142,4 +142,4 @@ export type TPProgressEvent =
   | { type: 'stage_progress'; stage: 1 | 2 | 3 | 4; detail: string }
   | { type: 'stage_complete'; stage: 1 | 2 | 3 | 4; label: string }
   | { type: 'error'; message: string }
-  | { type: 'done'; report: TransferPricingReport };
+  | { type: 'done' };

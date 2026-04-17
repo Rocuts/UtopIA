@@ -111,4 +111,4 @@ export type ValuationProgressEvent =
   | { type: 'agent_failed'; agent: 'dcf' | 'comparables' | 'synthesizer'; name: string; error: string }
   | { type: 'synthesizing' }
   | { type: 'error'; message: string }
-  | { type: 'done'; report: ValuationReport };
+  | { type: 'done' };

@@ -134,7 +134,7 @@ export async function orchestrateTaxPlanning(
     label: 'Reporte de planeacion tributaria consolidado listo',
   });
 
-  onProgress?.({ type: 'done', report });
+  onProgress?.({ type: 'done' });
 
   return report;
 }

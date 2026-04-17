@@ -147,7 +147,7 @@ export async function orchestrateTransferPricing(
     label: 'Reporte consolidado de precios de transferencia listo',
   });
 
-  onProgress?.({ type: 'done', report });
+  onProgress?.({ type: 'done' });
 
   return report;
 }

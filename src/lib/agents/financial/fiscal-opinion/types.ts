@@ -234,4 +234,4 @@ export type FiscalOpinionProgressEvent =
   | { type: 'drafter_complete'; name: string }
   | { type: 'consolidating' }
   | { type: 'error'; message: string }
-  | { type: 'done'; report: FiscalOpinionReport };
+  | { type: 'done' };

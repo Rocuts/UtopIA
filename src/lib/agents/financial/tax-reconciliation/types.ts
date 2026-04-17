@@ -89,4 +89,4 @@ export type TaxReconciliationProgressEvent =
   | { type: 'stage_progress'; stage: 1 | 2 | 3; detail: string }
   | { type: 'stage_complete'; stage: 1 | 2 | 3; label: string }
   | { type: 'error'; message: string }
-  | { type: 'done'; report: TaxReconciliationReport };
+  | { type: 'done' };

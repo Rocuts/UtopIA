@@ -36,6 +36,7 @@ import type {
   AuditDomain,
 } from '@/lib/agents/financial/audit/types';
 import type { ReportIterationTurn } from './types';
+import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
 
 const SPRING = { stiffness: 400, damping: 25 };
 
@@ -51,12 +52,6 @@ const AUDITOR_LABELS: Record<string, string> = {
   legal: 'Legal/Societario',
   revisoria: 'Rev. Fiscal',
 };
-
-interface SSEHandlers {
-  progress?: (event: unknown) => void;
-  result?: (event: unknown) => void;
-  error?: (event: unknown) => void;
-}
 
 // ─── POST-MVP NOTE ──────────────────────────────────────────────────────────
 // La orquestacion del pipeline de 3 fases esta en el cliente (este useEffect).
@@ -114,53 +109,6 @@ async function fetchJSONWithRetry<T>(
     }
   }
   throw lastErr;
-}
-
-async function consumeSSE(response: Response, signal: AbortSignal, handlers: SSEHandlers) {
-  if (!response.body) return;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let currentEvent = 'message';
-  let currentData = '';
-
-  try {
-    while (true) {
-      if (signal.aborted) {
-        reader.cancel();
-        return;
-      }
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let newlineIdx;
-      while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, newlineIdx).replace(/\r$/, '');
-        buffer = buffer.slice(newlineIdx + 1);
-
-        if (line === '') {
-          if (currentData) {
-            try {
-              const parsed = JSON.parse(currentData);
-              const handler = handlers[currentEvent as keyof SSEHandlers];
-              handler?.(parsed);
-            } catch {
-              // Skip malformed event
-            }
-          }
-          currentEvent = 'message';
-          currentData = '';
-        } else if (line.startsWith('event:')) {
-          currentEvent = line.slice(6).trim();
-        } else if (line.startsWith('data:')) {
-          currentData = line.slice(5).trim();
-        }
-      }
-    }
-  } catch (err) {
-    if ((err as Error)?.name !== 'AbortError') throw err;
-  }
 }
 
 function splitReportIntoSections(markdown: string): ReportSection[] {
@@ -787,7 +735,7 @@ export function PipelineWorkspace() {
           instructions: pipelineInput.specialInstructions,
         };
 
-        const phase1Res = await fetch('/api/financial-report', {
+        const phase1Res = await fetchSSEWithRetry('/api/financial-report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
           body: JSON.stringify(phase1Body),
@@ -877,7 +825,7 @@ export function PipelineWorkspace() {
       if (pipelineInput.outputOptions.auditPipeline) {
         setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
         try {
-          const phase2Res = await fetch('/api/financial-audit', {
+          const phase2Res = await fetchSSEWithRetry('/api/financial-audit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
             body: JSON.stringify({

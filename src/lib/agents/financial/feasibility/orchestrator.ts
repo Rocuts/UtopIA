@@ -123,7 +123,7 @@ export async function orchestrateFeasibilityStudy(
     label: 'Estudio de factibilidad consolidado listo',
   });
 
-  onProgress?.({ type: 'done', report });
+  onProgress?.({ type: 'done' });
 
   return report;
 }

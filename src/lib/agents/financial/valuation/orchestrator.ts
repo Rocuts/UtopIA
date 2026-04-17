@@ -179,7 +179,7 @@ export async function orchestrateValuation(
     generatedAt: new Date().toISOString(),
   };
 
-  onProgress?.({ type: 'done', report });
+  onProgress?.({ type: 'done' });
 
   return report;
 }
