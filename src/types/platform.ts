@@ -303,6 +303,11 @@ export interface PipelineState {
   qualityScore?: number
   startedAt?: Date
   completedAt?: Date
+  // Errores no-fatales de fases opcionales. Si Fase 2 o 3 fallan por red o
+  // timeout, el pipeline sigue hasta `complete` (Fase 1 ya persistio) y estos
+  // campos surfacean el detalle en UI sin destruir el reporte.
+  phase2Error?: string
+  phase3Error?: string
 }
 
 // ─── Normative & Audit ────────────────────────────────────────────────────────

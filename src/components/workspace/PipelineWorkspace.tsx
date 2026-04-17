@@ -58,6 +58,64 @@ interface SSEHandlers {
   error?: (event: unknown) => void;
 }
 
+// ─── POST-MVP NOTE ──────────────────────────────────────────────────────────
+// La orquestacion del pipeline de 3 fases esta en el cliente (este useEffect).
+// Es fragil: `ERR_NETWORK_CHANGED`, cambios de red, VPN, o cierre del tab
+// pueden perder trabajo ya completado por el servidor. Para la version
+// production-grade (post-MVP) hay que migrar a Vercel Workflow DevKit:
+// cada fase se convierte en `step.do(...)` con checkpoints automaticos en
+// Blob/KV, retries built-in y resume crash-safe. El cliente solo guarda un
+// `runId` y se conecta para leer progreso. Ver `docs/POST_MVP_WORKFLOW_MIGRATION.md`.
+// Los parches defensivos que siguen (checkpoint local tras Fase 1, fases 2/3
+// no-bloqueantes, retry en Fase 3) son mitigaciones MVP, no la arquitectura
+// final.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch con reintentos ante errores de red transitorios (`TypeError: Failed to
+ * fetch`, p.ej. `ERR_NETWORK_CHANGED`). Solo reintenta errores de RED — los
+ * HTTP no-ok y los errores de parseo NO se reintentan (probablemente son
+ * deterministas). Respeta `AbortSignal` durante el backoff para no bloquear
+ * unmounts del componente.
+ */
+async function fetchJSONWithRetry<T>(
+  url: string,
+  init: RequestInit,
+  opts: { retries?: number; backoffMs?: number[] } = {},
+): Promise<T> {
+  const retries = opts.retries ?? 2;
+  const backoff = opts.backoffMs ?? [1000, 3000];
+  const signal = init.signal ?? undefined;
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+      }
+      return (await res.json()) as T;
+    } catch (err) {
+      const e = err as Error;
+      if (e.name === 'AbortError') throw err;
+      const isNetwork = err instanceof TypeError;
+      if (!isNetwork || attempt === retries) throw err;
+      lastErr = err;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, backoff[attempt] ?? 3000);
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
+    }
+  }
+  throw lastErr;
+}
+
 async function consumeSSE(response: Response, signal: AbortSignal, handlers: SSEHandlers) {
   if (!response.body) return;
   const reader = response.body.getReader();
@@ -705,8 +763,11 @@ export function PipelineWorkspace() {
     const controller = new AbortController();
 
     (async () => {
+      // ─── Phase 1: Financial Report (CRITICA) ───────────────────────────
+      // Si Fase 1 falla, no hay reporte que mostrar — abortamos y mostramos
+      // error fatal. Es la unica fase cuyo fallo destruye la corrida.
+      let phase1Report: BackendFinancialReport | null = null;
       try {
-        // ─── Phase 1: Financial Report ─────────────────────────────────────
         const phase1Body = {
           rawData: pipelineInput.rawData,
           company: {
@@ -770,21 +831,52 @@ export function PipelineWorkspace() {
           },
         });
 
-        const phase1Report = phase1Box.value;
+        phase1Report = phase1Box.value;
         if (!phase1Report) throw new Error('El endpoint de reporte no devolvió un resultado.');
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        const msg = err instanceof Error ? err.message : 'Error desconocido';
+        setError(msg);
+        setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
+        return;
+      }
 
-        // Ensure all 3 stages are marked complete even if events were missed
-        setPipelineState((prev) => ({
-          ...prev,
-          completedStages: [1, 2, 3],
-          currentStage: 3,
-        }));
+      // ─── CHECKPOINT: persistir Fase 1 ANTES de fases opcionales ────────
+      // Esta linea es el corazon del fix: a partir de aqui, aunque la red se
+      // caiga y el usuario recargue, el reporte NIIF vive en localStorage via
+      // `saveReport` (WorkspaceContext.setLastCompletedReport). Antes del
+      // parche, el checkpoint ocurria al final de las 3 fases, asi que un
+      // `Failed to fetch` en Fase 3 borraba 5+ minutos de trabajo NIIF.
+      const nextConvId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setBackendReport(phase1Report);
+      setRawData(pipelineInput.rawData);
+      setCompanyInfo(phase1Report.company);
+      setConversationId(nextConvId);
+      setInitialTurns([]);
+      setLastCompletedReport({
+        report: phase1Report,
+        rawData: pipelineInput.rawData,
+        company: phase1Report.company,
+        conversationId: nextConvId,
+        turns: [],
+      });
 
-        // ─── Phase 2: Audit (if enabled) ──────────────────────────────────
-        const phase2Box: { value: BackendAuditReport | null } = { value: null };
-        if (pipelineInput.outputOptions.auditPipeline) {
-          setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
+      setPipelineState((prev) => ({
+        ...prev,
+        completedStages: [1, 2, 3],
+        currentStage: 3,
+        phase2Error: undefined,
+        phase3Error: undefined,
+      }));
 
+      // ─── Phase 2: Audit (OPCIONAL, no-bloqueante) ──────────────────────
+      // Fallos de red aqui NO destruyen el reporte. Se registra `phase2Error`
+      // y el pipeline continua. El usuario vera el reporte NIIF + un aviso
+      // "Auditoria no disponible" en la UI.
+      let phase2Report: BackendAuditReport | null = null;
+      if (pipelineInput.outputOptions.auditPipeline) {
+        setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
+        try {
           const phase2Res = await fetch('/api/financial-audit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
@@ -800,6 +892,7 @@ export function PipelineWorkspace() {
             throw new Error(`Auditoría falló (HTTP ${phase2Res.status}): ${errBody.slice(0, 300)}`);
           }
 
+          const phase2Box: { value: BackendAuditReport | null } = { value: null };
           await consumeSSE(phase2Res, controller.signal, {
             progress: (raw) => {
               const evt = raw as AuditProgressEvent;
@@ -830,9 +923,10 @@ export function PipelineWorkspace() {
             },
           });
 
-          if (phase2Box.value) {
+          phase2Report = phase2Box.value;
+          if (phase2Report) {
             const findingCounts: Record<string, number> = {};
-            for (const r of phase2Box.value.auditorResults) {
+            for (const r of phase2Report.auditorResults) {
               findingCounts[r.domain] = r.findings.length;
             }
             setPipelineState((prev) => ({
@@ -841,71 +935,64 @@ export function PipelineWorkspace() {
               auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
             }));
           }
+        } catch (err) {
+          if ((err as Error)?.name === 'AbortError') return;
+          const msg = err instanceof Error ? err.message : 'Error desconocido';
+          setPipelineState((prev) => ({ ...prev, phase2Error: msg }));
         }
-
-        // ─── Phase 3: Quality Meta-Audit (if enabled) ─────────────────────
-        if (pipelineInput.outputOptions.metaAudit) {
-          setPipelineState((prev) => ({ ...prev, mode: 'quality' }));
-
-          const phase3Res = await fetch('/api/financial-quality', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              report: phase1Report,
-              auditReport: phase2Box.value,
-              language,
-            }),
-            signal: controller.signal,
-          });
-
-          if (phase3Res.ok) {
-            const quality = (await phase3Res.json()) as {
-              grade?: QualityGrade;
-              score?: number;
-            };
-            setPipelineState((prev) => ({
-              ...prev,
-              qualityGrade: quality.grade,
-              qualityScore: quality.score,
-            }));
-          }
-        }
-
-        // ─── Finalize ─────────────────────────────────────────────────────
-        const consolidated = phase1Report.consolidatedReport;
-        setReport({
-          content: consolidated,
-          sections: splitReportIntoSections(consolidated),
-        });
-
-        // Persistencia: backend report + data cruda + empresa + conv id.
-        // `phase1Report.company` es canonico (viene del endpoint); lo usamos
-        // para garantizar fiscalPeriod/nit estables en el chat de seguimiento.
-        const nextConvId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        setBackendReport(phase1Report);
-        setRawData(pipelineInput.rawData);
-        setCompanyInfo(phase1Report.company);
-        setConversationId(nextConvId);
-        setInitialTurns([]);
-        setLastCompletedReport({
-          report: phase1Report,
-          rawData: pipelineInput.rawData,
-          company: phase1Report.company,
-          conversationId: nextConvId,
-          turns: [],
-        });
-
-        setPipelineState((prev) => ({
-          ...prev,
-          mode: 'complete',
-          completedAt: new Date(),
-        }));
-      } catch (err) {
-        if ((err as Error)?.name === 'AbortError') return;
-        const msg = err instanceof Error ? err.message : 'Error desconocido';
-        setError(msg);
-        setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
       }
+
+      // ─── Phase 3: Quality Meta-Audit (OPCIONAL, no-bloqueante, retry) ──
+      // Esta es la fase mas fragil: NO hay streaming, todo llega en un unico
+      // `await .json()` que puede tardar 60-180s. Es la que disparo el bug
+      // original `net::ERR_NETWORK_CHANGED`. Mitigacion: retry con backoff
+      // ante errores de red + aislamiento del catch.
+      if (pipelineInput.outputOptions.metaAudit) {
+        setPipelineState((prev) => ({ ...prev, mode: 'quality' }));
+        try {
+          const quality = await fetchJSONWithRetry<{
+            grade?: QualityGrade;
+            score?: number;
+          }>(
+            '/api/financial-quality',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                report: phase1Report,
+                auditReport: phase2Report,
+                language,
+              }),
+              signal: controller.signal,
+            },
+            { retries: 2, backoffMs: [1000, 3000] },
+          );
+          setPipelineState((prev) => ({
+            ...prev,
+            qualityGrade: quality.grade,
+            qualityScore: quality.score,
+          }));
+        } catch (err) {
+          if ((err as Error)?.name === 'AbortError') return;
+          const msg = err instanceof Error ? err.message : 'Error desconocido';
+          setPipelineState((prev) => ({ ...prev, phase3Error: msg }));
+        }
+      }
+
+      // ─── Finalize ────────────────────────────────────────────────────
+      // Independientemente de si Fase 2/3 fallaron, el reporte NIIF se
+      // muestra. Los warnings se surfacean via `phase2Error` / `phase3Error`.
+      const consolidated = phase1Report.consolidatedReport;
+      setReport({
+        content: consolidated,
+        sections: splitReportIntoSections(consolidated),
+      });
+
+      setPipelineState((prev) => ({
+        ...prev,
+        mode: 'complete',
+        completedAt: new Date(),
+      }));
     })();
 
     return () => {
@@ -941,6 +1028,8 @@ export function PipelineWorkspace() {
       qualityScore: undefined,
       startedAt: undefined,
       completedAt: undefined,
+      phase2Error: undefined,
+      phase3Error: undefined,
     }));
   }, [setPipelineInput, setPipelineState]);
 
@@ -980,20 +1069,45 @@ export function PipelineWorkspace() {
   );
 
   if (isComplete && report) {
+    const hasWarnings = Boolean(pipelineState.phase2Error || pipelineState.phase3Error);
     return (
-      <ReportViewer
-        content={report.content}
-        sections={report.sections}
-        report={backendReport ?? undefined}
-        rawData={rawData || undefined}
-        company={companyInfo ?? undefined}
-        language={language}
-        conversationId={conversationId || undefined}
-        initialTurns={initialTurns}
-        onReset={handleReset}
-        onPatchReport={handlePatchReport}
-        onTurnsChange={handleTurnsChange}
-      />
+      <div className="h-full flex flex-col">
+        {hasWarnings && (
+          <div className="shrink-0 border-b border-[#FCD34D] bg-[#FFFBEB] px-6 py-3 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 text-xs text-[#92400E]">
+              <div className="font-medium mb-0.5">
+                Reporte generado con advertencias
+              </div>
+              {pipelineState.phase2Error && (
+                <p className="whitespace-pre-wrap break-words">
+                  Auditoría regulatoria no disponible: {pipelineState.phase2Error}
+                </p>
+              )}
+              {pipelineState.phase3Error && (
+                <p className="whitespace-pre-wrap break-words">
+                  Meta-auditoría de calidad no disponible: {pipelineState.phase3Error}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="flex-1 min-h-0">
+          <ReportViewer
+            content={report.content}
+            sections={report.sections}
+            report={backendReport ?? undefined}
+            rawData={rawData || undefined}
+            company={companyInfo ?? undefined}
+            language={language}
+            conversationId={conversationId || undefined}
+            initialTurns={initialTurns}
+            onReset={handleReset}
+            onPatchReport={handlePatchReport}
+            onTurnsChange={handleTurnsChange}
+          />
+        </div>
+      </div>
     );
   }
 

@@ -11,9 +11,15 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 //
 // Input: { report, auditReport?, preprocessed?, language }
 // Output: QualityAssessment with 12-dimension scores + IFRS 18 readiness
+//
+// POST-MVP: este endpoint deberia migrar a Vercel Workflow DevKit como un
+// `step.do("quality-meta-audit", ...)` dentro del workflow durable que tambien
+// ejecute Fase 1 y Fase 2. Ver `docs/POST_MVP_WORKFLOW_MIGRATION.md`.
 // ---------------------------------------------------------------------------
 
-export const maxDuration = 120;
+// 300s = maximo default de Fluid Compute (2026). Igualamos Fases 1 y 2 para
+// que la meta-auditoria no sea el eslabon mas debil del pipeline.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
