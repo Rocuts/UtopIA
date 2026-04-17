@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
@@ -20,6 +20,8 @@ import {
   GitCompareArrows,
   Lightbulb,
   Settings,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -35,6 +37,13 @@ import type { CaseType } from '@/types/platform';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const NOVA_SPRING = { stiffness: 400, damping: 25 };
+
+// Persisted tools-panel sizing (user-resizable via drag handle).
+const TOOLS_HEIGHT_KEY = 'utopia.sidebar.toolsHeight';
+const TOOLS_COLLAPSED_KEY = 'utopia.sidebar.toolsCollapsed';
+const TOOLS_MIN_HEIGHT = 56;
+const TOOLS_MAX_HEIGHT = 560;
+const TOOLS_DEFAULT_HEIGHT = 300;
 
 const RISK_DOT_COLORS: Record<RiskLevel, string> = {
   bajo: '#22c55e',
@@ -247,6 +256,131 @@ export function Sidebar() {
     if (pathname !== '/workspace') router.push('/workspace');
   }, [pathname, router]);
 
+  // ── Resizable + collapsible tools panel ───────────────────────────────────
+  // Why: lazy init reads localStorage once on client mount (SSR returns the
+  // default). Avoids render cascades and keeps the panel stable across reloads.
+  const [toolsHeight, setToolsHeight] = useState<number>(() => {
+    if (typeof window === 'undefined') return TOOLS_DEFAULT_HEIGHT;
+    try {
+      const raw = window.localStorage.getItem(TOOLS_HEIGHT_KEY);
+      if (!raw) return TOOLS_DEFAULT_HEIGHT;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return TOOLS_DEFAULT_HEIGHT;
+      return Math.max(TOOLS_MIN_HEIGHT, Math.min(TOOLS_MAX_HEIGHT, n));
+    } catch {
+      return TOOLS_DEFAULT_HEIGHT;
+    }
+  });
+  const [toolsCollapsed, setToolsCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(TOOLS_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const dragStartRef = useRef<{ y: number; h: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TOOLS_HEIGHT_KEY, String(toolsHeight));
+    } catch {}
+  }, [toolsHeight]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        TOOLS_COLLAPSED_KEY,
+        toolsCollapsed ? '1' : '0',
+      );
+    } catch {}
+  }, [toolsCollapsed]);
+
+  const handleResizeStart = useCallback(
+    (clientY: number) => {
+      dragStartRef.current = { y: clientY, h: toolsHeight };
+      setIsResizing(true);
+    },
+    [toolsHeight],
+  );
+
+  const onResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      handleResizeStart(e.clientY);
+    },
+    [handleResizeStart],
+  );
+
+  const onResizeTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      handleResizeStart(e.touches[0].clientY);
+    },
+    [handleResizeStart],
+  );
+
+  // Why: attach listeners on `document` while dragging so fast cursor movement
+  // outside the handle doesn't drop the drag. Also lock body cursor/selection
+  // so the pointer stays as row-resize and text doesn't highlight mid-drag.
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const applyDelta = (clientY: number) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      const next = Math.max(
+        TOOLS_MIN_HEIGHT,
+        Math.min(TOOLS_MAX_HEIGHT, start.h + (clientY - start.y)),
+      );
+      setToolsHeight(next);
+    };
+    const onMove = (e: MouseEvent) => applyDelta(e.clientY);
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      applyDelta(e.touches[0].clientY);
+    };
+    const stop = () => {
+      setIsResizing(false);
+      dragStartRef.current = null;
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', stop);
+    document.addEventListener('touchmove', onTouchMove, { passive: true });
+    document.addEventListener('touchend', stop);
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', stop);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', stop);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  }, [isResizing]);
+
+  const onResizeKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setToolsHeight((h) => Math.max(TOOLS_MIN_HEIGHT, h - 16));
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setToolsHeight((h) => Math.min(TOOLS_MAX_HEIGHT, h + 16));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setToolsHeight(TOOLS_MIN_HEIGHT);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setToolsHeight(TOOLS_MAX_HEIGHT);
+    }
+  }, []);
+
   useEffect(() => {
     setConversations(listConversations());
   }, [conversationListVersion]);
@@ -441,7 +575,57 @@ export function Sidebar() {
       </div>
 
       {/* ── Section 2: Case Type Selector ───────────────────────────────────── */}
-      <div className="px-2 pb-2 shrink-0">
+      {isExpanded && (
+        <div className="px-3 pt-1 pb-0.5 shrink-0 flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#a3a3a3]">
+            {language === 'es' ? 'Herramientas' : 'Tools'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setToolsCollapsed((c) => !c)}
+            className="p-0.5 rounded text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+            aria-label={
+              toolsCollapsed
+                ? language === 'es'
+                  ? 'Mostrar herramientas'
+                  : 'Show tools'
+                : language === 'es'
+                  ? 'Ocultar herramientas'
+                  : 'Hide tools'
+            }
+            aria-expanded={!toolsCollapsed}
+            title={
+              toolsCollapsed
+                ? language === 'es'
+                  ? 'Mostrar'
+                  : 'Show'
+                : language === 'es'
+                  ? 'Ocultar'
+                  : 'Hide'
+            }
+          >
+            {toolsCollapsed ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronUp className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
+      )}
+      <div
+        className={cn(
+          'px-2 pb-2 shrink-0 overflow-y-auto styled-scrollbar',
+          isExpanded ? '' : 'overflow-visible',
+        )}
+        style={
+          isExpanded
+            ? {
+                height: toolsCollapsed ? 0 : toolsHeight,
+                transition: isResizing ? 'none' : 'height 150ms ease-out',
+              }
+            : undefined
+        }
+      >
         <nav aria-label={language === 'es' ? 'Tipos de caso' : 'Case types'}>
           <ul className="flex flex-col gap-0.5">
             {CASE_TYPE_ITEMS.map((item) => {
@@ -582,8 +766,45 @@ export function Sidebar() {
         </nav>
       </div>
 
+      {/* Resize handle — drag to reclaim space for the case list */}
+      {isExpanded && !toolsCollapsed && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={
+            language === 'es'
+              ? 'Ajustar tamaño de herramientas'
+              : 'Resize tools panel'
+          }
+          aria-valuemin={TOOLS_MIN_HEIGHT}
+          aria-valuemax={TOOLS_MAX_HEIGHT}
+          aria-valuenow={toolsHeight}
+          tabIndex={0}
+          onMouseDown={onResizeMouseDown}
+          onTouchStart={onResizeTouchStart}
+          onKeyDown={onResizeKeyDown}
+          className={cn(
+            'group shrink-0 h-1.5 mx-2 flex items-center justify-center cursor-row-resize',
+            'hover:bg-[#FEF9EC] transition-colors rounded-sm',
+            'focus:outline-none focus:bg-[#FEF9EC] focus:ring-1 focus:ring-[#D4A017]',
+            isResizing && 'bg-[#FEF9EC]',
+          )}
+        >
+          <div
+            className={cn(
+              'h-0.5 w-10 rounded-full transition-colors',
+              isResizing
+                ? 'bg-[#D4A017]'
+                : 'bg-[#e5e5e5] group-hover:bg-[#D4A017]',
+            )}
+          />
+        </div>
+      )}
+
       {/* Divider */}
-      <div className="h-px bg-[#e5e5e5] mx-2 shrink-0" />
+      {(!isExpanded || toolsCollapsed) && (
+        <div className="h-px bg-[#e5e5e5] mx-2 shrink-0" />
+      )}
 
       {/* ── Section 3: Case List ─────────────────────────────────────────────── */}
 
