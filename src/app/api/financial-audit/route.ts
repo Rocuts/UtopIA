@@ -3,6 +3,7 @@ import { financialAuditRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditProgressEvent } from '@/lib/agents/financial/audit/types';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-audit
@@ -95,9 +96,12 @@ function handleStreaming(
           '[financial-audit] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
+        const friendly = toFriendlyError(error, language);
         send('error', {
-          error: 'Error during audit.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          error:
+            language === 'en' ? 'Error during audit.' : 'Error durante la auditoria.',
+          detail: friendly.message,
+          code: friendly.code,
         });
       } finally {
         controller.close();

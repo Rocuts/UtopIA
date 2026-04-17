@@ -7,6 +7,7 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report
@@ -143,9 +144,17 @@ function handleStreaming(
           '[financial-report] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
+        // Traduce errores conocidos del Gateway (billing, quota, model, auth)
+        // al idioma del usuario y agrega un `code` para que la UI pueda
+        // diferenciar "el LLM rebote" de "tu cuenta no tiene tarjeta".
+        const friendly = toFriendlyError(error, language);
         send('error', {
-          error: 'Error during financial report generation.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          error:
+            language === 'en'
+              ? 'Error during financial report generation.'
+              : 'Error durante la generacion del reporte financiero.',
+          detail: friendly.message,
+          code: friendly.code,
         });
       } finally {
         controller.close();
