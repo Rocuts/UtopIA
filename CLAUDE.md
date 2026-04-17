@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is UtopIA
 
-UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration with OpenAI models, RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
+UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** routing through the **Vercel AI Gateway** (default `openai/gpt-4o-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
 
 ## Commands
 
@@ -20,11 +20,25 @@ No test framework is configured. Validate changes with `npx tsc --noEmit` and `n
 ## Environment Variables
 
 Required in `.env.local`:
-- `OPENAI_API_KEY` — used by all LLM calls (chat agents, financial pipeline, OCR, embeddings, voice)
+- `AI_GATEWAY_API_KEY` — auth for Vercel AI Gateway. Used by all AI SDK v6 calls (chat orchestrator, every financial pipeline, OCR). In prod, `VERCEL_OIDC_TOKEN` works instead. Get a key from Vercel dashboard → AI → AI Gateway → Create API Key.
+- `OPENAI_API_KEY` — still required for: (a) Realtime voice API (`src/app/api/realtime/route.ts`, direct HTTPS), (b) LangChain embeddings for RAG (`@langchain/openai` internally). The rest of the app does NOT use it anymore.
 - `TAVILY_API_KEY` — web search via `src/lib/search/web-search.ts`
 - `UTOPIA_AGENT_MODE` — `orchestrated` (multi-agent) or `legacy` (monolithic). Controls which handler `/api/chat` uses
 
+Optional model overrides (all route through the Gateway; pass `provider/model` strings):
+- `OPENAI_MODEL_CHAT` (default `openai/gpt-4o-mini`) — chat orchestrator, specialists, synthesizer
+- `OPENAI_MODEL_FINANCIAL` (default `openai/gpt-4o-mini`) — financial/audit/tax/valuation/etc. pipelines
+- `OPENAI_MODEL_OCR` (default `openai/gpt-4o`) — PDF/image OCR in `/api/upload`
+- Others in `src/lib/config/models.ts`
+
 `process.env.VERCEL` is checked in `src/lib/rag/vectorstore.ts` to fall back from HNSWLib to MemoryVectorStore on Vercel's read-only filesystem.
+
+## LLM Provider
+
+- **All AI SDK calls** use plain string model IDs (`'openai/gpt-4o-mini'`) which AI SDK v6 auto-resolves through the Gateway (see `node_modules/ai/src/model/resolve-model.ts`). **Never** pass an `apiKey` option or instantiate an OpenAI client — the provider is `gateway` by default.
+- Models come from `src/lib/config/models.ts` (`MODELS.CHAT`, `MODELS.FINANCIAL_PIPELINE`, `MODELS.OCR`, etc.). Change model IDs in ONE place; envs override per-key.
+- Migration contract followed by every existing call: `openai.chat.completions.create` → `generateText` / `streamText`, `max_tokens` → `maxOutputTokens`, `response.choices[0].message.content` → `result.text`, `response_format: { type: 'json_object' }` removed (instead the system prompt ends with `"\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences."`). See `docs/AI_SDK_MIGRATION.md`.
+- Realtime voice is the one exception — still uses direct `fetch('https://api.openai.com/v1/realtime/sessions', ...)` because the Gateway does not expose the Realtime API.
 
 ## Architecture
 
@@ -46,8 +60,8 @@ The codebase has two independent multi-agent systems:
 
 **2. Financial Pipeline** (`src/lib/agents/financial/orchestrator.ts`) — structured reports
 - Three agents run **sequentially** (each feeds the next): NIIF Analyst → Strategy Director → Governance Specialist
-- Does NOT use `BaseSpecialist` or the tool registry — agents are direct LLM calls with structured prompts
-- Uses `gpt-5.4-mini` (400K context) instead of `gpt-4o-mini`
+- Does NOT use `BaseSpecialist` or the tool registry — agents are plain `generateText` calls with structured Markdown prompts
+- Uses `MODELS.FINANCIAL_PIPELINE` (default `openai/gpt-4o-mini`). Override via `OPENAI_MODEL_FINANCIAL`.
 - Entry point: `POST /api/financial-report` with SSE streaming. `maxDuration: 300s`
 
 **3. Audit Pipeline** (`src/lib/agents/financial/audit/orchestrator.ts`) — regulatory validation
@@ -102,15 +116,17 @@ The codebase has two independent multi-agent systems:
 
 ### Tool System
 
-Tools are defined in `src/lib/agents/tools/registry.ts` (OpenAI function-calling format) and implemented in `src/lib/tools/`. Each specialist agent gets a subset via `getToolsForAgent()`. Available tools: `search_docs`, `search_web`, `calculate_sanction`, `analyze_document`, `draft_dian_response`, `assess_risk`, `get_tax_calendar`.
+Tools are defined in `src/lib/agents/tools/registry.ts` using the AI SDK v6 `tool({ description, inputSchema: z.object(...) })` helper and implemented in `src/lib/tools/`. Each specialist agent gets a subset via `getToolsForAgent(name)` which returns a `Record<string, Tool>` (map keyed by tool name). Available tools: `search_docs`, `search_web`, `calculate_sanction`, `analyze_document`, `draft_dian_response`, `assess_risk`, `get_tax_calendar`.
+
+**Important design choice** — tools in the registry have NO `execute` function. `generateText` / `streamText` return `toolCalls` without auto-invoking them. The manual loop in `BaseSpecialist.execute()` (`src/lib/agents/specialists/base-agent.ts`, `MAX_TOOL_ROUNDS = 6`) dispatches each call via `executeTool(name, args, ctx)` so the per-call `ToolExecContext` (documents, ERP connections, etc.) gets injected correctly. This is a zero-regression port of the pre-AI-SDK tool loop.
 
 ### RAG Pipeline
 
 - Vector store: HNSWLib-node (primary) with MemoryVectorStore fallback for Vercel
-- Embeddings: OpenAI `text-embedding-3-small`
+- Embeddings: `text-embedding-3-small` via `@langchain/openai` (NOT through the Gateway — LangChain's own client, uses `OPENAI_API_KEY` directly)
 - Source documents: `src/data/tax_docs/*.md` (Colombian tax law, DIAN doctrine, NIIF standards)
 - Ingestion: `src/lib/rag/ingest.ts` with RecursiveCharacterTextSplitter (1000 chars, 250 overlap)
-- Document upload: `POST /api/upload` handles PDF, DOCX, XLSX, CSV, images (OCR via GPT-4o Vision)
+- Document upload: `POST /api/upload` handles PDF, DOCX, XLSX, CSV, images. OCR is `generateText` with `{ type: 'image', image: dataUrl }` (images) or `{ type: 'file', data: buffer, mediaType: 'application/pdf' }` (scanned PDFs) against `MODELS.OCR`
 
 ### Security Layer
 
