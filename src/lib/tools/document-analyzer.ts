@@ -9,7 +9,8 @@
  * - Recommended next actions
  */
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
+import { MODELS } from '@/lib/config/models';
 
 export interface DocumentAnalysis {
   documentType: string;
@@ -91,8 +92,6 @@ export async function analyzeDocument(
   documentText: string,
   filename?: string
 ): Promise<DocumentAnalysis> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   // Truncate very long documents to stay within gpt-4o-mini's 128k context.
   // 60,000 chars (~15-20k tokens) ensures full tax returns and financial
   // statements are analyzed without truncation in most cases.
@@ -106,17 +105,17 @@ export async function analyzeDocument(
     : `Analiza el siguiente documento:\n\n${truncatedText}`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const result = await generateText({
+      model: MODELS.CHAT,
       messages: [
         { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.1,
-      max_tokens: 2000,
+      maxOutputTokens: 2000,
     });
 
-    const content = response.choices[0]?.message?.content?.trim();
+    const content = result.text?.trim();
     if (!content) {
       return fallbackAnalysis('No se obtuvo respuesta del modelo de analisis.');
     }

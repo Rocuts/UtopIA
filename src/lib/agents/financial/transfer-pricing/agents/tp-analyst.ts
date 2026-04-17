@@ -2,7 +2,7 @@
 // Agente 1: Analista de Precios de Transferencia
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildTPAnalystPrompt } from '../prompts/tp-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -24,7 +24,6 @@ export async function runTPAnalyst(
   instructions?: string,
   onProgress?: (event: TPProgressEvent) => void,
 ): Promise<TPAnalysisResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildTPAnalystPrompt(company, language);
 
   const userContent = [
@@ -43,21 +42,21 @@ export async function runTPAnalyst(
     detail: 'Evaluando obligatoriedad y caracterizando transacciones controladas...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'tp_analyst', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const sections = parseSections(fullContent);
 

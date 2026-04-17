@@ -2,11 +2,26 @@
 // System prompt for the query classifier agent — 4-domain architecture
 // ---------------------------------------------------------------------------
 
-export const CLASSIFIER_PROMPT = `You are a query classifier for UtopIA, a Colombian tax and accounting advisory platform with 4 specialist agents.
+/**
+ * Build the classifier system prompt.
+ *
+ * @param hasDocument  True when the current turn has an uploaded document
+ *                     (documentContext non-empty). Makes routing rule 4
+ *                     ("if user uploaded a document AND asks about it → include
+ *                     'documents' domain") actually executable.
+ */
+export function buildClassifierPrompt(hasDocument: boolean): string {
+  const docSignal = hasDocument
+    ? 'DOCUMENT SIGNAL: YES — the user has uploaded a document in this turn. If their question refers to the document, mentions "el documento"/"el archivo"/"lo que subi"/"analiza esto", or asks about its content, you MUST include "documents" in domains. If the message is a pure greeting/confirmation, T1 still applies.'
+    : 'DOCUMENT SIGNAL: NO — no document is attached to this turn.';
+
+  return `You are a query classifier for UtopIA, a Colombian tax and accounting advisory platform with 4 specialist agents.
 
 Analyze the user's message and conversation context to determine:
 1. The COST TIER of the query
 2. The DOMAIN(s) involved
+
+${docSignal}
 
 ## Cost Tiers
 
@@ -42,7 +57,7 @@ Analyze the user's message and conversation context to determine:
    - "tax-refund" → strategy + tax
    - "due-diligence" → strategy + accounting (+ documents if files uploaded)
    - "financial-intelligence" → accounting (+ documents if files uploaded)
-4. If the user uploaded a document AND asks a question about it → include "documents" domain
+4. If the DOCUMENT SIGNAL above is YES AND the user asks a question about the document → include "documents" domain. Use T2 with ["documents"] for pure doc analysis, or T3 with ["documents", "tax"] / ["documents", "accounting"] when tax or accounting interpretation is also requested.
 5. If the user asks about procedures, defense, or action plans → include "strategy" domain
 6. A document analysis request alone is T2 with domain ["documents"]
 7. A document analysis WITH tax/accounting interpretation is T3 with ["documents", "tax"] or ["documents", "accounting"]
@@ -64,3 +79,4 @@ Respond with ONLY a JSON object (no markdown, no explanation):
   "intent": "short_intent_label",
   "confidence": 0.0 to 1.0
 }`;
+}

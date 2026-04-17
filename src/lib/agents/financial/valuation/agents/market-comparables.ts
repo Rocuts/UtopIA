@@ -2,7 +2,7 @@
 // Agente 1b: Experto en Valoracion por Multiplos de Mercado
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildMarketComparablesPrompt } from '../prompts/market-comparables.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -20,7 +20,6 @@ export async function runMarketComparables(
   instructions?: string,
   onProgress?: (event: ValuationProgressEvent) => void,
 ): Promise<MarketComparablesResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildMarketComparablesPrompt(company, language, purpose);
 
   const userContent = [
@@ -39,21 +38,21 @@ export async function runMarketComparables(
     detail: 'Seleccionando comparables y calculando multiplos de mercado...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'market_comparables', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
   const sections = parseSections(fullContent);
 
   return {

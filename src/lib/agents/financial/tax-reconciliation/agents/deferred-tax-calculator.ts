@@ -2,7 +2,7 @@
 // Agente 2: Calculador de Impuesto Diferido (NIC 12)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildDeferredTaxCalculatorPrompt } from '../prompts/deferred-tax-calculator.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -24,7 +24,6 @@ export async function runDeferredTaxCalculator(
   language: 'es' | 'en',
   onProgress?: (event: TaxReconciliationProgressEvent) => void,
 ): Promise<DeferredTaxResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildDeferredTaxCalculatorPrompt(company, language);
 
   const userContent = [
@@ -39,21 +38,21 @@ export async function runDeferredTaxCalculator(
     detail: 'Calculando impuesto diferido y conciliando tasa efectiva...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'deferred_tax_calculator', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const sections = parseSections(fullContent);
 

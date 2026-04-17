@@ -2,7 +2,7 @@
 // Agente 1: Analista de Mercado (Market Research & Sectoral Analysis)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildMarketAnalystPrompt } from '../prompts/market-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -19,7 +19,6 @@ export async function runMarketAnalyst(
   instructions?: string,
   onProgress?: (event: FeasibilityProgressEvent) => void,
 ): Promise<MarketAnalysisResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildMarketAnalystPrompt(project, language);
 
   const userContent = [
@@ -34,21 +33,21 @@ export async function runMarketAnalyst(
 
   onProgress?.({ type: 'stage_progress', stage: 1, detail: 'Dimensionando mercado y analizando segmento objetivo...' });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'market_analyst', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const sections = parseSections(fullContent);
 

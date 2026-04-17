@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { generateText, stepCountIs, tool, type ModelMessage } from 'ai';
+import { z } from 'zod';
+import { MODELS } from '@/lib/config/models';
 import { redactPII, extractNITContext, type NITContext } from '@/lib/security/pii-filter';
 import { searchDocuments } from '@/lib/rag/vectorstore';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
@@ -11,6 +13,10 @@ import { chatRequestSchema } from '@/lib/validation/schemas';
 import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 import { orchestrate } from '@/lib/agents/orchestrator';
 import type { ProgressEvent } from '@/lib/agents/types';
+
+// Vercel Fluid Compute: explicit runtime + 300s ceiling for T3 parallel specialists + SSE
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -111,192 +117,18 @@ async function handleOrchestrated(
 }
 
 // ---------------------------------------------------------------------------
-// Legacy handler (original monolithic system — unchanged)
+// Legacy handler (original monolithic system — migrado a AI SDK v6)
+// ---------------------------------------------------------------------------
+//
+// Las definiciones de tools se construyen DENTRO del handler para poder cerrar
+// sobre el `documentContext` y los buffers de side-effects (`webSearchUsed`,
+// `webSources`, `riskAssessment`, `sanctionCalculation`) que se devuelven en
+// la respuesta final. El loop manual de tool-calls del handler legacy original
+// se reemplaza por `generateText({ tools, stopWhen: stepCountIs(MAX_TOOL_ROUNDS) })`,
+// patrón canónico de AI SDK v6 (ver node_modules/ai/docs/03-ai-sdk-core/15-tools-and-tool-calling.mdx).
 // ---------------------------------------------------------------------------
 
-// Tool definitions
-const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'search_tax_docs',
-      description:
-        'Search the LOCAL RAG knowledge base of Colombian tax regulations, DIAN doctrine, and accounting standards. ' +
-        'Covers: Estatuto Tributario, decretos reglamentarios, resoluciones DIAN, doctrina oficial, NIIF/IFRS, ' +
-        'normativa CTCP, procedimientos tributarios, sanciones, devoluciones, facturacion electronica. ' +
-        'ALWAYS use this tool FIRST before answering any tax or accounting question. You may call it multiple times with different queries.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'A specific search query to find relevant tax/accounting information. Be precise — e.g., "sancion por extemporaneidad Art. 641 E.T." or "reconocimiento ingresos NIIF 15".',
-          },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'search_web',
-      description:
-        'Search trusted Colombian tax and accounting sources on the internet ' +
-        '(dian.gov.co, secretariasenado.gov.co, ctcp.gov.co, actualicese.com, gerencie.com, etc.). ' +
-        'Use this tool AFTER search_tax_docs when: ' +
-        '(1) The local RAG database returned no results or insufficient information for the question, ' +
-        '(2) The user asks about a specific article, decree, resolution, or procedure NOT in the local database, ' +
-        '(3) The user asks about recent regulatory changes, DIAN updates, or current tax calendar, ' +
-        '(4) You need specific details like filing deadlines, UVT values, tax thresholds, or rate tables, ' +
-        '(5) The user asks about DIAN electronic systems, MUISCA, or procedural requirements.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'A precise search query about the tax/accounting topic. Include relevant legal terms, article numbers, or regulation names when possible. E.g., "calendario tributario DIAN 2026" or "requisitos devolucion saldo a favor IVA Art. 850 E.T.".',
-          },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'calculate_sanction',
-      description:
-        'Calculate Colombian tax sanctions and interest (moratorios). Use this tool when the user asks about: ' +
-        '(1) Sancion por extemporaneidad (Art. 641 E.T.) — late filing penalties, ' +
-        '(2) Sancion por correccion (Art. 644 E.T.) — penalties for amending a tax return, ' +
-        '(3) Sancion por inexactitud (Art. 647 E.T.) — penalties for inaccurate reporting, ' +
-        '(4) Intereses moratorios (Art. 634 E.T.) — late payment interest. ' +
-        'Also use when the user provides specific numbers (tax due, delay months, difference amounts) and wants to know the penalty. ' +
-        'UVT 2026 = $52,374 COP (Res. DIAN 000238 del 15-dic-2025). Minimum sanction = 10 UVT = $523,740 COP.',
-      parameters: {
-        type: 'object',
-        properties: {
-          type: {
-            type: 'string',
-            enum: ['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'],
-            description: 'Type of sanction to calculate.',
-          },
-          taxDue: { type: 'number', description: 'Impuesto a cargo (tax due amount in COP). Used for extemporaneidad calculation.' },
-          grossIncome: { type: 'number', description: 'Ingresos brutos (gross income in COP). Used for extemporaneidad when taxDue is 0.' },
-          difference: { type: 'number', description: 'Mayor valor a pagar / difference in tax (COP). Used for correccion and inexactitud.' },
-          delayMonths: { type: 'number', description: 'Meses de retraso (months of delay). Used for extemporaneidad.' },
-          isVoluntary: { type: 'boolean', description: 'Whether the correction is voluntary (before DIAN notice) or provoked. Default: true.' },
-          principal: { type: 'number', description: 'Capital amount for interest calculation (COP). Used for intereses_moratorios.' },
-          annualRate: { type: 'number', description: 'Annual interest rate (%). Default: 27.44% (tasa de usura aprox 2026).' },
-          days: { type: 'number', description: 'Days of late payment (dias de mora). Used for intereses_moratorios.' },
-        },
-        required: ['type'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'analyze_document',
-      description:
-        'Analyze an uploaded tax/accounting document to extract key information. Use this tool when: ' +
-        '(1) The user has uploaded a document and wants it analyzed, ' +
-        '(2) The user asks about the content of a previously uploaded document, ' +
-        '(3) The user wants to identify the type of a document (declaracion de renta, requerimiento DIAN, factura, etc.), ' +
-        '(4) The user wants to extract key financial figures from a document, ' +
-        '(5) The user wants to identify risks or inconsistencies in a document. ' +
-        'This tool uses the RAG knowledge base to retrieve the document text, then analyzes it.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'A search query to find the relevant uploaded document in the knowledge base. E.g., "declaracion de renta 2025" or the filename.' },
-          filename: { type: 'string', description: 'Optional: the name of the uploaded file to analyze.' },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'draft_dian_response',
-      description:
-        'Generate a professional draft response to a DIAN requirement (requerimiento). Use this tool when: ' +
-        '(1) The user needs to respond to a DIAN requerimiento ordinario, especial, o pliego de cargos, ' +
-        '(2) The user asks for help drafting a formal response to the DIAN, ' +
-        '(3) The user needs to prepare a written defense against a DIAN notice, ' +
-        '(4) The user needs a response template citing specific E.T. articles. ' +
-        'The generated draft follows official DIAN response format with header, body, evidence list, legal basis, and closing.',
-      parameters: {
-        type: 'object',
-        properties: {
-          requirementType: { type: 'string', description: 'Type of DIAN requirement: "Requerimiento Ordinario", "Requerimiento Especial", "Pliego de Cargos", "Emplazamiento para Declarar", "Emplazamiento para Corregir", "Liquidacion Oficial", etc.' },
-          requirementNumber: { type: 'string', description: 'DIAN requirement number (numero del requerimiento).' },
-          requirementDate: { type: 'string', description: 'Date of the DIAN requirement.' },
-          taxpayerName: { type: 'string', description: 'Full name of the taxpayer or company (contribuyente).' },
-          taxpayerNIT: { type: 'string', description: 'NIT of the taxpayer.' },
-          direccionSeccional: { type: 'string', description: 'DIAN Direccion Seccional (e.g., "Direccion Seccional de Impuestos de Bogota").' },
-          keyPoints: { type: 'array', items: { type: 'string' }, description: 'Key points that the DIAN is asking about and need to be addressed in the response.' },
-          relevantFacts: { type: 'array', items: { type: 'string' }, description: 'Relevant facts and circumstances of the case to include in the response.' },
-          supportingDocuments: { type: 'array', items: { type: 'string' }, description: 'List of supporting documents to reference as annexes.' },
-          additionalContext: { type: 'string', description: 'Any additional context relevant to drafting the response.' },
-        },
-        required: ['requirementType', 'taxpayerName', 'keyPoints', 'relevantFacts'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'assess_risk',
-      description:
-        'Perform a risk assessment of a Colombian tax case or situation. Use this tool when: ' +
-        '(1) The user asks about the risk level of their tax situation, ' +
-        '(2) The user is facing a DIAN requirement and wants to know how serious it is, ' +
-        '(3) The user wants an evaluation of potential sanctions or exposure, ' +
-        '(4) The conversation involves a tax dispute, audit, or compliance issue, ' +
-        '(5) The user asks "que tan grave es?" or "cual es el riesgo?" or similar risk questions. ' +
-        'Returns a risk level (bajo/medio/alto/critico), score (0-100), risk factors, and recommendations.',
-      parameters: {
-        type: 'object',
-        properties: {
-          caseDescription: {
-            type: 'string',
-            description: 'Detailed description of the tax case or situation to assess. Include: type of issue, amounts involved, time elapsed, actions taken, DIAN interactions, etc.',
-          },
-        },
-        required: ['caseDescription'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_tax_calendar',
-      description:
-        'Get the Colombian tax filing calendar personalized for a specific NIT. ' +
-        'Performs MULTIPLE targeted web searches to find EXACT filing dates for this taxpayer. ' +
-        'Use when: (1) User asks about tax calendar, filing deadlines, or "calendario tributario", ' +
-        '(2) User provides a NIT and wants personalized filing dates, ' +
-        '(3) User asks "cuándo debo declarar?" or "plazos" or deadline questions.',
-      parameters: {
-        type: 'object',
-        properties: {
-          nitLastDigit: { type: 'number', description: 'Last digit of the NIT number (0-9), BEFORE the check digit.' },
-          year: { type: 'number', description: 'Year for the tax calendar (e.g., 2026).' },
-          taxpayerType: {
-            type: 'string',
-            enum: ['persona_juridica', 'persona_natural', 'gran_contribuyente'],
-            description: 'Type of taxpayer.',
-          },
-          city: { type: 'string', description: 'Municipality/city for municipal tax obligations (ICA, predial, retención ICA).' },
-        },
-        required: ['nitLastDigit', 'year', 'taxpayerType'],
-      },
-    },
-  },
-];
+const MAX_TOOL_ROUNDS = 8;
 
 const USE_CASE_CONTEXT: Record<string, string> = {
   'dian-defense': `
@@ -479,11 +311,9 @@ ${useCaseContext}
 ${langInstruction}
 `;
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   // Build message list — inject uploaded document content so the AI always
   // has access to it, not only when it calls the analyze_document tool.
-  const docInjection: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  const docInjection: ModelMessage[] = [];
   if (documentContext && documentContext.trim()) {
     const DOC_PREVIEW_LIMIT = 30_000;
     const truncated = documentContext.length > DOC_PREVIEW_LIMIT;
@@ -505,135 +335,206 @@ ${langInstruction}
     });
   }
 
-  const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+  const fullMessages: ModelMessage[] = [
     { role: 'system', content: systemPrompt },
     ...docInjection,
-    ...messages,
+    ...messages.map((m) => ({ role: m.role, content: m.content }) as ModelMessage),
   ];
 
-  const MAX_TOOL_ROUNDS = 8;
-  let currentMessages = [...fullMessages];
+  // Side-effects acumulados durante el loop de tools — se exponen en la respuesta
+  // final para que el cliente pueda mostrar fuentes web, riesgo y cálculos.
   let webSearchUsed = false;
   const webSources: string[] = [];
   let riskAssessment: RiskAssessment | undefined;
   let sanctionCalculation: SanctionResult | undefined;
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: currentMessages,
-      tools: TOOLS,
-      tool_choice: 'auto',
+  // ---------------------------------------------------------------------------
+  // Tools — formato AI SDK v6. Mantenemos los MISMOS nombres que el systemPrompt
+  // legacy (search_tax_docs, etc.) para no romper las instrucciones del modelo.
+  // El loop de tool-calls lo maneja el SDK vía `stopWhen: stepCountIs(...)`.
+  // ---------------------------------------------------------------------------
+  const tools = {
+    search_tax_docs: tool({
+      description:
+        'Search the LOCAL RAG knowledge base of Colombian tax regulations, DIAN doctrine, and accounting standards. ' +
+        'Covers: Estatuto Tributario, decretos reglamentarios, resoluciones DIAN, doctrina oficial, NIIF/IFRS, ' +
+        'normativa CTCP, procedimientos tributarios, sanciones, devoluciones, facturacion electronica. ' +
+        'ALWAYS use this tool FIRST before answering any tax or accounting question. You may call it multiple times with different queries.',
+      inputSchema: z.object({
+        query: z.string().describe(
+          'A specific search query to find relevant tax/accounting information. Be precise — e.g., "sancion por extemporaneidad Art. 641 E.T." or "reconocimiento ingresos NIIF 15".',
+        ),
+      }),
+      execute: async ({ query }) => searchDocuments(query, 12),
+    }),
+
+    search_web: tool({
+      description:
+        'Search trusted Colombian tax and accounting sources on the internet ' +
+        '(dian.gov.co, secretariasenado.gov.co, ctcp.gov.co, actualicese.com, gerencie.com, etc.). ' +
+        'Use this tool AFTER search_tax_docs when: ' +
+        '(1) The local RAG database returned no results or insufficient information for the question, ' +
+        '(2) The user asks about a specific article, decree, resolution, or procedure NOT in the local database, ' +
+        '(3) The user asks about recent regulatory changes, DIAN updates, or current tax calendar, ' +
+        '(4) You need specific details like filing deadlines, UVT values, tax thresholds, or rate tables, ' +
+        '(5) The user asks about DIAN electronic systems, MUISCA, or procedural requirements.',
+      inputSchema: z.object({
+        query: z.string().describe(
+          'A precise search query about the tax/accounting topic. Include relevant legal terms, article numbers, or regulation names when possible. E.g., "calendario tributario DIAN 2026" or "requisitos devolucion saldo a favor IVA Art. 850 E.T.".',
+        ),
+      }),
+      execute: async ({ query }) => {
+        const searchResponse = await searchWeb(query);
+        const formatted = formatSearchResultsForLLM(searchResponse.results);
+        webSearchUsed = true;
+        for (const r of searchResponse.results) {
+          if (r.url) webSources.push(r.url);
+        }
+        return formatted || 'NO_RESULTS: No se encontraron resultados relevantes en fuentes web colombianas.';
+      },
+    }),
+
+    calculate_sanction: tool({
+      description:
+        'Calculate Colombian tax sanctions and interest (moratorios). Use this tool when the user asks about: ' +
+        '(1) Sancion por extemporaneidad (Art. 641 E.T.) — late filing penalties, ' +
+        '(2) Sancion por correccion (Art. 644 E.T.) — penalties for amending a tax return, ' +
+        '(3) Sancion por inexactitud (Art. 647 E.T.) — penalties for inaccurate reporting, ' +
+        '(4) Intereses moratorios (Art. 634 E.T.) — late payment interest. ' +
+        'Also use when the user provides specific numbers (tax due, delay months, difference amounts) and wants to know the penalty. ' +
+        'UVT 2026 = $52,374 COP (Res. DIAN 000238 del 15-dic-2025). Minimum sanction = 10 UVT = $523,740 COP.',
+      inputSchema: z.object({
+        type: z.enum(['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'])
+          .describe('Type of sanction to calculate.'),
+        taxDue: z.number().optional().describe('Impuesto a cargo (tax due amount in COP). Used for extemporaneidad calculation.'),
+        grossIncome: z.number().optional().describe('Ingresos brutos (gross income in COP). Used for extemporaneidad when taxDue is 0.'),
+        difference: z.number().optional().describe('Mayor valor a pagar / difference in tax (COP). Used for correccion and inexactitud.'),
+        delayMonths: z.number().optional().describe('Meses de retraso (months of delay). Used for extemporaneidad.'),
+        isVoluntary: z.boolean().optional().describe('Whether the correction is voluntary (before DIAN notice) or provoked. Default: true.'),
+        principal: z.number().optional().describe('Capital amount for interest calculation (COP). Used for intereses_moratorios.'),
+        annualRate: z.number().optional().describe('Annual interest rate (%). Default: 27.44% (tasa de usura aprox 2026).'),
+        days: z.number().optional().describe('Days of late payment (dias de mora). Used for intereses_moratorios.'),
+      }),
+      execute: async (args) => {
+        const result = calculateSanction(args as unknown as SanctionCalculation);
+        sanctionCalculation = result;
+        return JSON.stringify(result, null, 2);
+      },
+    }),
+
+    analyze_document: tool({
+      description:
+        'Analyze an uploaded tax/accounting document to extract key information. Use this tool when: ' +
+        '(1) The user has uploaded a document and wants it analyzed, ' +
+        '(2) The user asks about the content of a previously uploaded document, ' +
+        '(3) The user wants to identify the type of a document (declaracion de renta, requerimiento DIAN, factura, etc.), ' +
+        '(4) The user wants to extract key financial figures from a document, ' +
+        '(5) The user wants to identify risks or inconsistencies in a document. ' +
+        'This tool uses the RAG knowledge base to retrieve the document text, then analyzes it.',
+      inputSchema: z.object({
+        query: z.string().describe(
+          'A search query to find the relevant uploaded document in the knowledge base. E.g., "declaracion de renta 2025" or the filename.',
+        ),
+        filename: z.string().optional().describe('Optional: the name of the uploaded file to analyze.'),
+      }),
+      execute: async ({ query, filename }) => {
+        const docText = documentContext || (await searchDocuments(query, 8, { type: 'user_upload' }));
+        const analysis = await analyzeDocument(docText, filename);
+        return JSON.stringify(analysis, null, 2);
+      },
+    }),
+
+    draft_dian_response: tool({
+      description:
+        'Generate a professional draft response to a DIAN requirement (requerimiento). Use this tool when: ' +
+        '(1) The user needs to respond to a DIAN requerimiento ordinario, especial, o pliego de cargos, ' +
+        '(2) The user asks for help drafting a formal response to the DIAN, ' +
+        '(3) The user needs to prepare a written defense against a DIAN notice, ' +
+        '(4) The user needs a response template citing specific E.T. articles. ' +
+        'The generated draft follows official DIAN response format with header, body, evidence list, legal basis, and closing.',
+      inputSchema: z.object({
+        requirementType: z.string().describe('Type of DIAN requirement: "Requerimiento Ordinario", "Requerimiento Especial", "Pliego de Cargos", "Emplazamiento para Declarar", "Emplazamiento para Corregir", "Liquidacion Oficial", etc.'),
+        requirementNumber: z.string().optional().describe('DIAN requirement number (numero del requerimiento).'),
+        requirementDate: z.string().optional().describe('Date of the DIAN requirement.'),
+        taxpayerName: z.string().describe('Full name of the taxpayer or company (contribuyente).'),
+        taxpayerNIT: z.string().optional().describe('NIT of the taxpayer.'),
+        direccionSeccional: z.string().optional().describe('DIAN Direccion Seccional (e.g., "Direccion Seccional de Impuestos de Bogota").'),
+        keyPoints: z.array(z.string()).describe('Key points that the DIAN is asking about and need to be addressed in the response.'),
+        relevantFacts: z.array(z.string()).describe('Relevant facts and circumstances of the case to include in the response.'),
+        supportingDocuments: z.array(z.string()).optional().describe('List of supporting documents to reference as annexes.'),
+        additionalContext: z.string().optional().describe('Any additional context relevant to drafting the response.'),
+      }),
+      execute: async (args) => {
+        const draft = await generateDianResponse(args as unknown as DianResponseRequest);
+        return JSON.stringify(draft, null, 2);
+      },
+    }),
+
+    assess_risk: tool({
+      description:
+        'Perform a risk assessment of a Colombian tax case or situation. Use this tool when: ' +
+        '(1) The user asks about the risk level of their tax situation, ' +
+        '(2) The user is facing a DIAN requirement and wants to know how serious it is, ' +
+        '(3) The user wants an evaluation of potential sanctions or exposure, ' +
+        '(4) The conversation involves a tax dispute, audit, or compliance issue, ' +
+        '(5) The user asks "que tan grave es?" or "cual es el riesgo?" or similar risk questions. ' +
+        'Returns a risk level (bajo/medio/alto/critico), score (0-100), risk factors, and recommendations.',
+      inputSchema: z.object({
+        caseDescription: z.string().describe(
+          'Detailed description of the tax case or situation to assess. Include: type of issue, amounts involved, time elapsed, actions taken, DIAN interactions, etc.',
+        ),
+      }),
+      execute: async ({ caseDescription }) => {
+        const assessment = await assessRisk(caseDescription);
+        riskAssessment = assessment;
+        return JSON.stringify(assessment, null, 2);
+      },
+    }),
+
+    get_tax_calendar: tool({
+      description:
+        'Get the Colombian tax filing calendar personalized for a specific NIT. ' +
+        'Performs MULTIPLE targeted web searches to find EXACT filing dates for this taxpayer. ' +
+        'Use when: (1) User asks about tax calendar, filing deadlines, or "calendario tributario", ' +
+        '(2) User provides a NIT and wants personalized filing dates, ' +
+        '(3) User asks "cuándo debo declarar?" or "plazos" or deadline questions.',
+      inputSchema: z.object({
+        nitLastDigit: z.number().describe('Last digit of the NIT number (0-9), BEFORE the check digit.'),
+        year: z.number().describe('Year for the tax calendar (e.g., 2026).'),
+        taxpayerType: z.enum(['persona_juridica', 'persona_natural', 'gran_contribuyente']).describe('Type of taxpayer.'),
+        city: z.string().optional().describe('Municipality/city for municipal tax obligations (ICA, predial, retención ICA).'),
+      }),
+      execute: async ({ nitLastDigit, year, taxpayerType, city }) => {
+        const calendarResult = await getTaxCalendar(nitLastDigit, year, taxpayerType, city);
+        webSearchUsed = true;
+        return JSON.stringify(calendarResult, null, 2);
+      },
+    }),
+  };
+
+  // Loop nativo de tool-calling de AI SDK v6: hasta MAX_TOOL_ROUNDS pasos.
+  // Si el modelo emite una herramienta no listada o args inválidos, el SDK
+  // alimenta automáticamente el error de vuelta para que el modelo se recupere.
+  let result;
+  try {
+    result = await generateText({
+      model: MODELS.CHAT,
+      messages: fullMessages,
+      tools,
+      stopWhen: stepCountIs(MAX_TOOL_ROUNDS),
       temperature: 0.1,
     });
-
-    const choice = response.choices[0];
-
-    if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-      currentMessages.push(choice.message);
-
-      for (const toolCall of choice.message.tool_calls) {
-        if (toolCall.type !== 'function') continue;
-
-        let args: Record<string, unknown>;
-        try {
-          args = JSON.parse(toolCall.function.arguments);
-        } catch {
-          currentMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: 'Error: Invalid tool arguments. Please try again with valid JSON.',
-          });
-          continue;
-        }
-
-        try {
-          if (toolCall.function.name === 'search_tax_docs') {
-            const context = await searchDocuments(args.query as string, 12);
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: context });
-          } else if (toolCall.function.name === 'search_web') {
-            const searchResponse = await searchWeb(args.query as string);
-            const formatted = formatSearchResultsForLLM(searchResponse.results);
-            webSearchUsed = true;
-            for (const r of searchResponse.results) {
-              if (r.url) webSources.push(r.url);
-            }
-            currentMessages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: formatted || 'NO_RESULTS: No se encontraron resultados relevantes en fuentes web colombianas.',
-            });
-          } else if (toolCall.function.name === 'calculate_sanction') {
-            const result = calculateSanction(args as unknown as SanctionCalculation);
-            sanctionCalculation = result;
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result, null, 2) });
-          } else if (toolCall.function.name === 'analyze_document') {
-            let docText: string;
-            if (documentContext) {
-              docText = documentContext;
-            } else {
-              docText = await searchDocuments(args.query as string, 8, { type: 'user_upload' });
-            }
-            const analysis = await analyzeDocument(docText, args.filename as string | undefined);
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(analysis, null, 2) });
-          } else if (toolCall.function.name === 'draft_dian_response') {
-            const draft = await generateDianResponse(args as unknown as DianResponseRequest);
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(draft, null, 2) });
-          } else if (toolCall.function.name === 'assess_risk') {
-            const assessment = await assessRisk(args.caseDescription as string);
-            riskAssessment = assessment;
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(assessment, null, 2) });
-          } else if (toolCall.function.name === 'get_tax_calendar') {
-            const calendarResult = await getTaxCalendar(
-              args.nitLastDigit as number,
-              args.year as number,
-              args.taxpayerType as 'persona_juridica' | 'persona_natural' | 'gran_contribuyente',
-              args.city as string | undefined,
-            );
-            webSearchUsed = true;
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(calendarResult, null, 2) });
-          } else {
-            currentMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: `Unknown tool: ${toolCall.function.name}` });
-          }
-        } catch {
-          currentMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: `Error al ejecutar ${toolCall.function.name}. Informa al usuario que hubo un problema técnico.`,
-          });
-        }
-      }
-      continue;
-    }
-
-    return NextResponse.json({
-      role: 'assistant',
-      content: choice.message.content,
-      webSearchUsed,
-      webSources: webSearchUsed ? [...new Set(webSources)] : undefined,
-      riskAssessment: riskAssessment
-        ? {
-            level: riskAssessment.level,
-            score: riskAssessment.score,
-            factors: riskAssessment.factors.map((f) => ({ description: f.description, severity: f.severity })),
-            recommendations: riskAssessment.recommendations,
-          }
-        : undefined,
-      sanctionCalculation: sanctionCalculation
-        ? { amount: sanctionCalculation.amount, formula: sanctionCalculation.formula, article: sanctionCalculation.article, explanation: sanctionCalculation.explanation }
-        : undefined,
-    });
+  } catch (err) {
+    console.error('[chat] generateText error (legacy):', err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      { error: 'Internal server error during consultation.' },
+      { status: 500 },
+    );
   }
-
-  const finalResponse = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: currentMessages,
-    temperature: 0.1,
-  });
 
   return NextResponse.json({
     role: 'assistant',
-    content: finalResponse.choices[0].message.content,
+    content: result.text || '',
     webSearchUsed,
     webSources: webSearchUsed ? [...new Set(webSources)] : undefined,
     riskAssessment: riskAssessment

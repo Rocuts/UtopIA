@@ -2,7 +2,7 @@
 // Agente 1a: Modelador de Flujo de Caja Descontado (DCF)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildDcfModelerPrompt } from '../prompts/dcf-modeler.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -20,7 +20,6 @@ export async function runDcfModeler(
   instructions?: string,
   onProgress?: (event: ValuationProgressEvent) => void,
 ): Promise<DcfModelResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildDcfModelerPrompt(company, language, purpose);
 
   const userContent = [
@@ -39,21 +38,21 @@ export async function runDcfModeler(
     detail: 'Construyendo proyecciones de flujo de caja libre y calculando WACC...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'dcf_modeler', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
   const sections = parseSections(fullContent);
 
   return {

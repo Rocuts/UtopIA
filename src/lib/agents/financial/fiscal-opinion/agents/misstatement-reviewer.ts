@@ -2,7 +2,7 @@
 // Revisor de Incorrecciones Materiales (NIA 315/320/330/450)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildMisstatementReviewerPrompt } from '../prompts/misstatement-reviewer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -21,29 +21,27 @@ export async function runMisstatementReviewer(
   language: 'es' | 'en',
   onProgress?: (event: FiscalOpinionProgressEvent) => void,
 ): Promise<MisstatementResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   onProgress?.({
     type: 'evaluator_progress',
     domain: 'incorrecciones',
     detail: 'Calculando materialidad y evaluando incorrecciones (NIA 320/450)...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildMisstatementReviewerPrompt(company, language) },
           { role: 'user', content: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}` },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'misstatement_reviewer', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const materiality = parseMateriality(fullContent);
   const misstatements = parseMisstatements(fullContent);

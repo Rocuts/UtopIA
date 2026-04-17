@@ -4,7 +4,7 @@
 // Flow: classify -> (T1: direct | T2/T3: enhance -> route -> [synthesize])
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText, streamText } from 'ai';
 import { classifyQuery } from './classifier';
 import { enhancePrompt } from './prompt-enhancer';
 import { synthesizeResponses } from './synthesizer';
@@ -12,6 +12,7 @@ import { taxAgent } from './specialists/tax-agent';
 import { accountingAgent } from './specialists/accounting-agent';
 import { documentAgent } from './specialists/document-agent';
 import { strategyAgent } from './specialists/strategy-agent';
+import { MODELS } from '@/lib/config/models';
 import type {
   OrchestrateOptions,
   OrchestrateResult,
@@ -32,6 +33,36 @@ const SPECIALISTS = {
   strategy: strategyAgent,
 } as const;
 
+// Mismo limite que base-agent.ts — mantener en sincronia.
+const DOC_PREVIEW_LIMIT = 80_000;
+
+/**
+ * Construye el mensaje system con el documento cargado por el usuario.
+ * Formato identico al de BaseSpecialist para que T1/T2/T3 vean el mismo shape.
+ * Devuelve null si no hay documento.
+ */
+function buildDocInjectionMessage(
+  documentContext: string | undefined,
+): { role: 'system'; content: string } | null {
+  if (!documentContext || !documentContext.trim()) return null;
+  const truncated = documentContext.length > DOC_PREVIEW_LIMIT;
+  const preview = truncated
+    ? documentContext.slice(0, DOC_PREVIEW_LIMIT)
+    : documentContext;
+  return {
+    role: 'system',
+    content:
+      'DOCUMENTO CARGADO POR EL USUARIO — CONTENIDO EXTRAIDO:\n' +
+      'El usuario ha subido un documento. A continuacion se encuentra el texto extraido. ' +
+      'DEBES usar esta informacion para responder cualquier pregunta sobre el documento. ' +
+      'Para un analisis estructurado (cifras, riesgos, articulos), usa analyze_document.\n\n' +
+      preview +
+      (truncated
+        ? '\n\n[... documento truncado. Usa analyze_document para el analisis completo ...]'
+        : ''),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // T1: Direct lightweight response (no specialist needed)
 // ---------------------------------------------------------------------------
@@ -39,11 +70,10 @@ const SPECIALISTS = {
 async function handleT1(
   messages: ChatMessage[],
   language: 'es' | 'en',
+  documentContext: string | undefined,
   onStreamToken?: (delta: string) => void,
   abortSignal?: AbortSignal,
 ): Promise<OrchestrateResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   const langInstruction = language === 'en'
     ? 'Respond in English.'
     : 'Responde en espanol.';
@@ -57,24 +87,25 @@ If the user asks what you can do, briefly describe your 4 specialist capabilitie
 3. **Documental**: Analisis de documentos subidos — declaraciones, requerimientos, estados financieros, facturas
 4. **Estrategia**: Defensa ante DIAN, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones`;
 
+  // Inyectar el documento si existe, usando el mismo shape que BaseSpecialist.
+  const docMsg = buildDocInjectionMessage(documentContext);
+  const baseMessages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...(docMsg ? [docMsg] : []),
+    ...messages.slice(-6),
+  ];
+
   if (onStreamToken) {
-    const streamResp = await openai.chat.completions.create(
-      {
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.slice(-6),
-        ],
-        temperature: 0.3,
-        max_tokens: 500,
-        stream: true,
-      },
-      { signal: abortSignal },
-    );
+    const stream = streamText({
+      model: MODELS.CHAT,
+      messages: baseMessages,
+      temperature: 0.3,
+      maxOutputTokens: 500,
+      abortSignal,
+    });
     let acc = '';
-    for await (const chunk of streamResp) {
+    for await (const delta of stream.textStream) {
       abortSignal?.throwIfAborted?.();
-      const delta = chunk.choices[0]?.delta?.content;
       if (delta) {
         acc += delta;
         onStreamToken(delta);
@@ -89,22 +120,17 @@ If the user asks what you can do, briefly describe your 4 specialist capabilitie
     };
   }
 
-  const response = await openai.chat.completions.create(
-    {
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages.slice(-6),
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-    },
-    { signal: abortSignal },
-  );
+  const { text } = await generateText({
+    model: MODELS.CHAT,
+    messages: baseMessages,
+    temperature: 0.3,
+    maxOutputTokens: 500,
+    abortSignal,
+  });
 
   return {
     role: 'assistant',
-    content: response.choices[0].message.content || '',
+    content: text || '',
     tier: 'T1',
     agentsUsed: [],
     webSearchUsed: false,
@@ -136,17 +162,22 @@ export async function orchestrate(
     content: m.content,
   }));
 
+  // Senal booleana de "hay documento cargado este turno". Se deriva aqui y
+  // se propaga al classifier (regla 4 del prompt) y a handleT1 (inyeccion
+  // del texto extraido con el mismo shape que BaseSpecialist).
+  const hasDocument = !!documentContext?.trim();
+
   // -----------------------------------------------------------------------
   // Step 1: Classify the query
   // -----------------------------------------------------------------------
   onProgress?.({ type: 'classifying' });
-  const classification = await classifyQuery(lastMessage, conversationHistory, useCase);
+  const classification = await classifyQuery(lastMessage, conversationHistory, useCase, hasDocument);
 
   // -----------------------------------------------------------------------
   // Step 2: T1 — Direct response (cheap, fast) — streams directly
   // -----------------------------------------------------------------------
   if (classification.tier === 'T1') {
-    const result = await handleT1(messages, language, onStreamToken, abortSignal);
+    const result = await handleT1(messages, language, documentContext, onStreamToken, abortSignal);
     onProgress?.({ type: 'done' });
     return result;
   }

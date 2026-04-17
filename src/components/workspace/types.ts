@@ -42,6 +42,8 @@ export interface ChatMessage {
   errorKind?: 'network' | 'timeout' | 'rate_limit' | 'server' | 'unknown';
   /** Callback for the inline Retry button on error messages */
   onRetry?: () => void;
+  /** UI-only meta. `upload-notice` messages are rendered but filtered from the /api/chat payload. */
+  meta?: 'upload-notice';
 }
 
 export interface LegalReference {

@@ -2,7 +2,7 @@
 // Agente 3: Evaluador de Riesgos (Risk Assessment & Go/No-Go)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildRiskAssessorPrompt } from '../prompts/risk-assessor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -25,7 +25,6 @@ export async function runRiskAssessor(
   language: 'es' | 'en',
   onProgress?: (event: FeasibilityProgressEvent) => void,
 ): Promise<RiskAssessmentResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildRiskAssessorPrompt(project, language);
 
   const userContent = [
@@ -40,21 +39,21 @@ export async function runRiskAssessor(
 
   onProgress?.({ type: 'stage_progress', stage: 3, detail: 'Evaluando riesgos y construyendo matriz probabilidad-impacto...' });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'risk_assessor', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const sections = parseSections(fullContent);
 

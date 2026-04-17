@@ -2,7 +2,7 @@
 // Agente 1: Analista Contable NIIF (Data & Structuring)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildNiifAnalystPrompt } from '../prompts/niif-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -18,7 +18,6 @@ export async function runNiifAnalyst(
   instructions?: string,
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<NiifAnalysisResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildNiifAnalystPrompt(company, language);
 
   const userContent = [
@@ -33,21 +32,21 @@ export async function runNiifAnalyst(
 
   onProgress?.({ type: 'stage_progress', stage: 1, detail: 'Clasificando cuentas y mapeando estructura NIIF...' });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'niif_analyst', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   // Parse sections from the Markdown output
   const sections = parseSections(fullContent);

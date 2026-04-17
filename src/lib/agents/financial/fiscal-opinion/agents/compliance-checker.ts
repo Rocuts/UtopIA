@@ -2,7 +2,7 @@
 // Verificador de Cumplimiento Estatutario (Art. 207 C.Co.)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildComplianceCheckerPrompt } from '../prompts/compliance-checker.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -21,29 +21,27 @@ export async function runComplianceChecker(
   language: 'es' | 'en',
   onProgress?: (event: FiscalOpinionProgressEvent) => void,
 ): Promise<ComplianceResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   onProgress?.({
     type: 'evaluator_progress',
     domain: 'cumplimiento',
     detail: 'Verificando cumplimiento estatutario (Art. 207 C.Co.)...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildComplianceCheckerPrompt(company, language) },
           { role: 'user', content: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}` },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'compliance_checker', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const statutoryFunctions = parseStatutoryFunctions(fullContent);
   const regulatoryItems = parseRegulatoryItems(fullContent);

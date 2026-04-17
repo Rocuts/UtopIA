@@ -2,7 +2,7 @@
 // Auditor de Revisoria Fiscal — statutory auditor / ISA perspective
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildFiscalReviewerPrompt } from '../prompts/fiscal-reviewer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -15,25 +15,23 @@ export async function runFiscalReviewer(
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
 ): Promise<AuditorResult & { opinionType: AuditOpinionType; dictamen: string }> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   onProgress?.({ type: 'auditor_progress', domain: 'revisoria', detail: 'Evaluando razonabilidad y materialidad (NIA/ISA)...' });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildFiscalReviewerPrompt(company, language) },
           { role: 'user', content: `REPORTE FINANCIERO COMPLETO A AUDITAR:\n\n${reportContent}` },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'fiscal_reviewer', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
   const { score, findings, summary } = parseAuditorOutput(fullContent, 'revisoria');
   const opinionType = parseOpinionType(fullContent);
   const dictamen = parseDictamen(fullContent);

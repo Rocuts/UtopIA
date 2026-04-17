@@ -45,6 +45,8 @@ import {
   saveConversation,
   generateConversationId,
   inferTitle,
+  loadConversationDocs,
+  saveConversationDocs,
 } from '@/lib/storage/conversation-history';
 import type {
   ChatMessage,
@@ -932,8 +934,20 @@ export function ChatWorkspace({
   const [voiceMode, setVoiceMode] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
-  const [documentContext, setDocumentContext] = useState('');
+  // Documentos subidos en esta conversación (persistidos en localStorage por conversationId).
+  // El initializer corre una sola vez por mount; al cambiar de conversación en el sidebar,
+  // `key={activeCase}` fuerza remount y se vuelve a ejecutar con el id nuevo.
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>(() => {
+    const stored = loadConversationDocs(externalConversationId);
+    return stored as UploadedDocument[];
+  });
+  const [documentContext, setDocumentContext] = useState(() => {
+    const stored = loadConversationDocs(externalConversationId);
+    return stored
+      .filter((d) => d.extractedText)
+      .map((d) => d.extractedText)
+      .join('\n\n');
+  });
   const [progressStatus, setProgressStatus] = useState<string | undefined>(undefined);
   /** id of the message currently being streamed from the server (if any) */
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -1065,7 +1079,9 @@ export function ChatWorkspace({
       } catch { /* ignore malformed data */ }
 
       const payload = {
-        messages: allMessages.map(m => ({ id: m.id, role: m.role, content: m.content })),
+        messages: allMessages
+          .filter(m => m.meta !== 'upload-notice')
+          .map(m => ({ id: m.id, role: m.role, content: m.content })),
         language, useCase,
         ...(documentContext ? { documentContext } : {}),
         ...(erpConnections.length > 0 ? { erpConnections } : {}),
@@ -1342,7 +1358,12 @@ export function ChatWorkspace({
   const uploadFile = async (file: File) => {
     setIsUploading(true);
     const newDoc: UploadedDocument = { filename: file.name, size: file.size, chunks: 0, uploadedAt: new Date().toISOString() };
-    setUploadedDocs(prev => [...prev, newDoc]);
+    setUploadedDocs(prev => {
+      const next = [...prev, newDoc];
+      // No persistimos aún: el doc todavía no tiene texto y el backend
+      // podría fallar. Guardaremos cuando llegue la respuesta.
+      return next;
+    });
     const formData = new FormData();
     formData.append('file', file);
     formData.append('context', file.name);
@@ -1355,6 +1376,9 @@ export function ChatWorkspace({
       setUploadedDocs(prev => {
         const updated = prev.map(d => d.filename === file.name && d.uploadedAt === newDoc.uploadedAt ? finishedDoc : d);
         setDocumentContext(updated.filter(d => d.extractedText).map(d => d.extractedText).join('\n\n'));
+        // Persistir la lista final (con extractedText) para que sobreviva
+        // a recargas y cambios de conversación.
+        saveConversationDocs(conversationId, updated);
         return updated;
       });
       onDocumentUploaded?.(finishedDoc);
@@ -1364,9 +1388,15 @@ export function ChatWorkspace({
           ? `He procesado su documento **"${file.name}"** (${data.chunks} fragmentos). Ahora puedo responder preguntas basadas en su contenido.`
           : `I've processed your document **"${file.name}"** (${data.chunks} chunks). I can now answer questions based on its content.`,
         timestamp: new Date().toISOString(),
+        meta: 'upload-notice',
       }]);
     } catch {
-      setUploadedDocs(prev => prev.filter(d => d.uploadedAt !== newDoc.uploadedAt));
+      setUploadedDocs(prev => {
+        const next = prev.filter(d => d.uploadedAt !== newDoc.uploadedAt);
+        // Mantener el almacenamiento sincronizado tras el rollback.
+        saveConversationDocs(conversationId, next);
+        return next;
+      });
       setMessages(prev => [...prev, {
         id: generateId(), role: 'assistant',
         content: language === 'es'
@@ -1383,6 +1413,7 @@ export function ChatWorkspace({
     setUploadedDocs(prev => {
       const remaining = prev.filter(d => d.filename !== filename);
       setDocumentContext(remaining.filter(d => d.extractedText).map(d => d.extractedText).join('\n\n'));
+      saveConversationDocs(conversationId, remaining);
       return remaining;
     });
   };

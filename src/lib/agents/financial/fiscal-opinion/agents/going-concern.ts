@@ -2,7 +2,7 @@
 // Evaluador de Empresa en Marcha (NIA 570)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildGoingConcernPrompt } from '../prompts/going-concern.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -20,29 +20,27 @@ export async function runGoingConcernEvaluator(
   language: 'es' | 'en',
   onProgress?: (event: FiscalOpinionProgressEvent) => void,
 ): Promise<GoingConcernResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   onProgress?.({
     type: 'evaluator_progress',
     domain: 'empresa_en_marcha',
     detail: 'Evaluando hipotesis de empresa en marcha (NIA 570)...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildGoingConcernPrompt(company, language) },
           { role: 'user', content: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}` },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'going_concern_evaluator', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   return {
     assessment: parseAssessment(fullContent),

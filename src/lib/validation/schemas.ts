@@ -13,7 +13,21 @@ export const chatRequestSchema = z.object({
     .max(50, 'Too many messages in conversation'),
   language: z.enum(['es', 'en']).default('es'),
   useCase: z
-    .enum(['dian-defense', 'tax-refund', 'due-diligence', 'financial-intelligence', 'financial-report', ''])
+    .enum([
+      'dian-defense',
+      'tax-refund',
+      'due-diligence',
+      'financial-intelligence',
+      'financial-report',
+      'tax-planning',
+      'transfer-pricing',
+      'business-valuation',
+      'fiscal-audit-opinion',
+      'tax-reconciliation',
+      'feasibility-study',
+      'general',
+      '',
+    ])
     .default(''),
   /** Optional full document text passed from the upload flow for direct analysis. */
   documentContext: z.string().max(100_000).optional(),
@@ -65,7 +79,9 @@ export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp', '.heic',
 ]);
 
-export const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
+// Vercel Functions rechaza bodies >4.5MB con un 413 de plataforma antes
+// de que la ruta se ejecute. Mantenemos 4MB hasta migrar a Vercel Blob.
+export const MAX_UPLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
 
 // ---- Financial report route ----
 export const companyInfoSchema = z.object({

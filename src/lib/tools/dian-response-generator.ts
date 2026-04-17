@@ -5,7 +5,8 @@
  * Follows Colombian tax procedure conventions and DIAN format requirements.
  */
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
+import { MODELS } from '@/lib/config/models';
 
 export interface DianResponseRequest {
   requirementType: string;
@@ -77,22 +78,20 @@ REGLAS:
 export async function generateDianResponse(
   request: DianResponseRequest
 ): Promise<DianResponseDraft> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   const userPrompt = buildPromptFromRequest(request);
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const result = await generateText({
+      model: MODELS.CHAT,
       messages: [
         { role: 'system', content: GENERATION_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.2,
-      max_tokens: 3000,
+      maxOutputTokens: 3000,
     });
 
-    const content = response.choices[0]?.message?.content?.trim();
+    const content = result.text?.trim();
     if (!content) {
       return fallbackDraft(request, 'No se obtuvo respuesta del modelo.');
     }

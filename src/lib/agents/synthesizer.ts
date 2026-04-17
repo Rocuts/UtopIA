@@ -2,9 +2,10 @@
 // Synthesizer — merges outputs from multiple specialist agents (T3 only)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText, streamText } from 'ai';
 import { buildSynthesizerPrompt } from '@/lib/agents/prompts/synthesizer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { MODELS } from '@/lib/config/models';
 import type { SpecialistResult } from '@/lib/agents/types';
 
 interface SynthesisInput {
@@ -37,34 +38,35 @@ export async function synthesizeResponses(input: SynthesisInput): Promise<string
     .map((so) => `[${so.agent.toUpperCase()}]:\n${so.result.content}`)
     .join('\n\n---\n\n');
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const messages = [
+    { role: 'system' as const, content: buildSynthesizerPrompt(language) },
+    {
+      role: 'user' as const,
+      content: `Original user query: ${originalQuery}\n\nSpecialist outputs:\n\n${blocks}`,
+    },
+  ];
 
   try {
     if (onStreamToken) {
-      const streamResp = await withRetry(
+      // withRetry solo protege la conexion inicial — si el stream falla a medio
+      // camino no reintentamos para no duplicar tokens al cliente. Mismo
+      // comportamiento que el codigo OpenAI SDK previo.
+      const stream = await withRetry(
         () =>
-          openai.chat.completions.create(
-            {
-              model: 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: buildSynthesizerPrompt(language) },
-                {
-                  role: 'user',
-                  content: `Original user query: ${originalQuery}\n\nSpecialist outputs:\n\n${blocks}`,
-                },
-              ],
+          Promise.resolve(
+            streamText({
+              model: MODELS.SYNTHESIZER,
+              messages,
               temperature: 0.1,
-              max_tokens: 4096,
-              stream: true,
-            },
-            { signal: abortSignal },
+              maxOutputTokens: 4096,
+              abortSignal,
+            }),
           ),
         { label: 'synthesizer_stream', maxAttempts: 2, signal: abortSignal },
       );
       let acc = '';
-      for await (const chunk of streamResp) {
+      for await (const delta of stream.textStream) {
         abortSignal?.throwIfAborted?.();
-        const delta = chunk.choices[0]?.delta?.content;
         if (delta) {
           acc += delta;
           onStreamToken(delta);
@@ -73,27 +75,19 @@ export async function synthesizeResponses(input: SynthesisInput): Promise<string
       return acc;
     }
 
-    const response = await withRetry(
+    const { text } = await withRetry(
       () =>
-        openai.chat.completions.create(
-          {
-            model: 'gpt-4o-mini',
-            messages: [
-              { role: 'system', content: buildSynthesizerPrompt(language) },
-              {
-                role: 'user',
-                content: `Original user query: ${originalQuery}\n\nSpecialist outputs:\n\n${blocks}`,
-              },
-            ],
-            temperature: 0.1,
-            max_tokens: 4096,
-          },
-          { signal: abortSignal },
-        ),
+        generateText({
+          model: MODELS.SYNTHESIZER,
+          messages,
+          temperature: 0.1,
+          maxOutputTokens: 4096,
+          abortSignal,
+        }),
       { label: 'synthesizer', maxAttempts: 2, signal: abortSignal },
     );
 
-    return response.choices[0].message.content || '';
+    return text || '';
   } catch (error) {
     console.warn('[synthesizer] Failed after retries:', error instanceof Error ? error.message : error);
     // Fallback: concatenate outputs with headers instead of failing entirely

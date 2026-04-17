@@ -2,7 +2,7 @@
 // Auditor Legal/Societario — validates corporate governance docs
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildLegalAuditorPrompt } from '../prompts/legal-auditor.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -15,25 +15,23 @@ export async function runLegalAuditor(
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
 ): Promise<AuditorResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   onProgress?.({ type: 'auditor_progress', domain: 'legal', detail: 'Validando documentos de gobierno corporativo...' });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildLegalAuditorPrompt(company, language) },
           { role: 'user', content: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}` },
         ],
         temperature: 0.05,
-        max_tokens: 6144,
+        maxOutputTokens: 6144,
       }),
     { label: 'legal_auditor', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
   const { score, findings, summary } = parseAuditorOutput(fullContent, 'legal');
 
   return {

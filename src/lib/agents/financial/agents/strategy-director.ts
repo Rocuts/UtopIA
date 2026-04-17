@@ -2,7 +2,7 @@
 // Agente 2: Director de Estrategia Financiera (KPIs & Projections)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildStrategyDirectorPrompt } from '../prompts/strategy-director.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -23,7 +23,6 @@ export async function runStrategyDirector(
   language: 'es' | 'en',
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<StrategicAnalysisResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildStrategyDirectorPrompt(company, language);
 
   const userContent = [
@@ -34,21 +33,21 @@ export async function runStrategyDirector(
 
   onProgress?.({ type: 'stage_progress', stage: 2, detail: 'Calculando KPIs y punto de equilibrio...' });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.1,
-        max_tokens: 6144,
+        maxOutputTokens: 6144,
       }),
     { label: 'strategy_director', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   const sections = parseSections(fullContent);
 

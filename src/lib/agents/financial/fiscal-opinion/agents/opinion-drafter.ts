@@ -2,7 +2,7 @@
 // Redactor del Dictamen del Revisor Fiscal (NIA 700/705/706)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildOpinionDrafterPrompt } from '../prompts/opinion-drafter.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -26,8 +26,6 @@ export async function runOpinionDrafter(
   language: 'es' | 'en',
   onProgress?: (event: FiscalOpinionProgressEvent) => void,
 ): Promise<FiscalOpinionDictamen> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   onProgress?.({
     type: 'drafter_progress',
     detail: 'Redactando dictamen formal del revisor fiscal (NIA 700/705/706)...',
@@ -36,9 +34,9 @@ export async function runOpinionDrafter(
   // Build consolidated input from 3 evaluators
   const evaluatorInput = buildEvaluatorSummary(goingConcern, misstatementReview, complianceCheck);
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: buildOpinionDrafterPrompt(company, language) },
@@ -58,12 +56,12 @@ export async function runOpinionDrafter(
           },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'opinion_drafter', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
 
   return {
     opinionType: parseOpinionType(fullContent),

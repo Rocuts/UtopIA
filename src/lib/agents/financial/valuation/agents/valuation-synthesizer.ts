@@ -2,7 +2,7 @@
 // Agente 2: Sintetizador de Valoracion (Valuation Partner)
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildValuationSynthesizerPrompt } from '../prompts/valuation-synthesizer.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -20,7 +20,6 @@ export async function runValuationSynthesizer(
   purpose?: string,
   onProgress?: (event: ValuationProgressEvent) => void,
 ): Promise<ValuationSynthesisResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildValuationSynthesizerPrompt(company, language, purpose);
 
   const userContent = `INFORME DEL MODELADOR DCF:
@@ -39,21 +38,21 @@ ${comparablesContent}`;
     detail: 'Ponderando metodologias y construyendo opinion de valor consolidada...',
   });
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'valuation_synthesizer', maxAttempts: 3 },
   );
 
-  const fullContent = response.choices[0].message.content || '';
+  const fullContent = result.text || '';
   const sections = parseSections(fullContent);
 
   return {

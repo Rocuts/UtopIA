@@ -10,7 +10,7 @@
 //   - Colombian CTCP + Decreto 2420/2496
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import { buildQualityAuditorPrompt } from './prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
@@ -30,7 +30,6 @@ export interface QualityAuditInput {
  * Run the meta-quality audit on the full pipeline output.
  */
 export async function runQualityAudit(input: QualityAuditInput): Promise<QualityAssessment> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const systemPrompt = buildQualityAuditorPrompt(input.report.company, input.language);
 
   // Build comprehensive context for the auditor
@@ -57,21 +56,21 @@ export async function runQualityAudit(input: QualityAuditInput): Promise<Quality
 
   const userContent = sections.join('\n');
 
-  const response = await withRetry(
+  const result = await withRetry(
     () =>
-      openai.chat.completions.create({
+      generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
         temperature: 0.05,
-        max_tokens: 8192,
+        maxOutputTokens: 8192,
       }),
     { label: 'quality_auditor', maxAttempts: 3 },
   );
 
-  const fullReport = response.choices[0].message.content || '';
+  const fullReport = result.text || '';
   return parseQualityAssessment(fullReport);
 }
 

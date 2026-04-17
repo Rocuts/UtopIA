@@ -2,9 +2,14 @@ import { NextResponse } from 'next/server';
 import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
-import OpenAI from 'openai';
+import { generateText } from 'ai';
+import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
 import path from 'path';
+
+// Vercel Fluid Compute: explicit runtime + 300s ceiling for OCR-heavy uploads
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 const uploadsPath = getStoragePath('uploads');
 
@@ -33,28 +38,80 @@ function validateMagicBytes(buffer: Buffer, ext: string): boolean {
 }
 
 /**
- * Extract text from a scanned (image-only) PDF using OpenAI Responses API.
- * Sends the PDF as a file input to gpt-4o for OCR across all pages.
+ * Elimina el Byte Order Mark (U+FEFF) al inicio de archivos UTF-8.
+ * Editores de Windows (Excel, Notepad) guardan con BOM y el caracter
+ * contamina las primeras palabras cuando el LLM lee el texto literal.
+ */
+function stripBOM(text: string): string {
+  return text.replace(/^\uFEFF/, '');
+}
+
+/**
+ * Convierte una celda de ExcelJS a string legible para el LLM.
+ * ExcelJS devuelve distintos shapes por celda — sin mapeo explicito,
+ * `String(v)` produce `"[object Object]"` para formulas, hyperlinks,
+ * rich text y errores, y formatos de fecha inestables para Date.
+ *
+ * Mapeo:
+ *  - null/undefined -> ''
+ *  - string        -> as-is
+ *  - number        -> solo si es finito (evita NaN/Infinity)
+ *  - boolean       -> 'true' / 'false'
+ *  - Date          -> YYYY-MM-DD (formato estable)
+ *  - formula       -> .result (valor calculado)
+ *  - hyperlink     -> .text (etiqueta visible)
+ *  - rich text     -> concatenacion de .richText[].text
+ *  - error         -> .error (ej. '#DIV/0!')
+ *  - otros objetos -> '' (en lugar de '[object Object]')
+ */
+function cellToString(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'object') {
+    const obj = v as Record<string, unknown>;
+    // Formula: { formula: '...', result: <valor> }
+    if ('result' in obj) return cellToString(obj.result);
+    // Rich text: { richText: [{ text: '...' }, ...] }
+    if (Array.isArray(obj.richText)) {
+      return obj.richText
+        .map((piece) => (piece && typeof piece === 'object' && 'text' in piece ? String((piece as { text: unknown }).text ?? '') : ''))
+        .join('');
+    }
+    // Hyperlink: { text: '...', hyperlink: '...' }
+    if (typeof obj.text === 'string') return obj.text;
+    // Error: { error: '#DIV/0!' }
+    if (typeof obj.error === 'string') return obj.error;
+    return '';
+  }
+  return '';
+}
+
+/**
+ * Extract text from a scanned (image-only) PDF.
+ * Sends el PDF como file part al modelo multimodal via AI SDK + Vercel AI Gateway.
+ * El gateway enruta a OpenAI (gpt-4o por defecto vía MODELS.OCR), que acepta
+ * `application/pdf` como file part nativo (ver docs AI SDK 02-foundations/03-prompts.mdx).
+ *
+ * Migrado desde `openai.responses.create` — la Responses API no se expone via gateway,
+ * pero `generateText` con file part logra el mismo resultado: OCR multipagina y devuelve
+ * texto plano. Sin necesidad de la Responses API ni de fallback a Vision por pagina.
  *
  * @param buffer   - Raw PDF bytes.
  * @param filename - Original filename.
  * @returns Extracted text from all pages.
  */
 async function extractTextFromScannedPDF(buffer: Buffer, filename: string): Promise<string> {
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: 120_000, // 2 min timeout for large scanned PDFs
-  });
-  const base64 = buffer.toString('base64');
-
-  const response = await openai.responses.create({
-    model: 'gpt-4o',
-    input: [
+  const { text } = await generateText({
+    model: MODELS.OCR,
+    messages: [
       {
         role: 'user',
         content: [
           {
-            type: 'input_text',
+            type: 'text',
             text:
               'Este es un documento PDF escaneado con informacion contable/tributaria colombiana. ' +
               'Extrae TODO el texto de TODAS las paginas. Preserva la estructura de tablas usando markdown tables. ' +
@@ -62,16 +119,18 @@ async function extractTextFromScannedPDF(buffer: Buffer, filename: string): Prom
               'Si una pagina no tiene texto, omitela. Procesa TODAS las paginas del documento.',
           },
           {
-            type: 'input_file',
-            filename: filename,
-            file_data: `data:application/pdf;base64,${base64}`,
+            type: 'file',
+            mediaType: 'application/pdf',
+            data: buffer,
+            filename, // opcional; algunos providers la usan como hint
           },
         ],
       },
     ],
+    abortSignal: AbortSignal.timeout(120_000), // 2 min timeout para PDFs escaneados grandes
   });
 
-  const extracted = response.output_text?.trim();
+  const extracted = text?.trim();
   if (!extracted) {
     throw new Error('No se pudo extraer texto del PDF escaneado.');
   }
@@ -79,8 +138,15 @@ async function extractTextFromScannedPDF(buffer: Buffer, filename: string): Prom
 }
 
 /**
- * Extract text from an image file using OpenAI Vision API (OCR).
- * Sends the image as base64 to gpt-4o for high-quality text extraction.
+ * Extract text from an image file using Vision OCR (AI SDK + Vercel AI Gateway).
+ * Envia la imagen como data URL al modelo multimodal (MODELS.OCR — `openai/gpt-4o`
+ * por defecto), que enruta automaticamente vía gateway.
+ *
+ * Nota: el shape `{ type: 'image', image: <data URL> }` esta documentado en
+ * node_modules/ai/docs/02-foundations/03-prompts.mdx. `mediaType` es opcional
+ * cuando se pasa un data URL (el MIME ya esta embebido). El flag `imageDetail:
+ * 'high'` no se pasa porque el provider package @ai-sdk/openai no esta instalado
+ * (solo gateway), y el default del modelo gpt-4o es razonable para OCR.
  *
  * @param buffer   - Raw image bytes.
  * @param filename - Original filename (used for logging / MIME detection).
@@ -103,13 +169,8 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
   const base64 = buffer.toString('base64');
   const dataUrl = `data:${mime};base64,${base64}`;
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: 90_000, // 90s timeout for image OCR
-  });
-
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+  const { text } = await generateText({
+    model: MODELS.OCR,
     messages: [
       {
         role: 'user',
@@ -119,16 +180,17 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
             text: 'Extract ALL text from this scanned document. Preserve table structure using markdown tables. Include all numbers, dates, and legal references exactly as shown.',
           },
           {
-            type: 'image_url',
-            image_url: { url: dataUrl, detail: 'high' },
+            type: 'image',
+            image: dataUrl,
           },
         ],
       },
     ],
-    max_tokens: 8192,
+    maxOutputTokens: 8192,
+    abortSignal: AbortSignal.timeout(90_000), // 90s timeout para OCR de imagen
   });
 
-  const extracted = response.choices[0]?.message?.content?.trim();
+  const extracted = text?.trim();
   if (!extracted) {
     throw new Error('Vision API returned no text for the image.');
   }
@@ -187,11 +249,11 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   }
 
   if (ext === '.txt' || ext === '.md') {
-    return buffer.toString('utf-8');
+    return stripBOM(buffer.toString('utf-8'));
   }
 
   if (['.csv', '.json', '.xml'].includes(ext)) {
-    return buffer.toString('utf-8');
+    return stripBOM(buffer.toString('utf-8'));
   }
 
   if (ext === '.pdf') {
@@ -233,8 +295,11 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];
       worksheet.eachRow((row) => {
-        const values = row.values as (string | number | boolean | Date | null | undefined)[];
-        rows.push(values.slice(1).map(v => String(v ?? '')).join(','));
+        // row.values es un array sparse con shapes heterogeneos por celda
+        // (formulas, hyperlinks, rich text, errores, Date). cellToString
+        // maneja cada variante y evita basura tipo "[object Object]".
+        const values = row.values as unknown[];
+        rows.push(values.slice(1).map(cellToString).join(','));
       });
       sheets.push(`--- Sheet: ${worksheet.name} ---\n${rows.join('\n')}`);
     });
@@ -368,7 +433,7 @@ export async function POST(req: Request) {
     }
 
     if (file.size > MAX_UPLOAD_SIZE) {
-      return NextResponse.json({ error: 'File too large. Max 5MB.' }, { status: 400 });
+      return NextResponse.json({ error: 'File too large. Max 4MB.' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());

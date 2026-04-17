@@ -2,8 +2,9 @@
 // Prompt enhancer — transforms raw user queries into top-tier prompts
 // ---------------------------------------------------------------------------
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
 import { ENHANCER_PROMPT } from '@/lib/agents/prompts/enhancer.prompt';
+import { MODELS } from '@/lib/config/models';
 import type { NITContext } from '@/lib/security/pii-filter';
 import type { QueryClassification, EnhancedQuery, AgentDomain } from '@/lib/agents/types';
 
@@ -13,8 +14,6 @@ export async function enhancePrompt(
   classification: QueryClassification,
   nitContext: NITContext | null,
 ): Promise<EnhancedQuery> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   const recentContext = conversationHistory
     .slice(-6)
     .map((m) => `${m.role}: ${m.content.slice(0, 300)}`)
@@ -26,10 +25,15 @@ export async function enhancePrompt(
     nitHint = `NIT context: last digit ${nitContext.lastDigit}, type ${type}.`;
   }
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+  const { text: raw } = await generateText({
+    model: MODELS.SYNTHESIZER,
     messages: [
-      { role: 'system', content: ENHANCER_PROMPT },
+      {
+        role: 'system',
+        content:
+          ENHANCER_PROMPT +
+          '\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences.',
+      },
       {
         role: 'user',
         content: `Classification: tier=${classification.tier}, domains=${classification.domains.join(',')}, intent=${classification.intent}
@@ -42,15 +46,12 @@ User message to enhance:
 ${userMessage}`,
       },
     ],
-    response_format: { type: 'json_object' },
     temperature: 0.2,
-    max_tokens: 600,
+    maxOutputTokens: 600,
   });
 
-  const raw = response.choices[0].message.content || '{}';
-
   try {
-    const parsed = JSON.parse(raw) as {
+    const parsed = JSON.parse(raw || '{}') as {
       enhanced?: string;
       extractedEntities?: EnhancedQuery['extractedEntities'];
       subQueries?: { domain?: string; query?: string }[];

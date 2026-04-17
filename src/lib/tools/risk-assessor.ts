@@ -5,7 +5,8 @@
  * that can be displayed in the frontend RiskGauge component.
  */
 
-import OpenAI from 'openai';
+import { generateText } from 'ai';
+import { MODELS } from '@/lib/config/models';
 
 export interface RiskAssessment {
   level: 'bajo' | 'medio' | 'alto' | 'critico';
@@ -77,11 +78,9 @@ SIEMPRE responde en espanol.`;
  * Assess the risk of a tax case based on the conversation context.
  */
 export async function assessRisk(caseDescription: string): Promise<RiskAssessment> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const result = await generateText({
+      model: MODELS.CHAT,
       messages: [
         { role: 'system', content: RISK_SYSTEM_PROMPT },
         {
@@ -90,10 +89,10 @@ export async function assessRisk(caseDescription: string): Promise<RiskAssessmen
         },
       ],
       temperature: 0.1,
-      max_tokens: 1500,
+      maxOutputTokens: 1500,
     });
 
-    const content = response.choices[0]?.message?.content?.trim();
+    const content = result.text?.trim();
     if (!content) {
       return fallbackRiskAssessment('No se obtuvo respuesta del modelo de evaluacion de riesgo.');
     }
