@@ -1,17 +1,26 @@
-# AI SDK v6 + Vercel AI Gateway Migration
+# AI SDK v6 + Direct OpenAI Provider
 
-**Completed:** 2026-04-16 (commit `6753f41`). 45 files changed, +1195/-987.
+**Initial migration:** 2026-04-16 (commit `6753f41`) — moved off the legacy `openai` SDK to AI SDK v6 routing through the Vercel AI Gateway.
 
-## TL;DR
+**Provider switch:** 2026-04-16 (later same day) — switched from the Vercel AI Gateway to direct `OPENAI_API_KEY` via `@ai-sdk/openai`. The gateway requires a credit card on file and was failing in production; the user already had a working `OPENAI_API_KEY` provisioned, so we cut out the middleman.
 
-- All LLM calls that previously used the `openai` SDK (v6.27.0) now use AI SDK v6 (`ai` package, v6.0.168).
-- Models resolve automatically through the **Vercel AI Gateway** via string IDs like `'openai/gpt-4o-mini'`. No `apiKey` is ever passed.
-- The `openai` npm dependency was removed. Realtime voice still calls OpenAI directly via `fetch`, and RAG embeddings still use `@langchain/openai` — these two are the only surviving direct-to-OpenAI paths.
+## TL;DR (current state)
 
-## Why
+- All LLM calls use **AI SDK v6** (`ai` package, v6.0.168) with the **`@ai-sdk/openai`** provider (v3.0.53, the `latest` tag pinned to the same `@ai-sdk/provider@3.0.8` that `ai@6` ships).
+- `src/lib/config/models.ts` exports `MODELS.CHAT`, `MODELS.FINANCIAL_PIPELINE`, `MODELS.CLASSIFIER`, `MODELS.SYNTHESIZER`, `MODELS.OCR` as `LanguageModel` instances built with `openai('<model-id>')`. The provider reads `OPENAI_API_KEY` automatically — never pass `apiKey`.
+- `MODELS.REALTIME` and `MODELS.EMBEDDINGS` stay as plain strings (Realtime is consumed via raw `fetch`; embeddings via `@langchain/openai`'s own client).
+- The `openai` legacy npm dependency was removed in the first migration and is still gone.
+- 37 callsites passing `model: MODELS.X` to `generateText` / `streamText` / `streamObject` work unchanged because those APIs accept both strings and `LanguageModel` instances.
 
-- Vercel platform defaults (2026+) push AI Gateway for all server-side LLM calls: unified observability, per-model cost tracking, multi-provider failover, zero data retention, OIDC-based auth in prod.
-- AI SDK v6 is the framework-native TypeScript surface (`generateText`, `streamText`, `tool()` with Zod `inputSchema`) and matches the bundler / Fluid Compute runtime without extra provider packages.
+## Why direct OpenAI (and not the Gateway)
+
+The first iteration routed everything through the Vercel AI Gateway because the SDK auto-resolves `'openai/gpt-4o-mini'` strings to the gateway provider. In practice the gateway requires a credit card on the Vercel team and was returning 402 / billing errors in production. The user already had `OPENAI_API_KEY` provisioned in every Vercel environment, so direct calls are simpler, cheaper, and don't need a payment method on the Vercel side.
+
+## Why AI SDK v6 (still the right call)
+
+- Framework-native TypeScript surface (`generateText`, `streamText`, `tool()` with Zod `inputSchema`).
+- Provider-pluggable: switching from gateway to `@ai-sdk/openai` was a one-file change in `models.ts` (37 callsites untouched).
+- Streaming, tool-calling loop, and structured outputs work identically across providers.
 
 ## Scope (37 files migrated in parallel)
 
@@ -45,7 +54,7 @@ const text = response.choices[0].message.content || '';
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 const { text } = await generateText({
-  model: MODELS.FINANCIAL_PIPELINE, // resolves to 'openai/gpt-5.4-mini'
+  model: MODELS.FINANCIAL_PIPELINE, // LanguageModel from openai('gpt-4o-mini')
   messages: [...],
   temperature: 0.05,
   maxOutputTokens: 8192, // renamed
@@ -58,7 +67,7 @@ const { text } = await generateText({
   - **Preferred (new code, schema-validated):** `experimental_output: Output.object({ schema: zodSchema })` on `generateText`. Access the parsed+validated object as `result.experimental_output`. The classifier (`src/lib/agents/classifier.ts`) is the canonical example — no manual JSON parsing, no brittle prompt instruction.
   - **Lift-and-shift (used during the initial migration):** drop `response_format` and end the system prompt with `"\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences."`, then `JSON.parse(text)`. Acceptable for files that produce Markdown with an incidental JSON section; not ideal for tight structured outputs.
 - `withRetry(...)` wrapper is preserved; only the inner call changes.
-- Never instantiate an OpenAI client in migrated code. Never pass `apiKey`. The Gateway uses `AI_GATEWAY_API_KEY` (dev) or `VERCEL_OIDC_TOKEN` (prod) automatically.
+- Never instantiate an OpenAI client (`new OpenAI({...})`) in migrated code. Never pass `apiKey` to `generateText` / `streamText`. The `@ai-sdk/openai` provider reads `OPENAI_API_KEY` from `process.env` automatically.
 
 ## Streaming
 
@@ -123,8 +132,8 @@ Errors use `{ type: 'error-text', value: ... }` so the model can react different
 
 | Case | Implementation |
 |------|----------------|
-| Image OCR (jpg/png/webp) | `generateText` with `{ type: 'image', image: dataUrl }`, `MODELS.OCR` (defaults to `openai/gpt-5.4`) |
-| Scanned PDF OCR | `generateText` with `{ type: 'file', data: buffer, mediaType: 'application/pdf' }`. Replaces the old `openai.responses.create` + `input_file` path (Responses API is not exposed via Gateway as of 2026-04). |
+| Image OCR (jpg/png/webp) | `generateText` with `{ type: 'image', image: dataUrl }`, `MODELS.OCR` (defaults to `gpt-4o`) |
+| Scanned PDF OCR | `generateText` with `{ type: 'file', data: buffer, mediaType: 'application/pdf' }`. The old `openai.responses.create` + `input_file` path is gone; the AI SDK file part handles multipage OCR cleanly. |
 
 Timeouts that used to live on the OpenAI client (`timeout: 90_000`) become `abortSignal: AbortSignal.timeout(90_000)` passed into `generateText`.
 
@@ -132,23 +141,25 @@ Timeouts that used to live on the OpenAI client (`timeout: 90_000`) become `abor
 
 ```bash
 # .env.local (committed pattern, do not commit real values)
-AI_GATEWAY_API_KEY=vck_...           # required — gets auto-provisioned per environment on Vercel
-OPENAI_API_KEY=sk-...                # ONLY for Realtime voice route + LangChain embeddings
+OPENAI_API_KEY=sk-...                # required — used by every LLM call + embeddings + realtime
 TAVILY_API_KEY=tvly-...              # web search
 ```
 
-All three targets on Vercel (production / preview / development) must have `AI_GATEWAY_API_KEY`. Production + Development were added via CLI; Preview had to go through the REST API because `vercel@51.5.1` rejects both `--yes` without a branch and any production branch as a preview scope (open CLI bug).
+`AI_GATEWAY_API_KEY` is no longer required. If your `.env.local` or Vercel env still sets it, it is harmless dead config — feel free to remove it from production env to reduce confusion.
+
+All Vercel environments (production / preview / development) must have `OPENAI_API_KEY` set.
 
 ## What was NOT migrated
 
-- **Realtime voice API** (`src/app/api/realtime/route.ts`): still uses `fetch('https://api.openai.com/v1/realtime/sessions', ...)` with `OPENAI_API_KEY`. The Gateway does not expose this API yet.
-- **RAG embeddings**: `@langchain/openai` is used inside LangChain's own client. Works unchanged; migration deferred until LangChain supports AI SDK or we replace LangChain with `embed` / `embedMany` from `ai`.
+- **Realtime voice API** (`src/app/api/realtime/route.ts`): uses `fetch('https://api.openai.com/v1/realtime/sessions', ...)` directly with `OPENAI_API_KEY` because the AI SDK does not yet expose the Realtime API. Same pattern as before.
+- **RAG embeddings**: `@langchain/openai` uses its own client with `OPENAI_API_KEY`. `MODELS.EMBEDDINGS` is exported as a plain string (no `openai/` prefix) for that consumer. Migration deferred until LangChain supports AI SDK natively or we replace LangChain with `embed` / `embedMany` from `ai`.
 - **UI client rendering**: `ChatWorkspace.tsx` keeps its custom SSE parser and `ChatMessage` interface (separate from AI SDK's `UIMessage`). No `@ai-sdk/react` involved.
 
 ## Rollback
 
-- Full rollback: `vercel rollback` to the last known-good production deployment (pre-migration commits still on the main branch deploy list).
-- Partial rollback (models only): set `OPENAI_MODEL_*` envs to non-gateway strings and configure a direct provider. The shape of the code won't need to change.
+- Full rollback: `vercel rollback` to the last known-good production deployment.
+- Provider rollback (back to gateway): change `src/lib/config/models.ts` to export plain string IDs again (`'openai/gpt-4o-mini'`); the SDK auto-resolves through the gateway when `AI_GATEWAY_API_KEY` is set. The 37 callsites do not need to change.
+- Provider swap (different OpenAI-compatible provider): swap the `openai(...)` factory in `models.ts` for the matching `@ai-sdk/<provider>` factory. Same callsites unchanged.
 
 ## Verification checklist
 

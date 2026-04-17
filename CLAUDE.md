@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is UtopIA
 
-UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** routing through the **Vercel AI Gateway** (default `openai/gpt-5.4-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
+UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** calling **OpenAI directly** through `@ai-sdk/openai` with `OPENAI_API_KEY` (default `gpt-4o-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
 
 ## Commands
 
@@ -20,26 +20,27 @@ No test framework is configured. Validate changes with `npx tsc --noEmit` and `n
 ## Environment Variables
 
 Required in `.env.local`:
-- `AI_GATEWAY_API_KEY` — auth for Vercel AI Gateway. Used by all AI SDK v6 calls (chat orchestrator, every financial pipeline, OCR). In prod, `VERCEL_OIDC_TOKEN` works instead. Get a key from Vercel dashboard → AI → AI Gateway → Create API Key.
-- `OPENAI_API_KEY` — still required for: (a) Realtime voice API (`src/app/api/realtime/route.ts`, direct HTTPS), (b) LangChain embeddings for RAG (`@langchain/openai` internally). The rest of the app does NOT use it anymore.
+- `OPENAI_API_KEY` — used by every LLM call (chat orchestrator, every financial pipeline, OCR, Realtime voice, LangChain embeddings). The AI SDK provider `@ai-sdk/openai` reads it automatically — never pass `apiKey` in code.
 - `TAVILY_API_KEY` — web search via `src/lib/search/web-search.ts`
 - `UTOPIA_AGENT_MODE` — `orchestrated` (multi-agent) or `legacy` (monolithic). Controls which handler `/api/chat` uses
 
-Optional model overrides (all route through the Gateway; pass `provider/model` strings):
-- `OPENAI_MODEL_CHAT` (default `openai/gpt-5.4-mini`) — chat orchestrator, specialists, synthesizer
-- `OPENAI_MODEL_FINANCIAL` (default `openai/gpt-5.4-mini`) — financial/audit/tax/valuation/etc. pipelines
-- `OPENAI_MODEL_CLASSIFIER` (default `openai/gpt-5.4-mini`) — query classifier (T1/T2/T3 routing)
-- `OPENAI_MODEL_OCR` (default `openai/gpt-5.4`) — PDF/image OCR in `/api/upload` (full model, not mini, for accuracy on accounting docs)
+Optional model overrides (pass plain OpenAI model IDs — no `openai/` prefix; if a legacy value contains the prefix, `envModel()` strips it):
+- `OPENAI_MODEL_CHAT` (default `gpt-4o-mini`) — chat orchestrator, specialists, synthesizer
+- `OPENAI_MODEL_FINANCIAL` (default `gpt-4o-mini`) — financial/audit/tax/valuation/etc. pipelines
+- `OPENAI_MODEL_CLASSIFIER` (default `gpt-4o-mini`) — query classifier (T1/T2/T3 routing)
+- `OPENAI_MODEL_OCR` (default `gpt-4o`) — PDF/image OCR in `/api/upload` (full model, not mini, for accuracy on accounting docs)
 - Others in `src/lib/config/models.ts`
 
 `process.env.VERCEL` is checked in `src/lib/rag/vectorstore.ts` to fall back from HNSWLib to MemoryVectorStore on Vercel's read-only filesystem.
 
 ## LLM Provider
 
-- **All AI SDK calls** use plain string model IDs (`'openai/gpt-4o-mini'`) which AI SDK v6 auto-resolves through the Gateway (see `node_modules/ai/src/model/resolve-model.ts`). **Never** pass an `apiKey` option or instantiate an OpenAI client — the provider is `gateway` by default.
-- Models come from `src/lib/config/models.ts` (`MODELS.CHAT`, `MODELS.FINANCIAL_PIPELINE`, `MODELS.OCR`, etc.). Change model IDs in ONE place; envs override per-key.
+- **All AI SDK calls** receive a `LanguageModel` instance from `@ai-sdk/openai` (e.g. `MODELS.CHAT === openai('gpt-4o-mini')`). The provider reads `OPENAI_API_KEY` automatically — **never** pass an `apiKey` option, never instantiate the OpenAI SDK directly, and never use the legacy `'openai/<model>'` gateway-prefixed string.
+- Models come from `src/lib/config/models.ts` (`MODELS.CHAT`, `MODELS.FINANCIAL_PIPELINE`, `MODELS.OCR`, etc.). Change model IDs in ONE place; envs override per-key. `envModel()` strips a leading `openai/` if present in env values (defensive, for legacy gateway-style overrides).
 - Migration contract followed by every existing call: `openai.chat.completions.create` → `generateText` / `streamText`, `max_tokens` → `maxOutputTokens`, `response.choices[0].message.content` → `result.text`. For structured outputs, prefer `experimental_output: Output.object({ schema: zodSchema })` on `generateText` (see `src/lib/agents/classifier.ts` for the canonical pattern). The older "append `'Respond ONLY with valid JSON.'` to the system prompt" trick is acceptable for lift-and-shift but less reliable. See `docs/AI_SDK_MIGRATION.md`.
-- Realtime voice is the one exception — still uses direct `fetch('https://api.openai.com/v1/realtime/sessions', ...)` because the Gateway does not expose the Realtime API.
+- Realtime voice still uses direct `fetch('https://api.openai.com/v1/realtime/sessions', ...)` with `OPENAI_API_KEY` — the AI SDK does not yet expose the Realtime API.
+- RAG embeddings use `@langchain/openai`'s own client with `OPENAI_API_KEY` (LangChain doesn't share the AI SDK provider chain). `MODELS.EMBEDDINGS` is exported as a plain string for that consumer.
+- The Vercel AI Gateway is **not** used. An earlier iteration routed everything through it, but the gateway requires a credit card on file and was failing in production. Direct OpenAI calls are simpler and use the existing `OPENAI_API_KEY` the user already provisions.
 
 ## Architecture
 

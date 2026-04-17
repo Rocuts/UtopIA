@@ -95,13 +95,13 @@ function cellToString(v: unknown): string {
 
 /**
  * Extract text from a scanned (image-only) PDF.
- * Sends el PDF como file part al modelo multimodal via AI SDK + Vercel AI Gateway.
- * El gateway enruta a OpenAI (gpt-4o por defecto vía MODELS.OCR), que acepta
- * `application/pdf` como file part nativo (ver docs AI SDK 02-foundations/03-prompts.mdx).
+ * Envia el PDF como file part al modelo multimodal via AI SDK con el provider
+ * `@ai-sdk/openai` (auth con `OPENAI_API_KEY` directo, sin gateway). El modelo
+ * configurado en MODELS.OCR (default `gpt-4o`) acepta `application/pdf` como
+ * file part nativo (ver docs AI SDK 02-foundations/03-prompts.mdx).
  *
- * Migrado desde `openai.responses.create` — la Responses API no se expone via gateway,
- * pero `generateText` con file part logra el mismo resultado: OCR multipagina y devuelve
- * texto plano. Sin necesidad de la Responses API ni de fallback a Vision por pagina.
+ * `generateText` con file part hace OCR multipagina y devuelve texto plano. Sin
+ * necesidad de la Responses API ni de fallback a Vision por pagina.
  *
  * @param buffer   - Raw PDF bytes.
  * @param filename - Original filename.
@@ -142,15 +142,14 @@ async function extractTextFromScannedPDF(buffer: Buffer, filename: string): Prom
 }
 
 /**
- * Extract text from an image file using Vision OCR (AI SDK + Vercel AI Gateway).
- * Envia la imagen como data URL al modelo multimodal (MODELS.OCR — `openai/gpt-4o`
- * por defecto), que enruta automaticamente vía gateway.
+ * Extract text from an image file using Vision OCR (AI SDK + @ai-sdk/openai).
+ * Envia la imagen como data URL al modelo multimodal (MODELS.OCR, default
+ * `gpt-4o`) usando `OPENAI_API_KEY` directo (sin gateway).
  *
  * Nota: el shape `{ type: 'image', image: <data URL> }` esta documentado en
  * node_modules/ai/docs/02-foundations/03-prompts.mdx. `mediaType` es opcional
- * cuando se pasa un data URL (el MIME ya esta embebido). El flag `imageDetail:
- * 'high'` no se pasa porque el provider package @ai-sdk/openai no esta instalado
- * (solo gateway), y el default del modelo gpt-4o es razonable para OCR.
+ * cuando se pasa un data URL (el MIME ya esta embebido). El default del modelo
+ * `gpt-4o` es razonable para OCR.
  *
  * @param buffer   - Raw image bytes.
  * @param filename - Original filename (used for logging / MIME detection).
