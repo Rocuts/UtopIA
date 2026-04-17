@@ -231,6 +231,7 @@ export function Sidebar() {
     setActiveCase,
     conversationListVersion,
     activeCaseType,
+    intakeModalOpen,
     setIntakeModalOpen,
     openIntakeForType,
     startNewConsultation,
@@ -272,10 +273,17 @@ export function Sidebar() {
 
   // Keyboard shortcuts for case types
   useEffect(() => {
+    // Why: when the intake modal is open, a single letter key on a focused button
+    // (any radio-style selector, sector dropdown, tax pill, etc.) used to swap
+    // activeCaseType, unmounting the form and wiping unsaved manual entry.
+    // The modal is mutually exclusive with global navigation shortcuts.
+    if (intakeModalOpen) return;
     function handleKeyDown(e: KeyboardEvent) {
-      // Skip if user is typing in an input
-      const tag = (e.target as HTMLElement)?.tagName;
+      // Skip if user is typing in an input or contenteditable surface
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (target?.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const shortcutMap: Record<string, CaseType> = {
@@ -294,7 +302,7 @@ export function Sidebar() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openIntakeForType, goWorkspace]);
+  }, [openIntakeForType, goWorkspace, intakeModalOpen]);
 
   const handleNewConsultation = useCallback(() => {
     // Reset to the welcome screen so the user picks a fresh case type.

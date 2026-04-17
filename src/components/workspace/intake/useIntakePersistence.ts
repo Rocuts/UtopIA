@@ -14,6 +14,15 @@ export function useIntakePersistence<T extends Partial<IntakeFormUnion>>(
   const [values, setValuesInternal] = useState<T>(draft ?? initialValues);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Why: the latest typed value lives only in local state until the 500ms
+  // debounce fires. If the modal unmounts inside that window (Escape, route
+  // change, accidental close), the cleanup below must flush it to context so
+  // the user does not lose 500ms of work on remount.
+  const pendingRef = useRef<T | null>(null);
+  const setIntakeDraftRef = useRef(setIntakeDraft);
+  useEffect(() => {
+    setIntakeDraftRef.current = setIntakeDraft;
+  }, [setIntakeDraft]);
 
   const setValues = useCallback(
     (updater: T | ((prev: T) => T)) => {
@@ -22,7 +31,9 @@ export function useIntakePersistence<T extends Partial<IntakeFormUnion>>(
 
         // Debounced save to workspace context
         if (debounceRef.current) clearTimeout(debounceRef.current);
+        pendingRef.current = next;
         debounceRef.current = setTimeout(() => {
+          pendingRef.current = null;
           setIntakeDraft(caseType, next as Partial<IntakeFormUnion>);
         }, 500);
 
@@ -32,12 +43,20 @@ export function useIntakePersistence<T extends Partial<IntakeFormUnion>>(
     [caseType, setIntakeDraft],
   );
 
-  // Cleanup debounce timer on unmount
+  // Flush any pending debounced value on unmount so in-flight typing survives.
   useEffect(() => {
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const pending = pendingRef.current;
+      if (pending !== null) {
+        pendingRef.current = null;
+        setIntakeDraftRef.current(caseType, pending as Partial<IntakeFormUnion>);
+      }
     };
-  }, []);
+  }, [caseType]);
 
   return [values, setValues];
 }
