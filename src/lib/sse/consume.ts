@@ -61,12 +61,22 @@ export async function consumeSSE(
         if (line === '') {
           // Linea vacia = fin del evento. Emitir si hay data.
           if (currentData) {
+            let parsed: unknown;
+            let parsedOk = false;
             try {
-              const parsed = JSON.parse(currentData);
-              const handler = handlers[currentEvent];
-              handler?.(parsed);
+              parsed = JSON.parse(currentData);
+              parsedOk = true;
             } catch {
               // Data malformada — descartar sin romper el stream.
+            }
+            // Why: handler throws (p.ej. el `error` handler de PipelineWorkspace
+            // re-lanza el detalle real del backend) DEBEN propagar. Antes el
+            // try/catch tragaba el throw y el stream terminaba silencioso,
+            // produciendo "endpoint no devolvió un resultado" en vez del error
+            // verdadero.
+            if (parsedOk) {
+              const handler = handlers[currentEvent];
+              handler?.(parsed);
             }
           }
           currentEvent = 'message';
