@@ -57,7 +57,7 @@ ${userMessage}`,
       subQueries?: { domain?: string; query?: string }[];
     };
 
-    const VALID_DOMAINS: Set<string> = new Set(['tax', 'accounting', 'documents', 'strategy']);
+    const VALID_DOMAINS: Set<string> = new Set(['tax', 'accounting', 'documents', 'strategy', 'litigation']);
     const subQueries =
       classification.tier === 'T3' && parsed.subQueries
         ? parsed.subQueries

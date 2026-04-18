@@ -14,9 +14,14 @@ import type { NITContext } from '@/lib/security/pii-filter';
  * - tax:        Colombian tax law, sanctions, calendar, E.T. articles
  * - accounting: NIIF/IFRS, CTCP, financial statements, ratios
  * - documents:  Deep analysis of uploaded docs, OCR extraction, cross-referencing
- * - strategy:   DIAN defense, risk management, compliance planning, action plans
+ * - strategy:   DIAN defense planning, risk management, compliance roadmaps, action plans
+ * - litigation: Active aggressive legal defense vs already-issued DIAN acts
+ *               (requerimientos, pliegos, liquidaciones). "Shield & Sword" protocol:
+ *               procedural nullities, Art. 647 E.T. exclusion, Consejo de Estado
+ *               jurisprudence, formal recursos de reconsideración. Use when the DIAN
+ *               has already acted and the client needs hard-edged counter-argument.
  */
-export type AgentDomain = 'tax' | 'accounting' | 'documents' | 'strategy';
+export type AgentDomain = 'tax' | 'accounting' | 'documents' | 'strategy' | 'litigation';
 
 export type CostTier = 'T1' | 'T2' | 'T3';
 

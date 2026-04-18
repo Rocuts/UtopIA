@@ -13,7 +13,7 @@ import type { QueryClassification, CostTier, AgentDomain } from '@/lib/agents/ty
 // Más confiable que pedir "Respond ONLY with valid JSON" en el prompt.
 const classificationSchema = z.object({
   tier: z.enum(['T1', 'T2', 'T3']),
-  domains: z.array(z.enum(['tax', 'accounting', 'documents', 'strategy'])),
+  domains: z.array(z.enum(['tax', 'accounting', 'documents', 'strategy', 'litigation'])),
   intent: z.string(),
   confidence: z.number().min(0).max(1),
 });

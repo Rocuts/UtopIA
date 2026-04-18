@@ -12,6 +12,7 @@ import { taxAgent } from './specialists/tax-agent';
 import { accountingAgent } from './specialists/accounting-agent';
 import { documentAgent } from './specialists/document-agent';
 import { strategyAgent } from './specialists/strategy-agent';
+import { litigationDefenseAgent } from './specialists/litigation-defense';
 import { MODELS } from '@/lib/config/models';
 import type {
   OrchestrateOptions,
@@ -31,6 +32,7 @@ const SPECIALISTS = {
   accounting: accountingAgent,
   documents: documentAgent,
   strategy: strategyAgent,
+  litigation: litigationDefenseAgent,
 } as const;
 
 // Limites de inyeccion del documento cargado. El chat general opera con
@@ -96,11 +98,12 @@ async function handleT1(
   const systemPrompt = `You are UtopIA, a friendly AI assistant for Colombian accounting and tax advisory. ${langInstruction}
 Keep responses concise and helpful. If the user greets you, greet them back warmly and offer to help.
 If the user thanks you, acknowledge and ask if there's anything else.
-If the user asks what you can do, briefly describe your 4 specialist capabilities:
+If the user asks what you can do, briefly describe your 5 specialist capabilities:
 1. **Tributario**: Consultas sobre Estatuto Tributario, IVA, renta, retenciones, facturacion electronica, calendario tributario
 2. **Contable**: Normas NIIF/IFRS, analisis financiero, indicadores, presupuestos, revisoria fiscal
 3. **Documental**: Analisis de documentos subidos — declaraciones, requerimientos, estados financieros, facturas
-4. **Estrategia**: Defensa ante DIAN, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones`;
+4. **Estrategia**: Planeacion tributaria, calculo de sanciones, planes de accion, gestion de riesgo, devoluciones
+5. **Litigio Tributario**: Defensa agresiva cuando la DIAN YA emitio un acto (requerimiento, pliego, liquidacion, resolucion) — nulidades procesales, Art. 647 E.T., jurisprudencia del Consejo de Estado y redaccion de recursos formales`;
 
   // Inyectar el documento si existe, usando el mismo shape que BaseSpecialist.
   // El limite es useCase-aware (80k para financial-report, 30k default).

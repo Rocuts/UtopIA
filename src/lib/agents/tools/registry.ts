@@ -232,6 +232,15 @@ const AGENT_TOOLS = {
     get_tax_calendar: GET_TAX_CALENDAR,
     query_erp: QUERY_ERP,
   },
+  litigation: {
+    search_docs: SEARCH_DOCS,
+    search_web: SEARCH_WEB,
+    calculate_sanction: CALCULATE_SANCTION,
+    analyze_document: ANALYZE_DOCUMENT,
+    draft_dian_response: DRAFT_DIAN_RESPONSE,
+    assess_risk: ASSESS_RISK,
+    get_tax_calendar: GET_TAX_CALENDAR,
+  },
 } as const satisfies Record<string, Record<string, Tool>>;
 
 export type AgentName = keyof typeof AGENT_TOOLS;
