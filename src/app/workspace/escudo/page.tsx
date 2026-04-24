@@ -6,9 +6,8 @@
  * Overview de la ventana. Delega el dashboard a `EscudoArea` y añade un strip
  * contextual abajo que lanza un chat "El Escudo" con contexto precargado.
  *
- * Se envuelve en `data-theme="elite"` para que las utilities `.glass-*`,
- * `.glow-*` y `.border-elite-*` funcionen incluso si el layout padre aún
- * no tiene el token aplicado (Agente B lo añade al shell del workspace).
+ * El ambiente (orbs + max-width container) lo aporta `AreaShell`. El tema
+ * (light/dark/system) lo aplica `ThemeProvider` en <html>.
  */
 
 import { useCallback, useState } from 'react';
@@ -21,6 +20,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import { EliteButton } from '@/components/ui/EliteButton';
 import { EscudoArea } from '@/components/workspace/areas/EscudoArea';
+import { AreaShell } from '@/components/workspace/layouts/AreaShell';
 
 export default function EscudoPage() {
   const { t, language } = useLanguage();
@@ -67,43 +67,15 @@ export default function EscudoPage() {
       };
 
   return (
-    <div
-      data-theme="elite"
-      className={cn(
-        'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
-      )}
-    >
-      {/* Fondo ambient con orb wine sutil */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 overflow-hidden"
+    <AreaShell areaAccent="escudo">
+      <EscudoArea />
+
+      {/* Strip contextual — chat "El Escudo" */}
+      <motion.section
+        {...fade}
+        aria-label={language === 'es' ? 'Chat contextual de El Escudo' : 'Shield contextual chat'}
+        className="mt-16"
       >
-        <div
-          className="absolute -top-[20%] -left-[10%] w-[600px] h-[600px] rounded-full blur-[120px] opacity-30"
-          style={{
-            background:
-              'radial-gradient(circle, rgba(114,47,55,0.4) 0%, rgba(114,47,55,0) 70%)',
-          }}
-        />
-        <div
-          className="absolute top-[30%] -right-[10%] w-[500px] h-[500px] rounded-full blur-[140px] opacity-20"
-          style={{
-            background:
-              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.3) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
-          }}
-        />
-      </div>
-
-      <div className="relative z-[1] max-w-[1240px] mx-auto px-6 md:px-10 pt-8 pb-24">
-        <EscudoArea />
-
-        {/* Strip contextual — chat "El Escudo" */}
-        <motion.section
-          {...fade}
-          aria-label={language === 'es' ? 'Chat contextual de El Escudo' : 'Shield contextual chat'}
-          className="mt-16"
-        >
           <div className="relative overflow-hidden rounded-xl glass-elite-elevated border-elite-gold p-6 md:p-8">
             <div
               aria-hidden="true"
@@ -184,7 +156,6 @@ export default function EscudoPage() {
             </p>
           </div>
         </motion.section>
-      </div>
-    </div>
+    </AreaShell>
   );
 }

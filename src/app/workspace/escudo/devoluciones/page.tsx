@@ -111,7 +111,6 @@ export default function DevolucionesPage() {
 
   return (
     <div
-      data-theme="elite"
       className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
     >
       <div

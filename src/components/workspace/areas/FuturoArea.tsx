@@ -454,7 +454,6 @@ export function FuturoArea({
 
   return (
     <div
-      data-theme="elite"
       className={cn('relative w-full', compact ? '' : 'min-h-full', className)}
     >
       {!compact && (

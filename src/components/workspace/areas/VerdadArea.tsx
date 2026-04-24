@@ -347,7 +347,6 @@ export function VerdadArea({
 
   return (
     <section
-      data-theme="elite"
       className={cn(
         'relative flex flex-col gap-8',
         'text-n-100',

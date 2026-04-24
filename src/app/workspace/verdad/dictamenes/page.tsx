@@ -185,7 +185,6 @@ export default function DictamenesPage() {
 
   return (
     <div
-      data-theme="elite"
       data-lenis-prevent
       className="min-h-full w-full overflow-y-auto bg-n-1000"
     >

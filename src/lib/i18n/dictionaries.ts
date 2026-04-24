@@ -286,6 +286,55 @@ export const dict = {
         },
       },
     },
+    settings: {
+      title: 'Configuración',
+      eyebrow: 'Centro de Comando',
+      sections: {
+        theme: 'Tema',
+        density: 'Densidad',
+        language: 'Idioma',
+        integrations: 'Integraciones',
+        security: 'Seguridad',
+        reset: 'Restablecer',
+      },
+      themeSection: {
+        description: 'El modo sistema sigue automáticamente la preferencia de tu sistema operativo.',
+      },
+      density: {
+        comfortable: 'Cómodo',
+        compact: 'Compacto',
+        description: 'Aplicación progresiva. Tu preferencia se guarda localmente.',
+      },
+      languageSection: {
+        description: 'Tu idioma se guarda y aplica en toda la plataforma.',
+      },
+      integrations: {
+        description: 'Gestiona tus conexiones ERP.',
+      },
+      security: {
+        title: 'Almacenamiento de credenciales',
+        advisory: 'Las credenciales ERP se guardan actualmente en localStorage del navegador. Sprint 3 introducirá un vault cifrado en backend.',
+        keysLabel: 'Claves activas en este navegador:',
+        keys: {
+          theme: 'Tema de UI',
+          density: 'Densidad',
+          language: 'Idioma',
+          erp: 'Conexiones ERP',
+          conversations: 'Historial de conversaciones',
+        },
+      },
+      reset: {
+        title: 'Zona de peligro',
+        description: 'Limpia configuración local. Las conexiones ERP y el historial se pueden mantener con la opción "Solo UI".',
+        resetAll: 'Restablecer todo',
+        resetUIOnly: 'Solo preferencias de UI',
+        confirmTitle: '¿Restablecer configuración?',
+        confirmBody: 'Esta acción es inmediata e irreversible. Se limpiarán las claves seleccionadas de localStorage y se recargará la página.',
+        confirmAction: 'Sí, restablecer',
+        cancel: 'Cancelar',
+        done: 'Listo. Recargando...',
+      },
+    },
   },
   en: {
     nav: {
@@ -572,6 +621,55 @@ export const dict = {
             },
           },
         },
+      },
+    },
+    settings: {
+      title: 'Settings',
+      eyebrow: 'Command Center',
+      sections: {
+        theme: 'Theme',
+        density: 'Density',
+        language: 'Language',
+        integrations: 'Integrations',
+        security: 'Security',
+        reset: 'Reset',
+      },
+      themeSection: {
+        description: 'System mode automatically follows your operating system preference.',
+      },
+      density: {
+        comfortable: 'Comfortable',
+        compact: 'Compact',
+        description: 'Progressive application. Your preference is saved locally.',
+      },
+      languageSection: {
+        description: 'Your language is saved and applied across the entire platform.',
+      },
+      integrations: {
+        description: 'Manage your ERP connections.',
+      },
+      security: {
+        title: 'Credential storage',
+        advisory: 'ERP credentials are currently stored in browser localStorage. Sprint 3 will introduce an encrypted backend vault.',
+        keysLabel: 'Active keys in this browser:',
+        keys: {
+          theme: 'UI theme',
+          density: 'Density',
+          language: 'Language',
+          erp: 'ERP connections',
+          conversations: 'Conversation history',
+        },
+      },
+      reset: {
+        title: 'Danger zone',
+        description: 'Clear local configuration. ERP connections and history can be preserved with the "UI only" option.',
+        resetAll: 'Reset all',
+        resetUIOnly: 'UI preferences only',
+        confirmTitle: 'Reset settings?',
+        confirmBody: 'This action is immediate and irreversible. Selected localStorage keys will be cleared and the page will reload.',
+        confirmAction: 'Yes, reset',
+        cancel: 'Cancel',
+        done: 'Done. Reloading...',
       },
     },
   },

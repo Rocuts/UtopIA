@@ -7,9 +7,8 @@
  * abajo que lanza un chat "El Futuro" con contexto de factibilidad / macro /
  * escenarios precargado (aterriza en `financial-intelligence`).
  *
- * Se envuelve en `data-theme="elite"` para que las utilidades `.glass-*`,
- * `.glow-*` y `.border-elite-*` funcionen incluso si el layout padre aún no
- * tiene el token aplicado.
+ * El ambiente (orbs + max-width container) lo aporta `AreaShell`. El tema
+ * (light/dark/system) lo aplica `ThemeProvider` en <html>.
  */
 
 import { useCallback, useState } from 'react';
@@ -22,6 +21,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import { EliteButton } from '@/components/ui/EliteButton';
 import { FuturoArea } from '@/components/workspace/areas/FuturoArea';
+import { AreaShell } from '@/components/workspace/layouts/AreaShell';
 
 export default function FuturoPage() {
   const { t, language } = useLanguage();
@@ -68,45 +68,17 @@ export default function FuturoPage() {
       };
 
   return (
-    <div
-      data-theme="elite"
-      className={cn(
-        'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
-      )}
-    >
-      {/* Fondo ambient — orbs dorados (futuro = luz, oportunidad) con un toque wine */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 overflow-hidden"
+    <AreaShell areaAccent="futuro">
+      <FuturoArea />
+
+      {/* Strip contextual — chat "El Futuro" */}
+      <motion.section
+        {...fade}
+        aria-label={
+          isEs ? 'Chat contextual de El Futuro' : 'Future contextual chat'
+        }
+        className="mt-16"
       >
-        <div
-          className="absolute -top-[20%] -right-[10%] w-[620px] h-[620px] rounded-full blur-[120px] opacity-30"
-          style={{
-            background:
-              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.40) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
-          }}
-        />
-        <div
-          className="absolute top-[35%] -left-[10%] w-[520px] h-[520px] rounded-full blur-[140px] opacity-20"
-          style={{
-            background:
-              'radial-gradient(circle, rgba(114,47,55,0.30) 0%, rgba(114,47,55,0) 70%)',
-          }}
-        />
-      </div>
-
-      <div className="relative z-[1] max-w-[1240px] mx-auto px-6 md:px-10 pt-8 pb-24">
-        <FuturoArea />
-
-        {/* Strip contextual — chat "El Futuro" */}
-        <motion.section
-          {...fade}
-          aria-label={
-            isEs ? 'Chat contextual de El Futuro' : 'Future contextual chat'
-          }
-          className="mt-16"
-        >
           <div className="relative overflow-hidden rounded-xl glass-elite-elevated border-elite-gold p-6 md:p-8">
             <div
               aria-hidden="true"
@@ -185,7 +157,6 @@ export default function FuturoPage() {
             </p>
           </div>
         </motion.section>
-      </div>
-    </div>
+    </AreaShell>
   );
 }

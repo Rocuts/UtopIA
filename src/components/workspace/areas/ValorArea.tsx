@@ -454,7 +454,6 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
 
   return (
     <div
-      data-theme="elite"
       className={cn(
         'relative w-full',
         compact ? '' : 'min-h-full',

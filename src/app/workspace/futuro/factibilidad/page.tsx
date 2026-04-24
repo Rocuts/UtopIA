@@ -332,7 +332,6 @@ export default function FactibilidadPage() {
 
   return (
     <div
-      data-theme="elite"
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
         'bg-n-1000 text-n-100',

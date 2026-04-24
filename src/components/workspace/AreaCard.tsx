@@ -70,6 +70,8 @@ export type AreaKey = 'escudo' | 'valor' | 'verdad' | 'futuro';
  */
 export type AreaAccent = 'gold' | 'wine';
 
+export type AreaKpiSource = 'erp' | 'report' | 'mock';
+
 export interface AreaCardProps {
   area: AreaKey;
   eyebrow: ReactNode;
@@ -88,6 +90,14 @@ export interface AreaCardProps {
   alertsCount?: number;
   /** Sparkline data points. If omitted, a deterministic stub is generated. */
   sparkline?: number[];
+  /**
+   * Provenance of the KPI — surfaces a small dotted "Mock" marker when the
+   * card falls back to static fixtures so users don't confuse them with
+   * live ERP/report data.
+   */
+  source?: AreaKpiSource;
+  /** ISO timestamp of the last KPI refresh. Shown as micro-timestamp. */
+  updatedAt?: string;
   /**
    * Incremental entrance delay so the dashboard can reveal the 2×2/4-col
    * grid one card after another.
@@ -276,6 +286,8 @@ export function AreaCard({
   icon: Icon,
   alertsCount = 0,
   sparkline,
+  source,
+  updatedAt,
   delay = 0,
   className,
 }: AreaCardProps) {
@@ -285,6 +297,15 @@ export function AreaCard({
 
   const curve = sparkline ?? deterministicCurve(area);
   const seedKey = typeof concept === 'string' ? concept : area;
+
+  const sourceLabel =
+    source === 'erp'
+      ? 'ERP'
+      : source === 'report'
+        ? 'Reporte'
+        : source === 'mock'
+          ? 'Demo'
+          : null;
 
   return (
     <motion.div
@@ -380,6 +401,26 @@ export function AreaCard({
                 <span className="font-mono text-xs-mono uppercase tracking-eyebrow font-medium text-n-500 truncate">
                   {kpi.label}
                 </span>
+                {sourceLabel && (
+                  <span
+                    title={
+                      source === 'mock'
+                        ? 'Datos de demostración. Conecta un ERP para ver métricas en vivo.'
+                        : updatedAt
+                          ? `Actualizado: ${new Date(updatedAt).toLocaleString('es-CO')}`
+                          : undefined
+                    }
+                    className={cn(
+                      'shrink-0 inline-flex items-center rounded-sm px-1 py-0.5',
+                      'font-mono text-[9px] uppercase tracking-eyebrow font-medium',
+                      source === 'mock'
+                        ? 'bg-n-100 text-n-500 border border-dashed border-n-300'
+                        : 'bg-success/10 text-success border border-success/20',
+                    )}
+                  >
+                    {sourceLabel}
+                  </span>
+                )}
               </div>
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span

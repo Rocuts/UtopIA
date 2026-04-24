@@ -7,8 +7,8 @@
  * sparkline, sub-KPIs, grid 3 submódulos) y agrega el strip contextual
  * "Chat contextual El Valor".
  *
- * Wrapper `data-theme="elite"` para que `.glass-*` / `.glow-*` funcionen
- * aunque el layout padre aún no aplique el token.
+ * El ambiente (orbs + max-width container) lo aporta `AreaShell`. El tema
+ * (light/dark/system) lo aplica `ThemeProvider` en <html>.
  */
 
 import { useCallback, useState } from 'react';
@@ -21,6 +21,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import { EliteButton } from '@/components/ui/EliteButton';
 import { ValorArea } from '@/components/workspace/areas/ValorArea';
+import { AreaShell } from '@/components/workspace/layouts/AreaShell';
 
 export default function ValorPage() {
   const { t, language } = useLanguage();
@@ -66,45 +67,17 @@ export default function ValorPage() {
       };
 
   return (
-    <div
-      data-theme="elite"
-      className={cn(
-        'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
-      )}
-    >
-      {/* Fondo ambient — doble glow dorado (el valor brilla) */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 overflow-hidden"
+    <AreaShell areaAccent="valor">
+      <ValorArea />
+
+      {/* Strip contextual — chat "El Valor" */}
+      <motion.section
+        {...fade}
+        aria-label={
+          language === 'es' ? 'Chat contextual de El Valor' : 'Value contextual chat'
+        }
+        className="mt-16"
       >
-        <div
-          className="absolute -top-[15%] -right-[10%] w-[620px] h-[620px] rounded-full blur-[130px] opacity-35"
-          style={{
-            background:
-              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.45) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
-          }}
-        />
-        <div
-          className="absolute top-[45%] -left-[12%] w-[500px] h-[500px] rounded-full blur-[140px] opacity-25"
-          style={{
-            background:
-              'radial-gradient(circle, rgba(232,180,44,0.35) 0%, rgba(232,180,44,0) 70%)',
-          }}
-        />
-      </div>
-
-      <div className="relative z-[1] max-w-[1240px] mx-auto px-6 md:px-10 pt-8 pb-24">
-        <ValorArea />
-
-        {/* Strip contextual — chat "El Valor" */}
-        <motion.section
-          {...fade}
-          aria-label={
-            language === 'es' ? 'Chat contextual de El Valor' : 'Value contextual chat'
-          }
-          className="mt-16"
-        >
           <div className="relative overflow-hidden rounded-xl glass-elite-elevated border-elite-gold p-6 md:p-8">
             <div
               aria-hidden="true"
@@ -185,7 +158,6 @@ export default function ValorPage() {
             </p>
           </div>
         </motion.section>
-      </div>
-    </div>
+    </AreaShell>
   );
 }

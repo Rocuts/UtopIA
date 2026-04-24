@@ -1,104 +1,52 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'motion/react';
-import { Settings, Plug, SlidersHorizontal } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { ERPConnector } from '@/components/workspace/ERPConnector';
+/**
+ * Settings page — 1+1 Centro de Comando.
+ *
+ * Sprint 1 full redesign with 6 sections: Tema, Densidad, Idioma,
+ * Integraciones, Seguridad, Reset. The outer wrapper is neutral (no hardcoded
+ * data-theme) because A1 drives theming at <html> level from the workspace
+ * shell layout. `data-lenis-prevent` stays so internal wheel-scroll survives
+ * the global Lenis smooth-scroll hijack (see CLAUDE.md Layout Gotchas).
+ */
 
-type SettingsTab = 'integraciones' | 'preferencias';
+import { motion } from 'motion/react';
+import { Settings as SettingsIcon } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
+import { SettingsLayout } from '@/components/settings/SettingsLayout';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('integraciones');
-
-  const tabs: { key: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { key: 'integraciones', label: 'Integraciones ERP', icon: Plug },
-    { key: 'preferencias', label: 'Preferencias', icon: SlidersHorizontal },
-  ];
+  const { t } = useLanguage();
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto styled-scrollbar">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
+    <div
+      data-lenis-prevent
+      className="min-h-full w-full overflow-y-auto bg-n-1000"
+    >
+      <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
+        <motion.header
+          initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-n-900 flex items-center justify-center">
-              <Settings className="w-5 h-5 text-n-0" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-n-900">Configuración</h1>
-              <p className="text-xs text-n-400">Conecte sus ERPs y configure la plataforma</p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Tab Navigation */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.04 }}
-          className="flex gap-1 border-b border-n-200"
-          role="tablist"
-          aria-label="Secciones de configuración"
-        >
-          {tabs.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                aria-controls={`tabpanel-${tab.key}`}
-                id={`tab-${tab.key}`}
-                onClick={() => setActiveTab(tab.key)}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-colors relative',
-                  isActive
-                    ? 'text-n-900'
-                    : 'text-n-400 hover:text-n-600',
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {tab.label}
-                {isActive && (
-                  <motion.div
-                    layoutId="settings-tab-indicator"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold-500 rounded-full"
-                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </motion.div>
-
-        {/* Tab Content */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.08 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          className="flex items-start gap-4"
         >
           <div
-            role="tabpanel"
-            id={`tabpanel-${activeTab}`}
-            aria-labelledby={`tab-${activeTab}`}
+            aria-hidden="true"
+            className="shrink-0 w-11 h-11 rounded-lg glass-elite flex items-center justify-center"
           >
-            {activeTab === 'integraciones' && <ERPConnector />}
-            {activeTab === 'preferencias' && (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <SlidersHorizontal className="w-8 h-8 text-n-300" />
-                <p className="text-sm text-n-400">Preferencias de la plataforma</p>
-                <p className="text-xs text-n-300">Próximamente: idioma, moneda, formatos de exportación</p>
-              </div>
-            )}
+            <SettingsIcon className="w-5 h-5 text-gold-500" />
           </div>
-        </motion.div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-eyebrow text-n-500 font-medium font-mono">
+              {t.settings.eyebrow}
+            </span>
+            <h1 className="font-serif-elite text-3xl md:text-4xl leading-tight tracking-tight text-n-100">
+              {t.settings.title}
+            </h1>
+          </div>
+        </motion.header>
+
+        <SettingsLayout />
       </div>
     </div>
   );

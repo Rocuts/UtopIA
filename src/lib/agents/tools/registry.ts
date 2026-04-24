@@ -240,6 +240,7 @@ const AGENT_TOOLS = {
     draft_dian_response: DRAFT_DIAN_RESPONSE,
     assess_risk: ASSESS_RISK,
     get_tax_calendar: GET_TAX_CALENDAR,
+    query_erp: QUERY_ERP,
   },
 } as const satisfies Record<string, Record<string, Tool>>;
 

@@ -9,6 +9,9 @@ import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
+import { pullTrialBalanceForPeriod } from '@/lib/erp/pipeline';
+import type { PeriodSpec } from '@/lib/erp/adapter';
+import type { ERPServiceConnection } from '@/lib/erp/service';
 import type {
   FinancialReportRequest,
   FinancialReport,
@@ -24,6 +27,14 @@ export interface OrchestrateFinancialOptions {
    * extendiendo el shape y no queremos acoplarnos rigido aqui.
    */
   preprocessed?: unknown;
+  /**
+   * Conexiones ERP disponibles para auto-pull de `rawData` cuando el caller
+   * no provee el CSV manualmente. Se combina con `period` para llamar a
+   * `pullTrialBalanceForPeriod` antes del preprocess.
+   */
+  erpConnections?: ERPServiceConnection[];
+  /** Periodo fiscal a extraer del ERP cuando se dispara auto-pull. */
+  period?: PeriodSpec;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,12 +311,34 @@ export async function orchestrateFinancialReport(
   const { onProgress } = options;
 
   // ---------------------------------------------------------------------------
+  // Stage 0.0: Auto-pull desde ERP si el caller no entrego rawData explicito
+  // ---------------------------------------------------------------------------
+  // Cuando el usuario tiene un ERP conectado y no pasa un CSV manual, tiramos
+  // el balance de prueba en vivo y lo serializamos al mismo contrato CSV que
+  // consume `parseTrialBalanceCSV`. Si el ERP falla, propagamos via onProgress
+  // y lanzamos — el route handler captura y devuelve el error al cliente.
+  // ---------------------------------------------------------------------------
+  let effectiveRawData = rawData;
+  if (!effectiveRawData?.trim() && options?.erpConnections?.length && options?.period) {
+    try {
+      effectiveRawData = await pullTrialBalanceForPeriod(
+        options.erpConnections,
+        options.period,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      onProgress?.({ type: 'error', message: `erp_pull_failed: ${message}` });
+      throw err;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Stage 0: Preprocess (idempotente) — genera los totales vinculantes
   // ---------------------------------------------------------------------------
   let preprocessed: unknown = options.preprocessed;
   if (!preprocessed) {
     try {
-      const rows = parseTrialBalanceCSV(rawData);
+      const rows = parseTrialBalanceCSV(effectiveRawData);
       if (rows.length > 0) {
         preprocessed = preprocessTrialBalance(rows);
       }
@@ -359,7 +392,7 @@ export async function orchestrateFinancialReport(
   });
 
   const niifResult = await runNiifAnalyst(
-    rawData,
+    effectiveRawData,
     company,
     language,
     instructions,

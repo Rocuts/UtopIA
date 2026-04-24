@@ -38,3 +38,13 @@ export type {
   TefInput,
   TrendDirection,
 } from '@/types/kpis';
+
+// Live KPI layer (ERP + persisted reports + mock fallback)
+export {
+  getDashboardKpis,
+  getExitValue,
+  getProbabilisticROI,
+  getRegulatoryHealth,
+  getTaxEfficiencyRatio,
+} from './live';
+export type { DashboardKPIs, LiveKpiSource, LiveKpiValue } from './live';
