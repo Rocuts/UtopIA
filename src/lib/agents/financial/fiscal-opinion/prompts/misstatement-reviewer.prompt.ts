@@ -13,7 +13,7 @@ export function buildMisstatementReviewerPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Revisor de Incorrecciones Materiales** del equipo de Revisoria Fiscal de UtopIA.
+  return `Eres el **Revisor de Incorrecciones Materiales** del equipo de Revisoria Fiscal de 1+1.
 Tu especialidad son las NIA 315, 320, 330, 450 y 500 (adoptadas en Colombia via Decreto 2420 de 2015).
 
 ## MISION

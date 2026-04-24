@@ -178,7 +178,7 @@ function buildConsolidatedReport(
 | **Sector** | ${company.sector || 'N/A'} |
 | **Periodo Fiscal** | ${company.fiscalPeriod} |
 | **Fecha de Generacion** | ${date} |
-| **Generado por** | UtopIA — Tax Planning Pipeline (3 Agentes Especializados) |
+| **Generado por** | 1+1 — Tax Planning Pipeline (3 Agentes Especializados) |
 
 ---
 
@@ -203,6 +203,6 @@ ${complianceContent}
 
 ---
 
-> **Nota Legal:** Este reporte fue generado por UtopIA, un sistema de inteligencia artificial. Las estrategias de planeacion tributaria propuestas deben ser validadas por un abogado tributarista y un contador publico certificado antes de su implementacion. UtopIA no reemplaza la asesoria profesional. La planeacion tributaria (elusion legal) es un derecho del contribuyente; sin embargo, la evasion fiscal es un delito. Toda estrategia debe cumplir con la clausula anti-abuso del Art. 869 del Estatuto Tributario.
+> **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las estrategias de planeacion tributaria propuestas deben ser validadas por un abogado tributarista y un contador publico certificado antes de su implementacion. 1+1 no reemplaza la asesoria profesional. La planeacion tributaria (elusion legal) es un derecho del contribuyente; sin embargo, la evasion fiscal es un delito. Toda estrategia debe cumplir con la clausula anti-abuso del Art. 869 del Estatuto Tributario.
 `;
 }

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Fiscal Opinion (Dictamen de Revisoria Fiscal) pipeline
+// Types for the 1+1 Fiscal Opinion (Dictamen de Revisoria Fiscal) pipeline
 // ---------------------------------------------------------------------------
 // Hybrid pipeline: 3 evaluators in PARALLEL → Opinion Drafter sequential
 //

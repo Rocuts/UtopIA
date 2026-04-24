@@ -107,8 +107,8 @@ const PATTERNS: Array<{
       code: 'gateway_billing_required',
       message:
         lang === 'en'
-          ? 'The Vercel AI Gateway requires a credit card on file to process requests. UtopIA now calls OpenAI directly with OPENAI_API_KEY — if you see this in production, your deployment is still on a pre-migration commit. Redeploy main.'
-          : 'El Vercel AI Gateway requiere una tarjeta de credito en la cuenta. UtopIA ahora llama a OpenAI directo con OPENAI_API_KEY — si ves este error en produccion, tu deployment esta en un commit anterior a la migracion. Redespliega main.',
+          ? 'The Vercel AI Gateway requires a credit card on file to process requests. 1+1 now calls OpenAI directly with OPENAI_API_KEY — if you see this in production, your deployment is still on a pre-migration commit. Redeploy main.'
+          : 'El Vercel AI Gateway requiere una tarjeta de credito en la cuenta. 1+1 ahora llama a OpenAI directo con OPENAI_API_KEY — si ves este error en produccion, tu deployment esta en un commit anterior a la migracion. Redespliega main.',
     }),
   },
   {
@@ -117,8 +117,8 @@ const PATTERNS: Array<{
       code: 'gateway_quota_exceeded',
       message:
         lang === 'en'
-          ? 'AI Gateway monthly quota exceeded. (UtopIA now uses OpenAI direct — if you see this, deployment is on a pre-migration commit.)'
-          : 'Cuota mensual del AI Gateway agotada. (UtopIA ahora usa OpenAI directo — si ves esto, el deployment esta en un commit pre-migracion.)',
+          ? 'AI Gateway monthly quota exceeded. (1+1 now uses OpenAI direct — if you see this, deployment is on a pre-migration commit.)'
+          : 'Cuota mensual del AI Gateway agotada. (1+1 ahora usa OpenAI directo — si ves esto, el deployment esta en un commit pre-migracion.)',
     }),
   },
   {

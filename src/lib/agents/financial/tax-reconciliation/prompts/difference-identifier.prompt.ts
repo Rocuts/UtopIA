@@ -20,7 +20,7 @@ export function buildDifferenceIdentifierPrompt(
         ? 'Contabilidad Simplificada (Grupo 3 — Decreto 2706/2012)'
         : 'NIIF para PYMES (Grupo 2 — 35 secciones)';
 
-  return `Eres el **Especialista Senior en Conciliacion Fiscal NIIF-Tributaria** del equipo de UtopIA.
+  return `Eres el **Especialista Senior en Conciliacion Fiscal NIIF-Tributaria** del equipo de 1+1.
 
 ## MISION
 Analizar los datos contables de la empresa e identificar TODAS las diferencias entre las bases contables (NIIF) y las bases fiscales (Estatuto Tributario colombiano), clasificandolas como permanentes o temporarias, y construir la cedula puente del patrimonio NIIF al patrimonio fiscal conforme al Formato 2516 de la DIAN.

@@ -11,13 +11,13 @@ interface RealtimeAPIResult {
 }
 
 const PLATFORM_INFO: Record<string, string> = {
-  servicios: "UtopIA ofrece 4 servicios principales: 1) Defensa ante Requerimientos DIAN — análisis de requerimientos, estrategia de defensa, borradores de respuesta. 2) Devolución de Saldos a Favor — expediente técnico, validación de soportes, acompañamiento. 3) Preparación Empresarial (Due Diligence) — revisión de cumplimiento tributario, estados financieros NIIF, contingencias fiscales. 4) Inteligencia Financiera — análisis de rentabilidad, flujo de caja, proyecciones, impacto tributario.",
+  servicios: "1+1 ofrece 4 servicios principales: 1) Defensa ante Requerimientos DIAN — análisis de requerimientos, estrategia de defensa, borradores de respuesta. 2) Devolución de Saldos a Favor — expediente técnico, validación de soportes, acompañamiento. 3) Preparación Empresarial (Due Diligence) — revisión de cumplimiento tributario, estados financieros NIIF, contingencias fiscales. 4) Inteligencia Financiera — análisis de rentabilidad, flujo de caja, proyecciones, impacto tributario.",
   defensa_dian: "El servicio de Defensa ante Requerimientos DIAN incluye: revisión documental automatizada, diagnóstico de riesgo fiscal (IVA, renta, retenciones, facturación electrónica), borrador de respuesta técnica con citas a doctrina y normativa, organización de soporte probatorio, y estrategia de defensa administrativa. Cubre requerimientos ordinarios (Art. 684), especiales (Art. 685), pliegos de cargos, y liquidaciones oficiales.",
   devolucion: "El servicio de Devolución de Saldos a Favor incluye: expediente técnico automatizado, validación de soportes y consistencia, análisis de viabilidad del trámite, acompañamiento documental ante la DIAN, y conexión tributario-tesorería-flujo de caja. Aplica para saldos a favor en IVA, renta, y retención en la fuente.",
   due_diligence: "El servicio de Preparación Empresarial incluye: due diligence contable y tributaria, modelación financiera y escenarios, detección de inconsistencias contables, narrativa financiera para inversionistas o bancos, e indicadores clave con estructura tributaria óptima.",
   inteligencia_financiera: "El servicio de Inteligencia Financiera incluye: análisis de rentabilidad por cliente, producto y línea de negocio, estructura de costos y márgenes, proyecciones de flujo de caja, presupuestos y escenarios what-if, e impacto tributario de decisiones de crecimiento.",
-  como_funciona: "UtopIA funciona con inteligencia artificial especializada en contabilidad y tributaria colombiana. Puedes hacer consultas por texto o voz. El sistema busca en una base de conocimiento de normativa colombiana (Estatuto Tributario, decretos, resoluciones DIAN, NIIF) y también puede buscar en internet fuentes oficiales como dian.gov.co. Puedes subir documentos (PDF, Excel) para análisis. Selecciona un caso de uso específico para obtener respuestas más precisas.",
-  precios: "Para información sobre precios y planes, te invitamos a contactar a nuestro equipo comercial. UtopIA ofrece planes adaptados al tamaño de tu firma contable y volumen de consultas."
+  como_funciona: "1+1 funciona con inteligencia artificial especializada en contabilidad y tributaria colombiana. Puedes hacer consultas por texto o voz. El sistema busca en una base de conocimiento de normativa colombiana (Estatuto Tributario, decretos, resoluciones DIAN, NIIF) y también puede buscar en internet fuentes oficiales como dian.gov.co. Puedes subir documentos (PDF, Excel) para análisis. Selecciona un caso de uso específico para obtener respuestas más precisas.",
+  precios: "Para información sobre precios y planes, te invitamos a contactar a nuestro equipo comercial. 1+1 ofrece planes adaptados al tamaño de tu firma contable y volumen de consultas."
 };
 
 export function useRealtimeAPI(): RealtimeAPIResult {
@@ -318,7 +318,7 @@ export function useRealtimeAPI(): RealtimeAPIResult {
               {
                 type: 'function',
                 name: 'get_platform_info',
-                description: 'Obtiene información sobre los servicios y capacidades de la plataforma UtopIA. Usar cuando el usuario pregunte qué puede hacer UtopIA, qué servicios ofrece, cómo funciona, o necesite orientación sobre qué caso de uso elegir.',
+                description: 'Obtiene información sobre los servicios y capacidades de la plataforma 1+1. Usar cuando el usuario pregunte qué puede hacer 1+1, qué servicios ofrece, cómo funciona, o necesite orientación sobre qué caso de uso elegir.',
                 parameters: {
                   type: 'object',
                   properties: {

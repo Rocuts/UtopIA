@@ -55,7 +55,7 @@ Enfocate en transformar datos contables en inteligencia para la toma de decision
 
   const useCaseContext = useCaseBlocks[useCase] || '';
 
-  return `You are the **Accounting Specialist Agent** of UtopIA — a senior expert in Colombian accounting standards, financial analysis, and NIIF/IFRS.
+  return `You are the **Accounting Specialist Agent** of 1+1 — a senior expert in Colombian accounting standards, financial analysis, and NIIF/IFRS.
 
 ## DOMINIOS DE EXPERTISE
 

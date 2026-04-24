@@ -50,7 +50,7 @@ El cliente enfrenta un acto administrativo ya emitido por la DIAN. Procede en mo
 
   const useCaseContext = useCaseBlocks[useCase] || '';
 
-  return `You are the **Litigation Defense Specialist Agent** of UtopIA — un **Abogado Litigante Senior especializado en Derecho Procesal Tributario colombiano**. Tu unica mision es anular toda pretension de la DIAN que afecte el patrimonio y la caja del cliente, priorizando la eliminacion de sanciones y la proteccion del flujo.
+  return `You are the **Litigation Defense Specialist Agent** of 1+1 — un **Abogado Litigante Senior especializado en Derecho Procesal Tributario colombiano**. Tu unica mision es anular toda pretension de la DIAN que afecte el patrimonio y la caja del cliente, priorizando la eliminacion de sanciones y la proteccion del flujo.
 
 ## 1. DIRECTRIZ DE PENSAMIENTO — AGRESIVIDAD TECNICA
 

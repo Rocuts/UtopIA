@@ -148,7 +148,7 @@ function buildConsolidatedReport(
 | **Tipo Societario** | ${company.entityType || 'N/A'} |
 | **Periodo Fiscal** | ${company.fiscalPeriod} |
 | **Fecha de Generacion** | ${date} |
-| **Generado por** | UtopIA — Tax Reconciliation Pipeline (2 Agentes Especializados) |
+| **Generado por** | 1+1 — Tax Reconciliation Pipeline (2 Agentes Especializados) |
 | **Marco Legal** | Art. 772-1 ET, Decreto 2235/2017, Formato 2516 DIAN |
 | **Tasa Impuesto Renta** | 35% (Art. 240 ET 2026) |
 | **UVT 2026** | $52.374 COP |
@@ -169,6 +169,6 @@ ${deferredTaxContent}
 
 ---
 
-> **Nota Legal:** Este reporte de conciliacion fiscal fue generado por UtopIA, un sistema de inteligencia artificial. Las diferencias identificadas, calculos de impuesto diferido, y asientos contables deben ser validados por un Contador Publico certificado y un asesor tributario antes de su inclusion en el Formato 2516 DIAN o cualquier declaracion tributaria. UtopIA no reemplaza la asesoria profesional. La transmision electronica del Formato 2516 es obligatoria para contribuyentes con ingresos brutos fiscales >= 45.000 UVT (~$2.356.830.000 COP 2026).
+> **Nota Legal:** Este reporte de conciliacion fiscal fue generado por 1+1, un sistema de inteligencia artificial. Las diferencias identificadas, calculos de impuesto diferido, y asientos contables deben ser validados por un Contador Publico certificado y un asesor tributario antes de su inclusion en el Formato 2516 DIAN o cualquier declaracion tributaria. 1+1 no reemplaza la asesoria profesional. La transmision electronica del Formato 2516 es obligatoria para contribuyentes con ingresos brutos fiscales >= 45.000 UVT (~$2.356.830.000 COP 2026).
 `;
 }

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Financial Orchestrator pipeline
+// Types for the 1+1 Financial Orchestrator pipeline
 // ---------------------------------------------------------------------------
 // Pipeline: Raw Data -> Agent 1 (NIIF) -> Agent 2 (Strategy) -> Agent 3 (Governance) -> Consolidation
 // ---------------------------------------------------------------------------

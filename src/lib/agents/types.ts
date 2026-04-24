@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Shared types for the UtopIA multi-agent orchestration system
+// Shared types for the 1+1 multi-agent orchestration system
 // ---------------------------------------------------------------------------
 
 import type { NITContext } from '@/lib/security/pii-filter';

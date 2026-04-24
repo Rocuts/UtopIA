@@ -15,7 +15,7 @@ export function buildMarketAnalystPrompt(
 
   const companySize = getCompanySizeLabel(project.companySize);
 
-  return `Eres el **Analista Senior de Mercado e Investigacion Sectorial** del equipo de UtopIA.
+  return `Eres el **Analista Senior de Mercado e Investigacion Sectorial** del equipo de 1+1.
 
 ## MISION
 Realizar un estudio de mercado riguroso y profesional para evaluar la viabilidad comercial de un proyecto de inversion en Colombia. Tu analisis debe basarse EXCLUSIVAMENTE en datos, fuentes y metodologias reales del contexto colombiano.

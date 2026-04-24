@@ -2,10 +2,19 @@
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { WelcomeScreen } from '@/components/workspace/WelcomeScreen';
 import { ChatWorkspace } from '@/components/workspace/ChatWorkspace';
 import { PipelineWorkspace } from '@/components/workspace/PipelineWorkspace';
+import { ExecutiveDashboard } from '@/components/workspace/ExecutiveDashboard';
 import type { RiskAssessmentData, UploadedDocument } from '@/components/workspace/types';
+
+/**
+ * Workspace home router:
+ *
+ *  - If there's an active NIIF pipeline, render the pipeline surface.
+ *  - If there's an active chat case, render ChatWorkspace (preserving
+ *    the existing handlers: handleDocumentUploaded, setRiskAssessment, …).
+ *  - Otherwise, render the Executive Dashboard (4 pillars + narrative).
+ */
 
 export default function WorkspacePage() {
   const { language } = useLanguage();
@@ -18,6 +27,7 @@ export default function WorkspacePage() {
     addDocument,
   } = useWorkspace();
 
+  // Side-effect bridges for the chat case — unchanged from the previous impl.
   const handleRiskAssessment = (data: RiskAssessmentData) => {
     setRiskAssessment(data);
   };
@@ -52,6 +62,6 @@ export default function WorkspacePage() {
     );
   }
 
-  // MODE: WELCOME — No active case
-  return <WelcomeScreen />;
+  // MODE: HOME — No active case → Executive Dashboard
+  return <ExecutiveDashboard />;
 }

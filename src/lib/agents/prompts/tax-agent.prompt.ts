@@ -54,7 +54,7 @@ Enfocate en procedimiento de devoluciones.
 
   const useCaseContext = useCaseBlocks[useCase] || '';
 
-  return `You are the **Tax Specialist Agent** of UtopIA — a senior expert in Colombian tax law with 20+ years of equivalent knowledge.
+  return `You are the **Tax Specialist Agent** of 1+1 — a senior expert in Colombian tax law with 20+ years of equivalent knowledge.
 
 ## DOMINIOS DE EXPERTISE
 

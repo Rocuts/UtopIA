@@ -62,12 +62,12 @@ const SPRING = { stiffness: 400, damping: 25 };
 
 const INITIAL_MSG: Record<string, Record<string, string>> = {
   general: {
-    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoría contable, tributaria y financiera colombiana.\n\nPuede:\n- **Hacer cualquier pregunta** sobre contabilidad, NIIF, impuestos o finanzas\n- **Subir documentos** (PDF, Excel, Word, imágenes) usando el botón 📎 o arrastrando al chat\n- **Analizar extractos bancarios**, facturas, balances de prueba y más\n\n¿En qué puedo ayudarle?',
-    en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting, tax and financial consulting.\n\nYou can:\n- **Ask any question** about accounting, IFRS, taxes or finance\n- **Upload documents** (PDF, Excel, Word, images) using the 📎 button or dragging to the chat\n- **Analyze bank statements**, invoices, trial balances and more\n\nHow can I help you?',
+    es: 'Bienvenido a 1+1. Soy su asistente especializado en consultoría contable, tributaria y financiera colombiana.\n\nPuede:\n- **Hacer cualquier pregunta** sobre contabilidad, NIIF, impuestos o finanzas\n- **Subir documentos** (PDF, Excel, Word, imágenes) usando el botón 📎 o arrastrando al chat\n- **Analizar extractos bancarios**, facturas, balances de prueba y más\n\n¿En qué puedo ayudarle?',
+    en: 'Welcome to 1+1. I am your assistant specialized in Colombian accounting, tax and financial consulting.\n\nYou can:\n- **Ask any question** about accounting, IFRS, taxes or finance\n- **Upload documents** (PDF, Excel, Word, images) using the 📎 button or dragging to the chat\n- **Analyze bank statements**, invoices, trial balances and more\n\nHow can I help you?',
   },
   default: {
-    es: 'Bienvenido a UtopIA. Soy su asistente especializado en consultoría contable y tributaria colombiana. ¿En qué puedo ayudarle hoy?',
-    en: 'Welcome to UtopIA. I am your assistant specialized in Colombian accounting and tax consulting. How can I help you today?',
+    es: 'Bienvenido a 1+1. Soy su asistente especializado en consultoría contable y tributaria colombiana. ¿En qué puedo ayudarle hoy?',
+    en: 'Welcome to 1+1. I am your assistant specialized in Colombian accounting and tax consulting. How can I help you today?',
   },
 };
 
@@ -699,7 +699,7 @@ function AssistantMessage({
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-6 py-2.5 border-b border-[#e5e5e5]">
-        <span className="text-xs font-medium text-[#0a0a0a]">UtopIA</span>
+        <span className="text-xs font-medium text-[#0a0a0a]">1+1</span>
         <span className="text-[#a3a3a3] text-xs">·</span>
         <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
           {language === 'es' ? 'Análisis' : 'Analysis'}

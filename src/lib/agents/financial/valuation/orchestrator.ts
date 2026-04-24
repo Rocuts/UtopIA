@@ -225,7 +225,7 @@ function buildConsolidatedValuationReport(
 | **Periodo Base** | ${company.fiscalPeriod} |
 | **Proposito** | ${purpose} |
 | **Fecha de Valoracion** | ${date} |
-| **Sistema** | UtopIA — Valuation Pipeline (3 Agentes: DCF + Multiplos en Paralelo → Sintetizador) |
+| **Sistema** | 1+1 — Valuation Pipeline (3 Agentes: DCF + Multiplos en Paralelo → Sintetizador) |
 
 ---
 
@@ -250,6 +250,6 @@ ${synthesisContent}
 
 ---
 
-> **Nota Legal:** Este informe de valoracion fue generado por UtopIA, un sistema de inteligencia artificial. Las estimaciones de valor, supuestos y proyecciones deben ser validados por un valuador profesional certificado antes de su uso en transacciones, procesos legales o presentaciones ante la DIAN o SuperSociedades. UtopIA no reemplaza la opinion profesional de un perito valuador. La valoracion se realiza bajo el marco de NIIF 13 (Valor Razonable), Art. 90 del Estatuto Tributario, y los lineamientos de la Superintendencia de Sociedades vigentes a 2026.
+> **Nota Legal:** Este informe de valoracion fue generado por 1+1, un sistema de inteligencia artificial. Las estimaciones de valor, supuestos y proyecciones deben ser validados por un valuador profesional certificado antes de su uso en transacciones, procesos legales o presentaciones ante la DIAN o SuperSociedades. 1+1 no reemplaza la opinion profesional de un perito valuador. La valoracion se realiza bajo el marco de NIIF 13 (Valor Razonable), Art. 90 del Estatuto Tributario, y los lineamientos de la Superintendencia de Sociedades vigentes a 2026.
 `;
 }

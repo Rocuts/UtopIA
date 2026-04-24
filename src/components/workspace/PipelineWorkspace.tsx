@@ -390,7 +390,7 @@ function ReportViewer({
       // Extraer nombre sugerido del header (si existe).
       const disposition = res.headers.get('Content-Disposition') || '';
       const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match?.[1] || `Reporte_Financiero_UtopIA_${Date.now()}.xlsx`;
+      const filename = match?.[1] || `Reporte_Financiero_1mas1_${Date.now()}.xlsx`;
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -487,10 +487,8 @@ function ReportViewer({
           body {
             background: #ffffff !important;
           }
-          #workspace-sidebar,
-          #analysis-panel,
-          .statusbar,
-          [data-role='statusbar'],
+          #chat-sidebar,
+          header[role='banner'],
           .report-action-bar,
           .report-toc,
           .report-followup,

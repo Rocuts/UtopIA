@@ -148,4 +148,4 @@ Periódicamente, el legislador habilita mecanismos transitorios de conciliación
 
 ---
 
-*Documento de referencia para la base de conocimiento de UtopIA. Para cada caso específico, se recomienda consultar el texto completo del Estatuto Tributario y la doctrina oficial de la DIAN.*
+*Documento de referencia para la base de conocimiento de 1+1. Para cada caso específico, se recomienda consultar el texto completo del Estatuto Tributario y la doctrina oficial de la DIAN.*

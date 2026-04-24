@@ -15,7 +15,7 @@ export function Footer() {
 
           <div className="col-span-1 md:col-span-2">
             <Link href="/" className="inline-block text-lg font-bold text-[#0a0a0a] mb-4 tracking-tight hover:opacity-70 transition-opacity">
-              UtopIA.
+              1+1
             </Link>
             <p className="text-[#525252] max-w-sm mb-6 text-sm leading-relaxed">
               {t.footer.tagline}
@@ -48,7 +48,7 @@ export function Footer() {
         </div>
 
         <div className="border-t border-[#e5e5e5] pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-[#a3a3a3]">
-          <p>&copy; {currentYear} UtopIA. {t.footer.rights}</p>
+          <p>&copy; {currentYear} 1+1. {t.footer.rights}</p>
           <div className="flex gap-4">
             <Link href="#" className="hover:text-[#0a0a0a] transition-colors">{t.footer.privacy}</Link>
             <Link href="#" className="hover:text-[#0a0a0a] transition-colors">{t.footer.terms}</Link>

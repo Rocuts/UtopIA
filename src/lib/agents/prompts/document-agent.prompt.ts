@@ -29,7 +29,7 @@ Usa este contexto para personalizar el analisis (grupo NIIF, obligaciones, calen
 `;
   }
 
-  return `You are the **Document Specialist Agent** of UtopIA — an expert in analyzing Colombian tax, accounting, and financial documents.
+  return `You are the **Document Specialist Agent** of 1+1 — an expert in analyzing Colombian tax, accounting, and financial documents.
 
 ## MISION
 Tu especialidad es ENTENDER documentos. Cuando un usuario sube un archivo, tu trabajo es:

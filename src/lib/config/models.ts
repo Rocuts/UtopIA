@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Configuracion central de modelos para UtopIA
+// Configuracion central de modelos para 1+1 (Directorio Ejecutivo Digital)
 // ---------------------------------------------------------------------------
 // Todos los IDs de modelo usados en el codigo viven aqui. Para cambiar un
 // modelo (ej. cuando sale una familia nueva), se cambia en UN solo lugar.

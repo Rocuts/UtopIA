@@ -10,11 +10,11 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 // ---------------------------------------------------------------------------
-// Brand colors (UtopIA corporate palette)
+// Brand colors (1+1 corporate palette)
 // ---------------------------------------------------------------------------
 
 const COLORS = {
-  gold: 'FFD4A017',       // UtopIA gold
+  gold: 'FFD4A017',       // 1+1 gold
   darkNavy: 'FF0A0A0A',   // Primary dark
   white: 'FFFFFFFF',
   lightGray: 'FFF5F5F5',
@@ -53,7 +53,7 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   const { report, preprocessed } = options;
   const wb = new ExcelJS.Workbook();
 
-  wb.creator = 'UtopIA Financial Orchestrator';
+  wb.creator = '1+1 Financial Orchestrator';
   wb.created = new Date();
   wb.modified = new Date();
 
@@ -368,7 +368,7 @@ function addSummarySheet(wb: ExcelJS.Workbook, report: FinancialReport): void {
 function addSheetHeader(ws: ExcelJS.Worksheet, title: string, report: FinancialReport): void {
   // Gold bar effect
   const r1 = ws.getRow(1);
-  r1.getCell(1).value = 'UtopIA | Reporte Financiero Elite';
+  r1.getCell(1).value = '1+1 | Reporte Financiero Elite';
   r1.getCell(1).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.gold } };
 
   const r2 = ws.getRow(2);

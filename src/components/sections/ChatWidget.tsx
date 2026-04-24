@@ -14,7 +14,7 @@ const PREVIEW_MESSAGES = {
     {
       role: 'assistant' as const,
       content:
-        'Bienvenido a UtopIA. Soy su asistente especializado en consultoria contable y tributaria colombiana.',
+        'Bienvenido a 1+1. Soy su asistente especializado en consultoria contable y tributaria colombiana.',
     },
     {
       role: 'user' as const,
@@ -31,7 +31,7 @@ const PREVIEW_MESSAGES = {
     {
       role: 'assistant' as const,
       content:
-        'Welcome to UtopIA. I am your assistant specialized in Colombian accounting and tax consulting.',
+        'Welcome to 1+1. I am your assistant specialized in Colombian accounting and tax consulting.',
     },
     {
       role: 'user' as const,
@@ -73,7 +73,7 @@ export function ChatWidget() {
             <Bot className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h3 className="font-medium text-[#0a0a0a] text-sm">UtopIA</h3>
+            <h3 className="font-medium text-[#0a0a0a] text-sm">1+1</h3>
             <p className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
               {t.chatAi.status}
             </p>

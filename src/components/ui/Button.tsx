@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'accent' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'accent' | 'danger' | 'elite';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -19,6 +19,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             "bg-transparent text-[#525252] hover:bg-[#fafafa] hover:text-[#0a0a0a]": variant === 'ghost',
             "bg-[#d4a017] text-white hover:bg-[#b8901a] focus-visible:ring-[#d4a017]": variant === 'accent',
             "bg-[#ef4444] text-white hover:bg-[#dc2626] focus-visible:ring-[#ef4444]": variant === 'danger',
+            // elite: premium gold gradient on dark text, used inside data-theme="elite" subtrees.
+            // Forwards the look of EliteButton variant="primary" without requiring the Motion wrapper.
+            "rounded-[10px] text-black font-semibold bg-[linear-gradient(135deg,#D4A017_0%,#E8B42C_100%)] hover:bg-[linear-gradient(135deg,#E8B42C_0%,#F5C63F_100%)] focus-visible:ring-[#D4A017] border border-[rgba(0,0,0,0.12)] shadow-[0_0_22px_rgba(212,160,23,0.18)] hover:shadow-[0_0_32px_rgba(212,160,23,0.32)]": variant === 'elite',
             "h-8 px-3 text-xs": size === 'sm',
             "h-10 px-5": size === 'md',
             "h-12 px-8 text-base": size === 'lg',

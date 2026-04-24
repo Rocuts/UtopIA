@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Tax Planning (Planeacion Tributaria) pipeline
+// Types for the 1+1 Tax Planning (Planeacion Tributaria) pipeline
 // ---------------------------------------------------------------------------
 // Pipeline: Company Data -> Agent 1 (Tax Optimizer) -> Agent 2 (NIIF Impact)
 //           -> Agent 3 (Compliance Validator) -> Consolidation

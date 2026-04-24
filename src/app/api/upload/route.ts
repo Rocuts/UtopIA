@@ -282,7 +282,7 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
           'SCANNED_PDF: Este PDF parece ser una imagen escaneada. ' +
           'No fue posible extraer el texto automaticamente. ' +
           'Intente subir capturas de cada pagina como imagenes (.jpg o .png) ' +
-          'para que UtopIA las procese con OCR.'
+          'para que 1+1 las procese con OCR.'
         );
       }
     }

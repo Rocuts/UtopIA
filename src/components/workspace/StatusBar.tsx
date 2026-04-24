@@ -104,7 +104,7 @@ export function StatusBar({
           )}
         </button>
         <span className="text-sm font-bold text-[#0a0a0a] tracking-tight hidden sm:inline">
-          UtopIA<span className="text-[#d4a017]">.</span>
+          1<span className="text-[#d4a017]">+</span>1
         </span>
       </div>
 

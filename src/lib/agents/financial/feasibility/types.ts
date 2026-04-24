@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Feasibility Study (Estudio de Factibilidad) pipeline
+// Types for the 1+1 Feasibility Study (Estudio de Factibilidad) pipeline
 // ---------------------------------------------------------------------------
 // Pipeline: Project Data -> Agent 1 (Market) -> Agent 2 (Financial) -> Agent 3 (Risk) -> Consolidation
 // ---------------------------------------------------------------------------

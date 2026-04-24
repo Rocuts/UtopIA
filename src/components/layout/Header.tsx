@@ -36,7 +36,7 @@ export function Header() {
     )}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl h-16 flex items-center justify-between">
         <Link href="/" className="text-lg font-bold tracking-tight text-[#0a0a0a]">
-          UtopIA.
+          1+1
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">

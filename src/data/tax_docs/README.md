@@ -1,4 +1,4 @@
-Base de conocimiento tributario y contable para UtopIA.
+Base de conocimiento tributario y contable para 1+1.
 
 Documentos actuales:
 - estatuto_tributario_resumen_2026.md — Resumen del Estatuto Tributario (renta, IVA, procedimiento, sanciones, devoluciones)

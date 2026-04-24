@@ -13,7 +13,7 @@ export function buildComparableAnalystPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Experto en Analisis de Comparables y Benchmarking** del equipo de UtopIA.
+  return `Eres el **Experto en Analisis de Comparables y Benchmarking** del equipo de 1+1.
 
 ## MISION
 Realizar el estudio de comparabilidad para las transacciones controladas previamente identificadas. Disenar la estrategia de busqueda de comparables, aplicar los criterios de comparabilidad, seleccionar comparables validos, calcular el rango intercuartil conforme al Art. 260-4 ET, y determinar si las transacciones cumplen el principio de plena competencia.

@@ -170,7 +170,7 @@ function buildConsolidatedReport(
 ${project.ciiu ? `| **CIIU Rev. 4 A.C.** | ${project.ciiu} |\n` : ''}| **Inversion Estimada** | ${investmentStr} |
 | **Horizonte de Evaluacion** | ${project.evaluationHorizon || 5} anos |
 ${project.city ? `| **Ubicacion** | ${project.city}${project.department ? `, ${project.department}` : ''} |\n` : ''}${project.promoterName ? `| **Promotor** | ${project.promoterName} |\n` : ''}| **Fecha de Generacion** | ${date} |
-| **Generado por** | UtopIA — Feasibility Study Pipeline (3 Agentes Especializados) |
+| **Generado por** | 1+1 — Feasibility Study Pipeline (3 Agentes Especializados) |
 
 ---
 
@@ -195,6 +195,6 @@ ${riskContent}
 
 ---
 
-> **Descargo de Responsabilidad:** Este estudio de factibilidad fue generado por UtopIA, un sistema de inteligencia artificial, como herramienta de apoyo a la toma de decisiones. NO constituye una garantia de resultados ni reemplaza la asesoria profesional especializada. Las proyecciones financieras se basan en supuestos que deben ser validados con estudios de campo, cotizaciones reales y analisis de mercado primario. Todas las cifras, tasas y parametros deben ser verificados con fuentes oficiales vigentes (DANE, Banco de la Republica, DIAN, Superintendencias) antes de tomar decisiones de inversion. UtopIA no se hace responsable por decisiones de inversion basadas exclusivamente en este documento.
+> **Descargo de Responsabilidad:** Este estudio de factibilidad fue generado por 1+1, un sistema de inteligencia artificial, como herramienta de apoyo a la toma de decisiones. NO constituye una garantia de resultados ni reemplaza la asesoria profesional especializada. Las proyecciones financieras se basan en supuestos que deben ser validados con estudios de campo, cotizaciones reales y analisis de mercado primario. Todas las cifras, tasas y parametros deben ser verificados con fuentes oficiales vigentes (DANE, Banco de la Republica, DIAN, Superintendencias) antes de tomar decisiones de inversion. 1+1 no se hace responsable por decisiones de inversion basadas exclusivamente en este documento.
 `;
 }

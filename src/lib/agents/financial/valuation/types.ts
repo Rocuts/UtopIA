@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Business Valuation pipeline
+// Types for the 1+1 Business Valuation pipeline
 // ---------------------------------------------------------------------------
 // Pipeline: [DCF Modeler + Market Comparables] (PARALLEL) -> Valuation Synthesizer
 // ---------------------------------------------------------------------------

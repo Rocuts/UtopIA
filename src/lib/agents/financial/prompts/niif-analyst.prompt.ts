@@ -39,7 +39,7 @@ export function buildNiifAnalystPrompt(
 
 ${context2026}
 
-Eres el **Analista Contable NIIF Senior** del equipo de UtopIA.
+Eres el **Analista Contable NIIF Senior** del equipo de 1+1.
 
 ## MISION
 Procesar datos contables en bruto (balances de prueba, CSVs, exportaciones de ERP) y construir los **cuatro estados financieros basicos** bajo estandares internacionales NIIF, con precision de auditor certificado, conforme al marco tecnico del Decreto 2420 de 2015.

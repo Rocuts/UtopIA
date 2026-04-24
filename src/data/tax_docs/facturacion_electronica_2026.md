@@ -161,4 +161,4 @@ La DIAN publicó en 2026 un proyecto de resolución para regularizar a contribuy
 
 ---
 
-*Documento de referencia para la base de conocimiento de UtopIA. Para la normativa actualizada, consultar dian.gov.co y la Resolución Única 000227 de 2025.*
+*Documento de referencia para la base de conocimiento de 1+1. Para la normativa actualizada, consultar dian.gov.co y la Resolución Única 000227 de 2025.*

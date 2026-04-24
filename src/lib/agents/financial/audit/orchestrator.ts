@@ -316,7 +316,7 @@ function buildConsolidatedAuditReport(
 | **Score Global** | **${score}/100** |
 | **Opinion** | **${opinionLabels[opinion]}** |
 | **Total Hallazgos** | ${findings.length} (Criticos: ${counts.critico}, Altos: ${counts.alto}, Medios: ${counts.medio}) |
-| **Sistema** | UtopIA — Audit Pipeline (4 Auditores Especializados en Paralelo) |
+| **Sistema** | 1+1 — Audit Pipeline (4 Auditores Especializados en Paralelo) |
 
 ---
 
@@ -352,6 +352,6 @@ ${auditorSections}
 
 ---
 
-> **Nota Legal:** Este informe de auditoria fue generado por UtopIA, un sistema de inteligencia artificial. Los hallazgos, opiniones y recomendaciones deben ser validados por un Contador Publico certificado y un Revisor Fiscal independiente antes de su uso oficial. Este informe no constituye un dictamen de auditoria vinculante conforme a la Ley 43 de 1990.
+> **Nota Legal:** Este informe de auditoria fue generado por 1+1, un sistema de inteligencia artificial. Los hallazgos, opiniones y recomendaciones deben ser validados por un Contador Publico certificado y un Revisor Fiscal independiente antes de su uso oficial. Este informe no constituye un dictamen de auditoria vinculante conforme a la Ley 43 de 1990.
 `;
 }

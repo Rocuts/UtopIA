@@ -103,7 +103,7 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
 
 function createExcelResponse(buffer: Buffer, companyName: string): Response {
   const safeName = companyName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
-  const filename = `Reporte_Financiero_UtopIA_${safeName}_${Date.now()}.xlsx`;
+  const filename = `Reporte_Financiero_1mas1_${safeName}_${Date.now()}.xlsx`;
 
   return new Response(new Uint8Array(buffer), {
     headers: {

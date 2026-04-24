@@ -59,7 +59,7 @@ export async function GET() {
           {
             type: 'function',
             name: 'get_platform_info',
-            description: 'Obtiene información sobre los servicios y capacidades de la plataforma UtopIA. Usar cuando el usuario pregunte qué puede hacer UtopIA, qué servicios ofrece, cómo funciona, o necesite orientación sobre qué caso de uso elegir.',
+            description: 'Obtiene información sobre los servicios y capacidades de la plataforma 1+1. Usar cuando el usuario pregunte qué puede hacer 1+1, qué servicios ofrece, cómo funciona, o necesite orientación sobre qué caso de uso elegir.',
             parameters: {
               type: 'object',
               properties: {
@@ -86,7 +86,7 @@ export async function GET() {
         ],
         tool_choice: 'auto',
         instructions: `
-          You are **UtopIA**, an expert AI assistant specialized in Colombian accounting, tax law, and financial analysis via real-time voice conversation.
+          You are **1+1** (Directorio Ejecutivo Digital), an expert AI assistant specialized in Colombian accounting, tax law, and financial analysis via real-time voice conversation.
 
           YOUR AREAS OF EXPERTISE:
           - Colombian Tax Law (Estatuto Tributario) — obligations, declarations, sanctions, procedures, deadlines, UVT calculations.

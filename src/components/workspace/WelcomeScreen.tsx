@@ -105,13 +105,13 @@ export function WelcomeScreen() {
     <div className="h-full overflow-y-auto styled-scrollbar">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-5">
         <h1 className="sr-only">
-          {es ? 'UtopIA — Consultoría Contable y Tributaria' : 'UtopIA — Accounting & Tax Consulting'}
+          {es ? '1+1 — Directorio Ejecutivo Digital' : '1+1 — Digital Executive Board'}
         </h1>
 
         {/* Header */}
         <motion.div {...fadeUp(0)} className="flex items-center gap-2.5">
-          <img src="/logo-modern.png" alt="UtopIA" className="w-8 h-8 rounded-lg object-cover invert hue-rotate-180" />
-          <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">UtopIA.</span>
+          <img src="/logo-modern.png" alt="1+1" className="w-8 h-8 rounded-lg object-cover invert hue-rotate-180" />
+          <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">1+1</span>
           <span className="text-xs text-[#a3a3a3] ml-1 hidden sm:inline">
             {es ? 'Su firma contable, potenciada por IA' : 'Your accounting firm, powered by AI'}
           </span>

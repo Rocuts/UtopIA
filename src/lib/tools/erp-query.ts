@@ -590,7 +590,7 @@ export async function queryERP(
       content:
         'No hay ningun ERP conectado. Para consultar datos contables en tiempo real, ' +
         'conecte su sistema ERP (Alegra, Siigo, Helisa, SAP, QuickBooks, Xero, etc.) ' +
-        'desde la seccion de Integraciones en la configuracion de UtopIA.',
+        'desde la seccion de Integraciones en la configuracion de 1+1.',
       provider: 'ninguno',
       recordCount: 0,
       period: args.period ?? 'N/A',

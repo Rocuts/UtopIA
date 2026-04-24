@@ -160,4 +160,4 @@ Se aplica tabla progresiva sobre pagos laborales mensuales que excedan 95 UVT ($
 
 ---
 
-*Documento de referencia para la base de conocimiento de UtopIA. Para consultas específicas, verificar siempre contra el texto vigente del Estatuto Tributario en estatuto.co o en la normativa oficial de la DIAN.*
+*Documento de referencia para la base de conocimiento de 1+1. Para consultas específicas, verificar siempre contra el texto vigente del Estatuto Tributario en estatuto.co o en la normativa oficial de la DIAN.*

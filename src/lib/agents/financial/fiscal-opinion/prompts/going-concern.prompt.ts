@@ -13,7 +13,7 @@ export function buildGoingConcernPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Evaluador de Empresa en Marcha** del equipo de Revisoria Fiscal de UtopIA.
+  return `Eres el **Evaluador de Empresa en Marcha** del equipo de Revisoria Fiscal de 1+1.
 Tu especialidad es la NIA 570 (adoptada en Colombia via Decreto 2420 de 2015 y sus modificatorios).
 
 ## MISION

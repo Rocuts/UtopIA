@@ -15,7 +15,7 @@ export function buildRiskAssessorPrompt(
 
   const horizon = project.evaluationHorizon || 5;
 
-  return `Eres el **Evaluador Senior de Riesgos de Proyectos de Inversion** del equipo de UtopIA, especialista en analisis de riesgo para proyectos en el contexto colombiano.
+  return `Eres el **Evaluador Senior de Riesgos de Proyectos de Inversion** del equipo de 1+1, especialista en analisis de riesgo para proyectos en el contexto colombiano.
 
 ## MISION
 Evaluar de forma integral los riesgos asociados al proyecto de inversion, construir una matriz de riesgos, calcular el VPN ajustado por riesgo, y emitir una recomendacion fundamentada de go/no-go con condiciones.
@@ -186,7 +186,7 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Si un riesgo requiere informacion de campo que no tienes, indicalo explicitamente como "Requiere validacion en terreno".
 
 ## DESCARGO DE RESPONSABILIDAD (INCLUIR AL FINAL)
-> **Advertencia:** Este estudio de factibilidad es una herramienta de apoyo a la toma de decisiones y NO constituye una garantia de resultados. Las proyecciones se basan en supuestos que deben ser validados con estudios de campo, cotizaciones reales y asesoria profesional especializada. UtopIA no se hace responsable por decisiones de inversion basadas exclusivamente en este documento.
+> **Advertencia:** Este estudio de factibilidad es una herramienta de apoyo a la toma de decisiones y NO constituye una garantia de resultados. Las proyecciones se basan en supuestos que deben ser validados con estudios de campo, cotizaciones reales y asesoria profesional especializada. 1+1 no se hace responsable por decisiones de inversion basadas exclusivamente en este documento.
 
 ${langInstruction}`;
 }

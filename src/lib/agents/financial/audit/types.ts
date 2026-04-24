@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Financial Audit pipeline
+// Types for the 1+1 Financial Audit pipeline
 // ---------------------------------------------------------------------------
 // 4 auditors run IN PARALLEL and produce findings that are consolidated
 // into a single audit report with compliance scores and a formal opinion.

@@ -246,3 +246,136 @@ body {
 .prose-workspace p { margin-bottom: 0.75rem; line-height: 1.65; }
 .prose-workspace ul { margin-bottom: 0.75rem; }
 .prose-workspace li { margin-bottom: 0.25rem; }
+
+/* ============================================================
+   1+1 ELITE — Dark Premium Theme (scoped to [data-theme='elite'])
+   ============================================================
+   The landing page (/) stays light. Only subtrees opting-in with
+   data-theme='elite' (typically the workspace shell) get the dark
+   premium look: #030303 background, gold (#D4A017) + wine (#722F37)
+   accents, glassmorphism panels, Instrument Serif for headings.
+   ============================================================ */
+
+[data-theme='elite'] {
+  color-scheme: dark;
+  --background: #030303;
+  --foreground: #F5F5F5;
+  --primary: #F5F5F5;
+  --primary-light: #E5E5E5;
+  --accent: #D4A017;
+
+  --surface-base: #0A0A0A;
+  --surface-panel: #121212;
+  --surface-panel-hover: #1A1A1A;
+  --surface-panel-alt: #0F0F0F;
+  --surface-border: rgba(212, 160, 23, 0.18);
+  --surface-border-hover: rgba(212, 160, 23, 0.38);
+
+  --text-primary: #F5F5F5;
+  --text-secondary: #A8A8A8;
+  --text-tertiary: #6A6A6A;
+
+  --accent-gold: #D4A017;
+  --accent-gold-hover: #E8B42C;
+  --accent-gold-light: rgba(212, 160, 23, 0.12);
+  --accent-gold-glow: 0 0 40px rgba(212, 160, 23, 0.28);
+
+  --accent-wine: #722F37;
+  --accent-wine-hover: #8B3A45;
+  --accent-wine-light: rgba(114, 47, 55, 0.15);
+  --accent-wine-glow: 0 0 32px rgba(114, 47, 55, 0.35);
+
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Glass premium — usable either via [data-theme='elite'] .glass-panel
+   or via the standalone .glass-elite utility (works on any theme). */
+[data-theme='elite'] .glass-panel,
+.glass-elite {
+  background: rgba(10, 10, 10, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(212, 160, 23, 0.22);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(212, 160, 23, 0.1),
+    0 30px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.glass-elite-elevated {
+  background: rgba(18, 18, 18, 0.78);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(212, 160, 23, 0.32);
+  border-radius: 14px;
+  box-shadow:
+    0 0 50px -10px rgba(212, 160, 23, 0.15),
+    0 40px 80px -30px rgba(0, 0, 0, 0.9);
+}
+
+/* Gradient border elite (dorado → vino) — uses mask-composite to keep
+   the inside transparent, so the border gets the gradient. */
+.border-elite-gold {
+  position: relative;
+  background-clip: padding-box;
+}
+.border-elite-gold::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg,
+    rgba(212, 160, 23, 0.55),
+    rgba(114, 47, 55, 0.35) 60%,
+    rgba(212, 160, 23, 0.25));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Glow utilities — usable anywhere. */
+.glow-gold      { box-shadow: 0 0 40px rgba(212, 160, 23, 0.28); }
+.glow-gold-soft { box-shadow: 0 0 22px rgba(212, 160, 23, 0.18); }
+.glow-wine      { box-shadow: 0 0 32px rgba(114, 47, 55, 0.35); }
+
+/* Serif premium — headings in elite layouts. */
+.font-serif-elite {
+  font-family: var(--font-instrument-serif), 'Playfair Display', Georgia, serif;
+}
+
+/* Fade-in entrance for elite panels. */
+@keyframes elite-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-elite-fade {
+  animation: elite-fade-in 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Reduced motion fallback — explicit since the global reduced-motion
+   rule up top already zeroes animations, but we want to be defensive. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-elite-fade { animation: none; }
+}
+
+/* Scrollbar elite — only inside elite subtree. */
+[data-theme='elite'] *::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme='elite'] *::-webkit-scrollbar-track { background: transparent; }
+[data-theme='elite'] *::-webkit-scrollbar-thumb {
+  background: rgba(212, 160, 23, 0.22);
+  border-radius: 8px;
+}
+[data-theme='elite'] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 160, 23, 0.45);
+}
+
+/* Selection elite. */
+[data-theme='elite'] ::selection {
+  background: rgba(212, 160, 23, 0.35);
+  color: #F5F5F5;
+}

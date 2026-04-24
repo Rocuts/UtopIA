@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="public/logo-modern.png" alt="UtopIA" width="80" style="border-radius: 16px" />
+  <img src="public/logo-modern.png" alt="1+1" width="80" style="border-radius: 16px" />
 </p>
 
-<h1 align="center">UtopIA</h1>
+<h1 align="center">1+1</h1>
 
 <p align="center">
-  <strong>Plataforma de Inteligencia Profesional para Firmas Contables Colombianas</strong>
+  <strong>Directorio Ejecutivo Digital — impulsado por IA para empresas colombianas</strong>
 </p>
 
 <p align="center">
@@ -18,11 +18,11 @@
 
 ---
 
-## Que es UtopIA
+## Que es 1+1
 
-UtopIA es una plataforma de inteligencia contable, tributaria y financiera que transforma datos contables en bruto en reportes financieros de nivel corporativo. Combina orquestacion multi-agente, RAG sobre normativa colombiana curada, busqueda web en tiempo real y un pipeline de 8 nodos (3 agentes + 4 auditores + meta-auditor) para producir estados financieros NIIF, analisis estrategico, gobierno corporativo, auditoria y calificacion de calidad — todo en un solo flujo automatizado.
+**1+1** es el Directorio Ejecutivo Digital colombiano: una plataforma de inteligencia contable, tributaria, financiera y de aseguramiento que transforma datos contables en bruto en reportes de nivel corporativo. Combina orquestacion multi-agente, RAG sobre normativa colombiana curada, busqueda web en tiempo real y un pipeline de 8 nodos (3 agentes + 4 auditores + meta-auditor) para producir estados financieros NIIF, analisis estrategico, gobierno corporativo, auditoria y calificacion de calidad — todo en un solo flujo automatizado.
 
-La plataforma no es un chatbot con una caja de texto. Es un **centro de comando profesional** con flujos de intake estructurados, visualizacion de pipeline en tiempo real y un panel de inteligencia contextual que actua como co-piloto permanente.
+La plataforma no es un chatbot con una caja de texto. Es un **centro de comando estrategico elite** estructurado en cuatro areas de alto impacto — Escudo (tributario/legal), Valor (financiero/valoracion), Verdad (aseguramiento) y Futuro (proyeccion economica) — con flujos de intake estructurados, visualizacion de pipeline en tiempo real y un panel de inteligencia contextual que actua como co-piloto permanente.
 
 ---
 
@@ -331,7 +331,7 @@ El panel derecho nunca esta vacio. Se adapta automaticamente:
 
 ### Case Navigator (Sidebar)
 
-- Brand header con UtopIA wordmark
+- Brand header con 1+1 wordmark
 - "Nueva Consulta" button (dorado)
 - 5+1 case type selector con shortcut keys (D, R, U, I, N)
 - NIIF Elite con gradiente dorado permanente + badge "ELITE"
@@ -664,7 +664,7 @@ git push origin feature/mi-mejora
 
 ## Disclaimer
 
-UtopIA es una herramienta de apoyo para profesionales contables y tributarios. **No reemplaza el criterio profesional del contador publico** ni constituye asesoria tributaria vinculante. Las respuestas generadas por la IA deben ser verificadas contra la normativa vigente antes de ser utilizadas en actuaciones oficiales. La informacion normativa tiene como base el Estatuto Tributario, la doctrina DIAN y los estandares NIIF vigentes a 2026.
+1+1 es una herramienta de apoyo para profesionales contables y tributarios. **No reemplaza el criterio profesional del contador publico** ni constituye asesoria tributaria vinculante. Las respuestas generadas por la IA deben ser verificadas contra la normativa vigente antes de ser utilizadas en actuaciones oficiales. La informacion normativa tiene como base el Estatuto Tributario, la doctrina DIAN y los estandares NIIF vigentes a 2026.
 
 ---
 

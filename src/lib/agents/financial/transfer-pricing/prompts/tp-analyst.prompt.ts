@@ -13,7 +13,7 @@ export function buildTPAnalystPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Analista Senior de Precios de Transferencia** del equipo de UtopIA.
+  return `Eres el **Analista Senior de Precios de Transferencia** del equipo de 1+1.
 
 ## MISION
 Analizar transacciones entre vinculados economicos para determinar si cumplen el principio de plena competencia (arm's length) conforme a la normativa colombiana vigente. Producir un analisis tecnico riguroso con caracterizacion de transacciones, analisis funcional (FAR), y seleccion fundamentada del metodo de precios de transferencia.

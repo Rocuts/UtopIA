@@ -72,7 +72,7 @@ export const dict = {
       demoTag: 'Versión de demostración',
       confidential: 'Su consulta es privada y confidencial.',
       title: 'Iniciar Consulta',
-      disclaimer: 'UtopIA es una herramienta de asistencia profesional potenciada por IA. No reemplaza el criterio profesional de un contador público. Toda recomendación debe ser validada por un profesional certificado.',
+      disclaimer: '1+1 es una herramienta de asistencia profesional potenciada por IA. No reemplaza el criterio profesional de un contador público. Toda recomendación debe ser validada por un profesional certificado.',
     },
     chatAi: {
       status: 'Asistente Contable Activo',
@@ -80,7 +80,7 @@ export const dict = {
       errorMsg: 'Hubo un error al procesar su consulta. Por favor, intente nuevamente.',
       voiceDemo: 'Recibí un requerimiento ordinario de la DIAN por inconsistencias en mi declaración de renta del año gravable 2024.',
       disclaimerTitle: 'Aviso Profesional',
-      disclaimerText: 'UtopIA proporciona análisis y recomendaciones con fines de asistencia profesional y NO sustituye el criterio de un contador público certificado. Toda la información es procesada con cifrado de extremo a extremo. Cumplimos con la Ley 1581 de Protección de Datos.',
+      disclaimerText: '1+1 proporciona análisis y recomendaciones con fines de asistencia profesional y NO sustituye el criterio de un contador público certificado. Toda la información es procesada con cifrado de extremo a extremo. Cumplimos con la Ley 1581 de Protección de Datos.',
       acceptBtn: 'Entiendo y Acepto',
       clear: 'Limpiar',
       voiceConnecting: 'Conectando...',
@@ -94,17 +94,17 @@ export const dict = {
     faq: {
       title: 'Preguntas',
       titleHighlight: 'Frecuentes',
-      desc: 'Información importante sobre nuestros servicios y cómo UtopIA potencia su práctica contable.',
-      q1: '¿UtopIA reemplaza a mi contador?',
-      a1: 'No. UtopIA potencia a su contador o firma contable con herramientas de IA para análisis más rápidos, precisos y fundamentados. El criterio profesional del contador sigue siendo indispensable.',
+      desc: 'Información importante sobre nuestros servicios y cómo 1+1 potencia su práctica contable.',
+      q1: '¿1+1 reemplaza a mi contador?',
+      a1: 'No. 1+1 potencia a su contador o firma contable con herramientas de IA para análisis más rápidos, precisos y fundamentados. El criterio profesional del contador sigue siendo indispensable.',
       q2: '¿Qué tipo de requerimientos de la DIAN pueden analizar?',
       a2: 'Requerimientos ordinarios, especiales, pliegos de cargos, liquidaciones oficiales y emplazamientos por inconsistencias en IVA, renta, retenciones y facturación electrónica.',
       q3: '¿Cómo manejan la confidencialidad?',
       a3: 'Toda la información es procesada con cifrado de extremo a extremo. No almacenamos datos sensibles de manera permanente y cumplimos con la Ley 1581 de Protección de Datos.',
       q4: '¿Pueden ayudarme con la devolución de saldos a favor?',
       a4: 'Sí. Preparamos el expediente técnico completo, validamos soportes y acompañamos el proceso ante la DIAN hasta la resolución favorable.',
-      q5: '¿Qué diferencia hay entre UtopIA y un software contable?',
-      a5: 'Un software contable registra. UtopIA analiza, interpreta normativa, identifica riesgos y genera estrategias accionables. Es la diferencia entre tener datos y tener inteligencia.',
+      q5: '¿Qué diferencia hay entre 1+1 y un software contable?',
+      a5: 'Un software contable registra. 1+1 analiza, interpreta normativa, identifica riesgos y genera estrategias accionables. Es la diferencia entre tener datos y tener inteligencia.',
     },
     trust: {
       badge: 'Marco Normativo',
@@ -121,7 +121,7 @@ export const dict = {
       btn2: 'Ver Servicios',
     },
     footer: {
-      rights: 'Todos los derechos reservados. UtopIA es una herramienta de asistencia profesional potenciada por IA. No reemplaza el criterio profesional de un contador público.',
+      rights: 'Todos los derechos reservados. 1+1 es una herramienta de asistencia profesional potenciada por IA. No reemplaza el criterio profesional de un contador público.',
       tagline: 'Consultoría contable y tributaria potenciada por inteligencia artificial para firmas contables en Colombia.',
       badge: 'Contabilidad & Tributaria — Colombia',
       coverage: 'Servicios',
@@ -175,6 +175,116 @@ export const dict = {
       documents: 'Documentos',
       collapse: 'Colapsar',
       expand: 'Expandir',
+    },
+    elite: {
+      brand: '1+1',
+      tagline: 'Directorio Ejecutivo Digital',
+      narrativeHero:
+        '1+1 no es una plataforma de consulta, es tu Directorio Ejecutivo Digital. En la ventana Tributaria protegemos tu caja; en la Financiera multiplicamos tu valor; en Aseguramiento garantizamos tu tranquilidad legal y en Economía diseñamos tu próximo gran movimiento.',
+      narrativeIntro:
+        'En un entorno de incertidumbre, la información no es suficiente; lo que separa al líder del resto es la claridad estratégica. 1+1 no es un software de consulta. Es el epicentro de mando donde la complejidad de los datos se transforma en la precisión de la toma de decisiones. No solo gestionamos su pasado contable; blindamos su presente y modelamos su futuro.',
+      narrativePerspective:
+        'La mayoría de las empresas operan mirando el retrovisor: ven lo que gastaron, lo que pagaron y lo que quedó. Con 1+1, cambiamos la perspectiva 180°. Hemos estructurado su ecosistema empresarial en cuatro pilares de alto impacto. No hablamos de contabilidad o impuestos; hablamos de Resiliencia, Valor, Integridad y Futuro.',
+      niifEliteCTA: 'Informe NIIF Elite',
+      niifEliteCTALong: 'Informe NIIF Elite en determinado periodo',
+      areas: {
+        escudo: {
+          concept: 'El Escudo',
+          subtitle: 'Estrategia Tributaria y Legal',
+          tagline: 'Protección del patrimonio y cumplimiento optimizado',
+          narrative:
+            'Los impuestos no deben ser una fuga de capital inevitable, sino una variable gestionable. Aquí, convertimos la norma en una ventaja competitiva. Blindamos su operación frente a entes reguladores y detectamos oportunidades de ahorro fiscal que el ojo humano suele ignorar. Su tranquilidad legal es nuestro indicador de éxito.',
+          kpiPrimary: 'Tasa de Eficiencia Fiscal',
+          kpiSecondary: 'Vencimientos próximos',
+          submodules: {
+            defensaDian: {
+              title: 'Defensa DIAN',
+              description: 'Gestión de requerimientos con IA.',
+            },
+            planeacionTributaria: {
+              title: 'Planeación Tributaria',
+              description: 'Algoritmos de optimización de carga fiscal.',
+            },
+            preciosTransferencia: {
+              title: 'Precios de Transferencia',
+              description: 'Análisis de operaciones vinculadas.',
+            },
+            devoluciones: {
+              title: 'Devoluciones',
+              description: 'Ingeniería de saldos a favor.',
+            },
+          },
+        },
+        valor: {
+          concept: 'El Valor',
+          subtitle: 'Ingeniería Financiera y Valoración',
+          tagline: 'Maximización del valor corporativo y liquidez',
+          narrative:
+            'Una empresa vale lo que es capaz de generar en el futuro. En esta ventana, dejamos de contar monedas para empezar a construir valor. Analizamos su estructura de capital, optimizamos su EBITDA y le entregamos la cifra más importante para cualquier accionista: el valor de mercado de su esfuerzo. Aquí es donde su negocio deja de ser una operación y se convierte en un activo de élite.',
+          kpiPrimary: 'Valor de Salida Estimado',
+          kpiSecondary: 'EBITDA ajustado',
+          submodules: {
+            valoracion: {
+              title: 'Valoración Empresarial',
+              description: 'WACC, múltiplos y DCF. ¿Cuánto vale el negocio hoy?',
+            },
+            dueDiligence: {
+              title: 'Due Diligence',
+              description: 'Auditoría preventiva para inversión o venta.',
+            },
+            inteligenciaFinanciera: {
+              title: 'Inteligencia Financiera',
+              description: 'Flujo de caja predictivo y gestión de Breakeven.',
+            },
+          },
+        },
+        verdad: {
+          concept: 'La Verdad',
+          subtitle: 'Aseguramiento y Dictamen',
+          tagline: 'Transparencia, fe pública y cumplimiento normativo',
+          narrative:
+            'La confianza es la moneda más cara del mundo empresarial. Bajo este pilar, garantizamos que su información financiera sea irrefutable. No solo cumplimos con la norma NIIF; auditamos la verdad de su negocio para que socios, bancos e inversionistas vean una estructura sólida, transparente y libre de riesgos ocultos.',
+          kpiPrimary: 'Score de Salud Normativa',
+          kpiSecondary: 'Hallazgos críticos',
+          submodules: {
+            revisoriaFiscal: {
+              title: 'Revisoría Fiscal',
+              description: 'Auditoría bajo NIA 700 y Ley 43.',
+            },
+            conciliacionFiscal: {
+              title: 'Conciliación Fiscal',
+              description: 'El puente exacto entre NIIF y Estatuto Tributario.',
+            },
+            dictamenes: {
+              title: 'Dictámenes Especiales',
+              description: 'Informes de cumplimiento para socios y terceros.',
+            },
+          },
+        },
+        futuro: {
+          concept: 'El Futuro',
+          subtitle: 'Proyección Económica y Factibilidad',
+          tagline: 'Análisis de entorno y viabilidad de nuevos proyectos',
+          narrative:
+            'El crecimiento sin datos es una apuesta; el crecimiento con 1+1 es una estrategia. Aquí simulamos el mañana. Antes de que usted invierta un solo peso, nosotros ya habremos corrido miles de escenarios para decirle si ese proyecto es viable, rentable y oportuno. No predecimos el futuro, lo calculamos.',
+          kpiPrimary: 'ROI Probabilístico',
+          kpiSecondary: 'Escenarios evaluados',
+          submodules: {
+            factibilidad: {
+              title: 'Estudios de Factibilidad',
+              description: 'VPN, TIR y análisis de riesgo multivariado.',
+            },
+            macroeconomia: {
+              title: 'Análisis Macro-Económico',
+              description: 'Impacto de variables del mercado en la empresa.',
+            },
+            escenarios: {
+              title: 'Modelado de Escenarios',
+              description: 'Simulaciones de crecimiento y expansión.',
+            },
+          },
+        },
+      },
     },
   },
   en: {
@@ -250,7 +360,7 @@ export const dict = {
       demoTag: 'Demo version',
       confidential: 'Your consultation is private and confidential.',
       title: 'Start Your Consultation',
-      disclaimer: 'UtopIA is an AI-powered professional assistance tool. It does not replace the professional judgment of a certified public accountant. All recommendations should be validated by a certified professional.',
+      disclaimer: '1+1 is an AI-powered professional assistance tool. It does not replace the professional judgment of a certified public accountant. All recommendations should be validated by a certified professional.',
     },
     chatAi: {
       status: 'Accounting Assistant Active',
@@ -258,7 +368,7 @@ export const dict = {
       errorMsg: 'There was an error processing your query. Please try again.',
       voiceDemo: 'I received an ordinary requirement from DIAN for inconsistencies in my income tax return for fiscal year 2024.',
       disclaimerTitle: 'Professional Notice',
-      disclaimerText: 'UtopIA provides analysis and recommendations for professional assistance purposes and is NOT a substitute for the judgment of a certified public accountant. All information is processed with end-to-end encryption. We comply with Law 1581 on Data Protection.',
+      disclaimerText: '1+1 provides analysis and recommendations for professional assistance purposes and is NOT a substitute for the judgment of a certified public accountant. All information is processed with end-to-end encryption. We comply with Law 1581 on Data Protection.',
       acceptBtn: 'I Understand and Agree',
       clear: 'Clear',
       voiceConnecting: 'Connecting...',
@@ -272,17 +382,17 @@ export const dict = {
     faq: {
       title: 'Frequently Asked',
       titleHighlight: 'Questions',
-      desc: 'Important information about our services and how UtopIA empowers your accounting practice.',
-      q1: 'Does UtopIA replace my accountant?',
-      a1: 'No. UtopIA empowers your accountant or accounting firm with AI tools for faster, more accurate, and better-founded analysis. The professional judgment of the accountant remains indispensable.',
+      desc: 'Important information about our services and how 1+1 empowers your accounting practice.',
+      q1: 'Does 1+1 replace my accountant?',
+      a1: 'No. 1+1 empowers your accountant or accounting firm with AI tools for faster, more accurate, and better-founded analysis. The professional judgment of the accountant remains indispensable.',
       q2: 'What types of DIAN requirements can you analyze?',
       a2: 'Ordinary requirements, special requirements, charges briefs, official assessments, and citations for inconsistencies in VAT, income tax, withholdings, and electronic invoicing.',
       q3: 'How do you handle confidentiality?',
       a3: 'All information is processed with end-to-end encryption. We do not permanently store sensitive data and we comply with Law 1581 on Data Protection.',
       q4: 'Can you help me with tax refund recovery?',
       a4: 'Yes. We prepare the complete technical file, validate supporting documentation, and accompany the process before DIAN until a favorable resolution.',
-      q5: 'What is the difference between UtopIA and accounting software?',
-      a5: 'Accounting software records. UtopIA analyzes, interprets regulations, identifies risks, and generates actionable strategies. It is the difference between having data and having intelligence.',
+      q5: 'What is the difference between 1+1 and accounting software?',
+      a5: 'Accounting software records. 1+1 analyzes, interprets regulations, identifies risks, and generates actionable strategies. It is the difference between having data and having intelligence.',
     },
     trust: {
       badge: 'Regulatory Framework',
@@ -299,7 +409,7 @@ export const dict = {
       btn2: 'View Services',
     },
     footer: {
-      rights: 'All rights reserved. UtopIA is an AI-powered professional assistance tool. It does not replace the professional judgment of a certified public accountant.',
+      rights: 'All rights reserved. 1+1 is an AI-powered professional assistance tool. It does not replace the professional judgment of a certified public accountant.',
       tagline: 'AI-powered accounting and tax consulting for accounting firms in Colombia.',
       badge: 'Accounting & Tax — Colombia',
       coverage: 'Services',
@@ -353,6 +463,116 @@ export const dict = {
       documents: 'Documents',
       collapse: 'Collapse',
       expand: 'Expand',
+    },
+    elite: {
+      brand: '1+1',
+      tagline: 'Digital Executive Board',
+      narrativeHero:
+        '1+1 is not a consulting platform; it is your Digital Executive Board. In the Tax window we protect your cash; in the Financial window we multiply your value; in Assurance we guarantee your legal peace of mind, and in Economics we design your next bold move.',
+      narrativeIntro:
+        'In an environment of uncertainty, information is not enough — strategic clarity is what separates the leader from the rest. 1+1 is not consulting software. It is the command center where data complexity becomes decision precision. We do not just manage your accounting past; we shield your present and model your future.',
+      narrativePerspective:
+        'Most companies operate looking in the rear-view mirror: what was spent, what was paid, what remained. With 1+1, we flip the perspective 180°. We have structured your business ecosystem into four high-impact pillars. We do not talk about accounting or taxes; we talk about Resilience, Value, Integrity, and the Future.',
+      niifEliteCTA: 'IFRS Elite Report',
+      niifEliteCTALong: 'IFRS Elite Report for a specific period',
+      areas: {
+        escudo: {
+          concept: 'The Shield',
+          subtitle: 'Tax & Legal Strategy',
+          tagline: 'Wealth protection and optimized compliance',
+          narrative:
+            'Taxes should not be an unavoidable capital drain — they should be a managed variable. Here we turn regulation into competitive advantage. We shield your operation against regulators and surface tax-saving opportunities the human eye tends to miss. Your legal peace of mind is our success metric.',
+          kpiPrimary: 'Tax Efficiency Rate',
+          kpiSecondary: 'Upcoming deadlines',
+          submodules: {
+            defensaDian: {
+              title: 'DIAN Defense',
+              description: 'AI-powered handling of tax notices.',
+            },
+            planeacionTributaria: {
+              title: 'Tax Planning',
+              description: 'Algorithmic optimization of your tax burden.',
+            },
+            preciosTransferencia: {
+              title: 'Transfer Pricing',
+              description: 'Analysis of related-party transactions.',
+            },
+            devoluciones: {
+              title: 'Tax Refunds',
+              description: 'Engineering of favorable balances.',
+            },
+          },
+        },
+        valor: {
+          concept: 'The Value',
+          subtitle: 'Financial Engineering & Valuation',
+          tagline: 'Corporate value and liquidity maximization',
+          narrative:
+            'A company is worth what it can generate in the future. In this window we stop counting coins and start building value. We analyze your capital structure, optimize EBITDA, and deliver the one number that matters most to any shareholder: the market value of your effort. This is where your business stops being an operation and becomes an elite asset.',
+          kpiPrimary: 'Estimated Exit Value',
+          kpiSecondary: 'Adjusted EBITDA',
+          submodules: {
+            valoracion: {
+              title: 'Business Valuation',
+              description: 'WACC, multiples, and DCF. What is the business worth today?',
+            },
+            dueDiligence: {
+              title: 'Due Diligence',
+              description: 'Preventive audit for investment or sale.',
+            },
+            inteligenciaFinanciera: {
+              title: 'Financial Intelligence',
+              description: 'Predictive cash flow and breakeven management.',
+            },
+          },
+        },
+        verdad: {
+          concept: 'The Truth',
+          subtitle: 'Assurance & Opinion',
+          tagline: 'Transparency, public trust, and regulatory compliance',
+          narrative:
+            'Trust is the most expensive currency in business. Under this pillar we guarantee that your financial information is irrefutable. We do not just comply with IFRS; we audit the truth of your business so partners, banks, and investors see a solid, transparent structure free of hidden risks.',
+          kpiPrimary: 'Regulatory Health Score',
+          kpiSecondary: 'Critical findings',
+          submodules: {
+            revisoriaFiscal: {
+              title: 'Statutory Audit',
+              description: 'Audit under ISA 700 and Colombian Law 43.',
+            },
+            conciliacionFiscal: {
+              title: 'Tax Reconciliation',
+              description: 'The precise bridge between IFRS and the Tax Statute.',
+            },
+            dictamenes: {
+              title: 'Special Opinions',
+              description: 'Compliance reports for partners and third parties.',
+            },
+          },
+        },
+        futuro: {
+          concept: 'The Future',
+          subtitle: 'Economic Projection & Feasibility',
+          tagline: 'Market analysis and viability of new projects',
+          narrative:
+            'Growth without data is a bet; growth with 1+1 is a strategy. Here we simulate tomorrow. Before you invest a single peso, we will have run thousands of scenarios to tell you whether that project is viable, profitable, and timely. We do not predict the future — we calculate it.',
+          kpiPrimary: 'Probabilistic ROI',
+          kpiSecondary: 'Scenarios evaluated',
+          submodules: {
+            factibilidad: {
+              title: 'Feasibility Studies',
+              description: 'NPV, IRR, and multivariate risk analysis.',
+            },
+            macroeconomia: {
+              title: 'Macro-Economic Analysis',
+              description: 'Impact of market variables on the business.',
+            },
+            escenarios: {
+              title: 'Scenario Modeling',
+              description: 'Growth and expansion simulations.',
+            },
+          },
+        },
+      },
     },
   },
 };

@@ -18,7 +18,7 @@ export function buildValuationSynthesizerPrompt(
     ? `- **Proposito de la Valoracion:** ${purpose}`
     : '- **Proposito de la Valoracion:** No especificado (asumir proposito general de gestion)';
 
-  return `Eres el **Socio Senior de Valoracion** del equipo de UtopIA, responsable de sintetizar multiples metodologias de valoracion en una opinion consolidada de valor empresarial.
+  return `Eres el **Socio Senior de Valoracion** del equipo de 1+1, responsable de sintetizar multiples metodologias de valoracion en una opinion consolidada de valor empresarial.
 
 ## MISION
 Recibir los resultados del Modelador DCF y del Experto en Multiplos de Mercado, analizarlos criticamente, y producir una opinion de valoracion consolidada con rango de valor definitivo, ponderacion de metodologias, y resumen ejecutivo de nivel directivo.

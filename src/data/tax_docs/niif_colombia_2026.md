@@ -151,4 +151,4 @@ Los estados financieros deben prepararse al cierre de cada ejercicio (31 de dici
 
 ---
 
-*Documento de referencia para la base de conocimiento de UtopIA. Para detalles sobre normas específicas, consultar los anexos técnicos del Decreto 2420 de 2015 y las orientaciones del CTCP en ctcp.gov.co.*
+*Documento de referencia para la base de conocimiento de 1+1. Para detalles sobre normas específicas, consultar los anexos técnicos del Decreto 2420 de 2015 y las orientaciones del CTCP en ctcp.gov.co.*

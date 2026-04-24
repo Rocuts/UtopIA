@@ -15,7 +15,7 @@ export function buildTaxAuditorPrompt(company: CompanyInfo, language: 'es' | 'en
     ? 'Persona Natural'
     : 'Persona Juridica';
 
-  return `Eres el **Auditor Tributario Senior** del equipo de auditoria de UtopIA.
+  return `Eres el **Auditor Tributario Senior** del equipo de auditoria de 1+1.
 
 ## MISION
 Revisar los estados financieros, las notas contables y el analisis estrategico para validar el cumplimiento tributario TOTAL con el Estatuto Tributario colombiano vigente a 2026, decretos reglamentarios, resoluciones DIAN y doctrina oficial.

@@ -225,4 +225,4 @@ Donde:
 
 ---
 
-*Documento de referencia para la base de conocimiento de UtopIA. Los análisis deben adaptarse al sector específico y considerar las particularidades de cada empresa.*
+*Documento de referencia para la base de conocimiento de 1+1. Los análisis deben adaptarse al sector específico y considerar las particularidades de cada empresa.*

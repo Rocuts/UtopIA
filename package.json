@@ -1,7 +1,8 @@
 {
-  "name": "utopia",
+  "name": "one-plus-one",
+  "displayName": "1+1",
   "version": "0.1.0",
-  "description": "UtopIA — Plataforma AI de asesoría contable, tributaria y financiera para Colombia",
+  "description": "1+1 — Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: estrategia contable, tributaria y financiera en un solo centro de mando.",
   "private": true,
   "scripts": {
     "dev": "next dev",

@@ -197,7 +197,7 @@ function buildConsolidatedReport(
 | **Periodo Fiscal** | ${company.fiscalPeriod} |
 | **Base Normativa** | ${legalBasis} |
 | **Fecha de Generacion** | ${date} |
-| **Generado por** | UtopIA — Transfer Pricing Pipeline (3 Agentes Especializados) |
+| **Generado por** | 1+1 — Transfer Pricing Pipeline (3 Agentes Especializados) |
 
 ---
 
@@ -222,6 +222,6 @@ ${documentationContent}
 
 ---
 
-> **Nota Legal:** Este estudio de precios de transferencia fue generado por UtopIA, un sistema de inteligencia artificial. La documentacion comprobatoria, el analisis de comparables y las conclusiones deben ser validados por un especialista en precios de transferencia certificado antes de su presentacion ante la DIAN. UtopIA no reemplaza la asesoria profesional especializada. Los comparables presentados pueden requerir validacion con bases de datos comerciales (Orbis, RoyaltyStat, Capital IQ).
+> **Nota Legal:** Este estudio de precios de transferencia fue generado por 1+1, un sistema de inteligencia artificial. La documentacion comprobatoria, el analisis de comparables y las conclusiones deben ser validados por un especialista en precios de transferencia certificado antes de su presentacion ante la DIAN. 1+1 no reemplaza la asesoria profesional especializada. Los comparables presentados pueden requerir validacion con bases de datos comerciales (Orbis, RoyaltyStat, Capital IQ).
 `;
 }

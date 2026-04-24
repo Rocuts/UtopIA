@@ -174,7 +174,7 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
     // Si no hay preprocesado, devolvemos un bloque minimo explicito para
     // que el agente sepa que no tiene anclas numericas pre-calculadas.
     return [
-      'TOTALES VINCULANTES (pre-calculados por UtopIA — NO los modifiques):',
+      'TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):',
       '- No se pudo pre-calcular totales vinculantes desde los datos recibidos.',
       '  Usa las cifras de los auxiliares y declaralo explicitamente en las',
       '  notas tecnicas.',
@@ -182,7 +182,7 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
   }
 
   const lines: string[] = [];
-  lines.push('TOTALES VINCULANTES (pre-calculados por UtopIA — NO los modifiques):');
+  lines.push('TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):');
   lines.push(`- Total Activo: ${fmtCop(totals.activo)} COP`);
   if (typeof totals.activoCorriente === 'number') {
     lines.push(`  - Activo Corriente: ${fmtCop(totals.activoCorriente)} COP`);
@@ -527,7 +527,7 @@ function buildConsolidatedReport(
 | **Tipo Societario** | ${company.entityType || 'N/A'} |
 | **Periodo Fiscal** | ${company.fiscalPeriod} |
 | **Fecha de Generacion** | ${date} |
-| **Generado por** | UtopIA — Financial Orchestrator (3 Agentes Especializados) |
+| **Generado por** | 1+1 — Financial Orchestrator (3 Agentes Especializados) |
 
 ---
 
@@ -552,6 +552,6 @@ ${governanceContent}
 
 ---
 
-> **Nota Legal:** Este reporte fue generado por UtopIA, un sistema de inteligencia artificial. Las cifras, analisis y documentos legales deben ser validados por un Contador Publico certificado y un abogado antes de su uso oficial. UtopIA no reemplaza la asesoria profesional.
+> **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las cifras, analisis y documentos legales deben ser validados por un Contador Publico certificado y un abogado antes de su uso oficial. 1+1 no reemplaza la asesoria profesional.
 `;
 }

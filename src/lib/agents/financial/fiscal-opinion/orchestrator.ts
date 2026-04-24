@@ -304,7 +304,7 @@ function buildConsolidatedReport(
 | **Empresa en Marcha** | ${gcAssessmentLabel[goingConcern.assessment] || goingConcern.assessment} |
 | **Incorrecciones** | ${misstatementLabel[misstatement.assessment] || misstatement.assessment} |
 | **Cumplimiento Estatutario** | ${compliance.complianceScore}/100 |
-| **Sistema** | UtopIA — Fiscal Opinion Pipeline (4 Agentes: 3 Evaluadores + 1 Redactor) |
+| **Sistema** | 1+1 — Fiscal Opinion Pipeline (4 Agentes: 3 Evaluadores + 1 Redactor) |
 
 ---
 
@@ -391,6 +391,6 @@ ${managementLetter || '*Carta de gerencia no disponible.*'}
 
 ---
 
-> **Nota Legal:** Este dictamen fue generado por UtopIA, un sistema de inteligencia artificial. El dictamen, opiniones y recomendaciones deben ser validados por un Revisor Fiscal independiente con tarjeta profesional vigente antes de su uso oficial. Este documento no constituye un dictamen vinculante conforme a la Ley 43 de 1990 y el Art. 207 del Codigo de Comercio. Requiere firma de Revisor Fiscal designado por la asamblea de accionistas.
+> **Nota Legal:** Este dictamen fue generado por 1+1, un sistema de inteligencia artificial. El dictamen, opiniones y recomendaciones deben ser validados por un Revisor Fiscal independiente con tarjeta profesional vigente antes de su uso oficial. Este documento no constituye un dictamen vinculante conforme a la Ley 43 de 1990 y el Art. 207 del Codigo de Comercio. Requiere firma de Revisor Fiscal designado por la asamblea de accionistas.
 `;
 }

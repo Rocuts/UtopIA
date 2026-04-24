@@ -1,4 +1,4 @@
-// ─── UtopIA Design System Tokens ──────────────────────────────────────────────
+// ─── 1+1 Design System Tokens ─────────────────────────────────────────────────
 // Single source of truth for all visual tokens used across the platform.
 
 export const tokens = {
@@ -15,6 +15,18 @@ export const tokens = {
         700: '#7D5B0C',
         800: '#523C08',
         900: '#2A1E04',
+      },
+      wine: {
+        50:  '#FDF2F4',
+        100: '#FBE0E4',
+        200: '#F7BFC7',
+        300: '#EF95A2',
+        400: '#E36778',
+        500: '#722F37',
+        600: '#5F252D',
+        700: '#4B1D23',
+        800: '#391519',
+        900: '#1F0A0C',
       },
     },
     risk: {
@@ -70,10 +82,28 @@ export const tokens = {
     full: '9999px',
   },
   shadow: {
-    sm:   '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-    md:   '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-    lg:   '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-    gold: '0 0 0 2px #D4A017',
+    sm:        '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    md:        '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+    lg:        '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+    gold:      '0 0 0 2px #D4A017',
+    elite:     '0 0 40px rgba(212, 160, 23, 0.28)',
+    eliteWine: '0 0 32px rgba(114, 47, 55, 0.35)',
+    glassLift: '0 30px 60px -30px rgba(0, 0, 0, 0.9)',
+  },
+  elite: {
+    bg:              '#030303',
+    surface:         '#0A0A0A',
+    surfaceElevated: '#121212',
+    border:          'rgba(212, 160, 23, 0.22)',
+    borderStrong:    'rgba(212, 160, 23, 0.45)',
+    borderWine:      'rgba(114, 47, 55, 0.45)',
+    glassBg:         'rgba(10, 10, 10, 0.55)',
+    glassBgElevated: 'rgba(18, 18, 18, 0.78)',
+    glowGold:        '0 0 40px rgba(212, 160, 23, 0.28)',
+    glowWine:        '0 0 32px rgba(114, 47, 55, 0.35)',
+    textPrimary:     '#F5F5F5',
+    textSecondary:   '#A8A8A8',
+    textTertiary:    '#6A6A6A',
   },
   font: {
     mono: '"JetBrains Mono", "Fira Code", monospace',

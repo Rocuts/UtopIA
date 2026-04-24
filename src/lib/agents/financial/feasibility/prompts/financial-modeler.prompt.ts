@@ -18,7 +18,7 @@ export function buildFinancialModelerPrompt(
   // Tax regime context
   const taxContext = buildTaxContext(project);
 
-  return `Eres el **Modelador Financiero Senior** del equipo de UtopIA, especialista en evaluacion de proyectos de inversion en contexto colombiano.
+  return `Eres el **Modelador Financiero Senior** del equipo de 1+1, especialista en evaluacion de proyectos de inversion en contexto colombiano.
 
 ## MISION
 Construir un modelo financiero riguroso para evaluar la viabilidad financiera del proyecto, aplicando las metodologias estandar de evaluacion de proyectos con parametros especificos del mercado colombiano.

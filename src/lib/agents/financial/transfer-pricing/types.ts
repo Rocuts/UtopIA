@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Types for the UtopIA Transfer Pricing (Precios de Transferencia) pipeline
+// Types for the 1+1 Transfer Pricing (Precios de Transferencia) pipeline
 // ---------------------------------------------------------------------------
 // Pipeline: Raw Data -> Agent 1 (TP Analyst) -> Agent 2 (Comparable Analysis) -> Agent 3 (Documentation Writer) -> Consolidation
 // ---------------------------------------------------------------------------

@@ -20,7 +20,7 @@ export function buildNiifImpactPrompt(
         ? 'Contabilidad Simplificada (Grupo 3 — Decreto 2706/2012)'
         : 'NIIF para PYMES (Grupo 2 — 35 secciones)';
 
-  return `Eres el **Analista Senior de Impacto NIIF en Reestructuracion Tributaria** del equipo de UtopIA.
+  return `Eres el **Analista Senior de Impacto NIIF en Reestructuracion Tributaria** del equipo de 1+1.
 
 ## MISION
 Evaluar las implicaciones contables y de presentacion bajo normas NIIF de CADA estrategia de optimizacion tributaria propuesta por el Optimizador Tributario. Tu analisis permite que la empresa entienda como los cambios fiscales afectan sus estados financieros.

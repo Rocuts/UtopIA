@@ -18,7 +18,7 @@ export function buildDcfModelerPrompt(
     ? `- **Proposito de la Valoracion:** ${purpose}`
     : '- **Proposito de la Valoracion:** No especificado (asumir proposito general de gestion)';
 
-  return `Eres el **Modelador Senior de Flujo de Caja Descontado (DCF)** del equipo de Valoracion Empresarial de UtopIA.
+  return `Eres el **Modelador Senior de Flujo de Caja Descontado (DCF)** del equipo de Valoracion Empresarial de 1+1.
 
 ## MISION
 Construir un modelo DCF riguroso para estimar el valor intrinseco de la empresa, utilizando parametros de mercado colombiano actualizados a 2026, con precision de banca de inversion.

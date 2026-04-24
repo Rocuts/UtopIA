@@ -95,7 +95,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
           <div>
             <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
             <p className="text-xs text-[#a3a3a3]">
-              UtopIA extrae automáticamente los datos de su archivo y pre-llena el formulario
+              1+1 extrae automáticamente los datos de su archivo y pre-llena el formulario
             </p>
           </div>
 

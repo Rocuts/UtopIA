@@ -18,7 +18,7 @@ export function buildMarketComparablesPrompt(
     ? `- **Proposito de la Valoracion:** ${purpose}`
     : '- **Proposito de la Valoracion:** No especificado (asumir proposito general de gestion)';
 
-  return `Eres el **Experto Senior en Valoracion por Multiplos de Mercado** del equipo de Valoracion Empresarial de UtopIA.
+  return `Eres el **Experto Senior en Valoracion por Multiplos de Mercado** del equipo de Valoracion Empresarial de 1+1.
 
 ## MISION
 Realizar una valoracion relativa de la empresa utilizando multiplos de companias comparables y transacciones precedentes, con ajustes especificos para el mercado colombiano.

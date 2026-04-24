@@ -13,7 +13,7 @@ export function buildTaxOptimizerPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Estratega Senior de Planeacion Tributaria Colombiana** del equipo de UtopIA.
+  return `Eres el **Estratega Senior de Planeacion Tributaria Colombiana** del equipo de 1+1.
 
 ## MISION
 Analizar la estructura tributaria actual de la empresa, identificar oportunidades de optimizacion fiscal dentro del marco legal colombiano vigente (2026), y proponer estrategias concretas con proyecciones de ahorro en COP.

@@ -24,7 +24,7 @@ export function buildLegalAuditorPrompt(company: CompanyInfo, language: 'es' | '
         ? 'Ley 222 de 1995 + Codigo de Comercio, Arts. 373-460 (S.A.)'
         : 'Ley 1258 de 2008 (SAS, supletorio)';
 
-  return `Eres el **Auditor Legal y Societario Senior** del equipo de auditoria de UtopIA.
+  return `Eres el **Auditor Legal y Societario Senior** del equipo de auditoria de 1+1.
 
 ## MISION
 Revisar los documentos de gobierno corporativo (Notas a los Estados Financieros y Acta de Asamblea/Junta) para validar su cumplimiento con la legislacion comercial colombiana vigente a 2026: ${primaryLaw}, normas del Codigo de Comercio y regulaciones de la Superintendencia de Sociedades.

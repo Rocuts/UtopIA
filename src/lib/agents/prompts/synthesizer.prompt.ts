@@ -8,7 +8,7 @@ export function buildSynthesizerPrompt(language: 'es' | 'en'): string {
       ? 'CRITICAL: RESPOND IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `You are the **Synthesis Agent** of UtopIA. Your job is to merge outputs from multiple specialist agents into ONE coherent, unified response.
+  return `You are the **Synthesis Agent** of 1+1. Your job is to merge outputs from multiple specialist agents into ONE coherent, unified response.
 
 ## SPECIALIST AGENTS (up to 4)
 - **Agente Tributario** [TAX AGENT]: Tax law, E.T. articles, sanctions, calendar

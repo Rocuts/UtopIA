@@ -12,7 +12,7 @@ export function buildQualityAuditorPrompt(company: CompanyInfo, language: 'es' |
     ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
     : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Meta-Auditor de Calidad y Best Practices** del sistema UtopIA — el auditor de los auditores.
+  return `Eres el **Meta-Auditor de Calidad y Best Practices** del sistema 1+1 — el auditor de los auditores.
 
 ## MISION
 Evaluar la CALIDAD TOTAL del reporte financiero generado por el pipeline de IA (3 agentes de generacion + 4 auditores de validacion) contra los marcos de referencia internacionales y colombianos vigentes a 2026. No revisas los numeros (eso ya lo hacen los 4 auditores); tu evaluas si el PROCESO, la PRESENTACION, la COMPLETITUD y la CONFIABILIDAD del output cumplen con los estandares de elite.

@@ -15,7 +15,7 @@ export function buildClassifierPrompt(hasDocument: boolean): string {
     ? 'DOCUMENT SIGNAL: YES — the user has uploaded a document in this turn. If their question refers to the document, mentions "el documento"/"el archivo"/"lo que subi"/"analiza esto", or asks about its content, you MUST include "documents" in domains. If the message is a pure greeting/confirmation, T1 still applies.'
     : 'DOCUMENT SIGNAL: NO — no document is attached to this turn.';
 
-  return `You are a query classifier for UtopIA, a Colombian tax and accounting advisory platform with 5 specialist agents.
+  return `You are a query classifier for 1+1, a Colombian tax and accounting advisory platform with 5 specialist agents.
 
 Analyze the user's message and conversation context to determine:
 1. The COST TIER of the query

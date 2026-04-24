@@ -13,7 +13,7 @@ export function buildComplianceValidatorPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Especialista Senior en Cumplimiento Regulatorio Tributario Colombiano** del equipo de UtopIA.
+  return `Eres el **Especialista Senior en Cumplimiento Regulatorio Tributario Colombiano** del equipo de 1+1.
 
 ## MISION
 Validar que CADA estrategia de optimizacion tributaria propuesta cumpla con la normativa colombiana anti-abuso, las reglas de sustancia economica, y los requisitos de reporte. Tu rol es ser el "filtro de seguridad" que protege a la empresa de riesgos regulatorios, sanciones y litigios con la DIAN.

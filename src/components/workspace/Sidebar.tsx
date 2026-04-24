@@ -479,11 +479,11 @@ export function Sidebar() {
               >
                 <img
                   src="/logo-modern.png"
-                  alt="UtopIA Logo"
+                  alt="1+1 Logo"
                   className="w-6 h-6 rounded-sm object-cover invert hue-rotate-180 shrink-0"
                 />
                 <span className="text-sm font-bold tracking-tight text-[#0a0a0a]">
-                  UtopIA.
+                  1+1
                 </span>
               </motion.div>
             ) : (
@@ -497,7 +497,7 @@ export function Sidebar() {
               >
                 <img
                   src="/logo-modern.png"
-                  alt="UtopIA Logo"
+                  alt="1+1 Logo"
                   className="w-6 h-6 rounded-sm object-cover invert hue-rotate-180"
                 />
               </motion.div>

@@ -1,12 +1,21 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import { Instrument_Serif } from 'next/font/google';
 import './globals.css';
 import SmoothScroll from '@/components/layout/SmoothScroll';
 import { LanguageProvider } from '@/context/LanguageContext';
 
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  weight: '400',
+  style: ['normal', 'italic'],
+  variable: '--font-instrument-serif',
+  display: 'swap',
+});
+
 const SITE_URL = 'https://utopia-ai.co';
-const SITE_NAME = 'UtopIA';
+const SITE_NAME = '1+1';
 const BOGOTA_LAT = '4.7110';
 const BOGOTA_LON = '-74.0721';
 
@@ -22,43 +31,41 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: 'UtopIA | Consultoría Contable & Tributaria Potenciada por IA en Colombia',
-    template: '%s | UtopIA',
+    default: '1+1 — Directorio Ejecutivo Digital',
+    template: '%s · 1+1',
   },
   description:
-    'Consultoría contable y tributaria colombiana potenciada por inteligencia artificial. Defensa DIAN, devoluciones IVA/Renta, NIIF, planeación tributaria, precios de transferencia, valoración empresarial y due diligence. Basada en el Estatuto Tributario, doctrina DIAN y NIIF.',
+    '1+1 es el Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
   metadataBase: new URL(SITE_URL),
   applicationName: SITE_NAME,
   generator: 'Next.js',
   referrer: 'origin-when-cross-origin',
-  authors: [{ name: 'UtopIA', url: SITE_URL }],
-  creator: 'UtopIA',
-  publisher: 'UtopIA',
+  authors: [{ name: '1+1', url: SITE_URL }],
+  creator: '1+1',
+  publisher: '1+1',
   category: 'Business & Finance',
-  classification: 'Consultoría Contable, Tributaria y Financiera',
+  classification: 'Directorio Ejecutivo Digital — Contabilidad, Tributaria, Financiera y Aseguramiento',
   keywords: [
-    'consultoría contable Colombia',
-    'consultoría tributaria Colombia',
+    '1+1',
+    'contabilidad IA',
+    'NIIF',
+    'DIAN',
+    'Colombia',
+    'asesoría tributaria',
+    'planeación fiscal',
+    'valoración empresarial',
+    'Directorio Ejecutivo Digital',
     'defensa DIAN',
     'devolución saldos a favor',
-    'IVA Colombia',
-    'renta Colombia',
-    'NIIF Colombia',
-    'Estatuto Tributario',
-    'planeación tributaria',
     'precios de transferencia',
-    'valoración empresarial',
     'due diligence',
     'revisoría fiscal',
     'conciliación fiscal',
     'inteligencia artificial contabilidad',
-    'IA tributaria',
-    'firma contable Colombia',
-    'contador público Colombia',
+    'Estatuto Tributario',
     'Bogotá',
     'Medellín',
     'Cali',
-    'DIAN',
     'SuperSociedades',
     'CTCP',
     'UGPP',
@@ -72,9 +79,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'UtopIA | Consultoría Contable & Tributaria Potenciada por IA',
+    title: '1+1 — Directorio Ejecutivo Digital',
     description:
-      'Defensa tributaria, devoluciones, due diligence y análisis financiero — con la precisión de la IA y el criterio de un experto. Para firmas contables en Colombia.',
+      '1+1 es el Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
     url: SITE_URL,
     siteName: SITE_NAME,
     images: [
@@ -82,7 +89,7 @@ export const metadata: Metadata = {
         url: '/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: 'UtopIA — Consultoría Contable y Tributaria potenciada por IA en Colombia',
+        alt: '1+1 — Directorio Ejecutivo Digital impulsado por IA para empresas colombianas',
       },
     ],
     locale: 'es_CO',
@@ -92,9 +99,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UtopIA | Consultoría Contable & Tributaria Potenciada por IA',
+    title: '1+1 — Directorio Ejecutivo Digital',
     description:
-      'Defensa tributaria, devoluciones, due diligence y análisis financiero para firmas contables en Colombia. Potenciado por inteligencia artificial.',
+      '1+1 es el Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
     images: ['/twitter-image.jpg'],
   },
   robots: {
@@ -133,9 +140,10 @@ export default function RootLayout({
   const softwareAppSchema = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: 'UtopIA',
+    name: '1+1',
+    alternateName: 'UnoMasUno',
     description:
-      'Consultoría contable y tributaria colombiana potenciada por IA. Defensa DIAN, devoluciones, NIIF, planeación tributaria y más.',
+      '1+1 — Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: defensa DIAN, devoluciones, NIIF, planeación tributaria, valoración y aseguramiento.',
     applicationCategory: 'BusinessApplication',
     applicationSubCategory: 'Tax & Accounting Software',
     operatingSystem: 'Web',
@@ -148,7 +156,7 @@ export default function RootLayout({
     },
     provider: {
       '@type': 'Organization',
-      name: 'UtopIA',
+      name: '1+1',
       url: SITE_URL,
     },
     inLanguage: ['es-CO', 'en-US'],
@@ -178,9 +186,10 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'ProfessionalService',
     '@id': `${SITE_URL}#service`,
-    name: 'UtopIA — Consultoría Contable y Tributaria',
+    name: '1+1 — Directorio Ejecutivo Digital',
+    alternateName: 'UnoMasUno',
     description:
-      'Firma de consultoría contable y tributaria colombiana con inteligencia artificial. Defensa DIAN, NIIF, devoluciones, due diligence y análisis financiero.',
+      '1+1, Directorio Ejecutivo Digital colombiano con inteligencia artificial. Defensa DIAN, NIIF, devoluciones, due diligence, valoración, aseguramiento y análisis financiero.',
     url: SITE_URL,
     image: `${SITE_URL}/og-image.jpg`,
     priceRange: '$$',
@@ -251,14 +260,15 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'Organization',
     '@id': `${SITE_URL}#organization`,
-    name: 'UtopIA',
+    name: '1+1',
+    alternateName: 'UnoMasUno',
     url: SITE_URL,
     logo: {
       '@type': 'ImageObject',
       url: `${SITE_URL}/logo-modern.png`,
     },
     description:
-      'Plataforma de consultoría contable y tributaria colombiana potenciada por inteligencia artificial.',
+      '1+1 — Directorio Ejecutivo Digital impulsado por IA para empresas colombianas.',
     foundingLocation: {
       '@type': 'Place',
       address: {
@@ -294,7 +304,7 @@ export default function RootLayout({
   return (
     <html
       lang="es-CO"
-      className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable} antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-white text-[#0a0a0a] font-[family-name:var(--font-geist-sans)]">

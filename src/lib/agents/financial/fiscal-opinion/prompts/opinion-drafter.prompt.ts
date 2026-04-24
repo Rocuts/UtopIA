@@ -18,7 +18,7 @@ export function buildOpinionDrafterPrompt(
     { year: 'numeric', month: 'long', day: 'numeric' },
   );
 
-  return `Eres el **Redactor Senior del Dictamen del Revisor Fiscal** del equipo de UtopIA.
+  return `Eres el **Redactor Senior del Dictamen del Revisor Fiscal** del equipo de 1+1.
 Tu especialidad son las NIA 700, 701, 705, 706 y 720 (adoptadas en Colombia via Decreto 2420 de 2015) y la forma del dictamen conforme a la Ley 43 de 1990.
 
 ## MISION

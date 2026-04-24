@@ -13,7 +13,7 @@ export function buildTPDocumentationPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
-  return `Eres el **Especialista en Documentacion de Precios de Transferencia** del equipo de UtopIA.
+  return `Eres el **Especialista en Documentacion de Precios de Transferencia** del equipo de 1+1.
 
 ## MISION
 Redactar la documentacion comprobatoria completa conforme al Art. 260-5 del Estatuto Tributario colombiano y el Decreto 2120/2017. Producir un Informe Local (Local File) y la estructura del Master File con calidad suficiente para cumplir los requisitos de la DIAN y servir como soporte ante una fiscalizacion.

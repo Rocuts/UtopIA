@@ -511,7 +511,7 @@ export function NiifReportIntake() {
           </h3>
         </div>
         <p className="text-sm text-[#737373]">
-          UtopIA extrae automáticamente los datos de su archivo
+          1+1 extrae automáticamente los datos de su archivo
         </p>
       </div>
 

@@ -86,6 +86,16 @@ export interface WorkspaceState {
    * Si coincide con el reporte activo, tambien actualiza el estado en memoria.
    */
   updateReportTurns: (conversationId: string, turns: ReportIterationTurn[]) => void;
+
+  // ─── Chat seed bus (agentes E/F/G/H → ChatSidebar) ──────────────────────────
+  /**
+   * Texto "seed" emitido por los strips contextuales de cada ventana de área
+   * (El Escudo, El Valor, La Verdad, El Futuro). El ChatSidebar lo consume al
+   * montarse / hidratarse: lo coloca en su input y lo limpia vía
+   * `setPendingChatSeed(null)`. Single-consumer — no buffering.
+   */
+  pendingChatSeed: string | null;
+  setPendingChatSeed: (seed: string | null) => void;
 }
 
 // ─── Reporte completado (expuesto al shell) ───────────────────────────────────
@@ -137,6 +147,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [intakeDrafts, setIntakeDrafts] = useState<Partial<Record<CaseType, Partial<IntakeFormUnion>>>>({});
   const [intakeModalOpen, setIntakeModalOpen] = useState(false);
   const [pipelineInput, setPipelineInputState] = useState<NiifReportIntake | null>(null);
+  const [pendingChatSeed, setPendingChatSeedState] = useState<string | null>(null);
   // Hidratar el reporte mas reciente desde localStorage al crear el state.
   // `listReports()` ya chequea `typeof window === 'undefined'` y retorna [] en SSR,
   // asi que es seguro usarlo como inicializador lazy en un 'use client' component.
@@ -242,6 +253,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const setPipelineInput = useCallback((input: NiifReportIntake | null) => {
     setPipelineInputState(input);
+  }, []);
+
+  const setPendingChatSeed = useCallback((seed: string | null) => {
+    // Trimmed-null normalization: empty strings collapse to null so consumers
+    // can just check `if (pendingChatSeed)`.
+    setPendingChatSeedState(() => {
+      if (seed == null) return null;
+      const t = seed.trim();
+      return t ? t : null;
+    });
   }, []);
 
   /**
@@ -362,6 +383,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setPipelineInput,
         setLastCompletedReport,
         updateReportTurns,
+        pendingChatSeed,
+        setPendingChatSeed,
       }}
     >
       {children}

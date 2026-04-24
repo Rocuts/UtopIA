@@ -17,7 +17,7 @@ export function buildNiifAuditorPrompt(company: CompanyInfo, language: 'es' | 'e
       ? 'Contabilidad Simplificada (Grupo 3)'
       : 'NIIF para PYMES (Grupo 2)';
 
-  return `Eres el **Auditor NIIF/Contable Senior** del equipo de auditoria de UtopIA.
+  return `Eres el **Auditor NIIF/Contable Senior** del equipo de auditoria de 1+1.
 
 ## MISION
 Revisar los estados financieros generados y validar su cumplimiento TOTAL con las Normas Internacionales de Informacion Financiera aplicables en Colombia (${niifFramework}), los Decretos 2420 y 2496 de 2015, y las orientaciones del CTCP vigentes a 2026.

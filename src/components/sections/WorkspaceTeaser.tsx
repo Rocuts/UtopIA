@@ -68,7 +68,7 @@ export function WorkspaceTeaser() {
           {/* Mock Status Bar */}
           <div className="h-10 border-b border-[#e5e5e5] flex items-center px-4 gap-3 bg-white">
             <div className="w-1.5 h-1.5 rounded-full bg-[#0a0a0a]" />
-            <span className="text-xs font-bold text-[#0a0a0a]">UtopIA</span>
+            <span className="text-xs font-bold text-[#0a0a0a]">1+1</span>
             <div className="h-3 w-px bg-[#e5e5e5]" />
             <span className="text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
               {language === 'es' ? 'Defensa DIAN' : 'DIAN Defense'}
