@@ -81,7 +81,7 @@ export function Hero() {
 
         <motion.h1
           className="font-serif-elite text-balance font-medium tracking-tight mb-6 text-n-900 leading-display"
-          style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
+          style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", ...NOVA_SPRING, delay: 0.05 }}

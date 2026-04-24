@@ -67,7 +67,7 @@ export function Methodology() {
           <div className="text-center max-w-3xl mx-auto mb-20">
             <Badge variant="outline" className="mb-4">{t.methodology.badge}</Badge>
             <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 mt-2 text-n-900 leading-display"
-                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
               {t.methodology.title}
             </h2>
             <p className="text-lg text-n-600">

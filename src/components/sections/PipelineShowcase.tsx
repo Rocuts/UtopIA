@@ -62,7 +62,7 @@ export function PipelineShowcase() {
             {language === 'es' ? 'EXCLUSIVO EN COLOMBIA' : 'EXCLUSIVE IN COLOMBIA'}
           </div>
           <h2 className="font-serif-elite text-3xl md:text-4xl font-medium tracking-tight text-n-900 mb-3 leading-display"
-              style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
+              style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
             {language === 'es'
               ? 'Reporte Financiero de Nivel Corporativo'
               : 'Corporate-Grade Financial Report'}

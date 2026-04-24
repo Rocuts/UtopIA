@@ -15,7 +15,7 @@ export function CTA() {
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width-narrow)] text-center">
         <motion.h2
           className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 text-n-900 leading-display"
-          style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
+          style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
           initial={{ opacity: 0, y: -16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}

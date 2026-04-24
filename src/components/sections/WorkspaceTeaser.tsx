@@ -42,7 +42,7 @@ export function WorkspaceTeaser() {
           viewport={{ once: true }}
           transition={{ type: 'spring', ...NOVA_SPRING, delay: 0.05 }}
           className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-4 text-n-900 leading-display"
-          style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
+          style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
         >
           {t.chat.title}
         </motion.h2>

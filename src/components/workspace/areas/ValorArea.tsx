@@ -538,7 +538,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
                     'bg-clip-text text-transparent',
                     '[background-image:linear-gradient(135deg,#F5F5F5_0%,var(--gold-400)_50%,var(--gold-500)_100%)]',
                   )}
-                  style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
+                  style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
                 >
                   {kpiData.formatted}
                 </motion.span>

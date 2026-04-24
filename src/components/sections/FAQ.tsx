@@ -34,7 +34,7 @@ export function FAQ() {
               FAQ
             </span>
             <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight text-n-900 leading-display"
-                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
               {t.faq.title}{' '}
               {t.faq.titleHighlight}
             </h2>

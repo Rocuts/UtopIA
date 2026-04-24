@@ -56,7 +56,7 @@ export function Trust() {
           <div>
             <Badge variant="outline" className="mb-4">{t.trust.badge}</Badge>
             <h3 className="font-serif-elite text-2xl md:text-3xl font-medium tracking-tight mb-4 text-n-900 leading-display"
-                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
               {t.trust.title} <br className="hidden md:block"/> {t.trust.titleBreak}
             </h3>
             <p className="text-n-600 text-sm leading-relaxed mb-6">

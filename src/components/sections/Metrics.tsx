@@ -90,7 +90,7 @@ export function Metrics() {
         <Reveal direction="left">
           <div>
             <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 text-n-900 leading-display"
-                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
               {t.metrics.headline} <br /> {t.metrics.headlineHighlight}
             </h2>
             <p className="text-lg text-n-600 mb-8 max-w-xl leading-relaxed">

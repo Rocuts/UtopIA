@@ -205,7 +205,7 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
             )}
             style={
               isHero
-                ? { fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }
+                ? { fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }
                 : undefined
             }
           >
