@@ -202,7 +202,7 @@ export function EscudoArea({
             className={cn(
               'font-serif-elite font-medium tracking-tight',
               'text-xl md:text-2xl leading-relaxed',
-              'text-n-300 max-w-3xl mb-12',
+              'text-n-800 max-w-3xl mb-12',
             )}
           >
             {escudo.narrative}
@@ -322,7 +322,7 @@ function DeadlinesCard({ title, count, deadlines, language }: DeadlinesCardProps
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-serif-elite font-normal text-n-100 leading-[1] text-4xl md:text-5xl num">
+        <span className="font-serif-elite font-normal text-n-1000 leading-[1] text-4xl md:text-5xl num">
           {count}
         </span>
         <span className="text-sm text-n-500">
@@ -341,7 +341,7 @@ function DeadlinesCard({ title, count, deadlines, language }: DeadlinesCardProps
               className={cn('mt-1.5 h-1.5 w-1.5 rounded-full shrink-0', SEVERITY_DOT[d.severity])}
             />
             <span className="flex-1 min-w-0 flex items-center justify-between gap-3">
-              <span className="text-n-300 truncate">{d.label}</span>
+              <span className="text-n-800 truncate">{d.label}</span>
               <span className="text-n-500 shrink-0 inline-flex items-center gap-1">
                 <Clock className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
                 {d.date}
@@ -440,7 +440,7 @@ function SubmoduleCard({
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
               {title}
             </h3>
             <p className="text-base leading-relaxed text-n-500 max-w-md">

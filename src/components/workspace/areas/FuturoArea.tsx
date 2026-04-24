@@ -476,7 +476,7 @@ export function FuturoArea({
             className={cn(
               'font-serif-elite font-medium tracking-tight',
               'text-xl md:text-2xl leading-relaxed',
-              'text-n-300 max-w-3xl mb-12',
+              'text-n-800 max-w-3xl mb-12',
             )}
           >
             {futuro.narrative}
@@ -609,7 +609,7 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-mono font-semibold text-n-100 leading-tight text-3xl md:text-4xl num">
+        <span className="font-mono font-semibold text-n-1000 leading-tight text-3xl md:text-4xl num">
           {scenarios.toLocaleString('es-CO')}
         </span>
         <span className="text-sm text-n-500">
@@ -628,7 +628,7 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
               return (
                 <li key={c.name} className="flex flex-col gap-1">
                   <div className="flex items-center justify-between gap-3 text-xs">
-                    <span className="text-n-300 truncate">{c.name}</span>
+                    <span className="text-n-800 truncate">{c.name}</span>
                     <span className="text-gold-600 font-medium tabular-nums shrink-0">
                       {c.formatted}
                     </span>
@@ -678,7 +678,7 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
             <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
               {isEs ? 'Proyectos en evaluación' : 'Projects under evaluation'}
             </div>
-            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-100 mt-0.5">
+            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
               {isEs
                 ? `${projects.length} oportunidades activas`
                 : `${projects.length} active opportunities`}
@@ -721,7 +721,7 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
                     aria-hidden="true"
                     className={cn('inline-block h-1.5 w-1.5 rounded-full shrink-0', statusColor)}
                   />
-                  <span className="text-sm font-medium text-n-100 truncate">
+                  <span className="text-sm font-medium text-n-1000 truncate">
                     {displayName}
                   </span>
                 </div>
@@ -733,7 +733,7 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-n-500">
                   {isEs ? 'Inv.' : 'Inv.'}{' '}
-                  <span className="text-n-300 tabular-nums">
+                  <span className="text-n-800 tabular-nums">
                     {formatCopShort(p.investment)} COP
                   </span>
                 </span>
@@ -803,7 +803,7 @@ function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
             <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
               {isEs ? 'Macro snapshot — Colombia 2026' : 'Macro snapshot — Colombia 2026'}
             </div>
-            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-100 mt-0.5">
+            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
               {isEs
                 ? 'Indicadores que mueven su portafolio'
                 : 'Indicators that move your portfolio'}
@@ -850,7 +850,7 @@ function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-mono font-semibold text-xl leading-tight text-n-100 num">
+                  <span className="font-mono font-semibold text-xl leading-tight text-n-1000 num">
                     {m.value}
                   </span>
                   <span
@@ -974,7 +974,7 @@ function SubmoduleCard({
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
               {title}
             </h3>
             <p className="text-base leading-relaxed text-n-500 max-w-md">

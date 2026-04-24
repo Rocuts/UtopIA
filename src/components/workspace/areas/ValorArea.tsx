@@ -318,7 +318,7 @@ function MiniKpi({ label, value, icon: Icon, accent = 'gold', delta, deltaDir }:
         </div>
       </div>
 
-      <div className="font-mono font-semibold text-n-100 leading-tight text-2xl md:text-3xl num">
+      <div className="font-mono font-semibold text-n-1000 leading-tight text-2xl md:text-3xl num">
         {value}
       </div>
 
@@ -385,7 +385,7 @@ function ExitValueBreakdown({ kpi, open, onToggle, language }: ExitValueBreakdow
                     className="flex items-center justify-between gap-3 text-sm"
                   >
                     <dt className="text-n-500">{item.label}</dt>
-                    <dd className="text-n-100 font-medium tabular-nums">
+                    <dd className="text-n-1000 font-medium tabular-nums">
                       {item.formatted ?? item.value.toLocaleString('es-CO')}
                     </dd>
                   </div>
@@ -480,7 +480,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
             className={cn(
               'font-serif-elite font-medium tracking-tight',
               'text-xl md:text-2xl leading-relaxed',
-              'text-n-300 max-w-3xl mb-12',
+              'text-n-800 max-w-3xl mb-12',
             )}
           >
             {valor.narrative}
@@ -533,7 +533,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
                   animate={reduced ? {} : { opacity: 1, y: 0 }}
                   transition={reduced ? undefined : { duration: 0.5, ease: 'easeOut' }}
                   className={cn(
-                    'font-serif-elite font-medium text-n-100 leading-display tracking-tight num',
+                    'font-serif-elite font-medium text-n-1000 leading-display tracking-tight num',
                     'text-5xl sm:text-6xl',
                     'bg-clip-text text-transparent',
                     '[background-image:linear-gradient(135deg,#F5F5F5_0%,var(--gold-400)_50%,var(--gold-500)_100%)]',
@@ -722,7 +722,7 @@ function SubmoduleCard({
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
               {title}
             </h3>
             <p className="text-base leading-relaxed text-n-500 max-w-md">

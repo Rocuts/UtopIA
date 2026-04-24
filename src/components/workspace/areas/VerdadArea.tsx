@@ -284,7 +284,7 @@ function BreakdownBar({ label, value, weight, color }: BreakdownBarProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-n-300 font-medium tracking-wide">
+        <span className="text-n-800 font-medium tracking-wide">
           {label}
           {typeof weight === 'number' && (
             <span className="text-n-500 ml-2 font-normal">
@@ -292,7 +292,7 @@ function BreakdownBar({ label, value, weight, color }: BreakdownBarProps) {
             </span>
           )}
         </span>
-        <span className="tabular-nums text-n-100 font-medium">
+        <span className="tabular-nums text-n-1000 font-medium">
           {Math.round(pct)}/100
         </span>
       </div>
@@ -349,7 +349,7 @@ export function VerdadArea({
     <section
       className={cn(
         'relative flex flex-col gap-8',
-        'text-n-100',
+        'text-n-1000',
         'animate-elite-fade',
         className,
       )}
@@ -368,7 +368,7 @@ export function VerdadArea({
 
           <p
             className={cn(
-              'font-serif-elite font-medium tracking-tight text-n-300',
+              'font-serif-elite font-medium tracking-tight text-n-800',
               'text-lg md:text-xl leading-relaxed',
               'max-w-3xl',
             )}
@@ -413,7 +413,7 @@ export function VerdadArea({
           {/* Breakdown bars */}
           <div className="flex flex-col gap-5">
             <div>
-              <h3 className="font-serif-elite text-xl text-n-100 mb-1.5 leading-tight tracking-tight font-medium">
+              <h3 className="font-serif-elite text-xl text-n-1000 mb-1.5 leading-tight tracking-tight font-medium">
                 {language === 'es'
                   ? 'Desglose ponderado del score'
                   : 'Weighted score breakdown'}
@@ -508,7 +508,7 @@ export function VerdadArea({
                       style={{ backgroundColor: tone.dot }}
                     />
                     <div className="min-w-0 flex-1 flex flex-col">
-                      <p className="text-sm leading-relaxed text-n-100">
+                      <p className="text-sm leading-relaxed text-n-1000">
                         {f.description}
                       </p>
                       {f.norm && (
@@ -541,7 +541,7 @@ export function VerdadArea({
                 {language === 'es' ? 'Producto estrella' : 'Flagship product'}
               </span>
             </div>
-            <h3 className="font-serif-elite text-xl leading-tight tracking-tight text-n-100">
+            <h3 className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000">
               {language === 'es'
                 ? 'Informe NIIF Elite completo'
                 : 'Complete IFRS Elite Report'}
@@ -558,7 +558,7 @@ export function VerdadArea({
 
       {/* ── Grid de submódulos ───────────────────────────────────────────── */}
       <div>
-        <h3 className="font-serif-elite text-2xl leading-tight tracking-tight text-n-100 mb-4">
+        <h3 className="font-serif-elite text-2xl leading-tight tracking-tight text-n-1000 mb-4">
           {language === 'es' ? 'Módulos de aseguramiento' : 'Assurance modules'}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -592,16 +592,16 @@ export function VerdadArea({
             strokeWidth={1.75}
             aria-hidden="true"
           />
-          <p className="text-sm text-n-300 flex-1 min-w-[240px]">
+          <p className="text-sm text-n-800 flex-1 min-w-[240px]">
             {language === 'es' ? (
               <>
-                <span className="text-n-100 font-medium">Chat contextual.</span>{' '}
+                <span className="text-n-1000 font-medium">Chat contextual.</span>{' '}
                 Pregunte al asistente sobre cualquier hallazgo, partida conciliatoria
                 o dictamen — el contexto se carga automáticamente.
               </>
             ) : (
               <>
-                <span className="text-n-100 font-medium">Contextual chat.</span>{' '}
+                <span className="text-n-1000 font-medium">Contextual chat.</span>{' '}
                 Ask the assistant about any finding, reconciliation item, or opinion
                 — context loads automatically.
               </>
@@ -667,7 +667,7 @@ function SubmoduleCard({ href, icon: Icon, title, description }: SubmoduleCardPr
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <h4 className="font-serif-elite text-xl leading-tight tracking-tight text-n-100">
+          <h4 className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000">
             {title}
           </h4>
           <p className="text-sm leading-relaxed text-n-500 font-light">
