@@ -120,22 +120,22 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
     <div>
       <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
         <div>
-          <p className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+          <p className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
             {language === 'es'
               ? 'Análisis de Punto de Equilibrio'
               : 'Breakeven Analysis'}
           </p>
-          <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+          <p className="text-xs text-n-600 mt-0.5">
             {language === 'es'
               ? 'Costos, ingresos y punto de equilibrio'
               : 'Costs, revenue and breakeven point'}
           </p>
         </div>
-        <div className="flex items-center gap-5 text-[11px]">
-          <LegendDot color="#E8B42C" label={language === 'es' ? 'Ingresos' : 'Revenue'} />
-          <LegendDot color="#C46A76" label={language === 'es' ? 'Costo total' : 'Total cost'} />
+        <div className="flex items-center gap-5 text-xs">
+          <LegendDot color="var(--gold-400)" label={language === 'es' ? 'Ingresos' : 'Revenue'} />
+          <LegendDot color="var(--color-wine-400)" label={language === 'es' ? 'Costo total' : 'Total cost'} />
           <LegendDot
-            color="#6B6B6B"
+            color="var(--n-600)"
             label={language === 'es' ? 'Costo fijo' : 'Fixed cost'}
             dashed
           />
@@ -155,12 +155,12 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
       >
         <defs>
           <linearGradient id="be-profit" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22C55E" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#22C55E" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--success)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--success)" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="be-loss" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#722F37" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#722F37" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--color-wine-700)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--color-wine-700)" stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -188,7 +188,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
               x2={w - padR}
               y1={t.y}
               y2={t.y}
-              stroke="rgba(212, 160, 23, 0.08)"
+              stroke="rgb(var(--color-gold-500-rgb) / 0.08)"
               strokeWidth={1}
             />
             <text
@@ -196,7 +196,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
               y={t.y + 3}
               textAnchor="end"
               fontSize="9"
-              fill="#A8A8A8"
+              fill="var(--n-500)"
               fontFamily="system-ui, sans-serif"
             >
               {formatCop(t.value)}
@@ -208,7 +208,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
         <motion.path
           d={fixedPath}
           fill="none"
-          stroke="#6B6B6B"
+          stroke="var(--n-600)"
           strokeWidth={1.5}
           strokeDasharray="4 4"
           initial={reduced ? false : { pathLength: 0 }}
@@ -220,7 +220,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
         <motion.path
           d={totalCostPath}
           fill="none"
-          stroke="#C46A76"
+          stroke="var(--color-wine-400)"
           strokeWidth={2.2}
           strokeLinecap="round"
           initial={reduced ? false : { pathLength: 0 }}
@@ -232,7 +232,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
         <motion.path
           d={revenuePath}
           fill="none"
-          stroke="#E8B42C"
+          stroke="var(--gold-400)"
           strokeWidth={2.5}
           strokeLinecap="round"
           initial={reduced ? false : { pathLength: 0 }}
@@ -252,8 +252,8 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
               strokeWidth={1}
               strokeDasharray="3 3"
             />
-            <circle cx={beX} cy={beY} r={7} fill="#E8B42C" />
-            <circle cx={beX} cy={beY} r={12} fill="#E8B42C" opacity="0.24" />
+            <circle cx={beX} cy={beY} r={7} fill="var(--gold-400)" />
+            <circle cx={beX} cy={beY} r={12} fill="var(--gold-400)" opacity="0.24" />
             <g>
               <rect
                 x={beX - 64}
@@ -270,7 +270,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
                 textAnchor="middle"
                 fontSize="10"
                 fontWeight="600"
-                fill="#E8B42C"
+                fill="var(--gold-400)"
                 fontFamily="system-ui, sans-serif"
               >
                 {language === 'es' ? 'Punto de equilibrio' : 'Breakeven'}
@@ -287,7 +287,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
             y={h - padB + 18}
             textAnchor="middle"
             fontSize="10"
-            fill="#A8A8A8"
+            fill="var(--n-500)"
             fontFamily="system-ui, sans-serif"
           >
             {Math.round(t.units).toLocaleString('es-CO')}
@@ -298,7 +298,7 @@ function BreakevenChart({ scenario, language, reduced }: BreakevenChartProps) {
           y={h - 6}
           textAnchor="middle"
           fontSize="10"
-          fill="#6B6B6B"
+          fill="var(--n-600)"
           fontFamily="system-ui, sans-serif"
         >
           {language === 'es' ? 'Unidades vendidas' : 'Units sold'}
@@ -341,7 +341,7 @@ function LegendDot({
   dashed?: boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[#A8A8A8]">
+    <span className="inline-flex items-center gap-1.5 text-n-500">
       <span
         aria-hidden="true"
         className={cn('inline-block w-4 h-0.5 rounded-full', dashed && 'border-t border-dashed')}
@@ -365,14 +365,14 @@ function BeStat({
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
 }) {
   return (
-    <div className="p-3 rounded-[10px] bg-[rgba(10,10,10,0.55)] border border-[rgba(212,160,23,0.16)]">
+    <div className="p-3 rounded-md bg-[rgba(10,10,10,0.55)] border border-[rgb(var(--color-gold-500-rgb)_/_0.16)]">
       <div className="flex items-center gap-1.5 mb-1">
-        <Icon className="h-3 w-3 text-[#D4A017]" strokeWidth={2} />
-        <span className="text-[10px] uppercase tracking-[0.18em] text-[#A8A8A8]">
+        <Icon className="h-3 w-3 text-gold-500" strokeWidth={2} />
+        <span className="text-2xs uppercase tracking-eyebrow text-n-500">
           {label}
         </span>
       </div>
-      <p className="font-serif-elite text-[18px] text-[#F5F5F5] tabular-nums leading-tight">
+      <p className="font-serif-elite text-lg text-n-100 tabular-nums leading-tight">
         {value}
       </p>
     </div>
@@ -414,18 +414,18 @@ function CashflowProjection({ language, reduced }: CashflowProjectionProps) {
     <div>
       <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
         <div>
-          <p className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+          <p className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
             {language === 'es' ? 'Flujo de caja proyectado 6M' : 'Projected cash flow 6M'}
           </p>
-          <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+          <p className="text-xs text-n-600 mt-0.5">
             {language === 'es' ? 'Entradas vs salidas mensuales' : 'Monthly inflows vs outflows'}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] text-[#A8A8A8]">
+          <p className="text-xs text-n-500">
             {language === 'es' ? 'Flujo neto 6M' : 'Net flow 6M'}
           </p>
-          <p className="font-serif-elite text-[20px] text-[#86EFAC] tabular-nums">
+          <p className="font-serif-elite text-xl text-success-light tabular-nums">
             {formatCop(netFlow)}
           </p>
         </div>
@@ -450,7 +450,7 @@ function CashflowProjection({ language, reduced }: CashflowProjectionProps) {
             x2={w - padR}
             y1={padT + (h - padT - padB) * (1 - r)}
             y2={padT + (h - padT - padB) * (1 - r)}
-            stroke="rgba(212, 160, 23, 0.08)"
+            stroke="rgb(var(--color-gold-500-rgb) / 0.08)"
             strokeWidth={1}
           />
         ))}
@@ -463,7 +463,7 @@ function CashflowProjection({ language, reduced }: CashflowProjectionProps) {
             y={padT + (h - padT - padB) * (1 - r) + 3}
             textAnchor="end"
             fontSize="9"
-            fill="#A8A8A8"
+            fill="var(--n-500)"
             fontFamily="system-ui, sans-serif"
           >
             {formatCop(maxV * r)}
@@ -520,7 +520,7 @@ function CashflowProjection({ language, reduced }: CashflowProjectionProps) {
                 y={h - padB + 18}
                 textAnchor="middle"
                 fontSize="10"
-                fill="#A8A8A8"
+                fill="var(--n-500)"
                 fontFamily="system-ui, sans-serif"
               >
                 {d.month}
@@ -531,23 +531,23 @@ function CashflowProjection({ language, reduced }: CashflowProjectionProps) {
 
         <defs>
           <linearGradient id="cf-inflow" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F5C63F" />
-            <stop offset="100%" stopColor="#D4A017" />
+            <stop offset="0%" stopColor="var(--gold-300)" />
+            <stop offset="100%" stopColor="var(--gold-500)" />
           </linearGradient>
           <linearGradient id="cf-outflow" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#C46A76" />
-            <stop offset="100%" stopColor="#722F37" />
+            <stop offset="0%" stopColor="var(--color-wine-400)" />
+            <stop offset="100%" stopColor="var(--color-wine-700)" />
           </linearGradient>
         </defs>
       </svg>
 
-      <div className="mt-3 flex items-center gap-5 text-[11px]">
+      <div className="mt-3 flex items-center gap-5 text-xs">
         <LegendDot
-          color="#E8B42C"
+          color="var(--gold-400)"
           label={language === 'es' ? 'Entradas' : 'Inflows'}
         />
         <LegendDot
-          color="#C46A76"
+          color="var(--color-wine-400)"
           label={language === 'es' ? 'Salidas' : 'Outflows'}
         />
       </div>
@@ -610,7 +610,7 @@ export default function InteligenciaFinancieraPage() {
       data-theme="elite"
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-[#030303] text-[#F5F5F5]',
+        'bg-n-1000 text-n-100',
       )}
     >
       <div
@@ -621,7 +621,7 @@ export default function InteligenciaFinancieraPage() {
           className="absolute -top-[10%] -right-[10%] w-[520px] h-[520px] rounded-full blur-[130px] opacity-30"
           style={{
             background:
-              'radial-gradient(circle, rgba(212,160,23,0.4) 0%, rgba(212,160,23,0) 70%)',
+              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.4) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
           }}
         />
       </div>
@@ -631,7 +631,7 @@ export default function InteligenciaFinancieraPage() {
           <Link
             href="/workspace/valor"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#A8A8A8] hover:text-[#E8B42C] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-gold-600 transition-colors"
           >
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} />
             {language === 'es' ? 'Volver a El Valor' : 'Back to The Value'}
@@ -654,8 +654,8 @@ export default function InteligenciaFinancieraPage() {
         <motion.div {...fade(2)} className="mb-10 max-w-3xl">
           <p className={cn(
             'font-serif-elite font-normal',
-            'text-[20px] sm:text-[22px] leading-[1.6]',
-            'text-[#D4D4D4]',
+            'text-xl sm:text-xl leading-[1.6]',
+            'text-n-300',
           )}>
             {language === 'es'
               ? 'Convierta la contabilidad en inteligencia accionable. Predecimos su flujo de caja, calculamos el punto de equilibrio exacto por producto y disparamos alertas cuando un KPI sale de banda — antes de que duela.'
@@ -668,48 +668,48 @@ export default function InteligenciaFinancieraPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center gap-2 mb-2">
-                <Target className="h-3.5 w-3.5 text-[#E8B42C]" strokeWidth={2} />
-                <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+                <Target className="h-3.5 w-3.5 text-gold-600" strokeWidth={2} />
+                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
                   {language === 'es' ? 'Margen de contribución' : 'Contribution margin'}
                 </span>
               </div>
-              <p className="font-serif-elite text-[34px] text-[#F5F5F5] tabular-nums leading-none mb-1">
+              <p className="font-serif-elite text-3xl text-n-100 tabular-nums leading-none mb-1">
                 {miniKpis.contributionPct}
               </p>
-              <p className="text-[11px] text-[#86EFAC]">
+              <p className="text-xs text-success-light">
                 {language === 'es' ? 'Saludable · meta 60%' : 'Healthy · target 60%'}
               </p>
             </EliteCard>
 
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center gap-2 mb-2">
-                <Calendar className="h-3.5 w-3.5 text-[#E8B42C]" strokeWidth={2} />
-                <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+                <Calendar className="h-3.5 w-3.5 text-gold-600" strokeWidth={2} />
+                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
                   {language === 'es' ? 'Días de capital de trabajo' : 'Working capital days'}
                 </span>
               </div>
-              <p className="font-serif-elite text-[34px] text-[#F5F5F5] tabular-nums leading-none mb-1">
+              <p className="font-serif-elite text-3xl text-n-100 tabular-nums leading-none mb-1">
                 {miniKpis.workingCapitalDays}
-                <span className="text-[14px] text-[#A8A8A8] ml-1">
+                <span className="text-base text-n-500 ml-1">
                   {language === 'es' ? 'días' : 'days'}
                 </span>
               </p>
-              <p className="text-[11px] text-[#A8A8A8]">
+              <p className="text-xs text-n-500">
                 {language === 'es' ? 'DSO 48 · DPO 36 · DIO 30' : 'DSO 48 · DPO 36 · DIO 30'}
               </p>
             </EliteCard>
 
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center gap-2 mb-2">
-                <Wallet className="h-3.5 w-3.5 text-[#E8B42C]" strokeWidth={2} />
-                <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+                <Wallet className="h-3.5 w-3.5 text-gold-600" strokeWidth={2} />
+                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
                   {language === 'es' ? 'Runway (meses)' : 'Runway (months)'}
                 </span>
               </div>
-              <p className="font-serif-elite text-[34px] text-[#F5F5F5] tabular-nums leading-none mb-1">
+              <p className="font-serif-elite text-3xl text-n-100 tabular-nums leading-none mb-1">
                 {miniKpis.runwayMonths}
               </p>
-              <p className="text-[11px] text-[#EAB308] inline-flex items-center gap-1">
+              <p className="text-xs text-gold-500 inline-flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" strokeWidth={2} />
                 {language === 'es' ? 'Monitorear Q3' : 'Watch Q3'}
               </p>
@@ -740,25 +740,25 @@ export default function InteligenciaFinancieraPage() {
               className="absolute -top-14 -right-14 w-[180px] h-[180px] rounded-full blur-[70px] opacity-40"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(212,160,23,0.4) 0%, rgba(212,160,23,0) 70%)',
+                  'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.4) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
               }}
             />
             <div className="relative z-[1] flex flex-col gap-4 h-full">
               <div className="flex items-start gap-3">
                 <span
                   aria-hidden="true"
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                 >
                   <Plug className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017] mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
                     {language === 'es' ? 'Datos en vivo' : 'Live data'}
                   </div>
-                  <h3 className="font-serif-elite text-[22px] text-[#F5F5F5] leading-tight">
+                  <h3 className="font-serif-elite text-xl text-n-100 leading-tight">
                     {language === 'es' ? 'Conectar ERP' : 'Connect ERP'}
                   </h3>
-                  <p className="text-[13px] text-[#A8A8A8] mt-1.5 leading-relaxed">
+                  <p className="text-sm text-n-500 mt-1.5 leading-relaxed">
                     {language === 'es'
                       ? 'Sincronice Siigo, World Office, Contífico, Helisa o QuickBooks. La proyección se recalcula con cada cierre diario.'
                       : 'Sync Siigo, World Office, Contífico, Helisa or QuickBooks. The forecast recalculates with each daily close.'}
@@ -766,7 +766,7 @@ export default function InteligenciaFinancieraPage() {
                 </div>
               </div>
               <div className="mt-auto flex items-end justify-between gap-3">
-                <p className="text-[11px] text-[#6B6B6B]">
+                <p className="text-xs text-n-600">
                   {language === 'es' ? '5+ proveedores soportados' : '5+ providers supported'}
                 </p>
                 <EliteButton
@@ -789,18 +789,18 @@ export default function InteligenciaFinancieraPage() {
               <div className="flex items-start gap-3">
                 <span
                   aria-hidden="true"
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                 >
                   <Brain className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017] mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
                     {language === 'es' ? 'Modelado' : 'Modeling'}
                   </div>
-                  <h3 className="font-serif-elite text-[22px] text-[#F5F5F5] leading-tight">
+                  <h3 className="font-serif-elite text-xl text-n-100 leading-tight">
                     {language === 'es' ? 'Simular escenarios' : 'Simulate scenarios'}
                   </h3>
-                  <p className="text-[13px] text-[#A8A8A8] mt-1.5 leading-relaxed">
+                  <p className="text-sm text-n-500 mt-1.5 leading-relaxed">
                     {language === 'es'
                       ? 'Optimista, base y pesimista con supuestos colombianos (IPC, UVT, salario mínimo). Reporte ejecutivo + plan de contingencia.'
                       : 'Optimistic, base and pessimistic scenarios with Colombian assumptions (CPI, UVT, minimum wage). Executive report + contingency plan.'}
@@ -808,7 +808,7 @@ export default function InteligenciaFinancieraPage() {
                 </div>
               </div>
               <div className="mt-auto flex items-end justify-between gap-3">
-                <p className="text-[11px] text-[#6B6B6B]">
+                <p className="text-xs text-n-600">
                   {language === 'es' ? 'Análisis profundo con IA' : 'AI-powered deep analysis'}
                 </p>
                 <EliteButton
@@ -831,11 +831,11 @@ export default function InteligenciaFinancieraPage() {
             type="button"
             onClick={handleChatIntel}
             className={cn(
-              'w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-[10px]',
-              'bg-transparent border border-[rgba(212,160,23,0.22)] text-[#A8A8A8]',
-              'hover:border-[rgba(212,160,23,0.5)] hover:text-[#E8B42C] transition-colors',
-              'text-[13px] font-medium',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+              'w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md',
+              'bg-transparent border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] text-n-500',
+              'hover:border-[rgb(var(--color-gold-500-rgb)_/_0.5)] hover:text-gold-600 transition-colors',
+              'text-sm font-medium',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
             )}
           >
             <MessageSquare className="h-4 w-4" strokeWidth={1.75} />

@@ -64,15 +64,15 @@ function MetricCard({
   return (
     <Reveal delay={index * 0.05}>
       <GlassPanel hoverEffect className="p-6 flex flex-col justify-between">
-        <div className="mb-4 text-[#0a0a0a] bg-[#fafafa] border border-[#e5e5e5] w-fit p-3 rounded-sm">
+        <div className="mb-4 text-n-900 bg-n-50 border border-n-200 w-fit p-3 rounded-sm">
           {icon}
         </div>
         <div>
-          <div className="text-4xl font-bold mb-1 text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">
+          <div className="text-4xl font-bold mb-1 text-n-900 font-mono num">
             <AnimatedCounter value={value} />
           </div>
-          <p className="text-sm font-medium text-[#0a0a0a] mb-2">{label}</p>
-          <p className="text-xs text-[#a3a3a3]">{description}</p>
+          <p className="text-sm font-medium text-n-900 mb-2">{label}</p>
+          <p className="text-xs text-n-400">{description}</p>
         </div>
       </GlassPanel>
     </Reveal>
@@ -84,28 +84,29 @@ export function Metrics() {
   const sectionRef = useRef<HTMLElement>(null);
 
   return (
-    <section id="metrics" ref={sectionRef} className="py-24 relative container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
+    <section id="metrics" ref={sectionRef} className="py-20 md:py-28 relative container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)]">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center relative z-10">
 
         <Reveal direction="left">
           <div>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-6 text-[#0a0a0a]">
+            <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 text-n-900 leading-display"
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
               {t.metrics.headline} <br /> {t.metrics.headlineHighlight}
             </h2>
-            <p className="text-lg text-[#525252] mb-8 max-w-xl leading-relaxed">
+            <p className="text-lg text-n-600 mb-8 max-w-xl leading-relaxed">
               {t.metrics.headlineDesc}
             </p>
 
-            <div className="flex gap-4 items-center pl-4 border-l-2 border-[#0a0a0a]">
-              <p className="text-sm text-[#525252] italic max-w-md">
+            <div className="flex gap-4 items-center pl-4 border-l-2 border-n-900">
+              <p className="text-sm text-n-600 italic max-w-md">
                 {t.metrics.quote}
               </p>
             </div>
           </div>
         </Reveal>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-[#e5e5e5] border border-[#e5e5e5] rounded-sm overflow-hidden">
-          <div className="bg-white">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-n-200 border border-n-200 rounded-sm overflow-hidden">
+          <div className="bg-n-0">
             <MetricCard
               index={0}
               icon={<Briefcase className="w-5 h-5" />}
@@ -114,7 +115,7 @@ export function Metrics() {
               description={t.metrics.waitTimeDesc}
             />
           </div>
-          <div className="bg-white">
+          <div className="bg-n-0">
             <MetricCard
               index={1}
               icon={<DollarSign className="w-5 h-5" />}
@@ -123,7 +124,7 @@ export function Metrics() {
               description={t.metrics.legalBriefsDesc}
             />
           </div>
-          <div className="bg-white">
+          <div className="bg-n-0">
             <MetricCard
               index={2}
               icon={<Target className="w-5 h-5" />}
@@ -132,7 +133,7 @@ export function Metrics() {
               description={t.metrics.privacyDesc}
             />
           </div>
-          <div className="bg-white">
+          <div className="bg-n-0">
             <MetricCard
               index={3}
               icon={<Clock className="w-5 h-5" />}

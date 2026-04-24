@@ -24,21 +24,22 @@ export function FAQ() {
   };
 
   return (
-    <section id="faq" className="py-24 relative container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
+    <section id="faq" className="py-20 md:py-28 relative container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width-narrow)]">
       {/* Header — asymmetric two-column */}
       <Reveal>
         <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6 md:gap-12 mb-16 items-end">
           <div>
-            <span className="inline-flex items-center gap-2 text-xs tracking-widest uppercase text-[#a3a3a3] font-medium mb-4">
-              <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
+            <span className="inline-flex items-center gap-2 text-xs tracking-eyebrow uppercase text-n-400 font-medium mb-4">
+              <span className="h-px w-5 bg-n-300" aria-hidden="true" />
               FAQ
             </span>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-[#0a0a0a]">
+            <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight text-n-900 leading-display"
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
               {t.faq.title}{' '}
               {t.faq.titleHighlight}
             </h2>
           </div>
-          <p className="text-base text-[#737373] md:text-right md:max-w-md md:ml-auto">
+          <p className="text-base text-n-500 md:text-right md:max-w-md md:ml-auto">
             {t.faq.desc}
           </p>
         </div>
@@ -54,8 +55,8 @@ export function FAQ() {
                 className={cn(
                   "rounded-lg border transition-colors duration-150",
                   isOpen
-                    ? "border-[#d4d4d4] bg-[#fafafa]"
-                    : "border-[#e5e5e5] bg-white hover:border-[#d4d4d4]"
+                    ? "border-n-300 bg-n-50"
+                    : "border-n-200 bg-n-0 hover:border-n-300"
                 )}
               >
                 <button
@@ -63,13 +64,13 @@ export function FAQ() {
                   className="w-full flex items-center gap-4 p-5 sm:p-6 text-left focus:outline-none"
                   aria-expanded={isOpen}
                 >
-                  <span className="text-xs font-mono text-[#a3a3a3] tabular-nums select-none">
+                  <span className="text-xs font-mono text-n-400 tabular-nums select-none">
                     {String(idx + 1).padStart(2, '0')}
                   </span>
-                  <h3 className="flex-1 text-base font-medium text-[#0a0a0a]">{faq.question}</h3>
+                  <h3 className="flex-1 text-base font-medium text-n-900">{faq.question}</h3>
                   <ChevronDown
                     className={cn(
-                      "w-4 h-4 text-[#a3a3a3] transition-transform duration-150 flex-shrink-0",
+                      "w-4 h-4 text-n-400 transition-transform duration-150 flex-shrink-0",
                       { "rotate-180": isOpen }
                     )}
                   />
@@ -84,7 +85,7 @@ export function FAQ() {
                   className="overflow-hidden"
                 >
                   <div className="px-5 sm:px-6 pb-5 sm:pb-6 pl-[calc(1.25rem+1rem+theme(fontSize.xs))] sm:pl-[calc(1.5rem+1rem+theme(fontSize.xs))]">
-                    <p className="text-sm leading-relaxed text-[#525252]">{faq.answer}</p>
+                    <p className="text-sm leading-relaxed text-n-600">{faq.answer}</p>
                   </div>
                 </motion.div>
               </div>

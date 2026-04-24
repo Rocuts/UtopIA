@@ -125,7 +125,7 @@ export default function PlaneacionTributariaPage() {
   return (
     <div
       data-theme="elite"
-      className="relative w-full min-h-full overflow-y-auto bg-[#030303] text-[#F5F5F5]"
+      className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
     >
       <div
         aria-hidden="true"
@@ -135,7 +135,7 @@ export default function PlaneacionTributariaPage() {
           className="absolute -top-[15%] right-[5%] w-[500px] h-[500px] rounded-full blur-[130px] opacity-25"
           style={{
             background:
-              'radial-gradient(circle, rgba(212,160,23,0.38) 0%, rgba(212,160,23,0) 70%)',
+              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.38) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
           }}
         />
       </div>
@@ -146,7 +146,7 @@ export default function PlaneacionTributariaPage() {
           <Link
             href="/workspace/escudo"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#A8A8A8] hover:text-[#D4A017] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-gold-500 transition-colors"
           >
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             {language === 'es' ? 'El Escudo' : 'The Shield'}
@@ -157,7 +157,7 @@ export default function PlaneacionTributariaPage() {
         <motion.div {...fadeItem(1)} className="mb-10 flex items-start gap-5">
           <div
             aria-hidden="true"
-            className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-[14px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C] glow-gold-soft"
+            className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600 glow-gold-soft"
           >
             <Calculator className="h-7 w-7" strokeWidth={1.75} />
           </div>
@@ -175,7 +175,7 @@ export default function PlaneacionTributariaPage() {
         {/* Narrativa larga */}
         <motion.div
           {...fadeItem(2)}
-          className="max-w-3xl space-y-5 text-[15px] leading-relaxed text-[#D4D4D4] mb-12"
+          className="max-w-3xl space-y-5 text-md leading-relaxed text-n-300 mb-12"
         >
           <p>
             {language === 'es'
@@ -199,7 +199,7 @@ export default function PlaneacionTributariaPage() {
           {benefits.map((b) => (
             <li
               key={b}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(212,160,23,0.08)] border border-[rgba(212,160,23,0.25)] text-[12px] text-[#E8B42C]"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.08)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-xs text-gold-600"
             >
               <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
               {b}
@@ -215,18 +215,18 @@ export default function PlaneacionTributariaPage() {
                 <div className="flex items-center justify-between">
                   <span
                     aria-hidden="true"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                   >
                     <agent.icon className="h-5 w-5" strokeWidth={1.75} />
                   </span>
-                  <span className="font-serif-elite text-[20px] text-[#6B6B6B] tabular-nums">
+                  <span className="font-serif-elite text-xl text-n-600 tabular-nums">
                     {agent.num}
                   </span>
                 </div>
-                <h3 className="font-serif-elite text-[18px] leading-tight font-normal text-[#F5F5F5]">
+                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
                   {agent.title}
                 </h3>
-                <p className="text-[13px] leading-relaxed text-[#A8A8A8]">{agent.body}</p>
+                <p className="text-sm leading-relaxed text-n-500">{agent.body}</p>
               </div>
             </EliteCard>
           ))}
@@ -245,24 +245,24 @@ export default function PlaneacionTributariaPage() {
             className="absolute -right-24 -top-24 w-[320px] h-[320px] rounded-full blur-[110px] opacity-40"
             style={{
               background:
-                'radial-gradient(circle, rgba(212,160,23,0.45) 0%, rgba(212,160,23,0) 70%)',
+                'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.45) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
             }}
           />
           <div className="relative z-[1] flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div className="flex items-start gap-3 md:max-w-xl">
               <span
                 aria-hidden="true"
-                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.16)] text-[#E8B42C]"
+                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.16)] text-gold-600"
               >
                 <Gauge className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5] mb-1.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
                   {language === 'es'
                     ? 'Genere su plan tributario 2026'
                     : 'Generate your 2026 tax plan'}
                 </h3>
-                <p className="text-[13px] leading-relaxed text-[#A8A8A8]">
+                <p className="text-sm leading-relaxed text-n-500">
                   {language === 'es'
                     ? 'Complete el intake (2 min) con metadatos de la empresa y su régimen. El pipeline entrega un reporte SSE en vivo.'
                     : 'Complete the intake (2 min) with company metadata and regime. The pipeline delivers a live SSE report.'}

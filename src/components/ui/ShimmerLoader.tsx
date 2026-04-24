@@ -7,9 +7,12 @@ import type { CSSProperties, HTMLAttributes } from 'react';
 /**
  * ShimmerLoader — Skeleton with subtle gold shimmer for the elite theme.
  *
+ * Colors reference the design-system tokens:
+ *   gold-500 = var(--gold-500) → rgb(184 147 74)
+ *   n-800    = #171717 → rgb(23 23 23)
+ *
  * The shimmer keyframe is inlined so it works without requiring changes to
- * globals.css (which is locked for this agent). In reduced-motion it stays
- * static with a soft gradient background.
+ * globals.css. In reduced-motion it stays static with a soft gradient.
  *
  * Variants:
  *  - text: small rounded block, line-height friendly
@@ -54,8 +57,8 @@ export function ShimmerLoader({
     height: variant === 'circle' ? width : height,
     borderRadius: resolvedRadius,
     background: shouldReduce
-      ? 'linear-gradient(90deg, rgba(212, 160, 23, 0.08), rgba(212, 160, 23, 0.14), rgba(212, 160, 23, 0.08))'
-      : 'linear-gradient(90deg, rgba(18, 18, 18, 0.6) 0%, rgba(212, 160, 23, 0.12) 45%, rgba(212, 160, 23, 0.22) 50%, rgba(212, 160, 23, 0.12) 55%, rgba(18, 18, 18, 0.6) 100%)',
+      ? 'linear-gradient(90deg, rgb(184 147 74 / 0.08), rgb(184 147 74 / 0.14), rgb(184 147 74 / 0.08))'
+      : 'linear-gradient(90deg, rgb(23 23 23 / 0.6) 0%, rgb(184 147 74 / 0.12) 45%, rgb(184 147 74 / 0.22) 50%, rgb(184 147 74 / 0.12) 55%, rgb(23 23 23 / 0.6) 100%)',
     backgroundSize: shouldReduce ? '100% 100%' : '200% 100%',
     animation: shouldReduce ? undefined : 'elite-shimmer 1.8s ease-in-out infinite',
     ...(style ?? {}),
@@ -72,7 +75,7 @@ export function ShimmerLoader({
         aria-live="polite"
         className={cn(
           'inline-block overflow-hidden',
-          'border border-[rgba(212,160,23,0.12)]',
+          'border border-gold-500/10',
           className,
         )}
         style={baseStyle}

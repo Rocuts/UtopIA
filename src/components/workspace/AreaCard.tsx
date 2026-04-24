@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { motion, useReducedMotion, type Variants } from 'motion/react';
+import { motion, type Variants } from 'motion/react';
 import Link from 'next/link';
 import {
   ArrowDown,
@@ -13,40 +13,35 @@ import {
 import type { ReactNode } from 'react';
 
 /**
- * AreaCard — One of the 4 premium area tiles of the Executive Dashboard.
+ * AreaCard — One of the 4 cockpit tiles of the Executive Dashboard.
+ *
+ * Cockpit contract (NOT a brochure):
+ *   - Compact (min-h 240, not 380).
+ *   - One live KPI (number + sparkline stub).
+ *   - 4 distinct area accents (verdad / valor / futuro / escudo) — NOT
+ *     the legacy 2-tone gold/wine split. Every pillar reads distinctly.
+ *   - Directional hover: translate-y -2px + shadow-e4 + border intensifies.
+ *   - Submodule list REMOVED — AreaNav already surfaces navigation; the
+ *     cockpit tile shows the pulse, not the menu.
+ *   - CTA footer shows a live alerts count, not a generic "Enter".
  *
  *   <AreaCard
  *     area="escudo"
  *     eyebrow="I. Resiliencia"
  *     concept="El Escudo"
  *     subtitle="Estrategia Tributaria y Legal"
- *     tagline="Protección del patrimonio y cumplimiento optimizado"
- *     kpi={{ value: 22.4, formatted: '22.4%', label: 'Tasa de Eficiencia Fiscal',
+ *     tagline="Protección del patrimonio…"
+ *     kpi={{ value: 22.4, formatted: '22.4%', label: 'Eficiencia Fiscal',
  *            trend: { direction: 'up', delta: 12.3 }, severity: 'good' }}
- *     submodules={[{ title: 'Defensa DIAN', icon: Shield }, ...]}
  *     ctaLabel="Entrar a El Escudo"
+ *     alertsCount={3}
  *     href="/workspace/escudo"
- *     accent="wine"
  *     icon={Shield}
  *   />
- *
- * Visual contract:
- *  - glass-elite-elevated surface + border-elite-gold ring.
- *  - Eyebrow (roman numeral + pillar name) at top.
- *  - Giant serif concept title ("El Escudo"), sans subtitle below.
- *  - Inline hero KPI (moderate size, not full-card protagonism).
- *  - Mini grid of 4 submodules w/ tiny lucide icons.
- *  - Footer CTA link-button → hover lifts +1px and intensifies glow.
- *  - Entire card is a single <Link> for accessibility and hover framing.
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/**
- * Local minimal KPI contract — matches the shape exposed by Agent D's
- * `src/types/kpis.ts` (`KpiResult`). Kept local so this file compiles even
- * if the types module lands later. Agent I will align imports at polish time.
- */
 export type AreaKpiDirection = 'up' | 'down' | 'flat';
 export type AreaKpiSeverity = 'good' | 'neutral' | 'warn' | 'critical';
 
@@ -58,6 +53,10 @@ export interface AreaKpi {
   severity?: AreaKpiSeverity;
 }
 
+/**
+ * @deprecated Kept only so the parent type check doesn't break if anyone still
+ *   passes submodules. The card no longer renders them — AreaNav owns that.
+ */
 export interface AreaSubmodule {
   title: string;
   icon: LucideIcon;
@@ -65,6 +64,10 @@ export interface AreaSubmodule {
 }
 
 export type AreaKey = 'escudo' | 'valor' | 'verdad' | 'futuro';
+/**
+ * @deprecated — retained in the public API so the parent stays source-compatible.
+ *   The card now derives its accent from `area` (4 distinct palettes).
+ */
 export type AreaAccent = 'gold' | 'wine';
 
 export interface AreaCardProps {
@@ -74,45 +77,87 @@ export interface AreaCardProps {
   subtitle?: ReactNode;
   tagline?: ReactNode;
   kpi?: AreaKpi;
+  /** @deprecated — no longer rendered. */
   submodules?: AreaSubmodule[];
   ctaLabel: ReactNode;
   href: string;
+  /** @deprecated — ignored. Accent is derived from `area`. */
   accent?: AreaAccent;
   icon: LucideIcon;
+  /** Live alerts count surfaced in the footer. Defaults to 0 (hidden). */
+  alertsCount?: number;
+  /** Sparkline data points. If omitted, a deterministic stub is generated. */
+  sparkline?: number[];
   /**
-   * Incremental entrance delay so the dashboard can reveal the 2×2 grid
-   * one card after another.
+   * Incremental entrance delay so the dashboard can reveal the 2×2/4-col
+   * grid one card after another.
    */
   delay?: number;
   className?: string;
 }
 
-// ─── Visual constants ────────────────────────────────────────────────────────
+// ─── Area palettes (4 distinct accents) ──────────────────────────────────────
+// Using Tailwind utilities + CSS var tokens (bg-area-* comes from @theme via
+// --color-area-*). Fractions (/10, /30, /60) use the Tailwind v4 alpha syntax.
 
-const ACCENT_TEXT: Record<AreaAccent, string> = {
-  gold: 'text-[#E8B42C]',
-  wine: 'text-[#C46A76]',
-};
+interface AreaPalette {
+  tint: string;            // bg-<area>/10
+  border: string;          // border-<area>/30
+  borderHover: string;     // group-hover border /60
+  text: string;            // text-<area>
+  groupHoverText: string;  // group-hover:text-<area>
+  eyebrow: string;         // eyebrow text color
+  sparkStroke: string;     // sparkline stroke (resolves through a CSS var)
+  glow: string;            // var(--area-*-glow)
+}
 
-const ACCENT_ICON_BG: Record<AreaAccent, string> = {
-  gold: 'bg-[rgba(212,160,23,0.14)] text-[#E8B42C]',
-  wine: 'bg-[rgba(114,47,55,0.20)] text-[#C46A76]',
-};
-
-const ACCENT_EYEBROW: Record<AreaAccent, string> = {
-  gold: 'text-[#D4A017]',
-  wine: 'text-[#C46A76]',
-};
-
-const ACCENT_HOVER_GLOW: Record<AreaAccent, string> = {
-  gold: 'hover:shadow-[0_0_48px_rgba(212,160,23,0.32)]',
-  wine: 'hover:shadow-[0_0_48px_rgba(114,47,55,0.40)]',
+const AREA_PALETTES: Record<AreaKey, AreaPalette> = {
+  verdad: {
+    tint: 'bg-area-verdad/10',
+    border: 'border-area-verdad/30',
+    borderHover: 'group-hover:border-area-verdad/60',
+    text: 'text-area-verdad',
+    groupHoverText: 'group-hover:text-area-verdad',
+    eyebrow: 'text-area-verdad',
+    sparkStroke: 'var(--color-area-verdad)',
+    glow: 'var(--area-verdad-glow)',
+  },
+  valor: {
+    tint: 'bg-gold-500/10',
+    border: 'border-gold-500/30',
+    borderHover: 'group-hover:border-gold-500/60',
+    text: 'text-gold-500',
+    groupHoverText: 'group-hover:text-gold-500',
+    eyebrow: 'text-gold-500',
+    sparkStroke: 'var(--color-gold-500)',
+    glow: 'var(--area-valor-glow)',
+  },
+  futuro: {
+    tint: 'bg-area-futuro/10',
+    border: 'border-area-futuro/30',
+    borderHover: 'group-hover:border-area-futuro/60',
+    text: 'text-area-futuro',
+    groupHoverText: 'group-hover:text-area-futuro',
+    eyebrow: 'text-area-futuro',
+    sparkStroke: 'var(--color-area-futuro)',
+    glow: 'var(--area-futuro-glow)',
+  },
+  escudo: {
+    tint: 'bg-area-escudo/10',
+    border: 'border-area-escudo/30',
+    borderHover: 'group-hover:border-area-escudo/60',
+    text: 'text-area-escudo',
+    groupHoverText: 'group-hover:text-area-escudo',
+    eyebrow: 'text-area-escudo',
+    sparkStroke: 'var(--color-area-escudo)',
+    glow: 'var(--area-escudo-glow)',
+  },
 };
 
 const TREND_COLOR: Record<AreaKpiDirection, string> = {
-  up: 'text-[#86EFAC]',
-  down: 'text-[#FCA5A5]',
-  flat: 'text-[#A8A8A8]',
+  up: 'text-success',
+  down: 'text-danger',
+  flat: 'text-n-500',
 };
 
 const TREND_ICON: Record<AreaKpiDirection, LucideIcon> = {
@@ -122,27 +167,92 @@ const TREND_ICON: Record<AreaKpiDirection, LucideIcon> = {
 };
 
 const SEVERITY_DOT: Record<AreaKpiSeverity, string> = {
-  good: '#22C55E',
-  neutral: '#D4A017',
-  warn: '#EAB308',
-  critical: '#722F37',
+  good: 'bg-success',
+  neutral: 'bg-gold-500',
+  warn: 'bg-warning',
+  critical: 'bg-danger',
 };
 
 // ─── Motion ──────────────────────────────────────────────────────────────────
 
 const CARD_VARIANTS: Variants = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 16 },
   visible: (custom: number = 0) => ({
     opacity: 1,
     y: 0,
     transition: {
       type: 'spring',
-      stiffness: 240,
+      stiffness: 260,
       damping: 28,
       delay: custom,
     },
   }),
 };
+
+// ─── Sparkline stub ──────────────────────────────────────────────────────────
+// Deterministic pseudo-random curve so cards don't re-shuffle on re-render.
+// Real data will be wired by Agent I; this is the visual placeholder.
+
+function deterministicCurve(seedString: string, points: number = 12): number[] {
+  let h = 0;
+  for (let i = 0; i < seedString.length; i += 1) {
+    h = (h << 5) - h + seedString.charCodeAt(i);
+    h |= 0;
+  }
+  const out: number[] = [];
+  let last = 0.5;
+  for (let i = 0; i < points; i += 1) {
+    // LCG-ish step, scaled into [0, 1]
+    h = (h * 9301 + 49297) & 0x7fffffff;
+    const step = ((h % 1000) / 1000 - 0.5) * 0.32;
+    last = Math.min(0.95, Math.max(0.05, last + step));
+    out.push(last);
+  }
+  return out;
+}
+
+interface SparklineProps {
+  values: number[];
+  stroke: string;
+  width?: number;
+  height?: number;
+}
+
+function Sparkline({ values, stroke, width = 120, height = 28 }: SparklineProps) {
+  if (values.length < 2) return null;
+  const step = width / (values.length - 1);
+  const path = values
+    .map((v, i) => {
+      const x = i * step;
+      const y = height - v * height;
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+
+  const last = values[values.length - 1] ?? 0;
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      width={width}
+      height={height}
+      fill="none"
+      stroke={stroke}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="opacity-90"
+      aria-hidden="true"
+    >
+      <path d={path} />
+      <circle
+        cx={width}
+        cy={height - last * height}
+        r={2}
+        fill={stroke}
+      />
+    </svg>
+  );
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -155,25 +265,26 @@ function formatDelta(delta: number): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AreaCard({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained in the public API for parent routing / analytics
   area,
   eyebrow,
   concept,
   subtitle,
   tagline,
   kpi,
-  submodules,
   ctaLabel,
   href,
-  accent = 'gold',
   icon: Icon,
+  alertsCount = 0,
+  sparkline,
   delay = 0,
   className,
 }: AreaCardProps) {
-  const shouldReduce = useReducedMotion();
-
+  const palette = AREA_PALETTES[area];
   const severity = kpi?.severity ?? 'neutral';
   const TrendIconCmp = kpi?.trend ? TREND_ICON[kpi.trend.direction] : null;
+
+  const curve = sparkline ?? deterministicCurve(area);
+  const seedKey = typeof concept === 'string' ? concept : area;
 
   return (
     <motion.div
@@ -182,166 +293,165 @@ export function AreaCard({
       viewport={{ once: true, margin: '0px 0px -10% 0px' }}
       variants={CARD_VARIANTS}
       custom={delay}
-      whileHover={shouldReduce ? undefined : { y: -4 }}
-      transition={{ type: 'spring', stiffness: 280, damping: 26 }}
       className={cn('h-full', className)}
     >
       <Link
         href={href}
         aria-label={typeof concept === 'string' ? `${concept} — ${href}` : undefined}
         className={cn(
-          'group relative flex h-full min-h-[380px] flex-col',
-          'p-7 md:p-8',
-          'rounded-[16px]',
-          'glass-elite-elevated',
-          'border-elite-gold',
-          'transition-[box-shadow,border-color,transform] duration-300 ease-out',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
-          ACCENT_HOVER_GLOW[accent],
+          'group relative flex h-full min-h-[240px] flex-col',
+          'px-5 pt-5 pb-4',
+          'rounded-xl',
+          'bg-n-50 border',
+          palette.border,
+          palette.borderHover,
+          'shadow-e2 hover:shadow-e4',
+          'transition-[transform,box-shadow,border-color] duration-200 ease-out',
+          'hover:-translate-y-0.5',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
         )}
+        style={{
+          // Subtle ambient tint toward the area color, keyed off the card bg.
+          backgroundImage: `linear-gradient(135deg, ${palette.glow} 0%, transparent 55%)`,
+        }}
       >
-        {/* ── Top row: eyebrow + accent icon ───────────────────────────────── */}
-        <div className="flex items-start justify-between gap-4">
-          <span
-            className={cn(
-              'uppercase tracking-[0.26em] text-[11px] font-medium',
-              ACCENT_EYEBROW[accent],
-            )}
-          >
-            {eyebrow}
-          </span>
+        {/* ── Row 1: eyebrow + accent icon ────────────────────────────── */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className="inline-flex h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: palette.sparkStroke }}
+              aria-hidden="true"
+            />
+            <span
+              className={cn(
+                'font-mono text-xs-mono uppercase tracking-eyebrow font-medium truncate',
+                palette.eyebrow,
+              )}
+            >
+              {eyebrow}
+            </span>
+          </div>
 
           <div
             aria-hidden="true"
             className={cn(
-              'shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-[12px]',
-              'transition-transform duration-300 ease-out',
+              'shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg',
+              'transition-transform duration-200 ease-out',
               'group-hover:scale-105',
-              ACCENT_ICON_BG[accent],
+              palette.tint,
+              palette.text,
             )}
           >
-            <Icon className="h-[22px] w-[22px]" strokeWidth={1.6} />
+            <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
           </div>
         </div>
 
-        {/* ── Title block ──────────────────────────────────────────────────── */}
-        <div className="mt-5 flex flex-col gap-1.5">
+        {/* ── Row 2: title + subtitle ─────────────────────────────────── */}
+        <div className="mt-3 flex flex-col gap-0.5">
           <h3
             className={cn(
-              'font-serif-elite font-normal leading-[1.05]',
-              'text-[32px] sm:text-[36px] md:text-[40px]',
-              'text-[#F5F5F5]',
+              'font-serif-elite font-normal leading-tight tracking-tight',
+              'text-2xl',
+              'text-n-900',
             )}
           >
             {concept}
           </h3>
           {subtitle != null && (
-            <p className="text-[13px] sm:text-[14px] font-medium text-[#D4D4D4] tracking-wide">
+            <p className="text-sm font-medium text-n-700 truncate">
               {subtitle}
-            </p>
-          )}
-          {tagline != null && (
-            <p className="mt-1 text-[13px] leading-relaxed text-[#A8A8A8] font-light max-w-[38ch]">
-              {tagline}
             </p>
           )}
         </div>
 
-        {/* ── KPI hero (inline) ────────────────────────────────────────────── */}
-        {kpi && (
-          <div className="mt-6 flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: SEVERITY_DOT[severity] }}
-              />
-              <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8] truncate">
-                {kpi.label}
-              </span>
-            </div>
-
-            <div className="flex items-baseline gap-3 flex-wrap">
-              <span
-                className={cn(
-                  'font-serif-elite font-normal text-[#F5F5F5] leading-[1.02] tabular-nums',
-                  'text-[36px] sm:text-[42px] md:text-[44px]',
-                )}
-              >
-                {kpi.formatted}
-              </span>
-              {kpi.trend && TrendIconCmp && (
+        {/* ── Row 3: live KPI + sparkline ─────────────────────────────── */}
+        <div className="mt-4 flex items-end justify-between gap-4">
+          {kpi ? (
+            <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'inline-block h-1.5 w-1.5 rounded-full shrink-0',
+                    SEVERITY_DOT[severity],
+                  )}
+                />
+                <span className="font-mono text-xs-mono uppercase tracking-eyebrow font-medium text-n-500 truncate">
+                  {kpi.label}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 flex-wrap">
                 <span
                   className={cn(
-                    'inline-flex items-center gap-1 text-[13px] font-medium tabular-nums',
-                    TREND_COLOR[kpi.trend.direction],
+                    'font-mono font-medium text-n-900 leading-none tabular-nums num',
+                    'text-3xl',
                   )}
                 >
-                  <TrendIconCmp className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
-                  <span>{formatDelta(kpi.trend.delta)}</span>
+                  {kpi.formatted}
                 </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Submodules mini-list ─────────────────────────────────────────── */}
-        {submodules && submodules.length > 0 && (
-          <ul
-            className={cn(
-              'mt-6 grid gap-x-4 gap-y-2.5',
-              submodules.length > 2 ? 'grid-cols-2' : 'grid-cols-1',
-            )}
-          >
-            {submodules.slice(0, 4).map((m) => {
-              const MIcon = m.icon;
-              return (
-                <li
-                  key={typeof m.title === 'string' ? m.title : undefined}
-                  className="flex items-center gap-2 min-w-0"
-                >
+                {kpi.trend && TrendIconCmp && (
                   <span
-                    aria-hidden="true"
                     className={cn(
-                      'inline-flex h-6 w-6 items-center justify-center rounded-[7px] shrink-0',
-                      'bg-[rgba(212,160,23,0.08)] text-[#A8A8A8]',
-                      'transition-colors duration-200',
-                      'group-hover:text-[#E8B42C]',
+                      'inline-flex items-center gap-0.5 text-sm font-mono font-medium tabular-nums',
+                      TREND_COLOR[kpi.trend.direction],
                     )}
                   >
-                    <MIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    <TrendIconCmp className="h-3 w-3" strokeWidth={2.4} aria-hidden="true" />
+                    <span>{formatDelta(kpi.trend.delta)}</span>
                   </span>
-                  <span className="text-[12.5px] text-[#D4D4D4] truncate">
-                    {m.title}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                )}
+              </div>
+            </div>
+          ) : tagline != null ? (
+            <p className="text-sm leading-snug text-n-600 font-light">
+              {tagline}
+            </p>
+          ) : (
+            <div />
+          )}
 
-        {/* ── Footer CTA ───────────────────────────────────────────────────── */}
-        <div className="mt-auto pt-7 flex items-center justify-between gap-3 border-t border-[rgba(212,160,23,0.14)]">
-          <span
-            className={cn(
-              'text-[13px] font-medium tracking-wide',
-              ACCENT_TEXT[accent],
-              'transition-colors duration-200',
-            )}
-          >
-            {ctaLabel}
-          </span>
+          <div className="shrink-0 self-end opacity-80 group-hover:opacity-100 transition-opacity">
+            <Sparkline
+              key={seedKey}
+              values={curve}
+              stroke={palette.sparkStroke}
+            />
+          </div>
+        </div>
+
+        {/* ── Row 4: footer CTA + alerts ───────────────────────────────── */}
+        <div
+          className={cn(
+            'mt-auto pt-6 flex items-center justify-between gap-3',
+            'border-t border-n-200',
+          )}
+        >
+          {alertsCount > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-n-500 group-hover:text-gold-600 transition-colors">
+              <span
+                aria-hidden="true"
+                className="inline-flex h-1.5 w-1.5 rounded-full bg-warning"
+              />
+              <span className="font-mono tabular-nums">{alertsCount}</span>
+              <span>
+                {alertsCount === 1 ? 'alerta activa' : 'alertas activas'}
+              </span>
+            </span>
+          ) : (
+            <span className={cn('text-sm font-medium tracking-wide', palette.text)}>
+              {ctaLabel}
+            </span>
+          )}
           <span
             aria-hidden="true"
             className={cn(
-              'inline-flex h-9 w-9 items-center justify-center rounded-full',
-              'border border-[rgba(212,160,23,0.22)]',
-              'text-[#A8A8A8]',
-              'transition-[transform,color,border-color,background-color] duration-300 ease-out',
+              'inline-flex h-8 w-8 items-center justify-center rounded-full',
+              'border border-n-200 text-n-500',
+              'transition-[transform,color,border-color,background-color] duration-200 ease-out',
               'group-hover:translate-x-0.5',
-              accent === 'wine'
-                ? 'group-hover:text-[#C46A76] group-hover:border-[rgba(196,106,118,0.55)] group-hover:bg-[rgba(114,47,55,0.18)]'
-                : 'group-hover:text-[#E8B42C] group-hover:border-[rgba(232,180,44,0.55)] group-hover:bg-[rgba(212,160,23,0.12)]',
+              palette.borderHover,
+              palette.groupHoverText,
             )}
           >
             <ArrowRight className="h-4 w-4" strokeWidth={1.8} />

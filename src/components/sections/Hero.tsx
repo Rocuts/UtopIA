@@ -36,15 +36,20 @@ export function Hero() {
   const contentScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.97]);
 
   return (
-    <section ref={sectionRef} className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden w-full pt-20 bg-white">
+    <section ref={sectionRef} className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden w-full pt-20 bg-n-0">
 
       {/* Background 3D Layer */}
       <motion.div
-        className="absolute inset-0 z-[var(--z-canvas)] bg-white"
+        className="absolute inset-0 z-[var(--z-canvas)]"
         style={{ y: bgY, willChange: 'transform' }}
       >
-        <Suspense fallback={<div className="w-full h-full bg-white" />}>
-          <Canvas camera={{ position: [0, 0, 5], fov: 45 }} dpr={[1, 2]}>
+        <Suspense fallback={<div className="w-full h-full bg-n-0" />}>
+          <Canvas
+            camera={{ position: [0, 0, 5], fov: 45 }}
+            dpr={[1, 2]}
+            gl={{ alpha: true, antialias: true }}
+            style={{ background: 'transparent' }}
+          >
             <HeroScene />
           </Canvas>
         </Suspense>
@@ -52,7 +57,7 @@ export function Hero() {
 
       {/* Foreground Content */}
       <motion.div
-        className="relative z-[var(--z-base)] container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl flex flex-col items-center text-center"
+        className="relative z-[var(--z-base)] container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)] flex flex-col items-center text-center"
         style={{
           y: contentY,
           opacity: contentOpacity,
@@ -67,16 +72,16 @@ export function Hero() {
           transition={{ type: "spring", ...NOVA_SPRING }}
           className="mb-8"
         >
-          <span className="inline-flex items-center gap-2 text-xs tracking-widest uppercase text-[#a3a3a3] font-medium">
-            <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
+          <span className="inline-flex items-center gap-2 text-xs tracking-eyebrow uppercase text-n-500 font-medium">
+            <span className="h-px w-5 bg-n-300" aria-hidden="true" />
             {t.hero.badge}
-            <span className="h-px w-5 bg-[#d4d4d4]" aria-hidden="true" />
+            <span className="h-px w-5 bg-n-300" aria-hidden="true" />
           </span>
         </motion.div>
 
         <motion.h1
-          className="text-balance font-bold tracking-tighter mb-6 text-[#0a0a0a]"
-          style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', lineHeight: 0.95 }}
+          className="font-serif-elite text-balance font-medium tracking-tight mb-6 text-n-900 leading-display"
+          style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", ...NOVA_SPRING, delay: 0.05 }}
@@ -85,7 +90,7 @@ export function Hero() {
         </motion.h1>
 
         <motion.p
-          className="text-balance mt-4 text-lg sm:text-xl text-[#525252] max-w-2xl mx-auto mb-10"
+          className="text-balance mt-4 text-lg sm:text-xl text-n-600 max-w-2xl mx-auto mb-10 leading-relaxed"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
@@ -113,8 +118,8 @@ export function Hero() {
 
       </motion.div>
 
-      {/* Bottom border line instead of gradient fade */}
-      <div className="absolute bottom-0 w-full h-px bg-[#e5e5e5]" />
+      {/* Bottom border line */}
+      <div className="absolute bottom-0 w-full h-px bg-n-200" />
     </section>
   );
 }

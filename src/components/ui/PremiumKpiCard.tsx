@@ -17,23 +17,26 @@ import { forwardRef, type ReactNode } from 'react';
  *     accent="gold"
  *     icon={Shield}
  *     glow
+ *     variant="hero"
  *     onClick={...}
  *   />
  *
- * Design:
- *  - `value` is rendered in Instrument Serif at 48–64px for protagonism.
- *  - `label` is uppercase, spaced-out, small.
+ * Design (Phase Mercury+Aladdin typography lock-in):
+ *  - `variant="default"` (operational KPI): Geist Mono 600 at text-3xl, .num class.
+ *  - `variant="hero"` (one per page max, monumental): font-serif-elite (Fraunces)
+ *    at text-5xl with optical sizing opsz=144 forced.
+ *  - `label` is uppercase, spaced-out, 11px with tracking-eyebrow.
  *  - `subvalue` + `trend` live in a supporting row with an arrow glyph.
  *  - `severity="critical"` swaps the border+glow to wine for "alarm" KPIs.
  *  - `accent` picks gold (default) vs wine when severity is not critical.
  *  - `glow` adds a soft ambient glow (amplified on hover).
- *  - `onClick` makes the card an interactive <button>-styled surface with
- *    proper keyboard + role semantics.
+ *  - `onClick` makes the card an interactive <button>-styled surface.
  */
 
 export type KpiSeverity = 'good' | 'neutral' | 'warn' | 'critical';
 export type KpiAccent = 'gold' | 'wine';
 export type KpiTrendDirection = 'up' | 'down' | 'flat';
+export type KpiVariant = 'default' | 'hero';
 
 export interface KpiTrend {
   direction: KpiTrendDirection;
@@ -53,6 +56,9 @@ export interface PremiumKpiCardProps {
   icon?: LucideIcon;
   glow?: boolean;
   loading?: boolean;
+  /** Controls number rendering: `default` = Geist Mono 600 (operational),
+   *  `hero` = Fraunces display (monumental, max 1 per page). */
+  variant?: KpiVariant;
   /** If provided, the card becomes interactive (button-like). */
   onClick?: () => void;
   href?: string;
@@ -63,9 +69,9 @@ export interface PremiumKpiCardProps {
 }
 
 const TREND_COLOR: Record<KpiTrendDirection, string> = {
-  up: 'text-[#86EFAC]',
-  down: 'text-[#FCA5A5]',
-  flat: 'text-[#A8A8A8]',
+  up: 'text-success',
+  down: 'text-danger',
+  flat: 'text-n-500',
 };
 
 const TREND_ICON: Record<KpiTrendDirection, LucideIcon> = {
@@ -75,17 +81,17 @@ const TREND_ICON: Record<KpiTrendDirection, LucideIcon> = {
 };
 
 const SEVERITY_BORDER: Record<KpiSeverity, string> = {
-  good: 'rgba(34, 197, 94, 0.35)',
-  neutral: 'rgba(212, 160, 23, 0.32)',
-  warn: 'rgba(234, 179, 8, 0.38)',
-  critical: 'rgba(114, 47, 55, 0.55)',
+  good: 'rgb(34 197 94 / 0.35)',
+  neutral: 'rgb(184 147 74 / 0.32)',
+  warn: 'rgb(234 179 8 / 0.38)',
+  critical: 'rgb(168 56 56 / 0.55)',
 };
 
 const SEVERITY_DOT: Record<KpiSeverity, string> = {
-  good: '#22C55E',
-  neutral: '#D4A017',
-  warn: '#EAB308',
-  critical: '#722F37',
+  good: 'rgb(34 197 94)',
+  neutral: 'rgb(184 147 74)',
+  warn: 'rgb(234 179 8)',
+  critical: 'rgb(168 56 56)',
 };
 
 function formatDelta(delta: number | string | undefined): string | null {
@@ -107,6 +113,7 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
       icon: Icon,
       glow = false,
       loading = false,
+      variant = 'default',
       onClick,
       href,
       className,
@@ -117,6 +124,7 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
   ) => {
     const shouldReduce = useReducedMotion();
     const isInteractive = Boolean(onClick ?? href);
+    const isHero = variant === 'hero';
 
     const isCritical = severity === 'critical';
     const borderColor = SEVERITY_BORDER[severity];
@@ -124,14 +132,14 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
 
     const glowClass = glow
       ? isCritical || accent === 'wine'
-        ? 'shadow-[0_0_28px_rgba(114,47,55,0.28)]'
-        : 'shadow-[0_0_28px_rgba(212,160,23,0.22)]'
+        ? 'shadow-[0_0_28px_rgb(168_56_56_/_0.28)]'
+        : 'shadow-glow-gold-soft'
       : '';
 
     const hoverGlow = glow
       ? isCritical || accent === 'wine'
-        ? 'hover:shadow-[0_0_44px_rgba(114,47,55,0.42)]'
-        : 'hover:shadow-[0_0_44px_rgba(212,160,23,0.36)]'
+        ? 'hover:shadow-[0_0_44px_rgb(168_56_56_/_0.42)]'
+        : 'hover:shadow-glow-gold'
       : '';
 
     const TrendIcon = trend ? TREND_ICON[trend.direction] : null;
@@ -156,8 +164,8 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
             />
             <span
               className={cn(
-                'uppercase tracking-[0.18em] text-[11px] font-medium',
-                'text-[#A8A8A8]',
+                'uppercase tracking-eyebrow text-xs font-medium',
+                'text-n-500',
                 'truncate',
               )}
             >
@@ -168,12 +176,12 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
             <div
               aria-hidden="true"
               className={cn(
-                'shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-[10px]',
+                'shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md',
                 isCritical
-                  ? 'bg-[rgba(114,47,55,0.18)] text-[#C46A76]'
+                  ? 'bg-[rgb(168_56_56_/_0.18)] text-area-escudo'
                   : accent === 'wine'
-                    ? 'bg-[rgba(114,47,55,0.16)] text-[#C46A76]'
-                    : 'bg-[rgba(212,160,23,0.14)] text-[#E8B42C]',
+                    ? 'bg-[rgb(168_56_56_/_0.16)] text-area-escudo'
+                    : 'bg-[rgb(184_147_74_/_0.14)] text-gold-600',
               )}
             >
               <Icon className="h-4 w-4" strokeWidth={1.75} />
@@ -184,35 +192,47 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
         <div className={cn('flex flex-col', compact ? 'gap-1' : 'gap-1.5')}>
           <div
             className={cn(
-              'font-serif-elite font-normal text-[#F5F5F5] leading-[1.02]',
-              compact ? 'text-[36px]' : 'text-[48px] md:text-[56px] lg:text-[60px]',
-              'tabular-nums',
+              'text-n-100 leading-display num',
+              isHero
+                ? cn(
+                    'font-serif-elite font-medium tracking-tight',
+                    compact ? 'text-3xl' : 'text-4xl md:text-5xl',
+                  )
+                : cn(
+                    'font-mono font-semibold',
+                    compact ? 'text-2xl' : 'text-3xl',
+                  ),
             )}
+            style={
+              isHero
+                ? { fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }
+                : undefined
+            }
           >
             {loading ? (
-              <span className="inline-block h-[0.9em] w-[60%] rounded-[6px] bg-[rgba(212,160,23,0.14)] animate-pulse" />
+              <span className="inline-block h-[0.9em] w-[60%] rounded-sm bg-[rgb(184_147_74_/_0.14)] animate-pulse" />
             ) : (
               value
             )}
           </div>
 
           {(subvalue || trend) && (
-            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[13px]">
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm">
               {trend && TrendIcon && (
                 <span
                   className={cn(
-                    'inline-flex items-center gap-1 font-medium tabular-nums',
+                    'inline-flex items-center gap-1 font-medium num',
                     TREND_COLOR[trend.direction],
                   )}
                 >
                   <TrendIcon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
                   {deltaText && <span>{deltaText}</span>}
                   {trend.label && (
-                    <span className="text-[#A8A8A8] font-normal">{trend.label}</span>
+                    <span className="text-n-500 font-normal">{trend.label}</span>
                   )}
                 </span>
               )}
-              {subvalue && <span className="text-[#A8A8A8]">{subvalue}</span>}
+              {subvalue && <span className="text-n-500 num">{subvalue}</span>}
             </div>
           )}
         </div>
@@ -222,7 +242,7 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
     const commonClasses = cn(
       'relative flex flex-col gap-4',
       compact ? 'p-5' : 'p-6 sm:p-7',
-      'rounded-[14px]',
+      'rounded-xl',
       'glass-elite-elevated',
       'border-elite-gold',
       'transition-[box-shadow,transform] duration-300 ease-out',
@@ -230,14 +250,14 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
       glowClass,
       hoverGlow,
       isInteractive &&
-        'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+        'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
       className,
     );
 
     const borderOverlay = (
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[14px]"
+        className="pointer-events-none absolute inset-0 rounded-xl"
         style={{
           boxShadow: `inset 0 0 0 1px ${borderColor}`,
         }}

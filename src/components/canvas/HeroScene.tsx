@@ -32,7 +32,7 @@ function ParticleField() {
     <Points ref={ref} positions={positions} stride={3} frustumCulled={false}>
       <PointMaterial
         transparent
-        color="#d4a017"
+        color="var(--gold-500)"
         size={0.03}
         sizeAttenuation={true}
         depthWrite={false}
@@ -58,7 +58,7 @@ function AbstractShape() {
         <icosahedronGeometry args={[2, 1]} />
         <meshPhysicalMaterial 
           color="#0f172a" 
-          emissive="#d4a017"
+          emissive="var(--gold-500)"
           emissiveIntensity={0.2}
           wireframe={true}
           roughness={0.1}
@@ -80,7 +80,7 @@ export default function HeroScene() {
     <>
       <color attach="background" args={['#030712']} />
       <ambientLight intensity={0.2} />
-      <directionalLight position={[10, 10, 5]} intensity={1} color="#d4a017" />
+      <directionalLight position={[10, 10, 5]} intensity={1} color="var(--gold-500)" />
       <ParticleField />
       <AbstractShape />
       <EffectComposer>

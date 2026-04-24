@@ -38,7 +38,7 @@ function FloatingBadge({ children, index }: { children: React.ReactNode; index: 
         ...NOVA_SPRING,
         delay: index * 0.04,
       }}
-      className="inline-flex py-2 px-4 bg-white border border-[#e5e5e5] rounded-sm text-sm text-[#525252] tracking-tight hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors"
+      className="inline-flex py-2 px-4 bg-n-0 border border-n-200 rounded-sm text-sm text-n-600 tracking-tight hover:border-[#0a0a0a] hover:text-n-900 transition-colors"
     >
       {children}
     </motion.span>
@@ -49,23 +49,24 @@ export function Trust() {
   const { t } = useLanguage();
 
   return (
-    <section className="py-24 border-y border-[#e5e5e5] bg-[#fafafa]">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl flex flex-col md:flex-row gap-16 items-center">
+    <section className="py-20 md:py-28 border-y border-n-200 bg-n-50">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)] flex flex-col md:flex-row gap-16 items-center">
 
         <Reveal direction="left" className="md:w-1/3">
           <div>
             <Badge variant="outline" className="mb-4">{t.trust.badge}</Badge>
-            <h3 className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-[#0a0a0a]">
+            <h3 className="font-serif-elite text-2xl md:text-3xl font-medium tracking-tight mb-4 text-n-900 leading-display"
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
               {t.trust.title} <br className="hidden md:block"/> {t.trust.titleBreak}
             </h3>
-            <p className="text-[#525252] text-sm leading-relaxed mb-6">
+            <p className="text-n-600 text-sm leading-relaxed mb-6">
               {t.trust.desc}
             </p>
           </div>
         </Reveal>
 
         <Reveal direction="right" className="md:w-2/3 flex w-full">
-          <GlassPanel className="w-full flex flex-wrap gap-2 p-6 sm:p-8 bg-white">
+          <GlassPanel className="w-full flex flex-wrap gap-2 p-6 sm:p-8 bg-n-0">
             {sources.map((source, i) => (
               <FloatingBadge key={i} index={i}>
                 {source}

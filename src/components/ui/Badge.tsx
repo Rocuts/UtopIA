@@ -1,32 +1,40 @@
 import { cn } from "@/lib/utils";
 import { HTMLAttributes, forwardRef } from "react";
 
-type StatusLevel = 'bajo' | 'medio' | 'alto' | 'critico' | 'success' | 'warning' | 'danger' | 'info';
+type StatusLevel = 'bajo' | 'medio' | 'alto' | 'critico' | 'success' | 'warning' | 'danger' | 'info' | 'gold' | 'neutral';
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: 'outline' | 'solid' | 'muted' | 'status';
   status?: StatusLevel;
 }
 
-const STATUS_COLORS: Record<StatusLevel, { dot: string; bg: string; text: string }> = {
-  bajo:     { dot: '#22c55e', bg: 'rgba(34, 197, 94, 0.08)',  text: '#16a34a' },
-  medio:    { dot: '#eab308', bg: 'rgba(234, 179, 8, 0.08)',  text: '#ca8a04' },
-  alto:     { dot: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', text: '#ea580c' },
-  critico:  { dot: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)',  text: '#dc2626' },
-  success:  { dot: '#22c55e', bg: 'rgba(34, 197, 94, 0.08)',  text: '#16a34a' },
-  warning:  { dot: '#eab308', bg: 'rgba(234, 179, 8, 0.08)',  text: '#ca8a04' },
-  danger:   { dot: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)',  text: '#dc2626' },
-  info:     { dot: '#525252', bg: 'rgba(82, 82, 82, 0.06)',   text: '#525252' },
+/**
+ * Token-driven status colors. Uses CSS class tokens only; no hex.
+ *  - bg:   translucent tint of the semantic color
+ *  - text: semantic foreground
+ *  - dot:  solid accent used for the status dot
+ *
+ * Consumers that import by hex (legacy) should migrate to `status` names.
+ */
+const STATUS_TOKENS: Record<StatusLevel, { bg: string; text: string; dot: string }> = {
+  // Legacy severity aliases — preserved for back-compat, mapped to semantic tokens.
+  bajo:    { bg: 'bg-success/10',  text: 'text-success',  dot: 'bg-success' },
+  medio:   { bg: 'bg-warning/10',  text: 'text-warning',  dot: 'bg-warning' },
+  alto:    { bg: 'bg-warning/10',  text: 'text-warning',  dot: 'bg-warning' },
+  critico: { bg: 'bg-danger/10',   text: 'text-danger',   dot: 'bg-danger'  },
+  // Semantic names (preferred).
+  success: { bg: 'bg-success/10',  text: 'text-success',  dot: 'bg-success' },
+  warning: { bg: 'bg-warning/10',  text: 'text-warning',  dot: 'bg-warning' },
+  danger:  { bg: 'bg-danger/10',   text: 'text-danger',   dot: 'bg-danger'  },
+  info:    { bg: 'bg-info/10',     text: 'text-info',     dot: 'bg-info'    },
+  gold:    { bg: 'bg-gold-500/10', text: 'text-gold-500', dot: 'bg-gold-500'},
+  neutral: { bg: 'bg-n-200/60',    text: 'text-n-600',    dot: 'bg-n-400'   },
 };
 
 const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
-  ({ className, variant = 'outline', status, style, children, ...rest }, ref) => {
+  ({ className, variant = 'outline', status, children, ...rest }, ref) => {
     const isStatus = variant === 'status' && status;
-    const colors = isStatus ? STATUS_COLORS[status] : null;
-
-    const mergedStyle = isStatus
-      ? { backgroundColor: colors!.bg, color: colors!.text, ...(style || {}) }
-      : style;
+    const tokens = isStatus ? STATUS_TOKENS[status] : null;
 
     return (
       <span
@@ -34,19 +42,18 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
         className={cn(
           "inline-flex items-center rounded-sm px-2.5 py-0.5 text-xs font-medium tracking-wide",
           {
-            "border border-[#e5e5e5] text-[#525252]": variant === 'outline',
-            "bg-[#0a0a0a] text-white": variant === 'solid',
-            "bg-[#fafafa] text-[#525252] border border-[#e5e5e5]": variant === 'muted',
+            "border border-n-200 text-n-600": variant === 'outline',
+            "bg-n-900 text-n-0": variant === 'solid',
+            "bg-n-50 text-n-600 border border-n-200": variant === 'muted',
           },
+          isStatus && tokens ? [tokens.bg, tokens.text] : null,
           className
         )}
-        style={mergedStyle}
         {...rest}
       >
-        {isStatus && (
+        {isStatus && tokens && (
           <span
-            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full shrink-0"
-            style={{ backgroundColor: colors!.dot }}
+            className={cn("mr-1.5 inline-block h-1.5 w-1.5 rounded-full shrink-0", tokens.dot)}
             aria-hidden="true"
           />
         )}

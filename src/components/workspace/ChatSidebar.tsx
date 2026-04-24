@@ -114,6 +114,61 @@ function fromConvMessages(msgs: ConversationMessage[]): ChatMessage[] {
     }));
 }
 
+// ─── Date grouping for history ───────────────────────────────────────────────
+// Groups conversations into buckets by their updatedAt timestamp so the
+// history panel reads like modern chat apps (Hoy / Ayer / Esta semana / etc).
+
+type DateBucket = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'older';
+
+interface GroupedConversations {
+  bucket: DateBucket;
+  label: string;
+  items: Conversation[];
+}
+
+function bucketForDate(iso: string, now: Date): DateBucket {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'older';
+  const diffMs = now.getTime() - d.getTime();
+  const day = 86400000;
+  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
+  const startOfYesterday = new Date(startOfToday.getTime() - day);
+  if (d >= startOfToday) return 'today';
+  if (d >= startOfYesterday) return 'yesterday';
+  if (diffMs < 7 * day) return 'thisWeek';
+  if (diffMs < 30 * day) return 'thisMonth';
+  return 'older';
+}
+
+function groupConversationsByDate(
+  convos: Conversation[],
+  language: 'es' | 'en',
+): GroupedConversations[] {
+  const now = new Date();
+  const labels: Record<DateBucket, Record<'es' | 'en', string>> = {
+    today:     { es: 'Hoy',          en: 'Today' },
+    yesterday: { es: 'Ayer',         en: 'Yesterday' },
+    thisWeek:  { es: 'Esta semana',  en: 'This week' },
+    thisMonth: { es: 'Este mes',     en: 'This month' },
+    older:     { es: 'Anterior',     en: 'Older' },
+  };
+  const order: DateBucket[] = ['today', 'yesterday', 'thisWeek', 'thisMonth', 'older'];
+  const groups = new Map<DateBucket, Conversation[]>();
+  for (const c of convos) {
+    const b = bucketForDate(c.updatedAt || c.createdAt, now);
+    const arr = groups.get(b);
+    if (arr) arr.push(c); else groups.set(b, [c]);
+  }
+  const result: GroupedConversations[] = [];
+  for (const b of order) {
+    const items = groups.get(b);
+    if (items && items.length > 0) {
+      result.push({ bucket: b, label: labels[b][language], items });
+    }
+  }
+  return result;
+}
+
 function initialWelcome(language: 'es' | 'en'): ChatMessage {
   return {
     id: 'welcome',
@@ -146,8 +201,8 @@ function CollapsedRail({
         onClick={onExpand}
         className={cn(
           'w-10 h-10 rounded-md flex items-center justify-center',
-          'text-[#D4A017] hover:bg-[rgba(212,160,23,0.1)] transition-colors',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]',
+          'text-gold-500 hover:bg-gold-500/10 transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
         )}
         aria-label={language === 'es' ? 'Expandir asistente' : 'Expand assistant'}
         title={language === 'es' ? 'Expandir (C)' : 'Expand (C)'}
@@ -159,8 +214,8 @@ function CollapsedRail({
         onClick={onNewChat}
         className={cn(
           'w-10 h-10 rounded-md flex items-center justify-center',
-          'text-[#A8A8A8] hover:text-[#F5F5F5] hover:bg-[rgba(212,160,23,0.08)] transition-colors',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]',
+          'text-n-500 hover:text-n-900 hover:bg-gold-500/10 transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
         )}
         aria-label={language === 'es' ? 'Nuevo chat' : 'New chat'}
         title={language === 'es' ? 'Nuevo chat' : 'New chat'}
@@ -169,14 +224,14 @@ function CollapsedRail({
       </button>
       {messageCount > 1 && (
         <span
-          className="text-[10px] font-[family-name:var(--font-geist-mono)] text-[#A8A8A8] mt-1"
+          className="text-2xs font-mono text-n-500 mt-1"
           aria-label={`${messageCount} ${language === 'es' ? 'mensajes' : 'messages'}`}
         >
           {messageCount}
         </span>
       )}
       <div className="mt-auto flex flex-col items-center gap-1.5 opacity-60">
-        <MessageSquare className="w-4 h-4 text-[#6A6A6A]" />
+        <MessageSquare className="w-4 h-4 text-n-400" />
       </div>
     </div>
   );
@@ -205,25 +260,30 @@ function HistoryPanel({
     return conversations.filter((c) => c.title.toLowerCase().includes(q));
   }, [conversations, searchQuery]);
 
+  const groups = useMemo(
+    () => groupConversationsByDate(filtered, language),
+    [filtered, language],
+  );
+
   return (
     <div className="flex flex-col h-full">
-      <div className="p-3 border-b border-[rgba(212,160,23,0.12)] shrink-0 space-y-2">
+      <div className="p-3 border-b border-gold-500/15 shrink-0 space-y-2">
         <button
           type="button"
           onClick={onNew}
           className={cn(
             'w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md',
-            'bg-[rgba(212,160,23,0.12)] border border-[rgba(212,160,23,0.3)]',
-            'text-[#F5F5F5] text-xs font-medium uppercase tracking-wider',
-            'hover:bg-[rgba(212,160,23,0.2)] transition-colors',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]',
+            'bg-gold-500/10 border border-gold-500/30',
+            'text-n-900 text-xs font-medium uppercase tracking-wider',
+            'hover:bg-gold-500/20 transition-colors',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
           )}
         >
-          <Plus className="w-3.5 h-3.5 text-[#D4A017]" />
+          <Plus className="w-3.5 h-3.5 text-gold-500" />
           {language === 'es' ? 'Nuevo chat' : 'New chat'}
         </button>
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#6A6A6A]" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-n-400" />
           <input
             type="text"
             value={searchQuery}
@@ -232,16 +292,16 @@ function HistoryPanel({
             aria-label={language === 'es' ? 'Buscar conversaciones' : 'Search conversations'}
             className={cn(
               'w-full pl-8 pr-2 py-1.5 rounded-md text-xs',
-              'bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.15)]',
-              'text-[#F5F5F5] placeholder-[#6A6A6A]',
-              'focus:outline-none focus:border-[rgba(212,160,23,0.4)]',
+              'bg-n-0/60 border border-gold-500/15',
+              'text-n-900 placeholder-n-400',
+              'focus:outline-none focus:border-gold-500/40',
             )}
           />
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto styled-scrollbar">
         {filtered.length === 0 ? (
-          <p className="text-center text-xs text-[#6A6A6A] py-6 px-3">
+          <p className="text-center text-xs text-n-400 py-6 px-3">
             {language === 'es'
               ? searchQuery.trim()
                 ? 'Sin resultados'
@@ -251,43 +311,52 @@ function HistoryPanel({
                 : 'No conversations yet.'}
           </p>
         ) : (
-          <ul className="py-1">
-            {filtered.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(c.id)}
-                  aria-current={activeId === c.id ? 'page' : undefined}
-                  className={cn(
-                    'w-full px-3 py-2 text-left flex items-start gap-2',
-                    'hover:bg-[rgba(212,160,23,0.06)] transition-colors',
-                    activeId === c.id ? 'bg-[rgba(212,160,23,0.1)]' : '',
-                  )}
-                >
-                  <MessageSquare
-                    className={cn(
-                      'w-3.5 h-3.5 mt-0.5 shrink-0',
-                      activeId === c.id ? 'text-[#D4A017]' : 'text-[#6A6A6A]',
-                    )}
-                  />
-                  <span className="flex-1 min-w-0">
-                    <span
-                      className={cn(
-                        'block text-[12px] font-medium truncate',
-                        activeId === c.id ? 'text-[#F5F5F5]' : 'text-[#E5E5E5]',
-                      )}
-                    >
-                      {c.title || (language === 'es' ? 'Sin título' : 'Untitled')}
-                    </span>
-                    <span className="block text-[10px] text-[#A8A8A8] truncate mt-0.5">
-                      {c.messages.length}{' '}
-                      {language === 'es' ? 'mensajes' : 'messages'}
-                    </span>
-                  </span>
-                </button>
-              </li>
+          <div className="py-1">
+            {groups.map((group) => (
+              <section key={group.bucket} aria-label={group.label}>
+                <h3 className="text-xs-mono uppercase tracking-eyebrow text-n-500 font-medium px-4 py-2">
+                  {group.label}
+                </h3>
+                <ul>
+                  {group.items.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(c.id)}
+                        aria-current={activeId === c.id ? 'page' : undefined}
+                        className={cn(
+                          'w-full px-3 py-2 text-left flex items-start gap-2',
+                          'hover:bg-gold-500/6 transition-colors',
+                          activeId === c.id ? 'bg-gold-500/10' : '',
+                        )}
+                      >
+                        <MessageSquare
+                          className={cn(
+                            'w-3.5 h-3.5 mt-0.5 shrink-0',
+                            activeId === c.id ? 'text-gold-500' : 'text-n-400',
+                          )}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span
+                            className={cn(
+                              'block text-xs font-medium truncate',
+                              activeId === c.id ? 'text-n-900' : 'text-n-800',
+                            )}
+                          >
+                            {c.title || (language === 'es' ? 'Sin título' : 'Untitled')}
+                          </span>
+                          <span className="block text-2xs text-n-500 truncate mt-0.5 num">
+                            {c.messages.length}{' '}
+                            {language === 'es' ? 'mensajes' : 'messages'}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
@@ -298,21 +367,21 @@ function TypingDots({ language }: { language: 'es' | 'en' }) {
   return (
     <div className="flex items-center gap-2 px-3 py-2">
       <motion.span
-        className="w-1.5 h-1.5 rounded-full bg-[#D4A017]"
+        className="w-1.5 h-1.5 rounded-full bg-gold-500"
         animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
         transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.span
-        className="w-1.5 h-1.5 rounded-full bg-[#D4A017]"
+        className="w-1.5 h-1.5 rounded-full bg-gold-500"
         animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
         transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
       />
       <motion.span
-        className="w-1.5 h-1.5 rounded-full bg-[#D4A017]"
+        className="w-1.5 h-1.5 rounded-full bg-gold-500"
         animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
         transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
       />
-      <span className="text-[10px] text-[#A8A8A8] uppercase tracking-wider ml-1">
+      <span className="text-2xs text-n-500 uppercase tracking-wider ml-1">
         {language === 'es' ? 'Pensando…' : 'Thinking…'}
       </span>
     </div>
@@ -326,30 +395,30 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
     <div
       className={cn(
         'px-3 py-2',
-        isUser ? 'bg-[rgba(212,160,23,0.06)]' : 'bg-transparent',
-        'border-b border-[rgba(212,160,23,0.06)]',
+        isUser ? 'bg-gold-500/6' : 'bg-transparent',
+        'border-b border-gold-500/10',
       )}
     >
       <div className="flex items-center gap-2 mb-1">
         <span
           className={cn(
-            'text-[10px] font-medium uppercase tracking-wider',
-            isUser ? 'text-[#D4A017]' : 'text-[#A8A8A8]',
+            'text-2xs font-medium uppercase tracking-wider',
+            isUser ? 'text-gold-500' : 'text-n-500',
           )}
         >
           {isUser ? (language === 'es' ? 'Usted' : 'You') : '1+1'}
         </span>
         {msg.error && (
-          <span className="text-[10px] text-[#ef4444] uppercase tracking-wider">
+          <span className="text-2xs text-danger uppercase tracking-wider">
             · {language === 'es' ? 'error' : 'error'}
           </span>
         )}
       </div>
       <div
         className={cn(
-          'text-[13px] leading-relaxed',
-          isUser ? 'text-[#F5F5F5]' : 'text-[#E5E5E5]',
-          msg.error ? 'text-[#fca5a5]' : '',
+          'text-sm leading-relaxed',
+          isUser ? 'text-n-900' : 'text-n-800',
+          msg.error ? 'text-danger' : '',
         )}
       >
         {isUser ? (
@@ -364,17 +433,17 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
               rehypePlugins={[rehypeSanitize]}
               components={{
                 p: ({ children }) => (
-                  <p className="leading-relaxed my-1.5 text-[#E5E5E5]">{children}</p>
+                  <p className="leading-relaxed my-1.5 text-n-800">{children}</p>
                 ),
                 strong: ({ children }) => (
-                  <strong className="font-semibold text-[#F5F5F5]">{children}</strong>
+                  <strong className="font-semibold text-n-900">{children}</strong>
                 ),
-                em: ({ children }) => <em className="italic text-[#E5E5E5]">{children}</em>,
+                em: ({ children }) => <em className="italic text-n-800">{children}</em>,
                 ul: ({ children }) => (
-                  <ul className="list-disc pl-4 space-y-0.5 my-1.5 text-[#E5E5E5]">{children}</ul>
+                  <ul className="list-disc pl-4 space-y-0.5 my-1.5 text-n-800">{children}</ul>
                 ),
                 ol: ({ children }) => (
-                  <ol className="list-decimal pl-4 space-y-0.5 my-1.5 text-[#E5E5E5]">{children}</ol>
+                  <ol className="list-decimal pl-4 space-y-0.5 my-1.5 text-n-800">{children}</ol>
                 ),
                 li: ({ children }) => <li className="leading-relaxed">{children}</li>,
                 a: ({ href, children }) => (
@@ -382,7 +451,7 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#D4A017] hover:text-[#E8B42C] underline underline-offset-2"
+                    className="text-gold-500 hover:text-gold-600 underline underline-offset-2"
                   >
                     {children}
                   </a>
@@ -391,33 +460,33 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
                   const isBlock = className?.includes('language-');
                   if (isBlock) {
                     return (
-                      <code className="block bg-[#0a0a0a] border border-[rgba(212,160,23,0.15)] rounded px-2 py-2 my-1.5 overflow-x-auto text-[11px] text-[#E8B42C] font-[family-name:var(--font-geist-mono)]">
+                      <code className="block bg-n-50 border border-gold-500/15 rounded px-2 py-2 my-1.5 overflow-x-auto text-xs-mono text-gold-600 font-mono">
                         {children}
                       </code>
                     );
                   }
                   return (
-                    <code className="bg-[rgba(10,10,10,0.7)] text-[#E8B42C] px-1 py-0.5 rounded text-[11px] font-[family-name:var(--font-geist-mono)]">
+                    <code className="bg-n-0/70 text-gold-600 px-1 py-0.5 rounded text-xs-mono font-mono">
                       {children}
                     </code>
                   );
                 },
                 pre: ({ children }) => (
-                  <pre className="bg-[#0a0a0a] border border-[rgba(212,160,23,0.15)] rounded px-2 py-2 my-1.5 overflow-x-auto text-[11px] text-[#E8B42C] font-[family-name:var(--font-geist-mono)]">
+                  <pre className="bg-n-50 border border-gold-500/15 rounded px-2 py-2 my-1.5 overflow-x-auto text-xs-mono text-gold-600 font-mono">
                     {children}
                   </pre>
                 ),
                 h1: ({ children }) => (
-                  <h3 className="text-[13px] font-semibold text-[#F5F5F5] mt-2 mb-1">{children}</h3>
+                  <h3 className="text-sm font-semibold text-n-900 mt-2 mb-1">{children}</h3>
                 ),
                 h2: ({ children }) => (
-                  <h4 className="text-[12px] font-semibold text-[#F5F5F5] mt-1.5 mb-1">{children}</h4>
+                  <h4 className="text-xs font-semibold text-n-900 mt-1.5 mb-1">{children}</h4>
                 ),
                 h3: ({ children }) => (
-                  <h5 className="text-[12px] font-medium text-[#F5F5F5] mt-1.5 mb-0.5">{children}</h5>
+                  <h5 className="text-xs font-medium text-n-900 mt-1.5 mb-0.5">{children}</h5>
                 ),
                 blockquote: ({ children }) => (
-                  <blockquote className="border-l-2 border-[rgba(212,160,23,0.3)] pl-2 my-1.5 text-[#A8A8A8] italic">
+                  <blockquote className="border-l-2 border-gold-500/30 pl-2 my-1.5 text-n-500 italic">
                     {children}
                   </blockquote>
                 ),
@@ -903,7 +972,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
         className={cn(
           'relative shrink-0 h-[calc(100vh-64px)] sticky top-16 z-40',
           'glass-elite-elevated',
-          'border-r border-[rgba(212,160,23,0.18)]',
+          'border-r border-gold-500/20',
           'flex flex-col overflow-hidden',
           isMobile && !collapsed ? 'fixed top-16 left-0 shadow-2xl' : '',
           className,
@@ -924,21 +993,21 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
         {isExpanded && (
           <>
             {/* Header */}
-            <div className="flex items-center gap-2 px-3 h-12 border-b border-[rgba(212,160,23,0.12)] shrink-0">
+            <div className="flex items-center gap-2 px-3 h-14 border-b border-gold-500/15 shrink-0">
               <span
                 className={cn(
                   'inline-flex items-center justify-center w-7 h-7 rounded-full shrink-0',
-                  'bg-gradient-to-br from-[#D4A017] to-[#722F37]',
+                  'bg-gradient-to-br from-gold-500 to-danger',
                 )}
                 aria-hidden="true"
               >
-                <Bot className="w-4 h-4 text-[#0a0a0a]" strokeWidth={2.2} />
+                <Bot className="w-4 h-4 text-n-0" strokeWidth={2.2} />
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-[#F5F5F5] leading-tight truncate">
+                <p className="text-xs font-semibold text-n-900 leading-tight truncate">
                   {labels.assistant}
                 </p>
-                <p className="text-[10px] text-[#A8A8A8] leading-tight truncate uppercase tracking-wider">
+                <p className="text-2xs text-n-500 leading-tight truncate uppercase tracking-wider">
                   {labels.tagline}
                 </p>
               </div>
@@ -946,9 +1015,9 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                 type="button"
                 onClick={() => setCollapsed(true)}
                 className={cn(
-                  'p-1.5 rounded-md text-[#A8A8A8] hover:text-[#F5F5F5]',
-                  'hover:bg-[rgba(212,160,23,0.08)] transition-colors',
-                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]',
+                  'p-1.5 rounded-md text-n-500 hover:text-n-900',
+                  'hover:bg-gold-500/10 transition-colors',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
                 )}
                 aria-label={labels.collapse}
                 title={labels.collapse}
@@ -961,7 +1030,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
             <div
               role="tablist"
               aria-label={labels.assistant}
-              className="flex border-b border-[rgba(212,160,23,0.12)] shrink-0"
+              className="flex border-b border-gold-500/15 shrink-0"
             >
               <button
                 role="tab"
@@ -969,11 +1038,11 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                 aria-selected={tab === 'chat'}
                 onClick={() => setTab('chat')}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-medium uppercase tracking-wider',
+                  'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs-mono font-medium uppercase tracking-wider',
                   'transition-colors relative',
                   tab === 'chat'
-                    ? 'text-[#F5F5F5]'
-                    : 'text-[#A8A8A8] hover:text-[#F5F5F5]',
+                    ? 'text-n-900'
+                    : 'text-n-500 hover:text-n-900',
                 )}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -981,7 +1050,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                 {tab === 'chat' && (
                   <motion.span
                     layoutId="chat-sidebar-tab-underline"
-                    className="absolute bottom-0 left-2 right-2 h-[2px] bg-[#D4A017] rounded-full"
+                    className="absolute bottom-0 left-2 right-2 h-[2px] bg-gold-500 rounded-full"
                     transition={prefersReduced ? { duration: 0 } : SPRING}
                   />
                 )}
@@ -992,24 +1061,24 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                 aria-selected={tab === 'history'}
                 onClick={() => setTab('history')}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-medium uppercase tracking-wider',
+                  'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs-mono font-medium uppercase tracking-wider',
                   'transition-colors relative',
                   tab === 'history'
-                    ? 'text-[#F5F5F5]'
-                    : 'text-[#A8A8A8] hover:text-[#F5F5F5]',
+                    ? 'text-n-900'
+                    : 'text-n-500 hover:text-n-900',
                 )}
               >
                 <History className="w-3.5 h-3.5" />
                 {labels.historyTab}
                 {conversations.length > 0 && (
-                  <span className="text-[9px] bg-[rgba(212,160,23,0.15)] text-[#D4A017] px-1 rounded">
+                  <span className="text-2xs bg-gold-500/15 text-gold-500 px-1 rounded">
                     {conversations.length}
                   </span>
                 )}
                 {tab === 'history' && (
                   <motion.span
                     layoutId="chat-sidebar-tab-underline"
-                    className="absolute bottom-0 left-2 right-2 h-[2px] bg-[#D4A017] rounded-full"
+                    className="absolute bottom-0 left-2 right-2 h-[2px] bg-gold-500 rounded-full"
                     transition={prefersReduced ? { duration: 0 } : SPRING}
                   />
                 )}
@@ -1030,18 +1099,18 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
             ) : (
               <>
                 {/* Actions strip */}
-                <div className="flex items-center justify-between px-3 py-1.5 border-b border-[rgba(212,160,23,0.08)] shrink-0">
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-gold-500/10 shrink-0">
                   <button
                     type="button"
                     onClick={handleNewChat}
                     className={cn(
-                      'flex items-center gap-1.5 px-2 py-1 rounded text-[11px]',
-                      'text-[#A8A8A8] hover:text-[#F5F5F5] hover:bg-[rgba(212,160,23,0.06)]',
+                      'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono',
+                      'text-n-500 hover:text-n-900 hover:bg-gold-500/6',
                       'transition-colors',
                     )}
                     title={labels.new}
                   >
-                    <Plus className="w-3 h-3 text-[#D4A017]" />
+                    <Plus className="w-3 h-3 text-gold-500" />
                     <span className="hidden sm:inline">{labels.new}</span>
                   </button>
                   {messages.length > 1 && (
@@ -1049,8 +1118,8 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       type="button"
                       onClick={handleNewChat}
                       className={cn(
-                        'flex items-center gap-1 px-2 py-1 rounded text-[11px]',
-                        'text-[#6A6A6A] hover:text-[#F5F5F5] hover:bg-[rgba(212,160,23,0.06)]',
+                        'flex items-center gap-1 px-2 py-1 rounded text-xs-mono',
+                        'text-n-400 hover:text-n-900 hover:bg-gold-500/6',
                         'transition-colors',
                       )}
                       title={labels.clear}
@@ -1090,15 +1159,15 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                 <form
                   onSubmit={handleSubmit}
                   className={cn(
-                    'p-2 border-t border-[rgba(212,160,23,0.12)] shrink-0',
-                    'bg-[rgba(10,10,10,0.5)]',
+                    'p-3 border-t border-gold-500/15 shrink-0',
+                    'bg-n-0/50',
                   )}
                 >
                   <div
                     className={cn(
-                      'flex items-end gap-1.5 rounded-md p-1',
-                      'bg-[rgba(18,18,18,0.9)] border border-[rgba(212,160,23,0.2)]',
-                      'focus-within:border-[rgba(212,160,23,0.45)] transition-colors',
+                      'flex items-end gap-1.5 rounded-lg p-1',
+                      'bg-n-50/90 border border-gold-500/20',
+                      'focus-within:border-gold-500/45 transition-colors',
                     )}
                   >
                     <input
@@ -1113,10 +1182,10 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploading || isStreaming}
                       className={cn(
-                        'p-1.5 rounded text-[#A8A8A8] hover:text-[#D4A017] shrink-0',
-                        'hover:bg-[rgba(212,160,23,0.06)] transition-colors',
+                        'p-1.5 rounded text-n-500 hover:text-gold-500 shrink-0',
+                        'hover:bg-gold-500/6 transition-colors',
                         'disabled:opacity-40 disabled:cursor-not-allowed',
-                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017]',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
                       )}
                       aria-label={labels.attach}
                       title={labels.attach}
@@ -1134,8 +1203,8 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       aria-label={labels.placeholder}
                       className={cn(
                         'flex-1 bg-transparent border-none focus:ring-0 outline-none',
-                        'text-[12px] text-[#F5F5F5] placeholder:text-[#6A6A6A]',
-                        'resize-none py-1.5 px-1 max-h-[100px] min-h-[28px] leading-relaxed',
+                        'text-xs text-n-900 placeholder:text-n-400',
+                        'resize-none py-2 px-1 max-h-[100px] min-h-[36px] leading-relaxed',
                         'disabled:opacity-50',
                       )}
                     />
@@ -1144,9 +1213,9 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                         type="button"
                         onClick={handleStop}
                         className={cn(
-                          'p-1.5 rounded bg-[#D4A017] text-[#0a0a0a] shrink-0',
-                          'hover:bg-[#E8B42C] transition-colors',
-                          'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F5D079]',
+                          'p-1.5 rounded bg-gold-500 text-n-0 shrink-0',
+                          'hover:bg-gold-600 transition-colors',
+                          'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
                         )}
                         aria-label={labels.stop}
                         title={labels.stop}
@@ -1159,10 +1228,10 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                         disabled={!input.trim()}
                         className={cn(
                           'p-1.5 rounded shrink-0 transition-colors',
-                          'bg-[#D4A017] text-[#0a0a0a]',
-                          'hover:bg-[#E8B42C]',
-                          'disabled:opacity-30 disabled:cursor-not-allowed disabled:bg-[rgba(212,160,23,0.2)] disabled:text-[#6A6A6A]',
-                          'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F5D079]',
+                          'bg-gold-500 text-n-0',
+                          'hover:bg-gold-600',
+                          'disabled:opacity-30 disabled:cursor-not-allowed disabled:bg-gold-500/20 disabled:text-n-400',
+                          'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
                         )}
                         aria-label={labels.send}
                         title={labels.send}
@@ -1186,9 +1255,9 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
           className={cn(
             'fixed bottom-4 left-4 z-40 w-12 h-12 rounded-full',
             'flex items-center justify-center',
-            'bg-gradient-to-br from-[#D4A017] to-[#722F37] text-[#0a0a0a]',
+            'bg-gradient-to-br from-gold-500 to-danger text-n-0',
             'shadow-lg glow-gold-soft',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
           )}
           aria-label={language === 'es' ? 'Abrir asistente' : 'Open assistant'}
         >

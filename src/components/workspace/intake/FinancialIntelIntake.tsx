@@ -91,7 +91,7 @@ function ConfidenceDot({ level }: { level?: FieldConfidence }) {
   if (!level || level === 'none') return null;
   return (
     <span
-      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')}
+      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
       title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
     />
   );
@@ -184,24 +184,24 @@ export function FinancialIntelIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
-        <p className="text-xs text-[#a3a3a3]">
+        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
+        <p className="text-xs text-n-400">
           Cargue estados financieros o datos de soporte
         </p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
         <div className="space-y-3">
-          <div className="border border-[#22C55E]/30 bg-[#F0FDF4] rounded-xl p-4">
+          <div className="border border-success/30 bg-success/10 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-              <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
+              <CheckCircle className="w-4 h-4 text-success" />
+              <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
-            <p className="text-xs text-[#16A34A]/80">
+            <p className="text-xs text-success/80">
               {detected} de {totalFields} campos detectados automáticamente
             </p>
             {extractionState.extracted.isTrialBalance && (
-              <div className="mt-2 pt-2 border-t border-[#22C55E]/20 text-xs text-[#16A34A]/80 space-y-0.5">
+              <div className="mt-2 pt-2 border-t border-success/20 text-xs text-success/80 space-y-0.5">
                 {extractionState.extracted.accountsDetected && <p>Cuentas detectadas: {extractionState.extracted.accountsDetected}</p>}
                 {extractionState.extracted.equationValid !== undefined && (
                   <p>Ecuación patrimonial: {extractionState.extracted.equationValid ? 'Válida' : 'Con discrepancias'}</p>
@@ -209,29 +209,29 @@ export function FinancialIntelIntake() {
               </div>
             )}
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
             Subir otro archivo
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
-        <div className="border border-[#D4A017]/30 bg-[#FEF9EC] rounded-xl p-6 text-center">
+        <div className="border border-gold-500/30 bg-gold-500/10 rounded-xl p-6 text-center">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-            <Upload className="w-6 h-6 text-[#D4A017] mx-auto" />
+            <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
-          <p className="text-sm text-[#7D5B0C] mt-2 font-medium">
+          <p className="text-sm text-gold-700 mt-2 font-medium">
             {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
           </p>
-          <div className="w-48 h-1.5 bg-[#D4A017]/20 rounded-full overflow-hidden mx-auto mt-3">
-            <motion.div className="h-full bg-[#D4A017] rounded-full" animate={{ width: `${extractionState.progress}%` }} />
+          <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
+            <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
           </div>
         </div>
       ) : extractionState.status === 'error' ? (
-        <div className="border border-[#EF4444]/30 bg-[#FEF2F2] rounded-xl p-4">
+        <div className="border border-danger/30 bg-danger/10 rounded-xl p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#EF4444]" />
-            <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
+            <AlertCircle className="w-4 h-4 text-danger" />
+            <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
@@ -247,7 +247,7 @@ export function FinancialIntelIntake() {
         <button
           type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
-          className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
+          className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
           Llenar manualmente sin documento
         </button>
@@ -260,19 +260,19 @@ export function FinancialIntelIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipos de Análisis</h3>
-        <p className="text-xs text-[#737373]">
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Tipos de Análisis</h3>
+        <p className="text-xs text-n-500">
           Seleccione uno o más tipos de análisis financiero. Minimo 1 requerido.
         </p>
         {detected > 0 && !skippedUpload && (
-          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-            <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
-            <span className="text-xs text-[#16A34A] font-medium">
+          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
+            <CheckCircle className="w-3.5 h-3.5 text-success" />
+            <span className="text-xs text-success font-medium">
               {detected} de {totalFields} campos auto-detectados
             </span>
-            <span className="text-[10px] text-[#16A34A]/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] ml-1" /> inferido
+            <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
             </span>
           </div>
         )}
@@ -289,24 +289,24 @@ export function FinancialIntelIntake() {
               className={cn(
                 'relative flex flex-col items-start gap-2 p-4 rounded-lg border-2 text-left transition-all',
                 selected
-                  ? 'border-[#D4A017] bg-[#FEF9EC]'
-                  : 'border-[#e5e5e5] hover:border-[#d4d4d4] bg-white',
+                  ? 'border-gold-500 bg-gold-500/10'
+                  : 'border-n-200 hover:border-n-300 bg-n-0',
               )}
             >
               {selected && (
-                <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#D4A017] flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white" />
+                <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gold-500 flex items-center justify-center">
+                  <Check className="w-3 h-3 text-n-0" />
                 </div>
               )}
               <Icon
                 className={cn(
                   'w-5 h-5',
-                  selected ? 'text-[#D4A017]' : 'text-[#a3a3a3]',
+                  selected ? 'text-gold-500' : 'text-n-400',
                 )}
               />
               <div>
-                <span className="text-sm font-medium text-[#0a0a0a] block">{analysis.label}</span>
-                <p className="text-[11px] text-[#737373] leading-relaxed mt-0.5">
+                <span className="text-sm font-medium text-n-900 block">{analysis.label}</span>
+                <p className="text-xs-mono text-n-500 leading-relaxed mt-0.5">
                   {analysis.description}
                 </p>
               </div>
@@ -315,7 +315,7 @@ export function FinancialIntelIntake() {
         })}
       </div>
       {values.analyses.length > 0 && (
-        <p className="text-xs text-[#D4A017] font-medium">
+        <p className="text-xs text-gold-500 font-medium">
           {values.analyses.length} análisis seleccionado{values.analyses.length > 1 ? 's' : ''}
           {extractedConfidence.analyses && <ConfidenceDot level={extractedConfidence.analyses} />}
         </p>
@@ -328,28 +328,28 @@ export function FinancialIntelIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Detalles y Documentos</h3>
-        <p className="text-xs text-[#737373]">Periodo de análisis, pregunta específica y documentos soporte.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Detalles y Documentos</h3>
+        <p className="text-xs text-n-500">Periodo de análisis, pregunta específica y documentos soporte.</p>
       </div>
 
       {/* Periodo */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Periodo de análisis <ConfidenceDot level={extractedConfidence.period} /> <span className="text-[#DC2626] ml-1">*</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Periodo de análisis <ConfidenceDot level={extractedConfidence.period} /> <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="month"
           value={values.period}
           onChange={(e) => updateField('period', e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
 
       {/* Pregunta especifica */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5">
+        <label className="block text-xs font-medium text-n-600 mb-1.5">
           Pregunta o instrucción específica{' '}
-          <span className="text-[#a3a3a3] font-normal">-- opcional, max 500 caracteres</span>
+          <span className="text-n-400 font-normal">-- opcional, max 500 caracteres</span>
         </label>
         <textarea
           value={values.specificQuestion ?? ''}
@@ -360,10 +360,10 @@ export function FinancialIntelIntake() {
           }}
           placeholder="Ej: Necesito comparar el margen EBITDA con el sector retail en Colombia..."
           rows={3}
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] resize-none focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 resize-none focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
         <div className="text-right mt-1">
-          <span className="text-[10px] text-[#a3a3a3]">
+          <span className="text-2xs text-n-400">
             {(values.specificQuestion ?? '').length}/500
           </span>
         </div>

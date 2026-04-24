@@ -144,7 +144,7 @@ export default function DefensaDianPage() {
   return (
     <div
       data-theme="elite"
-      className="relative w-full min-h-full overflow-y-auto bg-[#030303] text-[#F5F5F5]"
+      className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
     >
       <div
         aria-hidden="true"
@@ -164,7 +164,7 @@ export default function DefensaDianPage() {
           <Link
             href="/workspace/escudo"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#A8A8A8] hover:text-[#D4A017] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-gold-500 transition-colors"
           >
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             {language === 'es' ? 'El Escudo' : 'The Shield'}
@@ -178,7 +178,7 @@ export default function DefensaDianPage() {
             <motion.div {...fadeItem(1)} className="mb-10 flex items-start gap-5">
               <div
                 aria-hidden="true"
-                className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-[14px] bg-[rgba(114,47,55,0.18)] text-[#C46A76] glow-wine"
+                className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[rgba(114,47,55,0.18)] text-area-escudo glow-wine"
               >
                 <Shield className="h-7 w-7" strokeWidth={1.75} />
               </div>
@@ -196,7 +196,7 @@ export default function DefensaDianPage() {
             {/* Narrativa larga */}
             <motion.div
               {...fadeItem(2)}
-              className="prose prose-invert max-w-none mb-10 space-y-5 text-[15px] leading-relaxed text-[#D4D4D4]"
+              className="prose prose-invert max-w-none mb-10 space-y-5 text-md leading-relaxed text-n-300"
             >
               <p>
                 {language === 'es'
@@ -222,14 +222,14 @@ export default function DefensaDianPage() {
                   <div className="flex flex-col gap-3">
                     <span
                       aria-hidden="true"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                     >
                       <cap.icon className="h-5 w-5" strokeWidth={1.75} />
                     </span>
-                    <h3 className="font-serif-elite text-[18px] leading-tight font-normal text-[#F5F5F5]">
+                    <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
                       {cap.title}
                     </h3>
-                    <p className="text-[13px] leading-relaxed text-[#A8A8A8]">{cap.body}</p>
+                    <p className="text-sm leading-relaxed text-n-500">{cap.body}</p>
                   </div>
                 </EliteCard>
               ))}
@@ -239,7 +239,7 @@ export default function DefensaDianPage() {
             <motion.div
               {...fadeItem(4)}
               className={cn(
-                'relative overflow-hidden rounded-[16px] p-6 md:p-8',
+                'relative overflow-hidden rounded-xl p-6 md:p-8',
                 'glass-elite-elevated border-elite-gold glow-gold-soft',
               )}
             >
@@ -255,17 +255,17 @@ export default function DefensaDianPage() {
                 <div className="flex items-start gap-3 md:max-w-xl">
                   <span
                     aria-hidden="true"
-                    className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(114,47,55,0.2)] text-[#C46A76]"
+                    className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(114,47,55,0.2)] text-area-escudo"
                   >
                     <ShieldCheck className="h-5 w-5" strokeWidth={1.75} />
                   </span>
                   <div>
-                    <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5] mb-1.5">
+                    <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
                       {language === 'es'
                         ? 'Inicie un caso de defensa DIAN'
                         : 'Open a DIAN defense case'}
                     </h3>
-                    <p className="text-[13px] leading-relaxed text-[#A8A8A8]">
+                    <p className="text-sm leading-relaxed text-n-500">
                       {language === 'es'
                         ? 'Cargue el requerimiento, indique el plazo y el tributo. El motor preparará el primer borrador en minutos.'
                         : 'Upload the notice, indicate the deadline and tax type. The engine prepares the first draft in minutes.'}
@@ -290,16 +290,16 @@ export default function DefensaDianPage() {
             <motion.div {...fadeItem(5)}>
               <EliteCard variant="bordered" padding="md" hover="none">
                 <div className="flex items-center gap-2 mb-4">
-                  <Scale className="h-4 w-4 text-[#D4A017]" strokeWidth={2} aria-hidden="true" />
-                  <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                  <Scale className="h-4 w-4 text-gold-500" strokeWidth={2} aria-hidden="true" />
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                     {language === 'es' ? 'Tips del experto' : 'Expert tips'}
                   </span>
                 </div>
-                <ul role="list" className="space-y-3 text-[13px] leading-relaxed text-[#D4D4D4]">
+                <ul role="list" className="space-y-3 text-sm leading-relaxed text-n-300">
                   <li className="flex gap-2">
                     <span
                       aria-hidden="true"
-                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-[#D4A017]"
+                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-gold-500"
                     />
                     <span>
                       {language === 'es'
@@ -310,7 +310,7 @@ export default function DefensaDianPage() {
                   <li className="flex gap-2">
                     <span
                       aria-hidden="true"
-                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-[#D4A017]"
+                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-gold-500"
                     />
                     <span>
                       {language === 'es'
@@ -321,7 +321,7 @@ export default function DefensaDianPage() {
                   <li className="flex gap-2">
                     <span
                       aria-hidden="true"
-                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-[#D4A017]"
+                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-gold-500"
                     />
                     <span>
                       {language === 'es'
@@ -337,11 +337,11 @@ export default function DefensaDianPage() {
               <EliteCard variant="glass" padding="md" hover="none">
                 <div className="flex items-center gap-2 mb-4">
                   <ScrollText
-                    className="h-4 w-4 text-[#C46A76]"
+                    className="h-4 w-4 text-area-escudo"
                     strokeWidth={2}
                     aria-hidden="true"
                   />
-                  <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#C46A76]">
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-area-escudo">
                     {language === 'es'
                       ? 'Artículos destacados'
                       : 'Key articles'}
@@ -351,14 +351,14 @@ export default function DefensaDianPage() {
                   {articles.map((a) => (
                     <li key={a.code} className="flex flex-col gap-0.5">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#D4A017] tabular-nums">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-gold-500 tabular-nums">
                           {a.code}
                         </span>
-                        <span className="text-[12px] font-medium text-[#F5F5F5]">
+                        <span className="text-xs font-medium text-n-100">
                           {a.title}
                         </span>
                       </div>
-                      <p className="text-[12px] text-[#A8A8A8] leading-snug">{a.summary}</p>
+                      <p className="text-xs text-n-500 leading-snug">{a.summary}</p>
                     </li>
                   ))}
                 </ul>
@@ -369,15 +369,15 @@ export default function DefensaDianPage() {
               <EliteCard variant="glass" padding="md" hover="none">
                 <div className="flex items-center gap-2 mb-3">
                   <AlertOctagon
-                    className="h-4 w-4 text-[#EAB308]"
+                    className="h-4 w-4 text-warning"
                     strokeWidth={2}
                     aria-hidden="true"
                   />
-                  <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#EAB308]">
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-warning">
                     {language === 'es' ? 'Plazos críticos' : 'Critical deadlines'}
                   </span>
                 </div>
-                <p className="text-[12px] leading-relaxed text-[#A8A8A8]">
+                <p className="text-xs leading-relaxed text-n-500">
                   {language === 'es'
                     ? 'Requerimiento ordinario: 15 días hábiles. Especial: 3 meses. Liquidación oficial: recurso de reconsideración 2 meses.'
                     : 'Ordinary notice: 15 business days. Special: 3 months. Official assessment: reconsideration appeal within 2 months.'}

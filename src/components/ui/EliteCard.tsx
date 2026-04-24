@@ -15,13 +15,19 @@ import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
  *
  * Variants:
  *  - glass: subtle transparency + blur + soft gold border (`.glass-elite`)
- *  - solid: opaque near-black (#0A0A0A) with hairline border
+ *  - solid: opaque near-black with hairline border
  *  - bordered: transparent bg with gradient gold→wine ring
  *
  * Interactivity:
  *  - interactive=true enables hover effects. Pick "lift" (translate+glow),
  *    "glow" (only ambient glow), or "none".
  *  - A card with onClick automatically toggles interactive on.
+ *
+ * Padding unified against design-system spacing tokens:
+ *  - none → p-0
+ *  - sm   → p-5 (20px, --spacing-5)
+ *  - md   → p-7 (28px, --spacing-7)
+ *  - lg   → p-9 (36px, --spacing-9)
  */
 
 export type EliteCardVariant = 'glass' | 'solid' | 'bordered';
@@ -37,18 +43,18 @@ export interface EliteCardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const VARIANT_CLASSES: Record<EliteCardVariant, string> = {
-  glass: 'glass-elite text-[#F5F5F5]',
+  glass: 'glass-elite text-n-100',
   solid:
-    'bg-[#0A0A0A] border border-[rgba(212,160,23,0.18)] rounded-[12px] text-[#F5F5F5]',
+    'bg-n-900 border border-gold-500/20 rounded-lg text-n-100',
   bordered:
-    'bg-transparent border-elite-gold rounded-[12px] text-[#F5F5F5]',
+    'bg-transparent border-elite-gold rounded-lg text-n-100',
 };
 
 const PADDING_CLASSES: Record<EliteCardPadding, string> = {
   none: 'p-0',
-  sm: 'p-4',
-  md: 'p-6',
-  lg: 'p-8',
+  sm: 'p-5',
+  md: 'p-7',
+  lg: 'p-9',
 };
 
 const EliteCardRoot = forwardRef<HTMLDivElement, EliteCardProps>(
@@ -75,19 +81,19 @@ const EliteCardRoot = forwardRef<HTMLDivElement, EliteCardProps>(
         return cn(
           'transition-[transform,box-shadow,border-color] duration-300 ease-out',
           'hover:-translate-y-0.5',
-          'hover:shadow-[0_0_36px_rgba(212,160,23,0.28)]',
+          'hover:shadow-e4',
         );
       }
       return cn(
         'transition-[box-shadow,border-color] duration-300 ease-out',
-        'hover:shadow-[0_0_36px_rgba(212,160,23,0.28)]',
+        'hover:shadow-e4',
       );
     })();
 
     const interactiveClasses = isInteractive
       ? cn(
           'cursor-pointer',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
         )
       : '';
 
@@ -150,8 +156,8 @@ const EliteCardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement
     <div
       ref={ref}
       className={cn(
-        'pb-4 mb-4 border-b border-[rgba(212,160,23,0.16)]',
-        'font-serif-elite text-[20px] leading-tight font-normal text-[#F5F5F5]',
+        'pb-4 mb-4 border-b border-gold-500/15',
+        'font-serif-elite text-xl leading-tight font-normal text-n-100',
         className,
       )}
       {...rest}
@@ -166,7 +172,7 @@ const EliteCardBody = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>
   ({ className, children, ...rest }, ref) => (
     <div
       ref={ref}
-      className={cn('text-[14px] leading-relaxed text-[#D4D4D4]', className)}
+      className={cn('text-base leading-relaxed text-n-300', className)}
       {...rest}
     >
       {children}
@@ -180,7 +186,7 @@ const EliteCardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement
     <div
       ref={ref}
       className={cn(
-        'pt-4 mt-4 border-t border-[rgba(212,160,23,0.16)]',
+        'pt-4 mt-4 border-t border-gold-500/15',
         'flex items-center justify-end gap-2',
         className,
       )}

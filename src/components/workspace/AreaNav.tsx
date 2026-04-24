@@ -1,18 +1,21 @@
 'use client';
 
 /**
- * AreaNav — Nav horizontal de las 4 áreas del Centro de Comando Elite.
+ * AreaNav — Horizontal nav for the 4 areas of the Centro de Comando Elite.
  *
- * Cada pill navega a `/workspace/{slug}`:
+ * Each pill routes to `/workspace/{slug}`:
  *   Escudo → /workspace/escudo
  *   Valor  → /workspace/valor
  *   Verdad → /workspace/verdad
  *   Futuro → /workspace/futuro
  *
- * Ruta activa se detecta con usePathname() — `startsWith` para soportar
- * sub-rutas (p.ej. /workspace/escudo/defensa-dian).
+ * Active route is detected via usePathname() with `startsWith` so sub-routes
+ * (e.g. /workspace/escudo/defensa-dian) stay highlighted.
  *
- * Responsive: en viewport <md colapsa a dropdown.
+ * Responsive: collapses to a dropdown under md.
+ *
+ * Tokens: migrated to bg-n-* / text-n-* / bg-gold-* / border-gold-* so both
+ * light (landing, if ever embedded) and dark (workspace shell) render correctly.
  */
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -36,13 +39,15 @@ interface AreaItem {
   key: AreaKey;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   href: string;
+  /** Tailwind color class for the icon/underline when active. */
+  accentClass: string;
 }
 
 const AREAS: AreaItem[] = [
-  { key: 'escudo', icon: Shield, href: '/workspace/escudo' },
-  { key: 'valor', icon: TrendingUp, href: '/workspace/valor' },
-  { key: 'verdad', icon: CheckCircle, href: '/workspace/verdad' },
-  { key: 'futuro', icon: Compass, href: '/workspace/futuro' },
+  { key: 'escudo', icon: Shield, href: '/workspace/escudo', accentClass: 'text-area-escudo' },
+  { key: 'valor', icon: TrendingUp, href: '/workspace/valor', accentClass: 'text-gold-500' },
+  { key: 'verdad', icon: CheckCircle, href: '/workspace/verdad', accentClass: 'text-area-verdad' },
+  { key: 'futuro', icon: Compass, href: '/workspace/futuro', accentClass: 'text-area-futuro' },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,7 +112,7 @@ export function AreaNav({ className }: AreaNavProps) {
         role="list"
         className="hidden md:flex items-center gap-1"
       >
-        {AREAS.map(({ key, icon: Icon, href }) => {
+        {AREAS.map(({ key, icon: Icon, href, accentClass }) => {
           const isActive = activeKey === key;
           const areaCopy = areas[key];
           return (
@@ -118,17 +123,20 @@ export function AreaNav({ className }: AreaNavProps) {
                 aria-current={isActive ? 'page' : undefined}
                 title={`${areaCopy.concept} — ${areaCopy.subtitle}`}
                 className={cn(
-                  'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium uppercase tracking-wider',
+                  'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-md',
+                  'font-mono text-xs-mono font-medium uppercase tracking-eyebrow',
                   'transition-colors duration-200',
                   isActive
-                    ? 'text-[#F5F5F5]'
-                    : 'text-[#A8A8A8] hover:text-[#F5F5F5]',
+                    ? 'text-n-900'
+                    : 'text-n-500 hover:text-n-900',
                 )}
               >
                 <Icon
                   className={cn(
                     'w-3.5 h-3.5 shrink-0 transition-colors',
-                    isActive ? 'text-[#D4A017]' : 'text-[#A8A8A8] group-hover:text-[#D4A017]',
+                    isActive
+                      ? accentClass
+                      : cn('text-n-500 group-hover:', accentClass),
                   )}
                   strokeWidth={2}
                 />
@@ -137,11 +145,7 @@ export function AreaNav({ className }: AreaNavProps) {
                   <motion.span
                     layoutId="area-nav-underline"
                     aria-hidden="true"
-                    className="absolute left-3 right-3 -bottom-0.5 h-[2px] rounded-full"
-                    style={{
-                      background:
-                        'linear-gradient(90deg, rgba(212,160,23,0) 0%, #D4A017 40%, #722F37 100%)',
-                    }}
+                    className="absolute left-3 right-3 -bottom-0.5 h-[2px] rounded-full bg-gold-500"
                     transition={
                       prefersReduced
                         ? { duration: 0 }
@@ -163,14 +167,15 @@ export function AreaNav({ className }: AreaNavProps) {
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium uppercase tracking-wider',
-            'text-[#F5F5F5] border border-[rgba(212,160,23,0.25)] bg-[rgba(10,10,10,0.6)]',
+            'flex items-center gap-2 px-3 py-1.5 rounded-md',
+            'text-xs font-medium uppercase tracking-eyebrow',
+            'text-n-900 border border-gold-500/25 bg-n-50/60',
           )}
         >
           <span className="truncate max-w-[120px]">{activeLabel}</span>
           <ChevronDown
             className={cn(
-              'w-3.5 h-3.5 transition-transform text-[#D4A017]',
+              'w-3.5 h-3.5 transition-transform text-gold-500',
               menuOpen ? 'rotate-180' : '',
             )}
           />
@@ -189,7 +194,7 @@ export function AreaNav({ className }: AreaNavProps) {
                 'glass-elite-elevated',
               )}
             >
-              {AREAS.map(({ key, icon: Icon, href }) => {
+              {AREAS.map(({ key, icon: Icon, href, accentClass }) => {
                 const isActive = activeKey === key;
                 const areaCopy = areas[key];
                 return (
@@ -203,27 +208,27 @@ export function AreaNav({ className }: AreaNavProps) {
                       }}
                       className={cn(
                         'w-full flex items-start gap-2.5 px-3 py-2 text-left',
-                        'hover:bg-[rgba(212,160,23,0.08)] transition-colors',
-                        isActive ? 'bg-[rgba(212,160,23,0.12)]' : '',
+                        'hover:bg-gold-500/8 transition-colors',
+                        isActive ? 'bg-gold-500/12' : '',
                       )}
                     >
                       <Icon
                         className={cn(
                           'w-4 h-4 mt-0.5 shrink-0',
-                          isActive ? 'text-[#D4A017]' : 'text-[#A8A8A8]',
+                          isActive ? accentClass : 'text-n-500',
                         )}
                         strokeWidth={2}
                       />
                       <span className="flex-1 min-w-0">
                         <span
                           className={cn(
-                            'block text-sm font-semibold uppercase tracking-wider',
-                            isActive ? 'text-[#F5F5F5]' : 'text-[#E5E5E5]',
+                            'block text-sm font-semibold uppercase tracking-eyebrow',
+                            isActive ? 'text-n-900' : 'text-n-800',
                           )}
                         >
                           {areaCopy.concept}
                         </span>
-                        <span className="block text-[10px] text-[#A8A8A8] mt-0.5 normal-case tracking-normal">
+                        <span className="block text-2xs text-n-500 mt-0.5 normal-case tracking-normal">
                           {areaCopy.subtitle}
                         </span>
                       </span>

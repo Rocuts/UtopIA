@@ -106,7 +106,7 @@ function ConfidenceDot({ level }: { level?: FieldConfidence }) {
   if (!level || level === 'none') return null;
   return (
     <span
-      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')}
+      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
       title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
     />
   );
@@ -181,46 +181,46 @@ export function DueDiligenceIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
-        <p className="text-xs text-[#a3a3a3]">
+        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
+        <p className="text-xs text-n-400">
           Cargue estados financieros, certificado de existencia o declaraciones
         </p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
         <div className="space-y-3">
-          <div className="border border-[#22C55E]/30 bg-[#F0FDF4] rounded-xl p-4">
+          <div className="border border-success/30 bg-success/10 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-              <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
+              <CheckCircle className="w-4 h-4 text-success" />
+              <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
-            <p className="text-xs text-[#16A34A]/80">
+            <p className="text-xs text-success/80">
               {detected} de {totalFields} campos detectados automáticamente
             </p>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
             Subir otro archivo
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
-        <div className="border border-[#D4A017]/30 bg-[#FEF9EC] rounded-xl p-6 text-center">
+        <div className="border border-gold-500/30 bg-gold-500/10 rounded-xl p-6 text-center">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-            <Upload className="w-6 h-6 text-[#D4A017] mx-auto" />
+            <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
-          <p className="text-sm text-[#7D5B0C] mt-2 font-medium">
+          <p className="text-sm text-gold-700 mt-2 font-medium">
             {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
           </p>
-          <div className="w-48 h-1.5 bg-[#D4A017]/20 rounded-full overflow-hidden mx-auto mt-3">
-            <motion.div className="h-full bg-[#D4A017] rounded-full" animate={{ width: `${extractionState.progress}%` }} />
+          <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
+            <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
           </div>
         </div>
       ) : extractionState.status === 'error' ? (
-        <div className="border border-[#EF4444]/30 bg-[#FEF2F2] rounded-xl p-4">
+        <div className="border border-danger/30 bg-danger/10 rounded-xl p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#EF4444]" />
-            <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
+            <AlertCircle className="w-4 h-4 text-danger" />
+            <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
@@ -236,7 +236,7 @@ export function DueDiligenceIntake() {
         <button
           type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
-          className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
+          className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
           Llenar manualmente sin documento
         </button>
@@ -249,8 +249,8 @@ export function DueDiligenceIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Propósito del Due Diligence</h3>
-        <p className="text-xs text-[#737373]">Seleccione la razón principal de la evaluación.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Propósito del Due Diligence</h3>
+        <p className="text-xs text-n-500">Seleccione la razón principal de la evaluación.</p>
       </div>
       <div className="space-y-3">
         {PURPOSES.map((purpose) => {
@@ -264,29 +264,29 @@ export function DueDiligenceIntake() {
               className={cn(
                 'w-full flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-all',
                 selected
-                  ? 'border-[#D4A017] bg-[#FEF9EC]'
-                  : 'border-[#e5e5e5] hover:border-[#d4d4d4] bg-white',
+                  ? 'border-gold-500 bg-gold-500/10'
+                  : 'border-n-200 hover:border-n-300 bg-n-0',
               )}
             >
               <div
                 className={cn(
                   'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5',
-                  selected ? 'border-[#D4A017]' : 'border-[#d4d4d4]',
+                  selected ? 'border-gold-500' : 'border-n-300',
                 )}
               >
-                {selected && <div className="w-2.5 h-2.5 rounded-full bg-[#D4A017]" />}
+                {selected && <div className="w-2.5 h-2.5 rounded-full bg-gold-500" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <Icon
                     className={cn(
                       'w-4 h-4 shrink-0',
-                      selected ? 'text-[#D4A017]' : 'text-[#a3a3a3]',
+                      selected ? 'text-gold-500' : 'text-n-400',
                     )}
                   />
-                  <span className="text-sm font-medium text-[#0a0a0a]">{purpose.label}</span>
+                  <span className="text-sm font-medium text-n-900">{purpose.label}</span>
                 </div>
-                <p className="text-xs text-[#737373]">{purpose.description}</p>
+                <p className="text-xs text-n-500">{purpose.description}</p>
               </div>
             </button>
           );
@@ -300,17 +300,17 @@ export function DueDiligenceIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Datos de la Empresa</h3>
-        <p className="text-xs text-[#737373]">Información básica de la entidad a evaluar.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Datos de la Empresa</h3>
+        <p className="text-xs text-n-500">Información básica de la entidad a evaluar.</p>
         {detected > 0 && !skippedUpload && (
-          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-            <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
-            <span className="text-xs text-[#16A34A] font-medium">
+          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
+            <CheckCircle className="w-3.5 h-3.5 text-success" />
+            <span className="text-xs text-success font-medium">
               {detected} de {totalFields} campos auto-detectados
             </span>
-            <span className="text-[10px] text-[#16A34A]/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] ml-1" /> inferido
+            <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
             </span>
           </div>
         )}
@@ -318,22 +318,22 @@ export function DueDiligenceIntake() {
 
       {/* Razon Social */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Razón Social <ConfidenceDot level={extractedConfidence.companyName} /> <span className="text-[#DC2626] ml-1">*</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Razón Social <ConfidenceDot level={extractedConfidence.companyName} /> <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="text"
           value={values.companyName}
           onChange={(e) => updateField('companyName', e.target.value)}
           placeholder="Ej: Empresa Ejemplo S.A.S."
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
 
       {/* NIT */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          NIT <ConfidenceDot level={extractedConfidence.nit} /> <span className="text-[#DC2626] ml-1">*</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          NIT <ConfidenceDot level={extractedConfidence.nit} /> <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="text"
@@ -341,13 +341,13 @@ export function DueDiligenceIntake() {
           onChange={(e) => updateField('nit', formatNIT(e.target.value))}
           placeholder="XXX.XXX.XXX-X"
           maxLength={13}
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] font-mono focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 font-mono focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
 
       {/* Tipo de Entidad */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-2 flex items-center gap-0.5">
+        <label className="block text-xs font-medium text-n-600 mb-2 flex items-center gap-0.5">
           Tipo de Sociedad <ConfidenceDot level={extractedConfidence.entityType} />
         </label>
         <div className="flex flex-wrap gap-2">
@@ -362,8 +362,8 @@ export function DueDiligenceIntake() {
                 className={cn(
                   'px-3.5 py-1.5 rounded-full text-xs font-medium border transition-colors',
                   active
-                    ? 'bg-[#D4A017] text-white border-[#D4A017]'
-                    : 'bg-white text-[#525252] border-[#e5e5e5] hover:border-[#D4A017]',
+                    ? 'bg-n-900 text-n-0 border-n-900'
+                    : 'bg-n-0 text-n-600 border-n-200 hover:border-n-400',
                 )}
               >
                 {label}
@@ -375,7 +375,7 @@ export function DueDiligenceIntake() {
 
       {/* Grupo NIIF */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-2 flex items-center gap-0.5">
+        <label className="block text-xs font-medium text-n-600 mb-2 flex items-center gap-0.5">
           Grupo NIIF <ConfidenceDot level={extractedConfidence.niifGroup} />
         </label>
         <div className="space-y-2">
@@ -389,21 +389,21 @@ export function DueDiligenceIntake() {
                 className={cn(
                   'w-full flex items-start gap-3 p-3 rounded-lg border-2 text-left transition-all',
                   selected
-                    ? 'border-[#D4A017] bg-[#FEF9EC]'
-                    : 'border-[#e5e5e5] hover:border-[#d4d4d4] bg-white',
+                    ? 'border-gold-500 bg-gold-500/10'
+                    : 'border-n-200 hover:border-n-300 bg-n-0',
                 )}
               >
                 <div
                   className={cn(
                     'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5',
-                    selected ? 'border-[#D4A017]' : 'border-[#d4d4d4]',
+                    selected ? 'border-gold-500' : 'border-n-300',
                   )}
                 >
-                  {selected && <div className="w-2 h-2 rounded-full bg-[#D4A017]" />}
+                  {selected && <div className="w-2 h-2 rounded-full bg-gold-500" />}
                 </div>
                 <div>
-                  <span className="text-xs font-medium text-[#0a0a0a]">{group.label}</span>
-                  <p className="text-[11px] text-[#737373]">{group.description}</p>
+                  <span className="text-xs font-medium text-n-900">{group.label}</span>
+                  <p className="text-xs-mono text-n-500">{group.description}</p>
                 </div>
               </button>
             );
@@ -414,25 +414,25 @@ export function DueDiligenceIntake() {
       {/* Periodo */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-[#525252] mb-1.5">
-            Periodo desde <span className="text-[#DC2626]">*</span>
+          <label className="block text-xs font-medium text-n-600 mb-1.5">
+            Periodo desde <span className="text-danger">*</span>
           </label>
           <input
             type="month"
             value={values.periodStart}
             onChange={(e) => updateField('periodStart', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-[#525252] mb-1.5">
-            Periodo hasta <span className="text-[#DC2626]">*</span>
+          <label className="block text-xs font-medium text-n-600 mb-1.5">
+            Periodo hasta <span className="text-danger">*</span>
           </label>
           <input
             type="month"
             value={values.periodEnd}
             onChange={(e) => updateField('periodEnd', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
       </div>
@@ -444,17 +444,17 @@ export function DueDiligenceIntake() {
   const step3 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Documentos de Soporte</h3>
-        <p className="text-xs text-[#737373]">
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Documentos de Soporte</h3>
+        <p className="text-xs text-n-500">
           Adjunte documentos adicionales para el análisis.
         </p>
       </div>
 
       {/* Document checklist */}
-      <div className="rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-3 space-y-1.5">
+      <div className="rounded-lg border border-n-200 bg-n-50 p-3 space-y-1.5">
         <div className="flex items-center gap-1.5 mb-2">
-          <Info className="w-3.5 h-3.5 text-[#D4A017]" />
-          <span className="text-xs font-semibold text-[#525252]">Documentos recomendados</span>
+          <Info className="w-3.5 h-3.5 text-gold-500" />
+          <span className="text-xs font-semibold text-n-600">Documentos recomendados</span>
         </div>
         {[
           'Estados financieros (último periodo)',
@@ -465,8 +465,8 @@ export function DueDiligenceIntake() {
           'Certificado de composición accionaria',
           'Contratos relevantes',
         ].map((doc) => (
-          <div key={doc} className="flex items-center gap-2 text-[11px] text-[#737373]">
-            <div className="w-1 h-1 rounded-full bg-[#d4d4d4] shrink-0" />
+          <div key={doc} className="flex items-center gap-2 text-xs-mono text-n-500">
+            <div className="w-1 h-1 rounded-full bg-n-300 shrink-0" />
             {doc}
           </div>
         ))}

@@ -47,10 +47,10 @@ const NOVA_SPRING = { stiffness: 400, damping: 25 };
 const SEVERITY_ORDER: AuditSeverity[] = ['critico', 'alto', 'medio', 'bajo', 'informativo'];
 
 const SEVERITY_COLORS: Record<AuditSeverity, string> = {
-  critico: '#EF4444',
+  critico: 'var(--danger)',
   alto: '#F97316',
   medio: '#F59E0B',
-  bajo: '#22C55E',
+  bajo: 'var(--success)',
   informativo: '#3B82F6',
 };
 
@@ -196,17 +196,17 @@ function CollapsibleSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-[#e5e5e5]">
+    <div className="border-b border-n-200">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-xs font-medium text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+        className="flex w-full items-center gap-2 px-4 py-3 text-xs font-medium text-n-900 hover:bg-n-50 transition-colors"
         aria-expanded={open}
       >
-        <Icon className="w-3.5 h-3.5 text-[#525252] shrink-0" />
+        <Icon className="w-3.5 h-3.5 text-n-600 shrink-0" />
         <span className="flex-1 text-left uppercase tracking-wide">{title}</span>
         {count !== undefined && count > 0 && (
-          <span className="text-[10px] bg-[#fafafa] border border-[#e5e5e5] text-[#525252] rounded-sm px-1.5 py-0.5 font-[family-name:var(--font-geist-mono)]">
+          <span className="text-2xs bg-n-50 border border-n-200 text-n-600 rounded-sm px-1.5 py-0.5 font-mono">
             {count}
           </span>
         )}
@@ -214,7 +214,7 @@ function CollapsibleSection({
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.2 }}
         >
-          <ChevronDown className="w-3.5 h-3.5 text-[#a3a3a3]" />
+          <ChevronDown className="w-3.5 h-3.5 text-n-400" />
         </motion.span>
       </button>
       <AnimatePresence initial={false}>
@@ -252,7 +252,7 @@ function ElapsedTimer({ startedAt }: { startedAt: Date }) {
   const seconds = elapsed % 60;
 
   return (
-    <span className="text-[10px] font-[family-name:var(--font-geist-mono)] text-[#a3a3a3] flex items-center gap-1">
+    <span className="text-2xs font-mono text-n-400 flex items-center gap-1">
       <Clock className="w-3 h-3" />
       {minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`}
     </span>
@@ -284,7 +284,7 @@ function StageDots({
             <div className="relative">
               {isActive && (
                 <motion.div
-                  className="absolute inset-0 rounded-full bg-[#d4a017]"
+                  className="absolute inset-0 rounded-full bg-gold-500"
                   animate={{ scale: [1, 1.6, 1], opacity: [0.4, 0, 0.4] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                 />
@@ -293,14 +293,14 @@ function StageDots({
                 className={cn(
                   'w-3 h-3 rounded-full border-2 transition-colors',
                   isComplete
-                    ? 'bg-[#22c55e] border-[#22c55e]'
+                    ? 'bg-success border-success'
                     : isActive
-                      ? 'bg-[#d4a017] border-[#d4a017]'
-                      : 'bg-[#f5f5f5] border-[#e5e5e5]',
+                      ? 'bg-gold-500 border-gold-500'
+                      : 'bg-n-100 border-n-200',
                 )}
               />
             </div>
-            <span className="text-[8px] text-[#a3a3a3] max-w-[60px] text-center leading-tight truncate">
+            <span className="text-2xs text-n-400 max-w-[60px] text-center leading-tight truncate">
               {label}
             </span>
           </div>
@@ -333,13 +333,13 @@ function AuditorDots({
               className={cn(
                 'w-2.5 h-2.5 rounded-full transition-colors',
                 complete
-                  ? 'bg-[#22c55e]'
+                  ? 'bg-success'
                   : started
-                    ? 'bg-[#f59e0b] animate-pulse'
-                    : 'bg-[#e5e5e5]',
+                    ? 'bg-warning animate-pulse'
+                    : 'bg-n-200',
               )}
             />
-            <span className="text-[8px] text-[#a3a3a3]">{DOMAIN_LABELS[key].slice(0, 4)}</span>
+            <span className="text-2xs text-n-400">{DOMAIN_LABELS[key].slice(0, 4)}</span>
           </div>
         );
       })}
@@ -363,7 +363,7 @@ function SeveritySummary({ summary }: { summary: Record<AuditSeverity, number> }
               className="w-2 h-2 rounded-full"
               style={{ backgroundColor: SEVERITY_COLORS[sev] }}
             />
-            <span className="text-[10px] text-[#525252] font-[family-name:var(--font-geist-mono)]">
+            <span className="text-2xs text-n-600 font-mono">
               {count} {SEVERITY_LABELS[sev]}
             </span>
           </div>
@@ -381,14 +381,14 @@ function DocStatusIcon({ status }: { status: string }) {
   switch (status) {
     case 'ready':
     case 'indexed':
-      return <CheckCircle2 className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />;
+      return <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />;
     case 'processing':
     case 'uploading':
-      return <Loader2 className="w-3.5 h-3.5 text-[#d4a017] shrink-0 animate-spin" />;
+      return <Loader2 className="w-3.5 h-3.5 text-gold-500 shrink-0 animate-spin" />;
     case 'error':
-      return <XCircle className="w-3.5 h-3.5 text-[#ef4444] shrink-0" />;
+      return <XCircle className="w-3.5 h-3.5 text-danger shrink-0" />;
     default:
-      return <FileText className="w-3.5 h-3.5 text-[#a3a3a3] shrink-0" />;
+      return <FileText className="w-3.5 h-3.5 text-n-400 shrink-0" />;
   }
 }
 
@@ -523,14 +523,14 @@ export function AnalysisPanel({
     return (
       <div className="px-4 py-6 space-y-4">
         <div className="flex items-center gap-2 mb-1">
-          <Sparkles className="w-4 h-4 text-[#d4a017]" />
-          <h3 className="text-sm font-medium text-[#0a0a0a]">Bienvenido</h3>
+          <Sparkles className="w-4 h-4 text-gold-500" />
+          <h3 className="text-sm font-medium text-n-900">Bienvenido</h3>
         </div>
-        <p className="text-xs text-[#525252] leading-relaxed">
+        <p className="text-xs text-n-600 leading-relaxed">
           Seleccione un tipo de consulta para ver informacion relevante. Este panel se actualizara en tiempo real a medida que interactue con la plataforma.
         </p>
-        <div className="border-t border-[#e5e5e5] pt-3">
-          <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-2">
+        <div className="border-t border-n-200 pt-3">
+          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
             Referencias Rápidas
           </h4>
           <div className="space-y-1.5">
@@ -557,39 +557,39 @@ export function AnalysisPanel({
     return (
       <div className="px-4 py-4 space-y-4">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-[#d4a017]" />
-          <h3 className="text-sm font-medium text-[#0a0a0a]">
+          <Shield className="w-4 h-4 text-gold-500" />
+          <h3 className="text-sm font-medium text-n-900">
             {CASE_TYPE_LABELS[activeCaseType]}
           </h3>
         </div>
 
         {isPipeline && (
-          <div className="bg-[#FEF9EC] border border-[#FBE08A] rounded-lg p-3 space-y-2">
-            <h4 className="text-[10px] font-medium text-[#A87C10] uppercase tracking-wider">
+          <div className="bg-gold-300/10 border border-gold-400/40 rounded-lg p-3 space-y-2">
+            <h4 className="text-2xs font-medium text-gold-700 uppercase tracking-wider">
               Pipeline de Agentes
             </h4>
             <ul className="space-y-1">
-              <li className="text-xs text-[#525252] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#d4a017]" />
+              <li className="text-xs text-n-600 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
                 Analista NIIF (estados financieros)
               </li>
-              <li className="text-xs text-[#525252] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#d4a017]" />
+              <li className="text-xs text-n-600 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
                 Director de Estrategia (KPIs, flujo)
               </li>
-              <li className="text-xs text-[#525252] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#d4a017]" />
+              <li className="text-xs text-n-600 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
                 Gobierno Corporativo (actas, notas)
               </li>
             </ul>
-            <p className="text-[10px] text-[#a3a3a3]">
+            <p className="text-2xs text-n-400">
               + 4 auditores en paralelo + Meta-auditor de calidad
             </p>
           </div>
         )}
 
         <div>
-          <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-2">
+          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
             Referencias Clave
           </h4>
           <div className="space-y-1.5">
@@ -612,15 +612,15 @@ export function AnalysisPanel({
     return (
       <div className="px-4 py-4 space-y-4">
         <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-[#0ea5e9]" />
-          <h3 className="text-sm font-medium text-[#0a0a0a]">Lo que analizaremos</h3>
+          <Info className="w-4 h-4 text-info" />
+          <h3 className="text-sm font-medium text-n-900">Lo que analizaremos</h3>
         </div>
-        <p className="text-xs text-[#525252] leading-relaxed">
+        <p className="text-xs text-n-600 leading-relaxed">
           Complete el formulario de ingreso para que nuestros agentes de IA puedan preparar un análisis personalizado.
         </p>
 
         <div className="space-y-2">
-          <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider">
+          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider">
             Capacidades habilitadas
           </h4>
           {[
@@ -630,33 +630,33 @@ export function AnalysisPanel({
             'Evaluación de nivel de riesgo',
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-2">
-              <CheckCircle2 className="w-3 h-3 text-[#22c55e] shrink-0" />
-              <span className="text-xs text-[#525252]">{item}</span>
+              <CheckCircle2 className="w-3 h-3 text-success shrink-0" />
+              <span className="text-xs text-n-600">{item}</span>
             </div>
           ))}
         </div>
 
         {activeCaseType === 'niif_report' && (
-          <div className="bg-[#f5f5f5] rounded-lg p-3">
+          <div className="bg-n-100 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider">
+              <span className="text-2xs font-medium text-n-400 uppercase tracking-wider">
                 Agentes estimados
               </span>
             </div>
-            <p className="text-xs text-[#525252]">3 agentes secuenciales + 4 auditores paralelos</p>
-            <p className="text-[10px] text-[#a3a3a3] mt-1">Tiempo estimado: 2-4 minutos</p>
+            <p className="text-xs text-n-600">3 agentes secuenciales + 4 auditores paralelos</p>
+            <p className="text-2xs text-n-400 mt-1">Tiempo estimado: 2-4 minutos</p>
           </div>
         )}
 
         {activeCaseType && activeCaseType !== 'niif_report' && (
-          <div className="bg-[#f5f5f5] rounded-lg p-3">
+          <div className="bg-n-100 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider">
+              <span className="text-2xs font-medium text-n-400 uppercase tracking-wider">
                 Agentes estimados
               </span>
             </div>
-            <p className="text-xs text-[#525252]">1-3 agentes segun complejidad (T1/T2/T3)</p>
-            <p className="text-[10px] text-[#a3a3a3] mt-1">Tiempo estimado: 10-30 segundos</p>
+            <p className="text-xs text-n-600">1-3 agentes segun complejidad (T1/T2/T3)</p>
+            <p className="text-2xs text-n-400 mt-1">Tiempo estimado: 10-30 segundos</p>
           </div>
         )}
       </div>
@@ -668,17 +668,17 @@ export function AnalysisPanel({
       <div className="px-4 py-4 space-y-4">
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider">
+            <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider">
               Actividad del Agente
             </h4>
           </div>
 
-          <div className="bg-[#fafafa] border border-[#e5e5e5] rounded-lg p-3 space-y-3">
+          <div className="bg-n-50 border border-n-200 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2">
-              <Loader2 className="w-3.5 h-3.5 text-[#d4a017] animate-spin" />
-              <span className="text-xs text-[#525252]">Procesando consulta...</span>
+              <Loader2 className="w-3.5 h-3.5 text-gold-500 animate-spin" />
+              <span className="text-xs text-n-600">Procesando consulta...</span>
             </div>
-            <p className="text-[10px] text-[#a3a3a3]">
+            <p className="text-2xs text-n-400">
               Consultando base normativa y evaluando complejidad del caso.
             </p>
           </div>
@@ -693,15 +693,15 @@ export function AnalysisPanel({
           <div className="space-y-2">
             <div className="flex items-start gap-2">
               <DSBadge variant="tier" tier="T1" label="T1" size="sm" />
-              <span className="text-[10px] text-[#525252]">Respuesta directa, 1 llamada LLM</span>
+              <span className="text-2xs text-n-600">Respuesta directa, 1 llamada LLM</span>
             </div>
             <div className="flex items-start gap-2">
               <DSBadge variant="tier" tier="T2" label="T2" size="sm" />
-              <span className="text-[10px] text-[#525252]">Especialista único con herramientas</span>
+              <span className="text-2xs text-n-600">Especialista único con herramientas</span>
             </div>
             <div className="flex items-start gap-2">
               <DSBadge variant="tier" tier="T3" label="T3" size="sm" />
-              <span className="text-[10px] text-[#525252]">Multi-expertos en paralelo + síntesis</span>
+              <span className="text-2xs text-n-600">Multi-expertos en paralelo + síntesis</span>
             </div>
           </div>
         </CollapsibleSection>
@@ -709,7 +709,7 @@ export function AnalysisPanel({
         {/* Show references if case type selected */}
         {activeCaseType && (
           <div>
-            <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-2">
+            <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
               Referencias del Caso
             </h4>
             <div className="space-y-1.5">
@@ -751,15 +751,15 @@ export function AnalysisPanel({
                 >
                   <ul className="space-y-1">
                     {riskFactors.map((f, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-xs text-[#525252]">
+                      <li key={i} className="flex items-start gap-1.5 text-xs text-n-600">
                         <span
                           className={cn(
                             'mt-1 w-1.5 h-1.5 rounded-full shrink-0',
                             f.points >= 3
-                              ? 'bg-[#ef4444]'
+                              ? 'bg-danger'
                               : f.points >= 2
-                                ? 'bg-[#f59e0b]'
-                                : 'bg-[#22c55e]',
+                                ? 'bg-warning'
+                                : 'bg-success',
                           )}
                         />
                         {f.description}
@@ -805,12 +805,12 @@ export function AnalysisPanel({
               {uploadedDocuments.map((doc, i) => (
                 <div
                   key={`${doc.filename}-${i}`}
-                  className="flex items-center gap-2 p-2 bg-[#fafafa] rounded border border-[#e5e5e5]"
+                  className="flex items-center gap-2 p-2 bg-n-50 rounded border border-n-200"
                 >
                   <DocStatusIcon status={doc.chunks > 0 ? 'ready' : 'processing'} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-[#0a0a0a] truncate">{doc.filename}</p>
-                    <p className="text-[10px] text-[#a3a3a3]">
+                    <p className="text-xs text-n-900 truncate">{doc.filename}</p>
+                    <p className="text-2xs text-n-400">
                       {(doc.size / 1024).toFixed(0)} KB
                     </p>
                   </div>
@@ -818,7 +818,7 @@ export function AnalysisPanel({
                     <button
                       type="button"
                       onClick={() => onRemoveDocument(doc.filename)}
-                      className="p-1 text-[#a3a3a3] hover:text-[#ef4444] transition-colors"
+                      className="p-1 text-n-400 hover:text-danger transition-colors"
                       aria-label={`Eliminar ${doc.filename}`}
                     >
                       <X className="w-3 h-3" />
@@ -837,7 +837,7 @@ export function AnalysisPanel({
     return (
       <div className="px-4 py-4 space-y-5">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-[#0a0a0a]">Pipeline NIIF</h3>
+          <h3 className="text-sm font-medium text-n-900">Pipeline NIIF</h3>
           {pipelineState.startedAt && (
             <ElapsedTimer startedAt={pipelineState.startedAt} />
           )}
@@ -847,12 +847,12 @@ export function AnalysisPanel({
         <div className="flex items-center gap-3">
           <ProgressRing progress={pipelineProgress} size={48} strokeWidth={4} />
           <div>
-            <p className="text-xs font-medium text-[#0a0a0a]">
+            <p className="text-xs font-medium text-n-900">
               {pipelineState.mode === 'running' && 'Generando reporte...'}
               {pipelineState.mode === 'auditing' && 'Auditando...'}
               {pipelineState.mode === 'quality' && 'Evaluación de calidad...'}
             </p>
-            <p className="text-[10px] text-[#a3a3a3]">
+            <p className="text-2xs text-n-400">
               {pipelineState.mode === 'running' && `Etapa ${pipelineState.currentStage + 1} de ${pipelineState.stageLabels.length}`}
               {pipelineState.mode === 'auditing' && `${pipelineState.auditorsComplete.length}/4 auditores completos`}
               {pipelineState.mode === 'quality' && 'Meta-auditor evaluando calidad'}
@@ -862,7 +862,7 @@ export function AnalysisPanel({
 
         {/* Agent stages */}
         <div>
-          <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-2">
+          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
             Agentes de Reporte
           </h4>
           <StageDots
@@ -876,7 +876,7 @@ export function AnalysisPanel({
         {/* Auditor stages */}
         {(pipelineState.mode === 'auditing' || pipelineState.mode === 'quality') && (
           <div>
-            <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-2">
+            <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
               Auditores
             </h4>
             <AuditorDots
@@ -888,9 +888,9 @@ export function AnalysisPanel({
 
         {/* Meta-auditor indicator */}
         {pipelineState.mode === 'quality' && (
-          <div className="flex items-center gap-2 p-2 bg-[#FEF9EC] border border-[#FBE08A] rounded-lg">
-            <Loader2 className="w-3.5 h-3.5 text-[#d4a017] animate-spin" />
-            <span className="text-xs text-[#A87C10]">Meta-auditor de calidad evaluando...</span>
+          <div className="flex items-center gap-2 p-2 bg-gold-300/10 border border-gold-400/40 rounded-lg">
+            <Loader2 className="w-3.5 h-3.5 text-gold-500 animate-spin" />
+            <span className="text-xs text-gold-700">Meta-auditor de calidad evaluando...</span>
           </div>
         )}
       </div>
@@ -913,7 +913,7 @@ export function AnalysisPanel({
                 score={intelligencePanelData.qualityScore ?? 0}
                 size="md"
               />
-              <p className="text-[10px] text-[#a3a3a3] text-center">
+              <p className="text-2xs text-n-400 text-center">
                 Calificación general basada en 12 dimensiones de calidad
               </p>
 
@@ -928,13 +928,13 @@ export function AnalysisPanel({
                   <div className="space-y-2">
                     {intelligencePanelData.qualityDimensions.map((dim: QualityDimension, i: number) => (
                       <div key={i} className="flex items-center justify-between">
-                        <span className="text-xs text-[#525252] flex-1 truncate">{dim.name}</span>
-                        <span className="text-[10px] font-[family-name:var(--font-geist-mono)] text-[#a3a3a3]">
+                        <span className="text-xs text-n-600 flex-1 truncate">{dim.name}</span>
+                        <span className="text-2xs font-mono text-n-400">
                           {dim.score}/{dim.maxScore}
                         </span>
-                        <div className="w-12 h-1.5 rounded-full bg-[#f5f5f5] ml-2 overflow-hidden">
+                        <div className="w-12 h-1.5 rounded-full bg-n-100 ml-2 overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-[#d4a017]"
+                            className="h-full rounded-full bg-gold-500"
                             style={{ width: `${(dim.score / dim.maxScore) * 100}%` }}
                           />
                         </div>
@@ -1032,12 +1032,12 @@ export function AnalysisPanel({
               {uploadedDocuments.map((doc, i) => (
                 <div
                   key={`${doc.filename}-${i}`}
-                  className="flex items-center gap-2 p-2 bg-[#fafafa] rounded border border-[#e5e5e5]"
+                  className="flex items-center gap-2 p-2 bg-n-50 rounded border border-n-200"
                 >
                   <DocStatusIcon status={doc.chunks > 0 ? 'ready' : 'processing'} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-[#0a0a0a] truncate">{doc.filename}</p>
-                    <p className="text-[10px] text-[#a3a3a3]">
+                    <p className="text-xs text-n-900 truncate">{doc.filename}</p>
+                    <p className="text-2xs text-n-400">
                       {(doc.size / 1024).toFixed(0)} KB
                     </p>
                   </div>
@@ -1055,7 +1055,7 @@ export function AnalysisPanel({
   function renderFooter() {
     if (currentState === 'pipeline_complete') {
       return (
-        <div className="px-4 py-3 border-t border-[#e5e5e5] shrink-0 space-y-2">
+        <div className="px-4 py-3 border-t border-n-200 shrink-0 space-y-2">
           <Button
             variant="accent"
             size="sm"
@@ -1087,7 +1087,7 @@ export function AnalysisPanel({
     }
 
     return (
-      <div className="px-4 py-3 border-t border-[#e5e5e5] shrink-0 space-y-2">
+      <div className="px-4 py-3 border-t border-n-200 shrink-0 space-y-2">
         {onExportPDF && (
           <Button
             onClick={onExportPDF}
@@ -1104,7 +1104,7 @@ export function AnalysisPanel({
             onClick={onClearConversation}
             variant="ghost"
             size="sm"
-            className="w-full justify-center gap-1.5 text-[#ef4444] hover:text-[#ef4444] hover:bg-[#fef2f2]"
+            className="w-full justify-center gap-1.5 text-danger hover:text-danger hover:bg-danger/10"
           >
             Limpiar conversación
           </Button>
@@ -1145,23 +1145,23 @@ export function AnalysisPanel({
             className={cn(
               'fixed right-0 top-0 bottom-0 w-full sm:w-[360px] z-50',
               'lg:static lg:w-[340px] lg:z-auto lg:shrink-0',
-              'bg-white border-l border-[#e5e5e5] flex flex-col overflow-hidden',
+              'bg-n-0 border-l border-n-200 flex flex-col overflow-hidden',
             )}
             role="complementary"
             aria-label="Panel de Inteligencia"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e5e5] shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-n-200 shrink-0">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-[#d4a017]" />
-                <h2 className="text-sm font-medium text-[#0a0a0a] uppercase tracking-wide">
+                <Sparkles className="w-3.5 h-3.5 text-gold-500" />
+                <h2 className="text-sm font-medium text-n-900 uppercase tracking-wide">
                   Inteligencia
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={onToggle}
-                className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+                className="p-1.5 rounded-sm text-n-400 hover:text-n-900 hover:bg-n-50 transition-colors"
                 aria-label="Cerrar panel"
               >
                 <X className="w-4 h-4" />

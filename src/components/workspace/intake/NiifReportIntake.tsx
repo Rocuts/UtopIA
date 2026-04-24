@@ -163,7 +163,7 @@ function ConfidenceDot({ level }: { level: FieldConfidence }) {
   if (level === 'high') {
     return (
       <span
-        className="inline-block w-2 h-2 rounded-full bg-[#22C55E] shrink-0"
+        className="inline-block w-2 h-2 rounded-full bg-success shrink-0"
         title="Auto-detectado (alta confianza)"
       />
     );
@@ -171,7 +171,7 @@ function ConfidenceDot({ level }: { level: FieldConfidence }) {
   if (level === 'medium') {
     return (
       <span
-        className="inline-block w-2 h-2 rounded-full bg-[#F59E0B] shrink-0"
+        className="inline-block w-2 h-2 rounded-full bg-warning shrink-0"
         title="Inferido (confianza media)"
       />
     );
@@ -206,17 +206,17 @@ function ExtractionProgress({
           animate={{ rotate: 360 }}
           transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
         >
-          <Sparkles className="w-5 h-5 text-[#D4A017]" />
+          <Sparkles className="w-5 h-5 text-gold-500" />
         </motion.div>
         <div>
-          <div className="text-sm font-medium text-[#0a0a0a]">{currentStage.label}...</div>
-          <div className="text-xs text-[#737373]">{fileName}</div>
+          <div className="text-sm font-medium text-n-900">{currentStage.label}...</div>
+          <div className="text-xs text-n-500">{fileName}</div>
         </div>
       </div>
 
-      <div className="w-full h-2 bg-[#f5f5f5] rounded-full overflow-hidden">
+      <div className="w-full h-2 bg-n-100 rounded-full overflow-hidden">
         <motion.div
-          className="h-full bg-[#D4A017] rounded-full"
+          className="h-full bg-gold-500 rounded-full"
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.3 }}
         />
@@ -236,10 +236,10 @@ function ExtractionProgress({
               className={cn(
                 'flex items-center gap-1.5 text-xs px-2 py-1 rounded',
                 reached
-                  ? 'text-[#22C55E]'
+                  ? 'text-success'
                   : active
-                    ? 'text-[#D4A017]'
-                    : 'text-[#a3a3a3]',
+                    ? 'text-gold-500'
+                    : 'text-n-400',
               )}
             >
               {reached ? (
@@ -248,10 +248,10 @@ function ExtractionProgress({
                 <motion.div
                   animate={{ opacity: [0.4, 1, 0.4] }}
                   transition={{ duration: 1.2, repeat: Infinity }}
-                  className="w-3 h-3 rounded-full bg-[#D4A017]"
+                  className="w-3 h-3 rounded-full bg-gold-500"
                 />
               ) : (
-                <div className="w-3 h-3 rounded-full border border-[#e5e5e5]" />
+                <div className="w-3 h-3 rounded-full border border-n-200" />
               )}
               {stage.label}
             </motion.div>
@@ -278,32 +278,32 @@ function ValidationCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3"
+      className="rounded-lg border border-n-200 bg-n-50 p-4 space-y-3"
     >
       <div className="flex items-center gap-2">
-        <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-        <span className="text-sm font-semibold text-[#0a0a0a]">Balance de Prueba Detectado</span>
+        <CheckCircle className="w-4 h-4 text-success" />
+        <span className="text-sm font-semibold text-n-900">Balance de Prueba Detectado</span>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="text-center">
-          <div className="text-lg font-bold text-[#0a0a0a]">{accountsDetected}</div>
-          <div className="text-[10px] text-[#737373]">Cuentas detectadas</div>
+          <div className="text-lg font-bold text-n-900">{accountsDetected}</div>
+          <div className="text-2xs text-n-500">Cuentas detectadas</div>
         </div>
         <div className="text-center">
-          <div className="text-lg font-bold text-[#0a0a0a]">{pucClasses}</div>
-          <div className="text-[10px] text-[#737373]">Clases PUC</div>
+          <div className="text-lg font-bold text-n-900">{pucClasses}</div>
+          <div className="text-2xs text-n-500">Clases PUC</div>
         </div>
         <div className="text-center">
           <div
             className={cn(
               'text-lg font-bold',
-              equationValid ? 'text-[#22C55E]' : 'text-[#EF4444]',
+              equationValid ? 'text-success' : 'text-danger',
             )}
           >
             {equationValid ? 'OK' : 'ERROR'}
           </div>
-          <div className="text-[10px] text-[#737373]">Ecuación Patrimonial</div>
+          <div className="text-2xs text-n-500">Ecuación Patrimonial</div>
         </div>
       </div>
     </motion.div>
@@ -323,13 +323,13 @@ function DetectionSummary({
   const total = ALL_TRACKED_FIELDS.length;
 
   return (
-    <div className="rounded-lg border border-[#e5e5e5] bg-[#FEF9EC] px-4 py-3 flex items-center gap-3">
-      <Sparkles className="w-4 h-4 text-[#D4A017] shrink-0" />
+    <div className="rounded-lg border border-n-200 bg-gold-500/10 px-4 py-3 flex items-center gap-3">
+      <Sparkles className="w-4 h-4 text-gold-500 shrink-0" />
       <div>
-        <span className="text-sm font-semibold text-[#0a0a0a]">
+        <span className="text-sm font-semibold text-n-900">
           {detected} de {total} campos auto-detectados
         </span>
-        <p className="text-xs text-[#737373]">
+        <p className="text-xs text-n-500">
           Revise y complete los campos faltantes marcados en rojo.
         </p>
       </div>
@@ -492,9 +492,9 @@ export function NiifReportIntake() {
     (field: string, hasValue: boolean): string => {
       const conf = getFieldConfidence(field);
       if (conf === 'none' && !hasValue && extractionState.status === 'done' && !skippedUpload) {
-        return 'border-[#EF4444] focus:border-[#EF4444] focus:ring-[#EF4444]';
+        return 'border-danger focus:border-danger focus:ring-danger';
       }
-      return 'border-[#e5e5e5] focus:border-[#D4A017] focus:ring-[#D4A017]';
+      return 'border-n-200 focus:border-gold-500 focus:ring-gold-500';
     },
     [getFieldConfidence, extractionState.status, skippedUpload],
   );
@@ -505,12 +505,12 @@ export function NiifReportIntake() {
     <div className="space-y-5">
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
-          <Upload className="w-5 h-5 text-[#D4A017]" />
-          <h3 className="text-base font-semibold text-[#0a0a0a]">
+          <Upload className="w-5 h-5 text-gold-500" />
+          <h3 className="text-base font-semibold text-n-900">
             Cargue su balance de prueba o estados financieros
           </h3>
         </div>
-        <p className="text-sm text-[#737373]">
+        <p className="text-sm text-n-500">
           1+1 extrae automáticamente los datos de su archivo
         </p>
       </div>
@@ -530,18 +530,18 @@ export function NiifReportIntake() {
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-[#EF4444] bg-[#FEF2F2] px-4 py-3 flex items-center gap-2"
+              className="rounded-lg border border-danger bg-danger/10 px-4 py-3 flex items-center gap-2"
             >
-              <AlertTriangle className="w-4 h-4 text-[#EF4444] shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
               <div>
-                <span className="text-sm font-medium text-[#DC2626]">Error al procesar</span>
-                <p className="text-xs text-[#737373]">{extractionState.error}</p>
+                <span className="text-sm font-medium text-danger">Error al procesar</span>
+                <p className="text-xs text-n-500">{extractionState.error}</p>
               </div>
             </motion.div>
           )}
         </>
       ) : (
-        <div className="min-h-[260px] rounded-lg border-2 border-dashed border-[#D4A017] bg-[#FEF9EC]/30 p-8 flex items-center justify-center">
+        <div className="min-h-[260px] rounded-lg border-2 border-dashed border-gold-500 bg-gold-500/5 p-8 flex items-center justify-center">
           <ExtractionProgress
             progress={extractionState.progress}
             status={extractionState.status}
@@ -568,7 +568,7 @@ export function NiifReportIntake() {
           <button
             type="button"
             onClick={handleSkipUpload}
-            className="inline-flex items-center gap-1.5 text-xs text-[#737373] hover:text-[#525252] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-n-500 hover:text-n-600 transition-colors"
           >
             <SkipForward className="w-3.5 h-3.5" />
             Llenar manualmente
@@ -592,16 +592,16 @@ export function NiifReportIntake() {
       {/* Company data section */}
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Building2 className="w-4 h-4 text-[#D4A017]" />
-          <h3 className="text-sm font-semibold text-[#0a0a0a]">Datos de la Empresa</h3>
+          <Building2 className="w-4 h-4 text-gold-500" />
+          <h3 className="text-sm font-semibold text-n-900">Datos de la Empresa</h3>
         </div>
-        <p className="text-xs text-[#737373]">Información de la entidad reportante.</p>
+        <p className="text-xs text-n-500">Información de la entidad reportante.</p>
       </div>
 
       {/* Razon Social -- full width */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
-          Razón Social <span className="text-[#DC2626]">*</span>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          Razón Social <span className="text-danger">*</span>
           <ConfidenceDot level={getFieldConfidence('name')} />
         </label>
         <input
@@ -610,7 +610,7 @@ export function NiifReportIntake() {
           onChange={(e) => updateCompany('name', e.target.value)}
           placeholder="Ej: Inversiones Colombia S.A.S."
           className={cn(
-            'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] focus:outline-none focus:ring-1',
+            'w-full px-3 py-2 rounded-lg border text-sm text-n-900 focus:outline-none focus:ring-1',
             fieldBorderClass('name', !!values.company.name),
           )}
         />
@@ -619,8 +619,8 @@ export function NiifReportIntake() {
       {/* 2-column grid: NIT + Sector */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
-            NIT <span className="text-[#DC2626]">*</span>
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+            NIT <span className="text-danger">*</span>
             <ConfidenceDot level={getFieldConfidence('nit')} />
           </label>
           <input
@@ -630,14 +630,14 @@ export function NiifReportIntake() {
             placeholder="XXX.XXX.XXX-X"
             maxLength={13}
             className={cn(
-              'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] font-mono focus:outline-none focus:ring-1',
+              'w-full px-3 py-2 rounded-lg border text-sm text-n-900 font-mono focus:outline-none focus:ring-1',
               fieldBorderClass('nit', !!values.company.nit),
             )}
           />
         </div>
 
         <div className="relative">
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
             Sector
             <ConfidenceDot level={getFieldConfidence('sector')} />
           </label>
@@ -645,16 +645,16 @@ export function NiifReportIntake() {
             type="button"
             onClick={() => setSectorOpen(!sectorOpen)}
             className={cn(
-              'w-full px-3 py-2 rounded-lg border text-sm text-left bg-white focus:outline-none focus:ring-1',
+              'w-full px-3 py-2 rounded-lg border text-sm text-left bg-n-0 focus:outline-none focus:ring-1',
               fieldBorderClass('sector', !!values.company.sector),
             )}
           >
-            <span className={values.company.sector ? 'text-[#0a0a0a]' : 'text-[#a3a3a3]'}>
+            <span className={values.company.sector ? 'text-n-900' : 'text-n-400'}>
               {values.company.sector || 'Seleccionar sector'}
             </span>
           </button>
           {sectorOpen && (
-            <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-[#e5e5e5] rounded-lg shadow-lg max-h-48 overflow-y-auto styled-scrollbar">
+            <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-n-0 border border-n-200 rounded-lg shadow-lg max-h-48 overflow-y-auto styled-scrollbar">
               {SECTORS.map((sector) => (
                 <button
                   key={sector}
@@ -664,10 +664,10 @@ export function NiifReportIntake() {
                     setSectorOpen(false);
                   }}
                   className={cn(
-                    'w-full text-left px-3 py-1.5 text-xs hover:bg-[#FEF9EC] transition-colors',
+                    'w-full text-left px-3 py-1.5 text-xs hover:bg-gold-500/10 transition-colors',
                     values.company.sector === sector
-                      ? 'bg-[#FEF9EC] text-[#D4A017] font-medium'
-                      : 'text-[#525252]',
+                      ? 'bg-gold-500/10 text-gold-500 font-medium'
+                      : 'text-n-600',
                   )}
                 >
                   {sector}
@@ -680,7 +680,7 @@ export function NiifReportIntake() {
 
       {/* Entity Type */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-2">
+        <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-2">
           Tipo de Sociedad
           <ConfidenceDot level={getFieldConfidence('entityType')} />
         </label>
@@ -695,8 +695,8 @@ export function NiifReportIntake() {
                 className={cn(
                   'px-3.5 py-1.5 rounded-full text-xs font-medium border transition-colors',
                   active
-                    ? 'bg-[#D4A017] text-white border-[#D4A017]'
-                    : 'bg-white text-[#525252] border-[#e5e5e5] hover:border-[#D4A017]',
+                    ? 'bg-n-900 text-n-0 border-n-900'
+                    : 'bg-n-0 text-n-600 border-n-200 hover:border-n-400',
                 )}
               >
                 {et.label}
@@ -709,7 +709,7 @@ export function NiifReportIntake() {
       {/* 2-column: city + representante legal */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
             Ciudad
             <ConfidenceDot level={getFieldConfidence('city')} />
           </label>
@@ -719,13 +719,13 @@ export function NiifReportIntake() {
             onChange={(e) => updateCompany('city', e.target.value)}
             placeholder="Ej: Bogotá D.C."
             className={cn(
-              'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] focus:outline-none focus:ring-1',
+              'w-full px-3 py-2 rounded-lg border text-sm text-n-900 focus:outline-none focus:ring-1',
               fieldBorderClass('city', !!values.company.city),
             )}
           />
         </div>
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
             Representante Legal
             <ConfidenceDot level={getFieldConfidence('legalRepresentative')} />
           </label>
@@ -735,7 +735,7 @@ export function NiifReportIntake() {
             onChange={(e) => updateCompany('legalRepresentative', e.target.value)}
             placeholder="Nombre completo"
             className={cn(
-              'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] focus:outline-none focus:ring-1',
+              'w-full px-3 py-2 rounded-lg border text-sm text-n-900 focus:outline-none focus:ring-1',
               fieldBorderClass('legalRepresentative', !!values.company.legalRepresentative),
             )}
           />
@@ -745,7 +745,7 @@ export function NiifReportIntake() {
       {/* Contador + Revisor Fiscal */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
             Contador
             <ConfidenceDot level={getFieldConfidence('accountant')} />
           </label>
@@ -755,19 +755,19 @@ export function NiifReportIntake() {
             onChange={(e) => updateCompany('accountant', e.target.value)}
             placeholder="Nombre completo"
             className={cn(
-              'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] focus:outline-none focus:ring-1',
+              'w-full px-3 py-2 rounded-lg border text-sm text-n-900 focus:outline-none focus:ring-1',
               fieldBorderClass('accountant', !!values.company.accountant),
             )}
           />
         </div>
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
             Revisor Fiscal{' '}
-            <span className="text-[#a3a3a3] font-normal">-- opcional</span>
+            <span className="text-n-400 font-normal">-- opcional</span>
             <ConfidenceDot level={getFieldConfidence('fiscalAuditor')} />
             <span className="inline-block relative group">
-              <Info className="w-3 h-3 text-[#a3a3a3] inline" />
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#0a0a0a] text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <Info className="w-3 h-3 text-n-400 inline" />
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-n-900 text-n-0 text-2xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 Obligatorio para sociedades con activos brutos &gt; 5.000 SMLMV o ingresos &gt;
                 3.000 SMLMV (Art. 203 Cod. Comercio)
               </span>
@@ -779,7 +779,7 @@ export function NiifReportIntake() {
             onChange={(e) => updateCompany('fiscalAuditor', e.target.value)}
             placeholder="Nombre completo"
             className={cn(
-              'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] focus:outline-none focus:ring-1',
+              'w-full px-3 py-2 rounded-lg border text-sm text-n-900 focus:outline-none focus:ring-1',
               fieldBorderClass('fiscalAuditor', !!values.company.fiscalAuditor),
             )}
           />
@@ -787,21 +787,21 @@ export function NiifReportIntake() {
       </div>
 
       {/* Period and NIIF group -- merged from old Step 2 */}
-      <div className="border-t border-[#e5e5e5] pt-5 mt-2">
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Periodo y Estandares</h3>
-        <p className="text-xs text-[#737373] mb-4">Periodo fiscal y marco normativo aplicable.</p>
+      <div className="border-t border-n-200 pt-5 mt-2">
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Periodo y Estandares</h3>
+        <p className="text-xs text-n-500 mb-4">Periodo fiscal y marco normativo aplicable.</p>
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
-              Periodo Fiscal <span className="text-[#DC2626]">*</span>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+              Periodo Fiscal <span className="text-danger">*</span>
               <ConfidenceDot level={getFieldConfidence('fiscalPeriod')} />
             </label>
             <select
               value={values.fiscalPeriod}
               onChange={(e) => updateField('fiscalPeriod', e.target.value)}
               className={cn(
-                'w-full px-3 py-2 rounded-lg border text-sm text-[#0a0a0a] bg-white focus:outline-none focus:ring-1',
+                'w-full px-3 py-2 rounded-lg border text-sm text-n-900 bg-n-0 focus:outline-none focus:ring-1',
                 fieldBorderClass('fiscalPeriod', !!values.fiscalPeriod),
               )}
             >
@@ -814,8 +814,8 @@ export function NiifReportIntake() {
             </select>
           </div>
           <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-1.5">
-              Periodo Comparativo <span className="text-[#a3a3a3] font-normal">-- opcional</span>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+              Periodo Comparativo <span className="text-n-400 font-normal">-- opcional</span>
             </label>
             <select
               value={values.comparativePeriod ?? ''}
@@ -826,7 +826,7 @@ export function NiifReportIntake() {
                   toggleOutput('comparativeAnalysis');
                 }
               }}
-              className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] bg-white focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+              className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 bg-n-0 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
             >
               <option value="">Sin comparativo</option>
               {years.map((y) => (
@@ -840,8 +840,8 @@ export function NiifReportIntake() {
 
         {/* Grupo NIIF */}
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] mb-2">
-            Grupo NIIF <span className="text-[#DC2626]">*</span>
+          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-2">
+            Grupo NIIF <span className="text-danger">*</span>
             <ConfidenceDot level={getFieldConfidence('niifGroup')} />
           </label>
           <div className="space-y-2">
@@ -855,19 +855,19 @@ export function NiifReportIntake() {
                   className={cn(
                     'w-full text-left p-4 rounded-lg border-l-4 transition-all',
                     selected
-                      ? 'border-l-[#D4A017] bg-[#FEF9EC] border border-[#D4A017]'
-                      : 'border-l-[#e5e5e5] bg-white border border-[#e5e5e5] hover:border-[#d4d4d4]',
+                      ? 'border-l-n-900 bg-n-50 border border-n-900'
+                      : 'border-l-n-200 bg-n-0 border border-n-200 hover:border-n-300',
                   )}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-[#0a0a0a]">{group.label}</span>
+                    <span className="text-sm font-semibold text-n-900">{group.label}</span>
                     {group.badge && (
-                      <span className="px-2 py-0.5 text-[10px] font-bold bg-[#D4A017] text-white rounded-full">
+                      <span className="px-2 py-0.5 text-2xs font-bold bg-n-100 text-n-700 rounded-full">
                         {group.badge}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737373] leading-relaxed">{group.description}</p>
+                  <p className="text-xs text-n-500 leading-relaxed">{group.description}</p>
                 </button>
               );
             })}
@@ -883,10 +883,10 @@ export function NiifReportIntake() {
     <div className="space-y-5">
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Settings2 className="w-4 h-4 text-[#D4A017]" />
-          <h3 className="text-sm font-semibold text-[#0a0a0a]">Configuración del Reporte</h3>
+          <Settings2 className="w-4 h-4 text-gold-500" />
+          <h3 className="text-sm font-semibold text-n-900">Configuración del Reporte</h3>
         </div>
-        <p className="text-xs text-[#737373]">
+        <p className="text-xs text-n-500">
           Seleccione los entregables que desea generar. Todos estan habilitados por defecto.
         </p>
       </div>
@@ -906,25 +906,25 @@ export function NiifReportIntake() {
               className={cn(
                 'flex items-start gap-3 p-3 rounded-lg border-2 text-left transition-all',
                 enabled
-                  ? 'border-[#D4A017] bg-[#FEF9EC]'
-                  : 'border-[#e5e5e5] bg-white',
+                  ? 'border-gold-500 bg-gold-500/10'
+                  : 'border-n-200 bg-n-0',
                 isComparative && !hasComparativePeriod && 'opacity-40 cursor-not-allowed',
-                !isComparative && !enabled && 'hover:border-[#d4d4d4]',
+                !isComparative && !enabled && 'hover:border-n-300',
               )}
             >
               <div
                 className={cn(
                   'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors',
-                  enabled ? 'bg-[#D4A017] border-[#D4A017]' : 'border-[#d4d4d4]',
+                  enabled ? 'bg-gold-500 border-gold-500' : 'border-n-300',
                 )}
               >
-                {enabled && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                {enabled && <CheckCircle className="w-3.5 h-3.5 text-n-0" />}
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-xs font-medium text-[#0a0a0a] block">{opt.label}</span>
-                <p className="text-[10px] text-[#737373] leading-relaxed">{opt.description}</p>
+                <span className="text-xs font-medium text-n-900 block">{opt.label}</span>
+                <p className="text-2xs text-n-500 leading-relaxed">{opt.description}</p>
                 {isComparative && !hasComparativePeriod && (
-                  <p className="text-[10px] text-[#D97706] mt-0.5">
+                  <p className="text-2xs text-warning mt-0.5">
                     Requiere periodo comparativo en paso 2
                   </p>
                 )}
@@ -936,16 +936,16 @@ export function NiifReportIntake() {
 
       {/* Instrucciones especiales */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5">
+        <label className="block text-xs font-medium text-n-600 mb-1.5">
           Instrucciones especiales{' '}
-          <span className="text-[#a3a3a3] font-normal">-- opcional</span>
+          <span className="text-n-400 font-normal">-- opcional</span>
         </label>
         <textarea
           value={values.specialInstructions ?? ''}
           onChange={(e) => updateField('specialInstructions', e.target.value)}
           placeholder="Ej: Enfatizar el análisis de cartera morosa, incluir simulación de provisión..."
           rows={3}
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] resize-none focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 resize-none focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
     </div>

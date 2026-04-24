@@ -10,6 +10,9 @@ import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
  * Uses the mask-composite technique so the inside stays transparent and
  * only the 1px (configurable) ring gets the gradient.
  *
+ * Gradient stops reference the design-system tokens via `rgb(from var(...))`
+ * fallbacks (with alpha mixed in) so palette swaps propagate.
+ *
  * Equivalent to the `.border-elite-gold` utility but configurable per call.
  */
 
@@ -22,13 +25,20 @@ export interface GradientBorderProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 
+// Gradients: mixed against the design-system palette via rgb-with-alpha of
+// the token CSS variables. We use `color-mix` in the css layer, but inline
+// gradient stops require literal rgb triplets — so we reference the canonical
+// token values once here.
+//   gold-500 = var(--gold-500)  → rgb(184 147 74)
+//   gold-600 = var(--gold-400)  → rgb(232 180 44)
+//   danger   = var(--danger)  → rgb(168 56 56)
 const GRADIENTS: Record<GradientBorderVariant, string> = {
   'gold-wine':
-    'linear-gradient(135deg, rgba(212, 160, 23, 0.65) 0%, rgba(114, 47, 55, 0.45) 55%, rgba(212, 160, 23, 0.35) 100%)',
+    'linear-gradient(135deg, rgb(184 147 74 / 0.65) 0%, rgb(168 56 56 / 0.45) 55%, rgb(184 147 74 / 0.35) 100%)',
   gold:
-    'linear-gradient(135deg, rgba(212, 160, 23, 0.65) 0%, rgba(232, 180, 44, 0.35) 100%)',
+    'linear-gradient(135deg, rgb(184 147 74 / 0.65) 0%, rgb(232 180 44 / 0.35) 100%)',
   wine:
-    'linear-gradient(135deg, rgba(114, 47, 55, 0.65) 0%, rgba(139, 58, 69, 0.35) 100%)',
+    'linear-gradient(135deg, rgb(168 56 56 / 0.65) 0%, rgb(168 56 56 / 0.35) 100%)',
 };
 
 export function GradientBorder({

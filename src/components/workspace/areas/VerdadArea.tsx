@@ -121,23 +121,23 @@ const DEFAULT_FINDINGS_EN: ActiveFinding[] = [
 
 const SEVERITY_COLOR: Record<FindingSeverity, { border: string; dot: string; label: string }> = {
   critical: {
-    border: 'border-l-[#EF4444]',
-    dot: '#EF4444',
+    border: 'border-l-danger',
+    dot: 'var(--danger)',
     label: 'Crítico',
   },
   high: {
-    border: 'border-l-[#C46A76]',
-    dot: '#C46A76',
+    border: 'border-l-wine-400',
+    dot: 'var(--color-wine-400)',
     label: 'Alto',
   },
   medium: {
-    border: 'border-l-[#EAB308]',
-    dot: '#EAB308',
+    border: 'border-l-gold-500',
+    dot: 'var(--gold-500)',
     label: 'Medio',
   },
   low: {
-    border: 'border-l-[#86EFAC]',
-    dot: '#86EFAC',
+    border: 'border-l-success-light',
+    dot: 'var(--color-success-light)',
     label: 'Bajo',
   },
 };
@@ -159,10 +159,10 @@ const OPINION_LABEL_EN: Record<LastAuditOpinion, string> = {
 };
 
 const OPINION_TONE: Record<LastAuditOpinion, { bg: string; text: string }> = {
-  favorable: { bg: 'rgba(34,197,94,0.14)', text: '#86EFAC' },
-  con_salvedades: { bg: 'rgba(234,179,8,0.14)', text: '#EAB308' },
-  desfavorable: { bg: 'rgba(239,68,68,0.14)', text: '#FCA5A5' },
-  abstension: { bg: 'rgba(114,47,55,0.18)', text: '#C46A76' },
+  favorable: { bg: 'rgba(34,197,94,0.14)', text: 'var(--color-success-light)' },
+  con_salvedades: { bg: 'rgba(234,179,8,0.14)', text: 'var(--gold-500)' },
+  desfavorable: { bg: 'rgba(239,68,68,0.14)', text: 'var(--color-danger-light)' },
+  abstension: { bg: 'rgba(114,47,55,0.18)', text: 'var(--color-wine-400)' },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -170,28 +170,28 @@ const OPINION_TONE: Record<LastAuditOpinion, { bg: string; text: string }> = {
 function scoreAccent(score: number): { ring: string; text: string; glow: string } {
   if (score >= 90) {
     return {
-      ring: '#22C55E',
-      text: '#86EFAC',
+      ring: 'var(--success)',
+      text: 'var(--color-success-light)',
       glow: '0 0 60px rgba(34,197,94,0.25)',
     };
   }
   if (score >= 75) {
     return {
-      ring: '#D4A017',
-      text: '#E8B42C',
-      glow: '0 0 60px rgba(212,160,23,0.28)',
+      ring: 'var(--gold-500)',
+      text: 'var(--gold-400)',
+      glow: '0 0 60px rgb(var(--color-gold-500-rgb) / 0.28)',
     };
   }
   if (score >= 60) {
     return {
-      ring: '#EAB308',
-      text: '#EAB308',
+      ring: 'var(--gold-500)',
+      text: 'var(--gold-500)',
       glow: '0 0 60px rgba(234,179,8,0.28)',
     };
   }
   return {
-    ring: '#722F37',
-    text: '#C46A76',
+    ring: 'var(--color-wine-700)',
+    text: 'var(--color-wine-400)',
     glow: '0 0 60px rgba(114,47,55,0.35)',
   };
 }
@@ -234,7 +234,7 @@ function ScoreArc({ score, size = 200, stroke = 14, label, sublabel }: ScoreArcP
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgba(212,160,23,0.10)"
+          stroke="rgb(var(--color-gold-500-rgb) / 0.10)"
           strokeWidth={stroke}
           strokeDasharray={`${arcLength} ${circumference}`}
           strokeLinecap="round"
@@ -261,7 +261,7 @@ function ScoreArc({ score, size = 200, stroke = 14, label, sublabel }: ScoreArcP
         >
           {safeScore}
         </span>
-        <span className="text-[11px] uppercase tracking-[0.22em] text-[#A8A8A8]">
+        <span className="text-xs uppercase tracking-eyebrow text-n-500">
           {sublabel ?? '/ 100'}
         </span>
       </div>
@@ -283,20 +283,20 @@ function BreakdownBar({ label, value, weight, color }: BreakdownBarProps) {
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between text-[12px]">
-        <span className="text-[#D4D4D4] font-medium tracking-wide">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-n-300 font-medium tracking-wide">
           {label}
           {typeof weight === 'number' && (
-            <span className="text-[#A8A8A8] ml-2 font-normal">
+            <span className="text-n-500 ml-2 font-normal">
               ({Math.round(weight * 100)}%)
             </span>
           )}
         </span>
-        <span className="tabular-nums text-[#F5F5F5] font-medium">
+        <span className="tabular-nums text-n-100 font-medium">
           {Math.round(pct)}/100
         </span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-[rgba(212,160,23,0.08)] overflow-hidden">
+      <div className="h-1.5 w-full rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.08)] overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
@@ -350,7 +350,7 @@ export function VerdadArea({
       data-theme="elite"
       className={cn(
         'relative flex flex-col gap-8',
-        'text-[#F5F5F5]',
+        'text-n-100',
         'animate-elite-fade',
         className,
       )}
@@ -369,8 +369,8 @@ export function VerdadArea({
 
           <p
             className={cn(
-              'font-serif-elite font-normal text-[#D4D4D4]',
-              'text-[18px] md:text-[20px] leading-[1.5]',
+              'font-serif-elite font-medium tracking-tight text-n-300',
+              'text-lg md:text-xl leading-relaxed',
               'max-w-3xl',
             )}
           >
@@ -378,7 +378,7 @@ export function VerdadArea({
           </p>
 
           {verdad.tagline && (
-            <p className="text-[13px] text-[#A8A8A8] tracking-wide max-w-2xl -mt-2">
+            <p className="text-sm text-n-500 tracking-wide max-w-2xl -mt-2">
               {verdad.tagline}
             </p>
           )}
@@ -398,11 +398,11 @@ export function VerdadArea({
               sublabel={language === 'es' ? '/ 100' : '/ 100'}
             />
             <div className="text-center">
-              <p className="uppercase tracking-[0.22em] text-[11px] text-[#A8A8A8] font-medium">
+              <p className="uppercase tracking-eyebrow text-xs text-n-500 font-medium">
                 {verdad.kpiPrimary}
               </p>
               <div
-                className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-medium tracking-wide"
+                className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium tracking-wide"
                 style={{ backgroundColor: opinionTone.bg, color: opinionTone.text }}
               >
                 <BadgeCheck className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
@@ -414,12 +414,12 @@ export function VerdadArea({
           {/* Breakdown bars */}
           <div className="flex flex-col gap-5">
             <div>
-              <h3 className="font-serif-elite font-normal text-[22px] text-[#F5F5F5] mb-1.5 leading-tight">
+              <h3 className="font-serif-elite text-xl text-n-100 mb-1.5 leading-tight tracking-tight font-medium">
                 {language === 'es'
                   ? 'Desglose ponderado del score'
                   : 'Weighted score breakdown'}
               </h3>
-              <p className="text-[13px] text-[#A8A8A8] font-light">
+              <p className="text-sm text-n-500 font-light">
                 {language === 'es'
                   ? 'Consolidación de cuatro dimensiones regulatorias. Ponderaciones alineadas con el Audit Pipeline.'
                   : 'Four regulatory dimensions consolidated. Weights aligned with the Audit Pipeline.'}
@@ -431,19 +431,19 @@ export function VerdadArea({
                 label="NIIF"
                 value={breakdown.niif.value}
                 weight={breakdown.niif.weight}
-                color="#D4A017"
+                color="var(--gold-500)"
               />
               <BreakdownBar
                 label={language === 'es' ? 'Tributario' : 'Tax'}
                 value={breakdown.tax.value}
                 weight={breakdown.tax.weight}
-                color="#E8B42C"
+                color="var(--gold-400)"
               />
               <BreakdownBar
                 label={language === 'es' ? 'Auditoría' : 'Audit'}
                 value={breakdown.audit.value}
                 weight={breakdown.audit.weight}
-                color="#C46A76"
+                color="var(--color-wine-400)"
               />
               <BreakdownBar
                 label="Legal"
@@ -462,20 +462,20 @@ export function VerdadArea({
           <EliteCard.Header className="flex items-center justify-between">
             <span className="flex items-center gap-2">
               <AlertCircle
-                className="w-4 h-4 text-[#C46A76]"
+                className="w-4 h-4 text-area-escudo"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="font-serif-elite text-[18px]">
+              <span className="font-serif-elite text-lg tracking-tight">
                 {language === 'es' ? 'Alertas activas' : 'Active alerts'}
               </span>
             </span>
             <span
-              className="text-[11px] uppercase tracking-[0.2em] font-medium px-2.5 py-1 rounded-full"
+              className="text-xs uppercase tracking-eyebrow font-medium px-2.5 py-1 rounded-full"
               style={{
                 backgroundColor:
                   criticalCount > 0 ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.14)',
-                color: criticalCount > 0 ? '#FCA5A5' : '#86EFAC',
+                color: criticalCount > 0 ? 'var(--color-danger-light)' : 'var(--color-success-light)',
               }}
             >
               {criticalCount}{' '}
@@ -509,11 +509,11 @@ export function VerdadArea({
                       style={{ backgroundColor: tone.dot }}
                     />
                     <div className="min-w-0 flex-1 flex flex-col">
-                      <p className="text-[13px] leading-relaxed text-[#F5F5F5]">
+                      <p className="text-sm leading-relaxed text-n-100">
                         {f.description}
                       </p>
                       {f.norm && (
-                        <p className="text-[11px] mt-0.5 text-[#A8A8A8] tracking-wide">
+                        <p className="text-xs mt-0.5 text-n-500 tracking-wide">
                           {f.norm}
                         </p>
                       )}
@@ -534,20 +534,20 @@ export function VerdadArea({
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <BadgeCheck
-                className="w-4 h-4 text-[#E8B42C]"
+                className="w-4 h-4 text-gold-600"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="uppercase tracking-[0.22em] text-[11px] text-[#D4A017] font-medium">
+              <span className="uppercase tracking-eyebrow text-xs text-gold-500 font-medium">
                 {language === 'es' ? 'Producto estrella' : 'Flagship product'}
               </span>
             </div>
-            <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5]">
+            <h3 className="font-serif-elite text-xl leading-tight tracking-tight text-n-100">
               {language === 'es'
                 ? 'Informe NIIF Elite completo'
                 : 'Complete IFRS Elite Report'}
             </h3>
-            <p className="text-[13px] leading-relaxed text-[#A8A8A8] font-light max-w-[32ch]">
+            <p className="text-sm leading-relaxed text-n-500 font-light max-w-[32ch]">
               {language === 'es'
                 ? 'Pipeline integral: Reporte NIIF + Auditoría regulatoria + Meta-auditor de calidad. El cierre definitivo de su verdad contable.'
                 : 'End-to-end pipeline: IFRS report + regulatory audit + quality meta-auditor. The definitive closing of your accounting truth.'}
@@ -559,7 +559,7 @@ export function VerdadArea({
 
       {/* ── Grid de submódulos ───────────────────────────────────────────── */}
       <div>
-        <h3 className="font-serif-elite text-[24px] leading-tight text-[#F5F5F5] mb-4">
+        <h3 className="font-serif-elite text-2xl leading-tight tracking-tight text-n-100 mb-4">
           {language === 'es' ? 'Módulos de aseguramiento' : 'Assurance modules'}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -582,27 +582,27 @@ export function VerdadArea({
       {!compact && (
         <div
           className={cn(
-            'rounded-[12px] px-5 py-4',
-            'bg-[rgba(212,160,23,0.04)]',
-            'border border-[rgba(212,160,23,0.14)]',
+            'rounded-lg px-5 py-4',
+            'bg-[rgb(var(--color-gold-500-rgb)_/_0.04)]',
+            'border border-[rgb(var(--color-gold-500-rgb)_/_0.14)]',
             'flex flex-wrap items-center gap-x-5 gap-y-2',
           )}
         >
           <ClipboardCheck
-            className="w-4 h-4 text-[#D4A017] shrink-0"
+            className="w-4 h-4 text-gold-500 shrink-0"
             strokeWidth={1.75}
             aria-hidden="true"
           />
-          <p className="text-[13px] text-[#D4D4D4] flex-1 min-w-[240px]">
+          <p className="text-sm text-n-300 flex-1 min-w-[240px]">
             {language === 'es' ? (
               <>
-                <span className="text-[#F5F5F5] font-medium">Chat contextual.</span>{' '}
+                <span className="text-n-100 font-medium">Chat contextual.</span>{' '}
                 Pregunte al asistente sobre cualquier hallazgo, partida conciliatoria
                 o dictamen — el contexto se carga automáticamente.
               </>
             ) : (
               <>
-                <span className="text-[#F5F5F5] font-medium">Contextual chat.</span>{' '}
+                <span className="text-n-100 font-medium">Contextual chat.</span>{' '}
                 Ask the assistant about any finding, reconciliation item, or opinion
                 — context loads automatically.
               </>
@@ -611,8 +611,8 @@ export function VerdadArea({
           <Link
             href="/workspace"
             className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium',
-              'text-[#D4A017] hover:text-[#E8B42C]',
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium',
+              'text-gold-500 hover:text-gold-600',
               'transition-colors',
             )}
           >
@@ -646,32 +646,32 @@ function SubmoduleCard({ href, icon: Icon, title, description }: SubmoduleCardPr
         href={href}
         className={cn(
           'group relative flex flex-col gap-4 h-full min-h-[200px]',
-          'p-5 rounded-[12px]',
+          'p-5 rounded-lg',
           'glass-elite-elevated border-elite-gold',
           'transition-[box-shadow,border-color] duration-300 ease-out',
-          'hover:shadow-[0_0_40px_rgba(212,160,23,0.28)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+          'hover:shadow-[0_0_40px_rgb(var(--color-gold-500-rgb) / 0.28)]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
         )}
       >
         <div className="flex items-start justify-between gap-3">
           <div
             aria-hidden="true"
-            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.12)] text-[#E8B42C] transition-transform duration-300 group-hover:scale-105"
+            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600 transition-transform duration-300 group-hover:scale-105"
           >
             <Icon className="w-5 h-5" strokeWidth={1.75} />
           </div>
           <span
             aria-hidden="true"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(212,160,23,0.22)] text-[#A8A8A8] transition-all duration-300 group-hover:text-[#E8B42C] group-hover:border-[rgba(232,180,44,0.55)] group-hover:bg-[rgba(212,160,23,0.12)] group-hover:translate-x-0.5"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] text-n-500 transition-all duration-300 group-hover:text-gold-600 group-hover:border-[rgba(232,180,44,0.55)] group-hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] group-hover:translate-x-0.5"
           >
             <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.75} />
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <h4 className="font-serif-elite text-[20px] leading-tight text-[#F5F5F5]">
+          <h4 className="font-serif-elite text-xl leading-tight tracking-tight text-n-100">
             {title}
           </h4>
-          <p className="text-[13px] leading-relaxed text-[#A8A8A8] font-light">
+          <p className="text-sm leading-relaxed text-n-500 font-light">
             {description}
           </p>
         </div>

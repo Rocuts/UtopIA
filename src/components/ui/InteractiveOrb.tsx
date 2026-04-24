@@ -23,7 +23,7 @@ export function InteractiveOrb({ volume, isConnected, isConnecting }: Interactiv
     const t = state.clock.getElapsedTime();
 
     // Base colors: Gold (idle), Amber (connecting), Purple/Pink (speaking)
-    let color = new THREE.Color("#d4a017");
+    let color = new THREE.Color("var(--gold-500)");
     let scaleMultiplierTarget = 1.0;
 
     if (isConnecting) {
@@ -66,7 +66,7 @@ export function InteractiveOrb({ volume, isConnected, isConnecting }: Interactiv
       {/* Outer Halo - Large, very transparent, additive blending */}
       <Sphere args={[1.5, 64, 64]} ref={outerHaloRef}>
         <meshBasicMaterial 
-          color="#d4a017"
+          color="var(--gold-500)"
           transparent={true}
           opacity={0.15}
           blending={THREE.AdditiveBlending}
@@ -78,7 +78,7 @@ export function InteractiveOrb({ volume, isConnected, isConnecting }: Interactiv
       {/* Inner Halo - Medium density, additive blending */}
       <Sphere args={[1, 64, 64]} ref={innerHaloRef}>
         <meshBasicMaterial 
-          color="#d4a017"
+          color="var(--gold-500)"
           transparent={true}
           opacity={0.3}
           blending={THREE.AdditiveBlending}

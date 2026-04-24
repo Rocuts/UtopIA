@@ -375,28 +375,28 @@ export function ReportFollowUpChat({
   );
 
   return (
-    <div className="border-t border-[#e5e5e5] bg-white">
+    <div className="border-t border-n-200 bg-n-0">
       {/* Toggle bar */}
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
         aria-controls={panelId}
-        className="w-full flex items-center justify-between px-6 h-12 text-sm font-medium text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+        className="w-full flex items-center justify-between px-6 h-12 text-sm font-medium text-n-900 hover:bg-n-50 transition-colors"
       >
         <span className="flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-[#D4A017]" />
+          <MessageSquare className="w-4 h-4 text-gold-500" />
           {expanded ? copy.toggleExpanded : copy.toggleCollapsed}
           {turns.length > 0 && (
-            <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+            <span className="text-xs text-n-400 font-mono">
               ({turns.length})
             </span>
           )}
         </span>
         {expanded ? (
-          <ChevronDown className="w-4 h-4 text-[#a3a3a3]" />
+          <ChevronDown className="w-4 h-4 text-n-400" />
         ) : (
-          <ChevronUp className="w-4 h-4 text-[#a3a3a3]" />
+          <ChevronUp className="w-4 h-4 text-n-400" />
         )}
       </button>
 
@@ -410,7 +410,7 @@ export function ReportFollowUpChat({
             animate={{ height: '40vh', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden border-t border-[#e5e5e5] bg-white flex flex-col"
+            className="overflow-hidden border-t border-n-200 bg-n-0 flex flex-col"
           >
             {/* Transcript — scrollable. data-lenis-prevent para no pelear con Lenis. */}
             <div
@@ -420,9 +420,9 @@ export function ReportFollowUpChat({
               className="flex-1 min-h-0 overflow-y-auto styled-scrollbar px-6 py-4 space-y-3"
             >
               {turns.length === 0 ? (
-                <div className="text-xs text-[#a3a3a3]">
+                <div className="text-xs text-n-400">
                   <div className="mb-3 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#D4A017]" />
+                    <Sparkles className="w-3.5 h-3.5 text-gold-500" />
                     <span className="font-semibold">{copy.emptyHint}</span>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -431,7 +431,7 @@ export function ReportFollowUpChat({
                         key={chip}
                         type="button"
                         onClick={() => handleChipClick(chip)}
-                        className="text-left px-3 py-2 rounded border border-[#e5e5e5] bg-[#fafafa] text-[#525252] text-xs hover:border-[#D4A017] hover:text-[#0a0a0a] transition-colors"
+                        className="text-left px-3 py-2 rounded border border-n-200 bg-n-50 text-n-600 text-xs hover:border-gold-500 hover:text-n-900 transition-colors"
                       >
                         {chip}
                       </button>
@@ -451,18 +451,18 @@ export function ReportFollowUpChat({
                       className={cn(
                         'max-w-[85%] rounded px-3 py-2 text-sm',
                         turn.role === 'user'
-                          ? 'bg-[#0a0a0a] text-white'
-                          : 'bg-[#fafafa] border border-[#e5e5e5] text-[#0a0a0a]',
+                          ? 'bg-n-900 text-n-0'
+                          : 'bg-n-50 border border-n-200 text-n-900',
                       )}
                     >
                       {turn.role === 'assistant' ? (
-                        <div className="prose prose-sm max-w-none text-[#0a0a0a] prose-p:leading-relaxed prose-headings:text-[#0a0a0a]">
+                        <div className="prose prose-sm max-w-none text-n-900 prose-p:leading-relaxed prose-headings:text-n-900">
                           {turn.content ? (
                             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                               {turn.content}
                             </ReactMarkdown>
                           ) : (
-                            <span className="text-[#a3a3a3] italic text-xs">{copy.streaming}</span>
+                            <span className="text-n-400 italic text-xs">{copy.streaming}</span>
                           )}
                         </div>
                       ) : (
@@ -470,25 +470,25 @@ export function ReportFollowUpChat({
                       )}
 
                       {turn.streaming && turn.content && (
-                        <span className="inline-block w-2 h-3 ml-0.5 bg-[#D4A017] animate-pulse align-text-bottom" />
+                        <span className="inline-block w-2 h-3 ml-0.5 bg-gold-500 animate-pulse align-text-bottom" />
                       )}
 
                       {/* Affordance de parche */}
                       {turn.patch && onPatchReport && !turn.applied && (
-                        <div className="mt-2 pt-2 border-t border-[#e5e5e5] flex items-center gap-2">
-                          <AlertTriangle className="w-3.5 h-3.5 text-[#D4A017]" />
-                          <span className="text-xs text-[#525252]">{copy.detectedPatch}</span>
+                        <div className="mt-2 pt-2 border-t border-n-200 flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-gold-500" />
+                          <span className="text-xs text-n-600">{copy.detectedPatch}</span>
                           <button
                             type="button"
                             onClick={() => handleApplyPatch(turn.id, turn.patch!.newConsolidatedMarkdown)}
-                            className="ml-auto px-2 py-1 rounded bg-[#D4A017] text-white text-[11px] font-medium hover:bg-[#A87C10] transition-colors"
+                            className="ml-auto px-2 py-1 rounded bg-gold-500 text-n-0 text-xs-mono font-medium hover:bg-gold-700 transition-colors"
                           >
                             {copy.applyPatch}
                           </button>
                         </div>
                       )}
                       {turn.applied && (
-                        <div className="mt-2 pt-2 border-t border-[#e5e5e5] flex items-center gap-1.5 text-[#16A34A] text-[11px]">
+                        <div className="mt-2 pt-2 border-t border-n-200 flex items-center gap-1.5 text-success text-xs-mono">
                           <CheckCircle className="w-3.5 h-3.5" />
                           {copy.patchApplied}
                         </div>
@@ -499,7 +499,7 @@ export function ReportFollowUpChat({
               )}
 
               {error && (
-                <div className="flex items-start gap-2 rounded border border-[#EF4444] bg-[#FEF2F2] px-3 py-2 text-xs text-[#DC2626]">
+                <div className="flex items-start gap-2 rounded border border-danger bg-danger/10 px-3 py-2 text-xs text-danger">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span className="whitespace-pre-wrap break-words">{error}</span>
                 </div>
@@ -507,7 +507,7 @@ export function ReportFollowUpChat({
             </div>
 
             {/* Composer */}
-            <div className="border-t border-[#e5e5e5] bg-white px-6 py-3">
+            <div className="border-t border-n-200 bg-n-0 px-6 py-3">
               <div className="flex items-end gap-2">
                 <textarea
                   ref={textareaRef}
@@ -517,7 +517,7 @@ export function ReportFollowUpChat({
                   rows={2}
                   placeholder={copy.inputPlaceholder}
                   aria-label={copy.inputPlaceholder}
-                  className="flex-1 resize-none rounded border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] focus:border-[#D4A017] focus:outline-none"
+                  className="flex-1 resize-none rounded border border-n-200 bg-n-0 px-3 py-2 text-sm text-n-900 placeholder:text-n-400 focus:border-gold-500 focus:outline-none"
                   disabled={isStreaming}
                 />
                 <button
@@ -528,8 +528,8 @@ export function ReportFollowUpChat({
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium transition-colors shrink-0',
                     isStreaming || !input.trim()
-                      ? 'bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed'
-                      : 'bg-[#D4A017] text-white hover:bg-[#A87C10]',
+                      ? 'bg-n-100 text-n-400 cursor-not-allowed'
+                      : 'bg-gold-500 text-n-0 hover:bg-gold-700',
                   )}
                 >
                   <Send className="w-3.5 h-3.5" />

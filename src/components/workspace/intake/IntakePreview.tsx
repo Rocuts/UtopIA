@@ -95,9 +95,9 @@ function formatCOP(amount: number | undefined): string {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between py-1.5 border-b border-[#f5f5f5] last:border-0">
-      <span className="text-xs text-[#737373]">{label}</span>
-      <span className="text-xs font-medium text-[#0a0a0a] text-right max-w-[60%]">{value}</span>
+    <div className="flex justify-between py-1.5 border-b border-n-100 last:border-0">
+      <span className="text-xs text-n-500">{label}</span>
+      <span className="text-xs font-medium text-n-900 text-right max-w-[60%]">{value}</span>
     </div>
   );
 }
@@ -119,7 +119,7 @@ function PipelineVisualization() {
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide">
+      <h4 className="text-xs font-semibold text-n-600 uppercase tracking-wide">
         Pipeline de Procesamiento
       </h4>
 
@@ -127,12 +127,12 @@ function PipelineVisualization() {
       <div className="flex items-center gap-2">
         {agents.map((agent, i) => (
           <div key={agent.label} className="flex items-center gap-2 flex-1">
-            <div className="flex-1 rounded-lg border border-[#e5e5e5] p-2.5 bg-[#fafafa]">
-              <div className="text-[11px] font-semibold text-[#0a0a0a]">{agent.label}</div>
-              <div className="text-[10px] text-[#a3a3a3]">{agent.sublabel}</div>
+            <div className="flex-1 rounded-lg border border-n-200 p-2.5 bg-n-50">
+              <div className="text-xs-mono font-semibold text-n-900">{agent.label}</div>
+              <div className="text-2xs text-n-400">{agent.sublabel}</div>
             </div>
             {i < agents.length - 1 && (
-              <ArrowRight className="w-3.5 h-3.5 text-[#d4d4d4] shrink-0" />
+              <ArrowRight className="w-3.5 h-3.5 text-n-300 shrink-0" />
             )}
           </div>
         ))}
@@ -140,7 +140,7 @@ function PipelineVisualization() {
 
       {/* Arrow down */}
       <div className="flex justify-center">
-        <ArrowRight className="w-4 h-4 text-[#d4d4d4] rotate-90" />
+        <ArrowRight className="w-4 h-4 text-n-300 rotate-90" />
       </div>
 
       {/* Parallel auditors */}
@@ -148,25 +148,25 @@ function PipelineVisualization() {
         {auditors.map((aud) => (
           <div
             key={aud.label}
-            className="rounded-lg border border-[#e5e5e5] p-2 text-center"
+            className="rounded-lg border border-n-200 p-2 text-center"
             style={{ borderTopColor: aud.color, borderTopWidth: 2 }}
           >
             <Shield className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: aud.color }} />
-            <div className="text-[10px] font-medium text-[#525252]">{aud.label}</div>
+            <div className="text-2xs font-medium text-n-600">{aud.label}</div>
           </div>
         ))}
       </div>
 
       {/* Arrow down */}
       <div className="flex justify-center">
-        <ArrowRight className="w-4 h-4 text-[#d4d4d4] rotate-90" />
+        <ArrowRight className="w-4 h-4 text-n-300 rotate-90" />
       </div>
 
       {/* Meta-auditor */}
-      <div className="rounded-lg border-2 border-[#D4A017] bg-[#FEF9EC] p-3 text-center">
-        <Star className="w-4 h-4 mx-auto mb-1 text-[#D4A017]" />
-        <div className="text-xs font-semibold text-[#0a0a0a]">Meta-Auditor de Calidad</div>
-        <div className="text-[10px] text-[#737373]">12 dimensiones -- ISO 25012 / ISO 42001</div>
+      <div className="rounded-lg border-2 border-gold-500 bg-gold-500/10 p-3 text-center">
+        <Star className="w-4 h-4 mx-auto mb-1 text-gold-500" />
+        <div className="text-xs font-semibold text-n-900">Meta-Auditor de Calidad</div>
+        <div className="text-2xs text-n-500">12 dimensiones -- ISO 25012 / ISO 42001</div>
       </div>
     </div>
   );
@@ -209,26 +209,26 @@ function ChatTierInfo({ caseType }: { caseType: CaseType }) {
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide">
+      <h4 className="text-xs font-semibold text-n-600 uppercase tracking-wide">
         Configuración del Agente
       </h4>
-      <div className="rounded-lg border border-[#e5e5e5] p-3 space-y-2">
+      <div className="rounded-lg border border-n-200 p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <Cpu className="w-4 h-4 text-[#D4A017]" />
-          <span className="text-sm font-semibold text-[#0a0a0a]">{info.tier}</span>
+          <Cpu className="w-4 h-4 text-gold-500" />
+          <span className="text-sm font-semibold text-n-900">{info.tier}</span>
         </div>
-        <p className="text-xs text-[#737373]">{info.description}</p>
+        <p className="text-xs text-n-500">{info.description}</p>
         <div className="flex flex-wrap gap-1.5 pt-1">
           {info.tools.map((tool) => (
             <span
               key={tool}
-              className="px-2 py-0.5 bg-[#f5f5f5] border border-[#e5e5e5] rounded text-[10px] font-mono text-[#525252]"
+              className="px-2 py-0.5 bg-n-100 border border-n-200 rounded text-2xs font-mono text-n-600"
             >
               {tool}
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-1.5 pt-1 text-xs text-[#737373]">
+        <div className="flex items-center gap-1.5 pt-1 text-xs text-n-500">
           <Clock className="w-3.5 h-3.5" />
           Tiempo estimado: {info.time}
         </div>
@@ -245,16 +245,16 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
   return (
     <div className="space-y-5 pb-4">
       {/* Header */}
-      <div className="rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-4">
-        <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">{CASE_LABELS[caseType]}</h3>
-        <p className="text-xs text-[#737373]">
+      <div className="rounded-lg border border-n-200 bg-n-50 p-4">
+        <h3 className="text-base font-semibold text-n-900 mb-1">{CASE_LABELS[caseType]}</h3>
+        <p className="text-xs text-n-500">
           Revise la información antes de iniciar. Puede volver a pasos anteriores para editar.
         </p>
       </div>
 
       {/* Case-specific summary */}
-      <div className="rounded-lg border border-[#e5e5e5] p-4 space-y-1">
-        <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide mb-2">
+      <div className="rounded-lg border border-n-200 p-4 space-y-1">
+        <h4 className="text-xs font-semibold text-n-600 uppercase tracking-wide mb-2">
           Resumen del Caso
         </h4>
 
@@ -345,16 +345,16 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
       {/* Output checklist for NIIF */}
       {isNiif && 'outputOptions' in data && (
         <div className="space-y-2">
-          <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide">
+          <h4 className="text-xs font-semibold text-n-600 uppercase tracking-wide">
             Entregables
           </h4>
           <div className="grid grid-cols-2 gap-1.5">
             {Object.entries((data as Partial<NiifReportIntake>).outputOptions ?? {}).map(([key, enabled]) => (
               <div key={key} className="flex items-center gap-1.5">
                 <CheckCircle
-                  className={cn('w-3.5 h-3.5 shrink-0', enabled ? 'text-[#22C55E]' : 'text-[#d4d4d4]')}
+                  className={cn('w-3.5 h-3.5 shrink-0', enabled ? 'text-success' : 'text-n-300')}
                 />
-                <span className={cn('text-xs', enabled ? 'text-[#0a0a0a]' : 'text-[#a3a3a3] line-through')}>
+                <span className={cn('text-xs', enabled ? 'text-n-900' : 'text-n-400 line-through')}>
                   {OUTPUT_LABELS[key as keyof NiifOutputOptions] ?? key}
                 </span>
               </div>
@@ -365,31 +365,31 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
 
       {/* Model info for NIIF */}
       {isNiif && (
-        <div className="rounded-lg border border-[#e5e5e5] p-3 space-y-2">
-          <h4 className="text-xs font-semibold text-[#525252] uppercase tracking-wide">
+        <div className="rounded-lg border border-n-200 p-3 space-y-2">
+          <h4 className="text-xs font-semibold text-n-600 uppercase tracking-wide">
             Información del Modelo
           </h4>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center gap-2">
-              <Cpu className="w-3.5 h-3.5 text-[#D4A017]" />
-              <span className="text-xs text-[#525252]">GPT-5.4 mini (400K contexto)</span>
+              <Cpu className="w-3.5 h-3.5 text-gold-500" />
+              <span className="text-xs text-n-600">GPT-5.4 mini (400K contexto)</span>
             </div>
             <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-[#737373]" />
-              <span className="text-xs text-[#525252]">3-5 minutos estimados</span>
+              <Clock className="w-3.5 h-3.5 text-n-500" />
+              <span className="text-xs text-n-600">3-5 minutos estimados</span>
             </div>
             <div className="flex items-center gap-2">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#737373]" />
-              <span className="text-xs text-[#525252]">3 agentes + 4 auditores + meta</span>
+              <FileSpreadsheet className="w-3.5 h-3.5 text-n-500" />
+              <span className="text-xs text-n-600">3 agentes + 4 auditores + meta</span>
             </div>
           </div>
         </div>
       )}
 
       {/* PII Notice */}
-      <div className="flex items-start gap-2 rounded-lg bg-[#f5f5f5] p-3">
-        <Lock className="w-3.5 h-3.5 text-[#737373] mt-0.5 shrink-0" />
-        <p className="text-[11px] text-[#737373] leading-relaxed">
+      <div className="flex items-start gap-2 rounded-lg bg-n-100 p-3">
+        <Lock className="w-3.5 h-3.5 text-n-500 mt-0.5 shrink-0" />
+        <p className="text-xs-mono text-n-500 leading-relaxed">
           Su información será procesada de forma segura. Datos sensibles como NIT, cédula y correos
           son redactados automáticamente antes del envío al modelo de IA.
         </p>

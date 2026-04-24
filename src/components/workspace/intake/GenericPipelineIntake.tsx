@@ -31,7 +31,7 @@ function ConfidenceDot({ level }: { level?: FieldConfidence }) {
   if (!level || level === 'none') return null;
   return (
     <span
-      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')}
+      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
       title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
     />
   );
@@ -93,8 +93,8 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
       component: (
         <div className="space-y-4 pb-6">
           <div>
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
-            <p className="text-xs text-[#a3a3a3]">
+            <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
+            <p className="text-xs text-n-400">
               1+1 extrae automáticamente los datos de su archivo y pre-llena el formulario
             </p>
           </div>
@@ -102,16 +102,16 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
           {extractionState.status === 'done' && extractionState.extracted ? (
             <div className="space-y-3">
               {/* Success card */}
-              <div className="border border-[#22C55E]/30 bg-[#F0FDF4] rounded-xl p-4">
+              <div className="border border-success/30 bg-success/10 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-                  <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
+                  <CheckCircle className="w-4 h-4 text-success" />
+                  <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
                 </div>
-                <p className="text-xs text-[#16A34A]/80">
+                <p className="text-xs text-success/80">
                   {detected} de {totalFields} campos detectados automáticamente
                 </p>
                 {extractionState.extracted.isTrialBalance && (
-                  <div className="mt-2 pt-2 border-t border-[#22C55E]/20 text-xs text-[#16A34A]/80 space-y-0.5">
+                  <div className="mt-2 pt-2 border-t border-success/20 text-xs text-success/80 space-y-0.5">
                     {extractionState.extracted.accountsDetected && <p>Cuentas detectadas: {extractionState.extracted.accountsDetected}</p>}
                     {extractionState.extracted.equationValid !== undefined && (
                       <p>Ecuación patrimonial: {extractionState.extracted.equationValid ? 'Válida' : 'Con discrepancias'}</p>
@@ -119,29 +119,29 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
                   </div>
                 )}
               </div>
-              <button type="button" onClick={() => { resetExtraction(); }} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+              <button type="button" onClick={() => { resetExtraction(); }} className="text-xs text-n-400 hover:text-n-600 transition-colors">
                 Subir otro archivo
               </button>
             </div>
           ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
-            <div className="border border-[#D4A017]/30 bg-[#FEF9EC] rounded-xl p-6 text-center">
+            <div className="border border-gold-500/30 bg-gold-500/10 rounded-xl p-6 text-center">
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                <Upload className="w-6 h-6 text-[#D4A017] mx-auto" />
+                <Upload className="w-6 h-6 text-gold-500 mx-auto" />
               </motion.div>
-              <p className="text-sm text-[#7D5B0C] mt-2 font-medium">
+              <p className="text-sm text-gold-700 mt-2 font-medium">
                 {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
               </p>
-              <div className="w-48 h-1.5 bg-[#D4A017]/20 rounded-full overflow-hidden mx-auto mt-3">
-                <motion.div className="h-full bg-[#D4A017] rounded-full" animate={{ width: `${extractionState.progress}%` }} />
+              <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
+                <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
               </div>
             </div>
           ) : extractionState.status === 'error' ? (
-            <div className="border border-[#EF4444]/30 bg-[#FEF2F2] rounded-xl p-4">
+            <div className="border border-danger/30 bg-danger/10 rounded-xl p-4">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-[#EF4444]" />
-                <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
+                <AlertCircle className="w-4 h-4 text-danger" />
+                <span className="text-sm text-danger">{extractionState.error}</span>
               </div>
-              <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+              <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
             </div>
           ) : (
             <FileUploadZone
@@ -157,7 +157,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
             <button
               type="button"
               onClick={() => { setSkippedUpload(true); setCurrentStep(1); }}
-              className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
+              className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
             >
               Llenar manualmente sin documento
             </button>
@@ -174,16 +174,16 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
       component: (
         <div className="space-y-4 pb-6">
           <div>
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Verifique los datos</h3>
+            <h3 className="text-base font-semibold text-n-900 mb-1">Verifique los datos</h3>
             {detected > 0 && (
-              <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-                <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
-                <span className="text-xs text-[#16A34A] font-medium">
+              <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
+                <CheckCircle className="w-3.5 h-3.5 text-success" />
+                <span className="text-xs text-success font-medium">
                   {detected} de {totalFields} campos auto-detectados
                 </span>
-                <span className="text-[10px] text-[#16A34A]/60 ml-auto flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> alta
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] ml-1" /> inferido
+                <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
+                  <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
                 </span>
               </div>
             )}
@@ -191,66 +191,66 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
+              <label className="text-xs font-medium text-n-600 flex items-center gap-0.5 mb-1">
                 Razón Social * <ConfidenceDot level={confidence.name} />
               </label>
               <input type="text" value={company.name} onChange={e => setCompany(c => ({ ...c, name: e.target.value }))}
-                className={cn('w-full border rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors',
-                  !company.name && !skippedUpload && extractionState.status === 'done' ? 'border-[#EF4444]/50' : 'border-[#e5e5e5]')}
+                className={cn('w-full border rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors',
+                  !company.name && !skippedUpload && extractionState.status === 'done' ? 'border-danger/50' : 'border-n-200')}
                 placeholder="Nombre de la empresa" />
             </div>
             <div>
-              <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
+              <label className="text-xs font-medium text-n-600 flex items-center gap-0.5 mb-1">
                 NIT * <ConfidenceDot level={confidence.nit} />
               </label>
               <input type="text" value={company.nit} onChange={e => setCompany(c => ({ ...c, nit: formatNit(e.target.value) }))}
-                className={cn('w-full border rounded-lg px-3 py-2 text-sm text-[#0a0a0a] font-[family-name:var(--font-geist-mono)] focus:border-[#0a0a0a] focus:outline-none transition-colors',
-                  !company.nit && !skippedUpload && extractionState.status === 'done' ? 'border-[#EF4444]/50' : 'border-[#e5e5e5]')}
+                className={cn('w-full border rounded-lg px-3 py-2 text-sm text-n-900 font-[family-name:var(--font-geist-mono)] focus:border-n-900 focus:outline-none transition-colors',
+                  !company.nit && !skippedUpload && extractionState.status === 'done' ? 'border-danger/50' : 'border-n-200')}
                 placeholder="XXX.XXX.XXX-X" />
             </div>
             <div>
-              <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
+              <label className="text-xs font-medium text-n-600 flex items-center gap-0.5 mb-1">
                 Tipo Entidad <ConfidenceDot level={confidence.entityType} />
               </label>
               <div className="flex gap-1.5 flex-wrap">
                 {['SAS', 'SA', 'LTDA', 'SCS', 'Otro'].map(t => (
                   <button key={t} type="button" onClick={() => setCompany(c => ({ ...c, entityType: t }))}
                     className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                      company.entityType === t ? 'border-[#D4A017] bg-[#FEF9EC] text-[#7D5B0C]' : 'border-[#e5e5e5] text-[#525252] hover:border-[#D4A017]')}
+                      company.entityType === t ? 'border-n-900 bg-n-900 text-n-0' : 'border-n-200 text-n-600 hover:border-n-400')}
                   >{t}</button>
                 ))}
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
+              <label className="text-xs font-medium text-n-600 flex items-center gap-0.5 mb-1">
                 Periodo Fiscal <ConfidenceDot level={confidence.fiscalPeriod} />
               </label>
               <input type="text" value={period} onChange={e => setPeriod(e.target.value)}
-                className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] font-[family-name:var(--font-geist-mono)] focus:border-[#0a0a0a] focus:outline-none transition-colors"
+                className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 font-[family-name:var(--font-geist-mono)] focus:border-n-900 focus:outline-none transition-colors"
                 placeholder="2025" />
             </div>
             <div>
-              <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
+              <label className="text-xs font-medium text-n-600 flex items-center gap-0.5 mb-1">
                 Ciudad <ConfidenceDot level={confidence.city} />
               </label>
               <input type="text" value={company.city} onChange={e => setCompany(c => ({ ...c, city: e.target.value }))}
-                className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors"
+                className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors"
                 placeholder="Bogotá" />
             </div>
             <div>
-              <label className="text-xs font-medium text-[#525252] flex items-center gap-0.5 mb-1">
+              <label className="text-xs font-medium text-n-600 flex items-center gap-0.5 mb-1">
                 Sector
               </label>
               <input type="text" value={company.sector} onChange={e => setCompany(c => ({ ...c, sector: e.target.value }))}
-                className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors"
+                className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors"
                 placeholder="Ej: Tecnología, Comercio" />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-medium text-[#525252] mb-1 block">Instrucciones Especiales</label>
+            <label className="text-xs font-medium text-n-600 mb-1 block">Instrucciones Especiales</label>
             <textarea value={instructions} onChange={e => setInstructions(e.target.value)} maxLength={1000} rows={2}
-              className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] placeholder:text-[#a3a3a3] focus:border-[#0a0a0a] focus:outline-none transition-colors resize-none"
+              className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 placeholder:text-n-400 focus:border-n-900 focus:outline-none transition-colors resize-none"
               placeholder="Contexto adicional para los agentes..." />
           </div>
         </div>
@@ -265,48 +265,48 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
       component: (
         <div className="space-y-5 pb-6">
           <div>
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">{title}</h3>
-            <p className="text-xs text-[#a3a3a3]">{subtitle}</p>
+            <h3 className="text-base font-semibold text-n-900 mb-1">{title}</h3>
+            <p className="text-xs text-n-400">{subtitle}</p>
           </div>
 
           {/* Company summary */}
-          <div className="bg-[#fafafa] border border-[#e5e5e5] rounded-xl p-4">
+          <div className="bg-n-50 border border-n-200 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Building2 className="w-4 h-4 text-[#525252]" />
-              <span className="text-xs font-semibold text-[#0a0a0a] uppercase tracking-wider">Empresa</span>
+              <Building2 className="w-4 h-4 text-n-600" />
+              <span className="text-xs font-semibold text-n-900 uppercase tracking-wider">Empresa</span>
             </div>
             <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <div><span className="text-[#a3a3a3]">Razón Social:</span> <span className="text-[#0a0a0a] font-medium">{company.name || '—'}</span></div>
-              <div><span className="text-[#a3a3a3]">NIT:</span> <span className="text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">{company.nit || '—'}</span></div>
-              <div><span className="text-[#a3a3a3]">Tipo:</span> <span className="text-[#0a0a0a]">{company.entityType}</span></div>
-              <div><span className="text-[#a3a3a3]">Periodo:</span> <span className="text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">{period}</span></div>
+              <div><span className="text-n-400">Razón Social:</span> <span className="text-n-900 font-medium">{company.name || '—'}</span></div>
+              <div><span className="text-n-400">NIT:</span> <span className="text-n-900 font-[family-name:var(--font-geist-mono)]">{company.nit || '—'}</span></div>
+              <div><span className="text-n-400">Tipo:</span> <span className="text-n-900">{company.entityType}</span></div>
+              <div><span className="text-n-400">Periodo:</span> <span className="text-n-900 font-[family-name:var(--font-geist-mono)]">{period}</span></div>
             </div>
           </div>
 
           {/* Pipeline */}
-          <div className="bg-white border border-[#e5e5e5] rounded-xl p-4">
-            <span className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider font-[family-name:var(--font-geist-mono)]">
+          <div className="bg-n-0 border border-n-200 rounded-xl p-4">
+            <span className="text-2xs font-bold text-n-400 uppercase tracking-wider font-[family-name:var(--font-geist-mono)]">
               Pipeline que se ejecutará
             </span>
             <div className="flex items-center gap-2 mt-3 overflow-x-auto styled-scrollbar pb-2">
               {agents.map((agent, i) => (
                 <div key={i} className="flex items-center">
-                  <div className="rounded-lg border-2 border-[#D4A017]/30 bg-[#FEF9EC] px-3 py-2 min-w-[110px] text-center">
-                    <p className="text-[10px] font-bold text-[#D4A017] font-[family-name:var(--font-geist-mono)]">Agente {i + 1}</p>
-                    <p className="text-xs font-medium text-[#7D5B0C] mt-0.5">{agent}</p>
+                  <div className="rounded-lg border-2 border-gold-500/30 bg-gold-500/10 px-3 py-2 min-w-[110px] text-center">
+                    <p className="text-2xs font-bold text-gold-500 font-[family-name:var(--font-geist-mono)]">Agente {i + 1}</p>
+                    <p className="text-xs font-medium text-gold-700 mt-0.5">{agent}</p>
                   </div>
-                  {i < agents.length - 1 && <ChevronRight className="w-4 h-4 text-[#d4d4d4] mx-1 shrink-0" />}
+                  {i < agents.length - 1 && <ChevronRight className="w-4 h-4 text-n-300 mx-1 shrink-0" />}
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-[10px] text-[#a3a3a3]">
+          <div className="flex items-center gap-3 text-2xs text-n-400">
             <span>Modelo: GPT-5.4 mini · 400K contexto</span>
             <span>·</span>
             <span>~3-5 min</span>
           </div>
-          <p className="text-[10px] text-[#a3a3a3]">
+          <p className="text-2xs text-n-400">
             Su información es redactada (PII) antes de enviarse al LLM
           </p>
         </div>

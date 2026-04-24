@@ -9,7 +9,7 @@ export function ScrollGradient({ children }: { children: ReactNode }) {
       <div
         className="fixed inset-0 pointer-events-none z-0 opacity-40"
         style={{
-          backgroundImage: 'radial-gradient(circle, #d4d4d4 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(circle, var(--color-n-300) 1px, transparent 1px)',
           backgroundSize: '24px 24px',
         }}
       />

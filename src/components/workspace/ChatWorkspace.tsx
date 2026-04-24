@@ -242,11 +242,11 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-[#e5e5e5]">
+    <div className="border-t border-n-200">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-medium text-[#525252] hover:bg-[#fafafa] transition-colors"
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-medium text-n-600 hover:bg-n-50 transition-colors"
         aria-expanded={open}
       >
         <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -306,14 +306,14 @@ function CaseHeader({
   };
 
   return (
-    <div className="px-6 py-3 border-b border-[#e5e5e5] bg-[#fafafa] flex items-center gap-3 sticky top-0 z-10">
+    <div className="px-6 py-3 border-b border-n-200 bg-n-50/60 backdrop-blur-sm flex items-center gap-3 sticky top-0 z-10">
       <span className="text-lg">{icons[useCase] ?? '\uD83D\uDCCB'}</span>
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-semibold text-[#0a0a0a]">
+        <span className="text-sm font-semibold text-n-900">
           {labels[useCase] ?? useCase}
         </span>
       </div>
-      <span className="text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+      <span className="text-xs-mono text-n-400 font-mono num">
         TC-{caseId.slice(5, 13)}
       </span>
     </div>
@@ -334,14 +334,14 @@ function PipelineBanner({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-6 py-2 border-b border-[#e5e5e5] bg-[#fafafa] flex items-center gap-2 text-xs text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+        className="w-full px-6 py-2 border-b border-n-200 bg-n-50 flex items-center gap-2 text-xs text-n-600 hover:bg-n-100 transition-colors"
       >
-        <Zap className="w-3 h-3 text-[#D4A017]" />
+        <Zap className="w-3 h-3 text-gold-500" />
         <span>
           Analizado por: {vizState.nodes.filter(n => n.status === 'complete').map(n => n.label).join(' + ')}
         </span>
         <DSBadge variant="tier" tier={vizState.tier} label="" size="sm" />
-        <span className="text-[10px] text-[#a3a3a3] ml-auto">
+        <span className="text-2xs text-n-400 ml-auto">
           {vizState.toolLog.length} herramientas · ver detalle
         </span>
       </button>
@@ -349,12 +349,12 @@ function PipelineBanner({
   }
 
   return (
-    <div className="border-b border-[#e5e5e5] bg-[#fafafa] px-6 py-3">
+    <div className="border-b border-n-200 bg-n-50 px-6 py-3">
       <AgentPipelineViz nodes={vizState.nodes} tier={vizState.tier} compact />
       {vizState.toolLog.length > 0 && (
         <div className="mt-2 space-y-0.5">
           {vizState.toolLog.slice(-3).map((log, i) => (
-            <p key={i} className="text-[10px] text-[#737373] font-[family-name:var(--font-geist-mono)] truncate">
+            <p key={i} className="text-2xs text-n-500 font-mono truncate">
               {log}
             </p>
           ))}
@@ -363,7 +363,7 @@ function PipelineBanner({
       <button
         type="button"
         onClick={onToggle}
-        className="text-[10px] text-[#a3a3a3] hover:text-[#525252] mt-1"
+        className="text-2xs text-n-400 hover:text-n-600 mt-1"
       >
         Colapsar
       </button>
@@ -394,12 +394,12 @@ function TypingIndicator({ language, progressStatus }: { language: 'es' | 'en'; 
     >
       <div className="flex items-center gap-3">
         <motion.div
-          className="h-[2px] bg-gradient-to-r from-[#d4a017] via-[#0a0a0a] to-transparent flex-1 max-w-[200px] rounded-full"
+          className="h-[2px] bg-gradient-to-r from-gold-500 via-n-900 to-transparent flex-1 max-w-[200px] rounded-full"
           animate={{ opacity: [0.3, 1, 0.3], scaleX: [0.6, 1, 0.6] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
           style={{ transformOrigin: 'left' }}
         />
-        <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">{label}</span>
+        <span className="text-xs text-n-400 font-mono">{label}</span>
       </div>
     </motion.div>
   );
@@ -411,18 +411,20 @@ function UserMessage({ message }: { message: ChatMessage }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', ...SPRING }}
-      className="border-t border-[#e5e5e5] px-6 py-4"
+      className="border-b border-n-200/40 px-6 py-6"
     >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-medium text-[#525252]">Usted</span>
-        <time
-          dateTime={message.timestamp}
-          className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]"
-        >
-          {formatTime(message.timestamp)}
-        </time>
+      <div className="max-w-[var(--chat-reading-width)] mx-auto w-full">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-medium text-n-600">Usted</span>
+          <time
+            dateTime={message.timestamp}
+            className="text-xs text-n-400 font-mono"
+          >
+            {formatTime(message.timestamp)}
+          </time>
+        </div>
+        <p className="text-md text-n-900 leading-relaxed whitespace-pre-wrap">{message.content ?? ''}</p>
       </div>
-      <p className="text-sm text-[#0a0a0a] leading-relaxed whitespace-pre-wrap">{message.content ?? ''}</p>
     </motion.div>
   );
 }
@@ -447,7 +449,7 @@ function CodeBlockPre({ children, className }: { children?: React.ReactNode; cla
       <pre
         ref={preRef}
         className={cn(
-          'bg-[#0a0a0a] text-[#e5e5e5] rounded-lg p-3 overflow-x-auto text-xs font-[family-name:var(--font-geist-mono)] leading-relaxed',
+          'bg-n-900 text-n-200 rounded-lg p-3 overflow-x-auto text-xs font-mono leading-relaxed',
           className,
         )}
       >
@@ -456,11 +458,11 @@ function CodeBlockPre({ children, className }: { children?: React.ReactNode; cla
       <button
         type="button"
         onClick={handleCopy}
-        className="absolute top-2 right-2 p-1.5 rounded bg-[#262626] text-[#a3a3a3] hover:text-white hover:bg-[#404040] opacity-0 group-hover/code:opacity-100 focus:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 p-1.5 rounded bg-n-700 text-n-400 hover:text-n-0 hover:bg-n-600 opacity-0 group-hover/code:opacity-100 focus:opacity-100 transition-opacity"
         aria-label={copied ? 'Copiado' : 'Copiar código'}
         title={copied ? 'Copiado' : 'Copiar código'}
       >
-        {copied ? <Check className="w-3.5 h-3.5 text-[#D4A017]" /> : <Copy className="w-3.5 h-3.5" />}
+        {copied ? <Check className="w-3.5 h-3.5 text-gold-500" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
     </div>
   );
@@ -560,25 +562,25 @@ function MessageActions({
 
   return (
     <div
-      className="flex items-center gap-1 px-6 py-2 border-t border-[#e5e5e5] md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 opacity-100 transition-opacity"
+      className="mt-3 flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 opacity-100 transition-opacity"
       role="toolbar"
       aria-label={language === 'es' ? 'Acciones del mensaje' : 'Message actions'}
     >
       <button
         type="button"
         onClick={handleCopy}
-        className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[#525252] hover:text-[#0a0a0a] hover:bg-white transition-colors"
+        className="flex items-center gap-1 px-2 py-1 rounded text-xs-mono text-n-600 hover:text-n-900 hover:bg-n-100 transition-colors"
         title={labels.copy}
         aria-label={labels.copy}
       >
-        {copied ? <Check className="w-3 h-3 text-[#D4A017]" /> : <Copy className="w-3 h-3" />}
+        {copied ? <Check className="w-3 h-3 text-gold-500" /> : <Copy className="w-3 h-3" />}
         <span className="hidden sm:inline">{copied ? labels.copied : labels.copy}</span>
       </button>
       {canRegenerate && (
         <button
           type="button"
           onClick={onRegenerate}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[#525252] hover:text-[#0a0a0a] hover:bg-white transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs-mono text-n-600 hover:text-n-900 hover:bg-n-100 transition-colors"
           title={labels.regen}
           aria-label={labels.regen}
         >
@@ -590,10 +592,10 @@ function MessageActions({
         type="button"
         onClick={() => handleFeedback('up')}
         className={cn(
-          'flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors',
+          'flex items-center gap-1 px-2 py-1 rounded text-xs-mono transition-colors',
           feedback === 'up'
-            ? 'text-[#D4A017] bg-[#fffbeb]'
-            : 'text-[#525252] hover:text-[#0a0a0a] hover:bg-white',
+            ? 'text-gold-500 bg-gold-300/10'
+            : 'text-n-600 hover:text-n-900 hover:bg-n-100',
         )}
         title={labels.up}
         aria-label={labels.up}
@@ -605,10 +607,10 @@ function MessageActions({
         type="button"
         onClick={() => handleFeedback('down')}
         className={cn(
-          'flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors',
+          'flex items-center gap-1 px-2 py-1 rounded text-xs-mono transition-colors',
           feedback === 'down'
-            ? 'text-[#ef4444] bg-[#fef2f2]'
-            : 'text-[#525252] hover:text-[#0a0a0a] hover:bg-white',
+            ? 'text-danger bg-danger/10'
+            : 'text-n-600 hover:text-n-900 hover:bg-n-100',
         )}
         title={labels.down}
         aria-label={labels.down}
@@ -619,7 +621,7 @@ function MessageActions({
       <button
         type="button"
         onClick={handleExport}
-        className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[#525252] hover:text-[#0a0a0a] hover:bg-white transition-colors ml-auto"
+        className="flex items-center gap-1 px-2 py-1 rounded text-xs-mono text-n-600 hover:text-n-900 hover:bg-n-100 transition-colors ml-auto"
         title={labels.exp}
         aria-label={labels.exp}
       >
@@ -660,186 +662,206 @@ function AssistantMessage({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', ...SPRING }}
-        className="bg-[#fef2f2] border-t border-b border-[#fecaca] px-6 py-4"
+        className="border-b border-danger/30 px-6 py-6"
       >
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 mt-0.5">
-            {message.errorKind === 'network' ? <WifiOff className="w-4 h-4 text-[#dc2626]" /> :
-             message.errorKind === 'timeout' ? <Clock className="w-4 h-4 text-[#dc2626]" /> :
-             message.errorKind === 'rate_limit' ? <AlertTriangle className="w-4 h-4 text-[#d97706]" /> :
-             <AlertTriangle className="w-4 h-4 text-[#dc2626]" />}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-[#dc2626] mb-1">
-              {language === 'es' ? 'No se pudo completar la consulta' : 'Could not complete the query'}
-            </p>
-            <p className="text-sm text-[#7f1d1d] leading-relaxed">{safeContent}</p>
-            {message.onRetry && (
-              <button
-                type="button"
-                onClick={message.onRetry}
-                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors"
-              >
-                <RefreshCw className="w-3 h-3" />
-                {language === 'es' ? 'Reintentar' : 'Retry'}
-              </button>
-            )}
+        <div className="max-w-[var(--chat-reading-width)] mx-auto w-full bg-danger/10 border border-danger/30 rounded-lg px-4 py-3">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 mt-0.5">
+              {message.errorKind === 'network' ? <WifiOff className="w-4 h-4 text-danger" /> :
+               message.errorKind === 'timeout' ? <Clock className="w-4 h-4 text-danger" /> :
+               message.errorKind === 'rate_limit' ? <AlertTriangle className="w-4 h-4 text-warning" /> :
+               <AlertTriangle className="w-4 h-4 text-danger" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-danger mb-1">
+                {language === 'es' ? 'No se pudo completar la consulta' : 'Could not complete the query'}
+              </p>
+              <p className="text-sm text-danger leading-relaxed">{safeContent}</p>
+              {message.onRetry && (
+                <button
+                  type="button"
+                  onClick={message.onRetry}
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-n-900 text-n-0 hover:bg-n-700 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  {language === 'es' ? 'Reintentar' : 'Retry'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
     );
   }
 
+  // Claude/ChatGPT-style assistant turn: no panel wrapper, centered reading
+  // column, 24px gold avatar to the left, subtle separator between turns.
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', ...SPRING }}
-      className="bg-[#fafafa] border-t border-b border-[#e5e5e5] group"
+      className="border-b border-n-200/40 px-6 py-8 group"
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-6 py-2.5 border-b border-[#e5e5e5]">
-        <span className="text-xs font-medium text-[#0a0a0a]">1+1</span>
-        <span className="text-[#a3a3a3] text-xs">·</span>
-        <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
-          {language === 'es' ? 'Análisis' : 'Analysis'}
-        </span>
-        {message.tier && (
-          <>
-            <span className="text-[#a3a3a3] text-xs">·</span>
-            <DSBadge variant="tier" tier={message.tier as AgentTier} label="" size="sm" />
-          </>
-        )}
-        <time
-          dateTime={message.timestamp}
-          className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] ml-auto"
+      <div className="max-w-[var(--chat-reading-width)] mx-auto w-full flex gap-4">
+        {/* 24px gold avatar */}
+        <div
+          aria-hidden="true"
+          className="shrink-0 w-6 h-6 rounded-full bg-gold-500 text-n-0 flex items-center justify-center text-xs-mono font-semibold font-mono mt-1"
         >
-          {formatTime(message.timestamp)}
-        </time>
-      </div>
-
-      {/* Web search indicator */}
-      {message.webSearchUsed && (
-        <div className="flex items-center gap-1.5 px-6 py-2 border-b border-[#e5e5e5] bg-white">
-          <Globe className="w-3.5 h-3.5 text-[#525252]" />
-          <span className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)]">
-            {language === 'es' ? 'Complementado con búsqueda web' : 'Enhanced with web search'}
-          </span>
+          1
         </div>
-      )}
 
-      {/* Markdown body — with optional streaming cursor */}
-      <div className="px-6 py-4 prose prose-sm max-w-none text-[#0a0a0a] prose-headings:text-[#0a0a0a] prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-a:text-[#d4a017] prose-strong:text-[#0a0a0a] prose-code:text-[#525252] prose-code:bg-white prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:border prose-code:border-[#e5e5e5] prose-code:text-xs prose-code:font-[family-name:var(--font-geist-mono)]">
-        <StreamingText isStreaming={!!isStreaming}>
-          {hasContent ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeSanitize]}
-              components={{
-                pre: ({ children, className }) => (
-                  <CodeBlockPre className={className}>{children}</CodeBlockPre>
-                ),
-                thead: ({ children }) => (
-                  <thead className="sticky top-0 bg-[#fafafa] z-[1] shadow-[0_1px_0_0_#e5e5e5]">
-                    {children}
-                  </thead>
-                ),
-              }}
-            >
-              {safeContent}
-            </ReactMarkdown>
-          ) : (
-            <span className="sr-only">
-              {language === 'es' ? 'Generando respuesta...' : 'Generating response...'}
+        <div className="flex-1 min-w-0">
+          {/* Inline header: author + meta */}
+          <div className="flex items-center gap-2 mb-2 text-xs">
+            <span className="font-medium text-n-900">1+1</span>
+            <span className="text-n-400">·</span>
+            <span className="text-n-400 font-mono">
+              {language === 'es' ? 'Análisis' : 'Analysis'}
             </span>
-          )}
-        </StreamingText>
-      </div>
+            {message.tier && (
+              <>
+                <span className="text-n-400">·</span>
+                <DSBadge variant="tier" tier={message.tier as AgentTier} label="" size="sm" />
+              </>
+            )}
+            <time
+              dateTime={message.timestamp}
+              className="text-n-400 font-mono ml-auto num"
+            >
+              {formatTime(message.timestamp)}
+            </time>
+          </div>
 
-      {/* Risk Assessment */}
-      {message.riskAssessment && (
-        <div className="border-t border-[#e5e5e5] px-6 py-4">
-          <RiskMeter
-            score={message.riskAssessment.score}
-            level={
-              ({ bajo: 'low', medio: 'medium', alto: 'high', critico: 'critical' } as const)[message.riskAssessment.level]
-            }
-          />
-          {message.riskAssessment.factors.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-xs font-medium text-[#525252] mb-1.5 uppercase tracking-wide">
-                {language === 'es' ? 'Factores de Riesgo' : 'Risk Factors'}
-              </h4>
-              <ul className="space-y-1">
-                {message.riskAssessment.factors.map((f, i) => (
-                  <li key={i} className="text-xs text-[#525252] flex items-start gap-1.5">
-                    <span className={cn(
-                      'mt-1 w-1.5 h-1.5 rounded-full shrink-0',
-                      f.severity === 'alto' || f.severity === 'high' ? 'bg-[#ef4444]' :
-                      f.severity === 'medio' || f.severity === 'medium' ? 'bg-[#eab308]' : 'bg-[#22c55e]'
-                    )} />
-                    {f.description}
-                  </li>
-                ))}
-              </ul>
+          {/* Web search indicator */}
+          {message.webSearchUsed && (
+            <div className="flex items-center gap-1.5 mb-3">
+              <Globe className="w-3.5 h-3.5 text-n-600" />
+              <span className="text-xs text-n-600 font-mono">
+                {language === 'es' ? 'Complementado con búsqueda web' : 'Enhanced with web search'}
+              </span>
             </div>
+          )}
+
+          {/* Markdown body — with optional streaming cursor */}
+          <div className="prose-chat text-n-800 prose-headings:text-n-900 prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-a:text-gold-500 prose-strong:text-n-900 prose-code:text-n-600 prose-code:bg-n-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded-xs prose-code:text-xs prose-code:font-mono">
+            <StreamingText isStreaming={!!isStreaming}>
+              {hasContent ? (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeSanitize]}
+                  components={{
+                    pre: ({ children, className }) => (
+                      <CodeBlockPre className={className}>{children}</CodeBlockPre>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="sticky top-0 bg-n-50 z-[1] shadow-[0_1px_0_0_var(--color-n-200)]">
+                        {children}
+                      </thead>
+                    ),
+                  }}
+                >
+                  {safeContent}
+                </ReactMarkdown>
+              ) : (
+                <span className="sr-only">
+                  {language === 'es' ? 'Generando respuesta...' : 'Generating response...'}
+                </span>
+              )}
+            </StreamingText>
+          </div>
+
+          {/* Risk Assessment */}
+          {message.riskAssessment && (
+            <div className="mt-4 pt-4 border-t border-n-200/50">
+              <RiskMeter
+                score={message.riskAssessment.score}
+                level={
+                  ({ bajo: 'low', medio: 'medium', alto: 'high', critico: 'critical' } as const)[message.riskAssessment.level]
+                }
+              />
+              {message.riskAssessment.factors.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="text-xs font-medium text-n-600 mb-1.5 uppercase tracking-eyebrow">
+                    {language === 'es' ? 'Factores de Riesgo' : 'Risk Factors'}
+                  </h4>
+                  <ul className="space-y-1">
+                    {message.riskAssessment.factors.map((f, i) => (
+                      <li key={i} className="text-xs text-n-600 flex items-start gap-1.5">
+                        <span className={cn(
+                          'mt-1 w-1.5 h-1.5 rounded-full shrink-0',
+                          f.severity === 'alto' || f.severity === 'high' ? 'bg-danger' :
+                          f.severity === 'medio' || f.severity === 'medium' ? 'bg-warning' : 'bg-success'
+                        )} />
+                        {f.description}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sanction Calculation */}
+          {message.sanctionCalculation && (
+            <div className="mt-4">
+              <CollapsibleSection
+                title={language === 'es' ? 'Cálculo de Sanción' : 'Sanction Calculation'}
+                icon={Calculator}
+                defaultOpen
+              >
+                <div className="bg-n-50 border border-n-200 rounded-lg p-4">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-xs text-n-400 font-mono">
+                      {message.sanctionCalculation.article}
+                    </span>
+                    <span className="text-lg font-bold text-n-900 font-mono num">
+                      ${message.sanctionCalculation.amount.toLocaleString('es-CO')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-n-600 font-mono mb-1">
+                    {message.sanctionCalculation.formula}
+                  </p>
+                  <p className="text-xs text-n-400">{message.sanctionCalculation.explanation}</p>
+                </div>
+              </CollapsibleSection>
+            </div>
+          )}
+
+          {/* Legal References */}
+          {legalRefs.length > 0 && (
+            <div className="mt-4">
+              <CollapsibleSection
+                title={language === 'es' ? 'Referencias Legales' : 'Legal References'}
+                icon={Scale}
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {legalRefs.map((ref, i) => (
+                    <CitationBadge
+                      key={i}
+                      article={ref.article}
+                      source="Estatuto Tributario"
+                      normText={ref.description}
+                    />
+                  ))}
+                </div>
+              </CollapsibleSection>
+            </div>
+          )}
+
+          {/* Actions row — hidden while streaming */}
+          {!isStreaming && hasContent && (
+            <MessageActions
+              message={message}
+              language={language}
+              useCase={useCase}
+              canRegenerate={canRegenerate}
+              onRegenerate={onRegenerate}
+            />
           )}
         </div>
-      )}
-
-      {/* Sanction Calculation */}
-      {message.sanctionCalculation && (
-        <CollapsibleSection
-          title={language === 'es' ? 'Cálculo de Sanción' : 'Sanction Calculation'}
-          icon={Calculator}
-          defaultOpen
-        >
-          <div className="bg-white border border-[#e5e5e5] rounded-lg p-4">
-            <div className="flex items-baseline justify-between mb-2">
-              <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
-                {message.sanctionCalculation.article}
-              </span>
-              <span className="text-lg font-bold text-[#0a0a0a] font-[family-name:var(--font-geist-mono)]">
-                ${message.sanctionCalculation.amount.toLocaleString('es-CO')}
-              </span>
-            </div>
-            <p className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)] mb-1">
-              {message.sanctionCalculation.formula}
-            </p>
-            <p className="text-xs text-[#a3a3a3]">{message.sanctionCalculation.explanation}</p>
-          </div>
-        </CollapsibleSection>
-      )}
-
-      {/* Legal References */}
-      {legalRefs.length > 0 && (
-        <CollapsibleSection
-          title={language === 'es' ? 'Referencias Legales' : 'Legal References'}
-          icon={Scale}
-        >
-          <div className="flex flex-wrap gap-1.5">
-            {legalRefs.map((ref, i) => (
-              <CitationBadge
-                key={i}
-                article={ref.article}
-                source="Estatuto Tributario"
-                normText={ref.description}
-              />
-            ))}
-          </div>
-        </CollapsibleSection>
-      )}
-
-      {/* Actions row — hidden while streaming */}
-      {!isStreaming && hasContent && (
-        <MessageActions
-          message={message}
-          language={language}
-          useCase={useCase}
-          canRegenerate={canRegenerate}
-          onRegenerate={onRegenerate}
-        />
-      )}
+      </div>
     </motion.div>
   );
 }
@@ -861,24 +883,26 @@ function StarterChips({
 
   return (
     <div className="px-6 pb-6">
-      <p className="text-[11px] uppercase tracking-wide text-[#a3a3a3] mb-3 font-[family-name:var(--font-geist-mono)]">
-        {language === 'es' ? 'Sugerencias para empezar' : 'Suggestions to get started'}
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {list.map((p, i) => (
-          <motion.button
-            key={p}
-            type="button"
-            onClick={() => onPick(p)}
-            initial={prefersReduced ? undefined : { opacity: 0, y: 6 }}
-            animate={prefersReduced ? undefined : { opacity: 1, y: 0 }}
-            transition={{ type: 'spring', ...SPRING, delay: prefersReduced ? 0 : i * 0.03 }}
-            whileHover={prefersReduced ? undefined : { y: -1 }}
-            className="text-left text-sm text-[#0a0a0a] bg-white border border-[#e5e5e5] rounded-lg px-3 py-2.5 hover:border-[#D4A017] hover:bg-[#fffbeb] transition-colors"
-          >
-            {p}
-          </motion.button>
-        ))}
+      <div className="max-w-[var(--chat-reading-width)] mx-auto w-full">
+        <p className="text-xs-mono uppercase tracking-eyebrow text-n-500 mb-3 font-mono font-medium">
+          {language === 'es' ? 'Sugerencias para empezar' : 'Suggestions to get started'}
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {list.map((p, i) => (
+            <motion.button
+              key={p}
+              type="button"
+              onClick={() => onPick(p)}
+              initial={prefersReduced ? undefined : { opacity: 0, y: 6 }}
+              animate={prefersReduced ? undefined : { opacity: 1, y: 0 }}
+              transition={{ type: 'spring', ...SPRING, delay: prefersReduced ? 0 : i * 0.03 }}
+              whileHover={prefersReduced ? undefined : { y: -1 }}
+              className="text-left text-sm text-n-900 bg-n-50 border border-n-200 rounded-lg px-3 py-2.5 hover:border-gold-500 hover:bg-gold-300/10 transition-colors"
+            >
+              {p}
+            </motion.button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1438,13 +1462,13 @@ export function ChatWorkspace({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 bg-white/90 border-2 border-dashed border-[#d4a017] rounded-sm flex flex-col items-center justify-center gap-3"
+            className="absolute inset-0 z-50 bg-n-0/90 border-2 border-dashed border-gold-500 rounded-sm flex flex-col items-center justify-center gap-3"
           >
-            <Upload className="w-8 h-8 text-[#d4a017]" />
-            <p className="text-sm font-medium text-[#0a0a0a]">
+            <Upload className="w-8 h-8 text-gold-500" />
+            <p className="text-sm font-medium text-n-900">
               {language === 'es' ? 'Suelte su documento aquí' : 'Drop your document here'}
             </p>
-            <p className="text-xs text-[#a3a3a3]">
+            <p className="text-xs text-n-400">
               PDF, Excel, Word, CSV, imágenes
             </p>
           </motion.div>
@@ -1461,7 +1485,7 @@ export function ChatWorkspace({
       <div
         ref={scrollContainerRef}
         data-lenis-prevent
-        className="flex-1 min-h-0 overflow-y-auto styled-scrollbar bg-white"
+        className="flex-1 min-h-0 overflow-y-auto styled-scrollbar"
         style={{ overscrollBehavior: 'contain' }}
       >
         <div
@@ -1506,16 +1530,16 @@ export function ChatWorkspace({
             transition={{ type: 'spring', ...SPRING }}
             className="absolute bottom-24 right-4 z-40"
           >
-            <div className="w-[120px] h-[120px] rounded-lg overflow-hidden bg-[#0a0a0a] border border-[#e5e5e5] shadow-lg relative">
+            <div className="w-[120px] h-[120px] rounded-lg overflow-hidden bg-n-900 border border-n-200 shadow-lg relative">
               <div className="absolute inset-0 flex items-center justify-center">
                 <motion.div
                   className="rounded-full"
-                  style={{ width: 48, height: 48, background: 'radial-gradient(circle, #ffffff 0%, #d4a017 50%, transparent 100%)' }}
+                  style={{ width: 48, height: 48, background: 'radial-gradient(circle, var(--color-n-0) 0%, var(--color-gold-500) 50%, transparent 100%)' }}
                   animate={{ scale: isConnecting ? [1, 1.2, 1] : [1 + volume * 0.5, 1 + volume * 0.8, 1 + volume * 0.5], opacity: isConnecting ? [0.5, 1, 0.5] : 0.9 }}
                   transition={{ duration: isConnecting ? 1 : 0.3, repeat: Infinity, ease: 'easeInOut' }}
                 />
               </div>
-              <button type="button" onClick={toggleVoice} className="absolute bottom-1 right-1 p-1 rounded bg-[#ef4444]/90 text-white hover:bg-[#ef4444] transition-colors" aria-label="Detener voz">
+              <button type="button" onClick={toggleVoice} className="absolute bottom-1 right-1 p-1 rounded bg-danger/90 text-n-0 hover:bg-danger transition-colors" aria-label="Detener voz">
                 <MicOff className="w-3 h-3" />
               </button>
             </div>
@@ -1531,14 +1555,14 @@ export function ChatWorkspace({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ type: 'spring', ...SPRING }}
-            className="overflow-hidden border-t border-[#e5e5e5] bg-[#fafafa]"
+            className="overflow-hidden border-t border-n-200 bg-n-50"
           >
             <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto styled-scrollbar">
               {uploadedDocs.map((doc, i) => (
-                <div key={`${doc.filename}-${i}`} className="flex items-center gap-1.5 bg-white border border-[#e5e5e5] rounded px-2 py-1 shrink-0">
-                  <FileText className="w-3 h-3 text-[#525252]" />
-                  <span className="text-xs text-[#0a0a0a] max-w-[120px] truncate">{doc.filename}</span>
-                  <button type="button" onClick={() => removeDocument(doc.filename)} className="p-0.5 text-[#a3a3a3] hover:text-[#ef4444] transition-colors" aria-label={`Remover ${doc.filename}`}>
+                <div key={`${doc.filename}-${i}`} className="flex items-center gap-1.5 bg-n-0 border border-n-200 rounded px-2 py-1 shrink-0">
+                  <FileText className="w-3 h-3 text-n-600" />
+                  <span className="text-xs text-n-900 max-w-[120px] truncate">{doc.filename}</span>
+                  <button type="button" onClick={() => removeDocument(doc.filename)} className="p-0.5 text-n-400 hover:text-danger transition-colors" aria-label={`Remover ${doc.filename}`}>
                     <X className="w-3 h-3" />
                   </button>
                 </div>
@@ -1549,55 +1573,57 @@ export function ChatWorkspace({
       </AnimatePresence>
 
       {/* Input area */}
-      <div className="p-4 bg-white border-t border-[#e5e5e5] relative z-20">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2 bg-white border border-[#e5e5e5] rounded-lg p-1.5 focus-within:border-[#0a0a0a] transition-colors">
-          <button type="button" onClick={toggleVoice} className={cn('p-2.5 rounded flex items-center justify-center shrink-0 transition-colors', voiceMode ? 'text-[#ef4444] bg-[#fef2f2]' : 'text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]')} aria-pressed={voiceMode} aria-label={voiceMode ? 'Detener voz' : 'Voz'}>
-            {voiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </button>
-          <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.heic" onChange={handleFileSelect} className="hidden" />
-          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-2.5 rounded flex items-center justify-center shrink-0 transition-colors text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] disabled:opacity-50" aria-label="Subir documento">
-            <Upload className="w-4 h-4" />
-          </button>
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={language === 'es'
-              ? (useCase === 'general' ? 'Escriba su consulta o suba un documento...' : 'Haga una pregunta sobre este caso...')
-              : (useCase === 'general' ? 'Type your question or upload a document...' : 'Ask a question about this case...')}
-            disabled={isTyping}
-            className="flex-1 bg-transparent border-none focus:ring-0 text-[#0a0a0a] text-sm resize-none py-2.5 px-2 outline-none min-h-[40px] max-h-[120px] placeholder:text-[#a3a3a3] disabled:opacity-50"
-            aria-label={language === 'es' ? 'Escribir mensaje' : 'Type message'}
-          />
-          {isTyping ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className="p-2.5 rounded bg-[#D4A017] text-[#0a0a0a] shrink-0 hover:bg-[#b8890f] transition-colors flex items-center gap-1.5 px-3"
-              aria-label={language === 'es' ? 'Detener generación' : 'Stop generation'}
-              title={language === 'es' ? 'Detener' : 'Stop'}
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span className="text-xs font-medium hidden sm:inline">
-                {language === 'es' ? 'Detener' : 'Stop'}
-              </span>
+      <div className="p-4 bg-n-0 border-t border-n-200 relative z-20">
+        <div className="max-w-[var(--chat-reading-width)] mx-auto w-full">
+          <form onSubmit={handleSubmit} className="flex items-end gap-2 bg-n-50 border border-n-200 rounded-lg p-1.5 focus-within:border-gold-500 transition-colors">
+            <button type="button" onClick={toggleVoice} className={cn('p-2.5 rounded-md flex items-center justify-center shrink-0 transition-colors', voiceMode ? 'text-danger bg-danger/10' : 'text-n-400 hover:text-n-900 hover:bg-n-100')} aria-pressed={voiceMode} aria-label={voiceMode ? 'Detener voz' : 'Voz'}>
+              {voiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!input.trim()}
-              className="p-2.5 rounded bg-[#0a0a0a] text-white shrink-0 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#262626] transition-colors"
-              aria-label={language === 'es' ? 'Enviar' : 'Send'}
-            >
-              <Send className="w-4 h-4" />
+            <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.xml,.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.bmp,.heic" onChange={handleFileSelect} className="hidden" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-2.5 rounded-md flex items-center justify-center shrink-0 transition-colors text-n-400 hover:text-n-900 hover:bg-n-100 disabled:opacity-50" aria-label="Subir documento">
+              <Upload className="w-4 h-4" />
             </button>
-          )}
-        </form>
-        <p className="text-center text-xs text-[#a3a3a3] mt-3 font-[family-name:var(--font-geist-mono)]">
-          {t.chat.disclaimer}
-        </p>
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={language === 'es'
+                ? (useCase === 'general' ? 'Escriba su consulta o suba un documento...' : 'Haga una pregunta sobre este caso...')
+                : (useCase === 'general' ? 'Type your question or upload a document...' : 'Ask a question about this case...')}
+              disabled={isTyping}
+              className="flex-1 bg-transparent border-none focus:ring-0 text-n-900 text-md resize-none py-2.5 px-2 outline-none min-h-[40px] max-h-[120px] placeholder:text-n-400 disabled:opacity-50"
+              aria-label={language === 'es' ? 'Escribir mensaje' : 'Type message'}
+            />
+            {isTyping ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="p-2.5 rounded-md bg-gold-500 text-n-0 shrink-0 hover:bg-gold-600 transition-colors flex items-center gap-1.5 px-3"
+                aria-label={language === 'es' ? 'Detener generación' : 'Stop generation'}
+                title={language === 'es' ? 'Detener' : 'Stop'}
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span className="text-xs font-medium hidden sm:inline">
+                  {language === 'es' ? 'Detener' : 'Stop'}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="p-2.5 rounded-md bg-n-900 text-n-0 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-n-700 transition-colors"
+                aria-label={language === 'es' ? 'Enviar' : 'Send'}
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            )}
+          </form>
+          <p className="text-center text-xs text-n-400 mt-3 font-mono num">
+            {t.chat.disclaimer}
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { HTMLAttributes, forwardRef } from 'react';
  * GlassPanel — Base surface that adapts to the active theme.
  *
  *  - In the default (light) theme: keeps the original white-panel look
- *    (bg: #fff, 1px neutral border, optional hover tint). Landing page
+ *    (bg: n-0, 1px neutral border, optional hover tint). Landing page
  *    components continue to render unchanged.
  *  - In the elite theme (subtree with `data-theme='elite'`): switches to
  *    a proper glass surface (backdrop-blur, translucent dark bg, subtle
@@ -40,11 +40,11 @@ const GlassPanel = forwardRef<HTMLDivElement, GlassPanelProps>(
         <div
           ref={ref}
           className={cn(
-            'glass-elite rounded-[12px]',
+            'glass-elite rounded-lg',
             {
-              'transition-[box-shadow,border-color] duration-200 hover:shadow-[0_0_32px_rgba(212,160,23,0.22)]':
+              'transition-[box-shadow,border-color] duration-200 hover:shadow-glow-gold-soft':
                 hoverEffect,
-              'shadow-[0_30px_60px_-30px_rgba(0,0,0,0.9)]': elevated,
+              'shadow-e5': elevated,
             },
             className,
           )}
@@ -59,9 +59,9 @@ const GlassPanel = forwardRef<HTMLDivElement, GlassPanelProps>(
         <div
           ref={ref}
           className={cn(
-            'bg-white border border-[#e5e5e5] rounded-sm',
+            'bg-n-0 border border-n-200 rounded-sm',
             {
-              'transition-colors duration-100 hover:border-[#d4d4d4] hover:bg-[#fafafa]':
+              'transition-colors duration-100 hover:border-n-300 hover:bg-n-50':
                 hoverEffect,
               'shadow-sm': elevated,
             },
@@ -84,9 +84,9 @@ const GlassPanel = forwardRef<HTMLDivElement, GlassPanelProps>(
       <div
         ref={ref}
         className={cn(
-          'glass-panel bg-white border border-[#e5e5e5] rounded-sm',
+          'glass-panel bg-n-0 border border-n-200 rounded-sm',
           {
-            'transition-colors duration-100 hover:border-[#d4d4d4] hover:bg-[#fafafa]':
+            'transition-colors duration-100 hover:border-n-300 hover:bg-n-50':
               hoverEffect,
             'shadow-sm': elevated,
           },

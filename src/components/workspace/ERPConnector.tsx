@@ -269,7 +269,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-n-1000/50"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
@@ -279,15 +279,15 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        className="bg-n-0 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-n-200">
           <div className="flex items-center gap-2">
-            <Plug className="w-4 h-4 text-[#D4A017]" />
-            <h3 id="connect-form-title" className="text-sm font-semibold text-[#0a0a0a]">Conectar {provider.name}</h3>
+            <Plug className="w-4 h-4 text-gold-500" />
+            <h3 id="connect-form-title" className="text-sm font-semibold text-n-900">Conectar {provider.name}</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={onClose} className="p-1 text-n-400 hover:text-n-600 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -296,32 +296,32 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
         <div className="px-6 py-5 space-y-4">
           {status === 'connected' ? (
             <div className="text-center py-4">
-              <CheckCircle className="w-10 h-10 text-[#22C55E] mx-auto mb-2" />
-              <p className="text-sm font-semibold text-[#16A34A]">Conectado exitosamente</p>
-              <p className="text-xs text-[#a3a3a3] mt-1">Ya puede importar datos desde {provider.name}</p>
+              <CheckCircle className="w-10 h-10 text-success mx-auto mb-2" />
+              <p className="text-sm font-semibold text-success">Conectado exitosamente</p>
+              <p className="text-xs text-n-400 mt-1">Ya puede importar datos desde {provider.name}</p>
             </div>
           ) : (
             <>
-              <p className="text-xs text-[#a3a3a3]">
-                Autenticación: <span className="text-[#525252] font-medium">{provider.authType}</span>
+              <p className="text-xs text-n-400">
+                Autenticación: <span className="text-n-600 font-medium">{provider.authType}</span>
               </p>
 
               {fieldDefs.map(field => (
                 <div key={field.key}>
-                  <label className="block text-xs font-medium text-[#525252] mb-1">{field.label}</label>
+                  <label className="block text-xs font-medium text-n-600 mb-1">{field.label}</label>
                   <input
                     type={field.secret ? 'password' : 'text'}
                     value={fields[field.key] || ''}
                     onChange={e => setFields(f => ({ ...f, [field.key]: e.target.value }))}
-                    className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors"
+                    className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors"
                     placeholder={field.placeholder}
                   />
-                  {field.hint && <p className="text-[10px] text-[#a3a3a3] mt-0.5">{field.hint}</p>}
+                  {field.hint && <p className="text-2xs text-n-400 mt-0.5">{field.hint}</p>}
                 </div>
               ))}
 
               {status === 'error' && (
-                <div className="flex items-center gap-2 text-xs text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   {error}
                 </div>
@@ -332,15 +332,15 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
 
         {/* Actions */}
         {status !== 'connected' && (
-          <div className="px-6 py-4 border-t border-[#e5e5e5] flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
+          <div className="px-6 py-4 border-t border-n-200 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-n-600 hover:bg-n-50 rounded-lg transition-colors">
               Cancelar
             </button>
             <button
               type="button"
               onClick={handleTest}
               disabled={!allRequiredFilled || status === 'testing' || status === 'connecting'}
-              className="px-4 py-2 rounded-lg text-xs font-medium border border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              className="px-4 py-2 rounded-lg text-xs font-medium border border-n-200 text-n-600 hover:bg-n-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {status === 'testing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {status === 'testing' ? 'Probando...' : 'Probar conexión'}
@@ -352,8 +352,8 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
               className={cn(
                 'px-5 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5',
                 status === 'connecting'
-                  ? 'bg-[#D4A017]/50 text-white cursor-wait'
-                  : 'bg-[#D4A017] hover:bg-[#A87C10] text-white disabled:bg-[#e5e5e5] disabled:text-[#a3a3a3] disabled:cursor-not-allowed',
+                  ? 'bg-gold-500/50 text-n-0 cursor-wait'
+                  : 'bg-gold-500 hover:bg-gold-600 text-n-0 disabled:bg-n-200 disabled:text-n-400 disabled:cursor-not-allowed',
               )}
             >
               {status === 'connecting' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -380,7 +380,7 @@ function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalP
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-n-1000/50"
       onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <motion.div
@@ -390,27 +390,27 @@ function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalP
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+        className="bg-n-0 rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
       >
         <div className="px-6 py-5">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-[#FEF2F2] flex items-center justify-center">
-              <Trash2 className="w-4 h-4 text-[#DC2626]" />
+            <div className="w-8 h-8 rounded-lg bg-danger/10 flex items-center justify-center">
+              <Trash2 className="w-4 h-4 text-danger" />
             </div>
-            <h3 id="disconnect-modal-title" className="text-sm font-semibold text-[#0a0a0a]">¿Desconectar {providerName}?</h3>
+            <h3 id="disconnect-modal-title" className="text-sm font-semibold text-n-900">¿Desconectar {providerName}?</h3>
           </div>
-          <p className="text-xs text-[#a3a3a3]">
+          <p className="text-xs text-n-400">
             Se eliminarán las credenciales almacenadas. Deberá volver a conectar para sincronizar datos.
           </p>
         </div>
-        <div className="px-6 py-4 border-t border-[#e5e5e5] flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
+        <div className="px-6 py-4 border-t border-n-200 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-xs font-medium text-n-600 hover:bg-n-50 rounded-lg transition-colors">
             Cancelar
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#DC2626] hover:bg-[#B91C1C] text-white transition-colors"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-danger hover:bg-danger/90 text-n-0 transition-colors"
           >
             Desconectar
           </button>
@@ -487,7 +487,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-n-1000/50"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
@@ -497,15 +497,15 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        className="bg-n-0 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-n-200">
           <div className="flex items-center gap-2">
-            <Download className="w-4 h-4 text-[#D4A017]" />
-            <h3 id="sync-modal-title" className="text-sm font-semibold text-[#0a0a0a]">Sincronizar {provider.name}</h3>
+            <Download className="w-4 h-4 text-gold-500" />
+            <h3 id="sync-modal-title" className="text-sm font-semibold text-n-900">Sincronizar {provider.name}</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={onClose} className="p-1 text-n-400 hover:text-n-600 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -513,19 +513,19 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
         <div className="px-6 py-5 space-y-4">
           {result?.success ? (
             <div className="text-center py-2 space-y-3">
-              <CheckCircle className="w-10 h-10 text-[#22C55E] mx-auto" />
+              <CheckCircle className="w-10 h-10 text-success mx-auto" />
               <div>
-                <p className="text-sm font-semibold text-[#16A34A]">
+                <p className="text-sm font-semibold text-success">
                   {result.recordCount} registros sincronizados
                 </p>
-                <p className="text-xs text-[#a3a3a3] mt-1">
+                <p className="text-xs text-n-400 mt-1">
                   Datos importados exitosamente desde {provider.name}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleCreateReport}
-                className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
+                className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-gold-500 hover:bg-gold-600 text-n-0 transition-colors"
               >
                 Crear Reporte NIIF con estos datos
               </button>
@@ -534,7 +534,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
             <>
               {/* Sync options */}
               <div className="space-y-2">
-                <p className="text-xs font-medium text-[#525252]">Datos a sincronizar</p>
+                <p className="text-xs font-medium text-n-600">Datos a sincronizar</p>
                 {[
                   { key: 'trialBalance' as const, label: 'Balance de Prueba' },
                   { key: 'chartOfAccounts' as const, label: 'Plan de Cuentas' },
@@ -542,25 +542,25 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
                   { key: 'invoices' as const, label: 'Facturas' },
                   { key: 'contacts' as const, label: 'Terceros / Contactos' },
                 ].map(opt => (
-                  <label key={opt.key} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#fafafa] cursor-pointer transition-colors">
+                  <label key={opt.key} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-n-50 cursor-pointer transition-colors">
                     <input
                       type="checkbox"
                       checked={syncOptions[opt.key]}
                       onChange={() => setSyncOptions(prev => ({ ...prev, [opt.key]: !prev[opt.key] }))}
-                      className="w-3.5 h-3.5 rounded border-[#d4d4d4] text-[#D4A017] focus:ring-[#D4A017] accent-[#D4A017]"
+                      className="w-3.5 h-3.5 rounded border-n-300 text-gold-500 focus:ring-gold-500 accent-gold-500"
                     />
-                    <span className="text-xs text-[#0a0a0a]">{opt.label}</span>
+                    <span className="text-xs text-n-900">{opt.label}</span>
                   </label>
                 ))}
               </div>
 
               {/* Year selector */}
               <div>
-                <label className="block text-xs font-medium text-[#525252] mb-1">Periodo (año)</label>
+                <label className="block text-xs font-medium text-n-600 mb-1">Periodo (año)</label>
                 <select
                   value={year}
                   onChange={e => setYear(Number(e.target.value))}
-                  className="w-full border border-[#e5e5e5] rounded-lg px-3 py-2 text-sm text-[#0a0a0a] focus:border-[#0a0a0a] focus:outline-none transition-colors bg-white"
+                  className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors bg-n-0"
                 >
                   {[2026, 2025, 2024, 2023].map(y => (
                     <option key={y} value={y}>{y}</option>
@@ -569,7 +569,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 text-xs text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   {error}
                 </div>
@@ -580,8 +580,8 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
 
         {/* Actions */}
         {!result?.success && (
-          <div className="px-6 py-4 border-t border-[#e5e5e5] flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-[#525252] hover:bg-[#fafafa] rounded-lg transition-colors">
+          <div className="px-6 py-4 border-t border-n-200 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-medium text-n-600 hover:bg-n-50 rounded-lg transition-colors">
               Cancelar
             </button>
             <button
@@ -591,8 +591,8 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
               className={cn(
                 'px-5 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5',
                 syncing
-                  ? 'bg-[#D4A017]/50 text-white cursor-wait'
-                  : 'bg-[#D4A017] hover:bg-[#A87C10] text-white disabled:bg-[#e5e5e5] disabled:text-[#a3a3a3] disabled:cursor-not-allowed',
+                  ? 'bg-gold-500/50 text-n-0 cursor-wait'
+                  : 'bg-gold-500 hover:bg-gold-600 text-n-0 disabled:bg-n-200 disabled:text-n-400 disabled:cursor-not-allowed',
               )}
             >
               {syncing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -636,8 +636,8 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
       className={cn(
         'flex flex-col p-4 rounded-xl border transition-all',
         isConnected
-          ? 'border-[#22C55E]/30 bg-[#F0FDF4]'
-          : 'border-[#e5e5e5] bg-white hover:border-[#d4d4d4] hover:shadow-sm',
+          ? 'border-success/30 bg-success/10'
+          : 'border-n-200 bg-n-0 hover:border-n-300 hover:shadow-sm',
       )}
     >
       {/* Header: brand logo + name + status */}
@@ -645,32 +645,32 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
         <div
           className={cn(
             'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 overflow-hidden',
-            isConnected && 'ring-2 ring-[#22C55E]/30',
+            isConnected && 'ring-2 ring-success/30',
           )}
         >
           <ERPLogo provider={provider.id} size={36} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#0a0a0a]">{provider.name}</span>
+            <span className="text-sm font-semibold text-n-900">{provider.name}</span>
             <span className={cn(
-              'inline-flex items-center gap-1 text-[10px] font-medium shrink-0',
-              isConnected ? 'text-[#16A34A]' : 'text-[#a3a3a3]',
+              'inline-flex items-center gap-1 text-2xs font-medium shrink-0',
+              isConnected ? 'text-success' : 'text-n-400',
             )}>
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full',
-                isConnected ? 'bg-[#22C55E]' : 'bg-[#d4d4d4]',
+                isConnected ? 'bg-success' : 'bg-n-300',
               )} />
               {isConnected ? 'Conectado' : 'No conectado'}
             </span>
           </div>
-          <p className="text-[11px] text-[#737373] mt-0.5 leading-snug">{provider.description}</p>
+          <p className="text-xs-mono text-n-500 mt-0.5 leading-snug">{provider.description}</p>
         </div>
       </div>
 
       {/* Connected: last sync */}
       {isConnected && connection.lastSync && (
-        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-[#16A34A]">
+        <div className="flex items-center gap-1.5 mt-2 text-2xs text-success">
           <RefreshCw className="w-3 h-3" />
           Última sync: {formatSyncDate(connection.lastSync)}
         </div>
@@ -679,7 +679,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
       {/* Capabilities */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5 flex-1">
         {provider.capabilities.map(cap => (
-          <span key={cap} className="inline-flex items-center gap-1 text-[11px] text-[#525252]">
+          <span key={cap} className="inline-flex items-center gap-1 text-xs-mono text-n-600">
             <Check className="w-3 h-3 shrink-0" style={{ color: provider.color }} />
             {CAPABILITY_LABELS[cap] || cap}
           </span>
@@ -693,7 +693,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
             <button
               type="button"
               onClick={onSync}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#D4A017] hover:bg-[#A87C10] text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gold-500 hover:bg-gold-600 text-n-0 transition-colors"
             >
               <RefreshCw className="w-3 h-3" />
               Sincronizar
@@ -701,7 +701,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
             <button
               type="button"
               onClick={onDisconnect}
-              className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
+              className="p-1.5 rounded-lg text-n-400 hover:text-danger hover:bg-danger/10 transition-colors"
               title="Desconectar"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -712,7 +712,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
             type="button"
             onClick={onConnect}
             aria-label={`Conectar ${provider.name}`}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#e5e5e5] text-[#525252] hover:border-[#D4A017] hover:text-[#D4A017] hover:bg-[#FFFBEB] transition-all"
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-n-200 text-n-600 hover:border-gold-500 hover:text-gold-500 hover:bg-[#FFFBEB] transition-all"
           >
             Conectar
             <ChevronRight className="w-3.5 h-3.5" />
@@ -775,9 +775,9 @@ export function ERPConnector() {
     <div className="space-y-6">
       {/* Summary bar */}
       {connectedCount > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F0FDF4] border border-[#22C55E]/20">
-          <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-          <span className="text-xs font-medium text-[#16A34A]">
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-success/10 border border-success/20">
+          <CheckCircle className="w-4 h-4 text-success" />
+          <span className="text-xs font-medium text-success">
             {connectedCount} ERP{connectedCount > 1 ? 's' : ''} conectado{connectedCount > 1 ? 's' : ''}
           </span>
         </div>
@@ -786,9 +786,9 @@ export function ERPConnector() {
       {/* Colombian ERPs */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <Shield className="w-4 h-4 text-[#D4A017]" />
-          <h3 className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wider">ERPs Colombianos</h3>
-          <span className="text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">PUC + DIAN</span>
+          <Shield className="w-4 h-4 text-gold-500" />
+          <h3 className="text-xs font-bold text-n-900 uppercase tracking-wider">ERPs Colombianos</h3>
+          <span className="text-2xs text-n-400 font-[family-name:var(--font-geist-mono)]">PUC + DIAN</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {COLOMBIAN_PROVIDERS.map(p => (
@@ -807,8 +807,8 @@ export function ERPConnector() {
       {/* International ERPs */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <Globe className="w-4 h-4 text-[#525252]" />
-          <h3 className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wider">ERPs Internacionales</h3>
+          <Globe className="w-4 h-4 text-n-600" />
+          <h3 className="text-xs font-bold text-n-900 uppercase tracking-wider">ERPs Internacionales</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {INTERNATIONAL_PROVIDERS.map(p => (

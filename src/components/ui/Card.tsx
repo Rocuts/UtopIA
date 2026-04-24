@@ -15,7 +15,7 @@ const CardHeader = forwardRef<HTMLDivElement, CardSubComponentProps>(
   ({ className, children, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("pb-4 border-b border-[#e5e5e5]", className)}
+      className={cn("pb-4 border-b border-n-200", className)}
       {...props}
     >
       {children}
@@ -41,7 +41,7 @@ const CardFooter = forwardRef<HTMLDivElement, CardSubComponentProps>(
   ({ className, children, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("pt-4 border-t border-[#e5e5e5]", className)}
+      className={cn("pt-4 border-t border-n-200", className)}
       {...props}
     >
       {children}
@@ -57,7 +57,7 @@ const CardBase = forwardRef<HTMLDivElement, CardProps>(
         ref={ref}
         hoverEffect={hoverEffect}
         elevated={elevated}
-        className={cn("p-6 sm:p-8 flex flex-col gap-4", className)}
+        className={cn("p-5 sm:p-7 flex flex-col gap-4", className)}
         {...props}
       >
         {children}

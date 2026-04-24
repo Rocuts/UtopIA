@@ -15,6 +15,12 @@ import type { HTMLAttributes, ReactNode } from 'react';
  *     align="left"
  *     accent="gold"
  *   />
+ *
+ * Typography lock-in (Phase Mercury+Aladdin):
+ *  - eyebrow: 11px uppercase tracking-eyebrow
+ *  - H1/H2 title: Fraunces variable with opsz=144 at display sizes
+ *  - subtitle: 15px (text-md) relaxed leading
+ *  - H3 consumer variant: text-xl fixed
  */
 
 export type SectionHeaderAccent = 'gold' | 'wine';
@@ -32,15 +38,15 @@ export interface SectionHeaderProps extends Omit<HTMLAttributes<HTMLElement>, 't
 }
 
 const ACCENT_TEXT: Record<SectionHeaderAccent, string> = {
-  gold: 'text-[#D4A017]',
-  wine: 'text-[#C46A76]',
+  gold: 'text-gold-500',
+  wine: 'text-area-escudo',
 };
 
 const DIVIDER_GRADIENT: Record<SectionHeaderAccent, string> = {
   gold:
-    'linear-gradient(90deg, rgba(212,160,23,0) 0%, rgba(212,160,23,0.6) 50%, rgba(212,160,23,0) 100%)',
+    'linear-gradient(90deg, rgb(184 147 74 / 0) 0%, rgb(184 147 74 / 0.6) 50%, rgb(184 147 74 / 0) 100%)',
   wine:
-    'linear-gradient(90deg, rgba(114,47,55,0) 0%, rgba(196,106,118,0.6) 50%, rgba(114,47,55,0) 100%)',
+    'linear-gradient(90deg, rgb(168 56 56 / 0) 0%, rgb(168 56 56 / 0.6) 50%, rgb(168 56 56 / 0) 100%)',
 };
 
 export function SectionHeader({
@@ -57,6 +63,7 @@ export function SectionHeader({
 }: SectionHeaderProps) {
   const TitleTag = titleAs;
   const isCenter = align === 'center';
+  const isDisplay = titleAs === 'h1' || titleAs === 'h2';
 
   return (
     <header
@@ -77,7 +84,7 @@ export function SectionHeader({
           {eyebrow != null && (
             <span
               className={cn(
-                'uppercase tracking-[0.22em] text-[11px] font-medium',
+                'uppercase tracking-eyebrow text-xs font-medium',
                 ACCENT_TEXT[accent],
               )}
             >
@@ -86,18 +93,23 @@ export function SectionHeader({
           )}
           <TitleTag
             className={cn(
-              'font-serif-elite font-normal leading-tight',
-              'text-[32px] sm:text-[40px] md:text-[44px]',
-              'text-[#F5F5F5]',
+              'font-serif-elite font-medium leading-display tracking-tight',
+              isDisplay ? 'text-4xl md:text-5xl' : 'text-xl',
+              'text-n-100',
             )}
+            style={
+              isDisplay
+                ? { fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }
+                : undefined
+            }
           >
             {title}
           </TitleTag>
           {subtitle != null && (
             <p
               className={cn(
-                'font-light text-[15px] leading-relaxed mt-0.5',
-                'text-[#A8A8A8] max-w-2xl',
+                'font-light text-md leading-relaxed mt-0.5',
+                'text-n-500 max-w-2xl',
               )}
             >
               {subtitle}

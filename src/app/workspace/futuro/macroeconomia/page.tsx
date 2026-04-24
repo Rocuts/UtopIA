@@ -319,11 +319,11 @@ const DIR_ICON: Record<Dir, React.ComponentType<{ className?: string; strokeWidt
 };
 
 function deltaColor(direction: Dir, upIsPositive: boolean): string {
-  if (direction === 'flat') return 'text-[#A8A8A8]';
+  if (direction === 'flat') return 'text-n-500';
   const isPositive =
     (direction === 'up' && upIsPositive) ||
     (direction === 'down' && !upIsPositive);
-  return isPositive ? 'text-[#86EFAC]' : 'text-[#FCA5A5]';
+  return isPositive ? 'text-success-light' : 'text-danger-light';
 }
 
 function Sparkline({
@@ -486,7 +486,7 @@ export default function MacroeconomiaPage() {
       data-theme="elite"
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-[#030303] text-[#F5F5F5]',
+        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient orbs */}
@@ -498,7 +498,7 @@ export default function MacroeconomiaPage() {
           className="absolute -top-[20%] -left-[5%] w-[520px] h-[520px] rounded-full blur-[120px] opacity-25"
           style={{
             background:
-              'radial-gradient(circle, rgba(212,160,23,0.35) 0%, rgba(212,160,23,0) 70%)',
+              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.35) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
           }}
         />
         <div
@@ -516,7 +516,7 @@ export default function MacroeconomiaPage() {
           <Link
             href="/workspace/futuro"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] text-[#A8A8A8] hover:text-[#E8B42C] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-n-500 hover:text-gold-600 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
             <span>{isEs ? 'Volver a El Futuro' : 'Back to The Future'}</span>
@@ -539,19 +539,19 @@ export default function MacroeconomiaPage() {
             actions={
               <span
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px]',
-                  'bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.25)] text-[#D4D4D4]',
+                  'inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs',
+                  'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-300',
                 )}
               >
                 {liveLoading ? (
                   <RefreshCw
-                    className="h-3 w-3 text-[#E8B42C] animate-spin"
+                    className="h-3 w-3 text-gold-600 animate-spin"
                     strokeWidth={2}
                     aria-hidden="true"
                   />
                 ) : (
                   <Sparkles
-                    className="h-3 w-3 text-[#E8B42C]"
+                    className="h-3 w-3 text-gold-600"
                     strokeWidth={2}
                     aria-hidden="true"
                   />
@@ -567,8 +567,8 @@ export default function MacroeconomiaPage() {
           {...fade(2)}
           className={cn(
             'font-serif-elite font-normal',
-            'text-[20px] sm:text-[22px] md:text-[24px] leading-[1.55]',
-            'text-[#D4D4D4] max-w-3xl mb-10',
+            'text-xl sm:text-xl md:text-2xl leading-[1.55]',
+            'text-n-300 max-w-3xl mb-10',
           )}
         >
           {isEs
@@ -591,15 +591,15 @@ export default function MacroeconomiaPage() {
           <EliteCard variant="glass" padding="lg">
             <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
               <div>
-                <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                   {isEs ? 'Impacto en su empresa' : 'Impact on your business'}
                 </span>
-                <h3 className="font-serif-elite text-[24px] leading-tight text-[#F5F5F5] mt-1">
+                <h3 className="font-serif-elite text-2xl leading-tight text-n-100 mt-1">
                   {isEs
                     ? 'Cómo estas variables afectan TU negocio'
                     : 'How these variables affect YOUR business'}
                 </h3>
-                <p className="text-[13px] text-[#A8A8A8] mt-1.5 max-w-2xl">
+                <p className="text-sm text-n-500 mt-1.5 max-w-2xl">
                   {isEs
                     ? 'Seleccione su sector para ver qué variables macro son las más sensibles y el outlook 2026.'
                     : 'Select your sector to see which macro variables are most sensitive and the 2026 outlook.'}
@@ -625,11 +625,11 @@ export default function MacroeconomiaPage() {
                     aria-checked={active}
                     onClick={() => setSector(s.key)}
                     className={cn(
-                      'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-[12px] font-medium transition-colors',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+                      'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-xs font-medium transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                       active
-                        ? 'bg-[rgba(212,160,23,0.20)] text-[#F5C63F] border border-[rgba(212,160,23,0.45)]'
-                        : 'bg-[rgba(10,10,10,0.55)] text-[#A8A8A8] border border-[rgba(212,160,23,0.14)] hover:text-[#F5F5F5] hover:border-[rgba(212,160,23,0.32)]',
+                        ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.20)] text-gold-300 border border-[rgb(var(--color-gold-500-rgb)_/_0.45)]'
+                        : 'bg-[rgba(10,10,10,0.55)] text-n-500 border border-[rgb(var(--color-gold-500-rgb)_/_0.14)] hover:text-n-100 hover:border-[rgb(var(--color-gold-500-rgb)_/_0.32)]',
                     )}
                   >
                     <SIcon className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -640,14 +640,14 @@ export default function MacroeconomiaPage() {
             </div>
 
             {/* Outlook */}
-            <div className="rounded-[12px] bg-[rgba(10,10,10,0.45)] border border-[rgba(212,160,23,0.2)] p-5 mb-5">
+            <div className="rounded-[12px] bg-[rgba(10,10,10,0.45)] border border-[rgb(var(--color-gold-500-rgb)_/_0.2)] p-5 mb-5">
               <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-4 w-4 text-[#E8B42C]" strokeWidth={2} aria-hidden="true" />
-                <span className="uppercase tracking-[0.16em] text-[10px] font-medium text-[#D4A017]">
+                <Sparkles className="h-4 w-4 text-gold-600" strokeWidth={2} aria-hidden="true" />
+                <span className="uppercase tracking-[0.16em] text-2xs font-medium text-gold-500">
                   {isEs ? 'Outlook 2026' : '2026 Outlook'}
                 </span>
               </div>
-              <p className="text-[14px] leading-relaxed text-[#D4D4D4]">
+              <p className="text-base leading-relaxed text-n-300">
                 {isEs ? sectorDef.outlookEs : sectorDef.outlookEn}
               </p>
             </div>
@@ -663,19 +663,19 @@ export default function MacroeconomiaPage() {
                 return (
                   <div
                     key={m.key}
-                    className="flex items-start gap-3 p-3.5 rounded-[10px] bg-[rgba(10,10,10,0.4)] border border-[rgba(212,160,23,0.14)]"
+                    className="flex items-start gap-3 p-3.5 rounded-md bg-[rgba(10,10,10,0.4)] border border-[rgb(var(--color-gold-500-rgb)_/_0.14)]"
                   >
-                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[rgba(212,160,23,0.12)] text-[#E8B42C]">
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600">
                       <Globe className="h-3.5 w-3.5" strokeWidth={1.8} />
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[12px] font-medium text-[#F5F5F5] truncate">
+                        <span className="text-xs font-medium text-n-100 truncate">
                           {isEs ? m.label : m.labelEn}
                         </span>
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 text-[11px] font-medium tabular-nums',
+                            'inline-flex items-center gap-1 text-xs font-medium tabular-nums',
                             color,
                           )}
                         >
@@ -683,7 +683,7 @@ export default function MacroeconomiaPage() {
                           {deltaStr}
                         </span>
                       </div>
-                      <p className="text-[12px] text-[#A8A8A8] leading-snug mt-1">
+                      <p className="text-xs text-n-500 leading-snug mt-1">
                         {isEs ? m.narrativeEs : m.narrativeEn}
                       </p>
                     </div>
@@ -702,27 +702,27 @@ export default function MacroeconomiaPage() {
               className="absolute -top-20 -right-20 w-[260px] h-[260px] rounded-full blur-[90px] opacity-40"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(212,160,23,0.35) 0%, rgba(212,160,23,0) 70%)',
+                  'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.35) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
               }}
             />
             <div className="relative z-[1] flex flex-col md:flex-row md:items-center gap-6 md:gap-8">
               <div className="flex items-start gap-3 md:max-w-md">
                 <span
                   aria-hidden="true"
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                 >
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017] mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
                     {isEs ? 'Análisis personalizado' : 'Personalized analysis'}
                   </div>
-                  <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5] mb-1.5">
+                  <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
                     {isEs
                       ? 'Análisis macro a la medida de su empresa'
                       : 'Macro analysis tailored to your company'}
                   </h3>
-                  <p className="text-[13px] leading-relaxed text-[#A8A8A8]">
+                  <p className="text-sm leading-relaxed text-n-500">
                     {isEs
                       ? 'Haga preguntas específicas sobre cómo las variables macro afectan su P&G, caja o proyectos concretos.'
                       : 'Ask specific questions about how macro variables affect your P&L, cash, or concrete projects.'}
@@ -756,11 +756,11 @@ function MacroCard({ m, isEs }: { m: MacroVar; isEs: boolean }) {
   const color = deltaColor(m.direction, m.upIsPositive);
   const sparkColor =
     m.direction === 'flat'
-      ? '#A8A8A8'
+      ? 'var(--n-500)'
       : (m.direction === 'up' && m.upIsPositive) ||
           (m.direction === 'down' && !m.upIsPositive)
-        ? '#86EFAC'
-        : '#FCA5A5';
+        ? 'var(--color-success-light)'
+        : 'var(--color-danger-light)';
   const deltaStr = `${m.delta > 0 ? '+' : ''}${
     Math.abs(m.delta) < 1 ? m.delta.toFixed(2) : m.delta.toFixed(1)
   }`;
@@ -769,38 +769,38 @@ function MacroCard({ m, isEs }: { m: MacroVar; isEs: boolean }) {
   const narrative = isEs ? m.narrativeEs : m.narrativeEn;
 
   return (
-    <div className="relative p-5 rounded-[14px] glass-elite-elevated border-elite-gold">
+    <div className="relative p-5 rounded-xl glass-elite-elevated border-elite-gold">
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[14px]"
-        style={{ boxShadow: 'inset 0 0 0 1px rgba(212,160,23,0.22)' }}
+        className="pointer-events-none absolute inset-0 rounded-xl"
+        style={{ boxShadow: 'inset 0 0 0 1px rgb(var(--color-gold-500-rgb) / 0.22)' }}
       />
 
       <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
-        <span className="uppercase tracking-[0.16em] text-[10px] font-medium text-[#A8A8A8] truncate">
+        <span className="uppercase tracking-[0.16em] text-2xs font-medium text-n-500 truncate">
           {label}
         </span>
-        <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#6B6B6B]">
+        <span className="shrink-0 text-2xs uppercase tracking-wider text-n-600">
           {m.source}
         </span>
       </div>
 
       <div className="flex items-end justify-between gap-3 mb-3">
-        <span className="font-serif-elite text-[28px] md:text-[30px] leading-[1.05] text-[#F5F5F5] tabular-nums">
+        <span className="font-serif-elite text-3xl md:text-3xl leading-[1.05] text-n-100 tabular-nums">
           {m.value}
         </span>
         <Sparkline points={m.history} color={sparkColor} />
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className={cn('inline-flex items-center gap-1 text-[12px] font-medium tabular-nums', color)}>
+        <span className={cn('inline-flex items-center gap-1 text-xs font-medium tabular-nums', color)}>
           <DirIcon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
           <span>{deltaStr}</span>
-          <span className="text-[#6B6B6B] font-normal">{deltaLbl}</span>
+          <span className="text-n-600 font-normal">{deltaLbl}</span>
         </span>
       </div>
 
-      <p className="text-[12px] leading-snug text-[#A8A8A8] mt-2.5">{narrative}</p>
+      <p className="text-xs leading-snug text-n-500 mt-2.5">{narrative}</p>
     </div>
   );
 }

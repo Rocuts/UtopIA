@@ -20,9 +20,9 @@ function ProgressLine() {
 
   return (
     <div ref={ref} className="absolute top-[3.5rem] left-0 w-full h-px hidden lg:block overflow-hidden">
-      <div className="absolute inset-0 bg-[#e5e5e5]" />
+      <div className="absolute inset-0 bg-n-200" />
       <motion.div
-        className="absolute inset-0 bg-[#0a0a0a]"
+        className="absolute inset-0 bg-n-900"
         style={{
           scaleX,
           transformOrigin: 'left',
@@ -60,16 +60,17 @@ export function Methodology() {
   ];
 
   return (
-    <section id="methodology" className="py-24 relative border-t border-[#e5e5e5]">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl relative z-10">
+    <section id="methodology" className="py-20 md:py-28 relative border-t border-n-200">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)] relative z-10">
 
         <Reveal>
           <div className="text-center max-w-3xl mx-auto mb-20">
             <Badge variant="outline" className="mb-4">{t.methodology.badge}</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-6 mt-2 text-[#0a0a0a]">
+            <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 mt-2 text-n-900 leading-display"
+                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}>
               {t.methodology.title}
             </h2>
-            <p className="text-lg text-[#525252]">
+            <p className="text-lg text-n-600">
               {t.methodology.desc}
             </p>
           </div>
@@ -88,19 +89,19 @@ export function Methodology() {
               >
                 <div className="relative flex flex-col group">
                   <div className="flex items-center mb-6">
-                    <div className="w-12 h-12 rounded-sm flex items-center justify-center border border-[#e5e5e5] bg-white z-10 text-[#0a0a0a] transition-colors group-hover:bg-[#0a0a0a] group-hover:text-white group-hover:border-[#0a0a0a]">
+                    <div className="w-12 h-12 rounded-sm flex items-center justify-center border border-n-200 bg-n-0 z-10 text-n-900 transition-colors group-hover:bg-n-900 group-hover:text-white group-hover:border-n-900">
                       {step.icon}
                     </div>
                     <div className="hidden lg:flex flex-1 items-center justify-end pr-4 opacity-20 group-hover:opacity-100 transition-opacity">
-                      {index < stepsList.length - 1 && <ArrowRight className="w-4 h-4 text-[#0a0a0a]" />}
+                      {index < stepsList.length - 1 && <ArrowRight className="w-4 h-4 text-n-900" />}
                     </div>
                   </div>
 
-                  <h3 className="text-lg font-semibold mb-3 flex items-baseline gap-3 text-[#0a0a0a]">
-                    <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">0{index + 1}</span>
+                  <h3 className="text-lg font-semibold mb-3 flex items-baseline gap-3 text-n-900">
+                    <span className="text-xs text-n-400 font-mono num">0{index + 1}</span>
                     {step.title}
                   </h3>
-                  <p className="text-[#525252] leading-relaxed text-sm lg:text-base">
+                  <p className="text-n-600 leading-relaxed text-sm lg:text-base">
                     {step.description}
                   </p>
                 </div>

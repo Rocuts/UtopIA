@@ -53,7 +53,7 @@ function ConfidenceDot({ level }: { level?: FieldConfidence }) {
   if (!level || level === 'none') return null;
   return (
     <span
-      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')}
+      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
       title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
     />
   );
@@ -153,46 +153,46 @@ export function TaxRefundIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
-        <p className="text-xs text-[#a3a3a3]">
+        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
+        <p className="text-xs text-n-400">
           Cargue la declaración tributaria o solicitud de devolución
         </p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
         <div className="space-y-3">
-          <div className="border border-[#22C55E]/30 bg-[#F0FDF4] rounded-xl p-4">
+          <div className="border border-success/30 bg-success/10 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-              <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
+              <CheckCircle className="w-4 h-4 text-success" />
+              <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
-            <p className="text-xs text-[#16A34A]/80">
+            <p className="text-xs text-success/80">
               {detected} de {totalFields} campos detectados automáticamente
             </p>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
             Subir otro archivo
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
-        <div className="border border-[#D4A017]/30 bg-[#FEF9EC] rounded-xl p-6 text-center">
+        <div className="border border-gold-500/30 bg-gold-500/10 rounded-xl p-6 text-center">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-            <Upload className="w-6 h-6 text-[#D4A017] mx-auto" />
+            <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
-          <p className="text-sm text-[#7D5B0C] mt-2 font-medium">
+          <p className="text-sm text-gold-700 mt-2 font-medium">
             {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
           </p>
-          <div className="w-48 h-1.5 bg-[#D4A017]/20 rounded-full overflow-hidden mx-auto mt-3">
-            <motion.div className="h-full bg-[#D4A017] rounded-full" animate={{ width: `${extractionState.progress}%` }} />
+          <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
+            <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
           </div>
         </div>
       ) : extractionState.status === 'error' ? (
-        <div className="border border-[#EF4444]/30 bg-[#FEF2F2] rounded-xl p-4">
+        <div className="border border-danger/30 bg-danger/10 rounded-xl p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#EF4444]" />
-            <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
+            <AlertCircle className="w-4 h-4 text-danger" />
+            <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
@@ -208,7 +208,7 @@ export function TaxRefundIntake() {
         <button
           type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
-          className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
+          className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
           Llenar manualmente sin documento
         </button>
@@ -221,17 +221,17 @@ export function TaxRefundIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipo de Devolución</h3>
-        <p className="text-xs text-[#737373]">Seleccione el tipo de saldo a favor que desea solicitar.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Tipo de Devolución</h3>
+        <p className="text-xs text-n-500">Seleccione el tipo de saldo a favor que desea solicitar.</p>
         {detected > 0 && !skippedUpload && (
-          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-            <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
-            <span className="text-xs text-[#16A34A] font-medium">
+          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
+            <CheckCircle className="w-3.5 h-3.5 text-success" />
+            <span className="text-xs text-success font-medium">
               {detected} de {totalFields} campos auto-detectados
             </span>
-            <span className="text-[10px] text-[#16A34A]/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] ml-1" /> inferido
+            <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
             </span>
           </div>
         )}
@@ -248,31 +248,31 @@ export function TaxRefundIntake() {
               className={cn(
                 'w-full flex items-start gap-4 p-5 rounded-lg border-2 text-left transition-all',
                 selected
-                  ? 'border-[#D4A017] bg-[#FEF9EC]'
-                  : 'border-[#e5e5e5] hover:border-[#d4d4d4] bg-white',
+                  ? 'border-gold-500 bg-gold-500/10'
+                  : 'border-n-200 hover:border-n-300 bg-n-0',
               )}
             >
               <div
                 className={cn(
                   'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5',
-                  selected ? 'border-[#D4A017]' : 'border-[#d4d4d4]',
+                  selected ? 'border-gold-500' : 'border-n-300',
                 )}
               >
-                {selected && <div className="w-2.5 h-2.5 rounded-full bg-[#D4A017]" />}
+                {selected && <div className="w-2.5 h-2.5 rounded-full bg-gold-500" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <Icon
                     className={cn(
                       'w-5 h-5 shrink-0',
-                      selected ? 'text-[#D4A017]' : 'text-[#a3a3a3]',
+                      selected ? 'text-gold-500' : 'text-n-400',
                     )}
                   />
-                  <span className="text-sm font-semibold text-[#0a0a0a]">{tax.label}</span>
+                  <span className="text-sm font-semibold text-n-900">{tax.label}</span>
                   {selected && <ConfidenceDot level={extractedConfidence.taxType} />}
                 </div>
-                <p className="text-xs text-[#737373] mb-1.5">{tax.description}</p>
-                <span className="text-[10px] font-mono text-[#a3a3a3] bg-[#f5f5f5] px-2 py-0.5 rounded">
+                <p className="text-xs text-n-500 mb-1.5">{tax.description}</p>
+                <span className="text-2xs font-mono text-n-400 bg-n-100 px-2 py-0.5 rounded">
                   {tax.reference}
                 </span>
               </div>
@@ -288,44 +288,44 @@ export function TaxRefundIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Detalles de la Solicitud</h3>
-        <p className="text-xs text-[#737373]">Información del periodo y monto a solicitar.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Detalles de la Solicitud</h3>
+        <p className="text-xs text-n-500">Información del periodo y monto a solicitar.</p>
       </div>
 
       {/* Periodo */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Periodo gravable <ConfidenceDot level={extractedConfidence.period} /> <span className="text-[#DC2626] ml-1">*</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Periodo gravable <ConfidenceDot level={extractedConfidence.period} /> <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="month"
           value={values.period}
           onChange={(e) => updateField('period', e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
 
       {/* Monto aproximado */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Monto aproximado (COP) <ConfidenceDot level={extractedConfidence.approximateAmount} /> <span className="text-[#a3a3a3] font-normal ml-1">-- opcional</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Monto aproximado (COP) <ConfidenceDot level={extractedConfidence.approximateAmount} /> <span className="text-n-400 font-normal ml-1">-- opcional</span>
         </label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#737373]">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-n-500">$</span>
           <input
             type="text"
             inputMode="numeric"
             value={displayCOP(values.approximateAmount)}
             onChange={(e) => updateField('approximateAmount', formatCOPInput(e.target.value))}
             placeholder="0"
-            className="w-full pl-7 pr-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full pl-7 pr-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
       </div>
 
       {/* Ya radicado? */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-2">
+        <label className="block text-xs font-medium text-n-600 mb-2">
           ¿Ya radicó la solicitud ante la DIAN?
         </label>
         <div className="flex gap-3">
@@ -340,8 +340,8 @@ export function TaxRefundIntake() {
               className={cn(
                 'flex-1 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors',
                 values.alreadyFiled === opt.value
-                  ? 'border-[#D4A017] bg-[#FEF9EC] text-[#0a0a0a]'
-                  : 'border-[#e5e5e5] text-[#525252] hover:border-[#d4d4d4]',
+                  ? 'border-gold-500 bg-gold-500/10 text-n-900'
+                  : 'border-n-200 text-n-600 hover:border-n-300',
               )}
             >
               {opt.label}
@@ -353,7 +353,7 @@ export function TaxRefundIntake() {
       {/* Numero de radicado */}
       {values.alreadyFiled && (
         <div>
-          <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
+          <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
             Número de radicado <ConfidenceDot level={extractedConfidence.filingNumber} />
           </label>
           <input
@@ -361,7 +361,7 @@ export function TaxRefundIntake() {
             value={values.filingNumber ?? ''}
             onChange={(e) => updateField('filingNumber', e.target.value)}
             placeholder="Ej: 202400123456"
-            className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
       )}
@@ -373,8 +373,8 @@ export function TaxRefundIntake() {
   const step3 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Documentos de Soporte</h3>
-        <p className="text-xs text-[#737373]">
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Documentos de Soporte</h3>
+        <p className="text-xs text-n-500">
           Adjunte documentos adicionales de soporte de la solicitud.
         </p>
       </div>

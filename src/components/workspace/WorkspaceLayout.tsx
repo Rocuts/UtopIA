@@ -1,5 +1,15 @@
 'use client';
 
+/**
+ * WorkspaceLayout — Legacy 3-panel shell (Navigator / Main / Intelligence).
+ *
+ * STATUS: Orphaned by the Centro de Comando Elite refactor. The new shell
+ * lives in `src/app/workspace/layout.tsx` (EliteHeader + ChatSidebar + main).
+ * This file is kept source-compatible for any isolated view that still wants
+ * a 3-panel layout, but it has been re-themed to the dark token system so
+ * it doesn't ship a light-mode relic. If no one re-adopts it by Phase 2 we
+ * can delete it; Agent B is deliberately leaving the contract intact for now.
+ */
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -16,13 +26,13 @@ export function WorkspaceLayout({ navigator, main, intelligence }: WorkspaceLayo
   const { sidebarOpen, analysisPanelOpen } = useWorkspace();
 
   return (
-    <div className="flex h-full min-h-0 w-full">
+    <div className="flex h-full min-h-0 w-full bg-n-0 text-n-900">
       {/* Panel A — Navigator */}
       <motion.div
         initial={false}
         animate={{ width: sidebarOpen ? 240 : 48 }}
         transition={{ type: 'spring', ...SPRING }}
-        className="shrink-0 h-full overflow-hidden border-r border-[#e5e5e5]"
+        className="shrink-0 h-full overflow-hidden border-r border-n-200"
       >
         <div className="h-full overflow-y-auto styled-scrollbar">
           {navigator}
@@ -43,7 +53,7 @@ export function WorkspaceLayout({ navigator, main, intelligence }: WorkspaceLayo
         }}
         transition={{ type: 'spring', ...SPRING }}
         className={cn(
-          'shrink-0 h-full overflow-hidden border-l border-[#e5e5e5]',
+          'shrink-0 h-full overflow-hidden border-l border-n-200',
           !analysisPanelOpen && 'border-l-0',
         )}
       >

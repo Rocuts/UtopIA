@@ -84,7 +84,7 @@ function ConfidenceDot({ level }: { level?: FieldConfidence }) {
   if (!level || level === 'none') return null;
   return (
     <span
-      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')}
+      className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
       title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
     />
   );
@@ -209,46 +209,46 @@ export function DianDefenseIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-[#0a0a0a] mb-1">Cargue su documento</h3>
-        <p className="text-xs text-[#a3a3a3]">
+        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
+        <p className="text-xs text-n-400">
           Cargue el requerimiento, liquidación o acto administrativo de la DIAN
         </p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
         <div className="space-y-3">
-          <div className="border border-[#22C55E]/30 bg-[#F0FDF4] rounded-xl p-4">
+          <div className="border border-success/30 bg-success/10 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-              <span className="text-sm font-semibold text-[#16A34A]">{extractionState.fileName}</span>
+              <CheckCircle className="w-4 h-4 text-success" />
+              <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
-            <p className="text-xs text-[#16A34A]/80">
+            <p className="text-xs text-success/80">
               {detected} de {totalFields} campos detectados automáticamente
             </p>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors">
+          <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
             Subir otro archivo
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
-        <div className="border border-[#D4A017]/30 bg-[#FEF9EC] rounded-xl p-6 text-center">
+        <div className="border border-gold-500/30 bg-gold-500/10 rounded-xl p-6 text-center">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-            <Upload className="w-6 h-6 text-[#D4A017] mx-auto" />
+            <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
-          <p className="text-sm text-[#7D5B0C] mt-2 font-medium">
+          <p className="text-sm text-gold-700 mt-2 font-medium">
             {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
           </p>
-          <div className="w-48 h-1.5 bg-[#D4A017]/20 rounded-full overflow-hidden mx-auto mt-3">
-            <motion.div className="h-full bg-[#D4A017] rounded-full" animate={{ width: `${extractionState.progress}%` }} />
+          <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
+            <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
           </div>
         </div>
       ) : extractionState.status === 'error' ? (
-        <div className="border border-[#EF4444]/30 bg-[#FEF2F2] rounded-xl p-4">
+        <div className="border border-danger/30 bg-danger/10 rounded-xl p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#EF4444]" />
-            <span className="text-sm text-[#DC2626]">{extractionState.error}</span>
+            <AlertCircle className="w-4 h-4 text-danger" />
+            <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-[#DC2626] hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
         </div>
       ) : (
         <FileUploadZone
@@ -264,7 +264,7 @@ export function DianDefenseIntake() {
         <button
           type="button"
           onClick={() => { setSkippedUpload(true); setStep(1); }}
-          className="text-xs text-[#a3a3a3] hover:text-[#525252] transition-colors block mx-auto"
+          className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
           Llenar manualmente sin documento
         </button>
@@ -277,17 +277,17 @@ export function DianDefenseIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Tipo de Acto Administrativo</h3>
-        <p className="text-xs text-[#737373]">Seleccione el tipo de acto que desea controvertir.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Tipo de Acto Administrativo</h3>
+        <p className="text-xs text-n-500">Seleccione el tipo de acto que desea controvertir.</p>
         {detected > 0 && !skippedUpload && (
-          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-            <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />
-            <span className="text-xs text-[#16A34A] font-medium">
+          <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
+            <CheckCircle className="w-3.5 h-3.5 text-success" />
+            <span className="text-xs text-success font-medium">
               {detected} de {totalFields} campos auto-detectados
             </span>
-            <span className="text-[10px] text-[#16A34A]/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] ml-1" /> inferido
+            <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
             </span>
           </div>
         )}
@@ -304,30 +304,30 @@ export function DianDefenseIntake() {
               className={cn(
                 'flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all',
                 selected
-                  ? 'border-[#D4A017] bg-[#FEF9EC]'
-                  : 'border-[#e5e5e5] hover:border-[#d4d4d4] bg-white',
+                  ? 'border-gold-500 bg-gold-500/10'
+                  : 'border-n-200 hover:border-n-300 bg-n-0',
               )}
             >
               <div
                 className={cn(
                   'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5',
-                  selected ? 'border-[#D4A017]' : 'border-[#d4d4d4]',
+                  selected ? 'border-gold-500' : 'border-n-300',
                 )}
               >
-                {selected && <div className="w-2.5 h-2.5 rounded-full bg-[#D4A017]" />}
+                {selected && <div className="w-2.5 h-2.5 rounded-full bg-gold-500" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <Icon
                     className={cn(
                       'w-4 h-4 shrink-0',
-                      selected ? 'text-[#D4A017]' : 'text-[#a3a3a3]',
+                      selected ? 'text-gold-500' : 'text-n-400',
                     )}
                   />
-                  <span className="text-sm font-medium text-[#0a0a0a]">{act.label}</span>
+                  <span className="text-sm font-medium text-n-900">{act.label}</span>
                   {selected && <ConfidenceDot level={extractedConfidence.actType} />}
                 </div>
-                <p className="text-[11px] text-[#737373] leading-relaxed">{act.description}</p>
+                <p className="text-xs-mono text-n-500 leading-relaxed">{act.description}</p>
               </div>
             </button>
           );
@@ -341,13 +341,13 @@ export function DianDefenseIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Detalles del Caso</h3>
-        <p className="text-xs text-[#737373]">Proporcione la información relevante del acto administrativo.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Detalles del Caso</h3>
+        <p className="text-xs text-n-500">Proporcione la información relevante del acto administrativo.</p>
       </div>
 
       {/* Impuestos involucrados */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-2 flex items-center gap-0.5">
+        <label className="block text-xs font-medium text-n-600 mb-2 flex items-center gap-0.5">
           Impuestos involucrados <ConfidenceDot level={extractedConfidence.taxes} />
         </label>
         <div className="flex flex-wrap gap-2">
@@ -362,8 +362,8 @@ export function DianDefenseIntake() {
                 className={cn(
                   'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
                   active
-                    ? 'bg-[#D4A017] text-white border-[#D4A017]'
-                    : 'bg-white text-[#525252] border-[#e5e5e5] hover:border-[#D4A017]',
+                    ? 'bg-n-900 text-n-0 border-n-900'
+                    : 'bg-n-0 text-n-600 border-n-200 hover:border-n-400',
                 )}
               >
                 {label}
@@ -376,67 +376,67 @@ export function DianDefenseIntake() {
       {/* Periodo */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-[#525252] mb-1.5">Periodo desde</label>
+          <label className="block text-xs font-medium text-n-600 mb-1.5">Periodo desde</label>
           <input
             type="month"
             value={values.periodStart}
             onChange={(e) => updateField('periodStart', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-[#525252] mb-1.5">Periodo hasta</label>
+          <label className="block text-xs font-medium text-n-600 mb-1.5">Periodo hasta</label>
           <input
             type="month"
             value={values.periodEnd}
             onChange={(e) => updateField('periodEnd', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
       </div>
 
       {/* Monto en disputa */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Monto en disputa (COP) <ConfidenceDot level={extractedConfidence.disputedAmount} /> <span className="text-[#a3a3a3] font-normal ml-1">-- opcional</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Monto en disputa (COP) <ConfidenceDot level={extractedConfidence.disputedAmount} /> <span className="text-n-400 font-normal ml-1">-- opcional</span>
         </label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#737373]">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-n-500">$</span>
           <input
             type="text"
             inputMode="numeric"
             value={displayCOP(values.disputedAmount)}
             onChange={(e) => updateField('disputedAmount', formatCOPInput(e.target.value))}
             placeholder="0"
-            className="w-full pl-7 pr-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+            className="w-full pl-7 pr-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
       </div>
 
       {/* Fecha limite de respuesta */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Fecha límite de respuesta <ConfidenceDot level={extractedConfidence.responseDeadline} /> <span className="text-[#DC2626] ml-1">*</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Fecha límite de respuesta <ConfidenceDot level={extractedConfidence.responseDeadline} /> <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="date"
           value={values.responseDeadline}
           onChange={(e) => updateField('responseDeadline', e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
 
       {/* Numero de expediente */}
       <div>
-        <label className="block text-xs font-medium text-[#525252] mb-1.5 flex items-center gap-0.5">
-          Número de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-[#a3a3a3] font-normal ml-1">-- opcional</span>
+        <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
+          Número de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-n-400 font-normal ml-1">-- opcional</span>
         </label>
         <input
           type="text"
           value={values.expedienteNumber ?? ''}
           onChange={(e) => updateField('expedienteNumber', e.target.value)}
           placeholder="Ej: 2024-00001234"
-          className="w-full px-3 py-2 rounded-lg border border-[#e5e5e5] text-sm text-[#0a0a0a] focus:outline-none focus:border-[#D4A017] focus:ring-1 focus:ring-[#D4A017]"
+          className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
     </div>
@@ -447,8 +447,8 @@ export function DianDefenseIntake() {
   const step3 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-[#0a0a0a] mb-1">Documentos de Soporte</h3>
-        <p className="text-xs text-[#737373]">
+        <h3 className="text-sm font-semibold text-n-900 mb-1">Documentos de Soporte</h3>
+        <p className="text-xs text-n-500">
           Adjunte documentos adicionales de soporte (declaraciones, soportes contables).
         </p>
       </div>

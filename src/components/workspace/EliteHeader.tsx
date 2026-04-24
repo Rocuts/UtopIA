@@ -1,28 +1,31 @@
 'use client';
 
 /**
- * EliteHeader — Top sticky header del Centro de Comando.
+ * EliteHeader — Sticky top header of the Centro de Comando.
  *
  * Layout (64px):
- *   [Brand "1+1" serif]  [AreaNav centro]  [NiifEliteButton | Lang | User]
+ *   [Brand "1+1" serif]  [Search (Cmd+K)]  [AreaNav — hidden on home]
+ *   [NiifEliteButton | Lang | User]
  *
- * - Brand en font-serif-elite, gold accent, click → /workspace (home dashboard)
- * - glass-elite background, border-bottom dorado sutil
- * - Skip-to-content link preservado arriba (sr-only hasta focus)
- * - No se oculta al scroll down — siempre sticky (decisión: el shell es un centro
- *   de mando, la barra es parte de la identidad; ocultarla sólo confunde al usuario)
+ * - Brand in font-serif-elite, gold accent, click → /workspace (home dashboard)
+ * - Cmd+K search trigger is ALWAYS visible from lg+ so the command palette is
+ *   discoverable. Clicking it fires a synthesized keydown that the shell's
+ *   global listener (src/app/workspace/layout.tsx) catches and toggles on.
+ * - On `/workspace` (home) the AreaNav is hidden — the 4 AreaCards below are
+ *   the canonical nav. Showing both doubles the visual weight for no benefit.
  *
- * Subcomponentes privados:
- *   - BrandMark: wordmark 1+1 con acento dorado en "+"
+ * Subcomponents:
+ *   - BrandMark: wordmark 1+1 with gold-accented "+"
+ *   - SearchTrigger: visible Cmd+K button with kbd glyph
  *   - LanguageToggle: ES/EN pill
- *   - UserMenu: avatar iniciales → dropdown (settings, logout stubs)
+ *   - UserMenu: initials avatar → dropdown (settings, logout stubs)
  *
- * Accesibilidad:
- *   - Banner role en el header
- *   - AreaNav ya tiene su propio aria-label
- *   - Todos los interactivos con focus-visible
+ * Accessibility:
+ *   - role="banner" on header
+ *   - AreaNav has its own aria-label
+ *   - All interactive elements have focus-visible
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -33,6 +36,7 @@ import {
   LogOut,
   FileText,
   ChevronDown,
+  Search,
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -49,15 +53,15 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
       prefetch={false}
       className={cn(
         'group flex items-center gap-2 rounded-md px-1.5 py-1',
-        'transition-colors hover:bg-[rgba(212,160,23,0.06)]',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+        'transition-colors hover:bg-gold-500/6',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
       )}
       aria-label="1+1 — Centro de Comando"
     >
       <span
         className={cn(
-          'font-serif-elite leading-none tracking-tight text-[#F5F5F5]',
-          compact ? 'text-[22px]' : 'text-[26px] md:text-[28px]',
+          'font-serif-elite leading-none tracking-tight text-n-900',
+          compact ? 'text-xl' : 'text-2xl md:text-3xl',
         )}
       >
         1
@@ -65,7 +69,7 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
           className="bg-clip-text text-transparent"
           style={{
             backgroundImage:
-              'linear-gradient(135deg, #D4A017 0%, #E8B42C 50%, #D4A017 100%)',
+              'linear-gradient(135deg, var(--color-gold-500) 0%, var(--color-gold-600) 50%, var(--color-gold-500) 100%)',
           }}
         >
           +
@@ -74,20 +78,74 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
       </span>
       <span
         className={cn(
-          'hidden lg:inline-block h-5 w-px bg-[rgba(212,160,23,0.35)]',
+          'hidden lg:inline-block h-5 w-px bg-gold-500/35',
           compact ? 'hidden' : '',
         )}
         aria-hidden="true"
       />
       <span
         className={cn(
-          'hidden lg:inline text-[10px] uppercase tracking-[0.18em] text-[#A8A8A8] font-medium',
+          'hidden lg:inline font-mono text-xs-mono uppercase tracking-eyebrow text-n-500 font-medium',
           compact ? 'hidden' : '',
         )}
       >
         Command
       </span>
     </Link>
+  );
+}
+
+// ─── Search Trigger (Cmd+K) ─────────────────────────────────────────────────
+
+function SearchTrigger() {
+  const { language } = useLanguage();
+
+  const handleClick = useCallback(() => {
+    // The shell listens for Cmd+K on window; synthesize the event so the
+    // trigger is a discoverable visual surface without duplicating state.
+    // Using KeyboardEvent constructor (not `new KeyboardEvent('keydown', {...})`
+    // directly because `metaKey`/`ctrlKey` aren't on `KeyboardEventInit` in
+    // older TS libs — we cast to the DOM standard init dict).
+    const isMac = typeof navigator !== 'undefined'
+      ? navigator.platform.toLowerCase().includes('mac')
+      : true;
+    const event = new KeyboardEvent('keydown', {
+      key: 'k',
+      code: 'KeyK',
+      bubbles: true,
+      cancelable: true,
+      ...(isMac ? { metaKey: true } : { ctrlKey: true }),
+    } as KeyboardEventInit);
+    window.dispatchEvent(event);
+  }, []);
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-label={language === 'es' ? 'Abrir búsqueda' : 'Open search'}
+      className={cn(
+        'hidden lg:flex items-center gap-2 w-72 px-3 h-9 rounded-md',
+        'bg-n-50 border border-n-200 text-n-500 text-sm',
+        'hover:border-gold-500/40 hover:text-n-700 transition-colors',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
+      )}
+    >
+      <Search className="w-4 h-4" />
+      <span className="truncate">
+        {language === 'es' ? 'Buscar caso, cliente, norma…' : 'Search case, client, norm…'}
+      </span>
+      <kbd
+        className={cn(
+          'ml-auto font-mono text-xs-mono px-1.5 py-0.5 rounded-xs',
+          'bg-n-100 text-n-600 border border-n-200',
+        )}
+      >
+        {typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
+          ? '⌘K'
+          : 'Ctrl K'}
+      </kbd>
+    </button>
   );
 }
 
@@ -102,10 +160,10 @@ function LanguageToggle() {
       onClick={() => setLanguage(next)}
       className={cn(
         'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
-        'text-[11px] font-medium font-[family-name:var(--font-geist-mono)] uppercase',
-        'text-[#A8A8A8] hover:text-[#F5F5F5] transition-colors',
-        'border border-transparent hover:border-[rgba(212,160,23,0.25)]',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+        'font-mono text-xs-mono font-medium uppercase',
+        'text-n-500 hover:text-n-900 transition-colors',
+        'border border-transparent hover:border-gold-500/25',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
       )}
       aria-label={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
       title={next.toUpperCase()}
@@ -144,7 +202,7 @@ function UserMenu() {
     };
   }, [open]);
 
-  const initials = 'YO'; // Placeholder — no hay auth todavía en UtopIA. Futuro: sacar de user profile.
+  const initials = 'YO'; // Placeholder — no auth yet.
 
   const labels = {
     profile: language === 'es' ? 'Perfil' : 'Profile',
@@ -165,15 +223,15 @@ function UserMenu() {
         aria-label={labels.menu}
         className={cn(
           'flex items-center gap-1.5 rounded-md pl-1 pr-2 py-1',
-          'hover:bg-[rgba(212,160,23,0.08)] transition-colors',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+          'hover:bg-gold-500/8 transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
         )}
       >
         <span
           className={cn(
             'inline-flex items-center justify-center w-7 h-7 rounded-full',
-            'bg-gradient-to-br from-[#D4A017] to-[#722F37] text-[#0a0a0a]',
-            'text-[11px] font-bold font-[family-name:var(--font-geist-mono)]',
+            'bg-gradient-to-br from-gold-500 to-area-escudo text-n-0',
+            'font-mono text-xs-mono font-bold',
           )}
           aria-hidden="true"
         >
@@ -181,7 +239,7 @@ function UserMenu() {
         </span>
         <ChevronDown
           className={cn(
-            'w-3 h-3 text-[#A8A8A8] transition-transform',
+            'w-3 h-3 text-n-500 transition-transform',
             open ? 'rotate-180' : '',
           )}
         />
@@ -212,13 +270,13 @@ function UserMenu() {
                 }}
                 className={cn(
                   'w-full flex items-center gap-2 px-3 py-2 text-left text-xs',
-                  'text-[#E5E5E5] hover:bg-[rgba(212,160,23,0.08)] transition-colors',
+                  'text-n-800 hover:bg-gold-500/8 transition-colors',
                 )}
               >
-                <FileText className="w-3.5 h-3.5 text-[#D4A017]" />
+                <FileText className="w-3.5 h-3.5 text-gold-500" />
                 <span className="flex-1 min-w-0">
                   <span className="block font-medium truncate">{labels.lastReport}</span>
-                  <span className="block text-[10px] text-[#A8A8A8] truncate">
+                  <span className="block text-2xs text-n-500 truncate">
                     {lastCompletedReport.company.name}
                   </span>
                 </span>
@@ -231,10 +289,10 @@ function UserMenu() {
               onClick={() => setOpen(false)}
               className={cn(
                 'flex items-center gap-2 px-3 py-2 text-xs',
-                'text-[#E5E5E5] hover:bg-[rgba(212,160,23,0.08)] transition-colors',
+                'text-n-800 hover:bg-gold-500/8 transition-colors',
               )}
             >
-              <Settings className="w-3.5 h-3.5 text-[#A8A8A8]" />
+              <Settings className="w-3.5 h-3.5 text-n-500" />
               <span>{labels.settings}</span>
             </Link>
             <button
@@ -244,7 +302,7 @@ function UserMenu() {
               disabled
               className={cn(
                 'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
-                'text-[#6A6A6A] cursor-not-allowed opacity-70',
+                'text-n-400 cursor-not-allowed opacity-70',
               )}
               title={language === 'es' ? 'Próximamente' : 'Coming soon'}
             >
@@ -252,7 +310,7 @@ function UserMenu() {
               <span>{labels.profile}</span>
             </button>
             <div
-              className="my-1 mx-2 h-px bg-[rgba(212,160,23,0.18)]"
+              className="my-1 mx-2 h-px bg-gold-500/18"
               aria-hidden="true"
             />
             <button
@@ -262,7 +320,7 @@ function UserMenu() {
               disabled
               className={cn(
                 'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
-                'text-[#6A6A6A] cursor-not-allowed opacity-70',
+                'text-n-400 cursor-not-allowed opacity-70',
               )}
               title={language === 'es' ? 'Próximamente' : 'Coming soon'}
             >
@@ -284,12 +342,12 @@ export interface EliteHeaderProps {
 
 export function EliteHeader({ className }: EliteHeaderProps) {
   const pathname = usePathname() ?? '';
-  // En ciertas rutas (ej. full-screen pipeline) podríamos querer compactar el header.
-  // Por ahora, compact lo reservamos para futuro.
+  // Reserved for future: some surfaces may want a compact header.
   const compact = false;
 
-  // Hide the area nav underline on workspace home (/workspace) where the
-  // dashboard itself shows the 4-area grid — avoids duplicate emphasis.
+  // On workspace home the dashboard itself presents the 4-area grid. Rendering
+  // AreaNav there duplicates navigation weight for zero signal gain — we hide
+  // it entirely instead of dimming it.
   const isHome = pathname === '/workspace' || pathname === '/workspace/';
 
   return (
@@ -302,28 +360,38 @@ export function EliteHeader({ className }: EliteHeaderProps) {
         'sticky top-0 z-50 w-full h-16 shrink-0',
         'flex items-center gap-3 px-4 md:px-6',
         'glass-elite',
-        'border-b',
+        'border-b border-gold-500/18',
         className,
       )}
-      style={{
-        borderBottomColor: 'rgba(212,160,23,0.18)',
-      }}
     >
       {/* Brand — left */}
       <div className="flex items-center shrink-0">
         <BrandMark compact={compact} />
       </div>
 
-      {/* AreaNav — center */}
-      <div className={cn('flex-1 flex items-center justify-center min-w-0', isHome ? 'opacity-60' : '')}>
+      {/* Search (Cmd+K) — visible on lg+, between brand and nav */}
+      <div className="shrink-0">
+        <SearchTrigger />
+      </div>
+
+      {/* AreaNav — center; hidden on home */}
+      <div
+        className={cn(
+          'flex-1 flex items-center justify-center min-w-0',
+          isHome ? 'hidden' : '',
+        )}
+      >
         <AreaNav />
       </div>
+
+      {/* Flex spacer when nav is hidden, so right cluster stays right */}
+      {isHome && <div className="flex-1" />}
 
       {/* Actions cluster — right */}
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
         <NiifEliteButton size="md" />
         <span
-          className="hidden md:inline-block h-6 w-px bg-[rgba(212,160,23,0.22)]"
+          className="hidden md:inline-block h-6 w-px bg-gold-500/22"
           aria-hidden="true"
         />
         <LanguageToggle />

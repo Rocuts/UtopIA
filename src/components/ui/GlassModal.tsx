@@ -183,7 +183,7 @@ export function GlassModal({
           key="glass-modal-backdrop"
           className={cn(
             'fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6',
-            'bg-[rgba(0,0,0,0.6)] backdrop-blur-[20px]',
+            'bg-n-1000/60 backdrop-blur-[20px]',
             className,
           )}
           onMouseDown={handleBackdropClick}
@@ -202,7 +202,7 @@ export function GlassModal({
             className={cn(
               'relative w-full outline-none',
               'glass-elite-elevated glow-gold-soft',
-              'text-[#F5F5F5]',
+              'text-n-100',
               SIZE_CLASSES[size],
               'max-h-[90vh] flex flex-col',
               panelClassName,
@@ -216,7 +216,7 @@ export function GlassModal({
                     <div
                       id={hasStringTitle ? titleId : undefined}
                       className={cn(
-                        'font-serif-elite text-[24px] leading-tight font-normal text-[#F5F5F5]',
+                        'font-serif-elite text-2xl leading-tight font-normal text-n-100',
                       )}
                     >
                       {title}
@@ -225,7 +225,7 @@ export function GlassModal({
                   {description && (
                     <p
                       id={descId}
-                      className="mt-1.5 text-sm text-[#A8A8A8] leading-relaxed"
+                      className="mt-1.5 text-sm text-n-500 leading-relaxed"
                     >
                       {description}
                     </p>
@@ -237,11 +237,11 @@ export function GlassModal({
                     onClick={onClose}
                     aria-label="Cerrar"
                     className={cn(
-                      'shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-[8px]',
-                      'text-[#A8A8A8] hover:text-[#F5F5F5]',
-                      'bg-transparent hover:bg-[rgba(255,255,255,0.05)]',
+                      'shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md',
+                      'text-n-500 hover:text-n-100',
+                      'bg-transparent hover:bg-n-0/5',
                       'transition-colors duration-150',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0A0A]',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-900',
                     )}
                   >
                     <X className="h-4 w-4" aria-hidden="true" />
@@ -266,7 +266,7 @@ export function GlassModal({
             {footer && (
               <div
                 className={cn(
-                  'px-6 py-4 border-t border-[rgba(212,160,23,0.18)]',
+                  'px-6 py-4 border-t border-gold-500/20',
                   'flex items-center justify-end gap-2',
                 )}
               >

@@ -161,27 +161,27 @@ function Sparkline({ points, language, reduced }: SparklineProps) {
     <div className="relative">
       <div className="flex items-end justify-between mb-2">
         <div>
-          <p className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+          <p className="uppercase tracking-label text-xs font-medium text-n-500">
             {language === 'es' ? 'Valor a través del tiempo' : 'Value over time'}
           </p>
-          <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+          <p className="text-xs text-n-600 mt-0.5">
             {language === 'es' ? 'Últimos 12 meses' : 'Last 12 months'}
           </p>
         </div>
         <div className="text-right">
           <p
             className={cn(
-              'text-[13px] font-medium tabular-nums',
-              delta >= 0 ? 'text-[#86EFAC]' : 'text-[#FCA5A5]',
+              'text-sm font-medium tabular-nums',
+              delta >= 0 ? 'text-success' : 'text-danger',
             )}
           >
             {delta >= 0 ? '+' : ''}
             {formatCop(delta)}
           </p>
-          <p className="text-[11px] text-[#A8A8A8]">
+          <p className="text-xs text-n-500">
             {deltaPct >= 0 ? '+' : ''}
             {deltaPct.toFixed(1)}%{' '}
-            <span className="text-[#6B6B6B]">
+            <span className="text-n-600">
               {language === 'es' ? 'desde t0' : 'since t0'}
             </span>
           </p>
@@ -201,13 +201,13 @@ function Sparkline({ points, language, reduced }: SparklineProps) {
       >
         <defs>
           <linearGradient id="sparkline-gold-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#D4A017" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#D4A017" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--gold-500)" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="var(--gold-500)" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="sparkline-gold-line" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#D4A017" />
-            <stop offset="50%" stopColor="#E8B42C" />
-            <stop offset="100%" stopColor="#F5C63F" />
+            <stop offset="0%" stopColor="var(--gold-500)" />
+            <stop offset="50%" stopColor="var(--gold-400)" />
+            <stop offset="100%" stopColor="var(--gold-300)" />
           </linearGradient>
         </defs>
 
@@ -219,7 +219,7 @@ function Sparkline({ points, language, reduced }: SparklineProps) {
             x2={w - padX}
             y1={padY + (h - padY * 2) * r}
             y2={padY + (h - padY * 2) * r}
-            stroke="rgba(212, 160, 23, 0.08)"
+            stroke="rgb(var(--color-gold-500-rgb) / 0.08)"
             strokeWidth={1}
           />
         ))}
@@ -245,19 +245,19 @@ function Sparkline({ points, language, reduced }: SparklineProps) {
           cx={toX(points.length - 1)}
           cy={toY(last)}
           r={3.5}
-          fill="#E8B42C"
+          fill="var(--gold-400)"
         />
         <circle
           cx={toX(points.length - 1)}
           cy={toY(last)}
           r={7}
-          fill="#E8B42C"
+          fill="var(--gold-400)"
           opacity="0.18"
         />
       </svg>
 
       {/* X-axis labels */}
-      <div className="flex justify-between text-[10px] text-[#6B6B6B] mt-1 px-2">
+      <div className="flex justify-between text-xs text-n-600 mt-1 px-2">
         {points
           .filter((_, i) => i % 2 === 0 || i === points.length - 1)
           .map((p) => (
@@ -282,20 +282,20 @@ interface MiniKpiProps {
 }
 
 function MiniKpi({ label, value, icon: Icon, accent = 'gold', delta, deltaDir }: MiniKpiProps) {
-  const dotColor = accent === 'gold' ? '#D4A017' : '#A8A8A8';
+  const dotColor = accent === 'gold' ? 'var(--gold-500)' : 'var(--n-500)';
   const iconBg =
     accent === 'gold'
-      ? 'bg-[rgba(212,160,23,0.14)] text-[#E8B42C]'
-      : 'bg-[rgba(255,255,255,0.06)] text-[#A8A8A8]';
+      ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600'
+      : 'bg-[rgba(255,255,255,0.06)] text-n-500';
   const deltaColor =
     deltaDir === 'up'
-      ? 'text-[#86EFAC]'
+      ? 'text-success'
       : deltaDir === 'down'
-        ? 'text-[#FCA5A5]'
-        : 'text-[#A8A8A8]';
+        ? 'text-danger'
+        : 'text-n-500';
 
   return (
-    <div className="relative flex flex-col gap-2.5 p-5 rounded-[12px] glass-elite border border-[rgba(212,160,23,0.2)]">
+    <div className="relative flex flex-col gap-2.5 p-5 rounded-lg glass-elite border border-[rgb(var(--color-gold-500-rgb)_/_0.2)]">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -303,14 +303,14 @@ function MiniKpi({ label, value, icon: Icon, accent = 'gold', delta, deltaDir }:
             className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
             style={{ backgroundColor: dotColor }}
           />
-          <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8] truncate">
+          <span className="uppercase tracking-label text-xs font-medium text-n-500 truncate">
             {label}
           </span>
         </div>
         <div
           aria-hidden="true"
           className={cn(
-            'shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-[8px]',
+            'shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md',
             iconBg,
           )}
         >
@@ -318,12 +318,12 @@ function MiniKpi({ label, value, icon: Icon, accent = 'gold', delta, deltaDir }:
         </div>
       </div>
 
-      <div className="font-serif-elite font-normal text-[#F5F5F5] leading-[1.05] text-[26px] md:text-[28px] tabular-nums">
+      <div className="font-mono font-semibold text-n-100 leading-tight text-2xl md:text-3xl num">
         {value}
       </div>
 
       {delta && (
-        <p className={cn('text-[11px] font-medium tabular-nums', deltaColor)}>{delta}</p>
+        <p className={cn('text-xs font-medium tabular-nums', deltaColor)}>{delta}</p>
       )}
     </div>
   );
@@ -351,9 +351,9 @@ function ExitValueBreakdown({ kpi, open, onToggle, language }: ExitValueBreakdow
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
-          'inline-flex items-center gap-2 text-[12px] font-medium uppercase tracking-wider',
-          'text-[#D4A017] hover:text-[#E8B42C] transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303] rounded',
+          'inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider',
+          'text-gold-500 hover:text-gold-600 transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000 rounded',
         )}
       >
         <span>{open ? closeLabel : openLabel}</span>
@@ -374,31 +374,31 @@ function ExitValueBreakdown({ kpi, open, onToggle, language }: ExitValueBreakdow
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="mt-4 p-4 rounded-[10px] bg-[rgba(10,10,10,0.55)] border border-[rgba(212,160,23,0.16)]">
-              <p className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8] mb-3">
+            <div className="mt-4 p-4 rounded-md bg-[rgba(10,10,10,0.55)] border border-[rgb(var(--color-gold-500-rgb)_/_0.16)]">
+              <p className="uppercase tracking-label text-xs font-medium text-n-500 mb-3">
                 {label}
               </p>
               <dl className="flex flex-col gap-2">
                 {(kpi.breakdown ?? []).map((item) => (
                   <div
                     key={item.label}
-                    className="flex items-center justify-between gap-3 text-[13px]"
+                    className="flex items-center justify-between gap-3 text-sm"
                   >
-                    <dt className="text-[#A8A8A8]">{item.label}</dt>
-                    <dd className="text-[#F5F5F5] font-medium tabular-nums">
+                    <dt className="text-n-500">{item.label}</dt>
+                    <dd className="text-n-100 font-medium tabular-nums">
                       {item.formatted ?? item.value.toLocaleString('es-CO')}
                     </dd>
                   </div>
                 ))}
               </dl>
               {kpi.assumptions && kpi.assumptions.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-[rgba(212,160,23,0.12)]">
-                  <p className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#6B6B6B] mb-1.5">
+                <div className="mt-3 pt-3 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.12)]">
+                  <p className="uppercase tracking-label text-xs font-medium text-n-600 mb-1.5">
                     {language === 'es' ? 'Supuestos' : 'Assumptions'}
                   </p>
-                  <ul className="flex flex-col gap-1 text-[11px] text-[#A8A8A8] leading-relaxed">
+                  <ul className="flex flex-col gap-1 text-xs text-n-500 leading-relaxed">
                     {kpi.assumptions.map((a) => (
-                      <li key={a} className="pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-[#D4A017]">
+                      <li key={a} className="pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-gold-500">
                         {a}
                       </li>
                     ))}
@@ -479,9 +479,9 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
           <motion.p
             {...fadeItem(1)}
             className={cn(
-              'font-serif-elite font-normal',
-              'text-[22px] sm:text-[24px] md:text-[26px] leading-[1.5]',
-              'text-[#D4D4D4] max-w-3xl mb-12',
+              'font-serif-elite font-medium tracking-tight',
+              'text-xl md:text-2xl leading-relaxed',
+              'text-n-300 max-w-3xl mb-12',
             )}
           >
             {valor.narrative}
@@ -494,7 +494,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
         {...fadeItem(2)}
         className={cn('mb-5', compact ? '' : '')}
       >
-        <div className="relative p-7 md:p-8 rounded-[16px] glass-elite-elevated border-elite-gold glow-gold overflow-hidden">
+        <div className="relative p-7 md:p-8 rounded-xl glass-elite-elevated border-elite-gold glow-gold overflow-hidden">
           {/* Ambient glow */}
           <div
             aria-hidden="true"
@@ -511,15 +511,15 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   aria-hidden="true"
-                  className="inline-block h-2 w-2 rounded-full shrink-0 bg-[#22C55E] shadow-[0_0_8px_rgba(34,197,94,0.8)]"
+                  className="inline-block h-2 w-2 rounded-full shrink-0 bg-success shadow-[0_0_8px_rgba(34,197,94,0.8)]"
                 />
-                <span className="uppercase tracking-[0.22em] text-[11px] font-medium text-[#D4A017] truncate">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 truncate">
                   {valor.kpiPrimary}
                 </span>
               </div>
               <div
                 aria-hidden="true"
-                className="shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-[12px] bg-[rgba(212,160,23,0.16)] text-[#E8B42C]"
+                className="shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[rgb(var(--color-gold-500-rgb)_/_0.16)] text-gold-600"
               >
                 <Diamond className="h-5 w-5" strokeWidth={1.6} />
               </div>
@@ -534,25 +534,26 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
                   animate={reduced ? {} : { opacity: 1, y: 0 }}
                   transition={reduced ? undefined : { duration: 0.5, ease: 'easeOut' }}
                   className={cn(
-                    'font-serif-elite font-normal text-[#F5F5F5] leading-[0.98] tabular-nums',
-                    'text-[56px] sm:text-[72px] md:text-[84px] lg:text-[92px]',
+                    'font-serif-elite font-medium text-n-100 leading-display tracking-tight num',
+                    'text-5xl sm:text-6xl',
                     'bg-clip-text text-transparent',
-                    '[background-image:linear-gradient(135deg,#F5F5F5_0%,#E8B42C_50%,#D4A017_100%)]',
+                    '[background-image:linear-gradient(135deg,#F5F5F5_0%,var(--gold-400)_50%,var(--gold-500)_100%)]',
                   )}
+                  style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
                 >
                   {kpiData.formatted}
                 </motion.span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[rgba(34,197,94,0.12)] border border-[rgba(34,197,94,0.3)]">
-                  <TrendingUp className="h-3.5 w-3.5 text-[#86EFAC]" strokeWidth={2.2} />
-                  <span className="text-[13px] font-semibold tabular-nums text-[#86EFAC]">
+                  <TrendingUp className="h-3.5 w-3.5 text-success" strokeWidth={2.2} />
+                  <span className="text-sm font-semibold tabular-nums text-success">
                     +{Math.abs(trendDelta).toFixed(1)}%
                   </span>
-                  <span className="text-[11px] text-[#A8A8A8]">
+                  <span className="text-xs text-n-500">
                     {language === 'es' ? 'vs t0' : 'vs t0'}
                   </span>
                 </span>
               </div>
-              <p className="text-[13px] text-[#A8A8A8] max-w-xl">
+              <p className="text-sm text-n-500 max-w-xl">
                 {language === 'es'
                   ? 'Equity Value estimado con múltiplos de transacciones CO 2024-2026 y ajuste por crecimiento esperado.'
                   : 'Equity value estimated using CO 2024-2026 transaction multiples with expected growth adjustment.'}
@@ -687,28 +688,28 @@ function SubmoduleCard({
           hover="lift"
           interactive
           padding="md"
-          className="h-full min-h-[220px] flex flex-col gap-5 focus-within:ring-2 focus-within:ring-[#D4A017] focus-within:ring-offset-2 focus-within:ring-offset-[#030303]"
+          className="h-full min-h-[220px] flex flex-col gap-5 focus-within:ring-2 focus-within:ring-gold-500 focus-within:ring-offset-2 focus-within:ring-offset-n-1000"
         >
           <div className="flex items-start justify-between gap-4">
             <div
               aria-hidden="true"
-              className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-[14px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C] group-hover:bg-[rgba(212,160,23,0.22)] group-hover:text-[#F5C63F] transition-colors"
+              className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600 group-hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.22)] group-hover:text-gold-400 transition-colors"
             >
               <Icon className="h-7 w-7" strokeWidth={1.6} />
             </div>
             <span
               className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider',
                 isReady
-                  ? 'bg-[rgba(34,197,94,0.12)] text-[#86EFAC] border border-[rgba(34,197,94,0.3)]'
-                  : 'bg-[rgba(212,160,23,0.12)] text-[#E8B42C] border border-[rgba(212,160,23,0.3)]',
+                  ? 'bg-[rgba(34,197,94,0.12)] text-success border border-[rgba(34,197,94,0.3)]'
+                  : 'bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
               )}
             >
               {isReady ? (
                 <>
                   <span
                     aria-hidden="true"
-                    className="inline-block h-1 w-1 rounded-full bg-[#22C55E]"
+                    className="inline-block h-1 w-1 rounded-full bg-success"
                   />
                   {readyLabel}
                 </>
@@ -722,15 +723,15 @@ function SubmoduleCard({
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-[22px] leading-tight font-normal text-[#F5F5F5]">
+            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
               {title}
             </h3>
-            <p className="text-[14px] leading-relaxed text-[#A8A8A8] max-w-md">
+            <p className="text-base leading-relaxed text-n-500 max-w-md">
               {description}
             </p>
           </div>
 
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#D4A017] group-hover:text-[#E8B42C] transition-colors">
+          <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gold-500 group-hover:text-gold-600 transition-colors">
             <span>{ctaLabel}</span>
             <ArrowRight
               className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"

@@ -166,39 +166,39 @@ function StageNode({ index, state, label, sublabel }: {
   return (
     <div className={cn(
       'rounded-xl border-2 px-5 py-4 min-w-[150px] text-center transition-colors',
-      isComplete && 'bg-[#F0FDF4] border-[#22C55E]',
-      isActive && 'bg-[#FEF9EC] border-[#D4A017]',
-      isPending && 'bg-[#fafafa] border-[#e5e5e5]',
+      isComplete && 'bg-success/10 border-success',
+      isActive && 'bg-gold-300/10 border-gold-500',
+      isPending && 'bg-n-50 border-n-200',
     )}>
       <div className="flex items-center justify-center gap-1.5 mb-1">
-        {isComplete && <CheckCircle className="w-3.5 h-3.5 text-[#22C55E]" />}
+        {isComplete && <CheckCircle className="w-3.5 h-3.5 text-success" />}
         {isActive && (
           <motion.div
             animate={prefersReduced ? {} : { rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           >
-            <Loader2 className="w-3.5 h-3.5 text-[#D4A017]" />
+            <Loader2 className="w-3.5 h-3.5 text-gold-500" />
           </motion.div>
         )}
-        {isPending && <div className="w-3.5 h-3.5 rounded-full border border-[#d4d4d4]" />}
+        {isPending && <div className="w-3.5 h-3.5 rounded-full border border-n-300" />}
         <span className={cn(
-          'text-[10px] font-bold font-[family-name:var(--font-geist-mono)] uppercase',
-          isComplete && 'text-[#16A34A]',
-          isActive && 'text-[#D4A017]',
-          isPending && 'text-[#a3a3a3]',
+          'text-2xs font-bold font-mono uppercase',
+          isComplete && 'text-success',
+          isActive && 'text-gold-500',
+          isPending && 'text-n-400',
         )}>
           Agente {stageNum}
         </span>
       </div>
       <p className={cn(
         'text-xs font-semibold',
-        isComplete && 'text-[#16A34A]',
-        isActive && 'text-[#7D5B0C]',
-        isPending && 'text-[#525252]',
+        isComplete && 'text-success',
+        isActive && 'text-gold-700',
+        isPending && 'text-n-600',
       )}>
         {label}
       </p>
-      <p className="text-[10px] text-[#a3a3a3] mt-0.5">{sublabel}</p>
+      <p className="text-2xs text-n-400 mt-0.5">{sublabel}</p>
     </div>
   );
 }
@@ -233,13 +233,13 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-n-200">
         <div>
-          <h2 className="text-sm font-bold text-[#0a0a0a] flex items-center gap-2">
+          <h2 className="text-sm font-bold text-n-900 flex items-center gap-2">
             <Loader2 className={cn('w-4 h-4', state.mode !== 'complete' && 'animate-spin')} />
             {state.mode === 'complete' ? 'REPORTE COMPLETO' : 'GENERANDO REPORTE NIIF ELITE'}
           </h2>
-          <p className="text-xs text-[#a3a3a3] mt-0.5 font-[family-name:var(--font-geist-mono)]">
+          <p className="text-xs text-n-400 mt-0.5 font-mono">
             <Clock className="w-3 h-3 inline mr-1" />
             {timeStr} · Tiempo estimado: 3-5 min
           </p>
@@ -249,7 +249,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
 
       {/* Phase 1: Agents */}
       <div className="px-6 py-4">
-        <h3 className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider mb-3 font-[family-name:var(--font-geist-mono)]">
+        <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-3 font-mono">
           Fase 1 — Generacion de Reporte
         </h3>
         <div className="flex items-center gap-2 overflow-x-auto styled-scrollbar pb-2">
@@ -257,7 +257,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
             <div key={i} className="flex items-center">
               <StageNode index={i} state={state} label={s.label} sublabel={s.sublabel} />
               {i < STAGE_LABELS.length - 1 && (
-                <ChevronRight className="w-5 h-5 text-[#d4d4d4] mx-1 shrink-0" />
+                <ChevronRight className="w-5 h-5 text-n-300 mx-1 shrink-0" />
               )}
             </div>
           ))}
@@ -265,8 +265,8 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
       </div>
 
       {/* Phase 2: Auditors */}
-      <div className="px-6 py-4 border-t border-[#f5f5f5]">
-        <h3 className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider mb-3 font-[family-name:var(--font-geist-mono)]">
+      <div className="px-6 py-4 border-t border-n-100">
+        <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-3 font-mono">
           Fase 2 — Auditoria (4 en paralelo)
         </h3>
         <div className="flex items-center gap-3 flex-wrap">
@@ -279,15 +279,15 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
                 key={key}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
-                  complete && 'bg-[#F0FDF4] border-[#BBF7D0] text-[#16A34A]',
-                  started && !complete && 'bg-[#FEF9EC] border-[#FDE68A] text-[#D97706]',
-                  !started && 'bg-[#fafafa] border-[#e5e5e5] text-[#a3a3a3]',
+                  complete && 'bg-success/10 border-success/30 text-success',
+                  started && !complete && 'bg-gold-300/10 border-warning/30 text-warning',
+                  !started && 'bg-n-50 border-n-200 text-n-400',
                 )}
               >
                 {complete ? <CheckCircle className="w-3 h-3" /> : started ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="w-3 h-3 rounded-full border border-current" />}
                 {label}
                 {findingCount !== undefined && (
-                  <span className="text-[10px] font-[family-name:var(--font-geist-mono)]">
+                  <span className="text-2xs font-mono">
                     ({findingCount})
                   </span>
                 )}
@@ -298,20 +298,20 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
       </div>
 
       {/* Phase 3: Quality */}
-      <div className="px-6 py-4 border-t border-[#f5f5f5]">
-        <h3 className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider mb-2 font-[family-name:var(--font-geist-mono)]">
+      <div className="px-6 py-4 border-t border-n-100">
+        <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-2 font-mono">
           Fase 3 — Meta-Auditoria de Calidad
         </h3>
         {state.qualityGrade ? (
           <div className="flex items-center gap-2">
             <DSBadge variant="grade" grade={state.qualityGrade} label={state.qualityGrade} size="md" />
-            <span className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)]">
+            <span className="text-xs text-n-600 font-mono">
               {state.qualityScore}/100
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-xs text-[#a3a3a3]">
-            <div className="w-3 h-3 rounded-full border border-[#d4d4d4]" />
+          <div className="flex items-center gap-1.5 text-xs text-n-400">
+            <div className="w-3 h-3 rounded-full border border-n-300" />
             {state.mode === 'quality' ? 'Evaluando calidad...' : 'Esperando auditoria completa'}
           </div>
         )}
@@ -514,8 +514,8 @@ function ReportViewer({
 
       {/* Document navigation */}
       {sections.length > 0 && (
-        <nav className="report-toc w-[200px] shrink-0 border-r border-[#e5e5e5] overflow-y-auto styled-scrollbar py-4 hidden lg:block">
-          <h3 className="px-4 text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider mb-2 font-[family-name:var(--font-geist-mono)]">
+        <nav className="report-toc w-[200px] shrink-0 border-r border-n-200 overflow-y-auto styled-scrollbar py-4 hidden lg:block">
+          <h3 className="px-4 text-2xs font-bold text-n-400 uppercase tracking-wider mb-2 font-mono">
             {language === 'es' ? 'Contenido' : 'Contents'}
           </h3>
           <ul className="space-y-0.5">
@@ -527,8 +527,8 @@ function ReportViewer({
                   className={cn(
                     'w-full text-left px-4 py-1.5 text-xs transition-colors',
                     activeSection === s.id
-                      ? 'text-[#D4A017] bg-[#FEF9EC] font-medium border-l-2 border-[#D4A017]'
-                      : 'text-[#525252] hover:bg-[#fafafa]',
+                      ? 'text-gold-500 bg-gold-300/10 font-medium border-l-2 border-gold-500'
+                      : 'text-n-600 hover:bg-n-50',
                   )}
                 >
                   {s.title}
@@ -542,7 +542,7 @@ function ReportViewer({
       {/* Document content */}
       <div ref={contentRef} className="flex-1 overflow-y-auto styled-scrollbar">
         {/* Action bar */}
-        <div className="report-action-bar sticky top-0 z-10 bg-white border-b border-[#e5e5e5] px-6 py-3 flex items-center gap-2 flex-wrap">
+        <div className="report-action-bar sticky top-0 z-10 bg-n-0 border-b border-n-200 px-6 py-3 flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={handleDownloadExcel}
@@ -551,8 +551,8 @@ function ReportViewer({
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
               isExportingExcel || !report
-                ? 'bg-[#f5f5f5] text-[#a3a3a3] cursor-not-allowed'
-                : 'bg-[#D4A017] text-white hover:bg-[#A87C10]',
+                ? 'bg-n-100 text-n-400 cursor-not-allowed'
+                : 'bg-gold-500 text-n-0 hover:bg-gold-700',
             )}
           >
             {isExportingExcel ? (
@@ -568,7 +568,7 @@ function ReportViewer({
             type="button"
             onClick={handlePrintPdf}
             aria-label={language === 'es' ? 'Exportar a PDF (Imprimir)' : 'Export to PDF (Print)'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-n-200 text-n-600 text-xs font-medium hover:bg-n-50 transition-colors"
           >
             <FileText className="w-3.5 h-3.5" />
             {language === 'es' ? 'Exportar PDF' : 'Export PDF'}
@@ -580,10 +580,10 @@ function ReportViewer({
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
               copyState === 'done'
-                ? 'border-[#BBF7D0] bg-[#F0FDF4] text-[#16A34A]'
+                ? 'border-success/30 bg-success/10 text-success'
                 : copyState === 'error'
-                  ? 'border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]'
-                  : 'border-[#e5e5e5] text-[#525252] hover:bg-[#fafafa]',
+                  ? 'border-danger/30 bg-danger/10 text-danger'
+                  : 'border-n-200 text-n-600 hover:bg-n-50',
             )}
           >
             {copyState === 'done' ? (
@@ -598,7 +598,7 @@ function ReportViewer({
             onClick={handleReset}
             disabled={!onReset}
             aria-label={language === 'es' ? 'Crear un nuevo reporte' : 'Create a new report'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e5e5e5] text-[#525252] text-xs font-medium hover:bg-[#fafafa] transition-colors ml-auto disabled:text-[#a3a3a3] disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-n-200 text-n-600 text-xs font-medium hover:bg-n-50 transition-colors ml-auto disabled:text-n-400 disabled:cursor-not-allowed"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {language === 'es' ? 'Nuevo Reporte' : 'New Report'}
@@ -606,7 +606,7 @@ function ReportViewer({
         </div>
 
         {exportError && (
-          <div className="mx-6 my-3 rounded border border-[#EF4444] bg-[#FEF2F2] px-3 py-2 flex items-start gap-2 text-xs text-[#DC2626]">
+          <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span className="whitespace-pre-wrap break-words">{exportError}</span>
           </div>
@@ -614,7 +614,7 @@ function ReportViewer({
 
         {/* Report content */}
         <div className="report-prose-root px-8 py-6 max-w-4xl mx-auto">
-          <div className="prose prose-sm max-w-none text-[#0a0a0a] prose-headings:text-[#0a0a0a] prose-headings:font-semibold prose-p:leading-relaxed prose-a:text-[#D4A017] prose-strong:text-[#0a0a0a] prose-table:border prose-table:border-[#e5e5e5] prose-th:bg-[#fafafa] prose-th:px-3 prose-th:py-2 prose-th:text-xs prose-th:font-medium prose-td:px-3 prose-td:py-2 prose-td:text-sm prose-td:border-t prose-td:border-[#f5f5f5]">
+          <div className="prose prose-sm max-w-none text-n-900 prose-headings:text-n-900 prose-headings:font-semibold prose-p:leading-relaxed prose-a:text-gold-500 prose-strong:text-n-900 prose-table:border prose-table:border-n-200 prose-th:bg-n-50 prose-th:px-3 prose-th:py-2 prose-th:text-xs prose-th:font-medium prose-td:px-3 prose-td:py-2 prose-td:text-sm prose-td:border-t prose-td:border-n-100">
             {sections.length > 0 ? (
               sections.map((s) => (
                 <div key={s.id} id={`report-section-${s.id}`} className="mb-8">
@@ -1019,9 +1019,9 @@ export function PipelineWorkspace() {
     return (
       <div className="h-full flex flex-col">
         {hasWarnings && (
-          <div className="shrink-0 border-b border-[#FCD34D] bg-[#FFFBEB] px-6 py-3 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0 text-xs text-[#92400E]">
+          <div className="shrink-0 border-b border-warning/30 bg-warning/10 px-6 py-3 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 text-xs text-warning">
               <div className="font-medium mb-0.5">
                 Reporte generado con advertencias
               </div>
@@ -1062,29 +1062,29 @@ export function PipelineWorkspace() {
       <PipelineMonitor state={pipelineState} />
 
       {error && (
-        <div className="mx-6 my-4 rounded-lg border border-[#EF4444] bg-[#FEF2F2] px-4 py-3 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-[#EF4444] shrink-0 mt-0.5" />
+        <div className="mx-6 my-4 rounded-lg border border-danger bg-danger/10 px-4 py-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-[#DC2626]">Error en el pipeline</div>
-            <p className="text-xs text-[#737373] whitespace-pre-wrap break-words">{error}</p>
+            <div className="text-sm font-medium text-danger">Error en el pipeline</div>
+            <p className="text-xs text-n-500 whitespace-pre-wrap break-words">{error}</p>
           </div>
         </div>
       )}
 
       {!pipelineInput && !isRunning && (
-        <div className="flex-1 flex items-center justify-center text-sm text-[#a3a3a3] px-6 text-center">
+        <div className="flex-1 flex items-center justify-center text-sm text-n-400 px-6 text-center">
           No hay pipeline activo. Inicie un nuevo reporte desde &quot;Nueva Consulta&quot;.
         </div>
       )}
 
       {/* Live streaming preview */}
       {streamedContent && (
-        <div className="flex-1 border-t border-[#e5e5e5] px-8 py-6 overflow-y-auto styled-scrollbar">
-          <h3 className="text-[10px] font-bold text-[#a3a3a3] uppercase tracking-wider mb-3 font-[family-name:var(--font-geist-mono)]">
+        <div className="flex-1 border-t border-n-200 px-8 py-6 overflow-y-auto styled-scrollbar">
+          <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-3 font-mono">
             Vista previa en tiempo real
           </h3>
           <StreamingText isStreaming={isRunning}>
-            <div className="prose prose-sm max-w-none text-[#0a0a0a]">
+            <div className="prose prose-sm max-w-none text-n-900">
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                 {streamedContent}
               </ReactMarkdown>
@@ -1094,7 +1094,7 @@ export function PipelineWorkspace() {
       )}
 
       {!streamedContent && isRunning && !error && (
-        <div className="flex-1 flex items-center justify-center text-sm text-[#a3a3a3]">
+        <div className="flex-1 flex items-center justify-center text-sm text-n-400">
           <motion.div
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 2, repeat: Infinity }}

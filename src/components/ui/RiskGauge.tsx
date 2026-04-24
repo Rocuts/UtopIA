@@ -11,27 +11,51 @@ interface RiskGaugeProps {
   className?: string;
 }
 
+/**
+ * Risk color map. Stored as CSS variable names so they flow from the
+ * tokenized palette in `globals.css` (@theme). No hex here.
+ *
+ * The SVG paths use `stroke="currentColor"` on wrapper spans when possible;
+ * for paths that need a different color than the parent, we read
+ * `getComputedStyle(--color-*)` via `var(...)` expressions in the stroke.
+ */
 const RISK_CONFIG: Record<
   RiskLevel,
-  { color: string; displayLabel: { es: string; en: string } }
+  {
+    cssVar: string; // CSS variable reference for the fill/stroke color
+    displayLabel: { es: string; en: string };
+    textClass: string;
+  }
 > = {
   bajo: {
-    color: '#22c55e',
+    cssVar: 'var(--color-success)',
     displayLabel: { es: 'BAJO', en: 'LOW' },
+    textClass: 'text-success',
   },
   medio: {
-    color: '#eab308',
+    cssVar: 'var(--color-warning)',
     displayLabel: { es: 'MEDIO', en: 'MEDIUM' },
+    textClass: 'text-warning',
   },
   alto: {
-    color: '#f97316',
+    cssVar: 'var(--color-warning)',
     displayLabel: { es: 'ALTO', en: 'HIGH' },
+    textClass: 'text-warning',
   },
   critico: {
-    color: '#ef4444',
+    cssVar: 'var(--color-danger)',
     displayLabel: { es: 'CRITICO', en: 'CRITICAL' },
+    textClass: 'text-danger',
   },
 };
+
+// Segment colors for the background arc (low→high severity gradient).
+const SEGMENT_VARS = [
+  'var(--color-success)', // 0-45°
+  'var(--color-warning)', // 45-90°
+  'var(--color-warning)', // 90-135°  (no separate "high" token yet)
+  'var(--color-danger)',  // 135-180°
+];
 
 export function RiskGauge({ level, label, score, className }: RiskGaugeProps) {
   const config = RISK_CONFIG[level];
@@ -42,10 +66,10 @@ export function RiskGauge({ level, label, score, className }: RiskGaugeProps) {
   const r = 80;
 
   const segments = [
-    { start: 0, end: 45, color: '#22c55e' },
-    { start: 45, end: 90, color: '#eab308' },
-    { start: 90, end: 135, color: '#f97316' },
-    { start: 135, end: 180, color: '#ef4444' },
+    { start: 0, end: 45, color: SEGMENT_VARS[0] },
+    { start: 45, end: 90, color: SEGMENT_VARS[1] },
+    { start: 90, end: 135, color: SEGMENT_VARS[2] },
+    { start: 135, end: 180, color: SEGMENT_VARS[3] },
   ];
 
   function arcPath(startDeg: number, endDeg: number, radius: number) {
@@ -83,7 +107,7 @@ export function RiskGauge({ level, label, score, className }: RiskGaugeProps) {
             <motion.path
               d={arcPath(0, angle, r)}
               fill="none"
-              stroke={config.color}
+              stroke={config.cssVar}
               strokeWidth="12"
               strokeLinecap="butt"
               initial={{ pathLength: 0 }}
@@ -97,7 +121,7 @@ export function RiskGauge({ level, label, score, className }: RiskGaugeProps) {
             y1={cy}
             x2={needleX}
             y2={needleY}
-            stroke="#0a0a0a"
+            stroke="var(--color-n-900)"
             strokeWidth="2"
             strokeLinecap="butt"
             initial={{ x2: cx - (r - 10), y2: cy }}
@@ -105,13 +129,13 @@ export function RiskGauge({ level, label, score, className }: RiskGaugeProps) {
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
           />
 
-          <circle cx={cx} cy={cy} r="4" fill="#0a0a0a" />
+          <circle cx={cx} cy={cy} r="4" fill="var(--color-n-900)" />
 
           <motion.text
             x={cx}
             y={cy - 15}
             textAnchor="middle"
-            fill="#0a0a0a"
+            fill="var(--color-n-900)"
             fontSize="24"
             fontWeight="bold"
             fontFamily="var(--font-geist-mono), monospace"
@@ -131,12 +155,10 @@ export function RiskGauge({ level, label, score, className }: RiskGaugeProps) {
         transition={{ type: "spring", stiffness: 400, damping: 25, delay: 0.2 }}
       >
         <span
-          className="text-xs font-medium uppercase tracking-widest px-2.5 py-0.5 rounded-sm border font-[family-name:var(--font-geist-mono)]"
-          style={{
-            color: config.color,
-            borderColor: '#e5e5e5',
-            backgroundColor: '#fafafa',
-          }}
+          className={cn(
+            "text-xs font-medium uppercase tracking-widest px-2.5 py-0.5 rounded-sm border bg-n-50 border-n-200 font-[family-name:var(--font-geist-mono)]",
+            config.textClass,
+          )}
         >
           {label ?? config.displayLabel.es}
         </span>

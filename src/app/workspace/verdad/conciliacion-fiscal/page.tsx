@@ -168,13 +168,13 @@ export default function ConciliacionFiscalPage() {
     <div
       data-theme="elite"
       data-lenis-prevent
-      className="min-h-full w-full overflow-y-auto bg-[#030303]"
+      className="min-h-full w-full overflow-y-auto bg-n-1000"
     >
       <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
         {/* Back link */}
         <Link
           href="/workspace/verdad"
-          className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.22em] text-[#A8A8A8] hover:text-[#E8B42C] transition-colors w-fit"
+          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-n-500 hover:text-gold-600 transition-colors w-fit"
         >
           <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
           {language === 'es' ? 'Volver a La Verdad' : 'Back to The Truth'}
@@ -229,10 +229,10 @@ export default function ConciliacionFiscalPage() {
                 },
               ].map((n) => (
                 <div key={n.title} className="flex flex-col gap-1.5">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-[#D4A017] font-medium">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-500 font-medium">
                     {n.title}
                   </p>
-                  <p className="text-[12.5px] text-[#D4D4D4] leading-relaxed">{n.desc}</p>
+                  <p className="text-[12.5px] text-n-300 leading-relaxed">{n.desc}</p>
                 </div>
               ))}
             </div>
@@ -244,11 +244,11 @@ export default function ConciliacionFiscalPage() {
           <EliteCard.Header>
             <span className="flex items-center gap-2">
               <Scale
-                className="w-4 h-4 text-[#E8B42C]"
+                className="w-4 h-4 text-gold-600"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="font-serif-elite text-[20px]">
+              <span className="font-serif-elite text-xl">
                 {language === 'es' ? 'Partidas conciliatorias' : 'Reconciliation items'}
               </span>
             </span>
@@ -257,7 +257,7 @@ export default function ConciliacionFiscalPage() {
             <div className="overflow-x-auto -mx-2">
               <table className="w-full min-w-[760px] text-[12.5px]">
                 <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-[0.16em] text-[#A8A8A8] border-b border-[rgba(212,160,23,0.18)]">
+                  <tr className="text-left text-xs uppercase tracking-[0.16em] text-n-500 border-b border-[rgb(var(--color-gold-500-rgb)_/_0.18)]">
                     <th className="py-3 px-3 font-medium">
                       {language === 'es' ? 'Concepto' : 'Concept'}
                     </th>
@@ -287,8 +287,8 @@ export default function ConciliacionFiscalPage() {
                         animate={shouldReduce ? undefined : { opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.04, duration: 0.3 }}
                         className={cn(
-                          'border-b border-[rgba(212,160,23,0.08)] text-[#F5F5F5]',
-                          zebra ? 'bg-[rgba(212,160,23,0.03)]' : '',
+                          'border-b border-[rgb(var(--color-gold-500-rgb)_/_0.08)] text-n-100',
+                          zebra ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.03)]' : '',
                         )}
                       >
                         <td className="py-3 px-3 align-top">
@@ -296,16 +296,16 @@ export default function ConciliacionFiscalPage() {
                             {language === 'es' ? p.concepto.es : p.concepto.en}
                           </span>
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-[#D4D4D4]">
+                        <td className="py-3 px-3 tabular-nums text-right text-n-300">
                           {formatCOP(p.niif)}
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-[#D4D4D4]">
+                        <td className="py-3 px-3 tabular-nums text-right text-n-300">
                           {formatCOP(p.fiscal)}
                         </td>
                         <td
                           className={cn(
                             'py-3 px-3 tabular-nums text-right font-medium',
-                            diff.value > 0 ? 'text-[#86EFAC]' : 'text-[#FCA5A5]',
+                            diff.value > 0 ? 'text-success-light' : 'text-danger-light',
                           )}
                         >
                           {diff.formatted}
@@ -313,10 +313,10 @@ export default function ConciliacionFiscalPage() {
                         <td className="py-3 px-3 text-center">
                           <span
                             className={cn(
-                              'inline-block px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.12em] font-medium',
+                              'inline-block px-2 py-0.5 rounded-full text-2xs uppercase tracking-[0.12em] font-medium',
                               p.tipo === 'permanente'
-                                ? 'bg-[rgba(114,47,55,0.18)] text-[#C46A76]'
-                                : 'bg-[rgba(212,160,23,0.14)] text-[#E8B42C]',
+                                ? 'bg-[rgba(114,47,55,0.18)] text-area-escudo'
+                                : 'bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600',
                             )}
                           >
                             {p.tipo === 'permanente'
@@ -328,7 +328,7 @@ export default function ConciliacionFiscalPage() {
                                 : 'Temporary'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-[#D4D4D4]">
+                        <td className="py-3 px-3 tabular-nums text-right text-n-300">
                           {typeof p.impuestoDiferido === 'number'
                             ? formatCOP(p.impuestoDiferido)
                             : '—'}
@@ -336,15 +336,15 @@ export default function ConciliacionFiscalPage() {
                       </motion.tr>
                     );
                   })}
-                  <tr className="border-t-2 border-[rgba(212,160,23,0.35)]">
-                    <td className="py-3 px-3 font-serif-elite text-[14px] text-[#F5F5F5]">
+                  <tr className="border-t-2 border-[rgb(var(--color-gold-500-rgb)_/_0.35)]">
+                    <td className="py-3 px-3 font-serif-elite text-base text-n-100">
                       {language === 'es' ? 'Totales' : 'Totals'}
                     </td>
                     <td className="py-3 px-3" colSpan={2}></td>
                     <td
                       className={cn(
-                        'py-3 px-3 tabular-nums text-right font-serif-elite text-[16px]',
-                        totals.total >= 0 ? 'text-[#E8B42C]' : 'text-[#FCA5A5]',
+                        'py-3 px-3 tabular-nums text-right font-serif-elite text-md',
+                        totals.total >= 0 ? 'text-gold-600' : 'text-danger-light',
                       )}
                     >
                       {(totals.total >= 0 ? '+' : '') + formatCOP(totals.total)}
@@ -352,8 +352,8 @@ export default function ConciliacionFiscalPage() {
                     <td className="py-3 px-3"></td>
                     <td
                       className={cn(
-                        'py-3 px-3 tabular-nums text-right font-serif-elite text-[16px]',
-                        totals.impuestoDiferido >= 0 ? 'text-[#E8B42C]' : 'text-[#FCA5A5]',
+                        'py-3 px-3 tabular-nums text-right font-serif-elite text-md',
+                        totals.impuestoDiferido >= 0 ? 'text-gold-600' : 'text-danger-light',
                       )}
                     >
                       {(totals.impuestoDiferido >= 0 ? '+' : '') +
@@ -371,18 +371,18 @@ export default function ConciliacionFiscalPage() {
           <EliteCard variant="glass" padding="lg">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp
-                className="w-4 h-4 text-[#C46A76]"
+                className="w-4 h-4 text-area-escudo"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="text-[11px] uppercase tracking-[0.22em] text-[#C46A76] font-medium">
+              <span className="text-xs uppercase tracking-[0.22em] text-area-escudo font-medium">
                 {language === 'es' ? 'Diferencias permanentes' : 'Permanent differences'}
               </span>
             </div>
-            <p className="font-serif-elite text-[36px] leading-none tabular-nums text-[#F5F5F5]">
+            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-100">
               {formatCOP(totals.permanente)}
             </p>
-            <p className="text-[12px] text-[#A8A8A8] mt-3 leading-relaxed">
+            <p className="text-xs text-n-500 mt-3 leading-relaxed">
               {language === 'es'
                 ? 'No generan impuesto diferido — se absorben en el período.'
                 : 'Do not generate deferred tax — absorbed in the period.'}
@@ -392,18 +392,18 @@ export default function ConciliacionFiscalPage() {
           <EliteCard variant="glass" padding="lg">
             <div className="flex items-center gap-2 mb-4">
               <TrendingDown
-                className="w-4 h-4 text-[#E8B42C]"
+                className="w-4 h-4 text-gold-600"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="text-[11px] uppercase tracking-[0.22em] text-[#D4A017] font-medium">
+              <span className="text-xs uppercase tracking-[0.22em] text-gold-500 font-medium">
                 {language === 'es' ? 'Diferencias temporarias' : 'Temporary differences'}
               </span>
             </div>
-            <p className="font-serif-elite text-[36px] leading-none tabular-nums text-[#F5F5F5]">
+            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-100">
               {formatCOP(totals.temporaria)}
             </p>
-            <p className="text-[12px] text-[#A8A8A8] mt-3 leading-relaxed">
+            <p className="text-xs text-n-500 mt-3 leading-relaxed">
               {language === 'es' ? (
                 <>
                   Generan impuesto diferido al {(TAX_RATE * 100).toFixed(0)}% (NIC 12).
@@ -423,20 +423,20 @@ export default function ConciliacionFiscalPage() {
           >
             <div className="flex items-center gap-2">
               <Sparkles
-                className="w-4 h-4 text-[#E8B42C]"
+                className="w-4 h-4 text-gold-600"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="uppercase tracking-[0.22em] text-[11px] text-[#D4A017] font-medium">
+              <span className="uppercase tracking-[0.22em] text-xs text-gold-500 font-medium">
                 {language === 'es' ? 'Ejecutar' : 'Execute'}
               </span>
             </div>
-            <h4 className="font-serif-elite text-[18px] leading-tight text-[#F5F5F5]">
+            <h4 className="font-serif-elite text-lg leading-tight text-n-100">
               {language === 'es'
                 ? 'Ejecutar conciliación AI'
                 : 'Run AI reconciliation'}
             </h4>
-            <p className="text-[12.5px] text-[#A8A8A8] leading-relaxed">
+            <p className="text-[12.5px] text-n-500 leading-relaxed">
               {language === 'es'
                 ? 'Dispara el pipeline: identificador de diferencias → calculador de impuesto diferido.'
                 : 'Triggers the pipeline: difference identifier → deferred tax calculator.'}
@@ -458,11 +458,11 @@ export default function ConciliacionFiscalPage() {
           <EliteCard.Header>
             <span className="flex items-center gap-2">
               <FileText
-                className="w-4 h-4 text-[#E8B42C]"
+                className="w-4 h-4 text-gold-600"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="font-serif-elite text-[20px]">
+              <span className="font-serif-elite text-xl">
                 {language === 'es'
                   ? 'Formato 2516 — resumen ejecutivo'
                   : 'Form 2516 — executive summary'}
@@ -494,12 +494,12 @@ export default function ConciliacionFiscalPage() {
               ].map((f) => (
                 <div
                   key={f.label}
-                  className="p-3 rounded-[8px] bg-[rgba(212,160,23,0.04)] border border-[rgba(212,160,23,0.12)]"
+                  className="p-3 rounded-[8px] bg-[rgb(var(--color-gold-500-rgb)_/_0.04)] border border-[rgb(var(--color-gold-500-rgb)_/_0.12)]"
                 >
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A8A8] mb-1.5">
+                  <p className="text-xs uppercase tracking-[0.16em] text-n-500 mb-1.5">
                     {f.label}
                   </p>
-                  <p className="font-serif-elite text-[18px] leading-tight tabular-nums text-[#F5F5F5]">
+                  <p className="font-serif-elite text-lg leading-tight tabular-nums text-n-100">
                     {f.value}
                   </p>
                 </div>

@@ -135,9 +135,9 @@ const MOCK_DEADLINES_EN: EscudoDeadline[] = [
 ];
 
 const SEVERITY_DOT: Record<DeadlineSeverity, string> = {
-  high: 'bg-[#FCA5A5]',
-  medium: 'bg-[#EAB308]',
-  low: 'bg-[#A8A8A8]',
+  high: 'bg-danger',
+  medium: 'bg-warning',
+  low: 'bg-n-500',
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -201,9 +201,9 @@ export function EscudoArea({
           <motion.p
             {...fadeItem(1)}
             className={cn(
-              'font-serif-elite font-normal',
-              'text-[22px] sm:text-[24px] md:text-[26px] leading-[1.5]',
-              'text-[#D4D4D4] max-w-3xl mb-12',
+              'font-serif-elite font-medium tracking-tight',
+              'text-xl md:text-2xl leading-relaxed',
+              'text-n-300 max-w-3xl mb-12',
             )}
           >
             {escudo.narrative}
@@ -290,14 +290,14 @@ interface DeadlinesCardProps {
 function DeadlinesCard({ title, count, deadlines, language }: DeadlinesCardProps) {
   const hasHigh = deadlines.some((d) => d.severity === 'high');
   return (
-    <div className="md:col-span-2 relative flex flex-col gap-4 p-6 rounded-[14px] glass-elite-elevated border-elite-gold glow-wine">
+    <div className="md:col-span-2 relative flex flex-col gap-4 p-6 rounded-xl glass-elite-elevated border-elite-gold glow-wine">
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[14px]"
+        className="pointer-events-none absolute inset-0 rounded-xl"
         style={{
           boxShadow: hasHigh
-            ? 'inset 0 0 0 1px rgba(114,47,55,0.55)'
-            : 'inset 0 0 0 1px rgba(212,160,23,0.32)',
+            ? 'inset 0 0 0 1px rgb(168 56 56 / 0.55)'
+            : 'inset 0 0 0 1px rgb(184 147 74 / 0.32)',
         }}
       />
 
@@ -307,26 +307,26 @@ function DeadlinesCard({ title, count, deadlines, language }: DeadlinesCardProps
             aria-hidden="true"
             className={cn(
               'inline-block h-1.5 w-1.5 rounded-full shrink-0',
-              hasHigh ? 'bg-[#C46A76]' : 'bg-[#D4A017]',
+              hasHigh ? 'bg-area-escudo' : 'bg-gold-500',
             )}
           />
-          <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#A8A8A8] truncate">
+          <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 truncate">
             {title}
           </span>
         </div>
         <div
           aria-hidden="true"
-          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(114,47,55,0.16)] text-[#C46A76]"
+          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(168_56_56_/_0.16)] text-area-escudo"
         >
           <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
         </div>
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-serif-elite font-normal text-[#F5F5F5] leading-[1] text-[44px] md:text-[48px] tabular-nums">
+        <span className="font-serif-elite font-normal text-n-100 leading-[1] text-4xl md:text-5xl num">
           {count}
         </span>
-        <span className="text-[13px] text-[#A8A8A8]">
+        <span className="text-sm text-n-500">
           {language === 'es' ? 'vencimientos' : 'deadlines'}
         </span>
       </div>
@@ -335,15 +335,15 @@ function DeadlinesCard({ title, count, deadlines, language }: DeadlinesCardProps
         {deadlines.map((d) => (
           <li
             key={`${d.label}-${d.date}`}
-            className="flex items-start gap-2.5 text-[13px] leading-snug"
+            className="flex items-start gap-2.5 text-sm leading-snug"
           >
             <span
               aria-hidden="true"
               className={cn('mt-1.5 h-1.5 w-1.5 rounded-full shrink-0', SEVERITY_DOT[d.severity])}
             />
             <span className="flex-1 min-w-0 flex items-center justify-between gap-3">
-              <span className="text-[#D4D4D4] truncate">{d.label}</span>
-              <span className="text-[#A8A8A8] shrink-0 inline-flex items-center gap-1">
+              <span className="text-n-300 truncate">{d.label}</span>
+              <span className="text-n-500 shrink-0 inline-flex items-center gap-1">
                 <Clock className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
                 {d.date}
               </span>
@@ -406,28 +406,28 @@ function SubmoduleCard({
           hover="lift"
           interactive
           padding="md"
-          className="h-full min-h-[180px] flex flex-col gap-4 focus-within:ring-2 focus-within:ring-[#D4A017] focus-within:ring-offset-2 focus-within:ring-offset-[#030303]"
+          className="h-full min-h-[180px] flex flex-col gap-4 focus-within:ring-2 focus-within:ring-gold-500 focus-within:ring-offset-2 focus-within:ring-offset-n-1000"
         >
           <div className="flex items-start justify-between gap-4">
             <div
               aria-hidden="true"
-              className="shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-[12px] bg-[rgba(114,47,55,0.18)] text-[#C46A76] group-hover:bg-[rgba(114,47,55,0.28)] group-hover:text-[#E5B0BA] transition-colors"
+              className="shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[rgb(168_56_56_/_0.18)] text-area-escudo group-hover:bg-[rgb(168_56_56_/_0.28)] group-hover:text-[rgb(229_176_186)] transition-colors"
             >
               <Icon className="h-6 w-6" strokeWidth={1.75} />
             </div>
             <span
               className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-label',
                 isReady
-                  ? 'bg-[rgba(34,197,94,0.12)] text-[#86EFAC] border border-[rgba(34,197,94,0.3)]'
-                  : 'bg-[rgba(212,160,23,0.12)] text-[#E8B42C] border border-[rgba(212,160,23,0.3)]',
+                  ? 'bg-[rgb(34_197_94_/_0.12)] text-success border border-[rgb(34_197_94_/_0.3)]'
+                  : 'bg-[rgb(184_147_74_/_0.12)] text-gold-600 border border-[rgb(184_147_74_/_0.3)]',
               )}
             >
               {isReady ? (
                 <>
                   <span
                     aria-hidden="true"
-                    className="inline-block h-1 w-1 rounded-full bg-[#22C55E]"
+                    className="inline-block h-1 w-1 rounded-full bg-success"
                   />
                   {readyLabel}
                 </>
@@ -441,15 +441,15 @@ function SubmoduleCard({
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-[22px] leading-tight font-normal text-[#F5F5F5]">
+            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
               {title}
             </h3>
-            <p className="text-[14px] leading-relaxed text-[#A8A8A8] max-w-md">
+            <p className="text-base leading-relaxed text-n-500 max-w-md">
               {description}
             </p>
           </div>
 
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#D4A017] group-hover:text-[#E8B42C] transition-colors">
+          <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-eyebrow text-gold-500 group-hover:text-gold-600 transition-colors">
             <span>{ctaLabel}</span>
             <ArrowRight
               className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"

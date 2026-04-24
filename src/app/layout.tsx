@@ -1,16 +1,16 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import { Instrument_Serif } from 'next/font/google';
+import { Fraunces } from 'next/font/google';
 import './globals.css';
 import SmoothScroll from '@/components/layout/SmoothScroll';
 import { LanguageProvider } from '@/context/LanguageContext';
 
-const instrumentSerif = Instrument_Serif({
+const fraunces = Fraunces({
   subsets: ['latin'],
-  weight: '400',
   style: ['normal', 'italic'],
-  variable: '--font-instrument-serif',
+  axes: ['opsz', 'SOFT', 'WONK'],
+  variable: '--font-fraunces',
   display: 'swap',
 });
 
@@ -21,8 +21,8 @@ const BOGOTA_LON = '-74.0721';
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
+    { media: '(prefers-color-scheme: light)', color: 'var(--n-0)' },
+    { media: '(prefers-color-scheme: dark)', color: '#0A0907' },
   ],
   colorScheme: 'light',
   width: 'device-width',
@@ -304,10 +304,10 @@ export default function RootLayout({
   return (
     <html
       lang="es-CO"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable} antialiased`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-white text-[#0a0a0a] font-[family-name:var(--font-geist-sans)]">
+      <body className="min-h-screen font-sans">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}

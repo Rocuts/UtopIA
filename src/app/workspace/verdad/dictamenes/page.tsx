@@ -187,13 +187,13 @@ export default function DictamenesPage() {
     <div
       data-theme="elite"
       data-lenis-prevent
-      className="min-h-full w-full overflow-y-auto bg-[#030303]"
+      className="min-h-full w-full overflow-y-auto bg-n-1000"
     >
       <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
         {/* Back link */}
         <Link
           href="/workspace/verdad"
-          className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.22em] text-[#A8A8A8] hover:text-[#E8B42C] transition-colors w-fit"
+          className="inline-flex items-center gap-2 text-xs uppercase tracking-eyebrow text-n-500 hover:text-gold-600 transition-colors w-fit"
         >
           <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
           {language === 'es' ? 'Volver a La Verdad' : 'Back to The Truth'}
@@ -217,7 +217,7 @@ export default function DictamenesPage() {
 
         <EliteCard variant="glass" padding="md">
           <EliteCard.Body>
-            <p className="text-[14px] leading-relaxed text-[#D4D4D4]">
+            <p className="text-base leading-relaxed text-n-300">
               {language === 'es'
                 ? 'Cada dictamen es emitido con fe pública por un Contador Público inscrito y se entrega firmado digitalmente con todos los soportes normativos requeridos. Los tiempos de respuesta varían entre 24 horas y 5 días hábiles según la profundidad del análisis.'
                 : 'Every opinion is issued under public trust by a registered Public Accountant and delivered digitally signed with all required regulatory support. Turnaround ranges from 24 hours to 5 business days depending on analysis depth.'}
@@ -247,20 +247,20 @@ export default function DictamenesPage() {
                     <div
                       aria-hidden="true"
                       className={cn(
-                        'shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-[10px]',
+                        'shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-md',
                         d.accent === 'gold'
-                          ? 'bg-[rgba(212,160,23,0.14)] text-[#E8B42C]'
-                          : 'bg-[rgba(114,47,55,0.18)] text-[#C46A76]',
+                          ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600'
+                          : 'bg-[rgba(114,47,55,0.18)] text-area-escudo',
                       )}
                     >
                       <Icon className="w-[22px] h-[22px]" strokeWidth={1.6} />
                     </div>
                     <span
                       className={cn(
-                        'text-[10px] uppercase tracking-[0.2em] font-medium px-2 py-0.5 rounded-full',
+                        'text-xs uppercase tracking-[0.2em] font-medium px-2 py-0.5 rounded-full',
                         d.accent === 'gold'
-                          ? 'bg-[rgba(212,160,23,0.10)] text-[#D4A017]'
-                          : 'bg-[rgba(114,47,55,0.16)] text-[#C46A76]',
+                          ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.10)] text-gold-500'
+                          : 'bg-[rgba(114,47,55,0.16)] text-area-escudo',
                       )}
                     >
                       {d.norm}
@@ -268,24 +268,24 @@ export default function DictamenesPage() {
                   </div>
 
                   <div className="flex flex-col gap-1.5 flex-1">
-                    <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5]">
+                    <h3 className="font-serif-elite text-xl leading-tight text-n-100">
                       {language === 'es' ? d.title.es : d.title.en}
                     </h3>
-                    <p className="text-[13px] leading-relaxed text-[#A8A8A8] font-light">
+                    <p className="text-sm leading-relaxed text-n-500 font-light">
                       {language === 'es' ? d.description.es : d.description.en}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#A8A8A8]">
-                    <span className="text-[#D4A017]">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-eyebrow text-n-500">
+                    <span className="text-gold-500">
                       {language === 'es' ? 'Destinatario:' : 'Audience:'}
                     </span>
-                    <span className="text-[#D4D4D4] normal-case tracking-normal">
+                    <span className="text-n-300 normal-case tracking-normal">
                       {language === 'es' ? d.audience.es : d.audience.en}
                     </span>
                   </div>
 
-                  <div className="pt-4 mt-auto border-t border-[rgba(212,160,23,0.14)]">
+                  <div className="pt-4 mt-auto border-t border-[rgb(var(--color-gold-500-rgb)_/_0.14)]">
                     <EliteButton
                       variant="secondary"
                       size="md"
@@ -308,20 +308,20 @@ export default function DictamenesPage() {
             <div className="flex flex-col gap-2 max-w-2xl">
               <div className="flex items-center gap-2">
                 <FileCheck
-                  className="w-4 h-4 text-[#E8B42C]"
+                  className="w-4 h-4 text-gold-600"
                   strokeWidth={2}
                   aria-hidden="true"
                 />
-                <span className="uppercase tracking-[0.22em] text-[11px] text-[#D4A017] font-medium">
+                <span className="uppercase tracking-eyebrow text-xs text-gold-500 font-medium">
                   {language === 'es' ? 'Dictamen personalizado' : 'Custom opinion'}
                 </span>
               </div>
-              <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5]">
+              <h3 className="font-serif-elite text-xl leading-tight text-n-100">
                 {language === 'es'
                   ? '¿Necesita un dictamen fuera del catálogo?'
                   : 'Need an opinion outside the catalog?'}
               </h3>
-              <p className="text-[13px] leading-relaxed text-[#A8A8A8] font-light">
+              <p className="text-sm leading-relaxed text-n-500 font-light">
                 {language === 'es'
                   ? 'Emitimos certificaciones a medida para requerimientos de DIAN, contratantes públicos, aseguradoras, entidades financieras o procesos judiciales.'
                   : 'We issue tailored certifications for DIAN requests, public contractors, insurers, financial entities, or legal proceedings.'}
@@ -370,14 +370,14 @@ export default function DictamenesPage() {
           <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
             <div
               aria-hidden="true"
-              className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[rgba(34,197,94,0.14)] text-[#86EFAC]"
+              className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[rgba(34,197,94,0.14)] text-success-light"
             >
               <Check className="w-7 h-7" strokeWidth={2} />
             </div>
-            <h4 className="font-serif-elite text-[22px] text-[#F5F5F5] leading-tight">
+            <h4 className="font-serif-elite text-xl text-n-100 leading-tight">
               {language === 'es' ? 'Solicitud enviada' : 'Request submitted'}
             </h4>
-            <p className="text-[13px] text-[#A8A8A8] max-w-sm leading-relaxed">
+            <p className="text-sm text-n-500 max-w-sm leading-relaxed">
               {language === 'es'
                 ? 'Un contador público certificado revisará su caso y le enviará una propuesta técnica y de honorarios.'
                 : 'A certified Public Accountant will review your case and send a technical and fee proposal.'}
@@ -390,13 +390,13 @@ export default function DictamenesPage() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {customMode && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-[0.18em] text-[#A8A8A8] font-medium">
+                <label className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
                   {language === 'es' ? 'Tipo de dictamen' : 'Opinion type'}
                 </label>
                 <input
                   required
                   type="text"
-                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.22)] px-3 py-2.5 text-[14px] text-[#F5F5F5] placeholder:text-[#A8A8A8] focus:outline-none focus:border-[#D4A017]"
+                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 placeholder:text-n-500 focus:outline-none focus:border-gold-500"
                   placeholder={
                     language === 'es'
                       ? 'Describa brevemente el dictamen solicitado'
@@ -408,46 +408,46 @@ export default function DictamenesPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-[0.18em] text-[#A8A8A8] font-medium">
+                <label className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
                   {language === 'es' ? 'Razón social' : 'Legal name'}
                 </label>
                 <input
                   required
                   type="text"
-                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.22)] px-3 py-2.5 text-[14px] text-[#F5F5F5] focus:outline-none focus:border-[#D4A017]"
+                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 focus:outline-none focus:border-gold-500"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-[0.18em] text-[#A8A8A8] font-medium">
+                <label className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
                   NIT
                 </label>
                 <input
                   required
                   type="text"
-                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.22)] px-3 py-2.5 text-[14px] text-[#F5F5F5] focus:outline-none focus:border-[#D4A017]"
+                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 focus:outline-none focus:border-gold-500"
                   placeholder="900.123.456-7"
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] uppercase tracking-[0.18em] text-[#A8A8A8] font-medium">
+              <label className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
                 {language === 'es' ? 'Correo de contacto' : 'Contact email'}
               </label>
               <input
                 required
                 type="email"
-                className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.22)] px-3 py-2.5 text-[14px] text-[#F5F5F5] focus:outline-none focus:border-[#D4A017]"
+                className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 focus:outline-none focus:border-gold-500"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] uppercase tracking-[0.18em] text-[#A8A8A8] font-medium">
+              <label className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
                 {language === 'es' ? 'Contexto adicional' : 'Additional context'}
               </label>
               <textarea
                 rows={3}
-                className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.22)] px-3 py-2.5 text-[14px] text-[#F5F5F5] placeholder:text-[#A8A8A8] focus:outline-none focus:border-[#D4A017] resize-none"
+                className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 placeholder:text-n-500 focus:outline-none focus:border-gold-500 resize-none"
                 placeholder={
                   language === 'es'
                     ? 'Propósito, destinatario, período a certificar, etc.'

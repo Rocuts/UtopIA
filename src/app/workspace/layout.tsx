@@ -150,9 +150,9 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      data-theme="elite"
+      data-theme="dark"
       data-lenis-prevent
-      className="min-h-screen w-full bg-[#030303] text-[#F5F5F5] flex flex-col relative overflow-x-hidden"
+      className="min-h-screen w-full bg-n-0 text-n-900 flex flex-col relative overflow-x-hidden"
     >
       {/* Skip-to-content link — visible on focus, compliant with WCAG 2.1 */}
       <a
@@ -161,9 +161,9 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
           'sr-only focus:not-sr-only',
           'focus:absolute focus:top-3 focus:left-3 focus:z-[100]',
           'focus:px-4 focus:py-2 focus:rounded-md',
-          'focus:bg-[#0a0a0a] focus:text-[#F5F5F5]',
-          'focus:border focus:border-[#D4A017] focus:shadow-lg',
-          'focus:outline-none focus:ring-2 focus:ring-[#D4A017]',
+          'focus:bg-n-50 focus:text-n-900',
+          'focus:border focus:border-gold-500 focus:shadow-e3',
+          'focus:outline-none focus:ring-2 focus:ring-gold-500',
         ].join(' ')}
       >
         {language === 'es' ? 'Saltar al contenido principal' : 'Skip to main content'}
@@ -175,7 +175,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
         className="pointer-events-none fixed inset-0 z-0 opacity-50"
         style={{
           background:
-            'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(212,160,23,0.08) 0%, transparent 60%), radial-gradient(ellipse 40% 30% at 100% 50%, rgba(114,47,55,0.06) 0%, transparent 60%)',
+            'radial-gradient(ellipse 60% 40% at 50% 0%, rgb(184 147 74 / 0.08) 0%, transparent 60%), radial-gradient(ellipse 40% 30% at 100% 50%, rgb(168 56 56 / 0.06) 0%, transparent 60%)',
         }}
       />
 

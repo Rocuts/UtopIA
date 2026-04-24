@@ -265,7 +265,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
         <>
           {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px]"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -286,7 +286,8 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
             transition={{ duration: 0.15 }}
           >
             <motion.div
-              className="w-full max-w-[560px] mx-4 bg-white border border-[#e5e5e5] rounded-sm shadow-lg overflow-hidden"
+              data-theme="dark"
+              className="w-full max-w-[560px] mx-4 glass-elite-elevated rounded-xl overflow-hidden"
               initial={{ scale: 0.96, y: -8 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.96, y: -8 }}
@@ -294,8 +295,8 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
               onKeyDown={handleKeyDown}
             >
               {/* Search input */}
-              <div className="flex items-center gap-3 px-4 border-b border-[#e5e5e5]">
-                <Search className="w-4 h-4 text-[#a3a3a3] shrink-0" aria-hidden="true" />
+              <div className="flex items-center gap-3 px-4 border-b border-n-200">
+                <Search className="w-4 h-4 text-n-500 shrink-0" aria-hidden="true" />
                 <input
                   ref={inputRef}
                   type="text"
@@ -305,7 +306,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                     setSelectedIndex(0);
                   }}
                   placeholder={t.placeholder}
-                  className="flex-1 h-12 bg-transparent text-sm font-[family-name:var(--font-geist-mono)] text-[#0a0a0a] placeholder:text-[#a3a3a3] outline-none"
+                  className="flex-1 h-12 bg-transparent text-sm font-mono text-n-1000 placeholder:text-n-500 outline-none"
                   aria-label={t.placeholder}
                   aria-activedescendant={flatItems[selectedIndex] ? `cmd-item-${flatItems[selectedIndex].id}` : undefined}
                   role="combobox"
@@ -313,8 +314,8 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                   aria-controls="command-palette-list"
                   aria-autocomplete="list"
                 />
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
-                  <span className="bg-[#fafafa] border border-[#e5e5e5] px-1.5 py-0.5 rounded-sm">esc</span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 text-2xs text-n-500 font-mono">
+                  <span className="bg-n-100 border border-n-200 px-1.5 py-0.5 rounded-xs">esc</span>
                 </kbd>
               </div>
 
@@ -326,14 +327,14 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                 className="max-h-[min(50vh,400px)] overflow-y-auto analysis-scroll"
               >
                 {flatItems.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-[#a3a3a3]">
+                  <div className="px-4 py-8 text-center text-sm text-n-500">
                     {t.noResults}
                   </div>
                 ) : (
                   grouped.map((section) => (
                     <div key={section.key} className="py-2">
                       {/* Section header */}
-                      <div className="px-4 pb-1.5 pt-1 text-[10px] uppercase tracking-widest text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] select-none">
+                      <div className="px-4 pb-1.5 pt-1 text-2xs uppercase tracking-eyebrow text-n-500 font-mono font-medium select-none">
                         {section.label}
                       </div>
 
@@ -356,30 +357,30 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                             className={cn(
                               'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors duration-75 outline-none',
                               isSelected
-                                ? 'bg-[#f5f5f5] border-l-2 border-l-[#d4a017]'
-                                : 'bg-transparent border-l-2 border-l-transparent hover:bg-[#fafafa]'
+                                ? 'bg-gold-300/10 border-l-2 border-l-gold-500'
+                                : 'bg-transparent border-l-2 border-l-transparent hover:bg-n-100'
                             )}
                           >
                             <div className={cn(
-                              'w-8 h-8 rounded-sm flex items-center justify-center shrink-0',
-                              isSelected ? 'bg-white border border-[#e5e5e5]' : 'bg-[#fafafa]'
+                              'w-8 h-8 rounded-xs flex items-center justify-center shrink-0',
+                              isSelected ? 'bg-n-100 border border-gold-500/30' : 'bg-n-100'
                             )}>
-                              <Icon className="w-4 h-4 text-[#525252]" aria-hidden="true" />
+                              <Icon className="w-4 h-4 text-n-600" aria-hidden="true" />
                             </div>
 
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-[#0a0a0a] truncate">
+                              <p className="text-sm font-medium text-n-1000 truncate">
                                 {item.title}
                               </p>
                               {item.subtitle && (
-                                <p className="text-xs text-[#a3a3a3] truncate">
+                                <p className="text-xs text-n-500 truncate">
                                   {item.subtitle}
                                 </p>
                               )}
                             </div>
 
                             {item.shortcut && (
-                              <kbd className="hidden sm:inline-flex items-center shrink-0 bg-[#fafafa] border border-[#e5e5e5] text-[10px] text-[#a3a3a3] px-1.5 py-0.5 rounded-sm font-[family-name:var(--font-geist-mono)]">
+                              <kbd className="hidden sm:inline-flex items-center shrink-0 bg-n-100 border border-n-200 text-2xs text-n-500 px-1.5 py-0.5 rounded-xs font-mono">
                                 {item.shortcut}
                               </kbd>
                             )}
@@ -392,7 +393,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
               </div>
 
               {/* Footer hints */}
-              <div className="flex items-center gap-4 px-4 py-2 border-t border-[#e5e5e5] text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+              <div className="flex items-center gap-4 px-4 py-2 border-t border-n-200 text-2xs text-n-500 font-mono">
                 <span className="inline-flex items-center gap-1">
                   <ArrowUp className="w-3 h-3" aria-hidden="true" />
                   <ArrowDown className="w-3 h-3" aria-hidden="true" />

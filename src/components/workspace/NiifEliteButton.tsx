@@ -10,6 +10,10 @@
  *   3. setIntakeModalOpen(true)   (abre el IntakeModal de NIIF)
  *
  * Respeta useReducedMotion: sin shimmer animado ni entrada resortada.
+ *
+ * Uses design-system tokens for background, shadow, and ring colors.
+ * The gradient stops reference canonical palette values (gold-500/600)
+ * as raw rgb() triplets — required inline for background-image composition.
  */
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
@@ -79,16 +83,17 @@ export function NiifEliteButton({
       data-testid="niif-elite-cta"
       className={cn(
         'relative inline-flex items-center justify-center shrink-0 rounded-md font-semibold',
-        'text-[#0a0a0a] tracking-wide whitespace-nowrap overflow-hidden',
+        'text-n-1000 tracking-wide whitespace-nowrap overflow-hidden',
         'transition-shadow duration-300 focus:outline-none',
-        'focus-visible:ring-2 focus-visible:ring-[#E8B42C] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
-        'shadow-[0_0_22px_rgba(212,160,23,0.22)] hover:shadow-[0_0_40px_rgba(212,160,23,0.45)]',
+        'focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+        'shadow-glow-gold-soft hover:shadow-glow-gold',
         sizeClasses,
         className,
       )}
       style={{
+        // gold-500 → rgb(184 147 74), gold-600 → rgb(232 180 44)
         backgroundImage:
-          'linear-gradient(135deg, #D4A017 0%, #E8B42C 35%, #F5D079 50%, #E8B42C 65%, #D4A017 100%)',
+          'linear-gradient(135deg, rgb(184 147 74) 0%, rgb(232 180 44) 35%, rgb(245 208 121) 50%, rgb(232 180 44) 65%, rgb(184 147 74) 100%)',
         backgroundSize: '220% 220%',
       }}
     >
@@ -101,7 +106,7 @@ export function NiifEliteButton({
           transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
           style={{
             backgroundImage:
-              'linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.35) 40%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0.35) 60%, transparent 80%)',
+              'linear-gradient(110deg, transparent 20%, rgb(255 255 255 / 0.35) 40%, rgb(255 255 255 / 0.55) 50%, rgb(255 255 255 / 0.35) 60%, transparent 80%)',
             backgroundSize: '250% 100%',
             mixBlendMode: 'overlay',
           }}
@@ -113,8 +118,9 @@ export function NiifEliteButton({
         aria-hidden="true"
         className="absolute inset-0 rounded-md pointer-events-none"
         style={{
+          // danger (bordeaux wine) → rgb(168 56 56)
           boxShadow:
-            'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(114,47,55,0.35)',
+            'inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -1px 0 rgb(168 56 56 / 0.35)',
         }}
       />
 
@@ -124,7 +130,7 @@ export function NiifEliteButton({
       </span>
       {showCaption && (
         <span
-          className="relative z-10 hidden md:inline text-[10px] font-normal opacity-80 normal-case tracking-normal"
+          className="relative z-10 hidden md:inline text-2xs font-normal opacity-80 normal-case tracking-normal"
         >
           · {language === 'es' ? 'Producto estrella' : 'Flagship product'}
         </span>

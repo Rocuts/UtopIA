@@ -340,7 +340,7 @@ function formatCopShort(n: number): string {
 /** Sparkline SVG inline — normaliza el array de history a [0..1] y pinta una polyline + relleno sutil. */
 function Sparkline({
   points,
-  color = '#D4A017',
+  color = 'var(--gold-500)',
   width = 72,
   height = 22,
 }: {
@@ -385,11 +385,11 @@ function Sparkline({
 
 /** Resuelve color semántico para delta (verde/rojo/gris) según upIsPositive. */
 function deltaColor(direction: MacroDirection, upIsPositive: boolean): string {
-  if (direction === 'flat') return 'text-[#A8A8A8]';
+  if (direction === 'flat') return 'text-n-500';
   const isPositive =
     (direction === 'up' && upIsPositive) ||
     (direction === 'down' && !upIsPositive);
-  return isPositive ? 'text-[#86EFAC]' : 'text-[#FCA5A5]';
+  return isPositive ? 'text-success' : 'text-danger';
 }
 
 const DIR_ICON: Record<MacroDirection, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
@@ -475,9 +475,9 @@ export function FuturoArea({
           <motion.p
             {...fadeItem(1)}
             className={cn(
-              'font-serif-elite font-normal',
-              'text-[22px] sm:text-[24px] md:text-[26px] leading-[1.5]',
-              'text-[#D4D4D4] max-w-3xl mb-12',
+              'font-serif-elite font-medium tracking-tight',
+              'text-xl md:text-2xl leading-relaxed',
+              'text-n-300 max-w-3xl mb-12',
             )}
           >
             {futuro.narrative}
@@ -584,43 +584,43 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
   const maxPct = Math.max(...topContribs.map((t) => t.contribPct), 0.0001);
 
   return (
-    <div className="md:col-span-2 relative flex flex-col gap-4 p-6 rounded-[14px] glass-elite-elevated border-elite-gold glow-gold-soft">
+    <div className="md:col-span-2 relative flex flex-col gap-4 p-6 rounded-xl glass-elite-elevated border-elite-gold glow-gold-soft">
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[14px]"
-        style={{ boxShadow: 'inset 0 0 0 1px rgba(212,160,23,0.32)' }}
+        className="pointer-events-none absolute inset-0 rounded-xl"
+        style={{ boxShadow: 'inset 0 0 0 1px rgb(var(--color-gold-500-rgb) / 0.32)' }}
       />
 
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <span
             aria-hidden="true"
-            className="inline-block h-1.5 w-1.5 rounded-full shrink-0 bg-[#D4A017]"
+            className="inline-block h-1.5 w-1.5 rounded-full shrink-0 bg-gold-500"
           />
-          <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#A8A8A8] truncate">
+          <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 truncate">
             {title}
           </span>
         </div>
         <div
           aria-hidden="true"
-          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
         >
           <Telescope className="h-4 w-4" strokeWidth={1.75} />
         </div>
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-serif-elite font-normal text-[#F5F5F5] leading-[1] text-[44px] md:text-[48px] tabular-nums">
+        <span className="font-mono font-semibold text-n-100 leading-tight text-3xl md:text-4xl num">
           {scenarios.toLocaleString('es-CO')}
         </span>
-        <span className="text-[13px] text-[#A8A8A8]">
+        <span className="text-sm text-n-500">
           {isEs ? 'escenarios simulados' : 'scenarios simulated'}
         </span>
       </div>
 
       {topContribs.length > 0 && (
         <div className="flex flex-col gap-2.5 mt-1">
-          <div className="uppercase tracking-[0.14em] text-[10px] font-medium text-[#A8A8A8]">
+          <div className="uppercase tracking-label text-xs font-medium text-n-500">
             {isEs ? 'Top proyectos' : 'Top projects'}
           </div>
           <ul role="list" className="flex flex-col gap-2">
@@ -628,22 +628,22 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
               const pctFill = Math.max(6, (c.contribPct / maxPct) * 100);
               return (
                 <li key={c.name} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-3 text-[12px]">
-                    <span className="text-[#D4D4D4] truncate">{c.name}</span>
-                    <span className="text-[#E8B42C] font-medium tabular-nums shrink-0">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-n-300 truncate">{c.name}</span>
+                    <span className="text-gold-600 font-medium tabular-nums shrink-0">
                       {c.formatted}
                     </span>
                   </div>
                   <div
                     aria-hidden="true"
-                    className="h-1.5 w-full rounded-full bg-[rgba(212,160,23,0.12)] overflow-hidden"
+                    className="h-1.5 w-full rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] overflow-hidden"
                   >
                     <div
                       className="h-full rounded-full"
                       style={{
                         width: `${pctFill}%`,
                         background:
-                          'linear-gradient(90deg, #D4A017 0%, #E8B42C 100%)',
+                          'linear-gradient(90deg, var(--gold-500) 0%, var(--gold-400) 100%)',
                       }}
                     />
                   </div>
@@ -666,20 +666,20 @@ interface ProjectsWidgetProps {
 
 function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
   return (
-    <div className="relative p-6 md:p-7 rounded-[14px] glass-elite-elevated border-elite-gold">
+    <div className="relative p-6 md:p-7 rounded-xl glass-elite-elevated border-elite-gold">
       <div className="flex items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
           <span
             aria-hidden="true"
-            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
           >
             <Target className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div>
-            <div className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
               {isEs ? 'Proyectos en evaluación' : 'Projects under evaluation'}
             </div>
-            <div className="font-serif-elite text-[20px] leading-tight text-[#F5F5F5] mt-0.5">
+            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-100 mt-0.5">
               {isEs
                 ? `${projects.length} oportunidades activas`
                 : `${projects.length} active opportunities`}
@@ -694,10 +694,10 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
           const status = p.status ?? 'evaluating';
           const statusColor =
             status === 'green'
-              ? 'bg-[#22C55E]'
+              ? 'bg-success'
               : status === 'hold'
-                ? 'bg-[#C46A76]'
-                : 'bg-[#E8B42C]';
+                ? 'bg-area-escudo'
+                : 'bg-gold-600';
           const statusLabel =
             status === 'green'
               ? isEs
@@ -714,7 +714,7 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
           return (
             <li
               key={p.name}
-              className="relative p-4 rounded-[12px] bg-[rgba(10,10,10,0.45)] border border-[rgba(212,160,23,0.18)]"
+              className="relative p-4 rounded-lg bg-[rgba(10,10,10,0.45)] border border-[rgb(var(--color-gold-500-rgb)_/_0.18)]"
             >
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -722,34 +722,34 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
                     aria-hidden="true"
                     className={cn('inline-block h-1.5 w-1.5 rounded-full shrink-0', statusColor)}
                   />
-                  <span className="text-[13px] font-medium text-[#F5F5F5] truncate">
+                  <span className="text-sm font-medium text-n-100 truncate">
                     {displayName}
                   </span>
                 </div>
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-[#A8A8A8]">
+                <span className="shrink-0 text-xs uppercase tracking-label text-n-500">
                   {statusLabel}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-3 text-[12px]">
-                <span className="text-[#A8A8A8]">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-n-500">
                   {isEs ? 'Inv.' : 'Inv.'}{' '}
-                  <span className="text-[#D4D4D4] tabular-nums">
+                  <span className="text-n-300 tabular-nums">
                     {formatCopShort(p.investment)} COP
                   </span>
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-[#A8A8A8]">
+                  <span className="text-n-500">
                     {isEs ? 'Score' : 'Score'}
                   </span>
                   <span
                     className={cn(
                       'tabular-nums font-medium',
                       p.score >= 75
-                        ? 'text-[#86EFAC]'
+                        ? 'text-success'
                         : p.score >= 60
-                          ? 'text-[#E8B42C]'
-                          : 'text-[#FCA5A5]',
+                          ? 'text-gold-600'
+                          : 'text-danger',
                     )}
                   >
                     {p.score}/100
@@ -759,7 +759,7 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
 
               <div
                 aria-hidden="true"
-                className="mt-2 h-1 w-full rounded-full bg-[rgba(212,160,23,0.1)] overflow-hidden"
+                className="mt-2 h-1 w-full rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.1)] overflow-hidden"
               >
                 <div
                   className="h-full rounded-full"
@@ -767,10 +767,10 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
                     width: `${Math.min(100, Math.max(4, p.score))}%`,
                     background:
                       p.score >= 75
-                        ? 'linear-gradient(90deg, #22C55E 0%, #86EFAC 100%)'
+                        ? 'linear-gradient(90deg, var(--success) 0%, var(--color-success-light) 100%)'
                         : p.score >= 60
-                          ? 'linear-gradient(90deg, #D4A017 0%, #E8B42C 100%)'
-                          : 'linear-gradient(90deg, #722F37 0%, #C46A76 100%)',
+                          ? 'linear-gradient(90deg, var(--gold-500) 0%, var(--gold-400) 100%)'
+                          : 'linear-gradient(90deg, var(--color-wine-700) 0%, var(--color-wine-400) 100%)',
                   }}
                 />
               </div>
@@ -791,28 +791,28 @@ interface MacroSnapshotProps {
 
 function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
   return (
-    <div className="relative p-6 md:p-7 rounded-[14px] glass-elite-elevated border-elite-gold">
+    <div className="relative p-6 md:p-7 rounded-xl glass-elite-elevated border-elite-gold">
       <div className="flex items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
           <span
             aria-hidden="true"
-            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(114,47,55,0.16)] text-[#C46A76]"
+            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgba(114,47,55,0.16)] text-area-escudo"
           >
             <Globe className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div>
-            <div className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
               {isEs ? 'Macro snapshot — Colombia 2026' : 'Macro snapshot — Colombia 2026'}
             </div>
-            <div className="font-serif-elite text-[20px] leading-tight text-[#F5F5F5] mt-0.5">
+            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-100 mt-0.5">
               {isEs
                 ? 'Indicadores que mueven su portafolio'
                 : 'Indicators that move your portfolio'}
             </div>
           </div>
         </div>
-        <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] text-[#A8A8A8]">
-          <Sparkles className="h-3 w-3 text-[#E8B42C]" strokeWidth={2} aria-hidden="true" />
+        <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-n-500">
+          <Sparkles className="h-3 w-3 text-gold-600" strokeWidth={2} aria-hidden="true" />
           {isEs ? 'Datos mock — 2026-04' : 'Mock data — 2026-04'}
         </span>
       </div>
@@ -837,33 +837,33 @@ function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
           return (
             <li
               key={m.key}
-              className="relative p-4 rounded-[12px] bg-[rgba(10,10,10,0.45)] border border-[rgba(212,160,23,0.14)]"
+              className="relative p-4 rounded-lg bg-[rgba(10,10,10,0.45)] border border-[rgb(var(--color-gold-500-rgb)_/_0.14)]"
             >
               <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
-                <span className="uppercase tracking-[0.14em] text-[10px] font-medium text-[#A8A8A8] truncate">
+                <span className="uppercase tracking-label text-xs font-medium text-n-500 truncate">
                   {label}
                 </span>
                 {m.source && (
-                  <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#6B6B6B]">
+                  <span className="shrink-0 text-xs uppercase tracking-label text-n-600">
                     {m.source}
                   </span>
                 )}
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-serif-elite text-[22px] leading-[1.05] text-[#F5F5F5] tabular-nums">
+                  <span className="font-mono font-semibold text-xl leading-tight text-n-100 num">
                     {m.value}
                   </span>
                   <span
                     className={cn(
-                      'inline-flex items-center gap-1 text-[11px] font-medium tabular-nums',
+                      'inline-flex items-center gap-1 text-xs font-medium tabular-nums',
                       colorCls,
                     )}
                   >
                     <DirIcon className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
                     <span>{deltaStr}</span>
                     {deltaLabel && (
-                      <span className="text-[#6B6B6B] font-normal">{deltaLabel}</span>
+                      <span className="text-n-600 font-normal">{deltaLabel}</span>
                     )}
                   </span>
                 </div>
@@ -872,11 +872,11 @@ function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
                     points={m.history}
                     color={
                       m.direction === 'flat'
-                        ? '#A8A8A8'
+                        ? 'var(--n-500)'
                         : (m.direction === 'up' && upPos) ||
                             (m.direction === 'down' && !upPos)
-                          ? '#86EFAC'
-                          : '#FCA5A5'
+                          ? 'var(--color-success-light)'
+                          : 'var(--color-danger-light)'
                     }
                   />
                 )}
@@ -940,28 +940,28 @@ function SubmoduleCard({
           hover="lift"
           interactive
           padding="md"
-          className="h-full min-h-[180px] flex flex-col gap-4 focus-within:ring-2 focus-within:ring-[#D4A017] focus-within:ring-offset-2 focus-within:ring-offset-[#030303]"
+          className="h-full min-h-[180px] flex flex-col gap-4 focus-within:ring-2 focus-within:ring-gold-500 focus-within:ring-offset-2 focus-within:ring-offset-n-1000"
         >
           <div className="flex items-start justify-between gap-4">
             <div
               aria-hidden="true"
-              className="shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-[12px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C] group-hover:bg-[rgba(212,160,23,0.24)] group-hover:text-[#F5C63F] transition-colors"
+              className="shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600 group-hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.24)] group-hover:text-gold-400 transition-colors"
             >
               <Icon className="h-6 w-6" strokeWidth={1.75} />
             </div>
             <span
               className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider',
                 isReady
-                  ? 'bg-[rgba(34,197,94,0.12)] text-[#86EFAC] border border-[rgba(34,197,94,0.3)]'
-                  : 'bg-[rgba(212,160,23,0.12)] text-[#E8B42C] border border-[rgba(212,160,23,0.3)]',
+                  ? 'bg-[rgba(34,197,94,0.12)] text-success border border-[rgba(34,197,94,0.3)]'
+                  : 'bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
               )}
             >
               {isReady ? (
                 <>
                   <span
                     aria-hidden="true"
-                    className="inline-block h-1 w-1 rounded-full bg-[#22C55E]"
+                    className="inline-block h-1 w-1 rounded-full bg-success"
                   />
                   {readyLabel}
                 </>
@@ -975,15 +975,15 @@ function SubmoduleCard({
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-[22px] leading-tight font-normal text-[#F5F5F5]">
+            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
               {title}
             </h3>
-            <p className="text-[14px] leading-relaxed text-[#A8A8A8] max-w-md">
+            <p className="text-base leading-relaxed text-n-500 max-w-md">
               {description}
             </p>
           </div>
 
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#D4A017] group-hover:text-[#E8B42C] transition-colors">
+          <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gold-500 group-hover:text-gold-600 transition-colors">
             <span>{ctaLabel}</span>
             <ArrowRight
               className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"

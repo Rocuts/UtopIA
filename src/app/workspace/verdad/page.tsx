@@ -17,7 +17,7 @@ export default function VerdadOverviewPage() {
     <div
       data-theme="elite"
       data-lenis-prevent
-      className="min-h-full w-full overflow-y-auto bg-[#030303]"
+      className="min-h-full w-full overflow-y-auto bg-n-1000"
     >
       <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12">
         <VerdadArea kpi={mockCompliance} lastOpinion="favorable" />

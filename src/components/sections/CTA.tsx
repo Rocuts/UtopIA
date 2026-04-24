@@ -11,10 +11,11 @@ export function CTA() {
   const { t } = useLanguage();
 
   return (
-    <section className="py-24 relative border-t border-[#e5e5e5]">
-      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl text-center">
+    <section className="py-20 md:py-28 relative border-t border-n-200">
+      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width-narrow)] text-center">
         <motion.h2
-          className="text-4xl md:text-6xl font-bold tracking-tighter mb-6 text-[#0a0a0a]"
+          className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 text-n-900 leading-display"
+          style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0' }}
           initial={{ opacity: 0, y: -16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
@@ -25,7 +26,7 @@ export function CTA() {
         </motion.h2>
 
         <motion.p
-          className="text-xl text-[#525252] mb-10 max-w-2xl mx-auto"
+          className="text-xl text-n-600 mb-10 max-w-2xl mx-auto"
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true, amount: 0.3 }}

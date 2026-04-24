@@ -129,13 +129,13 @@ export default function RevisoriaFiscalPage() {
     <div
       data-theme="elite"
       data-lenis-prevent
-      className="min-h-full w-full overflow-y-auto bg-[#030303]"
+      className="min-h-full w-full overflow-y-auto bg-n-1000"
     >
       <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
         {/* Back link */}
         <Link
           href="/workspace/verdad"
-          className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.22em] text-[#A8A8A8] hover:text-[#E8B42C] transition-colors w-fit"
+          className="inline-flex items-center gap-2 text-xs uppercase tracking-eyebrow text-n-500 hover:text-gold-600 transition-colors w-fit"
         >
           <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
           {language === 'es' ? 'Volver a La Verdad' : 'Back to The Truth'}
@@ -161,11 +161,11 @@ export default function RevisoriaFiscalPage() {
             <EliteCard.Header>
               <span className="flex items-center gap-2">
                 <ShieldCheck
-                  className="w-4 h-4 text-[#E8B42C]"
+                  className="w-4 h-4 text-gold-600"
                   strokeWidth={2}
                   aria-hidden="true"
                 />
-                <span className="font-serif-elite text-[20px]">
+                <span className="font-serif-elite text-xl">
                   {language === 'es'
                     ? 'Responsabilidad del Revisor Fiscal'
                     : 'Statutory Auditor Responsibility'}
@@ -173,16 +173,16 @@ export default function RevisoriaFiscalPage() {
               </span>
             </EliteCard.Header>
             <EliteCard.Body>
-              <p className="text-[14px] leading-relaxed text-[#D4D4D4] mb-3">
+              <p className="text-base leading-relaxed text-n-300 mb-3">
                 {language === 'es'
                   ? 'La Revisoría Fiscal es una institución de fe pública que emite dictamen sobre la razonabilidad de los estados financieros y el cumplimiento regulatorio. Su opinión tiene efectos legales y es requerida por socios, bancos, DIAN y entidades regulatorias.'
                   : 'The Statutory Audit (Revisoría Fiscal) is a public trust institution that issues an opinion on the reasonableness of financial statements and regulatory compliance. Its opinion has legal effects and is required by partners, banks, DIAN, and regulators.'}
               </p>
-              <ul className="flex flex-col gap-2 text-[13px] text-[#D4D4D4] mt-4">
+              <ul className="flex flex-col gap-2 text-sm text-n-300 mt-4">
                 <li className="flex items-start gap-2">
-                  <span className="text-[#D4A017] mt-1 text-[10px]">■</span>
+                  <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-[#F5F5F5]">
+                    <strong className="text-n-100">
                       {language === 'es' ? 'NIA 700:' : 'ISA 700:'}
                     </strong>{' '}
                     {language === 'es'
@@ -191,9 +191,9 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#D4A017] mt-1 text-[10px]">■</span>
+                  <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-[#F5F5F5]">
+                    <strong className="text-n-100">
                       {language === 'es' ? 'Ley 43/1990:' : 'Law 43/1990:'}
                     </strong>{' '}
                     {language === 'es'
@@ -202,9 +202,9 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#D4A017] mt-1 text-[10px]">■</span>
+                  <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-[#F5F5F5]">
+                    <strong className="text-n-100">
                       {language === 'es' ? 'Art. 207-209 C.Co.:' : 'Art. 207-209 Code of Commerce:'}
                     </strong>{' '}
                     {language === 'es'
@@ -213,9 +213,9 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#D4A017] mt-1 text-[10px]">■</span>
+                  <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-[#F5F5F5]">
+                    <strong className="text-n-100">
                       {language === 'es' ? 'Ley 222/1995:' : 'Law 222/1995:'}
                     </strong>{' '}
                     {language === 'es'
@@ -232,11 +232,11 @@ export default function RevisoriaFiscalPage() {
             <EliteCard.Header>
               <span className="flex items-center gap-2">
                 <CheckCircle2
-                  className="w-4 h-4 text-[#86EFAC]"
+                  className="w-4 h-4 text-success"
                   strokeWidth={2}
                   aria-hidden="true"
                 />
-                <span className="font-serif-elite text-[20px]">
+                <span className="font-serif-elite text-xl">
                   {language === 'es' ? 'Áreas auditadas' : 'Audited areas'}
                 </span>
               </span>
@@ -252,20 +252,20 @@ export default function RevisoriaFiscalPage() {
                     >
                       <span
                         aria-hidden="true"
-                        className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[rgba(212,160,23,0.10)] text-[#E8B42C]"
+                        className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.10)] text-gold-600"
                       >
                         <Icon className="w-4 h-4" strokeWidth={1.75} />
                       </span>
                       <div className="flex flex-col min-w-0">
-                        <span className="text-[13px] font-medium text-[#F5F5F5]">
+                        <span className="text-sm font-medium text-n-100">
                           {language === 'es' ? a.label.es : a.label.en}
                         </span>
-                        <span className="text-[11px] text-[#A8A8A8] tracking-wide">
+                        <span className="text-xs text-n-500 tracking-wide">
                           {a.norm}
                         </span>
                       </div>
                       <CheckCircle2
-                        className="ml-auto w-4 h-4 text-[#86EFAC] shrink-0"
+                        className="ml-auto w-4 h-4 text-success shrink-0"
                         strokeWidth={2}
                         aria-hidden="true"
                       />
@@ -282,11 +282,11 @@ export default function RevisoriaFiscalPage() {
           <EliteCard.Header>
             <span className="flex items-center gap-2">
               <Sparkles
-                className="w-4 h-4 text-[#E8B42C]"
+                className="w-4 h-4 text-gold-600"
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="font-serif-elite text-[20px]">
+              <span className="font-serif-elite text-xl">
                 {language === 'es'
                   ? 'Pipeline de auditoría (4 agentes en paralelo)'
                   : 'Audit pipeline (4 parallel agents)'}
@@ -294,7 +294,7 @@ export default function RevisoriaFiscalPage() {
             </span>
           </EliteCard.Header>
           <EliteCard.Body>
-            <p className="text-[13px] text-[#A8A8A8] font-light mb-5 max-w-3xl">
+            <p className="text-sm text-n-500 font-light mb-5 max-w-3xl">
               {language === 'es'
                 ? 'Cuatro auditores regulatorios trabajan de forma concurrente sobre el mismo reporte NIIF. Cada uno evalúa un dominio y emite hallazgos estructurados que luego se consolidan en el Compliance Score y en el dictamen del Revisor Fiscal.'
                 : 'Four regulatory auditors work concurrently on the same IFRS report. Each evaluates one domain and emits structured findings that are consolidated into the Compliance Score and the Statutory Auditor opinion.'}
@@ -307,32 +307,32 @@ export default function RevisoriaFiscalPage() {
                   animate={shouldReduce ? undefined : { opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.08, duration: 0.4 }}
                   className={cn(
-                    'relative p-4 rounded-[10px]',
-                    'border border-[rgba(212,160,23,0.18)]',
+                    'relative p-4 rounded-md',
+                    'border border-[rgb(var(--color-gold-500-rgb)_/_0.18)]',
                     'bg-[rgba(18,18,18,0.4)]',
                   )}
                 >
                   <div
                     className={cn(
-                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.18em] font-medium mb-3',
+                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs uppercase tracking-eyebrow font-medium mb-3',
                       a.accent === 'gold'
-                        ? 'bg-[rgba(212,160,23,0.12)] text-[#E8B42C]'
-                        : 'bg-[rgba(114,47,55,0.18)] text-[#C46A76]',
+                        ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600'
+                        : 'bg-[rgba(114,47,55,0.18)] text-area-escudo',
                     )}
                   >
                     <span
                       className="inline-block h-1.5 w-1.5 rounded-full"
                       style={{
-                        backgroundColor: a.accent === 'gold' ? '#E8B42C' : '#C46A76',
+                        backgroundColor: a.accent === 'gold' ? 'var(--gold-400)' : 'var(--color-wine-400)',
                       }}
                       aria-hidden="true"
                     />
                     {language === 'es' ? 'Auditor' : 'Auditor'}
                   </div>
-                  <h4 className="font-serif-elite text-[17px] leading-tight text-[#F5F5F5] mb-1">
+                  <h4 className="font-serif-elite text-lg leading-tight text-n-100 mb-1">
                     {language === 'es' ? a.label.es : a.label.en}
                   </h4>
-                  <p className="text-[11.5px] text-[#A8A8A8] tracking-wide">{a.norm}</p>
+                  <p className="text-xs text-n-500 tracking-wide">{a.norm}</p>
                 </motion.div>
               ))}
             </div>
@@ -345,30 +345,30 @@ export default function RevisoriaFiscalPage() {
             <EliteCard.Header>
               <span className="flex items-center gap-2">
                 <FileText
-                  className="w-4 h-4 text-[#E8B42C]"
+                  className="w-4 h-4 text-gold-600"
                   strokeWidth={2}
                   aria-hidden="true"
                 />
-                <span className="font-serif-elite text-[20px]">
+                <span className="font-serif-elite text-xl">
                   {language === 'es' ? 'Dictamen de ejemplo' : 'Sample opinion'}
                 </span>
               </span>
             </EliteCard.Header>
             <EliteCard.Body>
               <div
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[12px] font-medium mb-4"
-                style={{ backgroundColor: 'rgba(234,179,8,0.14)', color: '#EAB308' }}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-4"
+                style={{ backgroundColor: 'rgba(234,179,8,0.14)', color: 'var(--gold-500)' }}
               >
                 <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
                 {language === 'es' ? 'Opinión con salvedades' : 'Qualified opinion'}
               </div>
 
-              <h4 className="font-serif-elite text-[18px] text-[#F5F5F5] mb-2">
+              <h4 className="font-serif-elite text-lg text-n-100 mb-2">
                 {language === 'es' ? 'Considerandos clave' : 'Key considerations'}
               </h4>
-              <ul className="flex flex-col gap-2 text-[13px] text-[#D4D4D4] mb-4">
+              <ul className="flex flex-col gap-2 text-sm text-n-300 mb-4">
                 <li className="flex items-start gap-2">
-                  <span className="text-[#D4A017] mt-1 text-[10px]">■</span>
+                  <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
                     {language === 'es'
                       ? 'Estados financieros presentan razonablemente la situación financiera en sus aspectos materiales.'
@@ -376,7 +376,7 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#EAB308] mt-1 text-[10px]">■</span>
+                  <span className="text-warning mt-1 text-xs">■</span>
                   <span>
                     {language === 'es'
                       ? 'Salvedad: deterioro de cartera vencida > 180 días no reconocido según NIIF 9.5.5.'
@@ -384,7 +384,7 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#D4A017] mt-1 text-[10px]">■</span>
+                  <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
                     {language === 'es'
                       ? 'Párrafo de énfasis: conciliación fiscal pendiente de ajuste en Formato 2516.'
@@ -392,7 +392,7 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
               </ul>
-              <p className="text-[11px] text-[#A8A8A8] tracking-wide">
+              <p className="text-xs text-n-500 tracking-wide">
                 {language === 'es'
                   ? 'Vista previa ilustrativa. El dictamen formal se genera a partir de sus documentos.'
                   : 'Illustrative preview. The formal opinion is generated from your documents.'}
@@ -406,10 +406,10 @@ export default function RevisoriaFiscalPage() {
             padding="lg"
             className="flex flex-col gap-3 justify-center min-w-[280px]"
           >
-            <h4 className="font-serif-elite text-[20px] leading-tight text-[#F5F5F5]">
+            <h4 className="font-serif-elite text-xl leading-tight text-n-100">
               {language === 'es' ? 'Ejecutar' : 'Execute'}
             </h4>
-            <p className="text-[13px] text-[#A8A8A8] font-light mb-2">
+            <p className="text-sm text-n-500 font-light mb-2">
               {language === 'es'
                 ? 'Elija el flujo según la profundidad requerida.'
                 : 'Pick the flow based on required depth.'}

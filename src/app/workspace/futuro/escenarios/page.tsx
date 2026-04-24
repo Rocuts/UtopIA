@@ -79,8 +79,8 @@ const SCENARIOS: ScenarioModifier[] = [
     growthMod: -0.35,
     costMod: +0.04,
     ebitdaMod: -0.04,
-    dotColor: '#C46A76',
-    lineColor: '#C46A76',
+    dotColor: 'var(--color-wine-400)',
+    lineColor: 'var(--color-wine-400)',
     accent: 'wine',
   },
   {
@@ -93,7 +93,7 @@ const SCENARIOS: ScenarioModifier[] = [
     growthMod: 0,
     costMod: 0,
     ebitdaMod: 0,
-    dotColor: '#A8A8A8',
+    dotColor: 'var(--n-500)',
     lineColor: '#D4D4D4',
     accent: 'neutral',
   },
@@ -107,8 +107,8 @@ const SCENARIOS: ScenarioModifier[] = [
     growthMod: +0.45,
     costMod: -0.03,
     ebitdaMod: +0.05,
-    dotColor: '#E8B42C',
-    lineColor: '#E8B42C',
+    dotColor: 'var(--gold-400)',
+    lineColor: 'var(--gold-400)',
     accent: 'gold',
   },
 ];
@@ -258,7 +258,7 @@ export default function EscenariosPage() {
       data-theme="elite"
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-[#030303] text-[#F5F5F5]',
+        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient orbs (gold + wine mix) */}
@@ -270,7 +270,7 @@ export default function EscenariosPage() {
           className="absolute -top-[15%] -right-[10%] w-[560px] h-[560px] rounded-full blur-[120px] opacity-28"
           style={{
             background:
-              'radial-gradient(circle, rgba(212,160,23,0.38) 0%, rgba(212,160,23,0) 70%)',
+              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.38) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
           }}
         />
         <div
@@ -288,7 +288,7 @@ export default function EscenariosPage() {
           <Link
             href="/workspace/futuro"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] text-[#A8A8A8] hover:text-[#E8B42C] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-n-500 hover:text-gold-600 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
             <span>{isEs ? 'Volver a El Futuro' : 'Back to The Future'}</span>
@@ -316,8 +316,8 @@ export default function EscenariosPage() {
           {...fade(2)}
           className={cn(
             'font-serif-elite font-normal',
-            'text-[20px] sm:text-[22px] md:text-[24px] leading-[1.55]',
-            'text-[#D4D4D4] max-w-3xl mb-10',
+            'text-xl sm:text-xl md:text-2xl leading-[1.55]',
+            'text-n-300 max-w-3xl mb-10',
           )}
         >
           {isEs
@@ -332,15 +332,15 @@ export default function EscenariosPage() {
               <div className="flex items-center gap-3">
                 <span
                   aria-hidden="true"
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                 >
                   <Sliders className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div>
-                  <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                     {isEs ? 'Variables globales' : 'Global variables'}
                   </span>
-                  <h2 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5]">
+                  <h2 className="font-serif-elite text-xl leading-tight text-n-100">
                     {isEs
                       ? 'Ajuste los drivers del modelo'
                       : 'Adjust the model drivers'}
@@ -351,10 +351,10 @@ export default function EscenariosPage() {
                 type="button"
                 onClick={handleReset}
                 className={cn(
-                  'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[10px] text-[12px] font-medium',
-                  'bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.25)] text-[#D4D4D4]',
-                  'hover:border-[#D4A017] hover:text-[#F5F5F5] transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+                  'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-xs font-medium',
+                  'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-300',
+                  'hover:border-gold-500 hover:text-n-100 transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                 )}
               >
                 <MinusIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
@@ -405,14 +405,14 @@ export default function EscenariosPage() {
               />
             </div>
 
-            <div className="mt-5 pt-5 border-t border-[rgba(212,160,23,0.16)] flex items-center justify-between gap-3 text-[12px] text-[#A8A8A8]">
+            <div className="mt-5 pt-5 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.16)] flex items-center justify-between gap-3 text-xs text-n-500">
               <span>
                 {isEs ? 'Ingresos base (Año 0):' : 'Base revenue (Year 0):'}{' '}
-                <span className="text-[#D4D4D4] tabular-nums">
+                <span className="text-n-300 tabular-nums">
                   {formatCopShort(controls.baseRevenue)} COP
                 </span>
               </span>
-              <span className="text-[#6B6B6B]">
+              <span className="text-n-600">
                 {isEs
                   ? 'Horizonte 5 años · Capex 8% ingresos · Overhead 12%'
                   : '5-year horizon · Capex 8% of revenue · Overhead 12%'}
@@ -436,16 +436,16 @@ export default function EscenariosPage() {
           <EliteCard variant="glass" padding="lg">
             <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
               <div>
-                <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                   {isEs ? 'Proyección combinada' : 'Combined projection'}
                 </span>
-                <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5] mt-0.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mt-0.5">
                   {isEs ? 'Ingresos 5 años bajo cada escenario' : '5-year revenue under each scenario'}
                 </h3>
               </div>
-              <div className="flex items-center gap-4 text-[11px]">
+              <div className="flex items-center gap-4 text-xs">
                 {SCENARIOS.map((s) => (
-                  <span key={s.key} className="inline-flex items-center gap-1.5 text-[#D4D4D4]">
+                  <span key={s.key} className="inline-flex items-center gap-1.5 text-n-300">
                     <span
                       aria-hidden="true"
                       className="inline-block h-2 w-2 rounded-full"
@@ -468,28 +468,28 @@ export default function EscenariosPage() {
               className="absolute -top-20 -right-20 w-[260px] h-[260px] rounded-full blur-[90px] opacity-40"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(212,160,23,0.35) 0%, rgba(212,160,23,0) 70%)',
+                  'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.35) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
               }}
             />
             <div className="relative z-[1] flex flex-col md:flex-row md:items-center gap-6 md:gap-8">
               <div className="flex items-start gap-3 md:max-w-md">
                 <span
                   aria-hidden="true"
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                 >
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017] mb-1 inline-flex items-center gap-1.5">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1 inline-flex items-center gap-1.5">
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                     {isEs ? 'Simulación personalizada' : 'Custom simulation'}
                   </div>
-                  <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5] mb-1.5">
+                  <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
                     {isEs
                       ? 'Simular escenario personalizado'
                       : 'Simulate a custom scenario'}
                   </h3>
-                  <p className="text-[13px] leading-relaxed text-[#A8A8A8]">
+                  <p className="text-sm leading-relaxed text-n-500">
                     {isEs
                       ? 'Describa un evento específico (ej. entrada de un competidor, cambio regulatorio, nueva línea) y simulamos su impacto en las tres sendas.'
                       : 'Describe a specific event (e.g. new competitor entry, regulatory change, new line) and we simulate its impact on the three paths.'}
@@ -543,25 +543,25 @@ function SliderControl({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="uppercase tracking-[0.14em] text-[10px] font-medium text-[#A8A8A8] inline-flex items-center gap-1.5">
-          <Icon className="h-3 w-3 text-[#E8B42C]" strokeWidth={2} aria-hidden="true" />
+        <span className="uppercase tracking-[0.14em] text-2xs font-medium text-n-500 inline-flex items-center gap-1.5">
+          <Icon className="h-3 w-3 text-gold-600" strokeWidth={2} aria-hidden="true" />
           {label}
         </span>
-        <span className="text-[12px] font-medium text-[#F5F5F5] tabular-nums">
+        <span className="text-xs font-medium text-n-100 tabular-nums">
           {formatter(value)}
         </span>
       </div>
       <div className="relative h-6 flex items-center">
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 h-1.5 rounded-full bg-[rgba(212,160,23,0.14)]"
+          className="absolute inset-x-0 h-1.5 rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.14)]"
         />
         <div
           aria-hidden="true"
           className="absolute left-0 h-1.5 rounded-full"
           style={{
             width: `${Math.max(0, Math.min(100, pct))}%`,
-            background: 'linear-gradient(90deg, #D4A017 0%, #E8B42C 100%)',
+            background: 'linear-gradient(90deg, var(--gold-500) 0%, var(--gold-400) 100%)',
           }}
         />
         <input
@@ -578,13 +578,13 @@ function SliderControl({
             '[&::-webkit-slider-thumb]:appearance-none',
             '[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4',
             '[&::-webkit-slider-thumb]:rounded-full',
-            '[&::-webkit-slider-thumb]:bg-[#F5C63F]',
-            '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[#D4A017]',
-            '[&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(212,160,23,0.5)]',
+            '[&::-webkit-slider-thumb]:bg-gold-300',
+            '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-gold-500',
+            '[&::-webkit-slider-thumb]:shadow-[0_0_12px_rgb(var(--color-gold-500-rgb) / 0.5)]',
             '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4',
             '[&::-moz-range-thumb]:rounded-full',
-            '[&::-moz-range-thumb]:bg-[#F5C63F]',
-            '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#D4A017]',
+            '[&::-moz-range-thumb]:bg-gold-300',
+            '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-gold-500',
           )}
         />
       </div>
@@ -604,27 +604,27 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
     s.accent === 'wine'
       ? 'linear-gradient(135deg, rgba(114,47,55,0.6), rgba(196,106,118,0.35) 60%, rgba(114,47,55,0.25))'
       : s.accent === 'gold'
-        ? 'linear-gradient(135deg, rgba(212,160,23,0.6), rgba(232,180,44,0.4) 60%, rgba(212,160,23,0.25))'
+        ? 'linear-gradient(135deg, rgb(var(--color-gold-500-rgb) / 0.6), rgba(232,180,44,0.4) 60%, rgb(var(--color-gold-500-rgb) / 0.25))'
         : 'linear-gradient(135deg, rgba(168,168,168,0.5), rgba(212,212,212,0.3) 60%, rgba(168,168,168,0.2))';
 
   const successColor =
     output.successProb >= 0.55
-      ? 'text-[#86EFAC]'
+      ? 'text-success-light'
       : output.successProb >= 0.3
-        ? 'text-[#E8B42C]'
-        : 'text-[#FCA5A5]';
+        ? 'text-gold-600'
+        : 'text-danger-light';
 
   return (
     <div
       className={cn(
-        'relative rounded-[14px] p-5 flex flex-col gap-4',
+        'relative rounded-xl p-5 flex flex-col gap-4',
         'bg-[rgba(10,10,10,0.55)]',
       )}
     >
       {/* Gradient border overlay (por accent) */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[14px]"
+        className="pointer-events-none absolute inset-0 rounded-xl"
         style={{
           padding: '1px',
           background: gradient,
@@ -643,33 +643,33 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
             className="inline-block h-2 w-2 rounded-full shrink-0"
             style={{ backgroundColor: s.dotColor }}
           />
-          <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+          <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
             {label}
           </span>
         </div>
         <span
           className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium tabular-nums',
+            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium tabular-nums',
             successColor,
-            'bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.2)]',
+            'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.2)]',
           )}
         >
           P={(output.successProb * 100).toFixed(0)}%
         </span>
       </div>
 
-      <h3 className="font-serif-elite text-[28px] leading-[1.05] text-[#F5F5F5] relative">
+      <h3 className="font-serif-elite text-3xl leading-[1.05] text-n-100 relative">
         {label}
       </h3>
-      <p className="text-[12px] leading-snug text-[#A8A8A8] relative">{description}</p>
+      <p className="text-xs leading-snug text-n-500 relative">{description}</p>
 
       {/* Metrics */}
-      <div className="flex flex-col gap-2.5 relative pt-2 border-t border-[rgba(212,160,23,0.14)]">
+      <div className="flex flex-col gap-2.5 relative pt-2 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.14)]">
         <ScenarioMetric
           icon={Target}
           label={isEs ? 'Ingresos Año 3' : 'Year 3 revenue'}
           value={`${formatCopShort(output.year3Revenue)} COP`}
-          color="text-[#F5F5F5]"
+          color="text-n-100"
         />
         <ScenarioMetric
           icon={Percent}
@@ -677,10 +677,10 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
           value={formatPct(output.ebitdaMargin, 1)}
           color={
             output.ebitdaMargin >= 0.2
-              ? 'text-[#86EFAC]'
+              ? 'text-success-light'
               : output.ebitdaMargin >= 0.12
-                ? 'text-[#E8B42C]'
-                : 'text-[#FCA5A5]'
+                ? 'text-gold-600'
+                : 'text-danger-light'
           }
         />
         <ScenarioMetric
@@ -688,14 +688,14 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
           label={isEs ? 'Caja final 5Y' : 'Final cash 5Y'}
           value={`${formatCopShort(output.finalCash)} COP`}
           color={
-            output.finalCash > 0 ? 'text-[#86EFAC]' : 'text-[#FCA5A5]'
+            output.finalCash > 0 ? 'text-success-light' : 'text-danger-light'
           }
         />
       </div>
 
       {/* Mini revenue bars */}
-      <div className="relative pt-2 border-t border-[rgba(212,160,23,0.14)]">
-        <div className="text-[10px] uppercase tracking-[0.14em] text-[#A8A8A8] mb-2">
+      <div className="relative pt-2 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.14)]">
+        <div className="text-2xs uppercase tracking-[0.14em] text-n-500 mb-2">
           {isEs ? 'Ingresos por año' : 'Revenue by year'}
         </div>
         <RevenueBars points={output.revenueByYear} color={s.lineColor} />
@@ -716,12 +716,12 @@ function ScenarioMetric({
   color?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-[13px]">
-      <span className="inline-flex items-center gap-2 text-[#A8A8A8]">
-        <Icon className="h-3.5 w-3.5 text-[#E8B42C]" strokeWidth={1.9} aria-hidden="true" />
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="inline-flex items-center gap-2 text-n-500">
+        <Icon className="h-3.5 w-3.5 text-gold-600" strokeWidth={1.9} aria-hidden="true" />
         <span>{label}</span>
       </span>
-      <span className={cn('tabular-nums font-medium', color ?? 'text-[#F5F5F5]')}>
+      <span className={cn('tabular-nums font-medium', color ?? 'text-n-100')}>
         {value}
       </span>
     </div>
@@ -746,7 +746,7 @@ function RevenueBars({ points, color }: { points: number[]; color: string }) {
                 background: `linear-gradient(180deg, ${color} 0%, ${color}44 100%)`,
               }}
             />
-            <span className="text-[9px] text-[#6B6B6B] tabular-nums">Y{i + 1}</span>
+            <span className="text-2xs text-n-600 tabular-nums">Y{i + 1}</span>
           </div>
         );
       })}
@@ -797,7 +797,7 @@ function CombinedChart({ outputs, isEs }: { outputs: ScenarioOutput[]; isEs: boo
                 x2={width - padX}
                 y1={y}
                 y2={y}
-                stroke="rgba(212,160,23,0.12)"
+                stroke="rgb(var(--color-gold-500-rgb) / 0.12)"
                 strokeWidth={1}
                 strokeDasharray="3 5"
               />
@@ -805,7 +805,7 @@ function CombinedChart({ outputs, isEs }: { outputs: ScenarioOutput[]; isEs: boo
                 x={padX - 6}
                 y={y + 3}
                 textAnchor="end"
-                fill="#6B6B6B"
+                fill="var(--n-600)"
                 fontSize={9}
                 fontFamily="ui-monospace, monospace"
               >
@@ -825,14 +825,14 @@ function CombinedChart({ outputs, isEs }: { outputs: ScenarioOutput[]; isEs: boo
                 x2={x}
                 y1={height - padY}
                 y2={height - padY + 4}
-                stroke="rgba(212,160,23,0.3)"
+                stroke="rgb(var(--color-gold-500-rgb) / 0.3)"
                 strokeWidth={1}
               />
               <text
                 x={x}
                 y={height - padY + 16}
                 textAnchor="middle"
-                fill="#6B6B6B"
+                fill="var(--n-600)"
                 fontSize={10}
                 fontFamily="ui-monospace, monospace"
               >
@@ -848,7 +848,7 @@ function CombinedChart({ outputs, isEs }: { outputs: ScenarioOutput[]; isEs: boo
           x2={width - padX}
           y1={height - padY}
           y2={height - padY}
-          stroke="rgba(212,160,23,0.3)"
+          stroke="rgb(var(--color-gold-500-rgb) / 0.3)"
           strokeWidth={1}
         />
 
@@ -882,7 +882,7 @@ function CombinedChart({ outputs, isEs }: { outputs: ScenarioOutput[]; isEs: boo
                   cy={toY(v)}
                   r={3}
                   fill={o.scenario.lineColor}
-                  stroke="#030303"
+                  stroke="var(--n-1000)"
                   strokeWidth={1.5}
                 />
               ))}

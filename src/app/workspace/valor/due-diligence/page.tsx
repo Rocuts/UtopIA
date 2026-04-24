@@ -226,9 +226,9 @@ const STATUS_ICON: Record<CheckStatus, React.ComponentType<{ className?: string;
 };
 
 const STATUS_COLOR: Record<CheckStatus, string> = {
-  ready: 'text-[#86EFAC]',
-  pending: 'text-[#6B6B6B]',
-  attention: 'text-[#EAB308]',
+  ready: 'text-success-light',
+  pending: 'text-n-600',
+  attention: 'text-gold-500',
 };
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -284,7 +284,7 @@ export default function DueDiligencePage() {
       data-theme="elite"
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-[#030303] text-[#F5F5F5]',
+        'bg-n-1000 text-n-100',
       )}
     >
       <div
@@ -295,7 +295,7 @@ export default function DueDiligencePage() {
           className="absolute -top-[15%] -right-[10%] w-[520px] h-[520px] rounded-full blur-[130px] opacity-30"
           style={{
             background:
-              'radial-gradient(circle, rgba(212,160,23,0.4) 0%, rgba(212,160,23,0) 70%)',
+              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.4) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
           }}
         />
       </div>
@@ -305,7 +305,7 @@ export default function DueDiligencePage() {
           <Link
             href="/workspace/valor"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#A8A8A8] hover:text-[#E8B42C] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-gold-600 transition-colors"
           >
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} />
             {language === 'es' ? 'Volver a El Valor' : 'Back to The Value'}
@@ -329,8 +329,8 @@ export default function DueDiligencePage() {
         <motion.div {...fade(2)} className="mb-10 max-w-3xl">
           <p className={cn(
             'font-serif-elite font-normal',
-            'text-[20px] sm:text-[22px] leading-[1.6]',
-            'text-[#D4D4D4]',
+            'text-xl sm:text-xl leading-[1.6]',
+            'text-n-300',
           )}>
             {language === 'es'
               ? 'Un due diligence riguroso revela el valor oculto y los riesgos antes de que se conviertan en sorpresas costosas. Cruzamos la contabilidad con los contratos, los procesos judiciales y las declaraciones fiscales para entregar un reporte que blinda la transacción.'
@@ -349,7 +349,7 @@ export default function DueDiligencePage() {
                     cx="70"
                     cy="70"
                     r="60"
-                    stroke="rgba(212, 160, 23, 0.14)"
+                    stroke="rgb(var(--color-gold-500-rgb) / 0.14)"
                     strokeWidth="10"
                     fill="none"
                   />
@@ -371,16 +371,16 @@ export default function DueDiligencePage() {
                   />
                   <defs>
                     <linearGradient id="dd-progress-gradient" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#D4A017" />
-                      <stop offset="100%" stopColor="#F5C63F" />
+                      <stop offset="0%" stopColor="var(--gold-500)" />
+                      <stop offset="100%" stopColor="var(--gold-300)" />
                     </linearGradient>
                   </defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-                  <span className="font-serif-elite text-[36px] text-[#F5F5F5] tabular-nums leading-none">
+                  <span className="font-serif-elite text-4xl text-n-100 tabular-nums leading-none">
                     {stats.pct}%
                   </span>
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-[#A8A8A8] mt-1">
+                  <span className="text-2xs uppercase tracking-eyebrow text-n-500 mt-1">
                     {language === 'es' ? 'Completado' : 'Complete'}
                   </span>
                 </div>
@@ -417,7 +417,7 @@ export default function DueDiligencePage() {
                 >
                   {language === 'es' ? 'Iniciar Due Diligence' : 'Start Due Diligence'}
                 </EliteButton>
-                <p className="text-[11px] text-[#6B6B6B] text-right">
+                <p className="text-xs text-n-600 text-right">
                   {language === 'es' ? 'Flujo guiado con IA' : 'AI-guided flow'}
                 </p>
               </div>
@@ -427,7 +427,7 @@ export default function DueDiligencePage() {
 
         {/* Checklist por categorías */}
         <motion.section {...fade(4)} className="mb-10" aria-label={language === 'es' ? 'Checklist Due Diligence' : 'Due Diligence checklist'}>
-          <h2 className="font-serif-elite text-[24px] md:text-[28px] text-[#F5F5F5] mb-5">
+          <h2 className="font-serif-elite text-2xl md:text-3xl text-n-100 mb-5">
             {language === 'es' ? 'Checklist estructurado' : 'Structured checklist'}
           </h2>
           <div className="grid gap-5 md:grid-cols-2">
@@ -457,17 +457,17 @@ export default function DueDiligencePage() {
                       <div className="flex items-center gap-3">
                         <span
                           aria-hidden="true"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                         >
                           <Icon className="h-5 w-5" strokeWidth={1.75} />
                         </span>
                         <div>
-                          <h3 className="font-serif-elite text-[20px] text-[#F5F5F5] leading-tight">
+                          <h3 className="font-serif-elite text-xl text-n-100 leading-tight">
                             {language === 'es' ? cat.titleEs : cat.titleEn}
                           </h3>
-                          <p className="text-[11px] text-[#A8A8A8] mt-0.5 tabular-nums">
+                          <p className="text-xs text-n-500 mt-0.5 tabular-nums">
                             {catReady} / {catTotal} ·{' '}
-                            <span className="text-[#E8B42C]">{catPct}%</span>
+                            <span className="text-gold-600">{catPct}%</span>
                           </p>
                         </div>
                       </div>
@@ -479,7 +479,7 @@ export default function DueDiligencePage() {
                         return (
                           <li
                             key={item.labelEs}
-                            className="flex items-start gap-2.5 text-[13px] leading-snug"
+                            className="flex items-start gap-2.5 text-sm leading-snug"
                           >
                             <StatusIcon
                               className={cn(
@@ -492,8 +492,8 @@ export default function DueDiligencePage() {
                             <div className="flex-1 min-w-0">
                               <p
                                 className={cn(
-                                  'text-[#D4D4D4]',
-                                  item.status === 'pending' && 'text-[#A8A8A8]',
+                                  'text-n-300',
+                                  item.status === 'pending' && 'text-n-500',
                                 )}
                               >
                                 {language === 'es' ? item.labelEs : item.labelEn}
@@ -501,10 +501,10 @@ export default function DueDiligencePage() {
                               {(item.noteEs || item.noteEn) && (
                                 <p
                                   className={cn(
-                                    'text-[11px] mt-0.5',
+                                    'text-xs mt-0.5',
                                     item.status === 'attention'
-                                      ? 'text-[#EAB308]'
-                                      : 'text-[#6B6B6B]',
+                                      ? 'text-gold-500'
+                                      : 'text-n-600',
                                   )}
                                 >
                                   {language === 'es' ? item.noteEs : item.noteEn}
@@ -524,22 +524,22 @@ export default function DueDiligencePage() {
 
         {/* Secondary CTA — chat */}
         <motion.section {...fade(5)}>
-          <div className="relative overflow-hidden rounded-[16px] glass-elite border border-[rgba(212,160,23,0.2)] p-5 md:p-6">
+          <div className="relative overflow-hidden rounded-[16px] glass-elite border border-[rgb(var(--color-gold-500-rgb)_/_0.2)] p-5 md:p-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="flex items-start gap-3 flex-1">
                 <span
                   aria-hidden="true"
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
                 >
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div>
-                  <h3 className="font-serif-elite text-[18px] text-[#F5F5F5] leading-tight">
+                  <h3 className="font-serif-elite text-lg text-n-100 leading-tight">
                     {language === 'es'
                       ? '¿Preguntas puntuales sobre un hallazgo?'
                       : 'Specific questions about a finding?'}
                   </h3>
-                  <p className="text-[13px] text-[#A8A8A8] mt-1 max-w-xl">
+                  <p className="text-sm text-n-500 mt-1 max-w-xl">
                     {language === 'es'
                       ? 'Abra una consulta con el asistente DD y comparta contratos, balances o procesos para un análisis dirigido.'
                       : 'Open a conversation with the DD assistant and share contracts, balances or proceedings for a targeted analysis.'}
@@ -576,22 +576,22 @@ function StatPill({
 }) {
   const toneStyle =
     tone === 'good'
-      ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.3)] text-[#86EFAC]'
+      ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.3)] text-success-light'
       : tone === 'warn'
-        ? 'bg-[rgba(234,179,8,0.1)] border-[rgba(234,179,8,0.3)] text-[#EAB308]'
-        : 'bg-[rgba(255,255,255,0.04)] border-[rgba(212,160,23,0.18)] text-[#D4D4D4]';
+        ? 'bg-[rgba(234,179,8,0.1)] border-[rgba(234,179,8,0.3)] text-gold-500'
+        : 'bg-[rgba(255,255,255,0.04)] border-[rgb(var(--color-gold-500-rgb)_/_0.18)] text-n-300';
 
   return (
     <div
       className={cn(
-        'flex flex-col items-start gap-1 p-3 rounded-[10px] border',
+        'flex flex-col items-start gap-1 p-3 rounded-md border',
         toneStyle,
       )}
     >
-      <span className="text-[10px] uppercase tracking-[0.18em] font-medium opacity-80">
+      <span className="text-2xs uppercase tracking-eyebrow font-medium opacity-80">
         {label}
       </span>
-      <span className="font-serif-elite text-[28px] leading-none tabular-nums">
+      <span className="font-serif-elite text-3xl leading-none tabular-nums">
         {value}
       </span>
     </div>

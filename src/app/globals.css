@@ -1,321 +1,582 @@
 @import "tailwindcss";
 
 /* ============================================================
-   NOVAFORGE DESIGN SYSTEM — Vercel-Style Brutalismo Moderno
+   UtopIA Design System — Token Foundation
+   North stars: Mercury (warm premium) + Aladdin (institutional dense).
+   Paleta: warm off-white + champagne gold (light) / warm espresso +
+   luminous gold (dark). Fuentes: Geist Sans (UI) + Geist Mono
+   (numbers/tabular) + Fraunces variable (display editorial).
+   Tailwind v4 CSS-first. Phase 0 token foundation — do not hardcode.
    ============================================================ */
 
-/* --- Scrollbar: Neutral, minimal --- */
-.styled-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-.styled-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.styled-scrollbar::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
-  border-radius: 2px;
-}
-.styled-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #a3a3a3;
-}
-.styled-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #d4d4d4 transparent;
-}
+/* ---- Custom variant so components can use `dark:` prefix ---- */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="elite"], [data-theme="elite"] *));
 
-/* --- Tailwind v4 Theme Tokens --- */
+/* ============================================================
+   @theme — canonical design tokens (light mode defaults).
+   Tailwind v4 generates utilities from these (bg-n-0, text-gold-500,
+   rounded-lg, shadow-e3, text-base, font-sans, etc.).
+   Dark-mode values override the same names further down.
+   ============================================================ */
 @theme {
-  --color-brand-primary: #0a0a0a;
-  --color-brand-accent: #d4a017;
-  --color-brand-bg: #ffffff;
-  --color-accent-gold: #d4a017;
+  /* ---- Brand / neutrals: warm off-white, stone-tinted ---- */
+  --color-n-0:    #FCFBF8;
+  --color-n-50:   #F7F5F0;
+  --color-n-100:  #EFEBE2;
+  --color-n-200:  #E3DDD0;
+  --color-n-300:  #D1C9B8;
+  --color-n-400:  #B3AA95;
+  --color-n-500:  #8A8170;
+  --color-n-600:  #6B6354;
+  --color-n-700:  #4D4638;
+  --color-n-800:  #2F2A20;
+  --color-n-900:  #1A1611;
+  --color-n-1000: #0C0A06;
+
+  /* ---- Gold (accent único — champagne, not yellow toy) ---- */
+  --color-gold-300: #E6D19A;
+  --color-gold-400: #D4B876;
+  --color-gold-500: #B8934A;  /* primary — CTAs, active nav, logo, KPI hero */
+  --color-gold-600: #9A7A38;
+  --color-gold-700: #7A5F2C;
+
+  /* ---- Semantic (desaturated, sophisticated) ---- */
+  --color-success: #4F7A4C;  /* verde salvia */
+  --color-warning: #C48A2E;  /* ámbar diferenciado del gold */
+  --color-danger:  #A83838;  /* bordeaux */
+  --color-info:    #3D6B7E;  /* teal muted */
+
+  /* Semantic LIGHT variants — chips up/down, indicators sobre fondo oscuro */
+  --color-success-light: #86EFAC;  /* green-300 — "up" / "ok" pill */
+  --color-danger-light:  #FCA5A5;  /* red-300   — "down" / "alert" pill */
+
+  /* ---- Wine (bordeaux family — dictámenes, acentos graves) ---- */
+  --color-wine-400: #C46A76;
+  --color-wine-500: #A04855;
+  --color-wine-700: #722F37;
+
+  /* ---- RGB triplets (para rgba alpha via rgb(var(--x) / α)) ---- */
+  --color-gold-500-rgb:   184 147  74;
+  --color-wine-500-rgb:   160  72  85;
+  --color-wine-700-rgb:   114  47  55;
+  --color-success-rgb:     79 122  76;
+  --color-success-light-rgb: 134 239 172;
+  --color-danger-rgb:     168  56  56;
+  --color-danger-light-rgb: 252 165 165;
+
+  /* ---- Area accents (diferenciación de 4 pilares) ---- */
+  --color-area-verdad: #3D6B7E;  /* azul medianoche — rigor, revisoría */
+  --color-area-valor:  #B8934A;  /* champagne gold — área flagship */
+  --color-area-futuro: #5A7F7A;  /* teal petróleo — foresight */
+  --color-area-escudo: #A83838;  /* bordeaux — defensa DIAN */
+
+  /* ---- Radius scale (confident but not extreme) ---- */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* ---- Elevation (shadows warm-tinted, stone-colored shadow) ---- */
+  --shadow-e0: none;
+  --shadow-e1: 0 1px 2px 0 rgb(47 42 32 / 0.04);
+  --shadow-e2: 0 1px 3px 0 rgb(47 42 32 / 0.08), 0 1px 2px -1px rgb(47 42 32 / 0.04);
+  --shadow-e3: 0 4px 6px -1px rgb(47 42 32 / 0.08), 0 2px 4px -2px rgb(47 42 32 / 0.04);
+  --shadow-e4: 0 10px 15px -3px rgb(47 42 32 / 0.10), 0 4px 6px -4px rgb(47 42 32 / 0.06);
+  --shadow-e5: 0 20px 25px -5px rgb(47 42 32 / 0.12), 0 8px 10px -6px rgb(47 42 32 / 0.08);
+
+  /* ---- Signature: gold glow (brand moment) ---- */
+  --shadow-glow-gold:      0 0 40px rgb(184 147 74 / 0.28);
+  --shadow-glow-gold-soft: 0 0 22px rgb(184 147 74 / 0.18);
+
+  /* ---- Typography: families ---- */
+  --font-sans:    var(--font-geist-sans), system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-mono:    var(--font-geist-mono), 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --font-display: var(--font-fraunces), 'Playfair Display', Georgia, serif;
+  --font-serif:   var(--font-fraunces), 'Playfair Display', Georgia, serif;
+
+  /* ---- Typography: scale (dashboard-density, financial pro) ---- */
+  --text-2xs:       0.625rem;   /* 10px — micro labels (donut slices, chart ticks) */
+  --text-xs-mono:   0.6875rem;  /* 11px — tabular cells densos */
+  --text-xs:        0.75rem;    /* 12px — captions, legal footnotes */
+  --text-sm:        0.8125rem;  /* 13px — meta, labels */
+  --text-base:      0.875rem;   /* 14px — body UI (Bloomberg/Aladdin density) */
+  --text-md:        0.9375rem;  /* 15px — buttons, nav labels, chat prose */
+  --text-lg:        1.0625rem;  /* 17px — section headings inline */
+  --text-xl:        1.25rem;    /* 20px — page titles */
+  --text-2xl:       1.5rem;     /* 24px — report section headings */
+  --text-3xl:       1.875rem;   /* 30px — KPI hero numbers */
+  --text-4xl:       2.5rem;     /* 40px — landing hero */
+  --text-5xl:       3.5rem;     /* 56px — display / Fraunces moments */
+  --text-6xl:       4.5rem;     /* 72px — landing monumental */
+
+  /* Coupled line-heights (applied via utility or inline) */
+  --leading-tight:   1.15;
+  --leading-snug:    1.35;
+  --leading-normal:  1.55;
+  --leading-relaxed: 1.65;
+  --leading-display: 1.05;
+
+  /* ---- Letter-spacing tokens ---- */
+  --tracking-tighter: -0.03em;
+  --tracking-tight:   -0.02em;
+  --tracking-snug:    -0.01em;
+  --tracking-normal:   0em;
+  --tracking-wide:     0.08em;
+  --tracking-wider:    0.16em;
+  --tracking-eyebrow:  0.16em;
+  --tracking-label:    0.20em;
+
+  /* ---- Motion: durations ---- */
+  --duration-instant:   80ms;
+  --duration-fast:     150ms;
+  --duration-base:     200ms;
+  --duration-moderate: 300ms;
+  --duration-slow:     500ms;
+
+  /* ---- Motion: easings (Linear-style snappy, no ease-in-out default) ---- */
+  --ease-standard:    cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized:  cubic-bezier(0.3, 0, 0.1, 1);
+  --ease-enter:       cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- Spacing scale (8px base + detail stops at 4px) ---- */
+  --spacing-1:   0.25rem;   /* 4px */
+  --spacing-2:   0.5rem;    /* 8px */
+  --spacing-3:   0.75rem;   /* 12px */
+  --spacing-4:   1rem;      /* 16px */
+  --spacing-5:   1.25rem;   /* 20px */
+  --spacing-6:   1.5rem;    /* 24px */
+  --spacing-7:   1.75rem;   /* 28px */
+  --spacing-8:   2rem;      /* 32px */
+  --spacing-9:   2.25rem;   /* 36px */
+  --spacing-12:  3rem;      /* 48px */
+  --spacing-16:  4rem;      /* 64px */
+  --spacing-20:  5rem;      /* 80px */
+  --spacing-28:  7rem;      /* 112px */
 }
 
-/* --- Novaforge CSS Custom Properties --- */
+/* ============================================================
+   :root — legacy aliases for unmigrated components.
+   Phase 1 teams will migrate components off these to canonical
+   --color-*, --radius-*, --shadow-* tokens. Do NOT delete.
+   ============================================================ */
 :root {
-  /* Core */
-  --background: #ffffff;
-  --foreground: #0a0a0a;
+  /* ---- Canonical token aliases (short names for CSS usage) ---- */
+  --n-0:    var(--color-n-0);
+  --n-50:   var(--color-n-50);
+  --n-100:  var(--color-n-100);
+  --n-200:  var(--color-n-200);
+  --n-300:  var(--color-n-300);
+  --n-400:  var(--color-n-400);
+  --n-500:  var(--color-n-500);
+  --n-600:  var(--color-n-600);
+  --n-700:  var(--color-n-700);
+  --n-800:  var(--color-n-800);
+  --n-900:  var(--color-n-900);
+  --n-1000: var(--color-n-1000);
 
-  /* Monochrome brand */
-  --primary: #0a0a0a;
-  --primary-light: #171717;
-  --accent: #0a0a0a;
-  --accent-light: #262626;
-  --accent-glow: rgba(10, 10, 10, 0.06);
-  --blue-deep: #fafafa;
+  --gold-300: var(--color-gold-300);
+  --gold-400: var(--color-gold-400);
+  --gold-500: var(--color-gold-500);
+  --gold-600: var(--color-gold-600);
+  --gold-700: var(--color-gold-700);
 
-  /* Gold accent system — from 3D scene to 2D UI */
-  --accent-gold: #d4a017;
-  --accent-gold-hover: #b8901a;
-  --accent-gold-light: #fef9ee;
-  --accent-gold-glow: rgba(212, 160, 23, 0.1);
+  /* ---- Area glows (used by AreaCard, EliteHeader, etc.) ---- */
+  --area-verdad-glow: rgb(61 107 126 / 0.18);
+  --area-valor-glow:  rgb(184 147 74 / 0.18);
+  --area-futuro-glow: rgb(90 127 122 / 0.18);
+  --area-escudo-glow: rgb(168 56 56 / 0.18);
 
-  /* Status (functional — preserved) */
-  --success: #22c55e;
-  --warning: #eab308;
-  --danger: #ef4444;
+  /* ---- Gold shimmer gradient (KPI hero, AI-thinking signature) ---- */
+  --shimmer-gold: linear-gradient(
+    135deg,
+    var(--color-gold-500) 0%,
+    var(--color-gold-400) 50%,
+    var(--color-gold-500) 100%
+  );
 
-  /* Surfaces — no glass, no blur */
-  --surface-base: var(--background);
-  --surface-panel: #ffffff;
-  --surface-panel-hover: #fafafa;
-  --surface-border: #e5e5e5;
-  --surface-border-hover: #d4d4d4;
-  --surface-border-solid: #e5e5e5;
+  /* ---- Legacy: colors ---- */
+  --background:          var(--color-n-0);
+  --foreground:          var(--color-n-800);
+  --primary:             var(--color-n-900);
+  --primary-light:       var(--color-n-700);
+  --accent:              var(--color-n-800);
+  --accent-light:        var(--color-n-600);
+  --accent-glow:         rgb(47 42 32 / 0.06);
+  --blue-deep:           var(--color-n-50);
 
-  /* Text hierarchy */
-  --text-primary: #0a0a0a;
-  --text-secondary: #525252;
-  --text-tertiary: #a3a3a3;
+  /* ---- Legacy: gold accent system ---- */
+  --accent-gold:         var(--color-gold-500);
+  --accent-gold-hover:   var(--color-gold-600);
+  --accent-gold-light:   rgb(184 147 74 / 0.10);
+  --accent-gold-glow:    rgb(184 147 74 / 0.22);
 
-  /* Radii — hard-edged, max 4px */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 4px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --radius-full: 4px;
+  /* ---- Legacy: wine -> bordeaux (unified with danger) ---- */
+  --accent-wine:         var(--color-danger);
+  --accent-wine-hover:   #BF4343;
+  --accent-wine-light:   rgb(168 56 56 / 0.12);
+  --accent-wine-glow:    0 0 32px rgb(168 56 56 / 0.28);
 
-  /* Typography scale */
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-  --text-4xl: 2.25rem;
-  --text-5xl: 3rem;
-  --text-6xl: 3.75rem;
-  --text-7xl: 4.5rem;
+  /* ---- Legacy: status ---- */
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --danger:  var(--color-danger);
 
-  /* Workspace surface levels — three-depth spatial hierarchy */
-  --surface-sidebar: #fafafa;
-  --surface-content: #ffffff;
-  --surface-panel-alt: #f5f5f5;
+  /* ---- Legacy: surfaces ---- */
+  --surface-base:          var(--color-n-0);
+  --surface-panel:         var(--color-n-0);
+  --surface-panel-hover:   var(--color-n-50);
+  --surface-panel-alt:     var(--color-n-50);
+  --surface-border:        var(--color-n-200);
+  --surface-border-hover:  var(--color-n-300);
+  --surface-border-solid:  var(--color-n-200);
+  --surface-sidebar:       var(--color-n-50);
+  --surface-content:       var(--color-n-0);
 
-  /* Workspace-specific */
-  --workspace-sidebar-width: 260px;
-  --workspace-sidebar-collapsed: 48px;
-  --workspace-panel-width: 360px;
-  --workspace-statusbar-height: 48px;
+  /* ---- Legacy: text hierarchy ---- */
+  --text-primary:    var(--color-n-900);
+  --text-secondary:  var(--color-n-600);
+  --text-tertiary:   var(--color-n-500);
 
-  /* Z-index layers */
-  --z-bg: -10;
-  --z-canvas: -5;
-  --z-base: 1;
-  --z-glass: 10;
-  --z-sticky: 40;
-  --z-modal: 50;
+  /* ---- Legacy: font (points to Fraunces for old Instrument-Serif refs) ---- */
+  --font-instrument-serif: var(--font-fraunces);
+
+  /* ---- Legacy: workspace layout ---- */
+  --workspace-sidebar-width:     260px;
+  --workspace-sidebar-collapsed:  48px;
+  --workspace-panel-width:       360px;
+  --workspace-statusbar-height:   48px;
+  --workspace-header-h:           64px;
+  --chat-reading-width:          760px;
+  --content-width:               72rem;
+  --content-width-narrow:        48rem;
+  --content-width-wide:          80rem;
+
+  /* ---- Legacy: z-index layers ---- */
+  --z-bg:      -10;
+  --z-canvas:   -5;
+  --z-base:      1;
+  --z-glass:    10;
+  --z-sticky:   40;
+  --z-modal:    50;
   --z-popover: 100;
 }
 
-/* --- Reduced Motion --- */
+/* ============================================================
+   Dark mode — override @theme tokens + legacy aliases.
+   [data-theme='dark'] is the canonical name; [data-theme='elite']
+   is the legacy alias from the previous design system.
+   ============================================================ */
+[data-theme="dark"],
+[data-theme="elite"] {
+  color-scheme: dark;
+
+  /* Neutrals: warm espresso black, never #000 pure */
+  --color-n-0:    #0A0907;
+  --color-n-50:   #141210;
+  --color-n-100:  #1C1915;
+  --color-n-200:  #27231D;
+  --color-n-300:  #35302A;
+  --color-n-400:  #5A5246;
+  --color-n-500:  #7D7566;
+  --color-n-600:  #A09683;
+  --color-n-700:  #C4BBA5;
+  --color-n-800:  #DED5BD;
+  --color-n-900:  #EFE8D3;
+  --color-n-1000: #FAF5E6;
+
+  /* Gold: clarified for dark-mode perceived contrast */
+  --color-gold-300: #3A2F18;
+  --color-gold-400: #8A6E30;
+  --color-gold-500: #D4B876;  /* primary in dark — more luminous */
+  --color-gold-600: #E6D19A;
+  --color-gold-700: #F2E2B8;
+
+  /* Semantic: desaturated further (~15% chroma reduction) */
+  --color-success: #7AA075;
+  --color-warning: #E6B66A;
+  --color-danger:  #D66B6B;
+  --color-info:    #6B9BB0;
+
+  /* Area accents: dark-adjusted luminosity */
+  --color-area-verdad: #6B9BB0;
+  --color-area-valor:  #D4B876;
+  --color-area-futuro: #7AA09B;
+  --color-area-escudo: #D66B6B;
+
+  /* Elevation: simulate height via luminance + 1px inset, not heavy shadow */
+  --shadow-e0: none;
+  --shadow-e1: 0 1px 0 0 rgb(255 255 255 / 0.02) inset;
+  --shadow-e2: 0 1px 2px 0 rgb(0 0 0 / 0.4),  0 1px 0 0 rgb(255 255 255 / 0.03) inset;
+  --shadow-e3: 0 4px 12px -4px rgb(0 0 0 / 0.5), 0 1px 0 0 rgb(255 255 255 / 0.04) inset;
+  --shadow-e4: 0 16px 32px -12px rgb(0 0 0 / 0.6), 0 1px 0 0 rgb(255 255 255 / 0.06) inset;
+  --shadow-e5: 0 32px 64px -16px rgb(0 0 0 / 0.7), 0 1px 0 0 rgb(255 255 255 / 0.08) inset;
+
+  /* Gold glow adjusted to luminous gold */
+  --shadow-glow-gold:      0 0 40px rgb(212 184 118 / 0.28);
+  --shadow-glow-gold-soft: 0 0 22px rgb(212 184 118 / 0.22);
+
+  /* ---- Legacy aliases that don't auto-update via var() chain ---- */
+  --accent-glow:       rgb(212 184 118 / 0.08);
+  --accent-gold-light: rgb(212 184 118 / 0.12);
+  --accent-gold-glow:  rgb(212 184 118 / 0.28);
+  --accent-wine-hover: #E08383;
+  --accent-wine-light: rgb(214 107 107 / 0.15);
+  --accent-wine-glow:  0 0 32px rgb(214 107 107 / 0.35);
+
+  /* Area glows: dark-mode luminance */
+  --area-verdad-glow: rgb(107 155 176 / 0.22);
+  --area-valor-glow:  rgb(212 184 118 / 0.22);
+  --area-futuro-glow: rgb(122 160 155 / 0.22);
+  --area-escudo-glow: rgb(214 107 107 / 0.22);
+}
+
+/* ============================================================
+   Keyframes
+   ============================================================ */
+@keyframes gold-shimmer {
+  0%   { background-position:   0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@keyframes elite-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
+/* ============================================================
+   Accessibility — reduced motion
+   ============================================================ */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  .shimmer-gold,
+  .animate-elite-fade { animation: none; }
 }
 
-/* --- Base Body --- */
+/* ============================================================
+   Base body
+   ============================================================ */
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background: var(--color-n-0);
+  color: var(--color-n-700);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  line-height: 1.6;
+  text-rendering: optimizeLegibility;
 }
 
-/* --- Panel Utility (replaces glass-panel) ---
-   Same class name to avoid breaking existing components.
-   No backdrop-filter, no box-shadow. Solid border only.  */
-.glass-panel {
-  background: var(--surface-panel);
-  border: 1px solid var(--surface-border);
-  transition: border-color 0.1s ease;
-}
-.glass-panel:hover {
-  border-color: var(--surface-border-hover);
-}
-
-/* --- Dot Grid Background --- */
-.dot-grid {
-  background-image: radial-gradient(circle, #d4d4d4 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
-/* --- Text Gradient → Solid (Novaforge kills gradients) --- */
-.text-gradient {
-  color: var(--foreground);
-}
-.text-gradient-accent {
-  color: var(--foreground);
-}
-
-/* --- Focus — A11y --- */
+/* ============================================================
+   Focus / Selection
+   ============================================================ */
 *:focus-visible {
-  outline: 2px solid var(--foreground);
+  outline: 2px solid var(--color-gold-500);
   outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
 
-/* --- Selection --- */
 ::selection {
-  background: #0a0a0a;
-  color: #ffffff;
+  background: var(--color-gold-300);
+  color: var(--color-n-1000);
+}
+[data-theme="dark"] ::selection,
+[data-theme="elite"] ::selection {
+  background: rgb(212 184 118 / 0.35);
+  color: var(--color-n-1000);
 }
 
-/* --- Prose / Markdown (Chat AI Responses) --- */
+/* ============================================================
+   Utility: tabular numerals (for KPIs, tables, COP amounts)
+   ============================================================ */
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ============================================================
+   Prose (legacy) — mapped to tokens
+   ============================================================ */
 .prose {
-  color: var(--foreground);
+  color: var(--color-n-700);
 }
 .prose p {
   margin-bottom: 1rem;
-  line-height: 1.7;
+  line-height: var(--leading-relaxed);
 }
 .prose strong {
-  color: #0a0a0a;
+  color: var(--color-n-900);
   font-weight: 600;
 }
-.prose ul {
-  list-style-type: disc;
-  padding-left: 1.5rem;
-  margin-bottom: 1rem;
-}
+.prose ul,
 .prose ol {
-  list-style-type: decimal;
   padding-left: 1.5rem;
   margin-bottom: 1rem;
 }
-.prose li {
-  margin-bottom: 0.5rem;
-}
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+.prose li { margin-bottom: 0.5rem; }
 .prose a {
-  color: #0a0a0a;
+  color: var(--color-gold-600);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
+  transition: color var(--duration-fast) var(--ease-standard);
 }
 .prose a:hover {
+  color: var(--color-gold-700);
   text-decoration-thickness: 2px;
 }
 .prose pre {
-  background: #fafafa;
-  border: 1px solid #e5e5e5;
-  border-radius: 4px;
+  background: var(--color-n-50);
+  border: 1px solid var(--color-n-200);
+  border-radius: var(--radius-sm);
   padding: 1rem;
   overflow-x: auto;
+  font-family: var(--font-mono);
 }
 .prose code {
+  font-family: var(--font-mono);
   font-size: 0.875em;
+  background: var(--color-n-100);
+  padding: 2px 5px;
+  border-radius: var(--radius-xs);
 }
 .prose blockquote {
-  border-left: 2px solid #e5e5e5;
+  border-left: 2px solid var(--color-gold-500);
   padding-left: 1rem;
-  color: #525252;
+  color: var(--color-n-600);
+  font-style: italic;
+}
+.prose table {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+  border-collapse: collapse;
+}
+.prose td,
+.prose th {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-n-200);
+}
+.prose th {
+  text-align: left;
+  color: var(--color-n-600);
+  font-weight: 600;
+  font-size: var(--text-sm);
 }
 
-/* --- Workspace Layout Utilities --- */
-.workspace-sidebar { width: var(--workspace-sidebar-width); }
-.workspace-sidebar-collapsed { width: var(--workspace-sidebar-collapsed); }
-.workspace-panel { width: var(--workspace-panel-width); }
-
-/* Analysis panel scroll */
-.analysis-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: #d4d4d4 transparent;
-}
-.analysis-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-.analysis-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.analysis-scroll::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
-  border-radius: 2px;
-}
-.analysis-scroll::-webkit-scrollbar-thumb:hover {
-  background: #a3a3a3;
-}
-
-/* --- Prose Workspace (tighter spacing for chat) --- */
-.prose-workspace p { margin-bottom: 0.75rem; line-height: 1.65; }
+/* Prose workspace (tighter spacing, used in existing chat surfaces) */
+.prose-workspace p { margin-bottom: 0.75rem; line-height: var(--leading-relaxed); }
 .prose-workspace ul { margin-bottom: 0.75rem; }
 .prose-workspace li { margin-bottom: 0.25rem; }
 
-/* ============================================================
-   1+1 ELITE — Dark Premium Theme (scoped to [data-theme='elite'])
-   ============================================================
-   The landing page (/) stays light. Only subtrees opting-in with
-   data-theme='elite' (typically the workspace shell) get the dark
-   premium look: #030303 background, gold (#D4A017) + wine (#722F37)
-   accents, glassmorphism panels, Instrument Serif for headings.
-   ============================================================ */
-
-[data-theme='elite'] {
-  color-scheme: dark;
-  --background: #030303;
-  --foreground: #F5F5F5;
-  --primary: #F5F5F5;
-  --primary-light: #E5E5E5;
-  --accent: #D4A017;
-
-  --surface-base: #0A0A0A;
-  --surface-panel: #121212;
-  --surface-panel-hover: #1A1A1A;
-  --surface-panel-alt: #0F0F0F;
-  --surface-border: rgba(212, 160, 23, 0.18);
-  --surface-border-hover: rgba(212, 160, 23, 0.38);
-
-  --text-primary: #F5F5F5;
-  --text-secondary: #A8A8A8;
-  --text-tertiary: #6A6A6A;
-
-  --accent-gold: #D4A017;
-  --accent-gold-hover: #E8B42C;
-  --accent-gold-light: rgba(212, 160, 23, 0.12);
-  --accent-gold-glow: 0 0 40px rgba(212, 160, 23, 0.28);
-
-  --accent-wine: #722F37;
-  --accent-wine-hover: #8B3A45;
-  --accent-wine-light: rgba(114, 47, 55, 0.15);
-  --accent-wine-glow: 0 0 32px rgba(114, 47, 55, 0.35);
-
-  background: var(--background);
-  color: var(--foreground);
+/* Prose chat (NEW canonical — Phase 1A migrates ChatWorkspace to this) */
+.prose-chat {
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  color: var(--color-n-700);
+  max-width: 65ch;
+}
+.prose-chat p + p { margin-top: 1em; }
+.prose-chat strong { color: var(--color-n-900); font-weight: 600; }
+.prose-chat em { color: var(--color-n-800); }
+.prose-chat code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-n-100);
+  padding: 2px 5px;
+  border-radius: var(--radius-xs);
+}
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3,
+.prose-chat h4 {
+  font-weight: 600;
+  color: var(--color-n-900);
+  letter-spacing: var(--tracking-tight);
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: var(--leading-tight);
+}
+.prose-chat h1 { font-size: var(--text-xl); }
+.prose-chat h2 { font-size: var(--text-lg); }
+.prose-chat h3 { font-size: var(--text-md); }
+.prose-chat td,
+.prose-chat th {
+  font-variant-numeric: tabular-nums;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-n-200);
+}
+.prose-chat blockquote {
+  border-left: 2px solid var(--color-gold-500);
+  padding-left: 1rem;
+  color: var(--color-n-600);
 }
 
-/* Glass premium — usable either via [data-theme='elite'] .glass-panel
-   or via the standalone .glass-elite utility (works on any theme). */
-[data-theme='elite'] .glass-panel,
+/* ============================================================
+   Glass panels (legacy classes, remapped to tokens)
+   ============================================================ */
+.glass-panel {
+  background: var(--color-n-0);
+  border: 1px solid var(--color-n-200);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+.glass-panel:hover {
+  border-color: var(--color-n-300);
+}
+
 .glass-elite {
-  background: rgba(10, 10, 10, 0.55);
+  background: rgb(10 9 7 / 0.55);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
-  border: 1px solid rgba(212, 160, 23, 0.22);
-  border-radius: 12px;
+  border: 1px solid rgb(184 147 74 / 0.22);
+  border-radius: var(--radius-lg);
   box-shadow:
-    inset 0 0 0 0.5px rgba(212, 160, 23, 0.1),
-    0 30px 60px -30px rgba(0, 0, 0, 0.9);
+    inset 0 0 0 0.5px rgb(184 147 74 / 0.10),
+    0 30px 60px -30px rgb(0 0 0 / 0.7);
+}
+[data-theme="dark"] .glass-elite,
+[data-theme="elite"] .glass-elite {
+  background: rgb(10 9 7 / 0.65);
+  border-color: rgb(212 184 118 / 0.22);
 }
 
 .glass-elite-elevated {
-  background: rgba(18, 18, 18, 0.78);
+  background: rgb(20 18 16 / 0.78);
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid rgba(212, 160, 23, 0.32);
-  border-radius: 14px;
+  border: 1px solid rgb(184 147 74 / 0.28);
+  border-radius: var(--radius-xl);
   box-shadow:
-    0 0 50px -10px rgba(212, 160, 23, 0.15),
-    0 40px 80px -30px rgba(0, 0, 0, 0.9);
+    0 0 50px -10px rgb(184 147 74 / 0.12),
+    0 40px 80px -30px rgb(0 0 0 / 0.85);
+}
+[data-theme="dark"] .glass-elite-elevated,
+[data-theme="elite"] .glass-elite-elevated {
+  border-color: rgb(212 184 118 / 0.28);
+  box-shadow:
+    0 0 50px -10px rgb(212 184 118 / 0.14),
+    0 40px 80px -30px rgb(0 0 0 / 0.9);
 }
 
-/* Gradient border elite (dorado → vino) — uses mask-composite to keep
-   the inside transparent, so the border gets the gradient. */
+/* Elite gradient border — keeps inside transparent via mask-composite */
 .border-elite-gold {
   position: relative;
   background-clip: padding-box;
@@ -326,10 +587,12 @@ body {
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg,
-    rgba(212, 160, 23, 0.55),
-    rgba(114, 47, 55, 0.35) 60%,
-    rgba(212, 160, 23, 0.25));
+  background: linear-gradient(
+    135deg,
+    rgb(184 147 74 / 0.55),
+    rgb(168 56 56 / 0.30) 60%,
+    rgb(184 147 74 / 0.25)
+  );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -337,45 +600,129 @@ body {
           mask-composite: exclude;
   pointer-events: none;
 }
-
-/* Glow utilities — usable anywhere. */
-.glow-gold      { box-shadow: 0 0 40px rgba(212, 160, 23, 0.28); }
-.glow-gold-soft { box-shadow: 0 0 22px rgba(212, 160, 23, 0.18); }
-.glow-wine      { box-shadow: 0 0 32px rgba(114, 47, 55, 0.35); }
-
-/* Serif premium — headings in elite layouts. */
-.font-serif-elite {
-  font-family: var(--font-instrument-serif), 'Playfair Display', Georgia, serif;
+[data-theme="dark"] .border-elite-gold::before,
+[data-theme="elite"] .border-elite-gold::before {
+  background: linear-gradient(
+    135deg,
+    rgb(212 184 118 / 0.60),
+    rgb(214 107 107 / 0.30) 60%,
+    rgb(212 184 118 / 0.30)
+  );
 }
 
-/* Fade-in entrance for elite panels. */
-@keyframes elite-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* ============================================================
+   Glow utilities
+   ============================================================ */
+.glow-gold      { box-shadow: var(--shadow-glow-gold); }
+.glow-gold-soft { box-shadow: var(--shadow-glow-gold-soft); }
+.glow-wine      { box-shadow: 0 0 32px rgb(168 56 56 / 0.32); }
+[data-theme="dark"] .glow-wine,
+[data-theme="elite"] .glow-wine { box-shadow: 0 0 32px rgb(214 107 107 / 0.35); }
+
+/* ============================================================
+   Signature animations
+   ============================================================ */
+.shimmer-gold {
+  background: var(--shimmer-gold);
+  background-size: 200% 100%;
+  animation: gold-shimmer 4s ease-in-out infinite alternate;
 }
+
 .animate-elite-fade {
-  animation: elite-fade-in 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: elite-fade-in 420ms var(--ease-enter);
 }
 
-/* Reduced motion fallback — explicit since the global reduced-motion
-   rule up top already zeroes animations, but we want to be defensive. */
-@media (prefers-reduced-motion: reduce) {
-  .animate-elite-fade { animation: none; }
+.animate-skeleton {
+  animation: skeleton-pulse 1.8s var(--ease-standard) infinite;
 }
 
-/* Scrollbar elite — only inside elite subtree. */
-[data-theme='elite'] *::-webkit-scrollbar { width: 8px; height: 8px; }
-[data-theme='elite'] *::-webkit-scrollbar-track { background: transparent; }
-[data-theme='elite'] *::-webkit-scrollbar-thumb {
-  background: rgba(212, 160, 23, 0.22);
-  border-radius: 8px;
-}
-[data-theme='elite'] *::-webkit-scrollbar-thumb:hover {
-  background: rgba(212, 160, 23, 0.45);
+/* ============================================================
+   Display serif (legacy .font-serif-elite — now Fraunces with
+   optical sizing handled automatically by the variable axis)
+   ============================================================ */
+.font-serif-elite {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  letter-spacing: var(--tracking-tight);
 }
 
-/* Selection elite. */
-[data-theme='elite'] ::selection {
-  background: rgba(212, 160, 23, 0.35);
-  color: #F5F5F5;
+/* ============================================================
+   Text gradient (legacy — collapsed to solid per Novaforge
+   "kill gradients" ethos; dark mode gets brighter foreground)
+   ============================================================ */
+.text-gradient,
+.text-gradient-accent {
+  color: var(--color-n-900);
+}
+[data-theme="dark"] .text-gradient,
+[data-theme="elite"] .text-gradient,
+[data-theme="dark"] .text-gradient-accent,
+[data-theme="elite"] .text-gradient-accent {
+  color: var(--color-n-1000);
+}
+
+/* ============================================================
+   Dot grid (legacy landing background)
+   ============================================================ */
+.dot-grid {
+  background-image: radial-gradient(circle, var(--color-n-300) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ============================================================
+   Workspace layout utilities
+   ============================================================ */
+.workspace-sidebar           { width: var(--workspace-sidebar-width); }
+.workspace-sidebar-collapsed { width: var(--workspace-sidebar-collapsed); }
+.workspace-panel             { width: var(--workspace-panel-width); }
+
+/* ============================================================
+   Scrollbars — warm, subtle, brand-aware
+   ============================================================ */
+.styled-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-n-300) transparent;
+}
+.styled-scrollbar::-webkit-scrollbar      { width: 8px; height: 8px; }
+.styled-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.styled-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-n-300);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.styled-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-n-400);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+
+.analysis-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-n-300) transparent;
+}
+.analysis-scroll::-webkit-scrollbar       { width: 6px; }
+.analysis-scroll::-webkit-scrollbar-track { background: transparent; }
+.analysis-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-n-300);
+  border-radius: var(--radius-full);
+}
+.analysis-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-n-400);
+}
+
+/* Dark-mode scrollbar: gold-tinted, subtle */
+[data-theme="dark"] *::-webkit-scrollbar,
+[data-theme="elite"] *::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="dark"] *::-webkit-scrollbar-track,
+[data-theme="elite"] *::-webkit-scrollbar-track { background: transparent; }
+[data-theme="dark"] *::-webkit-scrollbar-thumb,
+[data-theme="elite"] *::-webkit-scrollbar-thumb {
+  background: rgb(212 184 118 / 0.16);
+  border-radius: var(--radius-full);
+}
+[data-theme="dark"] *::-webkit-scrollbar-thumb:hover,
+[data-theme="elite"] *::-webkit-scrollbar-thumb:hover {
+  background: rgb(212 184 118 / 0.36);
 }

@@ -126,7 +126,7 @@ export default function PreciosTransferenciaPage() {
   return (
     <div
       data-theme="elite"
-      className="relative w-full min-h-full overflow-y-auto bg-[#030303] text-[#F5F5F5]"
+      className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
     >
       <div
         aria-hidden="true"
@@ -147,7 +147,7 @@ export default function PreciosTransferenciaPage() {
           <Link
             href="/workspace/escudo"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[#A8A8A8] hover:text-[#D4A017] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-gold-500 transition-colors"
           >
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             {language === 'es' ? 'El Escudo' : 'The Shield'}
@@ -158,7 +158,7 @@ export default function PreciosTransferenciaPage() {
         <motion.div {...fadeItem(1)} className="mb-10 flex items-start gap-5">
           <div
             aria-hidden="true"
-            className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-[14px] bg-[rgba(114,47,55,0.18)] text-[#C46A76] glow-wine"
+            className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[rgba(114,47,55,0.18)] text-area-escudo glow-wine"
           >
             <Network className="h-7 w-7" strokeWidth={1.75} />
           </div>
@@ -176,7 +176,7 @@ export default function PreciosTransferenciaPage() {
         {/* Narrativa */}
         <motion.div
           {...fadeItem(2)}
-          className="max-w-3xl space-y-5 text-[15px] leading-relaxed text-[#D4D4D4] mb-12"
+          className="max-w-3xl space-y-5 text-md leading-relaxed text-n-300 mb-12"
         >
           <p>
             {language === 'es'
@@ -198,12 +198,12 @@ export default function PreciosTransferenciaPage() {
         {/* Methods strip */}
         <motion.div
           {...fadeItem(3)}
-          className="mb-12 rounded-[14px] glass-elite p-5 md:p-6"
+          className="mb-12 rounded-xl glass-elite p-5 md:p-6"
           aria-label={language === 'es' ? 'Métodos de precios de transferencia' : 'Transfer pricing methods'}
         >
           <div className="flex items-center gap-2 mb-3">
-            <Globe2 className="h-4 w-4 text-[#D4A017]" strokeWidth={2} aria-hidden="true" />
-            <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+            <Globe2 className="h-4 w-4 text-gold-500" strokeWidth={2} aria-hidden="true" />
+            <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
               {language === 'es' ? '6 métodos OCDE' : '6 OECD methods'}
             </span>
           </div>
@@ -211,12 +211,12 @@ export default function PreciosTransferenciaPage() {
             {methods.map((m) => (
               <li
                 key={m.code}
-                className="flex items-baseline gap-2 text-[13px] text-[#D4D4D4]"
+                className="flex items-baseline gap-2 text-sm text-n-300"
               >
-                <span className="font-semibold text-[#D4A017] tabular-nums w-10 shrink-0">
+                <span className="font-semibold text-gold-500 tabular-nums w-10 shrink-0">
                   {m.code}
                 </span>
-                <span className="text-[#A8A8A8] leading-snug">{m.name}</span>
+                <span className="text-n-500 leading-snug">{m.name}</span>
               </li>
             ))}
           </ul>
@@ -230,18 +230,18 @@ export default function PreciosTransferenciaPage() {
                 <div className="flex items-center justify-between">
                   <span
                     aria-hidden="true"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(114,47,55,0.18)] text-[#C46A76]"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(114,47,55,0.18)] text-area-escudo"
                   >
                     <agent.icon className="h-5 w-5" strokeWidth={1.75} />
                   </span>
-                  <span className="font-serif-elite text-[20px] text-[#6B6B6B] tabular-nums">
+                  <span className="font-serif-elite text-xl text-n-600 tabular-nums">
                     {agent.num}
                   </span>
                 </div>
-                <h3 className="font-serif-elite text-[18px] leading-tight font-normal text-[#F5F5F5]">
+                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
                   {agent.title}
                 </h3>
-                <p className="text-[13px] leading-relaxed text-[#A8A8A8]">{agent.body}</p>
+                <p className="text-sm leading-relaxed text-n-500">{agent.body}</p>
               </div>
             </EliteCard>
           ))}
@@ -267,17 +267,17 @@ export default function PreciosTransferenciaPage() {
             <div className="flex items-start gap-3 md:max-w-xl">
               <span
                 aria-hidden="true"
-                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(114,47,55,0.2)] text-[#C46A76]"
+                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(114,47,55,0.2)] text-area-escudo"
               >
                 <Network className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5] mb-1.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
                   {language === 'es'
                     ? 'Analice sus operaciones vinculadas'
                     : 'Analyze your related-party transactions'}
                 </h3>
-                <p className="text-[13px] leading-relaxed text-[#A8A8A8]">
+                <p className="text-sm leading-relaxed text-n-500">
                   {language === 'es'
                     ? 'Indique operaciones, vinculadas y flujos. Recibirá el estudio técnico y el Formato 1125 listos para la DIAN.'
                     : 'List transactions, related parties, and flows. Receive the technical study and Form 1125 ready for DIAN.'}

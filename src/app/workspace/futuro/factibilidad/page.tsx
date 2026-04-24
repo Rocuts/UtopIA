@@ -323,19 +323,19 @@ export default function FactibilidadPage() {
           : 'critical';
   const npvColor =
     npvSeverity === 'good'
-      ? 'text-[#86EFAC]'
+      ? 'text-success-light'
       : npvSeverity === 'neutral'
-        ? 'text-[#E8B42C]'
+        ? 'text-gold-600'
         : npvSeverity === 'warn'
-          ? 'text-[#EAB308]'
-          : 'text-[#FCA5A5]';
+          ? 'text-gold-500'
+          : 'text-danger-light';
 
   return (
     <div
       data-theme="elite"
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-[#030303] text-[#F5F5F5]',
+        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient orbs */}
@@ -347,7 +347,7 @@ export default function FactibilidadPage() {
           className="absolute -top-[20%] -right-[10%] w-[580px] h-[580px] rounded-full blur-[120px] opacity-30"
           style={{
             background:
-              'radial-gradient(circle, rgba(212,160,23,0.40) 0%, rgba(212,160,23,0) 70%)',
+              'radial-gradient(circle, rgb(var(--color-gold-500-rgb) / 0.40) 0%, rgb(var(--color-gold-500-rgb) / 0) 70%)',
           }}
         />
       </div>
@@ -358,7 +358,7 @@ export default function FactibilidadPage() {
           <Link
             href="/workspace/futuro"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-[12px] text-[#A8A8A8] hover:text-[#E8B42C] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-n-500 hover:text-gold-600 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
             <span>{isEs ? 'Volver a El Futuro' : 'Back to The Future'}</span>
@@ -386,8 +386,8 @@ export default function FactibilidadPage() {
           {...fade(2)}
           className={cn(
             'font-serif-elite font-normal',
-            'text-[20px] sm:text-[22px] md:text-[24px] leading-[1.55]',
-            'text-[#D4D4D4] max-w-3xl mb-10',
+            'text-xl sm:text-xl md:text-2xl leading-[1.55]',
+            'text-n-300 max-w-3xl mb-10',
           )}
         >
           {isEs
@@ -406,15 +406,15 @@ export default function FactibilidadPage() {
             <div className="flex items-center gap-3">
               <span
                 aria-hidden="true"
-                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
               >
                 <CalculatorIcon className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div className="flex flex-col">
-                <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                   {isEs ? 'Calculadora' : 'Calculator'}
                 </span>
-                <h2 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5]">
+                <h2 className="font-serif-elite text-xl leading-tight text-n-100">
                   {isEs ? 'VPN · TIR · Payback · IR' : 'NPV · IRR · Payback · PI'}
                 </h2>
               </div>
@@ -455,10 +455,10 @@ export default function FactibilidadPage() {
             {/* Years controls */}
             <div className="flex items-center justify-between gap-4">
               <div className="flex flex-col">
-                <span className="uppercase tracking-[0.14em] text-[10px] font-medium text-[#A8A8A8]">
+                <span className="uppercase tracking-[0.14em] text-2xs font-medium text-n-500">
                   {isEs ? 'Horizonte de proyección' : 'Projection horizon'}
                 </span>
-                <span className="text-[14px] text-[#D4D4D4]">
+                <span className="text-base text-n-300">
                   {years} {isEs ? 'años' : 'years'}
                 </span>
               </div>
@@ -469,11 +469,11 @@ export default function FactibilidadPage() {
                   onClick={() => handleYearsChange(years - 1)}
                   disabled={years <= 1}
                   className={cn(
-                    'inline-flex h-9 w-9 items-center justify-center rounded-[10px]',
-                    'bg-[rgba(212,160,23,0.1)] text-[#E8B42C] border border-[rgba(212,160,23,0.3)]',
-                    'hover:bg-[rgba(212,160,23,0.18)] transition-colors',
+                    'inline-flex h-9 w-9 items-center justify-center rounded-md',
+                    'bg-[rgb(var(--color-gold-500-rgb)_/_0.1)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
+                    'hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.18)] transition-colors',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                   )}
                 >
                   <Minus className="h-4 w-4" strokeWidth={2} />
@@ -484,11 +484,11 @@ export default function FactibilidadPage() {
                   onClick={() => handleYearsChange(years + 1)}
                   disabled={years >= 10}
                   className={cn(
-                    'inline-flex h-9 w-9 items-center justify-center rounded-[10px]',
-                    'bg-[rgba(212,160,23,0.1)] text-[#E8B42C] border border-[rgba(212,160,23,0.3)]',
-                    'hover:bg-[rgba(212,160,23,0.18)] transition-colors',
+                    'inline-flex h-9 w-9 items-center justify-center rounded-md',
+                    'bg-[rgb(var(--color-gold-500-rgb)_/_0.1)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
+                    'hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.18)] transition-colors',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A017] focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                   )}
                 >
                   <Plus className="h-4 w-4" strokeWidth={2} />
@@ -512,17 +512,17 @@ export default function FactibilidadPage() {
             </div>
 
             {/* Save scenario */}
-            <div className="flex flex-col sm:flex-row items-stretch gap-3 pt-2 border-t border-[rgba(212,160,23,0.16)]">
+            <div className="flex flex-col sm:flex-row items-stretch gap-3 pt-2 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.16)]">
               <input
                 type="text"
                 value={scenarioName}
                 onChange={(e) => setScenarioName(e.target.value)}
                 placeholder={isEs ? 'Nombre del escenario (opcional)' : 'Scenario name (optional)'}
                 className={cn(
-                  'flex-1 h-10 px-3 rounded-[10px] text-[13px]',
-                  'bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.25)]',
-                  'text-[#F5F5F5] placeholder:text-[#6B6B6B]',
-                  'focus:outline-none focus:border-[#D4A017] focus:ring-2 focus:ring-[#D4A017] focus:ring-offset-2 focus:ring-offset-[#030303]',
+                  'flex-1 h-10 px-3 rounded-md text-sm',
+                  'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+                  'text-n-100 placeholder:text-n-600',
+                  'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
                 )}
               />
               <EliteButton
@@ -539,7 +539,7 @@ export default function FactibilidadPage() {
             {toast && (
               <div
                 role="status"
-                className="flex items-center gap-2 text-[12px] text-[#86EFAC]"
+                className="flex items-center gap-2 text-xs text-success-light"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
                 {toast}
@@ -569,12 +569,12 @@ export default function FactibilidadPage() {
               value={formatPct(irr)}
               color={
                 irr == null
-                  ? 'text-[#A8A8A8]'
+                  ? 'text-n-500'
                   : irr >= discountRate + 0.05
-                    ? 'text-[#86EFAC]'
+                    ? 'text-success-light'
                     : irr >= discountRate
-                      ? 'text-[#E8B42C]'
-                      : 'text-[#FCA5A5]'
+                      ? 'text-gold-600'
+                      : 'text-danger-light'
               }
               hint={
                 isEs
@@ -588,10 +588,10 @@ export default function FactibilidadPage() {
               value={formatYears(payback)}
               color={
                 payback == null
-                  ? 'text-[#FCA5A5]'
+                  ? 'text-danger-light'
                   : payback <= years / 2
-                    ? 'text-[#86EFAC]'
-                    : 'text-[#E8B42C]'
+                    ? 'text-success-light'
+                    : 'text-gold-600'
               }
               hint={
                 isEs
@@ -609,10 +609,10 @@ export default function FactibilidadPage() {
               value={pi.toFixed(2)}
               color={
                 pi >= 1.3
-                  ? 'text-[#86EFAC]'
+                  ? 'text-success-light'
                   : pi >= 1
-                    ? 'text-[#E8B42C]'
-                    : 'text-[#FCA5A5]'
+                    ? 'text-gold-600'
+                    : 'text-danger-light'
               }
               hint={
                 isEs
@@ -630,33 +630,33 @@ export default function FactibilidadPage() {
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
-                  <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                     {isEs ? 'Escenarios guardados' : 'Saved scenarios'}
                   </span>
-                  <div className="text-[13px] text-[#A8A8A8] mt-0.5">
+                  <div className="text-sm text-n-500 mt-0.5">
                     {isEs
                       ? `${saved.length} escenario${saved.length === 1 ? '' : 's'} en su workspace (local).`
                       : `${saved.length} scenario${saved.length === 1 ? '' : 's'} in your workspace (local).`}
                   </div>
                 </div>
-                <FileDown className="h-4 w-4 text-[#A8A8A8]" aria-hidden="true" />
+                <FileDown className="h-4 w-4 text-n-500" aria-hidden="true" />
               </div>
               <ul role="list" className="flex flex-col gap-2">
                 {saved.slice(0, 5).map((s) => (
                   <li
                     key={s.id}
-                    className="flex items-center justify-between gap-3 text-[12px] p-2 rounded-[10px] bg-[rgba(10,10,10,0.4)] border border-[rgba(212,160,23,0.12)]"
+                    className="flex items-center justify-between gap-3 text-xs p-2 rounded-md bg-[rgba(10,10,10,0.4)] border border-[rgb(var(--color-gold-500-rgb)_/_0.12)]"
                   >
-                    <span className="text-[#D4D4D4] truncate">{s.label}</span>
+                    <span className="text-n-300 truncate">{s.label}</span>
                     <div className="flex items-center gap-4 shrink-0 tabular-nums">
-                      <span className="text-[#A8A8A8]">
+                      <span className="text-n-500">
                         VPN{' '}
-                        <span className={s.npv > 0 ? 'text-[#86EFAC]' : 'text-[#FCA5A5]'}>
+                        <span className={s.npv > 0 ? 'text-success-light' : 'text-danger-light'}>
                           {formatCopShort(s.npv)}
                         </span>
                       </span>
-                      <span className="text-[#A8A8A8]">
-                        TIR <span className="text-[#E8B42C]">{formatPct(s.irr)}</span>
+                      <span className="text-n-500">
+                        TIR <span className="text-gold-600">{formatPct(s.irr)}</span>
                       </span>
                     </div>
                   </li>
@@ -676,15 +676,15 @@ export default function FactibilidadPage() {
             <div className="flex items-center gap-3">
               <span
                 aria-hidden="true"
-                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+                className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
               >
                 <CheckCircle2 className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                   {isEs ? 'Dimensiones DNP' : 'DNP dimensions'}
                 </span>
-                <h3 className="font-serif-elite text-[22px] leading-tight text-[#F5F5F5]">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-100">
                   {isEs
                     ? '7 análisis que incluye cada estudio'
                     : '7 analyses included in every study'}
@@ -693,7 +693,7 @@ export default function FactibilidadPage() {
             </div>
             <ul
               role="list"
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[13px] text-[#D4D4D4]"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm text-n-300"
             >
               <ChecklistItem icon={Users} label={isEs ? 'Mercado' : 'Market'} />
               <ChecklistItem icon={Brain} label={isEs ? 'Técnico' : 'Technical'} />
@@ -714,13 +714,13 @@ export default function FactibilidadPage() {
             )}
           >
             <div>
-              <span className="uppercase tracking-[0.18em] text-[11px] font-medium text-[#D4A017]">
+              <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
                 {isEs ? 'Estudio profesional' : 'Professional study'}
               </span>
-              <h3 className="font-serif-elite text-[24px] leading-tight text-[#F5F5F5] mt-1 mb-2">
+              <h3 className="font-serif-elite text-2xl leading-tight text-n-100 mt-1 mb-2">
                 {isEs ? 'Generar estudio completo' : 'Generate full study'}
               </h3>
-              <p className="text-[13px] leading-relaxed text-[#A8A8A8]">
+              <p className="text-sm leading-relaxed text-n-500">
                 {isEs
                   ? 'Pipeline de 3 agentes: Analista de Mercado → Modelador Financiero → Evaluador de Riesgo. Resultado en SSE streaming.'
                   : '3-agent pipeline: Market Analyst → Financial Modeler → Risk Assessor. Output streams over SSE.'}
@@ -737,7 +737,7 @@ export default function FactibilidadPage() {
             >
               {isEs ? 'Iniciar estudio de factibilidad' : 'Start feasibility study'}
             </EliteButton>
-            <p className="text-[11px] text-[#6B6B6B]">
+            <p className="text-xs text-n-600">
               {isEs
                 ? 'Endpoint: /api/feasibility-study · maxDuration 300s · requiere OPENAI_API_KEY'
                 : 'Endpoint: /api/feasibility-study · maxDuration 300s · requires OPENAI_API_KEY'}
@@ -776,7 +776,7 @@ function LabeledNumberInput({
     <label className="flex flex-col gap-1.5">
       <span
         className={cn(
-          'uppercase tracking-[0.14em] text-[10px] font-medium text-[#A8A8A8]',
+          'uppercase tracking-[0.14em] text-2xs font-medium text-n-500',
           dense ? '' : '',
         )}
       >
@@ -794,15 +794,15 @@ function LabeledNumberInput({
         min={min}
         max={max}
         className={cn(
-          'h-10 px-3 rounded-[10px] text-[14px]',
-          'bg-[rgba(10,10,10,0.6)] border border-[rgba(212,160,23,0.25)]',
-          'text-[#F5F5F5] placeholder:text-[#6B6B6B] tabular-nums',
-          'focus:outline-none focus:border-[#D4A017] focus:ring-2 focus:ring-[#D4A017] focus:ring-offset-2 focus:ring-offset-[#030303]',
+          'h-10 px-3 rounded-md text-base',
+          'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+          'text-n-100 placeholder:text-n-600 tabular-nums',
+          'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
           'transition-[border-color,box-shadow]',
         )}
       />
       {helperText && (
-        <span className="text-[11px] text-[#6B6B6B] tabular-nums">{helperText}</span>
+        <span className="text-xs text-n-600 tabular-nums">{helperText}</span>
       )}
     </label>
   );
@@ -820,23 +820,23 @@ function ResultCard({ label, value, color, hint, icon: Icon }: ResultCardProps) 
   return (
     <div className="relative flex items-start justify-between gap-3 p-4 rounded-[12px] glass-elite-elevated border-elite-gold">
       <div className="flex flex-col gap-1 min-w-0">
-        <span className="uppercase tracking-[0.18em] text-[10px] font-medium text-[#A8A8A8]">
+        <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
           {label}
         </span>
         <span
           className={cn(
-            'font-serif-elite text-[30px] md:text-[32px] leading-[1.05] tabular-nums',
-            color ?? 'text-[#F5F5F5]',
+            'font-serif-elite text-3xl md:text-3xl leading-[1.05] tabular-nums',
+            color ?? 'text-n-100',
           )}
         >
           {value}
         </span>
-        {hint && <span className="text-[11px] text-[#A8A8A8]">{hint}</span>}
+        {hint && <span className="text-xs text-n-500">{hint}</span>}
       </div>
       {Icon && (
         <span
           aria-hidden="true"
-          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(212,160,23,0.12)] text-[#E8B42C]"
+          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600"
         >
           <Icon className="h-4 w-4" strokeWidth={1.75} />
         </span>
@@ -853,10 +853,10 @@ function ChecklistItem({
   label: string;
 }) {
   return (
-    <li className="flex items-center gap-2.5 px-3 py-2 rounded-[10px] bg-[rgba(10,10,10,0.4)] border border-[rgba(212,160,23,0.14)]">
+    <li className="flex items-center gap-2.5 px-3 py-2 rounded-md bg-[rgba(10,10,10,0.4)] border border-[rgb(var(--color-gold-500-rgb)_/_0.14)]">
       <span
         aria-hidden="true"
-        className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-[8px] bg-[rgba(212,160,23,0.14)] text-[#E8B42C]"
+        className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-[8px] bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
       >
         <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
       </span>

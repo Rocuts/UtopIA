@@ -23,10 +23,10 @@ import { USE_CASE_LABELS } from './types';
 const NOVA_SPRING = { stiffness: 400, damping: 25 };
 
 const RISK_DOT_COLORS: Record<RiskLevel, string> = {
-  bajo: '#22c55e',
-  medio: '#eab308',
-  alto: '#f97316',
-  critico: '#ef4444',
+  bajo: 'var(--color-success)',
+  medio: 'var(--color-warning)',
+  alto: 'var(--color-warning)',
+  critico: 'var(--color-danger)',
 };
 
 const RISK_LABELS: Record<'es' | 'en', Record<RiskLevel, string>> = {
@@ -75,24 +75,24 @@ export function StatusBar({
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', ...NOVA_SPRING }}
-      className="h-12 bg-white border-b border-[#e5e5e5] flex items-center px-3 shrink-0 z-30"
+      className="h-12 bg-n-0 border-b border-n-200 flex items-center px-3 shrink-0 z-30"
       role="banner"
     >
       {/* Left: back button + sidebar toggle + logo */}
       <div className="flex items-center gap-1 shrink-0">
         <Link
           href="/"
-          className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+          className="p-1.5 rounded-xs text-n-400 hover:text-n-900 hover:bg-n-50 transition-colors"
           aria-label={language === 'es' ? 'Volver al inicio' : 'Back to home'}
           title={language === 'es' ? 'Volver al inicio' : 'Back to home'}
         >
           <ArrowLeft className="w-4 h-4" />
         </Link>
-        <div className="w-px h-4 bg-[#e5e5e5] mx-0.5" />
+        <div className="w-px h-4 bg-n-200 mx-0.5" />
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+          className="p-1.5 rounded-xs text-n-400 hover:text-n-900 hover:bg-n-50 transition-colors"
           aria-label={sidebarOpen ? (language === 'es' ? 'Cerrar sidebar' : 'Close sidebar') : (language === 'es' ? 'Abrir sidebar' : 'Open sidebar')}
           aria-expanded={sidebarOpen}
           aria-controls="workspace-sidebar"
@@ -103,26 +103,26 @@ export function StatusBar({
             <PanelLeftOpen className="w-4 h-4" />
           )}
         </button>
-        <span className="text-sm font-bold text-[#0a0a0a] tracking-tight hidden sm:inline">
-          1<span className="text-[#d4a017]">+</span>1
+        <span className="text-sm font-bold text-n-900 tracking-tight hidden sm:inline">
+          1<span className="text-gold-500">+</span>1
         </span>
       </div>
 
       {/* Center: case info */}
       <div className="flex-1 flex items-center justify-center gap-2 min-w-0 px-2">
         {caseId && (
-          <span className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)] hidden md:inline truncate">
+          <span className="text-xs text-n-400 font-mono hidden md:inline truncate">
             {caseId}
           </span>
         )}
-        {caseId && <span className="text-[#e5e5e5] hidden md:inline">|</span>}
-        <span className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)] truncate">
+        {caseId && <span className="text-n-200 hidden md:inline">|</span>}
+        <span className="text-xs text-n-600 font-mono truncate">
           {useCaseLabel}
         </span>
 
         {riskLevel && (
           <>
-            <span className="text-[#e5e5e5]">|</span>
+            <span className="text-n-200">|</span>
             <span className="flex items-center gap-1.5 shrink-0">
               <motion.span
                 className="w-2 h-2 rounded-full"
@@ -131,7 +131,7 @@ export function StatusBar({
                 transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
               />
               <span
-                className="text-xs font-medium font-[family-name:var(--font-geist-mono)]"
+                className="text-xs font-medium font-mono"
                 style={{ color: RISK_DOT_COLORS[riskLevel] }}
               >
                 {RISK_LABELS[language][riskLevel]}
@@ -148,11 +148,11 @@ export function StatusBar({
           <button
             type="button"
             onClick={onToggleAnalysisPanel}
-            className="flex items-center gap-1 px-2 py-1 rounded-sm text-[#525252] hover:bg-[#fafafa] transition-colors"
+            className="flex items-center gap-1 px-2 py-1 rounded-xs text-n-600 hover:bg-n-50 transition-colors"
             aria-label={`${documentCount} ${language === 'es' ? 'documentos' : 'documents'}`}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span className="text-xs font-[family-name:var(--font-geist-mono)]">{documentCount}</span>
+            <span className="text-xs font-mono">{documentCount}</span>
           </button>
         )}
 
@@ -161,10 +161,10 @@ export function StatusBar({
           type="button"
           onClick={onToggleAnalysisPanel}
           className={cn(
-            'p-1.5 rounded-sm transition-colors',
+            'p-1.5 rounded-xs transition-colors',
             analysisPanelOpen
-              ? 'text-[#d4a017] bg-[#fafafa]'
-              : 'text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa]',
+              ? 'text-gold-500 bg-n-50'
+              : 'text-n-400 hover:text-n-900 hover:bg-n-50',
           )}
           aria-label={
             analysisPanelOpen
@@ -190,11 +190,11 @@ export function StatusBar({
         <button
           type="button"
           onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
-          className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors flex items-center gap-1"
+          className="p-1.5 rounded-xs text-n-400 hover:text-n-900 hover:bg-n-50 transition-colors flex items-center gap-1"
           aria-label={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
         >
           <Globe className="w-3.5 h-3.5" />
-          <span className="text-[10px] font-[family-name:var(--font-geist-mono)] uppercase">
+          <span className="text-2xs font-mono uppercase">
             {language === 'es' ? 'EN' : 'ES'}
           </span>
         </button>

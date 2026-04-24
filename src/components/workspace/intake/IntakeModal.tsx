@@ -94,7 +94,7 @@ export function IntakeModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-n-1000/50 backdrop-blur-sm"
           role="presentation"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleClose();
@@ -110,25 +110,25 @@ export function IntakeModal() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 10 }}
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="relative w-full max-w-3xl h-[85vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden mx-4"
+            className="relative w-[min(920px,calc(100vw-32px))] max-h-[min(880px,92vh)] bg-n-0 rounded-xl shadow-e5 flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e5e5] shrink-0">
-              <h2 id="intake-modal-title" className="text-base font-semibold text-[#0a0a0a]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-n-200 shrink-0">
+              <h2 id="intake-modal-title" className="text-base font-semibold text-n-900">
                 {TITLES[activeCaseType]}
               </h2>
               <button
                 type="button"
                 onClick={handleClose}
-                className="p-1.5 rounded-lg text-[#a3a3a3] hover:text-[#525252] hover:bg-[#f5f5f5] transition-colors"
+                className="p-1.5 rounded-lg text-n-400 hover:text-n-600 hover:bg-n-100 transition-colors"
                 aria-label="Cerrar"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Form Content */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            {/* Form Content — wheel events go to inner scrollable via data-lenis-prevent */}
+            <div className="flex-1 min-h-0 overflow-hidden" data-lenis-prevent>
               {renderIntakeForm()}
             </div>
           </motion.div>

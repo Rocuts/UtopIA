@@ -25,35 +25,45 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Status config: tokenized. Color classes drive icon + text, while wrapper
+ * tints use translucent semantic backgrounds. No more hex palette.
+ */
 const STATUS_CONFIG: Record<
   DocStatus,
-  { icon: typeof FileText; color: string; bgColor: string; label: { es: string; en: string }; variant: 'outline' | 'solid' | 'muted' }
+  {
+    icon: typeof FileText;
+    iconClass: string;
+    bgClass: string;
+    label: { es: string; en: string };
+    variant: 'outline' | 'solid' | 'muted';
+  }
 > = {
   uploading: {
     icon: Loader2,
-    color: '#525252',
-    bgColor: '#fafafa',
+    iconClass: 'text-n-600',
+    bgClass: 'bg-n-50',
     label: { es: 'Subiendo', en: 'Uploading' },
     variant: 'outline',
   },
   processing: {
     icon: Loader2,
-    color: '#525252',
-    bgColor: '#fafafa',
+    iconClass: 'text-n-600',
+    bgClass: 'bg-n-50',
     label: { es: 'Procesando', en: 'Processing' },
     variant: 'muted',
   },
   ready: {
     icon: CheckCircle,
-    color: '#22c55e',
-    bgColor: '#f0fdf4',
+    iconClass: 'text-success',
+    bgClass: 'bg-success/10',
     label: { es: 'Listo', en: 'Ready' },
     variant: 'outline',
   },
   error: {
     icon: AlertCircle,
-    color: '#ef4444',
-    bgColor: '#fef2f2',
+    iconClass: 'text-danger',
+    bgClass: 'bg-danger/10',
     label: { es: 'Error', en: 'Error' },
     variant: 'outline',
   },
@@ -86,21 +96,22 @@ export function DocumentPreview({
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-sm flex items-center justify-center shrink-0 border"
-            style={{ backgroundColor: config.bgColor, borderColor: '#e5e5e5' }}
+            className={cn(
+              'w-10 h-10 rounded-sm flex items-center justify-center shrink-0 border border-n-200',
+              config.bgClass,
+            )}
           >
-            <FileText className="w-5 h-5" style={{ color: config.color }} />
+            <FileText className={cn('w-5 h-5', config.iconClass)} />
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[#0a0a0a] truncate">{filename}</p>
-            <p className="text-xs text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">{formatFileSize(size)}</p>
+            <p className="text-sm font-medium text-n-900 truncate">{filename}</p>
+            <p className="text-xs text-n-400 font-[family-name:var(--font-geist-mono)]">{formatFileSize(size)}</p>
           </div>
 
           <Badge
             variant={config.variant}
-            className="shrink-0"
-            style={{ color: config.color }}
+            className={cn('shrink-0', config.iconClass)}
           >
             <StatusIcon
               className={cn('w-3 h-3 mr-1', { 'animate-spin': isAnimated })}
@@ -112,7 +123,7 @@ export function DocumentPreview({
             {textPreview && status === 'ready' && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
+                className="p-1.5 rounded-sm text-n-400 hover:text-n-900 hover:bg-n-50 transition-colors"
                 aria-label={expanded ? 'Collapse preview' : 'Expand preview'}
               >
                 {expanded ? (
@@ -125,7 +136,7 @@ export function DocumentPreview({
             {onRemove && (
               <button
                 onClick={onRemove}
-                className="p-1.5 rounded-sm text-[#a3a3a3] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
+                className="p-1.5 rounded-sm text-n-400 hover:text-danger hover:bg-danger/10 transition-colors"
                 aria-label="Remove document"
               >
                 <X className="w-4 h-4" />
@@ -143,8 +154,8 @@ export function DocumentPreview({
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
               className="overflow-hidden"
             >
-              <div className="mt-3 pt-3 border-t border-[#e5e5e5]">
-                <pre className="text-xs text-[#525252] font-[family-name:var(--font-geist-mono)] whitespace-pre-wrap max-h-[200px] overflow-y-auto leading-relaxed styled-scrollbar">
+              <div className="mt-3 pt-3 border-t border-n-200">
+                <pre className="text-xs text-n-600 font-[family-name:var(--font-geist-mono)] whitespace-pre-wrap max-h-[200px] overflow-y-auto leading-relaxed styled-scrollbar">
                   {textPreview.slice(0, 2000)}
                   {textPreview.length > 2000 && '\n...'}
                 </pre>

@@ -40,31 +40,29 @@ export interface EliteButtonProps
 
 const VARIANT_CLASSES: Record<EliteButtonVariant, string> = {
   primary: cn(
-    'text-black font-semibold',
-    'bg-[linear-gradient(135deg,#D4A017_0%,#E8B42C_100%)]',
-    'hover:bg-[linear-gradient(135deg,#E8B42C_0%,#F5C63F_100%)]',
-    'focus-visible:ring-[#D4A017]',
-    'border border-[rgba(0,0,0,0.12)]',
+    'text-n-1000 font-semibold',
+    'bg-gold-500 hover:bg-gold-600',
+    'focus-visible:ring-gold-500',
+    'border border-n-1000/10',
   ),
   secondary: cn(
-    'text-[#D4A017]',
+    'text-gold-500',
     'bg-transparent',
     'border-elite-gold',
-    'hover:text-[#E8B42C] hover:bg-[rgba(212,160,23,0.08)]',
-    'focus-visible:ring-[#D4A017]',
+    'hover:text-gold-600 hover:bg-gold-500/10',
+    'focus-visible:ring-gold-500',
   ),
   ghost: cn(
-    'text-[#A8A8A8]',
+    'text-n-400',
     'bg-transparent',
-    'hover:text-[#F5F5F5] hover:bg-[rgba(255,255,255,0.05)]',
-    'focus-visible:ring-[#F5F5F5]',
+    'hover:text-n-100 hover:bg-n-0/5',
+    'focus-visible:ring-n-100',
   ),
   wine: cn(
-    'text-white font-medium',
-    'bg-[linear-gradient(135deg,#722F37_0%,#8B3A45_100%)]',
-    'hover:bg-[linear-gradient(135deg,#8B3A45_0%,#9E4452_100%)]',
-    'focus-visible:ring-[#722F37]',
-    'border border-[rgba(255,255,255,0.08)]',
+    'text-n-0 font-medium',
+    'bg-danger hover:bg-danger/90',
+    'focus-visible:ring-danger',
+    'border border-n-0/10',
   ),
 };
 
@@ -111,9 +109,9 @@ const EliteButton = forwardRef<HTMLButtonElement, EliteButtonProps>(
         aria-busy={loading || undefined}
         className={cn(
           'relative inline-flex items-center justify-center whitespace-nowrap',
-          'rounded-[10px]',
+          'rounded-lg',
           'transition-[background,color,box-shadow,border-color] duration-200 ease-out',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#030303]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           VARIANT_CLASSES[variant],
           SIZE_CLASSES[size],

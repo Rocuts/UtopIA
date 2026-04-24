@@ -8,55 +8,33 @@ import {
   mockRoiProbabilistic,
 } from '@/lib/kpis';
 import type { KpiResult } from '@/lib/kpis';
-import { AreaCard, type AreaKey, type AreaAccent, type AreaKpi, type AreaSubmodule } from './AreaCard';
-import { ExecutiveNarrative } from './ExecutiveNarrative';
+import { AreaCard, type AreaKey, type AreaKpi } from './AreaCard';
 import {
   Shield,
   TrendingUp,
   Scale,
   Compass,
-  FileText,
-  Calculator,
-  Globe,
-  ArrowRightLeft,
-  Banknote,
-  FileSearch,
-  BarChart3,
-  ClipboardCheck,
-  GitCompareArrows,
-  BadgeCheck,
-  Lightbulb,
-  LineChart,
-  Layers,
   type LucideIcon,
 } from 'lucide-react';
 
 /**
  * ExecutiveDashboard — Home of `/workspace` when no case is active.
  *
- * A 4-window premium dashboard: the narrative hero sets the "Directorio
- * Ejecutivo Digital" positioning, then 4 AreaCards (Escudo / Valor / Verdad
- * / Futuro) give a KPI-hero glance + direct entry into each pillar.
+ * Design intent (post-audit):
+ *  - This is a COCKPIT, not a landing page. Above-the-fold = status.
+ *  - Compact header row (eyebrow + h1 + status chip) replaces the full
+ *    narrative hero. ExecutiveNarrative is no longer rendered here — the
+ *    tagline lives as a subtitle, everything else is signal.
+ *  - 4 AreaCards laid out in a 4-column grid on xl, 2-column on lg, stacked
+ *    on sm. Every card is a live tile (KPI + sparkline + alerts count).
  *
- * This component is intentionally self-contained for Agent C's scope:
+ * Agent C contract:
  *  - No mutation of ChatWorkspace / PipelineWorkspace flows — `page.tsx`
  *    still owns the decision to render this dashboard vs. one of those.
- *  - No kpi engines yet — mock data is inlined (see `MOCK_KPIS`). Agent D
- *    will expose `@/lib/kpis/mocks` so Agent I can swap the import.
- *  - No import of `@/types/kpis` — a local minimal type lives in AreaCard
- *    and Agent I aligns the final type at polish time.
- *
- * Vertical rhythm (from top):
- *  1. Hero (narrativeHero — big gradient serif + word-by-word stagger)
- *  2. Intro (narrativeIntro — essay paragraph, italic serif)
- *  3. 4-window grid (2×2 on lg+, 1 col on mobile)
- *  4. Perspective (narrativePerspective — closing framed block)
+ *  - KPI mocks remain projected through `toAreaKpi` until Agent I wires real data.
  */
 
 // ─── KPI mocks (sourced from Agent D's engines) ─────────────────────────────
-// The engines return a richer `KpiResult` shape; we project onto the minimal
-// `AreaKpi` shape the card consumes. Spanish labels stay owned by the dashboard
-// (per the note in `src/types/kpis.ts`: "UI may override with t.elite.*").
 
 function toAreaKpi(result: KpiResult, label: string): AreaKpi {
   const base: AreaKpi = {
@@ -82,17 +60,27 @@ const KPI_SOURCES: Record<AreaKey, KpiResult> = {
 };
 
 const KPI_LABELS_ES: Record<AreaKey, string> = {
-  escudo: 'Tasa de Eficiencia Fiscal',
-  valor: 'Valor de Salida Estimado',
-  verdad: 'Score de Salud Normativa',
+  escudo: 'Eficiencia Fiscal',
+  valor: 'Valor de Salida',
+  verdad: 'Salud Normativa',
   futuro: 'ROI Probabilístico',
 };
 
 const KPI_LABELS_EN: Record<AreaKey, string> = {
-  escudo: 'Tax Efficiency Rate',
-  valor: 'Estimated Exit Value',
-  verdad: 'Regulatory Health Score',
+  escudo: 'Tax Efficiency',
+  valor: 'Exit Value',
+  verdad: 'Regulatory Health',
   futuro: 'Probabilistic ROI',
+};
+
+// Lightweight mock of live alerts per area — Agent I will replace with real
+// data from the WorkspaceContext / audit engines. Keeping a stable shape here
+// so the card doesn't go dark when alerts = 0.
+const ALERTS: Record<AreaKey, number> = {
+  escudo: 3,
+  valor: 1,
+  verdad: 0,
+  futuro: 2,
 };
 
 // ─── Area configuration ─────────────────────────────────────────────────────
@@ -100,61 +88,40 @@ const KPI_LABELS_EN: Record<AreaKey, string> = {
 interface AreaDef {
   key: AreaKey;
   href: string;
-  accent: AreaAccent;
   icon: LucideIcon;
-  /** Roman-numeral eyebrow: "I. Resiliencia", "II. Valor", etc. */
+  /** Roman-numeral eyebrow: "I. Resiliencia", etc. */
   eyebrowEs: string;
   eyebrowEn: string;
-  /** Dict path prefix under `t.elite.areas.<key>`. */
-  /** Lucide icons for the 4 submodules rendered inside the card. */
-  submoduleIcons: LucideIcon[];
-  /**
-   * Submodule titles live in the dictionary under
-   * `t.elite.areas.<key>.submodules.*.title`; we index by sub-key.
-   */
-  submoduleKeys: ReadonlyArray<string>;
 }
 
 const AREAS: readonly AreaDef[] = [
   {
     key: 'escudo',
     href: '/workspace/escudo',
-    accent: 'wine',
     icon: Shield,
     eyebrowEs: 'I. Resiliencia',
     eyebrowEn: 'I. Resilience',
-    submoduleIcons: [FileText, Calculator, Globe, Banknote],
-    submoduleKeys: ['defensaDian', 'planeacionTributaria', 'preciosTransferencia', 'devoluciones'],
   },
   {
     key: 'valor',
     href: '/workspace/valor',
-    accent: 'gold',
     icon: TrendingUp,
     eyebrowEs: 'II. Valor',
     eyebrowEn: 'II. Value',
-    submoduleIcons: [LineChart, FileSearch, BarChart3, ArrowRightLeft],
-    submoduleKeys: ['valoracion', 'dueDiligence', 'inteligenciaFinanciera'],
   },
   {
     key: 'verdad',
     href: '/workspace/verdad',
-    accent: 'gold',
     icon: Scale,
     eyebrowEs: 'III. Integridad',
     eyebrowEn: 'III. Integrity',
-    submoduleIcons: [ClipboardCheck, GitCompareArrows, BadgeCheck],
-    submoduleKeys: ['revisoriaFiscal', 'conciliacionFiscal', 'dictamenes'],
   },
   {
     key: 'futuro',
     href: '/workspace/futuro',
-    accent: 'wine',
     icon: Compass,
     eyebrowEs: 'IV. Futuro',
     eyebrowEn: 'IV. Future',
-    submoduleIcons: [Lightbulb, Layers, BarChart3],
-    submoduleKeys: ['factibilidad', 'macroeconomia', 'escenarios'],
   },
 ] as const;
 
@@ -166,64 +133,65 @@ export function ExecutiveDashboard() {
   const isEs = language === 'es';
 
   const ctaPrefix = isEs ? 'Entrar a' : 'Enter';
-  const perspectiveEyebrow = isEs ? 'La Perspectiva 1+1' : 'The 1+1 Perspective';
   const heroEyebrow = elite.tagline; // "Directorio Ejecutivo Digital"
+
+  // Current UTC hour → a neutral "Live" label. Kept trivial; the status chip
+  // is a glanceable "system ok" signal, not a replacement for audit output.
+  const statusLabel = isEs ? 'Operativo' : 'Live';
 
   return (
     <div className="h-full w-full overflow-y-auto styled-scrollbar">
-      <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-12 md:pt-16 lg:pt-20 pb-20 md:pb-28 flex flex-col gap-16 md:gap-20 lg:gap-24">
-        <h1 className="sr-only">
-          {isEs
-            ? '1+1 — Directorio Ejecutivo Digital'
-            : '1+1 — Digital Executive Board'}
-        </h1>
+      <div
+        className={[
+          'max-w-7xl mx-auto',
+          'px-6 md:px-10 lg:px-12',
+          'pt-6 md:pt-8 lg:pt-10 pb-12',
+          'flex flex-col gap-8 md:gap-10',
+        ].join(' ')}
+      >
+        {/* ── Header row — eyebrow · h1 · status chip ───────────────── */}
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-2 min-w-0">
+            <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500 font-medium">
+              {heroEyebrow}
+            </span>
+            <h1 className="text-2xl md:text-3xl font-serif-elite font-normal leading-tight tracking-tight text-n-900">
+              {isEs
+                ? 'Centro de Comando'
+                : 'Command Center'}
+            </h1>
+            <p className="text-sm text-n-600 font-light max-w-[60ch]">
+              {isEs
+                ? '4 pilares. Telemetría en vivo. Una sola verdad.'
+                : '4 pillars. Live telemetry. One source of truth.'}
+            </p>
+          </div>
 
-        {/* ── 1. Hero narrativa ─────────────────────────────────────────── */}
-        <ExecutiveNarrative
-          variant="hero"
-          eyebrow={heroEyebrow}
-          heading={elite.narrativeHero}
-          align="center"
-        />
+          <span
+            className={[
+              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full',
+              'border border-success/30 bg-success/10',
+              'font-mono text-xs-mono uppercase tracking-eyebrow text-success font-medium',
+            ].join(' ')}
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block h-1.5 w-1.5 rounded-full bg-success"
+            />
+            {statusLabel}
+          </span>
+        </header>
 
-        {/* ── 2. Intro narrativa ────────────────────────────────────────── */}
-        <ExecutiveNarrative
-          variant="intro"
-          body={elite.narrativeIntro}
-          align="left"
-          className="mx-auto"
-          delay={0.1}
-        />
-
-        {/* ── 3. 4 áreas grid ──────────────────────────────────────────── */}
+        {/* ── 4-area cockpit grid (4 col xl / 2 col lg / 1 col sm) ──── */}
         <section
           aria-label={isEs ? 'Pilares ejecutivos' : 'Executive pillars'}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8"
+          className={[
+            'grid gap-4 lg:gap-5',
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4',
+          ].join(' ')}
         >
           {AREAS.map((area, idx) => {
             const areaDict = elite.areas[area.key];
-            const submodulesRaw = areaDict.submodules as Record<
-              string,
-              { title: string; description?: string }
-            >;
-
-            const submodules: AreaSubmodule[] = [];
-            area.submoduleKeys.forEach((subKey, subIdx) => {
-              const entry = submodulesRaw[subKey];
-              if (!entry) return;
-              const Icon =
-                area.submoduleIcons[subIdx] ??
-                area.submoduleIcons[area.submoduleIcons.length - 1];
-              const sub: AreaSubmodule = {
-                title: entry.title,
-                icon: Icon,
-              };
-              if (entry.description) {
-                sub.description = entry.description;
-              }
-              submodules.push(sub);
-            });
-
             const label = isEs ? KPI_LABELS_ES[area.key] : KPI_LABELS_EN[area.key];
             const kpi: AreaKpi = toAreaKpi(KPI_SOURCES[area.key], label);
 
@@ -239,25 +207,15 @@ export function ExecutiveDashboard() {
                 subtitle={areaDict.subtitle}
                 tagline={areaDict.tagline}
                 kpi={kpi}
-                submodules={submodules}
                 ctaLabel={ctaLabel}
                 href={area.href}
-                accent={area.accent}
                 icon={area.icon}
-                delay={0.08 + idx * 0.08}
+                alertsCount={ALERTS[area.key]}
+                delay={0.05 + idx * 0.05}
               />
             );
           })}
         </section>
-
-        {/* ── 4. Perspective cierre ─────────────────────────────────────── */}
-        <ExecutiveNarrative
-          variant="perspective"
-          eyebrow={perspectiveEyebrow}
-          body={elite.narrativePerspective}
-          align="center"
-          delay={0.1}
-        />
       </div>
     </div>
   );

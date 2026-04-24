@@ -30,43 +30,43 @@ export function Header() {
     <header className={cn(
       "fixed top-0 w-full z-[var(--z-sticky)] transition-colors duration-100 border-b",
       {
-        "bg-white/80 backdrop-blur-sm border-[#e5e5e5]": scrolled,
+        "bg-n-0/80 backdrop-blur-sm border-n-200": scrolled,
         "bg-transparent border-transparent": !scrolled,
       }
     )}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl h-16 flex items-center justify-between">
-        <Link href="/" className="text-lg font-bold tracking-tight text-[#0a0a0a]">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)] h-16 flex items-center justify-between">
+        <Link href="/" className="text-lg font-bold tracking-tight text-n-900">
           1+1
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
-          <Link href="#services" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
+          <Link href="#services" className="text-sm text-n-600 hover:text-n-900 transition-colors">
             {t.nav.services}
           </Link>
-          <Link href="#methodology" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
+          <Link href="#methodology" className="text-sm text-n-600 hover:text-n-900 transition-colors">
             {t.nav.methodology}
           </Link>
-          <Link href="#metrics" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
+          <Link href="#metrics" className="text-sm text-n-600 hover:text-n-900 transition-colors">
             {t.nav.results}
           </Link>
-          <Link href="#faq" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors">
+          <Link href="#faq" className="text-sm text-n-600 hover:text-n-900 transition-colors">
             {t.nav.faq}
           </Link>
-          <Link href="/dashboard" className="text-sm text-[#525252] hover:text-[#0a0a0a] transition-colors flex items-center gap-1.5">
+          <Link href="/dashboard" className="text-sm text-n-600 hover:text-n-900 transition-colors flex items-center gap-1.5">
             <LayoutDashboard className="w-4 h-4" />
             {t.nav.dashboard}
           </Link>
         </nav>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center border border-[#e5e5e5] rounded-sm p-0.5 relative">
+          <div className="flex items-center border border-n-200 rounded-sm p-0.5 relative">
             <button
               onClick={() => setLanguage('es')}
               className={cn(
                 "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
                 language === 'es'
-                  ? 'bg-[#0a0a0a] text-white'
-                  : 'text-[#a3a3a3] hover:text-[#0a0a0a]'
+                  ? 'bg-n-900 text-n-0'
+                  : 'text-n-400 hover:text-n-900'
               )}
             >
               ES
@@ -76,8 +76,8 @@ export function Header() {
               className={cn(
                 "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
                 language === 'en'
-                  ? 'bg-[#0a0a0a] text-white'
-                  : 'text-[#a3a3a3] hover:text-[#0a0a0a]'
+                  ? 'bg-n-900 text-n-0'
+                  : 'text-n-400 hover:text-n-900'
               )}
             >
               EN

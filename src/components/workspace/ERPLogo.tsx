@@ -68,7 +68,7 @@ function HelisaLogo({ className, size = 36 }: LogoProps) {
         d="M13 12h3v6.5h8V12h3v16h-3v-6.7h-8V28h-3z"
         fill="#ffffff"
       />
-      <circle cx="30" cy="13" r="1.8" fill="#FBBF24" />
+      <circle cx="30" cy="13" r="1.8" fill="var(--gold-400)" />
     </svg>
   );
 }
@@ -106,7 +106,7 @@ function ContaPymeLogo({ className, size = 36 }: LogoProps) {
       <rect width="40" height="40" rx="8" fill="#0D9488" />
       <rect x="11" y="11" width="18" height="18" rx="2" fill="none" stroke="#ffffff" strokeWidth="1.5" />
       <path d="M14 15h12M14 18h8M14 21h12M14 24h6" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
-      <circle cx="25" cy="24" r="2.5" fill="#FBBF24" />
+      <circle cx="25" cy="24" r="2.5" fill="var(--gold-400)" />
     </svg>
   );
 }
