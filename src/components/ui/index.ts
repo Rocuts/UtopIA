@@ -3,8 +3,14 @@
 // Keep imports direct from this file; tree-shaking works because every source
 // here already uses named exports and no side effects.
 
-// Elite / premium primitives (1+1 Executive Command Center)
-export { EliteButton, type EliteButtonProps, type EliteButtonVariant, type EliteButtonSize } from './EliteButton';
+// Elite / premium primitives — deprecated aliases kept for back-compat.
+// Prefer `Button` / `Card` below with variant props (sprint-2 unification).
+export {
+  EliteButton,
+  type EliteButtonProps,
+  type EliteButtonVariant,
+  type EliteButtonSize,
+} from './EliteButton';
 export {
   EliteCard,
   type EliteCardProps,
@@ -23,6 +29,10 @@ export {
 } from './PremiumKpiCard';
 export { GradientBorder, type GradientBorderProps, type GradientBorderVariant } from './GradientBorder';
 export { ShimmerLoader, type ShimmerLoaderProps, type ShimmerVariant } from './ShimmerLoader';
+export { Skeleton, type SkeletonProps } from './Skeleton';
+export { SkeletonText, type SkeletonTextProps } from './SkeletonText';
+export { SkeletonCard, type SkeletonCardProps } from './SkeletonCard';
+export { SkeletonKpi, type SkeletonKpiProps } from './SkeletonKpi';
 export {
   SectionHeader,
   type SectionHeaderProps,
@@ -31,7 +41,18 @@ export {
 } from './SectionHeader';
 
 // Base primitives (shared between landing light theme and elite subtree)
-export { Button, type ButtonProps } from './Button';
-export { Card, type CardProps } from './Card';
+export {
+  Button,
+  type ButtonProps,
+  type ButtonVariant,
+  type ButtonSize,
+} from './Button';
+export {
+  Card,
+  type CardProps,
+  type CardVariant,
+  type CardHover,
+  type CardPadding,
+} from './Card';
 export { Badge, type BadgeProps, type StatusLevel } from './Badge';
 export { GlassPanel, type GlassPanelVariant } from './GlassPanel';

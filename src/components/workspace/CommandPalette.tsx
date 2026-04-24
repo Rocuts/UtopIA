@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Search,
   MessageSquarePlus,
@@ -117,6 +117,9 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+  const prefersReduced = useReducedMotion();
   const t = LABELS[language];
 
   // Build static items -------------------------------------------------------
@@ -185,16 +188,24 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
 
   const flatItems = useMemo(() => grouped.flatMap((s) => s.items), [grouped]);
 
-  // Reset state on open/close -------------------------------------------------
+  // Reset state on open/close + focus restore ---------------------------------
 
   useEffect(() => {
     if (isOpen) {
+      previouslyFocused.current =
+        typeof document !== 'undefined'
+          ? (document.activeElement as HTMLElement | null)
+          : null;
       setQuery('');
       setSelectedIndex(0);
       // Auto-focus with a small delay to let the animation begin
       requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
+      return () => {
+        // Restore focus to the trigger element when palette closes
+        previouslyFocused.current?.focus?.();
+      };
     }
   }, [isOpen]);
 
@@ -247,6 +258,28 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
           e.preventDefault();
           onClose();
           break;
+        case 'Tab': {
+          // Focus trap: keep Tab cycling inside the palette.
+          const panel = panelRef.current;
+          if (!panel) return;
+          const focusables = Array.from(
+            panel.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          );
+          if (focusables.length === 0) return;
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+          const active = document.activeElement as HTMLElement | null;
+          if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+          break;
+        }
       }
     },
     [flatItems, selectedIndex, handleSelect, onClose]
@@ -286,7 +319,6 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
             transition={{ duration: 0.15 }}
           >
             <motion.div
-              data-theme="dark"
               className="w-full max-w-[560px] mx-4 glass-elite-elevated rounded-xl overflow-hidden"
               initial={{ scale: 0.96, y: -8 }}
               animate={{ scale: 1, y: 0 }}

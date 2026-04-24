@@ -1,6 +1,12 @@
-import jsPDF from 'jspdf';
+// NOTE: `jspdf` is ~350kB and only needed when the user explicitly hits "Export PDF".
+// We import the type statically (free at runtime) and load the real module on demand
+// inside `exportConversationPDF`. This keeps the ~350kB out of the initial workspace
+// bundle on first paint. Both call sites already fire-and-forget the result.
+import type jsPDFType from 'jspdf';
 import type { ConversationMessage } from '@/lib/storage/conversation-history';
 import { redactPII } from '@/lib/security/pii-filter';
+
+type jsPDF = jsPDFType;
 
 interface ExportOptions {
   title: string;
@@ -428,7 +434,7 @@ const LABELS = {
   },
 };
 
-export function exportConversationPDF(options: ExportOptions): void {
+export async function exportConversationPDF(options: ExportOptions): Promise<void> {
   const { title, useCase, messages, language, date } = options;
   const l = LABELS[language];
   const exportDate = date ?? new Date().toLocaleDateString(language === 'es' ? 'es-CO' : 'en-US', {
@@ -437,6 +443,7 @@ export function exportConversationPDF(options: ExportOptions): void {
     day: 'numeric',
   });
 
+  const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();

@@ -126,12 +126,14 @@ export function AreaNav({ className }: AreaNavProps) {
                   'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-md',
                   'font-mono text-xs-mono font-medium uppercase tracking-eyebrow',
                   'transition-colors duration-200',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
                   isActive
                     ? 'text-n-900'
                     : 'text-n-500 hover:text-n-900',
                 )}
               >
                 <Icon
+                  aria-hidden="true"
                   className={cn(
                     'w-3.5 h-3.5 shrink-0 transition-colors',
                     isActive
@@ -166,14 +168,17 @@ export function AreaNav({ className }: AreaNavProps) {
           onClick={() => setMenuOpen((o) => !o)}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
+          aria-label={t.elite.areas[activeKey ?? 'escudo'].concept}
           className={cn(
             'flex items-center gap-2 px-3 py-1.5 rounded-md',
             'text-xs font-medium uppercase tracking-eyebrow',
             'text-n-900 border border-gold-500/25 bg-n-50/60',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
           )}
         >
           <span className="truncate max-w-[120px]">{activeLabel}</span>
           <ChevronDown
+            aria-hidden="true"
             className={cn(
               'w-3.5 h-3.5 transition-transform text-gold-500',
               menuOpen ? 'rotate-180' : '',
@@ -185,6 +190,7 @@ export function AreaNav({ className }: AreaNavProps) {
           {menuOpen && (
             <motion.ul
               role="menu"
+              aria-label="Áreas"
               initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -4 }}
@@ -202,6 +208,7 @@ export function AreaNav({ className }: AreaNavProps) {
                     <button
                       role="menuitem"
                       type="button"
+                      aria-current={isActive ? 'page' : undefined}
                       onClick={() => {
                         setMenuOpen(false);
                         router.push(href);
@@ -209,10 +216,12 @@ export function AreaNav({ className }: AreaNavProps) {
                       className={cn(
                         'w-full flex items-start gap-2.5 px-3 py-2 text-left',
                         'hover:bg-gold-500/8 transition-colors',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-500',
                         isActive ? 'bg-gold-500/12' : '',
                       )}
                     >
                       <Icon
+                        aria-hidden="true"
                         className={cn(
                           'w-4 h-4 mt-0.5 shrink-0',
                           isActive ? accentClass : 'text-n-500',

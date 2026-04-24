@@ -43,6 +43,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import { AreaNav } from './AreaNav';
 import { NiifEliteButton } from './NiifEliteButton';
+import { ThemeToggle } from './ThemeToggle';
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
 
@@ -168,7 +169,7 @@ function LanguageToggle() {
       aria-label={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
       title={next.toUpperCase()}
     >
-      <Globe className="w-3.5 h-3.5" />
+      <Globe className="w-3.5 h-3.5" aria-hidden="true" />
       <span>{next}</span>
     </button>
   );
@@ -238,6 +239,7 @@ function UserMenu() {
           {initials}
         </span>
         <ChevronDown
+          aria-hidden="true"
           className={cn(
             'w-3 h-3 text-n-500 transition-transform',
             open ? 'rotate-180' : '',
@@ -249,6 +251,7 @@ function UserMenu() {
         {open && (
           <motion.div
             role="menu"
+            aria-label={labels.menu}
             initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
@@ -342,6 +345,7 @@ export interface EliteHeaderProps {
 
 export function EliteHeader({ className }: EliteHeaderProps) {
   const pathname = usePathname() ?? '';
+  const prefersReduced = useReducedMotion();
   // Reserved for future: some surfaces may want a compact header.
   const compact = false;
 
@@ -353,9 +357,10 @@ export function EliteHeader({ className }: EliteHeaderProps) {
   return (
     <motion.header
       role="banner"
-      initial={{ opacity: 0, y: -8 }}
+      aria-label="1+1"
+      initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
       className={cn(
         'sticky top-0 z-50 w-full h-16 shrink-0',
         'flex items-center gap-3 px-4 md:px-6',
@@ -395,6 +400,7 @@ export function EliteHeader({ className }: EliteHeaderProps) {
           aria-hidden="true"
         />
         <LanguageToggle />
+        <ThemeToggle />
         <UserMenu />
       </div>
     </motion.header>

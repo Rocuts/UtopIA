@@ -7,7 +7,7 @@
  *
  *   <WorkspaceProvider>
  *     <ToastProvider>
- *       <div data-theme="elite" data-lenis-prevent>
+ *       <div data-lenis-prevent>
  *         <EliteHeader />                    ← sticky top 64px, brand + AreaNav + NiifEliteButton
  *         <div className="flex">
  *           <ChatSidebar />                  ← izquierda persistente, colapsable (320/56px)
@@ -24,9 +24,9 @@
  * Decisiones de refactor (documentadas aquí porque el shell es el contrato
  * que consumen todos los demás agentes E–H):
  *
- *   1. `data-theme="elite"` en el contenedor raíz del workspace — todos los
- *      descendientes heredan los tokens dark. El landing `/` sigue light.
- *   2. `data-lenis-prevent` preservado en el mismo div — crítico para el
+ *   1. Tema (light/dark/system) aplicado por `ThemeProvider` en <html> vía
+ *      `data-theme="light|dark"`. El landing `/` respeta la misma preferencia.
+ *   2. `data-lenis-prevent` preservado en el shell — crítico para el
  *      wheel scroll (ver CLAUDE.md "Layout Gotchas"). NO removerlo.
  *   3. StatusBar legacy — ELIMINADO. Su contenido útil (caseId, riskLevel,
  *      documentCount, toggles) queda absorbido por el EliteHeader (user menu,
@@ -150,7 +150,6 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      data-theme="dark"
       data-lenis-prevent
       className="min-h-screen w-full bg-n-0 text-n-900 flex flex-col relative overflow-x-hidden"
     >
@@ -186,7 +185,9 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <main
           id="main-content"
           role="main"
-          className="flex-1 min-w-0 min-h-[calc(100vh-64px)] relative"
+          tabIndex={-1}
+          aria-label={language === 'es' ? 'Contenido principal' : 'Main content'}
+          className="flex-1 min-w-0 min-h-[calc(100vh-64px)] relative focus:outline-none"
         >
           {children}
         </main>

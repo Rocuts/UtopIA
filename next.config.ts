@@ -4,6 +4,17 @@ const nextConfig: NextConfig = {
   // CommonJS / native modules that must NOT be bundled by webpack/turbopack.
   serverExternalPackages: ['hnswlib-node', 'pdf-parse', 'mammoth', 'exceljs', 'jspdf'],
 
+  // Tree-shake barrel re-exports for heavy icon/markdown packages on the client.
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'motion', 'react-markdown', 'remark-gfm', 'rehype-sanitize'],
+  },
+
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production'
+      ? { exclude: ['error', 'warn'] }
+      : false,
+  },
+
   // File tracing hints for Vercel Fluid Compute.
   // - Includes: ensures native binaries of hnswlib-node ship with the function bundle.
   // - Excludes: keeps the 285 MB persisted vector index out of the bundle. In MVP the

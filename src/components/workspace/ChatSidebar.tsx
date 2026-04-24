@@ -35,6 +35,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { usePathname } from 'next/navigation';
 import {
   AnimatePresence,
   motion,
@@ -69,6 +70,7 @@ import {
   type ConversationMessage,
 } from '@/lib/storage/conversation-history';
 import { cn } from '@/lib/utils';
+import { SkeletonText } from '@/components/ui/SkeletonText';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -511,6 +513,26 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
   const { language } = useLanguage();
   const workspace = useWorkspace();
   const prefersReduced = useReducedMotion();
+  const pathname = usePathname();
+
+  const resolvedUseCase = useMemo(() => {
+    if (pathname?.startsWith('/workspace/escudo')) return 'dian-defense' as const;
+    if (pathname?.startsWith('/workspace/valor')) return 'financial-intelligence' as const;
+    if (pathname?.startsWith('/workspace/verdad')) return 'due-diligence' as const;
+    if (pathname?.startsWith('/workspace/futuro')) return 'feasibility-study' as const;
+    return 'general' as const;
+  }, [pathname]);
+
+  const contextLabel = useMemo(() => {
+    const map: Record<typeof resolvedUseCase, string> = {
+      'dian-defense': 'Escudo',
+      'financial-intelligence': 'Valor',
+      'due-diligence': 'Verdad',
+      'feasibility-study': 'Futuro',
+      'general': language === 'es' ? 'General' : 'General',
+    };
+    return map[resolvedUseCase];
+  }, [resolvedUseCase, language]);
 
   // ─── Collapse state (local, persisted) ─────────────────────────────────────
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -717,10 +739,25 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
       userAbortedRef.current = false;
 
       try {
+        let erpConnections: Array<{ provider: string; credentials: Record<string, string> }> = [];
+        try {
+          const raw = typeof window !== 'undefined' ? window.localStorage.getItem('utopia_erp_connections') : null;
+          if (raw) {
+            const decoded = JSON.parse(decodeURIComponent(atob(raw)));
+            erpConnections = (Array.isArray(decoded) ? decoded : [])
+              .filter((c: { provider?: string; credentials?: unknown }) => c && c.provider && c.credentials)
+              .map((c: { provider: string; credentials: Record<string, string> }) => ({
+                provider: c.provider,
+                credentials: c.credentials,
+              }));
+          }
+        } catch { erpConnections = []; }
+
         const payload = {
           messages: history.map((m) => ({ id: m.id, role: m.role, content: m.content })),
           language,
-          useCase: 'general',
+          useCase: resolvedUseCase,
+          ...(erpConnections.length > 0 ? { erpConnections } : {}),
         };
 
         const response = await fetch('/api/chat', {
@@ -795,7 +832,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
             saveConversation({
               id: conversationId,
               title: inferTitle(updated.map((m) => ({ id: m.id, role: m.role, content: m.content }))),
-              useCase: 'general',
+              useCase: resolvedUseCase,
               messages: toConvMessages(updated),
               createdAt: updated[0]?.timestamp || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -1100,19 +1137,28 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
               <>
                 {/* Actions strip */}
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-gold-500/10 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleNewChat}
-                    className={cn(
-                      'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono',
-                      'text-n-500 hover:text-n-900 hover:bg-gold-500/6',
-                      'transition-colors',
-                    )}
-                    title={labels.new}
-                  >
-                    <Plus className="w-3 h-3 text-gold-500" />
-                    <span className="hidden sm:inline">{labels.new}</span>
-                  </button>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      type="button"
+                      onClick={handleNewChat}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono shrink-0',
+                        'text-n-500 hover:text-n-900 hover:bg-gold-500/6',
+                        'transition-colors',
+                      )}
+                      title={labels.new}
+                    >
+                      <Plus className="w-3 h-3 text-gold-500" />
+                      <span className="hidden sm:inline">{labels.new}</span>
+                    </button>
+                    <span
+                      className="shrink-0 text-[10px] font-mono uppercase tracking-eyebrow text-n-500 px-2 py-0.5 rounded-full border border-gold-500/15 truncate"
+                      aria-label={`Contexto ${contextLabel}`}
+                      title={contextLabel}
+                    >
+                      {contextLabel}
+                    </span>
+                  </div>
                   {messages.length > 1 && (
                     <button
                       type="button"
@@ -1148,8 +1194,13 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        className="flex flex-col gap-2"
                       >
                         <TypingDots language={language} />
+                        {/* Skeleton body hint while the SSE pipeline is still handshaking. */}
+                        <div className="mr-auto max-w-[80%] rounded-2xl rounded-tl-sm border border-gold-500/15 bg-n-50/60 px-3 py-2">
+                          <SkeletonText lines={2} size="sm" />
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>

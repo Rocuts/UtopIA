@@ -1,5 +1,24 @@
 // ─── 1+1 Design System Tokens ─────────────────────────────────────────────────
-// Single source of truth for all visual tokens used across the platform.
+/**
+ * @deprecated Canonical design tokens now live in `src/app/globals.css`
+ * (Tailwind v4 `@theme`). The values below are frozen legacy hex fallbacks
+ * used by a handful of DS components (RiskMeter, ScoreGauge, Badge,
+ * FindingCard, AgentPipelineViz) and are intentionally NOT kept in sync
+ * with `globals.css`. New code should consume `var(--color-*)` /
+ * `var(--radius-*)` / `var(--shadow-*)` or Tailwind utilities generated
+ * from `@theme` — never import `tokens` directly.
+ *
+ * Migration targets:
+ *   - `tokens.color.risk.*`   → `var(--color-success|warning|danger|info)` + alpha
+ *   - `tokens.color.grade.*`  → semantic variables in globals.css (TBD)
+ *   - `tokens.color.tier.*`   → semantic variables in globals.css (TBD)
+ *   - `tokens.color.neutral.*`→ `var(--color-n-*)` / `text-n-*` / `bg-n-*`
+ *   - `tokens.radius.*`       → `var(--radius-*)` / `rounded-*`
+ *   - `tokens.shadow.*`       → `var(--shadow-*)` / `shadow-e*` / `shadow-glow-gold*`
+ *
+ * Do NOT delete this file — consumers still import from it. Delete only
+ * after each consumer has been migrated.
+ */
 
 export const tokens = {
   color: {

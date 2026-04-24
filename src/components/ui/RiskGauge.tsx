@@ -1,5 +1,16 @@
 'use client';
 
+/**
+ * RiskGauge — SVG semicircle gauge (180° arc + needle) used in workspace
+ * chat/sidebar risk panels. Takes `RiskLevel` (`bajo | medio | alto |
+ * critico`) from `@/lib/storage/conversation-history`.
+ *
+ * NOT the same component as `@/design-system/components/RiskMeter`, which
+ * renders a horizontal bar and takes a different `RiskSeverityKey`
+ * (`low | medium | high | critical | info`). The two APIs diverge in both
+ * shape and label vocabulary — do not merge without a consumer migration.
+ */
+
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import type { RiskLevel } from '@/lib/storage/conversation-history';

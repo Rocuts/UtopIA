@@ -5,6 +5,8 @@ import { Fraunces } from 'next/font/google';
 import './globals.css';
 import SmoothScroll from '@/components/layout/SmoothScroll';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { ThemeProvider, THEME_INIT_SCRIPT } from '@/components/providers/ThemeProvider';
+import { DensityProvider, DENSITY_INIT_SCRIPT } from '@/components/providers/DensityProvider';
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -24,7 +26,7 @@ export const viewport: Viewport = {
     { media: '(prefers-color-scheme: light)', color: 'var(--n-0)' },
     { media: '(prefers-color-scheme: dark)', color: '#0A0907' },
   ],
-  colorScheme: 'light',
+  colorScheme: 'light dark',
   width: 'device-width',
   initialScale: 1,
 };
@@ -308,6 +310,12 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen font-sans">
+        {/* Pre-hydration theme resolver — must be the first <body> child so
+            data-theme is set on <html> before any paint. Prevents FOUC. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Pre-hydration density resolver — sets data-density on <html> so
+            compact-mode tokens apply before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: DENSITY_INIT_SCRIPT }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}
@@ -324,9 +332,13 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteSchema) }}
         />
-        <LanguageProvider>
-          <SmoothScroll>{children}</SmoothScroll>
-        </LanguageProvider>
+        <ThemeProvider>
+          <DensityProvider>
+            <LanguageProvider>
+              <SmoothScroll>{children}</SmoothScroll>
+            </LanguageProvider>
+          </DensityProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

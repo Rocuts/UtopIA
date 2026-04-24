@@ -726,3 +726,37 @@ body {
 [data-theme="elite"] *::-webkit-scrollbar-thumb:hover {
   background: rgb(212 184 118 / 0.36);
 }
+
+/* =======================================================================
+   Density — compact mode overrides
+   Applied at <html> level via DensityProvider init script.
+   Additive only: new tokens that components can opt into, plus a subtle
+   root font-size nudge so the effect is perceptible even before every
+   component adopts the tokens.
+   ======================================================================= */
+
+/* Default / comfortable baseline — also covers the pre-hydration window. */
+[data-density="comfortable"],
+:root:not([data-density]) {
+  --density-gap-card:      1rem;     /* 16px */
+  --density-gap-section:   3rem;     /* 48px */
+  --density-padding-card:  1.5rem;   /* 24px */
+  --density-padding-page:  2.5rem;   /* 40px */
+  --density-heading-scale: 1;
+  --density-body-scale:    1;
+}
+
+[data-density="compact"] {
+  /* Spacing — ~30% tighter at card/page level. */
+  --density-gap-card:      0.75rem;  /* 12px */
+  --density-gap-section:   2rem;     /* 32px */
+  --density-padding-card:  1rem;     /* 16px */
+  --density-padding-page:  1.5rem;   /* 24px */
+  /* Typography — modest scale factors consumers can multiply against. */
+  --density-heading-scale: 0.92;
+  --density-body-scale:    0.94;
+  /* Perceptible root nudge: 16px → 15px. Tailwind rem-based utilities
+     (text-sm, p-4, gap-6, etc.) all scale proportionally. */
+  font-size: 15px;
+}
+

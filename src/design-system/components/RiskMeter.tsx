@@ -1,5 +1,16 @@
 'use client';
 
+/**
+ * RiskMeter — horizontal bar risk indicator used in analysis panels. Takes
+ * `RiskSeverityKey` (`low | medium | high | critical | info`) from the
+ * legacy `tokens` map.
+ *
+ * NOT the same component as `@/components/ui/RiskGauge`, which renders an
+ * SVG semicircle with a needle and takes `RiskLevel` (`bajo | medio | alto
+ * | critico`). The two APIs diverge in shape and vocabulary — do not merge
+ * without a consumer migration.
+ */
+
 import { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
