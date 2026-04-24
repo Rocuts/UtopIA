@@ -66,7 +66,7 @@ export function Header() {
                 "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
                 language === 'es'
                   ? 'bg-n-900 text-n-0'
-                  : 'text-n-400 hover:text-n-900'
+                  : 'text-n-600 hover:text-n-900'
               )}
             >
               ES
@@ -77,7 +77,7 @@ export function Header() {
                 "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
                 language === 'en'
                   ? 'bg-n-900 text-n-0'
-                  : 'text-n-400 hover:text-n-900'
+                  : 'text-n-600 hover:text-n-900'
               )}
             >
               EN

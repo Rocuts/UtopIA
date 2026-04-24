@@ -172,16 +172,16 @@ export default function RevisoriaFiscalPage() {
               </span>
             </EliteCard.Header>
             <EliteCard.Body>
-              <p className="text-base leading-relaxed text-n-300 mb-3">
+              <p className="text-base leading-relaxed text-n-800 mb-3">
                 {language === 'es'
                   ? 'La Revisoría Fiscal es una institución de fe pública que emite dictamen sobre la razonabilidad de los estados financieros y el cumplimiento regulatorio. Su opinión tiene efectos legales y es requerida por socios, bancos, DIAN y entidades regulatorias.'
                   : 'The Statutory Audit (Revisoría Fiscal) is a public trust institution that issues an opinion on the reasonableness of financial statements and regulatory compliance. Its opinion has legal effects and is required by partners, banks, DIAN, and regulators.'}
               </p>
-              <ul className="flex flex-col gap-2 text-sm text-n-300 mt-4">
+              <ul className="flex flex-col gap-2 text-sm text-n-800 mt-4">
                 <li className="flex items-start gap-2">
                   <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-n-100">
+                    <strong className="text-n-1000">
                       {language === 'es' ? 'NIA 700:' : 'ISA 700:'}
                     </strong>{' '}
                     {language === 'es'
@@ -192,7 +192,7 @@ export default function RevisoriaFiscalPage() {
                 <li className="flex items-start gap-2">
                   <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-n-100">
+                    <strong className="text-n-1000">
                       {language === 'es' ? 'Ley 43/1990:' : 'Law 43/1990:'}
                     </strong>{' '}
                     {language === 'es'
@@ -203,7 +203,7 @@ export default function RevisoriaFiscalPage() {
                 <li className="flex items-start gap-2">
                   <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-n-100">
+                    <strong className="text-n-1000">
                       {language === 'es' ? 'Art. 207-209 C.Co.:' : 'Art. 207-209 Code of Commerce:'}
                     </strong>{' '}
                     {language === 'es'
@@ -214,7 +214,7 @@ export default function RevisoriaFiscalPage() {
                 <li className="flex items-start gap-2">
                   <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
-                    <strong className="text-n-100">
+                    <strong className="text-n-1000">
                       {language === 'es' ? 'Ley 222/1995:' : 'Law 222/1995:'}
                     </strong>{' '}
                     {language === 'es'
@@ -256,10 +256,10 @@ export default function RevisoriaFiscalPage() {
                         <Icon className="w-4 h-4" strokeWidth={1.75} />
                       </span>
                       <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-medium text-n-100">
+                        <span className="text-sm font-medium text-n-1000">
                           {language === 'es' ? a.label.es : a.label.en}
                         </span>
-                        <span className="text-xs text-n-500 tracking-wide">
+                        <span className="text-xs text-n-700 tracking-wide">
                           {a.norm}
                         </span>
                       </div>
@@ -293,7 +293,7 @@ export default function RevisoriaFiscalPage() {
             </span>
           </EliteCard.Header>
           <EliteCard.Body>
-            <p className="text-sm text-n-500 font-light mb-5 max-w-3xl">
+            <p className="text-sm text-n-800 font-light mb-5 max-w-3xl">
               {language === 'es'
                 ? 'Cuatro auditores regulatorios trabajan de forma concurrente sobre el mismo reporte NIIF. Cada uno evalúa un dominio y emite hallazgos estructurados que luego se consolidan en el Compliance Score y en el dictamen del Revisor Fiscal.'
                 : 'Four regulatory auditors work concurrently on the same IFRS report. Each evaluates one domain and emits structured findings that are consolidated into the Compliance Score and the Statutory Auditor opinion.'}
@@ -328,10 +328,10 @@ export default function RevisoriaFiscalPage() {
                     />
                     {language === 'es' ? 'Auditor' : 'Auditor'}
                   </div>
-                  <h4 className="font-serif-elite text-lg leading-tight text-n-100 mb-1">
+                  <h4 className="font-serif-elite text-lg leading-tight text-n-1000 mb-1">
                     {language === 'es' ? a.label.es : a.label.en}
                   </h4>
-                  <p className="text-xs text-n-500 tracking-wide">{a.norm}</p>
+                  <p className="text-xs text-n-700 tracking-wide">{a.norm}</p>
                 </motion.div>
               ))}
             </div>
@@ -362,10 +362,10 @@ export default function RevisoriaFiscalPage() {
                 {language === 'es' ? 'Opinión con salvedades' : 'Qualified opinion'}
               </div>
 
-              <h4 className="font-serif-elite text-lg text-n-100 mb-2">
+              <h4 className="font-serif-elite text-lg text-n-1000 mb-2">
                 {language === 'es' ? 'Considerandos clave' : 'Key considerations'}
               </h4>
-              <ul className="flex flex-col gap-2 text-sm text-n-300 mb-4">
+              <ul className="flex flex-col gap-2 text-sm text-n-800 mb-4">
                 <li className="flex items-start gap-2">
                   <span className="text-gold-500 mt-1 text-xs">■</span>
                   <span>
@@ -391,7 +391,7 @@ export default function RevisoriaFiscalPage() {
                   </span>
                 </li>
               </ul>
-              <p className="text-xs text-n-500 tracking-wide">
+              <p className="text-xs text-n-700 tracking-wide">
                 {language === 'es'
                   ? 'Vista previa ilustrativa. El dictamen formal se genera a partir de sus documentos.'
                   : 'Illustrative preview. The formal opinion is generated from your documents.'}
@@ -405,10 +405,10 @@ export default function RevisoriaFiscalPage() {
             padding="lg"
             className="flex flex-col gap-3 justify-center min-w-[280px]"
           >
-            <h4 className="font-serif-elite text-xl leading-tight text-n-100">
+            <h4 className="font-serif-elite text-xl leading-tight text-n-1000">
               {language === 'es' ? 'Ejecutar' : 'Execute'}
             </h4>
-            <p className="text-sm text-n-500 font-light mb-2">
+            <p className="text-sm text-n-700 font-light mb-2">
               {language === 'es'
                 ? 'Elija el flujo según la profundidad requerida.'
                 : 'Pick the flow based on required depth.'}

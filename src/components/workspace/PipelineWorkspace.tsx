@@ -185,7 +185,7 @@ function StageNode({ index, state, label, sublabel }: {
           'text-2xs font-bold font-mono uppercase',
           isComplete && 'text-success',
           isActive && 'text-gold-500',
-          isPending && 'text-n-400',
+          isPending && 'text-n-600',
         )}>
           Agente {stageNum}
         </span>
@@ -194,11 +194,11 @@ function StageNode({ index, state, label, sublabel }: {
         'text-xs font-semibold',
         isComplete && 'text-success',
         isActive && 'text-gold-700',
-        isPending && 'text-n-600',
+        isPending && 'text-n-700',
       )}>
         {label}
       </p>
-      <p className="text-2xs text-n-400 mt-0.5">{sublabel}</p>
+      <p className="text-2xs text-n-600 mt-0.5">{sublabel}</p>
     </div>
   );
 }
@@ -281,7 +281,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
                   'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
                   complete && 'bg-success/10 border-success/30 text-success',
                   started && !complete && 'bg-gold-300/10 border-warning/30 text-warning',
-                  !started && 'bg-n-50 border-n-200 text-n-400',
+                  !started && 'bg-n-50 border-n-200 text-n-600',
                 )}
               >
                 {complete ? <CheckCircle className="w-3 h-3" /> : started ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="w-3 h-3 rounded-full border border-current" />}

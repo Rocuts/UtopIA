@@ -301,7 +301,7 @@ export function FinancialIntelIntake() {
               <Icon
                 className={cn(
                   'w-5 h-5',
-                  selected ? 'text-gold-500' : 'text-n-400',
+                  selected ? 'text-gold-500' : 'text-n-600',
                 )}
               />
               <div>

@@ -590,15 +590,15 @@ export default function MacroeconomiaPage() {
           <EliteCard variant="glass" padding="lg">
             <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
               <div>
-                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                   {isEs ? 'Impacto en su empresa' : 'Impact on your business'}
                 </span>
-                <h3 className="font-serif-elite text-2xl leading-tight text-n-100 mt-1">
+                <h3 className="font-serif-elite text-2xl leading-tight text-n-1000 mt-1">
                   {isEs
                     ? 'Cómo estas variables afectan TU negocio'
                     : 'How these variables affect YOUR business'}
                 </h3>
-                <p className="text-sm text-n-500 mt-1.5 max-w-2xl">
+                <p className="text-sm text-n-700 mt-1.5 max-w-2xl">
                   {isEs
                     ? 'Seleccione su sector para ver qué variables macro son las más sensibles y el outlook 2026.'
                     : 'Select your sector to see which macro variables are most sensitive and the 2026 outlook.'}
@@ -627,7 +627,7 @@ export default function MacroeconomiaPage() {
                       'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-xs font-medium transition-colors',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                       active
-                        ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.20)] text-gold-300 border border-[rgb(var(--color-gold-500-rgb)_/_0.45)]'
+                        ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.20)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.45)]'
                         : 'bg-[rgba(10,10,10,0.55)] text-n-500 border border-[rgb(var(--color-gold-500-rgb)_/_0.14)] hover:text-n-100 hover:border-[rgb(var(--color-gold-500-rgb)_/_0.32)]',
                     )}
                   >
@@ -669,7 +669,7 @@ export default function MacroeconomiaPage() {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-n-100 truncate">
+                        <span className="text-xs font-medium text-n-1000 truncate">
                           {isEs ? m.label : m.labelEn}
                         </span>
                         <span
@@ -682,7 +682,7 @@ export default function MacroeconomiaPage() {
                           {deltaStr}
                         </span>
                       </div>
-                      <p className="text-xs text-n-500 leading-snug mt-1">
+                      <p className="text-xs text-n-700 leading-snug mt-1">
                         {isEs ? m.narrativeEs : m.narrativeEn}
                       </p>
                     </div>
@@ -713,15 +713,15 @@ export default function MacroeconomiaPage() {
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600 mb-1">
                     {isEs ? 'Análisis personalizado' : 'Personalized analysis'}
                   </div>
-                  <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                  <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
                     {isEs
                       ? 'Análisis macro a la medida de su empresa'
                       : 'Macro analysis tailored to your company'}
                   </h3>
-                  <p className="text-sm leading-relaxed text-n-500">
+                  <p className="text-sm leading-relaxed text-n-700">
                     {isEs
                       ? 'Haga preguntas específicas sobre cómo las variables macro afectan su P&G, caja o proyectos concretos.'
                       : 'Ask specific questions about how macro variables affect your P&L, cash, or concrete projects.'}
@@ -776,16 +776,16 @@ function MacroCard({ m, isEs }: { m: MacroVar; isEs: boolean }) {
       />
 
       <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
-        <span className="uppercase tracking-[0.16em] text-2xs font-medium text-n-500 truncate">
+        <span className="uppercase tracking-[0.16em] text-2xs font-medium text-n-700 truncate">
           {label}
         </span>
-        <span className="shrink-0 text-2xs uppercase tracking-wider text-n-600">
+        <span className="shrink-0 text-2xs uppercase tracking-wider text-n-700">
           {m.source}
         </span>
       </div>
 
       <div className="flex items-end justify-between gap-3 mb-3">
-        <span className="font-serif-elite text-3xl md:text-3xl leading-[1.05] text-n-100 tabular-nums">
+        <span className="font-serif-elite text-3xl md:text-3xl leading-[1.05] text-n-1000 tabular-nums">
           {m.value}
         </span>
         <Sparkline points={m.history} color={sparkColor} />
@@ -799,7 +799,7 @@ function MacroCard({ m, isEs }: { m: MacroVar; isEs: boolean }) {
         </span>
       </div>
 
-      <p className="text-xs leading-snug text-n-500 mt-2.5">{narrative}</p>
+      <p className="text-xs leading-snug text-n-700 mt-2.5">{narrative}</p>
     </div>
   );
 }

@@ -149,7 +149,7 @@ export function WelcomeScreen() {
         <motion.div {...fadeUp(0)} className="flex items-center gap-2.5">
           <img src="/logo-modern.png" alt="1+1" className="w-8 h-8 rounded-lg object-cover" />
           <span className="text-lg font-serif-elite font-normal tracking-tight text-n-900">1+1</span>
-          <span className="font-mono text-xs-mono text-n-500 ml-1 hidden sm:inline">
+          <span className="font-mono text-xs-mono text-n-700 ml-1 hidden sm:inline">
             {es ? 'Su firma contable, potenciada por IA' : 'Your accounting firm, powered by AI'}
           </span>
           <button
@@ -186,11 +186,11 @@ export function WelcomeScreen() {
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-semibold text-n-900">Chat General</span>
-                <p className="text-xs text-n-500 mt-0.5">
+                <p className="text-xs text-n-700 mt-0.5">
                   {es ? 'Consultas libres sobre contabilidad, tributaria y NIIF' : 'Open queries on accounting, tax, and IFRS'}
                 </p>
               </div>
-              <ArrowRight className="w-4 h-4 text-n-400 group-hover:text-n-900 transition-colors shrink-0" />
+              <ArrowRight className="w-4 h-4 text-n-600 group-hover:text-n-900 transition-colors shrink-0" />
             </div>
           </motion.button>
 
@@ -214,7 +214,7 @@ export function WelcomeScreen() {
                   <span className="text-sm font-semibold text-n-900">Reporte NIIF Elite</span>
                   <span className="font-mono text-2xs font-bold px-1.5 py-0.5 rounded-xs bg-gold-500/15 text-gold-600 uppercase tracking-eyebrow">ELITE</span>
                 </div>
-                <p className="font-mono text-xs-mono text-gold-600 mt-0.5">
+                <p className="font-mono text-xs-mono text-gold-700 mt-0.5">
                   3 agentes + 4 auditores + meta-auditor
                 </p>
               </div>
@@ -245,7 +245,7 @@ export function WelcomeScreen() {
                   <h2 className="font-mono text-xs-mono font-bold text-n-900 uppercase tracking-eyebrow">
                     {es ? cat.roleEs : cat.roleEn}
                   </h2>
-                  <span className="font-mono text-xs-mono text-n-500 ml-auto tabular-nums">
+                  <span className="font-mono text-xs-mono text-n-700 ml-auto tabular-nums">
                     {cat.items.length} {cat.items.length === 1 ? 'módulo' : 'módulos'}
                   </span>
                 </div>
@@ -261,16 +261,16 @@ export function WelcomeScreen() {
                         onClick={() => openIntakeForType(item.id)}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-n-100 transition-colors group focus-visible:outline-none focus-visible:bg-n-100"
                       >
-                        <Icon className="w-3.5 h-3.5 text-n-500 shrink-0" />
+                        <Icon className="w-3.5 h-3.5 text-n-700 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <span className="text-xs font-medium text-n-900">
                             {es ? item.labelEs : item.labelEn}
                           </span>
-                          <span className="text-2xs text-n-500 ml-2">
+                          <span className="text-2xs text-n-700 ml-2">
                             {es ? item.descEs : item.descEn}
                           </span>
                         </div>
-                        <ChevronRight className="w-3 h-3 text-n-300 group-hover:text-n-500 transition-colors shrink-0" />
+                        <ChevronRight className="w-3 h-3 text-n-500 group-hover:text-n-800 transition-colors shrink-0" />
                       </button>
                     );
                   })}

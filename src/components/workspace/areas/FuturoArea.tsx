@@ -596,7 +596,7 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
             aria-hidden="true"
             className="inline-block h-1.5 w-1.5 rounded-full shrink-0 bg-gold-500"
           />
-          <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 truncate">
+          <span className="uppercase tracking-eyebrow text-xs font-medium text-n-700 truncate">
             {title}
           </span>
         </div>
@@ -612,14 +612,14 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
         <span className="font-mono font-semibold text-n-1000 leading-tight text-3xl md:text-4xl num">
           {scenarios.toLocaleString('es-CO')}
         </span>
-        <span className="text-sm text-n-500">
+        <span className="text-sm text-n-700">
           {isEs ? 'escenarios simulados' : 'scenarios simulated'}
         </span>
       </div>
 
       {topContribs.length > 0 && (
         <div className="flex flex-col gap-2.5 mt-1">
-          <div className="uppercase tracking-label text-xs font-medium text-n-500">
+          <div className="uppercase tracking-label text-xs font-medium text-n-700">
             {isEs ? 'Top proyectos' : 'Top projects'}
           </div>
           <ul role="list" className="flex flex-col gap-2">
@@ -675,7 +675,7 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
             <Target className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div>
-            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
               {isEs ? 'Proyectos en evaluación' : 'Projects under evaluation'}
             </div>
             <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
@@ -725,20 +725,20 @@ function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
                     {displayName}
                   </span>
                 </div>
-                <span className="shrink-0 text-xs uppercase tracking-label text-n-500">
+                <span className="shrink-0 text-xs uppercase tracking-label text-n-700">
                   {statusLabel}
                 </span>
               </div>
 
               <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="text-n-500">
+                <span className="text-n-700">
                   {isEs ? 'Inv.' : 'Inv.'}{' '}
-                  <span className="text-n-800 tabular-nums">
+                  <span className="text-n-900 tabular-nums">
                     {formatCopShort(p.investment)} COP
                   </span>
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-n-500">
+                  <span className="text-n-700">
                     {isEs ? 'Score' : 'Score'}
                   </span>
                   <span
@@ -800,7 +800,7 @@ function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
             <Globe className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <div>
-            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
               {isEs ? 'Macro snapshot — Colombia 2026' : 'Macro snapshot — Colombia 2026'}
             </div>
             <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
@@ -810,7 +810,7 @@ function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
             </div>
           </div>
         </div>
-        <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-n-500">
+        <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-n-700">
           <Sparkles className="h-3 w-3 text-gold-600" strokeWidth={2} aria-hidden="true" />
           {isEs ? 'Datos mock — 2026-04' : 'Mock data — 2026-04'}
         </span>

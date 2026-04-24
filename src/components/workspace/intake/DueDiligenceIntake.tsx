@@ -281,7 +281,7 @@ export function DueDiligenceIntake() {
                   <Icon
                     className={cn(
                       'w-4 h-4 shrink-0',
-                      selected ? 'text-gold-500' : 'text-n-400',
+                      selected ? 'text-gold-500' : 'text-n-600',
                     )}
                   />
                   <span className="text-sm font-medium text-n-900">{purpose.label}</span>

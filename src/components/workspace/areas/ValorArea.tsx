@@ -303,7 +303,7 @@ function MiniKpi({ label, value, icon: Icon, accent = 'gold', delta, deltaDir }:
             className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
             style={{ backgroundColor: dotColor }}
           />
-          <span className="uppercase tracking-label text-xs font-medium text-n-500 truncate">
+          <span className="uppercase tracking-label text-xs font-medium text-n-700 truncate">
             {label}
           </span>
         </div>

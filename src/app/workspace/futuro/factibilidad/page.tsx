@@ -410,10 +410,10 @@ export default function FactibilidadPage() {
                 <CalculatorIcon className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div className="flex flex-col">
-                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                   {isEs ? 'Calculadora' : 'Calculator'}
                 </span>
-                <h2 className="font-serif-elite text-xl leading-tight text-n-100">
+                <h2 className="font-serif-elite text-xl leading-tight text-n-1000">
                   {isEs ? 'VPN · TIR · Payback · IR' : 'NPV · IRR · Payback · PI'}
                 </h2>
               </div>
@@ -680,10 +680,10 @@ export default function FactibilidadPage() {
                 <CheckCircle2 className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                   {isEs ? 'Dimensiones DNP' : 'DNP dimensions'}
                 </span>
-                <h3 className="font-serif-elite text-xl leading-tight text-n-100">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-1000">
                   {isEs
                     ? '7 análisis que incluye cada estudio'
                     : '7 analyses included in every study'}
@@ -713,13 +713,13 @@ export default function FactibilidadPage() {
             )}
           >
             <div>
-              <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+              <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                 {isEs ? 'Estudio profesional' : 'Professional study'}
               </span>
-              <h3 className="font-serif-elite text-2xl leading-tight text-n-100 mt-1 mb-2">
+              <h3 className="font-serif-elite text-2xl leading-tight text-n-1000 mt-1 mb-2">
                 {isEs ? 'Generar estudio completo' : 'Generate full study'}
               </h3>
-              <p className="text-sm leading-relaxed text-n-500">
+              <p className="text-sm leading-relaxed text-n-700">
                 {isEs
                   ? 'Pipeline de 3 agentes: Analista de Mercado → Modelador Financiero → Evaluador de Riesgo. Resultado en SSE streaming.'
                   : '3-agent pipeline: Market Analyst → Financial Modeler → Risk Assessor. Output streams over SSE.'}
@@ -825,7 +825,7 @@ function ResultCard({ label, value, color, hint, icon: Icon }: ResultCardProps) 
         <span
           className={cn(
             'font-serif-elite text-3xl md:text-3xl leading-[1.05] tabular-nums',
-            color ?? 'text-n-100',
+            color ?? 'text-n-1000',
           )}
         >
           {value}

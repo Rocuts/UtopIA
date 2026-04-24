@@ -202,10 +202,10 @@ export default function DevolucionesPage() {
                 >
                   <step.icon className="h-5 w-5" strokeWidth={1.75} />
                 </span>
-                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
+                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-1000">
                   {step.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500">{step.body}</p>
+                <p className="text-sm leading-relaxed text-n-700">{step.body}</p>
               </div>
             </EliteCard>
           ))}
@@ -236,12 +236,12 @@ export default function DevolucionesPage() {
                 <ArrowUpRight className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
                   {language === 'es'
                     ? 'Recupere sus saldos a favor'
                     : 'Recover your favorable balances'}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500">
+                <p className="text-sm leading-relaxed text-n-700">
                   {language === 'es'
                     ? 'Estructurado (intake de 2 min) o conversacional. En ambos casos recibe diagnóstico y expediente listo.'
                     : 'Structured (2-min intake) or conversational. Either way you receive a diagnosis and a ready-to-file package.'}

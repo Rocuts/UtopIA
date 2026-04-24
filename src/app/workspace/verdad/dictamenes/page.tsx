@@ -216,7 +216,7 @@ export default function DictamenesPage() {
 
         <EliteCard variant="glass" padding="md">
           <EliteCard.Body>
-            <p className="text-base leading-relaxed text-n-300">
+            <p className="text-base leading-relaxed text-n-800">
               {language === 'es'
                 ? 'Cada dictamen es emitido con fe pública por un Contador Público inscrito y se entrega firmado digitalmente con todos los soportes normativos requeridos. Los tiempos de respuesta varían entre 24 horas y 5 días hábiles según la profundidad del análisis.'
                 : 'Every opinion is issued under public trust by a registered Public Accountant and delivered digitally signed with all required regulatory support. Turnaround ranges from 24 hours to 5 business days depending on analysis depth.'}
@@ -258,7 +258,7 @@ export default function DictamenesPage() {
                       className={cn(
                         'text-xs uppercase tracking-[0.2em] font-medium px-2 py-0.5 rounded-full',
                         d.accent === 'gold'
-                          ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.10)] text-gold-500'
+                          ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.10)] text-gold-600'
                           : 'bg-[rgba(114,47,55,0.16)] text-area-escudo',
                       )}
                     >
@@ -267,19 +267,19 @@ export default function DictamenesPage() {
                   </div>
 
                   <div className="flex flex-col gap-1.5 flex-1">
-                    <h3 className="font-serif-elite text-xl leading-tight text-n-100">
+                    <h3 className="font-serif-elite text-xl leading-tight text-n-1000">
                       {language === 'es' ? d.title.es : d.title.en}
                     </h3>
-                    <p className="text-sm leading-relaxed text-n-500 font-light">
+                    <p className="text-sm leading-relaxed text-n-700 font-light">
                       {language === 'es' ? d.description.es : d.description.en}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-eyebrow text-n-500">
-                    <span className="text-gold-500">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-eyebrow text-n-700">
+                    <span className="text-gold-600">
                       {language === 'es' ? 'Destinatario:' : 'Audience:'}
                     </span>
-                    <span className="text-n-300 normal-case tracking-normal">
+                    <span className="text-n-800 normal-case tracking-normal">
                       {language === 'es' ? d.audience.es : d.audience.en}
                     </span>
                   </div>
@@ -311,16 +311,16 @@ export default function DictamenesPage() {
                   strokeWidth={2}
                   aria-hidden="true"
                 />
-                <span className="uppercase tracking-eyebrow text-xs text-gold-500 font-medium">
+                <span className="uppercase tracking-eyebrow text-xs text-gold-600 font-medium">
                   {language === 'es' ? 'Dictamen personalizado' : 'Custom opinion'}
                 </span>
               </div>
-              <h3 className="font-serif-elite text-xl leading-tight text-n-100">
+              <h3 className="font-serif-elite text-xl leading-tight text-n-1000">
                 {language === 'es'
                   ? '¿Necesita un dictamen fuera del catálogo?'
                   : 'Need an opinion outside the catalog?'}
               </h3>
-              <p className="text-sm leading-relaxed text-n-500 font-light">
+              <p className="text-sm leading-relaxed text-n-700 font-light">
                 {language === 'es'
                   ? 'Emitimos certificaciones a medida para requerimientos de DIAN, contratantes públicos, aseguradoras, entidades financieras o procesos judiciales.'
                   : 'We issue tailored certifications for DIAN requests, public contractors, insurers, financial entities, or legal proceedings.'}
@@ -373,10 +373,10 @@ export default function DictamenesPage() {
             >
               <Check className="w-7 h-7" strokeWidth={2} />
             </div>
-            <h4 className="font-serif-elite text-xl text-n-100 leading-tight">
+            <h4 className="font-serif-elite text-xl text-n-1000 leading-tight">
               {language === 'es' ? 'Solicitud enviada' : 'Request submitted'}
             </h4>
-            <p className="text-sm text-n-500 max-w-sm leading-relaxed">
+            <p className="text-sm text-n-700 max-w-sm leading-relaxed">
               {language === 'es'
                 ? 'Un contador público certificado revisará su caso y le enviará una propuesta técnica y de honorarios.'
                 : 'A certified Public Accountant will review your case and send a technical and fee proposal.'}

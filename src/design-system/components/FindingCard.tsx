@@ -35,12 +35,12 @@ export function FindingCard({ finding, className }: FindingCardProps) {
 
   return (
     <div
-      className={cn('border border-[#e5e5e5] rounded-lg overflow-hidden', className)}
+      className={cn('border border-n-200 rounded-lg overflow-hidden', className)}
       style={{ borderLeftWidth: 3, borderLeftColor: risk.dot }}
     >
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-start gap-3 p-3 text-left hover:bg-[#fafafa] transition-colors"
+        className="w-full flex items-start gap-3 p-3 text-left hover:bg-n-50 transition-colors"
         aria-expanded={expanded}
       >
         <div className="flex-1 min-w-0">
@@ -58,16 +58,16 @@ export function FindingCard({ finding, className }: FindingCardProps) {
               {SEVERITY_LABELS[finding.severity]}
             </span>
           </div>
-          <p className="text-sm font-medium text-[#0a0a0a]">{finding.title}</p>
-          <p className="text-xs text-[#525252] mt-0.5 line-clamp-2">{finding.description}</p>
-          <p className="text-[10px] text-[#a3a3a3] mt-1 font-[family-name:var(--font-geist-mono)]">
+          <p className="text-sm font-medium text-n-1000">{finding.title}</p>
+          <p className="text-xs text-n-700 mt-0.5 line-clamp-2">{finding.description}</p>
+          <p className="text-[10px] text-n-500 mt-1 font-[family-name:var(--font-geist-mono)]">
             {finding.normReference}
           </p>
         </div>
         {expanded ? (
-          <ChevronUp className="w-4 h-4 text-[#a3a3a3] shrink-0 mt-1" />
+          <ChevronUp className="w-4 h-4 text-n-500 shrink-0 mt-1" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-[#a3a3a3] shrink-0 mt-1" />
+          <ChevronDown className="w-4 h-4 text-n-500 shrink-0 mt-1" />
         )}
       </button>
 
@@ -80,18 +80,18 @@ export function FindingCard({ finding, className }: FindingCardProps) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 space-y-2 border-t border-[#e5e5e5] pt-2">
+            <div className="px-3 pb-3 space-y-2 border-t border-n-200 pt-2">
               <div>
-                <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-0.5">
+                <h4 className="text-[10px] font-medium text-n-500 uppercase tracking-wider mb-0.5">
                   Recomendacion
                 </h4>
-                <p className="text-xs text-[#525252]">{finding.recommendation}</p>
+                <p className="text-xs text-n-700">{finding.recommendation}</p>
               </div>
               <div>
-                <h4 className="text-[10px] font-medium text-[#a3a3a3] uppercase tracking-wider mb-0.5">
+                <h4 className="text-[10px] font-medium text-n-500 uppercase tracking-wider mb-0.5">
                   Impacto
                 </h4>
-                <p className="text-xs text-[#525252]">{finding.impact}</p>
+                <p className="text-xs text-n-700">{finding.impact}</p>
               </div>
             </div>
           </motion.div>

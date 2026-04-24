@@ -222,10 +222,10 @@ export default function PlaneacionTributariaPage() {
                     {agent.num}
                   </span>
                 </div>
-                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
+                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-1000">
                   {agent.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500">{agent.body}</p>
+                <p className="text-sm leading-relaxed text-n-700">{agent.body}</p>
               </div>
             </EliteCard>
           ))}
@@ -256,12 +256,12 @@ export default function PlaneacionTributariaPage() {
                 <Gauge className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
                   {language === 'es'
                     ? 'Genere su plan tributario 2026'
                     : 'Generate your 2026 tax plan'}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500">
+                <p className="text-sm leading-relaxed text-n-700">
                   {language === 'es'
                     ? 'Complete el intake (2 min) con metadatos de la empresa y su régimen. El pipeline entrega un reporte SSE en vivo.'
                     : 'Complete the intake (2 min) with company metadata and regime. The pipeline delivers a live SSE report.'}

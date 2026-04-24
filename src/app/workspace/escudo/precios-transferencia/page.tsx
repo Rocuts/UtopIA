@@ -237,10 +237,10 @@ export default function PreciosTransferenciaPage() {
                     {agent.num}
                   </span>
                 </div>
-                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
+                <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-1000">
                   {agent.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500">{agent.body}</p>
+                <p className="text-sm leading-relaxed text-n-700">{agent.body}</p>
               </div>
             </EliteCard>
           ))}
@@ -271,12 +271,12 @@ export default function PreciosTransferenciaPage() {
                 <Network className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div>
-                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
                   {language === 'es'
                     ? 'Analice sus operaciones vinculadas'
                     : 'Analyze your related-party transactions'}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500">
+                <p className="text-sm leading-relaxed text-n-700">
                   {language === 'es'
                     ? 'Indique operaciones, vinculadas y flujos. Recibirá el estudio técnico y el Formato 1125 listos para la DIAN.'
                     : 'List transactions, related parties, and flows. Receive the technical study and Form 1125 ready for DIAN.'}

@@ -154,7 +154,7 @@ export function FileUploadZone({
               >
                 <Upload className="w-8 h-8 text-[#D4A017]" />
               </motion.div>
-              <span className="text-sm text-[#525252]">Subiendo archivo... {Math.round(progress)}%</span>
+              <span className="text-sm text-n-800">Subiendo archivo... {Math.round(progress)}%</span>
               <div className="w-48 h-1.5 bg-[#e5e5e5] rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-[#D4A017] rounded-full"
@@ -193,9 +193,9 @@ export function FileUploadZone({
               exit={{ opacity: 0 }}
               className="flex flex-col items-center gap-2"
             >
-              <Upload className="w-8 h-8 text-[#a3a3a3]" />
-              <span className="text-sm font-medium text-[#525252]">{label}</span>
-              <span className="text-xs text-[#a3a3a3]">{sublabel}</span>
+              <Upload className="w-8 h-8 text-n-500" />
+              <span className="text-sm font-medium text-n-800">{label}</span>
+              <span className="text-xs text-n-600">{sublabel}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -207,9 +207,9 @@ export function FileUploadZone({
         <div className="mt-2 space-y-1">
           {files.map(f => (
             <div key={f.name} className="flex items-center gap-2 px-3 py-1.5 bg-[#fafafa] border border-[#e5e5e5] rounded">
-              <FileText className="w-3.5 h-3.5 text-[#525252] shrink-0" />
-              <span className="text-xs text-[#0a0a0a] flex-1 truncate">{f.name}</span>
-              <span className="text-[10px] text-[#a3a3a3] font-[family-name:var(--font-geist-mono)]">
+              <FileText className="w-3.5 h-3.5 text-n-700 shrink-0" />
+              <span className="text-xs text-n-1000 flex-1 truncate">{f.name}</span>
+              <span className="text-[10px] text-n-600 font-[family-name:var(--font-geist-mono)]">
                 {formatSize(f.size)}
               </span>
               {f.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />}
@@ -217,7 +217,7 @@ export function FileUploadZone({
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); removeFile(f.name); }}
-                className="p-0.5 text-[#a3a3a3] hover:text-[#EF4444] transition-colors"
+                className="p-0.5 text-n-600 hover:text-danger transition-colors"
                 aria-label={`Remover ${f.name}`}
               >
                 <X className="w-3 h-3" />

@@ -228,10 +228,10 @@ export default function ConciliacionFiscalPage() {
                 },
               ].map((n) => (
                 <div key={n.title} className="flex flex-col gap-1.5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-gold-500 font-medium">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-600 font-medium">
                     {n.title}
                   </p>
-                  <p className="text-[12.5px] text-n-300 leading-relaxed">{n.desc}</p>
+                  <p className="text-[12.5px] text-n-800 leading-relaxed">{n.desc}</p>
                 </div>
               ))}
             </div>
@@ -286,7 +286,7 @@ export default function ConciliacionFiscalPage() {
                         animate={shouldReduce ? undefined : { opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.04, duration: 0.3 }}
                         className={cn(
-                          'border-b border-[rgb(var(--color-gold-500-rgb)_/_0.08)] text-n-100',
+                          'border-b border-[rgb(var(--color-gold-500-rgb)_/_0.08)] text-n-1000',
                           zebra ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.03)]' : '',
                         )}
                       >
@@ -295,10 +295,10 @@ export default function ConciliacionFiscalPage() {
                             {language === 'es' ? p.concepto.es : p.concepto.en}
                           </span>
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-n-300">
+                        <td className="py-3 px-3 tabular-nums text-right text-n-800">
                           {formatCOP(p.niif)}
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-n-300">
+                        <td className="py-3 px-3 tabular-nums text-right text-n-800">
                           {formatCOP(p.fiscal)}
                         </td>
                         <td
@@ -327,7 +327,7 @@ export default function ConciliacionFiscalPage() {
                                 : 'Temporary'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-n-300">
+                        <td className="py-3 px-3 tabular-nums text-right text-n-800">
                           {typeof p.impuestoDiferido === 'number'
                             ? formatCOP(p.impuestoDiferido)
                             : '—'}
@@ -336,7 +336,7 @@ export default function ConciliacionFiscalPage() {
                     );
                   })}
                   <tr className="border-t-2 border-[rgb(var(--color-gold-500-rgb)_/_0.35)]">
-                    <td className="py-3 px-3 font-serif-elite text-base text-n-100">
+                    <td className="py-3 px-3 font-serif-elite text-base text-n-1000">
                       {language === 'es' ? 'Totales' : 'Totals'}
                     </td>
                     <td className="py-3 px-3" colSpan={2}></td>
@@ -378,10 +378,10 @@ export default function ConciliacionFiscalPage() {
                 {language === 'es' ? 'Diferencias permanentes' : 'Permanent differences'}
               </span>
             </div>
-            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-100">
+            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-1000">
               {formatCOP(totals.permanente)}
             </p>
-            <p className="text-xs text-n-500 mt-3 leading-relaxed">
+            <p className="text-xs text-n-700 mt-3 leading-relaxed">
               {language === 'es'
                 ? 'No generan impuesto diferido — se absorben en el período.'
                 : 'Do not generate deferred tax — absorbed in the period.'}
@@ -395,14 +395,14 @@ export default function ConciliacionFiscalPage() {
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="text-xs uppercase tracking-[0.22em] text-gold-500 font-medium">
+              <span className="text-xs uppercase tracking-[0.22em] text-gold-600 font-medium">
                 {language === 'es' ? 'Diferencias temporarias' : 'Temporary differences'}
               </span>
             </div>
-            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-100">
+            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-1000">
               {formatCOP(totals.temporaria)}
             </p>
-            <p className="text-xs text-n-500 mt-3 leading-relaxed">
+            <p className="text-xs text-n-700 mt-3 leading-relaxed">
               {language === 'es' ? (
                 <>
                   Generan impuesto diferido al {(TAX_RATE * 100).toFixed(0)}% (NIC 12).
@@ -426,16 +426,16 @@ export default function ConciliacionFiscalPage() {
                 strokeWidth={2}
                 aria-hidden="true"
               />
-              <span className="uppercase tracking-[0.22em] text-xs text-gold-500 font-medium">
+              <span className="uppercase tracking-[0.22em] text-xs text-gold-600 font-medium">
                 {language === 'es' ? 'Ejecutar' : 'Execute'}
               </span>
             </div>
-            <h4 className="font-serif-elite text-lg leading-tight text-n-100">
+            <h4 className="font-serif-elite text-lg leading-tight text-n-1000">
               {language === 'es'
                 ? 'Ejecutar conciliación AI'
                 : 'Run AI reconciliation'}
             </h4>
-            <p className="text-[12.5px] text-n-500 leading-relaxed">
+            <p className="text-[12.5px] text-n-700 leading-relaxed">
               {language === 'es'
                 ? 'Dispara el pipeline: identificador de diferencias → calculador de impuesto diferido.'
                 : 'Triggers the pipeline: difference identifier → deferred tax calculator.'}
@@ -495,10 +495,10 @@ export default function ConciliacionFiscalPage() {
                   key={f.label}
                   className="p-3 rounded-[8px] bg-[rgb(var(--color-gold-500-rgb)_/_0.04)] border border-[rgb(var(--color-gold-500-rgb)_/_0.12)]"
                 >
-                  <p className="text-xs uppercase tracking-[0.16em] text-n-500 mb-1.5">
+                  <p className="text-xs uppercase tracking-[0.16em] text-n-700 mb-1.5">
                     {f.label}
                   </p>
-                  <p className="font-serif-elite text-lg leading-tight tabular-nums text-n-100">
+                  <p className="font-serif-elite text-lg leading-tight tabular-nums text-n-1000">
                     {f.value}
                   </p>
                 </div>

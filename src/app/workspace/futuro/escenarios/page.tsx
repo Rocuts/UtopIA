@@ -336,10 +336,10 @@ export default function EscenariosPage() {
                   <Sliders className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div>
-                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                     {isEs ? 'Variables globales' : 'Global variables'}
                   </span>
-                  <h2 className="font-serif-elite text-xl leading-tight text-n-100">
+                  <h2 className="font-serif-elite text-xl leading-tight text-n-1000">
                     {isEs
                       ? 'Ajuste los drivers del modelo'
                       : 'Adjust the model drivers'}
@@ -435,10 +435,10 @@ export default function EscenariosPage() {
           <EliteCard variant="glass" padding="lg">
             <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
               <div>
-                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                   {isEs ? 'Proyección combinada' : 'Combined projection'}
                 </span>
-                <h3 className="font-serif-elite text-xl leading-tight text-n-100 mt-0.5">
+                <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mt-0.5">
                   {isEs ? 'Ingresos 5 años bajo cada escenario' : '5-year revenue under each scenario'}
                 </h3>
               </div>
@@ -479,16 +479,16 @@ export default function EscenariosPage() {
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1 inline-flex items-center gap-1.5">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600 mb-1 inline-flex items-center gap-1.5">
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                     {isEs ? 'Simulación personalizada' : 'Custom simulation'}
                   </div>
-                  <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                  <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
                     {isEs
                       ? 'Simular escenario personalizado'
                       : 'Simulate a custom scenario'}
                   </h3>
-                  <p className="text-sm leading-relaxed text-n-500">
+                  <p className="text-sm leading-relaxed text-n-700">
                     {isEs
                       ? 'Describa un evento específico (ej. entrada de un competidor, cambio regulatorio, nueva línea) y simulamos su impacto en las tres sendas.'
                       : 'Describe a specific event (e.g. new competitor entry, regulatory change, new line) and we simulate its impact on the three paths.'}

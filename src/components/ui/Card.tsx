@@ -49,9 +49,9 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const ELITE_VARIANT_CLASSES: Record<Exclude<CardVariant, 'default'>, string> = {
-  glass: 'glass-elite text-n-100',
+  glass: 'glass-elite text-n-900',
   solid: 'bg-n-900 border border-gold-500/20 rounded-lg text-n-100',
-  bordered: 'bg-transparent border-elite-gold rounded-lg text-n-100',
+  bordered: 'bg-transparent border-elite-gold rounded-lg text-n-900',
 };
 
 const ELITE_PADDING_CLASSES: Record<CardPadding, string> = {
@@ -198,7 +198,7 @@ const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
         ref={ref}
         className={cn(
           'pb-4 mb-4 border-b border-gold-500/15',
-          'font-serif-elite text-xl leading-tight font-normal text-n-100',
+          'font-serif-elite text-xl leading-tight font-normal text-n-1000',
           className,
         )}
         {...rest}
@@ -221,7 +221,7 @@ const CardBody = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
       );
     }
     return (
-      <div ref={ref} className={cn('text-base leading-relaxed text-n-300', className)} {...rest}>
+      <div ref={ref} className={cn('text-base leading-relaxed text-n-800', className)} {...rest}>
         {children}
       </div>
     );

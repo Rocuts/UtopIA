@@ -165,7 +165,7 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
             <span
               className={cn(
                 'uppercase tracking-eyebrow text-xs font-medium',
-                'text-n-500',
+                'text-n-700',
                 'truncate',
               )}
             >
@@ -192,7 +192,7 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
         <div className={cn('flex flex-col', compact ? 'gap-1' : 'gap-1.5')}>
           <div
             className={cn(
-              'text-n-100 leading-display num',
+              'text-n-1000 leading-display num',
               isHero
                 ? cn(
                     'font-serif-elite font-medium tracking-tight',
@@ -228,11 +228,11 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
                   <TrendIcon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
                   {deltaText && <span>{deltaText}</span>}
                   {trend.label && (
-                    <span className="text-n-500 font-normal">{trend.label}</span>
+                    <span className="text-n-700 font-normal">{trend.label}</span>
                   )}
                 </span>
               )}
-              {subvalue && <span className="text-n-500 num">{subvalue}</span>}
+              {subvalue && <span className="text-n-700 num">{subvalue}</span>}
             </div>
           )}
         </div>

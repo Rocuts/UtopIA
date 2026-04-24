@@ -384,13 +384,13 @@ export default function ValoracionPage() {
                   <Calculator className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div>
-                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600 mb-1">
                     {language === 'es' ? 'Calculadora rápida' : 'Quick calculator'}
                   </div>
-                  <h2 className="font-serif-elite text-2xl md:text-3xl leading-tight text-n-100">
+                  <h2 className="font-serif-elite text-2xl md:text-3xl leading-tight text-n-1000">
                     {language === 'es' ? 'Valore su empresa en tiempo real' : 'Value your company in real time'}
                   </h2>
-                  <p className="text-sm text-n-500 mt-1 max-w-xl">
+                  <p className="text-sm text-n-700 mt-1 max-w-xl">
                     {language === 'es'
                       ? 'Ajuste los parámetros y vea la estimación del valor de mercado actualizarse en vivo. Para el informe profesional completo, genere el estudio con IA.'
                       : 'Adjust parameters and watch the market value estimate update live. For a full professional report, generate the AI-powered study.'}
@@ -612,16 +612,16 @@ export default function ValoracionPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
                   <LineChart className="h-4 w-4 text-gold-500" strokeWidth={2} />
-                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
+                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
                     {language === 'es' ? 'Informe profesional' : 'Professional report'}
                   </span>
                 </div>
-                <h3 className="font-serif-elite text-2xl md:text-3xl leading-tight text-n-100 mb-2">
+                <h3 className="font-serif-elite text-2xl md:text-3xl leading-tight text-n-1000 mb-2">
                   {language === 'es'
                     ? 'Genere la valoración NIIF 13 completa con IA'
                     : 'Generate the full IFRS 13 AI valuation'}
                 </h3>
-                <p className="text-sm leading-relaxed text-n-500 max-w-2xl">
+                <p className="text-sm leading-relaxed text-n-700 max-w-2xl">
                   {language === 'es'
                     ? 'Tres agentes corren en pipeline: Modelador DCF + Comparables de Mercado (paralelo) → Sintetizador de Valoración. Incluye WACC calculado para Colombia, tabla de sensibilidad completa, dictamen bajo NIIF 13 y narrativa apta para inversionistas.'
                     : 'Three agents run the pipeline: DCF Modeler + Market Comparables (parallel) → Valuation Synthesizer. Includes Colombian WACC, full sensitivity table, IFRS 13 opinion and investor-ready narrative.'}

@@ -376,10 +376,10 @@ export default function DueDiligencePage() {
                   </defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-                  <span className="font-serif-elite text-4xl text-n-100 tabular-nums leading-none">
+                  <span className="font-serif-elite text-4xl text-n-1000 tabular-nums leading-none">
                     {stats.pct}%
                   </span>
-                  <span className="text-2xs uppercase tracking-eyebrow text-n-500 mt-1">
+                  <span className="text-2xs uppercase tracking-eyebrow text-n-700 mt-1">
                     {language === 'es' ? 'Completado' : 'Complete'}
                   </span>
                 </div>
@@ -461,10 +461,10 @@ export default function DueDiligencePage() {
                           <Icon className="h-5 w-5" strokeWidth={1.75} />
                         </span>
                         <div>
-                          <h3 className="font-serif-elite text-xl text-n-100 leading-tight">
+                          <h3 className="font-serif-elite text-xl text-n-1000 leading-tight">
                             {language === 'es' ? cat.titleEs : cat.titleEn}
                           </h3>
-                          <p className="text-xs text-n-500 mt-0.5 tabular-nums">
+                          <p className="text-xs text-n-700 mt-0.5 tabular-nums">
                             {catReady} / {catTotal} ·{' '}
                             <span className="text-gold-600">{catPct}%</span>
                           </p>
@@ -533,12 +533,12 @@ export default function DueDiligencePage() {
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div>
-                  <h3 className="font-serif-elite text-lg text-n-100 leading-tight">
+                  <h3 className="font-serif-elite text-lg text-n-1000 leading-tight">
                     {language === 'es'
                       ? '¿Preguntas puntuales sobre un hallazgo?'
                       : 'Specific questions about a finding?'}
                   </h3>
-                  <p className="text-sm text-n-500 mt-1 max-w-xl">
+                  <p className="text-sm text-n-700 mt-1 max-w-xl">
                     {language === 'es'
                       ? 'Abra una consulta con el asistente DD y comparta contratos, balances o procesos para un análisis dirigido.'
                       : 'Open a conversation with the DD assistant and share contracts, balances or proceedings for a targeted analysis.'}

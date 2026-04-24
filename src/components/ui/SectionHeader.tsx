@@ -38,7 +38,7 @@ export interface SectionHeaderProps extends Omit<HTMLAttributes<HTMLElement>, 't
 }
 
 const ACCENT_TEXT: Record<SectionHeaderAccent, string> = {
-  gold: 'text-gold-500',
+  gold: 'text-gold-600',
   wine: 'text-area-escudo',
 };
 
@@ -95,7 +95,7 @@ export function SectionHeader({
             className={cn(
               'font-serif-elite font-medium leading-display tracking-tight',
               isDisplay ? 'text-4xl md:text-5xl' : 'text-xl',
-              'text-n-100',
+              'text-n-1000',
             )}
             style={
               isDisplay
@@ -109,7 +109,7 @@ export function SectionHeader({
             <p
               className={cn(
                 'font-light text-md leading-relaxed mt-0.5',
-                'text-n-500 max-w-2xl',
+                'text-n-700 max-w-2xl',
               )}
             >
               {subtitle}

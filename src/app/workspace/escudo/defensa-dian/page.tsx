@@ -225,10 +225,10 @@ export default function DefensaDianPage() {
                     >
                       <cap.icon className="h-5 w-5" strokeWidth={1.75} />
                     </span>
-                    <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-100">
+                    <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-1000">
                       {cap.title}
                     </h3>
-                    <p className="text-sm leading-relaxed text-n-500">{cap.body}</p>
+                    <p className="text-sm leading-relaxed text-n-700">{cap.body}</p>
                   </div>
                 </EliteCard>
               ))}
@@ -259,12 +259,12 @@ export default function DefensaDianPage() {
                     <ShieldCheck className="h-5 w-5" strokeWidth={1.75} />
                   </span>
                   <div>
-                    <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                    <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
                       {language === 'es'
                         ? 'Inicie un caso de defensa DIAN'
                         : 'Open a DIAN defense case'}
                     </h3>
-                    <p className="text-sm leading-relaxed text-n-500">
+                    <p className="text-sm leading-relaxed text-n-700">
                       {language === 'es'
                         ? 'Cargue el requerimiento, indique el plazo y el tributo. El motor preparará el primer borrador en minutos.'
                         : 'Upload the notice, indicate the deadline and tax type. The engine prepares the first draft in minutes.'}
@@ -350,14 +350,14 @@ export default function DefensaDianPage() {
                   {articles.map((a) => (
                     <li key={a.code} className="flex flex-col gap-0.5">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-gold-500 tabular-nums">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-gold-600 tabular-nums">
                           {a.code}
                         </span>
-                        <span className="text-xs font-medium text-n-100">
+                        <span className="text-xs font-medium text-n-1000">
                           {a.title}
                         </span>
                       </div>
-                      <p className="text-xs text-n-500 leading-snug">{a.summary}</p>
+                      <p className="text-xs text-n-700 leading-snug">{a.summary}</p>
                     </li>
                   ))}
                 </ul>
@@ -376,7 +376,7 @@ export default function DefensaDianPage() {
                     {language === 'es' ? 'Plazos críticos' : 'Critical deadlines'}
                   </span>
                 </div>
-                <p className="text-xs leading-relaxed text-n-500">
+                <p className="text-xs leading-relaxed text-n-700">
                   {language === 'es'
                     ? 'Requerimiento ordinario: 15 días hábiles. Especial: 3 meses. Liquidación oficial: recurso de reconsideración 2 meses.'
                     : 'Ordinary notice: 15 business days. Special: 3 months. Official assessment: reconsideration appeal within 2 months.'}

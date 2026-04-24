@@ -335,7 +335,7 @@ function HistoryPanel({
                         <MessageSquare
                           className={cn(
                             'w-3.5 h-3.5 mt-0.5 shrink-0',
-                            activeId === c.id ? 'text-gold-500' : 'text-n-400',
+                            activeId === c.id ? 'text-gold-500' : 'text-n-500',
                           )}
                         />
                         <span className="flex-1 min-w-0">
@@ -405,7 +405,7 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
         <span
           className={cn(
             'text-2xs font-medium uppercase tracking-wider',
-            isUser ? 'text-gold-500' : 'text-n-500',
+            isUser ? 'text-gold-600' : 'text-n-700',
           )}
         >
           {isUser ? (language === 'es' ? 'Usted' : 'You') : '1+1'}

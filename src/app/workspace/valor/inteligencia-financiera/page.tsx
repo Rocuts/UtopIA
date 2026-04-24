@@ -668,11 +668,11 @@ export default function InteligenciaFinancieraPage() {
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="h-3.5 w-3.5 text-gold-600" strokeWidth={2} />
-                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
+                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-700">
                   {language === 'es' ? 'Margen de contribución' : 'Contribution margin'}
                 </span>
               </div>
-              <p className="font-serif-elite text-3xl text-n-100 tabular-nums leading-none mb-1">
+              <p className="font-serif-elite text-3xl text-n-1000 tabular-nums leading-none mb-1">
                 {miniKpis.contributionPct}
               </p>
               <p className="text-xs text-success-light">
@@ -683,17 +683,17 @@ export default function InteligenciaFinancieraPage() {
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center gap-2 mb-2">
                 <Calendar className="h-3.5 w-3.5 text-gold-600" strokeWidth={2} />
-                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
+                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-700">
                   {language === 'es' ? 'Días de capital de trabajo' : 'Working capital days'}
                 </span>
               </div>
-              <p className="font-serif-elite text-3xl text-n-100 tabular-nums leading-none mb-1">
+              <p className="font-serif-elite text-3xl text-n-1000 tabular-nums leading-none mb-1">
                 {miniKpis.workingCapitalDays}
-                <span className="text-base text-n-500 ml-1">
+                <span className="text-base text-n-700 ml-1">
                   {language === 'es' ? 'días' : 'days'}
                 </span>
               </p>
-              <p className="text-xs text-n-500">
+              <p className="text-xs text-n-700">
                 {language === 'es' ? 'DSO 48 · DPO 36 · DIO 30' : 'DSO 48 · DPO 36 · DIO 30'}
               </p>
             </EliteCard>
@@ -701,11 +701,11 @@ export default function InteligenciaFinancieraPage() {
             <EliteCard variant="glass" padding="md">
               <div className="flex items-center gap-2 mb-2">
                 <Wallet className="h-3.5 w-3.5 text-gold-600" strokeWidth={2} />
-                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-500">
+                <span className="uppercase tracking-eyebrow text-2xs font-medium text-n-700">
                   {language === 'es' ? 'Runway (meses)' : 'Runway (months)'}
                 </span>
               </div>
-              <p className="font-serif-elite text-3xl text-n-100 tabular-nums leading-none mb-1">
+              <p className="font-serif-elite text-3xl text-n-1000 tabular-nums leading-none mb-1">
                 {miniKpis.runwayMonths}
               </p>
               <p className="text-xs text-gold-500 inline-flex items-center gap-1">
@@ -751,13 +751,13 @@ export default function InteligenciaFinancieraPage() {
                   <Plug className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600 mb-1">
                     {language === 'es' ? 'Datos en vivo' : 'Live data'}
                   </div>
-                  <h3 className="font-serif-elite text-xl text-n-100 leading-tight">
+                  <h3 className="font-serif-elite text-xl text-n-1000 leading-tight">
                     {language === 'es' ? 'Conectar ERP' : 'Connect ERP'}
                   </h3>
-                  <p className="text-sm text-n-500 mt-1.5 leading-relaxed">
+                  <p className="text-sm text-n-700 mt-1.5 leading-relaxed">
                     {language === 'es'
                       ? 'Sincronice Siigo, World Office, Contífico, Helisa o QuickBooks. La proyección se recalcula con cada cierre diario.'
                       : 'Sync Siigo, World Office, Contífico, Helisa or QuickBooks. The forecast recalculates with each daily close.'}
@@ -793,13 +793,13 @@ export default function InteligenciaFinancieraPage() {
                   <Brain className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1">
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600 mb-1">
                     {language === 'es' ? 'Modelado' : 'Modeling'}
                   </div>
-                  <h3 className="font-serif-elite text-xl text-n-100 leading-tight">
+                  <h3 className="font-serif-elite text-xl text-n-1000 leading-tight">
                     {language === 'es' ? 'Simular escenarios' : 'Simulate scenarios'}
                   </h3>
-                  <p className="text-sm text-n-500 mt-1.5 leading-relaxed">
+                  <p className="text-sm text-n-700 mt-1.5 leading-relaxed">
                     {language === 'es'
                       ? 'Optimista, base y pesimista con supuestos colombianos (IPC, UVT, salario mínimo). Reporte ejecutivo + plan de contingencia.'
                       : 'Optimistic, base and pessimistic scenarios with Colombian assumptions (CPI, UVT, minimum wage). Executive report + contingency plan.'}
