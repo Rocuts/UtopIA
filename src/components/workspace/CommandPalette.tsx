@@ -209,6 +209,22 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
     }
   }, [isOpen]);
 
+  // Close on Escape — document-level so focus loss during the spring
+  // animation doesn't swallow the event. ------------------------------------
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [isOpen, onClose]);
+
   // Clamp selectedIndex when items change -------------------------------------
 
   useEffect(() => {
@@ -254,10 +270,6 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
           e.preventDefault();
           if (flatItems[selectedIndex]) handleSelect(flatItems[selectedIndex]);
           break;
-        case 'Escape':
-          e.preventDefault();
-          onClose();
-          break;
         case 'Tab': {
           // Focus trap: keep Tab cycling inside the palette.
           const panel = panelRef.current;
@@ -282,11 +294,12 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
         }
       }
     },
-    [flatItems, selectedIndex, handleSelect, onClose]
+    [flatItems, selectedIndex, handleSelect]
   );
 
-  // Global Cmd+K / Ctrl+K listener is expected to live in a parent that
-  // toggles `isOpen`. We only handle Escape here via the onKeyDown above.
+  // Global Cmd+K / Ctrl+K toggle lives in the parent shell. Escape is
+  // handled by a document-level listener (above) so focus loss during the
+  // open animation doesn't swallow it.
 
   // Track flat index across sections ------------------------------------------
 
@@ -346,9 +359,14 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                   aria-controls="command-palette-list"
                   aria-autocomplete="list"
                 />
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 text-2xs text-n-500 font-mono">
-                  <span className="bg-n-100 border border-n-200 px-1.5 py-0.5 rounded-xs">esc</span>
-                </kbd>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label={language === 'es' ? 'Cerrar paleta' : 'Close palette'}
+                  className="hidden sm:inline-flex items-center gap-0.5 text-2xs text-n-500 font-mono outline-none rounded-xs hover:text-n-700 focus-visible:ring-1 focus-visible:ring-gold-500 transition-colors cursor-pointer"
+                >
+                  <kbd className="bg-n-100 border border-n-200 px-1.5 py-0.5 rounded-xs">esc</kbd>
+                </button>
               </div>
 
               {/* Results list */}
