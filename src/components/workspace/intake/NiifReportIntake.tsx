@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Building2,
   Info,
@@ -122,7 +122,7 @@ const DEFAULT_VALUES: NiifReportIntakeType = {
   caseType: 'niif_report',
   company: DEFAULT_COMPANY,
   niifGroup: 2,
-  fiscalPeriod: '',
+  fiscalPeriod: String(new Date().getFullYear() - 1),
   comparativePeriod: '',
   rawData: '',
   outputOptions: DEFAULT_OUTPUT_OPTIONS,
@@ -487,9 +487,14 @@ export function NiifReportIntake() {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
-  // Helper: border class based on confidence
+  // Helper: border class based on confidence + required-state.
+  // Required fields with no value always render in danger color so the user
+  // sees what's missing regardless of how they reached step 2 (upload or skip).
   const fieldBorderClass = useCallback(
-    (field: string, hasValue: boolean): string => {
+    (field: string, hasValue: boolean, isRequired = false): string => {
+      if (isRequired && !hasValue) {
+        return 'border-danger focus:border-danger focus:ring-danger';
+      }
       const conf = getFieldConfidence(field);
       if (conf === 'none' && !hasValue && extractionState.status === 'done' && !skippedUpload) {
         return 'border-danger focus:border-danger focus:ring-danger';
@@ -498,6 +503,16 @@ export function NiifReportIntake() {
     },
     [getFieldConfidence, extractionState.status, skippedUpload],
   );
+
+  // Required fields missing in step 2. Drives the red banner and aria-invalid hints.
+  const missingRequired = useMemo(() => {
+    const missing: string[] = [];
+    if (!values.company.name?.trim()) missing.push('Razón Social');
+    if (!values.company.nit?.trim()) missing.push('NIT');
+    if (!values.fiscalPeriod) missing.push('Periodo Fiscal');
+    if (!values.niifGroup) missing.push('Grupo NIIF');
+    return missing;
+  }, [values.company.name, values.company.nit, values.fiscalPeriod, values.niifGroup]);
 
   // ─── Step 1: Upload Document ──────────────────────────────────────────────
 
@@ -584,6 +599,24 @@ export function NiifReportIntake() {
 
   const step2Review = (
     <div className="space-y-5">
+      {/* Missing-required banner: surfaces blockers regardless of upload path. */}
+      {missingRequired.length > 0 && (
+        <div
+          id="niif-required-errors"
+          role="alert"
+          className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
+        >
+          <p className="font-semibold mb-1">
+            Falta(n) {missingRequired.length} campo(s) requerido(s) para continuar:
+          </p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {missingRequired.map((label) => (
+              <li key={label}>{label}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Detection summary banner */}
       {hasExtraction && (
         <DetectionSummary confidence={confidenceMap} />
@@ -609,9 +642,15 @@ export function NiifReportIntake() {
           value={values.company.name}
           onChange={(e) => updateCompany('name', e.target.value)}
           placeholder="Ej: Inversiones Colombia S.A.S."
+          aria-invalid={!values.company.name?.trim()}
+          aria-describedby={
+            !values.company.name?.trim() && missingRequired.length > 0
+              ? 'niif-required-errors'
+              : undefined
+          }
           className={cn(
             'w-full px-3 py-2 rounded-lg border text-sm text-n-900 focus:outline-none focus:ring-1',
-            fieldBorderClass('name', !!values.company.name),
+            fieldBorderClass('name', !!values.company.name, true),
           )}
         />
       </div>
@@ -629,9 +668,15 @@ export function NiifReportIntake() {
             onChange={(e) => updateCompany('nit', formatNIT(e.target.value))}
             placeholder="XXX.XXX.XXX-X"
             maxLength={13}
+            aria-invalid={!values.company.nit?.trim()}
+            aria-describedby={
+              !values.company.nit?.trim() && missingRequired.length > 0
+                ? 'niif-required-errors'
+                : undefined
+            }
             className={cn(
               'w-full px-3 py-2 rounded-lg border text-sm text-n-900 font-mono focus:outline-none focus:ring-1',
-              fieldBorderClass('nit', !!values.company.nit),
+              fieldBorderClass('nit', !!values.company.nit, true),
             )}
           />
         </div>
@@ -800,9 +845,15 @@ export function NiifReportIntake() {
             <select
               value={values.fiscalPeriod}
               onChange={(e) => updateField('fiscalPeriod', e.target.value)}
+              aria-invalid={!values.fiscalPeriod}
+              aria-describedby={
+                !values.fiscalPeriod && missingRequired.length > 0
+                  ? 'niif-required-errors'
+                  : undefined
+              }
               className={cn(
                 'w-full px-3 py-2 rounded-lg border text-sm text-n-900 bg-n-0 focus:outline-none focus:ring-1',
-                fieldBorderClass('fiscalPeriod', !!values.fiscalPeriod),
+                fieldBorderClass('fiscalPeriod', !!values.fiscalPeriod, true),
               )}
             >
               <option value="">Seleccionar año</option>
@@ -840,17 +891,33 @@ export function NiifReportIntake() {
 
         {/* Grupo NIIF */}
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-2">
+          <label
+            id="niif-group-label"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-2"
+          >
             Grupo NIIF <span className="text-danger">*</span>
             <ConfidenceDot level={getFieldConfidence('niifGroup')} />
           </label>
-          <div className="space-y-2">
+          <div
+            role="radiogroup"
+            aria-labelledby="niif-group-label"
+            aria-required="true"
+            aria-invalid={!values.niifGroup}
+            aria-describedby={
+              !values.niifGroup && missingRequired.length > 0
+                ? 'niif-required-errors'
+                : undefined
+            }
+            className="space-y-2"
+          >
             {NIIF_GROUPS.map((group) => {
               const selected = values.niifGroup === group.value;
               return (
                 <button
                   key={group.value}
                   type="button"
+                  role="radio"
+                  aria-checked={selected}
                   onClick={() => updateField('niifGroup', group.value)}
                   className={cn(
                     'w-full text-left p-4 rounded-lg border-l-4 transition-all',
