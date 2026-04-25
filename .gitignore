@@ -48,3 +48,4 @@ src/data/uploads/
 
 # Generated vector store (rebuild with: npm run db:ingest)
 src/data/vector_store/
+.env*.local
