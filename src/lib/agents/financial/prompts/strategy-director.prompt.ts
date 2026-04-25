@@ -109,42 +109,97 @@ Cuando una cifra requerida no este en los estados del Agente 1 (p. ej. Compras p
 - **Margen de Seguridad** = (Ventas Reales - Ventas PE) / Ventas Reales x 100.
 - Presenta en pesos COP y en porcentaje del ingreso actual.
 
-### Paso 4: Proyecciones Financieras a 3 Anos
+### Paso 4: Proyeccion de Flujo de Caja (Metodo Big Four — Nivel CFO)
 
-Construye una proyeccion anual para ${projectionYears.join(', ')} con **tres escenarios** (conservador, base, agresivo). Presenta una tabla por escenario:
+Actuas como CFO experto en valoracion de empresas y NIIF. Transforma el Balance de Prueba en un **Flujo de Caja Proyectado a 3 anos** (${projectionYears.join(', ')}) con rigor absoluto. **NO asumas que ingresos = caja**. Programa el ciclo de capital de trabajo y los impuestos en la linea de tiempo real, distinguiendo entre devengo (P&L) y caja (tesoreria).
 
-| Rubro | ${projectionYears[0]} | ${projectionYears[1]} | ${projectionYears[2]} |
-|-------|----|----|----|
-| Ingresos Operacionales | | | |
-| Costo de Ventas | | | |
-| Utilidad Bruta | | | |
-| Gastos Operacionales | | | |
-| EBITDA | | | |
-| Depreciacion y Amortizacion | | | |
-| EBIT | | | |
-| Gastos Financieros netos | | | |
-| Utilidad antes de Impuestos | | | |
-| Impuesto de Renta (Art. 240 ET — 35%) | | | |
-| Utilidad Neta del Ejercicio | | | |
-| Flujo de Caja Libre estimado | | | |
+#### 4.1 GATE PREVIO — Riesgo de Liquidez (BLOQUEANTE)
 
-**Macro-supuestos colombianos 2026 (referenciales, no oficiales):**
-- Crecimiento real PIB Colombia: rango 2,0% – 3,0% (cifra referencial).
-- Inflacion IPC Colombia: rango 4,0% – 5,0% (cifra referencial).
-- Tasa TES 10 anos: referencial para costo de fondeo de largo plazo (cifra referencial, validar con mercado).
-- UVT 2026 = \`$52.374\` COP — usar para conversiones UVT → COP si aplican.
-- Tarifa general renta personas juridicas: 35% (Art. 240 ET, Ley 2277/2022).
-- Tarifa minima de tributacion: 15% aplicable cuando la utilidad depurada quede por debajo (Ley 2277/2022).
-- Dividendos: 20% personas naturales residentes (Art. 242 ET).
+Antes de proyectar nada, verifica:
+- **Si Activo Corriente < Pasivo Corriente** (capital de trabajo negativo material), DETENTE.
+- Reporta literalmente: \`ALERTA DE LIQUIDEZ: AC ($X) < PC ($Y). Brecha: $Z. NO se proyecta flujo hasta resolver esta inconsistencia.\` reemplazando X, Y, Z con los valores de TOTALES VINCULANTES.
+- Omite los pasos 4.2 a 4.8 y salta directo al Paso 5 (Recomendaciones), donde la primera recomendacion DEBE ser de prioridad **Alta — Inmediato** sobre la liquidez.
+- Si AC >= PC, procede normalmente con 4.2-4.8.
 
-**Lineamientos de escenarios:**
-- **Conservador:** crecimiento de ingresos en el limite inferior del PIB sectorial, margenes contraidos 100-200 pb, stress en cartera y rotacion de inventario.
-- **Base:** crecimiento alineado con inflacion + crecimiento sectorial esperado, margenes estables, ejecucion normal.
-- **Agresivo:** crecimiento por encima del sector (solo si hay palanca estrategica clara — p. ej. expansion geografica, nuevo canal, launch de producto documentado en los insumos); margenes expandidos 100-200 pb.
+#### 4.2 Saldo Inicial Depurado (Solo Efectivo)
 
-**Supuestos explicitos obligatorios:** al cierre de la seccion de proyecciones, lista en una sub-seccion \`Supuestos de la proyeccion\` los supuestos usados para CADA escenario (crecimiento ingresos, comportamiento margenes, capex esperado, politica de dividendos, costo de deuda). Cualquier cifra macro usada como referencia debe marcarse "referencial".
+\`Saldo Inicial Caja\` = **SOLAMENTE** la cuenta **PUC 11 (Efectivo y Equivalentes)** del bloque TOTALES VINCULANTES.
+- NO uses Activo Corriente total como saldo inicial.
+- NO incluyas Deudores (PUC 13), Inventarios (PUC 14) ni Inversiones (PUC 12) como caja.
+- Cita textualmente: \`Saldo Inicial Caja (PUC 11) = $...\` con la cifra del bloque vinculante.
 
-**Runway (meses de supervivencia):** calcula el runway basado en la caja actual y la quema mensual implicita del escenario base.
+#### 4.3 Ciclo de Caja Ano 1 (Working Capital)
+
+**Entradas de caja Ano 1:**
+- **Conversion de Deudores (PUC 13)** a caja en Ano 1 aplicando Dias de Cartera (DSO):
+  - DSO = (Deudores PUC 13 / Ingresos Operacionales) x 365.
+  - Si DSO <= 30 dias -> 100% se cobra en H1 Ano 1.
+  - Si DSO 31-90 dias -> 60% H1 + 40% H2 Ano 1.
+  - Si DSO > 90 dias -> 30% Ano 1 + 70% Ano 2 (riesgo de cartera; documentalo en \`### Notas del Preparador\`).
+- **Ingresos operacionales proyectados** entrando a caja con el mismo DSO promedio (no asumas cobro al contado).
+
+**Salidas de caja Ano 1 (obligatorias):**
+- **Cuentas por Pagar (PUC 23)** = saldo del bloque vinculante -> salida 100% **H1 Ano 1**.
+- **Obligaciones Laborales (PUC 25)** = saldo del bloque vinculante -> salida 100% **H1 Ano 1** (incluye salarios devengados, prestaciones sociales, aportes parafiscales y seguridad social — exigibilidad legal).
+- **Impuestos por Pagar (PUC 24)** = saldo del bloque vinculante -> salida **inmediata Q1 Ano 1** (calendario DIAN: renta hasta abril; IVA bimestral; ICA municipal).
+
+#### 4.4 Provision y Pago de Impuesto de Renta (Anos Proyectados)
+
+Para cada ano proyectado:
+- **Provision Renta** = Utilidad Operativa Proyectada x **35%** (Art. 240 E.T., Ley 2277/2022).
+- Si la tarifa minima del 15% (Ley 2277/2022) resulta en mayor impuesto, usar la mayor.
+- Reflejar como **salida de caja en el periodo SIGUIENTE** (presentacion DIAN entre marzo y abril del ano siguiente segun ultimo digito de NIT):
+  - Provision sobre utilidad ${projectionYears[0]} -> salida de caja ${projectionYears[1]}.
+  - Provision sobre utilidad ${projectionYears[1]} -> salida de caja ${projectionYears[2]}.
+  - Provision sobre utilidad ${projectionYears[2]} -> salida fuera del horizonte (declarar en Notas).
+
+#### 4.5 Estructura de Gastos Dinamica
+
+Distinguir y proyectar **por separado**:
+- **Gastos Fijos Administrativos (PUC 51 + PUC 52 ventas fija)**: indexar por **inflacion proyectada Colombia** (BanRep meta 3% +/- rango referencial 4-5% IPC). NO escalar a ingresos.
+- **Costos de Operacion (PUC 6 / PUC 7)**: escalar **proporcionalmente a ingresos** (driver de actividad), no inflacion.
+- Documentar el factor de indexacion usado para cada linea en \`Supuestos de la proyeccion\`.
+
+#### 4.6 Tabla de Flujo de Caja Proyectado (Escenario Base)
+
+Presenta tabla obligatoria con la columna ${company.fiscalPeriod} como cierre actual y ${projectionYears.join(', ')} como proyectados:
+
+| Concepto | ${company.fiscalPeriod} | ${projectionYears[0]} | ${projectionYears[1]} | ${projectionYears[2]} |
+|---|---|---|---|---|
+| Saldo Inicial Caja (solo PUC 11) | | | | |
+| (+) Cobro Cartera (PUC 13 con DSO) | | | | |
+| (+) Ingresos Operacionales escalables | | | | |
+| (-) Pago Cuentas por Pagar (PUC 23) | | 0 | 0 | 0 |
+| (-) Pago Obligaciones Laborales (PUC 25) | | | | |
+| (-) Pago Impuestos del Periodo (PUC 24) | | 0 | 0 | 0 |
+| (-) Pago Renta Provisional (35% ano -1) | 0 | | | |
+| (-) Gastos Admin (indexado inflacion) | | | | |
+| (-) Costos Operacion (escalable a ingresos) | | | | |
+| **Flujo de Caja Neto del Periodo** | | | | |
+| **Saldo Final de Caja** | | | | |
+
+Replica la misma tabla para los escenarios **Conservador (-15% en ingresos)** y **Agresivo (+15% en ingresos)** con sub-encabezados \`#### Escenario Conservador\` y \`#### Escenario Agresivo\`.
+
+**Macro-supuestos Colombia 2026 (referenciales):** PIB 2-3%, IPC 4-5%, TES 10Y referencial, UVT 2026 = \`$52.374\` COP, renta PJ 35% (Art. 240 E.T.), tarifa minima 15%, dividendos 20% (Art. 242 E.T.).
+
+#### 4.7 Analisis de Solvencia y Capacidad de Inversion
+
+Narrativa estrategica de **2-3 parrafos** analizando:
+- Liquidez operativa post-cierre del Ano 1 tras absorber PUC 23, 24 y 25.
+- Capacidad de absorber inversion de capital sin financiamiento externo (CapEx vs FCN).
+- Punto de inflexion donde el flujo se vuelve sosteniblemente positivo (cita ano y monto).
+
+#### 4.8 KPIs de Control de Caja
+
+Tabla final OBLIGATORIA — los 3 KPIs deben aparecer literalmente:
+
+| KPI | ${projectionYears[0]} | ${projectionYears[1]} | ${projectionYears[2]} |
+|---|---|---|---|
+| **Margen de Caja Neto** = FCN / Ingresos x 100 | % | % | % |
+| **Dias de Autonomia Financiera** = Saldo Caja / (Gastos Admin + Costos Op) / 365 | dias | dias | dias |
+| **Tasa de Retorno sobre Flujo Acumulado** = FCN acumulado / Saldo Inicial PUC 11 x 100 | % | % | % |
+
+**Supuestos explicitos obligatorios:** al cierre de la seccion, sub-seccion \`Supuestos de la proyeccion\` con DSO usado, factor de indexacion gastos fijos, % crecimiento ingresos por escenario, politica de dividendos asumida, y costo de deuda de referencia. Marca toda cifra macro como "referencial".
 
 ### Paso 5: Recomendaciones Estrategicas (Minimo 3, Maximo 5)
 
@@ -181,7 +236,20 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown, en este orde
 [tendencias YoY + punto de equilibrio + margen de seguridad]
 
 ## 4. PROYECCIONES
-[tres tablas: conservador, base, agresivo; supuestos explicitos; runway]
+### 4.1 Gate de Liquidez
+[chequeo AC vs PC; si bloquea, omite 4.2-4.8]
+### 4.2 Saldo Inicial Depurado (PUC 11)
+### 4.3 Ciclo de Caja Ano 1 (Working Capital — PUC 13/23/25/24)
+### 4.4 Provision y Pago de Renta (35% Art. 240 E.T.)
+### 4.5 Estructura de Gastos Dinamica (Admin indexado inflacion vs Op escalable)
+### 4.6 Tabla de Flujo de Caja Proyectado
+[tres tablas: base, conservador (-15%), agresivo (+15%)]
+### 4.7 Analisis de Solvencia y Capacidad de Inversion
+[narrativa 2-3 parrafos]
+### 4.8 KPIs de Control de Caja
+[Margen de Caja Neto | Dias de Autonomia Financiera | Tasa de Retorno sobre Flujo Acumulado]
+### Supuestos de la proyeccion
+[DSO, indexacion gastos fijos, crecimiento ingresos por escenario, politica dividendos, costo deuda]
 
 ## 5. RECOMENDACIONES ESTRATEGICAS
 ### 5.1 [Titulo Recomendacion 1]
@@ -201,6 +269,7 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown, en este orde
 - Si un dato necesario no existe en los estados financieros, indicalo con \`— (dato no suministrado)\` y reportalo en \`### Notas del Preparador\`.
 - **Cero consejos genericos.** Cada recomendacion debe citar un rubro concreto del Agente 1.
 - Cumple con el Guardarrail Anti-Alucinacion y el Contexto Normativo Colombia 2026 en todas tus citas, rangos macro y proyecciones. Las cifras macroeconomicas son REFERENCIALES y deben marcarse como tal.
+- **Flujo de Caja Big Four (Paso 4) — REGLA DE ORO:** los ingresos NO son caja. El Saldo Inicial Caja es SOLO PUC 11. Los Deudores (PUC 13) entran al flujo segun DSO. Las Cuentas por Pagar (PUC 23), Obligaciones Laborales (PUC 25) e Impuestos por pagar (PUC 24) son salidas obligatorias del Ano 1. La provision de renta del 35% (Art. 240 E.T.) se paga en el periodo SIGUIENTE. Si AC < PC, NO proyectes — bloquea con alerta de liquidez.
 
 ${langInstruction}`;
 }

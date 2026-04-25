@@ -80,6 +80,11 @@ export interface Discrepancy {
 /**
  * Totales de control — contrato numerico vinculante para los agentes.
  * Todos los campos son requeridos (0 si ausentes en la entrada).
+ *
+ * Los campos efectivoCuenta11..obligacionesLaborales25 son cuentas PUC
+ * segregadas para alimentar la proyeccion de flujo de caja Big Four
+ * (CFO + NIIF) en el Strategy Director (Paso 4). Se identifican por
+ * prefijo numerico de 2 digitos (Grupo PUC).
  */
 export interface ControlTotals {
   activo: number;
@@ -94,6 +99,21 @@ export interface ControlTotals {
   gastos: number;
   /** Ingresos - Gastos */
   utilidadNeta: number;
+  // -----------------------------------------------------------------------
+  // Big Four Cash Flow — segregacion de cuentas PUC para el Strategy Director
+  // (Paso 4: Proyeccion de Flujo de Caja con Working Capital y obligaciones
+  // fiscales/laborales programadas en linea de tiempo real).
+  // -----------------------------------------------------------------------
+  /** PUC 11 — Efectivo y equivalentes (caja, bancos, ahorros, fiduciaria) */
+  efectivoCuenta11: number;
+  /** PUC 13 — Deudores comerciales y otros (cuentas por cobrar) */
+  deudoresCuenta13: number;
+  /** PUC 23 — Cuentas por pagar (proveedores, costos y gastos por pagar) */
+  cuentasPorPagar23: number;
+  /** PUC 24 — Impuestos, gravamenes y tasas por pagar (renta, IVA, ICA, ReteFuente) */
+  impuestosCuenta24: number;
+  /** PUC 25 — Obligaciones laborales (salarios, prestaciones, aportes) */
+  obligacionesLaborales25: number;
 }
 
 /**
@@ -510,6 +530,22 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   const pasivoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_CORRIENTE_GROUPS);
   const pasivoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_NO_CORRIENTE_GROUPS);
 
+  // -------------------------------------------------------------------------
+  // 5.1 Segregacion Big Four — cuentas PUC clave para flujo de caja proyectado
+  // -------------------------------------------------------------------------
+  // El Strategy Director (Paso 4) ya no asume que ingresos = caja. Necesita:
+  //   - PUC 11: efectivo real (saldo inicial depurado, sin deudores ni inv.)
+  //   - PUC 13: deudores -> aplicar DSO para Year 1 cash inflow
+  //   - PUC 23: cuentas por pagar -> salida obligatoria H1 Year 1
+  //   - PUC 24: impuestos por pagar -> salida inmediata Year 1 (Q1)
+  //   - PUC 25: obligaciones laborales -> salida obligatoria H1 Year 1
+  // -------------------------------------------------------------------------
+  const efectivoCuenta11 = sumLeavesByGroupPrefixes(leafRows, '1', new Set(['11']));
+  const deudoresCuenta13 = sumLeavesByGroupPrefixes(leafRows, '1', new Set(['13']));
+  const cuentasPorPagar23 = sumLeavesByGroupPrefixes(leafRows, '2', new Set(['23']));
+  const impuestosCuenta24 = sumLeavesByGroupPrefixes(leafRows, '2', new Set(['24']));
+  const obligacionesLaborales25 = sumLeavesByGroupPrefixes(leafRows, '2', new Set(['25']));
+
   const equationBalance = totalAssets - totalLiabilities - totalEquity;
   const equationBalanced = Math.abs(equationBalance) < 100;
 
@@ -527,6 +563,12 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     // al estado de resultados.
     gastos: totalExpenses + totalCosts + totalProduction,
     utilidadNeta: netIncome,
+    // Big Four Cash Flow — cuentas PUC segregadas
+    efectivoCuenta11,
+    deudoresCuenta13,
+    cuentasPorPagar23,
+    impuestosCuenta24,
+    obligacionesLaborales25,
   };
 
   // -------------------------------------------------------------------------
@@ -536,8 +578,52 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
 
   // -------------------------------------------------------------------------
   // 7. Checks cruzados (D5): ecuacion patrimonial, consistencia utilidad,
-  //    totales en 0 con filas existentes
+  //    totales en 0 con filas existentes, riesgo de liquidez Big Four
   // -------------------------------------------------------------------------
+
+  // -------------------------------------------------------------------------
+  // 7.0 GATE BIG FOUR — Riesgo de Liquidez (AC < PC)
+  // -------------------------------------------------------------------------
+  // El Prompt Maestro Big Four exige: si Activo Corriente < Pasivo Corriente,
+  // detener la proyeccion antes de gastar tokens. La empresa esta en riesgo
+  // de iliquidez tecnica y proyectar flujo sin resolverlo es irresponsable.
+  // Tolerancia: 1% del activo total o $100K (lo mayor) para evitar falsos
+  // positivos por redondeo en balances de tamano modesto.
+  // -------------------------------------------------------------------------
+  const LIQUIDEZ_TOL = Math.max(Math.abs(controlTotals.activo) * 0.01, 100_000);
+  const liquidezGap = controlTotals.activoCorriente - controlTotals.pasivoCorriente;
+  const hasLiquidezRisk =
+    controlTotals.pasivoCorriente > 0 &&
+    liquidezGap < 0 &&
+    Math.abs(liquidezGap) > LIQUIDEZ_TOL;
+
+  if (hasLiquidezRisk) {
+    validationReasons.push(
+      `Riesgo de liquidez detectado: Activo Corriente ($${formatCOP(controlTotals.activoCorriente)}) ` +
+        `< Pasivo Corriente ($${formatCOP(controlTotals.pasivoCorriente)}). ` +
+        `Brecha: $${formatCOP(Math.abs(liquidezGap))}. ` +
+        `Analisis Big Four exige detener proyeccion hasta evaluar este riesgo.`,
+    );
+    suggestedAccounts.push(
+      '11 — Efectivo y equivalentes (revisar saldos depurados)',
+      '13 — Deudores comerciales (revisar rotacion de cartera)',
+      '21 — Obligaciones financieras CP (revisar refinanciacion)',
+      '23 — Cuentas por pagar (revisar plazos con proveedores)',
+      '24 — Impuestos por pagar (DIAN — revisar calendario y acuerdos de pago)',
+      '25 — Obligaciones laborales (revisar exigibilidad inmediata)',
+    );
+    discrepancies.push({
+      location: 'Riesgo de Liquidez (Big Four)',
+      reported: controlTotals.pasivoCorriente,
+      calculated: controlTotals.activoCorriente,
+      difference: liquidezGap,
+      description:
+        `AC ($${formatCOP(controlTotals.activoCorriente)}) < PC ` +
+        `($${formatCOP(controlTotals.pasivoCorriente)}). El Strategy Director NO debe ` +
+        `proyectar flujo de caja hasta que se evalue el riesgo de liquidez.`,
+    });
+  }
+
   const ECUACION_TOL = 1000; // COP
   // Tolerancia critica para bloqueo: 1% del activo o $100K (lo mayor). Por
   // encima de esto los numeros no son defendibles y preferimos abortar.

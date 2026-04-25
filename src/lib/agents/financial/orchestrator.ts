@@ -213,6 +213,46 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
   lines.push(`- Total Gastos: ${fmtCop(totals.gastos)} COP`);
   lines.push(`- Utilidad Neta (P&L): ${fmtCop(totals.utilidadNeta)} COP`);
 
+  // -------------------------------------------------------------------------
+  // Big Four Cash Flow — cuentas PUC segregadas para el Strategy Director
+  // (Paso 4: Proyeccion de Flujo de Caja). Solo se emiten si vienen del
+  // preprocesador extendido — los consumers legacy quedan sin estas lineas.
+  // -------------------------------------------------------------------------
+  const hasAnyBigFourField =
+    typeof totals.efectivoCuenta11 === 'number' ||
+    typeof totals.deudoresCuenta13 === 'number' ||
+    typeof totals.cuentasPorPagar23 === 'number' ||
+    typeof totals.impuestosCuenta24 === 'number' ||
+    typeof totals.obligacionesLaborales25 === 'number';
+  if (hasAnyBigFourField) {
+    lines.push('- Cuentas PUC clave (Big Four — Flujo de Caja Proyectado):');
+    if (typeof totals.efectivoCuenta11 === 'number') {
+      lines.push(
+        `  - PUC 11 (Efectivo y equivalentes): ${fmtCop(totals.efectivoCuenta11)} COP`,
+      );
+    }
+    if (typeof totals.deudoresCuenta13 === 'number') {
+      lines.push(
+        `  - PUC 13 (Deudores comerciales): ${fmtCop(totals.deudoresCuenta13)} COP`,
+      );
+    }
+    if (typeof totals.cuentasPorPagar23 === 'number') {
+      lines.push(
+        `  - PUC 23 (Cuentas por pagar): ${fmtCop(totals.cuentasPorPagar23)} COP`,
+      );
+    }
+    if (typeof totals.impuestosCuenta24 === 'number') {
+      lines.push(
+        `  - PUC 24 (Impuestos por pagar): ${fmtCop(totals.impuestosCuenta24)} COP`,
+      );
+    }
+    if (typeof totals.obligacionesLaborales25 === 'number') {
+      lines.push(
+        `  - PUC 25 (Obligaciones laborales): ${fmtCop(totals.obligacionesLaborales25)} COP`,
+      );
+    }
+  }
+
   if (equity) {
     const desglose: string[] = [];
     if (typeof equity.capitalAutorizado === 'number')

@@ -11,6 +11,10 @@ import type { ReportValidationResult } from '../types';
 // Agente A3 ira extendiendo PreprocessedBalance con controlTotals/equityBreakdown.
 // Mientras tanto aceptamos el "shape contractual" directamente para evitar
 // acoplamiento estrecho si su forma cambia en medio de la integracion.
+//
+// Los campos efectivoCuenta11..obligacionesLaborales25 alimentan la proyeccion
+// de flujo de caja Big Four (Strategy Director, Paso 4). Son opcionales para
+// preservar compatibilidad con consumers legacy que no los emiten.
 export interface ControlTotalsInput {
   activo?: number;
   activoCorriente?: number;
@@ -22,6 +26,16 @@ export interface ControlTotalsInput {
   ingresos?: number;
   gastos?: number;
   utilidadNeta?: number;
+  /** PUC 11 — Efectivo y equivalentes (Big Four: saldo inicial caja) */
+  efectivoCuenta11?: number;
+  /** PUC 13 — Deudores comerciales (Big Four: aplicar DSO en Year 1) */
+  deudoresCuenta13?: number;
+  /** PUC 23 — Cuentas por pagar (Big Four: salida H1 Year 1) */
+  cuentasPorPagar23?: number;
+  /** PUC 24 — Impuestos por pagar (Big Four: salida inmediata Year 1) */
+  impuestosCuenta24?: number;
+  /** PUC 25 — Obligaciones laborales (Big Four: salida H1 Year 1) */
+  obligacionesLaborales25?: number;
 }
 
 /**
@@ -314,11 +328,208 @@ export function validateConsolidatedReport(
   const tableWarning = detectBrokenTables(consolidatedMarkdown);
   if (tableWarning) warnings.push(tableWarning);
 
+  // -----------------------------------------------------------------------
+  // 6) Big Four Cash Flow validators (Strategy Director Paso 4)
+  // -----------------------------------------------------------------------
+  // Estos validators verifican que el Strategy Director realmente aplique el
+  // metodo Big Four (PUC 11 como saldo inicial, working capital con DSO, KPIs
+  // de control). El primero es HARD FAIL (caja inflada), los otros dos son
+  // WARNING (proyeccion incompleta pero recuperable).
+  // -----------------------------------------------------------------------
+  const cashError = detectInflatedCash(consolidatedMarkdown, controlTotals);
+  if (cashError) errors.push(cashError);
+
+  const wcWarning = detectMissingWorkingCapital(consolidatedMarkdown);
+  if (wcWarning) warnings.push(wcWarning);
+
+  const kpiWarning = detectMissingControlKPIs(consolidatedMarkdown);
+  if (kpiWarning) warnings.push(kpiWarning);
+
   return {
     ok: errors.length === 0,
     errors,
     warnings,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Big Four Cash Flow Validators
+// ---------------------------------------------------------------------------
+// Estos validators son la red de seguridad del refactor "Prompt Maestro Big
+// Four" en strategy-director.prompt.ts (Paso 4). Aunque el prompt instruya al
+// modelo a usar SOLO PUC 11 como saldo inicial y aplicar working capital, un
+// LLM puede regresar a la heuristica vieja "ingresos = caja". Los validators
+// post-render detectan esa regresion y o bien fallan duro (caja inflada) o
+// emiten warning para el operador (working capital ignorado, KPIs ausentes).
+// ---------------------------------------------------------------------------
+
+/**
+ * detectInflatedCash — HARD FAIL si el Strategy Director uso un saldo inicial
+ * inflado (ej. Activo Corriente total) en lugar de SOLO PUC 11.
+ *
+ * Heuristica: extrae el primer monto que aparezca en una linea con etiquetas
+ * tipo "Saldo Inicial Caja" / "Saldo Inicial de Caja" / "Saldo Inicial (PUC 11)"
+ * dentro de la PARTE II (Estrategia). Compara con `controlTotals.efectivoCuenta11`.
+ * Si la diferencia es > 5% del valor esperado Y > $100K absoluto, fallar duro.
+ *
+ * Si controlTotals.efectivoCuenta11 no esta disponible (consumer legacy),
+ * el validator no aplica (retorna null) — preserva backwards compatibility.
+ */
+export function detectInflatedCash(
+  markdown: string,
+  controlTotals?: ControlTotalsInput,
+): string | null {
+  if (!controlTotals || typeof controlTotals.efectivoCuenta11 !== 'number') {
+    return null; // sin ancla, no podemos validar
+  }
+  const expected = controlTotals.efectivoCuenta11;
+  if (!Number.isFinite(expected) || Math.abs(expected) < 1) {
+    return null; // efectivo cero o invalido — el Strategy Director debera reportar 0
+  }
+
+  // Solo evaluar la PARTE II (Estrategia) — donde vive el Paso 4. Si no
+  // existe la marca, evaluar el documento completo (consumer legacy).
+  const parteIIIdx = markdown.search(/# PARTE II:/i);
+  const parteIIIIdx = markdown.search(/# PARTE III:/i);
+  const region =
+    parteIIIdx !== -1
+      ? markdown.slice(parteIIIdx, parteIIIIdx !== -1 ? parteIIIIdx : undefined)
+      : markdown;
+
+  // Patrones que matchean "Saldo Inicial Caja" / "Saldo Inicial de Caja" /
+  // "Saldo Inicial (PUC 11)" con o sin asteriscos/pipes.
+  const labelPattern =
+    /saldo\s+inicial(?:\s+(?:de\s+)?caja)?\s*(?:\(\s*(?:solo\s+)?puc\s*11[^\)]*\))?/i;
+
+  const lines = region.split(/\r?\n/);
+  let firstReported: number | null = null;
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\*+/g, '').trim();
+    if (!labelPattern.test(line)) continue;
+    // Si la linea menciona PUC 13/14/12/Activo Corriente, NO es el saldo inicial
+    // depurado — ignorar.
+    if (
+      /puc\s*1[2-4]/i.test(line) ||
+      /activo\s+corriente/i.test(line) ||
+      /deudores/i.test(line) ||
+      /inventarios/i.test(line)
+    ) {
+      continue;
+    }
+    const nums = line.match(
+      /\$?\s*\(?-?\s*\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?|\$?\s*\(?-?\s*\d+(?:[.,]\d{1,2})?\)?/g,
+    );
+    if (!nums) continue;
+    for (const raw of nums) {
+      const n = parseCopAmount(raw);
+      if (n !== null && Math.abs(n) > 1) {
+        firstReported = n;
+        break;
+      }
+    }
+    if (firstReported !== null) break;
+  }
+
+  if (firstReported === null) return null; // no se reporto saldo inicial — manejado por detectMissingWorkingCapital
+
+  const absExpected = Math.abs(expected);
+  const diff = Math.abs(firstReported - expected);
+  const pct = absExpected > 0 ? diff / absExpected : Infinity;
+  // Tolerancia: 5% del valor esperado Y al menos $100K absoluto.
+  if (pct > 0.05 && diff > 100_000) {
+    return (
+      `Caja inflada (Big Four): Strategy Director reporta Saldo Inicial Caja ` +
+      `${formatCop(firstReported)} pero el balance dice ${formatCop(expected)} ` +
+      `(PUC 11). Diferencia ${formatCop(diff)} (${(pct * 100).toFixed(1)}% del valor esperado). ` +
+      `El Paso 4 del Prompt Maestro Big Four exige usar SOLO PUC 11 como saldo inicial; ` +
+      `incluir Deudores (PUC 13), Inventarios (PUC 14) o Activo Corriente total es regresion.`
+    );
+  }
+  return null;
+}
+
+/**
+ * detectMissingWorkingCapital — WARNING si el Strategy Director no aplico el
+ * ciclo de capital de trabajo (DSO, PUC 23, PUC 25) en el Paso 4.
+ *
+ * Heuristica: en la region de la PARTE II (o doc completo si no existe),
+ * verifica que aparezca al menos UNA de las frases clave de working capital
+ * (DSO, "Dias de Cartera", "PUC 23", "PUC 25", "Cuentas por Pagar"). Si NO
+ * aparece ninguna, es probable que la proyeccion siga la heuristica vieja
+ * ingresos=caja sin programar salidas obligatorias.
+ */
+export function detectMissingWorkingCapital(markdown: string): string | null {
+  const parteIIIdx = markdown.search(/# PARTE II:/i);
+  const parteIIIIdx = markdown.search(/# PARTE III:/i);
+  const region =
+    parteIIIdx !== -1
+      ? markdown.slice(parteIIIdx, parteIIIIdx !== -1 ? parteIIIIdx : undefined)
+      : markdown;
+
+  // Si no hay un Paso 4 (## 4. ...), no aplica este validator.
+  if (!/##\s*4\./.test(region)) return null;
+
+  const wcSignals = [
+    /\bdso\b/i,
+    /d[ií]as\s+de\s+cartera/i,
+    /\bpuc\s*23\b/i,
+    /\bpuc\s*25\b/i,
+    /\bpuc\s*13\b/i,
+    /cuentas?\s+por\s+pagar/i,
+    /obligaciones?\s+laborales?/i,
+    /capital\s+de\s+trabajo/i,
+    /working\s+capital/i,
+  ];
+
+  const matches = wcSignals.filter((re) => re.test(region));
+  if (matches.length === 0) {
+    return (
+      'Working Capital ausente (Big Four): la proyeccion de flujo (Paso 4) no ' +
+      'cita DSO, Dias de Cartera, PUC 13, PUC 23, PUC 25 ni cuentas por pagar / ' +
+      'obligaciones laborales. El Prompt Maestro Big Four exige programar el ciclo ' +
+      'de capital de trabajo en lugar de asumir ingresos = caja.'
+    );
+  }
+  return null;
+}
+
+/**
+ * detectMissingControlKPIs — WARNING si la tabla final de KPIs de Control de
+ * Caja (Paso 4.8) no incluye los 3 KPIs obligatorios.
+ *
+ * Heuristica: verifica presencia de cada uno de los 3 KPIs por nombre. Si
+ * falta cualquiera, emite warning con la lista de los faltantes.
+ */
+export function detectMissingControlKPIs(markdown: string): string | null {
+  const parteIIIdx = markdown.search(/# PARTE II:/i);
+  const parteIIIIdx = markdown.search(/# PARTE III:/i);
+  const region =
+    parteIIIdx !== -1
+      ? markdown.slice(parteIIIdx, parteIIIIdx !== -1 ? parteIIIIdx : undefined)
+      : markdown;
+
+  if (!/##\s*4\./.test(region)) return null;
+
+  const kpis: Array<{ label: string; pattern: RegExp }> = [
+    { label: 'Margen de Caja Neto', pattern: /margen\s+de\s+caja\s+neto/i },
+    {
+      label: 'Dias de Autonomia Financiera',
+      pattern: /d[ií]as\s+de\s+autonom[ií]a\s+financiera/i,
+    },
+    {
+      label: 'Tasa de Retorno sobre Flujo Acumulado',
+      pattern: /tasa\s+de\s+retorno\s+sobre\s+(?:el\s+)?flujo\s+acumulado/i,
+    },
+  ];
+
+  const missing = kpis.filter((k) => !k.pattern.test(region)).map((k) => k.label);
+  if (missing.length > 0) {
+    return (
+      `KPIs de Control de Caja ausentes (Big Four 4.8): faltan ${missing.join(', ')}. ` +
+      `El Paso 4.8 del Prompt Maestro exige los 3 KPIs literalmente.`
+    );
+  }
+  return null;
 }
 
 /**

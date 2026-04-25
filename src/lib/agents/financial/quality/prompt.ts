@@ -92,7 +92,7 @@ Basado en la investigacion de IFRS Foundation, EY, KPMG, y Mindbridge:
 - **Comparabilidad temporal:** Siempre incluir periodo comparativo cuando este disponible
 - **Revelaciones suficientes:** Las notas deben ser sustanciales, no genericas
 
-## CHECKLIST DE EVALUACION (12 DIMENSIONES)
+## CHECKLIST DE EVALUACION (13 DIMENSIONES)
 
 ### D1. COMPLETITUD DEL REPORTE (ISO 25012)
 - [ ] Los 4 estados financieros estan presentes (Balance, P&L, Flujo de Efectivo, Cambios en Patrimonio)
@@ -182,6 +182,20 @@ Basado en la investigacion de IFRS Foundation, EY, KPMG, y Mindbridge:
 - [ ] Se identifican posibles MRDG (medidas no-NIIF como EBITDA)
 - [ ] Si se usa EBITDA u otra medida no-NIIF, tiene definicion y conciliacion
 
+### D13. CALIDAD DEL FLUJO DE CAJA PROYECTADO (Metodo Big Four — CFO + NIIF)
+Framework: Prompt Maestro Big Four (PwC / Deloitte / EY / KPMG) — eleva la proyeccion de "calculadora" a Ingeniero Financiero CFO. Evalua que el Paso 4 del Strategy Director respete las directrices de visión empresarial profunda:
+- [ ] El **Saldo Inicial Caja** usa SOLO la cuenta PUC 11 (efectivo y equivalentes) — NO Activo Corriente total ni Deudores (PUC 13) ni Inventarios (PUC 14).
+- [ ] La proyeccion considera **Dias de Cartera (DSO)** sobre la cuenta PUC 13 y aplica el % de cobro segun DSO al Ano 1.
+- [ ] Las **Cuentas por Pagar (PUC 23)** estan programadas como salida obligatoria de caja en H1 del Ano 1.
+- [ ] Las **Obligaciones Laborales (PUC 25)** estan programadas como salida obligatoria de caja en H1 del Ano 1 (incluye prestaciones sociales y aportes parafiscales).
+- [ ] Los **Impuestos por Pagar (PUC 24)** estan programados como salida inmediata Q1 del Ano 1.
+- [ ] Los anos proyectados tienen **provision de Renta del 35% (Art. 240 E.T.)** sobre la utilidad operativa, con pago programado en el periodo SUBSIGUIENTE.
+- [ ] Hay distincion entre **Gastos Fijos (PUC 51) indexados por inflacion** (BanRep meta 3% +/- IPC 4-5%) y **Costos de Operacion (PUC 6/7) escalables a ingresos**.
+- [ ] La seccion **"Analisis de Solvencia y Capacidad de Inversion"** esta presente como narrativa estrategica de 2-3 parrafos.
+- [ ] Los 3 **KPIs de Control de Caja** estan reportados literalmente: Margen de Caja Neto, Dias de Autonomia Financiera, Tasa de Retorno sobre el Flujo Acumulado.
+- [ ] Si Activo Corriente < Pasivo Corriente, hay **gate de bloqueo** (alerta de liquidez) y la primera recomendacion del Paso 5 es Alta-Inmediato sobre liquidez.
+- [ ] Los tres escenarios (Conservador -15%, Base, Agresivo +15%) estan presentes y con supuestos explicitos.
+
 ## FORMATO DE SALIDA
 
 Estructura tu respuesta EXACTAMENTE asi:
@@ -197,7 +211,8 @@ Estructura tu respuesta EXACTAMENTE asi:
 [3-4 parrafos con evaluacion general y hallazgos principales]
 
 ## DIMENSIONES DE CALIDAD
-[JSON array con las 12 dimensiones, cada una con: name, score, framework, findings[], recommendations[]]
+[JSON array con las 13 dimensiones, cada una con: name, score, framework, findings[], recommendations[]]
+[D13 (Calidad del Flujo de Caja Proyectado — Big Four) tiene un peso del 8-10% en el overallScore. Score D13 = 0-100 segun cumplimiento del checklist de 11 items. Si la empresa esta en gate de liquidez (AC < PC) y el Strategy Director correctamente bloqueo la proyeccion, D13 puntua alto por defensividad — no penalices por la ausencia de proyeccion en ese caso.]
 
 ## CALIDAD DE DATOS (ISO 25012)
 completeness: [0-100]
