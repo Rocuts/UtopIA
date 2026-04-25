@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   TrendingUp,
@@ -126,9 +126,21 @@ export function FinancialIntelIntake() {
     [setValues],
   );
 
-  // Pre-fill from extraction
+  // Pre-fill from extraction — guarded by a ref so debounced re-renders
+  // (e.g. autosave from useIntakePersistence) can't re-trigger prefill and
+  // yank the user back to step 0 mid-edit.
+  const hasAutoAdvancedRef = useRef(false);
   useEffect(() => {
-    if (extractionState.status === 'done' && extractionState.extracted) {
+    if (extractionState.status === 'idle') {
+      hasAutoAdvancedRef.current = false;
+      return;
+    }
+    if (
+      extractionState.status === 'done' &&
+      extractionState.extracted &&
+      !hasAutoAdvancedRef.current
+    ) {
+      hasAutoAdvancedRef.current = true;
       const text = extractionState.extracted.rawText.toLowerCase();
 
       // Detect period

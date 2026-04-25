@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Building2,
   Info,
@@ -368,9 +368,21 @@ export function NiifReportIntake() {
     [skippedUpload, extractionState.status, confidenceMap],
   );
 
-  // Auto-advance to step 2 when extraction completes
+  // Auto-advance to step 2 when extraction completes — guarded by a ref
+  // so debounced re-renders (e.g. autosave from useIntakePersistence) can't
+  // re-trigger prefill and yank the user back mid-edit.
+  const hasAutoAdvancedRef = useRef(false);
   useEffect(() => {
-    if (extractionState.status === 'done' && extractionState.extracted && step === 0) {
+    if (extractionState.status === 'idle') {
+      hasAutoAdvancedRef.current = false;
+      return;
+    }
+    if (
+      extractionState.status === 'done' &&
+      extractionState.extracted &&
+      !hasAutoAdvancedRef.current
+    ) {
+      hasAutoAdvancedRef.current = true;
       const { extracted } = extractionState;
 
       // Pre-fill values from extraction
@@ -403,7 +415,7 @@ export function NiifReportIntake() {
       const timer = setTimeout(() => setStep(1), 800);
       return () => clearTimeout(timer);
     }
-  }, [extractionState.status, extractionState.extracted, step, setValues]);
+  }, [extractionState.status, extractionState.extracted, setValues]);
 
   const updateCompany = useCallback(
     <K extends keyof CompanyMetadata>(key: K, val: CompanyMetadata[K]) => {

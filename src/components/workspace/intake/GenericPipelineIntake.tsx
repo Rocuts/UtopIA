@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Building2, ChevronRight, Upload, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -54,9 +54,21 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
   const [period, setPeriod] = useState('2025');
   const [instructions, setInstructions] = useState('');
 
-  // Pre-fill from extraction
+  // Pre-fill from extraction — guarded by a ref so debounced re-renders
+  // (e.g. autosave from useIntakePersistence) can't re-trigger prefill and
+  // yank the user back to step 0 mid-edit.
+  const hasAutoAdvancedRef = useRef(false);
   useEffect(() => {
-    if (extractionState.status === 'done' && extractionState.extracted) {
+    if (extractionState.status === 'idle') {
+      hasAutoAdvancedRef.current = false;
+      return;
+    }
+    if (
+      extractionState.status === 'done' &&
+      extractionState.extracted &&
+      !hasAutoAdvancedRef.current
+    ) {
+      hasAutoAdvancedRef.current = true;
       const ext = extractionState.extracted;
       setCompany(prev => ({
         ...prev,
