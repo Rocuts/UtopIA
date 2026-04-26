@@ -68,13 +68,12 @@ export function buildRepairSystemPrompt(
     : `## Error reported by validation\n\n\`\`\`\n${ctx.errorMessage}\n\`\`\``;
 
   // ---------------------------------------------------------------------------
-  // Resumen denso del preprocesado (cuando esta disponible)
+  // Resumen denso del preprocesado (cuando esta disponible) o fallback con
+  // el contenido crudo del archivo cuando el parser CSV no aplico (PDF/OCR).
   // ---------------------------------------------------------------------------
   const dataBlock = preprocessed
     ? buildPreprocessedBlock(preprocessed, isEs)
-    : isEs
-      ? `## Datos del balance\n\nNo se pudo recuperar el balance pre-procesado. Solo dispones del mensaje de error literal de arriba. NO inventes saldos: si necesitas un numero especifico, dilo abiertamente al usuario y pidele que vuelva a subir el archivo.`
-      : `## Balance data\n\nThe preprocessed trial balance is not available. You only have the literal error message above. DO NOT invent balances: if you need a specific number, say so openly to the user and ask them to re-upload the file.`;
+    : buildRawTextFallback(ctx.rawCsv, isEs);
 
   // ---------------------------------------------------------------------------
   // Tools disponibles
@@ -330,6 +329,65 @@ function buildPreprocessedBlock(pp: PreprocessedBalance, isEs: boolean): string 
   lines.push(report);
 
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// buildRawTextFallback — cuando parseTrialBalanceCSV no produjo filas (caso
+// tipico: el archivo subido es PDF/imagen y `rawData` viene como texto OCR
+// multi-linea sin header CSV reconocible). Inyectamos ese texto truncado para
+// que el agente pueda razonar sobre el directamente — leer codigos PUC,
+// nombres y montos del extracto crudo. Las herramientas read_account /
+// propose_adjustment / etc. NO funcionan sin balance pre-procesado, asi que
+// el prompt aclara que el agente debe trabajar con la informacion
+// disponible: los totales del mensaje de error + el texto crudo. Si necesita
+// un dato que no este en ninguno de los dos, debe pedirselo al usuario.
+// ---------------------------------------------------------------------------
+
+const RAW_TEXT_LIMIT = 15_000;
+
+function buildRawTextFallback(rawCsv: string | null, isEs: boolean): string {
+  const header = isEs ? '## Datos del balance' : '## Balance data';
+
+  // Sin contenido crudo en absoluto.
+  if (!rawCsv || !rawCsv.trim()) {
+    return [
+      header,
+      '',
+      isEs
+        ? 'No hay contenido del balance disponible en esta sesion (ni pre-procesado ni texto crudo). Trabaja con los totales que aparecen en el mensaje de error de arriba. Si necesitas un dato especifico que no este alli, dile al usuario que vuelva a subir el archivo.'
+        : 'No balance content is available in this session (neither preprocessed nor raw text). Work with the totals shown in the error message above. If you need any specific datum not present there, tell the user to re-upload the file.',
+    ].join('\n');
+  }
+
+  const trimmed = rawCsv.trim();
+  const truncated = trimmed.length > RAW_TEXT_LIMIT;
+  const body = truncated ? trimmed.slice(0, RAW_TEXT_LIMIT) : trimmed;
+  const totalChars = trimmed.length;
+
+  return [
+    header,
+    '',
+    isEs
+      ? 'El balance NO se pudo procesar como CSV estructurado (el archivo subido posiblemente es PDF, imagen, o un Excel sin headers reconocibles). Las herramientas `read_account`, `propose_adjustment`, `apply_adjustment` y `recheck_validation` **NO funcionan en esta sesion** porque dependen del balance pre-procesado.'
+      : 'The balance could NOT be parsed as structured CSV (the uploaded file is likely a PDF, image, or an Excel without recognizable headers). Tools `read_account`, `propose_adjustment`, `apply_adjustment` and `recheck_validation` **do NOT work in this session** because they depend on the preprocessed balance.',
+    '',
+    isEs
+      ? 'Sin embargo, dispones del texto crudo extraido del archivo (abajo) y de los totales reportados en el mensaje de error. Trabaja con esos dos: lee codigos PUC, nombres de cuentas y montos directamente del texto, y razona aritmeticamente sobre ellos. Aclara siempre al usuario cuando estes citando del texto crudo (vs. de un sistema validado). Si el usuario quiere usar las tools, debe re-subir el archivo en formato CSV con headers (codigo, nombre, saldo, debito, credito).'
+      : 'However, you have the raw text extracted from the file (below) and the totals reported in the error message. Work with those two: read PUC codes, account names and amounts directly from the text, and reason arithmetically with them. Always clarify to the user when you are quoting from raw text (vs. a validated system). If the user wants to use tools, they must re-upload the file as CSV with headers (code, name, balance, debit, credit).',
+    '',
+    isEs
+      ? `### Texto crudo extraido${truncated ? ` (mostrando primeros ${RAW_TEXT_LIMIT.toLocaleString('es-CO')} de ${totalChars.toLocaleString('es-CO')} caracteres)` : ''}`
+      : `### Extracted raw text${truncated ? ` (showing first ${RAW_TEXT_LIMIT.toLocaleString('en-US')} of ${totalChars.toLocaleString('en-US')} characters)` : ''}`,
+    '',
+    '```',
+    body,
+    '```',
+    truncated
+      ? isEs
+        ? '\n[texto truncado — pidele al usuario que comparta secciones especificas si necesitas mas]'
+        : '\n[text truncated — ask the user to share specific sections if you need more]'
+      : '',
+  ].filter(Boolean).join('\n');
 }
 
 function fmtCop(n: number): string {
