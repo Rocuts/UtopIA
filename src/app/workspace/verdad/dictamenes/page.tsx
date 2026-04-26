@@ -395,7 +395,7 @@ export default function DictamenesPage() {
                 <input
                   required
                   type="text"
-                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 placeholder:text-n-500 focus:outline-none focus:border-gold-500"
+                  className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 placeholder:text-n-500 focus:outline-none focus:border-gold-500"
                   placeholder={
                     language === 'es'
                       ? 'Describa brevemente el dictamen solicitado'
@@ -413,7 +413,7 @@ export default function DictamenesPage() {
                 <input
                   required
                   type="text"
-                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 focus:outline-none focus:border-gold-500"
+                  className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 focus:outline-none focus:border-gold-500"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -423,7 +423,7 @@ export default function DictamenesPage() {
                 <input
                   required
                   type="text"
-                  className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 focus:outline-none focus:border-gold-500"
+                  className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 focus:outline-none focus:border-gold-500"
                   placeholder="900.123.456-7"
                 />
               </div>
@@ -436,7 +436,7 @@ export default function DictamenesPage() {
               <input
                 required
                 type="email"
-                className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 focus:outline-none focus:border-gold-500"
+                className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 focus:outline-none focus:border-gold-500"
               />
             </div>
 
@@ -446,7 +446,7 @@ export default function DictamenesPage() {
               </label>
               <textarea
                 rows={3}
-                className="rounded-[8px] bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-100 placeholder:text-n-500 focus:outline-none focus:border-gold-500 resize-none"
+                className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 placeholder:text-n-500 focus:outline-none focus:border-gold-500 resize-none"
                 placeholder={
                   language === 'es'
                     ? 'Propósito, destinatario, período a certificar, etc.'

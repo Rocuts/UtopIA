@@ -95,11 +95,11 @@ export default function EscudoPage() {
                   <MessageSquare className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <div className="flex-1">
-                  <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 mb-1 inline-flex items-center gap-1.5">
-                    <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                  <div className="uppercase tracking-eyebrow text-xs font-medium text-n-700 dark:text-gold-500 mb-1 inline-flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-gold-500" strokeWidth={2} aria-hidden="true" />
                     {language === 'es' ? 'Asistente contextual' : 'Contextual assistant'}
                   </div>
-                  <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                  <h3 className="font-serif-elite text-xl leading-tight text-n-800 mb-1.5">
                     {language === 'es'
                       ? 'Consulta a El Escudo'
                       : 'Ask The Shield'}
@@ -131,9 +131,10 @@ export default function EscudoPage() {
                   }
                   className={cn(
                     'flex-1 h-11 px-4 rounded-md',
-                    'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
-                    'text-base text-n-100 placeholder:text-n-600',
-                    'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
+                    'bg-n-50 dark:bg-[rgba(10,10,10,0.6)]',
+                    'border border-[rgb(var(--color-gold-500-rgb)_/_0.35)] dark:border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+                    'text-base text-n-800 placeholder:text-n-600',
+                    'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-50',
                     'transition-[border-color,box-shadow]',
                   )}
                 />

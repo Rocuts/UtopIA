@@ -539,7 +539,7 @@ export default function MacroeconomiaPage() {
               <span
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs',
-                  'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-300',
+                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-300',
                 )}
               >
                 {liveLoading ? (

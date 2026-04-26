@@ -354,7 +354,7 @@ export default function ValoracionPage() {
           <p className={cn(
             'font-serif-elite font-normal',
             'text-lg md:text-xl leading-relaxed',
-            'text-n-300',
+            'text-n-700',
           )}>
             {language === 'es'
               ? 'Valoramos su empresa combinando métodos intrínsecos (DCF) y de mercado (múltiplos comparables) bajo estándares colombianos. El resultado es defendible ante DIAN, SuperSociedades, inversionistas y bancos.'
@@ -441,8 +441,8 @@ export default function ValoracionPage() {
                     }
                     className={cn(
                       'w-full h-11 px-3 rounded-md',
-                      'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
-                      'text-base text-n-100',
+                      'bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+                      'text-base text-n-800',
                       'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
                     )}
                   >
@@ -568,7 +568,7 @@ export default function ValoracionPage() {
                         className="flex items-center justify-between gap-3 text-sm"
                       >
                         <dt className="text-n-500">{item.label}</dt>
-                        <dd className="text-n-100 font-medium tabular-nums">
+                        <dd className="text-n-800 font-medium tabular-nums">
                           {item.formatted ?? item.value.toLocaleString('es-CO')}
                         </dd>
                       </div>

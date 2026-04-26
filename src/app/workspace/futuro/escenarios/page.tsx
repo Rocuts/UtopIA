@@ -351,8 +351,8 @@ export default function EscenariosPage() {
                 onClick={handleReset}
                 className={cn(
                   'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-xs font-medium',
-                  'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-300',
-                  'hover:border-gold-500 hover:text-n-100 transition-colors',
+                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-300',
+                  'hover:border-gold-500 hover:text-n-800 dark:hover:text-n-100 transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                 )}
               >
@@ -657,7 +657,7 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
         </span>
       </div>
 
-      <h3 className="font-serif-elite text-3xl leading-[1.05] text-n-100 relative">
+      <h3 className="font-serif-elite text-3xl leading-[1.05] text-n-800 relative">
         {label}
       </h3>
       <p className="text-xs leading-snug text-n-500 relative">{description}</p>
@@ -668,7 +668,7 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
           icon={Target}
           label={isEs ? 'Ingresos Año 3' : 'Year 3 revenue'}
           value={`${formatCopShort(output.year3Revenue)} COP`}
-          color="text-n-100"
+          color="text-n-800"
         />
         <ScenarioMetric
           icon={Percent}
@@ -720,7 +720,7 @@ function ScenarioMetric({
         <Icon className="h-3.5 w-3.5 text-gold-600" strokeWidth={1.9} aria-hidden="true" />
         <span>{label}</span>
       </span>
-      <span className={cn('tabular-nums font-medium', color ?? 'text-n-100')}>
+      <span className={cn('tabular-nums font-medium', color ?? 'text-n-800')}>
         {value}
       </span>
     </div>

@@ -519,8 +519,8 @@ export default function FactibilidadPage() {
                 placeholder={isEs ? 'Nombre del escenario (opcional)' : 'Scenario name (optional)'}
                 className={cn(
                   'flex-1 h-10 px-3 rounded-md text-sm',
-                  'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
-                  'text-n-100 placeholder:text-n-600',
+                  'bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+                  'text-n-800 placeholder:text-n-600',
                   'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
                 )}
               />
@@ -794,8 +794,8 @@ function LabeledNumberInput({
         max={max}
         className={cn(
           'h-10 px-3 rounded-md text-base',
-          'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
-          'text-n-100 placeholder:text-n-600 tabular-nums',
+          'bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+          'text-n-800 placeholder:text-n-600 tabular-nums',
           'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
           'transition-[border-color,box-shadow]',
         )}

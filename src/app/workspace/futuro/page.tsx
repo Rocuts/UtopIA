@@ -102,7 +102,7 @@ export default function FuturoPage() {
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                     {isEs ? 'Asistente contextual' : 'Contextual assistant'}
                   </div>
-                  <h3 className="font-serif-elite text-xl leading-tight text-n-100 mb-1.5">
+                  <h3 className="font-serif-elite text-xl leading-tight text-n-800 mb-1.5">
                     {isEs ? 'Consulta a El Futuro' : 'Ask The Future'}
                   </h3>
                   <p className="text-sm leading-relaxed text-n-500">
@@ -132,8 +132,8 @@ export default function FuturoPage() {
                   }
                   className={cn(
                     'flex-1 h-11 px-4 rounded-md',
-                    'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
-                    'text-base text-n-100 placeholder:text-n-600',
+                    'bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
+                    'text-base text-n-800 placeholder:text-n-600',
                     'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
                     'transition-[border-color,box-shadow]',
                   )}
