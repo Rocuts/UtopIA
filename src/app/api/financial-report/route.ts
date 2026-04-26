@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { financialReportRequestSchema } from '@/lib/validation/schemas';
 import {
   orchestrateFinancialReport,
@@ -10,7 +11,17 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
+import type { ProvisionalFlag } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+
+// Schema inline para el flag `provisional` — opcional, no se reusa en otras
+// rutas. Si esta presente, ambos campos son obligatorios.
+const provisionalFlagSchema = z
+  .object({
+    active: z.boolean(),
+    reason: z.string().min(1).max(2_000),
+  })
+  .optional();
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report
@@ -37,6 +48,25 @@ export async function POST(req: Request) {
     }
 
     const { rawData, company, language, instructions } = parsed.data;
+
+    // Override del usuario (repair chat). Validamos opcionalmente — si viene
+    // mal formado, devolvemos 400 para que el caller corrija en lugar de
+    // silenciar el flag.
+    const provisionalParsed = provisionalFlagSchema.safeParse(
+      (body as { provisional?: unknown }).provisional,
+    );
+    if (!provisionalParsed.success) {
+      return NextResponse.json(
+        {
+          error: 'Invalid provisional flag.',
+          details: provisionalParsed.error.issues.map(
+            (i) => `provisional.${i.path.join('.')}: ${i.message}`,
+          ),
+        },
+        { status: 400 },
+      );
+    }
+    const provisional = provisionalParsed.data as ProvisionalFlag | undefined;
 
     // Si el cliente nos paso un PreprocessedBalance completo (desde /api/upload),
     // lo reusamos. Asi evitamos re-parsear el CSV y garantizamos que los totales
@@ -83,7 +113,7 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(enhancedData, company, language, enhancedInstructions, preprocessed);
+      return handleStreaming(enhancedData, company, language, enhancedInstructions, preprocessed, provisional);
     }
 
     // Non-streaming: run the full pipeline and return JSON
@@ -94,7 +124,7 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
         language,
         instructions: enhancedInstructions,
       },
-      { preprocessed },
+      { preprocessed, provisional },
     );
 
     return NextResponse.json(report);
@@ -133,6 +163,7 @@ function handleStreaming(
   language: 'es' | 'en',
   instructions: string | undefined,
   preprocessed: PreprocessedBalance | undefined,
+  provisional: ProvisionalFlag | undefined,
 ) {
   const encoder = new TextEncoder();
 
@@ -149,9 +180,17 @@ function handleStreaming(
           { rawData, company, language, instructions },
           {
             onProgress: (event: FinancialProgressEvent) => {
+              // El orchestrator emite eventos `warning` cuando el override
+              // provisional convierte errores en advertencias. Los pasamos a
+              // un canal SSE dedicado para que la UI los muestre como banner.
+              if (event.type === 'warning') {
+                send('warning', { warnings: event.warnings });
+                return;
+              }
               send('progress', event);
             },
             preprocessed,
+            provisional,
           },
         );
         send('result', report);

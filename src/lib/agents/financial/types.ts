@@ -135,5 +135,6 @@ export type FinancialProgressEvent =
   | { type: 'stage_start'; stage: 1 | 2 | 3 | 4; label: string }
   | { type: 'stage_progress'; stage: 1 | 2 | 3 | 4; detail: string }
   | { type: 'stage_complete'; stage: 1 | 2 | 3 | 4; label: string }
+  | { type: 'warning'; warnings: string[] }
   | { type: 'error'; message: string }
   | { type: 'done' };

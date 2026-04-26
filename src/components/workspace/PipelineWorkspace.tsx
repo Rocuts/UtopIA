@@ -8,11 +8,14 @@ import {
   Copy,
   RotateCcw,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Clock,
   CheckCircle,
   Loader2,
   AlertTriangle,
   Check,
+  Stethoscope,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -24,7 +27,15 @@ import { StreamingText } from '@/design-system/components/StreamingText';
 import { DSBadge } from '@/design-system/components/Badge';
 import { ProgressRing } from '@/design-system/components/ProgressRing';
 import { ReportFollowUpChat } from './ReportFollowUpChat';
-import type { PipelineState, FinancialReport, ReportSection, QualityGrade } from '@/types/platform';
+import { RepairChat } from './repair/RepairChat';
+import type { ProvisionalFlag } from '@/lib/agents/repair/types';
+import type {
+  PipelineState,
+  FinancialReport,
+  ReportSection,
+  QualityGrade,
+  NiifReportIntake,
+} from '@/types/platform';
 import type {
   FinancialReport as BackendFinancialReport,
   FinancialProgressEvent,
@@ -680,8 +691,27 @@ export function PipelineWorkspace() {
     lastCompletedReport?.turns ?? [],
   );
   const [error, setError] = useState<string | null>(null);
+  const [showRepair, setShowRepair] = useState(false);
+  const [repairSeed, setRepairSeed] = useState<string | null>(null);
+  // Stable id for the repair chat session — regenerated each time a new error
+  // surfaces so server-side telemetry can group attempts by error occurrence.
+  const [repairConvId, setRepairConvId] = useState<string>('');
   const { language } = useLanguage();
   const lastProcessedInputRef = useRef<typeof pipelineInput>(null);
+
+  // Repair chat lifecycle: tied to the presence of an error in the UI.
+  // - new error  -> mint conv id, ensure chat starts collapsed
+  // - error gone -> clear conv id and collapse chat
+  useEffect(() => {
+    if (error) {
+      setRepairConvId((prev) =>
+        prev || `repair-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      );
+    } else {
+      setRepairConvId('');
+      setShowRepair(false);
+    }
+  }, [error]);
 
   // Si al montar existe un reporte completado pero el pipelineState no marca
   // 'complete' (p.ej. primera carga tras hidratar desde storage), lo forzamos.
@@ -714,6 +744,14 @@ export function PipelineWorkspace() {
       // error fatal. Es la unica fase cuyo fallo destruye la corrida.
       let phase1Report: BackendFinancialReport | null = null;
       try {
+        // The provisional flag may have been attached locally by the repair chat
+        // (handleMarkProvisional) — it is not on the NiifReportIntake type yet
+        // so we read it via a narrow lookup. The Backend agent extends the
+        // /api/financial-report request schema to accept it.
+        const provisional = (pipelineInput as NiifReportIntake & {
+          provisional?: ProvisionalFlag;
+        }).provisional;
+
         const phase1Body = {
           rawData: pipelineInput.rawData,
           company: {
@@ -731,6 +769,7 @@ export function PipelineWorkspace() {
           },
           language,
           instructions: pipelineInput.specialInstructions,
+          ...(provisional ? { provisional } : {}),
         };
 
         const phase1Res = await fetchSSEWithRetry('/api/financial-report', {
@@ -960,6 +999,8 @@ export function PipelineWorkspace() {
     setInitialTurns([]);
     setStreamedContent('');
     setError(null);
+    setShowRepair(false);
+    setRepairConvId('');
     lastProcessedInputRef.current = null;
     setPipelineInput(null);
     setPipelineState((prev) => ({
@@ -1014,6 +1055,47 @@ export function PipelineWorkspace() {
     [conversationId, updateReportTurns],
   );
 
+  // ─── Repair chat: mark provisional ───────────────────────────────────────
+  // Triggered by RepairChat when the agent decides (via `mark_provisional`
+  // tool) that the user wants to bypass the validator hard-fail. We reset
+  // error state and re-trigger the pipeline by minting a NEW input object
+  // (carries the override flag). The effect on `pipelineInput` re-fires
+  // because `lastProcessedInputRef` no longer matches the new reference.
+  const handleMarkProvisional = useCallback(
+    (reason: string) => {
+      setShowRepair(false);
+      setError(null);
+      if (!pipelineInput) return;
+      const provisional: ProvisionalFlag = { active: true, reason };
+      // The shared NiifReportIntake type does not yet declare `provisional` —
+      // we attach it locally and the api/financial-report route reads it via
+      // its own (Backend-agent-extended) request schema. Cast at the boundary
+      // to avoid mutating the global type from this file.
+      const next = { ...pipelineInput, provisional } as NiifReportIntake;
+      setPipelineInput(next);
+    },
+    [pipelineInput, setPipelineInput],
+  );
+
+  // ─── "Continuar de todas formas" shortcut ────────────────────────────────
+  const handleContinueAnyway = useCallback(() => {
+    setRepairSeed(
+      language === 'es'
+        ? 'Quiero generar el reporte como borrador a pesar del error de validación. Confirma el override y procede.'
+        : 'I want to generate the report as a draft despite the validation error. Confirm the override and proceed.',
+    );
+    setShowRepair(true);
+  }, [language]);
+
+  const handleToggleRepair = useCallback(() => {
+    setShowRepair((s) => {
+      // Si abrimos el chat manualmente (no via "Continuar de todas formas"),
+      // limpiamos el seed para no auto-enviar mensaje no deseado.
+      if (!s) setRepairSeed(null);
+      return !s;
+    });
+  }, []);
+
   if (isComplete && report) {
     const hasWarnings = Boolean(pipelineState.phase2Error || pipelineState.phase3Error);
     return (
@@ -1062,12 +1144,66 @@ export function PipelineWorkspace() {
       <PipelineMonitor state={pipelineState} />
 
       {error && (
-        <div className="mx-6 my-4 rounded-lg border border-danger bg-danger/10 px-4 py-3 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-danger">Error en el pipeline</div>
-            <p className="text-xs text-n-500 whitespace-pre-wrap break-words">{error}</p>
+        <div className="mx-6 my-4 rounded-lg border border-danger bg-danger/10 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-danger">
+                {language === 'es' ? 'Error en el pipeline' : 'Pipeline error'}
+              </div>
+              <p className="text-xs text-n-700 whitespace-pre-wrap break-words">{error}</p>
+
+              {/* Action footer — repair chat toggle + continue-anyway shortcut. */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleRepair}
+                  aria-expanded={showRepair}
+                  aria-controls="repair-chat-panel"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+                >
+                  <Stethoscope className="w-3.5 h-3.5" />
+                  {showRepair
+                    ? language === 'es' ? 'Cerrar chat' : 'Close chat'
+                    : language === 'es' ? 'Hablar con El Doctor' : 'Talk to the Doctor'}
+                  {showRepair ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleContinueAnyway}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-n-200 text-n-700 text-xs font-medium hover:bg-n-50 transition-colors"
+                >
+                  {language === 'es' ? 'Continuar de todas formas' : 'Continue anyway'}
+                </button>
+              </div>
+            </div>
           </div>
+
+          {showRepair && pipelineInput && (
+            <div id="repair-chat-panel" className="mt-3">
+              <RepairChat
+                context={{
+                  errorMessage: error,
+                  rawCsv: pipelineInput.rawData ?? null,
+                  language,
+                  companyName: pipelineInput.company?.name,
+                  period: pipelineInput.fiscalPeriod,
+                  conversationId: repairConvId,
+                }}
+                onMarkProvisional={handleMarkProvisional}
+                onClose={() => {
+                  setShowRepair(false);
+                  setRepairSeed(null);
+                }}
+                language={language}
+                initialUserMessage={repairSeed ?? undefined}
+              />
+            </div>
+          )}
         </div>
       )}
 

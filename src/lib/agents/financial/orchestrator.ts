@@ -17,9 +17,18 @@ import type {
   FinancialReport,
   FinancialProgressEvent,
 } from './types';
+import type { ProvisionalFlag } from '@/lib/agents/repair/types';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
+  /**
+   * Override del usuario: cuando `active === true`, la validacion post-render
+   * NO lanza si falla — el reporte se devuelve con un watermark BORRADOR y se
+   * emite un `event: warning` con la lista de errores. Lo activa el repair
+   * chat ("El Doctor de Datos") cuando el usuario insiste en generar el
+   * reporte a pesar del fallo.
+   */
+  provisional?: ProvisionalFlag;
   /**
    * Resultado del preprocesador (si el caller ya lo corrio, p.ej. /api/upload
    * o /api/financial-report). Si se omite, el orchestrator corre el preprocess
@@ -515,7 +524,7 @@ export async function orchestrateFinancialReport(
     label: 'Consolidando reporte maestro',
   });
 
-  const consolidatedReport = buildConsolidatedReport(
+  let consolidatedReport = buildConsolidatedReport(
     company,
     niifResult.fullContent,
     strategyResult.fullContent,
@@ -526,6 +535,23 @@ export async function orchestrateFinancialReport(
   // Validator: placeholders + secciones + sanity numerica + ecuacion patrimonial.
   const controlTotals = deriveControlTotals(preprocessed);
   const validation = validateConsolidatedReport(consolidatedReport, controlTotals);
+
+  // ---------------------------------------------------------------------------
+  // Override del usuario (provisional): si esta activo y la validacion fallo,
+  // NO lanzamos. Convertimos los `errors` en `warnings` para la UI y
+  // anteponemos un watermark BORRADOR al reporte final.
+  // ---------------------------------------------------------------------------
+  const provisional = options.provisional;
+  if (provisional?.active && !validation.ok) {
+    onProgress?.({
+      type: 'warning',
+      warnings: [...validation.errors, ...validation.warnings],
+    });
+    consolidatedReport =
+      buildProvisionalWatermark(provisional.reason, validation.errors, language) +
+      '\n\n' +
+      consolidatedReport;
+  }
 
   const report: FinancialReport = {
     company,
@@ -543,7 +569,7 @@ export async function orchestrateFinancialReport(
     label: 'Reporte consolidado listo',
   });
 
-  if (!validation.ok) {
+  if (!validation.ok && !provisional?.active) {
     const errMsg = 'Validacion fallida: ' + validation.errors.join('; ');
     onProgress?.({ type: 'error', message: errMsg });
     throw new Error(errMsg);
@@ -627,4 +653,42 @@ ${governanceContent}
 
 > **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las cifras, analisis y documentos legales deben ser validados por un Contador Publico certificado y un abogado antes de su uso oficial. 1+1 no reemplaza la asesoria profesional.
 `;
+}
+
+// ---------------------------------------------------------------------------
+// Provisional watermark — se prepende al reporte cuando el usuario activa el
+// override desde el repair chat ("El Doctor de Datos"). Bilingue: respeta
+// `language`. Lista los errores de validacion para que quede explicito por
+// que el reporte va marcado como borrador.
+// ---------------------------------------------------------------------------
+
+function buildProvisionalWatermark(
+  reason: string,
+  errors: string[],
+  language: 'es' | 'en',
+): string {
+  const safeReason = (reason || '').trim() || (language === 'en' ? '(no reason provided)' : '(razon no declarada)');
+  const errLines = errors.length > 0
+    ? errors.map((e) => `> - ${e}`).join('\n')
+    : language === 'en'
+      ? '> - (no detailed errors)'
+      : '> - (sin errores detallados)';
+
+  if (language === 'en') {
+    return [
+      '> ⚠️ **DRAFT — VALIDATION PENDING**',
+      '> This report was generated with a user override. Automatic validation detected:',
+      errLines,
+      `> User-stated reason: "${safeReason}"`,
+      '> Must NOT be signed by the statutory auditor in this state.',
+    ].join('\n');
+  }
+
+  return [
+    '> ⚠️ **BORRADOR — VALIDACION PENDIENTE**',
+    '> Este reporte fue generado con override del usuario. La validacion automatica detecto:',
+    errLines,
+    `> Razon declarada: "${safeReason}"`,
+    '> NO debe firmarse por revisor fiscal en este estado.',
+  ].join('\n');
 }
