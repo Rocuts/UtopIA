@@ -330,7 +330,103 @@ Validar también el camino "Continuar de todas formas":
 ## Versionado
 
 - **2026-04-26 — Phase 1 + Phase 2 GA en main**: chat colaborativo completo en `/api/financial-report` con override y reparación de ajustes.
-- **2026-04-26 — Phase 3 parte 1 GA en main**: persistencia DB del ledger (Drizzle migration pendiente de `npm run db:push` en deploy) + diff visual antes/después.
+- **2026-04-26 — Phase 3 parte 1 GA en main**: persistencia DB del ledger + diff visual antes/después. Migración 0002 aplicada manualmente en Neon producción (commit `e8b9907`).
+- **2026-04-26 — Hotfix OCR PDF (`e8b9907`)**: fixed "no tengo acceso" cuando `pipelineInput.rawData` es texto OCR de PDF/imagen (no CSV). Nueva función `buildRawTextFallback` en `prompt.ts` inyecta el texto crudo truncado a 15K chars cuando `parseTrialBalanceCSV` retorna 0 filas. El agente ahora razona sobre raw text + totales del error message.
+- **2026-04-26 — Post-deploy audit fixes (`b9fa6a9`)**: dos P1 detectados en auditoría con Opus 4.7. (1) `executeReadAccount` ahora alinea su hint con el prompt fallback (antes contradecía). (2) `useRepairChat` ahora reemplaza el ledger client-side incluso cuando el server devuelve `adjustments: []` (antes mantenía state ephemeral, desincronizándose).
+
+## Auditoría post-deploy (2026-04-26)
+
+Auditoría con Opus 4.7 sobre todo el sistema Phases 1-3. Hallazgos:
+
+### Falsos positivos descartados
+- **Drizzle `setWhere` supuestamente inválido** — verificado en `node_modules/drizzle-orm/pg-core/query-builders/insert.d.ts:66`, sí es opción soportada. La protección cross-workspace funciona como diseñada.
+- **LCS uint32 overflow** — V8 crashea por OOM antes de overflow real. No es problema práctico.
+
+### P1 arreglados (commit `b9fa6a9`)
+- Tool ↔ prompt incoherentes cuando no hay preprocessed.
+- Hidratación silenciosa cuando server devolvía sesión con `[]`.
+
+### P1 diferidos (vigilar, no bloquean producción)
+- **CSV partial-parse silencioso** (`agent.ts:67-68`): si el parser retornase pocas filas con códigos válidos pero balance vacío, las tools podrían reportar datos parciales como autoritativos. Mitigación sugerida: detectar `controlTotals.activo === 0 && pasivo === 0 && patrimonio === 0` y caer al fallback de raw text.
+- **Multi-tab autosave race** (`persistence.ts:201-203`): si el usuario abre el mismo `conversationId` en dos tabs (no ocurre con `crypto.randomUUID()` por tab, pero sí si llega del DB hidratado), DELETE+INSERT concurrentes pueden corromper el ledger. Mitigación sugerida: serializar con `SELECT FOR UPDATE` o cambiar a driver `neon` con WS para transacciones interactivas.
+- **Zod-rejected tool calls invisibles** (`tools.ts:88-91`): si el LLM pasa `amount: "1000"` (string) en vez de número, Zod throw → `streamText` lo maneja silenciosamente. Mitigación: surface schema-failed tool calls como evento UI.
+- **Autosave errors silenciados** (`useRepairChat.ts:245`): persistence falla → console.error sin feedback al usuario. Mitigación: toast no-bloqueante.
+- **Hardcoded `provisional: null` en autosave** (`useRepairChat.ts:221`): si el host marca provisional, DB nunca lo ve, recargas pierden la intención.
+- **`numeric(20,2)` precision >$9,007 trillones** (`persistence.ts:92`): saldos colombianos prácticos no exceden 16 dígitos significativos, pero un valor extremo silencioso redondea. Mitigación: usar string para amount o validar overflow.
+
+### P2 / no-bloqueantes
+- `cachedIndex` singleton serverless (concurrencia rebuilds, sin issue de correctitud).
+- Watermark provisional + adjustmentLedger simultáneos (caso raro, comportamiento actual aceptable).
+
+## Plan para la próxima sesión
+
+Ordenado por valor entregado / tiempo:
+
+### 1. Endurecer los P1 diferidos (1 sesión, ~3 horas)
+- Surface schema-failed tool calls al UI (toast pequeño).
+- Toast de error en autosave (non-blocking).
+- Detectar parse parcial sospechoso en `agent.ts` y caer al raw-text fallback.
+- Persistir `provisional` en autosave (eliminar el TODO).
+- Validar overflow de `numeric(20,2)` en `persistence.ts:92`.
+
+**Por qué primero**: bajo costo, alto impacto en confianza del sistema. Cierra los flecos de la auditoría.
+
+### 2. Phase 3.1 — multi-pipeline + tax-reconciliation (1-2 sesiones)
+- Refactor `PipelineWorkspace.tsx` para soportar `pipelineKind: 'financial-report' | 'tax-reconciliation'`.
+- Extender `tax-reconciliation/orchestrator.ts` para preprocesar el TB (hoy no lo hace) y aceptar `adjustmentLedger`.
+- Schema zod del route hermano duplica el de financial-report.
+- Coordinación: WS4 (refactor host) primero, WS3 (extension del orchestrator) segundo.
+
+**Por qué segundo**: el otro pipeline que consume CSV de TB; replica un patrón ya validado.
+
+### 3. Telemetría / audit log (1 sesión)
+- Tabla `repair_events(id, workspace_id, event_type, payload jsonb, created_at)` con tipos: `provisional_marked`, `adjustment_proposed`, `adjustment_applied`, `adjustment_rejected`, `pipeline_regenerated`.
+- Hook server-side desde route + orchestrator.
+- Dashboard simple para revisor fiscal en `/workspace/audit/repair-log` (opcional).
+
+**Por qué importante**: trazabilidad para revisor fiscal cuando un reporte fue editado vía Doctor.
+
+### 4. Migración a SDK Anthropic + prompt caching (1 sesión)
+- Hoy cada turno carga el balance summary completo (~5K tokens) sin caché. Costo ~$0.05-0.10 USD/turno.
+- Migrando a SDK Anthropic con `cache_control` baja el costo 50-70% en turnos de seguimiento.
+- Trade-off: cambia el provider del orchestrator existente. Requiere coordinación con el resto del sistema (que también usa OpenAI directo).
+
+**Por qué después**: el sistema funciona bien sin esto; es optimización pura.
+
+### 5. Phase 4 — Write-back al ERP (proyecto separado, 1-2 sprints)
+**No tractable en una sesión orquestada.** Requiere:
+- Métodos POST en cada provider (`siigo.ts`, `helisa.ts`, `world-office.ts`, etc.). Hoy todos son read-only.
+- Helper AES-256-GCM real para `erp_credentials` (la columna existe, el código no cifra).
+- Idempotencia keys por ERP, manejo de partidas dobles balanceadas, rollback de partidas posteadas.
+- Suite de tests por ERP con sandbox/dev environment.
+- Acceso a credenciales sandbox de cada ERP — bloqueante operacionalmente.
+
+**Por qué tan pesado**: cada ERP tiene su propio schema, autenticación, y manejo de errores. No es código que se pueda escribir especulativamente — necesita testing real.
+
+## Cómo retomar la próxima sesión
+
+1. Lee este doc (`docs/REPAIR_CHAT.md`) primero — todo el contexto está aquí.
+2. Decide cuál de los 5 ítems del plan querés atacar.
+3. Si es 1 (endurecer P1s) o 2 (Phase 3.1), puedes orquestar agentes Opus 4.7 con el patrón ya probado: contrato de tipos en `types.ts` → 2-3 agentes en paralelo sobre archivos disjuntos → integrar y verificar.
+4. Si es 3 (telemetría) o 4 (caching), un solo agente alcanza.
+5. Si es 5 (write-back ERP), no lo arranques solo: necesita planeación con acceso a credenciales sandbox.
+
+### Comandos útiles
+
+```bash
+# Ver estado de la migración en producción
+DATABASE_URL=$(vercel env pull --environment=production /tmp/.env.audit && grep '^DATABASE_URL_UNPOOLED=' /tmp/.env.audit | cut -d= -f2-) \
+  node -e 'const {neon}=require("@neondatabase/serverless");const sql=neon(process.env.DATABASE_URL);sql.query("SELECT table_name FROM information_schema.tables WHERE table_schema=$1",["public"]).then(r=>console.log(r.rows.map(x=>x.table_name).join(",")))' \
+  && rm /tmp/.env.audit
+
+# Smoke test del repair chat sin LLM
+curl -X POST https://utopia.vercel.app/api/repair-chat \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"hola"}],"context":{"errorMessage":"test","rawCsv":null,"language":"es","conversationId":"test-123"}}'
+
+# tsc + build local
+npx tsc --noEmit && npm run build
+```
 
 ## Estado de archivos por fase
 
