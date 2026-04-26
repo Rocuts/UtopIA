@@ -35,7 +35,9 @@ confirmación del usuario.
 |---|---|---|
 | **Phase 1** | Chat read-only diagnóstico. Tools: `read_account`, `mark_provisional`. Override del validador con watermark "BORRADOR" + razón en el reporte. | ✅ Entregado, en main |
 | **Phase 2** | Chat colaborativo de reparación. Tools nuevas: `propose_adjustment`, `apply_adjustment`, `recheck_validation`. Util pura `applyAdjustments` aplicada también al re-run del pipeline. | ✅ Entregado, en main |
-| **Phase 3** | Write-back al ERP (Siigo/Helisa/WO), soporte para los otros 8 pipelines, diff visual antes/después. Persistencia DB del ledger. | ⏳ En diseño |
+| **Phase 3 (parte 1)** | Persistencia DB del ledger (Postgres Neon via Drizzle, hidratación + autosave). Diff visual antes/después con tabs Antes/Cambios/Después y highlighting de cuentas tocadas. | ✅ Entregado, en main |
+| **Phase 3.1** (deferred) | Refactor multi-pipeline en `PipelineWorkspace` + extender `adjustmentLedger` a `tax-reconciliation` (el único pipeline hermano que también consume CSV de TB). | ⏳ Diferido para después de validar Phase 3 con usuarios |
+| **Phase 4** (separate sprint) | Write-back al ERP (Siigo/Helisa/WO). Requiere: (a) métodos de creación en los connectors (hoy son read-only), (b) helper de cifrado real para `erp_credentials`, (c) idempotencia y rollback de partidas posteadas, (d) testing por ERP. **No tractable en una sesión orquestada — proyecto separado de 1-2 sprints.** | ❌ Fuera de scope Phase 3 |
 
 ---
 
@@ -328,3 +330,36 @@ Validar también el camino "Continuar de todas formas":
 ## Versionado
 
 - **2026-04-26 — Phase 1 + Phase 2 GA en main**: chat colaborativo completo en `/api/financial-report` con override y reparación de ajustes.
+- **2026-04-26 — Phase 3 parte 1 GA en main**: persistencia DB del ledger (Drizzle migration pendiente de `npm run db:push` en deploy) + diff visual antes/después.
+
+## Estado de archivos por fase
+
+### Phase 3 parte 1 (parche actual)
+
+| Archivo | Tipo | Workstream |
+|---|---|---|
+| `src/lib/db/schema.ts` | MODIFY | WS1 — agrega `repair_sessions`, `repair_adjustments` |
+| `src/lib/agents/repair/persistence.ts` | NEW | WS1 — `loadSession`, `upsertSession` |
+| `src/app/api/repair-session/route.ts` | NEW | WS1 — GET/PUT del ledger |
+| `src/components/workspace/repair/useRepairChat.ts` | MODIFY | WS1 — hidratación + autosave debounce 500ms |
+| `src/lib/diff/markdown-diff.ts` | NEW | WS2 — util LCS pura, sin deps |
+| `src/components/workspace/ReportDiff.tsx` | NEW | WS2 — tabs Antes/Cambios/Después |
+| `src/components/workspace/PipelineWorkspace.tsx` | MODIFY | WS2 — captura `originalReport` + toggle de diff |
+
+### Phase 3.1 deferred (cuando vuelva el feedback)
+
+| Workstream | Archivos previstos | Notas |
+|---|---|---|
+| WS3 — Extender `adjustmentLedger` a `tax-reconciliation` | `src/lib/agents/financial/tax-reconciliation/orchestrator.ts`, `src/app/api/tax-reconciliation/route.ts`, `src/lib/validation/schemas.ts` | El orchestrator hoy NO preprocesa TB — hay que agregar `parseTrialBalanceCSV` + `preprocessTrialBalance` antes del Stage 1 |
+| WS4 — Refactor multi-pipeline en `PipelineWorkspace` | `src/components/workspace/PipelineWorkspace.tsx`, `src/types/platform.ts` | Variable `pipelineKind` + routing condicional del fetch + repair chat agnóstico al pipeline |
+
+### Fuera de Phase 3 (proyecto separado)
+
+- **Write-back al ERP** — los connectors actuales (`src/lib/erp/providers/*.ts`) son **read-only**. No existe `createJournalEntry` ni equivalente en ningún provider. Tampoco hay helper de cifrado real para `erp_credentials` (la columna existe; el código no cifra). Implementarlo requiere:
+  - Métodos POST en cada provider (descubrir endpoints de creación, schemas distintos, manejo de partidas dobles balanceadas)
+  - Capa de idempotencia keys (Siigo y Helisa la documentan; WorldOffice no necesariamente)
+  - Helper AES-256-GCM real para cifrar credentials antes de pasarlos al connector
+  - Suite de tests por ERP con sandbox/dev environment de cada uno
+  - Manejo de errores 4xx/5xx específicos, rollback de partidas posteadas, y telemetría
+  
+  **Alcance estimado: 1-2 sprints dedicados con acceso a ambientes sandbox de cada ERP.**
