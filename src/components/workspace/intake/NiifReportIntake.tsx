@@ -711,7 +711,10 @@ export function NiifReportIntake() {
             </span>
           </button>
           {sectorOpen && (
-            <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-n-0 border border-n-200 rounded-lg shadow-lg max-h-48 overflow-y-auto styled-scrollbar">
+            <div
+              data-lenis-prevent
+              className="absolute z-20 top-full mt-1 left-0 right-0 bg-n-0 border border-n-200 rounded-lg shadow-lg max-h-48 overflow-y-auto styled-scrollbar"
+            >
               {SECTORS.map((sector) => (
                 <button
                   key={sector}

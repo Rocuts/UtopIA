@@ -374,6 +374,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                 ref={listRef}
                 id="command-palette-list"
                 role="listbox"
+                data-lenis-prevent
                 className="max-h-[min(50vh,400px)] overflow-y-auto analysis-scroll"
               >
                 {flatItems.length === 0 ? (

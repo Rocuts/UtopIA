@@ -93,7 +93,14 @@ export function StepWizard({
       </div>
 
       {/* Step content */}
-      <div className="flex-1 min-h-0 overflow-y-auto styled-scrollbar px-6">
+      {/* data-lenis-prevent: el wizard vive dentro de IntakeModal (fixed overlay).
+          Lenis está en modo root y secuestra el wheel global; sin este atributo
+          en el scrollable real, la rueda del mouse no llega a este contenedor
+          y el contenido queda cortado abajo. Defensivo y siempre correcto. */}
+      <div
+        data-lenis-prevent
+        className="flex-1 min-h-0 overflow-y-auto styled-scrollbar px-6"
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={current.id}

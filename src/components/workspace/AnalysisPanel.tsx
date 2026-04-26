@@ -1169,7 +1169,13 @@ export function AnalysisPanel({
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 min-h-0 overflow-y-auto styled-scrollbar">
+            {/* data-lenis-prevent: el panel se monta como `fixed` sheet en mobile.
+                Lenis root secuestra wheel a nivel documento; este atributo
+                garantiza que la rueda llegue al scrollable de la sheet. */}
+            <div
+              data-lenis-prevent
+              className="flex-1 min-h-0 overflow-y-auto styled-scrollbar"
+            >
               {currentState === 'welcome' && renderWelcome()}
               {currentState === 'case_selected' && renderCaseSelected()}
               {currentState === 'intake' && renderIntake()}
