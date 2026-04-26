@@ -33,7 +33,9 @@ import type {
   RepairToolName,
 } from './types';
 
-const MAX_ROUNDS = 3;
+// Phase 2 sube de 3 → 8: el flujo "propose → apply → recheck → propose otro
+// → apply → recheck" necesita más rondas que el chat read-only de Phase 1.
+const MAX_ROUNDS = 8;
 const MAX_OUTPUT_TOKENS = 1500;
 
 /**

@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { runRepairAgent } from '@/lib/agents/repair/agent';
 import type { RepairChatRequest } from '@/lib/agents/repair/types';
+import { redactPII } from '@/lib/security/pii-filter';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -84,7 +85,16 @@ export async function POST(req: Request) {
     );
   }
 
-  const validated: RepairChatRequest = parsed.data;
+  // Redactar PII (NIT, cedulas, emails, telefonos, tarjetas) en los mensajes
+  // del usuario ANTES de pasarlos al LLM. La rawCsv y el errorMessage pasan
+  // sin redactar — analogos al `documentContext` del chat principal — porque
+  // las tools necesitan operar sobre los codigos PUC reales y los totales.
+  const validated: RepairChatRequest = {
+    ...parsed.data,
+    messages: parsed.data.messages.map((m) =>
+      m.role === 'user' ? { ...m, content: redactPII(m.content) } : m,
+    ),
+  };
   const abortController = new AbortController();
   // Propagar el abort del cliente (cierre de SSE) al streamText.
   if (req.signal) {
