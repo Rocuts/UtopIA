@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Check,
   Stethoscope,
+  GitCompare,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -28,6 +29,7 @@ import { DSBadge } from '@/design-system/components/Badge';
 import { ProgressRing } from '@/design-system/components/ProgressRing';
 import { ReportFollowUpChat } from './ReportFollowUpChat';
 import { RepairChat } from './repair/RepairChat';
+import { ReportDiff } from './ReportDiff';
 import type {
   ProvisionalFlag,
   Adjustment,
@@ -357,6 +359,17 @@ interface ReportViewerProps {
   onReset?: () => void;
   onPatchReport?: (newConsolidatedMarkdown: string) => void;
   onTurnsChange?: (turns: ReportIterationTurn[]) => void;
+  /**
+   * Markdown del reporte ORIGINAL — capturado por el host antes de regenerar
+   * con adjustments. Si esta presente, el viewer muestra un toggle "Ver
+   * cambios" que abre `<ReportDiff>` comparando original vs `content`.
+   */
+  originalContent?: string | null;
+  /**
+   * Codigos PUC afectados por adjustments (vienen del adjustment ledger).
+   * Se pasan al `<ReportDiff>` para subrayar las lineas que los mencionan.
+   */
+  affectedAccounts?: string[];
 }
 
 function ReportViewer({
@@ -371,12 +384,21 @@ function ReportViewer({
   onReset,
   onPatchReport,
   onTurnsChange,
+  originalContent,
+  affectedAccounts,
 }: ReportViewerProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
+  const [showDiff, setShowDiff] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Solo se ofrece el diff si el host capturo un reporte original distinto
+  // del actual. Trim guard cubre el caso de tabs en blanco / saltos triviales.
+  const hasDiff =
+    typeof originalContent === 'string' &&
+    originalContent.trim().length > 0 &&
+    originalContent !== content;
 
   const scrollToSection = useCallback((sectionId: string) => {
     setActiveSection(sectionId);
@@ -608,6 +630,30 @@ function ReportViewer({
             )}
             {copyLabel}
           </button>
+          {hasDiff && (
+            <button
+              type="button"
+              onClick={() => setShowDiff((s) => !s)}
+              aria-expanded={showDiff}
+              aria-controls="report-diff-panel"
+              aria-label={
+                language === 'es'
+                  ? 'Ver cambios respecto al reporte original'
+                  : 'View changes from original report'
+              }
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
+                showDiff
+                  ? 'border-gold-500 bg-gold-300/10 text-gold-700'
+                  : 'border-n-200 text-n-600 hover:bg-n-50',
+              )}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              {showDiff
+                ? language === 'es' ? 'Ocultar cambios' : 'Hide changes'
+                : language === 'es' ? 'Ver cambios' : 'View changes'}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleReset}
@@ -619,6 +665,21 @@ function ReportViewer({
             {language === 'es' ? 'Nuevo Reporte' : 'New Report'}
           </button>
         </div>
+
+        {/* Diff panel — visible solo cuando el host capturo un reporte
+            original (regen post-adjustments) y el usuario abre el toggle.
+            Va inmediatamente debajo del action bar para que el contraste
+            antes/cambios/despues sea inmediato visualmente. */}
+        {hasDiff && showDiff && (
+          <div id="report-diff-panel" className="mx-6 mt-3 mb-2 no-print">
+            <ReportDiff
+              before={originalContent ?? ''}
+              after={content}
+              affectedAccounts={affectedAccounts}
+              language={language}
+            />
+          </div>
+        )}
 
         {exportError && (
           <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
@@ -697,6 +758,15 @@ export function PipelineWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
+  // ─── Phase 3 (hook 3): diff visual antes/despues ──────────────────────────
+  // Cuando el usuario regenera con adjustments via el Doctor, capturamos el
+  // markdown del reporte ANTES del regen aqui. El ReportViewer expone un
+  // toggle "Ver cambios" si este state esta poblado y difiere del actual.
+  // Reseteado en handleReset.
+  const [originalReport, setOriginalReport] = useState<string | null>(null);
+  // Cuentas afectadas por los adjustments aplicados — pasadas al diff para
+  // resaltar las lineas del reporte que las mencionan.
+  const [diffAffectedAccounts, setDiffAffectedAccounts] = useState<string[]>([]);
   // Stable id for the repair chat session — regenerated each time a new error
   // surfaces so server-side telemetry can group attempts by error occurrence.
   const [repairConvId, setRepairConvId] = useState<string>('');
@@ -1014,6 +1084,8 @@ export function PipelineWorkspace() {
     setError(null);
     setShowRepair(false);
     setRepairConvId('');
+    setOriginalReport(null);
+    setDiffAffectedAccounts([]);
     lastProcessedInputRef.current = null;
     setPipelineInput(null);
     setPipelineState((prev) => ({
@@ -1106,6 +1178,22 @@ export function PipelineWorkspace() {
       setShowRepair(false);
       setRepairSeed(null);
       setError(null);
+      // ─── Phase 3 hook 3: capturar reporte original ANTES del regen ─────
+      // El reporte vivo puede venir de dos lugares dependiendo de si hubo
+      // un patch del chat de seguimiento: prefer backend.consolidatedReport
+      // (autoritativo, es lo que el backend ya emitio) y caer a report.content.
+      // Si ninguno existe (caso raro: regenerando sin reporte previo), no
+      // capturamos — el toggle de diff simplemente no aparecera.
+      const previousMarkdown =
+        backendReport?.consolidatedReport ?? report?.content ?? null;
+      if (previousMarkdown && previousMarkdown.trim().length > 0) {
+        setOriginalReport(previousMarkdown);
+      }
+      // Cuentas afectadas — codigos PUC unicos del set aplicado, para que
+      // el diff las pueda resaltar.
+      setDiffAffectedAccounts(
+        Array.from(new Set(applied.map((a) => a.accountCode).filter(Boolean))),
+      );
       // Mint a NEW reference so the pipeline effect re-fires (it compares
       // identity against `lastProcessedInputRef.current`).
       const next = {
@@ -1118,7 +1206,7 @@ export function PipelineWorkspace() {
       };
       setPipelineInput(next);
     },
-    [pipelineInput, setPipelineInput],
+    [pipelineInput, setPipelineInput, backendReport, report],
   );
 
   // ─── "Continuar de todas formas" shortcut ────────────────────────────────
@@ -1177,6 +1265,8 @@ export function PipelineWorkspace() {
             onReset={handleReset}
             onPatchReport={handlePatchReport}
             onTurnsChange={handleTurnsChange}
+            originalContent={originalReport}
+            affectedAccounts={diffAffectedAccounts}
           />
         </div>
       </div>

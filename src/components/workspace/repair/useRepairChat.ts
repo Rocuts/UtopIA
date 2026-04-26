@@ -119,8 +119,146 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      // Cancelar autosave debounce pendiente al desmontar.
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
     };
   }, []);
+
+  // ─── Phase 3: hidratación + autosave ──────────────────────────────────────
+  //
+  // Hidratación one-shot por conversationId: al montar, hace GET /api/
+  // repair-session y rehidrata el ledger. NO toca `messages` (esos siguen
+  // siendo ephemeral por ahora).
+  //
+  // `hydratedRef` bloquea el autosave hasta que la hidratación termine; sin
+  // esto, el primer render (adjustments = []) dispararía un PUT que borraría
+  // los adjustments persistidos antes de poder leerlos.
+  const hydratedRef = useRef(false);
+  // Track del conversationId que ya hidratamos, para re-hidratar si el
+  // host cambia el contexto a una sesión distinta (raro, pero posible).
+  const hydratedConversationIdRef = useRef<string | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightAutosaveRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const cid = initialContext.conversationId;
+    if (!cid) return;
+    if (hydratedConversationIdRef.current === cid) return;
+
+    hydratedRef.current = false;
+    hydratedConversationIdRef.current = cid;
+
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/repair-session?conversationId=${encodeURIComponent(cid)}`,
+          { signal: ctrl.signal, credentials: 'same-origin' },
+        );
+        if (!res.ok) {
+          // 4xx/5xx: silently fallback to empty state. La persistencia es
+          // best-effort, no debe romper el chat.
+          return;
+        }
+        const json = (await res.json()) as {
+          session: { adjustments?: Adjustment[] } | null;
+        };
+        if (
+          json?.session &&
+          Array.isArray(json.session.adjustments) &&
+          json.session.adjustments.length > 0
+        ) {
+          // Reemplazo total del ledger; el server es la autoridad para la
+          // hidratación inicial.
+          setAdjustments(json.session.adjustments);
+        }
+      } catch (err) {
+        if ((err as Error | undefined)?.name !== 'AbortError') {
+          console.error('[useRepairChat] hydrate failed', err);
+        }
+      } finally {
+        hydratedRef.current = true;
+      }
+    })();
+
+    return () => {
+      ctrl.abort();
+    };
+  }, [initialContext.conversationId]);
+
+  // Autosave debounce 500 ms: cada cambio en `adjustments` programa un PUT.
+  // Si llega otro cambio antes de que dispare, reinicia el timer (debounce
+  // estándar). Solo un PUT en vuelo a la vez (cancelamos el anterior).
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const ctx = contextRef.current;
+    if (!ctx?.conversationId) return;
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = setTimeout(() => {
+      autosaveTimerRef.current = null;
+
+      // Cancelar PUT previo si seguía corriendo.
+      inFlightAutosaveRef.current?.abort();
+      const ctrl = new AbortController();
+      inFlightAutosaveRef.current = ctrl;
+
+      const body = {
+        conversationId: ctx.conversationId,
+        errorMessage: ctx.errorMessage,
+        rawCsv: ctx.rawCsv,
+        language: ctx.language,
+        companyName: ctx.companyName,
+        period: ctx.period,
+        // Phase 3.1: cuando el host notifique al hook que el provisional
+        // se confirmó, persistir aquí. Por ahora null (TODO).
+        provisional: null,
+        status: 'open' as const,
+        adjustments: adjustmentsRef.current,
+      };
+
+      fetch('/api/repair-session', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+        credentials: 'same-origin',
+      })
+        .then((res) => {
+          if (!res.ok) {
+            console.error(
+              '[useRepairChat] autosave non-2xx',
+              res.status,
+            );
+          }
+        })
+        .catch((err) => {
+          if ((err as Error | undefined)?.name !== 'AbortError') {
+            console.error('[useRepairChat] autosave failed', err);
+          }
+        })
+        .finally(() => {
+          if (inFlightAutosaveRef.current === ctrl) {
+            inFlightAutosaveRef.current = null;
+          }
+        });
+    }, 500);
+
+    return () => {
+      // Si `adjustments` cambia otra vez antes del timeout, lo limpiamos
+      // y se re-programa en el siguiente run del efecto.
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [adjustments]);
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
