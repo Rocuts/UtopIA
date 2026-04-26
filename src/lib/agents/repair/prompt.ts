@@ -11,7 +11,8 @@
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
-import type { RepairContext } from './types';
+import { applyAdjustments, revalidate } from './adjustments';
+import type { Adjustment, RepairContext } from './types';
 
 const VALIDATION_REPORT_LIMIT = 3000;
 
@@ -27,6 +28,7 @@ const VALIDATION_REPORT_LIMIT = 3000;
 export function buildRepairSystemPrompt(
   ctx: RepairContext,
   preprocessed: PreprocessedBalance | null,
+  adjustments: Adjustment[] = [],
 ): string {
   const lang = ctx.language;
   const isEs = lang === 'es';
@@ -80,26 +82,57 @@ export function buildRepairSystemPrompt(
   const toolsBlock = isEs
     ? `## Herramientas disponibles
 
-Tienes dos herramientas. Usalas con criterio:
+Tienes cinco herramientas. Usalas con criterio:
 
-1. **read_account({ code })** — Inspecciona una cuenta PUC por codigo (ej. "11", "1105", "110505"). Te devuelve el saldo, descendientes inmediatos y total de la clase. **USA ESTA TOOL SIEMPRE antes de afirmar el saldo de una cuenta.** Si el codigo es de Clase (1 digito) o Grupo (2 digitos), te devolvera tambien sus cuentas hijas para que las analices. Si el codigo no existe, te dara una pista basada en prefijos cercanos.
+1. **read_account({ code })** — Inspecciona una cuenta PUC por codigo (ej. "11", "1105", "110505"). Te devuelve el saldo (con ajustes ya aplicados, si los hay), descendientes inmediatos y total de la clase. **USA ESTA TOOL SIEMPRE antes de afirmar el saldo de una cuenta.** Si el codigo es de Clase (1 digito) o Grupo (2 digitos), te devolvera tambien sus cuentas hijas. Si el codigo no existe, te dara una pista basada en prefijos cercanos.
 
 2. **mark_provisional({ reason })** — Marca el reporte como BORRADOR con la razon que el usuario te declare por escrito. **REGLAS CRITICAS:**
    - NUNCA llames esta tool por iniciativa propia. SOLO cuando el usuario, en el ultimo turno de la conversacion, exprese inequivocamente que quiere generar el reporte como borrador a pesar del error.
    - La \`reason\` debe ser la razon que el usuario te dio, parafraseada en una sola frase clara (no inventes razones).
-   - Si el usuario duda, NO la llames: pidele primero que confirme con palabras explicitas (por ejemplo "si, generalo igual" o "marcalo como borrador").
-   - Esta tool no modifica nada en el servidor: solo emite una senal a la interfaz para que ofrezca al usuario re-correr el reporte con el override.`
+   - Si el usuario duda, NO la llames: pidele primero que confirme con palabras explicitas.
+
+3. **propose_adjustment({ accountCode, accountName?, amount, rationale })** — Propone un ajuste contable concreto. Suma \`amount\` (signed COP: positivo aumenta, negativo disminuye) al saldo de la cuenta PUC indicada, y devuelve un PREVIEW con el saldo nuevo y los totales hipoteticos. **NO aplica el ajuste — solo es un calculo de propuesta.** REGLAS CRITICAS:
+   - SOLO despues de que el usuario haya confirmado un valor numerico concreto Y la cuenta destino. Ejemplo valido: el usuario dice "mi cuenta de ahorros 1120 deberia tener 5.000.000 mas".
+   - NUNCA inventes ajustes. Si la cuenta no aparece en el balance pero el usuario afirma que existe, pregunta primero el codigo y nombre exactos.
+   - La \`rationale\` debe reflejar la justificacion del usuario (>=15 caracteres). No moralices ni elabores: solo parafrasea.
+   - Si la cuenta no existe en el balance, propose_adjustment la creara como nueva hoja en su clase PUC. Esto es valido solo si el usuario confirmo el nuevo codigo.
+
+4. **apply_adjustment({ id })** — Solicita aplicar un ajuste previamente propuesto, identificado por su \`id\`. NO muta el server: la UI mostrara una tarjeta de confirmacion al usuario; solo si el usuario confirma "aplica el ajuste X" en palabras explicitas, el cliente actualizara el ledger y reintentara la conversacion. REGLAS:
+   - Solo invoca esta tool cuando el usuario haya dicho explicitamente que quiere aplicar un ajuste especifico que ya fue propuesto.
+   - El \`id\` debe coincidir con uno de la lista de ajustes que aparece arriba en el contexto. Si no estas seguro, primero llama propose_adjustment.
+
+5. **recheck_validation({})** — Re-corre la validacion aritmetica del balance con los ajustes ya APLICADOS (status === "applied"). Devuelve totales actualizados (activo, pasivo, patrimonio, utilidad) + estado de la ecuacion patrimonial. USALA despues de aplicar uno o varios ajustes para confirmar al usuario que la ecuacion ya cuadra y que puede regenerar el reporte.`
     : `## Available tools
 
-You have two tools. Use them with judgment:
+You have five tools. Use them with judgment:
 
-1. **read_account({ code })** — Inspect a PUC account by code (e.g. "11", "1105", "110505"). Returns balance, immediate descendants, and class total. **ALWAYS use this tool before stating an account balance.** If the code is Class (1 digit) or Group (2 digits), it will also return its child accounts. If the code does not exist, it will hint at nearby prefixes.
+1. **read_account({ code })** — Inspect a PUC account by code (e.g. "11", "1105", "110505"). Returns balance (with applied adjustments, if any), immediate descendants, and class total. **ALWAYS use this tool before stating an account balance.** If the code is Class (1 digit) or Group (2 digits), it will also return child accounts. If the code does not exist, it will hint at nearby prefixes.
 
-2. **mark_provisional({ reason })** — Marks the report as DRAFT with the reason the user has explicitly declared. **CRITICAL RULES:**
-   - NEVER call this tool on your own initiative. ONLY when the user, in their latest turn, unambiguously expresses they want to generate the report as a draft despite the error.
-   - The \`reason\` must be the user's stated reason, paraphrased in a single clear sentence (do not invent reasons).
-   - If the user hesitates, DO NOT call it: first ask them to confirm with explicit words (e.g. "yes, generate it anyway" or "mark it as draft").
-   - This tool does not change anything on the server: it only signals the UI to offer the user the option to re-run with the override.`;
+2. **mark_provisional({ reason })** — Marks the report as DRAFT with the user's stated reason. **CRITICAL RULES:**
+   - NEVER call on your own initiative. ONLY when the user explicitly says they want to generate the report as a draft despite the error.
+   - The \`reason\` must be the user's stated reason paraphrased in one clear sentence.
+   - If the user hesitates, do NOT call it: ask for explicit confirmation first.
+
+3. **propose_adjustment({ accountCode, accountName?, amount, rationale })** — Proposes a concrete accounting adjustment. Adds \`amount\` (signed COP: positive increases, negative decreases) to the indicated PUC account, and returns a PREVIEW with the new balance and hypothetical totals. **DOES NOT apply — it's a proposal calculation only.** CRITICAL RULES:
+   - ONLY after the user has confirmed a concrete numeric value AND the target account.
+   - NEVER invent adjustments. If the account is not in the balance but the user claims it exists, ask first for the exact code and name.
+   - \`rationale\` must reflect the user's justification (>=15 characters). Just paraphrase.
+   - If the account does not exist in the balance, propose_adjustment will create it as a new leaf in its PUC class. Valid only if the user confirmed the new code.
+
+4. **apply_adjustment({ id })** — Requests applying a previously proposed adjustment by \`id\`. DOES NOT mutate the server: the UI will show a confirmation card; only if the user explicitly confirms "apply adjustment X" the client updates the ledger and retries the conversation. RULES:
+   - Only call when the user has explicitly stated they want to apply a specific previously-proposed adjustment.
+   - The \`id\` must match one in the adjustments list above. If unsure, call propose_adjustment first.
+
+5. **recheck_validation({})** — Re-runs arithmetic validation with already-APPLIED adjustments (status === "applied"). Returns updated totals (assets, liabilities, equity, net income) + accounting equation status. USE IT after applying one or more adjustments to confirm the equation balances and the user can regenerate the report.`;
+
+  // ---------------------------------------------------------------------------
+  // Ledger de ajustes (Phase 2)
+  // ---------------------------------------------------------------------------
+  const adjustmentsBlock = buildAdjustmentsBlock(
+    adjustments,
+    preprocessed,
+    isEs,
+  );
 
   // ---------------------------------------------------------------------------
   // Reglas anti-alucinacion + estilo
@@ -135,10 +168,96 @@ You have two tools. Use them with judgment:
     '',
     dataBlock,
     '',
+    adjustmentsBlock,
+    '',
     toolsBlock,
     '',
     rulesBlock,
   ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// buildAdjustmentsBlock — lista los ajustes del ledger + sugiere regenerar
+// el reporte si la ecuacion ya cuadra post-aplicacion.
+// ---------------------------------------------------------------------------
+
+function buildAdjustmentsBlock(
+  adjustments: Adjustment[],
+  preprocessed: PreprocessedBalance | null,
+  isEs: boolean,
+): string {
+  const header = isEs ? '## Ajustes propuestos en esta sesion' : '## Adjustments proposed in this session';
+  if (!adjustments || adjustments.length === 0) {
+    return [
+      header,
+      '',
+      isEs
+        ? 'No hay ajustes propuestos todavia. Usa `propose_adjustment` cuando el usuario te confirme un valor concreto y la cuenta destino.'
+        : 'No adjustments proposed yet. Use `propose_adjustment` once the user confirms a concrete value and target account.',
+    ].join('\n');
+  }
+
+  const lines: string[] = [header, ''];
+  const STATUS_LABEL_ES: Record<Adjustment['status'], string> = {
+    proposed: 'PROPUESTO',
+    applied: 'APLICADO',
+    rejected: 'RECHAZADO',
+  };
+  const STATUS_LABEL_EN: Record<Adjustment['status'], string> = {
+    proposed: 'PROPOSED',
+    applied: 'APPLIED',
+    rejected: 'REJECTED',
+  };
+  const labelMap = isEs ? STATUS_LABEL_ES : STATUS_LABEL_EN;
+
+  lines.push(
+    isEs
+      ? '| id | cuenta | monto | estado | razon |'
+      : '| id | account | amount | status | rationale |',
+  );
+  lines.push('|----|--------|-------|--------|-------|');
+
+  for (const adj of adjustments) {
+    const shortId = (adj.id || '').slice(0, 8);
+    const code = adj.accountCode;
+    const name = adj.accountName || (isEs ? '(sin nombre)' : '(unnamed)');
+    const amount = fmtCop(Number(adj.amount) || 0);
+    const status = labelMap[adj.status] || adj.status;
+    const rationale = (adj.rationale || '').replace(/\s+/g, ' ').slice(0, 80);
+    lines.push(
+      `| \`${shortId}\` | ${code} ${name} | ${amount} | ${status} | ${rationale} |`,
+    );
+  }
+
+  // Si hay >=1 ajuste applied y tenemos preprocessed, evaluamos si la
+  // ecuacion ya cuadra; en ese caso recomendamos al agente cerrar el ciclo.
+  const applied = adjustments.filter((a) => a.status === 'applied');
+  if (applied.length > 0 && preprocessed) {
+    try {
+      const application = applyAdjustments(preprocessed, applied);
+      const v = revalidate(application.balance);
+      const ct = application.balance.controlTotals;
+      const diff = ct.activo - (ct.pasivo + ct.patrimonio);
+      lines.push('');
+      if (v.ok) {
+        lines.push(
+          isEs
+            ? `Estado actual con ${applied.length} ajuste(s) aplicado(s): la ecuacion patrimonial CUADRA (diferencia ${fmtCop(diff)}). Sugiere al usuario regenerar el reporte cuando quede satisfecho.`
+            : `Current state with ${applied.length} applied adjustment(s): the accounting equation BALANCES (diff ${fmtCop(diff)}). Suggest the user regenerate the report when ready.`,
+        );
+      } else {
+        lines.push(
+          isEs
+            ? `Estado actual con ${applied.length} ajuste(s) aplicado(s): la ecuacion patrimonial AUN NO CUADRA (diferencia ${fmtCop(diff)}). Sigue diagnosticando.`
+            : `Current state with ${applied.length} applied adjustment(s): the accounting equation does NOT yet balance (diff ${fmtCop(diff)}). Keep diagnosing.`,
+        );
+      }
+    } catch {
+      // No-fatal: si applyAdjustments tira (improbable), seguimos sin nota.
+    }
+  }
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------

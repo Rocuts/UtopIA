@@ -28,7 +28,11 @@ import { DSBadge } from '@/design-system/components/Badge';
 import { ProgressRing } from '@/design-system/components/ProgressRing';
 import { ReportFollowUpChat } from './ReportFollowUpChat';
 import { RepairChat } from './repair/RepairChat';
-import type { ProvisionalFlag } from '@/lib/agents/repair/types';
+import type {
+  ProvisionalFlag,
+  Adjustment,
+  AdjustmentLedger,
+} from '@/lib/agents/repair/types';
 import type {
   PipelineState,
   FinancialReport,
@@ -748,11 +752,17 @@ export function PipelineWorkspace() {
         // (handleMarkProvisional) — it is not on the NiifReportIntake type yet
         // so we read it via a narrow lookup. The Backend agent extends the
         // /api/financial-report request schema to accept it.
-        const provisional = (pipelineInput as NiifReportIntake & {
+        // Phase 2: same pattern for `adjustmentLedger`, attached locally by
+        // handleRegenerateWithAdjustments. Backend route accepts it as
+        // optional and applies adjustments post-preprocessing.
+        const intakeWithExtras = pipelineInput as NiifReportIntake & {
           provisional?: ProvisionalFlag;
-        }).provisional;
+          adjustmentLedger?: AdjustmentLedger;
+        };
+        const provisional = intakeWithExtras.provisional;
+        const adjustmentLedger = intakeWithExtras.adjustmentLedger;
 
-        const phase1Body = {
+        const phase1Body: Record<string, unknown> = {
           rawData: pipelineInput.rawData,
           company: {
             name: pipelineInput.company.name,
@@ -771,6 +781,9 @@ export function PipelineWorkspace() {
           instructions: pipelineInput.specialInstructions,
           ...(provisional ? { provisional } : {}),
         };
+        if (adjustmentLedger?.adjustments?.length) {
+          phase1Body.adjustmentLedger = adjustmentLedger;
+        }
 
         const phase1Res = await fetchSSEWithRetry('/api/financial-report', {
           method: 'POST',
@@ -1077,6 +1090,37 @@ export function PipelineWorkspace() {
     [pipelineInput, setPipelineInput],
   );
 
+  // ─── Repair chat: regenerate with applied adjustments (Phase 2) ──────────
+  // Triggered by RepairChat when the user has confirmed at least one
+  // adjustment via the inline propose/apply UI. The component already
+  // filters to `status === 'applied'` before invoking this callback.
+  //
+  // Mutual exclusion with `provisional`: applying real adjustments supersedes
+  // the provisional override — there is no need to mark a report as
+  // provisional if the user has actually repaired the data. We therefore
+  // CLEAR `provisional` when re-running with adjustments. (If the user later
+  // wants to bypass validation again, the repair chat can re-emit it.)
+  const handleRegenerateWithAdjustments = useCallback(
+    (applied: Adjustment[]) => {
+      if (!pipelineInput) return;
+      setShowRepair(false);
+      setRepairSeed(null);
+      setError(null);
+      // Mint a NEW reference so the pipeline effect re-fires (it compares
+      // identity against `lastProcessedInputRef.current`).
+      const next = {
+        ...pipelineInput,
+        adjustmentLedger: { adjustments: applied },
+        provisional: undefined,
+      } as NiifReportIntake & {
+        adjustmentLedger: AdjustmentLedger;
+        provisional?: ProvisionalFlag;
+      };
+      setPipelineInput(next);
+    },
+    [pipelineInput, setPipelineInput],
+  );
+
   // ─── "Continuar de todas formas" shortcut ────────────────────────────────
   const handleContinueAnyway = useCallback(() => {
     setRepairSeed(
@@ -1139,8 +1183,28 @@ export function PipelineWorkspace() {
     );
   }
 
+  // Phase 2 visual indicator: when the pipeline is running with applied
+  // adjustments, show a thin banner so the user knows the regeneration was
+  // not a fresh run. Read via the same narrow lookup used in the fetch.
+  const adjustmentLedger = (pipelineInput as
+    | (NiifReportIntake & { adjustmentLedger?: AdjustmentLedger })
+    | null)?.adjustmentLedger;
+  const adjustmentCount = adjustmentLedger?.adjustments?.length ?? 0;
+  const isRegeneratingWithAdjustments = isRunning && adjustmentCount > 0;
+
   return (
     <div className="h-full flex flex-col overflow-y-auto styled-scrollbar">
+      {isRegeneratingWithAdjustments && (
+        <div className="shrink-0 border-b border-gold-500/30 bg-gold-300/10 px-6 py-2 flex items-center gap-2 text-xs text-gold-700">
+          <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+          <span className="font-medium">
+            {language === 'es'
+              ? `Regenerando con ${adjustmentCount} ajuste${adjustmentCount === 1 ? '' : 's'} aplicado${adjustmentCount === 1 ? '' : 's'}`
+              : `Regenerating with ${adjustmentCount} applied adjustment${adjustmentCount === 1 ? '' : 's'}`}
+          </span>
+        </div>
+      )}
+
       <PipelineMonitor state={pipelineState} />
 
       {error && (
@@ -1195,6 +1259,7 @@ export function PipelineWorkspace() {
                   conversationId: repairConvId,
                 }}
                 onMarkProvisional={handleMarkProvisional}
+                onRegenerateWithAdjustments={handleRegenerateWithAdjustments}
                 onClose={() => {
                   setShowRepair(false);
                   setRepairSeed(null);

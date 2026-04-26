@@ -1,14 +1,12 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// RepairChat — UI inline (NO modal) del "Doctor de Datos" Phase 1.
+// RepairChat — UI inline (NO modal) del "Doctor de Datos".
 // ---------------------------------------------------------------------------
-// Se monta dentro del card de error del pipeline (PipelineWorkspace) cuando el
-// validador determinístico falla. Permite al usuario conversar con un agente
-// que tiene acceso de solo-lectura al balance crudo (tool `read_account`) y
-// que puede ofrecerle marcar el reporte como BORRADOR provisional vía la
-// tool `mark_provisional` — la confirmación final la da el usuario aquí, NO
-// el agente.
+// Phase 1: chat read-only con read_account + mark_provisional.
+// Phase 2: chat colaborativo con propose_adjustment + apply_adjustment +
+//   recheck_validation. El estado del adjustment ledger vive en el cliente
+//   (useRepairChat) y se replay-ea al servidor en cada turno.
 //
 // Restricciones críticas:
 //   - Inline expandible (no portal, no overlay).
@@ -23,10 +21,24 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bot, Loader2, Send, X, AlertTriangle, Wrench } from 'lucide-react';
+import {
+  Bot,
+  Loader2,
+  Send,
+  X,
+  AlertTriangle,
+  Wrench,
+  RefreshCw,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRepairChat, type RepairToolInvocation } from './useRepairChat';
-import type { RepairContext, RepairLanguage } from '@/lib/agents/repair/types';
+import { AdjustmentCard } from './AdjustmentCard';
+import { ValidationStatusStrip } from './ValidationStatusStrip';
+import type {
+  Adjustment,
+  RepairContext,
+  RepairLanguage,
+} from '@/lib/agents/repair/types';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +46,9 @@ export interface RepairChatProps {
   context: RepairContext;
   /** Host re-dispara el pipeline con `{ provisional: { active: true, reason } }`. */
   onMarkProvisional: (reason: string) => void;
+  /** Phase 2: host re-dispara el pipeline con `{ adjustments: [...] }` (solo
+   *  los `applied`). El componente cierra el chat al disparar. */
+  onRegenerateWithAdjustments?: (adjustments: Adjustment[]) => void;
   onClose: () => void;
   language: RepairLanguage;
   /**
@@ -65,6 +80,16 @@ const COPY = {
     emptyHint:
       'Pregúntale al Doctor por una cuenta específica (p. ej. “revisa la cuenta 1120”) o pídele que te ayude a entender el descuadre.',
     toolPrefix: 'Consulté',
+    adjustmentsTitle: 'Ajustes propuestos',
+    adjustmentConfirmTitle: 'El Doctor pide tu confirmación',
+    adjustmentConfirmBody: (shortId: string) =>
+      `Confirma para aplicar el ajuste ${shortId}.`,
+    adjustmentConfirmApply: 'Aplicar',
+    adjustmentConfirmReject: 'Rechazar',
+    regenerateCtaTitle: 'Validación cuadrada con tus ajustes',
+    regenerateCtaBody:
+      'Puedes regenerar el reporte completo aplicando estos ajustes confirmados.',
+    regenerateCtaButton: 'Regenerar reporte completo con estos ajustes',
   },
   en: {
     region: 'Data Doctor repair chat',
@@ -84,6 +109,16 @@ const COPY = {
     emptyHint:
       'Ask the Doctor about a specific account (e.g. “check account 1120”) or have it explain the imbalance.',
     toolPrefix: 'Looked up',
+    adjustmentsTitle: 'Proposed adjustments',
+    adjustmentConfirmTitle: 'The Doctor needs your confirmation',
+    adjustmentConfirmBody: (shortId: string) =>
+      `Confirm to apply adjustment ${shortId}.`,
+    adjustmentConfirmApply: 'Apply',
+    adjustmentConfirmReject: 'Reject',
+    regenerateCtaTitle: 'Validation balances with your adjustments',
+    regenerateCtaBody:
+      'You can regenerate the full report applying these confirmed adjustments.',
+    regenerateCtaButton: 'Regenerate full report with these adjustments',
   },
 } as const;
 
@@ -121,6 +156,23 @@ function formatToolCall(tc: RepairToolInvocation, language: RepairLanguage): str
       language === 'en' ? 'proposed mark_provisional' : 'propuso mark_provisional';
     return `${prefix} ${label}: "${reason}"`;
   }
+  if (tc.name === 'propose_adjustment') {
+    const code = (tc.args as { accountCode?: string })?.accountCode ?? '?';
+    const amount = (tc.args as { amount?: number })?.amount;
+    const amtStr =
+      typeof amount === 'number'
+        ? ` ${amount > 0 ? '+' : ''}$${Math.abs(amount).toLocaleString(language === 'en' ? 'en-US' : 'es-CO')}`
+        : '';
+    return `${prefix} propose_adjustment(${code})${amtStr}`;
+  }
+  if (tc.name === 'apply_adjustment') {
+    const id = (tc.args as { id?: string })?.id ?? '?';
+    const shortId = id.slice(0, 6);
+    return `${prefix} apply_adjustment(${shortId})`;
+  }
+  if (tc.name === 'recheck_validation') {
+    return `${prefix} recheck_validation()`;
+  }
   return `${prefix} ${tc.name}`;
 }
 
@@ -129,6 +181,7 @@ function formatToolCall(tc: RepairToolInvocation, language: RepairLanguage): str
 export function RepairChat({
   context,
   onMarkProvisional,
+  onRegenerateWithAdjustments,
   onClose,
   language,
   initialUserMessage,
@@ -137,6 +190,7 @@ export function RepairChat({
   const regionId = useId();
 
   const {
+    // Phase 1
     messages,
     pendingAssistant,
     toolCalls,
@@ -147,6 +201,13 @@ export function RepairChat({
     abort,
     resetError,
     consumeProvisional,
+    // Phase 2
+    adjustments,
+    pendingAdjustmentId,
+    validationStatus,
+    confirmAdjustment,
+    rejectAdjustment,
+    consumeAdjustmentConfirmation,
   } = useRepairChat(context);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -174,7 +235,7 @@ export function RepairChat({
     const el = transcriptRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, pendingAssistant, toolCalls]);
+  }, [messages, pendingAssistant, toolCalls, adjustments]);
 
   // Auto-grow de la textarea (max 4 líneas ≈ 96 px considerando line-height
   // de la tipografía base). Lo recalculamos en cada keystroke.
@@ -232,10 +293,56 @@ export function RepairChat({
     consumeProvisional();
   }, [consumeProvisional]);
 
-  // Index O(1) para emparejar tool-calls con su mensaje. En Phase 1 los tool
-  // calls del último turno se renderizan al final del transcript (decisión de
-  // diseño: el usuario no necesita verlos intercalados con cada token).
-  const visibleToolCalls = useMemo(() => toolCalls, [toolCalls]);
+  // Phase 2 handlers ────────────────────────────────────────────────────────
+
+  const handlePendingAdjConfirm = useCallback(() => {
+    if (!pendingAdjustmentId) return;
+    confirmAdjustment(pendingAdjustmentId);
+    consumeAdjustmentConfirmation();
+  }, [pendingAdjustmentId, confirmAdjustment, consumeAdjustmentConfirmation]);
+
+  const handlePendingAdjReject = useCallback(() => {
+    if (!pendingAdjustmentId) return;
+    rejectAdjustment(pendingAdjustmentId);
+    consumeAdjustmentConfirmation();
+  }, [pendingAdjustmentId, rejectAdjustment, consumeAdjustmentConfirmation]);
+
+  const handleRegenerate = useCallback(() => {
+    if (!onRegenerateWithAdjustments) return;
+    const applied = adjustments.filter((a) => a.status === 'applied');
+    if (applied.length === 0) return;
+    onRegenerateWithAdjustments(applied);
+    onClose();
+  }, [onRegenerateWithAdjustments, adjustments, onClose]);
+
+  // Sort adjustments: proposed → applied → rejected. Memo para no re-ordenar
+  // en cada render — el array cambia identity solo cuando muta.
+  const sortedAdjustments = useMemo(() => {
+    const order = { proposed: 0, applied: 1, rejected: 2 } as const;
+    return [...adjustments].sort(
+      (a, b) => order[a.status] - order[b.status],
+    );
+  }, [adjustments]);
+
+  // CTA Regenerar: visible solo si validación pasa, hay applied y el host
+  // proveyó el callback. Derived state — no useEffect.
+  const hasAppliedAdjustments = adjustments.some((a) => a.status === 'applied');
+  const canRegenerate =
+    validationStatus?.ok === true &&
+    hasAppliedAdjustments &&
+    typeof onRegenerateWithAdjustments === 'function';
+
+  // Si tanto pendingAdjustmentId como pendingProvisionalReason están activos,
+  // priorizamos el adjustment (caso raro pero documentado en el spec).
+  const showProvisionalPanel =
+    pendingProvisionalReason !== null && pendingAdjustmentId === null;
+
+  const visibleToolCalls = toolCalls;
+
+  // Short id del adjustment pendiente (para el panel de confirmación).
+  const pendingShortId = pendingAdjustmentId
+    ? pendingAdjustmentId.slice(0, 6)
+    : '';
 
   return (
     <motion.section
@@ -320,11 +427,149 @@ export function RepairChat({
               <span>{copy.thinking}</span>
             </div>
           )}
+
+          {/* Phase 2: Adjustment ledger al final del transcript */}
+          <AnimatePresence initial={false}>
+            {sortedAdjustments.length > 0 && (
+              <motion.div
+                key="adjustments-section"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                className="pt-2"
+              >
+                <div className="text-2xs font-semibold uppercase tracking-wide text-n-500 mb-2">
+                  {copy.adjustmentsTitle}
+                </div>
+                <div className="space-y-2">
+                  {sortedAdjustments.map((adj) => (
+                    <AdjustmentCard
+                      key={adj.id}
+                      adjustment={adj}
+                      onConfirm={
+                        adj.status === 'proposed' ? confirmAdjustment : undefined
+                      }
+                      onReject={
+                        adj.status === 'proposed' ? rejectAdjustment : undefined
+                      }
+                      disabled={isLoading}
+                      language={language}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Provisional confirmation panel */}
+        {/* Phase 2: Validation status strip (fuera del transcript) */}
         <AnimatePresence initial={false}>
-          {pendingProvisionalReason !== null && (
+          {validationStatus && (
+            <motion.div
+              key="validation-strip"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="overflow-hidden"
+            >
+              <ValidationStatusStrip
+                status={validationStatus}
+                language={language}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Phase 2: Regenerar CTA cuando validación cuadra y hay applied */}
+        <AnimatePresence initial={false}>
+          {canRegenerate && (
+            <motion.div
+              key="regenerate-cta"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="mx-5 mb-3 rounded-md border border-success/40 bg-success/8 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <RefreshCw
+                    className="w-4 h-4 mt-0.5 shrink-0 text-success"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-success">
+                      {copy.regenerateCtaTitle}
+                    </div>
+                    <p className="mt-0.5 text-xs text-n-700">
+                      {copy.regenerateCtaBody}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleRegenerate}
+                      className="mt-2 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-600 transition-colors"
+                    >
+                      {copy.regenerateCtaButton}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Phase 2: Adjustment confirmation panel (prioriza sobre provisional) */}
+        <AnimatePresence initial={false}>
+          {pendingAdjustmentId !== null && (
+            <motion.div
+              key="adj-confirm"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="mx-5 mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle
+                    className="w-4 h-4 mt-0.5 shrink-0 text-warning"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-n-900">
+                      {copy.adjustmentConfirmTitle}
+                    </div>
+                    <p className="mt-0.5 text-xs text-n-700">
+                      {copy.adjustmentConfirmBody(pendingShortId)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePendingAdjConfirm}
+                        className="px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-600 transition-colors"
+                      >
+                        {copy.adjustmentConfirmApply}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePendingAdjReject}
+                        className="px-3 py-1.5 rounded text-xs font-medium text-n-700 hover:text-n-900 hover:bg-n-50 transition-colors"
+                      >
+                        {copy.adjustmentConfirmReject}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Phase 1: Provisional confirmation panel */}
+        <AnimatePresence initial={false}>
+          {showProvisionalPanel && (
             <motion.div
               key="provisional"
               initial={{ height: 0, opacity: 0 }}

@@ -11,7 +11,10 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
-import type { ProvisionalFlag } from '@/lib/agents/repair/types';
+import type {
+  AdjustmentLedger,
+  ProvisionalFlag,
+} from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // Schema inline para el flag `provisional` — opcional, no se reusa en otras
@@ -20,6 +23,28 @@ const provisionalFlagSchema = z
   .object({
     active: z.boolean(),
     reason: z.string().min(1).max(2_000),
+  })
+  .optional();
+
+// ---------------------------------------------------------------------------
+// Adjustment ledger (Phase 2 — Doctor de Datos). Inline en esta ruta porque
+// es un body opcional. La forma se duplica desde repair-chat/route.ts a
+// proposito (ambas son consumers independientes del mismo tipo `Adjustment`).
+// ---------------------------------------------------------------------------
+const adjustmentSchema = z.object({
+  id: z.string().min(1).max(100),
+  accountCode: z.string().min(1).max(10),
+  accountName: z.string().min(1).max(200),
+  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
+  rationale: z.string().min(1).max(2_000),
+  status: z.enum(['proposed', 'applied', 'rejected']),
+  proposedAt: z.string().min(1).max(40),
+  appliedAt: z.string().min(1).max(40).optional(),
+  rejectedAt: z.string().min(1).max(40).optional(),
+});
+const adjustmentLedgerSchema = z
+  .object({
+    adjustments: z.array(adjustmentSchema).max(50),
   })
   .optional();
 
@@ -68,6 +93,25 @@ export async function POST(req: Request) {
     }
     const provisional = provisionalParsed.data as ProvisionalFlag | undefined;
 
+    // Phase 2: ledger de ajustes confirmados via Doctor de Datos. Validamos
+    // explicitamente para que un body mal formado devuelva 400 en vez de
+    // silenciar los ajustes.
+    const adjustmentLedgerParsed = adjustmentLedgerSchema.safeParse(
+      (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+    );
+    if (!adjustmentLedgerParsed.success) {
+      return NextResponse.json(
+        {
+          error: 'Invalid adjustmentLedger format.',
+          details: adjustmentLedgerParsed.error.issues.map(
+            (i) => `adjustmentLedger.${i.path.join('.')}: ${i.message}`,
+          ),
+        },
+        { status: 400 },
+      );
+    }
+    const adjustmentLedger = adjustmentLedgerParsed.data as AdjustmentLedger | undefined;
+
     // Si el cliente nos paso un PreprocessedBalance completo (desde /api/upload),
     // lo reusamos. Asi evitamos re-parsear el CSV y garantizamos que los totales
     // vinculantes que vio el usuario en el upload son exactamente los que
@@ -113,7 +157,15 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(enhancedData, company, language, enhancedInstructions, preprocessed, provisional);
+      return handleStreaming(
+        enhancedData,
+        company,
+        language,
+        enhancedInstructions,
+        preprocessed,
+        provisional,
+        adjustmentLedger,
+      );
     }
 
     // Non-streaming: run the full pipeline and return JSON
@@ -124,7 +176,7 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
         language,
         instructions: enhancedInstructions,
       },
-      { preprocessed, provisional },
+      { preprocessed, provisional, adjustmentLedger },
     );
 
     return NextResponse.json(report);
@@ -164,6 +216,7 @@ function handleStreaming(
   instructions: string | undefined,
   preprocessed: PreprocessedBalance | undefined,
   provisional: ProvisionalFlag | undefined,
+  adjustmentLedger: AdjustmentLedger | undefined,
 ) {
   const encoder = new TextEncoder();
 
@@ -191,6 +244,7 @@ function handleStreaming(
             },
             preprocessed,
             provisional,
+            adjustmentLedger,
           },
         );
         send('result', report);

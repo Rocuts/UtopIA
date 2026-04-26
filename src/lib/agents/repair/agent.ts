@@ -28,6 +28,7 @@ import {
 import { buildRepairSystemPrompt } from './prompt';
 import { executeRepairTool, repairTools } from './tools';
 import type {
+  Adjustment,
   RepairChatRequest,
   RepairToolName,
 } from './types';
@@ -74,7 +75,16 @@ export async function runRepairAgent(
     }
   }
 
-  const systemPrompt = buildRepairSystemPrompt(req.context, preprocessed);
+  // Phase 2: ledger replicado por el cliente. Vacio si el caller es Phase 1.
+  const adjustments: Adjustment[] = Array.isArray(req.adjustments)
+    ? req.adjustments
+    : [];
+
+  const systemPrompt = buildRepairSystemPrompt(
+    req.context,
+    preprocessed,
+    adjustments,
+  );
 
   // ---------------------------------------------------------------------------
   // Mensajes iniciales: system + historial conversacional
@@ -93,6 +103,12 @@ export async function runRepairAgent(
   // resultados. Si devuelve solo texto (ya streameado), terminamos.
   // ---------------------------------------------------------------------------
   let markedProvisionalReason: string | null = null;
+  /**
+   * Phase 2: ids de ajustes que el agente quiere aplicar via tool. La UI los
+   * recibe via `event: action {type: 'confirm_adjustment', adjustmentId}`.
+   * Se emiten en orden de aparicion ANTES del `event: done`.
+   */
+  const pendingApplyAdjustmentIds: string[] = [];
   let doneReason: 'finish' | 'aborted' | 'max_rounds' = 'finish';
 
   try {
@@ -175,7 +191,11 @@ export async function runRepairAgent(
           const toolResult = await executeRepairTool(
             tc.toolName as RepairToolName,
             args,
-            { preprocessed, language: req.context.language },
+            {
+              preprocessed,
+              language: req.context.language,
+              adjustments,
+            },
           );
 
           send('tool_result', {
@@ -191,6 +211,17 @@ export async function runRepairAgent(
             if (reasonArg.length >= 10) {
               markedProvisionalReason = reasonArg;
             }
+          }
+
+          // Phase 2: si fue apply_adjustment con resultado pendiente de
+          // confirmacion, encolamos el id para emitir `confirm_adjustment`.
+          // (No emitimos en este punto para no intercalar SSE entre el
+          // tool_result y el siguiente token del modelo.)
+          if (
+            tc.toolName === 'apply_adjustment' &&
+            isPendingConfirmation(toolResult)
+          ) {
+            pendingApplyAdjustmentIds.push(toolResult.id);
           }
 
           // Empujamos el resultado al historial como JSON para que el modelo
@@ -233,7 +264,18 @@ export async function runRepairAgent(
       });
     }
 
+    // Phase 2: emitimos un `confirm_adjustment` por cada id pendiente. La UI
+    // muestra una tarjeta inline y, si el usuario confirma, flipea el status
+    // del Adjustment a 'applied' en el ledger del cliente.
+    for (const id of pendingApplyAdjustmentIds) {
+      send('action', {
+        type: 'confirm_adjustment',
+        adjustmentId: id,
+      });
+    }
+
     send('done', { reason: doneReason });
+    return;
   } catch (err) {
     if (abortSignal.aborted) {
       send('done', { reason: 'aborted' });
@@ -246,4 +288,21 @@ export async function runRepairAgent(
       detail: message,
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Type guards
+// ---------------------------------------------------------------------------
+
+/**
+ * Discrimina el output de `apply_adjustment` cuando trae el shape esperado
+ * `{ status: 'pending_user_confirmation', id: string }`. Retorna el objeto
+ * tipado para que el caller pueda extraer `id` sin un cast adicional.
+ */
+function isPendingConfirmation(
+  result: unknown,
+): result is { status: 'pending_user_confirmation'; id: string } {
+  if (!result || typeof result !== 'object') return false;
+  const r = result as { status?: unknown; id?: unknown };
+  return r.status === 'pending_user_confirmation' && typeof r.id === 'string' && r.id.length > 0;
 }

@@ -26,6 +26,25 @@ const messageSchema = z.object({
   content: z.string().min(1).max(10_000),
 });
 
+// ---------------------------------------------------------------------------
+// Adjustment ledger (Phase 2). El cliente envia el array completo en cada
+// request (replay). El servidor es stateless; no persiste nada.
+// ---------------------------------------------------------------------------
+const adjustmentSchema = z.object({
+  id: z.string().min(1).max(100),
+  accountCode: z.string().min(1).max(10),
+  accountName: z.string().min(1).max(200),
+  amount: z.number().refine(
+    (n) => Number.isFinite(n),
+    'amount debe ser finito',
+  ),
+  rationale: z.string().min(1).max(2_000),
+  status: z.enum(['proposed', 'applied', 'rejected']),
+  proposedAt: z.string().min(1).max(40),
+  appliedAt: z.string().min(1).max(40).optional(),
+  rejectedAt: z.string().min(1).max(40).optional(),
+});
+
 const requestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(50),
   context: z.object({
@@ -36,6 +55,7 @@ const requestSchema = z.object({
     period: z.string().max(20).optional(),
     conversationId: z.string().min(1).max(100),
   }),
+  adjustments: z.array(adjustmentSchema).max(50).optional().default([]),
 });
 
 // ---------------------------------------------------------------------------

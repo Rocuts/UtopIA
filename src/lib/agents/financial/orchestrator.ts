@@ -7,7 +7,11 @@
 import { runNiifAnalyst } from './agents/niif-analyst';
 import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
-import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
+import {
+  parseTrialBalanceCSV,
+  preprocessTrialBalance,
+  type PreprocessedBalance,
+} from '@/lib/preprocessing/trial-balance';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
 import { pullTrialBalanceForPeriod } from '@/lib/erp/pipeline';
 import type { PeriodSpec } from '@/lib/erp/adapter';
@@ -17,7 +21,11 @@ import type {
   FinancialReport,
   FinancialProgressEvent,
 } from './types';
-import type { ProvisionalFlag } from '@/lib/agents/repair/types';
+import type {
+  AdjustmentLedger,
+  ProvisionalFlag,
+} from '@/lib/agents/repair/types';
+import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
@@ -44,6 +52,17 @@ export interface OrchestrateFinancialOptions {
   erpConnections?: ERPServiceConnection[];
   /** Periodo fiscal a extraer del ERP cuando se dispara auto-pull. */
   period?: PeriodSpec;
+  /**
+   * Phase 2 (Doctor de Datos): ledger de ajustes confirmados por el usuario en
+   * el repair chat. Solo entradas con `status === 'applied'` se honran.
+   *
+   * Flujo: el orchestrator corre el preprocesador como siempre y, antes del
+   * Stage 0.5 (gate), reescribe el `preprocessed` aplicando los ajustes via
+   * `applyAdjustments()`. Asi la validacion y los Agentes 1/2/3 ven el balance
+   * ya parchado, y el reporte refleja exactamente lo que el usuario aprobo en
+   * el chat.
+   */
+  adjustmentLedger?: AdjustmentLedger;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +168,17 @@ function deriveValidation(preprocessed: unknown): {
     suggestedAccounts: asStringArray(v.suggestedAccounts),
     adjustments: asStringArray(v.adjustments),
   };
+}
+
+/**
+ * Type-guard defensivo: verifica que `preprocessed` parezca un PreprocessedBalance
+ * suficientemente bien formado para alimentar `applyAdjustments`. Mantiene el
+ * mismo estilo `unknown`-friendly que el resto del orchestrator.
+ */
+function isPreprocessedBalance(pp: unknown): pp is PreprocessedBalance {
+  if (!pp || typeof pp !== 'object') return false;
+  const candidate = pp as { classes?: unknown; controlTotals?: unknown; summary?: unknown };
+  return Array.isArray(candidate.classes) && !!candidate.controlTotals && !!candidate.summary;
 }
 
 /**
@@ -401,6 +431,35 @@ export async function orchestrateFinancialReport(
   }
 
   // ---------------------------------------------------------------------------
+  // Stage 0.4: Aplicar adjustmentLedger (Phase 2 — Doctor de Datos)
+  // ---------------------------------------------------------------------------
+  // Si el usuario confirmo ajustes en el repair chat, los aplicamos AHORA
+  // sobre el preprocessed antes del gate de validacion. Esto permite que un
+  // balance que fallaba el gate en su forma original pase con los ajustes
+  // aprobados por el usuario.
+  // ---------------------------------------------------------------------------
+  const appliedAdjustments =
+    options.adjustmentLedger?.adjustments?.filter((a) => a.status === 'applied') ?? [];
+  let adjustmentsApplicationDetail: ReturnType<typeof applyAdjustments> | null = null;
+  if (
+    appliedAdjustments.length > 0 &&
+    preprocessed &&
+    typeof preprocessed === 'object' &&
+    isPreprocessedBalance(preprocessed)
+  ) {
+    adjustmentsApplicationDetail = applyAdjustments(
+      preprocessed,
+      appliedAdjustments,
+    );
+    preprocessed = adjustmentsApplicationDetail.balance;
+    onProgress?.({
+      type: 'stage_progress',
+      stage: 1,
+      detail: `Doctor de Datos: ${appliedAdjustments.length} ajuste(s) aplicado(s) al balance antes de generar el reporte.`,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Stage 0.5: Gate de validacion aritmetica
   // ---------------------------------------------------------------------------
   // Si el preprocesador marco el balance como "blocking" (p.ej. la ecuacion
@@ -531,6 +590,21 @@ export async function orchestrateFinancialReport(
     governanceResult.fullContent,
     language,
   );
+
+  // -------------------------------------------------------------------------
+  // Phase 2: si hubo ajustes aplicados via Doctor de Datos, agregamos una
+  // seccion al final del reporte que documenta cada uno (id corto, cuenta,
+  // monto, razon). Esto deja una traza auditable en el reporte final.
+  // -------------------------------------------------------------------------
+  if (adjustmentsApplicationDetail && appliedAdjustments.length > 0) {
+    consolidatedReport +=
+      '\n\n' +
+      buildAdjustmentsAuditSection(
+        appliedAdjustments,
+        adjustmentsApplicationDetail.affected,
+        language,
+      );
+  }
 
   // Validator: placeholders + secciones + sanity numerica + ecuacion patrimonial.
   const controlTotals = deriveControlTotals(preprocessed);
@@ -691,4 +765,64 @@ function buildProvisionalWatermark(
     `> Razon declarada: "${safeReason}"`,
     '> NO debe firmarse por revisor fiscal en este estado.',
   ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Adjustments audit section (Phase 2 — Doctor de Datos)
+// ---------------------------------------------------------------------------
+
+/**
+ * Documenta los ajustes aplicados por el Doctor de Datos al final del reporte
+ * consolidado. Bilingue. Usa los `affected` resueltos por `applyAdjustments`
+ * (que ya conocen oldBalance / newBalance / isNewAccount) para que la tabla
+ * sea autoexplicativa.
+ */
+function buildAdjustmentsAuditSection(
+  applied: AdjustmentLedger['adjustments'],
+  affected: ReturnType<typeof applyAdjustments>['affected'],
+  language: 'es' | 'en',
+): string {
+  const isEs = language === 'es';
+  const fmt = (n: number) => fmtCop(n);
+  const byId = new Map<string, (typeof affected)[number]>();
+  for (const row of affected) byId.set(row.adjustmentId, row);
+
+  const lines: string[] = [];
+  lines.push('---');
+  lines.push('');
+  lines.push(
+    isEs
+      ? '## Ajustes contables aplicados durante el proceso de revision'
+      : '## Accounting adjustments applied during the review process',
+  );
+  lines.push('');
+  lines.push(
+    isEs
+      ? 'Los siguientes ajustes fueron propuestos por el agente "Doctor de Datos" y confirmados explicitamente por el usuario antes de generar este reporte. Las cifras del cuerpo del reporte ya los reflejan.'
+      : 'The following adjustments were proposed by the "Data Doctor" agent and explicitly confirmed by the user prior to generating this report. The figures in the body of the report already reflect them.',
+  );
+  lines.push('');
+  lines.push(
+    isEs
+      ? '| id | Cuenta | Saldo previo | Monto ajuste | Saldo nuevo | Nueva cuenta | Razon |'
+      : '| id | Account | Previous balance | Adjustment | New balance | New account | Rationale |',
+  );
+  lines.push('|----|--------|------------|------------|------------|------------|------|');
+
+  for (const adj of applied) {
+    const a = byId.get(adj.id);
+    const shortId = (adj.id || '').slice(0, 8);
+    const code = adj.accountCode;
+    const name = adj.accountName || (isEs ? '(sin nombre)' : '(unnamed)');
+    const oldBal = a ? fmt(a.oldBalance) : 'N/D';
+    const amt = fmt(Number(adj.amount) || 0);
+    const newBal = a ? fmt(a.newBalance) : 'N/D';
+    const isNew = a?.isNewAccount ? (isEs ? 'Si' : 'Yes') : 'No';
+    const rationale = (adj.rationale || '').replace(/\s+/g, ' ').slice(0, 200);
+    lines.push(
+      `| \`${shortId}\` | ${code} ${name} | ${oldBal} | ${amt} | ${newBal} | ${isNew} | ${rationale} |`,
+    );
+  }
+
+  return lines.join('\n');
 }

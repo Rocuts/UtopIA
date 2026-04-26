@@ -2,22 +2,31 @@
 
 // ---------------------------------------------------------------------------
 // useRepairChat — hook que maneja el ciclo de vida del chat con el "Doctor de
-// Datos" (Phase 1). Consume `/api/repair-chat` via SSE con eventos:
-//   - token        → delta de texto del asistente
-//   - tool_call    → el agente invocó una tool (read_account / mark_provisional)
-//   - tool_result  → resultado de la tool
-//   - action       → side-channel: el agente decidió que el usuario debería
-//                    confirmar marcar el reporte como provisional (override)
-//   - done         → fin del turno (flush del pending → messages)
-//   - error        → falla del backend
+// Datos".
 //
-// Server es stateless — el contexto (errorMessage, rawCsv, language, …) viaja
-// en cada request. El hook solo mantiene el historial cliente.
+// Phase 1: read-only diagnostics (read_account, mark_provisional).
+// Phase 2: collaborative repair — el agente puede proponer ajustes
+//   (`propose_adjustment`), pedir confirmación al usuario (`apply_adjustment` →
+//   action `confirm_adjustment`), y revalidar la ecuación contable
+//   (`recheck_validation`). El estado canónico (adjustment ledger) vive en el
+//   cliente y se replay-ea al servidor en cada `sendMessage`.
+//
+// Eventos SSE consumidos:
+//   - token        → delta de texto del asistente
+//   - tool_call    → el agente invocó una tool
+//   - tool_result  → resultado de la tool
+//   - action       → side-channel (mark_provisional | confirm_adjustment)
+//   - done         → fin del turno
+//   - error        → falla del backend
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { consumeSSE } from '@/lib/sse/consume';
 import type {
+  Adjustment,
+  ProposeAdjustmentInput,
+  ProposeAdjustmentOutput,
+  RecheckValidationOutput,
   RepairContext,
   RepairMessage,
   RepairChatRequest,
@@ -39,6 +48,7 @@ export interface RepairToolInvocation {
 }
 
 export interface UseRepairChat {
+  // Phase 1
   messages: RepairMessage[];
   pendingAssistant: string;
   toolCalls: RepairToolInvocation[];
@@ -49,6 +59,14 @@ export interface UseRepairChat {
   abort: () => void;
   resetError: () => void;
   consumeProvisional: () => string | null;
+
+  // Phase 2
+  adjustments: Adjustment[];
+  pendingAdjustmentId: string | null;
+  validationStatus: RecheckValidationOutput | null;
+  confirmAdjustment: (id: string) => void;
+  rejectAdjustment: (id: string) => void;
+  consumeAdjustmentConfirmation: () => string | null;
 }
 
 // ─── Implementación ─────────────────────────────────────────────────────────
@@ -62,16 +80,40 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
   const [pendingProvisionalReason, setPendingProvisionalReason] =
     useState<string | null>(null);
 
+  // Phase 2 state
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [pendingAdjustmentId, setPendingAdjustmentId] = useState<string | null>(
+    null,
+  );
+  const [validationStatus, setValidationStatus] =
+    useState<RecheckValidationOutput | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
 
   // Mantenemos el contexto inicial en una ref para que `sendMessage` no se
   // re-cree cada vez que el host pase una referencia nueva (objetos inline).
-  // El contexto es estable durante la sesión; si el host necesita cambiarlo
-  // debe re-montar el hook (lo que es coherente con el contrato Phase 1).
   const contextRef = useRef<RepairContext>(initialContext);
   useEffect(() => {
     contextRef.current = initialContext;
   }, [initialContext]);
+
+  // Espejo del adjustment ledger para enviarlo en `sendMessage` sin recrear
+  // el callback con cada cambio del state.
+  const adjustmentsRef = useRef<Adjustment[]>([]);
+  useEffect(() => {
+    adjustmentsRef.current = adjustments;
+  }, [adjustments]);
+
+  // Cache toolCallId → args. Cuando llega un `tool_result` de
+  // `propose_adjustment`, el `result` solo trae `id` y `preview`; los datos
+  // originales (accountCode, accountName, amount, rationale) están en los
+  // args del tool_call previo. Los recordamos por id.
+  // Ref (no state): no afecta render, no debe disparar re-renders, y no se
+  // serializa al servidor — se reconstruye en cada montaje (consistente con
+  // el modelo stateless del server).
+  const toolCallArgsRef = useRef<Map<string, Record<string, unknown>>>(
+    new Map(),
+  );
 
   // Cleanup: si el componente se desmonta con un fetch en curso, abortar.
   useEffect(() => {
@@ -97,6 +139,41 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
       return null;
     });
     return captured;
+  }, []);
+
+  const consumeAdjustmentConfirmation = useCallback((): string | null => {
+    let captured: string | null = null;
+    setPendingAdjustmentId((prev) => {
+      captured = prev;
+      return null;
+    });
+    return captured;
+  }, []);
+
+  const confirmAdjustment = useCallback((id: string) => {
+    const nowIso = new Date().toISOString();
+    setAdjustments((prev) =>
+      prev.map((adj) =>
+        adj.id === id && adj.status === 'proposed'
+          ? { ...adj, status: 'applied', appliedAt: nowIso }
+          : adj,
+      ),
+    );
+    // Limpia el pending solo si coincide; si la UI ya lo había consumido,
+    // este set es no-op.
+    setPendingAdjustmentId((prev) => (prev === id ? null : prev));
+  }, []);
+
+  const rejectAdjustment = useCallback((id: string) => {
+    const nowIso = new Date().toISOString();
+    setAdjustments((prev) =>
+      prev.map((adj) =>
+        adj.id === id && adj.status === 'proposed'
+          ? { ...adj, status: 'rejected', rejectedAt: nowIso }
+          : adj,
+      ),
+    );
+    setPendingAdjustmentId((prev) => (prev === id ? null : prev));
   }, []);
 
   const sendMessage = useCallback(
@@ -127,6 +204,7 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
         const payload: RepairChatRequest = {
           messages: [...priorMessages, userMessage],
           context: contextRef.current,
+          adjustments: adjustmentsRef.current,
         };
 
         const response = await fetch('/api/repair-chat', {
@@ -150,9 +228,12 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
           tool_call: (raw) => {
             const ev = raw as RepairToolCallEvent;
             if (!ev?.id || !ev?.name) return;
+            const args = ev.args ?? {};
+            // Cachear args para emparejar con el tool_result subsiguiente.
+            toolCallArgsRef.current.set(ev.id, args);
             setToolCalls((prev) => [
               ...prev,
-              { id: ev.id, name: ev.name, args: ev.args ?? {} },
+              { id: ev.id, name: ev.name, args },
             ]);
           },
           tool_result: (raw) => {
@@ -163,11 +244,68 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
                 tc.id === ev.id ? { ...tc, result: ev.result } : tc,
               ),
             );
+
+            // Phase 2: side-effects de tool results específicos.
+            //
+            // propose_adjustment → agregar Adjustment 'proposed' al ledger.
+            // recheck_validation → guardar el último estado de validación.
+            //
+            // Buscamos el nombre via el tool_call cacheado por id (`toolCalls`
+            // del state aún no refleja el cambio de este tick — usamos el ref).
+            const cachedArgs = toolCallArgsRef.current.get(ev.id);
+            if (!cachedArgs) return;
+
+            // El `name` no está en el tool_result event, así que lo
+            // recuperamos desde el state via búsqueda. Como el state es
+            // asíncrono, dependemos del ref de toolCallNames separado.
+            const name = toolCallNamesRef.current.get(ev.id);
+            if (!name) return;
+
+            if (name === 'propose_adjustment') {
+              const result = ev.result as ProposeAdjustmentOutput | undefined;
+              if (!result?.id) return;
+              const input = cachedArgs as unknown as ProposeAdjustmentInput;
+
+              // Si por alguna razón el server reusara un id (improbable),
+              // hacemos upsert idempotente.
+              setAdjustments((prev) => {
+                if (prev.some((a) => a.id === result.id)) return prev;
+                const adj: Adjustment = {
+                  id: result.id,
+                  accountCode: String(input.accountCode ?? ''),
+                  accountName:
+                    input.accountName ??
+                    result.preview?.affectedAccount?.name ??
+                    `Cuenta ${input.accountCode ?? '?'}`,
+                  amount: Number(input.amount ?? 0),
+                  rationale: String(input.rationale ?? ''),
+                  status: 'proposed',
+                  proposedAt: new Date().toISOString(),
+                };
+                return [...prev, adj];
+              });
+            } else if (name === 'recheck_validation') {
+              const result = ev.result as RecheckValidationOutput | undefined;
+              if (
+                result &&
+                typeof result === 'object' &&
+                'ok' in result &&
+                'controlTotals' in result
+              ) {
+                setValidationStatus(result);
+              }
+            }
           },
           action: (raw) => {
             const ev = raw as RepairActionEvent;
-            if (ev?.type === 'mark_provisional' && typeof ev.reason === 'string') {
+            if (!ev || typeof ev !== 'object' || !('type' in ev)) return;
+            if (ev.type === 'mark_provisional' && typeof ev.reason === 'string') {
               setPendingProvisionalReason(ev.reason);
+            } else if (
+              ev.type === 'confirm_adjustment' &&
+              typeof ev.adjustmentId === 'string'
+            ) {
+              setPendingAdjustmentId(ev.adjustmentId);
             }
           },
           done: () => {
@@ -235,14 +373,28 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
   );
 
   // Ref espejo de `isLoading` para usar dentro del `consumeSSE` sin re-cerrar
-  // closures. Lo declaramos al final para minimizar reordenamientos del hook
-  // anterior — las reglas de hooks se respetan porque siempre se llama.
+  // closures.
   const isLoadingRef = useRef(false);
   useEffect(() => {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
 
+  // Ref espejo de los nombres de tool_call por id, para que el handler de
+  // `tool_result` pueda discriminar por nombre sin depender del `toolCalls`
+  // state (que se actualiza en el mismo tick y produce closure stale).
+  const toolCallNamesRef = useRef<Map<string, RepairToolName>>(new Map());
+  useEffect(() => {
+    // Sincronización mínima: solo agregamos los ids nuevos. Las entradas
+    // viejas se conservan por el resto de la vida del hook.
+    for (const tc of toolCalls) {
+      if (!toolCallNamesRef.current.has(tc.id)) {
+        toolCallNamesRef.current.set(tc.id, tc.name);
+      }
+    }
+  }, [toolCalls]);
+
   return {
+    // Phase 1
     messages,
     pendingAssistant,
     toolCalls,
@@ -253,5 +405,12 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
     abort,
     resetError,
     consumeProvisional,
+    // Phase 2
+    adjustments,
+    pendingAdjustmentId,
+    validationStatus,
+    confirmAdjustment,
+    rejectAdjustment,
+    consumeAdjustmentConfirmation,
   };
 }

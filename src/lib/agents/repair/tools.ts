@@ -2,13 +2,17 @@
 // Repair Chat — Tool definitions + executor
 // ---------------------------------------------------------------------------
 // Tools del agente "Doctor de Datos":
-//   1. read_account(code)        — busqueda PUC sobre el preprocessed.
-//   2. mark_provisional({reason}) — senal a la UI; no muta nada en el server.
+//   1. read_account(code)            — busqueda PUC sobre el preprocessed.
+//   2. mark_provisional({reason})    — senal a la UI; no muta nada en el server.
+//   Phase 2 (mutacion colaborativa con confirmacion humana):
+//   3. propose_adjustment(...)       — propone un ajuste y devuelve preview.
+//   4. apply_adjustment({id})        — emite senal `confirm_adjustment` a la UI.
+//   5. recheck_validation()          — re-valida con los ajustes ya aplicados.
 //
 // Convencion de la app: las tools NO traen `execute`, el loop manual del
 // runner las despacha pasando un context per-call. Esto preserva la semantica
-// del registry principal (BaseSpecialist) y permite pasar el preprocessed
-// directamente sin closures globales.
+// del registry principal (BaseSpecialist) y permite pasar el preprocessed +
+// el ledger de ajustes directamente sin closures globales.
 // ---------------------------------------------------------------------------
 
 import { tool } from 'ai';
@@ -18,11 +22,16 @@ import type {
   ValidatedAccount,
 } from '@/lib/preprocessing/trial-balance';
 import type {
+  Adjustment,
+  ApplyAdjustmentOutput,
   MarkProvisionalOutput,
+  ProposeAdjustmentOutput,
   ReadAccountOutput,
+  RecheckValidationOutput,
   RepairLanguage,
   RepairToolName,
 } from './types';
+import { applyAdjustments, revalidate } from './adjustments';
 
 // ---------------------------------------------------------------------------
 // Schemas (publicos para el AI SDK)
@@ -56,9 +65,67 @@ const MARK_PROVISIONAL = tool({
   }),
 });
 
+const PROPOSE_ADJUSTMENT = tool({
+  description:
+    'Propone un ajuste contable concreto: suma `amount` (signed COP) al saldo de la cuenta PUC indicada. ' +
+    'NO aplica el ajuste — solo devuelve un preview con los totales hipoteticos para que el usuario lo evalue. ' +
+    'REGLAS: invoca esta tool SOLO despues de que el usuario haya confirmado un valor numerico concreto y la ' +
+    'cuenta destino. NUNCA propongas ajustes inventados ni asumas saldos que el usuario no haya declarado.',
+  inputSchema: z.object({
+    accountCode: z
+      .string()
+      .min(1)
+      .max(10)
+      .describe('Codigo PUC destino (ej. "1120", "3605"). Si no existe, se creara como hoja en su clase.'),
+    accountName: z
+      .string()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe('Nombre opcional de la cuenta. Solo se usa si la cuenta no existe.'),
+    amount: z
+      .number()
+      .refine(
+        (n) => Number.isFinite(n) && n !== 0,
+        'amount debe ser un numero finito distinto de cero (signed: + suma, - resta)',
+      )
+      .describe('Delta signed en COP. Positivo aumenta el saldo, negativo lo disminuye.'),
+    rationale: z
+      .string()
+      .min(15)
+      .max(500)
+      .describe('Justificacion del ajuste basada en lo declarado por el usuario (15..500 chars).'),
+  }),
+});
+
+const APPLY_ADJUSTMENT = tool({
+  description:
+    'Solicita aplicar un ajuste previamente propuesto, identificado por `id`. ' +
+    'NO muta el server: dispara una solicitud de confirmacion al usuario via la UI. Solo cuando el usuario ' +
+    'confirme inequivocamente "aplica el ajuste X", el cliente actualizara el ledger y reenviara la conversacion. ' +
+    'Invoca esta tool unicamente cuando el usuario haya dicho explicitamente que quiere aplicar un ajuste especifico.',
+  inputSchema: z.object({
+    id: z
+      .string()
+      .min(1)
+      .describe('Id devuelto por una llamada previa a propose_adjustment.'),
+  }),
+});
+
+const RECHECK_VALIDATION = tool({
+  description:
+    'Re-corre la validacion aritmetica del balance con los ajustes ya APLICADOS (status === "applied"). ' +
+    'Devuelve totales actualizados (activo, pasivo, patrimonio, utilidad) + estado de la ecuacion patrimonial. ' +
+    'Util despues de aplicar uno o varios ajustes para confirmar al usuario que la ecuacion ya cuadra.',
+  inputSchema: z.object({}),
+});
+
 export const repairTools = {
   read_account: READ_ACCOUNT,
   mark_provisional: MARK_PROVISIONAL,
+  propose_adjustment: PROPOSE_ADJUSTMENT,
+  apply_adjustment: APPLY_ADJUSTMENT,
+  recheck_validation: RECHECK_VALIDATION,
 };
 
 // ---------------------------------------------------------------------------
@@ -68,6 +135,12 @@ export const repairTools = {
 export interface RepairToolContext {
   preprocessed: PreprocessedBalance | null;
   language: RepairLanguage;
+  /**
+   * Phase 2: ledger replicado por el cliente. El server NO persiste — solo lee.
+   * Los previews y rechecks aplican TODOS los ajustes con status === 'applied'
+   * sobre el `preprocessed` reconstruido desde `rawCsv`.
+   */
+  adjustments: Adjustment[];
 }
 
 interface AccountIndex {
@@ -118,6 +191,12 @@ export async function executeRepairTool(
       return executeReadAccount(args, ctx);
     case 'mark_provisional':
       return executeMarkProvisional(args, ctx);
+    case 'propose_adjustment':
+      return executeProposeAdjustment(args, ctx);
+    case 'apply_adjustment':
+      return executeApplyAdjustment(args, ctx);
+    case 'recheck_validation':
+      return executeRecheckValidation(args, ctx);
     default: {
       // exhaustive — typescript debe verificar que llegamos aqui solo si se
       // agrego un nombre nuevo sin caso. En runtime, ayuda al debugging.
@@ -145,7 +224,10 @@ function executeReadAccount(
     };
   }
 
-  if (!ctx.preprocessed) {
+  // Phase 2: si hay ajustes 'applied', el agente debe ver el balance ajustado
+  // — asi `read_account` refleja saldos coherentes con propose_adjustment.
+  const baseBalance = applyLedgerForRead(ctx);
+  if (!baseBalance) {
     return {
       found: false,
       hint:
@@ -155,7 +237,7 @@ function executeReadAccount(
     };
   }
 
-  const pp = ctx.preprocessed;
+  const pp = baseBalance;
   const idx = buildIndex(pp);
   const classDigit = code[0];
   const classObj = pp.classes.find((c) => String(c.code) === classDigit);
@@ -288,6 +370,230 @@ function executeMarkProvisional(
     acknowledged: true,
     watermark,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — propose / apply / recheck
+// ---------------------------------------------------------------------------
+
+function executeProposeAdjustment(
+  args: Record<string, unknown>,
+  ctx: RepairToolContext,
+): ProposeAdjustmentOutput | { error: string } {
+  if (!ctx.preprocessed) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? 'No hay balance pre-procesado disponible. Pidele al usuario que vuelva a subir el archivo antes de proponer ajustes.'
+          : 'No preprocessed balance available. Ask the user to re-upload the file before proposing adjustments.',
+    };
+  }
+
+  const accountCodeRaw = typeof args.accountCode === 'string' ? args.accountCode : '';
+  const accountCode = accountCodeRaw.replace(/[.\-\s]/g, '');
+  const amount = typeof args.amount === 'number' ? args.amount : NaN;
+  const rationale = typeof args.rationale === 'string' ? args.rationale.trim() : '';
+  const accountNameRaw = typeof args.accountName === 'string' ? args.accountName.trim() : '';
+
+  if (!accountCode || !/^\d+$/.test(accountCode)) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? 'accountCode debe ser numerico (ej. "1120", "3605").'
+          : 'accountCode must be numeric (e.g. "1120", "3605").',
+    };
+  }
+  if (!Number.isFinite(amount) || amount === 0) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? 'amount debe ser un numero finito distinto de cero.'
+          : 'amount must be a non-zero finite number.',
+    };
+  }
+  if (rationale.length < 15) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? 'rationale debe tener al menos 15 caracteres y reflejar lo que dijo el usuario.'
+          : 'rationale must be at least 15 characters and reflect what the user stated.',
+    };
+  }
+
+  // Resolver nombre por defecto: usar el nombre de la cuenta hoja existente si
+  // ya esta en el balance, sino usar `accountName` o fallback "Cuenta <code>".
+  let resolvedName = accountNameRaw || `Cuenta ${accountCode}`;
+  for (const cls of ctx.preprocessed.classes) {
+    const hit = cls.accounts.find((a) => a.code === accountCode);
+    if (hit && hit.name) {
+      resolvedName = accountNameRaw || hit.name;
+      break;
+    }
+  }
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  // Construir balance hipotetico: aplicar TODOS los applied + este nuevo
+  // (con status 'applied' temporalmente para preview).
+  const appliedSoFar = ctx.adjustments.filter((a) => a.status === 'applied');
+  const previewLedger: Adjustment[] = [
+    ...appliedSoFar,
+    {
+      id,
+      accountCode,
+      accountName: resolvedName,
+      amount,
+      rationale,
+      status: 'applied',
+      proposedAt: now,
+      appliedAt: now,
+    },
+  ];
+
+  // Balance "before" — solo applied previos, sin este nuevo. Sirve para el
+  // oldBalance del preview.
+  const beforeApplication = applyAdjustments(ctx.preprocessed, appliedSoFar);
+  const afterApplication = applyAdjustments(ctx.preprocessed, previewLedger);
+
+  // Localizar la cuenta en before / after para old/new balance.
+  const findLeaf = (
+    bal: PreprocessedBalance,
+    code: string,
+  ): ValidatedAccount | null => {
+    for (const cls of bal.classes) {
+      const hit = cls.accounts.find((a) => a.code === code);
+      if (hit) return hit;
+    }
+    return null;
+  };
+
+  const beforeLeaf = findLeaf(beforeApplication.balance, accountCode);
+  const afterLeaf = findLeaf(afterApplication.balance, accountCode);
+  const oldBalance = beforeLeaf ? Number(beforeLeaf.balance) || 0 : 0;
+  const newBalance = afterLeaf ? Number(afterLeaf.balance) || 0 : amount;
+  const isNewAccount = !beforeLeaf;
+  const displayName = afterLeaf?.name || resolvedName;
+
+  const ct = afterApplication.balance.controlTotals;
+  const ecuacionDiff = ct.activo - (ct.pasivo + ct.patrimonio);
+  const ecuacionPct =
+    Math.abs(ct.activo) > 0 ? (ecuacionDiff / ct.activo) * 100 : 0;
+  const ecuacionOk = Math.abs(ecuacionDiff) < Math.max(Math.abs(ct.activo) * 0.01, 10_000);
+
+  return {
+    id,
+    preview: {
+      affectedAccount: {
+        code: accountCode,
+        name: displayName,
+        oldBalance,
+        newBalance,
+        isNewAccount,
+      },
+      newControlTotals: {
+        activo: ct.activo,
+        pasivo: ct.pasivo,
+        patrimonio: ct.patrimonio,
+        ingresos: ct.ingresos,
+        gastos: ct.gastos,
+        utilidadNeta: ct.utilidadNeta,
+        ecuacionDiff,
+        ecuacionPct,
+        ecuacionOk,
+      },
+    },
+  };
+}
+
+function executeApplyAdjustment(
+  args: Record<string, unknown>,
+  ctx: RepairToolContext,
+): ApplyAdjustmentOutput | { error: string } {
+  const id = typeof args.id === 'string' ? args.id.trim() : '';
+  if (!id) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? 'Falta el id del ajuste a aplicar. Usa el id devuelto por propose_adjustment.'
+          : 'Missing adjustment id. Use the id returned by propose_adjustment.',
+    };
+  }
+
+  // Verificacion suave: si el id no esta en el ledger del cliente, devolvemos
+  // un error para que el modelo entienda y reintente con un id valido. Si esta
+  // pero ya fue aplicado/rechazado, igual devolvemos pending — la UI decide.
+  const known = ctx.adjustments.find((a) => a.id === id);
+  if (!known) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? `No se encontro un ajuste con id "${id}" en el ledger. Verifica que primero hayas llamado propose_adjustment.`
+          : `No adjustment with id "${id}" was found in the ledger. Make sure you called propose_adjustment first.`,
+    };
+  }
+
+  return { status: 'pending_user_confirmation', id };
+}
+
+function executeRecheckValidation(
+  _args: Record<string, unknown>,
+  ctx: RepairToolContext,
+): RecheckValidationOutput | { error: string } {
+  if (!ctx.preprocessed) {
+    return {
+      error:
+        ctx.language === 'es'
+          ? 'No hay balance pre-procesado disponible.'
+          : 'No preprocessed balance available.',
+    };
+  }
+
+  const applied = ctx.adjustments.filter((a) => a.status === 'applied');
+  const application = applyAdjustments(ctx.preprocessed, applied);
+  const v = revalidate(application.balance);
+  const ct = application.balance.controlTotals;
+  const ecuacionDiff = ct.activo - (ct.pasivo + ct.patrimonio);
+  const ecuacionPct =
+    Math.abs(ct.activo) > 0 ? (ecuacionDiff / ct.activo) * 100 : 0;
+
+  return {
+    ok: v.ok,
+    errors: v.errors,
+    warnings: v.warnings,
+    controlTotals: {
+      activo: ct.activo,
+      pasivo: ct.pasivo,
+      patrimonio: ct.patrimonio,
+      ingresos: ct.ingresos,
+      gastos: ct.gastos,
+      utilidadNeta: ct.utilidadNeta,
+      ecuacionDiff,
+      ecuacionPct,
+    },
+    appliedAdjustmentsCount: applied.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/** Aplica el subset 'applied' del ledger sobre el preprocessed para read_account. */
+function applyLedgerForRead(ctx: RepairToolContext): PreprocessedBalance | null {
+  if (!ctx.preprocessed) return null;
+  const applied = ctx.adjustments.filter((a) => a.status === 'applied');
+  if (applied.length === 0) return ctx.preprocessed;
+  return applyAdjustments(ctx.preprocessed, applied).balance;
+}
+
+function generateId(): string {
+  // Disponible en Node 18+. Fallback robusto si por alguna razon no lo esta.
+  const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c && typeof c.randomUUID === 'function') {
+    return c.randomUUID();
+  }
+  return `adj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // ---------------------------------------------------------------------------
