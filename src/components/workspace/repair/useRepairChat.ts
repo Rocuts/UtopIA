@@ -166,13 +166,12 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
         const json = (await res.json()) as {
           session: { adjustments?: Adjustment[] } | null;
         };
-        if (
-          json?.session &&
-          Array.isArray(json.session.adjustments) &&
-          json.session.adjustments.length > 0
-        ) {
-          // Reemplazo total del ledger; el server es la autoridad para la
-          // hidratación inicial.
+        if (json?.session && Array.isArray(json.session.adjustments)) {
+          // Reemplazo total del ledger — el server es la autoridad. Si la
+          // sesión persistida tiene array vacío (todos rechazados o ninguno
+          // confirmado todavía), TAMBIEN reemplazamos: si dejamos el state
+          // local intacto, una sesión "limpia" en DB convivira con ajustes
+          // ephemeral del cliente y se desincronizan irreversiblemente.
           setAdjustments(json.session.adjustments);
         }
       } catch (err) {

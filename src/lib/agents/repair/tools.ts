@@ -230,10 +230,14 @@ function executeReadAccount(
   if (!baseBalance) {
     return {
       found: false,
+      // Coherente con buildRawTextFallback en prompt.ts: cuando no hay
+      // balance pre-procesado, el agente DEBE usar el texto crudo + los
+      // totales del error. NO repetimos "no tengo acceso" porque eso
+      // contradice la directiva del system prompt de leer del raw text.
       hint:
         ctx.language === 'es'
-          ? 'No hay balance pre-procesado disponible en esta sesion. Pidele al usuario que vuelva a subir el archivo.'
-          : 'No preprocessed balance available in this session. Ask the user to re-upload the file.',
+          ? 'Las tools que dependen del balance pre-procesado estan deshabilitadas en esta sesion (el archivo subido no es CSV con headers). Lee el texto crudo del balance y los totales del error message directamente, como te indica el system prompt. Si necesitas calculos exactos, pidele al usuario que re-suba el archivo en formato CSV con headers (codigo, nombre, saldo).'
+          : 'Tools that depend on the preprocessed balance are disabled in this session (the uploaded file is not CSV with headers). Read the raw balance text and error totals directly, as the system prompt instructs. If you need exact calculations, ask the user to re-upload the file as CSV with headers (code, name, balance).',
     };
   }
 
