@@ -1,5 +1,6 @@
 export const dict = {
   es: {
+    slogan: 'Tan sencillo como 1+1',
     nav: {
       services: 'Servicios',
       methodology: 'Metodología',
@@ -359,6 +360,7 @@ export const dict = {
     },
   },
   en: {
+    slogan: 'As simple as 1+1',
     nav: {
       services: 'Services',
       methodology: 'Methodology',

@@ -80,7 +80,7 @@ export function Hero() {
         </motion.div>
 
         <motion.h1
-          className="font-serif-elite text-balance font-medium tracking-tight mb-6 text-n-900 leading-display"
+          className="font-serif-elite text-balance font-medium tracking-tight mb-4 text-n-900 leading-display"
           style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -90,7 +90,17 @@ export function Hero() {
         </motion.h1>
 
         <motion.p
-          className="text-balance mt-4 text-lg sm:text-xl text-n-600 max-w-2xl mx-auto mb-10 leading-relaxed"
+          className="font-serif-elite italic text-balance text-base sm:text-lg text-gold-600 mb-3"
+          style={{ fontVariationSettings: '"opsz" 14, "SOFT" 100, "WONK" 1, "wght" 400' }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.08 }}
+        >
+          {t.slogan}
+        </motion.p>
+
+        <motion.p
+          className="text-balance mt-2 text-lg sm:text-xl text-n-600 max-w-2xl mx-auto mb-10 leading-relaxed"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}

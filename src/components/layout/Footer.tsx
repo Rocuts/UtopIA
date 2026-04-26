@@ -14,9 +14,12 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
 
           <div className="col-span-1 md:col-span-2">
-            <Link href="/" className="inline-block text-lg font-bold text-n-900 mb-4 tracking-tight hover:opacity-70 transition-opacity">
+            <Link href="/" className="inline-block text-lg font-bold text-n-900 tracking-tight hover:opacity-70 transition-opacity">
               1+1
             </Link>
+            <p className="font-serif-elite italic text-sm text-gold-600 mt-1 mb-4">
+              {t.slogan}
+            </p>
             <p className="text-n-600 max-w-sm mb-6 text-sm leading-relaxed">
               {t.footer.tagline}
             </p>

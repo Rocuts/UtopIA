@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     template: '%s · 1+1',
   },
   description:
-    '1+1 es el Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
+    'Tan sencillo como 1+1. El Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
   metadataBase: new URL(SITE_URL),
   applicationName: SITE_NAME,
   generator: 'Next.js',
@@ -49,6 +49,7 @@ export const metadata: Metadata = {
   classification: 'Directorio Ejecutivo Digital — Contabilidad, Tributaria, Financiera y Aseguramiento',
   keywords: [
     '1+1',
+    'tan sencillo como 1+1',
     'contabilidad IA',
     'NIIF',
     'DIAN',
@@ -81,9 +82,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: '1+1 — Directorio Ejecutivo Digital',
+    title: '1+1 — Tan sencillo como 1+1',
     description:
-      '1+1 es el Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
+      'Tan sencillo como 1+1. El Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
     url: SITE_URL,
     siteName: SITE_NAME,
     images: [
@@ -101,9 +102,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: '1+1 — Directorio Ejecutivo Digital',
+    title: '1+1 — Tan sencillo como 1+1',
     description:
-      '1+1 es el Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
+      'Tan sencillo como 1+1. El Directorio Ejecutivo Digital impulsado por IA para empresas colombianas: protege tu caja, multiplica tu valor y audita tu cumplimiento NIIF/DIAN.',
     images: ['/twitter-image.jpg'],
   },
   robots: {
