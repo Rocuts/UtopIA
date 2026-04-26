@@ -5,64 +5,17 @@
  *  1. Audit findings from last persisted report (severity criticas/altas).
  *  2. Validation warnings/errors attached to the last FinancialReport.
  *  3. ERP connection errors (status !== 'connected').
- *  4. Static Colombian tax deadlines for the current calendar quarter.
+ *  4. Verified Colombian tax deadlines (single source of truth — pulled from
+ *     `@/lib/calendars/source` so we never drift from the LLM tool's data).
  *
  * The feed is deterministic, side-effect free and ready to run in an
  * SSR-safe context — every read from `localStorage` is guarded.
  */
 
+import { getVerifiedNational } from '@/lib/calendars/source';
 import { listReports } from '@/lib/storage/conversation-history';
+import type { NationalDeadline } from '@/data/calendars';
 import type { Alert, AlertArea, AlertSeverity, ErpConnectionLite } from './types';
-
-// ─── Deadlines (Colombia, Q1-Q2 2026 — DIAN) ─────────────────────────────────
-// Kept intentionally small and high-signal. Extend carefully so the feed stays
-// glanceable.
-
-interface Deadline {
-  date: string;          // ISO date (used for sorting + staleness)
-  title: string;
-  description: string;
-  area: AlertArea;
-  severity: AlertSeverity;
-}
-
-const DEADLINES_2026: Deadline[] = [
-  {
-    date: '2026-04-30',
-    title: 'Declaración renta — Personas jurídicas',
-    description: 'Vencimientos escalonados según último dígito NIT. Art. 1.6.1.13.2.11 DUR.',
-    area: 'escudo',
-    severity: 'warn',
-  },
-  {
-    date: '2026-05-15',
-    title: 'IVA bimestral Mar–Abr',
-    description: 'Formulario 300. Responsables con ingresos > 92.000 UVT.',
-    area: 'escudo',
-    severity: 'info',
-  },
-  {
-    date: '2026-06-30',
-    title: 'Información exógena 2025',
-    description: 'Resolución DIAN. Formatos 1001–1011 por fechas específicas.',
-    area: 'verdad',
-    severity: 'warn',
-  },
-  {
-    date: '2026-07-15',
-    title: 'Retención en la fuente Junio',
-    description: 'Formulario 350. Obligatorio para todos los agentes retenedores.',
-    area: 'escudo',
-    severity: 'info',
-  },
-  {
-    date: '2026-09-15',
-    title: 'ICA trimestral',
-    description: 'Varía por municipio. Bogotá: CHIP autoliquidación.',
-    area: 'verdad',
-    severity: 'info',
-  },
-];
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -80,34 +33,90 @@ function sortAlerts(list: Alert[]): Alert[] {
   });
 }
 
-function daysUntil(isoDate: string): number {
-  const target = new Date(isoDate).getTime();
-  const now = Date.now();
-  return Math.round((target - now) / (1000 * 60 * 60 * 24));
+const MS_PER_DAY = 86_400_000;
+
+/** Last digit of a NIT, ignoring the check digit ("dígito de verificación"). */
+function parseLastDigit(rawNit: string | undefined): number | null {
+  if (!rawNit) return null;
+  const digitsOnly = rawNit.replace(/\D/g, '');
+  if (digitsOnly.length === 0) return null;
+  // Strip a single check digit if the NIT looks like 9-10 digits + DV (separated
+  // by '-' in the source). When user types "900123456-7", we want '6'.
+  const hasCheckDigit = /[-\s]\d$/.test(rawNit);
+  const effective = hasCheckDigit ? digitsOnly.slice(0, -1) : digitsOnly;
+  if (effective.length === 0) return null;
+  return Number(effective[effective.length - 1]);
 }
 
-function deadlineAlerts(): Alert[] {
-  const now = Date.now();
-  const horizon = 1000 * 60 * 60 * 24 * 120; // 120 days forward
-  const alerts: Alert[] = [];
-  for (const d of DEADLINES_2026) {
-    const ts = new Date(d.date).getTime();
-    if (ts < now - 1000 * 60 * 60 * 24) continue; // past due, hide
-    if (ts - now > horizon) continue;             // too far
-    const delta = daysUntil(d.date);
-    const sev: AlertSeverity = delta <= 10 ? 'critical' : delta <= 30 ? 'warn' : d.severity;
-    const lead = delta <= 0 ? 'Vence hoy' : delta === 1 ? 'Vence mañana' : `En ${delta} días`;
-    alerts.push({
-      id: `deadline:${d.date}:${d.title}`,
-      severity: sev,
-      area: d.area,
-      title: `${d.title} · ${lead}`,
-      description: d.description,
-      createdAt: new Date(d.date).toISOString(),
-      source: 'deadline',
-    });
+/** Maps a NationalDeadline obligation to one of the four UtopIA areas. */
+function deriveArea(obligation: string): AlertArea {
+  // Escudo: defensive tax / DIAN-facing obligations
+  if (/Renta|Retención|IVA/i.test(obligation)) return 'escudo';
+  // Verdad: information / compliance reporting
+  if (/Información Exógena|ICA|auxiliares|Medios Magnéticos/i.test(obligation)) return 'verdad';
+  // Valor: wealth / cross-border
+  if (/Activos en el Exterior|Patrimonio/i.test(obligation)) return 'valor';
+  // Default: forward-looking / strategic bucket
+  return 'futuro';
+}
+
+/**
+ * Convert a verified national deadline into an Alert, applying the user-NIT
+ * filter and the time horizon. Returns null when the deadline is past, too
+ * far in the future, or doesn't match the user's NIT digit.
+ */
+export function nationalToAlert(d: NationalDeadline, userNit?: string): Alert | null {
+  // NIT filter — if we know the user's NIT, only surface their digit
+  const userDigit = parseLastDigit(userNit);
+  if (userDigit !== null && d.nitDigit !== userDigit) return null;
+
+  if (d.dueDate === 'pendiente') return null;
+
+  const dueMs = Date.parse(d.dueDate);
+  if (Number.isNaN(dueMs)) return null;
+
+  const daysUntil = (dueMs - Date.now()) / MS_PER_DAY;
+  // Past due (>1 day past) or too far out (>90 days) → drop
+  if (daysUntil < -1) return null;
+  if (daysUntil > 90) return null;
+
+  const severity: AlertSeverity =
+    daysUntil <= 7 ? 'critical' : daysUntil <= 30 ? 'warn' : 'info';
+
+  const lead =
+    daysUntil <= 0
+      ? 'Vence hoy'
+      : daysUntil < 2
+        ? 'Vence mañana'
+        : `En ${Math.round(daysUntil)} días`;
+
+  return {
+    id: `deadline:${d.dueDate}:${d.obligation}:${d.nitDigit}`,
+    severity,
+    area: deriveArea(d.obligation),
+    title: `${d.obligation} — NIT dígito ${d.nitDigit} · ${lead}`,
+    description: `${d.period}. Base: ${d.legalBasis}${d.notes ? ` · ${d.notes}` : ''}`,
+    createdAt: new Date(dueMs).toISOString(),
+    source: 'deadline',
+  };
+}
+
+async function deadlineAlerts(userNit?: string): Promise<Alert[]> {
+  try {
+    const verified = await getVerifiedNational(2026);
+    if (verified.source === 'none' || verified.deadlines.length === 0) return [];
+
+    const out: Alert[] = [];
+    for (const d of verified.deadlines) {
+      const alert = nationalToAlert(d, userNit);
+      if (alert) out.push(alert);
+    }
+    return out;
+  } catch (err) {
+    // Never crash the dashboard if the calendar source layer fails.
+    console.error('[alerts] Failed to load verified national deadlines.', err);
+    return [];
   }
-  return alerts;
 }
 
 function erpAlerts(connections: ErpConnectionLite[]): Alert[] {
@@ -220,6 +229,8 @@ function reportAlerts(): Alert[] {
 export interface GetAlertsInput {
   erpConnections?: ErpConnectionLite[];
   maxItems?: number;
+  /** User's NIT — used to filter deadlines to the relevant digit. */
+  userNit?: string;
 }
 
 export async function getAlerts(input: GetAlertsInput = {}): Promise<Alert[]> {
@@ -229,7 +240,7 @@ export async function getAlerts(input: GetAlertsInput = {}): Promise<Alert[]> {
   const buckets: Alert[] = [
     ...reportAlerts(),
     ...erpAlerts(connections),
-    ...deadlineAlerts(),
+    ...(await deadlineAlerts(input.userNit)),
   ];
 
   return sortAlerts(buckets).slice(0, maxItems);

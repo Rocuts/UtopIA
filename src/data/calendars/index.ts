@@ -22,10 +22,10 @@ export const UVT_2026 = 52_374;
 /** Calendario completo del año vigente */
 export const CALENDAR_2026: YearCalendar = {
   year: 2026,
-  nationalDecree: 'Decreto calendario tributario 2026 (verificar número)',
+  nationalDecree: 'Decreto 2229 de 2023',
   uvt: UVT_2026,
   uvtResolution: 'Resolución DIAN 000238 del 15 de diciembre de 2025',
-  lastUpdated: '2026-04-09',
+  lastUpdated: '2026-04-25',
   national: NACIONAL_2026,
   municipal: MUNICIPAL_2026,
 };
@@ -34,13 +34,15 @@ export const CALENDAR_2026: YearCalendar = {
 
 /**
  * Obtiene las obligaciones nacionales para un dígito NIT específico.
- * Filtra por tipo de contribuyente si se indica.
+ * Si `nitLastDigit` es `undefined`, retorna TODAS las obligaciones del año
+ * (útil para snapshot/seeding del calendario completo en `verified_calendars`).
  */
 export function getNationalDeadlines(
-  nitLastDigit: number,
+  nitLastDigit?: number,
   year: number = CURRENT_YEAR,
 ): NationalDeadline[] {
   if (year !== CURRENT_YEAR) return []; // No hay datos locales para otros años
+  if (nitLastDigit === undefined) return NACIONAL_2026;
   return NACIONAL_2026.filter(d => d.nitDigit === nitLastDigit);
 }
 

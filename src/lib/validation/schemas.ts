@@ -48,6 +48,14 @@ export const webSearchRequestSchema = z.object({
   query: z.string().min(1, 'Query is required').max(1_000, 'Query too long'),
 });
 
+// ---- Tax calendar route ----
+export const taxCalendarRequestSchema = z.object({
+  nitLastDigit: z.number().int().min(0).max(9),
+  year: z.number().int().min(2020).max(2099),
+  taxpayerType: z.enum(['persona_juridica', 'persona_natural', 'gran_contribuyente']),
+  city: z.string().min(1).max(120).optional(),
+});
+
 // ---- Sanction calculator route ----
 export const sanctionRequestSchema = z.object({
   type: z.enum(['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios']),

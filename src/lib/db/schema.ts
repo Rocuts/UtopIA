@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   jsonb,
   numeric,
   pgTable,
@@ -82,6 +83,32 @@ export const alertThresholds = pgTable('alert_thresholds', {
     .defaultNow(),
 });
 
+// Snapshot del calendario tributario verificado contra la fuente oficial DIAN.
+// Una row por (year, slug) cada vez que el cron confirma o detecta cambios:
+// mantenemos historial completo para auditoría y rollback. Las lecturas
+// (`getVerifiedNational`) ordenan por `last_verified_at DESC LIMIT 1` para
+// quedarse siempre con la última versión válida.
+//
+// `slug` ∈ { 'national', 'municipal:<city-id>' }
+// `payload` ∈ { NationalDeadline[] | MunicipalDeadline[] } según slug
+// `decree_hash` permite detectar idempotentemente si la fuente cambió.
+export const verifiedCalendars = pgTable('verified_calendars', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  year: integer('year').notNull(),
+  slug: text('slug').notNull(),
+  decreeNumber: text('decree_number').notNull(),
+  decreeHash: text('decree_hash').notNull(),
+  payload: jsonb('payload').notNull(),
+  source: text('source').notNull(),
+  sourceUrl: text('source_url').notNull(),
+  lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type NewWorkspace = typeof workspaces.$inferInsert;
 export type ErpCredential = typeof erpCredentials.$inferSelect;
@@ -90,3 +117,5 @@ export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
 export type AlertThreshold = typeof alertThresholds.$inferSelect;
 export type NewAlertThreshold = typeof alertThresholds.$inferInsert;
+export type VerifiedCalendar = typeof verifiedCalendars.$inferSelect;
+export type NewVerifiedCalendar = typeof verifiedCalendars.$inferInsert;

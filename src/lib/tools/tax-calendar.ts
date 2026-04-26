@@ -1,25 +1,39 @@
 /**
- * Tax Calendar Tool — Hybrid: local structured data + web search.
+ * Tax Calendar Tool — verified-source first, web supplement only on fallback.
  *
- * STRATEGY:
- * 1. Check local calendar data first (src/data/calendars/)
- * 2. If local data exists, use it as the PRIMARY source
- * 3. Supplement with web search for verification and gaps
- * 4. If no local data (unsupported year), fall back entirely to web search
+ * STRATEGY (post-cron-verified system):
+ *   1. Pull national deadlines from `getVerifiedNational(year)` — single source
+ *      of truth, in-memory cached. Resolves to one of:
+ *         • 'edge-config'         — pushed by cron (fastest path)
+ *         • 'postgres-verified'   — DB row marked `verified = true`
+ *         • 'static-fallback'     — heuristic dataset in src/data/calendars
+ *         • 'none'                — no data available for the year
+ *   2. Pull municipal deadlines from the static city dataset (unchanged).
+ *   3. Tavily web search ONLY when the verified source is NOT 'edge-config'
+ *      or 'postgres-verified'. This saves latency + tokens once the cron
+ *      has populated the DB, and preserves the safety net for years where
+ *      we still rely on heuristics.
  *
- * This ensures fast, reliable answers from curated data while
- * staying current via web search for recent changes.
+ * The tool's contract with the LLM (TaxCalendarResult shape, function
+ * signature) is unchanged for required fields. Three new optional fields —
+ * `dataSource`, `decreeNumber`, `verifiedAt` — are surfaced so the model can
+ * cite provenance when answering the user.
  */
 
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
+import { getVerifiedNational } from '@/lib/calendars/source';
 import {
-  getNationalDeadlines,
   getMunicipalCalendar,
   getAvailableCities,
-  CURRENT_YEAR,
   type NationalDeadline,
   type CityCalendar,
 } from '@/data/calendars';
+
+/** Provenance tag exposed to the LLM so it can cite the source band correctly. */
+export type TaxCalendarDataSource =
+  | 'OFICIAL_DIAN_VERIFICADO'   // edge-config or postgres-verified
+  | 'HEURISTICA_FALLBACK'       // static-fallback dataset
+  | 'SIN_DATOS';                // 'none' from the source helper
 
 export interface TaxCalendarResult {
   nitLastDigit: number;
@@ -30,20 +44,27 @@ export interface TaxCalendarResult {
   localNational: string;
   /** Local structured data — municipal obligations for the city */
   localMunicipal: string;
-  /** Web search results as supplement */
+  /** Web search results as supplement (empty string when not invoked) */
   webSupplement: string;
   /** Available cities in the local database */
   availableCities: string[];
   /** Instructions for the LLM */
   instruction: string;
+  /** Provenance band — verified vs heuristic vs none */
+  dataSource?: TaxCalendarDataSource;
+  /** Decree number if known (e.g. "Decreto 2229 de 2023") */
+  decreeNumber?: string | null;
+  /** ISO timestamp of last verification (null if not verified) */
+  verifiedAt?: string | null;
 }
 
 // ── Format local data for LLM consumption ──
 
-function formatNationalDeadlines(deadlines: NationalDeadline[]): string {
+function formatNationalDeadlines(deadlines: NationalDeadline[], verified: boolean): string {
   if (deadlines.length === 0) return '';
 
-  const anyUnverified = deadlines.some((d) => d.verified !== true);
+  const anyUnverifiedFlag = deadlines.some((d) => d.verified !== true);
+  const treatAsUnverified = !verified || anyUnverifiedFlag;
 
   // Group by obligation
   const grouped = new Map<string, NationalDeadline[]>();
@@ -53,7 +74,7 @@ function formatNationalDeadlines(deadlines: NationalDeadline[]): string {
     grouped.get(key)!.push(d);
   }
 
-  const headerLines = anyUnverified
+  const headerLines = treatAsUnverified
     ? [
         '## Obligaciones Nacionales',
         '',
@@ -123,100 +144,124 @@ export async function getTaxCalendar(
   };
   const typeLabel = typeLabels[taxpayerType] || 'personas jurídicas';
 
-  // ── Step 1: Check local structured data ──
-  const localNational = getNationalDeadlines(nitLastDigit, year);
+  // ── Step 1: Verified source (edge-config → postgres-verified → static-fallback → none) ──
+  const verifiedSource = await getVerifiedNational(year);
+  const localNational = verifiedSource.deadlines.filter((d) => d.nitDigit === nitLastDigit);
+
+  const isVerified =
+    verifiedSource.source === 'edge-config' || verifiedSource.source === 'postgres-verified';
+  const dataSource: TaxCalendarDataSource =
+    verifiedSource.source === 'none'
+      ? 'SIN_DATOS'
+      : isVerified
+        ? 'OFICIAL_DIAN_VERIFICADO'
+        : 'HEURISTICA_FALLBACK';
+
+  // ── Step 2: Municipal (still static — separate work item) ──
   const localMunicipal = city ? getMunicipalCalendar(city, year) : null;
   const cities = getAvailableCities(year);
-
-  const hasLocalNational = localNational.length > 0;
   const hasLocalMunicipal = localMunicipal !== null;
 
-  // ── Step 2: Web search to supplement gaps ──
-  // If we have good local data, do fewer searches; if not, do more
-  const searches: Promise<any>[] = [];
+  // ── Step 3: Web supplement — only when verified data is unavailable ──
+  // Once the cron populates Postgres / Edge Config, we skip Tavily entirely
+  // for the national calendar (saves ~600ms + 5 Tavily credits per call).
+  const useWebSupplement = !isVerified;
+  const searches: Promise<{ results: unknown[] }>[] = [];
 
-  if (!hasLocalNational) {
-    // No local data — full web search for national dates
-    searches.push(
-      searchWeb(
-        `decreto calendario tributario ${year} plazos DIAN declaración renta IVA retención ${typeLabel} último dígito NIT ${nitLastDigit}`,
-        { maxResults: 5, searchDepth: 'advanced' }
-      )
-    );
-  } else {
-    // Have local data — light verification search
-    searches.push(
-      searchWeb(
-        `calendario tributario ${year} DIAN plazos declaración renta ${typeLabel}`,
-        { maxResults: 3, searchDepth: 'basic' }
-      )
-    );
+  if (useWebSupplement) {
+    if (verifiedSource.source === 'none') {
+      // No data at all — full national web search
+      searches.push(
+        searchWeb(
+          `decreto calendario tributario ${year} plazos DIAN declaración renta IVA retención ${typeLabel} último dígito NIT ${nitLastDigit}`,
+          { maxResults: 5, searchDepth: 'advanced' },
+        ),
+      );
+    } else {
+      // Heuristic fallback in hand — light verification search
+      searches.push(
+        searchWeb(
+          `calendario tributario ${year} DIAN plazos declaración renta ${typeLabel}`,
+          { maxResults: 3, searchDepth: 'basic' },
+        ),
+      );
+    }
   }
 
+  // Municipal supplement — independent of national verification status,
+  // because municipal data is still static-only.
   if (!hasLocalMunicipal && city) {
-    // No local data for this city — targeted search
     searches.push(
       searchWeb(
         `calendario tributario ${city} ${year} ICA industria comercio predial plazos vencimiento`,
-        { maxResults: 5, searchDepth: 'advanced' }
-      )
+        { maxResults: 5, searchDepth: 'advanced' },
+      ),
     );
   } else if (!city) {
-    // No city specified — general municipal search
     searches.push(
       searchWeb(
         `calendario tributario municipal ${year} ICA predial principales ciudades Colombia plazos`,
-        { maxResults: 3, searchDepth: 'advanced' }
-      )
+        { maxResults: 3, searchDepth: 'advanced' },
+      ),
     );
   }
 
-  const webResults = await Promise.all(searches);
+  const webResults = searches.length > 0 ? await Promise.all(searches) : [];
   const webSupplement = webResults
-    .map(r => formatSearchResultsForLLM(r.results))
+    .map((r) => formatSearchResultsForLLM(r.results as Parameters<typeof formatSearchResultsForLLM>[0]))
     .filter(Boolean)
     .join('\n\n---\n\n');
 
-  // ── Step 3: Build result ──
+  // ── Step 4: Build instruction ──
   const cityLabel = city || 'no especificada';
-  const hasUnverifiedLocal = localNational.some((d) => d.verified !== true);
-  const dataSource = hasLocalNational
-    ? hasUnverifiedLocal
+  const verifiedAtIso = verifiedSource.verifiedAt ? verifiedSource.verifiedAt.toISOString() : null;
+  const decreeRef =
+    verifiedSource.decreeNumber ||
+    (isVerified ? 'decreto oficial DIAN' : 'decreto calendario tributario');
+
+  const sourceLabel = isVerified
+    ? `DATOS OFICIALES VERIFICADOS contra ${decreeRef}` +
+      (verifiedAtIso ? ` (verificado al ${verifiedAtIso})` : '') +
+      (verifiedSource.source === 'edge-config'
+        ? ' [Edge Config snapshot]'
+        : ' [Postgres]')
+    : verifiedSource.source === 'static-fallback'
       ? 'DATOS LOCALES HEURÍSTICOS (fechas inferidas por patrón, NO oficiales) + búsqueda web de respaldo'
-      : 'DATOS LOCALES VERIFICADOS (fuente primaria) + búsqueda web (verificación)'
-    : 'BÚSQUEDA WEB (no hay datos locales para este año)';
+      : 'BÚSQUEDA WEB (no hay datos locales para este año)';
+
+  const verifiedInstruction = isVerified
+    ? `✅ FECHAS VERIFICADAS: estas fechas están confirmadas contra ${decreeRef}` +
+      (verifiedAtIso ? ` (snapshot tomado el ${verifiedAtIso})` : '') +
+      `. CITA la fuente al usuario en tu respuesta (ej. "Según ${decreeRef}…"). Puedes presentarlas como definitivas.`
+    : `⚠️ FECHAS HEURÍSTICAS: estas fechas son inferencias por patrón histórico y NO provienen del decreto oficial. DEBES advertir al usuario "Fecha estimada — confirmar con DIAN antes de comprometer al cliente" y recomendar verificar en https://www.dian.gov.co antes de presentar declaraciones.`;
 
   return {
     nitLastDigit,
     taxpayerType,
     year,
     city: city || null,
-    localNational: hasLocalNational
-      ? formatNationalDeadlines(localNational)
-      : 'No hay datos nacionales locales para el año ' + year + '. Usar resultados web.',
+    localNational:
+      localNational.length > 0
+        ? formatNationalDeadlines(localNational, isVerified)
+        : `No hay datos nacionales locales para el año ${year} (último dígito NIT ${nitLastDigit}). Usar resultados web.`,
     localMunicipal: hasLocalMunicipal
       ? formatMunicipalCalendar(localMunicipal)
       : city
         ? `No hay datos municipales locales para ${city} ${year}. Ciudades disponibles: ${cities.join(', ')}. Usar resultados web.`
         : `No se especificó ciudad. Ciudades con datos locales: ${cities.join(', ')}.`,
-    webSupplement: webSupplement || 'No se encontraron resultados web adicionales.',
+    webSupplement: webSupplement || (useWebSupplement ? 'No se encontraron resultados web adicionales.' : ''),
     availableCities: cities,
     instruction:
-      `FUENTE DE DATOS: ${dataSource}\n\n` +
+      `FUENTE DE DATOS: ${sourceLabel}\n\n` +
+      `${verifiedInstruction}\n\n` +
       `INSTRUCCIÓN: Presenta el calendario tributario ${year} para último dígito NIT ${nitLastDigit} (${typeLabel}).\n` +
       `Ciudad: ${cityLabel}.\n\n` +
-      (hasUnverifiedLocal
-        ? `⚠️ ADVERTENCIA OBLIGATORIA: las fechas locales son ESTIMADAS por patrón histórico, NO provienen del decreto oficial. DEBES:\n` +
-          `  1. Incluir visiblemente el aviso: "Fecha estimada — verificar contra el decreto oficial DIAN antes de presentar".\n` +
-          `  2. Priorizar los resultados de BÚSQUEDA WEB con fuente dian.gov.co si aportan fechas oficiales diferentes.\n` +
-          `  3. Recomendar al usuario consultar https://www.dian.gov.co para confirmar.\n\n`
-        : ``) +
       `PRIORIDAD DE DATOS:\n` +
-      (hasUnverifiedLocal
-        ? `1. La BÚSQUEDA WEB con fuente oficial DIAN tiene PRIORIDAD sobre los datos locales heurísticos.\n` +
-          `2. Usa los datos locales solo como referencia secundaria.\n`
-        : `1. Usa los DATOS LOCALES como fuente principal (ya están filtrados para este NIT).\n` +
-          `2. Usa la BÚSQUEDA WEB para verificar o complementar datos faltantes.\n`) +
+      (isVerified
+        ? `1. Usa los DATOS OFICIALES VERIFICADOS como única fuente para el calendario nacional — están confirmados contra el decreto.\n` +
+          `2. Para datos municipales, usa la sección local si existe; complementa con búsqueda web cuando falte.\n`
+        : `1. La BÚSQUEDA WEB con fuente oficial DIAN tiene PRIORIDAD sobre los datos heurísticos.\n` +
+          `2. Usa los datos locales solo como referencia secundaria y SIEMPRE marca la advertencia "fecha estimada".\n`) +
       `3. Si hay conflicto entre local y web, menciona ambos y recomienda verificar en dian.gov.co.\n\n` +
       `FORMATO: Presenta DOS tablas separadas:\n` +
       `1. **OBLIGACIONES NACIONALES (DIAN)**: Columnas: Mes | Obligación | Fecha Límite | Base Legal\n` +
@@ -226,5 +271,8 @@ export async function getTaxCalendar(
       `- Incluye régimen ICA (bimestral/anual, común/simplificado).\n` +
       `- Si no se especificó ciudad, muestra datos de las ciudades principales disponibles.\n` +
       `- Cita fuentes para datos de búsqueda web.`,
+    dataSource,
+    decreeNumber: verifiedSource.decreeNumber,
+    verifiedAt: verifiedAtIso,
   };
 }
