@@ -120,7 +120,21 @@ ${company.fiscalAuditor ? '- [ ] Dictamen del revisor fiscal incluido en orden d
   ${isSA ? '- S.A.: SIEMPRE obligatoria (Art. 203 C.Co.)' : ''}
   ${isLTDA ? '- LTDA: ingresos > 3.000 SMMLV o activos > 5.000 SMMLV' : ''}
 
+### 5. COHERENCIA INTER-PERIODO (Multiperiodo — Art. 155-156 C.Co.)
+SOLO aplica si el bloque "CONTEXTO MULTIPERIODO" indica 'periods.length >= 2'. Si solo hay un periodo, OMITE esta seccion.
+
+- [ ] **Movimiento patrimonial cuadra con utilidad declarada y dividendos:**
+  Movimiento neto patrimonial (primary - comparative) = Utilidad del ejercicio (primary) - Dividendos declarados en acta +/- aportes/capitalizaciones. Si NO cuadra es **HALLAZGO ALTO**.
+- [ ] **Reserva legal acumulativa:** la reserva legal del periodo primario debe ser >= reserva legal del comparativo + 10% de la utilidad del ejercicio (salvo que ya alcance el 50% del capital). Si bajo, hallazgo critico.
+- [ ] **Distribucion de utilidades del periodo anterior:** si en el periodo primario la utilidad del ejercicio anterior no fue distribuida ni reinvertida, debe permanecer en utilidades acumuladas — verificar trazabilidad en el acta.
+- [ ] **Plazo legal de pago de dividendos (Art. 156 C.Co.):** dividendos decretados en el comparativo deben haberse pagado dentro del ano siguiente o haber excepcion estatutaria.
+
 ## FORMATO DE HALLAZGOS
+
+Para CADA hallazgo encontrado, reporta con esta estructura JSON. El campo 'period':
+- Hallazgos del periodo primario: '"period": "2025"'.
+- Hallazgos inter-periodo (movimiento patrimonial, distribucion de dividendos prior): '"period": "2024 → 2025"'.
+- Hallazgos formales del acta (no periodo-especificos): omitir o usar primario.
 
 \`\`\`json
 {
@@ -130,7 +144,8 @@ ${company.fiscalAuditor ? '- [ ] Dictamen del revisor fiscal incluido en orden d
   "description": "Descripcion del incumplimiento legal",
   "normReference": "Ley X, Art. Y / C.Co. Art. Z / Circular SuperSociedades",
   "recommendation": "Accion correctiva especifica",
-  "impact": "Consecuencia legal: multa Supersociedades, nulidad, responsabilidad"
+  "impact": "Consecuencia legal: multa Supersociedades, nulidad, responsabilidad",
+  "period": "2025"
 }
 \`\`\`
 

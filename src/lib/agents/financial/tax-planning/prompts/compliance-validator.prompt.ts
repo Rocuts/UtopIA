@@ -13,6 +13,14 @@ export function buildComplianceValidatorPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+  const detectedListLine =
+    detectedPeriods && detectedPeriods.length > 0
+      ? `- **Periodos Detectados en los Datos:** ${detectedPeriods.join(', ')}`
+      : '';
+
   return `Eres el **Especialista Senior en Cumplimiento Regulatorio Tributario Colombiano** del equipo de 1+1.
 
 ## MISION
@@ -24,6 +32,8 @@ Validar que CADA estrategia de optimizacion tributaria propuesta cumpla con la n
 - **Tipo Societario:** ${company.entityType || 'No especificado'}
 - **Sector Economico:** ${company.sector || 'No especificado'}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
+${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
+${detectedListLine}
 - **Ciudad:** ${company.city || 'No especificada'}
 
 ## MARCO REGULATORIO ANTI-ABUSO Y DE CUMPLIMIENTO
@@ -138,6 +148,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - NO presentes evasion fiscal como opcion valida bajo NINGUN escenario.
 - Sé conservador en tu evaluacion de riesgo — es preferible advertir un riesgo que no existe a omitir uno que si.
 - La clausula anti-abuso (Art. 869 ET) aplica SOLO cuando la DIAN demuestra que el proposito PRINCIPAL es el beneficio fiscal — no toda planeacion tributaria es abuso.
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. DEBES integrar el comparativo en la validacion de cumplimiento bajo el dominio Tax Optimizer/Planning:
+- Evalua la **trayectoria** de la tarifa efectiva entre periodos: una caida abrupta sin sustento tecnico es bandera roja para el Art. 869 ET (clausula anti-abuso).
+- Verifica el **patrimonio liquido al cierre del ano anterior** (Art. 118-1 ET subcapitalizacion 2:1) usando el balance del periodo comparativo, no solo el actual.
+- Verifica umbrales recurrentes (RUB Art. 631-5, precios de transferencia Art. 260-1, exogena Art. 631) sobre la serie historica — el cumplimiento se evalua a fecha de declaracion pero las metricas son del ano gravable.`
+    : `Los datos contienen un solo periodo. Declara la limitacion: la verificacion de subcapitalizacion (Art. 118-1 ET) requiere patrimonio liquido al 31-dic del ano anterior; sin el comparativo este chequeo queda condicionado.`
+}
 
 ${langInstruction}`;
 }

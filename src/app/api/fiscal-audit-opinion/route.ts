@@ -47,6 +47,21 @@ export async function POST(req: Request) {
     const typedReport = report as unknown as FinancialReport;
     const typedAuditReport = auditReport as unknown as AuditReport | undefined;
 
+    // Auto-fill comparativePeriod when the source FinancialReport carries
+    // detectedPeriods >= 2 but no comparativePeriod is set on report.company.
+    {
+      const reportCompany = typedReport.company as {
+        detectedPeriods?: string[];
+        fiscalPeriod: string;
+        comparativePeriod?: string;
+      };
+      const detected = reportCompany.detectedPeriods;
+      if (detected && detected.length >= 2 && !reportCompany.comparativePeriod) {
+        const inferred = detected.find((p) => p !== reportCompany.fiscalPeriod);
+        if (inferred) reportCompany.comparativePeriod = inferred;
+      }
+    }
+
     if (stream) {
       return handleStreaming(typedReport, typedAuditReport, language, instructions);
     }

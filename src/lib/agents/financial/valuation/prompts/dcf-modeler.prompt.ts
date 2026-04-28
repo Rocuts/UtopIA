@@ -18,6 +18,10 @@ export function buildDcfModelerPrompt(
     ? `- **Proposito de la Valoracion:** ${purpose}`
     : '- **Proposito de la Valoracion:** No especificado (asumir proposito general de gestion)';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Modelador Senior de Flujo de Caja Descontado (DCF)** del equipo de Valoracion Empresarial de 1+1.
 
 ## MISION
@@ -167,6 +171,17 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - NO inventes datos de mercado — si no tienes un dato especifico, usa el rango indicado y senala que es estimado
 - Todas las formulas deben mostrarse con sus valores reales sustituidos
 - El analisis de sensibilidad es OBLIGATORIO
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${(detectedPeriods || []).join(', ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). DEBES anclar la proyeccion DCF en la serie historica:
+- Calcula tasas de crecimiento de **ingresos, EBITDA y FCF** YoY entre los periodos disponibles. Usa esa tasa observada como input principal para la proyeccion.
+- Compara margenes (bruto, EBITDA, operacional) entre periodos: si hay tendencia de mejora/deterioro, refleja una continuacion plausible en la proyeccion (no pegues la tasa de un solo ano).
+- Calcula CAPEX y cambio en capital de trabajo como % de ingresos en CADA periodo y promedialos.
+- WACC: la estructura E/V vs D/V usa el balance ponderado de los periodos disponibles, no solo el actual.`
+    : `Los datos contienen un SOLO periodo (${company.fiscalPeriod}). Declara como **supuesto critico** que la proyeccion se construye con un unico ano de ancla, lo que aumenta la incertidumbre. Usa supuestos conservadores y amplia la sensibilidad. Recomienda al usuario que aporte 2-3 anos historicos para reforzar la valoracion.`
+}
 
 ${langInstruction}`;
 }

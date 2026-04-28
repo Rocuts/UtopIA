@@ -15,6 +15,7 @@ import { generateText, streamText, type ModelMessage, type ToolResultPart } from
 import { executeTool, getToolsForAgent, type AgentName, type ToolExecContext } from '@/lib/agents/tools/registry';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { MODELS } from '@/lib/config/models';
+import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
 import type { SpecialistContext, SpecialistResult, ProgressEvent } from '@/lib/agents/types';
 
 const MAX_TOOL_ROUNDS = 6;
@@ -43,14 +44,19 @@ export abstract class BaseSpecialist {
     const tools = getToolsForAgent(this.name);
     const systemPrompt = this.buildSystemPrompt(ctx);
 
-    // Inject uploaded document content so the specialist always has access to it
+    // Inject uploaded document content so the specialist always has access to it.
+    // Refactor T1+T5: limite unico via DOCUMENT_MAX_CHARS (antes 80_000 hardcoded).
     const docInjection: ModelMessage[] = [];
     if (ctx.documentContext && ctx.documentContext.trim()) {
-      const DOC_PREVIEW_LIMIT = 80_000;
-      const truncated = ctx.documentContext.length > DOC_PREVIEW_LIMIT;
+      const truncated = ctx.documentContext.length > DOCUMENT_MAX_CHARS;
       const preview = truncated
-        ? ctx.documentContext.slice(0, DOC_PREVIEW_LIMIT)
+        ? ctx.documentContext.slice(0, DOCUMENT_MAX_CHARS)
         : ctx.documentContext;
+      if (truncated) {
+        console.warn(
+          `[base-agent:${this.name}] documento truncado de ${ctx.documentContext.length} a ${DOCUMENT_MAX_CHARS} chars (DOCUMENT_MAX_CHARS)`,
+        );
+      }
       docInjection.push({
         role: 'system',
         content:

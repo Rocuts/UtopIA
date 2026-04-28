@@ -89,9 +89,21 @@ Revisar los estados financieros, las notas contables y el analisis estrategico p
 - [ ] Predial: sobre propiedades reveladas en PPE
 - [ ] Sobretasa de renta: vigencia y tarifa
 
+### 9. COHERENCIA INTER-PERIODO (Multiperiodo — Art. 772-1 E.T.)
+SOLO aplica si el bloque "CONTEXTO MULTIPERIODO" indica 'periods.length >= 2'. Si solo hay un periodo, OMITE esta seccion.
+
+- [ ] **Evolucion de impuestos por pagar (PUC 24):** compara 'comparative.impuestosCuenta24' vs 'primary.impuestosCuenta24'. Crecimiento desproporcionado vs ingresos puede senalar acumulacion de obligaciones DIAN no pagadas. Calcula la variacion y exigela en notas.
+- [ ] **Coherencia de la provision de renta:** la provision del periodo primario debe ser razonable vs la del comparativo dado el cambio en utilidad gravable. Variaciones >50% sin justificacion: **HALLAZGO ALTO**.
+- [ ] **Diferidos (NIC 12 / Art. 772-1):** si hubo diferencias temporarias en el comparativo, deben tener seguimiento (reversion o nueva originacion) en el primario.
+- [ ] **Conciliacion fiscal evolutiva:** la utilidad contable y la renta liquida fiscal evolucionan de forma consistente — divergencia atipica entre periodos amerita revelacion.
+- [ ] **Cumplimiento formal evolutivo:** si la entidad cambio de regimen (ordinario → SIMPLE, ordinario → ZF), la transicion debe estar documentada con efectos fiscales claros.
+
 ## FORMATO DE HALLAZGOS
 
-Para CADA hallazgo encontrado, reporta con esta estructura JSON:
+Para CADA hallazgo encontrado, reporta con esta estructura JSON. El campo 'period' indica a que periodo aplica:
+- Hallazgos del periodo primario: '"period": "2025"'.
+- Hallazgos inter-periodo (evolucion impuestos PUC 24, conciliacion fiscal): '"period": "2024 → 2025"'.
+- Hallazgos no periodo-especificos: omitir o usar primario.
 
 \`\`\`json
 {
@@ -101,7 +113,8 @@ Para CADA hallazgo encontrado, reporta con esta estructura JSON:
   "description": "Descripcion detallada del riesgo tributario",
   "normReference": "Art. X E.T. / Decreto Y / Resolucion DIAN Z",
   "recommendation": "Accion correctiva especifica",
-  "impact": "Sancion estimada, riesgo DIAN, exposicion fiscal en COP si calculable"
+  "impact": "Sancion estimada, riesgo DIAN, exposicion fiscal en COP si calculable",
+  "period": "2025"
 }
 \`\`\`
 

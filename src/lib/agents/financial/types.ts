@@ -31,6 +31,8 @@ export interface CompanyInfo {
   fiscalAuditor?: string;
   /** Contador publico */
   accountant?: string;
+  /** Períodos detectados en el archivo. Sourced en /api/upload. */
+  detectedPeriods?: string[];
 }
 
 export interface FinancialReportRequest {

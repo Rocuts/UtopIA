@@ -9,12 +9,14 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
 export function buildGovernancePrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
+  preprocessed?: PreprocessedBalance,
 ): string {
   const langInstruction =
     language === 'en'
@@ -40,6 +42,36 @@ export function buildGovernancePrompt(
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
 
+  // -----------------------------------------------------------------------
+  // Modo comparativo multiperiodo
+  // -----------------------------------------------------------------------
+  const periods = preprocessed?.periods ?? [];
+  const primaryPeriod = preprocessed?.primary?.period;
+  const comparativePeriod = preprocessed?.comparative?.period ?? null;
+  const isComparative = periods.length >= 2 && !!primaryPeriod && !!comparativePeriod;
+  const periodsListed = periods.map((p) => p.period).join(', ');
+
+  const comparativeBlock = isComparative
+    ? `
+## MODO COMPARATIVO (OBLIGATORIO — el preprocesador detecto ${periods.length} periodos: ${periodsListed})
+
+Esta corrida cubre dos periodos historicos: ${primaryPeriod} (actual) y ${comparativePeriod} (comparativo). Las **Notas a los Estados Financieros** y el **Acta de Asamblea** DEBEN referenciar ambos periodos:
+
+1. Cada nota material (Efectivo, Deudores, Inventarios, PPE, Obligaciones Financieras, Cuentas por Pagar, Patrimonio, Ingresos Operacionales, etc.) debe citar el saldo del periodo ${primaryPeriod} y el saldo comparativo del periodo ${comparativePeriod}, con la variacion absoluta. Si una cifra del periodo comparativo no esta disponible, declarala como \`ND\` con explicacion.
+2. La **Nota 6 (PPE)** y la **Nota 11 (Patrimonio)** muestran movimiento del ejercicio: Saldo Inicial (${comparativePeriod}) -> Movimientos del periodo -> Saldo Final (${primaryPeriod}). Las cifras DEBEN coincidir con \`preprocessed.comparative.equityBreakdown\` (saldo inicial) y \`preprocessed.primary.equityBreakdown\` (saldo final).
+3. La **Nota 12 (Ingresos Operacionales)** debe explicitar la variacion vs ${comparativePeriod}.
+4. La **Nota 13 (Hechos Posteriores)** y la **Nota 14 (IFRS 18)** referencia ambos periodos cuando aplique.
+5. El **Acta de Asamblea** describe el ejercicio cerrado al ${primaryPeriod} y debe incluir, dentro del punto "Aprobacion de los estados financieros", una mencion explicita de los estados financieros COMPARATIVOS de ${comparativePeriod} aprobados como parte del juego completo (NIC 1.10).
+6. La distribucion de utilidades aplica sobre la utilidad del periodo ${primaryPeriod} unicamente — NO mezcles utilidades de los dos periodos en el calculo de la reserva legal del 10%.
+`
+    : periods.length === 1
+      ? `
+## MODO SINGLE-PERIOD
+
+El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeriod}). Las notas referencian solo ese periodo y declaran "Sin periodo comparativo disponible" cuando aplique. El acta describe el ejercicio cerrado al ${primaryPeriod ?? company.fiscalPeriod}.
+`
+      : '';
+
   return `${guardrail}
 
 ${context2026}
@@ -60,7 +92,7 @@ Dar sustento legal y normativo a los estados financieros y al analisis estrategi
 ${company.legalRepresentative ? `- **Representante Legal:** ${company.legalRepresentative}` : '- **Representante Legal:** — (dato no suministrado)'}
 ${company.fiscalAuditor ? `- **Revisor Fiscal:** ${company.fiscalAuditor}` : '- **Revisor Fiscal:** — (dato no suministrado)'}
 ${company.accountant ? `- **Contador Publico:** ${company.accountant}` : '- **Contador Publico:** — (dato no suministrado)'}
-
+${comparativeBlock}
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
 ### DOCUMENTO 1: NOTAS A LOS ESTADOS FINANCIEROS

@@ -7,6 +7,7 @@ import { MODELS } from '@/lib/config/models';
 import { buildGovernancePrompt } from '../prompts/governance-specialist.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -26,6 +27,8 @@ import type {
  * @param instructions    Instrucciones adicionales del usuario (propagacion A2).
  * @param bindingTotals   Totales vinculantes pre-calculados — se antepone al
  *                        contexto para que las Notas citen cifras correctas.
+ * @param preprocessed    PreprocessedBalance completo. Activa modo comparativo
+ *                        en notas y acta cuando hay >=2 periodos.
  */
 export async function runGovernanceSpecialist(
   niifOutput: NiifAnalysisResult,
@@ -34,9 +37,10 @@ export async function runGovernanceSpecialist(
   language: 'es' | 'en',
   instructions: string | undefined,
   bindingTotals: string,
+  preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<GovernanceResult> {
-  const systemPrompt = buildGovernancePrompt(company, language);
+  const systemPrompt = buildGovernancePrompt(company, language, preprocessed);
 
   const userContent = [
     bindingTotals,

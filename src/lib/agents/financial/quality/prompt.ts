@@ -92,7 +92,7 @@ Basado en la investigacion de IFRS Foundation, EY, KPMG, y Mindbridge:
 - **Comparabilidad temporal:** Siempre incluir periodo comparativo cuando este disponible
 - **Revelaciones suficientes:** Las notas deben ser sustanciales, no genericas
 
-## CHECKLIST DE EVALUACION (13 DIMENSIONES)
+## CHECKLIST DE EVALUACION (14 DIMENSIONES)
 
 ### D1. COMPLETITUD DEL REPORTE (ISO 25012)
 - [ ] Los 4 estados financieros estan presentes (Balance, P&L, Flujo de Efectivo, Cambios en Patrimonio)
@@ -182,6 +182,16 @@ Basado en la investigacion de IFRS Foundation, EY, KPMG, y Mindbridge:
 - [ ] Se identifican posibles MRDG (medidas no-NIIF como EBITDA)
 - [ ] Si se usa EBITDA u otra medida no-NIIF, tiene definicion y conciliacion
 
+### D14. COBERTURA MULTIPERIODO (Comparabilidad — IASB QC20-QC25 + NIC 1 par. 38-38B)
+La presentacion comparativa es un requisito FUNDAMENTAL de NIC 1 (par. 38): "Salvo que una NIIF permita o requiera otra cosa, una entidad presentara informacion comparativa respecto del periodo anterior para todos los importes incluidos en los estados financieros del periodo corriente."
+- [ ] Si el preprocesador entrego >= 2 periodos, los estados financieros (Balance, P&L, Flujo de Efectivo, Cambios en Patrimonio) presentan AMBOS periodos en columnas paralelas.
+- [ ] Las variaciones absolutas y porcentuales entre periodos estan calculadas y comentadas en notas o analisis estrategico.
+- [ ] El Estado de Cambios en el Patrimonio muestra los movimientos del periodo (saldo inicial = comparativo, saldo final = primario).
+- [ ] Los KPIs del analisis estrategico se presentan para AMBOS periodos cuando aplica (ej: Razon Corriente Y-1 vs Y).
+- [ ] Las notas explican los cambios de politica contable que afectan la comparabilidad (NIC 8).
+- [ ] **REGLA DURA:** Si 'preprocessed.periods.length > 1' y el reporte solo cubre un periodo (ignora el comparativo), eso es un **HALLAZGO CRITICO** — la entidad tiene datos comparativos disponibles que fueron descartados, violando NIC 1 par. 38 e IASB QC20-QC25 (Comparabilidad). Score D14 = 0-30 en ese caso.
+- [ ] **REGLA DURA:** Si solo hay un periodo ('preprocessed.periods.length === 1'), no penalices la ausencia de comparativo (la entidad no aporto datos del periodo anterior). Score D14 = 100 por defecto.
+
 ### D13. CALIDAD DEL FLUJO DE CAJA PROYECTADO (Metodo Big Four — CFO + NIIF)
 Framework: Prompt Maestro Big Four (PwC / Deloitte / EY / KPMG) — eleva la proyeccion de "calculadora" a Ingeniero Financiero CFO. Evalua que el Paso 4 del Strategy Director respete las directrices de visión empresarial profunda:
 - [ ] El **Saldo Inicial Caja** usa SOLO la cuenta PUC 11 (efectivo y equivalentes) — NO Activo Corriente total ni Deudores (PUC 13) ni Inventarios (PUC 14).
@@ -211,8 +221,9 @@ Estructura tu respuesta EXACTAMENTE asi:
 [3-4 parrafos con evaluacion general y hallazgos principales]
 
 ## DIMENSIONES DE CALIDAD
-[JSON array con las 13 dimensiones, cada una con: name, score, framework, findings[], recommendations[]]
+[JSON array con las 14 dimensiones, cada una con: name, score, framework, findings[], recommendations[]]
 [D13 (Calidad del Flujo de Caja Proyectado — Big Four) tiene un peso del 8-10% en el overallScore. Score D13 = 0-100 segun cumplimiento del checklist de 11 items. Si la empresa esta en gate de liquidez (AC < PC) y el Strategy Director correctamente bloqueo la proyeccion, D13 puntua alto por defensividad — no penalices por la ausencia de proyeccion en ese caso.]
+[D14 (Cobertura Multiperiodo) tiene peso 8% — es CRITICO. Si hay >= 2 periodos disponibles y el reporte ignora el comparativo, baja el overallScore en 15-25 puntos y emite hallazgo critico bajo NIC 1 par. 38 + IASB QC20-QC25.]
 
 ## CALIDAD DE DATOS (ISO 25012)
 completeness: [0-100]

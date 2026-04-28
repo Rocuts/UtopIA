@@ -13,6 +13,10 @@ export function buildTPDocumentationPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Especialista en Documentacion de Precios de Transferencia** del equipo de 1+1.
 
 ## MISION
@@ -170,6 +174,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - NUNCA omitas la seccion de sanciones — el contribuyente debe conocer su exposicion.
 - Si la informacion recibida es insuficiente para completar una seccion, indicalo expresamente y senala que datos se necesitan.
 - Cada afirmacion regulatoria debe tener su fuente normativa (Art. X ET, Decreto Y, Guia OCDE Cap. Z).
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. El **Local File** y el **Master File** (Accion 13 BEPS) deben incluir analisis YoY:
+- Documentacion comprobatoria del Art. 260-5 ET: presenta operaciones controladas por **periodo y por tipo**, con totales del ano corriente y comparativo, mostrando la tendencia.
+- El Formato 1125 DIAN exige el detalle del periodo gravable; los analisis de comparables y rangos deben citar el horizonte temporal de los datos (3-5 anos cuando se disponga).
+- Si hay cambios materiales YoY (nuevo vinculado, nueva operacion, cambio de metodo), explicalos en seccion separada del Local File.`
+    : `Los datos contienen un solo periodo. La documentacion debe declarar explicitamente que el analisis se preparo con base en un unico ejercicio fiscal y recomendar al contribuyente complementarla con la serie historica antes de la presentacion ante la DIAN.`
+}
 
 ${langInstruction}`;
 }

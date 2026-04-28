@@ -10,6 +10,7 @@ import { runTaxAuditor } from './agents/tax-auditor';
 import { runLegalAuditor } from './agents/legal-auditor';
 import { runFiscalReviewer } from './agents/fiscal-reviewer';
 import type { FinancialReport } from '../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type {
   AuditRequest,
   AuditReport,
@@ -22,6 +23,12 @@ import type {
 
 export interface AuditOrchestrateOptions {
   onProgress?: (event: AuditProgressEvent) => void;
+  /**
+   * Balance preprocesado (multiperiodo). Si se provee, los auditores reciben
+   * contexto numerico vinculante (controlTotals + equityBreakdown del periodo
+   * primario y comparativo) para validar coherencia inter-periodo.
+   */
+  preprocessed?: PreprocessedBalance;
 }
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critico', 'alto', 'medio', 'bajo', 'informativo'];
@@ -41,7 +48,7 @@ export async function orchestrateAudit(
   options: AuditOrchestrateOptions = {},
 ): Promise<AuditReport> {
   const { report, language } = request;
-  const { onProgress } = options;
+  const { onProgress, preprocessed } = options;
 
   const auditorNames = [
     'Auditor NIIF/Contable',
@@ -53,20 +60,32 @@ export async function orchestrateAudit(
   onProgress?.({ type: 'audit_start', auditors: auditorNames });
 
   // ---------------------------------------------------------------------------
+  // Build multiperiodo context block (if preprocessed available)
+  // ---------------------------------------------------------------------------
+  // Lee el contrato canonico T1: preprocessed.primary, preprocessed.comparative,
+  // preprocessed.periods[]. Antes vivia en preprocessed.summary/.controlTotals
+  // top-level — esa forma fue eliminada.
+  const periodContext = buildPeriodContext(preprocessed);
+
+  // ---------------------------------------------------------------------------
   // Launch all 4 auditors in parallel
   // ---------------------------------------------------------------------------
-  const reportContent = report.consolidatedReport;
+  const reportContent = periodContext
+    ? `${report.consolidatedReport}\n\n${periodContext}`
+    : report.consolidatedReport;
 
   onProgress?.({ type: 'auditor_start', domain: 'niif', name: 'Auditor NIIF/Contable' });
   onProgress?.({ type: 'auditor_start', domain: 'tributario', name: 'Auditor Tributario' });
   onProgress?.({ type: 'auditor_start', domain: 'legal', name: 'Auditor Legal/Societario' });
   onProgress?.({ type: 'auditor_start', domain: 'revisoria', name: 'Auditor de Revisoria Fiscal' });
 
+  const primaryPeriod = preprocessed?.primary.period ?? report.company.fiscalPeriod;
+
   const results = await Promise.allSettled([
-    runNiifAuditor(reportContent, report.company, language, onProgress),
-    runTaxAuditor(reportContent, report.company, language, onProgress),
-    runLegalAuditor(reportContent, report.company, language, onProgress),
-    runFiscalReviewer(reportContent, report.company, language, onProgress),
+    runNiifAuditor(reportContent, report.company, language, onProgress, primaryPeriod),
+    runTaxAuditor(reportContent, report.company, language, onProgress, primaryPeriod),
+    runLegalAuditor(reportContent, report.company, language, onProgress, primaryPeriod),
+    runFiscalReviewer(reportContent, report.company, language, onProgress, primaryPeriod),
   ]);
 
   // ---------------------------------------------------------------------------
@@ -207,6 +226,108 @@ export async function orchestrateAudit(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Construye un bloque de contexto multiperiodo para anexar al reporte que cada
+ * auditor recibe. Usa el contrato canonico T1: preprocessed.primary,
+ * preprocessed.comparative, preprocessed.periods[].
+ *
+ * Si solo hay un periodo, emite contexto minimo. Si hay 2+ periodos, emite
+ * tablas comparativas de control totals + equity breakdown que los auditores
+ * usan para validar coherencia inter-periodo.
+ */
+function buildPeriodContext(preprocessed: PreprocessedBalance | undefined): string {
+  if (!preprocessed) return '';
+
+  const { primary, comparative, periods } = preprocessed;
+  const lines: string[] = [];
+
+  lines.push('---');
+  lines.push('## CONTEXTO MULTIPERIODO (Preprocesador — Datos Vinculantes)');
+  lines.push('');
+  lines.push(`**Periodos detectados:** ${periods.length} (${periods.map((p) => p.period).join(', ')})`);
+  lines.push(`**Periodo primario (auditado):** ${primary.period}`);
+
+  if (comparative) {
+    lines.push(`**Periodo comparativo:** ${comparative.period}`);
+    lines.push('');
+    lines.push('### Totales de Control — Comparacion Inter-Periodo');
+    lines.push('');
+    lines.push('| Concepto | ' + comparative.period + ' | ' + primary.period + ' | Variacion $ | Variacion % |');
+    lines.push('|----------|-----------|-----------|-------------|-------------|');
+    const ct0 = comparative.controlTotals;
+    const ct1 = primary.controlTotals;
+    const rowFor = (label: string, prev: number, curr: number) => {
+      const delta = curr - prev;
+      const pct = prev !== 0 ? ((delta / Math.abs(prev)) * 100).toFixed(2) + '%' : 'N/A';
+      lines.push(`| ${label} | ${fmtCOP(prev)} | ${fmtCOP(curr)} | ${fmtCOP(delta)} | ${pct} |`);
+    };
+    rowFor('Activo Total', ct0.activo, ct1.activo);
+    rowFor('Pasivo Total', ct0.pasivo, ct1.pasivo);
+    rowFor('Patrimonio Total', ct0.patrimonio, ct1.patrimonio);
+    rowFor('Ingresos', ct0.ingresos, ct1.ingresos);
+    rowFor('Gastos+Costos', ct0.gastos, ct1.gastos);
+    rowFor('Utilidad Neta', ct0.utilidadNeta, ct1.utilidadNeta);
+    rowFor('Impuestos por Pagar (PUC 24)', ct0.impuestosCuenta24, ct1.impuestosCuenta24);
+    lines.push('');
+
+    // Equity breakdown comparison — para cuadre inter-periodo del Estado de
+    // Cambios en el Patrimonio.
+    lines.push('### Desglose de Patrimonio — Comparacion Inter-Periodo');
+    lines.push('');
+    const eb0 = comparative.equityBreakdown;
+    const eb1 = primary.equityBreakdown;
+    lines.push('| Cuenta | ' + comparative.period + ' | ' + primary.period + ' | Movimiento |');
+    lines.push('|--------|-----------|-----------|------------|');
+    const equityRow = (label: string, prev: number | undefined, curr: number | undefined) => {
+      const p = prev ?? 0;
+      const c = curr ?? 0;
+      lines.push(`| ${label} | ${fmtCOP(p)} | ${fmtCOP(c)} | ${fmtCOP(c - p)} |`);
+    };
+    equityRow('Capital suscrito y pagado', eb0.capitalSuscritoPagado, eb1.capitalSuscritoPagado);
+    equityRow('Reserva legal', eb0.reservaLegal, eb1.reservaLegal);
+    equityRow('Otras reservas', eb0.otrasReservas, eb1.otrasReservas);
+    equityRow('Utilidad del ejercicio', eb0.utilidadEjercicio, eb1.utilidadEjercicio);
+    equityRow('Utilidades acumuladas', eb0.utilidadesAcumuladas, eb1.utilidadesAcumuladas);
+    lines.push('');
+
+    // Cuadre patrimonial: saldo final = saldo inicial + utilidad - dividendos
+    const eq0Total = (eb0.capitalSuscritoPagado ?? 0) + (eb0.reservaLegal ?? 0) +
+      (eb0.otrasReservas ?? 0) + (eb0.utilidadEjercicio ?? 0) + (eb0.utilidadesAcumuladas ?? 0);
+    const eq1Total = (eb1.capitalSuscritoPagado ?? 0) + (eb1.reservaLegal ?? 0) +
+      (eb1.otrasReservas ?? 0) + (eb1.utilidadEjercicio ?? 0) + (eb1.utilidadesAcumuladas ?? 0);
+    lines.push(
+      `**Movimiento neto patrimonial:** ${fmtCOP(eq0Total)} (${comparative.period}) → ${fmtCOP(eq1Total)} (${primary.period}) = ${fmtCOP(eq1Total - eq0Total)}`,
+    );
+    lines.push(
+      `**Utilidad del ejercicio ${primary.period}:** ${fmtCOP(ct1.utilidadNeta)} — el cambio neto de patrimonio deberia conciliar con esta utilidad menos dividendos declarados.`,
+    );
+    lines.push('');
+  } else {
+    lines.push('**Sin periodo comparativo disponible** — la auditoria se limita al periodo primario.');
+    lines.push('');
+  }
+
+  // Validation status per period
+  lines.push('### Estado de Validacion por Periodo');
+  lines.push('');
+  for (const p of periods) {
+    lines.push(
+      `- **${p.period}:** Ecuacion patrimonial ${p.summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'} | ` +
+        `Discrepancias: ${p.discrepancies.length} | ` +
+        `Cuentas faltantes: ${p.missingExpectedAccounts.length}`,
+    );
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function fmtCOP(amount: number): string {
+  const abs = Math.abs(amount);
+  const formatted = abs.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return amount < 0 ? `-$${formatted}` : `$${formatted}`;
+}
 
 function buildExecutiveSummary(
   results: AuditorResult[],

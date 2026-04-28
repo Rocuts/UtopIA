@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+/**
+ * Tamaño maximo (en caracteres) que se acepta para texto crudo de balance/
+ * documentos contables en los endpoints financieros. Se eleva a 500K para
+ * absorber balances multiperiodo (varias hojas Excel concatenadas con
+ * etiquetas `[period=YYYY]`). Cualquier schema que valide longitud de
+ * texto crudo (rawData, financialData, projectData, documentContext) lo
+ * importa de aqui.
+ */
+export const DOCUMENT_MAX_CHARS = 500_000;
+
 // ---- Chat route ----
 export const chatMessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system']),
@@ -30,7 +40,7 @@ export const chatRequestSchema = z.object({
     ])
     .default(''),
   /** Optional full document text passed from the upload flow for direct analysis. */
-  documentContext: z.string().max(100_000).optional(),
+  documentContext: z.string().max(DOCUMENT_MAX_CHARS).optional(),
   /** Connected ERP integrations — provider + credentials only (no UI metadata). */
   erpConnections: z.array(z.object({
     provider: z.string(),
@@ -104,18 +114,25 @@ export const companyInfoSchema = z.object({
   legalRepresentative: z.string().max(200).optional(),
   fiscalAuditor: z.string().max(200).optional(),
   accountant: z.string().max(200).optional(),
+  /** Períodos detectados en el archivo subido (e.g. ["2024","2025"]). */
+  detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
 });
 
 export const financialReportRequestSchema = z.object({
-  rawData: z.string().min(1, 'Raw accounting data is required').max(200_000, 'Data too large'),
+  rawData: z.string().min(1, 'Raw accounting data is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),
   company: companyInfoSchema,
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),
+  /**
+   * Periodos detectados en el archivo subido. Permite que el endpoint
+   * de financial-report propague la lista al pipeline sin re-detectar.
+   */
+  detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
 });
 
 // ---- Tax planning route ----
 export const taxPlanningRequestSchema = z.object({
-  rawData: z.string().min(1, 'Financial data is required').max(200_000, 'Data too large'),
+  rawData: z.string().min(1, 'Financial data is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),
   company: companyInfoSchema,
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),
@@ -128,7 +145,7 @@ export const taxPlanningRequestSchema = z.object({
 
 // ---- Business valuation route ----
 export const businessValuationRequestSchema = z.object({
-  financialData: z.string().min(1, 'Financial data is required').max(200_000, 'Data too large'),
+  financialData: z.string().min(1, 'Financial data is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),
   company: companyInfoSchema,
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),
@@ -153,7 +170,7 @@ export const controlledTransactionSchema = z.object({
 });
 
 export const transferPricingRequestSchema = z.object({
-  rawData: z.string().min(1, 'Intercompany transaction data is required').max(200_000, 'Data too large'),
+  rawData: z.string().min(1, 'Intercompany transaction data is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),
   company: companyInfoSchema,
   relatedParties: z.array(transferPricingPartySchema).max(50).optional(),
   controlledTransactions: z.array(controlledTransactionSchema).max(100).optional(),
@@ -163,7 +180,7 @@ export const transferPricingRequestSchema = z.object({
 
 // ---- Tax reconciliation route ----
 export const taxReconciliationRequestSchema = z.object({
-  rawData: z.string().min(1, 'Raw accounting data is required').max(200_000, 'Data too large'),
+  rawData: z.string().min(1, 'Raw accounting data is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),
   company: companyInfoSchema,
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),
@@ -188,7 +205,7 @@ export const projectInfoSchema = z.object({
 });
 
 export const feasibilityStudyRequestSchema = z.object({
-  projectData: z.string().min(1, 'Project description is required').max(200_000, 'Data too large'),
+  projectData: z.string().min(1, 'Project description is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),
   project: projectInfoSchema,
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),

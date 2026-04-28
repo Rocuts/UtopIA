@@ -11,6 +11,7 @@
 
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
+import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
 
 export interface DocumentAnalysis {
   documentType: string;
@@ -92,13 +93,20 @@ export async function analyzeDocument(
   documentText: string,
   filename?: string
 ): Promise<DocumentAnalysis> {
-  // Truncate very long documents to stay within gpt-4o-mini's 128k context.
-  // 60,000 chars (~15-20k tokens) ensures full tax returns and financial
-  // statements are analyzed without truncation in most cases.
-  const maxChars = 60_000;
-  const truncatedText = documentText.length > maxChars
-    ? documentText.substring(0, maxChars) + '\n\n[... documento truncado por longitud ...]'
+  // Refactor T1+T5: limite unico via DOCUMENT_MAX_CHARS (antes hardcoded
+  // 60_000 — inconsistente con orchestrator/base-agent/chat-route). Si el
+  // documento llega ya por encima del limite (ej. orchestrator no lo recorto
+  // antes), aplicamos truncado conservador en lugar de re-recortar
+  // agresivamente, y logueamos para que sea visible.
+  const original = documentText.length;
+  const truncatedText = original > DOCUMENT_MAX_CHARS
+    ? documentText.substring(0, DOCUMENT_MAX_CHARS) + '\n\n[... documento truncado por longitud ...]'
     : documentText;
+  if (original > DOCUMENT_MAX_CHARS) {
+    console.warn(
+      `[analyze_document] truncated ${original - DOCUMENT_MAX_CHARS} chars (original=${original}, limit=${DOCUMENT_MAX_CHARS})`,
+    );
+  }
 
   const userPrompt = filename
     ? `Analiza el siguiente documento (archivo: ${filename}):\n\n${truncatedText}`

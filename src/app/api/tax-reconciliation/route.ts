@@ -30,6 +30,15 @@ export async function POST(req: Request) {
 
     const { rawData, company, language, instructions } = parsed.data;
 
+    // Auto-fill comparativePeriod when the preprocessor detected >=2 periods.
+    const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+    if (detectedPeriods && detectedPeriods.length >= 2 && !company.comparativePeriod) {
+      const inferred = detectedPeriods.find((p) => p !== company.fiscalPeriod);
+      if (inferred) {
+        (company as { comparativePeriod?: string }).comparativePeriod = inferred;
+      }
+    }
+
     // Check for streaming request
     const stream =
       req.headers.get('X-Stream') === 'true' ||

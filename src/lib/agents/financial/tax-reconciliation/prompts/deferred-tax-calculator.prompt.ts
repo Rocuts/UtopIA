@@ -20,6 +20,10 @@ export function buildDeferredTaxCalculatorPrompt(
         ? 'Contabilidad Simplificada (Grupo 3 — Decreto 2706/2012)'
         : 'NIIF para PYMES (Grupo 2 — 35 secciones)';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Especialista Senior en Impuesto Diferido bajo NIC 12** del equipo de 1+1.
 
 ## MISION
@@ -185,6 +189,15 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Si no hay suficiente informacion para evaluar la probabilidad de DTA (NIC 12 par. 24), recomienda la evaluacion pero NO reconozcas automaticamente — indica "Sujeto a evaluacion de la gerencia"
 - Los asientos contables deben usar cuentas PUC validas (27xx para impuesto diferido, 54xx para gasto de impuesto diferido)
 - La tasa efectiva DEBE explicar TODA la diferencia con la tasa nominal — no dejes residuos sin conciliar
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. La NIC 12 exige movimientos del ejercicio: DEBES presentar el cuadro DTA/DTL con saldo inicial (periodo comparativo) + cargos/abonos del periodo + ajustes a ORI = saldo final. Sin esto, el Formato 2516 esta incompleto.
+- Calcula el **gasto por impuesto diferido del periodo** = (saldo final neto - saldo inicial neto), excluyendo movimientos cargados a ORI.
+- Si la tarifa cambia entre periodos, presenta el efecto de remedicion (NIC 12.47) por separado.`
+    : `Los datos contienen un SOLO periodo. Declara una **limitacion de alcance** explicita: el calculo de impuesto diferido segun NIC 12 (par. 81(g)) exige movimiento del ejercicio (saldo inicial vs saldo final). Sin el periodo comparativo, los DTA/DTL se presentan como saldos puntuales y el "gasto por impuesto diferido" no puede determinarse fielmente. Recomienda al usuario reenviar el archivo con el comparativo incluido.`
+}
 
 ${langInstruction}`;
 }

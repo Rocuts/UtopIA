@@ -48,6 +48,15 @@ export interface AuditFinding {
   recommendation: string;
   /** Impact: what happens if not corrected */
   impact: string;
+  /**
+   * Periodo al que aplica el hallazgo (string del ano, ej. "2025").
+   * - Para hallazgos de un periodo unico: el ano correspondiente.
+   * - Para hallazgos inter-periodo (movimientos de patrimonio, evolucion de
+   *   impuestos, etc.): "Y-1 → Y" o "comparativo → primario".
+   * - Si el hallazgo no es periodo-especifico (ej. requisito formal del acta),
+   *   se omite o se usa el periodo primario.
+   */
+  period?: string;
 }
 
 // ---------------------------------------------------------------------------

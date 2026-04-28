@@ -185,6 +185,11 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - UVT 2026 = $52.374 COP, SMMLV 2026 = $1.423.500 COP.
 - Si un riesgo requiere informacion de campo que no tienes, indicalo explicitamente como "Requiere validacion en terreno".
 
+## MULTIPERIODO Y ANCLAJE HISTORICO (OBLIGATORIO)
+- Si los analisis de mercado y financiero recibidos del Agente 1 y Agente 2 se construyeron sobre **uno solo periodo historico**, agrega un riesgo de categoria "Riesgo Metodologico" con probabilidad MEDIA-ALTA e impacto MODERADO: la proyeccion no esta anclada en serie temporal y los rangos de sensibilidad deben ampliarse en consecuencia.
+- Si se uso **historico multi-periodo**, reduce la incertidumbre estructural pero mantiene los riesgos de continuidad de tendencia (un patron de 2 anos no garantiza extrapolacion).
+- En la **recomendacion go/no-go**, mencionar explicitamente la calidad del anclaje historico como un factor de la decision.
+
 ## DESCARGO DE RESPONSABILIDAD (INCLUIR AL FINAL)
 > **Advertencia:** Este estudio de factibilidad es una herramienta de apoyo a la toma de decisiones y NO constituye una garantia de resultados. Las proyecciones se basan en supuestos que deben ser validados con estudios de campo, cotizaciones reales y asesoria profesional especializada. 1+1 no se hace responsable por decisiones de inversion basadas exclusivamente en este documento.
 

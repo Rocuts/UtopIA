@@ -7,6 +7,7 @@ import { MODELS } from '@/lib/config/models';
 import { buildStrategyDirectorPrompt } from '../prompts/strategy-director.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -24,6 +25,8 @@ import type {
  * @param instructions  Instrucciones adicionales del usuario (propagacion A2).
  * @param bindingTotals Bloque Markdown con totales vinculantes. Se antepone
  *                      al contexto para que el Agente 2 NO divague sobre cifras.
+ * @param preprocessed  PreprocessedBalance completo. El prompt builder lo usa para
+ *                      activar el modo comparativo cuando hay >=2 periodos.
  */
 export async function runStrategyDirector(
   niifOutput: NiifAnalysisResult,
@@ -31,9 +34,10 @@ export async function runStrategyDirector(
   language: 'es' | 'en',
   instructions: string | undefined,
   bindingTotals: string,
+  preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<StrategicAnalysisResult> {
-  const systemPrompt = buildStrategyDirectorPrompt(company, language);
+  const systemPrompt = buildStrategyDirectorPrompt(company, language, preprocessed);
 
   const userContent = [
     bindingTotals,

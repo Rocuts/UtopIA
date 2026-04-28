@@ -48,11 +48,38 @@ export async function runQualityAudit(input: QualityAuditInput): Promise<Quality
   }
 
   if (input.preprocessed) {
+    const periods = input.preprocessed.periods;
+    const totalDiscrepancies = periods.reduce((acc, p) => acc + p.discrepancies.length, 0);
+
+    // Multiperiodo: ecuacion cuadra si TODOS los periodos cuadran
+    const allBalanced = periods.every((p) => p.summary.equationBalanced);
+    const failingPeriods = periods.filter((p) => !p.summary.equationBalanced).map((p) => p.period);
+
     sections.push('\n=== INFORME DE VALIDACION ARITMETICA (Preprocesador) ===');
     sections.push(input.preprocessed.validationReport);
     sections.push(`\nCuentas auxiliares procesadas: ${input.preprocessed.auxiliaryCount}`);
-    sections.push(`Discrepancias detectadas: ${input.preprocessed.discrepancies.length}`);
-    sections.push(`Ecuacion patrimonial: ${input.preprocessed.summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'}`);
+    sections.push(`Periodos detectados: ${periods.length} (${periods.map((p) => p.period).join(', ')})`);
+    sections.push(`Periodo primario: ${input.preprocessed.primary.period}`);
+    if (input.preprocessed.comparative) {
+      sections.push(`Periodo comparativo: ${input.preprocessed.comparative.period}`);
+    } else if (periods.length === 1) {
+      sections.push('Sin periodo comparativo disponible');
+    }
+    sections.push(`Discrepancias totales (todos los periodos): ${totalDiscrepancies}`);
+    sections.push(
+      `Ecuacion patrimonial: ${allBalanced ? 'CUADRA en todos los periodos' : `NO CUADRA en ${failingPeriods.join(', ')}`}`,
+    );
+
+    // Senal explicita al meta-auditor sobre uso de comparativo en el reporte
+    if (periods.length > 1) {
+      sections.push(
+        `\n[META-AUDITORIA] Hay ${periods.length} periodos disponibles. ` +
+          `EVALUA si el reporte presenta los datos comparativos correctamente. ` +
+          `Si solo cubre el periodo primario (${input.preprocessed.primary.period}) ` +
+          `e ignora el comparativo (${input.preprocessed.comparative?.period ?? 'N/A'}), ` +
+          `ese es un HALLAZGO CRITICO de calidad multiperiodo (D14).`,
+      );
+    }
   }
 
   const userContent = sections.join('\n');

@@ -134,6 +134,11 @@ You have five tools. Use them with judgment:
   );
 
   // ---------------------------------------------------------------------------
+  // Modo comparativo (multiperiodo) — solo aplica cuando hay >=2 snapshots
+  // ---------------------------------------------------------------------------
+  const comparativeBlock = buildComparativeBlock(preprocessed, isEs);
+
+  // ---------------------------------------------------------------------------
   // Reglas anti-alucinacion + estilo
   // ---------------------------------------------------------------------------
   const rulesBlock = isEs
@@ -171,8 +176,47 @@ You have five tools. Use them with judgment:
     '',
     toolsBlock,
     '',
+    comparativeBlock,
+    '',
     rulesBlock,
   ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// buildComparativeBlock — instrucciones especificas cuando el balance trae
+// 2+ periodos. Returns '' si solo hay un snapshot (no inflamos el prompt).
+// ---------------------------------------------------------------------------
+
+function buildComparativeBlock(
+  preprocessed: PreprocessedBalance | null,
+  isEs: boolean,
+): string {
+  if (!preprocessed || preprocessed.periods.length < 2) return '';
+  const primary = preprocessed.primary.period;
+  const comparative = preprocessed.comparative?.period ?? '';
+  if (!comparative) return '';
+
+  return isEs
+    ? `## Modo comparativo (multiperiodo)
+
+Este balance trae **dos periodos**: \`${primary}\` (primario, foco del reporte) y \`${comparative}\` (comparativo). Reglas especificas:
+
+- Cuando hables de un saldo, **siempre** aclara a que periodo te refieres ("$X en ${primary}", "$Y en ${comparative}"). NO mezcles cifras de periodos sin avisar.
+- Las tools \`read_account\` y \`recheck_validation\` aceptan un parametro opcional \`period\`. Si lo omites, trabajan sobre el primario; si lo especificas, sobre ese snapshot.
+- Cuando llames \`read_account\` SIN \`period\` y exista comparativo, la tool te devolvera AMBOS saldos en una sola respuesta (campo \`comparative\`). Aprovechalo para contrastar tendencia ${comparative} → ${primary}.
+- **Inconsistencias inter-periodo**: si detectas que un saldo de cierre en ${comparative} (ej. utilidad acumulada 3705) NO coincide con el saldo inicial esperado en ${primary}, eso es una bandera roja. Propon un ajuste que ancle al periodo correcto via \`propose_adjustment({ period: "..." })\`.
+- Para ajustes de patrimonio que mueven saldos del periodo anterior (ej. corregir un saldo inicial de utilidad acumulada), usa \`period: "${comparative}"\`. Para ajustes del periodo actual usa \`period: "${primary}"\` o omitelo (default).
+- La ecuacion patrimonial debe cuadrar **independientemente en cada periodo**. Si solo cuadra en uno, queda un problema sin resolver.`
+    : `## Comparative mode (multi-period)
+
+This balance has **two periods**: \`${primary}\` (primary, report focus) and \`${comparative}\` (comparative). Specific rules:
+
+- When citing a balance, **always** clarify which period (e.g. "$X in ${primary}", "$Y in ${comparative}"). Do NOT mix figures across periods without flagging it.
+- Tools \`read_account\` and \`recheck_validation\` accept an optional \`period\` argument. If omitted, they operate on the primary; if specified, on that snapshot.
+- When you call \`read_account\` WITHOUT \`period\` and a comparative exists, the tool returns BOTH balances in one response (\`comparative\` field). Use it to contrast the ${comparative} → ${primary} trend.
+- **Inter-period inconsistencies**: if a closing balance in ${comparative} (e.g. retained earnings 3705) does NOT match the expected opening balance in ${primary}, that is a red flag. Propose an adjustment anchored to the correct period via \`propose_adjustment({ period: "..." })\`.
+- For equity adjustments that move prior-period balances (e.g. correcting an opening retained earnings), use \`period: "${comparative}"\`. For current-period adjustments use \`period: "${primary}"\` or omit it (default).
+- The accounting equation must balance **independently in each period**. If it only balances in one, there is still an unresolved issue.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,25 +274,29 @@ function buildAdjustmentsBlock(
 
   // Si hay >=1 ajuste applied y tenemos preprocessed, evaluamos si la
   // ecuacion ya cuadra; en ese caso recomendamos al agente cerrar el ciclo.
+  // Multiperiodo: validamos sobre el snapshot primario (que es lo que el
+  // reporte final usa). Los ajustes que tocan el comparativo afectan saldos
+  // iniciales pero no la ecuacion del primario en este chequeo simple.
   const applied = adjustments.filter((a) => a.status === 'applied');
   if (applied.length > 0 && preprocessed) {
     try {
       const application = applyAdjustments(preprocessed, applied);
       const v = revalidate(application.balance);
-      const ct = application.balance.controlTotals;
+      const ct = application.balance.primary.controlTotals;
       const diff = ct.activo - (ct.pasivo + ct.patrimonio);
+      const periodLabel = application.balance.primary.period;
       lines.push('');
       if (v.ok) {
         lines.push(
           isEs
-            ? `Estado actual con ${applied.length} ajuste(s) aplicado(s): la ecuacion patrimonial CUADRA (diferencia ${fmtCop(diff)}). Sugiere al usuario regenerar el reporte cuando quede satisfecho.`
-            : `Current state with ${applied.length} applied adjustment(s): the accounting equation BALANCES (diff ${fmtCop(diff)}). Suggest the user regenerate the report when ready.`,
+            ? `Estado actual con ${applied.length} ajuste(s) aplicado(s) en ${periodLabel}: la ecuacion patrimonial CUADRA (diferencia ${fmtCop(diff)}). Sugiere al usuario regenerar el reporte cuando quede satisfecho.`
+            : `Current state with ${applied.length} applied adjustment(s) in ${periodLabel}: the accounting equation BALANCES (diff ${fmtCop(diff)}). Suggest the user regenerate the report when ready.`,
         );
       } else {
         lines.push(
           isEs
-            ? `Estado actual con ${applied.length} ajuste(s) aplicado(s): la ecuacion patrimonial AUN NO CUADRA (diferencia ${fmtCop(diff)}). Sigue diagnosticando.`
-            : `Current state with ${applied.length} applied adjustment(s): the accounting equation does NOT yet balance (diff ${fmtCop(diff)}). Keep diagnosing.`,
+            ? `Estado actual con ${applied.length} ajuste(s) aplicado(s) en ${periodLabel}: la ecuacion patrimonial AUN NO CUADRA (diferencia ${fmtCop(diff)}). Sigue diagnosticando.`
+            : `Current state with ${applied.length} applied adjustment(s) in ${periodLabel}: the accounting equation does NOT yet balance (diff ${fmtCop(diff)}). Keep diagnosing.`,
         );
       }
     } catch {
@@ -267,10 +315,118 @@ function buildPreprocessedBlock(pp: PreprocessedBalance, isEs: boolean): string 
   const lines: string[] = [];
   lines.push(isEs ? '## Resumen del balance pre-procesado' : '## Preprocessed balance summary');
   lines.push('');
-  if (pp.period) {
-    lines.push(isEs ? `- Periodo detectado: ${pp.period}` : `- Detected period: ${pp.period}`);
+
+  // Multiperiodo (T1): renderizamos el snapshot primario como el contexto
+  // base, y si existe `comparative`, agregamos un bloque adicional con
+  // sus totales. La regla de oro: el agente trabaja por defecto sobre el
+  // primario; cuando necesite hablar del comparativo, debe referenciarlo
+  // explicitamente y pasar `period` a las tools.
+  const periods = pp.periods;
+  if (periods.length > 1) {
+    lines.push(
+      isEs
+        ? `- Balance comparativo: ${periods.length} periodos detectados (${periods.map((s) => s.period).join(', ')})`
+        : `- Comparative balance: ${periods.length} periods detected (${periods.map((s) => s.period).join(', ')})`,
+    );
+    lines.push(
+      isEs
+        ? `- Periodo primario (foco actual): ${pp.primary.period}`
+        : `- Primary period (current focus): ${pp.primary.period}`,
+    );
+    if (pp.comparative) {
+      lines.push(
+        isEs
+          ? `- Periodo comparativo: ${pp.comparative.period}`
+          : `- Comparative period: ${pp.comparative.period}`,
+      );
+    }
+    lines.push('');
+  } else {
+    lines.push(
+      isEs
+        ? `- Periodo detectado: ${pp.primary.period}`
+        : `- Detected period: ${pp.primary.period}`,
+    );
   }
-  const ct = pp.controlTotals;
+
+  // Bloque de totales para el primario (siempre).
+  lines.push('');
+  lines.push(
+    isEs
+      ? `### Periodo primario: ${pp.primary.period}`
+      : `### Primary period: ${pp.primary.period}`,
+  );
+  pushSnapshotTotals(lines, pp.primary, isEs);
+
+  // Bloque adicional para el comparativo, si existe.
+  if (pp.comparative) {
+    lines.push('');
+    lines.push(
+      isEs
+        ? `### Periodo comparativo: ${pp.comparative.period}`
+        : `### Comparative period: ${pp.comparative.period}`,
+    );
+    pushSnapshotTotals(lines, pp.comparative, isEs);
+  }
+
+  // Discrepancias y cuentas faltantes — del primario (las del comparativo se
+  // mencionan en el validationReport; mantenemos el bloque conciso).
+  if (pp.primary.discrepancies.length > 0) {
+    lines.push('');
+    lines.push(
+      isEs
+        ? `### Discrepancias detectadas en ${pp.primary.period} (${pp.primary.discrepancies.length})`
+        : `### Detected discrepancies in ${pp.primary.period} (${pp.primary.discrepancies.length})`,
+    );
+    for (const d of pp.primary.discrepancies.slice(0, 8)) {
+      lines.push(`- **${d.location}**: ${d.description}`);
+    }
+    if (pp.primary.discrepancies.length > 8) {
+      lines.push(isEs
+        ? `- ...y ${pp.primary.discrepancies.length - 8} mas (consulta el reporte completo abajo).`
+        : `- ...and ${pp.primary.discrepancies.length - 8} more (see full report below).`);
+    }
+  }
+
+  if (pp.primary.missingExpectedAccounts.length > 0) {
+    lines.push('');
+    lines.push(
+      isEs
+        ? `### Cuentas PUC faltantes o con saldo 0 en ${pp.primary.period} (${pp.primary.missingExpectedAccounts.length})`
+        : `### Missing or zero-balance PUC accounts in ${pp.primary.period} (${pp.primary.missingExpectedAccounts.length})`,
+    );
+    for (const m of pp.primary.missingExpectedAccounts.slice(0, 6)) {
+      lines.push(`- ${m}`);
+    }
+    if (pp.primary.missingExpectedAccounts.length > 6) {
+      lines.push(isEs
+        ? `- ...y ${pp.primary.missingExpectedAccounts.length - 6} mas.`
+        : `- ...and ${pp.primary.missingExpectedAccounts.length - 6} more.`);
+    }
+  }
+
+  // Truncamos el validationReport para no explotar el contexto.
+  const report = pp.validationReport.length > VALIDATION_REPORT_LIMIT
+    ? pp.validationReport.slice(0, VALIDATION_REPORT_LIMIT) + (isEs ? '\n\n[...truncado...]' : '\n\n[...truncated...]')
+    : pp.validationReport;
+  lines.push('');
+  lines.push(isEs ? '### Informe de validacion (extracto)' : '### Validation report (excerpt)');
+  lines.push('');
+  lines.push(report);
+
+  return lines.join('\n');
+}
+
+/**
+ * Empuja el bloque de totales de UN snapshot a `lines`. Multiperiodo: se
+ * llama una vez por primary y otra por comparative cuando aplica.
+ */
+function pushSnapshotTotals(
+  lines: string[],
+  snap: PreprocessedBalance['primary'],
+  isEs: boolean,
+): void {
+  const ct = snap.controlTotals;
   lines.push(
     isEs
       ? `- Activo: ${fmtCop(ct.activo)} (corriente ${fmtCop(ct.activoCorriente)} / no corriente ${fmtCop(ct.activoNoCorriente)})`
@@ -285,50 +441,12 @@ function buildPreprocessedBlock(pp: PreprocessedBalance, isEs: boolean): string 
   lines.push(isEs ? `- Ingresos: ${fmtCop(ct.ingresos)}` : `- Revenue: ${fmtCop(ct.ingresos)}`);
   lines.push(isEs ? `- Gastos+Costos: ${fmtCop(ct.gastos)}` : `- Expenses+Costs: ${fmtCop(ct.gastos)}`);
   lines.push(isEs ? `- Utilidad neta: ${fmtCop(ct.utilidadNeta)}` : `- Net income: ${fmtCop(ct.utilidadNeta)}`);
-
   const equationDiff = ct.activo - (ct.pasivo + ct.patrimonio);
   lines.push(
     isEs
       ? `- Ecuacion patrimonial (Activo - (Pasivo + Patrimonio)): ${fmtCop(equationDiff)}`
       : `- Accounting equation (Assets - (Liabilities + Equity)): ${fmtCop(equationDiff)}`,
   );
-
-  if (pp.discrepancies.length > 0) {
-    lines.push('');
-    lines.push(isEs ? `### Discrepancias detectadas (${pp.discrepancies.length})` : `### Detected discrepancies (${pp.discrepancies.length})`);
-    for (const d of pp.discrepancies.slice(0, 8)) {
-      lines.push(`- **${d.location}**: ${d.description}`);
-    }
-    if (pp.discrepancies.length > 8) {
-      lines.push(isEs
-        ? `- ...y ${pp.discrepancies.length - 8} mas (consulta el reporte completo abajo).`
-        : `- ...and ${pp.discrepancies.length - 8} more (see full report below).`);
-    }
-  }
-
-  if (pp.missingAccounts.length > 0) {
-    lines.push('');
-    lines.push(isEs ? `### Cuentas PUC faltantes o con saldo 0 (${pp.missingAccounts.length})` : `### Missing or zero-balance PUC accounts (${pp.missingAccounts.length})`);
-    for (const m of pp.missingAccounts.slice(0, 6)) {
-      lines.push(`- ${m}`);
-    }
-    if (pp.missingAccounts.length > 6) {
-      lines.push(isEs
-        ? `- ...y ${pp.missingAccounts.length - 6} mas.`
-        : `- ...and ${pp.missingAccounts.length - 6} more.`);
-    }
-  }
-
-  // Truncamos el validationReport para no explotar el contexto.
-  const report = pp.validationReport.length > VALIDATION_REPORT_LIMIT
-    ? pp.validationReport.slice(0, VALIDATION_REPORT_LIMIT) + (isEs ? '\n\n[...truncado...]' : '\n\n[...truncated...]')
-    : pp.validationReport;
-  lines.push('');
-  lines.push(isEs ? '### Informe de validacion (extracto)' : '### Validation report (excerpt)');
-  lines.push('');
-  lines.push(report);
-
-  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------

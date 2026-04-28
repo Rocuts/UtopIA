@@ -9,7 +9,7 @@ import { calculateSanction, type SanctionResult, type SanctionCalculation } from
 import { analyzeDocument } from '@/lib/tools/document-analyzer';
 import { generateDianResponse, type DianResponseRequest } from '@/lib/tools/dian-response-generator';
 import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
-import { chatRequestSchema } from '@/lib/validation/schemas';
+import { chatRequestSchema, DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
 import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 import { orchestrate } from '@/lib/agents/orchestrator';
 import type { ProgressEvent } from '@/lib/agents/types';
@@ -342,13 +342,20 @@ ${langInstruction}
 
   // Build message list — inject uploaded document content so the AI always
   // has access to it, not only when it calls the analyze_document tool.
+  // Refactor T1+T5: limite unico via DOCUMENT_MAX_CHARS (antes hardcoded
+  // 30_000 en este handler legacy — inconsistente con orchestrator y
+  // base-agent que usaban 80_000).
   const docInjection: ModelMessage[] = [];
   if (documentContext && documentContext.trim()) {
-    const DOC_PREVIEW_LIMIT = 30_000;
-    const truncated = documentContext.length > DOC_PREVIEW_LIMIT;
+    const truncated = documentContext.length > DOCUMENT_MAX_CHARS;
     const preview = truncated
-      ? documentContext.slice(0, DOC_PREVIEW_LIMIT)
+      ? documentContext.slice(0, DOCUMENT_MAX_CHARS)
       : documentContext;
+    if (truncated) {
+      console.warn(
+        `[chat/route legacy] documento truncado de ${documentContext.length} a ${DOCUMENT_MAX_CHARS} chars (DOCUMENT_MAX_CHARS)`,
+      );
+    }
     docInjection.push({
       role: 'system',
       content:

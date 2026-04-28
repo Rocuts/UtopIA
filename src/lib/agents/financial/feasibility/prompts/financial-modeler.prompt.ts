@@ -216,6 +216,11 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Si necesitas un dato que no esta disponible (ej: beta sectorial especifico), indica la fuente donde obtenerlo (ej: "Beta Damodaran para sector X") y usa un valor razonable documentado.
 - NO apliques incentivos tributarios a menos que el proyecto los califique explicitamente.
 
+## MULTIPERIODO Y ANCLAJE HISTORICO (OBLIGATORIO)
+- Las **proyecciones financieras** se anclan en historico real cuando se disponga: si el insumo del Analista de Mercado o los datos del usuario aportan dos o mas periodos historicos (ingresos, margenes), DEBES calcular tasas de crecimiento YoY y promedios para construir las proyecciones, en lugar de inventar parametros.
+- Si solo hay un periodo de referencia, declara como **flag de riesgo metodologico**: la sensibilidad debe ampliarse y los escenarios pesimista/base/optimista deben separarse mas. Documenta los supuestos como "expert judgment" y senala que requieren validacion con benchmark sectorial.
+- El WACC y la estructura E/V se anclan en parametros sectoriales actualizados (Damodaran sector emergente, Banco de la Republica), no solo en la foto patrimonial puntual del promotor.
+
 ${langInstruction}`;
 }
 

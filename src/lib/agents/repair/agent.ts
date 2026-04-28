@@ -79,7 +79,8 @@ export async function runRepairAgent(
         // seguro el CSV venia con separador equivocado, columnas mal mapeadas
         // o saldos vacios. Tratar ese resultado como autoritativo lleva a
         // tools que reportan datos inexistentes. Caemos al raw-text fallback.
-        const ct = preprocessed.controlTotals;
+        // Multiperiodo T1: leemos del snapshot primario.
+        const ct = preprocessed.primary.controlTotals;
         if (ct.activo === 0 && ct.pasivo === 0 && ct.patrimonio === 0) {
           console.warn(
             '[repair-chat] preprocess parcial sospechoso (totales en cero), cayendo a raw-text fallback',

@@ -1,18 +1,30 @@
 // ---------------------------------------------------------------------------
-// Repair Chat — applyAdjustments util (Phase 2, pure)
+// Repair Chat — applyAdjustments util (Phase 2 + multiperiodo T1+T5, pure)
 // ---------------------------------------------------------------------------
 // Aplica ajustes contables determinísticamente sobre un PreprocessedBalance,
 // reconstruyendo controlTotals, summary, equityBreakdown y la jerarquia de
-// cuentas (hojas + ancestros). Sin side effects: clona todo lo que toca.
+// cuentas (hojas + ancestros) de cada PeriodSnapshot afectado. Sin side
+// effects: clona todo lo que toca.
 //
 // Esta misma util es invocada por:
 //   - tools del repair chat (preview de propose_adjustment, recheck_validation)
 //   - financial orchestrator (post-preprocesamiento, antes del Stage 1)
 // asi el reporte final refleja exactamente lo que el usuario aprobo en el chat.
+//
+// Multiperiodo (T1 contract):
+//   - PreprocessedBalance ahora expone `periods: PeriodSnapshot[]` mas dos
+//     accesos `primary` y `comparative`. Cada snapshot tiene su propio
+//     `classes`, `controlTotals`, `equityBreakdown`, `summary`, etc.
+//   - `Adjustment.period` (opcional) ancla el ajuste a un snapshot. Si se
+//     omite, default = `primary.period`.
+//   - Ajustes con `period` que no exista en `periods[*].period` se ignoran
+//     silenciosamente para no contaminar otro snapshot — la UI debio haberlo
+//     validado antes de mandar el replay.
 // ---------------------------------------------------------------------------
 
 import type {
   PreprocessedBalance,
+  PeriodSnapshot,
   PUCClass,
   ValidatedAccount,
 } from '@/lib/preprocessing/trial-balance';
@@ -51,6 +63,8 @@ export interface AdjustmentApplicationAffected {
   oldBalance: number;
   newBalance: number;
   isNewAccount: boolean;
+  /** Periodo del snapshot donde se aplico el ajuste. */
+  period: string;
 }
 
 export interface AdjustmentApplication {
@@ -98,68 +112,71 @@ function cloneClass(cls: PUCClass): PUCClass {
   };
 }
 
-function cloneBalance(pp: PreprocessedBalance): PreprocessedBalance {
+function cloneSnapshot(snap: PeriodSnapshot): PeriodSnapshot {
   return {
-    period: pp.period,
-    classes: pp.classes.map(cloneClass),
-    summary: { ...pp.summary },
-    controlTotals: { ...pp.controlTotals },
-    equityBreakdown: { ...pp.equityBreakdown },
+    period: snap.period,
+    classes: snap.classes.map(cloneClass),
+    summary: { ...snap.summary },
+    controlTotals: { ...snap.controlTotals },
+    equityBreakdown: { ...snap.equityBreakdown },
     validation: {
-      blocking: pp.validation.blocking,
-      reasons: [...pp.validation.reasons],
-      suggestedAccounts: [...pp.validation.suggestedAccounts],
-      adjustments: [...pp.validation.adjustments],
+      blocking: snap.validation.blocking,
+      reasons: [...snap.validation.reasons],
+      suggestedAccounts: [...snap.validation.suggestedAccounts],
+      adjustments: [...snap.validation.adjustments],
     },
-    discrepancies: pp.discrepancies.map((d) => ({ ...d })),
-    missingAccounts: [...pp.missingAccounts],
-    auxiliaryCount: pp.auxiliaryCount,
-    totalRowCount: pp.totalRowCount,
-    validationReport: pp.validationReport,
-    cleanData: pp.cleanData,
+    discrepancies: snap.discrepancies.map((d) => ({ ...d })),
+    missingExpectedAccounts: [...snap.missingExpectedAccounts],
   };
 }
 
-/**
- * Retorna el siguiente nivel jerarquico PUC clasico:
- *   1 -> 2 -> 4 -> 6 -> 8 (Auxiliar). Codigos atipicos retornan null.
- */
-function nextHierarchyLength(len: number): number | null {
-  if (len === 1) return 2;
-  if (len === 2) return 4;
-  if (len === 4) return 6;
-  if (len === 6) return 8;
-  return null;
+function cloneBalance(pp: PreprocessedBalance): PreprocessedBalance {
+  // Clonamos cada snapshot UNA sola vez y reusamos las referencias para que
+  // `primary` y `comparative` apunten a las mismas instancias dentro de
+  // `periods` (consistencia del contrato T1).
+  const clonedPeriods = pp.periods.map(cloneSnapshot);
+  const findClone = (target: PeriodSnapshot | null): PeriodSnapshot | null => {
+    if (!target) return null;
+    return clonedPeriods.find((s) => s.period === target.period) ?? cloneSnapshot(target);
+  };
+
+  return {
+    periods: clonedPeriods,
+    primary: findClone(pp.primary) ?? clonedPeriods[0],
+    comparative: findClone(pp.comparative),
+    rawRows: pp.rawRows.map((r) => ({ ...r })),
+    auxiliaryCount: pp.auxiliaryCount,
+    cleanData: pp.cleanData,
+    validationReport: pp.validationReport,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// applyAdjustments
+// applyAdjustments — multiperiodo
 // ---------------------------------------------------------------------------
 
 /**
  * Aplica los `adjustments` con status === 'applied' al `balance`, en orden de
- * llegada. Devuelve un objeto NUEVO con balance reconstruido y un resumen de
- * cuentas afectadas. Los ajustes con otros status se ignoran.
+ * llegada. Devuelve un objeto NUEVO con cada `PeriodSnapshot` reconstruido y
+ * un resumen de cuentas afectadas (con `period`). Los ajustes con otros status
+ * se ignoran.
  *
- * Decisiones de diseno (documentadas tambien en el reporte de Phase 2):
+ * Decisiones de diseno:
+ *   - Si `adj.period` es undefined → snapshot destino = `primary`.
+ *   - Si `adj.period` matchea un `periods[i].period` → ese snapshot.
+ *   - Si `adj.period` no existe → ajuste descartado silenciosamente (la UI
+ *     debio validarlo). Esto evita contaminar el snapshot equivocado.
  *   - Las cuentas nuevas se crean como hojas (`isLeaf = true`) en la clase
  *     derivada del primer digito del codigo. El nivel se infiere por longitud
  *     (Clase / Grupo / Cuenta / Subcuenta / Auxiliar). El `previousBalance`
  *     queda en `undefined`.
  *   - Cuando un ajuste apunta a una cuenta hoja existente, se SUMA el `amount`
  *     (signed) a su balance.
- *   - Cuando un ajuste apunta a un codigo no-hoja (Clase/Grupo/Cuenta/Subcuenta),
- *     se trata como hoja nueva en ese mismo codigo (ya hay precedente: el
- *     preprocessor admite Subcuentas huerfanas como hojas). Esto puede crear
- *     superposicion con descendientes existentes — decidida como aceptable
- *     para Phase 2 porque el contrato del agente exige proponer codigos hoja
- *     concretos.
- *   - controlTotals, summary y equityBreakdown se RECALCULAN desde cero a
- *     partir de las hojas resultantes. La ecuacion patrimonial se evalua
- *     con la misma tolerancia (100 COP) que usa el preprocessor.
- *   - validation, discrepancies, missingAccounts y validationReport NO se
- *     mutan aqui — el caller debe usar `revalidate()` cuando necesite el
- *     estado de salud post-ajustes.
+ *   - controlTotals, summary y equityBreakdown del snapshot afectado se
+ *     RECALCULAN desde cero a partir de las hojas resultantes.
+ *   - validation, discrepancies, missingExpectedAccounts y validationReport
+ *     NO se mutan aqui — el caller debe usar `revalidate()` cuando necesite
+ *     el estado de salud post-ajustes.
  *
  * Es pura: no muta `balance` ni los `Adjustment[]` recibidos.
  */
@@ -170,6 +187,16 @@ export function applyAdjustments(
   const next = cloneBalance(balance);
   const affected: AdjustmentApplicationAffected[] = [];
 
+  // Indice por period para resolver el snapshot destino en O(1).
+  const snapshotByPeriod = new Map<string, PeriodSnapshot>();
+  for (const snap of next.periods) {
+    snapshotByPeriod.set(snap.period, snap);
+  }
+
+  // Track de snapshots que efectivamente recibieron ajustes para recomputar
+  // solo esos al final.
+  const dirtySnapshots = new Set<PeriodSnapshot>();
+
   for (const adj of adjustments) {
     if (!adj || adj.status !== 'applied') continue;
 
@@ -179,10 +206,24 @@ export function applyAdjustments(
     const classDigit = classDigitFromCode(code);
     if (classDigit === null) continue;
 
-    // ---------------------------------------------------------------------
-    // 1. Localizar / crear la clase
-    // ---------------------------------------------------------------------
-    let cls = next.classes.find((c) => c.code === classDigit);
+    // -------------------------------------------------------------------
+    // Resolver snapshot destino: adj.period > primary.period
+    // -------------------------------------------------------------------
+    const targetPeriod = adj.period ?? next.primary.period;
+    const snap = snapshotByPeriod.get(targetPeriod);
+    if (!snap) {
+      // Periodo desconocido — ignoramos. Logueamos para que el cliente sepa
+      // que el ajuste no se aplico (aparece en server logs).
+      console.warn(
+        `[repair/adjustments] adj ${adj.id} apunta a period="${targetPeriod}" que no existe en preprocessed.periods. Ignorado.`,
+      );
+      continue;
+    }
+
+    // -------------------------------------------------------------------
+    // 1. Localizar / crear la clase en el snapshot destino
+    // -------------------------------------------------------------------
+    let cls = snap.classes.find((c) => c.code === classDigit);
     if (!cls) {
       cls = {
         code: classDigit,
@@ -192,12 +233,12 @@ export function applyAdjustments(
         discrepancy: 0,
         accounts: [],
       };
-      next.classes.push(cls);
+      snap.classes.push(cls);
     }
 
-    // ---------------------------------------------------------------------
+    // -------------------------------------------------------------------
     // 2. Buscar la cuenta hoja por code exacto
-    // ---------------------------------------------------------------------
+    // -------------------------------------------------------------------
     const idx = cls.accounts.findIndex((a) => normalizeCode(a.code) === code);
 
     if (idx >= 0) {
@@ -216,6 +257,7 @@ export function applyAdjustments(
         oldBalance,
         newBalance,
         isNewAccount: false,
+        period: snap.period,
       });
     } else {
       const fallbackName =
@@ -236,14 +278,32 @@ export function applyAdjustments(
         oldBalance: 0,
         newBalance: amount,
         isNewAccount: true,
+        period: snap.period,
       });
     }
+
+    dirtySnapshots.add(snap);
   }
 
   // -------------------------------------------------------------------------
-  // 3. Recalcular auxiliaryTotal por clase + summary + controlTotals
+  // 3. Recalcular auxiliaryTotal / summary / controlTotals / equityBreakdown
+  //    para cada snapshot afectado.
   // -------------------------------------------------------------------------
-  for (const cls of next.classes) {
+  for (const snap of dirtySnapshots) {
+    recomputeSnapshotTotals(snap);
+  }
+
+  return { balance: next, affected };
+}
+
+// ---------------------------------------------------------------------------
+// recomputeSnapshotTotals — encapsula los pasos 3..5 originales aplicados a un
+// PeriodSnapshot. MUTA el snapshot recibido (caller ya hizo clone).
+// ---------------------------------------------------------------------------
+
+function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
+  // 1. auxiliaryTotal por clase
+  for (const cls of snap.classes) {
     cls.auxiliaryTotal = cls.accounts.reduce(
       (s, a) => s + (Number(a.balance) || 0),
       0,
@@ -254,7 +314,7 @@ export function applyAdjustments(
   }
 
   const getClassTotal = (c: number) =>
-    next.classes.find((cl) => cl.code === c)?.auxiliaryTotal ?? 0;
+    snap.classes.find((cl) => cl.code === c)?.auxiliaryTotal ?? 0;
 
   const totalAssets = getClassTotal(1);
   const totalLiabilities = getClassTotal(2);
@@ -269,7 +329,7 @@ export function applyAdjustments(
   const equationBalance = totalAssets - totalLiabilities - totalEquity;
   const equationBalanced = Math.abs(equationBalance) < 100;
 
-  next.summary = {
+  snap.summary = {
     totalAssets,
     totalLiabilities,
     totalEquity,
@@ -282,15 +342,13 @@ export function applyAdjustments(
     equationBalanced,
   };
 
-  // -------------------------------------------------------------------------
-  // 4. controlTotals — incluyendo segregacion Big Four (PUC 11/13/23/24/25)
-  // -------------------------------------------------------------------------
+  // controlTotals — incluyendo segregacion Big Four (PUC 11/13/23/24/25)
   const sumByGroupPrefixes = (
     classDigit: string,
     groupSet: Set<string>,
   ): number => {
     let total = 0;
-    const cls = next.classes.find((c) => String(c.code) === classDigit);
+    const cls = snap.classes.find((c) => String(c.code) === classDigit);
     if (!cls) return 0;
     for (const acc of cls.accounts) {
       const norm = normalizeCode(acc.code);
@@ -301,7 +359,7 @@ export function applyAdjustments(
     return total;
   };
 
-  next.controlTotals = {
+  snap.controlTotals = {
     activo: totalAssets,
     activoCorriente: sumByGroupPrefixes('1', ACTIVO_CORRIENTE_GROUPS),
     activoNoCorriente: sumByGroupPrefixes('1', ACTIVO_NO_CORRIENTE_GROUPS),
@@ -319,19 +377,8 @@ export function applyAdjustments(
     obligacionesLaborales25: sumByGroupPrefixes('2', new Set(['25'])),
   };
 
-  // -------------------------------------------------------------------------
-  // 5. equityBreakdown — recalculado desde las hojas Clase 3 resultantes
-  // -------------------------------------------------------------------------
-  next.equityBreakdown = recomputeEquityBreakdown(next.classes);
-
-  // auxiliaryCount queda como suma de hojas resultantes (cualquier cuenta
-  // creada por un ajuste cuenta como hoja).
-  next.auxiliaryCount = next.classes.reduce(
-    (s, c) => s + c.accounts.length,
-    0,
-  );
-
-  return { balance: next, affected };
+  // equityBreakdown — recalculado desde las hojas Clase 3 resultantes
+  snap.equityBreakdown = recomputeEquityBreakdown(snap.classes);
 }
 
 // ---------------------------------------------------------------------------
@@ -340,8 +387,8 @@ export function applyAdjustments(
 
 function recomputeEquityBreakdown(
   classes: PUCClass[],
-): PreprocessedBalance['equityBreakdown'] {
-  const out: PreprocessedBalance['equityBreakdown'] = {};
+): PeriodSnapshot['equityBreakdown'] {
+  const out: PeriodSnapshot['equityBreakdown'] = {};
   const cls3 = classes.find((c) => c.code === 3);
   if (!cls3) return out;
 
@@ -392,17 +439,23 @@ function recomputeEquityBreakdown(
 }
 
 // ---------------------------------------------------------------------------
-// revalidate — chequeo ligero post-aplicacion
+// revalidate — chequeo ligero post-aplicacion sobre el snapshot `primary`.
+// Multiperiodo: por defecto evalua el primary, pero acepta un snapshot
+// explicito para validar otros periodos (util en tools que iteran).
 // ---------------------------------------------------------------------------
 
 /**
  * Re-valida un PreprocessedBalance ya con ajustes aplicados. Es deliberadamente
- * mas simple que el preprocessor original: chequea ecuacion patrimonial y
- * reporta utilidad neta. Tolerancias consistentes con report-validator:
+ * mas simple que el preprocessor original: chequea ecuacion patrimonial sobre
+ * el snapshot `primary` (o el snapshot dado por el caller) y reporta utilidad
+ * neta. Tolerancias consistentes con report-validator:
  *   - blocking: |diff| > 1% del activo o $10K (lo mayor)
  *   - warning : |diff| > $1K
  */
-export function revalidate(balance: PreprocessedBalance): {
+export function revalidate(
+  balance: PreprocessedBalance,
+  snapshot?: PeriodSnapshot,
+): {
   ok: boolean;
   errors: string[];
   warnings: string[];
@@ -410,7 +463,8 @@ export function revalidate(balance: PreprocessedBalance): {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const ct = balance.controlTotals;
+  const target = snapshot ?? balance.primary;
+  const ct = target.controlTotals;
   const diff = ct.activo - (ct.pasivo + ct.patrimonio);
   const absDiff = Math.abs(diff);
 
@@ -419,25 +473,25 @@ export function revalidate(balance: PreprocessedBalance): {
 
   if (absDiff > blockingTol) {
     errors.push(
-      `Ecuacion patrimonial descuadrada: Activo (${fmtCop(ct.activo)}) ` +
+      `Ecuacion patrimonial descuadrada (${target.period}): Activo (${fmtCop(ct.activo)}) ` +
         `!= Pasivo (${fmtCop(ct.pasivo)}) + Patrimonio (${fmtCop(ct.patrimonio)}). ` +
         `Diferencia: ${fmtCop(diff)}.`,
     );
   } else if (absDiff > warningTol) {
     warnings.push(
-      `Ecuacion patrimonial con diferencia menor: ${fmtCop(diff)} ` +
+      `Ecuacion patrimonial con diferencia menor (${target.period}): ${fmtCop(diff)} ` +
         `(< 1% del activo). Probable redondeo.`,
     );
   }
 
   // Cross-check utilidad: si Clase 3 trae 3605, debe ~= utilidadNeta
-  const utilEjercicio = balance.equityBreakdown.utilidadEjercicio;
+  const utilEjercicio = target.equityBreakdown.utilidadEjercicio;
   if (typeof utilEjercicio === 'number') {
     const utilDiff = ct.utilidadNeta - utilEjercicio;
     if (Math.abs(utilDiff) > 1_000) {
       warnings.push(
         `Utilidad neta P&L (${fmtCop(ct.utilidadNeta)}) difiere de la ` +
-          `utilidad del ejercicio en patrimonio (${fmtCop(utilEjercicio)}): ` +
+          `utilidad del ejercicio en patrimonio (${fmtCop(utilEjercicio)}) en ${target.period}: ` +
           `${fmtCop(utilDiff)}.`,
       );
     }

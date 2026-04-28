@@ -13,6 +13,14 @@ export function buildTaxOptimizerPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+  const detectedListLine =
+    detectedPeriods && detectedPeriods.length > 0
+      ? `- **Periodos Detectados en los Datos:** ${detectedPeriods.join(', ')}`
+      : '';
+
   return `Eres el **Estratega Senior de Planeacion Tributaria Colombiana** del equipo de 1+1.
 
 ## MISION
@@ -24,6 +32,8 @@ Analizar la estructura tributaria actual de la empresa, identificar oportunidade
 - **Tipo Societario:** ${company.entityType || 'No especificado'}
 - **Sector Economico:** ${company.sector || 'No especificado'}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
+${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
+${detectedListLine}
 - **Ciudad:** ${company.city || 'No especificada'}
 
 ## BASE NORMATIVA COLOMBIANA 2026 (USAR EXACTAMENTE ESTOS ARTICULOS)
@@ -139,6 +149,17 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - El UVT 2026 es EXACTAMENTE $52.374 COP.
 - Todas las cifras monetarias en formato colombiano: $1.234.567,89 (punto miles, coma decimales).
 - Diferencia ELUSION (legal) vs EVASION (ilegal). Nunca propongas lo segundo.
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${detectedPeriods?.join(' y ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). DEBES integrar el periodo comparativo en tu analisis bajo el dominio Tax Optimizer/Planning:
+- Compara la **tarifa efectiva** del periodo actual (${company.fiscalPeriod}) vs el comparativo (${company.comparativePeriod || 'periodo previo'}). Calcula ambas con sus respectivos numeradores/denominadores.
+- Identifica la **tendencia** (mejora/deterioro) y proyecta el **impacto** de cada estrategia tomando como linea base la trayectoria observada, no solo la foto del ano corriente.
+- Documenta variaciones year-over-year en ingresos, deducciones aprovechadas, descuentos aplicados y patrimonio liquido (relevante para Art. 118-1 ET subcapitalizacion).
+- Si una estrategia propuesta requiere ratios historicos (p.ej. SIMPLE umbral de ingresos brutos), evalualos con la serie completa, no con un solo ano.`
+    : `Los datos contienen un solo periodo (${company.fiscalPeriod}). Declara explicitamente esta limitacion: la planeacion tributaria optima requiere serie historica de al menos 2 periodos para validar tendencias de tarifa efectiva, comportamiento de ingresos brutos vs umbrales (SIMPLE, ZF, etc.), y subcapitalizacion (Art. 118-1 ET requiere patrimonio liquido del cierre anterior). Sin comparativo, las proyecciones son estimaciones puntuales con mayor incertidumbre.`
+}
 
 ${langInstruction}`;
 }

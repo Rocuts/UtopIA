@@ -13,6 +13,10 @@ export function buildGoingConcernPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Evaluador de Empresa en Marcha** del equipo de Revisoria Fiscal de 1+1.
 Tu especialidad es la NIA 570 (adoptada en Colombia via Decreto 2420 de 2015 y sus modificatorios).
 
@@ -126,6 +130,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Se conservador: ante la duda, clasifica como "caution" y recomienda procedimientos adicionales.
 - UVT 2026 = $52.374 COP para cualquier calculo de umbrales regulatorios.
 - Usa formato de moneda colombiana: $1.234.567,89
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${(detectedPeriods || []).join(', ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). La evaluacion de empresa en marcha (NIA 570) es estructuralmente comparativa:
+- Evalua los **indicadores financieros** sobre la serie: capital de trabajo, perdidas recurrentes, FCF operativo, ratios de endeudamiento — la presencia o tendencia adversa entre periodos es lo que activa la duda significativa, no un solo dato puntual.
+- Aplica el test del **Art. 457 C.Co.** (causal de disolucion por perdidas) con la trayectoria patrimonio neto / capital suscrito en ambos periodos.
+- "Perdidas recurrentes" requiere por definicion mas de un periodo: usa el comparativo para sustentar o descartar este indicador.`
+    : `Los datos contienen un solo periodo. Declara una **limitacion al alcance**: NIA 570 par. 12-13 (factores indicativos) menciona explicitamente "perdidas recurrentes", "deterioros sostenidos" — sin comparativo no se pueden evaluar. Baja el nivel de confianza del dictamen y recomienda obtener el periodo previo antes de emitir conclusion definitiva. Por defecto, sin historico, califica como "caution" salvo evidencia clara de salud actual.`
+}
 
 ${langInstruction}`;
 }

@@ -148,15 +148,22 @@ export type RepairToolName =
 export interface ReadAccountInput {
   /** PUC code, e.g. "11", "1105", "11050501". Class digit is first. */
   code: string;
+  /**
+   * Multiperiodo: periodo del snapshot a inspeccionar. Si se omite, usa
+   * `primary.period` y, si existe `comparative`, devuelve tambien sus
+   * saldos en `comparative` para que el doctor pueda contrastar 2024 vs 2025.
+   */
+  period?: string;
 }
 
 export interface ReadAccountOutput {
   found: boolean;
+  /** Periodo del snapshot consultado (refleja el `period` resuelto). */
+  period?: string;
   account?: {
     code: string;
     name: string;
     balance: number;
-    previousBalance: number | null;
     isLeaf: boolean;
     level: number;
     classCode: string;
@@ -165,9 +172,19 @@ export interface ReadAccountOutput {
       code: string;
       name: string;
       balance: number;
-      previousBalance: number | null;
       isLeaf: boolean;
     }>;
+  };
+  /**
+   * Multiperiodo: si `period` no se especifico Y existe un comparativo,
+   * devolvemos tambien los saldos del comparativo (mismo codigo, distinto
+   * snapshot). Permite al agente comparar saldos en una sola tool call.
+   */
+  comparative?: {
+    period: string;
+    balance: number;
+    classTotal: number;
+    found: boolean;
   };
   hint?: string;
 }
@@ -204,6 +221,16 @@ export interface Adjustment {
   appliedAt?: string;
   /** ISO-8601 timestamp when the user rejected. Only set if status === 'rejected'. */
   rejectedAt?: string;
+  /**
+   * Multiperiodo (refactor T1+T5): periodo al que aplica el ajuste. Si se omite,
+   * el doctor lo aplica al `primary.period` por defecto. Permite anclar ajustes
+   * de patrimonio o saldos iniciales al `comparative.period` cuando aplique
+   * (ej. mover utilidad acumulada de 2024 a 2025).
+   *
+   * Convencion: matchea exactamente `PeriodSnapshot.period`. Cualquier valor
+   * fuera de `preprocessed.periods[*].period` se rechaza por el aplicador.
+   */
+  period?: string;
 }
 
 // ─── Phase 2 tool I/O ───────────────────────────────────────────────────────
@@ -214,6 +241,12 @@ export interface ProposeAdjustmentInput {
   accountName?: string;
   amount: number;
   rationale: string;
+  /**
+   * Multiperiodo: periodo del snapshot al que aplica el ajuste. Si se omite,
+   * default = `primary.period`. Util para anclar ajustes patrimoniales al
+   * `comparative` (ej. corregir saldo inicial 2024 que arrastra a 2025).
+   */
+  period?: string;
 }
 
 export interface ProposeAdjustmentOutput {
@@ -251,10 +284,19 @@ export interface ApplyAdjustmentOutput {
   id: string;
 }
 
-export type RecheckValidationInput = Record<string, never>;
+export interface RecheckValidationInput {
+  /**
+   * Multiperiodo: periodo del snapshot a re-validar. Si se omite, usa
+   * `primary.period`. La tool acepta opcional para mantener compat con
+   * llamadas previas al refactor T1.
+   */
+  period?: string;
+}
 
 export interface RecheckValidationOutput {
   ok: boolean;
+  /** Periodo del snapshot validado. */
+  period: string;
   errors: string[];
   warnings: string[];
   controlTotals: {

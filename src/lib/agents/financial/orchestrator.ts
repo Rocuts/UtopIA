@@ -11,6 +11,8 @@ import {
   parseTrialBalanceCSV,
   preprocessTrialBalance,
   type PreprocessedBalance,
+  type PeriodSnapshot,
+  type EquityBreakdown,
 } from '@/lib/preprocessing/trial-balance';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
 import { pullTrialBalanceForPeriod } from '@/lib/erp/pipeline';
@@ -70,61 +72,60 @@ export interface OrchestrateFinancialOptions {
 // preprocesador. Leemos con optional chaining y caemos al shape legado.
 // ---------------------------------------------------------------------------
 
-function deriveControlTotals(preprocessed: unknown): ControlTotalsInput | undefined {
-  if (!preprocessed || typeof preprocessed !== 'object') return undefined;
-  const pp = preprocessed as {
-    controlTotals?: ControlTotalsInput;
-    summary?: {
-      totalAssets?: number;
-      totalLiabilities?: number;
-      totalEquity?: number;
-      totalRevenue?: number;
-      totalExpenses?: number;
-      netIncome?: number;
-    };
-  };
+/**
+ * Acceso defensivo al PeriodSnapshot del periodo actual (`primary`).
+ * Retorna null si la forma no matchea (consumer pre-T1 o preprocesado vacio).
+ */
+function getPrimarySnapshot(preprocessed: unknown): PeriodSnapshot | null {
+  if (!preprocessed || typeof preprocessed !== 'object') return null;
+  const pp = preprocessed as { primary?: PeriodSnapshot };
+  return pp.primary && typeof pp.primary === 'object' ? pp.primary : null;
+}
 
-  // Preferir el nuevo shape (Agente A3) si esta disponible
-  if (pp.controlTotals) return pp.controlTotals;
+/**
+ * Acceso defensivo al PeriodSnapshot del periodo comparativo. Puede ser null
+ * legitimamente (single-period). Retorna null tambien si la forma no matchea.
+ */
+function getComparativeSnapshot(preprocessed: unknown): PeriodSnapshot | null {
+  if (!preprocessed || typeof preprocessed !== 'object') return null;
+  const pp = preprocessed as { comparative?: PeriodSnapshot | null };
+  return pp.comparative && typeof pp.comparative === 'object' ? pp.comparative : null;
+}
 
-  // Fallback al shape legado (`summary`)
-  if (pp.summary) {
+function deriveControlTotalsFromSnapshot(
+  snap: PeriodSnapshot | null,
+): ControlTotalsInput | undefined {
+  if (!snap) return undefined;
+  if (snap.controlTotals) return snap.controlTotals;
+  if (snap.summary) {
     return {
-      activo: pp.summary.totalAssets,
-      pasivo: pp.summary.totalLiabilities,
-      patrimonio: pp.summary.totalEquity,
-      ingresos: pp.summary.totalRevenue,
-      gastos: pp.summary.totalExpenses,
-      utilidadNeta: pp.summary.netIncome,
+      activo: snap.summary.totalAssets,
+      pasivo: snap.summary.totalLiabilities,
+      patrimonio: snap.summary.totalEquity,
+      ingresos: snap.summary.totalRevenue,
+      gastos: snap.summary.totalExpenses,
+      utilidadNeta: snap.summary.netIncome,
     };
   }
-
   return undefined;
 }
 
-function deriveEquityBreakdown(
-  preprocessed: unknown,
-): Record<string, number | undefined> | undefined {
-  if (!preprocessed || typeof preprocessed !== 'object') return undefined;
-  const pp = preprocessed as {
-    equityBreakdown?: {
-      capitalAutorizado?: number;
-      capitalSuscritoPagado?: number;
-      reservaLegal?: number;
-      otrasReservas?: number;
-      utilidadEjercicio?: number;
-      utilidadesAcumuladas?: number;
-    };
-  };
-  return pp.equityBreakdown;
+/** Totales del periodo actual (primary). Usado por validator y guardas. */
+function deriveControlTotals(preprocessed: unknown): ControlTotalsInput | undefined {
+  return deriveControlTotalsFromSnapshot(getPrimarySnapshot(preprocessed));
 }
 
-function deriveDiscrepancies(preprocessed: unknown): string[] {
-  if (!preprocessed || typeof preprocessed !== 'object') return [];
-  const pp = preprocessed as { discrepancies?: unknown[] };
-  if (!Array.isArray(pp.discrepancies)) return [];
+function deriveEquityBreakdownFromSnapshot(
+  snap: PeriodSnapshot | null,
+): EquityBreakdown | undefined {
+  if (!snap) return undefined;
+  return snap.equityBreakdown;
+}
+
+function deriveDiscrepanciesFromSnapshot(snap: PeriodSnapshot | null): string[] {
+  if (!snap || !Array.isArray(snap.discrepancies)) return [];
   const out: string[] = [];
-  for (const d of pp.discrepancies) {
+  for (const d of snap.discrepancies) {
     if (typeof d === 'string') {
       out.push(d);
     } else if (d && typeof d === 'object') {
@@ -138,9 +139,10 @@ function deriveDiscrepancies(preprocessed: unknown): string[] {
 }
 
 /**
- * Extrae el `ValidationResult` del preprocesador usando tipado defensivo
- * (mismo patron que `deriveControlTotals`). Si la forma no matchea o faltan
- * campos, retorna un ValidationResult por defecto no-bloqueante.
+ * Extrae el `ValidationResult` consolidado del preprocesador. Multiperiodo:
+ * unifica las validaciones de TODOS los PeriodSnapshots — si CUALQUIER periodo
+ * tiene blocking=true, el conjunto bloquea, y los reasons/suggestedAccounts se
+ * concatenan con prefijo de periodo para que el usuario sepa donde corregir.
  */
 function deriveValidation(preprocessed: unknown): {
   blocking: boolean;
@@ -150,35 +152,50 @@ function deriveValidation(preprocessed: unknown): {
 } {
   const empty = { blocking: false, reasons: [], suggestedAccounts: [], adjustments: [] };
   if (!preprocessed || typeof preprocessed !== 'object') return empty;
-  const pp = preprocessed as {
-    validation?: {
-      blocking?: boolean;
-      reasons?: unknown[];
-      suggestedAccounts?: unknown[];
-      adjustments?: unknown[];
-    };
-  };
-  const v = pp.validation;
-  if (!v) return empty;
+  const pp = preprocessed as { periods?: PeriodSnapshot[] };
+  const snapshots = Array.isArray(pp.periods) ? pp.periods : [];
+  if (snapshots.length === 0) return empty;
+
   const asStringArray = (arr: unknown): string[] =>
     Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+
+  let blocking = false;
+  const reasons: string[] = [];
+  const suggestedAccounts: string[] = [];
+  const adjustments: string[] = [];
+
+  for (const snap of snapshots) {
+    const v = snap.validation;
+    if (!v) continue;
+    const tag = `[${snap.period}] `;
+    if (v.blocking) blocking = true;
+    for (const r of asStringArray(v.reasons)) reasons.push(`${tag}${r}`);
+    for (const a of asStringArray(v.suggestedAccounts)) suggestedAccounts.push(a);
+    for (const adj of asStringArray(v.adjustments)) adjustments.push(`${tag}${adj}`);
+  }
+
   return {
-    blocking: Boolean(v.blocking),
-    reasons: asStringArray(v.reasons),
-    suggestedAccounts: asStringArray(v.suggestedAccounts),
-    adjustments: asStringArray(v.adjustments),
+    blocking,
+    reasons,
+    suggestedAccounts: Array.from(new Set(suggestedAccounts)),
+    adjustments,
   };
 }
 
 /**
  * Type-guard defensivo: verifica que `preprocessed` parezca un PreprocessedBalance
- * suficientemente bien formado para alimentar `applyAdjustments`. Mantiene el
- * mismo estilo `unknown`-friendly que el resto del orchestrator.
+ * suficientemente bien formado para alimentar `applyAdjustments`. El nuevo
+ * contrato exige `periods[]` no vacio y un `primary` referenciable.
  */
 function isPreprocessedBalance(pp: unknown): pp is PreprocessedBalance {
   if (!pp || typeof pp !== 'object') return false;
-  const candidate = pp as { classes?: unknown; controlTotals?: unknown; summary?: unknown };
-  return Array.isArray(candidate.classes) && !!candidate.controlTotals && !!candidate.summary;
+  const candidate = pp as { periods?: unknown; primary?: unknown };
+  return (
+    Array.isArray(candidate.periods) &&
+    candidate.periods.length > 0 &&
+    !!candidate.primary &&
+    typeof candidate.primary === 'object'
+  );
 }
 
 /**
@@ -211,28 +228,20 @@ function fmtCop(n: number | undefined): string {
 }
 
 /**
- * Construye el bloque Markdown "TOTALES VINCULANTES" que se inyecta a los 3
- * agentes. Este bloque es la fuente de verdad: los agentes deben citar estas
- * cifras textualmente y no re-calcularlas.
+ * Renderiza un PeriodSnapshot a lineas Markdown. Helper usado por
+ * `buildBindingTotalsBlock` en single-period y multi-period.
  */
-function buildBindingTotalsBlock(preprocessed: unknown): string {
-  const totals = deriveControlTotals(preprocessed);
-  const equity = deriveEquityBreakdown(preprocessed);
-  const discrepancies = deriveDiscrepancies(preprocessed);
+function renderSnapshotLines(snap: PeriodSnapshot): string[] {
+  const totals = deriveControlTotalsFromSnapshot(snap);
+  const equity = deriveEquityBreakdownFromSnapshot(snap);
+  const discrepancies = deriveDiscrepanciesFromSnapshot(snap);
+  const lines: string[] = [];
 
   if (!totals) {
-    // Si no hay preprocesado, devolvemos un bloque minimo explicito para
-    // que el agente sepa que no tiene anclas numericas pre-calculadas.
-    return [
-      'TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):',
-      '- No se pudo pre-calcular totales vinculantes desde los datos recibidos.',
-      '  Usa las cifras de los auxiliares y declaralo explicitamente en las',
-      '  notas tecnicas.',
-    ].join('\n');
+    lines.push(`- (Sin totales pre-calculados para ${snap.period})`);
+    return lines;
   }
 
-  const lines: string[] = [];
-  lines.push('TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):');
   lines.push(`- Total Activo: ${fmtCop(totals.activo)} COP`);
   if (typeof totals.activoCorriente === 'number') {
     lines.push(`  - Activo Corriente: ${fmtCop(totals.activoCorriente)} COP`);
@@ -252,11 +261,6 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
   lines.push(`- Total Gastos: ${fmtCop(totals.gastos)} COP`);
   lines.push(`- Utilidad Neta (P&L): ${fmtCop(totals.utilidadNeta)} COP`);
 
-  // -------------------------------------------------------------------------
-  // Big Four Cash Flow — cuentas PUC segregadas para el Strategy Director
-  // (Paso 4: Proyeccion de Flujo de Caja). Solo se emiten si vienen del
-  // preprocesador extendido — los consumers legacy quedan sin estas lineas.
-  // -------------------------------------------------------------------------
   const hasAnyBigFourField =
     typeof totals.efectivoCuenta11 === 'number' ||
     typeof totals.deudoresCuenta13 === 'number' ||
@@ -266,29 +270,19 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
   if (hasAnyBigFourField) {
     lines.push('- Cuentas PUC clave (Big Four — Flujo de Caja Proyectado):');
     if (typeof totals.efectivoCuenta11 === 'number') {
-      lines.push(
-        `  - PUC 11 (Efectivo y equivalentes): ${fmtCop(totals.efectivoCuenta11)} COP`,
-      );
+      lines.push(`  - PUC 11 (Efectivo y equivalentes): ${fmtCop(totals.efectivoCuenta11)} COP`);
     }
     if (typeof totals.deudoresCuenta13 === 'number') {
-      lines.push(
-        `  - PUC 13 (Deudores comerciales): ${fmtCop(totals.deudoresCuenta13)} COP`,
-      );
+      lines.push(`  - PUC 13 (Deudores comerciales): ${fmtCop(totals.deudoresCuenta13)} COP`);
     }
     if (typeof totals.cuentasPorPagar23 === 'number') {
-      lines.push(
-        `  - PUC 23 (Cuentas por pagar): ${fmtCop(totals.cuentasPorPagar23)} COP`,
-      );
+      lines.push(`  - PUC 23 (Cuentas por pagar): ${fmtCop(totals.cuentasPorPagar23)} COP`);
     }
     if (typeof totals.impuestosCuenta24 === 'number') {
-      lines.push(
-        `  - PUC 24 (Impuestos por pagar): ${fmtCop(totals.impuestosCuenta24)} COP`,
-      );
+      lines.push(`  - PUC 24 (Impuestos por pagar): ${fmtCop(totals.impuestosCuenta24)} COP`);
     }
     if (typeof totals.obligacionesLaborales25 === 'number') {
-      lines.push(
-        `  - PUC 25 (Obligaciones laborales): ${fmtCop(totals.obligacionesLaborales25)} COP`,
-      );
+      lines.push(`  - PUC 25 (Obligaciones laborales): ${fmtCop(totals.obligacionesLaborales25)} COP`);
     }
   }
 
@@ -323,11 +317,103 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
     lines.push('- Discrepancias detectadas: ninguna.');
   }
 
+  return lines;
+}
+
+/**
+ * Calcula la variacion porcentual con guardas para divisiones por 0.
+ * Retorna 'ND' si el valor base es 0/null/undefined.
+ */
+function pctYoY(current: number | undefined, base: number | undefined): string {
+  if (typeof current !== 'number' || typeof base !== 'number') return 'ND';
+  if (!Number.isFinite(current) || !Number.isFinite(base)) return 'ND';
+  if (base === 0) return current === 0 ? '0,00%' : 'ND';
+  const pct = ((current - base) / Math.abs(base)) * 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+}
+
+function absDelta(current: number | undefined, base: number | undefined): string {
+  if (typeof current !== 'number' || typeof base !== 'number') return 'ND';
+  return fmtCop(current - base);
+}
+
+/**
+ * Construye el bloque Markdown "TOTALES VINCULANTES" que se inyecta a los 3
+ * agentes. Este bloque es la fuente de verdad: los agentes deben citar estas
+ * cifras textualmente y no re-calcularlas.
+ *
+ * Multiperiodo: si `preprocessed.periods.length >= 2`, emite una seccion por
+ * periodo + tabla de variacion YoY entre primary y comparative. Si solo hay
+ * 1 periodo, emite el bloque simple legacy.
+ */
+function buildBindingTotalsBlock(preprocessed: unknown): string {
+  const primary = getPrimarySnapshot(preprocessed);
+  const comparative = getComparativeSnapshot(preprocessed);
+
+  if (!primary) {
+    // Si no hay preprocesado, devolvemos un bloque minimo explicito para
+    // que el agente sepa que no tiene anclas numericas pre-calculadas.
+    return [
+      'TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):',
+      '- No se pudo pre-calcular totales vinculantes desde los datos recibidos.',
+      '  Usa las cifras de los auxiliares y declaralo explicitamente en las',
+      '  notas tecnicas.',
+    ].join('\n');
+  }
+
+  const lines: string[] = [];
+  lines.push('TOTALES VINCULANTES (pre-calculados por 1+1 — NO los modifiques):');
+  lines.push('');
+  lines.push(`=== Periodo actual (${primary.period}) ===`);
+  lines.push(...renderSnapshotLines(primary));
+
+  if (comparative) {
+    lines.push('');
+    lines.push(`=== Periodo comparativo (${comparative.period}) ===`);
+    lines.push(...renderSnapshotLines(comparative));
+
+    const pT = deriveControlTotalsFromSnapshot(primary);
+    const cT = deriveControlTotalsFromSnapshot(comparative);
+    if (pT && cT) {
+      lines.push('');
+      lines.push(`=== Variacion YoY (${primary.period} vs ${comparative.period}) ===`);
+      lines.push(
+        `- Activo: ${absDelta(pT.activo, cT.activo)} (${pctYoY(pT.activo, cT.activo)})`,
+      );
+      lines.push(
+        `- Pasivo: ${absDelta(pT.pasivo, cT.pasivo)} (${pctYoY(pT.pasivo, cT.pasivo)})`,
+      );
+      lines.push(
+        `- Patrimonio: ${absDelta(pT.patrimonio, cT.patrimonio)} (${pctYoY(pT.patrimonio, cT.patrimonio)})`,
+      );
+      lines.push(
+        `- Ingresos: ${absDelta(pT.ingresos, cT.ingresos)} (${pctYoY(pT.ingresos, cT.ingresos)})`,
+      );
+      lines.push(
+        `- Gastos: ${absDelta(pT.gastos, cT.gastos)} (${pctYoY(pT.gastos, cT.gastos)})`,
+      );
+      lines.push(
+        `- Utilidad Neta: ${absDelta(pT.utilidadNeta, cT.utilidadNeta)} (${pctYoY(pT.utilidadNeta, cT.utilidadNeta)})`,
+      );
+    }
+    lines.push('');
+    lines.push(
+      'REGLA MULTIPERIODO: las cifras de cada periodo son AUTORITARIAS para ese periodo. Tus estados financieros, KPIs y notas DEBEN producir DOS columnas (actual + comparativo) + variacion. Si una cifra del comparativo es 0, declarala como $0,00. Si NO existe, declarala como ND. NUNCA omitas el periodo comparativo silenciosamente.',
+    );
+  } else {
+    lines.push('');
+    lines.push(
+      'NOTA: solo hay un periodo en el balance — modo single-period. Declara "Sin periodo comparativo disponible" en cada estado financiero.',
+    );
+  }
+
   lines.push('');
   lines.push(
     'REGLA: Estos totales son VINCULANTES. Tus estados financieros y notas DEBEN reflejarlos exactamente.',
   );
 
+  // Bloque legacy "lines" para compat con la rama if(!totals) — mantenemos el
+  // nombre `lines` pero ya no entra al for de duplicados; retornamos directo.
   return lines.join('\n');
 }
 
@@ -490,6 +576,44 @@ export async function orchestrateFinancialReport(
   const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
 
   // ---------------------------------------------------------------------------
+  // Multiperiodo: si el preprocesador detecto >=2 periodos pero el caller no
+  // declaro `company.comparativePeriod`, lo autocompletamos con el penultimo
+  // periodo detectado. Asi el copy "Periodo Comparativo: YYYY" en los prompts
+  // queda alineado con el preprocesado real.
+  // ---------------------------------------------------------------------------
+  let effectiveCompany = company;
+  if (
+    !effectiveCompany.comparativePeriod &&
+    Array.isArray(effectiveCompany.detectedPeriods) &&
+    effectiveCompany.detectedPeriods.length >= 2
+  ) {
+    const dp = effectiveCompany.detectedPeriods;
+    effectiveCompany = {
+      ...effectiveCompany,
+      comparativePeriod: dp[dp.length - 2],
+    };
+  } else {
+    // Si no viene detectedPeriods en company, derivarlo del preprocesado.
+    const ppPeriods =
+      preprocessed && typeof preprocessed === 'object'
+        ? (preprocessed as { periods?: PeriodSnapshot[] }).periods ?? []
+        : [];
+    if (ppPeriods.length >= 2) {
+      const detected = ppPeriods.map((p) => p.period);
+      effectiveCompany = {
+        ...effectiveCompany,
+        detectedPeriods: detected,
+        comparativePeriod:
+          effectiveCompany.comparativePeriod ?? detected[detected.length - 2],
+      };
+    }
+  }
+
+  // PreprocessedBalance tipado para los agents (nuevo contrato T1).
+  const ppForAgents: PreprocessedBalance | undefined =
+    preprocessed && isPreprocessedBalance(preprocessed) ? preprocessed : undefined;
+
+  // ---------------------------------------------------------------------------
   // Stage 1: NIIF Analyst
   // ---------------------------------------------------------------------------
   onProgress?.({
@@ -501,10 +625,11 @@ export async function orchestrateFinancialReport(
 
   const niifResult = await runNiifAnalyst(
     effectiveRawData,
-    company,
+    effectiveCompany,
     language,
     instructions,
     bindingTotalsBlock,
+    ppForAgents,
     onProgress,
   );
 
@@ -536,10 +661,11 @@ export async function orchestrateFinancialReport(
 
   const strategyResult = await runStrategyDirector(
     niifResult,
-    company,
+    effectiveCompany,
     language,
     instructions,
     bindingTotalsBlock,
+    ppForAgents,
     onProgress,
   );
 
@@ -561,10 +687,11 @@ export async function orchestrateFinancialReport(
   const governanceResult = await runGovernanceSpecialist(
     niifResult,
     strategyResult,
-    company,
+    effectiveCompany,
     language,
     instructions,
     bindingTotalsBlock,
+    ppForAgents,
     onProgress,
   );
 
@@ -584,7 +711,7 @@ export async function orchestrateFinancialReport(
   });
 
   let consolidatedReport = buildConsolidatedReport(
-    company,
+    effectiveCompany,
     niifResult.fullContent,
     strategyResult.fullContent,
     governanceResult.fullContent,
@@ -607,8 +734,20 @@ export async function orchestrateFinancialReport(
   }
 
   // Validator: placeholders + secciones + sanity numerica + ecuacion patrimonial.
-  const controlTotals = deriveControlTotals(preprocessed);
-  const validation = validateConsolidatedReport(consolidatedReport, controlTotals);
+  // Multiperiodo: pasamos los totales del periodo actual como anclas primarias
+  // y los totales del comparativo (si existe) como anclas secundarias para
+  // que el validator pueda verificar tambien las cifras del periodo anterior.
+  const primarySnapshotForValidator = getPrimarySnapshot(preprocessed);
+  const comparativeSnapshotForValidator = getComparativeSnapshot(preprocessed);
+  const controlTotals = deriveControlTotalsFromSnapshot(primarySnapshotForValidator);
+  const comparativeControlTotals = deriveControlTotalsFromSnapshot(
+    comparativeSnapshotForValidator,
+  );
+  const validation = validateConsolidatedReport(consolidatedReport, controlTotals, {
+    comparativeTotals: comparativeControlTotals,
+    primaryPeriod: primarySnapshotForValidator?.period,
+    comparativePeriod: comparativeSnapshotForValidator?.period,
+  });
 
   // ---------------------------------------------------------------------------
   // Override del usuario (provisional): si esta activo y la validacion fallo,
@@ -628,7 +767,7 @@ export async function orchestrateFinancialReport(
   }
 
   const report: FinancialReport = {
-    company,
+    company: effectiveCompany,
     niifAnalysis: niifResult,
     strategicAnalysis: strategyResult,
     governance: governanceResult,

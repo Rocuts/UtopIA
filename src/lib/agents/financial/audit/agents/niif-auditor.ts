@@ -15,6 +15,7 @@ export async function runNiifAuditor(
   company: CompanyInfo,
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
+  defaultPeriod?: string,
 ): Promise<AuditorResult> {
   onProgress?.({ type: 'auditor_progress', domain: 'niif', detail: 'Validando estados financieros contra NIC/NIIF...' });
 
@@ -35,7 +36,7 @@ export async function runNiifAuditor(
   assertFinishedCleanly(result, 'niif_auditor');
 
   const fullContent = result.text || '';
-  const { score, findings, summary } = parseAuditorOutput(fullContent, 'niif');
+  const { score, findings, summary } = parseAuditorOutput(fullContent, 'niif', defaultPeriod);
 
   return {
     domain: 'niif',
@@ -51,6 +52,7 @@ export async function runNiifAuditor(
 function parseAuditorOutput(
   content: string,
   domain: 'niif' | 'tributario' | 'legal' | 'revisoria',
+  defaultPeriod?: string,
 ): { score: number; findings: AuditFinding[]; summary: string } {
   // Extract score
   const scoreMatch = content.match(/##\s*SCORE\s*\n+(\d+)/i);
@@ -75,6 +77,7 @@ function parseAuditorOutput(
         normReference: (f.normReference as string) || '',
         recommendation: (f.recommendation as string) || '',
         impact: (f.impact as string) || '',
+        period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
       }));
     } catch {
       // If JSON parsing fails, try to extract individual objects
@@ -93,6 +96,7 @@ function parseAuditorOutput(
               normReference: (f.normReference as string) || '',
               recommendation: (f.recommendation as string) || '',
               impact: (f.impact as string) || '',
+              period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
             });
           } catch { /* skip malformed */ }
         }

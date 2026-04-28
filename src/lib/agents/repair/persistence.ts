@@ -115,6 +115,11 @@ export async function loadSession(
           ? row.rejectedAt.toISOString()
           : String(row.rejectedAt);
     }
+    // Multiperiodo (T1+T5): hidratamos el periodo si la columna existe y trae
+    // valor. NULL => undefined, que el aplicador interpreta como `primary`.
+    if (row.period) {
+      adj.period = row.period;
+    }
     return adj;
   });
 
@@ -229,6 +234,9 @@ export async function upsertSession(
       amount: String(adj.amount),
       rationale: adj.rationale,
       status: adj.status,
+      // Multiperiodo (T1+T5): persistimos el periodo. null si el agente lo
+      // omitio (default = primary del balance al cargar).
+      period: adj.period ?? null,
       proposedAt: new Date(adj.proposedAt),
       appliedAt: adj.appliedAt ? new Date(adj.appliedAt) : null,
       rejectedAt: adj.rejectedAt ? new Date(adj.rejectedAt) : null,

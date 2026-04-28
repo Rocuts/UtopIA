@@ -11,12 +11,14 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
 export function buildNiifAnalystPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
+  preprocessed?: PreprocessedBalance,
 ): string {
   const langInstruction =
     language === 'en'
@@ -35,6 +37,43 @@ export function buildNiifAnalystPrompt(
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
 
+  // -----------------------------------------------------------------------
+  // Modo comparativo: si el preprocesador devolvio >=2 PeriodSnapshots,
+  // forzamos al Agente 1 a producir TODOS los estados financieros con dos
+  // columnas (actual + comparativo) + variacion. Si solo hay 1 periodo, el
+  // bloque no se inyecta y el agente trabaja en modo single-period.
+  // -----------------------------------------------------------------------
+  const periods = preprocessed?.periods ?? [];
+  const primaryPeriod = preprocessed?.primary?.period;
+  const comparativePeriod = preprocessed?.comparative?.period ?? null;
+  const isComparative = periods.length >= 2 && !!primaryPeriod && !!comparativePeriod;
+  const periodsListed = periods.map((p) => p.period).join(', ');
+
+  const comparativeBlock = isComparative
+    ? `
+## MODO COMPARATIVO (OBLIGATORIO — el preprocesador detecto ${periods.length} periodos: ${periodsListed})
+
+Esta corrida cubre **DOS periodos** del balance de prueba: el periodo actual ${primaryPeriod} y el periodo comparativo ${comparativePeriod}. Tu salida DEBE producir TODOS los estados financieros, KPIs y notas con DOS COLUMNAS EXPLICITAS por rubro:
+
+| Rubro | ${primaryPeriod} (actual) | ${comparativePeriod} (comparativo) | Variacion absoluta | Variacion % |
+
+Reglas inviolables del modo comparativo:
+
+1. NUNCA omitas el periodo comparativo. Si una cifra del periodo comparativo es 0, declarala como \`$0,00\`. Si la cifra simplemente NO existe en \`preprocessed.comparative\` (cuenta nueva en el periodo actual), declara la celda como \`ND\` (no disponible) y registra el motivo en \`## 5. NOTAS TECNICAS\`. NO la dejes en blanco ni la omitas silenciosamente.
+2. Las cuatro tablas obligatorias (Estado de Situacion Financiera, Estado de Resultados Integral, Estado de Flujos de Efectivo, Estado de Cambios en el Patrimonio) DEBEN traer las 4 columnas indicadas arriba para cada rubro.
+3. El **Estado de Cambios en el Patrimonio** DEBE estructurarse como Saldo Inicial (cifras de \`preprocessed.comparative.equityBreakdown\` — capital, reservas, utilidades acumuladas, utilidad del ejercicio del periodo ${comparativePeriod}) -> Movimientos del periodo (aportes, distribuciones, traslados a reservas, utilidad del ejercicio ${primaryPeriod}) -> Saldo Final (cifras de \`preprocessed.primary.equityBreakdown\`). El Saldo Final debe coincidir EXACTAMENTE con el Total Patrimonio del Balance del periodo actual.
+4. Las notas tecnicas (Seccion 5) DEBEN comparar contra el periodo ${comparativePeriod} cuando una variacion supere el 10%, y citar el periodo de cada cifra mencionada explicitamente (ej. "Ingresos ${primaryPeriod} aumentaron 18% vs ${comparativePeriod}").
+5. La preparacion IFRS 18 (cuando aplique) referencia ambos periodos.
+6. Los datos del CSV/cleanData del Agente vienen etiquetados con \`[period=YYYY]\` por bloque — usa esa marca para distinguir los registros y NO mezcles cifras entre periodos.
+`
+    : periods.length === 1
+      ? `
+## MODO SINGLE-PERIOD
+
+El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeriod}). NO hay periodo comparativo: declara explicitamente en cada estado financiero "Sin periodo comparativo disponible" y omite las columnas de comparativo y variacion. Las notas tecnicas pueden hacer mencion de tendencias generales pero NO inventes cifras de un comparativo inexistente.
+`
+      : '';
+
   return `${guardrail}
 
 ${context2026}
@@ -52,7 +91,7 @@ Procesar datos contables en bruto (balances de prueba, CSVs, exportaciones de ER
 - **Marco Normativo:** ${niifFramework}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
 ${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
-
+${comparativeBlock}
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
 ### Paso 1: Lectura y Mapeo de Datos

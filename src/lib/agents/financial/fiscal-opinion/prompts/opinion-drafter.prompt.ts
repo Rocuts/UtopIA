@@ -18,6 +18,10 @@ export function buildOpinionDrafterPrompt(
     { year: 'numeric', month: 'long', day: 'numeric' },
   );
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Redactor Senior del Dictamen del Revisor Fiscal** del equipo de 1+1.
 Tu especialidad son las NIA 700, 701, 705, 706 y 720 (adoptadas en Colombia via Decreto 2420 de 2015) y la forma del dictamen conforme a la Ley 43 de 1990.
 
@@ -192,6 +196,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - La Carta de Gerencia es un documento SEPARADO del dictamen — redactalo con formato de carta formal.
 - UVT 2026 = $52.374 COP.
 - Usa formato de moneda colombiana: $1.234.567,89
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${(detectedPeriods || []).join(' y ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). NIA 710 (Informacion Comparativa) aplica:
+- El dictamen DEBE aclarar si la informacion comparativa fue auditada en un periodo previo (cifras correspondientes vs estados financieros comparativos).
+- Si los evaluadores detectaron diferencias temporarias entre periodos o cambios en politicas (NIC 8), refleja parrafos de enfasis o salvedad si materializan.
+- La opinion del Dictamen formal cubre el periodo principal (${company.fiscalPeriod}); las cifras del comparativo son referencia para la imagen fiel pero no son objeto principal de la opinion en este ejercicio.`
+    : `Los datos contienen un solo periodo. La NIA 710 (Informacion Comparativa) sugiere que la ausencia del comparativo es una limitacion. Documenta esto y, en su caso, **abstencion de opinion** sobre la informacion comparativa o **parrafo de otras cuestiones** (NIA 706) explicando que el dictamen se emite sobre estados financieros sin comparativo, lo cual es excepcional bajo NIIF.`
+}
 
 ${langInstruction}`;
 }

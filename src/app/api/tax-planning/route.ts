@@ -30,6 +30,16 @@ export async function POST(req: Request) {
     const { rawData, company, language, instructions, currentRegime, grossRevenue, employeeCount } =
       parsed.data;
 
+    // Auto-fill comparativePeriod when the preprocessor detected >=2 periods in
+    // the source file but the caller did not pass an explicit comparative.
+    const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+    if (detectedPeriods && detectedPeriods.length >= 2 && !company.comparativePeriod) {
+      const inferred = detectedPeriods.find((p) => p !== company.fiscalPeriod);
+      if (inferred) {
+        (company as { comparativePeriod?: string }).comparativePeriod = inferred;
+      }
+    }
+
     // Build enhanced instructions with regime context
     let enhancedInstructions = instructions || '';
     if (currentRegime) {

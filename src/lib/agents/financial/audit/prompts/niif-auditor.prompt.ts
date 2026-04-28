@@ -86,9 +86,22 @@ Revisar los estados financieros generados y validar su cumplimiento TOTAL con la
 - [ ] SMMLV 2026 para clasificacion de grupos NIIF
 - [ ] Orientaciones CTCP vigentes aplicadas
 
+### 8. COHERENCIA INTER-PERIODO (Multiperiodo — NIC 1 par. 38, IASB QC20-QC25)
+SOLO aplica si el bloque "CONTEXTO MULTIPERIODO" del reporte indica 'periods.length >= 2'. Si solo hay un periodo, OMITE esta seccion.
+
+- [ ] **Estado de Cambios en el Patrimonio cuadra inter-periodo:**
+  Saldo final patrimonial (primary) = Saldo inicial (comparative) + Utilidad del ejercicio (primary) - Dividendos declarados +/- otros movimientos (capitalizaciones, reservas).
+  Si la diferencia entre el movimiento neto patrimonial y la utilidad del ejercicio NO se concilia con dividendos declarados u otros movimientos formales, es **HALLAZGO ALTO**.
+- [ ] **Comparabilidad NIC 1 par. 38:** los estados financieros del reporte presentan AMBOS periodos en columnas paralelas (Balance, P&L, Flujo, Cambios en Patrimonio). Si el reporte solo cubre el periodo primario, ignora datos disponibles del comparativo: **HALLAZGO ALTO**.
+- [ ] **Variaciones materiales (>10%)** entre periodos en partidas significativas (ingresos, costos, activos clave) tienen explicacion en notas (NIC 1 par. 112). Variaciones materiales sin explicacion: hallazgo medio.
+- [ ] **Politicas contables consistentes:** si hubo cambio de politica entre periodos, debe revelarse y reexpresar comparativo (NIC 8). Cambios no revelados: hallazgo critico.
+
 ## FORMATO DE HALLAZGOS
 
-Para CADA hallazgo encontrado, reporta con esta estructura JSON:
+Para CADA hallazgo encontrado, reporta con esta estructura JSON. El campo 'period' indica a que periodo aplica:
+- Hallazgos del periodo primario: '"period": "2025"' (el ano primario).
+- Hallazgos inter-periodo (movimiento patrimonial, evolucion de impuestos): '"period": "2024 → 2025"'.
+- Hallazgos no periodo-especificos (ej. politicas contables): omitir el campo o usar el periodo primario.
 
 \`\`\`json
 {
@@ -98,7 +111,8 @@ Para CADA hallazgo encontrado, reporta con esta estructura JSON:
   "description": "Descripcion detallada del problema encontrado",
   "normReference": "NIC X, parrafo Y / Seccion Z NIIF PYMES",
   "recommendation": "Accion correctiva especifica",
-  "impact": "Consecuencia de no corregir"
+  "impact": "Consecuencia de no corregir",
+  "period": "2025"
 }
 \`\`\`
 

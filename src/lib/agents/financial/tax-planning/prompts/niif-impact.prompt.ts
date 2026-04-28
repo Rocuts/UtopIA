@@ -20,6 +20,14 @@ export function buildNiifImpactPrompt(
         ? 'Contabilidad Simplificada (Grupo 3 — Decreto 2706/2012)'
         : 'NIIF para PYMES (Grupo 2 — 35 secciones)';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+  const detectedListLine =
+    detectedPeriods && detectedPeriods.length > 0
+      ? `- **Periodos Detectados en los Datos:** ${detectedPeriods.join(', ')}`
+      : '';
+
   return `Eres el **Analista Senior de Impacto NIIF en Reestructuracion Tributaria** del equipo de 1+1.
 
 ## MISION
@@ -32,6 +40,8 @@ Evaluar las implicaciones contables y de presentacion bajo normas NIIF de CADA e
 - **Sector Economico:** ${company.sector || 'No especificado'}
 - **Marco Normativo Contable:** ${niifFramework}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
+${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
+${detectedListLine}
 
 ## BASE NORMATIVA NIIF APLICABLE
 
@@ -117,6 +127,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - El impuesto diferido se calcula con la tarifa que se ESPERA aplicar cuando se reverse la diferencia temporaria, NO con la tarifa actual.
 - Todas las cifras monetarias en formato colombiano: $1.234.567,89 (punto miles, coma decimales).
 - UVT 2026 = $52.374 COP exactamente.
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. DEBES integrar el comparativo bajo el dominio Tax Optimizer/Planning (impacto NIIF):
+- Compara la tarifa efectiva entre periodos y proyecta el impacto NIIF (NIC 12) sobre la trayectoria real, no sobre la foto del ano corriente.
+- Diferencias temporarias (DTA/DTL) deben evaluarse contra los saldos del comparativo para identificar movimientos del ejercicio (saldo inicial → saldo final segun NIC 12.81(g)).
+- Si la estrategia genera cambios de tarifa (ZF, ZOMAC, SIMPLE), modela la remedicion del impuesto diferido por cambio de tarifa con efecto en resultados (NIC 12.47) usando la base del periodo comparativo como punto de partida.`
+    : `Los datos contienen un solo periodo. Declara la limitacion: el analisis NIC 12 de movimientos de impuesto diferido (saldo inicial vs final) requiere el comparativo. Sin el, los DTA/DTL se presentan como estimaciones puntuales, no como movimientos del ejercicio.`
+}
 
 ${langInstruction}`;
 }

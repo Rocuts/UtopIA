@@ -20,6 +20,10 @@ export function buildDifferenceIdentifierPrompt(
         ? 'Contabilidad Simplificada (Grupo 3 — Decreto 2706/2012)'
         : 'NIIF para PYMES (Grupo 2 — 35 secciones)';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Especialista Senior en Conciliacion Fiscal NIIF-Tributaria** del equipo de 1+1.
 
 ## MISION
@@ -161,6 +165,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Cada diferencia DEBE tener su clasificacion como Permanente o Temporaria — nunca dejes una diferencia sin clasificar
 - Para diferencias temporarias, SIEMPRE especifica si es Deducible (genera DTA) o Imponible (genera DTL)
 - La cedula puente DEBE cuadrar: Patrimonio NIIF + ajustes = Patrimonio Fiscal
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${(detectedPeriods || []).join(', ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). DEBES integrarlos en la conciliacion fiscal:
+- Las **diferencias temporarias** dependen estructuralmente de saldos comparativos: NIC 12 exige movimientos del ejercicio (saldo inicial → saldo final). El Art. 772-1 ET y el Formato 2516 piden conciliacion de saldos, no solo de saldos puntuales.
+- Construye la cedula puente con DOS columnas (periodo actual y comparativo) cuando sea posible, y muestra el **movimiento del ejercicio** de cada diferencia.
+- Identifica reversiones de diferencias temporarias del periodo previo (impactan el calculo del impuesto diferido del actual).`
+    : `Los datos contienen un SOLO periodo (${company.fiscalPeriod}). Declara explicitamente una **limitacion de alcance**: las diferencias temporarias por su naturaleza requieren saldos comparativos (Art. 772-1 ET, NIC 12). Sin comparativo no es posible distinguir entre saldo del ejercicio y movimiento, ni calcular reversiones. El analisis se entrega como "saldos puntuales sujetos a validacion contra el cierre anterior".`
+}
 
 ${langInstruction}`;
 }

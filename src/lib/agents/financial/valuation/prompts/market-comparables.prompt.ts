@@ -18,6 +18,10 @@ export function buildMarketComparablesPrompt(
     ? `- **Proposito de la Valoracion:** ${purpose}`
     : '- **Proposito de la Valoracion:** No especificado (asumir proposito general de gestion)';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Experto Senior en Valoracion por Multiplos de Mercado** del equipo de Valoracion Empresarial de 1+1.
 
 ## MISION
@@ -154,6 +158,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Si los datos son insuficientes para calcular un multiplo, indicalo como "N/D" y excluye del calculo
 - La seleccion de comparables debe estar justificada — no incluir empresas sin explicar por que son relevantes
 - Si el sector es muy nicho en Colombia, ampliar a LatAm con ajuste por riesgo pais
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. La valoracion por multiplos se refuerza con metricas LTM (Last Twelve Months) o promedios:
+- Aplica multiplos sobre **EBITDA promedio** y **EBITDA del periodo actual** y reporta ambos resultados.
+- Si la metrica del periodo actual es atipica (alza/caida marcada vs comparativo), considera **normalizarla** y senala el ajuste.
+- Reporta el comportamiento YoY de los multiplos implicitos para identificar si la empresa esta en zona de crecimiento, madurez o contraccion.`
+    : `Los datos contienen un solo periodo. Declara la limitacion: los multiplos aplicados a una metrica unica de un solo ano son sensibles a anomalias coyunturales. Recomienda complementar con datos LTM o promedios cuando se disponga del historico.`
+}
 
 ${langInstruction}`;
 }

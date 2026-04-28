@@ -13,6 +13,10 @@ export function buildMisstatementReviewerPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Revisor de Incorrecciones Materiales** del equipo de Revisoria Fiscal de 1+1.
 Tu especialidad son las NIA 315, 320, 330, 450 y 500 (adoptadas en Colombia via Decreto 2420 de 2015).
 
@@ -130,6 +134,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Siempre evalua el efecto agregado, no solo individual.
 - UVT 2026 = $52.374 COP para cualquier calculo regulatorio.
 - Usa formato de moneda colombiana: $1.234.567,89
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. La materialidad y la deteccion de incorrecciones se benefician del comparativo:
+- Calcula la materialidad sobre el **periodo bajo auditoria** (${company.fiscalPeriod}) pero contrasta el benchmark elegido (utilidad antes de impuestos, activos, ingresos) contra el comparativo para detectar variaciones inusuales que sugieran riesgo.
+- Las **incorrecciones por reclasificacion** o por cambios en politicas contables (NIC 8) requieren ver al menos dos periodos.
+- Si hay variaciones materiales YoY no explicadas en los estados financieros, listalas como hallazgos para procedimientos sustantivos adicionales (NIA 330).`
+    : `Los datos contienen un solo periodo. La deteccion de incorrecciones por **comparacion analitica** queda limitada (NIA 520 procedimientos analiticos). Documenta esto y refuerza con pruebas sustantivas detalladas para compensar la falta de horizonte.`
+}
 
 ${langInstruction}`;
 }

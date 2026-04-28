@@ -27,6 +27,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { cn } from '@/lib/utils';
 import { consumeSSE } from '@/lib/sse/consume';
+import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
 import type { FinancialReport, CompanyInfo } from '@/lib/agents/financial/types';
 import type { ReportIterationTurn } from './types';
 
@@ -109,12 +110,21 @@ function newId(): string {
 
 /**
  * Arma el bloque de contexto que se envia a `/api/chat` como `documentContext`.
- * Tope conservador: 40 KB del rawData para que el total < ~80 KB (bajo el
- * limite de 100 KB del `chatRequestSchema`).
+ *
+ * Refactor T1+T5: usamos el limite unificado `DOCUMENT_MAX_CHARS`. Antes se
+ * truncaba el `rawData` a 40 KB localmente, dejando fuera medio balance
+ * comparativo. Ahora dejamos pasar el balance completo y, si por algun
+ * motivo viene mas grande que el limite global, truncamos visiblemente
+ * (logging + flag) para que el truncado deje de ser silencioso.
  */
 function composeContext(report: FinancialReport, rawData: string, company: CompanyInfo): string {
-  const RAW_DATA_LIMIT = 40_000;
-  const truncatedRaw = rawData.length > RAW_DATA_LIMIT ? rawData.slice(0, RAW_DATA_LIMIT) : rawData;
+  const truncated = rawData.length > DOCUMENT_MAX_CHARS;
+  const truncatedRaw = truncated ? rawData.slice(0, DOCUMENT_MAX_CHARS) : rawData;
+  if (truncated) {
+    console.warn(
+      `[ReportFollowUpChat] rawData truncado de ${rawData.length} a ${DOCUMENT_MAX_CHARS} chars (DOCUMENT_MAX_CHARS).`,
+    );
+  }
   return [
     'REPORTE FINANCIERO ACTUAL (Markdown completo):',
     report.consolidatedReport,
@@ -122,6 +132,9 @@ function composeContext(report: FinancialReport, rawData: string, company: Compa
     '---',
     'BALANCE DE PRUEBA ORIGINAL (texto extraído del XLSX/CSV):',
     truncatedRaw,
+    truncated
+      ? '\n[... rawData truncado por DOCUMENT_MAX_CHARS — pidele al usuario el segmento que falta si lo necesitas ...]'
+      : '',
     '',
     '---',
     `EMPRESA: ${company.name} (NIT ${company.nit})`,

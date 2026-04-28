@@ -13,6 +13,10 @@ export function buildComparableAnalystPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Experto en Analisis de Comparables y Benchmarking** del equipo de 1+1.
 
 ## MISION
@@ -138,6 +142,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Formato COP con punto separador de miles: $1.234.567
 - Porcentajes con un decimal: 12,5%
 - NUNCA presentes un estudio de comparables sin al menos mencionar los ajustes requeridos.
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. La OCDE (Capitulo III, par. 3.75-3.79) recomienda usar **datos de comparables de multiples anos** (3-5 anos) para promediar efectos ciclicos. Aplica:
+- Calcula el **rango intercuartil promedio** sobre la serie de comparables, no sobre un solo ano.
+- Para la parte analizada (tested party), promedia el indicador de rentabilidad de los periodos disponibles (${(detectedPeriods || []).join(' y ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}) y compara contra el rango.
+- Reporta el **comportamiento YoY** del PLI: si oscila significativamente, evalua si es por factor sistemico o por desvio en politicas TP.`
+    : `Los datos contienen un solo periodo. Declara la limitacion: el benchmarking robusto OCDE requiere datos plurianuales de comparables y de la parte analizada. Con un solo ano, el rango intercuartil refleja un punto de tiempo y puede estar sesgado por factores ciclicos.`
+}
 
 ${langInstruction}`;
 }

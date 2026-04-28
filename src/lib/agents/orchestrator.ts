@@ -14,6 +14,7 @@ import { documentAgent } from './specialists/document-agent';
 import { strategyAgent } from './specialists/strategy-agent';
 import { litigationDefenseAgent } from './specialists/litigation-defense';
 import { MODELS } from '@/lib/config/models';
+import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
 import type {
   OrchestrateOptions,
   OrchestrateResult,
@@ -35,36 +36,36 @@ const SPECIALISTS = {
   litigation: litigationDefenseAgent,
 } as const;
 
-// Limites de inyeccion del documento cargado. El chat general opera con
-// 30k chars (equilibrio coste/señal), pero el follow-up chat del financial-
-// report necesita ~80 KB porque carga el reporte completo + CSV original.
-const DOC_PREVIEW_LIMIT_DEFAULT = 30_000;
-const DOC_PREVIEW_LIMIT_FINANCIAL = 80_000;
-
-function getDocPreviewLimit(useCase: string | undefined): number {
-  return useCase === 'financial-report'
-    ? DOC_PREVIEW_LIMIT_FINANCIAL
-    : DOC_PREVIEW_LIMIT_DEFAULT;
-}
+// Limite unificado de inyeccion del documento cargado. Refactor T1+T5: una
+// sola fuente de verdad (`DOCUMENT_MAX_CHARS` en `validation/schemas.ts`)
+// reemplaza los antiguos `DOC_PREVIEW_LIMIT_DEFAULT = 30_000` /
+// `DOC_PREVIEW_LIMIT_FINANCIAL = 80_000`. Antes, el orchestrator recortaba
+// silenciosamente datos del balance multiperiodo y el reporte solo "veia"
+// 2025 aunque el usuario subiera 2024+2025.
 
 /**
  * Construye el mensaje system con el documento cargado por el usuario.
  * Formato identico al de BaseSpecialist para que T1/T2/T3 vean el mismo shape.
  * Devuelve null si no hay documento.
  *
- * El limite depende del `useCase`: `financial-report` recibe 80_000 chars
- * para que quepa el reporte consolidado + el CSV original; el resto usa 30_000.
+ * Usa `DOCUMENT_MAX_CHARS` (publicado por T1) como unico limite. Cuando
+ * se trunca, lo logueamos en server-side para que el truncado deje de ser
+ * silencioso.
  */
 function buildDocInjectionMessage(
   documentContext: string | undefined,
-  useCase: string | undefined,
+  _useCase: string | undefined,
 ): { role: 'system'; content: string } | null {
   if (!documentContext || !documentContext.trim()) return null;
-  const limit = getDocPreviewLimit(useCase);
-  const truncated = documentContext.length > limit;
+  const truncated = documentContext.length > DOCUMENT_MAX_CHARS;
   const preview = truncated
-    ? documentContext.slice(0, limit)
+    ? documentContext.slice(0, DOCUMENT_MAX_CHARS)
     : documentContext;
+  if (truncated) {
+    console.warn(
+      `[orchestrator] documento truncado de ${documentContext.length} a ${DOCUMENT_MAX_CHARS} chars (DOCUMENT_MAX_CHARS)`,
+    );
+  }
   return {
     role: 'system',
     content:

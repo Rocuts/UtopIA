@@ -4,6 +4,7 @@ import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/li
 import {
   parseTrialBalanceCSV,
   preprocessTrialBalance,
+  detectYearFromString,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import { generateText } from 'ai';
@@ -294,19 +295,32 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
     const { Workbook } = await import('exceljs');
     const workbook = new Workbook();
     await workbook.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
-    const sheets: string[] = [];
+    const blocks: string[] = [];
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];
-      worksheet.eachRow((row) => {
+      let header: string | null = null;
+      worksheet.eachRow((row, rowNumber) => {
         // row.values es un array sparse con shapes heterogeneos por celda
         // (formulas, hyperlinks, rich text, errores, Date). cellToString
         // maneja cada variante y evita basura tipo "[object Object]".
         const values = row.values as unknown[];
-        rows.push(values.slice(1).map(cellToString).join(','));
+        const csv = values.slice(1).map(cellToString).join(',');
+        if (rowNumber === 1) header = csv;
+        rows.push(csv);
       });
-      sheets.push(`--- Sheet: ${worksheet.name} ---\n${rows.join('\n')}`);
+      if (rows.length === 0) return;
+      // Detectar año a partir del nombre de hoja (e.g. "2024", "Balance 2025").
+      // Si la hoja se llama explicitamente con un año, lo usamos como
+      // etiqueta de periodo y forzamos toda esa hoja al mismo periodo.
+      const sheetYear = detectYearFromString(worksheet.name);
+      const periodLabel = sheetYear ?? worksheet.name;
+      // Re-emitimos el header en cada bloque para que parseTrialBalanceCSV
+      // pueda procesarlo de forma independiente. Si la primera fila ya es el
+      // header, no hace falta agregarlo otra vez (rows[0] === header).
+      const body = header ? rows.join('\n') : rows.join('\n');
+      blocks.push(`[period=${periodLabel}]\n${body}\n[/period]`);
     });
-    return sheets.join('\n\n');
+    return blocks.join('\n\n');
   }
 
   throw new Error('Unsupported file type.');
@@ -494,14 +508,47 @@ export async function POST(req: Request) {
     // -----------------------------------------------------------------
     let validationReport: string | undefined;
     let preprocessed: PreprocessedBalance | null = null;
+    let detectedPeriods: string[] = [];
     if (['.csv', '.xlsx', '.xls'].includes(ext)) {
       try {
-        const rows = parseTrialBalanceCSV(text);
-        if (rows.length > 10) { // Threshold: at least 10 accounts to be a trial balance
-          const pp = preprocessTrialBalance(rows);
+        // Si el texto ya viene segmentado en bloques `[period=YYYY]...[/period]`
+        // (caso Excel con multiples hojas etiquetadas con año), parseamos cada
+        // bloque por separado forzando su periodo y consolidamos las filas.
+        const blockRegex = /\[period=([^\]]+)\]\n([\s\S]*?)\n\[\/period\]/g;
+        const blocks: Array<{ period: string; csv: string }> = [];
+        let m: RegExpExecArray | null;
+        while ((m = blockRegex.exec(text)) !== null) {
+          blocks.push({ period: m[1].trim(), csv: m[2] });
+        }
+
+        const allRows: ReturnType<typeof parseTrialBalanceCSV> = [];
+        if (blocks.length > 0) {
+          for (const b of blocks) {
+            const yr = detectYearFromString(b.period) ?? b.period;
+            const parsed = parseTrialBalanceCSV(b.csv, { forcePeriod: yr });
+            // Merge balances by code: si el mismo codigo aparece en varios
+            // bloques, fusionamos balancesByPeriod en una sola fila.
+            for (const row of parsed) {
+              const existing = allRows.find((r) => r.code === row.code);
+              if (existing) {
+                Object.assign(existing.balancesByPeriod, row.balancesByPeriod);
+              } else {
+                allRows.push(row);
+              }
+            }
+          }
+        } else {
+          // CSV sin segmentacion explicita: parser detecta columnas multi-año.
+          const parsed = parseTrialBalanceCSV(text);
+          allRows.push(...parsed);
+        }
+
+        if (allRows.length > 10) {
+          const pp = preprocessTrialBalance(allRows);
           if (pp.auxiliaryCount > 0) {
             preprocessed = pp;
             validationReport = pp.validationReport;
+            detectedPeriods = pp.periods.map((p) => p.period);
             // Prepend validation report so agents receive validated data
             text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
           }
@@ -533,6 +580,13 @@ export async function POST(req: Request) {
        * el archivo no es un balance de prueba.
        */
       preprocessed,
+      /**
+       * Periodos fiscales detectados en el archivo (e.g. ["2024","2025"]).
+       * El cliente debe propagar este valor a los endpoints financieros via
+       * `company.detectedPeriods` para que los pipelines sepan que generar
+       * comparativos sin volver a inspeccionar el CSV.
+       */
+      detectedPeriods,
       message: chunksCount > 0
         ? `Documento "${file.name}" procesado en ${chunksCount} fragmentos e indexado.`
         : `Documento "${file.name}" procesado exitosamente. Texto extraido disponible para consulta.`,

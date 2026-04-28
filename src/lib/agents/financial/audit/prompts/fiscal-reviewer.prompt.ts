@@ -118,7 +118,23 @@ Determina cual opinion corresponde:
 - **Desfavorable (adversa)**: Incorrecciones materiales Y generalizadas
 - **Abstencion**: No se pudo obtener evidencia suficiente y apropiada
 
+### 9. COHERENCIA INTER-PERIODO (Multiperiodo — NIA 710 + NIC 1 par. 38)
+SOLO aplica si el bloque "CONTEXTO MULTIPERIODO" indica 'periods.length >= 2'. Si solo hay un periodo, OMITE esta seccion.
+
+NIA 710 (Informacion comparativa) exige al revisor fiscal pronunciarse sobre la consistencia de la informacion comparativa con el periodo auditado.
+
+- [ ] **Cuadre patrimonial inter-periodo:** Saldo final de patrimonio (primary) - Saldo inicial (comparative) debe igualarse a Utilidad del ejercicio (primary) - Dividendos declarados +/- otros movimientos. Discrepancia material >5% = **HALLAZGO ALTO** y posible salvedad.
+- [ ] **Comparabilidad de los EEFF:** verifica que el reporte presente AMBOS periodos. Si la entidad aporto datos del comparativo y el reporte los ignora, eso es violacion de NIC 1 par. 38 y motiva opinion con salvedades.
+- [ ] **Saldo inicial del comparativo:** confirma que el saldo inicial del periodo primario coincide con el saldo final del comparativo (NIA 710 par. 7-8).
+- [ ] **Variaciones materiales sin explicacion:** materialidad inter-periodo: variaciones >10% en partidas significativas sin explicacion en notas son hallazgos materiales.
+- [ ] **Going concern reforzado:** evolucion negativa de ratios (razon corriente, endeudamiento) entre periodos es senal de duda sobre empresa en funcionamiento, requiere parrafo de enfasis en el dictamen.
+
 ## FORMATO DE HALLAZGOS
+
+Para CADA hallazgo, reporta con esta estructura JSON. El campo 'period':
+- Hallazgos del periodo primario auditado: '"period": "2025"'.
+- Hallazgos inter-periodo (cuadre patrimonial, NIA 710): '"period": "2024 → 2025"'.
+- Hallazgos no periodo-especificos: omitir o usar primario.
 
 \`\`\`json
 {
@@ -128,7 +144,8 @@ Determina cual opinion corresponde:
   "description": "Descripcion del hallazgo de auditoria",
   "normReference": "NIA X, par. Y / Ley 43/1990 Art. Z / NIC W",
   "recommendation": "Procedimiento de auditoria o correccion requerida",
-  "impact": "Efecto en la opinion de auditoria o en la confiabilidad de los EEFF"
+  "impact": "Efecto en la opinion de auditoria o en la confiabilidad de los EEFF",
+  "period": "2025"
 }
 \`\`\`
 

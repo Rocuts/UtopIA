@@ -15,6 +15,7 @@ export async function runTaxAuditor(
   company: CompanyInfo,
   language: 'es' | 'en',
   onProgress?: (event: AuditProgressEvent) => void,
+  defaultPeriod?: string,
 ): Promise<AuditorResult> {
   onProgress?.({ type: 'auditor_progress', domain: 'tributario', detail: 'Validando cumplimiento tributario contra E.T. 2026...' });
 
@@ -35,7 +36,7 @@ export async function runTaxAuditor(
   assertFinishedCleanly(result, 'tax_auditor');
 
   const fullContent = result.text || '';
-  const { score, findings, summary } = parseAuditorOutput(fullContent, 'tributario');
+  const { score, findings, summary } = parseAuditorOutput(fullContent, 'tributario', defaultPeriod);
 
   return {
     domain: 'tributario',
@@ -51,6 +52,7 @@ export async function runTaxAuditor(
 function parseAuditorOutput(
   content: string,
   domain: 'niif' | 'tributario' | 'legal' | 'revisoria',
+  defaultPeriod?: string,
 ): { score: number; findings: AuditFinding[]; summary: string } {
   const scoreMatch = content.match(/##\s*SCORE\s*\n+(\d+)/i);
   const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 50;
@@ -71,6 +73,7 @@ function parseAuditorOutput(
         normReference: (f.normReference as string) || '',
         recommendation: (f.recommendation as string) || '',
         impact: (f.impact as string) || '',
+        period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
       }));
     } catch {
       const objectRegex = /\{[^{}]*\}/g;
@@ -88,6 +91,7 @@ function parseAuditorOutput(
               normReference: (f.normReference as string) || '',
               recommendation: (f.recommendation as string) || '',
               impact: (f.impact as string) || '',
+              period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
             });
           } catch { /* skip */ }
         }

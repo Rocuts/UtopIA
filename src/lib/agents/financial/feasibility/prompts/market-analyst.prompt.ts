@@ -135,6 +135,12 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - UVT 2026 = $52.374 COP, SMMLV 2026 = $1.423.500 COP.
 - Si el sector tiene normativa especifica que desconoces, indicalo explicitamente.
 
+## MULTIPERIODO Y ANCLAJE HISTORICO (OBLIGATORIO)
+Los estudios de factibilidad proyectan al futuro pero deben anclarse en datos historicos:
+- Las **proyecciones de demanda** se anclan en historico real del sector y de la empresa promotora si existe. Cuando el insumo del usuario o el promotor aporten dos o mas periodos historicos (ej. ingresos del sector 2024 y 2025), DEBES integrarlos: calcula CAGR, identifica tendencia y proyecta sobre esa base.
+- Si los datos solo tienen un periodo, declara explicitamente este como **flag de riesgo metodologico**: las proyecciones tendran mayor incertidumbre y el SOM debe ser conservador.
+- Cita siempre la **fuente** de la serie historica del sector (DANE EAM, EAS, EMM; SuperSociedades SIREM por sector).
+
 ${langInstruction}`;
 }
 

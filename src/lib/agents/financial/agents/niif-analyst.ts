@@ -7,6 +7,7 @@ import { MODELS } from '@/lib/config/models';
 import { buildNiifAnalystPrompt } from '../prompts/niif-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { CompanyInfo, NiifAnalysisResult, FinancialProgressEvent } from '../types';
 
 /**
@@ -18,6 +19,8 @@ import type { CompanyInfo, NiifAnalysisResult, FinancialProgressEvent } from '..
  * @param instructions  Instrucciones adicionales del usuario (propaga A2 a los 3 agentes).
  * @param bindingTotals Bloque Markdown con totales vinculantes (pre-calculados). Se
  *                      antepone al userContent para que el modelo lo vea SIEMPRE.
+ * @param preprocessed  PreprocessedBalance completo. El prompt builder lo usa para
+ *                      activar el modo comparativo cuando hay >=2 periodos.
  */
 export async function runNiifAnalyst(
   rawData: string,
@@ -25,9 +28,10 @@ export async function runNiifAnalyst(
   language: 'es' | 'en',
   instructions: string | undefined,
   bindingTotals: string,
+  preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
 ): Promise<NiifAnalysisResult> {
-  const systemPrompt = buildNiifAnalystPrompt(company, language);
+  const systemPrompt = buildNiifAnalystPrompt(company, language, preprocessed);
 
   // El bindingTotals se antepone al raw data para que el Agente 1 lo lea
   // ANTES de ver los auxiliares. Esto evita que el modelo re-sume y divaga.

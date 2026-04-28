@@ -60,23 +60,79 @@ export async function POST(req: Request) {
       ? `${preprocessed.validationReport}\n\n---\n\nDATOS LIMPIOS (auxiliares validados):\n${preprocessed.cleanData}`
       : rawData;
 
-    // Build binding constraints from pre-computed totals
+    // Build binding constraints from pre-computed totals — multiperiodo:
+    // imprimimos cifras del periodo actual (primary) y, si existe comparativo,
+    // tambien las del periodo anterior + variacion YoY.
     let enhancedInstructions = instructions || '';
+    let effectiveCompany = company;
     if (preprocessed) {
-      const s = preprocessed.summary;
-      const fmt = (n: number) => (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      enhancedInstructions += `\n\nTOTALES PRE-CALCULADOS (VINCULANTES — precision decimal desde auxiliares):
-- Total Activos (Clase 1): ${fmt(s.totalAssets)}
-- Total Pasivos (Clase 2): ${fmt(s.totalLiabilities)}
-- Total Patrimonio (Clase 3): ${fmt(s.totalEquity)}
-- Total Ingresos (Clase 4): ${fmt(s.totalRevenue)}
-- Total Gastos (Clase 5): ${fmt(s.totalExpenses)}
-- Total Costos de Ventas (Clase 6): ${fmt(s.totalCosts)}
-- Costos de Produccion (Clase 7): ${fmt(s.totalProduction)}
-- Utilidad Neta Calculada: ${fmt(s.netIncome)}
-- Ecuacion Patrimonial: ${s.equationBalanced ? 'CUADRA' : 'NO CUADRA'}
-REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.`;
-      if (preprocessed.discrepancies.length > 0) {
+      const fmt = (n: number) =>
+        (n < 0 ? '-' : '') +
+        '$' +
+        Math.abs(n).toLocaleString('es-CO', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+      const p = preprocessed.primary;
+      const c = preprocessed.comparative;
+
+      const detected = preprocessed.periods.map((s) => s.period);
+      if (!effectiveCompany.comparativePeriod && detected.length >= 2) {
+        effectiveCompany = {
+          ...effectiveCompany,
+          comparativePeriod: detected[detected.length - 2],
+          detectedPeriods: detected,
+        };
+      } else if (!effectiveCompany.detectedPeriods) {
+        effectiveCompany = { ...effectiveCompany, detectedPeriods: detected };
+      }
+
+      enhancedInstructions += `\n\nTOTALES PRE-CALCULADOS (VINCULANTES — precision decimal desde auxiliares).`;
+      enhancedInstructions += `\n\n=== Periodo actual (${p.period}) ===\n`;
+      enhancedInstructions += `- Total Activos (Clase 1): ${fmt(p.summary.totalAssets)}\n`;
+      enhancedInstructions += `- Total Pasivos (Clase 2): ${fmt(p.summary.totalLiabilities)}\n`;
+      enhancedInstructions += `- Total Patrimonio (Clase 3): ${fmt(p.summary.totalEquity)}\n`;
+      enhancedInstructions += `- Total Ingresos (Clase 4): ${fmt(p.summary.totalRevenue)}\n`;
+      enhancedInstructions += `- Total Gastos (Clase 5): ${fmt(p.summary.totalExpenses)}\n`;
+      enhancedInstructions += `- Total Costos de Ventas (Clase 6): ${fmt(p.summary.totalCosts)}\n`;
+      enhancedInstructions += `- Costos de Produccion (Clase 7): ${fmt(p.summary.totalProduction)}\n`;
+      enhancedInstructions += `- Utilidad Neta Calculada: ${fmt(p.summary.netIncome)}\n`;
+      enhancedInstructions += `- Ecuacion Patrimonial: ${p.summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'}`;
+
+      if (c) {
+        enhancedInstructions += `\n\n=== Periodo comparativo (${c.period}) ===\n`;
+        enhancedInstructions += `- Total Activos: ${fmt(c.summary.totalAssets)}\n`;
+        enhancedInstructions += `- Total Pasivos: ${fmt(c.summary.totalLiabilities)}\n`;
+        enhancedInstructions += `- Total Patrimonio: ${fmt(c.summary.totalEquity)}\n`;
+        enhancedInstructions += `- Total Ingresos: ${fmt(c.summary.totalRevenue)}\n`;
+        enhancedInstructions += `- Total Gastos: ${fmt(c.summary.totalExpenses)}\n`;
+        enhancedInstructions += `- Utilidad Neta: ${fmt(c.summary.netIncome)}`;
+
+        const yoy = (cur: number, base: number): string => {
+          if (base === 0) return cur === 0 ? '0,00%' : 'ND';
+          const pct = ((cur - base) / Math.abs(base)) * 100;
+          return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+        };
+        enhancedInstructions += `\n\n=== Variacion YoY (${p.period} vs ${c.period}) ===\n`;
+        enhancedInstructions += `- Activos: ${fmt(p.summary.totalAssets - c.summary.totalAssets)} (${yoy(p.summary.totalAssets, c.summary.totalAssets)})\n`;
+        enhancedInstructions += `- Pasivos: ${fmt(p.summary.totalLiabilities - c.summary.totalLiabilities)} (${yoy(p.summary.totalLiabilities, c.summary.totalLiabilities)})\n`;
+        enhancedInstructions += `- Patrimonio: ${fmt(p.summary.totalEquity - c.summary.totalEquity)} (${yoy(p.summary.totalEquity, c.summary.totalEquity)})\n`;
+        enhancedInstructions += `- Ingresos: ${fmt(p.summary.totalRevenue - c.summary.totalRevenue)} (${yoy(p.summary.totalRevenue, c.summary.totalRevenue)})\n`;
+        enhancedInstructions += `- Utilidad Neta: ${fmt(p.summary.netIncome - c.summary.netIncome)} (${yoy(p.summary.netIncome, c.summary.netIncome)})`;
+        enhancedInstructions += `\n\nREGLA MULTIPERIODO: Tus estados financieros, KPIs y notas DEBEN producir DOS columnas (actual + comparativo) + variacion. Cifras 0 -> $0,00. Cifras inexistentes -> ND. NUNCA omitas el comparativo silenciosamente.`;
+      } else {
+        enhancedInstructions += `\n\nNOTA: solo hay un periodo en el balance — modo single-period.`;
+      }
+
+      enhancedInstructions += `\n\nREGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.`;
+
+      const allDiscrepancies = preprocessed.periods.flatMap((s) =>
+        (s.discrepancies ?? []).map((d) =>
+          typeof d === 'string' ? `[${s.period}] ${d}` : `[${s.period}] ${d.description ?? ''}`,
+        ),
+      );
+      if (allDiscrepancies.length > 0) {
         enhancedInstructions += '\nADVERTENCIA: Discrepancias aritmeticas detectadas. USA totales de auxiliares, NO los reportados.';
       }
     }
@@ -84,14 +140,14 @@ REGLA: Estos totales son VINCULANTES. Tus estados financieros DEBEN reflejarlos.
     // Step 2: Run the 3-agent financial pipeline
     const report = await orchestrateFinancialReport({
       rawData: enhancedData,
-      company,
+      company: effectiveCompany,
       language,
       instructions: enhancedInstructions,
     });
 
     // Step 3: Generate Excel
     const buffer = await generateFinancialExcel({ report, preprocessed });
-    return createExcelResponse(buffer, company.name);
+    return createExcelResponse(buffer, effectiveCompany.name);
   } catch (error) {
     console.error('[financial-report/export] Error:', error instanceof Error ? error.message : error);
     return NextResponse.json(

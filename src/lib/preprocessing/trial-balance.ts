@@ -8,6 +8,11 @@
 // (equityBreakdown) que los agentes del pipeline financiero consumen como
 // anclas anti-alucinacion.
 //
+// Multiperíodo (refactor 2026-04-28): cada `RawAccountRow` ahora puede llevar
+// saldos de varios periodos en `balancesByPeriod`. `preprocessTrialBalance`
+// agrupa los datos por periodo y emite un `PeriodSnapshot` por cada uno;
+// `primary` apunta al periodo más reciente y `comparative` al anterior.
+//
 // NO LLM — computacion pura. Corre antes del pipeline financiero para que los
 // agentes reciban datos limpios con garantias aritmeticas.
 //
@@ -31,14 +36,21 @@ export interface RawAccountRow {
   level: string;
   /** Whether this is a transactional account */
   transactional: boolean;
-  /** Debit balance */
-  debit: number;
-  /** Credit balance */
-  credit: number;
-  /** Final balance (debit - credit or as provided) */
+  /**
+   * Saldos por periodo. Claves: "2024", "2025", etc. Para entradas sin
+   * año detectado se usa la etiqueta provista (default `'current'`).
+   */
+  balancesByPeriod: Record<string, number>;
+}
+
+export interface ValidatedAccount {
+  code: string;
+  name: string;
+  level: string;
+  /** Solo el balance del snapshot al que pertenece esta cuenta. */
   balance: number;
-  /** Previous period balance (comparative) */
-  previousBalance?: number;
+  /** Whether this is a leaf/transactional account used in summation */
+  isLeaf: boolean;
 }
 
 export interface PUCClass {
@@ -52,16 +64,6 @@ export interface PUCClass {
   discrepancy: number;
   /** Accounts in this class */
   accounts: ValidatedAccount[];
-}
-
-export interface ValidatedAccount {
-  code: string;
-  name: string;
-  level: string;
-  balance: number;
-  previousBalance?: number;
-  /** Whether this is a leaf/transactional account used in summation */
-  isLeaf: boolean;
 }
 
 export interface Discrepancy {
@@ -80,11 +82,6 @@ export interface Discrepancy {
 /**
  * Totales de control — contrato numerico vinculante para los agentes.
  * Todos los campos son requeridos (0 si ausentes en la entrada).
- *
- * Los campos efectivoCuenta11..obligacionesLaborales25 son cuentas PUC
- * segregadas para alimentar la proyeccion de flujo de caja Big Four
- * (CFO + NIIF) en el Strategy Director (Paso 4). Se identifican por
- * prefijo numerico de 2 digitos (Grupo PUC).
  */
 export interface ControlTotals {
   activo: number;
@@ -101,32 +98,21 @@ export interface ControlTotals {
   utilidadNeta: number;
   // -----------------------------------------------------------------------
   // Big Four Cash Flow — segregacion de cuentas PUC para el Strategy Director
-  // (Paso 4: Proyeccion de Flujo de Caja con Working Capital y obligaciones
-  // fiscales/laborales programadas en linea de tiempo real).
   // -----------------------------------------------------------------------
-  /** PUC 11 — Efectivo y equivalentes (caja, bancos, ahorros, fiduciaria) */
+  /** PUC 11 — Efectivo y equivalentes */
   efectivoCuenta11: number;
-  /** PUC 13 — Deudores comerciales y otros (cuentas por cobrar) */
+  /** PUC 13 — Deudores comerciales y otros */
   deudoresCuenta13: number;
-  /** PUC 23 — Cuentas por pagar (proveedores, costos y gastos por pagar) */
+  /** PUC 23 — Cuentas por pagar */
   cuentasPorPagar23: number;
-  /** PUC 24 — Impuestos, gravamenes y tasas por pagar (renta, IVA, ICA, ReteFuente) */
+  /** PUC 24 — Impuestos por pagar */
   impuestosCuenta24: number;
-  /** PUC 25 — Obligaciones laborales (salarios, prestaciones, aportes) */
+  /** PUC 25 — Obligaciones laborales */
   obligacionesLaborales25: number;
 }
 
 /**
  * Resultado de la validacion aritmetica del balance de prueba.
- *
- * `blocking = true` indica que los numeros son inconsistentes al punto de no
- * poder generar un reporte confiable. El orchestrator financiero debe abortar
- * la Fase 1 y devolver `reasons` + `suggestedAccounts` al usuario para que
- * corrija el Excel antes de reintentar.
- *
- * `adjustments` documenta reparaciones aplicadas al vuelo (p.ej. reinyeccion
- * de la utilidad del ejercicio cuando el ERP esta antes del cierre). Son
- * informativas — el reporte se genera con los totales ya ajustados.
  */
 export interface ValidationResult {
   /** Si true, el pipeline no debe generar un reporte. */
@@ -139,75 +125,63 @@ export interface ValidationResult {
   adjustments: string[];
 }
 
-/**
- * Desglose del patrimonio (Clase 3). Todos los campos son opcionales:
- * solo se emiten si la cuenta/subcuenta existe en el balance.
- */
+/** Desglose del patrimonio (Clase 3). */
 export interface EquityBreakdown {
-  /** 3105 — Capital autorizado */
   capitalAutorizado?: number;
-  /** 3115 + 3120 — Capital suscrito y pagado / Aporte de socios */
   capitalSuscritoPagado?: number;
-  /** 3305 — Reserva legal */
   reservaLegal?: number;
-  /** 3310-3395 — Otras reservas agregadas */
   otrasReservas?: number;
-  /** 3605 — Utilidad del ejercicio */
   utilidadEjercicio?: number;
-  /** 3610 + 3705 + 3710 — Utilidades acumuladas / resultados de ejercicios anteriores */
   utilidadesAcumuladas?: number;
 }
 
-export interface PreprocessedBalance {
-  /** Fiscal period (if detected) */
-  period: string | null;
-  /** All PUC classes with validated totals */
+/**
+ * Snapshot de un periodo individual. Cada `PeriodSnapshot` corre su propia
+ * validacion patrimonial, control totals y equity breakdown. La estructura
+ * replica el contrato historico de `PreprocessedBalance` pero confinado al
+ * periodo nombrado por `period`.
+ */
+export interface PeriodSnapshot {
+  period: string;
   classes: PUCClass[];
-  /**
-   * Resumen agregado legacy (mantenido por compatibilidad con consumers
-   * existentes: excel-export, api/financial-report, api/financial-report/export,
-   * agents/financial/quality).
-   */
+  controlTotals: ControlTotals;
+  equityBreakdown: EquityBreakdown;
   summary: {
-    totalAssets: number;        // Clase 1
-    totalLiabilities: number;   // Clase 2
-    totalEquity: number;        // Clase 3
-    totalRevenue: number;       // Clase 4
-    totalExpenses: number;      // Clase 5
-    totalCosts: number;         // Clase 6
-    totalProduction: number;    // Clase 7
-    netIncome: number;          // Revenue - Expenses - Costs
-    equationBalance: number;    // Assets - Liabilities - Equity (should be ≈ 0)
+    totalAssets: number;
+    totalLiabilities: number;
+    totalEquity: number;
+    totalRevenue: number;
+    totalExpenses: number;
+    totalCosts: number;
+    totalProduction: number;
+    netIncome: number;
+    equationBalance: number;
     equationBalanced: boolean;
   };
-  /**
-   * Totales de control — contrato numerico nuevo, vinculante para agentes.
-   * Ver ControlTotals.
-   */
-  controlTotals: ControlTotals;
-  /** Desglose del patrimonio por sub-cuenta principal. */
-  equityBreakdown: EquityBreakdown;
-  /**
-   * Validacion aritmetica del balance: si `validation.blocking === true`, el
-   * orchestrator debe abortar la Fase 1 y pedirle al usuario corregir el
-   * archivo en vez de generar un reporte mediocre.
-   */
   validation: ValidationResult;
-  /** Detected discrepancies (Discrepancy[] estructuradas). */
   discrepancies: Discrepancy[];
-  /**
-   * Cuentas PUC importantes faltantes o con saldo 0 inesperado.
-   * Lista de mensajes legibles.
-   */
-  missingAccounts: string[];
-  /** Number of auxiliary accounts processed */
+  missingExpectedAccounts: string[];
+}
+
+/**
+ * Resultado del preprocesamiento multiperiodo. `periods` esta ordenado
+ * ascendentemente (mas antiguo -> mas reciente). `primary` apunta siempre al
+ * periodo mas reciente; `comparative` al inmediatamente anterior si existe.
+ */
+export interface PreprocessedBalance {
+  /** No vacio. Ordenado ascendente. */
+  periods: PeriodSnapshot[];
+  /** = periods[periods.length - 1] */
+  primary: PeriodSnapshot;
+  /** = periods[periods.length - 2] o null */
+  comparative: PeriodSnapshot | null;
+  /** Cross-period: filas crudas con todos los saldos. */
+  rawRows: RawAccountRow[];
   auxiliaryCount: number;
-  /** Total accounts in the raw data */
-  totalRowCount: number;
-  /** Human-readable validation report (Markdown) */
-  validationReport: string;
-  /** Clean CSV-like text for the NIIF analyst agent */
+  /** CSV consolidado etiquetado por bloque `[period=YYYY]` */
   cleanData: string;
+  /** Markdown human-readable que documenta TODOS los periodos. */
+  validationReport: string;
 }
 
 /** Alias de compatibilidad hacia atras. */
@@ -230,37 +204,14 @@ const PUC_CLASS_NAMES: Record<number, string> = {
 // ---------------------------------------------------------------------------
 // PUC — clasificacion corriente / no corriente (Decreto 2650/1993 ajustado)
 // ---------------------------------------------------------------------------
-// Activo corriente (realizable en <= 12 meses):
-//   11 Disponible, 12 Inversiones (corto plazo — la norma permite ajuste fino,
-//   pero para efectos de sumario conservador se incluyen por defecto), 13
-//   Deudores, 14 Inventarios, 15 seria Propiedades, planta y equipo — NO es
-//   corriente; se excluye. Aqui usamos 11, 12, 13, 14.
-// Activo NO corriente: 15 (PP&E), 16 Intangibles, 17 Diferidos, 18 Otros
-//   activos, 19 Valorizaciones.
-// Nota: la norma permite que inversiones de largo plazo vayan a 1205+ como
-//   no corriente. Sin sub-clasificacion explicita preferimos conservador:
-//   todo 12 queda en corriente. Si el input trae nivel suficiente, el agente
-//   puede re-clasificar.
-// ---------------------------------------------------------------------------
 const ACTIVO_CORRIENTE_GROUPS = new Set(['11', '12', '13', '14']);
 const ACTIVO_NO_CORRIENTE_GROUPS = new Set(['15', '16', '17', '18', '19']);
-
-// Pasivo corriente (exigible en <= 12 meses):
-//   21 Obligaciones financieras (corto plazo en teoria — aqui conservador,
-//   todo 21 va a corriente salvo que venga sub-clasificado), 22 Proveedores,
-//   23 Cuentas por pagar, 24 Impuestos, 25 Obligaciones laborales, 26
-//   Pasivos estimados (corriente por defecto).
-// Pasivo NO corriente: 27 Diferidos, 28 Otros pasivos, 29 Bonos y papeles
-//   comerciales de largo plazo.
-// ---------------------------------------------------------------------------
 const PASIVO_CORRIENTE_GROUPS = new Set(['21', '22', '23', '24', '25', '26']);
 const PASIVO_NO_CORRIENTE_GROUPS = new Set(['27', '28', '29']);
 
 // ---------------------------------------------------------------------------
-// Subcuentas importantes para findMissingAccounts (D6)
+// Subcuentas importantes
 // ---------------------------------------------------------------------------
-// Mapa: codigo subcuenta -> { nombre, grupo padre }
-// Si el grupo padre tiene saldo > 0 y la subcuenta no aparece, se reporta.
 const IMPORTANT_SUBCUENTAS: Record<string, { name: string; parentGroup: string }> = {
   '1105': { name: 'Caja', parentGroup: '11' },
   '1110': { name: 'Bancos', parentGroup: '11' },
@@ -275,23 +226,94 @@ const IMPORTANT_SUBCUENTAS: Record<string, { name: string; parentGroup: string }
 };
 
 // ---------------------------------------------------------------------------
-// Parser
+// Period detection helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Parse raw CSV text into account rows.
- * Handles various CSV formats from Colombian ERPs (Siigo, World Office, Helisa, etc.).
+ * Etiqueta default para cuando no se detecta un año en headers ni en
+ * `parseTrialBalanceCSV` options. Los consumers deberian preferir pasar
+ * `fiscalPeriod` por `options` desde la upload route para evitarla.
  */
-export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
+export const DEFAULT_PERIOD = 'current';
+
+/** Regex para detectar un año tipo "2024" en cualquier string. */
+const YEAR_REGEX = /\b(20\d{2})\b/;
+
+/**
+ * Detecta el año embebido en un string (header de columna o nombre de hoja
+ * Excel). Devuelve el año como string ("2024") o `null` si no hay año.
+ */
+export function detectYearFromString(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const m = String(value).match(YEAR_REGEX);
+  return m ? m[1] : null;
+}
+
+/**
+ * Determina si un header pertenece a una columna de saldo (final, neto o
+ * balance). Acepta variantes con espacios, guiones bajos y mayusculas.
+ */
+function isBalanceHeader(header: string): boolean {
+  const lower = header.toLowerCase();
+  // Excluye columnas de movimientos (debito/credito)
+  if (/\b(debito|debit|credito|credit|debe|haber)\b/.test(lower)) return false;
+  return /\b(saldo|balance|neto|saldos)\b/.test(lower);
+}
+
+/**
+ * Determina si un header es explicitamente "saldo anterior" / comparativo,
+ * SIN año explicito. Cuando se usa, el caller debe inferir el año restando 1
+ * al periodo principal.
+ */
+function isPreviousBalanceHeader(header: string): boolean {
+  const lower = header.toLowerCase();
+  return /\b(saldo[ _]?anterior|previous|comparativo|prior)\b/.test(lower);
+}
+
+// ---------------------------------------------------------------------------
+// Parser
+// ---------------------------------------------------------------------------
+
+/** Opciones del parser CSV. */
+export interface ParseTrialBalanceOptions {
+  /**
+   * Periodo fiscal "actual" cuando los headers no traen año. Si los headers
+   * tienen "saldo anterior" sin año explicito, el periodo anterior se infiere
+   * como `Number(currentYear) - 1`.
+   */
+  currentYear?: string;
+  /**
+   * Si el caller ya sabe que toda la entrada (por ejemplo una hoja Excel
+   * etiquetada con un año) corresponde a un solo periodo, lo pasa aqui y se
+   * fuerza ese periodo en TODOS los rows, ignorando headers de año.
+   */
+  forcePeriod?: string;
+}
+
+interface BalanceColumn {
+  index: number;
+  period: string | null; // null = "saldo anterior" sin año todavia conocido
+  isPrevious: boolean;
+}
+
+/**
+ * Parse raw CSV text into account rows.
+ * Detecta multiples columnas de saldo y las distribuye en `balancesByPeriod`.
+ */
+export function parseTrialBalanceCSV(
+  csvText: string,
+  options: ParseTrialBalanceOptions = {},
+): RawAccountRow[] {
   const lines = csvText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
   if (lines.length < 2) return [];
 
-  // Detect separator (comma, semicolon, tab)
   const firstLine = lines[0];
   const separator = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ',';
 
-  // Parse header to find column indices
-  const headers = parseLine(firstLine, separator).map((h) => h.toLowerCase().trim());
+  // Headers: conservamos tanto el original (para detectYearFromString, que es
+  // case-insensitive pero no requiere mucho) como el lowercase (para findColumnIndex).
+  const rawHeaders = parseLine(firstLine, separator).map((h) => h.trim());
+  const headers = rawHeaders.map((h) => h.toLowerCase());
 
   const codeIdx = findColumnIndex(headers, ['codigo', 'code', 'cuenta', 'account', 'cta', 'cod']);
   const nameIdx = findColumnIndex(headers, ['nombre', 'name', 'descripcion', 'description', 'concepto']);
@@ -299,33 +321,28 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
   const transIdx = findColumnIndex(headers, ['transaccional', 'transactional', 'auxiliar', 'movimiento']);
   const debitIdx = findColumnIndex(headers, ['debito', 'debit', 'debitos', 'debe', 'db']);
   const creditIdx = findColumnIndex(headers, ['credito', 'credit', 'creditos', 'haber', 'cr']);
-  const balanceIdx = findColumnIndex(headers, ['saldo', 'balance', 'saldo_final', 'neto', 'saldo final']);
-  const prevBalIdx = findColumnIndex(headers, ['saldo_anterior', 'anterior', 'previous', 'saldo anterior', 'comparativo']);
 
   if (codeIdx === -1) return [];
+
+  // -------------------------------------------------------------------------
+  // Detectar TODAS las columnas de saldo y mapearlas a periodos.
+  // -------------------------------------------------------------------------
+  const balanceColumns = detectBalanceColumns(rawHeaders, options);
 
   const rows: RawAccountRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseLine(lines[i], separator);
     const rawCode = (cols[codeIdx] || '').trim().replace(/['"]/g, '');
-    // Normalizacion PUC: algunos ERPs exportan codigos con puntos/guiones
-    // (p.ej. "1.1.05.01" o "11-05-01"). Los agrupamos a digitos contiguos
-    // para que inferLevel pueda decidir el nivel correctamente. Si el codigo
-    // queda vacio o no empieza por digito, saltamos la fila.
     const code = rawCode.replace(/[.\-\s]/g, '');
-    if (!code || !/^\d/.test(code)) continue; // skip non-account rows
+    if (!code || !/^\d/.test(code)) continue;
 
     const debit = safeNumber(parseNumber(cols[debitIdx]));
     const credit = safeNumber(parseNumber(cols[creditIdx]));
-    const rawBalance = balanceIdx !== -1 ? parseNumber(cols[balanceIdx]) : NaN;
-    const hasRawBalance = !Number.isNaN(rawBalance);
 
-    // Determine level
     let level = levelIdx !== -1 ? (cols[levelIdx] || '').trim() : inferLevel(code);
     level = normalizeLevel(level);
 
-    // Determine transactional flag
     let transactional = false;
     if (transIdx !== -1) {
       const val = (cols[transIdx] || '').trim().toLowerCase();
@@ -334,85 +351,263 @@ export function parseTrialBalanceCSV(csvText: string): RawAccountRow[] {
       transactional = level === 'Auxiliar';
     }
 
-    // Calculate balance: use provided balance, or debit - credit for asset/expense classes
     const classCode = parseInt(code[0], 10);
-    let balance: number;
-    if (hasRawBalance) {
-      balance = rawBalance;
-    } else {
-      // Classes 1, 5, 6, 7 are debit-nature; classes 2, 3, 4 are credit-nature
-      if ([1, 5, 6, 7].includes(classCode)) {
-        balance = debit - credit;
-      } else {
-        balance = credit - debit;
+    const balancesByPeriod: Record<string, number> = {};
+
+    if (balanceColumns.length > 0) {
+      // Caso normal: hay columnas de saldo identificadas. Cada columna
+      // alimenta su periodo correspondiente.
+      for (const col of balanceColumns) {
+        const raw = parseNumber(cols[col.index]);
+        if (Number.isNaN(raw)) continue;
+        const period = col.period ?? options.forcePeriod ?? options.currentYear ?? DEFAULT_PERIOD;
+        balancesByPeriod[period] = raw;
       }
+    } else if (debitIdx !== -1 || creditIdx !== -1) {
+      // Solo hay debito/credito: derivamos el balance segun naturaleza PUC.
+      const computed =
+        [1, 5, 6, 7].includes(classCode) ? debit - credit : credit - debit;
+      const period = options.forcePeriod ?? options.currentYear ?? DEFAULT_PERIOD;
+      balancesByPeriod[period] = computed;
     }
+
+    // Si no se detecto ningun balance para esta fila, la saltamos.
+    if (Object.keys(balancesByPeriod).length === 0) continue;
 
     rows.push({
       code,
       name: (cols[nameIdx] || '').trim().replace(/['"]/g, ''),
       level,
       transactional,
-      debit,
-      credit,
-      balance,
-      previousBalance: prevBalIdx !== -1 ? safeNumberOrUndefined(parseNumber(cols[prevBalIdx])) : undefined,
+      balancesByPeriod,
     });
   }
 
   return rows;
 }
 
+/**
+ * Detecta las columnas de saldo del header y las mapea a periodos.
+ *
+ * Reglas:
+ *  1. Cualquier header que matchee `isBalanceHeader` y contenga un año
+ *     `20\d{2}` es columna de un periodo explicito.
+ *  2. Header con "saldo anterior"/"comparativo" sin año -> columna previa,
+ *     periodo a inferir como `currentYear - 1`.
+ *  3. Header con "saldo"/"balance" sin año y sin "anterior" -> usa
+ *     `options.currentYear` o `DEFAULT_PERIOD`.
+ *  4. Si tras (1)/(2)/(3) hay ambiguedad por multiples columnas sin año,
+ *     se desempata: la primera es "current", la segunda es "previous"
+ *     (heuristica: muchos ERPs colombianos exportan "Saldo Final | Saldo Anterior").
+ */
+function detectBalanceColumns(
+  rawHeaders: string[],
+  options: ParseTrialBalanceOptions,
+): BalanceColumn[] {
+  const candidates: Array<BalanceColumn & { rawHeader: string }> = [];
+
+  rawHeaders.forEach((header, index) => {
+    if (!isBalanceHeader(header)) return;
+    const year = detectYearFromString(header);
+    const prev = isPreviousBalanceHeader(header);
+    candidates.push({
+      index,
+      period: year, // si null, se resuelve mas abajo
+      isPrevious: prev,
+      rawHeader: header,
+    });
+  });
+
+  if (candidates.length === 0) return [];
+
+  // Si forcePeriod esta seteado, todas las columnas van al mismo periodo.
+  if (options.forcePeriod) {
+    return candidates.map((c) => ({
+      index: c.index,
+      period: options.forcePeriod!,
+      isPrevious: false,
+    }));
+  }
+
+  // Resolucion para columnas sin año:
+  // - currentYear contextual
+  const currentYear = options.currentYear;
+  const currentYearNum = currentYear ? parseInt(currentYear, 10) : NaN;
+  const prevYear =
+    !Number.isNaN(currentYearNum) ? String(currentYearNum - 1) : null;
+
+  // Si tenemos UNA columna explicita "saldo anterior" sin año, le asignamos prevYear.
+  // Si tenemos UNA columna "saldo" sin año, le asignamos currentYear.
+  // Si tenemos DOS columnas sin año (heuristica clasica saldo + saldo anterior):
+  //   la marcada como "previous" -> prevYear; la otra -> currentYear.
+  const resolved: BalanceColumn[] = [];
+  const unlabeled = candidates.filter((c) => !c.period);
+
+  for (const c of candidates) {
+    if (c.period) {
+      resolved.push({ index: c.index, period: c.period, isPrevious: c.isPrevious });
+      continue;
+    }
+    // sin año: decidir por flag isPrevious
+    if (c.isPrevious) {
+      resolved.push({
+        index: c.index,
+        period: prevYear ?? `${DEFAULT_PERIOD}_anterior`,
+        isPrevious: true,
+      });
+    } else {
+      // Si hay un "saldo anterior" desambiguado y este NO lo es, asume currentYear
+      resolved.push({
+        index: c.index,
+        period: currentYear ?? DEFAULT_PERIOD,
+        isPrevious: false,
+      });
+    }
+  }
+
+  // Edge case: si tras la resolucion todas terminaron con el mismo periodo
+  // (porque no habia year context) y son 2 columnas, la heuristica del par
+  // saldo/saldo_anterior aplica: marcar la segunda como anterior.
+  if (
+    !currentYear &&
+    unlabeled.length === 2 &&
+    resolved.length === 2 &&
+    resolved[0].period === resolved[1].period
+  ) {
+    resolved[1] = {
+      index: resolved[1].index,
+      period: `${DEFAULT_PERIOD}_anterior`,
+      isPrevious: true,
+    };
+  }
+
+  // Dedupe por periodo: si dos columnas terminan apuntando al mismo periodo
+  // (caso raro de archivos con headers duplicados), prefiere la primera.
+  const seen = new Set<string>();
+  const dedup: BalanceColumn[] = [];
+  for (const r of resolved) {
+    if (seen.has(r.period!)) continue;
+    seen.add(r.period!);
+    dedup.push(r);
+  }
+  return dedup;
+}
+
 // ---------------------------------------------------------------------------
 // Validation & Structuring
 // ---------------------------------------------------------------------------
 
-/**
- * Process parsed account rows into a validated, structured balance.
- */
-export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalance {
-  // -------------------------------------------------------------------------
-  // 1. Calcular el conjunto de "leaf rows" (hojas) — la base de toda suma.
-  // Regla:
-  //   (a) Auxiliar (8+ digitos o flag transactional=true) siempre cuenta.
-  //   (b) Subcuenta (6 digitos) cuenta SI no existe ningun Auxiliar con codigo
-  //       que empiece por el codigo de esta Subcuenta. Esto captura
-  //       Subcuentas exportadas sin detalle — caso clasico: 1120 Ahorros
-  //       solo a nivel Subcuenta, sin 8 digitos debajo.
-  //   (c) Si para un mismo prefijo PUC coexisten Subcuenta y Auxiliar,
-  //       preferimos Auxiliar (es el nivel mas detallado y la regla clasica
-  //       del parser previo).
-  // -------------------------------------------------------------------------
-  const auxiliarRows = rows.filter((r) => r.transactional || r.level === 'Auxiliar');
-  const subcuentaRows = rows.filter((r) => r.level === 'Subcuenta');
+/** Opciones del preprocesador. */
+export interface PreprocessTrialBalanceOptions {
+  /**
+   * Si la entrada solo tiene saldos sin año (todas con periodo `'current'`),
+   * el caller puede pasar `defaultPeriod` para etiquetar el snapshot.
+   */
+  defaultPeriod?: string;
+}
 
-  // Para cada Subcuenta, verificar si tiene descendencia entre auxiliares.
-  const orphanSubcuentas: RawAccountRow[] = [];
+/**
+ * Process parsed account rows into a multi-period validated balance.
+ */
+export function preprocessTrialBalance(
+  rows: RawAccountRow[],
+  options: PreprocessTrialBalanceOptions = {},
+): PreprocessedBalance {
+  // -------------------------------------------------------------------------
+  // 1. Inventario de periodos presentes.
+  // -------------------------------------------------------------------------
+  const periodSet = new Set<string>();
+  for (const r of rows) {
+    for (const p of Object.keys(r.balancesByPeriod)) periodSet.add(p);
+  }
+  if (periodSet.size === 0 && options.defaultPeriod) {
+    // No deberia pasar normalmente — pero aseguramos al menos un periodo.
+    periodSet.add(options.defaultPeriod);
+  }
+  if (periodSet.size === 0) {
+    periodSet.add(DEFAULT_PERIOD);
+  }
+
+  const periods = sortPeriodsAscending([...periodSet]);
+
+  // -------------------------------------------------------------------------
+  // 2. Construir un PeriodSnapshot por cada periodo.
+  // -------------------------------------------------------------------------
+  const snapshots: PeriodSnapshot[] = [];
+  for (const p of periods) {
+    snapshots.push(buildSnapshotForPeriod(rows, p));
+  }
+
+  const primary = snapshots[snapshots.length - 1];
+  const comparative = snapshots.length >= 2 ? snapshots[snapshots.length - 2] : null;
+
+  // -------------------------------------------------------------------------
+  // 3. Reportes y datos limpios consolidados (etiquetados por periodo).
+  // -------------------------------------------------------------------------
+  const cleanData = buildCleanDataMultiPeriod(snapshots);
+  const validationReport = buildMultiPeriodValidationReport(snapshots, rows.length);
+
+  const auxiliaryCount = primary.classes.reduce(
+    (s, c) => s + c.accounts.length,
+    0,
+  );
+
+  return {
+    periods: snapshots,
+    primary,
+    comparative,
+    rawRows: rows,
+    auxiliaryCount,
+    cleanData,
+    validationReport,
+  };
+}
+
+/**
+ * Construye un snapshot completo (clases, controlTotals, equityBreakdown,
+ * summary, validation, discrepancies) para un periodo concreto. Trabaja sobre
+ * la "vista" del periodo: cada row se proyecta a `balance = balancesByPeriod[period] ?? 0`.
+ */
+function buildSnapshotForPeriod(
+  allRows: RawAccountRow[],
+  period: string,
+): PeriodSnapshot {
+  // Vista plana: rows con balance del periodo.
+  const view = allRows.map((r) => ({
+    code: r.code,
+    name: r.name,
+    level: r.level,
+    transactional: r.transactional,
+    balance: r.balancesByPeriod[period] ?? 0,
+  }));
+
+  // -------------------------------------------------------------------------
+  // 1. Leaf rows: aux + subcuentas huerfanas
+  // -------------------------------------------------------------------------
+  const auxiliarRows = view.filter((r) => r.transactional || r.level === 'Auxiliar');
+  const subcuentaRows = view.filter((r) => r.level === 'Subcuenta');
+
+  const orphanSubcuentas: typeof view = [];
   for (const sub of subcuentaRows) {
     const hasAuxiliarDescendant = auxiliarRows.some(
       (aux) => aux.code !== sub.code && aux.code.startsWith(sub.code),
     );
-    if (!hasAuxiliarDescendant) {
-      orphanSubcuentas.push(sub);
-    }
+    if (!hasAuxiliarDescendant) orphanSubcuentas.push(sub);
   }
 
-  // Evitar dobles conteos: si un codigo aparece en ambos grupos, auxiliar gana.
   const auxiliarCodes = new Set(auxiliarRows.map((r) => r.code));
-  const leafRows: RawAccountRow[] = [
+  const leafRows = [
     ...auxiliarRows,
     ...orphanSubcuentas.filter((r) => !auxiliarCodes.has(r.code)),
   ];
 
-  const classRows = rows.filter((r) => r.level === 'Clase');
+  const classRows = view.filter((r) => r.level === 'Clase');
 
   // -------------------------------------------------------------------------
   // 2. Agrupar leafs por clase PUC (1..7)
   // -------------------------------------------------------------------------
-  const classMap = new Map<number, { leaves: RawAccountRow[]; reportedRow: RawAccountRow | null }>();
-  for (let c = 1; c <= 7; c++) {
-    classMap.set(c, { leaves: [], reportedRow: null });
-  }
+  const classMap = new Map<number, { leaves: typeof view; reportedRow: typeof view[number] | null }>();
+  for (let c = 1; c <= 7; c++) classMap.set(c, { leaves: [], reportedRow: null });
 
   for (const row of leafRows) {
     const classCode = parseInt(row.code[0], 10);
@@ -423,13 +618,11 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
 
   for (const row of classRows) {
     const classCode = parseInt(row.code[0], 10);
-    if (classMap.has(classCode)) {
-      classMap.get(classCode)!.reportedRow = row;
-    }
+    if (classMap.has(classCode)) classMap.get(classCode)!.reportedRow = row;
   }
 
   // -------------------------------------------------------------------------
-  // 3. Construir clases validadas + detectar discrepancias por clase
+  // 3. Construir PUCClass[] + discrepancias por clase
   // -------------------------------------------------------------------------
   const classes: PUCClass[] = [];
   const discrepancies: Discrepancy[] = [];
@@ -439,9 +632,8 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     const reportedTotal = data.reportedRow ? data.reportedRow.balance : null;
     const discrepancy = reportedTotal !== null ? Math.abs(auxiliaryTotal - reportedTotal) : 0;
 
-    // Report discrepancy if > $1 (floating point tolerance)
     if (reportedTotal !== null && discrepancy > 1) {
-      const missingDesc = findMissingAccountsForClass(rows, classCode, data.leaves);
+      const missingDesc = findMissingAccountsForClass(view, classCode, data.leaves);
       discrepancies.push({
         location: `Clase ${classCode} (${PUC_CLASS_NAMES[classCode]})`,
         reported: reportedTotal,
@@ -456,10 +648,8 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
       name: r.name,
       level: r.level,
       balance: r.balance,
-      previousBalance: r.previousBalance,
       isLeaf: true,
     }));
-
     accounts.sort((a, b) => a.code.localeCompare(b.code));
 
     classes.push({
@@ -473,10 +663,9 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   }
 
   // -------------------------------------------------------------------------
-  // 4. Calcular summary legacy
+  // 4. Summary legacy (por periodo)
   // -------------------------------------------------------------------------
   const getClassTotal = (c: number) => classes.find((cl) => cl.code === c)?.auxiliaryTotal ?? 0;
-
   const totalAssets = getClassTotal(1);
   const totalLiabilities = getClassTotal(2);
   const totalEquityRaw = getClassTotal(3);
@@ -487,17 +676,7 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   const netIncome = totalRevenue - totalExpenses - totalCosts - totalProduction;
 
   // -------------------------------------------------------------------------
-  // 4.1. Auto-reparacion: reinyeccion de utilidad del ejercicio en patrimonio
-  // -------------------------------------------------------------------------
-  // Caso comun: un ERP colombiano que exporta el balance ANTES del cierre del
-  // ejercicio deja Clase 3 solo con capital + reservas + resultados anteriores.
-  // La utilidad del ejercicio vive en Clase 4/5/6/7 (P&L) y aun no fue
-  // trasladada a 3605. El resultado: Activo != Pasivo + Patrimonio por una
-  // cantidad aprox = netIncome.
-  //
-  // Si detectamos ese patron, reinyectamos la utilidad al patrimonio para que
-  // el balance cuadre y el reporte sea correcto. Documentamos el ajuste en
-  // validation.adjustments para que el agente NIIF lo cite en notas.
+  // 4.1. Auto-reparacion de utilidad del ejercicio
   // -------------------------------------------------------------------------
   const adjustments: string[] = [];
   const validationReasons: string[] = [];
@@ -505,7 +684,7 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   let totalEquity = totalEquityRaw;
 
   const shortfallBeforeReinject = totalAssets - totalLiabilities - totalEquity;
-  const RECONCILE_TOL = Math.max(Math.abs(totalAssets) * 0.001, 1000); // 0.1% del activo o $1K
+  const RECONCILE_TOL = Math.max(Math.abs(totalAssets) * 0.001, 1000);
 
   if (
     netIncome !== 0 &&
@@ -515,7 +694,7 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     totalEquity = totalEquityRaw + netIncome;
     adjustments.push(
       `Se reinyecto la utilidad del ejercicio (${formatCOP(netIncome)} COP) al ` +
-        `Total Patrimonio. El balance exportado parece estar ANTES del cierre ` +
+        `Total Patrimonio del periodo ${period}. El balance exportado parece estar ANTES del cierre ` +
         `contable: Clase 3 solo incluia capital, reservas y resultados anteriores ` +
         `(${formatCOP(totalEquityRaw)} COP). Tras el traslado a 3605, la ecuacion ` +
         `patrimonial cuadra.`,
@@ -523,23 +702,13 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   }
 
   // -------------------------------------------------------------------------
-  // 5. Calcular controlTotals (contrato nuevo D4)
+  // 5. controlTotals
   // -------------------------------------------------------------------------
   const activoCorriente = sumLeavesByGroupPrefixes(leafRows, '1', ACTIVO_CORRIENTE_GROUPS);
   const activoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '1', ACTIVO_NO_CORRIENTE_GROUPS);
   const pasivoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_CORRIENTE_GROUPS);
   const pasivoNoCorriente = sumLeavesByGroupPrefixes(leafRows, '2', PASIVO_NO_CORRIENTE_GROUPS);
 
-  // -------------------------------------------------------------------------
-  // 5.1 Segregacion Big Four — cuentas PUC clave para flujo de caja proyectado
-  // -------------------------------------------------------------------------
-  // El Strategy Director (Paso 4) ya no asume que ingresos = caja. Necesita:
-  //   - PUC 11: efectivo real (saldo inicial depurado, sin deudores ni inv.)
-  //   - PUC 13: deudores -> aplicar DSO para Year 1 cash inflow
-  //   - PUC 23: cuentas por pagar -> salida obligatoria H1 Year 1
-  //   - PUC 24: impuestos por pagar -> salida inmediata Year 1 (Q1)
-  //   - PUC 25: obligaciones laborales -> salida obligatoria H1 Year 1
-  // -------------------------------------------------------------------------
   const efectivoCuenta11 = sumLeavesByGroupPrefixes(leafRows, '1', new Set(['11']));
   const deudoresCuenta13 = sumLeavesByGroupPrefixes(leafRows, '1', new Set(['13']));
   const cuentasPorPagar23 = sumLeavesByGroupPrefixes(leafRows, '2', new Set(['23']));
@@ -558,12 +727,8 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
     pasivoNoCorriente,
     patrimonio: totalEquity,
     ingresos: totalRevenue,
-    // Contrato: gastos = Clase 5 + Clase 6 (costos). Clase 7 (costos de
-    // produccion) se suma tambien aqui porque representa costo imputable
-    // al estado de resultados.
     gastos: totalExpenses + totalCosts + totalProduction,
     utilidadNeta: netIncome,
-    // Big Four Cash Flow — cuentas PUC segregadas
     efectivoCuenta11,
     deudoresCuenta13,
     cuentasPorPagar23,
@@ -572,23 +737,12 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
   };
 
   // -------------------------------------------------------------------------
-  // 6. Calcular equityBreakdown (D3)
+  // 6. equityBreakdown
   // -------------------------------------------------------------------------
-  const equityBreakdown = extractEquityBreakdown(rows, discrepancies);
+  const equityBreakdown = extractEquityBreakdownForView(view, discrepancies);
 
   // -------------------------------------------------------------------------
-  // 7. Checks cruzados (D5): ecuacion patrimonial, consistencia utilidad,
-  //    totales en 0 con filas existentes, riesgo de liquidez Big Four
-  // -------------------------------------------------------------------------
-
-  // -------------------------------------------------------------------------
-  // 7.0 GATE BIG FOUR — Riesgo de Liquidez (AC < PC)
-  // -------------------------------------------------------------------------
-  // El Prompt Maestro Big Four exige: si Activo Corriente < Pasivo Corriente,
-  // detener la proyeccion antes de gastar tokens. La empresa esta en riesgo
-  // de iliquidez tecnica y proyectar flujo sin resolverlo es irresponsable.
-  // Tolerancia: 1% del activo total o $100K (lo mayor) para evitar falsos
-  // positivos por redondeo en balances de tamano modesto.
+  // 7. Cross-checks (riesgo liquidez, ecuacion patrimonial, etc.)
   // -------------------------------------------------------------------------
   const LIQUIDEZ_TOL = Math.max(Math.abs(controlTotals.activo) * 0.01, 100_000);
   const liquidezGap = controlTotals.activoCorriente - controlTotals.pasivoCorriente;
@@ -599,10 +753,9 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
 
   if (hasLiquidezRisk) {
     validationReasons.push(
-      `Riesgo de liquidez detectado: Activo Corriente ($${formatCOP(controlTotals.activoCorriente)}) ` +
+      `[${period}] Riesgo de liquidez: Activo Corriente ($${formatCOP(controlTotals.activoCorriente)}) ` +
         `< Pasivo Corriente ($${formatCOP(controlTotals.pasivoCorriente)}). ` +
-        `Brecha: $${formatCOP(Math.abs(liquidezGap))}. ` +
-        `Analisis Big Four exige detener proyeccion hasta evaluar este riesgo.`,
+        `Brecha: $${formatCOP(Math.abs(liquidezGap))}.`,
     );
     suggestedAccounts.push(
       '11 — Efectivo y equivalentes (revisar saldos depurados)',
@@ -613,192 +766,158 @@ export function preprocessTrialBalance(rows: RawAccountRow[]): PreprocessedBalan
       '25 — Obligaciones laborales (revisar exigibilidad inmediata)',
     );
     discrepancies.push({
-      location: 'Riesgo de Liquidez (Big Four)',
+      location: `Riesgo de Liquidez (Big Four) [${period}]`,
       reported: controlTotals.pasivoCorriente,
       calculated: controlTotals.activoCorriente,
       difference: liquidezGap,
       description:
         `AC ($${formatCOP(controlTotals.activoCorriente)}) < PC ` +
-        `($${formatCOP(controlTotals.pasivoCorriente)}). El Strategy Director NO debe ` +
-        `proyectar flujo de caja hasta que se evalue el riesgo de liquidez.`,
+        `($${formatCOP(controlTotals.pasivoCorriente)}).`,
     });
   }
 
-  const ECUACION_TOL = 1000; // COP
-  // Tolerancia critica para bloqueo: 1% del activo o $100K (lo mayor). Por
-  // encima de esto los numeros no son defendibles y preferimos abortar.
+  const ECUACION_TOL = 1000;
   const BLOCKING_TOL = Math.max(Math.abs(controlTotals.activo) * 0.01, 100_000);
   const equationDiff = controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio);
 
   if (Math.abs(equationDiff) > ECUACION_TOL) {
     discrepancies.push({
-      location: 'Ecuacion Patrimonial',
+      location: `Ecuacion Patrimonial [${period}]`,
       reported: controlTotals.pasivo + controlTotals.patrimonio,
       calculated: controlTotals.activo,
       difference: equationDiff,
-      description: `Ecuacion patrimonial descuadrada: Activo $${formatCOP(controlTotals.activo)} != Pasivo $${formatCOP(controlTotals.pasivo)} + Patrimonio $${formatCOP(controlTotals.patrimonio)} (diferencia $${formatCOP(equationDiff)})`,
+      description: `[${period}] Ecuacion patrimonial descuadrada: Activo $${formatCOP(controlTotals.activo)} != Pasivo $${formatCOP(controlTotals.pasivo)} + Patrimonio $${formatCOP(controlTotals.patrimonio)} (diferencia $${formatCOP(equationDiff)})`,
     });
 
-    // Si el descuadre supera la tolerancia de bloqueo, construimos razones
-    // y sugerencias accionables para el usuario.
     if (Math.abs(equationDiff) > BLOCKING_TOL) {
       validationReasons.push(
-        `La ecuacion contable no cuadra: Activo (${formatCOP(controlTotals.activo)}) ` +
-          `!= Pasivo (${formatCOP(controlTotals.pasivo)}) + Patrimonio ` +
-          `(${formatCOP(controlTotals.patrimonio)}). Diferencia: ${formatCOP(equationDiff)}.`,
+        `[${period}] La ecuacion contable no cuadra: Activo (${formatCOP(controlTotals.activo)}) ` +
+          `!= Pasivo (${formatCOP(controlTotals.pasivo)}) + Patrimonio (${formatCOP(controlTotals.patrimonio)}). ` +
+          `Diferencia: ${formatCOP(equationDiff)}.`,
       );
 
-      // Diagnostico heuristico: si el descuadre ~ netIncome significa que la
-      // utilidad no esta en Clase 3 pero tampoco pudimos reinyectarla (ej.
-      // porque la detectamos en patron diferente).
       if (netIncome !== 0 && Math.abs(equationDiff - netIncome) < BLOCKING_TOL * 0.5) {
         validationReasons.push(
-          `El descuadre (${formatCOP(equationDiff)}) coincide aproximadamente con ` +
-            `la utilidad del ejercicio (${formatCOP(netIncome)}). Posiblemente el ` +
-            `balance fue exportado antes del cierre y la utilidad no fue trasladada ` +
-            `a la cuenta 3605.`,
+          `[${period}] El descuadre coincide aproximadamente con la utilidad del ejercicio. ` +
+            `Posiblemente el balance fue exportado antes del cierre (3605 sin trasladar).`,
         );
         suggestedAccounts.push('3605 — Utilidad del ejercicio (Clase 3)');
       }
 
-      // Si Patrimonio es sospechosamente bajo, sugerir revisar cuentas 31xx/33xx
       if (Math.abs(controlTotals.patrimonio) < Math.abs(controlTotals.activo) * 0.01) {
         validationReasons.push(
-          `El Total Patrimonio (${formatCOP(controlTotals.patrimonio)}) es menor al ` +
-            `1% del Total Activo, lo cual es inusual. Revisa si faltan cuentas de ` +
-            `capital (31xx), reservas (33xx) o resultados acumulados (37xx) en el Excel.`,
+          `[${period}] Total Patrimonio (${formatCOP(controlTotals.patrimonio)}) < 1% del Activo. ` +
+            `Revisa si faltan cuentas 31xx/33xx/37xx.`,
         );
         suggestedAccounts.push(
           '3105 — Capital autorizado',
           '3115 — Capital suscrito y pagado',
           '3305 — Reserva legal',
-          '3705 — Utilidades acumuladas / Resultados de ejercicios anteriores',
+          '3705 — Utilidades acumuladas',
         );
       }
     }
   } else if (!equationBalanced) {
-    // Tolerancia mas estricta (100 COP) — avisamos pero sin el prefijo duro.
     discrepancies.push({
-      location: 'Ecuacion Patrimonial (tolerancia fina)',
+      location: `Ecuacion Patrimonial (tolerancia fina) [${period}]`,
       reported: 0,
       calculated: equationBalance,
       difference: equationBalance,
-      description: `Activo ($${formatCOP(totalAssets)}) - Pasivo ($${formatCOP(totalLiabilities)}) - Patrimonio ($${formatCOP(totalEquity)}) = $${formatCOP(equationBalance)}. Diferencia menor a $${ECUACION_TOL} (posible redondeo).`,
+      description: `[${period}] Activo - Pasivo - Patrimonio = $${formatCOP(equationBalance)} (posible redondeo).`,
     });
   }
 
-  // Cross-check utilidad P&L vs utilidad del ejercicio en patrimonio
-  const UTIL_TOL = 1000; // COP
+  const UTIL_TOL = 1000;
   if (equityBreakdown.utilidadEjercicio !== undefined) {
     const diffUtil = controlTotals.utilidadNeta - equityBreakdown.utilidadEjercicio;
     if (Math.abs(diffUtil) > UTIL_TOL) {
       discrepancies.push({
-        location: 'Consistencia Utilidad',
+        location: `Consistencia Utilidad [${period}]`,
         reported: equityBreakdown.utilidadEjercicio,
         calculated: controlTotals.utilidadNeta,
         difference: diffUtil,
-        description: `Utilidad neta P&L $${formatCOP(controlTotals.utilidadNeta)} difiere de Utilidad del ejercicio en patrimonio $${formatCOP(equityBreakdown.utilidadEjercicio)} (diferencia $${formatCOP(diffUtil)})`,
+        description: `[${period}] Utilidad neta P&L $${formatCOP(controlTotals.utilidadNeta)} difiere de Utilidad del ejercicio en patrimonio $${formatCOP(equityBreakdown.utilidadEjercicio)}.`,
       });
     }
   }
 
-  // Totales en 0 con filas existentes (posible fallo de parseo)
   for (let c = 1; c <= 6; c++) {
     const classData = classMap.get(c);
     const classTotal = getClassTotal(c);
-    const hasClassRows = rows.some((r) => r.code.startsWith(String(c)));
+    const hasClassRows = view.some((r) => r.code.startsWith(String(c)));
     if (classTotal === 0 && hasClassRows && classData && classData.leaves.length === 0) {
       discrepancies.push({
-        location: `Clase ${c} (${PUC_CLASS_NAMES[c]})`,
+        location: `Clase ${c} (${PUC_CLASS_NAMES[c]}) [${period}]`,
         reported: 0,
         calculated: 0,
         difference: 0,
-        description: `Advertencia: Total de Clase ${c} es $0 pero existen filas con codigo ${c}xxx en la entrada. Posible fallo de parseo de numeros o niveles.`,
+        description: `[${period}] Total de Clase ${c} es $0 pero existen filas con codigo ${c}xxx. Posible fallo de parseo.`,
       });
     }
   }
 
   // -------------------------------------------------------------------------
-  // 8. missingAccounts (D6): cuentas y subcuentas PUC importantes ausentes
+  // 8. missingExpectedAccounts
   // -------------------------------------------------------------------------
-  const missingAccounts = buildMissingAccounts(rows, leafRows, classes);
+  const missingExpectedAccounts = buildMissingAccountsForView(view, leafRows, classes);
 
-  // -------------------------------------------------------------------------
-  // 9. Informe de validacion + datos limpios
-  // -------------------------------------------------------------------------
-  const auxiliaryCount = leafRows.length;
   const summary = {
-    totalAssets, totalLiabilities, totalEquity, totalRevenue,
-    totalExpenses, totalCosts, totalProduction, netIncome,
-    equationBalance, equationBalanced,
+    totalAssets,
+    totalLiabilities,
+    totalEquity,
+    totalRevenue,
+    totalExpenses,
+    totalCosts,
+    totalProduction,
+    netIncome,
+    equationBalance,
+    equationBalanced,
   };
 
-  // -------------------------------------------------------------------------
-  // 10. Construir ValidationResult final
-  // -------------------------------------------------------------------------
-  // Deduplica sugerencias conservando orden de aparicion
-  const dedupedSuggestions = Array.from(new Set(suggestedAccounts));
   const validation: ValidationResult = {
     blocking: validationReasons.length > 0,
     reasons: validationReasons,
-    suggestedAccounts: dedupedSuggestions,
+    suggestedAccounts: Array.from(new Set(suggestedAccounts)),
     adjustments,
   };
 
-  const validationReport = buildValidationReport(
-    classes,
-    discrepancies,
-    missingAccounts,
-    summary,
-    controlTotals,
-    equityBreakdown,
-    auxiliaryCount,
-    rows.length,
-  );
-
-  const cleanData = buildCleanData(classes);
-
   return {
-    period: null,
+    period,
     classes,
-    summary,
     controlTotals,
     equityBreakdown,
+    summary,
     validation,
     discrepancies,
-    missingAccounts,
-    auxiliaryCount,
-    totalRowCount: rows.length,
-    validationReport,
-    cleanData,
+    missingExpectedAccounts,
   };
 }
 
 // ---------------------------------------------------------------------------
-// equityBreakdown (D3)
+// equityBreakdown helpers (refactor: trabajan sobre la "vista" de un periodo)
 // ---------------------------------------------------------------------------
 
-/**
- * Extrae el desglose de patrimonio a partir de todas las filas (no solo leafs).
- * Preferimos el nivel mas agregado que sume correctamente. Si 3105 y 310505
- * conviven con saldos distintos, usamos 3105 y emitimos discrepancia.
- */
-export function extractEquityBreakdown(
-  rows: RawAccountRow[],
+interface ViewRow {
+  code: string;
+  name: string;
+  level: string;
+  transactional: boolean;
+  balance: number;
+}
+
+function extractEquityBreakdownForView(
+  view: ViewRow[],
   discrepancies: Discrepancy[],
 ): EquityBreakdown {
   const breakdown: EquityBreakdown = {};
 
-  // Helper: suma filas que comienzan por prefijo exacto, preferentemente al
-  // nivel indicado. Si el nivel preferido existe y los descendientes suman
-  // distinto, preferimos el nivel preferido y emitimos discrepancia.
   const sumPreferring = (
     prefix: string,
     preferredLevel: 'Cuenta' | 'Subcuenta',
     label: string,
   ): number | undefined => {
-    const preferred = rows.find((r) => r.code === prefix && r.level === preferredLevel);
-    const descendants = rows.filter(
+    const preferred = view.find((r) => r.code === prefix && r.level === preferredLevel);
+    const descendants = view.filter(
       (r) => r.code !== prefix && r.code.startsWith(prefix) && r.balance !== 0,
     );
 
@@ -820,42 +939,33 @@ export function extractEquityBreakdown(
       return preferred.balance;
     }
 
-    // Sin nivel preferido: usamos descendientes (leaf-like) como fallback.
     const descSum = descendants
       .filter((r) => r.level === 'Auxiliar' || r.level === 'Subcuenta' || r.transactional)
       .reduce((s, r) => s + r.balance, 0);
     return descSum !== 0 ? descSum : undefined;
   };
 
-  // 3105 — Capital autorizado
   const v3105 = sumPreferring('3105', 'Cuenta', 'Capital autorizado');
   if (v3105 !== undefined) breakdown.capitalAutorizado = v3105;
 
-  // 3115 + 3120 — Capital suscrito y pagado (+ Aporte de socios si existe)
   const v3115 = sumPreferring('3115', 'Cuenta', 'Capital suscrito y pagado');
   const v3120 = sumPreferring('3120', 'Cuenta', 'Aporte de socios');
   const capSuscrito = (v3115 ?? 0) + (v3120 ?? 0);
-  if (v3115 !== undefined || v3120 !== undefined) {
-    breakdown.capitalSuscritoPagado = capSuscrito;
-  }
+  if (v3115 !== undefined || v3120 !== undefined) breakdown.capitalSuscritoPagado = capSuscrito;
 
-  // 3305 — Reserva legal
   const v3305 = sumPreferring('3305', 'Cuenta', 'Reserva legal');
   if (v3305 !== undefined) breakdown.reservaLegal = v3305;
 
-  // 3310..3395 — Otras reservas (agregadas). Sumamos a nivel Cuenta (4 digitos)
-  // que empiezan por 33 pero no sean 3305. Si no hay Cuenta, caemos a subcuentas
-  // del grupo 33 excluyendo prefijo 3305.
   let otrasReservasTotal = 0;
   let otrasReservasFound = false;
-  const cuentasGrupo33 = rows.filter(
+  const cuentasGrupo33 = view.filter(
     (r) => r.level === 'Cuenta' && r.code.startsWith('33') && r.code !== '3305' && r.balance !== 0,
   );
   if (cuentasGrupo33.length > 0) {
     otrasReservasTotal = cuentasGrupo33.reduce((s, r) => s + r.balance, 0);
     otrasReservasFound = true;
   } else {
-    const hojas33 = rows.filter(
+    const hojas33 = view.filter(
       (r) =>
         (r.level === 'Auxiliar' || r.level === 'Subcuenta' || r.transactional) &&
         r.code.startsWith('33') &&
@@ -869,11 +979,9 @@ export function extractEquityBreakdown(
   }
   if (otrasReservasFound) breakdown.otrasReservas = otrasReservasTotal;
 
-  // 3605 — Utilidad del ejercicio
   const v3605 = sumPreferring('3605', 'Cuenta', 'Utilidad del ejercicio');
   if (v3605 !== undefined) breakdown.utilidadEjercicio = v3605;
 
-  // 3610 + 3705 + 3710 — Utilidades acumuladas / ejercicios anteriores
   const v3610 = sumPreferring('3610', 'Cuenta', 'Utilidades acumuladas');
   const v3705 = sumPreferring('3705', 'Cuenta', 'Utilidad ejercicios anteriores');
   const v3710 = sumPreferring('3710', 'Cuenta', 'Perdida ejercicios anteriores');
@@ -884,26 +992,39 @@ export function extractEquityBreakdown(
   return breakdown;
 }
 
+/**
+ * @deprecated Wrapper para retrocompatibilidad. Usa
+ * `extractEquityBreakdownForView` internamente. Espera filas con `.balance`.
+ */
+export function extractEquityBreakdown(
+  rows: { code: string; name: string; level: string; transactional?: boolean; balance: number }[],
+  discrepancies: Discrepancy[],
+): EquityBreakdown {
+  const view: ViewRow[] = rows.map((r) => ({
+    code: r.code,
+    name: r.name,
+    level: r.level,
+    transactional: !!r.transactional,
+    balance: r.balance,
+  }));
+  return extractEquityBreakdownForView(view, discrepancies);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function parseLine(line: string, separator: string): string[] {
-  // Simple CSV parser that handles quoted fields
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === separator && !inQuotes) {
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (ch === separator && !inQuotes) {
       result.push(current);
       current = '';
-    } else {
-      current += ch;
-    }
+    } else current += ch;
   }
   result.push(current);
   return result;
@@ -911,42 +1032,24 @@ function parseLine(line: string, separator: string): string[] {
 
 /**
  * parseNumber — robusto contra formatos diversos de ERP colombianos.
- *
- * Soporta:
- *  - Envoltura `(...)` como negativo (convencion contable: credit balance).
- *  - Prefijo/sufijo `-` como negativo (incluye `1234-` estilo mainframe).
- *  - Simbolos de moneda y etiquetas: `$`, `COP`, `USD`, espacios.
- *  - Formato colombiano: `1.234.567,89` (. miles, , decimal).
- *  - Formato US: `1,234,567.89` (, miles, . decimal).
- *  - Entrada solo con `.` o solo con `,`: heuristica por numero de digitos
- *    despues del ultimo separador (<=2 digitos => decimal).
- *  - Entradas invalidas: retorna NaN (permite al caller distinguir "no es
- *    numero" de 0). Para el contrato publico historico (debit/credit en
- *    parseTrialBalanceCSV) se envuelve con safeNumber().
- *
- * Devuelve: number | NaN.
  */
 export function parseNumber(val: string | undefined): number {
   if (val === undefined || val === null) return NaN;
-  // Normalizacion: trim + remover $, COP, USD, espacios internos y comillas.
   let cleaned = String(val).trim();
   if (cleaned.length === 0) return NaN;
 
-  // Remover simbolos/etiquetas monetarias (case-insensitive) y comillas.
   cleaned = cleaned
     .replace(/\b(COP|USD|EUR)\b/gi, '')
     .replace(/[$€£'"\s]/g, '')
     .trim();
   if (cleaned.length === 0) return NaN;
 
-  // Detectar envoltura (...) como negativo.
   let isNegative = false;
   if (/^\(.*\)$/.test(cleaned)) {
     isNegative = true;
     cleaned = cleaned.slice(1, -1).trim();
   }
 
-  // Sufijo '-' (e.g. "1234-") o prefijo '-' (e.g. "-1234").
   if (cleaned.endsWith('-')) {
     isNegative = !isNegative;
     cleaned = cleaned.slice(0, -1).trim();
@@ -955,14 +1058,9 @@ export function parseNumber(val: string | undefined): number {
     isNegative = !isNegative;
     cleaned = cleaned.slice(1).trim();
   }
-  // Prefijo '+' opcional.
-  if (cleaned.startsWith('+')) {
-    cleaned = cleaned.slice(1).trim();
-  }
+  if (cleaned.startsWith('+')) cleaned = cleaned.slice(1).trim();
 
   if (cleaned.length === 0) return NaN;
-
-  // Si quedan caracteres no numericos salvo . y , es invalido.
   if (!/^[\d.,]+$/.test(cleaned)) return NaN;
 
   const hasDot = cleaned.includes('.');
@@ -971,38 +1069,20 @@ export function parseNumber(val: string | undefined): number {
   const lastComma = cleaned.lastIndexOf(',');
 
   let normalized: string;
-
   if (hasDot && hasComma) {
-    // Ambos separadores: el ultimo es el decimal.
-    if (lastComma > lastDot) {
-      // Colombian: 1.234.567,89
-      normalized = cleaned.replace(/\./g, '').replace(',', '.');
-    } else {
-      // US: 1,234,567.89
-      normalized = cleaned.replace(/,/g, '');
-    }
+    if (lastComma > lastDot) normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    else normalized = cleaned.replace(/,/g, '');
   } else if (hasDot) {
-    // Solo '.': si <=2 digitos despues del ultimo punto => decimal; si no, miles.
     const digitsAfter = cleaned.length - lastDot - 1;
     const occurrences = (cleaned.match(/\./g) || []).length;
-    if (occurrences === 1 && digitsAfter <= 2) {
-      // decimal
-      normalized = cleaned;
-    } else {
-      // miles — remover todos los puntos
-      normalized = cleaned.replace(/\./g, '');
-    }
+    if (occurrences === 1 && digitsAfter <= 2) normalized = cleaned;
+    else normalized = cleaned.replace(/\./g, '');
   } else if (hasComma) {
-    // Solo ',': si <=2 digitos despues de la ultima coma => decimal; si no, miles.
     const digitsAfter = cleaned.length - lastComma - 1;
     const occurrences = (cleaned.match(/,/g) || []).length;
-    if (occurrences === 1 && digitsAfter <= 2) {
-      normalized = cleaned.replace(',', '.');
-    } else {
-      normalized = cleaned.replace(/,/g, '');
-    }
+    if (occurrences === 1 && digitsAfter <= 2) normalized = cleaned.replace(',', '.');
+    else normalized = cleaned.replace(/,/g, '');
   } else {
-    // Solo digitos.
     normalized = cleaned;
   }
 
@@ -1011,14 +1091,8 @@ export function parseNumber(val: string | undefined): number {
   return isNegative ? -num : num;
 }
 
-/** Convierte NaN en 0 — para campos historicos donde se espera number. */
 function safeNumber(val: number): number {
   return Number.isNaN(val) ? 0 : val;
-}
-
-/** Convierte NaN en undefined — para campos opcionales. */
-function safeNumberOrUndefined(val: number): number | undefined {
-  return Number.isNaN(val) ? undefined : val;
 }
 
 function findColumnIndex(headers: string[], candidates: string[]): number {
@@ -1029,26 +1103,13 @@ function findColumnIndex(headers: string[], candidates: string[]): number {
   return -1;
 }
 
-/**
- * Infiere el nivel PUC a partir del numero de digitos del codigo (ya
- * normalizado, sin puntos ni guiones). Convencion PUC colombiano:
- *   1 digito  -> Clase       (1, 2, 3, 4, 5, 6, 7)
- *   2 digitos -> Grupo       (11 Disponible, 13 Deudores, etc.)
- *   4 digitos -> Cuenta      (1105 Caja, 1110 Bancos)
- *   6 digitos -> Subcuenta   (110505 Caja general)
- *   8+ dig.   -> Auxiliar    (nivel mas granular del libro mayor)
- *
- * Longitudes intermedias (3, 5, 7) son atipicas pero algunos ERPs las
- * exportan. Las mapeamos al nivel PUC mas cercano por arriba para no
- * perderlas: 3 -> Grupo, 5 -> Cuenta, 7 -> Subcuenta.
- */
 function inferLevel(code: string): string {
   const len = code.length;
   if (len === 1) return 'Clase';
   if (len === 2 || len === 3) return 'Grupo';
   if (len === 4 || len === 5) return 'Cuenta';
   if (len === 6 || len === 7) return 'Subcuenta';
-  return 'Auxiliar'; // 8+ digitos
+  return 'Auxiliar';
 }
 
 function normalizeLevel(level: string): string {
@@ -1061,14 +1122,10 @@ function normalizeLevel(level: string): string {
   return level;
 }
 
-/**
- * Busca discrepancias por clase: grupos/cuentas con saldo != 0 pero sin hojas.
- * Legacy — se usa para la descripcion textual en discrepancies por clase.
- */
 function findMissingAccountsForClass(
-  allRows: RawAccountRow[],
+  allRows: ViewRow[],
   classCode: number,
-  leafRows: RawAccountRow[],
+  leafRows: ViewRow[],
 ): string {
   const classPrefix = String(classCode);
   const groupRows = allRows.filter(
@@ -1089,29 +1146,13 @@ function findMissingAccountsForClass(
   return '';
 }
 
-/**
- * Construye la lista missingAccounts (D6) — cuentas y subcuentas PUC
- * importantes que deberian existir pero no aparecen (o aparecen en 0).
- *
- * Reglas:
- *  1. Para cada subcuenta en IMPORTANT_SUBCUENTAS, si el grupo padre tiene
- *     saldo > 0 pero la subcuenta no aparece entre las hojas o tiene saldo 0,
- *     se reporta.
- *  2. Tambien se reportan grupos/cuentas con saldo reportado > 0 pero sin
- *     hojas descendientes (caso tradicional: ERP exporto Grupo pero no
- *     detalle).
- */
-function buildMissingAccounts(
-  allRows: RawAccountRow[],
-  leafRows: RawAccountRow[],
+function buildMissingAccountsForView(
+  view: ViewRow[],
+  leafRows: ViewRow[],
   classes: PUCClass[],
 ): string[] {
   const out: string[] = [];
-  const leafByCode = new Map<string, RawAccountRow>();
-  for (const r of leafRows) leafByCode.set(r.code, r);
 
-  // Saldo total por grupo (2 digitos) — usando hojas (que ya consideran
-  // subcuentas huerfanas).
   const groupTotals = new Map<string, number>();
   for (const r of leafRows) {
     if (r.code.length >= 2) {
@@ -1120,32 +1161,29 @@ function buildMissingAccounts(
     }
   }
 
-  // (1) Subcuentas importantes ausentes
   for (const [subCode, meta] of Object.entries(IMPORTANT_SUBCUENTAS)) {
     const parentTotal = groupTotals.get(meta.parentGroup) ?? 0;
-    if (Math.abs(parentTotal) <= 1) continue; // grupo padre sin actividad
+    if (Math.abs(parentTotal) <= 1) continue;
 
-    // Buscar la subcuenta o cualquier hoja bajo su prefijo.
     const hasHere = leafRows.some((l) => l.code === subCode);
     const hasBelow = leafRows.some((l) => l.code.startsWith(subCode) && l.code !== subCode);
-    const rowAtSub = allRows.find((r) => r.code === subCode);
+    const rowAtSub = view.find((r) => r.code === subCode);
     const subBalance = rowAtSub?.balance ?? 0;
 
     if (!hasHere && !hasBelow) {
       out.push(
-        `Subcuenta PUC esperada ausente: ${subCode} ${meta.name} (grupo ${meta.parentGroup} tiene saldo $${formatCOP(parentTotal)} — la subcuenta deberia aportar parte).`,
+        `Subcuenta PUC esperada ausente: ${subCode} ${meta.name} (grupo ${meta.parentGroup} tiene saldo $${formatCOP(parentTotal)}).`,
       );
     } else if (hasHere && Math.abs(subBalance) < 1 && !hasBelow) {
       out.push(
-        `Subcuenta PUC ${subCode} ${meta.name} presente pero con saldo $0 (grupo ${meta.parentGroup} = $${formatCOP(parentTotal)}). Verificar.`,
+        `Subcuenta PUC ${subCode} ${meta.name} presente pero con saldo $0 (grupo ${meta.parentGroup} = $${formatCOP(parentTotal)}).`,
       );
     }
   }
 
-  // (2) Grupos/cuentas a nivel superior con saldo pero sin hojas descendientes
   for (const cl of classes) {
     const classPrefix = String(cl.code);
-    const groupsAndAccounts = allRows.filter(
+    const groupsAndAccounts = view.filter(
       (r) =>
         r.code.startsWith(classPrefix) &&
         (r.level === 'Grupo' || r.level === 'Cuenta') &&
@@ -1157,7 +1195,7 @@ function buildMissingAccounts(
       );
       if (!hasLeafBelow) {
         out.push(
-          `${g.level} ${g.code} ${g.name} con saldo $${formatCOP(g.balance)} sin hojas (auxiliares/subcuentas) debajo. Revisar exportacion del ERP.`,
+          `${g.level} ${g.code} ${g.name} con saldo $${formatCOP(g.balance)} sin hojas debajo.`,
         );
       }
     }
@@ -1167,7 +1205,7 @@ function buildMissingAccounts(
 }
 
 function sumLeavesByGroupPrefixes(
-  leafRows: RawAccountRow[],
+  leafRows: ViewRow[],
   classDigit: string,
   groupSet: Set<string>,
 ): number {
@@ -1185,129 +1223,128 @@ function formatCOP(amount: number): string {
   return amount < 0 ? `-${formatted}` : formatted;
 }
 
-function buildValidationReport(
-  classes: PUCClass[],
-  discrepancies: Discrepancy[],
-  missingAccounts: string[],
-  summary: PreprocessedBalance['summary'],
-  controlTotals: ControlTotals,
-  equityBreakdown: EquityBreakdown,
-  auxCount: number,
-  totalCount: number,
+/**
+ * Ordena periodos ascendentemente. Periodos numericos (años) se ordenan
+ * naturalmente; etiquetas no numericas (DEFAULT_PERIOD, etc.) van al final.
+ */
+function sortPeriodsAscending(periods: string[]): string[] {
+  return [...periods].sort((a, b) => {
+    const ay = /^20\d{2}$/.test(a) ? parseInt(a, 10) : null;
+    const by = /^20\d{2}$/.test(b) ? parseInt(b, 10) : null;
+    if (ay !== null && by !== null) return ay - by;
+    if (ay !== null) return -1;
+    if (by !== null) return 1;
+    // Heuristica: "*_anterior" < "current"
+    if (a.endsWith('_anterior') && !b.endsWith('_anterior')) return -1;
+    if (b.endsWith('_anterior') && !a.endsWith('_anterior')) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Reporting helpers (multi-period)
+// ---------------------------------------------------------------------------
+
+function buildCleanDataMultiPeriod(snapshots: PeriodSnapshot[]): string {
+  const blocks: string[] = [];
+  for (const snap of snapshots) {
+    const lines: string[] = [];
+    lines.push(`[period=${snap.period}]`);
+    lines.push('codigo,nombre,nivel,saldo');
+    for (const c of snap.classes) {
+      for (const acc of c.accounts) {
+        lines.push(`${acc.code},"${acc.name}",${acc.level},${acc.balance.toFixed(2)}`);
+      }
+    }
+    lines.push(`[/period]`);
+    blocks.push(lines.join('\n'));
+  }
+  return blocks.join('\n\n');
+}
+
+function buildMultiPeriodValidationReport(
+  snapshots: PeriodSnapshot[],
+  totalRowCount: number,
 ): string {
   const lines: string[] = [];
   lines.push('# INFORME DE VALIDACION ARITMETICA DEL BALANCE DE PRUEBA');
   lines.push('');
-  lines.push(`**Cuentas totales:** ${totalCount} | **Hojas procesadas (aux + subcuentas huerfanas):** ${auxCount}`);
+  lines.push(
+    `**Periodos detectados:** ${snapshots.map((s) => s.period).join(', ')} | **Filas crudas:** ${totalRowCount}`,
+  );
   lines.push('');
-  lines.push('## Resumen por Clase PUC');
-  lines.push('');
-  lines.push('| Clase | Nombre | Total Hojas | Total Reportado | Discrepancia |');
-  lines.push('|-------|--------|-------------|-----------------|--------------|');
 
-  for (const c of classes) {
-    const reported = c.reportedTotal !== null ? `$${formatCOP(c.reportedTotal)}` : 'N/A';
-    const disc = c.discrepancy > 1 ? `$${formatCOP(c.discrepancy)}` : 'OK';
-    const flag = c.discrepancy > 1 ? ' !!' : '';
-    lines.push(`| ${c.code} | ${c.name} | $${formatCOP(c.auxiliaryTotal)} | ${reported} | ${disc}${flag} |`);
-  }
+  for (const snap of snapshots) {
+    lines.push(`## Periodo ${snap.period}`);
+    lines.push('');
+    lines.push('### Resumen por Clase PUC');
+    lines.push('');
+    lines.push('| Clase | Nombre | Total Hojas | Total Reportado | Discrepancia |');
+    lines.push('|-------|--------|-------------|-----------------|--------------|');
+    for (const c of snap.classes) {
+      const reported = c.reportedTotal !== null ? `$${formatCOP(c.reportedTotal)}` : 'N/A';
+      const disc = c.discrepancy > 1 ? `$${formatCOP(c.discrepancy)}` : 'OK';
+      const flag = c.discrepancy > 1 ? ' !!' : '';
+      lines.push(`| ${c.code} | ${c.name} | $${formatCOP(c.auxiliaryTotal)} | ${reported} | ${disc}${flag} |`);
+    }
+    lines.push('');
+    lines.push('### Totales de Control');
+    lines.push('');
+    lines.push(`- **Activo Total:** $${formatCOP(snap.controlTotals.activo)} (corriente $${formatCOP(snap.controlTotals.activoCorriente)} + no corriente $${formatCOP(snap.controlTotals.activoNoCorriente)})`);
+    lines.push(`- **Pasivo Total:** $${formatCOP(snap.controlTotals.pasivo)} (corriente $${formatCOP(snap.controlTotals.pasivoCorriente)} + no corriente $${formatCOP(snap.controlTotals.pasivoNoCorriente)})`);
+    lines.push(`- **Patrimonio Total:** $${formatCOP(snap.controlTotals.patrimonio)}`);
+    lines.push(`- **Ingresos:** $${formatCOP(snap.controlTotals.ingresos)}`);
+    lines.push(`- **Gastos+Costos:** $${formatCOP(snap.controlTotals.gastos)}`);
+    lines.push(`- **Utilidad Neta:** $${formatCOP(snap.controlTotals.utilidadNeta)}`);
+    lines.push('');
+    lines.push('### Ecuacion Patrimonial');
+    lines.push('');
+    lines.push(`- Activo - (Pasivo + Patrimonio) = $${formatCOP(snap.summary.equationBalance)}`);
+    lines.push(`- Estado: **${snap.summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'}**`);
 
-  lines.push('');
-  lines.push('## Totales de Control (Contrato Vinculante)');
-  lines.push('');
-  lines.push(`- **Activo Total:** $${formatCOP(controlTotals.activo)} (corriente $${formatCOP(controlTotals.activoCorriente)} + no corriente $${formatCOP(controlTotals.activoNoCorriente)})`);
-  lines.push(`- **Pasivo Total:** $${formatCOP(controlTotals.pasivo)} (corriente $${formatCOP(controlTotals.pasivoCorriente)} + no corriente $${formatCOP(controlTotals.pasivoNoCorriente)})`);
-  lines.push(`- **Patrimonio Total:** $${formatCOP(controlTotals.patrimonio)}`);
-  lines.push(`- **Ingresos:** $${formatCOP(controlTotals.ingresos)}`);
-  lines.push(`- **Gastos+Costos:** $${formatCOP(controlTotals.gastos)}`);
-  lines.push(`- **Utilidad Neta:** $${formatCOP(controlTotals.utilidadNeta)}`);
-  lines.push('');
-  lines.push('## Ecuacion Patrimonial');
-  lines.push('');
-  lines.push(`- **Activo - (Pasivo + Patrimonio) = $${formatCOP(controlTotals.activo - (controlTotals.pasivo + controlTotals.patrimonio))}**`);
-  lines.push(`- **Estado:** ${summary.equationBalanced ? 'CUADRA' : 'NO CUADRA'}`);
-
-  // Desglose de patrimonio (si hay datos)
-  const eb = equityBreakdown;
-  const hasEB = Object.keys(eb).length > 0;
-  if (hasEB) {
-    lines.push('');
-    lines.push('## Desglose de Patrimonio');
-    lines.push('');
-    if (eb.capitalAutorizado !== undefined) lines.push(`- **Capital autorizado (3105):** $${formatCOP(eb.capitalAutorizado)}`);
-    if (eb.capitalSuscritoPagado !== undefined) lines.push(`- **Capital suscrito y pagado (3115+3120):** $${formatCOP(eb.capitalSuscritoPagado)}`);
-    if (eb.reservaLegal !== undefined) lines.push(`- **Reserva legal (3305):** $${formatCOP(eb.reservaLegal)}`);
-    if (eb.otrasReservas !== undefined) lines.push(`- **Otras reservas (3310-3395):** $${formatCOP(eb.otrasReservas)}`);
-    if (eb.utilidadEjercicio !== undefined) lines.push(`- **Utilidad del ejercicio (3605):** $${formatCOP(eb.utilidadEjercicio)}`);
-    if (eb.utilidadesAcumuladas !== undefined) lines.push(`- **Utilidades acumuladas (3610+3705+3710):** $${formatCOP(eb.utilidadesAcumuladas)}`);
-  }
-
-  if (discrepancies.length > 0) {
-    lines.push('');
-    lines.push('## Discrepancias Detectadas');
-    lines.push('');
-    for (const d of discrepancies) {
-      lines.push(`### ${d.location}`);
-      lines.push(`- **Reportado:** $${formatCOP(d.reported)}`);
-      lines.push(`- **Calculado:** $${formatCOP(d.calculated)}`);
-      lines.push(`- **Diferencia:** $${formatCOP(d.difference)}`);
-      lines.push(`- **Nota:** ${d.description}`);
+    const eb = snap.equityBreakdown;
+    if (Object.keys(eb).length > 0) {
       lines.push('');
+      lines.push('### Desglose de Patrimonio');
+      lines.push('');
+      if (eb.capitalAutorizado !== undefined) lines.push(`- Capital autorizado (3105): $${formatCOP(eb.capitalAutorizado)}`);
+      if (eb.capitalSuscritoPagado !== undefined) lines.push(`- Capital suscrito y pagado (3115+3120): $${formatCOP(eb.capitalSuscritoPagado)}`);
+      if (eb.reservaLegal !== undefined) lines.push(`- Reserva legal (3305): $${formatCOP(eb.reservaLegal)}`);
+      if (eb.otrasReservas !== undefined) lines.push(`- Otras reservas (3310-3395): $${formatCOP(eb.otrasReservas)}`);
+      if (eb.utilidadEjercicio !== undefined) lines.push(`- Utilidad del ejercicio (3605): $${formatCOP(eb.utilidadEjercicio)}`);
+      if (eb.utilidadesAcumuladas !== undefined) lines.push(`- Utilidades acumuladas (3610+3705+3710): $${formatCOP(eb.utilidadesAcumuladas)}`);
     }
-    lines.push('> **REGLA DE ORO:** Se priorizan los totales calculados desde hojas sobre los totales reportados.');
-  } else {
-    lines.push('');
-    lines.push('*No se detectaron discrepancias. Los totales reportados coinciden con la suma de hojas.*');
-  }
 
-  if (missingAccounts.length > 0) {
-    lines.push('');
-    lines.push('## Cuentas PUC Importantes Faltantes o Con Saldo 0');
-    lines.push('');
-    for (const m of missingAccounts) {
-      lines.push(`- ${m}`);
+    if (snap.discrepancies.length > 0) {
+      lines.push('');
+      lines.push('### Discrepancias Detectadas');
+      lines.push('');
+      for (const d of snap.discrepancies) {
+        lines.push(`#### ${d.location}`);
+        lines.push(`- Reportado: $${formatCOP(d.reported)}`);
+        lines.push(`- Calculado: $${formatCOP(d.calculated)}`);
+        lines.push(`- Diferencia: $${formatCOP(d.difference)}`);
+        lines.push(`- Nota: ${d.description}`);
+        lines.push('');
+      }
     }
+
+    if (snap.missingExpectedAccounts.length > 0) {
+      lines.push('');
+      lines.push('### Cuentas PUC Importantes Faltantes o Con Saldo 0');
+      lines.push('');
+      for (const m of snap.missingExpectedAccounts) lines.push(`- ${m}`);
+    }
+
+    if (snap.validation.adjustments.length > 0) {
+      lines.push('');
+      lines.push('### Ajustes Automaticos Aplicados');
+      lines.push('');
+      for (const a of snap.validation.adjustments) lines.push(`- ${a}`);
+    }
+
+    lines.push('');
   }
 
   return lines.join('\n');
 }
-
-function buildCleanData(classes: PUCClass[]): string {
-  const lines: string[] = [];
-  lines.push('codigo,nombre,nivel,saldo');
-
-  for (const c of classes) {
-    for (const acc of c.accounts) {
-      lines.push(`${acc.code},"${acc.name}",${acc.level},${acc.balance.toFixed(2)}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-// ---------------------------------------------------------------------------
-// Test assertions (snippet inline — NO LLM, NO ejecutable en runtime)
-// ---------------------------------------------------------------------------
-// Las siguientes aserciones se usaron durante desarrollo para validar
-// parseNumber. Estan comentadas y no corren en produccion.
-// ---------------------------------------------------------------------------
-/*
-import assert from 'node:assert';
-// Caso colombiano normal
-assert.strictEqual(parseNumber('1.234.567,89'), 1234567.89);
-// Parentesis como negativo
-assert.strictEqual(parseNumber('(1.234,56)'), -1234.56);
-// Prefijo - con decimal US
-assert.strictEqual(parseNumber('-1234.56'), -1234.56);
-// Formato US
-assert.strictEqual(parseNumber('1,234,567.89'), 1234567.89);
-// Con simbolos de moneda
-assert.strictEqual(parseNumber('$ 1.234,56 COP'), 1234.56);
-// Sufijo - (mainframe)
-assert.strictEqual(parseNumber('1234-'), -1234);
-// Input vacio / whitespace => NaN
-assert.ok(Number.isNaN(parseNumber(' ')));
-assert.ok(Number.isNaN(parseNumber('')));
-// Texto no numerico => NaN
-assert.ok(Number.isNaN(parseNumber('N/A')));
-*/

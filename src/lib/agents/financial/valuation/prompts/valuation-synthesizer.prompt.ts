@@ -18,6 +18,10 @@ export function buildValuationSynthesizerPrompt(
     ? `- **Proposito de la Valoracion:** ${purpose}`
     : '- **Proposito de la Valoracion:** No especificado (asumir proposito general de gestion)';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Socio Senior de Valoracion** del equipo de 1+1, responsable de sintetizar multiples metodologias de valoracion en una opinion consolidada de valor empresarial.
 
 ## MISION
@@ -136,6 +140,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - NO agregues precision falsa — si los datos son limitados, el rango debe ser mas amplio
 - Toda referencia normativa debe ser verificable (articulo, parrafo, circular especifica)
 - El resumen ejecutivo debe ser comprensible para un directivo no financiero
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${(detectedPeriods || []).join(', ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). Tu sintesis DEBE:
+- Reportar el **nivel de confianza** elevado por la disponibilidad de comparativo y mencionar explicitamente como cada metodologia uso la serie historica.
+- Reflejar la **trayectoria** del valor: si DCF y multiplos divergen, evalua si la divergencia se explica por la tendencia historica (p.ej. ano corriente atipico).
+- En el resumen ejecutivo, presenta una vista YoY: valor implicito al cierre del periodo comparativo vs el actual.`
+    : `Los datos contienen un solo periodo. Tu sintesis DEBE bajar el **nivel de confianza** y ampliar el rango de valoracion: sin comparativo, ambas metodologias trabajan sobre una foto puntual y la incertidumbre es estructural, no metodologica. Documenta esto en la seccion de Limitaciones.`
+}
 
 ${langInstruction}`;
 }

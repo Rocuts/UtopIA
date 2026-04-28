@@ -14,12 +14,14 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
 export function buildStrategyDirectorPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
+  preprocessed?: PreprocessedBalance,
 ): string {
   const langInstruction =
     language === 'en'
@@ -33,6 +35,39 @@ export function buildStrategyDirectorPrompt(
   const projectionYears = Number.isNaN(baseYear)
     ? ['Ano +1', 'Ano +2', 'Ano +3']
     : [`${baseYear + 1}`, `${baseYear + 2}`, `${baseYear + 3}`];
+
+  // -----------------------------------------------------------------------
+  // Modo comparativo multiperiodo
+  // -----------------------------------------------------------------------
+  const periods = preprocessed?.periods ?? [];
+  const primaryPeriod = preprocessed?.primary?.period;
+  const comparativePeriod = preprocessed?.comparative?.period ?? null;
+  const isComparative = periods.length >= 2 && !!primaryPeriod && !!comparativePeriod;
+  const periodsListed = periods.map((p) => p.period).join(', ');
+
+  const comparativeBlock = isComparative
+    ? `
+## MODO COMPARATIVO (OBLIGATORIO — el preprocesador detecto ${periods.length} periodos: ${periodsListed})
+
+Esta corrida cubre dos periodos historicos del balance: ${primaryPeriod} (actual) y ${comparativePeriod} (comparativo). Tu salida DEBE producir TODOS los KPIs, dashboards y analisis con DOS columnas explicitas + columna de variacion absoluta y % YoY.
+
+Reglas inviolables del modo comparativo:
+
+1. **Dashboard Ejecutivo (Paso 1):** la tabla DEBE tener las columnas \`Rubro | Valor ${primaryPeriod} | Valor ${comparativePeriod} | Variacion absoluta | Variacion % | Interpretacion breve\`. NUNCA omitas la columna del periodo comparativo. Si una cifra del comparativo es 0 o nula, marcala como \`ND\` (no disponible) y explica por que en el comentario, en lugar de saltarla silenciosamente.
+2. **KPIs Financieros (Paso 2):** TODOS los KPIs (Margen Operativo, Margen Neto, ROE, ROA, EBITDA, Razon Corriente, Prueba Acida, Capital de Trabajo, Endeudamiento, Apalancamiento, Cobertura de Intereses, Rotacion de Activos, Ciclo Operativo, CCE) se calculan POR PERIODO. La tabla de KPIs DEBE incluir las columnas \`KPI | Formula con numeros ${primaryPeriod} | Resultado ${primaryPeriod} | Resultado ${comparativePeriod} | Variacion (pp o %) | Diagnostico YoY\`. Para promedios de balance (ROE, ROA, Rotacion), usa el promedio entre ${primaryPeriod} y ${comparativePeriod} cuando aplique; si solo hay 2 puntos, declara la base usada en \`### Notas del Preparador\`.
+3. **Analisis DuPont:** descomposicion para cada periodo + comentario sobre cual driver explica la variacion del ROE entre ${comparativePeriod} y ${primaryPeriod}.
+4. **Tendencias (Paso 3):** la subseccion de tendencias YoY ya no es opcional — es obligatoria. Cita variaciones absolutas y porcentuales para Ingresos, EBITDA, Utilidad Neta, Patrimonio, Capital de Trabajo y margenes (en puntos porcentuales).
+5. **Proyecciones (Paso 4):** las proyecciones siguen ancladas al periodo actual (${primaryPeriod}) — el comparativo (${comparativePeriod}) sirve para calibrar la tasa de crecimiento del escenario base. Si la variacion YoY de ingresos es negativa, el escenario base NO puede asumir crecimiento positivo sin justificacion explicita.
+6. **Recomendaciones (Paso 5):** cada diagnostico debe citar la variacion YoY que la motiva (ej. "Margen Neto cayo de 8.4% en ${comparativePeriod} a 4.1% en ${primaryPeriod}, una contraccion de 4.3 pp...").
+7. Los datos vienen etiquetados con \`[period=YYYY]\` por bloque en el CSV/cleanData del orchestrator. Respeta esa marca: NO mezcles cifras entre periodos.
+`
+    : periods.length === 1
+      ? `
+## MODO SINGLE-PERIOD
+
+El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeriod}). NO hay periodo comparativo: omite columnas de comparativo y de variacion YoY en el dashboard, KPIs y tendencias. Las proyecciones se calibran con macro-supuestos sin ancla historica YoY; declara esa limitacion en \`### Notas del Preparador\`.
+`
+      : '';
 
   return `${guardrail}
 
@@ -49,7 +84,7 @@ Interpretar los estados financieros NIIF generados por el Agente 1 — Analista 
 - **Sector:** ${company.sector || '— (dato no suministrado)'}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
 ${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
-
+${comparativeBlock}
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
 ### Paso 1: Dashboard Ejecutivo

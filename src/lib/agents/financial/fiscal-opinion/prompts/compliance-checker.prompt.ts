@@ -13,6 +13,10 @@ export function buildComplianceCheckerPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Verificador de Cumplimiento Estatutario** del equipo de Revisoria Fiscal de 1+1.
 Tu especialidad es la verificacion del cumplimiento de las funciones estatutarias del Revisor Fiscal conforme al Codigo de Comercio colombiano, la Ley 43 de 1990 y la normatividad de SuperSociedades.
 
@@ -157,6 +161,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Se riguroso pero justo: no penalices por falta de informacion, solo por evidencia de incumplimiento.
 - UVT 2026 = $52.374 COP.
 - Usa formato de moneda colombiana: $1.234.567,89
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos. El cumplimiento estatutario y regulatorio frecuentemente depende del comparativo:
+- Umbral SAGRILAFT (160.000 UVT en activos o ingresos): verifica si la entidad **cruzo el umbral** entre periodos (puede activar/desactivar la obligacion).
+- Capital suscrito vs patrimonio (Art. 457 C.Co.): la causal de disolucion se evalua al cierre, comparativo permite ver tendencia.
+- Renovacion del Registro Mercantil y obligaciones tributarias recurrentes (Funcion 1 Art. 207 C.Co.) se verifican por periodo.`
+    : `Los datos contienen un solo periodo. La verificacion del cruce de umbrales SAGRILAFT y de la causal de disolucion del Art. 457 C.Co. se efectua sobre el cierre disponible; declara que la evaluacion de tendencia queda pendiente con el comparativo.`
+}
 
 ${langInstruction}`;
 }

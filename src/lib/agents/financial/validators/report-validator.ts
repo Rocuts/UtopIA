@@ -153,16 +153,32 @@ function extractHeadlineTotal(markdown: string, pattern: RegExp): number | null 
 }
 
 /**
+ * Opciones avanzadas del validador. Multiperiodo: permite cruzar tambien las
+ * cifras del periodo comparativo cuando el reporte declara dos columnas.
+ */
+export interface ValidateConsolidatedReportOptions {
+  /** Totales del periodo comparativo (si el balance trae 2+ periodos). */
+  comparativeTotals?: ControlTotalsInput;
+  /** Identificador del periodo actual (ej. "2025") — solo para los mensajes de error. */
+  primaryPeriod?: string;
+  /** Identificador del periodo comparativo (ej. "2024") — solo para los mensajes. */
+  comparativePeriod?: string;
+}
+
+/**
  * Valida el reporte consolidado:
  * 1. Rechaza placeholders literales (`$[___]`, `[Fecha]`, etc.) — HARD FAIL.
  * 2. Verifica que existen las 3 secciones maestras (PARTE I/II/III) — HARD FAIL.
  * 3. Sanity-check numerico contra controlTotals (tolerancia 1%) — WARNING.
+ *    Multiperiodo: si `options.comparativeTotals` esta presente, se cruza
+ *    tambien el periodo comparativo con sus propias cifras.
  * 4. Advierte si no se mencionan Activo/Pasivo/Patrimonio juntos — WARNING.
  * 5. Detecta tablas Markdown malformadas — WARNING.
  */
 export function validateConsolidatedReport(
   consolidatedMarkdown: string,
   controlTotals?: ControlTotalsInput,
+  options: ValidateConsolidatedReportOptions = {},
 ): ReportValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -207,49 +223,60 @@ export function validateConsolidatedReport(
   // -----------------------------------------------------------------------
   // 3) Numeric sanity vs. controlTotals — WARNING (tolerancia 1%)
   // -----------------------------------------------------------------------
-  if (controlTotals) {
-    const TOLERANCE = 0.01; // 1%
+  // Multiperiodo: corremos el chequeo dos veces — una para el periodo actual
+  // (anclado al universo de menciones global) y otra para el periodo
+  // comparativo, donde restringimos las menciones a lineas que citen el
+  // identificador del periodo comparativo (ej. "2024") para evitar falsos
+  // positivos cruzados con cifras del periodo actual.
+  // -----------------------------------------------------------------------
+  const TOLERANCE = 0.01; // 1%
+  const checkSpecs = (totals: ControlTotalsInput) => [
+    {
+      label: 'Total Activo',
+      expected: totals.activo,
+      pattern: /total\s*(?:de\s*)?activo(?:s)?\b/i,
+    },
+    {
+      label: 'Total Pasivo',
+      expected: totals.pasivo,
+      pattern: /total\s*(?:de\s*)?pasivo(?:s)?\b/i,
+    },
+    {
+      label: 'Total Patrimonio',
+      expected: totals.patrimonio,
+      pattern: /total\s*(?:del?\s*)?patrimonio\b/i,
+    },
+    {
+      label: 'Utilidad Neta',
+      expected: totals.utilidadNeta,
+      pattern: /utilidad\s*(?:neta|del\s*ejercicio)\b/i,
+    },
+  ];
 
-    const checks: Array<{
-      label: string;
-      expected: number | undefined;
-      pattern: RegExp;
-    }> = [
-      {
-        label: 'Total Activo',
-        expected: controlTotals.activo,
-        pattern: /total\s*(?:de\s*)?activo(?:s)?\b/i,
-      },
-      {
-        label: 'Total Pasivo',
-        expected: controlTotals.pasivo,
-        pattern: /total\s*(?:de\s*)?pasivo(?:s)?\b/i,
-      },
-      {
-        label: 'Total Patrimonio',
-        expected: controlTotals.patrimonio,
-        pattern: /total\s*(?:del?\s*)?patrimonio\b/i,
-      },
-      {
-        label: 'Utilidad Neta',
-        expected: controlTotals.utilidadNeta,
-        pattern: /utilidad\s*(?:neta|del\s*ejercicio)\b/i,
-      },
-    ];
-
-    for (const check of checks) {
+  const sanityCheck = (
+    totals: ControlTotalsInput,
+    periodLabel: string | undefined,
+    restrictToPeriod: string | undefined,
+  ) => {
+    const tag = periodLabel ? ` [${periodLabel}]` : '';
+    for (const check of checkSpecs(totals)) {
       if (typeof check.expected !== 'number' || !Number.isFinite(check.expected)) continue;
-      const mentions = extractTotalsMentions(consolidatedMarkdown, check.pattern);
-      if (mentions.length === 0) continue; // no se menciona -> no es warning
+
+      // Para el comparativo, restringimos a lineas que citen el identificador
+      // del periodo (ej. la columna "2024" en una tabla de dos columnas).
+      const lines = consolidatedMarkdown.split(/\r?\n/);
+      const filteredText = restrictToPeriod
+        ? lines.filter((l) => l.includes(restrictToPeriod)).join('\n')
+        : consolidatedMarkdown;
+
+      const mentions = extractTotalsMentions(filteredText, check.pattern);
+      if (mentions.length === 0) continue;
       const expected = check.expected;
       const absExpected = Math.abs(expected);
-      // Revisar si ALGUNA mencion cae fuera de tolerancia
       let worst: { reported: number; diff: number } | null = null;
       for (const reported of mentions) {
         const diff = Math.abs(reported - expected);
         const pct = absExpected > 0 ? diff / absExpected : diff > 1 ? Infinity : 0;
-        // Requiere 1% de tolerancia Y al menos $100 de diferencia absoluta
-        // (para evitar falsos positivos por redondeo en montos pequenos).
         if (pct > TOLERANCE && diff > 100) {
           if (!worst || diff > worst.diff) {
             worst = { reported, diff };
@@ -258,11 +285,28 @@ export function validateConsolidatedReport(
       }
       if (worst) {
         warnings.push(
-          `${check.label}: reportado ${formatCop(worst.reported)} vs. esperado ${formatCop(expected)} ` +
+          `${check.label}${tag}: reportado ${formatCop(worst.reported)} vs. esperado ${formatCop(expected)} ` +
             `(diferencia ${formatCop(worst.diff)}).`,
         );
       }
     }
+  };
+
+  if (controlTotals) {
+    // Periodo actual: no restringimos por periodo (el reporte single-period
+    // y las menciones globales caen aqui).
+    sanityCheck(controlTotals, options.primaryPeriod, undefined);
+  }
+
+  if (options.comparativeTotals && options.comparativePeriod) {
+    // Periodo comparativo: solo las lineas que mencionan el identificador
+    // del periodo comparativo. Esto evita reportar como discrepancia las
+    // cifras del periodo actual cuando se cruzan contra el comparativo.
+    sanityCheck(
+      options.comparativeTotals,
+      options.comparativePeriod,
+      options.comparativePeriod,
+    );
   }
 
   // -----------------------------------------------------------------------

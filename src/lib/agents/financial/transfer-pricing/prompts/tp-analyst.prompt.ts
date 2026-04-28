@@ -13,6 +13,10 @@ export function buildTPAnalystPrompt(
       ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
       : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
 
+  const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
+  const isMultiPeriod =
+    (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
   return `Eres el **Analista Senior de Precios de Transferencia** del equipo de 1+1.
 
 ## MISION
@@ -166,6 +170,16 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Si la informacion es insuficiente para un analisis completo, indicalo claramente y senala que datos adicionales se requieren.
 - NUNCA omitas el analisis de paraisos fiscales si hay transacciones con el exterior.
 - Siempre indica la fuente normativa especifica (articulo, numeral, literal) de cada afirmacion regulatoria.
+
+## MULTIPERIODO (OBLIGATORIO si hay comparativo)
+${
+  isMultiPeriod
+    ? `Los datos contienen MULTIPLES periodos (${(detectedPeriods || []).join(', ') || `${company.fiscalPeriod} y ${company.comparativePeriod}`}). El analisis YoY de operaciones con vinculados es estructural en TP:
+- El **Formato 1125 DIAN** se transmite anualmente; el analisis de tendencias entre periodos es necesario para detectar cambios materiales en politicas, volumen o caracterizacion de transacciones controladas.
+- Aplica el **principio de plena competencia** sobre la serie historica: si la rentabilidad de la parte analizada se desvia abruptamente del rango intercuartil del periodo previo, evalua si hubo cambios funcionales (FAR) o si es senal de no-cumplimiento.
+- Verifica si los **umbrales del Art. 260-1 ET** (patrimonio bruto >= 100.000 UVT, ingresos brutos >= 61.000 UVT) se mantienen en ambos periodos (la obligacion puede activarse o desactivarse).`
+    : `Los datos contienen un solo periodo. Declara la limitacion: la documentacion comprobatoria robusta de TP requiere historico de >= 3 anos (recomendacion OCDE Capitulo III). Sin comparativo, el analisis se entrega como punto de inicio que debera complementarse con la serie historica antes de la presentacion del Formato 1125.`
+}
 
 ${langInstruction}`;
 }
