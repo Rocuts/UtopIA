@@ -13,6 +13,11 @@ const RATE_LIMITS: Record<string, number> = {
   '/api/rag': 30,
   '/api/web-search': 20,
   '/api/tools/sanction': 30,
+  // Modulo Pyme — uploads disparan OCR (gpt-4o vision, ~$0.015/foto), por eso
+  // mas estricto que /api/upload generico. reports/monthly llama al LLM
+  // summarizer, costo medio.
+  '/api/pyme/uploads': 8,
+  '/api/pyme/reports/monthly': 10,
 };
 const DEFAULT_RATE_LIMIT = 60;
 

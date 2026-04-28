@@ -7,8 +7,11 @@ import { getAlerts, summarizeAlerts } from '@/lib/alerts/feed';
 import type { Alert, ErpConnectionLite } from '@/lib/alerts/types';
 import { AreaCard, type AreaKey, type AreaKpi } from './AreaCard';
 import { ShimmerLoader } from '@/components/ui/ShimmerLoader';
+import Link from 'next/link';
 import {
   AlertTriangle,
+  ArrowRight,
+  BookOpen,
   Compass,
   Scale,
   Shield,
@@ -367,6 +370,50 @@ export function ExecutiveDashboard() {
                   />
                 );
               })}
+        </section>
+
+        <section
+          aria-label={isEs ? 'Módulos auxiliares' : 'Auxiliary modules'}
+          className="flex flex-col gap-3"
+        >
+          <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500 font-medium">
+            {isEs ? 'Módulos' : 'Modules'}
+          </span>
+          <Link
+            href="/workspace/pyme"
+            className={[
+              'group relative flex items-center gap-4 rounded-xl border border-n-200 bg-n-50',
+              'p-5 transition-colors hover:border-area-escudo/40 hover:bg-n-100',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+            ].join(' ')}
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-area-escudo/10 text-area-escudo"
+            >
+              <BookOpen className="h-6 w-6" strokeWidth={1.6} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-serif-elite font-normal text-n-1000 truncate">
+                  {isEs ? 'Contabilidad Pyme' : 'Small Business Bookkeeping'}
+                </h3>
+                <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-area-escudo font-medium">
+                  {isEs ? 'Nuevo' : 'New'}
+                </span>
+              </div>
+              <p className="text-sm text-n-700 font-light truncate">
+                {isEs
+                  ? 'Sube fotos de tu cuaderno y conviértelas en reportes mensuales.'
+                  : 'Upload notebook photos and turn them into monthly reports.'}
+              </p>
+            </div>
+            <ArrowRight
+              className="h-5 w-5 shrink-0 text-n-500 transition-transform group-hover:translate-x-1 group-hover:text-area-escudo"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </Link>
         </section>
       </div>
     </div>

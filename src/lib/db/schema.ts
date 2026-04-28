@@ -163,6 +163,10 @@ export const repairAdjustments = pgTable('repair_adjustments', {
   amount: numeric('amount', { precision: 20, scale: 2 }).notNull(),
   rationale: text('rationale').notNull(),
   status: text('status').notNull(),
+  // Multiperiodo (T1+T5): periodo del snapshot al que aplica el ajuste.
+  // Nullable: si null, el aplicador usa primary.period como default.
+  // Migracion: ALTER TABLE repair_adjustments ADD COLUMN period text;
+  period: text('period'),
   proposedAt: timestamp('proposed_at', { withTimezone: true }).notNull(),
   appliedAt: timestamp('applied_at', { withTimezone: true }),
   rejectedAt: timestamp('rejected_at', { withTimezone: true }),
@@ -185,3 +189,112 @@ export type RepairSession = typeof repairSessions.$inferSelect;
 export type NewRepairSession = typeof repairSessions.$inferInsert;
 export type RepairAdjustment = typeof repairAdjustments.$inferSelect;
 export type NewRepairAdjustment = typeof repairAdjustments.$inferInsert;
+
+// ─── Modulo "Contabilidad Pyme" ─────────────────────────────────────────────
+//
+// Modulo simple para tenderos / microempresas que llevan contabilidad en
+// cuadernos de papel. El usuario fotografia paginas → OCR Vision (gpt-4o)
+// → renglones estructurados (ingreso/egreso, monto, categoria) → revision
+// humana → ledger persistido por workspace.
+//
+// No comparte tablas con el pipeline NIIF. Cuando se quiera puentear, se
+// genera un balance de comprobacion derivado y se enchufa al flujo
+// existente (`reports.kind = 'pyme_monthly'` o un export CSV).
+
+export const pymeBooks = pgTable('pyme_books', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  currency: text('currency').notNull().default('COP'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Una foto subida = una row aqui. `image_url` puede ser:
+//  - una URL https de Vercel Blob (preferido)
+//  - una data URL `data:image/...;base64,...` (fallback MVP cuando Blob
+//    no esta provisionado)
+// `page_count` es siempre 1 para fotos individuales — el campo existe
+// para soportar PDFs multi-pagina en el futuro.
+//
+// El estado avanza pending → processing → done | failed. Los entries
+// extraidos se persisten en `pyme_entries` con `source_image_url` y
+// `source_page` apuntando a esta row.
+export const pymeUploads = pgTable('pyme_uploads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  bookId: uuid('book_id')
+    .notNull()
+    .references(() => pymeBooks.id, { onDelete: 'cascade' }),
+  imageUrl: text('image_url').notNull(),
+  mimeType: text('mime_type').notNull(),
+  pageCount: integer('page_count').notNull().default(1),
+  ocrStatus: text('ocr_status').notNull().default('pending'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Cada renglon del cuaderno. `status = 'draft'` mientras el extractor o el
+// usuario no han confirmado; `status = 'confirmed'` cuando el usuario
+// presiona "guardar" en EntryReview. Solo los confirmed entran a reportes.
+//
+// `category` es texto libre (catalogo recomendado en `pyme_categories`,
+// pero no FK rigida — un tendero puede inventar categorias on-the-fly).
+// `raw_ocr_text` guarda la linea cruda del OCR para auditoria.
+export const pymeEntries = pgTable('pyme_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  bookId: uuid('book_id')
+    .notNull()
+    .references(() => pymeBooks.id, { onDelete: 'cascade' }),
+  uploadId: uuid('upload_id').references(() => pymeUploads.id, {
+    onDelete: 'set null',
+  }),
+  entryDate: timestamp('entry_date', { withTimezone: true }).notNull(),
+  description: text('description').notNull(),
+  kind: text('kind').notNull(), // 'ingreso' | 'egreso'
+  amount: numeric('amount', { precision: 20, scale: 2 }).notNull(),
+  category: text('category'),
+  pucHint: text('puc_hint'), // codigo PUC sugerido (opcional)
+  sourceImageUrl: text('source_image_url'),
+  sourcePage: integer('source_page'),
+  rawOcrText: text('raw_ocr_text'),
+  confidence: numeric('confidence', { precision: 4, scale: 3 }), // 0..1
+  status: text('status').notNull().default('draft'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Catalogo simple de categorias por libro. NO es FK desde `pyme_entries`
+// para permitir categorias ad-hoc, pero la UI sugiere desde aqui.
+export const pymeCategories = pgTable('pyme_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  bookId: uuid('book_id')
+    .notNull()
+    .references(() => pymeBooks.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  kind: text('kind').notNull(), // 'ingreso' | 'egreso'
+  pucHint: text('puc_hint'), // codigo PUC sugerido para futuro export
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type PymeBook = typeof pymeBooks.$inferSelect;
+export type NewPymeBook = typeof pymeBooks.$inferInsert;
+export type PymeUpload = typeof pymeUploads.$inferSelect;
+export type NewPymeUpload = typeof pymeUploads.$inferInsert;
+export type PymeEntry = typeof pymeEntries.$inferSelect;
+export type NewPymeEntry = typeof pymeEntries.$inferInsert;
+export type PymeCategory = typeof pymeCategories.$inferSelect;
+export type NewPymeCategory = typeof pymeCategories.$inferInsert;
