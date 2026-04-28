@@ -18,7 +18,13 @@
 //     manual via `executeRepairTool`.
 // ---------------------------------------------------------------------------
 
-import { streamText, type ModelMessage, type ToolResultPart } from 'ai';
+import {
+  InvalidToolInputError,
+  NoSuchToolError,
+  streamText,
+  type ModelMessage,
+  type ToolResultPart,
+} from 'ai';
 import { MODELS } from '@/lib/config/models';
 import {
   parseTrialBalanceCSV,
@@ -30,6 +36,7 @@ import { executeRepairTool, repairTools } from './tools';
 import type {
   Adjustment,
   RepairChatRequest,
+  RepairToolErrorEvent,
   RepairToolName,
 } from './types';
 
@@ -67,6 +74,18 @@ export async function runRepairAgent(
       const rows = parseTrialBalanceCSV(req.context.rawCsv);
       if (rows.length > 0) {
         preprocessed = preprocessTrialBalance(rows);
+        // Audit P1 fix: parse parcial sospechoso. Si el preprocesador devolvio
+        // filas pero TODOS los totales de control quedaron en cero, casi
+        // seguro el CSV venia con separador equivocado, columnas mal mapeadas
+        // o saldos vacios. Tratar ese resultado como autoritativo lleva a
+        // tools que reportan datos inexistentes. Caemos al raw-text fallback.
+        const ct = preprocessed.controlTotals;
+        if (ct.activo === 0 && ct.pasivo === 0 && ct.patrimonio === 0) {
+          console.warn(
+            '[repair-chat] preprocess parcial sospechoso (totales en cero), cayendo a raw-text fallback',
+          );
+          preprocessed = null;
+        }
       }
     } catch (err) {
       console.warn(
@@ -182,6 +201,44 @@ export async function runRepairAgent(
 
       for (const tc of toolCalls) {
         const args = (tc.input as Record<string, unknown> | undefined) ?? {};
+
+        // Audit P1 fix: si el SDK rechazo el toolCall ANTES del executor (zod
+        // schema invalido o tool name desconocido), `tc.dynamic === true` y
+        // `tc.invalid === true`. Surface al UI como `event: tool_error` para
+        // que el usuario vea la falla, y empuja un tool-result `error-text`
+        // al historial para que el modelo pueda recuperarse en la siguiente
+        // ronda. NO ejecutamos el tool en este caso.
+        if (tc.dynamic === true && tc.invalid === true) {
+          const errCause = tc.error;
+          let kind: RepairToolErrorEvent['kind'] = 'schema_invalid';
+          let message = 'Tool input rechazado por el validador.';
+          if (NoSuchToolError.isInstance(errCause)) {
+            kind = 'unknown_tool';
+            message = `Tool desconocido: ${tc.toolName}`;
+          } else if (InvalidToolInputError.isInstance(errCause)) {
+            kind = 'schema_invalid';
+            message = errCause.message;
+          } else if (errCause instanceof Error) {
+            message = errCause.message;
+          }
+
+          const toolErrorEvt: RepairToolErrorEvent = {
+            id: tc.toolCallId,
+            name: tc.toolName,
+            kind,
+            message,
+            args,
+          };
+          send('tool_error', toolErrorEvt);
+
+          toolResultParts.push({
+            type: 'tool-result',
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            output: { type: 'error-text', value: message },
+          });
+          continue;
+        }
 
         send('tool_call', {
           id: tc.toolCallId,

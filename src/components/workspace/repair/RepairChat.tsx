@@ -36,6 +36,7 @@ import { AdjustmentCard } from './AdjustmentCard';
 import { ValidationStatusStrip } from './ValidationStatusStrip';
 import type {
   Adjustment,
+  ProvisionalFlag,
   RepairContext,
   RepairLanguage,
 } from '@/lib/agents/repair/types';
@@ -57,6 +58,12 @@ export interface RepairChatProps {
    * intención y deja que el agente confirme y dispare `mark_provisional`.
    */
   initialUserMessage?: string;
+  /**
+   * Phase 3 P1 fix #4: el host es la autoridad del provisional flag. Si el
+   * usuario marcó "BORRADOR" desde el flujo del pipeline, lo pasa aquí para
+   * que el autosave del hook persista la intención (DB → reload preserva).
+   */
+  provisional?: ProvisionalFlag | null;
 }
 
 // ─── i18n ───────────────────────────────────────────────────────────────────
@@ -90,6 +97,11 @@ const COPY = {
     regenerateCtaBody:
       'Puedes regenerar el reporte completo aplicando estos ajustes confirmados.',
     regenerateCtaButton: 'Regenerar reporte completo con estos ajustes',
+    toolErrorPrefix:
+      'El Doctor intentó usar una herramienta con datos inválidos:',
+    toolErrorSuffix: 'Si vuelve a pasar, repórtalo.',
+    toolErrorDismissLabel: 'Cerrar aviso',
+    autosaveErrorDismissLabel: 'Cerrar aviso',
   },
   en: {
     region: 'Data Doctor repair chat',
@@ -119,6 +131,11 @@ const COPY = {
     regenerateCtaBody:
       'You can regenerate the full report applying these confirmed adjustments.',
     regenerateCtaButton: 'Regenerate full report with these adjustments',
+    toolErrorPrefix:
+      'The Doctor tried to use a tool with invalid data:',
+    toolErrorSuffix: 'If it happens again, please report it.',
+    toolErrorDismissLabel: 'Dismiss',
+    autosaveErrorDismissLabel: 'Dismiss',
   },
 } as const;
 
@@ -185,9 +202,18 @@ export function RepairChat({
   onClose,
   language,
   initialUserMessage,
+  provisional,
 }: RepairChatProps) {
   const copy = COPY[language];
   const regionId = useId();
+
+  // Phase 3 P1 fix #4: el provisional flag fluye host → hook. Mergeamos con el
+  // context base manteniendo identidad estable mientras `context` y `provisional`
+  // no cambien — evita re-disparar la hidratación del hook por identidad.
+  const enhancedContext = useMemo<RepairContext>(
+    () => ({ ...context, provisional: provisional ?? null }),
+    [context, provisional],
+  );
 
   const {
     // Phase 1
@@ -208,7 +234,12 @@ export function RepairChat({
     confirmAdjustment,
     rejectAdjustment,
     consumeAdjustmentConfirmation,
-  } = useRepairChat(context);
+    // Phase 3 hardening
+    toolError,
+    clearToolError,
+    autosaveError,
+    clearAutosaveError,
+  } = useRepairChat(enhancedContext);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -383,6 +414,42 @@ export function RepairChat({
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
+
+        {/* Phase 3 P1 fix #1: tool_error strip — non-blocking, dismissible.
+            Renders entre header y transcript para no tapar contenido conversacional. */}
+        <AnimatePresence initial={false}>
+          {toolError && (
+            <motion.div
+              key="tool-error-strip"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="overflow-hidden"
+              role="status"
+            >
+              <div className="mx-5 mb-2 flex items-start gap-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
+                <AlertTriangle
+                  className="w-3.5 h-3.5 mt-0.5 shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="flex-1 whitespace-pre-wrap break-words">
+                  {copy.toolErrorPrefix}{' '}
+                  <span className="italic">“{toolError.message}”</span>{' '}
+                  {copy.toolErrorSuffix}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearToolError}
+                  aria-label={copy.toolErrorDismissLabel}
+                  className="flex items-center justify-center w-5 h-5 rounded text-red-700 hover:bg-red-100 transition-colors shrink-0 dark:text-red-200 dark:hover:bg-red-900/40"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Transcript */}
         <div
@@ -682,6 +749,40 @@ export function RepairChat({
               </button>
             </div>
           )}
+
+          {/* Phase 3 P1 fix #2: autosave error strip — los datos no se perdieron,
+              solo no se persistieron. Color ámbar (no rojo) y dismissible. */}
+          <AnimatePresence initial={false}>
+            {autosaveError && (
+              <motion.div
+                key="autosave-error-strip"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                className="overflow-hidden"
+                role="status"
+              >
+                <div className="mt-2 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+                  <AlertTriangle
+                    className="w-3.5 h-3.5 mt-0.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1 whitespace-pre-wrap break-words">
+                    {autosaveError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearAutosaveError}
+                    aria-label={copy.autosaveErrorDismissLabel}
+                    className="flex items-center justify-center w-5 h-5 rounded text-amber-700 hover:bg-amber-100 transition-colors shrink-0 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  >
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.section>

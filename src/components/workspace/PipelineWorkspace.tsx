@@ -1356,6 +1356,13 @@ export function PipelineWorkspace() {
                 }}
                 language={language}
                 initialUserMessage={repairSeed ?? undefined}
+                // Phase 3 P1 fix #4: el provisional flag vive en el pipelineInput
+                // como campo runtime (no declarado en NiifReportIntake). Lo
+                // pasamos al chat para que el autosave del hook lo persista en DB.
+                provisional={
+                  (pipelineInput as NiifReportIntake & { provisional?: ProvisionalFlag })
+                    ?.provisional ?? null
+                }
               />
             </div>
           )}

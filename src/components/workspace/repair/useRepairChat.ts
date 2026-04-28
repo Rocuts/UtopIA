@@ -35,6 +35,7 @@ import type {
   RepairToolResultEvent,
   RepairActionEvent,
   RepairErrorEvent,
+  RepairToolErrorEvent,
   RepairToolName,
 } from '@/lib/agents/repair/types';
 
@@ -67,6 +68,16 @@ export interface UseRepairChat {
   confirmAdjustment: (id: string) => void;
   rejectAdjustment: (id: string) => void;
   consumeAdjustmentConfirmation: () => string | null;
+
+  // Phase 3 hardening (P1 fixes)
+  /** Last schema-failed / unknown / executor-failed tool call surfaced by the backend. */
+  toolError: RepairToolErrorEvent | null;
+  /** Dismiss the current tool error banner. */
+  clearToolError: () => void;
+  /** Last autosave failure message (localized). null when last autosave succeeded. */
+  autosaveError: string | null;
+  /** Dismiss the autosave error banner. */
+  clearAutosaveError: () => void;
 }
 
 // ─── Implementación ─────────────────────────────────────────────────────────
@@ -87,6 +98,12 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
   );
   const [validationStatus, setValidationStatus] =
     useState<RecheckValidationOutput | null>(null);
+
+  // Phase 3 hardening: P1 banners.
+  // - toolError: last schema/exec failure emitted by backend via SSE `tool_error`.
+  // - autosaveError: last localized message when the autosave PUT failed.
+  const [toolError, setToolError] = useState<RepairToolErrorEvent | null>(null);
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -215,12 +232,18 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
         language: ctx.language,
         companyName: ctx.companyName,
         period: ctx.period,
-        // Phase 3.1: cuando el host notifique al hook que el provisional
-        // se confirmó, persistir aquí. Por ahora null (TODO).
-        provisional: null,
+        // Phase 3 P1 fix #4: el host inyecta el provisional flag en el
+        // RepairContext (campo opcional). Si está, lo persistimos para que un
+        // reload preserve la intención del usuario.
+        provisional: ctx.provisional ?? null,
         status: 'open' as const,
         adjustments: adjustmentsRef.current,
       };
+
+      const failureMessage =
+        ctx.language === 'en'
+          ? "We couldn't save your changes. We'll retry."
+          : 'No pudimos guardar los cambios. Se reintentarán.';
 
       fetch('/api/repair-session', {
         method: 'PUT',
@@ -235,11 +258,17 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
               '[useRepairChat] autosave non-2xx',
               res.status,
             );
+            setAutosaveError(failureMessage);
+          } else {
+            // Éxito: limpiar cualquier banner anterior. Solo mutamos si
+            // estaba en error para evitar renders innecesarios.
+            setAutosaveError((prev) => (prev === null ? prev : null));
           }
         })
         .catch((err) => {
           if ((err as Error | undefined)?.name !== 'AbortError') {
             console.error('[useRepairChat] autosave failed', err);
+            setAutosaveError(failureMessage);
           }
         })
         .finally(() => {
@@ -267,6 +296,14 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
 
   const resetError = useCallback(() => {
     setError(null);
+  }, []);
+
+  const clearToolError = useCallback(() => {
+    setToolError(null);
+  }, []);
+
+  const clearAutosaveError = useCallback(() => {
+    setAutosaveError(null);
   }, []);
 
   const consumeProvisional = useCallback((): string | null => {
@@ -445,6 +482,24 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
               setPendingAdjustmentId(ev.adjustmentId);
             }
           },
+          tool_error: (raw) => {
+            // Phase 3 P1 fix #1: backend emite este evento cuando un tool call
+            // falla por schema/unknown/exec. La UI muestra un strip dismissible.
+            const ev = raw as RepairToolErrorEvent;
+            if (!ev || typeof ev !== 'object' || !('message' in ev)) return;
+            setToolError({
+              id: typeof ev.id === 'string' ? ev.id : '',
+              name: typeof ev.name === 'string' ? ev.name : 'unknown',
+              kind: ev.kind ?? 'execution_failed',
+              message:
+                typeof ev.message === 'string' && ev.message.trim()
+                  ? ev.message
+                  : contextRef.current.language === 'en'
+                    ? 'A tool call failed.'
+                    : 'Una herramienta falló.',
+              args: ev.args,
+            });
+          },
           done: () => {
             // Flush del texto streameado al historial. Si no hubo tokens (turno
             // que terminó solo en tool-calls sin respuesta final) NO empujamos
@@ -549,5 +604,10 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
     confirmAdjustment,
     rejectAdjustment,
     consumeAdjustmentConfirmation,
+    // Phase 3 hardening
+    toolError,
+    clearToolError,
+    autosaveError,
+    clearAutosaveError,
   };
 }

@@ -197,6 +197,21 @@ export async function upsertSession(
 
   const sessionId = upserted.id;
 
+  // Audit P1 fix: validar que cada amount cabe en numeric(20,2). El tope
+  // teorico de la columna es 10^18 - 1 con 2 decimales; Number puede
+  // representar hasta ~9.007e15 con precision exacta, asi que cualquier
+  // valor superior es practicamente seguro un decimal corrido o una
+  // alucinacion del modelo. Failsafe: throw para devolver 5xx en lugar de
+  // truncar/corromper silenciosamente al insertar como string.
+  const MAX_NUMERIC_20_2 = 1e18;
+  for (const adj of session.adjustments) {
+    if (!Number.isFinite(adj.amount) || Math.abs(adj.amount) >= MAX_NUMERIC_20_2) {
+      throw new Error(
+        `repair_adjustment_overflow: adjustment ${adj.id} amount=${adj.amount} excede numeric(20,2)`,
+      );
+    }
+  }
+
   // 2. Borrar adjustments existentes del sessionId.
   await db
     .delete(repairAdjustments)

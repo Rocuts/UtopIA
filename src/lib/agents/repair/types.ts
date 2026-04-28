@@ -35,6 +35,13 @@ export interface RepairContext {
   period?: string;
   /** Stable id for this repair session, used for telemetry / future persistence. */
   conversationId: string;
+  /**
+   * Phase 3 hardening: provisional flag that the host has confirmed for this
+   * session. The hook reads it and the autosave persists it so a reload
+   * preserves the user's intent. The hook does NOT mutate this — the host is
+   * still the source of truth (the pipeline override flow lives there).
+   */
+  provisional?: ProvisionalFlag | null;
 }
 
 export interface RepairMessage {
@@ -99,6 +106,33 @@ export interface RepairDoneEvent {
 export interface RepairErrorEvent {
   error: string;
   detail?: string;
+}
+
+/**
+ * Phase 3 hardening (P1 fix): a tool call failed before reaching the executor
+ * — typically because the AI SDK rejected the model's args via the zod schema
+ * (e.g. the model passed `amount: "1000"` as a string instead of a number).
+ * Without surfacing these the failure is invisible to the UI: the user just
+ * sees the agent stall or skip the action silently.
+ *
+ * Distinct from `RepairToolResultEvent`'s `{error: ...}` shape, which is the
+ * runtime error path (executor ran and returned an error). This event covers
+ * the *pre-execution* validation path.
+ *
+ * UI consumes it as a non-blocking toast; the audit log can use it to detect
+ * model regressions ("agent keeps passing strings to numeric fields").
+ */
+export interface RepairToolErrorEvent {
+  /** Tool call id from the SDK if available; synthetic uuid otherwise. */
+  id: string;
+  /** Tool name as the model attempted to call it. May be unknown. */
+  name: string;
+  /** Discriminator for the failure mode. */
+  kind: 'schema_invalid' | 'unknown_tool' | 'execution_failed';
+  /** Human-readable message safe to display in a toast. */
+  message: string;
+  /** Original args the model attempted to pass, if known. Optional — only useful for debugging. */
+  args?: unknown;
 }
 
 // ─── Tool inputs and outputs ────────────────────────────────────────────────
