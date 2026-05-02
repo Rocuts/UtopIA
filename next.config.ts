@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // CommonJS / native modules that must NOT be bundled by webpack/turbopack.
-  serverExternalPackages: ['hnswlib-node', 'pdf-parse', 'mammoth', 'exceljs', 'jspdf'],
+  // (`hnswlib-node` removido en Ola 0.D — el RAG ahora usa Neon pgvector.)
+  serverExternalPackages: ['pdf-parse', 'mammoth', 'exceljs', 'jspdf'],
 
   // Tree-shake barrel re-exports for heavy icon/markdown packages on the client.
   experimental: {
@@ -16,13 +17,8 @@ const nextConfig: NextConfig = {
   },
 
   // File tracing hints for Vercel Fluid Compute.
-  // - Includes: ensures native binaries of hnswlib-node ship with the function bundle.
-  // - Excludes: keeps the 285 MB persisted vector index out of the bundle. In MVP the
-  //   store is local-only (dev); on Vercel it falls back to MemoryVectorStore. When we
-  //   move to a managed vector DB (Upstash Vector / Neon pgvector), these stay as is.
-  outputFileTracingIncludes: {
-    '/api/**/*': ['./node_modules/hnswlib-node/build/**/*'],
-  },
+  // - Excludes: legacy paths que ya no se bundlean (RAG migrado a Neon
+  //   pgvector en Ola 0.D — el index 285 MB ya no vive en el filesystem).
   outputFileTracingExcludes: {
     '/api/**/*': [
       './src/data/vector_store/**/*',
@@ -47,18 +43,36 @@ const nextConfig: NextConfig = {
           {
             key: 'Content-Security-Policy',
             value: [
-              "default-src 'self' http: https: 'unsafe-inline' 'unsafe-eval'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              // default-src restricted to self only — no http:/https: wildcards
+              "default-src 'self'",
+              // 'unsafe-inline' kept ONLY for Next.js inline bootstrap scripts (no nonce yet);
+              // 'unsafe-eval' is required by some dev/HMR paths but should be removed in prod.
+              process.env.NODE_ENV === 'production'
+                ? "script-src 'self' 'unsafe-inline'"
+                : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // style-src must keep 'unsafe-inline' — Next.js + Tailwind inject inline styles.
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https: http:",
+              "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://api.openai.com https://api.tavily.com wss://api.openai.com http://192.168.40.67:* ws://192.168.40.67:*",
+              [
+                "connect-src 'self'",
+                'https://api.openai.com',
+                'wss://api.openai.com',
+                'https://api.tavily.com',
+                'https://api.cohere.com',
+                'https://*.neon.tech',
+                'wss://*.neon.tech',
+                'https://*.public.blob.vercel-storage.com',
+                process.env.NODE_ENV === 'production' ? '' : 'http://192.168.40.67:*',
+                process.env.NODE_ENV === 'production' ? '' : 'ws://192.168.40.67:*',
+              ].filter(Boolean).join(' '),
               "media-src 'self' blob:",
               "worker-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
               "object-src 'none'",
+              "upgrade-insecure-requests",
             ].join('; '),
           },
         ],

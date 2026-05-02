@@ -22,6 +22,29 @@
       "when": 1777224107662,
       "tag": "0002_repair_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777762294938,
+      "tag": "0003_pyme_tables",
+      "breakpoints": true,
+      "hash": "pyme-migration-manual"
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777763715344,
+      "tag": "0004_closed_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777763715345,
+      "tag": "0004b_accounting_triggers",
+      "breakpoints": true,
+      "hash": "accounting-triggers-manual"
     }
   ]
 }

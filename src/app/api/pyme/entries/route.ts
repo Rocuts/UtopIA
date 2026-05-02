@@ -17,9 +17,11 @@ import type { PymeEntry } from '@/lib/db/schema';
 // POST: crea una entry manual (para correcciones cuando el usuario tipea
 //       directamente sin pasar por OCR).
 //
-// `numeric` columns en Postgres llegan como strings desde drizzle-orm/neon-http.
-// Las convertimos a number antes de devolver al cliente para que la UI pueda
-// formatearlas con `.toLocaleString` sin coercion silenciosa.
+// `numeric` columns en Postgres llegan como strings desde drizzle-orm
+// (tanto neon-http como node-postgres preservan el tipo numeric como string
+// para no perder precision). Las convertimos a number antes de devolver al
+// cliente para que la UI pueda formatearlas con `.toLocaleString` sin
+// coercion silenciosa.
 // ---------------------------------------------------------------------------
 
 export const runtime = 'nodejs';

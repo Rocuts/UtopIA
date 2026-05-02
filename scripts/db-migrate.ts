@@ -4,10 +4,15 @@
 //
 // Uso:
 //   npm run db:migrate
+//
+// Driver: pg.Pool + drizzle-orm/node-postgres (TCP). El driver neon-http
+// fue retirado del runtime porque no soporta `db.transaction()`. Para
+// migraciones one-shot el pool se crea, ejecuta `migrate()` y se cierra
+// explicitamente con `pool.end()`.
 
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
-import { migrate } from 'drizzle-orm/neon-http/migrator';
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -16,12 +21,16 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = neon(url);
-  const db = drizzle(sql);
+  const pool = new Pool({ connectionString: url, max: 1 });
+  const db = drizzle(pool);
 
-  console.log('Applying migrations from src/lib/db/migrations …');
-  await migrate(db, { migrationsFolder: './src/lib/db/migrations' });
-  console.log('Migrations applied.');
+  try {
+    console.log('Applying migrations from src/lib/db/migrations …');
+    await migrate(db, { migrationsFolder: './src/lib/db/migrations' });
+    console.log('Migrations applied.');
+  } finally {
+    await pool.end();
+  }
 }
 
 main().catch((err) => {

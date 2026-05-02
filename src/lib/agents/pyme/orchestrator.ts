@@ -92,7 +92,7 @@ export async function processUpload(
 
     // -----------------------------------------------------------------------
     // 3. OCR Vision. La URL puede ser https (Blob) o data:; ambas las acepta
-    //    el extractor (gpt-4o vision soporta ambas).
+    //    el extractor (gpt-5.4 vision soporta ambas).
     // -----------------------------------------------------------------------
     const extraction: ExtractionResult = await extractEntriesFromImage(
       upload.imageUrl,

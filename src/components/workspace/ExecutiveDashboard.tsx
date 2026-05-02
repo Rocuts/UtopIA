@@ -380,6 +380,41 @@ export function ExecutiveDashboard() {
             {isEs ? 'Módulos' : 'Modules'}
           </span>
           <Link
+            href="/workspace/contabilidad"
+            className={[
+              'group relative flex items-center gap-4 rounded-xl border border-n-200 bg-n-50',
+              'p-5 transition-colors hover:border-gold-500/40 hover:bg-n-100',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+            ].join(' ')}
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gold-500/10 text-gold-600"
+            >
+              <BookOpen className="h-6 w-6" strokeWidth={1.6} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-serif-elite font-normal text-n-1000 truncate">
+                  {isEs ? 'Contabilidad' : 'Accounting'}
+                </h3>
+                <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-gold-600 font-medium">
+                  {isEs ? 'Nuevo' : 'New'}
+                </span>
+              </div>
+              <p className="text-sm text-n-700 font-light truncate">
+                {isEs
+                  ? 'Núcleo contable de doble partida: asientos, PUC y saldos iniciales.'
+                  : 'Double-entry accounting core: entries, chart of accounts, opening balances.'}
+              </p>
+            </div>
+            <ArrowRight
+              className="h-5 w-5 shrink-0 text-n-500 transition-transform group-hover:translate-x-1 group-hover:text-gold-500"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </Link>
+          <Link
             href="/workspace/pyme"
             className={[
               'group relative flex items-center gap-4 rounded-xl border border-n-200 bg-n-50',

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { MODEL_IDS } from '@/lib/config/models';
 
 export async function GET() {
   try {
@@ -9,7 +10,7 @@ export async function GET() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-realtime-preview-2024-12-17',
+        model: MODEL_IDS.REALTIME,
         voice: 'alloy',
         tools: [
           {

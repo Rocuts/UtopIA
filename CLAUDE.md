@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is UtopIA
 
-UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** calling **OpenAI directly** through `@ai-sdk/openai` with `OPENAI_API_KEY` (default `gpt-4o-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
+UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. It uses multi-agent orchestration via **AI SDK v6** calling **OpenAI directly** through `@ai-sdk/openai` with `OPENAI_API_KEY` (default `gpt-5.4-mini`), RAG over curated tax documents, and real-time web search to deliver professional-grade consulting through a chat interface.
 
 ## Commands
 
@@ -24,18 +24,20 @@ Required in `.env.local`:
 - `TAVILY_API_KEY` — web search via `src/lib/search/web-search.ts`
 - `UTOPIA_AGENT_MODE` — `orchestrated` (multi-agent) or `legacy` (monolithic). Controls which handler `/api/chat` uses
 
-Optional model overrides (pass plain OpenAI model IDs — no `openai/` prefix; if a legacy value contains the prefix, `envModel()` strips it):
-- `OPENAI_MODEL_CHAT` (default `gpt-4o-mini`) — chat orchestrator, specialists, synthesizer
-- `OPENAI_MODEL_FINANCIAL` (default `gpt-4o-mini`) — financial/audit/tax/valuation/etc. pipelines
-- `OPENAI_MODEL_CLASSIFIER` (default `gpt-4o-mini`) — query classifier (T1/T2/T3 routing)
-- `OPENAI_MODEL_OCR` (default `gpt-4o`) — PDF/image OCR in `/api/upload` (full model, not mini, for accuracy on accounting docs)
+Optional model overrides (pass plain OpenAI model IDs — no `openai/` prefix; if a legacy value contains the prefix, `envModel()` strips it). Defaults are GPT-5.4 family (lanzada marzo 2026; gpt-4o deprecado):
+- `OPENAI_MODEL_CHAT` (default `gpt-5.4-mini`) — chat orchestrator, specialists, synthesizer
+- `OPENAI_MODEL_FINANCIAL` (default `gpt-5.4-mini`) — financial/audit/tax/valuation/etc. pipelines
+- `OPENAI_MODEL_CLASSIFIER` (default `gpt-5.4-nano`) — query classifier (T1/T2/T3 routing); usa nano para ahorrar costo
+- `OPENAI_MODEL_OCR` (default `gpt-5.4`) — PDF/image OCR in `/api/upload` (full model, not mini, for accuracy on accounting docs)
+- `OPENAI_MODEL_OCR_LIGHT` (default `gpt-5.4-mini`) — OCR ligero para facturas y tirillas (vision-extractor pyme)
+- `OPENAI_MODEL_EMBEDDINGS` (default `text-embedding-3-small`) — RAG embeddings via `@langchain/openai`
 - Others in `src/lib/config/models.ts`
 
 `process.env.VERCEL` is checked in `src/lib/rag/vectorstore.ts` to fall back from HNSWLib to MemoryVectorStore on Vercel's read-only filesystem.
 
 ## LLM Provider
 
-- **All AI SDK calls** receive a `LanguageModel` instance from `@ai-sdk/openai` (e.g. `MODELS.CHAT === openai('gpt-4o-mini')`). The provider reads `OPENAI_API_KEY` automatically — **never** pass an `apiKey` option, never instantiate the OpenAI SDK directly, and never use the legacy `'openai/<model>'` gateway-prefixed string.
+- **All AI SDK calls** receive a `LanguageModel` instance from `@ai-sdk/openai` (e.g. `MODELS.CHAT === openai('gpt-5.4-mini')`). The provider reads `OPENAI_API_KEY` automatically — **never** pass an `apiKey` option, never instantiate the OpenAI SDK directly, and never use the legacy `'openai/<model>'` gateway-prefixed string. The GPT-5.4 family ships as reasoning models — AI SDK >= 3.0.55 mapea `maxOutputTokens` -> `max_completion_tokens` automaticamente, asi que las llamadas existentes siguen funcionando sin cambios.
 - Models come from `src/lib/config/models.ts` (`MODELS.CHAT`, `MODELS.FINANCIAL_PIPELINE`, `MODELS.OCR`, etc.). Change model IDs in ONE place; envs override per-key. `envModel()` strips a leading `openai/` if present in env values (defensive, for legacy gateway-style overrides).
 - Migration contract followed by every existing call: `openai.chat.completions.create` → `generateText` / `streamText`, `max_tokens` → `maxOutputTokens`, `response.choices[0].message.content` → `result.text`. For structured outputs, prefer `experimental_output: Output.object({ schema: zodSchema })` on `generateText` (see `src/lib/agents/classifier.ts` for the canonical pattern). The older "append `'Respond ONLY with valid JSON.'` to the system prompt" trick is acceptable for lift-and-shift but less reliable. See `docs/AI_SDK_MIGRATION.md`.
 - Realtime voice still uses direct `fetch('https://api.openai.com/v1/realtime/sessions', ...)` with `OPENAI_API_KEY` — the AI SDK does not yet expose the Realtime API.
@@ -63,7 +65,7 @@ The codebase has two independent multi-agent systems:
 **2. Financial Pipeline** (`src/lib/agents/financial/orchestrator.ts`) — structured reports
 - Three agents run **sequentially** (each feeds the next): NIIF Analyst → Strategy Director → Governance Specialist
 - Does NOT use `BaseSpecialist` or the tool registry — agents are plain `generateText` calls with structured Markdown prompts
-- Uses `MODELS.FINANCIAL_PIPELINE` (default `openai/gpt-4o-mini`). Override via `OPENAI_MODEL_FINANCIAL`.
+- Uses `MODELS.FINANCIAL_PIPELINE` (default `gpt-5.4-mini`). Override via `OPENAI_MODEL_FINANCIAL`.
 - Entry point: `POST /api/financial-report` with SSE streaming. `maxDuration: 300s`
 
 **3. Audit Pipeline** (`src/lib/agents/financial/audit/orchestrator.ts`) — regulatory validation
@@ -132,7 +134,7 @@ Tools are defined in `src/lib/agents/tools/registry.ts` using the AI SDK v6 `too
 
 ### Security Layer
 
-- `src/middleware.ts`: rate limiting (per-IP, per-endpoint), CSRF origin checking, security headers. Only applies to `/api/*` routes
+- `src/proxy.ts` (Next 16, formerly `src/middleware.ts`): rate limiting (workspace-id-or-IP keyed; Vercel WAF first via `@vercel/firewall`, in-memory backstop), fail-closed CSRF origin check on POST/PUT/PATCH/DELETE (with `/api/cron/*` allowlist), security headers. Only applies to `/api/*`. The list of WAF `rateLimitId`s to configure in the Vercel dashboard lives in `docs/PLATFORM_MIGRATION.md`.
 - `src/lib/security/pii-filter.ts`: redacts NIT, cédula, emails, phones, cards before LLM calls. Extracts NIT context (last digit) BEFORE redacting for personalization
 - `next.config.ts`: CSP headers restricting connections to OpenAI + Tavily APIs
 - `src/lib/validation/schemas.ts`: Zod schemas for all API request validation

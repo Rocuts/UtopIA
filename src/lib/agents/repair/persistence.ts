@@ -16,9 +16,10 @@ import type { Adjustment, ProvisionalFlag } from '@/lib/agents/repair/types';
 // snapshot. Esto evita tener que hacer merge/diff a nivel de fila y mantiene
 // la consistencia con el modelo stateless de `/api/repair-chat`.
 //
-// IMPORTANTE: el driver `drizzle-orm/neon-http` NO soporta transacciones
-// interactivas (es HTTP one-shot). Por eso no usamos `db.transaction()`.
-// Mitigación de race / consistencia:
+// NOTA: este endpoint fue diseñado bajo `drizzle-orm/neon-http` (HTTP
+// one-shot, sin transacciones). Tras la migración a `node-postgres` +
+// `pg.Pool` ya hay soporte para `db.transaction()` real, pero el flujo
+// actual sigue siendo seguro y se mantiene por simplicidad:
 //
 // 1. Upsert del header (`repair_sessions`) PRIMERO. Esto garantiza que la
 //    fila exista antes de tocar adjustments y nos da un `sessionId` estable.
@@ -31,6 +32,9 @@ import type { Adjustment, ProvisionalFlag } from '@/lib/agents/repair/types';
 // el mismo navegador. Si llegara un GET justo en esa ventana, devolvería
 // `adjustments: []` en lugar de la versión previa — tolerable porque el
 // cliente ya tiene el state local autoritativo en memoria.
+//
+// TODO(Ola 1): envolver pasos 2-3 en `db.transaction()` ahora que el driver
+// node-postgres lo soporta, eliminando la ventana inconsistente.
 // ---------------------------------------------------------------------------
 
 export interface PersistedSession {

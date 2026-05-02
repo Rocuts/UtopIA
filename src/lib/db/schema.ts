@@ -1,13 +1,20 @@
 import {
   boolean,
+  check,
+  index,
   integer,
   jsonb,
   numeric,
+  pgEnum,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
+  varchar,
+  vector,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type { ProvisionalFlag } from '@/lib/agents/repair/types';
 
 // MVP — schema mínimo funcional, sin auth.
@@ -193,7 +200,7 @@ export type NewRepairAdjustment = typeof repairAdjustments.$inferInsert;
 // ─── Modulo "Contabilidad Pyme" ─────────────────────────────────────────────
 //
 // Modulo simple para tenderos / microempresas que llevan contabilidad en
-// cuadernos de papel. El usuario fotografia paginas → OCR Vision (gpt-4o)
+// cuadernos de papel. El usuario fotografia paginas → OCR Vision (gpt-5.4)
 // → renglones estructurados (ingreso/egreso, monto, categoria) → revision
 // humana → ledger persistido por workspace.
 //
@@ -298,3 +305,376 @@ export type PymeEntry = typeof pymeEntries.$inferSelect;
 export type NewPymeEntry = typeof pymeEntries.$inferInsert;
 export type PymeCategory = typeof pymeCategories.$inferSelect;
 export type NewPymeCategory = typeof pymeCategories.$inferInsert;
+
+// ─── Modulo RAG (Neon pgvector + hybrid search) ────────────────────────────
+//
+// Reemplaza el HNSWLib local que en Vercel caía a MemoryVectorStore vacío
+// (el index 285 MB excede 250 MB de Functions). Usa pgvector 0.8 con HNSW +
+// tsvector('spanish') para hybrid search BM25+vector con RRF.
+//
+// Multi-tenant: una sola tabla `rag_chunks`. `workspace_id NULL` ⇒ corpus
+// global (E.T., NIIF, decretos, doctrina DIAN). `workspace_id <uuid>` ⇒
+// docs subidos por un tenant especifico.
+//
+// `embedding`: 1536 dim ← `text-embedding-3-small` (OpenAI). Si en el
+// futuro se cambia el modelo, generar una nueva tabla `rag_chunks_v2` y
+// migrar progresivamente — no se puede mezclar dimensiones distintas en
+// un mismo HNSW index.
+//
+// `tsv` es una columna GENERATED en SQL crudo (Drizzle aun no expone la
+// sintaxis GENERATED ALWAYS AS ... STORED para tsvector con conversion
+// `to_tsvector('spanish', ...)`). Se materializa en `src/lib/rag/init.ts`
+// con CREATE TABLE IF NOT EXISTS, y aqui solo declaramos la columna como
+// metadata para que Drizzle pueda hacer queries que la referencien si
+// hace falta. Por ahora ni siquiera la exportamos al Drizzle schema —
+// las queries hibridas usan `sql` raw.
+//
+// `contextual_prefix` implementa el patron de Anthropic Contextual
+// Retrieval (50-100 tokens generados por gpt-5.4-mini que ubican el
+// chunk dentro del documento completo). Se concatena con `content` para
+// el tsvector de busqueda lexica.
+export const ragChunks = pgTable(
+  'rag_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // NULL = corpus global (E.T., NIIF, normativa). UUID = docs del tenant.
+    workspaceId: uuid('workspace_id'),
+    source: text('source').notNull(),
+    docType: varchar('doc_type', { length: 64 }),
+    entity: varchar('entity', { length: 64 }),
+    year: integer('year'),
+    section: text('section'),
+    content: text('content').notNull(),
+    contextualPrefix: text('contextual_prefix'),
+    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    wsIdx: index('rag_ws_idx').on(t.workspaceId),
+    sourceIdx: index('rag_source_idx').on(t.source),
+    // Indices HNSW + GIN(tsvector) se crean en init.ts con SQL raw,
+    // ya que Drizzle aun no soporta `USING hnsw (...)` declarativo.
+  }),
+);
+
+export type RagChunk = typeof ragChunks.$inferSelect;
+export type NewRagChunk = typeof ragChunks.$inferInsert;
+
+// ─── Núcleo contable PYME — partida doble (Ola 1) ───────────────────────────
+//
+// Modelo "1+1" para PYMES colombianas: chart_of_accounts (PUC PYMES Decreto
+// 2706/2012 + 2420/2015 Anexo 2), accounting_periods (year/month con
+// status open|closed|locked), third_parties (NIT/CC del libro auxiliar),
+// cost_centers (dimensión analítica), journal_entries + journal_lines
+// (libro mayor con partida doble exacta).
+//
+// Reglas duras del libro mayor (enforced en DB con triggers + checks):
+//  1. journal_entries.totalDebit = journal_entries.totalCredit (CHECK).
+//  2. journal_lines.debit y credit son no-negativos y mutuamente exclusivos
+//     (CHECK: solo uno puede ser >0 por fila).
+//  3. journal_lines.debit + credit > 0 (no se permiten líneas en cero).
+//  4. Una entry posted NO se puede modificar (trigger
+//     `journal_entries_immutable`). Para corregir → reversal entry que
+//     apunte vía `reversalOfEntryId`.
+//  5. No se pueden insertar journal_lines en un período cerrado/bloqueado
+//     (trigger `journal_lines_period_check` lee
+//     accounting_periods.status del período del entry).
+//  6. journal_lines.accountId debe apuntar a una cuenta con `is_postable
+//     = true` (trigger `journal_lines_account_postable`). Las cuentas de
+//     nivel 1-3 (clase/grupo/cuenta) NO son postables; solo nivel 4-5
+//     (subcuenta/auxiliar) lo son.
+//
+// Multi-currency forward-compat: hoy todo es COP, pero `currency`,
+// `exchangeRate`, `functionalDebit`, `functionalCredit` ya existen para
+// soportar empresas con operaciones USD/EUR sin migrar el schema.
+//
+// `metadata` y `dimensions` (jsonb) permiten extensibilidad sin alter
+// table: tags arbitrarios, IDs externos (factura, contrato), referencias
+// a documentos OCR, etc. Las dimensiones que se vuelvan estables migran
+// a columnas indexadas.
+//
+// Numeración: `entry_number` es UNIQUE por (workspace_id, period_id), se
+// asigna al pasar de draft → posted (correlativo gap-less por período).
+// Drafts pueden tener entry_number=0 o reservado; el aplicador del Ola 1.B
+// se encarga del próximo número en una transacción serializable.
+
+export const accountTypeEnum = pgEnum('account_type', [
+  'ACTIVO',
+  'PASIVO',
+  'PATRIMONIO',
+  'INGRESO',
+  'GASTO',
+  'COSTO',
+  'ORDEN_DEUDORA',
+  'ORDEN_ACREEDORA',
+]);
+
+export const periodStatusEnum = pgEnum('period_status', [
+  'open',
+  'closed',
+  'locked',
+]);
+
+export const entryStatusEnum = pgEnum('entry_status', [
+  'draft',
+  'posted',
+  'reversed',
+]);
+
+export const sourceTypeEnum = pgEnum('source_type', [
+  'manual',
+  'import',
+  'invoice',
+  'payment',
+  'depreciation',
+  'adjustment',
+  'closing',
+  'reversal',
+  'ai_generated',
+  'opening',
+]);
+
+export const chartOfAccounts = pgTable(
+  'chart_of_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    code: varchar('code', { length: 16 }).notNull(),
+    name: text('name').notNull(),
+    type: accountTypeEnum('type').notNull(),
+    parentId: uuid('parent_id'),
+    level: integer('level').notNull(),
+    isPostable: boolean('is_postable').notNull().default(false),
+    currency: varchar('currency', { length: 3 }).notNull().default('COP'),
+    requiresThirdParty: boolean('requires_third_party')
+      .notNull()
+      .default(false),
+    requiresCostCenter: boolean('requires_cost_center')
+      .notNull()
+      .default(false),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    wsCodeUniq: uniqueIndex('coa_ws_code_uniq').on(t.workspaceId, t.code),
+    parentIdx: index('coa_parent_idx').on(t.parentId),
+    wsTypeIdx: index('coa_ws_type_idx').on(t.workspaceId, t.type),
+  }),
+);
+
+export const accountingPeriods = pgTable(
+  'accounting_periods',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    year: integer('year').notNull(),
+    month: integer('month').notNull(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    status: periodStatusEnum('status').notNull().default('open'),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closedBy: uuid('closed_by'),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+  },
+  (t) => ({
+    wsYmUniq: uniqueIndex('period_ws_ym_uniq').on(
+      t.workspaceId,
+      t.year,
+      t.month,
+    ),
+    monthCheck: check(
+      'period_month_chk',
+      sql`${t.month} BETWEEN 1 AND 13`,
+    ),
+    wsStatusIdx: index('period_ws_status_idx').on(t.workspaceId, t.status),
+  }),
+);
+
+export const thirdParties = pgTable(
+  'third_parties',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    identificationType: varchar('identification_type', {
+      length: 8,
+    }).notNull(),
+    identification: varchar('identification', { length: 32 }).notNull(),
+    verificationDigit: varchar('verification_digit', { length: 1 }),
+    legalName: text('legal_name').notNull(),
+    tradeName: text('trade_name'),
+    taxRegime: varchar('tax_regime', { length: 32 }),
+    isCustomer: boolean('is_customer').notNull().default(false),
+    isSupplier: boolean('is_supplier').notNull().default(false),
+    isEmployee: boolean('is_employee').notNull().default(false),
+    email: text('email'),
+    phone: text('phone'),
+    address: text('address'),
+    city: varchar('city', { length: 64 }),
+    country: varchar('country', { length: 3 }).notNull().default('COL'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex('tp_ws_id_uniq').on(
+      t.workspaceId,
+      t.identificationType,
+      t.identification,
+    ),
+    wsActiveIdx: index('tp_ws_active_idx').on(t.workspaceId, t.active),
+  }),
+);
+
+export const costCenters = pgTable(
+  'cost_centers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    code: varchar('code', { length: 16 }).notNull(),
+    name: text('name').notNull(),
+    parentId: uuid('parent_id'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex('cc_ws_code_uniq').on(t.workspaceId, t.code),
+  }),
+);
+
+export const journalEntries = pgTable(
+  'journal_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    periodId: uuid('period_id')
+      .notNull()
+      .references(() => accountingPeriods.id, { onDelete: 'restrict' }),
+    entryNumber: integer('entry_number').notNull(),
+    entryDate: timestamp('entry_date', { withTimezone: true }).notNull(),
+    status: entryStatusEnum('status').notNull().default('draft'),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    postedBy: uuid('posted_by'),
+    reversalOfEntryId: uuid('reversal_of_entry_id'),
+    reversedByEntryId: uuid('reversed_by_entry_id'),
+    sourceType: sourceTypeEnum('source_type').notNull().default('manual'),
+    sourceId: uuid('source_id'),
+    sourceRef: text('source_ref'),
+    description: text('description').notNull(),
+    totalDebit: numeric('total_debit', { precision: 20, scale: 2 }).notNull(),
+    totalCredit: numeric('total_credit', { precision: 20, scale: 2 }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('COP'),
+    version: integer('version').notNull().default(1),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    metadata: jsonb('metadata'),
+  },
+  (t) => ({
+    uniqNumber: uniqueIndex('je_ws_period_num_uniq').on(
+      t.workspaceId,
+      t.periodId,
+      t.entryNumber,
+    ),
+    byDate: index('je_ws_date_idx').on(t.workspaceId, t.entryDate),
+    byPeriod: index('je_ws_period_status_idx').on(
+      t.workspaceId,
+      t.periodId,
+      t.status,
+    ),
+    bySource: index('je_source_idx').on(
+      t.workspaceId,
+      t.sourceType,
+      t.sourceId,
+    ),
+    balanceCheck: check(
+      'je_balanced_chk',
+      sql`${t.totalDebit} = ${t.totalCredit}`,
+    ),
+  }),
+);
+
+export const journalLines = pgTable(
+  'journal_lines',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    entryId: uuid('entry_id')
+      .notNull()
+      .references(() => journalEntries.id, { onDelete: 'restrict' }),
+    lineNumber: integer('line_number').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => chartOfAccounts.id),
+    thirdPartyId: uuid('third_party_id').references(() => thirdParties.id),
+    costCenterId: uuid('cost_center_id').references(() => costCenters.id),
+    debit: numeric('debit', { precision: 20, scale: 2 })
+      .notNull()
+      .default('0'),
+    credit: numeric('credit', { precision: 20, scale: 2 })
+      .notNull()
+      .default('0'),
+    currency: varchar('currency', { length: 3 }).notNull().default('COP'),
+    exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 })
+      .notNull()
+      .default('1'),
+    functionalDebit: numeric('functional_debit', { precision: 20, scale: 2 })
+      .notNull()
+      .default('0'),
+    functionalCredit: numeric('functional_credit', { precision: 20, scale: 2 })
+      .notNull()
+      .default('0'),
+    description: text('description'),
+    dimensions: jsonb('dimensions'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniqLine: uniqueIndex('jl_entry_line_uniq').on(t.entryId, t.lineNumber),
+    byAccount: index('jl_ws_account_idx').on(t.workspaceId, t.accountId),
+    byThirdParty: index('jl_ws_tp_idx').on(t.workspaceId, t.thirdPartyId),
+    byCostCenter: index('jl_ws_cc_idx').on(t.workspaceId, t.costCenterId),
+    signCheck: check(
+      'jl_single_side_chk',
+      sql`${t.debit} >= 0 AND ${t.credit} >= 0 AND (${t.debit} = 0 OR ${t.credit} = 0)`,
+    ),
+    positiveCheck: check(
+      'jl_positive_chk',
+      sql`${t.debit} + ${t.credit} > 0`,
+    ),
+  }),
+);
+
+export type ChartOfAccountsRow = typeof chartOfAccounts.$inferSelect;
+export type NewChartOfAccountsRow = typeof chartOfAccounts.$inferInsert;
+export type AccountingPeriodRow = typeof accountingPeriods.$inferSelect;
+export type NewAccountingPeriodRow = typeof accountingPeriods.$inferInsert;
+export type ThirdPartyRow = typeof thirdParties.$inferSelect;
+export type NewThirdPartyRow = typeof thirdParties.$inferInsert;
+export type CostCenterRow = typeof costCenters.$inferSelect;
+export type NewCostCenterRow = typeof costCenters.$inferInsert;
+export type JournalEntryRow = typeof journalEntries.$inferSelect;
+export type NewJournalEntryRow = typeof journalEntries.$inferInsert;
+export type JournalLineRow = typeof journalLines.$inferSelect;
+export type NewJournalLineRow = typeof journalLines.$inferInsert;

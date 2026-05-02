@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Agente categorizador — refina la categoria de un entry contable pyme.
 // ---------------------------------------------------------------------------
-// Modelo: MODELS.CHAT (gpt-4o-mini por defecto). Output forzado via
+// Modelo: MODELS.CHAT (gpt-5.4-mini por defecto). Output forzado via
 // `experimental_output: Output.object({ schema })` igual que el classifier.
 // Para batches > 1 entry, una sola llamada con un array de items para evitar
 // N round-trips.

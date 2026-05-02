@@ -98,7 +98,7 @@ function cellToString(v: unknown): string {
  * Extract text from a scanned (image-only) PDF.
  * Envia el PDF como file part al modelo multimodal via AI SDK con el provider
  * `@ai-sdk/openai` (auth con `OPENAI_API_KEY` directo, sin gateway). El modelo
- * configurado en MODELS.OCR (default `gpt-4o`) acepta `application/pdf` como
+ * configurado en MODELS.OCR (default `gpt-5.4`) acepta `application/pdf` como
  * file part nativo (ver docs AI SDK 02-foundations/03-prompts.mdx).
  *
  * `generateText` con file part hace OCR multipagina y devuelve texto plano. Sin
@@ -145,12 +145,12 @@ async function extractTextFromScannedPDF(buffer: Buffer, filename: string): Prom
 /**
  * Extract text from an image file using Vision OCR (AI SDK + @ai-sdk/openai).
  * Envia la imagen como data URL al modelo multimodal (MODELS.OCR, default
- * `gpt-4o`) usando `OPENAI_API_KEY` directo (sin gateway).
+ * `gpt-5.4`) usando `OPENAI_API_KEY` directo (sin gateway).
  *
  * Nota: el shape `{ type: 'image', image: <data URL> }` esta documentado en
  * node_modules/ai/docs/02-foundations/03-prompts.mdx. `mediaType` es opcional
  * cuando se pasa un data URL (el MIME ya esta embebido). El default del modelo
- * `gpt-4o` es razonable para OCR.
+ * `gpt-5.4` es razonable para OCR.
  *
  * @param buffer   - Raw image bytes.
  * @param filename - Original filename (used for logging / MIME detection).
@@ -474,13 +474,16 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------------------
-    // Vectorization (RAG) — uses centralized store with automatic
-    // HNSWLib → MemoryVectorStore fallback. Non-critical: if it fails
-    // entirely, the extracted text still reaches agents via documentContext.
+    // Vectorization (RAG) — Neon pgvector. Hybrid BM25+cosine search.
+    // Non-critical: si falla la insercion, el texto extraido sigue llegando
+    // a los agentes via documentContext. (No tagueamos workspaceId aun
+    // porque la cookie utopia_workspace_id se introducira con Ola 0.A —
+    // mientras tanto los uploads quedan como global por defecto.)
     // -----------------------------------------------------------------
     const chunksCount = await addDocumentsToStore([text], {
       source: file.name,
       context: contextLabel,
+      docType: 'user_upload',
     });
     if (chunksCount > 0) {
       invalidateVectorStore();

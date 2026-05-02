@@ -45,6 +45,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import {
+  BookOpen,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -58,6 +59,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import {
@@ -232,6 +234,19 @@ function CollapsedRail({
           {messageCount}
         </span>
       )}
+      <Link
+        href="/workspace/contabilidad"
+        prefetch={false}
+        className={cn(
+          'w-10 h-10 rounded-md flex items-center justify-center',
+          'text-n-700 hover:text-n-1000 hover:bg-gold-500/10 transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+        )}
+        aria-label={language === 'es' ? 'Contabilidad' : 'Accounting'}
+        title={language === 'es' ? 'Contabilidad' : 'Accounting'}
+      >
+        <BookOpen className="w-4 h-4" strokeWidth={1.8} />
+      </Link>
       <div className="mt-auto flex flex-col items-center gap-1.5 opacity-60">
         <MessageSquare className="w-4 h-4 text-n-400" />
       </div>
@@ -1143,7 +1158,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       onClick={handleNewChat}
                       className={cn(
                         'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono shrink-0',
-                        'text-n-500 hover:text-n-900 hover:bg-gold-500/6',
+                        'text-n-700 hover:text-n-1000 hover:bg-gold-500/6',
                         'transition-colors',
                       )}
                       title={labels.new}
@@ -1151,8 +1166,24 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       <Plus className="w-3 h-3 text-gold-500" />
                       <span className="hidden sm:inline">{labels.new}</span>
                     </button>
+                    <Link
+                      href="/workspace/contabilidad"
+                      prefetch={false}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono shrink-0',
+                        'text-n-700 hover:text-n-1000 hover:bg-gold-500/6',
+                        'transition-colors',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+                      )}
+                      title={language === 'es' ? 'Contabilidad' : 'Accounting'}
+                    >
+                      <BookOpen className="w-3 h-3 text-gold-500" />
+                      <span className="hidden sm:inline">
+                        {language === 'es' ? 'Contabilidad' : 'Accounting'}
+                      </span>
+                    </Link>
                     <span
-                      className="shrink-0 text-[10px] font-mono uppercase tracking-eyebrow text-n-500 px-2 py-0.5 rounded-full border border-gold-500/15 truncate"
+                      className="shrink-0 text-[10px] font-mono uppercase tracking-eyebrow text-n-700 px-2 py-0.5 rounded-full border border-gold-500/15 truncate"
                       aria-label={`Contexto ${contextLabel}`}
                       title={contextLabel}
                     >

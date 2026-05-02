@@ -348,9 +348,10 @@ export interface MonthlySummary {
 // Agregacion mensual con comparativo vs N-1. Filtra siempre por
 // status = 'confirmed' — los drafts NO entran a reportes.
 //
-// `numeric` columns vienen como string desde drizzle-orm/neon-http;
-// convertimos con Number() antes de devolver. Los rangos de fecha se
-// calculan en JS (month es 0-indexed en `new Date(...)`).
+// `numeric` columns vienen como string desde drizzle-orm (node-postgres
+// preserva la precision de Postgres `numeric`); convertimos con Number()
+// antes de devolver. Los rangos de fecha se calculan en JS (month es
+// 0-indexed en `new Date(...)`).
 export async function monthlySummary(
   bookId: string,
   year: number,
