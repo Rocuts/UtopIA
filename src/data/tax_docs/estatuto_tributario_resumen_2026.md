@@ -1,3 +1,15 @@
+---
+slug: estatuto_tributario_resumen_2026
+title: "Estatuto Tributario de Colombia — Resumen Ejecutivo 2026"
+docType: tax_law_summary
+entity: Estatuto Tributario
+year: 2026
+normCode: "Decreto 624/1989"
+status: vigente
+lastVerified: 2026-05-02
+tags: [estatuto-tributario, resumen, renta, iva, uvt, procedimiento]
+---
+
 # Estatuto Tributario de Colombia — Resumen Ejecutivo 2026
 
 ## Introducción

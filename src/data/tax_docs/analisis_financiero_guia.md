@@ -1,3 +1,13 @@
+---
+slug: analisis_financiero_guia
+title: "Análisis Financiero — Guía Metodológica para Contadores"
+docType: guide
+entity: UtopIA
+year: 2026
+lastVerified: 2026-05-02
+tags: [analisis-financiero, indicadores, liquidez, rentabilidad, niif]
+---
+
 # Análisis Financiero — Guía Metodológica para Contadores
 
 ## Introducción

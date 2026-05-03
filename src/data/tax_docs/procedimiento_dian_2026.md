@@ -1,3 +1,15 @@
+---
+slug: procedimiento_dian_2026
+title: "Procedimiento Tributario ante la DIAN — Guía Práctica 2026"
+docType: procedural_guide
+entity: DIAN
+year: 2026
+normCode: "ET Libro V"
+status: vigente
+lastVerified: 2026-05-02
+tags: [procedimiento, dian, fiscalizacion, requerimiento-especial, recursos]
+---
+
 # Procedimiento Tributario ante la DIAN — Guía Práctica 2026
 
 ## Introducción

@@ -1,3 +1,15 @@
+---
+slug: niif_colombia_2026
+title: "NIIF en Colombia — Guía de Implementación 2026"
+docType: accounting_standard
+entity: CTCP
+year: 2026
+normCode: "Decreto 2420/2015 + Ley 1314/2009"
+status: vigente
+lastVerified: 2026-05-02
+tags: [niif, ifrs, ctcp, grupo-1, grupo-2, grupo-3, decreto-2420]
+---
+
 # NIIF en Colombia — Guía de Implementación 2026
 
 ## Introducción

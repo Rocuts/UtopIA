@@ -1,3 +1,15 @@
+---
+slug: facturacion_electronica_2026
+title: "Facturación Electrónica en Colombia — Guía Práctica 2026"
+docType: guide
+entity: DIAN
+year: 2026
+normCode: "Resolución DIAN 000227/2025"
+status: vigente
+lastVerified: 2026-05-02
+tags: [facturacion-electronica, dian, cufe, ubl, xml]
+---
+
 # Facturación Electrónica en Colombia — Guía Práctica 2026
 
 ## Introducción
