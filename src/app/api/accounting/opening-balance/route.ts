@@ -41,7 +41,8 @@ import {
 // Vercel Fluid Compute: explicit Node.js runtime + 120s ceiling. Esto es
 // computacion pura (sin LLMs); el limite alto cubre archivos con miles de
 // cuentas auxiliares + lookups secuenciales en chart_of_accounts.
-export const runtime = 'nodejs';
+// `export const runtime = 'nodejs'` removido en Ola 2: incompatible con
+// `nextConfig.cacheComponents: true` (nodejs es el default).
 export const maxDuration = 120;
 
 // Limite de tamaño de archivo. El upload route principal usa 4 MB, pero

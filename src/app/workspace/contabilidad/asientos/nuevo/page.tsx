@@ -12,8 +12,6 @@ import { NewEntryWorkspace } from '@/components/workspace/accounting/NewEntryWor
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 export default function NewEntryPage() {
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:py-10">

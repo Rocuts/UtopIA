@@ -28,9 +28,7 @@ import { getDb } from '@/lib/db/client';
 import { verifiedCalendars } from '@/lib/db/schema';
 import { scrapeDIANCalendar } from '@/lib/scrapers/dian-scraper';
 
-export const runtime = 'nodejs';
 export const maxDuration = 60;
-export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   // Auth — Vercel Cron envía Authorization: Bearer ${CRON_SECRET}.

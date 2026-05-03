@@ -13,8 +13,6 @@
  */
 import { ContabilidadLanding } from '@/components/workspace/accounting/ContabilidadLanding';
 
-export const dynamic = 'force-dynamic';
-
 export default function ContabilidadPage() {
   return <ContabilidadLanding />;
 }

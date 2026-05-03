@@ -599,8 +599,11 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // ─── Conversation state ────────────────────────────────────────────────────
+  // Initial: deterministic empty string on SSR/prerender (Math.random/Date.now
+  // are forbidden during prerender with cacheComponents:true). Real ID is
+  // generated client-side after mount in the useEffect below.
   const [conversationId, setConversationId] = useState<string>(() => {
-    if (typeof window === 'undefined') return generateConversationId();
+    if (typeof window === 'undefined') return '';
     try {
       const saved = window.localStorage.getItem(ACTIVE_CONV_STORAGE_KEY);
       if (saved) return saved;
@@ -608,8 +611,16 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
     return generateConversationId();
   });
 
+  useEffect(() => {
+    if (!conversationId) setConversationId(generateConversationId());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // SSR/prerender: empty list (deterministic — `new Date()` in `initialWelcome`
+  // would break Cache Components prerender). Real welcome message arrives on
+  // mount via useEffect below.
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window === 'undefined') return [initialWelcome('es')];
+    if (typeof window === 'undefined') return [];
     try {
       const saved = window.localStorage.getItem(ACTIVE_CONV_STORAGE_KEY);
       if (saved) {
@@ -621,6 +632,11 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
     } catch { /* noop */ }
     return [initialWelcome('es')];
   });
+
+  useEffect(() => {
+    if (messages.length === 0) setMessages([initialWelcome('es')]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist active conversation id
   useEffect(() => {

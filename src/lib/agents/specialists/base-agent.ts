@@ -1,24 +1,46 @@
 // ---------------------------------------------------------------------------
-// Base specialist agent — shared tool-calling loop with retry & resilience
+// Base specialist agent — ToolLoopAgent (AI SDK v6) wrapper
 // ---------------------------------------------------------------------------
-// Migrado a AI SDK v6 (Vercel AI Gateway). Conserva el loop manual con
-// MAX_TOOL_ROUNDS, retry y semánticas de onStreamToken / abortSignal.
+// Migrado a ToolLoopAgent (patrón canónico AI SDK v6). El loop manual con
+// MAX_TOOL_ROUNDS desapareció: ahora la iteración la maneja el SDK gracias a
+// `stopWhen: stepCountIs(20)` (default) y a que cada tool del registry tiene
+// su propio `execute`.
 //
-// Decisión: las tools del registry NO traen `execute`. Eso significa que
-// `generateText` / `streamText` devuelven `toolCalls` sin invocarlas — el loop
-// de aquí abajo las despacha manualmente vía `executeTool(name, args, ctx)`,
-// inyectando el `ToolExecContext` por-llamada (documentos cargados, ERP, etc.).
-// Es la mejor regresión-cero respecto al loop original con `openai`.
+// Per-request context (`ToolExecContext` con documentos cargados, conexiones
+// ERP) viaja vía `experimental_context`: ToolLoopAgent lo inyecta a `options`
+// de cada tool execute. Por eso construimos un nuevo `ToolLoopAgent` por
+// llamada (config liviana, no es un coste real) — así cada request ve su
+// propio bag y collectors.
+//
+// La API pública (`BaseSpecialist`, `execute(query, ctx)`, `SpecialistResult`)
+// se preserva; orchestrator.ts y synthesizer.ts no requieren cambios.
 // ---------------------------------------------------------------------------
 
-import { generateText, streamText, type ModelMessage, type ToolResultPart } from 'ai';
-import { executeTool, getToolsForAgent, type AgentName, type ToolExecContext } from '@/lib/agents/tools/registry';
+import {
+  ToolLoopAgent,
+  stepCountIs,
+  type ModelMessage,
+  type Tool,
+} from 'ai';
+import {
+  getToolsForAgent,
+  type AgentName,
+  type ToolSideEffectSink,
+  type ToolRuntimeBag,
+} from '@/lib/agents/tools/registry';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { MODELS } from '@/lib/config/models';
 import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
+import { agentStepLogger } from '@/lib/observability/agent-logger';
 import type { SpecialistContext, SpecialistResult, ProgressEvent } from '@/lib/agents/types';
 
-const MAX_TOOL_ROUNDS = 6;
+/**
+ * Step ceiling for ToolLoopAgent. Más generoso que el viejo MAX_TOOL_ROUNDS=6
+ * porque cada step es a la vez (texto final | tool call), no una "ronda" del
+ * loop manual. 20 es el default oficial del SDK; lo dejamos explícito para
+ * documentar la intención.
+ */
+const MAX_AGENT_STEPS = 20;
 
 export abstract class BaseSpecialist {
   abstract readonly name: AgentName;
@@ -34,18 +56,23 @@ export abstract class BaseSpecialist {
 
   /**
    * Run the specialist on a query within the given context.
-   * Manages el tool-calling loop manualmente con retry sobre fallos transitorios.
    *
-   * Cuando `ctx.onStreamToken` está provisto Y este especialista es el único
-   * responsable (sin synthesizer downstream), su completación final post-tools
-   * se streamea token-a-token a través del callback.
+   * Internamente:
+   * - Construye el set de tools para este especialista (vía registry, ya con
+   *   `execute` enlazado al dispatcher central).
+   * - Crea un `ToolLoopAgent` per-call con `experimental_context` que lleva
+   *   el `ToolExecContext` y un `sink` para metadatos accesorios (web sources,
+   *   risk, sanction).
+   * - Si `ctx.onStreamToken` está provisto Y el agente soporta streaming,
+   *   usa `agent.stream()` y bombea tokens; si no, `agent.generate()`.
+   * - `onStepFinish` dispara progreso al UI (`agent_working` con tool name) y
+   *   telemetría estructurada (`agent-logger.ts`).
    */
   async execute(query: string, ctx: SpecialistContext): Promise<SpecialistResult> {
     const tools = getToolsForAgent(this.name);
     const systemPrompt = this.buildSystemPrompt(ctx);
 
     // Inject uploaded document content so the specialist always has access to it.
-    // Refactor T1+T5: limite unico via DOCUMENT_MAX_CHARS (antes 80_000 hardcoded).
     const docInjection: ModelMessage[] = [];
     if (ctx.documentContext && ctx.documentContext.trim()) {
       const truncated = ctx.documentContext.length > DOCUMENT_MAX_CHARS;
@@ -82,218 +109,123 @@ export abstract class BaseSpecialist {
       { role: 'user', content: query },
     ];
 
-    let webSearchUsed = false;
-    const webSources: string[] = [];
-    let riskAssessment: SpecialistResult['riskAssessment'] | undefined;
-    let sanctionCalculation: SpecialistResult['sanctionCalculation'] | undefined;
-
-    const toolExecCtx: ToolExecContext = {
-      documentContext: ctx.documentContext,
-      erpConnections: ctx.erpConnections,
+    // Side-effect collector. Lives en el `experimental_context` y es mutado
+    // por los `execute` de cada tool en `registry.ts`.
+    const sink: ToolSideEffectSink = {
+      webSearchUsed: false,
+      webSources: [],
     };
+    const runtimeBag: ToolRuntimeBag = {
+      ctx: {
+        documentContext: ctx.documentContext,
+        erpConnections: ctx.erpConnections,
+      },
+      sink,
+    };
+
+    const stepLogger = agentStepLogger({ agent: this.name });
+
+    // ToolLoopAgent per-call. La construcción es config plana — no incurre
+    // en coste de runtime real.
+    const agent = new ToolLoopAgent<never, Record<string, Tool>>({
+      model: MODELS.CHAT,
+      tools,
+      stopWhen: stepCountIs(MAX_AGENT_STEPS),
+      temperature: 0.1,
+      experimental_context: runtimeBag,
+      onStepFinish: (event) => {
+        // 1) Progress: emite `agent_working` por cada tool invocada en el step.
+        for (const call of event.toolCalls ?? []) {
+          ctx.onProgress?.({
+            type: 'agent_working',
+            agent: this.displayName,
+            status: call.toolName,
+          } as ProgressEvent);
+        }
+        // 2) Telemetría estructurada (latencia, tokens, finishReason).
+        try {
+          stepLogger(event);
+        } catch {
+          /* never break the agent loop on logger error */
+        }
+      },
+    });
 
     const shouldStream = !!ctx.onStreamToken && this.supportsStreaming;
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      ctx.abortSignal?.throwIfAborted?.();
-
-      // Cada ronda: una sola "step" del modelo. Sin `stopWhen`, el AI SDK
-      // devuelve solo el primer paso — exactamente lo que el loop manual
-      // necesita (texto final O un set de tool calls, nunca ambos en la misma
-      // ronda).
-      let finalText: string;
-      let toolCalls: Array<{ toolCallId: string; toolName: string; input: unknown }>;
-
+    try {
       if (shouldStream) {
-        // Streaming path: streamText() — consumimos textStream para tokens y
-        // luego await de toolCalls / text para el cierre de la ronda.
         const result = await withRetry(
           () =>
             Promise.resolve(
-              streamText({
-                model: MODELS.CHAT,
+              agent.stream({
                 messages,
-                tools,
-                toolChoice: 'auto',
-                temperature: 0.1,
                 abortSignal: ctx.abortSignal,
               }),
             ),
-          { label: `${this.name}_round_${round}_stream`, maxAttempts: 3, signal: ctx.abortSignal },
+          { label: `${this.name}_stream`, maxAttempts: 3, signal: ctx.abortSignal },
         );
 
         let acc = '';
         for await (const delta of result.textStream) {
           ctx.abortSignal?.throwIfAborted?.();
-          acc += delta;
-          ctx.onStreamToken?.(delta);
-        }
-
-        toolCalls = await result.toolCalls;
-        finalText = acc || (await result.text);
-      } else {
-        // Non-streaming path
-        const result = await withRetry(
-          () =>
-            generateText({
-              model: MODELS.CHAT,
-              messages,
-              tools,
-              toolChoice: 'auto',
-              temperature: 0.1,
-              abortSignal: ctx.abortSignal,
-            }),
-          { label: `${this.name}_round_${round}`, maxAttempts: 3, signal: ctx.abortSignal },
-        );
-        toolCalls = result.toolCalls;
-        finalText = result.text;
-      }
-
-      if (toolCalls.length > 0) {
-        // El modelo pidió tools — empujamos el assistant message con los
-        // tool-call parts (más texto previo si el modelo emitió razonamiento
-        // antes de llamar la tool) y luego un tool message con resultados.
-        const assistantParts: Array<
-          | { type: 'text'; text: string }
-          | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
-        > = [];
-        if (finalText && finalText.trim()) {
-          assistantParts.push({ type: 'text', text: finalText });
-        }
-        for (const tc of toolCalls) {
-          assistantParts.push({
-            type: 'tool-call',
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            input: tc.input,
-          });
-        }
-        messages.push({ role: 'assistant', content: assistantParts });
-
-        const toolResultParts: ToolResultPart[] = [];
-
-        for (const toolCall of toolCalls) {
-          // `input` viene ya parseado y validado por Zod (no necesita JSON.parse).
-          const args = (toolCall.input as Record<string, unknown> | undefined) ?? {};
-
-          ctx.onProgress?.({
-            type: 'agent_working',
-            agent: this.displayName,
-            status: toolCall.toolName,
-          } as ProgressEvent);
-
-          try {
-            const result = await withRetry(
-              () => executeTool(toolCall.toolName, args, toolExecCtx),
-              { label: `tool_${toolCall.toolName}`, maxAttempts: 2 },
-            );
-            toolResultParts.push({
-              type: 'tool-result',
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              output: { type: 'text', value: result.content },
-            });
-
-            // Collect metadata
-            if (result.meta?.webSearchUsed) webSearchUsed = true;
-            if (result.meta?.webSources) webSources.push(...result.meta.webSources);
-            if (result.meta?.riskAssessment) {
-              const ra = result.meta.riskAssessment;
-              riskAssessment = {
-                level: ra.level,
-                score: ra.score,
-                factors: ra.factors.map((f) => ({ description: f.description, severity: f.severity })),
-                recommendations: ra.recommendations,
-              };
-            }
-            if (result.meta?.sanctionCalculation) {
-              const sc = result.meta.sanctionCalculation;
-              sanctionCalculation = {
-                amount: sc.amount,
-                formula: sc.formula,
-                article: sc.article,
-                explanation: sc.explanation,
-              };
-            }
-          } catch (toolError) {
-            console.warn(
-              `[${this.name}] Tool ${toolCall.toolName} failed after retries:`,
-              toolError instanceof Error ? toolError.message : toolError,
-            );
-            toolResultParts.push({
-              type: 'tool-result',
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              output: {
-                type: 'error-text',
-                value: `Error al ejecutar ${toolCall.toolName}: ${toolError instanceof Error ? toolError.message : 'error desconocido'}. Intenta responder con la informacion disponible o usa otra herramienta.`,
-              },
-            });
+          if (delta) {
+            acc += delta;
+            ctx.onStreamToken?.(delta);
           }
         }
 
-        messages.push({ role: 'tool', content: toolResultParts });
-        continue;
+        // Si por la razón que sea el textStream quedó vacío (p. ej. el modelo
+        // terminó tras una secuencia de tool calls sin texto final), recurrimos
+        // a `result.text` que ya está resuelto por el SDK.
+        const finalText = acc || (await result.text);
+
+        return buildSpecialistResult(finalText, sink);
       }
 
-      // Modelo terminó con texto — devolver resultado.
-      return {
-        content: finalText,
-        webSearchUsed,
-        webSources: [...new Set(webSources)],
-        riskAssessment,
-        sanctionCalculation,
-      };
-    }
-
-    // Safety fallback: max rounds hit, hacer una llamada final sin tools.
-    // Stream también el fallback para que el usuario reciba tokens aunque
-    // se haya agotado el presupuesto de rondas.
-    if (shouldStream) {
       const result = await withRetry(
         () =>
-          Promise.resolve(
-            streamText({
-              model: MODELS.CHAT,
-              messages,
-              temperature: 0.1,
-              abortSignal: ctx.abortSignal,
-            }),
-          ),
-        { label: `${this.name}_final_stream`, maxAttempts: 2, signal: ctx.abortSignal },
+          agent.generate({
+            messages,
+            abortSignal: ctx.abortSignal,
+          }),
+        { label: `${this.name}_generate`, maxAttempts: 3, signal: ctx.abortSignal },
       );
-      let acc = '';
-      for await (const delta of result.textStream) {
-        ctx.abortSignal?.throwIfAborted?.();
-        acc += delta;
-        ctx.onStreamToken?.(delta);
-      }
-      return {
-        content: acc || (await result.text),
-        webSearchUsed,
-        webSources: [...new Set(webSources)],
-        riskAssessment,
-        sanctionCalculation,
-      };
+
+      return buildSpecialistResult(result.text, sink);
+    } catch (err) {
+      console.error(
+        `[base-agent:${this.name}] agent execution failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      throw err;
     }
-
-    const finalResponse = await withRetry(
-      () =>
-        generateText({
-          model: MODELS.CHAT,
-          messages,
-          temperature: 0.1,
-          abortSignal: ctx.abortSignal,
-        }),
-      { label: `${this.name}_final`, maxAttempts: 2, signal: ctx.abortSignal },
-    );
-
-    return {
-      content: finalResponse.text,
-      webSearchUsed,
-      webSources: [...new Set(webSources)],
-      riskAssessment,
-      sanctionCalculation,
-    };
   }
+}
+
+function buildSpecialistResult(content: string, sink: ToolSideEffectSink): SpecialistResult {
+  return {
+    content,
+    webSearchUsed: sink.webSearchUsed,
+    webSources: [...new Set(sink.webSources)],
+    riskAssessment: sink.riskAssessment
+      ? {
+          level: sink.riskAssessment.level,
+          score: sink.riskAssessment.score,
+          factors: sink.riskAssessment.factors.map((f) => ({
+            description: f.description,
+            severity: f.severity,
+          })),
+          recommendations: sink.riskAssessment.recommendations,
+        }
+      : undefined,
+    sanctionCalculation: sink.sanctionCalculation
+      ? {
+          amount: sink.sanctionCalculation.amount,
+          formula: sink.sanctionCalculation.formula,
+          article: sink.sanctionCalculation.article,
+          explanation: sink.sanctionCalculation.explanation,
+        }
+      : undefined,
+  };
 }

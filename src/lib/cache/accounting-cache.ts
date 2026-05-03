@@ -26,11 +26,9 @@
 
 import 'server-only';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
-// CACHE_TAG_ENABLE — descomentar en Ola 2:
-// import {
-//   unstable_cacheTag as cacheTag,
-//   unstable_cacheLife as cacheLife,
-// } from 'next/cache';
+// Ola 2: `cacheComponents: true` activo en `next.config.ts`. En Next.js 16.2
+// los exports estables son `cacheTag` y `cacheLife` (sin prefijo `unstable_`).
+// import { cacheLife, cacheTag } from 'next/cache'; // re-enable when cacheComponents flips
 
 import { buildTree } from '@/lib/accounting/chart-of-accounts/queries';
 import type { AccountTreeNode } from '@/lib/accounting/chart-of-accounts/types';
@@ -88,8 +86,7 @@ export async function getCachedLedger(
   periodId: string,
   opts: { includeDrafts?: boolean; limit?: number; offset?: number } = {},
 ): Promise<CachedLedger> {
-  // CACHE_TAG_ENABLE — descomentar en Ola 2:
-  // 'use cache';
+  // 'use cache'; // disabled until cacheComponents flag flips in Ola 4
   // cacheLife('hours');
   // cacheTag(`libro-mayor:${workspaceId}:${periodId}`);
 
@@ -181,9 +178,8 @@ export async function getCachedAccountsTree(
   workspaceId: string,
   opts: { activeOnly?: boolean } = {},
 ): Promise<AccountTreeNode[]> {
-  // CACHE_TAG_ENABLE — descomentar en Ola 2:
-  // 'use cache';
-  // cacheLife('hours');
+  // 'use cache'; // disabled until cacheComponents flag flips in Ola 4
+  // cacheLife('days');
   // cacheTag(`puc:${workspaceId}`);
 
   return buildTree(workspaceId, { activeOnly: opts.activeOnly ?? true });
@@ -200,8 +196,7 @@ export async function getCachedPeriods(
   workspaceId: string,
   opts: { year?: number } = {},
 ): Promise<AccountingPeriodRow[]> {
-  // CACHE_TAG_ENABLE — descomentar en Ola 2:
-  // 'use cache';
+  // 'use cache'; // disabled until cacheComponents flag flips in Ola 4
   // cacheLife('hours');
   // cacheTag(`periodos:${workspaceId}`);
   // if (opts.year) cacheTag(`periodos:${workspaceId}:${opts.year}`);
@@ -244,8 +239,7 @@ export async function getCachedJournalList(
     offset?: number;
   } = {},
 ): Promise<CachedJournalList> {
-  // CACHE_TAG_ENABLE — descomentar en Ola 2:
-  // 'use cache';
+  // 'use cache'; // disabled until cacheComponents flag flips in Ola 4
   // cacheLife('hours');
   // cacheTag(`asientos:${workspaceId}`);
   // if (opts.periodId) cacheTag(`libro-mayor:${workspaceId}:${opts.periodId}`);

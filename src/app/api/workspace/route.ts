@@ -5,8 +5,6 @@ import { getDb } from '@/lib/db/client';
 import { workspaces } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 
-export const runtime = 'nodejs';
-
 export async function GET() {
   try {
     const ws = await getOrCreateWorkspace();

@@ -12,10 +12,34 @@
  * SSR-safe context — every read from `localStorage` is guarded.
  */
 
-import { getVerifiedNational } from '@/lib/calendars/source';
 import { listReports } from '@/lib/storage/conversation-history';
 import type { NationalDeadline } from '@/data/calendars';
 import type { Alert, AlertArea, AlertSeverity, ErpConnectionLite } from './types';
+
+// NOTA Ola 2: este módulo se usa desde Client Components (ExecutiveDashboard).
+// Importar `@/lib/calendars/source` directamente arrastra `pg` al bundle del
+// cliente y rompe el build (Module not found: 'dns', 'fs', 'net', 'tls').
+// En lugar de eso fetch al endpoint `/api/calendar/verified` que envuelve
+// `getVerifiedNational` server-side.
+interface VerifiedCalendarResponse {
+  source: 'database' | 'fallback' | 'none';
+  deadlines: NationalDeadline[];
+}
+
+async function fetchVerifiedNational(year: number): Promise<VerifiedCalendarResponse> {
+  const baseUrl =
+    typeof window === 'undefined'
+      ? process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:3000'
+      : '';
+  const res = await fetch(`${baseUrl}/api/calendar/verified?year=${year}`, {
+    cache: 'force-cache',
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return { source: 'none', deadlines: [] };
+  return (await res.json()) as VerifiedCalendarResponse;
+}
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -103,7 +127,7 @@ export function nationalToAlert(d: NationalDeadline, userNit?: string): Alert | 
 
 async function deadlineAlerts(userNit?: string): Promise<Alert[]> {
   try {
-    const verified = await getVerifiedNational(2026);
+    const verified = await fetchVerifiedNational(2026);
     if (verified.source === 'none' || verified.deadlines.length === 0) return [];
 
     const out: Alert[] = [];

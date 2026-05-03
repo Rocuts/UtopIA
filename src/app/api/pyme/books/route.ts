@@ -15,8 +15,6 @@ import { HttpError } from '../_lib/ownership';
 // `maxDuration` extendido — usamos el default (60s).
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 // JSON endpoints: 64KB es suficiente para cualquier payload legitimo
 // (createBook tiene 2 campos chicos). Rechazamos abuso antes de parsear.
 const MAX_JSON_BODY = 64 * 1024;

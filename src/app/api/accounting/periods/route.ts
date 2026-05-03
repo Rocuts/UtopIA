@@ -23,9 +23,6 @@ import {
   ok,
 } from '../_shared';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 // ─── GET ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {

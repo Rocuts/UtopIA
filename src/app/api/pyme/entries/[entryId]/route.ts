@@ -21,8 +21,6 @@ import type { PymeEntry } from '@/lib/db/schema';
 // tuyo" para no filtrar existencia entre tenants.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 const MAX_JSON_BODY = 64 * 1024;
 
 type RouteContext = { params: Promise<{ entryId: string }> };

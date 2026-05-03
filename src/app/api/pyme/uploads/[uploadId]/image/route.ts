@@ -21,8 +21,6 @@ import * as repo from '@/lib/db/pyme';
 // referer. Deuda tecnica: migrar a Blob private post-MVP.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 type RouteContext = { params: Promise<{ uploadId: string }> };
 
 const NOT_FOUND = new Response('Not Found', { status: 404 });

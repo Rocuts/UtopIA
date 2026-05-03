@@ -27,9 +27,10 @@ import {
 
 import { badRequestZod, errorResponse, ok } from '../_shared';
 
-export const runtime = 'nodejs';
-// Mutating endpoints must never be cached.
-export const dynamic = 'force-dynamic';
+// Mutating endpoints son dinamicas por defecto bajo Cache Components.
+// `export const dynamic = 'force-dynamic'` y `export const runtime = 'nodejs'`
+// son incompatibles con `nextConfig.cacheComponents: true` y se eliminaron
+// en la Ola 2 (nodejs es el default ahora).
 
 // ─── POST ──────────────────────────────────────────────────────────────────
 

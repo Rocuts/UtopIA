@@ -11,8 +11,6 @@ import { assertBookOwned, HttpError } from '../../_lib/ownership';
 //   Por ahora el MVP solo permite crear y listar; la UI no expone edicion.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 // Next.js 16 — params es Promise.
 type RouteContext = { params: Promise<{ bookId: string }> };
 

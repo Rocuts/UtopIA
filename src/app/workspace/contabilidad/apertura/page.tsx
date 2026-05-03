@@ -8,8 +8,6 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { OpeningBalanceUploader } from '@/components/workspace/accounting/OpeningBalanceUploader';
 
-export const dynamic = 'force-dynamic';
-
 export default function OpeningBalancePage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-8 md:py-10">

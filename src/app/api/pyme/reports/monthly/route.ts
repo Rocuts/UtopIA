@@ -19,8 +19,6 @@ import { assertBookOwned, HttpError } from '../../_lib/ownership';
 // `maxDuration = 300` por la llamada al LLM summarizer (puede tardar 20-40s
 // en frio + agregaciones SQL del summary).
 // ---------------------------------------------------------------------------
-
-export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const MAX_JSON_BODY = 64 * 1024;

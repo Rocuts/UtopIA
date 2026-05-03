@@ -14,8 +14,6 @@ import { z } from 'zod';
 import { runRepairAgent } from '@/lib/agents/repair/agent';
 import type { RepairChatRequest } from '@/lib/agents/repair/types';
 import { redactPII } from '@/lib/security/pii-filter';
-
-export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------

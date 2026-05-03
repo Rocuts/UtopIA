@@ -31,8 +31,6 @@ import {
 // El reseed inicial vive en `seed/route.ts`.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 // JSON endpoints chicos (CreateAccountInput es minúsculo). 32KB rechaza abuso.
 const MAX_JSON_BODY = 32 * 1024;
 

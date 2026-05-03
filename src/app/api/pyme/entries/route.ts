@@ -24,8 +24,6 @@ import type { PymeEntry } from '@/lib/db/schema';
 // coercion silenciosa.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 // JSON endpoints: 64KB es ampliamente suficiente para crear un entry manual.
 const MAX_JSON_BODY = 64 * 1024;
 

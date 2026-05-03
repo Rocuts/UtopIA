@@ -22,8 +22,6 @@ import { assertBookOwned, HttpError } from '../_lib/ownership';
 // archivo HEIC requiere transformacion lenta. La parte LLM corre en el
 // `waitUntil` y NO bloquea el response.
 // ---------------------------------------------------------------------------
-
-export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024;

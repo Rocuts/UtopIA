@@ -18,8 +18,6 @@ import {
 // Body: ninguno requerido. POST sin payload está OK.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 // Sembrar el PUC ejecuta una transacción con varios cientos de INSERTs.
 // 60s del default es suficiente; lo dejamos explícito por documentación.
 export const maxDuration = 60;

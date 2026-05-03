@@ -10,8 +10,6 @@
 
 import { PymeLanding } from '@/components/workspace/pyme/PymeLanding';
 
-export const dynamic = 'force-dynamic';
-
 export default function PymePage() {
   return <PymeLanding />;
 }

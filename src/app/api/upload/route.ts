@@ -12,8 +12,9 @@ import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
 import path from 'path';
 
-// Vercel Fluid Compute: explicit runtime + 300s ceiling for OCR-heavy uploads
-export const runtime = 'nodejs';
+// Vercel Fluid Compute: 300s ceiling for OCR-heavy uploads.
+// `export const runtime = 'nodejs'` removido en Ola 2: incompatible con
+// `nextConfig.cacheComponents: true` (nodejs es default).
 export const maxDuration = 300;
 
 const uploadsPath = getStoragePath('uploads');

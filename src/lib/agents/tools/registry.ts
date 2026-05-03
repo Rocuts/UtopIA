@@ -4,17 +4,17 @@
 // Tool DEFINITIONS live here; tool IMPLEMENTATIONS remain en src/lib/tools/.
 // Each specialist agent picks only the tools it needs via getToolsForAgent().
 //
-// Migrado a AI SDK v6 (Vercel AI Gateway). Las tools se exponen ahora como
-// `Record<string, Tool>` usando el helper `tool()` con `inputSchema` Zod.
+// Migrado a AI SDK v6 + ToolLoopAgent. Cada tool ahora trae su propio `execute`
+// que delega al dispatcher central `executeTool(name, args, ctx)`. El contexto
+// por-llamada (`ToolExecContext` con documentos, conexiones ERP, etc.) viaja
+// vía `experimental_context` que ToolLoopAgent inyecta a `options` de cada
+// `execute` call. Esto preserva el dispatcher único como fuente de verdad —
+// el legacy `/api/chat/route.ts` también lo usa.
 //
-// Decisión de diseño: las tools se definen SIN la propiedad `execute`. El loop
-// manual en BaseSpecialist se encarga de despachar las llamadas a `executeTool`
-// de este mismo módulo, inyectando el `ToolExecContext` (documentos cargados,
-// conexiones ERP, etc.) que es por-llamada y no por-tool. Esto preserva la
-// semántica del loop original con MAX_TOOL_ROUNDS y `withRetry`.
+// El loop manual ya NO existe — ToolLoopAgent auto-itera hasta `stopWhen`.
 // ---------------------------------------------------------------------------
 
-import { tool, type Tool } from 'ai';
+import { tool, type Tool, type ToolCallOptions } from 'ai';
 import { z } from 'zod';
 import { searchDocuments } from '@/lib/rag/vectorstore';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
@@ -25,11 +25,50 @@ import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
 import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 
 // ---------------------------------------------------------------------------
-// Tool definition catalog
+// Side-effect bus carried via experimental_context
 // ---------------------------------------------------------------------------
 //
-// Cada tool se define SIN `execute`. El despacho ocurre en el loop manual del
-// especialista (ver BaseSpecialist) que invoca `executeTool(name, args, ctx)`.
+// `BaseSpecialist.execute()` builds this object por-llamada y lo pasa como
+// `experimental_context`. Cada tool execute lo lee desde `options.experimental_context`,
+// despacha vía `executeTool()` y empuja metadata accesoria al `sink` para que el
+// caller la consuma sin parsear strings JSON.
+// ---------------------------------------------------------------------------
+
+export interface ToolExecContext {
+  documentContext?: string;
+  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
+}
+
+export interface ToolSideEffectSink {
+  webSearchUsed: boolean;
+  webSources: string[];
+  riskAssessment?: RiskAssessment;
+  sanctionCalculation?: SanctionResult;
+}
+
+/**
+ * Internal envelope. `BaseSpecialist` constructs and passes this via
+ * `experimental_context`. Tools read it from `options.experimental_context`.
+ */
+export interface ToolRuntimeBag {
+  ctx: ToolExecContext;
+  sink: ToolSideEffectSink;
+}
+
+function readBag(options: ToolCallOptions): ToolRuntimeBag {
+  const bag = options.experimental_context as ToolRuntimeBag | undefined;
+  if (!bag) {
+    return {
+      ctx: {},
+      sink: { webSearchUsed: false, webSources: [] },
+    };
+  }
+  return bag;
+}
+
+// ---------------------------------------------------------------------------
+// Tool definition catalog — each tool now has its own `execute` that delegates
+// to `executeTool()` so we keep the dispatcher as single source of truth.
 // ---------------------------------------------------------------------------
 
 const SEARCH_DOCS = tool({
@@ -43,6 +82,11 @@ const SEARCH_DOCS = tool({
       .string()
       .describe('A specific search query. Be precise — e.g., "sancion por extemporaneidad Art. 641 E.T."'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('search_docs', args, bag.ctx);
+    return result.content;
+  },
 });
 
 const SEARCH_WEB = tool({
@@ -55,6 +99,13 @@ const SEARCH_WEB = tool({
       .string()
       .describe('A precise search query. Include legal terms, article numbers, or regulation names when possible.'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('search_web', args, bag.ctx);
+    if (result.meta?.webSearchUsed) bag.sink.webSearchUsed = true;
+    if (result.meta?.webSources) bag.sink.webSources.push(...result.meta.webSources);
+    return result.content;
+  },
 });
 
 const CALCULATE_SANCTION = tool({
@@ -94,6 +145,12 @@ const CALCULATE_SANCTION = tool({
       ),
     days: z.number().optional().describe('Días de mora. Para intereses_moratorios.'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('calculate_sanction', args, bag.ctx);
+    if (result.meta?.sanctionCalculation) bag.sink.sanctionCalculation = result.meta.sanctionCalculation;
+    return result.content;
+  },
 });
 
 const ANALYZE_DOCUMENT = tool({
@@ -106,6 +163,11 @@ const ANALYZE_DOCUMENT = tool({
       .describe('Search query to find the relevant uploaded document. E.g., "declaracion de renta 2025".'),
     filename: z.string().optional().describe('Optional: filename to analyze.'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('analyze_document', args, bag.ctx);
+    return result.content;
+  },
 });
 
 const DRAFT_DIAN_RESPONSE = tool({
@@ -126,6 +188,11 @@ const DRAFT_DIAN_RESPONSE = tool({
     supportingDocuments: z.array(z.string()).optional().describe('Supporting documents to reference.'),
     additionalContext: z.string().optional().describe('Additional context for drafting.'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('draft_dian_response', args, bag.ctx);
+    return result.content;
+  },
 });
 
 const ASSESS_RISK = tool({
@@ -139,6 +206,12 @@ const ASSESS_RISK = tool({
         'Detailed description of the case: type, amounts, time elapsed, actions taken, DIAN interactions.',
       ),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('assess_risk', args, bag.ctx);
+    if (result.meta?.riskAssessment) bag.sink.riskAssessment = result.meta.riskAssessment;
+    return result.content;
+  },
 });
 
 const GET_TAX_CALENDAR = tool({
@@ -153,6 +226,12 @@ const GET_TAX_CALENDAR = tool({
       .describe('Type of taxpayer.'),
     city: z.string().optional().describe('Municipality for municipal tax obligations (ICA, predial).'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('get_tax_calendar', args, bag.ctx);
+    if (result.meta?.webSearchUsed) bag.sink.webSearchUsed = true;
+    return result.content;
+  },
 });
 
 const QUERY_ERP = tool({
@@ -189,14 +268,15 @@ const QUERY_ERP = tool({
       .optional()
       .describe('Codigo de cuenta PUC para filtrar (ej: "41" para ingresos, "52" para gastos de ventas).'),
   }),
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('query_erp', args, bag.ctx);
+    return result.content;
+  },
 });
 
 // ---------------------------------------------------------------------------
 // Agent -> Tool mapping
-// ---------------------------------------------------------------------------
-//
-// Mapeo de cada agente al subset de tools que tiene disponibles.
-// Las claves del Record son los nombres de las tools que el modelo verá.
 // ---------------------------------------------------------------------------
 
 const AGENT_TOOLS = {
@@ -249,22 +329,21 @@ export type AgentName = keyof typeof AGENT_TOOLS;
 /**
  * Devuelve el conjunto de tools (formato AI SDK) para el especialista dado.
  *
- * Las tools se devuelven SIN `execute` — el despacho lo hace el loop manual
- * vía `executeTool(name, args, ctx)` para inyectar el `ToolExecContext`
- * por-llamada (documentos, ERP, etc.).
+ * Cada tool ya trae su propio `execute` que delega a `executeTool()` y lee el
+ * `ToolExecContext` desde `experimental_context`. ToolLoopAgent itera sin
+ * intervención manual.
  */
 export function getToolsForAgent(agent: AgentName): Record<string, Tool> {
   return { ...AGENT_TOOLS[agent] };
 }
 
 // ---------------------------------------------------------------------------
-// Tool execution
+// Tool execution dispatcher
 // ---------------------------------------------------------------------------
-
-export interface ToolExecContext {
-  documentContext?: string;
-  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
-}
+//
+// Single source of truth para los efectos de cada tool. Sigue siendo público
+// porque `/api/chat/route.ts` (handler legacy) depende de él para inyectar
+// closures sobre `documentContext` desde su propio path.
 
 export interface ToolExecResult {
   content: string;
@@ -352,7 +431,8 @@ export async function executeTool(
     case 'query_erp': {
       const { queryERP } = await import('@/lib/tools/erp-query');
       const connections = (ctx.erpConnections || []) as import('@/lib/tools/erp-query').ERPConnectionInfo[];
-      const result = await queryERP(args as any, connections);
+      const queryArgs = args as unknown as import('@/lib/tools/erp-query').QueryERPArgs;
+      const result = await queryERP(queryArgs, connections);
       return {
         content: result.content,
         meta: { erpProvider: result.provider, erpRecordCount: result.recordCount },

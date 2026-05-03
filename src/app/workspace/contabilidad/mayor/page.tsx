@@ -8,8 +8,6 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { LedgerView } from '@/components/workspace/accounting/LedgerView';
 
-export const dynamic = 'force-dynamic';
-
 export default function LedgerPage() {
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:py-10">

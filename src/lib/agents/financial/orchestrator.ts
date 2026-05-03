@@ -22,12 +22,16 @@ import type {
   FinancialReportRequest,
   FinancialReport,
   FinancialProgressEvent,
+  NiifAnalysisResult,
+  StrategicAnalysisResult,
+  GovernanceResult,
 } from './types';
 import type {
   AdjustmentLedger,
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
+import { BasePipeline, type PipelineStage } from './base-pipeline';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
@@ -614,92 +618,146 @@ export async function orchestrateFinancialReport(
     preprocessed && isPreprocessedBalance(preprocessed) ? preprocessed : undefined;
 
   // ---------------------------------------------------------------------------
-  // Stage 1: NIIF Analyst
+  // Stages 1-3: NIIF Analyst -> Strategy Director -> Governance Specialist
   // ---------------------------------------------------------------------------
-  onProgress?.({
-    type: 'stage_start',
-    stage: 1,
-    label:
-      'Analista Contable NIIF — Procesando datos y construyendo estados financieros',
-  });
+  // Coordinados via BasePipeline.runSequential. Cada stage emite SSE
+  // `stage_start`/`stage_complete` con el shape FinancialProgressEvent ya
+  // existente — preservamos el contrato del API route. Los stages internos
+  // que ya emiten `stage_progress` (token streaming desde los agentes via
+  // onProgress) siguen funcionando porque la callback es la misma.
+  //
+  // Acumulador: encadenamos los outputs (NIIF -> Strategy y NIIF+Strategy ->
+  // Governance) en un objeto que cada stage agranda monotonicamente. Esto
+  // permite que cada stage reciba lo que necesita sin perder el output
+  // previo, y que el caller obtenga el shape final en un solo pase.
+  // ---------------------------------------------------------------------------
 
-  const niifResult = await runNiifAnalyst(
-    effectiveRawData,
-    effectiveCompany,
-    language,
-    instructions,
-    bindingTotalsBlock,
-    ppForAgents,
-    onProgress,
+  type SequentialAccumulator = {
+    niif?: NiifAnalysisResult;
+    strategy?: StrategicAnalysisResult;
+    governance?: GovernanceResult;
+  };
+
+  const stageLabels: Record<1 | 2 | 3, { start: string; complete: string }> = {
+    1: {
+      start:
+        'Analista Contable NIIF — Procesando datos y construyendo estados financieros',
+      complete: 'Estados financieros NIIF generados',
+    },
+    2: {
+      start: 'Director de Estrategia — Analizando KPIs y proyecciones',
+      complete: 'Dashboard ejecutivo y proyecciones completados',
+    },
+    3: {
+      start:
+        'Especialista en Gobierno Corporativo — Redactando documentos legales',
+      complete: 'Notas contables y acta de asamblea redactadas',
+    },
+  };
+
+  const stages: ReadonlyArray<PipelineStage<unknown, unknown>> = [
+    {
+      name: 'niif-analyst',
+      onStart: () =>
+        onProgress?.({ type: 'stage_start', stage: 1, label: stageLabels[1].start }),
+      onSuccess: (out) => {
+        const acc = out as SequentialAccumulator;
+        // Sanity-check no-fatal: el Agente 1 deberia citar las cifras vinculantes.
+        if (
+          acc.niif &&
+          !niifOutputMentionsBindingTotals(acc.niif.fullContent, preprocessed)
+        ) {
+          onProgress?.({
+            type: 'stage_progress',
+            stage: 1,
+            detail:
+              'Advertencia: el output NIIF no cita ninguno de los totales vinculantes pre-calculados. ' +
+              'Los Agentes 2 y 3 recibiran igualmente los bindingTotals.',
+          });
+        }
+        onProgress?.({ type: 'stage_complete', stage: 1, label: stageLabels[1].complete });
+      },
+      run: async (input) => {
+        const acc = (input as SequentialAccumulator) ?? {};
+        const niifResult = await runNiifAnalyst(
+          effectiveRawData,
+          effectiveCompany,
+          language,
+          instructions,
+          bindingTotalsBlock,
+          ppForAgents,
+          onProgress,
+        );
+        return { ...acc, niif: niifResult } satisfies SequentialAccumulator;
+      },
+    },
+    {
+      name: 'strategy-director',
+      onStart: () =>
+        onProgress?.({ type: 'stage_start', stage: 2, label: stageLabels[2].start }),
+      onSuccess: () =>
+        onProgress?.({ type: 'stage_complete', stage: 2, label: stageLabels[2].complete }),
+      run: async (input) => {
+        const acc = input as SequentialAccumulator;
+        if (!acc?.niif) {
+          throw new Error('strategy-director: missing NIIF output in accumulator');
+        }
+        const strategyResult = await runStrategyDirector(
+          acc.niif,
+          effectiveCompany,
+          language,
+          instructions,
+          bindingTotalsBlock,
+          ppForAgents,
+          onProgress,
+        );
+        return { ...acc, strategy: strategyResult } satisfies SequentialAccumulator;
+      },
+    },
+    {
+      name: 'governance-specialist',
+      onStart: () =>
+        onProgress?.({ type: 'stage_start', stage: 3, label: stageLabels[3].start }),
+      onSuccess: () =>
+        onProgress?.({ type: 'stage_complete', stage: 3, label: stageLabels[3].complete }),
+      run: async (input) => {
+        const acc = input as SequentialAccumulator;
+        if (!acc?.niif || !acc?.strategy) {
+          throw new Error('governance-specialist: missing prior outputs in accumulator');
+        }
+        const governanceResult = await runGovernanceSpecialist(
+          acc.niif,
+          acc.strategy,
+          effectiveCompany,
+          language,
+          instructions,
+          bindingTotalsBlock,
+          ppForAgents,
+          onProgress,
+        );
+        return { ...acc, governance: governanceResult } satisfies SequentialAccumulator;
+      },
+    },
+  ];
+
+  const pipeline = new BasePipeline({ name: 'financial-report' });
+  const sequentialResult = await pipeline.runSequential<SequentialAccumulator>(
+    stages,
+    {} as SequentialAccumulator,
   );
 
-  // Sanity-check no-fatal: el Agente 1 deberia citar las cifras vinculantes.
-  if (!niifOutputMentionsBindingTotals(niifResult.fullContent, preprocessed)) {
-    onProgress?.({
-      type: 'stage_progress',
-      stage: 1,
-      detail:
-        'Advertencia: el output NIIF no cita ninguno de los totales vinculantes pre-calculados. ' +
-        'Los Agentes 2 y 3 recibiran igualmente los bindingTotals.',
-    });
+  if (
+    !sequentialResult.niif ||
+    !sequentialResult.strategy ||
+    !sequentialResult.governance
+  ) {
+    // Imposible si runSequential resolvio sin lanzar — guarda defensivo.
+    throw new Error('financial-pipeline: incomplete sequential output');
   }
 
-  onProgress?.({
-    type: 'stage_complete',
-    stage: 1,
-    label: 'Estados financieros NIIF generados',
-  });
-
-  // ---------------------------------------------------------------------------
-  // Stage 2: Strategy Director
-  // ---------------------------------------------------------------------------
-  onProgress?.({
-    type: 'stage_start',
-    stage: 2,
-    label: 'Director de Estrategia — Analizando KPIs y proyecciones',
-  });
-
-  const strategyResult = await runStrategyDirector(
-    niifResult,
-    effectiveCompany,
-    language,
-    instructions,
-    bindingTotalsBlock,
-    ppForAgents,
-    onProgress,
-  );
-
-  onProgress?.({
-    type: 'stage_complete',
-    stage: 2,
-    label: 'Dashboard ejecutivo y proyecciones completados',
-  });
-
-  // ---------------------------------------------------------------------------
-  // Stage 3: Governance Specialist
-  // ---------------------------------------------------------------------------
-  onProgress?.({
-    type: 'stage_start',
-    stage: 3,
-    label: 'Especialista en Gobierno Corporativo — Redactando documentos legales',
-  });
-
-  const governanceResult = await runGovernanceSpecialist(
-    niifResult,
-    strategyResult,
-    effectiveCompany,
-    language,
-    instructions,
-    bindingTotalsBlock,
-    ppForAgents,
-    onProgress,
-  );
-
-  onProgress?.({
-    type: 'stage_complete',
-    stage: 3,
-    label: 'Notas contables y acta de asamblea redactadas',
-  });
+  const niifResult = sequentialResult.niif;
+  const strategyResult = sequentialResult.strategy;
+  const governanceResult = sequentialResult.governance;
 
   // ---------------------------------------------------------------------------
   // Stage 4: Consolidation + post-render validation

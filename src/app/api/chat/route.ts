@@ -14,8 +14,9 @@ import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 import { orchestrate } from '@/lib/agents/orchestrator';
 import type { ProgressEvent } from '@/lib/agents/types';
 
-// Vercel Fluid Compute: explicit runtime + 300s ceiling for T3 parallel specialists + SSE
-export const runtime = 'nodejs';
+// Vercel Fluid Compute: 300s ceiling for T3 parallel specialists + SSE.
+// `export const runtime = 'nodejs'` removido en Ola 2: incompatible con
+// `nextConfig.cacheComponents: true` (nodejs es default).
 export const maxDuration = 300;
 
 interface ChatMessage {

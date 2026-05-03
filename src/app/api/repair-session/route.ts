@@ -18,8 +18,6 @@ import {
 } from '@/lib/agents/repair/persistence';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 
-export const runtime = 'nodejs';
-
 // ─── Schemas ────────────────────────────────────────────────────────────────
 //
 // Mismo shape que `/api/repair-chat` pero con campos extra (status,

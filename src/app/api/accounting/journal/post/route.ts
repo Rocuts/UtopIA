@@ -13,9 +13,6 @@ import { postEntryBodySchema } from '@/lib/validation/accounting-schemas';
 
 import { badRequestZod, errorResponse, ok } from '../../_shared';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 export async function POST(req: Request) {
   let raw: unknown;
   try {

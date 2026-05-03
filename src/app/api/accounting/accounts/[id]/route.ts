@@ -20,8 +20,6 @@ import { updateAccountBodySchema } from '@/lib/validation/accounting-schemas';
 //         movimientos en `journal_lines`.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 const MAX_JSON_BODY = 16 * 1024;
 
 const idParamSchema = z.string().uuid('id must be a valid UUID');

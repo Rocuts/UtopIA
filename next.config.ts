@@ -3,12 +3,22 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // CommonJS / native modules that must NOT be bundled by webpack/turbopack.
   // (`hnswlib-node` removido en Ola 0.D — el RAG ahora usa Neon pgvector.)
-  serverExternalPackages: ['pdf-parse', 'mammoth', 'exceljs', 'jspdf'],
+  serverExternalPackages: ['pdf-parse', 'mammoth', 'exceljs', 'jspdf', 'pg', 'pg-connection-string', 'pgpass', 'pg-native'],
 
   // Tree-shake barrel re-exports for heavy icon/markdown packages on the client.
   experimental: {
     optimizePackageImports: ['lucide-react', 'motion', 'react-markdown', 'remark-gfm', 'rehype-sanitize'],
   },
+
+  // Cache Components (Next 16): activación pendiente de Ola 4. Activar
+  // `cacheComponents: true` requiere envolver Client Components con
+  // initializers no-deterministas (`new Date()`, `Math.random()`) en
+  // `<Suspense>` boundaries y mover el state init a useEffect. Los helpers
+  // `src/lib/cache/{accounting-cache,ledger-queries}.ts` están listos para
+  // activarse junto con esa migración por-página. Por ahora corren como
+  // queries normales sin cache. Las Server Actions ya emiten `updateTag(...)`
+  // listo para cuando el flag se prenda.
+  // cacheComponents: true,
 
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'

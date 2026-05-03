@@ -9,8 +9,6 @@
 
 import { BookWorkspace } from '@/components/workspace/pyme/BookWorkspace';
 
-export const dynamic = 'force-dynamic';
-
 interface PageProps {
   params: Promise<{ bookId: string }>;
 }

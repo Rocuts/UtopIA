@@ -20,8 +20,6 @@ import * as repo from '@/lib/db/pyme';
 // hay cookie, no hay ownership posible -> 404.
 // ---------------------------------------------------------------------------
 
-export const runtime = 'nodejs';
-
 // Si un upload lleva mas de 5 minutos en `processing` (max maxDuration=300s
 // del route POST), asumimos que el waitUntil murio antes de actualizar el
 // estado. Reportamos `failed` al cliente para que pueda reintentar sin tocar
