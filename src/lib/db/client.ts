@@ -39,7 +39,18 @@ export function getDb() {
         'DATABASE_URL is not set. Run `vercel env pull .env.local --yes` after `vercel integration add neon`. The connection string MUST point to the Neon pooled endpoint (host contains `-pooler`).',
       );
     }
-    _pool = new Pool({ connectionString: url, max: 5 });
+    _pool = new Pool({
+      connectionString: url,
+      max: 5,
+      // Server-side timeout: PG aborta la query y libera la conexion limpiamente.
+      // Sin esto, una INSERT que tarda mas que el timeout JS deja la conexion
+      // en estado "busy" y todas las queries siguientes fallan (vimos 195 leyes
+      // skipped en cascada en el ingest 2026-05). 120s cubre INSERTs grandes
+      // (1MB+) sin dejar querys colgadas eternamente.
+      statement_timeout: 120_000,
+      query_timeout: 130_000,
+      connectionTimeoutMillis: 10_000,
+    });
     attachDatabasePool(_pool);
     _db = drizzle(_pool, { schema });
   }
