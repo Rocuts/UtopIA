@@ -67,6 +67,9 @@ export const config: VercelConfig = {
     // cron/monthly-close/route.ts: 300s to iterate all workspaces and fire starts.
     'src/app/api/accounting/close/start/route.ts': { maxDuration: 60 },
     'src/app/api/cron/monthly-close/route.ts': { maxDuration: 300 },
+    // D5.3 — Forensic Anomaly Detection cron.
+    // 300s para iterar todos los workspaces con 6 reglas deterministas cada uno.
+    'src/app/api/cron/anomaly-detection/route.ts': { maxDuration: 300 },
   },
 
   // Cron jobs (production deployment only). Endpoints under /api/cron/* are
@@ -75,5 +78,7 @@ export const config: VercelConfig = {
     { path: '/api/cron/calendar-sync', schedule: '0 11 * * *' },
     // WS5: 1ro de cada mes a las 06:00 UTC = 01:00 Colombia (UTC-5).
     { path: '/api/cron/monthly-close', schedule: '0 6 1 * *' },
+    // D5.3: escaneo forense nocturno — 04:00 UTC = 23:00 Colombia (UTC-5).
+    { path: '/api/cron/anomaly-detection', schedule: '0 4 * * *' },
   ],
 };

@@ -163,6 +163,7 @@ Lista de flags en este Ola:
 - `UTOPIA_ENABLE_AUTO_ADJUSTMENTS` (WS4)
 - `UTOPIA_ENABLE_MONTHLY_CLOSE_WORKFLOW` (WS5)
 - `UTOPIA_ENABLE_NOTIFICATIONS` (WS6)
+- `UTOPIA_ENABLE_ANOMALY_DETECTION` (D5.3) — cron forense nocturno. OFF por defecto. Encender tras smoke-test del cierre mensual.
 
 ---
 

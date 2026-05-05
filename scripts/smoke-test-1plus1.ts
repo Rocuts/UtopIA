@@ -29,6 +29,8 @@ import {
   type StepResult,
   type SectionSummary,
 } from './smoke-test-1plus1/reporter';
+import { bootstrapSmokeFixtures, type SmokeFixturesResult } from './smoke-fixtures';
+import { closeSmokePool } from './smoke-test-1plus1/db-helpers';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,8 @@ interface SmokeCtx {
   fixedAssetId: string | null;
   closeRunId: string | null;
   pymeEntryIds: string[];
+  // UUIDs resueltos por el bootstrap (no requieren env vars)
+  chartAccountIds: SmokeFixturesResult['chartAccountIds'] | null;
 }
 
 // ─── Timing helper ────────────────────────────────────────────────────────────
@@ -276,18 +280,30 @@ async function runWS2(ctx: SmokeCtx): Promise<SectionSummary> {
   const steps: SectionSummary['steps'] = [];
 
   // ── pyme-create-entry ─────────────────────────────────────────────────────
-  // Este step requiere inserts directos en DB (no hay endpoint POST pyme_entries
-  // que acepte status='confirmed' externamente). Lo marcamos SKIP con instrucción.
+  // El bootstrap ya insertó los entries directamente vía pg.Pool — no se
+  // necesita un endpoint ni instrucción manual.
   {
     const t = now();
-    steps.push({
-      name: 'pyme-create-entry',
-      result: warn(
-        'Requiere fixture directo en DB — ver SMOKE_TEST_GUIDE.md §WS2',
-        'Crear pyme_entries con status=confirmed via: INSERT INTO pyme_entries ...',
-        t,
-      ),
-    });
+    const count = ctx.pymeEntryIds.length;
+    if (count >= 1) {
+      steps.push({
+        name: 'pyme-create-entry',
+        result: pass(
+          `${count} pyme_entries confirmed creados por bootstrap`,
+          `IDs: ${ctx.pymeEntryIds.map((id) => id.slice(0, 8)).join(', ')}…`,
+          t,
+        ),
+      });
+    } else {
+      steps.push({
+        name: 'pyme-create-entry',
+        result: warn(
+          'Bootstrap no creó pyme_entries — pymeEntryIds vacío',
+          'Verifica que el pyme book se creó correctamente',
+          t,
+        ),
+      });
+    }
   }
 
   // ── pyme-promote ──────────────────────────────────────────────────────────
@@ -356,36 +372,23 @@ async function runWS3(ctx: SmokeCtx): Promise<SectionSummary> {
 
   const steps: SectionSummary['steps'] = [];
 
-  // Necesitamos un accountId (chart_of_accounts.id) para crear el bank_account.
-  // Primero intentamos listar las cuentas del workspace para obtener una.
-  let chartAccountId: string | null = null;
-  {
+  // Usar el UUID resuelto por el bootstrap (111005 / 111010 Bancos)
+  const chartAccountId: string | null = ctx.chartAccountIds?.bank ?? null;
+
+  if (!chartAccountId) {
     const t = now();
-    try {
-      const res = await ctx.http.get(`/api/accounting/periods?workspaceId=${ctx.workspaceId}`);
-      // No hay un endpoint de listado de cuentas expuesto directo; intentamos
-      // el endpoint de banking/accounts (GET lista cuentas bancarias; pero necesitamos PUC).
-      // Usaremos un accountId placeholder que el usuario debe tener en su PUC.
-      // Para el smoke-test usamos el env SMOKE_CHART_ACCOUNT_ID si está seteado.
-      void res; // no usado
-    } catch { /* ignore */ }
-
-    chartAccountId = process.env.SMOKE_CHART_ACCOUNT_ID ?? null;
-
-    if (!chartAccountId) {
-      steps.push({
-        name: 'bank-acc-create',
-        result: warn(
-          'SMOKE_CHART_ACCOUNT_ID no configurado — saltando creación de cuenta bancaria',
-          'Exporta SMOKE_CHART_ACCOUNT_ID=<uuid de chart_of_accounts> para probar WS3',
-          t,
-        ),
-      });
-      steps.push({ name: 'bank-csv-import', result: warn('Saltado — sin bankAccountId', undefined, t) });
-      steps.push({ name: 'bank-csv-reimport', result: warn('Saltado — sin bankAccountId', undefined, t) });
-      steps.push({ name: 'bank-status', result: warn('Saltado — sin bankAccountId y periodId', undefined, t) });
-      return { name: 'WS3 — Bank Reconciliation', skipped: false, flagLabel: 'UTOPIA_ENABLE_BANK_RECON', steps };
-    }
+    steps.push({
+      name: 'bank-acc-create',
+      result: warn(
+        'Bootstrap no encontró cuenta bancaria postable en chart_of_accounts — WS3 saltado',
+        'Verifica que el PUC seed incluyó 111005 (Bancos) y que is_postable=true',
+        t,
+      ),
+    });
+    steps.push({ name: 'bank-csv-import', result: warn('Saltado — sin chartAccountId', undefined, now()) });
+    steps.push({ name: 'bank-csv-reimport', result: warn('Saltado — sin chartAccountId', undefined, now()) });
+    steps.push({ name: 'bank-status', result: warn('Saltado — sin chartAccountId', undefined, now()) });
+    return { name: 'WS3 — Bank Reconciliation', skipped: false, flagLabel: 'UTOPIA_ENABLE_BANK_RECON', steps };
   }
 
   // ── bank-acc-create ───────────────────────────────────────────────────────
@@ -614,33 +617,32 @@ async function runWS4(ctx: SmokeCtx): Promise<SectionSummary> {
   }
 
   // ── fa-create ─────────────────────────────────────────────────────────────
-  // Necesitamos accountIds de chart_of_accounts para los 3 campos requeridos.
-  // Si no están en env, marcamos como WARN con instrucción.
+  // UUIDs resueltos por el bootstrap — sin requerir env vars manuales.
   {
     const t = now();
-    const assetAccId = process.env.SMOKE_FA_ASSET_ACCOUNT_ID ?? null;
-    const depAccId = process.env.SMOKE_FA_DEP_ACCOUNT_ID ?? null;
-    const expAccId = process.env.SMOKE_FA_EXP_ACCOUNT_ID ?? null;
+    const assetAccId = ctx.chartAccountIds?.fixedAssetCpu ?? null;
+    const depAccId = ctx.chartAccountIds?.accumDeprecCpu ?? null;
+    const expAccId = ctx.chartAccountIds?.expenseDeprecCpu ?? null;
 
     if (!assetAccId || !depAccId || !expAccId) {
       steps.push({
         name: 'fa-create',
         result: warn(
-          'SMOKE_FA_ASSET_ACCOUNT_ID / SMOKE_FA_DEP_ACCOUNT_ID / SMOKE_FA_EXP_ACCOUNT_ID no configurados',
-          'Exporta los 3 UUIDs de chart_of_accounts para crear el activo fijo de prueba',
+          'Bootstrap no resolvió las 3 cuentas PUC para activo fijo (152805/159215/516015)',
+          'Verifica que el PUC seed completó correctamente',
           t,
         ),
       });
     } else {
       try {
         const res = await ctx.http.post('/api/accounting/adjustments/fixed-assets', {
-          code: 'SMOKE-FA-001',
-          name: 'Computador Smoke Test',
+          code: 'SMOKE-CPU-001',
+          name: 'Computador smoke test',
           category: 'equipo_computo',
           assetAccountId: assetAccId,
           depreciationAccountId: depAccId,
           expenseAccountId: expAccId,
-          acquisitionDate: '2026-01-01T00:00:00.000Z',
+          acquisitionDate: '2026-04-01T00:00:00Z',
           acquisitionCost: '3000000',
           salvageValue: '0',
           usefulLifeMonths: 36,
@@ -648,11 +650,19 @@ async function runWS4(ctx: SmokeCtx): Promise<SectionSummary> {
         });
 
         if (res.status === 201 || res.status === 200) {
-          const body = res.body as { id?: string };
+          const body = res.body as { id?: string; monthlyDepreciation?: string | number };
           ctx.fixedAssetId = body.id ?? null;
+          // Verificar cuota mensual = 83333.33 (3.000.000 / 36)
+          const monthly = body.monthlyDepreciation !== undefined
+            ? Math.abs(Number(body.monthlyDepreciation))
+            : null;
+          const monthlyOk = monthly !== null && Math.abs(monthly - 83_333.33) <= 1;
+          const detail = monthly !== null
+            ? `fixedAssetId=${ctx.fixedAssetId?.slice(0, 8) ?? 'N/A'}…, cuota=${monthly.toFixed(2)}${monthlyOk ? ' ✓' : ' ⚠ (esperado 83333.33)'}`
+            : `fixedAssetId=${ctx.fixedAssetId?.slice(0, 8) ?? 'N/A'}…`;
           steps.push({
             name: 'fa-create',
-            result: pass(`fixedAssetId=${ctx.fixedAssetId?.slice(0, 8) ?? 'N/A'}…`, undefined, t),
+            result: pass(detail, undefined, t),
           });
         } else if (res.status === 409) {
           steps.push({ name: 'fa-create', result: pass('Activo ya existe (idempotente)', undefined, t) });
@@ -1047,7 +1057,8 @@ async function main(): Promise<void> {
     bankAccountId: null,
     fixedAssetId: null,
     closeRunId: null,
-    pymeEntryIds: (process.env.SMOKE_PYME_ENTRY_IDS ?? '').split(',').filter(Boolean),
+    pymeEntryIds: [],
+    chartAccountIds: null,
   };
 
   // ── Sección 0 — Fundaciones ────────────────────────────────────────────────
@@ -1060,6 +1071,7 @@ async function main(): Promise<void> {
   if (!healthOk) {
     // Imprimir secciones saltadas
     const skippedAll = [
+      { name: 'Smoke Bootstrap', skipped: true, steps: [] },
       { name: 'WS1 — Smart-Tax Engine', skipped: true, steps: [] },
       { name: 'WS2 — OCR → Journal Bridge', skipped: true, steps: [] },
       { name: 'WS3 — Bank Reconciliation', skipped: true, steps: [] },
@@ -1069,11 +1081,56 @@ async function main(): Promise<void> {
     ] as SectionSummary[];
     for (const s of skippedAll) printSection(s);
     printFooter(0, 0, 1, elapsed(globalStart), false);
+    await closeSmokePool();
     process.exit(1);
   }
 
-  // Intentar resolver un periodId para los workstreams que lo necesitan
-  ctx.periodId = await ensurePeriod(http);
+  // ── Bootstrap — fixtures idempotentes ─────────────────────────────────────
+  const bootstrapSteps: SectionSummary['steps'] = [];
+  {
+    const t = now();
+    try {
+      const fixtures = await bootstrapSmokeFixtures(ctx.workspaceId);
+
+      // Propagar resultados al contexto
+      ctx.periodId = fixtures.periodId;
+      ctx.pymeEntryIds = fixtures.pymeEntryIds;
+      ctx.chartAccountIds = fixtures.chartAccountIds;
+
+      const detail = [
+        `periodId=${fixtures.periodId.slice(0, 8)}…`,
+        `pymeEntries=${fixtures.pymeEntryIds.length}`,
+        `bank=${fixtures.chartAccountIds.bank?.slice(0, 8) ?? 'N/A'}…`,
+        `fa=${fixtures.chartAccountIds.fixedAssetCpu?.slice(0, 8) ?? 'N/A'}…`,
+        ...(fixtures.warnings.length > 0 ? [`warnings: ${fixtures.warnings.join('; ')}`] : []),
+      ].join(', ');
+
+      bootstrapSteps.push({
+        name: 'smoke-bootstrap',
+        result: fixtures.warnings.length > 0
+          ? warn('Bootstrap completado con advertencias', detail, t)
+          : pass('Bootstrap completado', detail, t),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      bootstrapSteps.push({
+        name: 'smoke-bootstrap',
+        result: fail(`Bootstrap falló: ${msg}`, t),
+      });
+    }
+  }
+
+  const secBootstrap: SectionSummary = {
+    name: 'Smoke Bootstrap',
+    skipped: false,
+    steps: bootstrapSteps,
+  };
+  printSection(secBootstrap);
+
+  // Si el bootstrap falló completamente, intentar ensurePeriod como fallback
+  if (!ctx.periodId) {
+    ctx.periodId = await ensurePeriod(http);
+  }
 
   // ── Secciones 1-6 ──────────────────────────────────────────────────────────
   const sections: SectionSummary[] = [
@@ -1092,7 +1149,7 @@ async function main(): Promise<void> {
   let totalWarn = 0;
   let totalFail = 0;
 
-  const allSections = [sec0, ...sections];
+  const allSections = [sec0, secBootstrap, ...sections];
   for (const sec of allSections) {
     if (sec.skipped) continue;
     for (const { result } of sec.steps) {
@@ -1104,10 +1161,12 @@ async function main(): Promise<void> {
 
   const passed = totalFail === 0;
   printFooter(totalOk, totalWarn, totalFail, elapsed(globalStart), passed);
+  await closeSmokePool();
   process.exit(passed ? 0 : 1);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error('Error fatal en el smoke runner:', err);
+  await closeSmokePool();
   process.exit(1);
 });
