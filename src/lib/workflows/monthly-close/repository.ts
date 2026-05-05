@@ -260,12 +260,24 @@ export async function getRunByPeriodId(periodId: string): Promise<MonthlyCloseRu
   return rows[0] ?? null;
 }
 
+/**
+ * Acepta el UUID de monthly_close_runs.id O el workflow runId de Vercel
+ * Workflow (formato `wrun_<ulid>`). El endpoint /api/accounting/close/start
+ * retorna `workflowRunId` al caller, así que el polling /status/[runId]
+ * recibe ese formato — sin esta detección la query falla con
+ * "invalid input syntax for type uuid".
+ */
 export async function getRunById(runId: string): Promise<MonthlyCloseRunRow | null> {
   const db = getDb();
+  const isWorkflowRunId = runId.startsWith('wrun_');
   const rows = await db
     .select()
     .from(monthlyCloseRuns)
-    .where(eq(monthlyCloseRuns.id, runId))
+    .where(
+      isWorkflowRunId
+        ? eq(monthlyCloseRuns.workflowRunId, runId)
+        : eq(monthlyCloseRuns.id, runId),
+    )
     .limit(1);
   return rows[0] ?? null;
 }

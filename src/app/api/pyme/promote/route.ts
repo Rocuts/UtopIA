@@ -27,6 +27,8 @@ const promoteBodySchema = z.object({
     .max(MAX_ENTRIES_PER_REQUEST, `Máximo ${MAX_ENTRIES_PER_REQUEST} renglones por solicitud.`),
   periodId: z.string().uuid('periodId debe ser un UUID válido.'),
   applyTaxEngine: z.boolean().optional().default(false),
+  /** UUID del cost_center default para cuentas con requires_cost_center=true. */
+  costCenterId: z.string().uuid().nullable().optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { pymeEntryIds, periodId, applyTaxEngine } = parsed.data;
+  const { pymeEntryIds, periodId, applyTaxEngine, costCenterId } = parsed.data;
 
   // ── Ejecutar bridge ───────────────────────────────────────────────────────
   try {
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       pymeEntryIds,
       periodId,
       applyTaxEngine,
+      costCenterId: costCenterId ?? null,
     });
 
     return NextResponse.json({ ok: true, ...result });

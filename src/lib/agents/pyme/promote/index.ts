@@ -47,7 +47,7 @@ function looksLikeInvoice(pucHint: string | null, description: string, category:
 // ---------------------------------------------------------------------------
 
 export async function promoteEntries(input: PromoteInput): Promise<PromoteResult> {
-  const { workspaceId, pymeEntryIds, periodId, applyTaxEngine = false } = input;
+  const { workspaceId, pymeEntryIds, periodId, applyTaxEngine = false, costCenterId = null } = input;
 
   if (pymeEntryIds.length === 0) {
     return { promotedCount: 0, journalEntryIds: [], skipped: [], warnings: [] };
@@ -103,18 +103,28 @@ export async function promoteEntries(input: PromoteInput): Promise<PromoteResult
       group.kind,
       rep.description,
       rep.category,
+      { costCenterId },
     );
 
     if (!mapping.accountId) {
-      // No se encontró cuenta → todo el grupo va a skipped.
+      // No se encontró cuenta válida (puede ser que requires_cost_center=true
+      // pero no se proveyó costCenterId, o que no existe ninguna cuenta para
+      // el kind en el PUC del workspace).
+      const reason =
+        mapping.requiresCostCenter && !costCenterId
+          ? `requires_cost_center_no_default_provided:${mapping.accountCode ?? 'unknown'}`
+          : `account_not_found_for_code:${mapping.accountCode ?? mapping.fallbackCode ?? 'unknown'}`;
+
       for (const e of group.entries) {
-        skipped.push({
-          pymeEntryId: e.id,
-          reason: `account_not_found_for_code:${mapping.accountCode ?? mapping.fallbackCode ?? 'unknown'}`,
-        });
+        skipped.push({ pymeEntryId: e.id, reason });
       }
       continue;
     }
+
+    // Si la cuenta primaria requiere CC y tenemos uno → lo propagamos.
+    // Si la requiere y NO tenemos → ya fue capturado arriba (accountId=null).
+    const primaryCostCenterId =
+      mapping.requiresCostCenter && costCenterId ? costCenterId : null;
 
     // ── 3b. Tax engine (opcional) ────────────────────────────────────────
     let taxLines: JournalLineInput[] | undefined;
@@ -165,6 +175,7 @@ export async function promoteEntries(input: PromoteInput): Promise<PromoteResult
         bookId,
         cajaAccountId: cajaAccount.id,
         primaryAccountId: mapping.accountId,
+        primaryCostCenterId,
         taxEngineLines: taxLines,
       });
 

@@ -26,10 +26,17 @@ export interface BuildGroupInput {
   periodId: string;
   workspaceId: string;
   bookId: string;
-  /** UUID de la cuenta de caja (1105 05). */
+  /** UUID de la cuenta de caja (110505). */
   cajaAccountId: string;
   /** UUID de la cuenta de ingreso/gasto para este grupo (null → caller ya lo marcó skipped). */
   primaryAccountId: string;
+  /**
+   * Si la cuenta primaria tiene requires_cost_center=true, este UUID se asigna
+   * a esa línea. Si es null/undefined y la cuenta lo requiere, el caller ya
+   * debería haber descartado el grupo (skipped). Se incluye aquí solo como
+   * mecanismo de propagación para líneas simples.
+   */
+  primaryCostCenterId?: string | null;
   /**
    * Líneas adicionales del tax engine (opcionales). Si se proveen, reemplazan
    * la línea de caja simple y el builder ajusta el cuadre automáticamente.
@@ -48,7 +55,16 @@ export interface BuildGroupResult {
  * Suma todos los montos del grupo → una sola entrada de libro mayor.
  */
 export function buildGroupEntry(args: BuildGroupInput): BuildGroupResult {
-  const { group, periodId, workspaceId, bookId, cajaAccountId, primaryAccountId, taxEngineLines } = args;
+  const {
+    group,
+    periodId,
+    workspaceId,
+    bookId,
+    cajaAccountId,
+    primaryAccountId,
+    primaryCostCenterId,
+    taxEngineLines,
+  } = args;
 
   const sourceEntryIds = group.entries.map((e) => e.id);
 
@@ -79,7 +95,13 @@ export function buildGroupEntry(args: BuildGroupInput): BuildGroupResult {
     lines = taxEngineLines;
   } else {
     // Líneas simples: Caja + cuenta primaria.
-    lines = buildSimpleLines(group.kind, totalStr, primaryAccountId, cajaAccountId);
+    lines = buildSimpleLines(
+      group.kind,
+      totalStr,
+      primaryAccountId,
+      cajaAccountId,
+      primaryCostCenterId ?? null,
+    );
   }
 
   const input: CreateEntryInput = {
@@ -112,6 +134,7 @@ function buildSimpleLines(
   totalStr: string,
   primaryAccountId: string,
   cajaAccountId: string,
+  primaryCostCenterId: string | null,
 ): JournalLineInput[] {
   if (kind === 'ingreso') {
     // Ingreso: Débito Caja, Crédito Cuenta de ingreso
@@ -121,12 +144,16 @@ function buildSimpleLines(
         debit: totalStr,
         credit: '0.00',
         description: 'Caja – cobro ingreso OCR',
+        // Caja (110505) no tiene requires_cost_center en el seed, pero si
+        // acaso lo tuviera en el futuro, no aplicamos CC aquí; solo en la
+        // cuenta primaria (ingreso/gasto) que lo requiere.
       },
       {
         accountId: primaryAccountId,
         debit: '0.00',
         credit: totalStr,
         description: 'Ingreso OCR pyme',
+        ...(primaryCostCenterId ? { costCenterId: primaryCostCenterId } : {}),
       },
     ];
   } else {
@@ -137,6 +164,7 @@ function buildSimpleLines(
         debit: totalStr,
         credit: '0.00',
         description: 'Gasto OCR pyme',
+        ...(primaryCostCenterId ? { costCenterId: primaryCostCenterId } : {}),
       },
       {
         accountId: cajaAccountId,

@@ -77,17 +77,25 @@ export async function POST(req: Request) {
 
   const run = await start(closeMonthWorkflow, [input]);
 
-  // Persistir el workflowRunId en la fila del run
-  // (el step persist-run crea la fila inicial; aquí solo actualizamos el runId del workflow)
-  await upsertCloseRun({
+  // Persistir el workflowRunId en la fila del run. Race con el step
+  // `persist-run` del workflow (que puede INSERT-ar primero sin runId)
+  // queda resuelto porque `upsertCloseRun` UPDATEa con todos los campos
+  // recibidos cuando encuentra fila existente.
+  const dbRow = await upsertCloseRun({
     workspaceId,
     periodId,
     status: 'running',
     workflowRunId: run.runId,
   });
 
+  // Retornamos el UUID de la fila como `runId` (para que el cliente pueda
+  // polear /status/[runId] de forma determinista, sin depender del campo
+  // workflow_run_id que el workflow puede sobreescribir o ignorar entre
+  // replays). El workflowRunId queda disponible aparte para correlacionar
+  // con el dashboard `npx workflow web`.
   return NextResponse.json(
     {
+      runId: dbRow.id,
       workflowRunId: run.runId,
       status: 'started',
       message: 'Workflow de cierre mensual iniciado.',

@@ -2,125 +2,73 @@ import 'server-only';
 // ---------------------------------------------------------------------------
 // WS2 — account-mapper: categoría/pucHint → UUID en chart_of_accounts
 // ---------------------------------------------------------------------------
-// Estrategia en dos pasos:
+// Estrategia en tres pasos:
+//
 //   1. Búsqueda exacta: si pucHint existe y hay una cuenta `code=pucHint`,
 //      `is_postable=true` en el workspace → úsala.
-//   2. Fallback heurístico: tabla de códigos PUC PYMES (Decreto 2706/2012)
-//      según kind + palabras clave de la descripción/categoría.
+//      Si la cuenta tiene requires_cost_center=true y no hay costCenterId,
+//      se emite un warning en el AccountMapping pero el caller decide.
 //
-// Si ningún paso resuelve → accountId=null (el caller agrega al `skipped`).
+//   2. Fallback dinámico via findAccountForKind():
+//      Prefijos de código PUC PYMES (Decreto 2706/2012) por kind + palabras
+//      clave de la descripción/categoría. UNA sola query con CASE-WHEN
+//      scoring — sin N round-trips.
 //
-// Las cuentas de los fallbacks son auxiliares (nivel 5) del PUC simplificado
-// PYME; asumimos que el workspace las tiene si usó `db:push` con el seed de
-// PUC incluido. Si no existen, el double-entry service las rechazará con
-// ACCOUNT_NOT_POSTABLE y el bridge los captura como `skipped`.
+//      Orden de prefijos por kind (todos existen en el seed):
+//        ingreso: '4135', '4170', '421'   (operacional → no-operacional)
+//        egreso:  '5105','5110','5120','5135','5145','5205','530','531','540'
+//
+//      Si hay costCenterId: intenta cualquier cuenta postable del kind.
+//      Si NO hay costCenterId: filtra requires_cost_center=false primero;
+//        si no hay ninguna sin CC, intenta igual con CC y avisa (warning);
+//        si tampoco hay ninguna con CC, retorna accountId=null → skipped.
+//
+//   3. Sin pucHint y sin match → accountId=null → caller agrega a skipped.
+//
+// Cuentas de contrapartida: 110505 (Caja general) — normalmente sin CC.
 // ---------------------------------------------------------------------------
 
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { chartOfAccounts } from '@/lib/db/schema';
+import { findAccountForKind } from './repository';
 import type { AccountMapping } from './types';
 
 // ---------------------------------------------------------------------------
-// Fallbacks heurísticos (kind → código PUC PYME por defecto)
+// Prefijos de fallback por kind (todos existentes en el PUC PYMES seed)
 // ---------------------------------------------------------------------------
 
 /**
- * Tabla de fallbacks ordered by specificity (más específico primero).
- * Cada entrada: [keywords (en descripción + categoria, lowercase), kind, pucCode, pucName].
- * Se evalúa en orden; la primera que hace match gana.
+ * Prefijos PUC ordenados de más a menos específico para ingresos.
+ * El mapper prueba en este orden y toma el primero que existe en DB.
+ *   4135xx → Comercio al por mayor/menor (ventas)
+ *   4170xx → Actividades de servicios
+ *   4175xx → Devoluciones en ventas (no ideal pero postable)
+ *   421xxx → Ingresos financieros (no operacional)
  */
-const FALLBACK_RULES: Array<{
-  keywords: string[];
-  kind: 'ingreso' | 'egreso' | 'both';
-  code: string;
-  name: string;
-}> = [
-  // ─── Ingresos ────────────────────────────────────────────────────────────
-  {
-    keywords: ['venta', 'ventas', 'mercancia', 'mercancía', 'producto'],
-    kind: 'ingreso',
-    code: '413505',
-    name: 'Ventas - Comercio al por menor',
-  },
-  {
-    keywords: ['servicio', 'servicios', 'honorario', 'honorarios', 'consultor'],
-    kind: 'ingreso',
-    code: '417510',
-    name: 'Ingresos por servicios',
-  },
-  {
-    keywords: ['arriendo', 'alquiler', 'arrendamiento'],
-    kind: 'ingreso',
-    code: '419510',
-    name: 'Otros ingresos - Arrendamientos',
-  },
-  // ─── Egresos ─────────────────────────────────────────────────────────────
-  {
-    keywords: ['arriendo', 'alquiler', 'arrendamiento', 'local'],
-    kind: 'egreso',
-    code: '511005',
-    name: 'Gastos de personal - Arrendamientos',
-  },
-  {
-    keywords: ['nomina', 'nómina', 'salario', 'sueldo', 'empleado', 'trabajador'],
-    kind: 'egreso',
-    code: '510515',
-    name: 'Gastos de personal - Salarios',
-  },
-  {
-    keywords: ['mercancia', 'mercancía', 'inventario', 'materia prima', 'compra'],
-    kind: 'egreso',
-    code: '143505',
-    name: 'Inventarios - Mercancías',
-  },
-  {
-    keywords: ['servicio publico', 'servicios publicos', 'agua', 'luz', 'energia', 'energía', 'gas'],
-    kind: 'egreso',
-    code: '521505',
-    name: 'Gastos generales - Servicios públicos',
-  },
-  {
-    keywords: ['telefono', 'teléfono', 'celular', 'internet', 'comunicacion', 'comunicación'],
-    kind: 'egreso',
-    code: '521520',
-    name: 'Gastos generales - Comunicaciones',
-  },
-  {
-    keywords: ['transporte', 'flete', 'mensajeria', 'mensajería', 'envio', 'envío'],
-    kind: 'egreso',
-    code: '521525',
-    name: 'Gastos generales - Transporte',
-  },
-  {
-    keywords: ['publicidad', 'marketing', 'propaganda', 'anuncio'],
-    kind: 'egreso',
-    code: '521530',
-    name: 'Gastos generales - Publicidad',
-  },
-  {
-    keywords: ['papeleria', 'papelería', 'utiles', 'útiles', 'suministro'],
-    kind: 'egreso',
-    code: '521535',
-    name: 'Gastos generales - Útiles y papelería',
-  },
-  // ─── Fallback genérico por kind ─────────────────────────────────────────
-  {
-    keywords: [],
-    kind: 'ingreso',
-    code: '419595',
-    name: 'Otros ingresos no operacionales',
-  },
-  {
-    keywords: [],
-    kind: 'egreso',
-    code: '529595',
-    name: 'Gastos generales - Diversos',
-  },
+const INGRESO_PREFIXES_ALL = ['4135', '4170', '4175', '421'];
+
+/**
+ * Prefijos PUC ordenados de más a menos específico para egresos.
+ * Solo se listan grupos que están en el seed.
+ *   5105xx → Gastos de personal
+ *   5110xx → Honorarios
+ *   5120xx → Arrendamientos
+ *   5135xx → Servicios (agua, energía, teléfono, correo, internet)
+ *   5145xx → Mantenimiento y reparaciones
+ *   5160xx → Depreciaciones (sin CC en seed)
+ *   5205xx → Gastos de personal ventas
+ *   530xxx → No operacionales financieros (sin CC)
+ *   531xxx → Gastos extraordinarios (sin CC)
+ *   540xxx → Impuesto de renta (sin CC)
+ */
+const EGRESO_PREFIXES_ALL = [
+  '5105', '5110', '5120', '5135', '5145', '5160',
+  '5205', '530', '531', '540',
 ];
 
 // ---------------------------------------------------------------------------
-// Cuenta de contrapartida: siempre 1105 (Caja) para el MVP.
+// Cuenta de contrapartida: 110505 (Caja general)
 // ---------------------------------------------------------------------------
 
 export const CAJA_PUC_CODE = '110505';
@@ -130,14 +78,33 @@ export const CAJA_PUC_NAME = 'Caja general';
 // Función principal
 // ---------------------------------------------------------------------------
 
+export interface MapCategoryOptions {
+  /** UUID del cost center default para líneas que lo requieran. null = sin CC. */
+  costCenterId?: string | null;
+}
+
+/**
+ * Resuelve la cuenta contable para un pyme_entry dado su pucHint, kind y
+ * descripción/categoría.
+ *
+ * @param workspaceId  UUID del workspace.
+ * @param pucHint      Código PUC sugerido por el OCR (puede ser null).
+ * @param kind         'ingreso' | 'egreso'.
+ * @param description  Descripción del entry (para heurísticas).
+ * @param category     Categoría clasificada (para heurísticas).
+ * @param options      Opciones adicionales (costCenterId).
+ */
 export async function mapCategoryToAccount(
   workspaceId: string,
   pucHint: string | null,
   kind: 'ingreso' | 'egreso',
   description?: string | null,
   category?: string | null,
+  options?: MapCategoryOptions,
 ): Promise<AccountMapping> {
   const db = getDb();
+  const costCenterId = options?.costCenterId ?? null;
+  const hasCostCenter = !!costCenterId;
 
   // ── Paso 1: búsqueda exacta por pucHint ────────────────────────────────
   if (pucHint && pucHint.trim().length > 0) {
@@ -156,92 +123,67 @@ export async function mapCategoryToAccount(
 
     if (rows.length > 0) {
       const acct = rows[0];
+      // Si la cuenta requiere CC y no tenemos → el caller skipeará si
+      // hasCostCenter=false. Informamos via requiresCostCenter para que
+      // index.ts tome la decisión.
       return {
         pymeEntryId: '',
-        accountId: acct.id,
+        accountId: acct.requiresCostCenter && !hasCostCenter ? null : acct.id,
         accountCode: acct.code,
         accountName: acct.name,
         isExact: true,
         fallbackCode: null,
+        requiresCostCenter: acct.requiresCostCenter,
       };
     }
+    // Si el pucHint no existe en DB, caemos al fallback dinámico.
   }
 
-  // ── Paso 2: fallback heurístico ─────────────────────────────────────────
-  const needle = [description ?? '', category ?? ''].join(' ').toLowerCase();
+  // ── Paso 2: fallback dinámico por kind ──────────────────────────────────
+  // Determinamos prefijos según kind.
+  const prefixesAll =
+    kind === 'ingreso' ? INGRESO_PREFIXES_ALL : EGRESO_PREFIXES_ALL;
 
-  let matchedCode: string | null = null;
-  let matchedName: string | null = null;
+  // Con costCenterId → buscamos cualquier cuenta postable.
+  // Sin costCenterId → buscamos primero sin CC. Si no hay, fallamos.
+  const found = await findAccountForKind({
+    workspaceId,
+    kind,
+    candidateCodePrefixes: prefixesAll,
+    requireWithoutCostCenter: !hasCostCenter,
+  });
 
-  for (const rule of FALLBACK_RULES) {
-    if (rule.kind !== 'both' && rule.kind !== kind) continue;
-    const matches =
-      rule.keywords.length === 0 ||
-      rule.keywords.some((kw) => needle.includes(kw));
-    if (matches) {
-      matchedCode = rule.code;
-      matchedName = rule.name;
-      break;
-    }
-  }
-
-  if (!matchedCode) {
-    // Nunca debería llegar aquí porque hay fallbacks genéricos con keywords=[],
-    // pero lo manejamos por seguridad.
+  if (found) {
     return {
       pymeEntryId: '',
-      accountId: null,
-      accountCode: null,
-      accountName: null,
+      accountId: found.id,
+      accountCode: found.code,
+      accountName: found.name,
       isExact: false,
-      fallbackCode: null,
+      fallbackCode: found.code,
+      requiresCostCenter: found.requiresCostCenter,
     };
   }
 
-  // Intentar encontrar el UUID en chart_of_accounts para el código fallback.
-  // Si el workspace no tiene el PUC sembrado, devolvemos null → skipped.
-  const fallbackRows = await db
-    .select()
-    .from(chartOfAccounts)
-    .where(
-      and(
-        eq(chartOfAccounts.workspaceId, workspaceId),
-        eq(chartOfAccounts.code, matchedCode),
-        eq(chartOfAccounts.isPostable, true),
-        eq(chartOfAccounts.active, true),
-      ),
-    )
-    .limit(1);
-
-  if (fallbackRows.length === 0) {
-    return {
-      pymeEntryId: '',
-      accountId: null,
-      accountCode: matchedCode,
-      accountName: matchedName,
-      isExact: false,
-      fallbackCode: matchedCode,
-    };
-  }
-
-  const fallbackAcct = fallbackRows[0];
+  // No se encontró nada.
   return {
     pymeEntryId: '',
-    accountId: fallbackAcct.id,
-    accountCode: fallbackAcct.code,
-    accountName: fallbackAcct.name,
+    accountId: null,
+    accountCode: null,
+    accountName: null,
     isExact: false,
-    fallbackCode: matchedCode,
+    fallbackCode: null,
+    requiresCostCenter: false,
   };
 }
 
 /**
- * Resuelve el UUID de la cuenta de caja (1105 05) para el workspace.
+ * Resuelve el UUID de la cuenta de caja (110505) para el workspace.
  * Retorna null si no existe en chart_of_accounts.
  */
 export async function resolveCajaAccount(
   workspaceId: string,
-): Promise<{ id: string; code: string; name: string } | null> {
+): Promise<{ id: string; code: string; name: string; requiresCostCenter: boolean } | null> {
   const db = getDb();
   const rows = await db
     .select()
@@ -257,5 +199,10 @@ export async function resolveCajaAccount(
     .limit(1);
 
   if (rows.length === 0) return null;
-  return { id: rows[0].id, code: rows[0].code, name: rows[0].name };
+  return {
+    id: rows[0].id,
+    code: rows[0].code,
+    name: rows[0].name,
+    requiresCostCenter: rows[0].requiresCostCenter,
+  };
 }

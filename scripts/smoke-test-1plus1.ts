@@ -58,6 +58,8 @@ interface SmokeCtx {
   pymeEntryIds: string[];
   // UUIDs resueltos por el bootstrap (no requieren env vars)
   chartAccountIds: SmokeFixturesResult['chartAccountIds'] | null;
+  /** UUID del cost_center 'GENERAL' para cuentas con requires_cost_center=true. */
+  costCenterId: string | null;
 }
 
 // ─── Timing helper ────────────────────────────────────────────────────────────
@@ -329,6 +331,7 @@ async function runWS2(ctx: SmokeCtx): Promise<SectionSummary> {
           pymeEntryIds: ctx.pymeEntryIds,
           periodId: ctx.periodId,
           applyTaxEngine: false,
+          costCenterId: ctx.costCenterId,
         });
 
         if (res.ok) {
@@ -772,7 +775,11 @@ async function runWS5(ctx: SmokeCtx): Promise<SectionSummary> {
 
       if (res.status === 202 || res.status === 200) {
         const body = res.body as { workflowRunId?: string; runId?: string; status?: string };
-        workflowRunId = body.workflowRunId ?? body.runId ?? null;
+        // Preferimos `runId` (UUID de monthly_close_runs.id) sobre
+        // `workflowRunId` (wrun_xxx) — el workflow_run_id puede no
+        // persistir por races con persist-run; el UUID siempre existe.
+        // /status/[runId] acepta ambos via detección de prefijo.
+        workflowRunId = body.runId ?? body.workflowRunId ?? null;
         ctx.closeRunId = workflowRunId;
         steps.push({
           name: 'close-start',
@@ -1059,6 +1066,7 @@ async function main(): Promise<void> {
     closeRunId: null,
     pymeEntryIds: [],
     chartAccountIds: null,
+    costCenterId: null,
   };
 
   // ── Sección 0 — Fundaciones ────────────────────────────────────────────────
@@ -1096,6 +1104,7 @@ async function main(): Promise<void> {
       ctx.periodId = fixtures.periodId;
       ctx.pymeEntryIds = fixtures.pymeEntryIds;
       ctx.chartAccountIds = fixtures.chartAccountIds;
+      ctx.costCenterId = fixtures.costCenterId;
 
       const detail = [
         `periodId=${fixtures.periodId.slice(0, 8)}…`,

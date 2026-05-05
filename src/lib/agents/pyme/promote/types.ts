@@ -24,6 +24,12 @@ export interface PromoteInput {
    * Si el motor no está disponible (flag OFF), se ignora silenciosamente.
    */
   applyTaxEngine?: boolean;
+  /**
+   * UUID de cost_centers por defecto para líneas en cuentas con requires_cost_center=true.
+   * Si no se pasa (o es null), el mapper filtrará a cuentas que NO requieran centro de
+   * costo; si ninguna existe para el kind, el entry va a skipped.
+   */
+  costCenterId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +68,8 @@ export interface AccountMapping {
   isExact: boolean;
   /** Código fallback PUC usado si !isExact. */
   fallbackCode: string | null;
+  /** true si la cuenta resuelta tiene requires_cost_center=true en chart_of_accounts. */
+  requiresCostCenter: boolean;
 }
 
 // ---------------------------------------------------------------------------

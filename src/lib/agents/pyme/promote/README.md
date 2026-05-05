@@ -14,23 +14,44 @@ El usuario selecciona renglones desde el `Ledger` → pulsa "Promover a Libro Ma
 
 ```
 POST /api/pyme/promote
-  { pymeEntryIds[], periodId, applyTaxEngine? }
+  { pymeEntryIds[], periodId, applyTaxEngine?, costCenterId? }
 
 1. Cargar pyme_entries confirmados del workspace (JOIN pyme_books para ownership).
 2. Agrupar por (entryDate, kind) → una journal_entry por grupo.
 3. Para cada grupo:
-   a. Resolver cuenta principal via account-mapper:
-      - Exacta: pucHint → chart_of_accounts WHERE code=pucHint AND is_postable.
-      - Fallback: 12 reglas heurísticas por keywords (description + category).
-   b. Contrapartida: siempre cuenta 110505 (Caja general).
+   a. Resolver cuenta principal via account-mapper (3 pasos):
+      1. Exacta: pucHint → chart_of_accounts WHERE code=pucHint AND is_postable.
+         Si la cuenta tiene requires_cost_center=true y no se pasó costCenterId
+         → accountId=null → grupo a skipped.
+      2. Fallback dinámico (UNA query CASE-WHEN):
+         - Con costCenterId: busca la primera cuenta postable del kind
+           entre prefijos [4135, 4170, 4175, 421] (ingreso) o
+           [5105, 5110, 5120, 5135, 5145, 5160, 5205, 530, 531, 540] (egreso).
+         - Sin costCenterId: igual pero filtrando requires_cost_center=false.
+         - Si no hay ninguna → accountId=null → grupo a skipped.
+      3. Sin pucHint y sin match → accountId=null → skipped.
+   b. Contrapartida: siempre cuenta 110505 (Caja general, no requiere CC).
    c. Opcional: si applyTaxEngine=true Y UTOPIA_ENABLE_TAX_ENGINE=true
       Y el entry parece una factura → import('@/lib/accounting/tax-engine').evaluate()
       → reemplaza la línea de Caja con líneas tributarias del motor WS1.
    d. createEntry({ status: 'draft', sourceType: 'ai_generated',
                     sourceRef: 'pyme_book:<bookId>',
                     metadata: { promotedFromPymeEntryIds: [...] } })
+      Las líneas con requires_cost_center=true llevan costCenterId en la columna.
 4. Retornar PromoteResult: { promotedCount, journalEntryIds, skipped, warnings }
 ```
+
+### Centro de costos (`costCenterId`)
+
+El campo `costCenterId` en el body de `POST /api/pyme/promote` es **opcional**.
+
+| Escenario | Comportamiento |
+|---|---|
+| `costCenterId` presente | Asigna el CC a las líneas cuya cuenta tiene `requires_cost_center=true`. |
+| Sin `costCenterId` + cuenta sin CC | Funciona normal; no asigna CC. |
+| Sin `costCenterId` + cuenta con CC | El mapper descarta esa cuenta y busca la siguiente sin CC. Si ninguna disponible → entry a `skipped` con razón `requires_cost_center_no_default_provided:<code>`. |
+
+El smoke-test crea automáticamente un cost_center `GENERAL` via `bootstrapSmokeFixtures()` y lo pasa en el body.
 
 ## Trazabilidad bidireccional
 
@@ -76,14 +97,30 @@ npm run dev
 # 1. Obtener workspace cookie desde el navegador (Dev Tools → Application → Cookies)
 COOKIE="utopia_workspace_id=<UUID>"
 
-# 2. Necesitas un pyme_entry confirmado y un accounting_period abierto.
+# 2. Necesitas un pyme_entry confirmado, un accounting_period abierto y un cost_center.
 # Consulta con Drizzle Studio o psql:
 #   SELECT id FROM pyme_entries WHERE status='confirmed' LIMIT 1;
 #   SELECT id FROM accounting_periods WHERE status='open' LIMIT 1;
+#   SELECT id FROM cost_centers WHERE code='GENERAL' LIMIT 1;
 
 ENTRY_ID="<uuid-del-entry>"
 PERIOD_ID="<uuid-del-period>"
+CC_ID="<uuid-del-cost-center>"
 
+curl -X POST http://localhost:3000/api/pyme/promote \
+  -H "Content-Type: application/json" \
+  -H "Cookie: $COOKIE" \
+  -d "{
+    \"pymeEntryIds\": [\"$ENTRY_ID\"],
+    \"periodId\": \"$PERIOD_ID\",
+    \"applyTaxEngine\": false,
+    \"costCenterId\": \"$CC_ID\"
+  }"
+
+# Respuesta esperada:
+# { "ok": true, "promotedCount": 1, "journalEntryIds": ["<uuid>"], "skipped": [], "warnings": [] }
+
+# Sin costCenterId (solo funciona si la cuenta resuelta NO requiere CC):
 curl -X POST http://localhost:3000/api/pyme/promote \
   -H "Content-Type: application/json" \
   -H "Cookie: $COOKIE" \
@@ -92,9 +129,6 @@ curl -X POST http://localhost:3000/api/pyme/promote \
     \"periodId\": \"$PERIOD_ID\",
     \"applyTaxEngine\": false
   }"
-
-# Respuesta esperada:
-# { "ok": true, "promotedCount": 1, "journalEntryIds": ["<uuid>"], "skipped": [], "warnings": [] }
 ```
 
 ## Límites del MVP (decisión D2 honrada)

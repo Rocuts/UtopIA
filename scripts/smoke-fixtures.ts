@@ -42,6 +42,8 @@ export interface SmokeFixturesResult {
   chartAccountIds: SmokeChartAccountIds;
   pymeBookId: string;
   pymeEntryIds: string[];
+  /** UUID del cost_center 'GENERAL' creado/reutilizado para el workspace. */
+  costCenterId: string;
   warnings: string[];
 }
 
@@ -245,6 +247,32 @@ export async function bootstrapSmokeFixtures(
   if (!accumDeprecCpu) warnings.push('No se encontró cuenta depreciación acumulada (159215) en chart_of_accounts.');
   if (!expenseDeprecCpu) warnings.push('No se encontró cuenta gasto depreciación (516015) en chart_of_accounts.');
 
+  // ── 5b. Cost center 'GENERAL' (idempotente) ───────────────────────────────
+  // Necesario para cuentas con requires_cost_center=true (ej. 413505, 510506).
+  let costCenterId: string;
+  {
+    const ccRes = await pool.query<{ id: string }>(
+      `INSERT INTO cost_centers (workspace_id, code, name, active)
+       VALUES ($1, 'GENERAL', 'Centro de Costo General', true)
+       ON CONFLICT (workspace_id, code) DO NOTHING
+       RETURNING id`,
+      [workspaceId],
+    );
+    if (ccRes.rows[0]) {
+      costCenterId = ccRes.rows[0].id;
+    } else {
+      // Ya existía — obtener el id
+      const existing = await pool.query<{ id: string }>(
+        `SELECT id FROM cost_centers WHERE workspace_id = $1 AND code = 'GENERAL' LIMIT 1`,
+        [workspaceId],
+      );
+      if (!existing.rows[0]) {
+        throw new Error(`No se pudo crear ni obtener cost_center GENERAL para workspace ${workspaceId}`);
+      }
+      costCenterId = existing.rows[0].id;
+    }
+  }
+
   // ── 6. Pyme book + 3 entries confirmed ────────────────────────────────────
   // Buscar o crear pyme book por nombre (pyme_books no tiene unique constraint)
   let pymeBookId: string;
@@ -306,6 +334,7 @@ export async function bootstrapSmokeFixtures(
     },
     pymeBookId,
     pymeEntryIds,
+    costCenterId,
     warnings,
   };
 }
