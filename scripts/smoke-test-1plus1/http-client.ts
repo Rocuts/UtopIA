@@ -61,6 +61,10 @@ export class HttpClient {
 
     const reqHeaders: Record<string, string> = {
       ...(this.cookie ? { Cookie: this.cookie } : {}),
+      // src/proxy.ts hace fail-closed CSRF check sobre Origin/Host en
+      // POST/PUT/PATCH/DELETE → siempre lo enviamos en mutaciones para que
+      // el smoke pueda hacer las peticiones que un browser haría.
+      ...(method !== 'GET' && method !== 'HEAD' ? { Origin: this.base } : {}),
       ...(options.headers ?? {}),
     };
 
