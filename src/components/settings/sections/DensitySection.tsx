@@ -46,7 +46,7 @@ export function DensitySection() {
   return (
     <EliteCard variant="glass" padding="lg">
       <EliteCard.Header>
-        <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+        <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
           {t.settings.sections.density}
         </h2>
       </EliteCard.Header>
@@ -55,7 +55,7 @@ export function DensitySection() {
           <div
             role="radiogroup"
             aria-label={t.settings.sections.density}
-            className="relative inline-flex items-center p-1 rounded-lg bg-n-900 border border-gold-500/15 w-fit"
+            className="relative inline-flex items-center p-1 rounded-lg bg-n-100 border border-gold-500/15 w-fit"
           >
             {OPTIONS.map((opt) => {
               const selected = density === opt;
@@ -68,8 +68,8 @@ export function DensitySection() {
                   onClick={() => handleSelect(opt)}
                   className={cn(
                     'relative z-10 px-4 py-1.5 text-sm rounded-md transition-colors',
-                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-900',
-                    selected ? 'text-n-1000 font-medium' : 'text-n-400 hover:text-n-200',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
+                    selected ? 'text-n-0 font-medium' : 'text-n-700 hover:text-n-1000',
                   )}
                 >
                   {selected && !reduce && (
@@ -90,7 +90,7 @@ export function DensitySection() {
               );
             })}
           </div>
-          <p className="text-sm text-n-400 leading-relaxed">
+          <p className="text-sm text-n-600 leading-relaxed">
             {t.settings.density.description}
           </p>
         </div>

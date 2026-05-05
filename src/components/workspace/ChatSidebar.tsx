@@ -247,7 +247,7 @@ function CollapsedRail({
       >
         <BookOpen className="w-4 h-4" strokeWidth={1.8} />
       </Link>
-      <div className="mt-auto flex flex-col items-center gap-1.5 opacity-60">
+      <div className="mt-auto flex flex-col items-center gap-1.5 opacity-60" aria-hidden="true">
         <MessageSquare className="w-4 h-4 text-n-400" />
       </div>
     </div>
@@ -599,42 +599,31 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // ─── Conversation state ────────────────────────────────────────────────────
-  // Initial: deterministic empty string on SSR/prerender (Math.random/Date.now
-  // are forbidden during prerender with cacheComponents:true). Real ID is
-  // generated client-side after mount in the useEffect below.
-  const [conversationId, setConversationId] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    try {
-      const saved = window.localStorage.getItem(ACTIVE_CONV_STORAGE_KEY);
-      if (saved) return saved;
-    } catch { /* noop */ }
-    return generateConversationId();
-  });
+  // Initial state DEBE ser idéntico en SSR y CSR para evitar hydration mismatch.
+  // `useState` initializer corre tanto en server como en client (con `window`
+  // definido en client) y retornar valores distintos rompe la hidratación.
+  // Patrón correcto: empty/null inicial → poblar en useEffect (solo client).
+  const [conversationId, setConversationId] = useState<string>('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
+  // Hydration: leer localStorage + generar IDs/welcome solo después de mount.
   useEffect(() => {
-    if (!conversationId) setConversationId(generateConversationId());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // SSR/prerender: empty list (deterministic — `new Date()` in `initialWelcome`
-  // would break Cache Components prerender). Real welcome message arrives on
-  // mount via useEffect below.
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window === 'undefined') return [];
+    let resolvedId = '';
+    let resolvedMessages: ChatMessage[] = [];
     try {
       const saved = window.localStorage.getItem(ACTIVE_CONV_STORAGE_KEY);
       if (saved) {
+        resolvedId = saved;
         const conv = loadConversation(saved);
         if (conv && Array.isArray(conv.messages) && conv.messages.length > 0) {
-          return fromConvMessages(conv.messages);
+          resolvedMessages = fromConvMessages(conv.messages);
         }
       }
     } catch { /* noop */ }
-    return [initialWelcome('es')];
-  });
-
-  useEffect(() => {
-    if (messages.length === 0) setMessages([initialWelcome('es')]);
+    if (!resolvedId) resolvedId = generateConversationId();
+    if (resolvedMessages.length === 0) resolvedMessages = [initialWelcome('es')];
+    setConversationId(resolvedId);
+    setMessages(resolvedMessages);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1038,7 +1027,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
         animate={{ width }}
         transition={prefersReduced ? { duration: 0 } : SPRING}
         className={cn(
-          'relative shrink-0 h-[calc(100vh-64px)] sticky top-16 z-40',
+          'relative shrink-0 h-full z-40',
           'glass-elite-elevated',
           'border-r border-gold-500/20',
           'flex flex-col overflow-hidden',

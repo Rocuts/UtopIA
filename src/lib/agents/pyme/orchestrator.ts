@@ -15,6 +15,10 @@
 import 'server-only';
 import * as repo from '@/lib/db/pyme';
 import { extractEntriesFromImage } from '@/lib/agents/pyme/extraction/vision-extractor';
+import {
+  preprocessImage,
+  normalizedLevenshtein,
+} from '@/lib/agents/pyme/extraction/image-preprocessor';
 import type {
   ExtractedEntry,
   ExtractionResult,
@@ -91,11 +95,38 @@ export async function processUpload(
     });
 
     // -----------------------------------------------------------------------
-    // 3. OCR Vision. La URL puede ser https (Blob) o data:; ambas las acepta
-    //    el extractor (gpt-5.4 vision soporta ambas).
+    // 3a. Preprocesar imagen (resize 2048 + grayscale + normalize) ANTES de
+    //     enviarla al modelo de vision. Pipeline SOTA mayo 2026 — mejora
+    //     accuracy en handwriting hasta +60% en pipeline completo.
+    //     Solo aplica si la URL es data: o comienza con https (Blob).
+    //     En caso de error en el preprocesado, se continua con la URL original
+    //     (nunca bloqueamos el pipeline por un fallo de preprocessing).
+    // -----------------------------------------------------------------------
+    let ocrInputUrl = upload.imageUrl;
+    try {
+      const pre = await preprocessImage(upload.imageUrl);
+      ocrInputUrl = pre.dataUrl;
+      console.log('[pyme/preprocess]', JSON.stringify({
+        uploadId,
+        applied:    pre.appliedSteps,
+        bytesIn:    pre.bytesIn,
+        bytesOut:   pre.bytesOut,
+        dimensions: `${pre.width}x${pre.height}`,
+        durationMs: pre.durationMs,
+      }));
+    } catch (prepErr) {
+      console.warn('[pyme/preprocess] skipped — fallback to original URL', {
+        uploadId,
+        error: prepErr instanceof Error ? prepErr.message : String(prepErr),
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // 3b. OCR Vision. La URL puede ser https (Blob) o data:; ambas las acepta
+    //     el extractor (gpt-5.4 vision soporta ambas).
     // -----------------------------------------------------------------------
     const extraction: ExtractionResult = await extractEntriesFromImage(
-      upload.imageUrl,
+      ocrInputUrl,
       {
         language,
         bookCurrency,
@@ -150,6 +181,27 @@ export async function processUpload(
     });
 
     emit({ type: 'stage_complete', stage: 'categorize' });
+
+    // -----------------------------------------------------------------------
+    // 6b. Levenshtein guard post-OCR: si description y rawText divergen >0.3
+    //     el modelo "corrigio" en lugar de transcribir literal — penaliza
+    //     confidence para que el entry quede marcado para revision humana.
+    // -----------------------------------------------------------------------
+    for (const entry of extraction.entries) {
+      if (entry.rawText && entry.description) {
+        const lev = normalizedLevenshtein(entry.description, entry.rawText);
+        if (lev > 0.3) {
+          entry.confidence = Math.max(0, (entry.confidence ?? 0.7) - 0.15);
+          console.warn('[pyme/levenshtein] high divergence', {
+            uploadId,
+            description:        entry.description,
+            rawText:            entry.rawText,
+            levRatio:           lev.toFixed(3),
+            adjustedConfidence: entry.confidence,
+          });
+        }
+      }
+    }
 
     // -----------------------------------------------------------------------
     // 7. Persistir entries. Mapeo:

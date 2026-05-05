@@ -67,11 +67,16 @@ export const MODEL_IDS = {
   /** Prompt enhancer / synthesizer multi-agente. */
   SYNTHESIZER: envModel('OPENAI_MODEL_SYNTHESIZER', 'gpt-5.4-mini'),
 
-  /** OCR / vision para balances de prueba y PDFs escaneados criticos.
-   *  Usa el modelo full porque la precision numerica es critica. */
-  OCR: envModel('OPENAI_MODEL_OCR', 'gpt-5.4'),
+  /** OCR / vision — TODO: usa `gpt-5.4-mini` por preferencia del usuario.
+   *  Tiene visión nativa, soporta reasoning con `reasoningEffort: 'low'` para
+   *  tareas de OCR (que no requieren cadenas de pensamiento profundas), y es
+   *  ~5x más barato que el modelo full. La precisión para cuadernos
+   *  manuscritos y balances PDF es suficiente con `MAX_OUTPUT_TOKENS=16000`.
+   *  Override con `OPENAI_MODEL_OCR=gpt-5.4` si una empresa requiere full. */
+  OCR: envModel('OPENAI_MODEL_OCR', 'gpt-5.4-mini'),
 
-  /** OCR ligero para facturas, tirillas y documentos de baja densidad numerica. */
+  /** Alias retrocompatible — mismo modelo ahora. Mantengamos el slot
+   *  por si en el futuro queremos diferenciar (e.g. nano para tirillas). */
   OCR_LIGHT: envModel('OPENAI_MODEL_OCR_LIGHT', 'gpt-5.4-mini'),
 
   /** Realtime voice API. Se consume via `fetch` directo (string, no LanguageModel). */

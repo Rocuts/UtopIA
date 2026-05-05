@@ -21,7 +21,7 @@ export default function SettingsPage() {
   return (
     <div
       data-lenis-prevent
-      className="min-h-full w-full overflow-y-auto bg-n-1000"
+      className="min-h-full w-full overflow-y-auto bg-n-0"
     >
       <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
         <motion.header
@@ -37,10 +37,10 @@ export default function SettingsPage() {
             <SettingsIcon className="w-5 h-5 text-gold-500" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-eyebrow text-n-500 font-medium font-mono">
+            <span className="text-xs uppercase tracking-eyebrow text-n-600 font-medium font-mono">
               {t.settings.eyebrow}
             </span>
-            <h1 className="font-serif-elite text-3xl md:text-4xl leading-tight tracking-tight text-n-100">
+            <h1 className="font-serif-elite text-3xl md:text-4xl leading-tight tracking-tight text-n-1000">
               {t.settings.title}
             </h1>
           </div>

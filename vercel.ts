@@ -61,12 +61,19 @@ export const config: VercelConfig = {
     // Future Ola 1 (núcleo contable). Listed pre-emptively so when the
     // route ships it already has an explicit budget.
     'src/app/api/accounting/opening-balance/route.ts': { maxDuration: 120 },
+
+    // WS5 — Monthly Close Workflow.
+    // start/route.ts: 60s covers the DB idempotency check + workflow start call.
+    // cron/monthly-close/route.ts: 300s to iterate all workspaces and fire starts.
+    'src/app/api/accounting/close/start/route.ts': { maxDuration: 60 },
+    'src/app/api/cron/monthly-close/route.ts': { maxDuration: 300 },
   },
 
-  // Cron jobs (production deployment only). Migrated verbatim from the
-  // previous vercel.json. Endpoints under /api/cron/* are exempted from
-  // the proxy CSRF check (see src/proxy.ts CSRF_ALLOWLIST).
+  // Cron jobs (production deployment only). Endpoints under /api/cron/* are
+  // exempted from the proxy CSRF check (see src/proxy.ts CSRF_ALLOWLIST).
   crons: [
     { path: '/api/cron/calendar-sync', schedule: '0 11 * * *' },
+    // WS5: 1ro de cada mes a las 06:00 UTC = 01:00 Colombia (UTC-5).
+    { path: '/api/cron/monthly-close', schedule: '0 6 1 * *' },
   ],
 };

@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BookOpen,
+  ChevronRight,
   Compass,
   Scale,
   Shield,
@@ -126,6 +127,21 @@ function toAreaKpi(value: LiveKpiValue, label: string): AreaKpi {
   return kpi;
 }
 
+// ─── Alert route resolver ───────────────────────────────────────────────────
+
+const AREA_ROUTE: Record<string, string> = {
+  escudo: '/workspace/escudo',
+  valor: '/workspace/valor',
+  verdad: '/workspace/verdad',
+  futuro: '/workspace/futuro',
+  global: '/workspace/escudo', // tax deadlines are the most common global alert
+};
+
+function alertHref(alert: Alert): string {
+  if (alert.actionHref) return alert.actionHref;
+  return AREA_ROUTE[alert.area] ?? '/workspace/escudo';
+}
+
 // ─── Alerts strip ───────────────────────────────────────────────────────────
 
 const SEVERITY_CHIP: Record<Alert['severity'], string> = {
@@ -210,17 +226,24 @@ function AlertsStrip({
         className="flex flex-col gap-1.5"
       >
         {top.map((alert) => (
-          <li
-            key={alert.id}
-            className={['flex items-start gap-2.5 px-3 py-2 rounded-md border', SEVERITY_CHIP[alert.severity]].join(' ')}
-          >
-            <span aria-hidden="true" className={`mt-1 inline-block h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[alert.severity]}`} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-n-900 truncate">{alert.title}</div>
-              {alert.description && (
-                <div className="text-xs text-n-600 truncate font-light">{alert.description}</div>
-              )}
-            </div>
+          <li key={alert.id}>
+            <Link
+              href={alertHref(alert)}
+              className={[
+                'flex items-start gap-2.5 px-3 py-2 rounded-md border cursor-pointer',
+                'transition-colors hover:bg-gold-500/5',
+                SEVERITY_CHIP[alert.severity],
+              ].join(' ')}
+            >
+              <span aria-hidden="true" className={`mt-1 inline-block h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[alert.severity]}`} />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-n-900 truncate">{alert.title}</div>
+                {alert.description && (
+                  <div className="text-xs text-n-600 truncate font-light">{alert.description}</div>
+                )}
+              </div>
+              <ChevronRight className="h-3.5 w-3.5 ml-auto shrink-0 opacity-60 mt-0.5" aria-hidden="true" />
+            </Link>
           </li>
         ))}
       </ul>

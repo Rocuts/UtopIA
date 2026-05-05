@@ -151,7 +151,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       data-lenis-prevent
-      className="min-h-screen w-full bg-n-0 text-n-900 flex flex-col relative overflow-x-hidden"
+      className="h-screen w-full bg-n-0 text-n-900 flex flex-col relative overflow-hidden"
     >
       {/* Skip-to-content link — visible on focus, compliant with WCAG 2.1 */}
       <a
@@ -180,14 +180,14 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
       <EliteHeader />
 
-      <div className="flex-1 flex min-h-0 relative z-10">
+      <div className="flex-1 flex overflow-hidden relative z-10">
         <ChatSidebar />
         <main
           id="main-content"
           role="main"
           tabIndex={-1}
           aria-label={language === 'es' ? 'Contenido principal' : 'Main content'}
-          className="flex-1 min-w-0 min-h-[calc(100vh-64px)] relative focus:outline-none"
+          className="flex-1 min-w-0 h-full overflow-y-auto styled-scrollbar relative focus:outline-none"
         >
           {children}
         </main>

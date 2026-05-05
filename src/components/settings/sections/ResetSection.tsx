@@ -65,14 +65,14 @@ export function ResetSection() {
         <EliteCard.Header className="border-danger/25">
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-5 h-5 text-danger" aria-hidden="true" />
-            <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+            <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
               {t.settings.reset.title}
             </h2>
           </div>
         </EliteCard.Header>
         <EliteCard.Body>
           <div className="flex flex-col gap-5">
-            <p className="text-sm text-n-300 leading-relaxed">
+            <p className="text-sm text-n-700 leading-relaxed">
               {t.settings.reset.description}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
@@ -118,14 +118,14 @@ export function ResetSection() {
         }
       >
         <div className="flex flex-col gap-3">
-          <p className="text-xs uppercase tracking-eyebrow text-n-500 font-medium">
+          <p className="text-xs uppercase tracking-eyebrow text-n-600 font-medium">
             {t.settings.security.keysLabel}
           </p>
           <ul className="flex flex-col gap-1">
             {(pending === 'all' ? FULL_KEYS : UI_KEYS).map((key) => (
               <li
                 key={key}
-                className="font-mono text-xs-mono text-n-400 px-3 py-1.5 rounded-md bg-n-900/60 border border-gold-500/10"
+                className="font-mono text-xs-mono text-n-600 px-3 py-1.5 rounded-md bg-n-100/60 border border-gold-500/10"
               >
                 {key}
               </li>

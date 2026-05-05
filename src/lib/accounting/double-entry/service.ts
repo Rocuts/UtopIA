@@ -400,6 +400,15 @@ export async function postEntry(
           .from(journalLines)
           .where(eq(journalLines.entryId, entry.id));
 
+        // WS6: invalida cache de pilares (best-effort, jamás propaga errores).
+        // `entry.periodId` es el período del asiento recién posteado.
+        try {
+          const { invalidatePillarKpis } = await import('@/lib/kpis/cache');
+          await invalidatePillarKpis(input.workspaceId, updated.periodId);
+        } catch (err) {
+          console.warn('[ws6/cache] pillar invalidation failed', err);
+        }
+
         return { entry: updated, lines };
       },
       { isolationLevel: 'serializable' },

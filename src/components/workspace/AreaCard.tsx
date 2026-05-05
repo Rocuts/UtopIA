@@ -411,10 +411,10 @@ export function AreaCard({
                           : undefined
                     }
                     className={cn(
-                      'shrink-0 inline-flex items-center rounded-sm px-1 py-0.5',
+                      'shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5',
                       'font-mono text-[9px] uppercase tracking-eyebrow font-medium',
                       source === 'mock'
-                        ? 'bg-n-100 text-n-500 border border-dashed border-n-300'
+                        ? 'border border-n-300/40 text-n-400 bg-transparent dark:border-n-600/40 dark:text-n-500'
                         : 'bg-success/10 text-success border border-success/20',
                     )}
                   >

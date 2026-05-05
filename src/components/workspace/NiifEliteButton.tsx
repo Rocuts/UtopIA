@@ -30,6 +30,12 @@ export interface NiifEliteButtonProps {
   long?: boolean;
   /** Override visual — por defecto sólo ícono + label; si true muestra el caption secundario */
   showCaption?: boolean;
+  /**
+   * compact — hides the text label at md breakpoint and below, showing only
+   * the Sparkles icon. Used in EliteHeader when viewport is 768–1024px to
+   * prevent AreaNav truncation.
+   */
+  compact?: boolean;
   className?: string;
 }
 
@@ -37,6 +43,7 @@ export function NiifEliteButton({
   size = 'md',
   long = false,
   showCaption = false,
+  compact = false,
   className,
 }: NiifEliteButtonProps) {
   const { t, language } = useLanguage();
@@ -125,7 +132,7 @@ export function NiifEliteButton({
       />
 
       <Sparkles className={cn('relative z-10 drop-shadow-sm', iconSize)} strokeWidth={2.2} />
-      <span className="relative z-10 uppercase tracking-wider">
+      <span className={cn('relative z-10 uppercase tracking-wider', compact ? 'hidden md:inline' : '')}>
         {label}
       </span>
       {showCaption && (

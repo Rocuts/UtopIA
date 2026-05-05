@@ -15,10 +15,10 @@ export function IntegrationsSection() {
     <div className="flex flex-col gap-4">
       <EliteCard variant="glass" padding="md">
         <div className="flex flex-col gap-1.5">
-          <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+          <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
             {t.settings.sections.integrations}
           </h2>
-          <p className="text-sm text-n-400 leading-relaxed">
+          <p className="text-sm text-n-600 leading-relaxed">
             {t.settings.integrations.description}
           </p>
         </div>

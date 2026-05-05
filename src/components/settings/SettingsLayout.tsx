@@ -73,13 +73,13 @@ export function SettingsLayout() {
     <div className="flex flex-col md:flex-row gap-6 md:gap-10">
       {/* Mobile: select dropdown */}
       <div className="md:hidden">
-        <label className="block text-xs uppercase tracking-eyebrow text-n-500 mb-2">
+        <label className="block text-xs uppercase tracking-eyebrow text-n-600 mb-2">
           {t.settings.title}
         </label>
         <select
           value={active}
           onChange={(e) => handleSelect(e.target.value as SettingsSectionId)}
-          className="w-full h-10 px-3 rounded-md bg-n-900 border border-gold-500/20 text-n-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          className="w-full h-10 px-3 rounded-md bg-n-100 border border-gold-500/20 text-n-1000 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
           aria-label={t.settings.title}
         >
           {SETTINGS_SECTION_ORDER.map((id) => (

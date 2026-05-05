@@ -93,10 +93,10 @@ export function SettingsNav({ active, onSelect }: SettingsNavProps) {
             className={cn(
               'group relative flex items-center gap-3 px-3 py-2.5 rounded-md',
               'text-sm transition-colors',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
               isActive
-                ? 'text-n-100 bg-gold-500/10 border border-gold-500/25'
-                : 'text-n-400 hover:text-n-100 hover:bg-n-0/5 border border-transparent',
+                ? 'text-n-1000 bg-gold-500/10 border border-gold-500/25'
+                : 'text-n-700 hover:text-n-1000 hover:bg-n-1000/5 border border-transparent',
             )}
           >
             {isActive && !reduce && (
@@ -110,7 +110,7 @@ export function SettingsNav({ active, onSelect }: SettingsNavProps) {
             <Icon
               className={cn(
                 'w-4 h-4 shrink-0',
-                isActive ? 'text-gold-500' : 'text-n-500 group-hover:text-n-300',
+                isActive ? 'text-gold-500' : 'text-n-500 group-hover:text-n-800',
               )}
             />
             <span className="truncate">{label}</span>

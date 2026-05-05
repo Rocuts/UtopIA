@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { Fraunces } from 'next/font/google';
@@ -311,12 +312,20 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen font-sans">
-        {/* Pre-hydration theme resolver — must be the first <body> child so
-            data-theme is set on <html> before any paint. Prevents FOUC. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        {/* Pre-hydration density resolver — sets data-density on <html> so
-            compact-mode tokens apply before first paint. */}
-        <script dangerouslySetInnerHTML={{ __html: DENSITY_INIT_SCRIPT }} />
+        {/* Pre-hydration theme/density resolvers via next/script with
+            `beforeInteractive` strategy: Next 16 + React 19 prohíben <script>
+            inline en componentes (no ejecutan en client). `Script` con esa
+            estrategia se inyecta antes del bundle cliente y previene FOUC. */}
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+        <Script
+          id="density-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: DENSITY_INIT_SCRIPT }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}

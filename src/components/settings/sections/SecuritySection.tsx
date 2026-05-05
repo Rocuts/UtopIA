@@ -27,7 +27,7 @@ export function SecuritySection() {
       <EliteCard.Header>
         <div className="flex items-center gap-2.5">
           <Shield className="w-5 h-5 text-gold-500" aria-hidden="true" />
-          <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-100">
+          <h2 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
             {t.settings.sections.security}
           </h2>
         </div>
@@ -46,17 +46,17 @@ export function SecuritySection() {
               aria-hidden="true"
             />
             <div className="flex flex-col gap-1.5">
-              <h3 className="text-sm font-semibold text-n-100">
+              <h3 className="text-sm font-semibold text-n-1000">
                 {t.settings.security.title}
               </h3>
-              <p className="text-sm text-n-300 leading-relaxed">
+              <p className="text-sm text-n-700 leading-relaxed">
                 {t.settings.security.advisory}
               </p>
             </div>
           </div>
 
           <div>
-            <p className="text-xs uppercase tracking-eyebrow text-n-500 font-medium mb-3">
+            <p className="text-xs uppercase tracking-eyebrow text-n-600 font-medium mb-3">
               {t.settings.security.keysLabel}
             </p>
             <ul className="flex flex-col gap-1.5">
@@ -65,13 +65,13 @@ export function SecuritySection() {
                   key={id}
                   className={cn(
                     'flex items-center justify-between gap-3 px-3 py-2 rounded-md',
-                    'bg-n-900/50 border border-gold-500/10',
+                    'bg-n-100/50 border border-gold-500/10',
                   )}
                 >
-                  <span className="text-sm text-n-200">
+                  <span className="text-sm text-n-900">
                     {t.settings.security.keys[id as KeyId]}
                   </span>
-                  <code className="font-mono text-xs-mono text-n-500 truncate">
+                  <code className="font-mono text-xs-mono text-n-600 truncate">
                     {key}
                   </code>
                 </li>

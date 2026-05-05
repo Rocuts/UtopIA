@@ -28,11 +28,22 @@ import {
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
 import type { PymeEntry, PymeEntryKind } from './types';
+import { PromoteEntries, type PromotableEntry } from './PromoteEntries';
 
 interface LedgerProps {
   bookId: string;
   /** ISO 4217 — para formatear los montos con la moneda correcta. */
   currency?: string;
+  /**
+   * UUID del período contable activo. Requerido por el bridge de promoción.
+   * Si no se provee, el botón "Promover" no aparece.
+   */
+  activePeriodId?: string;
+  /**
+   * Si true, se muestra el toggle del motor de impuestos en el diálogo.
+   * El parent puede resolver esto desde process.env en SSR o via API.
+   */
+  taxEngineAvailable?: boolean;
 }
 
 const PAGE_SIZE = 100;
@@ -89,7 +100,12 @@ function monthBounds(monthVal: string): { from: string; to: string } | null {
   };
 }
 
-export function Ledger({ bookId, currency = 'COP' }: LedgerProps) {
+export function Ledger({
+  bookId,
+  currency = 'COP',
+  activePeriodId,
+  taxEngineAvailable = false,
+}: LedgerProps) {
   const { t, language } = useLanguage();
   const tt = t.pyme.ledger;
 
@@ -101,6 +117,38 @@ export function Ledger({ bookId, currency = 'COP' }: LedgerProps) {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
+
+  // ── Selección para Promover ───────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectedEntries = useMemo((): PromotableEntry[] => {
+    return entries
+      .filter((e) => selectedIds.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        description: e.description,
+        kind: e.kind as 'ingreso' | 'egreso',
+        amount: String(e.amount),
+        category: e.category ?? null,
+        pucHint: e.pucHint ?? null,
+      }));
+  }, [entries, selectedIds]);
+
+  const handlePromoteSuccess = useCallback((journalEntryIds: string[]) => {
+    void journalEntryIds; // los usa el diálogo para mostrar link
+    // Limpiar selección y refrescar.
+    setSelectedIds(new Set());
+    setOffset(0);
+  }, []);
 
   const loadPage = useCallback(
     async (opts: {
@@ -197,6 +245,16 @@ export function Ledger({ bookId, currency = 'COP' }: LedgerProps) {
             {tt.title}
           </h3>
         </div>
+
+        {/* Botón Promover — solo visible cuando el flag está activo y hay un periodId */}
+        {activePeriodId && (
+          <PromoteEntries
+            selectedEntries={selectedEntries}
+            periodId={activePeriodId}
+            onSuccess={handlePromoteSuccess}
+            taxEngineAvailable={taxEngineAvailable}
+          />
+        )}
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -276,6 +334,9 @@ export function Ledger({ bookId, currency = 'COP' }: LedgerProps) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-n-0/95 backdrop-blur">
             <tr className="text-left text-xs font-medium uppercase tracking-eyebrow text-n-600">
+              {activePeriodId && (
+                <th scope="col" className="pl-4 pr-1 py-2.5 w-8" aria-label="Seleccionar" />
+              )}
               <th scope="col" className="px-4 py-2.5 font-medium">{tt.col_date}</th>
               <th scope="col" className="px-4 py-2.5 font-medium">{tt.col_description}</th>
               <th scope="col" className="px-4 py-2.5 font-medium">{tt.col_category}</th>
@@ -288,7 +349,7 @@ export function Ledger({ bookId, currency = 'COP' }: LedgerProps) {
           <tbody>
             {filtered.length === 0 && !loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-n-600">
+                <td colSpan={activePeriodId ? 6 : 5} className="px-4 py-10 text-center text-n-600">
                   {tt.empty}
                 </td>
               </tr>
@@ -296,8 +357,26 @@ export function Ledger({ bookId, currency = 'COP' }: LedgerProps) {
             {filtered.map((e) => {
               const date = (e.entryDate ?? '').slice(0, 10);
               const amount = Number(e.amount) || 0;
+              const isSelected = selectedIds.has(e.id);
               return (
-                <tr key={e.id} className="border-t border-n-200 hover:bg-n-100 transition-colors">
+                <tr
+                  key={e.id}
+                  className={cn(
+                    'border-t border-n-200 hover:bg-n-100 transition-colors',
+                    isSelected && 'bg-area-escudo/5',
+                  )}
+                >
+                  {activePeriodId && (
+                    <td className="pl-4 pr-1 py-2.5 align-top">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(e.id)}
+                        aria-label={`Seleccionar ${e.description}`}
+                        className="h-3.5 w-3.5 rounded border-n-300 text-area-escudo focus:ring-area-escudo/30"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2.5 align-top text-n-800 num whitespace-nowrap">
                     {date}
                   </td>

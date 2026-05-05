@@ -386,7 +386,9 @@ export function EliteHeader({ className }: EliteHeaderProps) {
           isHome ? 'hidden' : '',
         )}
       >
-        <AreaNav />
+        <div className="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <AreaNav />
+        </div>
       </div>
 
       {/* Flex spacer when nav is hidden, so right cluster stays right */}
@@ -394,7 +396,7 @@ export function EliteHeader({ className }: EliteHeaderProps) {
 
       {/* Actions cluster — right */}
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-        <NiifEliteButton size="md" />
+        <NiifEliteButton size="md" compact />
         <span
           className="hidden md:inline-block h-6 w-px bg-gold-500/22"
           aria-hidden="true"

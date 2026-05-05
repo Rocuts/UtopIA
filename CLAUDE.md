@@ -28,8 +28,8 @@ Optional model overrides (pass plain OpenAI model IDs — no `openai/` prefix; i
 - `OPENAI_MODEL_CHAT` (default `gpt-5.4-mini`) — chat orchestrator, specialists, synthesizer
 - `OPENAI_MODEL_FINANCIAL` (default `gpt-5.4-mini`) — financial/audit/tax/valuation/etc. pipelines
 - `OPENAI_MODEL_CLASSIFIER` (default `gpt-5.4-nano`) — query classifier (T1/T2/T3 routing); usa nano para ahorrar costo
-- `OPENAI_MODEL_OCR` (default `gpt-5.4`) — PDF/image OCR in `/api/upload` (full model, not mini, for accuracy on accounting docs)
-- `OPENAI_MODEL_OCR_LIGHT` (default `gpt-5.4-mini`) — OCR ligero para facturas y tirillas (vision-extractor pyme)
+- `OPENAI_MODEL_OCR` (default `gpt-5.4-mini`) — PDF/image OCR. Por preferencia del usuario, `gpt-5.4-mini` con `reasoningEffort: 'low'` y `MAX_OUTPUT_TOKENS: 16000` da precisión suficiente para cuadernos manuscritos y balances PDF a 5x menos costo que el full. Override a `gpt-5.4` (full) si una empresa lo requiere.
+- `OPENAI_MODEL_OCR_LIGHT` (default `gpt-5.4-mini`) — alias retrocompatible (mismo modelo); slot reservado por si en el futuro se diferencia (ej. nano para tirillas simples).
 - `OPENAI_MODEL_EMBEDDINGS` (default `text-embedding-3-small`) — RAG embeddings via `@langchain/openai`
 - Others in `src/lib/config/models.ts`
 

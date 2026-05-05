@@ -555,7 +555,7 @@ body {
 }
 [data-theme="dark"] .glass-elite,
 [data-theme="elite"] .glass-elite {
-  background: rgb(10 9 7 / 0.65);
+  background: rgb(28 25 21 / 0.72);
   border-color: rgb(212 184 118 / 0.22);
   box-shadow:
     inset 0 0 0 0.5px rgb(212 184 118 / 0.10),
@@ -575,7 +575,7 @@ body {
 }
 [data-theme="dark"] .glass-elite-elevated,
 [data-theme="elite"] .glass-elite-elevated {
-  background: rgb(20 18 16 / 0.78);
+  background: rgb(28 25 21 / 0.85);
   border-color: rgb(212 184 118 / 0.28);
   box-shadow:
     0 0 50px -10px rgb(212 184 118 / 0.14),

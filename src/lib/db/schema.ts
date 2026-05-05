@@ -678,3 +678,27 @@ export type JournalEntryRow = typeof journalEntries.$inferSelect;
 export type NewJournalEntryRow = typeof journalEntries.$inferInsert;
 export type JournalLineRow = typeof journalLines.$inferSelect;
 export type NewJournalLineRow = typeof journalLines.$inferInsert;
+
+// ─── Ola 1+1 Élite — schema splits ──────────────────────────────────────────
+//
+// Los siguientes módulos viven en archivos separados para permitir trabajo
+// paralelo de los workstreams (WS1, WS3, WS4, WS5, WS6) sin colisión de
+// merges en este archivo. Drizzle Kit los descubre vía estos re-exports.
+//
+// Cada split documenta sus tablas y por qué viven aparte:
+//   - schema-tax.ts            (WS1) — Smart-Tax Engine
+//   - schema-banking.ts        (WS3) — Conciliación bancaria
+//   - schema-adjustments.ts    (WS4 + WS5) — NIIF Auto-Adjustments + monthly_close_runs
+//   - schema-notifications.ts  (WS6) — Notification subscriptions + log
+//
+// Importante sobre el ciclo schema ↔ split: cada split hace
+// `import { workspaces } from './schema'` para sus FK. El ciclo es seguro
+// porque (1) las definiciones de workspaces, accountingPeriods, etc. están
+// ANTES de los `export *` siguientes, así que cuando un split se carga ya
+// existen; y (2) las FK usan callbacks `() => workspaces.id` (lazy), nunca
+// acceso top-level a las tablas core.
+
+export * from './schema-tax';
+export * from './schema-banking';
+export * from './schema-adjustments';
+export * from './schema-notifications';

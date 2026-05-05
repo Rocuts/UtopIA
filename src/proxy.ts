@@ -122,7 +122,11 @@ const DEFAULT_RATE_LIMIT = 60;
  * Wildcards via prefix-match. Add NEW server-to-server endpoints (webhooks
  * etc.) here EXPLICITLY rather than loosening the global rule.
  */
-const CSRF_ALLOWLIST: readonly string[] = ['/api/cron/'];
+const CSRF_ALLOWLIST: readonly string[] = [
+  '/api/cron/',
+  // WS6: internal server-to-server dispatch (called by WS5 workflow, no browser Origin).
+  '/api/notifications/dispatch',
+];
 
 function getRateLimitConfig(pathname: string): { limit: number; id: string } {
   for (const [prefix, limit] of Object.entries(RATE_LIMITS)) {
@@ -277,5 +281,8 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
+  // Restrict to /api/* only. Workflow DevKit internal paths live under
+  // .well-known/workflow/* which does NOT start with /api/, so they pass
+  // through untouched — no extra exclusion needed.
   matcher: ['/api/:path*'],
 };
