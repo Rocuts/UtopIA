@@ -1,0 +1,68 @@
+name: CI
+
+# CI mínimo de la Ola 1+1 Élite. Verifica los 3 quality gates definidos
+# en docs/MVP_DECISIONS_DEFERRED.md (D6):
+#   - npx tsc --noEmit  (type safety)
+#   - npm test          (vitest, 129 tests críticos)
+#   - npm run build     (Next.js production bundle)
+#
+# El smoke (npm run smoke) NO corre aquí: necesita Neon + dev server, lo
+# cual requiere un workflow aparte con secretos y un branch de Neon staging.
+# Documentado como TODO en docs/SMOKE_TEST_GUIDE.md.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancela runs anteriores del mismo branch al hacer un nuevo push: los
+# typechecks corren rápido, no tiene sentido pagar por uno desactualizado.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    name: Type + Tests + Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: TypeScript noEmit
+        run: npx tsc --noEmit
+
+      - name: Vitest unit tests (129 expected)
+        run: npm test
+
+      - name: Next.js production build
+        run: npm run build
+        env:
+          # Stubs: el código usa lazy `getDb()`, así que basta con que las
+          # vars estén DEFINIDAS (no necesariamente válidas) para que el
+          # bundle se construya sin throws en top-level.
+          DATABASE_URL: postgresql://stub:stub@localhost:5432/stub?sslmode=require
+          OPENAI_API_KEY: sk-stub-for-build-only
+          TAVILY_API_KEY: tvly-stub-for-build-only
+          UTOPIA_AGENT_MODE: orchestrated
+          # Feature flags OFF en CI: build no necesita ejercitarlas y queremos
+          # que cualquier code-path detrás de un flag esté detrás de su gate.
+          UTOPIA_ENABLE_TAX_ENGINE: 'false'
+          UTOPIA_ENABLE_OCR_PROMOTE: 'false'
+          UTOPIA_ENABLE_BANK_RECON: 'false'
+          UTOPIA_ENABLE_AUTO_ADJUSTMENTS: 'false'
+          UTOPIA_ENABLE_MONTHLY_CLOSE_WORKFLOW: 'false'
+          UTOPIA_ENABLE_NOTIFICATIONS: 'false'
+          UTOPIA_ENABLE_ANOMALY_DETECTION: 'false'
