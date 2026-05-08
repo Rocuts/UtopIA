@@ -130,6 +130,23 @@ export const financialReportRequestSchema = z.object({
   detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
 });
 
+/**
+ * Output format hint for `/api/financial-report/export`.
+ *
+ * - `excel` (default, legacy) — multi-tab .xlsx via ExcelJS.
+ * - `pdf` (deprecated) — legacy jsPDF dump.
+ * - `pdf-elite` — editorial PDF rendered via `@react-pdf/renderer`.
+ */
+export const exportFormatSchema = z.enum(['excel', 'pdf', 'pdf-elite']).default('excel');
+
+/**
+ * Extended financial-report request that adds the `format` field. Used by the
+ * export route to dispatch between Excel / legacy PDF / editorial PDF.
+ */
+export const financialExportRequestSchema = financialReportRequestSchema.extend({
+  format: exportFormatSchema,
+});
+
 // ---- Tax planning route ----
 export const taxPlanningRequestSchema = z.object({
   rawData: z.string().min(1, 'Financial data is required').max(DOCUMENT_MAX_CHARS, 'Data too large'),

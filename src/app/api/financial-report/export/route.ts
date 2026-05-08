@@ -1,35 +1,58 @@
 import { NextResponse } from 'next/server';
+import { Readable } from 'node:stream';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
-import { orchestrateFinancialReport } from '@/lib/agents/financial/orchestrator';
-import { financialReportRequestSchema } from '@/lib/validation/schemas';
+import {
+  orchestrateFinancialReport,
+  BalanceValidationError,
+} from '@/lib/agents/financial/orchestrator';
+import {
+  financialReportRequestSchema,
+  exportFormatSchema,
+} from '@/lib/validation/schemas';
+import {
+  composeEditorialReport,
+  renderEditorialReportToStream,
+} from '@/lib/export/pdf-elite-react';
+import { aggregatePillars } from '@/lib/pillars/service';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/export
 // ---------------------------------------------------------------------------
-// Two modes:
+// Three modes:
 //
-// 1. FULL PIPELINE: Send rawData + company → preprocess → 3 agents → export
-//    Body: { rawData: "...", company: {...}, language: "es" }
+// 1. FULL PIPELINE (Excel):    Send rawData + company → preprocess → 3 agents → .xlsx
+// 2. EXPORT ONLY (Excel):      Send an existing FinancialReport → .xlsx
+// 3. EDITORIAL PDF (pdf-elite): Send rawData + company + format='pdf-elite'
+//                               → preprocess → 3 agents → editorial PDF
 //
-// 2. EXPORT ONLY: Send an existing FinancialReport → export to Excel
-//    Body: { report: {...} }
-//
-// Returns: .xlsx file download
+// Selection: body.format ∈ {'excel'|'pdf'|'pdf-elite'} (default 'excel').
+// `pdf` is the legacy jsPDF format and is deprecated — prefer `pdf-elite`.
 // ---------------------------------------------------------------------------
 
+export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Mode 2: Export existing report
+    const formatParse = exportFormatSchema.safeParse(body?.format);
+    const format = formatParse.success ? formatParse.data : 'excel';
+
+    // -----------------------------------------------------------------------
+    // EDITORIAL PDF branch
+    // -----------------------------------------------------------------------
+    if (format === 'pdf-elite') {
+      return await handlePdfElite(body);
+    }
+
+    // -----------------------------------------------------------------------
+    // Mode 2 (Excel-only): pre-built report passthrough.
+    // -----------------------------------------------------------------------
     if (body.report && body.report.consolidatedReport) {
       const report = body.report as FinancialReport;
-
-      // If raw CSV is also provided, preprocess it for precise numbers
       let preprocessed;
       if (body.rawData) {
         const rows = parseTrialBalanceCSV(body.rawData as string);
@@ -37,12 +60,13 @@ export async function POST(req: Request) {
           preprocessed = preprocessTrialBalance(rows);
         }
       }
-
       const buffer = await generateFinancialExcel({ report, preprocessed });
       return createExcelResponse(buffer, report.company.name);
     }
 
-    // Mode 1: Full pipeline
+    // -----------------------------------------------------------------------
+    // Mode 1 (Excel full pipeline) — original behavior preserved verbatim.
+    // -----------------------------------------------------------------------
     const parsed = financialReportRequestSchema.safeParse(body);
     if (!parsed.success) {
       const errors = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
@@ -51,18 +75,13 @@ export async function POST(req: Request) {
 
     const { rawData, company, language, instructions } = parsed.data;
 
-    // Step 1: Preprocess and validate
     const rows = parseTrialBalanceCSV(rawData);
     const preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
 
-    // Enhance the raw data with validation report for the agents
     const enhancedData = preprocessed
       ? `${preprocessed.validationReport}\n\n---\n\nDATOS LIMPIOS (auxiliares validados):\n${preprocessed.cleanData}`
       : rawData;
 
-    // Build binding constraints from pre-computed totals — multiperiodo:
-    // imprimimos cifras del periodo actual (primary) y, si existe comparativo,
-    // tambien las del periodo anterior + variacion YoY.
     let enhancedInstructions = instructions || '';
     let effectiveCompany = company;
     if (preprocessed) {
@@ -137,7 +156,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Step 2: Run the 3-agent financial pipeline
     const report = await orchestrateFinancialReport({
       rawData: enhancedData,
       company: effectiveCompany,
@@ -145,16 +163,145 @@ export async function POST(req: Request) {
       instructions: enhancedInstructions,
     });
 
-    // Step 3: Generate Excel
+    if (format === 'pdf') {
+      // @deprecated — use 'pdf-elite' instead. Legacy jsPDF path is preserved
+      // here only to not break existing callers; new integrations should opt
+      // into 'pdf-elite' for the editorial template.
+    }
+
     const buffer = await generateFinancialExcel({ report, preprocessed });
     return createExcelResponse(buffer, effectiveCompany.name);
   } catch (error) {
     console.error('[financial-report/export] Error:', error instanceof Error ? error.message : error);
     return NextResponse.json(
-      { error: 'Error generating Excel export.' },
+      { error: 'Error generating export.' },
       { status: 500 },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// pdf-elite branch
+// ---------------------------------------------------------------------------
+// Runs the same preprocess + 3-agent pipeline as the Excel path. On
+// BalanceValidationError, builds a degenerate doc and renders a BLOQUEADO PDF
+// (cover + appendix + closing only). On success, optionally aggregates pillars
+// and renders the full editorial document.
+
+async function handlePdfElite(body: unknown): Promise<Response> {
+  const parsed = financialReportRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+    return NextResponse.json({ error: 'Invalid request.', details: errors }, { status: 400 });
+  }
+  const { rawData, company, language, instructions } = parsed.data;
+
+  // Preprocess up front so we can reuse the snapshot for both pillars and the
+  // BLOQUEADO degenerate path.
+  let preprocessed;
+  try {
+    const rows = parseTrialBalanceCSV(rawData);
+    preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+  } catch (err) {
+    console.warn('[pdf-elite] preprocess failed:', err);
+  }
+
+  let report: FinancialReport | null = null;
+  let blockerReasons: string[] = [];
+
+  try {
+    report = await orchestrateFinancialReport({
+      rawData,
+      company,
+      language,
+      instructions,
+    });
+  } catch (err) {
+    if (err instanceof BalanceValidationError) {
+      blockerReasons = err.reasons;
+    } else {
+      throw err;
+    }
+  }
+
+  if (!report) {
+    // BLOCKED branch: build a minimal stub report so composer can produce a
+    // doc whose meta.watermark === 'BLOQUEADO'. The renderer is responsible
+    // for showing only Cover + Normative Appendix + Closing.
+    const stub: FinancialReport = {
+      company,
+      niifAnalysis: {
+        balanceSheet: '',
+        incomeStatement: '',
+        cashFlowStatement: '',
+        equityChangesStatement: '',
+        technicalNotes: '',
+        fullContent: '',
+      },
+      strategicAnalysis: {
+        kpiDashboard: '',
+        breakEvenAnalysis: '',
+        projectedCashFlow: '',
+        strategicRecommendations: '',
+        fullContent: '',
+      },
+      governance: {
+        financialNotes: '',
+        shareholderMinutes: '',
+        fullContent: '',
+      },
+      consolidatedReport:
+        language === 'en'
+          ? '# REPORT BLOCKED — VALIDATION FAILED'
+          : '# REPORTE BLOQUEADO — VALIDACION FALLIDA',
+      generatedAt: new Date().toISOString(),
+    };
+    const doc = composeEditorialReport({
+      report: stub,
+      preprocessed: preprocessed ?? null,
+      pillars: null,
+      language,
+      emittable: { ok: false, blockers: blockerReasons },
+    });
+    const stream = await renderEditorialReportToStream(doc);
+    return pdfResponse(stream, company.name);
+  }
+
+  // Successful path: optionally aggregate pillars (fail-soft).
+  let pillars = null;
+  if (preprocessed?.primary) {
+    try {
+      pillars = aggregatePillars({
+        snapshot: preprocessed.primary,
+        comparative: preprocessed.comparative ?? null,
+      });
+    } catch (err) {
+      console.warn('[pdf-elite] aggregatePillars failed:', err);
+    }
+  }
+
+  const doc = composeEditorialReport({
+    report,
+    preprocessed: preprocessed ?? null,
+    pillars,
+    language,
+  });
+
+  const stream = await renderEditorialReportToStream(doc);
+  return pdfResponse(stream, company.name);
+}
+
+function pdfResponse(stream: Readable, companyName: string): Response {
+  const safeName = companyName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
+  const filename = `Reporte_Editorial_${safeName}_${Date.now()}.pdf`;
+  const web = Readable.toWeb(stream) as unknown as ReadableStream;
+  return new Response(web, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 function createExcelResponse(buffer: Buffer, companyName: string): Response {

@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "companyName": "Demo Comercializadora SAS",
+    "nit": "900123456-7",
+    "entityType": "SAS",
+    "fiscalPeriod": "2026-01 al 2026-12",
+    "comparativePeriod": "2025-01 al 2025-12",
+    "generatedAt": "2026-05-08T12:00:00.000Z",
+    "language": "es"
+  },
+  "cover": {
+    "title": "Informe Financiero Editorial",
+    "subtitle": "Demo Comercializadora SAS",
+    "accentArea": "valor"
+  },
+  "toc": {
+    "entries": [
+      { "label": "Carta del director", "page": 3, "uppercase": false },
+      { "label": "Resumen ejecutivo", "page": 5, "uppercase": false },
+      { "label": "TEMA 1: Indicadores clave", "page": 7, "uppercase": true },
+      { "label": "TEMA 2: Cascada de utilidad", "page": 9, "uppercase": true },
+      { "label": "TEMA 3: Diales de salud", "page": 11, "uppercase": true },
+      { "label": "TEMA 4: Pilares", "page": 13, "uppercase": true },
+      { "label": "TEMA 5: Estados financieros", "page": 15, "uppercase": true },
+      { "label": "TEMA 6: Notas", "page": 23, "uppercase": true },
+      { "label": "TEMA 7: Recomendaciones", "page": 29, "uppercase": true },
+      { "label": "Apéndice normativo", "page": 33, "uppercase": false }
+    ]
+  },
+  "directorLetter": {
+    "portrait": { "kind": "initials", "initials": "EU", "areaAccent": "valor" },
+    "bodyMarkdown": "Demo Comercializadora SAS cierra 2026 con un crecimiento sostenido del 18,4% en ingresos y un margen neto del 11,2%, superando la mediana sectorial. La estructura financiera se mantiene equilibrada: razón corriente 1,87 y endeudamiento 0,42 — ambos en zona saludable bajo NIIF Secc. 17 y los lineamientos de la SuperSociedades.\n\nDestacamos la consolidación del pilar Verdad: cero hallazgos críticos del Curator NIIF y la ecuación maestra del balance cuadra al centavo. La utilidad del ejercicio (Art. 240 ET, 35%) ya está provisionada por $187,3M COP, dejando un excedente disponible para reinversión bajo la guía del Decreto 2420/2015.",
+    "citations": [
+      { "label": "NIIF Secc. 17" },
+      { "label": "Art. 240 ET" },
+      { "label": "Decreto 2420/2015" }
+    ],
+    "signerName": "Equipo UtopIA",
+    "signerRole": "Director Editorial"
+  },
+  "kpiGrid": {
+    "kpis": [
+      { "label": "Activo Total", "value": "$2.847.512.300,00" },
+      { "label": "Pasivo Total", "value": "$1.195.954.600,00" },
+      { "label": "Patrimonio", "value": "$1.651.557.700,00" },
+      { "label": "Ingresos", "value": "$3.420.180.450,00" },
+      { "label": "Gastos + Costos", "value": "$2.886.520.700,00" },
+      { "label": "Utilidad Neta", "value": "$383.012.680,00" },
+      { "label": "Margen Neto", "value": "11,2%" },
+      { "label": "ROE", "value": "23,2%" },
+      { "label": "Razón Corriente", "value": "1,87" },
+      { "label": "Endeudamiento", "value": "42,0%" },
+      { "label": "Días Autonomía", "value": "47 días" },
+      { "label": "Crecimiento Ingresos", "value": "18,4%" }
+    ]
+  },
+  "waterfall": {
+    "items": [
+      { "label": "Ingresos", "amount": 3420180450, "sign": "pos" },
+      { "label": "(Costos de Ventas)", "amount": -2104230120, "sign": "neg" },
+      { "label": "(Gastos Operacionales)", "amount": -601480700, "sign": "neg" },
+      { "label": "(Impuesto de Renta)", "amount": -187321650, "sign": "neg" },
+      { "label": "Utilidad Neta", "amount": 383012680, "sign": "total" }
+    ]
+  },
+  "dialGauges": {
+    "gauges": [
+      {
+        "label": "Razón Corriente",
+        "value": 1.87,
+        "min": 0,
+        "max": 5,
+        "thresholds": [1.0, 1.5, 2.5],
+        "areaAccent": "escudo",
+        "caption": "Óptimo ≥ 1,5"
+      },
+      {
+        "label": "Prueba Ácida",
+        "value": 1.21,
+        "min": 0,
+        "max": 3,
+        "thresholds": [0.7, 1.0, 2.0],
+        "areaAccent": "escudo",
+        "caption": "Óptimo ≥ 1,0"
+      },
+      {
+        "label": "Endeudamiento",
+        "value": 0.42,
+        "min": 0,
+        "max": 1,
+        "thresholds": [0.3, 0.5, 0.7],
+        "areaAccent": "verdad",
+        "caption": "Óptimo ≤ 0,5"
+      },
+      {
+        "label": "Cobertura Intereses",
+        "value": 4.8,
+        "min": 0,
+        "max": 10,
+        "thresholds": [1.5, 3.0, 6.0],
+        "areaAccent": "futuro",
+        "caption": "Óptimo ≥ 3,0"
+      }
+    ]
+  },
+  "pillars": {
+    "overall": 78,
+    "satellites": [
+      {
+        "id": "escudo",
+        "label": "Escudo",
+        "score": 74,
+        "topKpi": "Autonomía 47 días",
+        "areaAccent": "escudo"
+      },
+      {
+        "id": "valor",
+        "label": "Valor",
+        "score": 82,
+        "topKpi": "EBITDA $570,3M",
+        "areaAccent": "valor"
+      },
+      {
+        "id": "verdad",
+        "label": "Verdad",
+        "score": 88,
+        "topKpi": "Ecuación cuadra al centavo",
+        "areaAccent": "verdad"
+      },
+      {
+        "id": "futuro",
+        "label": "Futuro",
+        "score": 68,
+        "topKpi": "CAGR 18,4%",
+        "areaAccent": "futuro"
+      }
+    ]
+  },
+  "statements": {
+    "balance": {
+      "caption": "Estado de Situación Financiera",
+      "headers": ["Cuenta", "2026", "2025", "Var %"],
+      "rows": [
+        { "account": "Efectivo y equivalentes", "cells": ["$412.300.000", "$298.110.000", "+38,3%"] },
+        { "account": "Deudores comerciales", "cells": ["$684.200.000", "$612.450.000", "+11,7%"] },
+        { "account": "Inventarios", "cells": ["$521.080.300", "$489.300.500", "+6,5%"] },
+        { "account": "Activo Corriente", "cells": ["$1.617.580.300", "$1.399.860.500", "+15,6%"], "emphasis": "subtotal" },
+        { "account": "Propiedad, planta y equipo", "cells": ["$1.087.432.000", "$1.054.110.000", "+3,2%"] },
+        { "account": "Activo No Corriente", "cells": ["$1.229.932.000", "$1.204.610.000", "+2,1%"], "emphasis": "subtotal" },
+        { "account": "TOTAL ACTIVO", "cells": ["$2.847.512.300", "$2.604.470.500", "+9,3%"], "emphasis": "total" },
+        { "account": "Cuentas por pagar", "cells": ["$487.300.000", "$521.110.000", "-6,5%"] },
+        { "account": "Impuestos por pagar", "cells": ["$187.321.650", "$155.420.300", "+20,5%"] },
+        { "account": "TOTAL PASIVO", "cells": ["$1.195.954.600", "$1.115.840.300", "+7,2%"], "emphasis": "total" }
+      ]
+    },
+    "income": {
+      "caption": "Estado de Resultados Integral",
+      "headers": ["Cuenta", "2026", "2025", "Var %"],
+      "rows": [
+        { "account": "Ingresos operacionales", "cells": ["$3.420.180.450", "$2.890.330.700", "+18,3%"] },
+        { "account": "Costo de ventas", "cells": ["($2.104.230.120)", "($1.792.110.450)", "+17,4%"] },
+        { "account": "Utilidad Bruta", "cells": ["$1.315.950.330", "$1.098.220.250", "+19,8%"], "emphasis": "subtotal" },
+        { "account": "Gastos de administración", "cells": ["($321.480.700)", "($289.430.100)", "+11,1%"] },
+        { "account": "Gastos de ventas", "cells": ["($280.000.000)", "($245.110.500)", "+14,2%"] },
+        { "account": "Utilidad Operacional", "cells": ["$714.469.630", "$563.679.650", "+26,8%"], "emphasis": "subtotal" },
+        { "account": "Impuesto de renta (35%)", "cells": ["($187.321.650)", "($155.420.300)", "+20,5%"] },
+        { "account": "UTILIDAD NETA", "cells": ["$383.012.680", "$294.220.300", "+30,2%"], "emphasis": "total" }
+      ]
+    },
+    "cashFlow": {
+      "caption": "Estado de Flujos de Efectivo (Indirecto)",
+      "headers": ["Concepto", "2026", "2025"],
+      "rows": [
+        { "account": "Utilidad Neta", "cells": ["$383.012.680", "$294.220.300"] },
+        { "account": "(+) Depreciaciones y amortizaciones", "cells": ["$108.230.000", "$94.110.500"] },
+        { "account": "(-) Variación capital de trabajo", "cells": ["($87.430.500)", "($45.220.100)"] },
+        { "account": "Flujo Operativo", "cells": ["$403.812.180", "$343.110.700"], "emphasis": "subtotal" },
+        { "account": "(-) CapEx (PPE)", "cells": ["($141.552.300)", "($128.330.450)"] },
+        { "account": "Flujo de Inversión", "cells": ["($141.552.300)", "($128.330.450)"], "emphasis": "subtotal" },
+        { "account": "Flujo de Financiación", "cells": ["($148.069.880)", "($102.110.300)"], "emphasis": "subtotal" },
+        { "account": "Variación Neta de Caja", "cells": ["$114.190.000", "$112.669.950"], "emphasis": "total" }
+      ]
+    },
+    "equity": {
+      "caption": "Estado de Cambios en el Patrimonio",
+      "headers": ["Concepto", "Capital", "Reserva Legal", "Resultados"],
+      "rows": [
+        { "account": "Saldo Inicial", "cells": ["$500.000.000", "$87.330.000", "$580.230.700"] },
+        { "account": "(+) Utilidad del ejercicio", "cells": ["—", "—", "$383.012.680"] },
+        { "account": "(-) Apropiación reserva legal", "cells": ["—", "$38.301.268", "($38.301.268)"] },
+        { "account": "(-) Distribución dividendos", "cells": ["—", "—", "($101.013.680)"] },
+        { "account": "Saldo Final", "cells": ["$500.000.000", "$125.631.268", "$823.928.432"], "emphasis": "total" }
+      ]
+    }
+  },
+  "notes": {
+    "blocks": [
+      {
+        "heading": "Nota 1 — Bases de Preparación",
+        "bodyMarkdown": "Los estados financieros adjuntos han sido preparados de conformidad con las NIIF para PYMES (Grupo 2) acogidas en Colombia mediante el Decreto 2420/2015 y sus modificatorios. La empresa aplica el modelo de costo histórico salvo en aquellas partidas donde NIIF Secc. 17 exige medición a valor razonable.",
+        "citations": [
+          { "label": "NIIF Secc. 17" },
+          { "label": "Decreto 2420/2015" }
+        ]
+      },
+      {
+        "heading": "Nota 2 — Políticas Contables Significativas",
+        "bodyMarkdown": "El reconocimiento de ingresos sigue NIIF Secc. 23 — punto en el tiempo, al transferir el control de los bienes. Los inventarios se valoran al menor entre el costo (PEPS) y el valor neto realizable según NIC 2. La provisión de impuesto de renta se calcula al 35% conforme al Art. 240 ET.",
+        "citations": [
+          { "label": "NIIF Secc. 23" },
+          { "label": "NIC 2" },
+          { "label": "Art. 240 ET" }
+        ]
+      },
+      {
+        "heading": "Nota 3 — Eventos Posteriores",
+        "bodyMarkdown": "No se identificaron eventos posteriores al 31 de diciembre de 2026 que requieran ajuste o revelación adicional bajo NIIF Secc. 32.",
+        "citations": [{ "label": "NIIF Secc. 32" }]
+      }
+    ]
+  },
+  "recommendations": {
+    "items": [
+      {
+        "title": "Acelerar la conversión de cartera",
+        "bodyMarkdown": "Los días de cobro pasaron de 64 a 73. Se recomienda implementar incentivos por pronto pago (descuento 2% a 10 días) y revisar el límite de crédito de los 5 clientes con mayor antigüedad. Impacto estimado: liberar $80M COP de capital de trabajo.",
+        "areaAccent": "futuro"
+      },
+      {
+        "title": "Negociar refinanciación del pasivo de corto plazo",
+        "bodyMarkdown": "El 78% del pasivo es corriente. Migrar $300M a deuda de largo plazo mejoraría la razón corriente a 2,15 y reduciría el riesgo de liquidez de cara a 2027.",
+        "areaAccent": "valor"
+      },
+      {
+        "title": "Constituir reserva voluntaria adicional",
+        "bodyMarkdown": "La reserva legal alcanzó el 25% del capital suscrito (Ley 222/1995, Art. 452 C.Co.). Recomendamos constituir una reserva estatutaria del 10% de la utilidad para amortiguar el riesgo cambiario.",
+        "areaAccent": "escudo"
+      }
+    ]
+  },
+  "appendix": {
+    "adjustmentsTable": [
+      {
+        "cuenta": "1110",
+        "descripcion": "Reclasificación saldo acreedor en Bancos",
+        "ajuste": -12450000,
+        "norma": "NIC 1 párr. 32"
+      },
+      {
+        "cuenta": "3605",
+        "descripcion": "Cierre virtual de utilidad del ejercicio (R8)",
+        "ajuste": 383012680,
+        "norma": "NIC 1 párr. 16"
+      }
+    ],
+    "validationWarnings": [
+      "Curator R5: Anclaje patrimonial aplicado por $4.500.000 (NIC 1 párr. 106).",
+      "Curator R7: Margen bruto 38,5% — dentro del rango sectorial."
+    ],
+    "bindingTotalsBlock": "TOTALES VINCULANTES (controlTotals)\n  Activo:        $2.847.512.300,00\n  Pasivo:        $1.195.954.600,00\n  Patrimonio:    $1.651.557.700,00\n  Ingresos:      $3.420.180.450,00\n  Gastos+Costos: $2.886.520.700,00\n  Utilidad Neta: $383.012.680,00"
+  }
+}
