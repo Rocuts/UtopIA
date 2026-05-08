@@ -7,24 +7,28 @@
 // individual: una regla que falle NO interrumpe a las otras — el error
 // queda en `result.errors[ruleCode]` para diagnóstico.
 //
-// Orden de ejecución (Pulido Diamante):
-//   R1 → R5 → R3 → R2 → R6 → R4 → R7
+// Orden de ejecución (Autonomía de Cierre):
+//   R1 → R8 → R5 → R3 → R2 → R6 → R4 → R7
 //
 // Justificación del orden:
 //   1. R1 sanea Activos/Pasivos negativos (mutación de control totals).
-//   2. R5 ancla el patrimonio al ECP (depende del controlTotals.patrimonio
-//      ya saneado por R1).
-//   3. R3 atribuye el descuadre residual (lectura sobre control totals
+//   2. R8 aplica Cierre Virtual: traslada utilidad del ejercicio (Clase
+//      4-5-6-7) a Patrimonio (cuenta virtual 3605VC) y reclasifica saldo
+//      histórico de 3605 a 3710VC. Garantiza ecuación contable previa a R5.
+//   3. R5 ancla el patrimonio al ECP (sólo absorbe gaps reales de transición
+//      NIIF / redondeos; los gaps por utilidad transitoria ya fueron
+//      eliminados por R8).
+//   4. R3 atribuye el descuadre residual (lectura sobre control totals
 //      saneados).
-//   4. R2 construye el EFE indirecto (sobre control totals saneados).
-//   5. R6 cierra el EFE contra el saldo PUC 11 (depende de R2).
-//   6. R4 valida la provisión de renta (independiente).
-//   7. R7 emite advertencia de costo presunto (independiente, no muta).
+//   5. R2 construye el EFE indirecto (sobre control totals saneados).
+//   6. R6 cierra el EFE contra el saldo PUC 11 (depende de R2).
+//   7. R4 valida la provisión de renta (independiente).
+//   8. R7 emite advertencia de costo presunto (independiente, no muta).
 //
-// La función NO ES PURA en sentido estricto: las reglas R1, R5, R6 y R7 mutan
-// el snapshot recibido (ver contrato Pulido Diamante en
-// `curator-rules/types.ts`). Sigue siendo determinística: mismo input → mismo
-// output (snapshot mutado idénticamente).
+// La función NO ES PURA en sentido estricto: las reglas R1, R5, R6, R7 y R8
+// mutan el snapshot recibido (ver contratos en `curator-rules/types.ts`).
+// Sigue siendo determinística: mismo input → mismo output (snapshot mutado
+// idénticamente, R8 idempotente sobre cuentas virtuales 3605VC/3710VC).
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot } from './trial-balance';
@@ -36,6 +40,7 @@ import { runR4 } from './curator-rules/r4-tax-provision-sufficiency';
 import { runR5 } from './curator-rules/r5-equity-anchor';
 import { runR6 } from './curator-rules/r6-cashflow-closure';
 import { runR7 } from './curator-rules/r7-presumed-cost';
+import { runR8 } from './curator-rules/r8-virtual-close';
 import type { CuratorFinding, CuratorResult } from './curator-rules/types';
 
 export function runCurator(
@@ -53,6 +58,18 @@ export function runCurator(
   } catch (err) {
     errors['CUR-R1'] = err instanceof Error ? err.message : String(err);
     console.warn('[curator] R1 failed:', err);
+  }
+
+  // R8 — Cierre Virtual: traslado automático de utilidad transitoria a
+  // patrimonio (3605VC) + reclasificación de saldo histórico 3605 → 3710VC
+  // (muta). Corre antes de R5 para que R5 sólo vea gaps reales de NIIF.
+  let r8Out: ReturnType<typeof runR8> | null = null;
+  try {
+    r8Out = runR8(snapshot);
+    findings.push(...r8Out.findings);
+  } catch (err) {
+    errors['CUR-R8'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R8 failed:', err);
   }
 
   // R5 — anclaje patrimonial Balance ↔ ECP (muta).
@@ -130,6 +147,7 @@ export function runCurator(
     convergenceAdjustment: r5Out.convergenceAdjustment,
     cashFlowClosureAdjustment: r6Out.cashFlowClosureAdjustment,
     presumedCostWarning: r7Out.presumedCostWarning,
+    virtualCloseAdjustment: r8Out?.virtualCloseAdjustment,
     findings,
     errors,
     generatedAt: new Date().toISOString(),

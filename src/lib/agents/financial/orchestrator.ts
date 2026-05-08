@@ -352,6 +352,50 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     }
   }
 
+  // --- Seccion A2 — Cierre Virtual aplicado (Curator R8) ---
+  // R8 corre antes que R5 en `runCurator`. Cuando hay actividad P&L (clases 4-7),
+  // R8 SIEMPRE inyecta 3605VC con la utilidad dinámica del periodo y, si hace
+  // falta, absorbe el residual de la ecuación contable en 3710VC. El LLM debe
+  // ver explícitamente este ajuste para no alucinar la utilidad del ejercicio
+  // contra el saldo CSV de 3605 (que R8 anula a 0).
+  const vcAdj = snap.virtualCloseAdjustment;
+  if (vcAdj) {
+    lines.push('');
+    lines.push('## Cierre Virtual aplicado (Curator R8)');
+    lines.push(
+      `- Utilidad dinámica del periodo (Clase 4 − 5 − 6 − 7): ` +
+        `${fmtCop(vcAdj.dynamicNetIncome)} → inyectada en cuenta virtual ` +
+        `${vcAdj.virtualCurrentCode} (${vcAdj.virtualCurrentName}).`,
+    );
+    lines.push(
+      `- Saldo CSV en 3605 al ingresar al Curator: ` +
+        `${fmtCop(vcAdj.csvUtilidadEjercicio)} ` +
+        `(anulado a 0 por R8 — la utilidad autoritativa es la dinámica).`,
+    );
+    if (vcAdj.reclassifiedFrom3605) {
+      lines.push(
+        `- Reclasificación 3605 → ${vcAdj.virtualRetainedCode}: ` +
+          `${fmtCop(vcAdj.reclassifiedAmount)} ` +
+          `(${vcAdj.virtualRetainedName}).`,
+      );
+    }
+    if (vcAdj.centsAdjustment !== 0) {
+      lines.push(
+        `- Ajuste residual absorbido en ${vcAdj.virtualRetainedCode}: ` +
+          `${fmtCop(vcAdj.centsAdjustment)} ` +
+          `(garantiza Activo = Pasivo + Patrimonio al centavo).`,
+      );
+    }
+    lines.push(
+      `- Total Patrimonio post-R8 (autoritativo): ` +
+        `${fmtCop(vcAdj.reconciledEquity)}.`,
+    );
+    lines.push(
+      `- Sustento NIIF: Marco Conceptual NIIF parr. 4.37–4.53 ` +
+        `(Reconocimiento) + NIC 1 parr. 16 (presentación de EEFF).`,
+    );
+  }
+
   // --- Seccion B — Anclaje patrimonial aplicado (Curator R5) ---
   if (
     typeof snap.equityAnchorAdjustment === 'number' &&

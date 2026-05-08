@@ -418,20 +418,33 @@ describe('runCurator (orchestrator)', () => {
   // Pulido Diamante 2026-05-08 — el contrato CFO exige que R1 + R5 + R6 SÍ
   // muten el snapshot cuando hay descuadres. La inmutabilidad solo se
   // preserva cuando NO hay nada que reparar (input ya cuadrado).
+  //
+  // Nota post-R8 (2026-05-08): R8 SIEMPRE muta el snapshot cuando hay
+  // actividad P&L (ingresos + gastos > 0), trasladando la utilidad dinámica
+  // a la cuenta virtual 3605VC en Patrimonio. Para que el Curator no mute
+  // absolutamente nada, el snapshot debe:
+  //   a) No tener actividad P&L (ingresos = gastos = 0) → R8 no actúa (guard).
+  //   b) Ecuación A = P + Pat cuadrada → R5 no actúa.
+  //   c) Sin saldos negativos en activos → R1 no actúa.
+  //   d) Sin EFE (prev = null) → R6 no actúa.
+  //   e) Sin margen > 85% → R7 no actúa.
   // ---------------------------------------------------------------------
-  it('NO muta el snapshot cuando la entrada ya está cuadrada (sin descuadres)', () => {
-    // Snapshot perfectamente cuadrado: sin negativos en activos, ECP coincide
-    // con patrimonio, sin EFE construible (no hay prev). Curator no debería
-    // mutar nada.
+  it('NO muta el snapshot cuando la entrada ya está cuadrada y sin actividad P&L (sin descuadres)', () => {
+    // Snapshot perfectamente cuadrado SIN actividad P&L: balance-sheet puro.
+    // Sin ingresos ni gastos → R8 no actúa (guard: hasPnLActivity = false).
+    // ECP coincide con patrimonio → R5 no actúa.
+    // Sin negativos en activos → R1 no actúa.
+    // Sin prev → R6 no actúa. Sin margen → R7 no actúa.
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
         activo: 1_000_000_000,
         pasivo: 600_000_000,
         patrimonio: 400_000_000,
-        utilidadNeta: 1_000_000_000,
-        impuestosCuenta24: 400_000_000, // 40% — sobre el piso de 30%
-        ingresos: 2_500_000_000, // utilidadNeta = 1B → margen 40% (no dispara R7)
+        ingresos: 0,     // sin actividad P&L → R8 preserva el snapshot
+        gastos: 0,
+        utilidadNeta: 0,
+        impuestosCuenta24: 0,
       }),
       classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
       equity: {

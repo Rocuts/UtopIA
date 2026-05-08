@@ -34,6 +34,7 @@ import type {
   CuratorResult,
   PresumedCostWarning,
   Reclassification,
+  VirtualCloseAdjustment,
 } from './curator-rules/types';
 
 export interface RawAccountRow {
@@ -201,6 +202,8 @@ export interface PeriodSnapshot {
   cashFlowClosureAdjustment?: number;
   /** Callout R7 si margen > 85% Y inventario > 50% ingresos. */
   presumedCostWarning?: PresumedCostWarning;
+  /** Ajuste de Cierre Virtual aplicado por R8 (siempre presente post-curator). */
+  virtualCloseAdjustment?: VirtualCloseAdjustment;
 }
 
 /**
@@ -731,30 +734,26 @@ function buildSnapshotForPeriod(
   const netIncome = totalRevenue - totalExpenses - totalCosts - totalProduction;
 
   // -------------------------------------------------------------------------
-  // 4.1. Auto-reparacion de utilidad del ejercicio
+  // 4.1. Patrimonio crudo — la "Lógica de Cierre Virtual" (R8 del Curator)
+  // sustituyó la auto-reparación condicional que vivía aquí.
+  //
+  // Razón: la auto-reparación previa sólo disparaba si `shortfall ≈ netIncome`
+  // (frágil: balances con descuadres legítimos por otros motivos quedaban sin
+  // utilidad, y balances post-cierre con saldo en 3605 ≠ utilidad dinámica
+  // no se autocorregían). R8 (`curator-rules/r8-virtual-close.ts`) corre
+  // SIEMPRE como primera regla del Curator y es autoritativo:
+  //   - Inyecta cuenta virtual 3605VC con utilidad dinámica.
+  //   - Reclasifica saldo histórico de 3605 a 3710VC (Resultados Acumulados)
+  //     si difiere del cálculo dinámico.
+  //   - Absorbe centavos de redondeo en 3710VC.
+  // El renderer Excel pinta 3605VC como "Resultado del Ejercicio (Corte
+  // Actual)" y los pilares Verdad/Valor leen `controlTotals.utilidadNeta`
+  // y `equityBreakdown.utilidadEjercicio` (ambos sincronizados por R8).
   // -------------------------------------------------------------------------
   const adjustments: string[] = [];
   const validationReasons: string[] = [];
   const suggestedAccounts: string[] = [];
-  let totalEquity = totalEquityRaw;
-
-  const shortfallBeforeReinject = totalAssets - totalLiabilities - totalEquity;
-  const RECONCILE_TOL = Math.max(Math.abs(totalAssets) * 0.001, 1000);
-
-  if (
-    netIncome !== 0 &&
-    Math.abs(shortfallBeforeReinject - netIncome) < RECONCILE_TOL &&
-    Math.abs(shortfallBeforeReinject) > RECONCILE_TOL
-  ) {
-    totalEquity = totalEquityRaw + netIncome;
-    adjustments.push(
-      `Se reinyecto la utilidad del ejercicio (${formatCOP(netIncome)} COP) al ` +
-        `Total Patrimonio del periodo ${period}. El balance exportado parece estar ANTES del cierre ` +
-        `contable: Clase 3 solo incluia capital, reservas y resultados anteriores ` +
-        `(${formatCOP(totalEquityRaw)} COP). Tras el traslado a 3605, la ecuacion ` +
-        `patrimonial cuadra.`,
-    );
-  }
+  const totalEquity = totalEquityRaw;
 
   // -------------------------------------------------------------------------
   // 5. controlTotals

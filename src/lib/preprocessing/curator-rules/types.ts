@@ -24,7 +24,8 @@ export type CuratorRuleCode =
   | 'CUR-R4'
   | 'CUR-R5'
   | 'CUR-R6'
-  | 'CUR-R7';
+  | 'CUR-R7'
+  | 'CUR-R8';
 
 export interface CuratorFinding {
   code: CuratorRuleCode;
@@ -203,6 +204,8 @@ export interface CuratorResult {
   cashFlowClosureAdjustment?: CashFlowClosureAdjustment;
   /** R7: advertencia de costo presunto (no muta cifras). */
   presumedCostWarning?: PresumedCostWarning;
+  /** R8: ajuste de Cierre Virtual (utilidad transitoria → patrimonio). */
+  virtualCloseAdjustment?: VirtualCloseAdjustment;
   /** Findings agregados de las reglas. */
   findings: CuratorFinding[];
   /** Errores capturados por regla (regla → mensaje). Para diagnóstico. */
@@ -244,6 +247,62 @@ export interface CashFlowClosureAdjustment {
   reconciledClosingCash: number;
   /** Saldo inicial caja del periodo. */
   openingCash: number;
+  justification: string;
+}
+
+// ---------------------------------------------------------------------------
+// R8 — Cierre Virtual (Autonomía de Cierre)
+// ---------------------------------------------------------------------------
+// Garantiza la ecuación patrimonial Activo = Pasivo + Patrimonio incluso si
+// el balance de prueba se exporta a mitad de año (sin asiento de cierre) o
+// si el ERP entrega un Clase 3 con un saldo histórico en 3605 que no
+// corresponde al P&L del periodo.
+//
+// La regla SIEMPRE se aplica:
+//   1. Toma utilidad transitoria = Clase 4 - Clase 5 - Clase 6 - Clase 7
+//      (ya calculada en `controlTotals.utilidadNeta` por preprocesamiento).
+//   2. Reclasifica el saldo de la cuenta 3605 del CSV (si difiere de la
+//      utilidad transitoria) hacia una cuenta virtual `3710VC` (Resultados
+//      Acumulados — Cierre Virtual). Conserva trazabilidad: anula el saldo de
+//      3605 a 0 sin remover la fila, e inyecta `3710VC` con el monto.
+//   3. Inyecta una cuenta virtual `3605VC` (Resultado del Ejercicio — Corte
+//      Actual) en Clase 3 con saldo = utilidad transitoria.
+//   4. Recalcula `controlTotals.patrimonio` y `summary.totalEquity`.
+//   5. Si tras la inyección queda una diferencia marginal por redondeo
+//      (≤ tolerancia centavos), la absorbe en `3710VC`.
+//   6. Sobreescribe `equityBreakdown.utilidadEjercicio` con el cálculo
+//      dinámico (autoritativo para downstream: pilares Verdad/Valor, agentes
+//      NIIF, Excel export).
+//
+// Severidad de findings:
+//   - 'informativo' siempre (la regla siempre actúa por diseño).
+//   - 'medio' si tuvo que reclasificar saldo material de 3605 (auditor lo
+//     debe revisar).
+// ---------------------------------------------------------------------------
+export interface VirtualCloseAdjustment {
+  /** Utilidad transitoria calculada del P&L (Clase 4 − 5 − 6 − 7). */
+  dynamicNetIncome: number;
+  /** Saldo histórico en cuenta 3605 leído del CSV (0 si no existía). */
+  csvUtilidadEjercicio: number;
+  /** Diferencia |dynamicNetIncome − csvUtilidadEjercicio|. */
+  utilidadGap: number;
+  /** Si true, hubo que reclasificar saldo no-trivial de 3605 a 3710VC. */
+  reclassifiedFrom3605: boolean;
+  /** Monto reclasificado de 3605 hacia 3710VC (0 si no hubo). */
+  reclassifiedAmount: number;
+  /** Diferencia residual de la ecuación tras inyectar 3605VC, antes del
+   *  ajuste de centavos. */
+  residualGapBeforeCents: number;
+  /** Ajuste de centavos absorbido en 3710VC (puede ser negativo). */
+  centsAdjustment: number;
+  /** Total Patrimonio FINAL post-R8 — autoritativo. */
+  reconciledEquity: number;
+  /** Cuenta virtual donde se imputa la utilidad del ejercicio. */
+  virtualCurrentCode: string;
+  virtualCurrentName: string;
+  /** Cuenta virtual donde se reclasifica 3605 viejo y centavos. */
+  virtualRetainedCode: string;
+  virtualRetainedName: string;
   justification: string;
 }
 

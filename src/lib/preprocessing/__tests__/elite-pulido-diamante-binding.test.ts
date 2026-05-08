@@ -50,12 +50,28 @@ function loadPrimarySnapshot() {
 }
 
 describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', () => {
-  it('renderSnapshotLines emite las 4 secciones Curator cuando el snapshot las trae', () => {
+  // -------------------------------------------------------------------------
+  // Notas de la nueva arquitectura (post-R8, mayo 2026):
+  //
+  // (a) R8 (Cierre Virtual) reemplaza a R5 como absorbedor del gap del fixture:
+  //     el residual de la cuenta 379505 (-$1,572B) + el gap 3605 viejo vs
+  //     utilidad dinámica ($147,5M) terminan en la cuenta virtual 3710VC. R5
+  //     solo ve la ecuación contable ya cuadrada y NO actúa, así que la
+  //     sección "## Anclaje patrimonial aplicado (Curator R5)" NO aparece en
+  //     el bloque vinculante. En su lugar aparece la sección R8.
+  //
+  // (b) R6 (Cierre EFE): la brecha del EFE indirecto vs la variación observada
+  //     en PUC 11 es ≈ $312,5M — superior al 50 % de cualquier bucket
+  //     operativo disponible. El guardrail Pulido Diamante R6 rechaza el
+  //     cierre automático y NO popula `snap.cashFlowClosureAdjustment`, por
+  //     lo que la sección R6 tampoco aparece.
+  // -------------------------------------------------------------------------
+  it('renderSnapshotLines emite R1 + R8 + R7 (R5/R6 inactivos por la nueva arquitectura)', () => {
     const snap = loadPrimarySnapshot();
     const lines = renderSnapshotLines(snap);
     const text = lines.join('\n');
 
-    // Sub-string 1: R1 (reclasificaciones)
+    // Sub-string 1: R1 (reclasificaciones) — DEBE aparecer
     expect(
       text,
       'Falta seccion R1 — el LLM no veria las reclasificaciones del Curator. ' +
@@ -63,23 +79,36 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
         text,
     ).toContain('## Reclasificaciones aplicadas (Curator R1)');
 
-    // Sub-string 2: R5 (anclaje patrimonial)
+    // Sub-string 2 (NUEVA): R8 (Cierre Virtual) — DEBE aparecer porque hay
+    // actividad P&L en el fixture y R8 SIEMPRE muta en ese caso.
     expect(
       text,
-      'Falta seccion R5 — el LLM no veria el anclaje patrimonial Balance↔ECP. ' +
+      'Falta seccion R8 — el LLM no veria el Cierre Virtual aplicado. ' +
         'Output recibido:\n' +
         text,
-    ).toContain('## Anclaje patrimonial aplicado (Curator R5)');
+    ).toContain('## Cierre Virtual aplicado (Curator R8)');
 
-    // Sub-string 3: R6 (cierre EFE)
+    // Sub-string 3: R5 (anclaje patrimonial) — NO debe aparecer: bajo la nueva
+    // arquitectura R8 absorbe el gap antes y deja la ecuación cuadrada, por
+    // lo que el guard de R5 lo deja pasar sin actuar.
     expect(
       text,
-      'Falta seccion R6 — el LLM no veria el cierre del EFE contra PUC 11. ' +
+      'La seccion R5 NO deberia emitirse cuando R8 ya cuadró la ecuación. ' +
         'Output recibido:\n' +
         text,
-    ).toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+    ).not.toContain('## Anclaje patrimonial aplicado (Curator R5)');
 
-    // Sub-string 4: R7 (costo presunto)
+    // Sub-string 4: R6 (cierre EFE) — NO debe aparecer: el guardrail de
+    // plausibilidad rechazó el cierre automático (brecha ≈ $312,5M > 50 %
+    // de todos los buckets). El renderer omite esta sección correctamente.
+    expect(
+      text,
+      'La seccion R6 NO deberia emitirse cuando el guardrail rechaza el cierre. ' +
+        'Output recibido:\n' +
+        text,
+    ).not.toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+
+    // Sub-string 5: R7 (costo presunto) — DEBE aparecer
     expect(
       text,
       'Falta seccion R7 — el LLM no veria la advertencia de costo presunto. ' +
@@ -98,8 +127,10 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
     expect(text).toMatch(/120505/);
     expect(text).toMatch(/159205/);
 
-    // R5: el ajuste de $1.572M debe aparecer.
-    expect(text).toMatch(/1\.572\.000\.000/);
+    // R8: el residual absorbido en 3710VC ≈ $1.719,5M debe aparecer literal
+    // (formato es-CO: punto miles + coma decimal). El centsAdjustment es el
+    // único valor con esa magnitud que el renderer pinta.
+    expect(text).toMatch(/1\.719\.500\.000/);
 
     // R7: el callout debe traer titulo y cuerpo (no vacios).
     expect(text).toMatch(/Texto literal del callout/);

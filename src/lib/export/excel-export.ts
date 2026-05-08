@@ -28,6 +28,7 @@ import type {
   ConvergenceAdjustment,
   CashFlowClosureAdjustment,
   PresumedCostWarning,
+  VirtualCloseAdjustment,
 } from '@/lib/preprocessing/curator-rules/types';
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,7 @@ interface PeriodLayout {
     equityBreakdown?: { convergenceAdjustment?: number };
     curatorConvergenceAdjustment?: ConvergenceAdjustment;
     curatorCashFlowClosure?: CashFlowClosureAdjustment;
+    virtualCloseAdjustment?: VirtualCloseAdjustment;
   };
   /** Periodo comparativo (anterior) — solo si hay 2+ periodos. */
   comparative: PeriodView | null;
@@ -128,6 +130,8 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
     equityBreakdown: prep.primary.equityBreakdown,
     curatorConvergenceAdjustment: prep.primary.curator?.convergenceAdjustment,
     curatorCashFlowClosure: prep.primary.curator?.cashFlowClosureAdjustment,
+    virtualCloseAdjustment:
+      prep.primary.virtualCloseAdjustment ?? prep.primary.curator?.virtualCloseAdjustment,
   };
 
   const comparative: PeriodView | null = prep.comparative
@@ -356,6 +360,31 @@ function addBalanceSheet(
       isMultiPeriod,
     );
     row++;
+
+    // Nota informativa de Cierre Virtual (R8) — siempre que aplique.
+    const vca = primary.virtualCloseAdjustment;
+    if (vca) {
+      const noteRow = ws.getRow(row);
+      noteRow.getCell(2).value =
+        `R8 Cierre Virtual: utilidad transitoria de $${vca.dynamicNetIncome.toLocaleString('es-CO')} ` +
+        `trasladada a Patrimonio (cuenta virtual ${vca.virtualCurrentCode})` +
+        (vca.reclassifiedFrom3605
+          ? ` · saldo histórico 3605 ($${vca.csvUtilidadEjercicio.toLocaleString('es-CO')}) reclasificado a ${vca.virtualRetainedCode}`
+          : '') +
+        (vca.centsAdjustment !== 0 && !vca.reclassifiedFrom3605
+          ? ` · ajuste de centavos $${vca.centsAdjustment.toLocaleString('es-CO')} en ${vca.virtualRetainedCode}`
+          : '') +
+        '.';
+      noteRow.getCell(2).font = {
+        name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.textMuted },
+      };
+      for (let i = 1; i <= (isMultiPeriod ? 6 : 4); i++) {
+        noteRow.getCell(i).fill = {
+          type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.lightGray },
+        };
+      }
+      row++;
+    }
 
     // Verification
     row = addStatementTotalRow(
@@ -1043,8 +1072,12 @@ function addClassRows(
     for (const meta of merged) {
       let currBal = primaryCl ? findAccountBalance([primaryCl], meta.code) ?? 0 : 0;
       let prevBal = comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
-      // Apply abs for liability/equity classes (not 3710ZZ convergence virtual account)
-      if (absValues && meta.code !== '3710ZZ') {
+      // Apply abs for liability/equity classes EXCEPT virtual accounts that
+      // must preserve their sign:
+      //   - 3710ZZ: convergence adjustment (R5)
+      //   - 3605VC: utilidad/pérdida del ejercicio (R8) — pérdidas son negativas
+      //   - 3710VC: ajuste de cierre virtual (R8) — puede ser negativo
+      if (absValues && !isSignPreservingVirtual(meta.code)) {
         currBal = Math.abs(currBal);
         prevBal = Math.abs(prevBal);
       }
@@ -1053,13 +1086,18 @@ function addClassRows(
   } else if (primaryCl) {
     for (const acc of primaryCl.accounts) {
       let bal = acc.balance;
-      if (absValues && acc.code !== '3710ZZ') {
+      if (absValues && !isSignPreservingVirtual(acc.code)) {
         bal = Math.abs(bal);
       }
       row = addAccountRowSingle(ws, row, acc.code, acc.name, bal, undefined, footnoteMap.get(acc.code));
     }
   }
   return row;
+}
+
+/** Cuentas virtuales del Curator cuyo signo debe preservarse al renderizar. */
+function isSignPreservingVirtual(code: string): boolean {
+  return code === '3710ZZ' || code === '3605VC' || code === '3710VC';
 }
 
 function addAccountRowSingle(

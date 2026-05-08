@@ -51,6 +51,28 @@ export function runR5(
   // Sin componentes detectados, el ECP no es construible — no aplicamos.
   if (components.length === 0) return { findings: [] };
 
+  // Guard contra interacción con R8 (Cierre Virtual): si R8 ya cuadró la
+  // ecuación contable (Activo = Pasivo + Patrimonio), R5 NO debe re-anclar
+  // al breakdown — el breakdown puede no reflejar cuentas Clase 3 fuera
+  // del mapeo conocido (ej. 3795 "ajustes pendientes"), y forzar la
+  // igualdad rompería el cuadre que R8 logró. R5 fue diseñado para casos
+  // donde el balance crudo no incluía la utilidad del ejercicio; ese rol
+  // ahora lo cubre R8 autoritativamente.
+  const equationGap =
+    snapshot.controlTotals.activo -
+    snapshot.controlTotals.pasivo -
+    snapshot.controlTotals.patrimonio;
+  const equationTolerance = Math.max(
+    Math.abs(snapshot.controlTotals.activo) * 0.0001,
+    1000,
+  );
+  if (
+    snapshot.virtualCloseAdjustment !== undefined &&
+    Math.abs(equationGap) <= equationTolerance
+  ) {
+    return { findings: [] };
+  }
+
   const ecpClosingBalance = components.reduce((s, n) => s + n, 0);
   const balanceEquity = snapshot.controlTotals.patrimonio;
   const gap = ecpClosingBalance - balanceEquity;
