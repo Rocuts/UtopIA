@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/Card';
 import { InsightInboxButton } from '@/components/notifications/InsightInboxButton';
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarsResult } from '@/lib/pillars/types';
+import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type {
   CashInflectionPoint,
   DuPontSegment,
@@ -36,6 +37,7 @@ import {
   MOCK_PILLARS,
   MOCK_PNL_WATERFALL,
   MOCK_RUNWAY,
+  MOCK_VALOR_TREND,
 } from './mock-data';
 
 export interface PillarsCommandCenterProps {
@@ -55,6 +57,8 @@ export interface PillarsCommandCenterProps {
     amountCop: number;
     zScore: number;
   };
+  /** Serie temporal EBITDA/FCF/Ingresos para el gráfico de barras del pilar Valor. */
+  valorTrend?: ValorBarSeries[];
   /** Si no hay datos reales, marca los charts con un badge "DEMO". */
   demo?: boolean;
 }
@@ -160,7 +164,7 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
       {/* Micro-dashboards apilados */}
       <div className="flex flex-col gap-10">
         <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} />
-        <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} />
+        <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={props.valorTrend ?? MOCK_VALOR_TREND} />
         <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} />
         <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} />
       </div>

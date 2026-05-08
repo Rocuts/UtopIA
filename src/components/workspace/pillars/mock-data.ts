@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PillarsResult, PillarMetrics } from '@/lib/pillars/types';
+import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type {
   PnLWaterfallData,
   DuPontSegment,
@@ -136,6 +137,13 @@ export const MOCK_RUNWAY: RunwayMonth[] = (() => {
   }
   return out;
 })();
+
+export const MOCK_VALOR_TREND: ValorBarSeries[] = [
+  { label: '2023', ebitda: 1_800_000_000, fcf: null,          ingresos: 10_500_000_000, period: '2023', isInterpolated: false },
+  { label: '2024', ebitda: 2_100_000_000, fcf: 850_000_000,   ingresos: 11_200_000_000, period: '2024', isInterpolated: false },
+  { label: '2025', ebitda: 2_450_000_000, fcf: 1_100_000_000, ingresos: 12_000_000_000, period: '2025', isInterpolated: false },
+  { label: '2026', ebitda: 2_800_000_000, fcf: 1_400_000_000, ingresos: 13_500_000_000, period: '2026', isInterpolated: false },
+];
 
 function monthLabel(offset: number): string {
   const d = new Date();

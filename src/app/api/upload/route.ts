@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
@@ -555,6 +556,11 @@ export async function POST(req: Request) {
             detectedPeriods = pp.periods.map((p) => p.period);
             // Prepend validation report so agents receive validated data
             text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+            // Invalidate workspace-balance tag so ERP sync consumers and
+            // cached dashboard queries pick up the freshly uploaded balance.
+            // 'default' profile: 5 min stale / 15 min revalidate (same as
+            // invalidatePillarKpis — sufficient for manual upload cadence).
+            revalidateTag('workspace-balance', 'default');
           }
         }
       } catch {

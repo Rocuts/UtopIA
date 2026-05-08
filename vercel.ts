@@ -76,6 +76,12 @@ export const config: VercelConfig = {
     // alerts pending. Sin LLM, sin red externa más allá de Resend.
     'src/app/api/sentinel/check/route.ts': { maxDuration: 60 },
     'src/app/api/cron/sentinel/route.ts': { maxDuration: 300 },
+
+    // ERP eventing/sync layer.
+    // Webhook: 60s — 202 returned immediately; after() task uses remaining budget.
+    // Cron sync: 300s — iterates all active workspaces via Promise.allSettled.
+    'src/app/api/erp/webhook/[provider]/route.ts': { maxDuration: 60 },
+    'src/app/api/cron/erp-sync/route.ts': { maxDuration: 300 },
   },
 
   // Cron jobs (production deployment only). Endpoints under /api/cron/* are
@@ -90,5 +96,8 @@ export const config: VercelConfig = {
     // y escala alerts >48h sin acción. Suficiente cadencia para insights
     // financieros (no necesita real-time).
     { path: '/api/cron/sentinel', schedule: '0 */6 * * *' },
+    // ERP polling sync: cada 2 horas — ERPs sin push nativo (Alegra, Helisa,
+    // World Office, ContaPyme). Horario laboral en Colombia: 06:00-22:00 COT.
+    { path: '/api/cron/erp-sync', schedule: '0 */2 * * *' },
   ],
 };

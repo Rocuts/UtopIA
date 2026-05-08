@@ -187,6 +187,29 @@ function getFieldsForProvider(provider: ERPProvider): FieldDef[] {
         { key: 'username', label: 'Usuario (email)', placeholder: 'admin@empresa.com', required: true },
         { key: 'password', label: 'Contraseña o API Key', placeholder: '', secret: true, required: true },
       ];
+    case 'sap_s4hana':
+      return [
+        { key: 'baseUrl', label: 'URL del tenant S/4HANA', placeholder: 'https://mi-tenant.s4hana.ondemand.com', required: true },
+        { key: 'clientId', label: 'Client ID (Communication User)', placeholder: 'sb-xsuaa-...', required: true },
+        { key: 'clientSecret', label: 'Client Secret', placeholder: '', secret: true, required: true },
+        { key: 'companyId', label: 'Company Code (opcional)', placeholder: '1000', hint: 'Filtra por código de sociedad SAP' },
+        { key: 'tenantId', label: 'BTP Subdomain (opcional)', placeholder: 'mi-tenant', hint: 'Solo si usa XSUAA de BTP en lugar del S/4 nativo' },
+      ];
+    case 'oracle_fusion':
+      return [
+        { key: 'baseUrl', label: 'URL del pod Oracle', placeholder: 'https://mipod.oraclecloud.com', required: true },
+        { key: 'clientId', label: 'Client ID (IDCS)', placeholder: 'oracle-client-id', required: true },
+        { key: 'clientSecret', label: 'Client Secret', placeholder: '', secret: true, required: true },
+        { key: 'tenantId', label: 'Dominio IDCS', placeholder: 'idcs-abc123.identity.oraclecloud.com', required: true },
+        { key: 'companyId', label: 'Nombre del Ledger (opcional)', placeholder: 'Vision Operations', hint: 'Filtra las balanzas por ledger' },
+        { key: 'apiKey', label: 'Índice segmento cuenta natural (opcional)', placeholder: '2', hint: 'Posición 0-based del segmento PUC en DetailAccountCombination (default 3)' },
+      ];
+    default: {
+      // Exhaustiveness guard: TS valida que el switch cubra todos los ERPProvider.
+      const _exhaustive: never = provider;
+      void _exhaustive;
+      return [];
+    }
   }
 }
 

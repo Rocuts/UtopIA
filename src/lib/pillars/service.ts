@@ -11,6 +11,7 @@
 
 import { computeEscudoPillar } from './escudo';
 import { computeValorPillar } from './valor';
+import { computeValorExecutiveCards } from './valor-cards';
 import { computeVerdadPillar } from './verdad';
 import { computeFuturoPillar } from './futuro';
 import { scoreToStatus } from './health-score';
@@ -47,6 +48,17 @@ export function aggregatePillars(input: PillarsAggregateInput): PillarsResult {
   const valor = safeCompute(computeValorPillar, input, 'valor');
   const verdad = safeCompute(computeVerdadPillar, input, 'verdad');
   const futuro = safeCompute(computeFuturoPillar, input, 'futuro');
+
+  // Inyectar las 4 tarjetas ejecutivas (EBITDA / WAOO / Ratio / FCF) sólo en
+  // el pilar Valor. Try/catch independiente — si falla, las cards no aparecen
+  // pero el pilar Valor (con sus 3 KPIs NIIF clásicos) sigue intacto.
+  try {
+    valor.executiveCards = computeValorExecutiveCards(input);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[pillars] valor.executiveCards failed:', err);
+    valor.errors = { ...(valor.errors ?? {}), executiveCards: message };
+  }
 
   const overallScore = Math.round(
     (escudo.healthScore + valor.healthScore + verdad.healthScore + futuro.healthScore) / 4,

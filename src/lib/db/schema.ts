@@ -7,6 +7,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  serial,
   text,
   timestamp,
   uniqueIndex,
@@ -703,3 +704,47 @@ export * from './schema-banking';
 export * from './schema-adjustments';
 export * from './schema-notifications';
 export * from './schema-sentinel';
+
+// ─── ERP Account Mapping ─────────────────────────────────────────────────────
+//
+// Tabla de mapeo entre cuentas ERP del proveedor y cuentas PUC colombiano.
+// Permite que el pipeline de sincronización traduzca automáticamente los
+// saldos del ERP al formato esperado por el preprocesador NIIF.
+//
+// `provider` ∈ tipos soportados por ERPProvider (ver src/lib/erp/types.ts).
+// `erpAccount` es el código/ID nativo del ERP (string arbitrario).
+// `pucAccount` es el código del PUC colombiano (ej. '1105', '2205').
+// `validFrom` permite versionar el mapeo si el ERP reclasifica cuentas.
+//
+// unique_idx: (workspaceId, provider, erpAccount) — un solo mapeo PUC
+// activo por cuenta ERP. Para reclasificar, insertar con nueva `validFrom`.
+
+export const erpAccountMapping = pgTable(
+  'erp_account_mapping',
+  {
+    id: serial('id').primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    erpAccount: text('erp_account').notNull(),
+    pucAccount: text('puc_account').notNull(),
+    pucName: text('puc_name'),
+    validFrom: timestamp('valid_from', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    uniqueWorkspaceProviderErp: uniqueIndex('erp_mapping_unique_idx').on(
+      table.workspaceId,
+      table.provider,
+      table.erpAccount,
+    ),
+  }),
+);
+
+export type ErpAccountMapping = typeof erpAccountMapping.$inferSelect;
+export type NewErpAccountMapping = typeof erpAccountMapping.$inferInsert;

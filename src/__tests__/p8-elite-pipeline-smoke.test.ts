@@ -92,16 +92,18 @@ describe('P8 Elite Pipeline Smoke — full bridge', () => {
     expect(out.primary.curator?.findings.length).toBeGreaterThan(0);
   });
 
-  it('(2) curator dispara R3 (brecha de cuadratura) y R4 (provisión renta) sobre el TB de fixture', () => {
+  it('(2) curator dispara R8 (cierre virtual) y R4 (provisión renta) sobre el TB de fixture', () => {
     const out = preprocessTrialBalance(TB);
     const findings = out.primary.curator?.findings ?? [];
     const codes = new Set(findings.map((f) => f.code));
-    // R3: el TB tiene Activo 1.456B vs Pasivo+Patrimonio 1.0B → gap de 456M
-    expect(codes.has('CUR-R3')).toBe(true);
+    // R8 (Cierre Virtual): SIEMPRE dispara cuando hay actividad P&L. Absorbe la
+    // brecha original (Activo 1.456B vs Pasivo+Patrimonio 1.0B = gap 456M) en
+    // cuenta virtual 3710VC y deja la ecuación cuadrada al centavo. Por eso
+    // R3 ya NO dispara post-R8 (la brecha se anuló en patrimonio).
+    expect(codes.has('CUR-R8')).toBe(true);
+    expect(out.primary.curator?.virtualCloseAdjustment).toBeDefined();
     // R4: utilidadNeta = 2B (12B - 3.5B - 6.5B), provisión 24 = 3.8M → ratio 0.19% << 30%
     expect(codes.has('CUR-R4')).toBe(true);
-    // R3 atribución debería apuntar a una cuenta — validamos shape no monto exacto
-    expect(out.primary.curator?.balanceGapAttribution).toBeDefined();
     expect(out.primary.curator?.taxProvisionRisk?.severidad).toBe('critico');
   });
 
@@ -115,8 +117,11 @@ describe('P8 Elite Pipeline Smoke — full bridge', () => {
     expect(pillars.valor.kpis).toHaveLength(3);
     expect(pillars.verdad.kpis).toHaveLength(3);
     expect(pillars.futuro.kpis).toHaveLength(3);
-    // Verdad debe estar critical: el TB tiene un descuadre material (>1%).
-    expect(pillars.verdad.status).toBe('critical');
+    // Verdad: post-R8 la ecuación cuadra al centavo, así que el status ya no
+    // es 'critical' por descuadre. Pero R4 (provisión renta 0,19% << 30%) y la
+    // utilidad masiva sin respaldo de caja siguen produciendo señales — el
+    // status debe ser al menos 'watch' (degradado vs healthy).
+    expect(['watch', 'warning', 'critical']).toContain(pillars.verdad.status);
     // Cada pilar tiene score 0-100.
     for (const p of [pillars.escudo, pillars.valor, pillars.verdad, pillars.futuro]) {
       expect(p.healthScore).toBeGreaterThanOrEqual(0);
@@ -129,8 +134,13 @@ describe('P8 Elite Pipeline Smoke — full bridge', () => {
   it('(4) Sentinel triggers evalúan correctamente las métricas derivadas del snapshot', () => {
     const pre = preprocessTrialBalance(TB);
     const ct = pre.primary.controlTotals;
-    const equationGapAmount = ct.activo - (ct.pasivo + ct.patrimonio);
-    const equationGapPct = ct.activo > 0 ? Math.abs(equationGapAmount) / ct.activo : 0;
+
+    // Post-R8 la ecuación cuadra al centavo, así que `ct.activo - pasivo - patrimonio`
+    // ≈ 0 y T1 (equationGapPct) jamás dispararía. Para preservar la cobertura del
+    // trigger T1 sobre el gap PRE-R8, simulamos el descuadre original aquí
+    // (Activo 1.456B vs Pasivo+Patrimonio 1.0B = gap 456M = 31% del activo).
+    const equationGapAmount = 456_000_000;
+    const equationGapPct = 0.31;
 
     const metrics: SentinelMetrics & { equationGapAmount: number } = {
       equationGapPct,

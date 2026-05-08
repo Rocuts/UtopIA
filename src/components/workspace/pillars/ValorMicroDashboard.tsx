@@ -16,20 +16,24 @@ import type {
 } from '@/components/charts';
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarMetrics } from '@/lib/pillars/types';
+import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 
 import { PillarHealthBadge } from './PillarHealthBadge';
 import { PillarKpiList } from './_kpi-list';
 import { PillarAlertsList } from './_alerts-list';
 import { PresumedCostWarning } from './PresumedCostWarning';
+import { ValorExecutiveCards } from './ValorExecutiveCards';
+import { ValorTrendBars } from './ValorTrendBars';
 
 interface Props {
   metrics: PillarMetrics;
   pnlBridge?: PnLWaterfallData;
   segments?: DuPontSegment[];
   density?: 'comfortable' | 'compact';
+  valorTrend?: ValorBarSeries[];
 }
 
-export function ValorMicroDashboard({ metrics, pnlBridge, segments, density }: Props) {
+export function ValorMicroDashboard({ metrics, pnlBridge, segments, density, valorTrend }: Props) {
   const { language } = useLanguage();
   const isEs = language === 'es';
 
@@ -57,11 +61,25 @@ export function ValorMicroDashboard({ metrics, pnlBridge, segments, density }: P
         </p>
       </Card>
 
+      {/* Tarjetas ejecutivas (vista dueño): EBITDA · Margen · Ratio · FCF */}
+      <ValorExecutiveCards
+        cards={metrics.executiveCards}
+        language={language}
+        density={density}
+      />
+
+      {/* Gráfico de tendencia temporal EBITDA/FCF/Ingresos */}
+      {valorTrend && valorTrend.length > 0 && (
+        <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
+          <ValorTrendBars series={valorTrend} language={language} density={density} />
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {pnlBridge && <PnLWaterfall data={pnlBridge} density={density} />}
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <h3 className="font-serif-elite text-base font-normal text-n-1000 mb-2">
-            {isEs ? 'KPIs Maestros' : 'Master KPIs'}
+            {isEs ? 'KPIs Maestros NIIF' : 'NIIF Master KPIs'}
           </h3>
           <PillarKpiList kpis={metrics.kpis} language={language} />
         </Card>

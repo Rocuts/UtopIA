@@ -101,6 +101,9 @@ const RATE_LIMITS: Record<string, number> = {
   '/api/erp/status': 60,
   '/api/erp/providers': 60,
   '/api/erp/sync': 10,
+  // ERP webhook receivers: 60/min per source IP is generous for real ERP
+  // push traffic but still provides a backstop against replay attacks.
+  '/api/erp/webhook': 60,
 
   // Workspace bootstrap
   '/api/workspace': 60,
@@ -126,6 +129,10 @@ const CSRF_ALLOWLIST: readonly string[] = [
   '/api/cron/',
   // WS6: internal server-to-server dispatch (called by WS5 workflow, no browser Origin).
   '/api/notifications/dispatch',
+  // ERP webhook receivers: external ERP servers POST without an Origin header.
+  // Token auth (X-Webhook-Token) is enforced inside the route handler itself.
+  // Rate limiting is still applied by the proxy (see RATE_LIMITS below).
+  '/api/erp/webhook/',
 ];
 
 function getRateLimitConfig(pathname: string): { limit: number; id: string } {

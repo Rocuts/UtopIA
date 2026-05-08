@@ -7,6 +7,8 @@ export type ERPProvider =
   | 'world_office'
   | 'contapyme'
   | 'sap_b1'
+  | 'sap_s4hana'
+  | 'oracle_fusion'
   | 'dynamics_365'
   | 'quickbooks'
   | 'xero'

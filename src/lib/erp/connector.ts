@@ -1,6 +1,7 @@
 // ─── Abstract ERP Connector ───────────────────────────────────────────────────
 // All provider connectors implement this interface.
 
+import type { RawAccountRow } from '@/lib/preprocessing/trial-balance';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -93,5 +94,23 @@ export abstract class BaseERPConnector implements ERPConnectorInterface {
       .filter(a => a.isAuxiliary)
       .map(a => `${a.code},${a.name.replace(/,/g, ';')},${a.debit},${a.credit},${a.balance}`);
     return [header, ...rows].join('\n');
+  }
+
+  /**
+   * Convert an ERPTrialBalance to RawAccountRow[] — the type consumed by
+   * preprocessTrialBalance / parseTrialBalanceCSV. The period key is the
+   * fiscal year extracted from `tb.period` (e.g. "2025-12" → "2025").
+   */
+  trialBalanceToRawRows(tb: ERPTrialBalance): RawAccountRow[] {
+    const periodKey = tb.period.split('-')[0] ?? tb.period;
+    return tb.accounts
+      .filter((a) => a.isAuxiliary)
+      .map((a) => ({
+        code: a.code,
+        name: a.name,
+        level: 'Auxiliar',
+        transactional: true,
+        balancesByPeriod: { [periodKey]: a.balance },
+      }));
   }
 }

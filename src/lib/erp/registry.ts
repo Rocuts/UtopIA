@@ -73,6 +73,28 @@ export const ERP_PROVIDERS: Record<ERPProvider, ERPProviderInfo> = {
     supportsDIAN: false,
     capabilities: ['chart_of_accounts', 'journal_entries', 'invoices', 'contacts', 'products'],
   },
+  sap_s4hana: {
+    id: 'sap_s4hana',
+    name: 'SAP S/4HANA Cloud',
+    country: 'international',
+    authType: 'oauth2',
+    baseUrl: '',
+    docsUrl: 'https://api.sap.com/package/SAPS4HANACloud/odata',
+    supportsPUC: false,
+    supportsDIAN: false,
+    capabilities: ['trial_balance'],
+  },
+  oracle_fusion: {
+    id: 'oracle_fusion',
+    name: 'Oracle Fusion ERP Cloud',
+    country: 'international',
+    authType: 'oauth2',
+    baseUrl: '',
+    docsUrl: 'https://docs.oracle.com/en/cloud/saas/financials/23b/farfa/index.html',
+    supportsPUC: false,
+    supportsDIAN: false,
+    capabilities: ['trial_balance', 'balance_sheet'],
+  },
   dynamics_365: {
     id: 'dynamics_365',
     name: 'Microsoft Dynamics 365',
@@ -159,6 +181,16 @@ export async function getConnector(provider: ERPProvider): Promise<BaseERPConnec
     case 'sap_b1': {
       const { SAPConnector } = await import('./providers/sap');
       connector = new SAPConnector();
+      break;
+    }
+    case 'sap_s4hana': {
+      const { SAPS4HANAConnector } = await import('./providers/sap-s4hana');
+      connector = new SAPS4HANAConnector();
+      break;
+    }
+    case 'oracle_fusion': {
+      const { OracleFusionConnector } = await import('./providers/oracle-fusion');
+      connector = new OracleFusionConnector();
       break;
     }
     case 'dynamics_365': {

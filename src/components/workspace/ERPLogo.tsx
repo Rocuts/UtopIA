@@ -236,6 +236,38 @@ function OdooLogo({ className, size = 36 }: LogoProps) {
   );
 }
 
+function SAPS4HANALogo({ className, size = 36 }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      width={size}
+      height={size}
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect width="40" height="40" rx="8" fill="#0070F2" />
+      <text x="20" y="26" textAnchor="middle" fontFamily="Arial,sans-serif" fontWeight="bold" fontSize="11" fill="#ffffff">S/4</text>
+    </svg>
+  );
+}
+
+function OracleFusionLogo({ className, size = 36 }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      width={size}
+      height={size}
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect width="40" height="40" rx="8" fill="#C74634" />
+      <text x="20" y="26" textAnchor="middle" fontFamily="Arial,sans-serif" fontWeight="bold" fontSize="9" fill="#ffffff">ORA</text>
+    </svg>
+  );
+}
+
 const LOGOS: Record<ERPProvider, React.FC<LogoProps>> = {
   alegra: AlegraLogo,
   siigo: SiigoLogo,
@@ -243,6 +275,8 @@ const LOGOS: Record<ERPProvider, React.FC<LogoProps>> = {
   world_office: WorldOfficeLogo,
   contapyme: ContaPymeLogo,
   sap_b1: SapLogo,
+  sap_s4hana: SAPS4HANALogo,
+  oracle_fusion: OracleFusionLogo,
   dynamics_365: Dynamics365Logo,
   quickbooks: QuickBooksLogo,
   xero: XeroLogo,

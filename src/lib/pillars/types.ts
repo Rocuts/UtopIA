@@ -75,6 +75,63 @@ export interface PillarMetrics {
   generatedAt: string;
   /** Advertencia R7 (Curator) sobre costo de ventas posiblemente subestimado. */
   presumedCostWarning?: PresumedCostWarning;
+  /** 4 tarjetas ejecutivas (sólo pilar Valor): EBITDA / Margen / Ratio / FCF. */
+  executiveCards?: ValorExecutiveCards;
+}
+
+// ─── Tarjetas ejecutivas (Pilar Valor) ─────────────────────────────────────
+
+export type ExecutiveCardColor = 'blue' | 'orange' | 'purple' | 'green';
+export type ExecutiveCardKey = 'ebitda' | 'waoo' | 'ratio' | 'fcf';
+
+export interface ExecutiveCard {
+  key: ExecutiveCardKey;
+  labelEs: string;
+  labelEn: string;
+  /** Valor numérico crudo. `null` cuando no es calculable
+   *  (ej. FCF sin periodo comparativo). */
+  value: number | null;
+  unit: 'cop' | 'pct' | 'ratio';
+  color: ExecutiveCardColor;
+  status: PillarStatus;
+  /** Variación vs periodo anterior, mismo unit. `null` si no hay comparativo. */
+  deltaVsComparative: number | null;
+  descriptionEs: string;
+  descriptionEn: string;
+  /** Pasos del cálculo (texto humano para tooltip + auditor). */
+  formulaEs: string;
+  formulaEn: string;
+}
+
+export interface ValorExecutiveCardsAudit {
+  /** Utilidad operacional NIIF: utilidadNeta + impuestosCuenta24. */
+  utilidadOperacional: number;
+  /** Suma cuentas Clase 5 con prefijo 5160 (Depreciaciones). */
+  depreciaciones: number;
+  /** Suma cuentas Clase 5 con prefijo 5165 (Amortizaciones). */
+  amortizaciones: number;
+  /** Total Clase 5 (Gastos Operacionales). */
+  totalGastos: number;
+  /** Total Clase 6 (Costos de Ventas). */
+  totalCostos: number;
+  /** Total Clase 4 (Ingresos). */
+  totalIngresos: number;
+  /** Var. PPE (Clase 15) — proxy de CapEx, del EFE indirecto NIC 7. */
+  capex: number | null;
+  /** Flujo operativo (operating.total del EFE). */
+  operatingCashFlow: number | null;
+}
+
+export interface ValorExecutiveCards {
+  ebitda: ExecutiveCard;
+  /** Margen EBITDA (a.k.a. WAOO en el contrato visual). */
+  waoo: ExecutiveCard;
+  /** Ratio de eficiencia (Gastos+Costos)/Ingresos. */
+  ratio: ExecutiveCard;
+  /** Free Cash Flow = Operating − CapEx. */
+  fcf: ExecutiveCard;
+  audit: ValorExecutiveCardsAudit;
+  generatedAt: string;
 }
 
 // ─── Resultado consolidado de los 4 pilares ────────────────────────────────
