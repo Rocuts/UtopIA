@@ -17,6 +17,7 @@
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
     "db:generate": "dotenv -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- tsx scripts/db-migrate.ts",
+    "db:recover-elite": "dotenv -e .env.local -- tsx scripts/recover-elite-push.ts",
     "db:seed-calendar": "dotenv -e .env.local -- tsx scripts/seed-verified-calendar.ts",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts"
