@@ -82,6 +82,10 @@ export const config: VercelConfig = {
     // Cron sync: 300s — iterates all active workspaces via Promise.allSettled.
     'src/app/api/erp/webhook/[provider]/route.ts': { maxDuration: 60 },
     'src/app/api/cron/erp-sync/route.ts': { maxDuration: 300 },
+
+    // Macro Colombia refresh: fetch BanRep (TRM/TIB) + DANE (IPC) + persist.
+    // 60s es amplio: 3 llamadas HTTP externas + 1 insert Postgres.
+    'src/app/api/cron/macro-refresh/route.ts': { maxDuration: 60 },
   },
 
   // Cron jobs (production deployment only). Endpoints under /api/cron/* are
@@ -99,5 +103,8 @@ export const config: VercelConfig = {
     // ERP polling sync: cada 2 horas — ERPs sin push nativo (Alegra, Helisa,
     // World Office, ContaPyme). Horario laboral en Colombia: 06:00-22:00 COT.
     { path: '/api/cron/erp-sync', schedule: '0 */2 * * *' },
+    // Macro Colombia: 12:00 UTC = 07:00 COT (antes de apertura mercados).
+    // Actualiza IPC (DANE), TRM y Tasa BanRep desde datos.gov.co.
+    { path: '/api/cron/macro-refresh', schedule: '0 12 * * *' },
   ],
 };

@@ -256,6 +256,94 @@ describe('computeEscudoExecutiveCards', () => {
     expect(cards.audit.promedioEgresosMensuales).toBeCloseTo(75_000_000, -3);
   });
 
+  // ── CapEx tests ───────────────────────────────────────────────────────────
+
+  it('Sin capexEvents: autonomía y brecha idénticas a sin opts', () => {
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        ingresos: 1_200_000_000,
+        gastos: 600_000_000,
+        utilidadNeta: 600_000_000,
+        efectivoCuenta11: 100_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 40_000_000 }]),
+      ],
+    });
+
+    const sinOpts = computeEscudoExecutiveCards({ snapshot: snap });
+    const conOpts = computeEscudoExecutiveCards({ snapshot: snap, capexEvents: [] });
+
+    expect(conOpts.autonomia.value).toBeCloseTo(sinOpts.autonomia.value!, 4);
+    expect(conOpts.brecha_escudo.value).toBeCloseTo(sinOpts.brecha_escudo.value!, 4);
+    expect(conOpts.audit.proyectosFuturoCop).toBe(0);
+    expect(conOpts.audit.cantidadEventosProximos).toBe(0);
+  });
+
+  it('Evento CapEx 200M en mes 3: autonomía baja y puede quedar <0 → critical', () => {
+    // Caja = 100M, egresos = 600M/año = 50M/mes → sin CapEx = 60 días.
+    // CapEx 200M en mes 3 → caja efectiva = 100M − 200M = −100M → autonomía <0 → critical.
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        ingresos: 1_200_000_000,
+        gastos: 600_000_000,
+        utilidadNeta: 600_000_000,
+        efectivoCuenta11: 100_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 40_000_000 }]),
+      ],
+    });
+
+    const sinCapex = computeEscudoExecutiveCards({ snapshot: snap });
+    const conCapex = computeEscudoExecutiveCards({
+      snapshot: snap,
+      capexEvents: [{ id: 'ce1', name: 'Maquinaria', monthOffset: 3, amountCop: 200_000_000 }],
+    });
+
+    // Sin CapEx ~60 días
+    expect(sinCapex.autonomia.value).toBeCloseTo(60, 0);
+    // Con CapEx: caja ajustada = 100M − 200M = −100M → días <0
+    expect(conCapex.autonomia.value).toBeLessThan(0);
+    expect(conCapex.autonomia.status).toBe('critical');
+    // Brecha también baja: (100M − 40M) − 200M = −140M
+    expect(conCapex.brecha_escudo.value).toBeCloseTo(-140_000_000, 0);
+    expect(conCapex.audit.proyectosFuturoCop).toBe(200_000_000);
+    expect(conCapex.audit.cantidadEventosProximos).toBe(1);
+  });
+
+  it('Evento CapEx en mes 12: NO afecta (fuera del horizonte 6m)', () => {
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        ingresos: 1_200_000_000,
+        gastos: 600_000_000,
+        utilidadNeta: 600_000_000,
+        efectivoCuenta11: 100_000_000,
+      }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '220505', name: 'Proveedores', balance: 40_000_000 }]),
+      ],
+    });
+
+    const sinCapex = computeEscudoExecutiveCards({ snapshot: snap });
+    const conCapex = computeEscudoExecutiveCards({
+      snapshot: snap,
+      capexEvents: [{ id: 'ce2', name: 'Remodelación', monthOffset: 12, amountCop: 500_000_000 }],
+    });
+
+    // monthOffset 12 > 6 → no debe cambiar autonomía ni brecha
+    expect(conCapex.autonomia.value).toBeCloseTo(sinCapex.autonomia.value!, 4);
+    expect(conCapex.brecha_escudo.value).toBeCloseTo(sinCapex.brecha_escudo.value!, 4);
+    expect(conCapex.audit.proyectosFuturoCop).toBe(0);
+    expect(conCapex.audit.cantidadEventosProximos).toBe(0);
+  });
+
   it('Pasivo corriente = 0 → cobertura saturada a 999 (sin division by zero)', () => {
     const snap = makeSnapshot({
       period: '2026',

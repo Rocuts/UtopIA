@@ -19,6 +19,7 @@ import { buildValorBarSeries } from '@/lib/pillars/valor-bars';
 import { buildEscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import { buildVerdadBarSeries } from '@/lib/pillars/verdad-bars';
 import { buildFuturoBarSeries } from '@/lib/pillars/futuro-bars';
+import { runMonteCarlo } from '@/lib/pillars/monte-carlo';
 import type {
   CashInflectionPoint,
   PnLWaterfallData,
@@ -120,6 +121,9 @@ export default async function ComandoPage() {
     // Proyección de caja 12 meses · 3 escenarios para el gráfico de líneas del pilar Futuro.
     const futuroTrend = buildFuturoBarSeries(balance);
 
+    // Monte Carlo — 9.600 sims en ~15ms, corre server-side sin bloquear.
+    const monteCarlo = runMonteCarlo(balance.primary);
+
     // Gap attribution del Curator (R3) si hay descuadre.
     const curatorGap = balance.primary.curator?.balanceGapAttribution;
     const gapAttribution = curatorGap
@@ -144,6 +148,7 @@ export default async function ComandoPage() {
         verdadTrend={verdadTrend}
         futuroTrend={futuroTrend}
         balance={balance}
+        monteCarlo={monteCarlo}
         demo={false}
       />
     );

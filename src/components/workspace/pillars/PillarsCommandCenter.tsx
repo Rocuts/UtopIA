@@ -17,7 +17,7 @@ import { Bell, FileUp, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { InsightInboxButton } from '@/components/notifications/InsightInboxButton';
 import { useLanguage } from '@/context/LanguageContext';
-import type { PillarsResult } from '@/lib/pillars/types';
+import type { MonteCarloResult, PillarsResult } from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
@@ -76,6 +76,8 @@ export interface PillarsCommandCenterProps {
   demo?: boolean;
   /** Balance preprocesado — habilita el selector interactivo de crecimiento en FuturoTrendBars. */
   balance?: PreprocessedBalance;
+  /** Resultado Monte Carlo precomputado server-side para el ROI probabilístico. */
+  monteCarlo?: MonteCarloResult;
 }
 
 export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
@@ -181,7 +183,7 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
         <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} escudoTrend={props.escudoTrend ?? MOCK_ESCUDO_TREND} />
         <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={props.valorTrend ?? MOCK_VALOR_TREND} />
         <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} verdadTrend={props.verdadTrend ?? MOCK_VERDAD_TREND} />
-        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={props.futuroTrend ?? MOCK_FUTURO_TREND} balance={props.balance} />
+        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={props.futuroTrend ?? MOCK_FUTURO_TREND} balance={props.balance} monteCarlo={props.monteCarlo} />
       </div>
     </div>
   );

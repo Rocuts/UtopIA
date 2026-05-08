@@ -24,6 +24,8 @@ import { PillarKpiList } from './_kpi-list';
 import { PillarAlertsList } from './_alerts-list';
 import { FuturoTrendBars } from './FuturoTrendBars';
 import { FuturoExecutiveCards } from './FuturoExecutiveCards';
+import { MonteCarloHistogram } from './MonteCarloHistogram';
+import type { MonteCarloResult } from '@/lib/pillars/types';
 
 interface Props {
   metrics: PillarMetrics;
@@ -33,6 +35,8 @@ interface Props {
   density?: 'comfortable' | 'compact';
   /** Balance preprocesado para recalculación reactiva del escenario base. */
   balance?: PreprocessedBalance;
+  /** Resultado de Monte Carlo precomputado server-side. */
+  monteCarlo?: MonteCarloResult;
 }
 
 export function FuturoMicroDashboard({
@@ -42,6 +46,7 @@ export function FuturoMicroDashboard({
   futuroTrend,
   density,
   balance,
+  monteCarlo,
 }: Props) {
   const { language } = useLanguage();
   const isEs = language === 'es';
@@ -76,6 +81,17 @@ export function FuturoMicroDashboard({
         language={language}
         density={density}
       />
+
+      {/* Monte Carlo — ROI Probabilístico (solo si hay datos reales) */}
+      {monteCarlo && (
+        <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
+          <MonteCarloHistogram
+            result={monteCarlo}
+            language={language}
+            density={density}
+          />
+        </Card>
+      )}
 
       {runway && runway.length > 0 && (
         <RunwayProjection months={runway} density={density} />

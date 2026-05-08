@@ -7,6 +7,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  real,
   serial,
   text,
   timestamp,
@@ -748,3 +749,21 @@ export const erpAccountMapping = pgTable(
 
 export type ErpAccountMapping = typeof erpAccountMapping.$inferSelect;
 export type NewErpAccountMapping = typeof erpAccountMapping.$inferInsert;
+
+// ─── Factores Macro Colombia ───────────────────────────────────────────────
+// Cache diario de IPC (DANE), TRM y Tasa BanRep.
+// Actualización: cron `api/cron/macro-refresh` a las 07:00 COT (12:00 UTC).
+// NO ejecutar db:push sin revisar drift — usar db:generate + db:migrate.
+// Ver: docs MEMORY — feedback_db_push_drift.md
+
+export const macroFactors = pgTable('macro_factors', {
+  id: serial('id').primaryKey(),
+  ipc: real('ipc').notNull(),
+  trm: real('trm').notNull(),
+  tasaBanRep: real('tasa_banrep').notNull(),
+  fuente: text('fuente').notNull(),
+  fechaActualizacion: timestamp('fecha_actualizacion').defaultNow().notNull(),
+});
+
+export type MacroFactorsRow = typeof macroFactors.$inferSelect;
+export type NewMacroFactorsRow = typeof macroFactors.$inferInsert;

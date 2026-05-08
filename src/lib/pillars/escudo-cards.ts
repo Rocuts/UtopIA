@@ -278,6 +278,34 @@ export function computeEscudoExecutiveCards(
     prevBrecha = prevCaja - prevProv2205;
   }
 
+  // ── CapEx próximos 6 meses ───────────────────────────────────────────────
+  const capexProximos = (input.capexEvents ?? []).filter(
+    (ev) => ev.monthOffset <= 6,
+  );
+  const proyectosFuturoCop = capexProximos.reduce(
+    (s, ev) => s + ev.amountCop,
+    0,
+  );
+  const cantidadEventosProximos = capexProximos.length;
+
+  // Registrar en audit (campos opcionales del tipo extendido)
+  audit.proyectosFuturoCop = proyectosFuturoCop;
+  audit.cantidadEventosProximos = cantidadEventosProximos;
+
+  // Autonomía ajustada: resta CapEx próximos al numerador de caja disponible
+  if (proyectosFuturoCop > 0 && autonomiaValue !== null) {
+    const cajaAjustada = liquidezTotal - proyectosFuturoCop;
+    if (avgMonthlyEgresos <= 0) {
+      autonomiaValue = cajaAjustada > 0 ? 365 : 0;
+    } else {
+      autonomiaValue = (cajaAjustada / avgMonthlyEgresos) * 30;
+    }
+  }
+
+  // Brecha Escudo ajustada: resta CapEx próximos adicionalmente
+  const brechaValueAjustada =
+    proyectosFuturoCop > 0 ? brechaValue - proyectosFuturoCop : brechaValue;
+
   // ── Construir tarjetas ───────────────────────────────────────────────────
   const autonomia: ExecutiveCard = {
     key: 'autonomia',
@@ -286,7 +314,7 @@ export function computeEscudoExecutiveCards(
     value: autonomiaValue,
     unit: 'ratio', // días expresados como ratio (no hay unit 'days' en ExecutiveCard)
     color: 'blue',
-    status: autonomiaStatus(autonomiaValue),
+    status: autonomiaValue !== null && autonomiaValue < 0 ? 'critical' : autonomiaStatus(autonomiaValue),
     deltaVsComparative: safeDelta(autonomiaValue, prevAutonomia),
     descriptionEs:
       'Cuántos días puede operar la empresa sin un peso de venta. Combina caja + inversiones temporales contra egresos promedio.',
@@ -336,11 +364,11 @@ export function computeEscudoExecutiveCards(
     key: 'brecha_escudo',
     labelEs: 'Brecha Escudo',
     labelEn: 'Shield Gap',
-    value: brechaValue,
+    value: brechaValueAjustada,
     unit: 'cop',
     color: 'green',
-    status: brechaStatus(brechaValue, proveedoresCuenta2205),
-    deltaVsComparative: safeDelta(brechaValue, prevBrecha),
+    status: brechaStatus(brechaValueAjustada, proveedoresCuenta2205),
+    deltaVsComparative: safeDelta(brechaValueAjustada, prevBrecha),
     descriptionEs:
       'Caja disponible menos saldo de Proveedores Nacionales (PUC 2205). Negativo = no hay efectivo para cubrir las obligaciones inmediatas.',
     descriptionEn:

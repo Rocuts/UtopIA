@@ -181,6 +181,11 @@ export interface EscudoExecutiveCardsAudit {
   tasaRenta: number;
   /** Cantidad de períodos usados para promedio (1 = anual, 3 = trimestre). */
   periodosUsados: number;
+  /** Suma COP de eventos CapEx en los próximos 6 meses (monthOffset ≤ 6).
+   *  Presente sólo cuando el input incluye capexEvents. */
+  proyectosFuturoCop?: number;
+  /** Cantidad de eventos CapEx con monthOffset ≤ 6. */
+  cantidadEventosProximos?: number;
 }
 
 export interface EscudoExecutiveCards {
@@ -328,4 +333,84 @@ export interface PillarsAggregateInput {
   curator?: CuratorResult | null;
   /** Costo de oportunidad para EVA. Default 0.12 (TES Colombia + risk premium). */
   costoOportunidad?: number;
+  /** Variables macroeconómicas oficiales (BanRep/DANE). Si no vienen, los
+   *  pilares usan defaults conservadores. */
+  macro?: MacroFactors | null;
+  /** Eventos CapEx personalizados del usuario (compras, inversiones, deudas
+   *  proyectadas). Afectan tanto FUTURO (caja proyectada) como ESCUDO
+   *  (días de autonomía si suceden en los próximos 6 meses). */
+  capexEvents?: CapexEventInput[] | null;
+  /** Resultado de Monte Carlo precomputado (si se ejecutó upstream). */
+  monteCarlo?: MonteCarloResult | null;
+}
+
+// ─── Macroeconomía oficial (BanRep/DANE) ───────────────────────────────────
+
+export interface MacroFactors {
+  /** IPC anual Colombia (decimal: 0.045 = 4,5%). Fuente: DANE. */
+  ipc: number;
+  /** TRM diaria USD/COP. Fuente: BanRep. */
+  trm: number;
+  /** Tasa de intervención política BanRep (decimal: 0.0925 = 9,25%). */
+  tasaBanRep: number;
+  /** Fecha ISO 8601 de la última actualización exitosa. */
+  fechaActualizacion: string;
+  /** Fuente del dato (para audit trail). */
+  fuente: 'banrep' | 'dane' | 'default' | 'manual';
+}
+
+// ─── Monte Carlo ───────────────────────────────────────────────────────────
+
+/** Input mínimo de un evento CapEx para alimentar pilares.
+ *  Idéntico a `CapexEvent` de futuro-bars.ts pero re-declarado aquí para
+ *  evitar dependencia circular pillars↔futuro-bars. */
+export interface CapexEventInput {
+  id: string;
+  name: string;
+  monthOffset: number;
+  amountCop: number;
+}
+
+export interface MonteCarloOptions {
+  /** Número de simulaciones. Default 9600 (estándar Bank of England 2024+). */
+  iterations?: number;
+  /** Horizonte en meses. Default 12. */
+  horizonMonths?: number;
+  /** Volatilidad mensual (sigma) sobre los ingresos. Default 0.15. */
+  ingresoSigma?: number;
+  /** Seed para reproducibilidad determinística. Default 42. */
+  seed?: number;
+}
+
+export interface MonteCarloDistribution {
+  /** Percentil 10 (peor 10% de escenarios). */
+  p10: number;
+  /** Percentil 50 (mediana). */
+  p50: number;
+  /** Percentil 90 (mejor 10%). */
+  p90: number;
+  /** Promedio. */
+  mean: number;
+  /** Desviación estándar de la distribución. */
+  stdev: number;
+}
+
+export interface MonteCarloResult {
+  /** N de simulaciones efectivamente corridas. */
+  iterations: number;
+  /** Caja final al mes M+12 (distribución). */
+  cajaFinal: MonteCarloDistribution;
+  /** Utilidad acumulada 12m (distribución). */
+  utilidadAcumulada: MonteCarloDistribution;
+  /** ROI = utilidadAcumulada / inversiónPPE (Clase 15). null si no hay PPE. */
+  roiProbabilistico: MonteCarloDistribution | null;
+  /** Probabilidad [0,1] de que la caja cruce 0 antes del mes 12. */
+  probabilidadQuiebre12m: number;
+  /** Mes esperado de quiebre (mediana de los meses donde caja<0; null si <50%). */
+  mesQuiebreMediano: number | null;
+  /** Inversión PPE base (Clase 15) usada para el ROI. */
+  inversionPPE: number;
+  /** Seed usada (para reproducibilidad). */
+  seed: number;
+  generatedAt: string;
 }
