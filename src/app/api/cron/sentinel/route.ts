@@ -18,6 +18,11 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { workspaces, accountingPeriods } from '@/lib/db/schema';
 import { runSentinelCheck } from '@/lib/workflows/sentinel/orchestrator';
+import {
+  findComparativePeriod,
+  getCachedPreprocessedBalance,
+  getLatestOpenPeriod,
+} from '@/lib/cache/preprocessed-balance';
 
 export const maxDuration = 300;
 
@@ -48,9 +53,27 @@ export async function GET(req: Request) {
     let processed = 0;
     for (const r of rows) {
       try {
+        // Resolver último periodo abierto del workspace + cargar preprocessed
+        // (con curator inyectado). Si la carga falla, igual disparamos el
+        // workflow con preprocessed=null (los triggers se omiten gracefully).
+        const period = await getLatestOpenPeriod(r.workspaceId);
+        let preprocessed = null;
+        if (period) {
+          try {
+            const comparative = await findComparativePeriod(r.workspaceId, period);
+            const result = await getCachedPreprocessedBalance(
+              r.workspaceId,
+              period.id,
+              comparative?.id,
+            );
+            preprocessed = result.balance;
+          } catch (loadErr) {
+            console.warn(`[cron/sentinel] load failed for ${r.workspaceId}:`, loadErr);
+          }
+        }
         await runSentinelCheck(
-          { workspaceId: r.workspaceId, periodId: null, dryRun: false },
-          null, // TODO: pasar preprocessed cuando exista persistencia
+          { workspaceId: r.workspaceId, periodId: period?.id ?? null, dryRun: false },
+          preprocessed,
         );
         processed += 1;
       } catch (err) {
