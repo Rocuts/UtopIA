@@ -32,6 +32,8 @@ import type {
   CashFlowStatement,
   CuratorFinding,
   CuratorResult,
+  PresumedCostWarning,
+  Reclassification,
 } from './curator-rules/types';
 
 export interface RawAccountRow {
@@ -116,6 +118,21 @@ export interface ControlTotals {
   impuestosCuenta24: number;
   /** PUC 25 — Obligaciones laborales */
   obligacionesLaborales25: number;
+  // -----------------------------------------------------------------------
+  // Pulido Diamante R6 — anclas de caja para validar EFE ↔ Balance al centavo.
+  // Opcionales por ahora: la lógica que los popula la pondrá B1. Hacerlos
+  // obligatorios hoy rompería tests/literales existentes que construyen
+  // `ControlTotals` sin estos campos.
+  // -----------------------------------------------------------------------
+  /**
+   * Saldo final de caja (= efectivoCuenta11) — alias semántico para validar
+   * EFE↔Balance al centavo.
+   */
+  // TODO(B1): hacer obligatorio cuando R6 popule estos campos
+  cashClose?: number;
+  /** Saldo inicial de caja (PUC 11 del comparativo, 0 si single-period). */
+  // TODO(B1): hacer obligatorio cuando R6 popule estos campos
+  cashOpen?: number;
 }
 
 /**
@@ -140,6 +157,8 @@ export interface EquityBreakdown {
   otrasReservas?: number;
   utilidadEjercicio?: number;
   utilidadesAcumuladas?: number;
+  /** Gap absorbido por R5; 0 o ausente si Balance y ECP cuadraban. */
+  convergenceAdjustment?: number;
 }
 
 /**
@@ -174,6 +193,14 @@ export interface PeriodSnapshot {
   /** Estado de Flujos de Efectivo método indirecto (NIC 7), generado por
    *  R2 cuando hay periodo comparativo. */
   cashFlowIndirecto?: CashFlowStatement;
+  /** Reclasificaciones APLICADAS por R1 (con mutación efectiva). */
+  reclassifications?: Reclassification[];
+  /** Gap absorbido por R5 (mismo valor que equityBreakdown.convergenceAdjustment). */
+  equityAnchorAdjustment?: number;
+  /** Gap absorbido por R6. */
+  cashFlowClosureAdjustment?: number;
+  /** Callout R7 si margen > 85% Y inventario > 50% ingresos. */
+  presumedCostWarning?: PresumedCostWarning;
 }
 
 /**

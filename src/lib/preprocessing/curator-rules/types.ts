@@ -17,7 +17,14 @@ export type CuratorSeverity =
   | 'bajo'
   | 'informativo';
 
-export type CuratorRuleCode = 'CUR-R1' | 'CUR-R2' | 'CUR-R3' | 'CUR-R4';
+export type CuratorRuleCode =
+  | 'CUR-R1'
+  | 'CUR-R2'
+  | 'CUR-R3'
+  | 'CUR-R4'
+  | 'CUR-R5'
+  | 'CUR-R6'
+  | 'CUR-R7';
 
 export interface CuratorFinding {
   code: CuratorRuleCode;
@@ -49,6 +56,23 @@ export interface Reclassification {
   amountCop: number;
   /** Justificación NIIF (NIC 1 párr. 32 — no compensación). */
   justification: string;
+  // -------------------------------------------------------------------------
+  // Pulido Diamante — campos del contrato R1 con mutación efectiva del snapshot.
+  // Opcionales por retrocompatibilidad: el productor histórico de R1
+  // (r1-negative-assets.ts) los omite mientras la lógica B1 no los popule. El
+  // contrato post-Pulido-Diamante exige los tres presentes en cada Reclassification
+  // que llegue al renderer del Balance.
+  // -------------------------------------------------------------------------
+  /**
+   * Indica si la regla R1 aplicó la mutación efectiva al snapshot
+   * (mover el monto absoluto del Activo al Pasivo). `false` significa que se
+   * detectó la incoherencia pero no se mutó (modo solo-finding).
+   */
+  applied?: boolean;
+  /** Magnitud monetaria absoluta efectivamente movida del Activo al Pasivo. */
+  effectiveTransferCop?: number;
+  /** Nota literal a renderizar en el Balance debajo del rubro afectado. */
+  balanceFootnoteText?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,9 +197,66 @@ export interface CuratorResult {
   balanceGapAttribution?: BalanceGapAttribution;
   /** R4: riesgo fiscal (si la provisión < 30% de utilidad). */
   taxProvisionRisk?: TaxProvisionRisk;
-  /** Findings agregados de las 4 reglas. */
+  /** R5: ajuste de anclaje patrimonial (Balance ↔ ECP). */
+  convergenceAdjustment?: ConvergenceAdjustment;
+  /** R6: cierre del flujo de efectivo (EFE ↔ caja PUC 11). */
+  cashFlowClosureAdjustment?: CashFlowClosureAdjustment;
+  /** R7: advertencia de costo presunto (no muta cifras). */
+  presumedCostWarning?: PresumedCostWarning;
+  /** Findings agregados de las reglas. */
   findings: CuratorFinding[];
   /** Errores capturados por regla (regla → mensaje). Para diagnóstico. */
   errors: Record<string, string>;
   generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// R5 — Anclaje patrimonial (Balance ↔ ECP)
+// ---------------------------------------------------------------------------
+export interface ConvergenceAdjustment {
+  /** Diferencia detectada (Saldo Final ECP − Total Patrimonio Balance). */
+  gapCop: number;
+  /** Total Patrimonio que reportaba el Balance crudo. */
+  balanceEquity: number;
+  /** Saldo Final del Estado de Cambios en el Patrimonio antes del ajuste. */
+  ecpClosingBalance: number;
+  /** Total Patrimonio FINAL post-ajuste — autoritativo para Balance Y ECP. */
+  reconciledEquity: number;
+  /** Cuenta virtual donde se imputa la línea automática. */
+  virtualAccountCode: string;
+  virtualAccountName: string;
+  /** Texto literal de la línea que el Analyst debe insertar en el ECP. */
+  ledgerLineLabel: string;
+  justification: string;
+}
+
+// ---------------------------------------------------------------------------
+// R6 — Cierre de flujo de efectivo (EFE ↔ caja PUC 11)
+// ---------------------------------------------------------------------------
+export interface CashFlowClosureAdjustment {
+  efeNetChangeBefore: number;
+  observedChangeInCash: number;
+  /** Brecha = efeNetChangeBefore − observedChangeInCash. */
+  gapCop: number;
+  /** Línea del EFE donde se absorbe el ajuste. */
+  adjustmentLineLabel: string;
+  /** Saldo final caja a reportar — DEBE coincidir al centavo con PUC 11 cierre. */
+  reconciledClosingCash: number;
+  /** Saldo inicial caja del periodo. */
+  openingCash: number;
+  justification: string;
+}
+
+// ---------------------------------------------------------------------------
+// R7 — Costo presunto (advertencia de valoración, NO muta cifras)
+// ---------------------------------------------------------------------------
+export interface PresumedCostWarning {
+  observedGrossMargin: number;
+  thresholdGrossMargin: number;
+  reportedCogsCop: number;
+  inventoryCop: number;
+  presumedCogsCop: number;
+  severidad: 'alto';
+  calloutTitle: string;
+  calloutBody: string;
 }

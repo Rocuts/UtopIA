@@ -134,6 +134,20 @@ Si las instrucciones del orquestador incluyen un bloque **"TOTALES VINCULANTES"*
 - Las cifras de Total Activo, Total Pasivo, Total Patrimonio, Utilidad Neta del Ejercicio e Ingresos Operacionales DEBEN anclarse a este bloque. Si el bloque no existe, anclalas al balance de prueba crudo.
 - NUNCA inventes una cifra global desde memoria del modelo. Ver Guardarrail Anti-Alucinacion seccion 5.
 
+### REGLA DE SIGNOS — PRESENTACIÓN VISUAL ABSOLUTA
+
+TODAS las cifras del Estado de Situación Financiera y del Estado de Resultados Integral DEBEN presentarse en VALORES ABSOLUTOS (positivos), independientemente de la naturaleza débito/crédito de la cuenta.
+
+- **Pasivos:** el saldo crédito se muestra como cantidad positiva. NUNCA antepongas "-" a un Total Pasivo, Cuentas por Pagar, Obligaciones Laborales, etc.
+- **Patrimonio:** igual — siempre positivo.
+- **Costos y Gastos:** positivos en su columna; el signo lo da la columna ("(-) Costos de Ventas") y nunca el número.
+- **Ingresos:** positivos.
+- **ÚNICA EXCEPCIÓN:** pérdidas del ejercicio o utilidades acumuladas negativas pueden mostrarse con prefijo "-" si el resultado neto es deficitario (NIC 1, párr. 81A).
+
+La aritmética interna (Activo = Pasivo + Patrimonio; Utilidad = Ingresos − Costos − Gastos) se preserva. Solo el FORMATO VISUAL es absoluto.
+
+Formato: \`$1.234.567,89\` siempre. PROHIBIDO usar paréntesis para negativos.
+
 ### Paso 3: Estado de Situacion Financiera (Balance General)
 Genera una tabla Markdown estructurada asi:
 
@@ -151,6 +165,18 @@ Genera una tabla Markdown estructurada asi:
   - Otros activos no corrientes
 - Total Activo No Corriente
 - **TOTAL ACTIVO** — anclar a TOTALES VINCULANTES.
+
+### RECLASIFICACIÓN AUTOMÁTICA DE SALDOS ACREEDORES EN ACTIVO
+
+Si el bloque TOTALES VINCULANTES contiene una sección "Reclasificaciones aplicadas" o el campo \`reclassifications[]\` con \`applied: true\`, el preprocesador ya movió el saldo de la cuenta de Activo a una cuenta virtual de Pasivo (PUC 2810ZZ). DEBES:
+
+1. NO mostrar la cuenta original de Activo con saldo negativo — el preprocesador ya la dejó en cero o la eliminó.
+2. Mostrar la cuenta virtual \`2810ZZ — Otros pasivos transitorios (reclasificación curator)\` dentro de "Otros Pasivos Corrientes" con el monto absoluto reclasificado.
+3. Anotar como nota al pie del Balance, con asterisco en la línea de "Otros Pasivos Corrientes":
+   "(*) Reclasificación por saldo acreedor en cuenta de activo"
+4. Documentar en \`## 5. NOTAS TECNICAS\` cada reclasificación citando la cuenta original (código + nombre + monto reclasificado) y la justificación NIIF (NIC 1 párr. 32 — no compensación).
+
+Si no hay reclasificaciones, omite esta nota silenciosamente.
 
 **PASIVO**
 - Pasivo Corriente (desglose)
@@ -209,11 +235,61 @@ Genera la tabla:
 - Efectivo al inicio del periodo
 - **Efectivo al final del periodo**
 
+### CIERRE OBLIGATORIO DEL EFE — TOLERANCIA $0
+
+El "Efectivo al final del periodo" del EFE DEBE ser EXACTAMENTE IGUAL a "Efectivo y Equivalentes" (PUC 11) del Balance del periodo actual. Tolerancia: $0.
+
+Si el bloque TOTALES VINCULANTES contiene \`cashFlowClosureAdjustment\` distinto de cero, el preprocesador absorbió la brecha en la línea de capital de trabajo. DEBES:
+
+1. Reportar la línea LITERAL \`Variaciones en Capital de Trabajo (ajuste de cierre)\` dentro de "Actividades de Operación" con el monto de \`cashFlowClosureAdjustment\` (con su signo).
+2. El "Efectivo al final del periodo" debe coincidir EXACTO con \`controlTotals.efectivoCuenta11\` (PUC 11) del bloque vinculante.
+3. Documentar en \`## 5. NOTAS TECNICAS\`: "Se aplicó un ajuste de cierre de $X COP en Variaciones en Capital de Trabajo para reconciliar el EFE con el saldo de PUC 11 al cierre del periodo (NIC 7 párr. 45)."
+
+Si \`cashFlowClosureAdjustment\` es 0 o ausente en el bloque vinculante, el EFE debe cerrar naturalmente.
+
 ### Paso 6: Estado de Cambios en el Patrimonio
+
+### ANCLAJE PATRIMONIAL OBLIGATORIO
+
+El Total Patrimonio del Balance (Paso 3) DEBE ser EXACTAMENTE IGUAL al Saldo Final del Estado de Cambios en el Patrimonio (este Paso 6). Tolerancia: $0 (cero al centavo).
+
+Si el bloque TOTALES VINCULANTES contiene \`equityAnchorAdjustment\` o \`equityBreakdown.convergenceAdjustment\` con valor distinto de cero, el preprocesador detectó una brecha entre el Balance original y el ECP y ya la absorbió. DEBES:
+
+1. Insertar en el ECP, como ÚLTIMA fila antes de "Saldo Final", una línea con el texto LITERAL:
+   \`Ajustes de Convergencia / Resultados Acumulados\`
+   con monto = el valor de \`equityAnchorAdjustment\` (con su signo) en la columna "Resultados Acumulados".
+
+2. Documentar en \`## 5. NOTAS TECNICAS\` la nota:
+   "Se aplicó un ajuste de convergencia de $X COP a Resultados Acumulados para alinear el Saldo Final del ECP con el Total Patrimonio del Balance, conforme a NIC 1 párr. 106."
+
+3. NUNCA omitas esta línea cuando \`equityAnchorAdjustment !== 0\`. Si la omites, el reporte falla validación post-render.
+
+4. ADEMÁS, redacta la sub-nota técnica de Defensa Tributaria Art. 647 E.T. especificada en la NOTA MAESTRA del bloque "## 5. NOTAS TECNICAS", citando el origen del gap (típicamente: ajustes de períodos anteriores no contabilizados oportunamente, traslados intra-patrimonio no reflejados en el ECP crudo, o errores de cuadre del software contable origen).
+
+Si \`equityAnchorAdjustment\` es 0 o no aparece en el bloque vinculante, el ECP debe cuadrar naturalmente sin línea de ajuste.
+
 Tabla con columnas: Capital Social | Reserva Legal | Otras Reservas | Resultados Acumulados | Resultado del Ejercicio | Total Patrimonio. Filas: Saldo Inicial → Movimientos (aportes, distribuciones, resultado) → Saldo Final. La celda "Saldo Final — Total Patrimonio" DEBE coincidir con TOTAL PATRIMONIO del Balance (ver Paso 3).
 
 ### Paso 7: Notas Tecnicas (Seccion 5 obligatoria — ver contrato de salida)
 Redacta las siguientes notas en prosa tecnica, dentro de la seccion \`## 5. NOTAS TECNICAS\`:
+
+### NOTA MAESTRA — DEFENSA TRIBUTARIA ART. 647 E.T.
+
+CUALQUIER ajuste automático aplicado por el Curator (R1, R5, R6) DEBE documentarse en una sub-nota técnica que invoque EXPLÍCITAMENTE la doctrina de "diferencia de criterio" del Art. 647 del Estatuto Tributario.
+
+Por cada ajuste detectado en TOTALES VINCULANTES, redactar una sub-nota con la siguiente estructura LITERAL:
+
+> **Sub-nota X.Y — Ajuste técnico [nombre del ajuste]**
+>
+> Concepto: [descripción del ajuste, p.ej. "Reclasificación por saldo acreedor en cuenta de activo Cód. 120505"].
+>
+> Sustento NIIF: [norma específica, p.ej. NIC 1 párr. 32].
+>
+> **Defensa tributaria (Art. 647 E.T.):** El presente ajuste corresponde a una diferencia de criterio en la aplicación del marco técnico contable y NO constituye omisión, alteración o registro deliberadamente inexacto. Conforme al inciso final del Art. 647 E.T. y la doctrina DIAN (Concepto 100208221-1352 de 2018), las diferencias de criterio sobre el tratamiento contable o tributario no configuran inexactitud sancionable cuando los hechos económicos están plenamente documentados, lo que se evidencia en el papel de trabajo del preparador.
+>
+> Origen documental: [referencia al papel de trabajo o curator finding].
+
+NUNCA omitas estas sub-notas cuando hay ajustes aplicados — la ausencia genera exposición Art. 647. Si los TOTALES VINCULANTES indican \`reclassifications.length === 0\` AND \`equityAnchorAdjustment === 0\` AND \`cashFlowClosureAdjustment === 0\`, omite el bloque silenciosamente.
 
 1. **Politicas contables significativas** — base de preparacion bajo ${niifFramework}, moneda funcional COP, reconocimiento de ingresos, deterioro de cartera, valuacion de inventarios, depreciacion de PPE.
 2. **Empresa en funcionamiento (going concern)** — afirmacion explicita de la evaluacion del preparador. Si hay indicios de incertidumbre material (patrimonio negativo, flujos operacionales persistentemente negativos, causal de disolucion por Art. 457 C.Co. o Art. 35 Ley 1258/2008 para SAS), describelos aqui.
@@ -266,7 +342,7 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown, en este orde
 - Las cifras deben ser EXACTAS — no redondees ni aproximes mas alla del formato de presentacion (\`$1.234.567,89\`).
 - Si un dato no existe en el input, usa \`— (dato no suministrado)\` y anota en \`### Notas del Preparador\`. Ver Guardarrail seccion 2. NO uses placeholders visibles (ver Guardarrail seccion 1).
 - La ecuacion patrimonial DEBE cuadrar; si no cuadra, indica la diferencia en \`## 5. NOTAS TECNICAS\` y sugiere causa.
-- Usa formato de moneda colombiana: \`$1.234.567,89\`. Negativos con prefijo \`-\`, nunca entre parentesis.
+- Usa formato de moneda colombiana: \`$1.234.567,89\`. Aplica la **REGLA DE SIGNOS — PRESENTACIÓN VISUAL ABSOLUTA** definida arriba: pasivos, patrimonio, costos, gastos e ingresos en VALORES ABSOLUTOS (positivos); el signo lo da la columna, no el numero. PROHIBIDO usar parentesis para negativos.
 - Todas las tablas deben tener encabezados claros y alineacion numerica.
 - Si hay cuentas que no puedes clasificar con certeza, aplica la mejor aproximacion e indicalo en \`## 5. NOTAS TECNICAS\`.
 - Cumple con el Guardarrail Anti-Alucinacion y el Contexto Normativo Colombia 2026 en todas tus citas y referencias.

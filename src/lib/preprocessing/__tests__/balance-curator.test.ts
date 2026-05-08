@@ -119,7 +119,11 @@ describe('R1 — Saldos Incoherentes en Activos', () => {
     expect(out.reclassifications).toHaveLength(1);
     expect(out.reclassifications[0].accountCode).toBe('110505');
     expect(out.reclassifications[0].amountCop).toBe(50_000_000);
-    expect(out.reclassifications[0].reclassifiedToCode).toBe('2810ZZ');
+    // Pulido Diamante 2026-05-08 — la cuenta virtual ahora lleva el sufijo
+    // del código original para preservar trazabilidad (`2810ZZ-<originalCode>`).
+    expect(out.reclassifications[0].reclassifiedToCode).toBe('2810ZZ-110505');
+    expect(out.reclassifications[0].applied).toBe(true);
+    expect(out.reclassifications[0].effectiveTransferCop).toBe(50_000_000);
     expect(out.findings).toHaveLength(1);
     expect(out.findings[0].code).toBe('CUR-R1');
     expect(out.findings[0].severity).toBe('alto');
@@ -410,17 +414,92 @@ describe('runCurator (orchestrator)', () => {
     expect(out.findings.some((f) => f.code === 'CUR-R4')).toBe(true);
   });
 
-  it('es inmutable: no muta el snapshot original', () => {
+  // ---------------------------------------------------------------------
+  // Pulido Diamante 2026-05-08 — el contrato CFO exige que R1 + R5 + R6 SÍ
+  // muten el snapshot cuando hay descuadres. La inmutabilidad solo se
+  // preserva cuando NO hay nada que reparar (input ya cuadrado).
+  // ---------------------------------------------------------------------
+  it('NO muta el snapshot cuando la entrada ya está cuadrada (sin descuadres)', () => {
+    // Snapshot perfectamente cuadrado: sin negativos en activos, ECP coincide
+    // con patrimonio, sin EFE construible (no hay prev). Curator no debería
+    // mutar nada.
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
+        activo: 1_000_000_000,
+        pasivo: 600_000_000,
+        patrimonio: 400_000_000,
         utilidadNeta: 1_000_000_000,
-        impuestosCuenta24: 100_000_000,
+        impuestosCuenta24: 400_000_000, // 40% — sobre el piso de 30%
+        ingresos: 2_500_000_000, // utilidadNeta = 1B → margen 40% (no dispara R7)
       }),
-      classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: -1_000_000 }])],
+      classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
+      equity: {
+        capitalAutorizado: 200_000_000,
+        reservaLegal: 50_000_000,
+        utilidadEjercicio: 100_000_000,
+        utilidadesAcumuladas: 50_000_000,
+        // Suma = 400M (igual a controlTotals.patrimonio) → R5 no muta
+      },
     });
     const before = JSON.stringify(snap);
     runCurator(snap, null);
     expect(JSON.stringify(snap)).toBe(before);
+  });
+
+  it('SÍ muta el snapshot cuando R1 detecta saldos negativos materiales (contrato Pulido Diamante)', () => {
+    // R1 contract: cuentas materiales con saldo crédito mutan a `2810ZZ-*`.
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        activo: 1_000_000_000,
+        pasivo: 0,
+        patrimonio: 1_000_000_000,
+      }),
+      classes: [
+        makeClass(1, [
+          { code: '110505', name: 'Caja', balance: 1_010_000_000 },
+          // Saldo crédito material (>$50K, > 0.0001 × 1B = $100K)
+          { code: '120505', name: 'Inversiones', balance: -10_000_000 },
+        ]),
+      ],
+    });
+    const before = JSON.stringify(snap);
+    runCurator(snap, null);
+    const after = JSON.stringify(snap);
+    expect(after).not.toBe(before);
+    // Verificar mutación específica: la cuenta original quedó en 0 y aparece
+    // la cuenta virtual en Clase 2.
+    const class1 = snap.classes.find((c) => c.code === 1);
+    const class2 = snap.classes.find((c) => c.code === 2);
+    const negCuenta = class1?.accounts.find((a) => a.code === '120505');
+    const virtual = class2?.accounts.find((a) => a.code === '2810ZZ-120505');
+    expect(negCuenta?.balance).toBe(0);
+    expect(virtual?.balance).toBe(10_000_000);
+  });
+
+  it('SÍ muta controlTotals.patrimonio cuando R5 detecta brecha Balance↔ECP', () => {
+    // R5 contract: si ECP_sum != patrimonio (más allá de tolerancia), R5 ancla
+    // patrimonio al ECP_sum.
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        activo: 1_000_000_000,
+        pasivo: 600_000_000,
+        patrimonio: 100_000_000, // brecha de 300M vs ECP_sum = 400M
+      }),
+      classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
+      equity: {
+        capitalAutorizado: 200_000_000,
+        reservaLegal: 50_000_000,
+        utilidadEjercicio: 100_000_000,
+        utilidadesAcumuladas: 50_000_000,
+        // Suma = 400M
+      },
+    });
+    runCurator(snap, null);
+    expect(snap.controlTotals.patrimonio).toBe(400_000_000);
+    expect(snap.equityBreakdown.convergenceAdjustment).toBe(300_000_000);
+    expect(snap.equityAnchorAdjustment).toBe(300_000_000);
   });
 });

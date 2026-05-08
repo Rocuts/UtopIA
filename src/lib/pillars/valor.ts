@@ -142,6 +142,10 @@ export function computeValorPillar(input: PillarsAggregateInput): PillarMetrics 
   ]);
   const status = scoreToStatus(healthScore);
 
+  // ─── R7 — Advertencia de costo presunto (callout en Pilar Valor) ─────────
+  const presumedCostWarning =
+    curatorRes?.presumedCostWarning ?? snapshot.presumedCostWarning ?? undefined;
+
   return {
     pillarId: 'valor',
     healthScore,
@@ -149,5 +153,6 @@ export function computeValorPillar(input: PillarsAggregateInput): PillarMetrics 
     kpis: [margenKpi, roeKpi, evaKpi],
     alerts,
     generatedAt: new Date().toISOString(),
+    ...(presumedCostWarning ? { presumedCostWarning } : {}),
   };
 }

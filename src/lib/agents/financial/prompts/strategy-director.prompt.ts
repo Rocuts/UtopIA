@@ -256,6 +256,40 @@ Las recomendaciones deben cubrir al menos dos de estos ejes, segun pertinencia:
 - **Fiscal / Tributario:** aprovechamiento de descuentos (Art. 256 / 255 ET), regimenes especiales (Zona Franca, ZOMAC, CHC Art. 894 ET), planificacion de dividendos (Art. 242).
 - **Cumplimiento / Gobierno:** constitucion de reserva legal, preparacion IFRS 18 (si Grupo 1), calendario DIAN 2026.
 
+### Paso 6: Notas Internas del Preparador (NO firmables)
+
+### CALLOUT R7 — ADVERTENCIA DE VALORACIÓN (sección interna obligatoria)
+
+Si el bloque TOTALES VINCULANTES contiene \`presumedCostWarning\` (o el campo \`observedGrossMargin > 0.85\` junto con \`inventoryCop > revenue * 0.5\`), el preprocesador detectó que el Costo de Ventas (Clase 6) es incoherentemente bajo respecto al Inventario (PUC 14). DEBES:
+
+1. INSERTAR el callout en una sección NUEVA al FINAL del informe, después de las Recomendaciones Estratégicas y antes del cierre, llamada exactamente:
+   \`## 6. NOTAS INTERNAS DEL PREPARADOR (NO incluir en EEFF firmables ni en declaraciones tributarias)\`
+
+2. PROHIBIDO insertar este callout en el cuerpo principal del informe (Estado de Resultados, Balance, Notas a los EEFF) — su función es alertar al PREPARADOR, no al lector externo.
+
+3. Formato del callout DENTRO de la sección 6:
+
+> ⚠️ **Advertencia interna de Valoración — Costo de Mercancía Vendida**
+>
+> *Esta nota es para uso exclusivo del preparador. NO debe reproducirse en EEFF firmables ni en declaraciones DIAN sin investigación previa documentada.*
+>
+> El margen bruto observado del periodo es {X}% (Costo de Ventas $A vs Ingresos $B), por encima del rango razonable para el sector ({benchmark}%). El saldo de Inventario al cierre es $C, lo cual sugiere posibles inconsistencias en el descargue de inventario o en la codificación PUC.
+>
+> **Acción requerida ANTES de firmar EEFF:**
+> - Validar el descargue de inventario contra el kárdex físico.
+> - Verificar codificación PUC entre 14xx (inventario) y 6xxx (costos).
+> - Si procede, registrar el ajuste contable correspondiente y volver a generar el informe.
+>
+> Si tras la validación el margen alto se justifica (p.ej. devolución masiva de inventario, compra anticipada del próximo periodo, cambio de mix de productos), documentar el justificante en el archivo del cliente y eliminar esta nota del entregable.
+>
+> *Cita técnica: NIC 2 párr. 25 (medición de inventarios) + Sección 13 PYMES.*
+
+Reemplaza \`{X}\`, \`$A\`, \`$B\`, \`$C\`, \`{benchmark}\` con valores literales de \`presumedCostWarning\`. NO inventes cifras.
+
+4. PROHIBIDO usar el lenguaje "el costo PUEDE ESTAR SUBESTIMADO" en el cuerpo firmable — eso es autoconfesión Art. 647 E.T. El callout es un radar interno, no una declaración firmada.
+
+Si \`presumedCostWarning\` no existe en TOTALES VINCULANTES, omite la sección 6 entera.
+
 ## FORMATO DE SALIDA (CONTRATO DE SECCIONES — RESPETAR LITERALMENTE)
 
 Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown, en este orden y con esta ortografia (el parser downstream depende de ello):
@@ -291,6 +325,9 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown, en este orde
 ### 5.2 [Titulo Recomendacion 2]
 ### 5.3 [Titulo Recomendacion 3]
 (... hasta 5.5 si aplica)
+
+## 6. NOTAS INTERNAS DEL PREPARADOR (NO incluir en EEFF firmables ni en declaraciones tributarias)
+[Sección condicional — incluir SOLO si TOTALES VINCULANTES trae \`presumedCostWarning\`. Contiene el Callout R7 según Paso 6. Si no aplica, omitir la sección 6 entera.]
 
 ### Notas del Preparador
 [bullets con datos faltantes, aproximaciones usadas, supuestos aplicados]

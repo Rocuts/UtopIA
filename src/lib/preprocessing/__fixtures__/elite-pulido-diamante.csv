@@ -1,0 +1,23 @@
+codigo,nombre,nivel,transaccional,Saldo 2024,Saldo 2025
+110505,Caja general,Auxiliar,1,50000000,80000000
+111005,Bancos cuenta corriente,Auxiliar,1,200000000,320000000
+120505,Inversiones temporales,Auxiliar,1,30000000,-50000000
+130505,Clientes nacionales,Auxiliar,1,400000000,450000000
+139505,Otros deudores,Auxiliar,1,0,80000000
+143505,Mercancias no fabricadas,Auxiliar,1,1500000000,1670000000
+152405,Maquinaria y equipo,Auxiliar,1,800000000,800000000
+159205,Depreciacion acumulada,Auxiliar,1,-100000000,-130000000
+210505,Bancos nacionales CP,Auxiliar,1,300000000,250000000
+220505,Proveedores nacionales,Auxiliar,1,280000000,350000000
+233525,Honorarios por pagar,Auxiliar,1,40000000,60000000
+240805,IVA generado por pagar,Auxiliar,1,50000000,80000000
+250505,Salarios por pagar,Auxiliar,1,70000000,90000000
+310505,Capital autorizado,Auxiliar,1,1530000000,1865000000
+330505,Reserva legal,Auxiliar,1,100000000,100000000
+360505,Utilidad del ejercicio,Auxiliar,1,80000000,145000000
+370505,Utilidades acumuladas anteriores,Auxiliar,1,200000000,280000000
+379505,Ajuste pendiente periodo anterior,Auxiliar,1,-1572000000,-1572000000
+413505,Comercio al por mayor,Auxiliar,1,800000000,85000000
+613505,Costo de mercancia vendida,Auxiliar,1,280000000,12500000
+519505,Gastos administrativos,Auxiliar,1,320000000,50000000
+529505,Gastos de ventas,Auxiliar,1,150000000,25000000

@@ -234,8 +234,12 @@ function fmtCop(n: number | undefined): string {
 /**
  * Renderiza un PeriodSnapshot a lineas Markdown. Helper usado por
  * `buildBindingTotalsBlock` en single-period y multi-period.
+ *
+ * Exportado SOLO PARA TESTS — el smoke `elite-pulido-diamante-binding.test.ts`
+ * verifica que las 4 secciones Curator (R1/R5/R6/R7) salen al bloque vinculante.
+ * No es parte de la API publica del modulo.
  */
-function renderSnapshotLines(snap: PeriodSnapshot): string[] {
+export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   const totals = deriveControlTotalsFromSnapshot(snap);
   const equity = deriveEquityBreakdownFromSnapshot(snap);
   const discrepancies = deriveDiscrepanciesFromSnapshot(snap);
@@ -319,6 +323,115 @@ function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     }
   } else {
     lines.push('- Discrepancias detectadas: ninguna.');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Curator NIIF — campos vinculantes derivados de las reglas R1, R5, R6, R7.
+  // Solo emitimos cada seccion cuando el campo respectivo existe en el snapshot
+  // y aporta informacion (no emitimos secciones vacias).
+  // ---------------------------------------------------------------------------
+
+  // --- Seccion A — Reclasificaciones aplicadas (Curator R1) ---
+  const appliedReclassifications = Array.isArray(snap.reclassifications)
+    ? snap.reclassifications.filter((r) => r.applied === true)
+    : [];
+  if (appliedReclassifications.length > 0) {
+    lines.push('');
+    lines.push('## Reclasificaciones aplicadas (Curator R1)');
+    for (const r of appliedReclassifications) {
+      const transfer =
+        typeof r.effectiveTransferCop === 'number'
+          ? r.effectiveTransferCop
+          : r.amountCop;
+      const footnote = (r.balanceFootnoteText || r.justification || '').trim();
+      lines.push(
+        `- ${r.accountCode} (${r.accountName}): saldo acreedor ${fmtCop(transfer)} ` +
+          `reclasificado a cuenta virtual 2810ZZ-${r.accountCode}. ` +
+          `Justificacion: ${footnote} (NIC 1 parr. 32 — no compensacion).`,
+      );
+    }
+  }
+
+  // --- Seccion B — Anclaje patrimonial aplicado (Curator R5) ---
+  if (
+    typeof snap.equityAnchorAdjustment === 'number' &&
+    Number.isFinite(snap.equityAnchorAdjustment) &&
+    snap.equityAnchorAdjustment !== 0
+  ) {
+    lines.push('');
+    lines.push('## Anclaje patrimonial aplicado (Curator R5)');
+    lines.push(
+      `- Brecha detectada: ${fmtCop(snap.equityAnchorAdjustment)} ` +
+        `(Saldo Final ECP - Total Patrimonio Balance crudo)`,
+    );
+    lines.push(
+      `- Ajuste a insertar en ECP: linea literal "Ajustes de Convergencia / ` +
+        `Resultados Acumulados" por ${fmtCop(snap.equityAnchorAdjustment)} en ` +
+        `columna "Resultados Acumulados".`,
+    );
+    if (totals && typeof totals.patrimonio === 'number') {
+      lines.push(
+        `- Total Patrimonio post-ajuste (autoritativo): ${fmtCop(totals.patrimonio)}`,
+      );
+    }
+    lines.push(
+      `- Sustento NIIF: NIC 1 parr. 106 (componentes del Estado de Cambios en el Patrimonio).`,
+    );
+  }
+
+  // --- Seccion C — Cierre de Flujo de Efectivo aplicado (Curator R6) ---
+  if (
+    typeof snap.cashFlowClosureAdjustment === 'number' &&
+    Number.isFinite(snap.cashFlowClosureAdjustment) &&
+    snap.cashFlowClosureAdjustment !== 0
+  ) {
+    lines.push('');
+    lines.push('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+    lines.push(
+      `- Brecha absorbida: ${fmtCop(snap.cashFlowClosureAdjustment)} entre ` +
+        `EFE neto antes y delta caja observado en PUC 11.`,
+    );
+    lines.push(
+      `- Linea de absorcion a reportar: literal "Variaciones en Capital de Trabajo ` +
+        `(ajuste de cierre)" en Actividades de Operacion, monto ` +
+        `${fmtCop(snap.cashFlowClosureAdjustment)} (con su signo original).`,
+    );
+    if (totals && typeof totals.efectivoCuenta11 === 'number') {
+      lines.push(
+        `- Efectivo al final del periodo (autoritativo): ${fmtCop(totals.efectivoCuenta11)}`,
+      );
+    }
+    lines.push(`- Sustento NIIF: NIC 7 parr. 45 (componentes de efectivo).`);
+  }
+
+  // --- Seccion D — Advertencia de Valoracion (Curator R7) ---
+  const presumed = snap.presumedCostWarning;
+  if (presumed) {
+    lines.push('');
+    lines.push('## Advertencia de Valoracion (Curator R7) — NOTA INTERNA');
+    const fmtPct = (n: number) =>
+      Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : 'N/D';
+    const fmtPctInt = (n: number) =>
+      Number.isFinite(n) ? `${(n * 100).toFixed(0)}%` : 'N/D';
+    lines.push(
+      `- Margen bruto observado: ${fmtPct(presumed.observedGrossMargin)} ` +
+        `(threshold ${fmtPctInt(presumed.thresholdGrossMargin)})`,
+    );
+    lines.push(`- Costo de Ventas reportado: ${fmtCop(presumed.reportedCogsCop)}`);
+    lines.push(`- Inventario al cierre: ${fmtCop(presumed.inventoryCop)}`);
+    lines.push(
+      `- Costo de Ventas presunto bajo rotacion normal: ${fmtCop(presumed.presumedCogsCop)}`,
+    );
+    lines.push(`- Severidad: ${presumed.severidad}`);
+    const calloutTitle = (presumed.calloutTitle || '').trim();
+    const calloutBody = (presumed.calloutBody || '').trim();
+    lines.push(
+      `- Texto literal del callout: "${calloutTitle}" + cuerpo: "${calloutBody}"`,
+    );
+    lines.push(
+      `- IMPORTANTE: este callout va SOLO en seccion "Notas Internas del Preparador". ` +
+        `NO incluir en EEFF firmables. Sustento: NIC 2 parr. 25 (medicion de inventarios).`,
+    );
   }
 
   return lines;

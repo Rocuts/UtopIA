@@ -20,6 +20,7 @@ import type { PillarMetrics } from '@/lib/pillars/types';
 import { PillarHealthBadge } from './PillarHealthBadge';
 import { PillarKpiList } from './_kpi-list';
 import { PillarAlertsList } from './_alerts-list';
+import { PresumedCostWarning } from './PresumedCostWarning';
 
 interface Props {
   metrics: PillarMetrics;
@@ -68,6 +69,13 @@ export function ValorMicroDashboard({ metrics, pnlBridge, segments, density }: P
 
       {segments && segments.length > 0 && (
         <DuPontTreemap segments={segments} density={density} />
+      )}
+
+      {metrics.presumedCostWarning && (
+        <PresumedCostWarning
+          warning={metrics.presumedCostWarning}
+          density={density}
+        />
       )}
 
       <PillarAlertsList alerts={metrics.alerts} language={language} />

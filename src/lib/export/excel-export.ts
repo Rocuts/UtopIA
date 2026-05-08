@@ -23,6 +23,12 @@ import type {
   PUCClass,
   Discrepancy,
 } from '@/lib/preprocessing/trial-balance';
+import type {
+  Reclassification,
+  ConvergenceAdjustment,
+  CashFlowClosureAdjustment,
+  PresumedCostWarning,
+} from '@/lib/preprocessing/curator-rules/types';
 
 // ---------------------------------------------------------------------------
 // Brand colors (1+1 corporate palette)
@@ -76,7 +82,15 @@ interface PeriodView {
 
 interface PeriodLayout {
   /** Periodo primario (corriente) — siempre presente. */
-  primary: PeriodView;
+  primary: PeriodView & {
+    reclassifications?: Reclassification[];
+    equityAnchorAdjustment?: number;
+    cashFlowClosureAdjustment?: number;
+    presumedCostWarning?: PresumedCostWarning;
+    equityBreakdown?: { convergenceAdjustment?: number };
+    curatorConvergenceAdjustment?: ConvergenceAdjustment;
+    curatorCashFlowClosure?: CashFlowClosureAdjustment;
+  };
   /** Periodo comparativo (anterior) — solo si hay 2+ periodos. */
   comparative: PeriodView | null;
   /** Todos los periodos (orden cronologico). */
@@ -98,12 +112,22 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
     missingExpectedAccounts: p.missingExpectedAccounts,
   }));
 
-  const primary: PeriodView = {
+  const primary: PeriodLayout['primary'] = {
     period: prep.primary.period,
     classes: prep.primary.classes,
     summary: prep.primary.summary,
     discrepancies: prep.primary.discrepancies,
     missingExpectedAccounts: prep.primary.missingExpectedAccounts,
+    reclassifications: prep.primary.reclassifications ?? prep.primary.curator?.reclassifications,
+    equityAnchorAdjustment: prep.primary.equityAnchorAdjustment ?? undefined,
+    cashFlowClosureAdjustment:
+      typeof prep.primary.cashFlowClosureAdjustment === 'number'
+        ? prep.primary.cashFlowClosureAdjustment
+        : undefined,
+    presumedCostWarning: prep.primary.presumedCostWarning ?? prep.primary.curator?.presumedCostWarning,
+    equityBreakdown: prep.primary.equityBreakdown,
+    curatorConvergenceAdjustment: prep.primary.curator?.convergenceAdjustment,
+    curatorCashFlowClosure: prep.primary.curator?.cashFlowClosureAdjustment,
   };
 
   const comparative: PeriodView | null = prep.comparative
@@ -208,8 +232,26 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   // Tab 5: Report Summary
   addSummarySheet(wb, report, layout);
 
+  // Tab 6: Ajustes Pulido Diamante (only when at least one mutation is present)
+  if (layout && hasPulidoDiamanteData(layout)) {
+    addPulidoDiamanteSheet(wb, layout);
+  }
+
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer);
+}
+
+/** Returns true if any Pulido Diamante mutation data exists in the primary snapshot. */
+function hasPulidoDiamanteData(layout: PeriodLayout): boolean {
+  const p = layout.primary;
+  return (
+    (Array.isArray(p.reclassifications) && p.reclassifications.length > 0) ||
+    (p.equityAnchorAdjustment !== undefined && p.equityAnchorAdjustment !== 0) ||
+    (p.cashFlowClosureAdjustment !== undefined && p.cashFlowClosureAdjustment !== 0) ||
+    p.presumedCostWarning !== undefined ||
+    (p.curatorConvergenceAdjustment !== undefined) ||
+    (p.curatorCashFlowClosure !== undefined)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -233,11 +275,12 @@ function addBalanceSheet(
     const { primary, comparative, isMultiPeriod } = layout;
 
     // Column header row depends on multiperiodo
-    row = addStatementColumnHeader(ws, row, primary.period, comparative?.period ?? null);
+    const hasReclassifications = Array.isArray(primary.reclassifications) && primary.reclassifications.length > 0;
+    row = addStatementColumnHeader(ws, row, primary.period, comparative?.period ?? null, hasReclassifications);
 
     // ACTIVO
     row = addSectionHeader(ws, row, 'ACTIVO', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 1);
+    row = addClassRows(ws, row, primary, comparative, 1, { reclassifications: primary.reclassifications });
     row = addStatementTotalRow(
       ws,
       row,
@@ -250,26 +293,66 @@ function addBalanceSheet(
 
     // PASIVO
     row = addSectionHeader(ws, row, 'PASIVO', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 2);
+    row = addClassRows(ws, row, primary, comparative, 2, { absValues: true });
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL PASIVO',
-      primary.summary.totalLiabilities,
-      comparative?.summary.totalLiabilities,
+      Math.abs(primary.summary.totalLiabilities),
+      comparative?.summary.totalLiabilities !== undefined
+        ? Math.abs(comparative.summary.totalLiabilities)
+        : undefined,
       isMultiPeriod,
     );
     row++;
 
     // PATRIMONIO
     row = addSectionHeader(ws, row, 'PATRIMONIO', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 3);
+    row = addClassRows(ws, row, primary, comparative, 3, { absValues: true });
+
+    // Línea de convergencia patrimonial R5 (si aplica)
+    const convAdj = primary.curatorConvergenceAdjustment ?? primary.equityBreakdown?.convergenceAdjustment;
+    const convAdjAmount = typeof convAdj === 'object' && convAdj !== null
+      ? (convAdj as ConvergenceAdjustment).gapCop
+      : typeof convAdj === 'number'
+        ? convAdj
+        : undefined;
+    if (convAdjAmount !== undefined && convAdjAmount !== 0) {
+      const label =
+        typeof convAdj === 'object' && convAdj !== null && 'virtualAccountName' in convAdj
+          ? (convAdj as ConvergenceAdjustment).virtualAccountName
+          : 'Ajustes de Convergencia / Resultados Acumulados';
+      const r = ws.getRow(row);
+      r.getCell(1).value = '3710ZZ';
+      r.getCell(1).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted }, italic: true };
+      r.getCell(2).value = label;
+      r.getCell(2).font = { name: FONT_MAIN, size: 9, italic: true };
+      // Convergence row preserves sign (can be negative) — NO Math.abs
+      if (isMultiPeriod) {
+        r.getCell(3).value = 0;
+        r.getCell(3).numFmt = NUM_FMT_COP;
+        r.getCell(4).value = convAdjAmount;
+        r.getCell(4).numFmt = NUM_FMT_COP;
+        r.getCell(4).font = { name: FONT_MAIN, size: 9, italic: true };
+      } else {
+        r.getCell(3).value = convAdjAmount;
+        r.getCell(3).numFmt = NUM_FMT_COP;
+        r.getCell(3).font = { name: FONT_MAIN, size: 9, italic: true };
+      }
+      for (let i = 1; i <= (isMultiPeriod ? 6 : 4); i++) {
+        r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.orange } };
+      }
+      row++;
+    }
+
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL PATRIMONIO',
-      primary.summary.totalEquity,
-      comparative?.summary.totalEquity,
+      Math.abs(primary.summary.totalEquity),
+      comparative?.summary.totalEquity !== undefined
+        ? Math.abs(comparative.summary.totalEquity)
+        : undefined,
       isMultiPeriod,
     );
     row++;
@@ -327,6 +410,7 @@ function addBalanceSheet(
   ws.getColumn(4).width = 22;
   ws.getColumn(5).width = 18;
   ws.getColumn(6).width = 14;
+  ws.getColumn(7).width = 50; // Notas de Reclasificación (col 7, solo si hay reclasificaciones)
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +431,28 @@ function addIncomeStatement(
 
   if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
+
+    // Banner de Advertencia R7 (costo presunto) — si existe, aparece antes de los datos
+    if (primary.presumedCostWarning) {
+      const warn = primary.presumedCostWarning;
+      const bannerTitle = ws.getRow(row);
+      bannerTitle.getCell(1).value = `⚠ ${warn.calloutTitle}`;
+      bannerTitle.getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.darkNavy } };
+      for (let i = 1; i <= 6; i++) {
+        bannerTitle.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.orange } };
+      }
+      ws.mergeCells(`A${row}:F${row}`);
+      row++;
+
+      const bannerBody = ws.getRow(row);
+      bannerBody.getCell(1).value = warn.calloutBody;
+      bannerBody.getCell(1).font = { name: FONT_MAIN, size: 9, italic: true };
+      for (let i = 1; i <= 6; i++) {
+        bannerBody.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+      }
+      ws.mergeCells(`A${row}:F${row}`);
+      row += 2;
+    }
 
     row = addStatementColumnHeader(ws, row, primary.period, comparative?.period ?? null);
 
@@ -856,6 +962,7 @@ function addStatementColumnHeader(
   row: number,
   primaryPeriod: string,
   comparativePeriod: string | null,
+  showReclassNotes = false,
 ): number {
   const r = ws.getRow(row);
   r.getCell(1).value = 'Codigo';
@@ -868,10 +975,17 @@ function addStatementColumnHeader(
   } else {
     r.getCell(3).value = `Saldo ${primaryPeriod}`;
   }
-  for (let i = 1; i <= (comparativePeriod ? 6 : 3); i++) {
+  const lastDataCol = comparativePeriod ? 6 : 3;
+  for (let i = 1; i <= lastDataCol; i++) {
     r.getCell(i).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.white } };
     r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.darkNavy } };
     r.getCell(i).alignment = { horizontal: 'center' };
+  }
+  if (showReclassNotes) {
+    r.getCell(7).value = 'Notas de Reclasificación';
+    r.getCell(7).font = { name: FONT_MAIN, bold: true, size: 10, color: { argb: COLORS.white } };
+    r.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.orange } };
+    r.getCell(7).alignment = { horizontal: 'center' };
   }
   return row + 1;
 }
@@ -895,6 +1009,11 @@ function addSectionHeader(
 /**
  * Anade filas de cuentas de una clase, uniendo cuentas entre primary y comparative
  * cuando hay multiperiodo.
+ *
+ * @param opts.absValues — si true, los valores monetarios se muestran con Math.abs
+ *   (para Clase 2 Pasivo y Clase 3 Patrimonio). La cuenta 3710ZZ (convergencia) queda
+ *   exenta; esa fila la maneja el llamador directamente.
+ * @param opts.reclassifications — lista de reclasificaciones para mostrar notas en col 7.
  */
 function addClassRows(
   ws: ExcelJS.Worksheet,
@@ -902,21 +1021,42 @@ function addClassRows(
   primary: PeriodView,
   comparative: PeriodView | null,
   classCode: number,
+  opts: { absValues?: boolean; reclassifications?: Reclassification[] } = {},
 ): number {
   let row = startRow;
+  const { absValues = false, reclassifications } = opts;
   const primaryCl = findClass(primary.classes, classCode);
   const comparativeCl = comparative ? findClass(comparative.classes, classCode) : undefined;
+
+  // Build a footnote map: accountCode → balanceFootnoteText
+  const footnoteMap = new Map<string, string>();
+  if (reclassifications) {
+    for (const r of reclassifications) {
+      if (r.balanceFootnoteText) {
+        footnoteMap.set(r.accountCode, r.balanceFootnoteText);
+      }
+    }
+  }
 
   if (comparative) {
     const merged = unionAccounts(primaryCl, comparativeCl);
     for (const meta of merged) {
-      const currBal = primaryCl ? findAccountBalance([primaryCl], meta.code) ?? 0 : 0;
-      const prevBal = comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
-      row = addAccountRowMulti(ws, row, meta.code, meta.name, prevBal, currBal);
+      let currBal = primaryCl ? findAccountBalance([primaryCl], meta.code) ?? 0 : 0;
+      let prevBal = comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
+      // Apply abs for liability/equity classes (not 3710ZZ convergence virtual account)
+      if (absValues && meta.code !== '3710ZZ') {
+        currBal = Math.abs(currBal);
+        prevBal = Math.abs(prevBal);
+      }
+      row = addAccountRowMulti(ws, row, meta.code, meta.name, prevBal, currBal, footnoteMap.get(meta.code));
     }
   } else if (primaryCl) {
     for (const acc of primaryCl.accounts) {
-      row = addAccountRowSingle(ws, row, acc.code, acc.name, acc.balance);
+      let bal = acc.balance;
+      if (absValues && acc.code !== '3710ZZ') {
+        bal = Math.abs(bal);
+      }
+      row = addAccountRowSingle(ws, row, acc.code, acc.name, bal, undefined, footnoteMap.get(acc.code));
     }
   }
   return row;
@@ -929,6 +1069,7 @@ function addAccountRowSingle(
   name: string,
   balance: number,
   previousBalance?: number,
+  footnote?: string,
 ): number {
   const r = ws.getRow(row);
   r.getCell(1).value = code;
@@ -943,6 +1084,10 @@ function addAccountRowSingle(
     r.getCell(4).numFmt = NUM_FMT_COP;
     r.getCell(4).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
   }
+  if (footnote) {
+    r.getCell(7).value = footnote;
+    r.getCell(7).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
+  }
 
   if (row % 2 === 0) {
     for (let i = 1; i <= 4; i++) {
@@ -954,7 +1099,7 @@ function addAccountRowSingle(
 
 /**
  * Fila de cuenta con layout multiperiodo:
- *   Codigo | Cuenta | Saldo {prev} | Saldo {curr} | Variacion $ | Variacion %
+ *   Codigo | Cuenta | Saldo {prev} | Saldo {curr} | Variacion $ | Variacion % | Nota Reclasificación?
  */
 function addAccountRowMulti(
   ws: ExcelJS.Worksheet,
@@ -963,6 +1108,7 @@ function addAccountRowMulti(
   name: string,
   prevBalance: number,
   currBalance: number,
+  footnote?: string,
 ): number {
   const r = ws.getRow(row);
   r.getCell(1).value = code;
@@ -990,6 +1136,10 @@ function addAccountRowMulti(
     size: 9,
     color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
   };
+  if (footnote) {
+    r.getCell(7).value = footnote;
+    r.getCell(7).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
+  }
 
   if (row % 2 === 0) {
     for (let i = 1; i <= 6; i++) {
@@ -1047,4 +1197,169 @@ function addStatementTotalRow(
   }
 
   return row + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Tab 6: Ajustes Pulido Diamante
+// ---------------------------------------------------------------------------
+
+/**
+ * Hoja de resumen de las 4 mutaciones que el Curator Pulido Diamante aplicó
+ * al snapshot. Solo se genera cuando al menos una mutación está presente.
+ *
+ * Secciones:
+ *   R1 — Reclasificaciones de saldos negativos en activos
+ *   R5 — Convergencia patrimonial (Balance ↔ ECP)
+ *   R6 — Cierre del Flujo de Efectivo (EFE ↔ PUC 11)
+ *   R7 — Advertencia de costo presunto (no muta cifras)
+ */
+function addPulidoDiamanteSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): void {
+  const ws = wb.addWorksheet('Pulido Diamante', {
+    properties: { tabColor: { argb: COLORS.orange } },
+  });
+  ws.properties.defaultColWidth = 22;
+
+  // ── Sheet header ──────────────────────────────────────────────────────────
+  const h1 = ws.getRow(1);
+  h1.getCell(1).value = 'AJUSTES PULIDO DIAMANTE — CURATOR NIIF';
+  h1.getCell(1).font = { name: FONT_MAIN, bold: true, size: 14, color: { argb: COLORS.orange } };
+  ws.mergeCells('A1:F1');
+
+  const h2 = ws.getRow(2);
+  h2.getCell(1).value =
+    'Mutaciones determinísticas aplicadas por el Curator antes del pipeline financiero.';
+  h2.getCell(1).font = { name: FONT_MAIN, size: 10, italic: true, color: { argb: COLORS.textMuted } };
+  ws.mergeCells('A2:F2');
+
+  let row = 4;
+
+  const p = layout.primary;
+
+  // ── Helper: sección header ─────────────────────────────────────────────
+  const addPDSectionHeader = (title: string): void => {
+    const r = ws.getRow(row);
+    r.getCell(1).value = title;
+    r.getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.white } };
+    for (let i = 1; i <= 6; i++) {
+      r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.darkNavy } };
+    }
+    ws.mergeCells(`A${row}:F${row}`);
+    row++;
+  };
+
+  const addPDTableHeader = (cols: string[]): void => {
+    const r = ws.getRow(row);
+    cols.forEach((h, i) => {
+      r.getCell(i + 1).value = h;
+      r.getCell(i + 1).font = { name: FONT_MAIN, bold: true, size: 9, color: { argb: COLORS.darkNavy } };
+      r.getCell(i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.mediumGray } };
+      r.getCell(i + 1).alignment = { horizontal: 'center' };
+    });
+    row++;
+  };
+
+  const addPDLabelValue = (label: string, value: string | number, isMoney = false): void => {
+    const r = ws.getRow(row);
+    r.getCell(1).value = label;
+    r.getCell(1).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
+    r.getCell(2).value = value;
+    if (isMoney && typeof value === 'number') {
+      r.getCell(2).numFmt = NUM_FMT_COP;
+    }
+    r.getCell(2).font = { name: FONT_MAIN, size: 9 };
+    row++;
+  };
+
+  // ── Sección 1: R1 — Reclasificaciones ─────────────────────────────────
+  const reclassList = p.reclassifications ?? [];
+  if (reclassList.length > 0) {
+    addPDSectionHeader('R1 — Reclasificaciones de Saldos Negativos en Activos (NIC 1 párr. 32)');
+    addPDTableHeader([
+      'Cuenta original (código)',
+      'Nombre cuenta original',
+      'Monto reclasificado ($)',
+      'Cuenta destino',
+      'Nombre destino',
+      'Justificación',
+    ]);
+
+    for (const r1 of reclassList) {
+      const r = ws.getRow(row);
+      r.getCell(1).value = r1.accountCode;
+      r.getCell(2).value = r1.accountName;
+      r.getCell(3).value = r1.amountCop;
+      r.getCell(3).numFmt = NUM_FMT_COP;
+      r.getCell(4).value = r1.reclassifiedToCode;
+      r.getCell(5).value = r1.reclassifiedToName;
+      r.getCell(6).value = r1.justification;
+      r.getCell(6).alignment = { wrapText: true };
+      if (row % 2 === 0) {
+        for (let i = 1; i <= 6; i++) {
+          r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.lightGray } };
+        }
+      }
+      row++;
+    }
+    row++;
+  }
+
+  // ── Sección 2: R5 — Convergencia Patrimonial ──────────────────────────
+  const convAdj = p.curatorConvergenceAdjustment;
+  const convAdjNum = p.equityBreakdown?.convergenceAdjustment;
+  if (convAdj || (convAdjNum !== undefined && convAdjNum !== 0)) {
+    addPDSectionHeader('R5 — Convergencia Patrimonial (Balance ↔ ECP)');
+    if (convAdj) {
+      addPDLabelValue('Total Patrimonio Balance original ($)', convAdj.balanceEquity, true);
+      addPDLabelValue('Saldo Final ECP antes del ajuste ($)', convAdj.ecpClosingBalance, true);
+      addPDLabelValue('Brecha absorbida ($)', convAdj.gapCop, true);
+      addPDLabelValue('Total Patrimonio reconciliado ($)', convAdj.reconciledEquity, true);
+      addPDLabelValue('Cuenta virtual', `${convAdj.virtualAccountCode} — ${convAdj.virtualAccountName}`);
+      addPDLabelValue('Línea insertada en ECP', convAdj.ledgerLineLabel);
+      addPDLabelValue('Justificación', convAdj.justification);
+    } else {
+      addPDLabelValue('Gap absorbido ($)', convAdjNum ?? 0, true);
+    }
+    row++;
+  }
+
+  // ── Sección 3: R6 — Cierre EFE ────────────────────────────────────────
+  const efeAdj = p.curatorCashFlowClosure;
+  const efeAdjNum = p.cashFlowClosureAdjustment;
+  if (efeAdj || (efeAdjNum !== undefined && efeAdjNum !== 0)) {
+    addPDSectionHeader('R6 — Cierre del Flujo de Efectivo (EFE ↔ Caja PUC 11)');
+    if (efeAdj) {
+      addPDLabelValue('Δ EFE antes del ajuste ($)', efeAdj.efeNetChangeBefore, true);
+      addPDLabelValue('Δ Caja observado en Balance ($)', efeAdj.observedChangeInCash, true);
+      addPDLabelValue('Brecha ($)', efeAdj.gapCop, true);
+      addPDLabelValue('Línea de absorción', efeAdj.adjustmentLineLabel);
+      addPDLabelValue('Caja final reconciliada ($)', efeAdj.reconciledClosingCash, true);
+      addPDLabelValue('Caja inicial del periodo ($)', efeAdj.openingCash, true);
+      addPDLabelValue('Justificación', efeAdj.justification);
+    } else {
+      addPDLabelValue('Gap absorbido ($)', efeAdjNum ?? 0, true);
+    }
+    row++;
+  }
+
+  // ── Sección 4: R7 — Advertencia Costo Presunto ────────────────────────
+  const r7 = p.presumedCostWarning;
+  if (r7) {
+    addPDSectionHeader('R7 — Advertencia de Costo Presunto (no muta cifras)');
+    addPDLabelValue('Margen bruto observado', `${(r7.observedGrossMargin * 100).toFixed(1)}%`);
+    addPDLabelValue('Umbral configurado', `${(r7.thresholdGrossMargin * 100).toFixed(1)}%`);
+    addPDLabelValue('COGS reportado ($)', r7.reportedCogsCop, true);
+    addPDLabelValue('COGS presunto ($)', r7.presumedCogsCop, true);
+    addPDLabelValue('Inventario al cierre ($)', r7.inventoryCop, true);
+    addPDLabelValue('Título del callout', r7.calloutTitle);
+    addPDLabelValue('Descripción', r7.calloutBody);
+    row++;
+  }
+
+  // ── Column widths ──────────────────────────────────────────────────────
+  ws.getColumn(1).width = 35;
+  ws.getColumn(2).width = 35;
+  ws.getColumn(3).width = 22;
+  ws.getColumn(4).width = 16;
+  ws.getColumn(5).width = 35;
+  ws.getColumn(6).width = 55;
 }

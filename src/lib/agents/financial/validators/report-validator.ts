@@ -367,6 +367,71 @@ export function validateConsolidatedReport(
   }
 
   // -----------------------------------------------------------------------
+  // 4b) ECP ↔ Balance equity anchor — HARD FAIL
+  // -----------------------------------------------------------------------
+  // El Saldo Final del Patrimonio en el ECP debe cerrar exactamente igual al
+  // Total Patrimonio del Balance. Si hay gap, el modelo debio absorberlo via
+  // "Ajustes de Convergencia / Resultados Acumulados" antes de emitir.
+  const reportedEcpClose = extractHeadlineTotal(
+    consolidatedMarkdown,
+    /saldo\s+final\s*(?:del?\s+)?(?:patrimonio|periodo)\s*(?:\||:|$|\s{2,})/i,
+  );
+  if (reportedEquity !== null && reportedEcpClose !== null) {
+    const ecpDiff = Math.abs(reportedEquity - reportedEcpClose);
+    const ECP_TOL_ABS = 1; // un peso COP
+    if (ecpDiff > ECP_TOL_ABS) {
+      errors.push(
+        `ECP ↔ Balance: Total Patrimonio ${formatCop(reportedEquity)} != Saldo Final ECP ${formatCop(reportedEcpClose)} ` +
+        `(diferencia ${formatCop(ecpDiff)}). Si hubo gap, debe absorberse via "Ajustes de Convergencia / Resultados Acumulados".`,
+      );
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 4c) EFE closing cash ↔ Balance PUC 11 — HARD FAIL
+  // -----------------------------------------------------------------------
+  // "Efectivo al final del periodo" del EFE debe cuadrar al centavo con el
+  // saldo de Efectivo y Equivalentes (PUC 11) en el Balance. Cualquier
+  // diferencia indica un error de presentacion o de calculo que debe
+  // corregirse via "Variaciones en Capital de Trabajo (ajuste de cierre)".
+  const reportedEfeClose = extractHeadlineTotal(
+    consolidatedMarkdown,
+    /efectivo\s+al\s+final\s+del\s+periodo\s*(?:\||:|$|\s{2,})/i,
+  );
+  if (
+    controlTotals?.efectivoCuenta11 !== undefined &&
+    reportedEfeClose !== null
+  ) {
+    const cashDiff = Math.abs(reportedEfeClose - controlTotals.efectivoCuenta11);
+    const CASH_TOL_ABS = 1; // un peso COP
+    if (cashDiff > CASH_TOL_ABS) {
+      errors.push(
+        `EFE ↔ Caja: "Efectivo al final del periodo" ${formatCop(reportedEfeClose)} != ` +
+        `Efectivo y Equivalentes Balance (PUC 11) ${formatCop(controlTotals.efectivoCuenta11)} ` +
+        `(diferencia ${formatCop(cashDiff)}). Debe cerrar al centavo via "Variaciones en Capital de Trabajo (ajuste de cierre)".`,
+      );
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 4d) Detect negative liabilities/equity in presentation — WARNING
+  // -----------------------------------------------------------------------
+  // Politica Pulido Diamante: Pasivo y Patrimonio se presentan en valores
+  // absolutos en el Balance y en el P&L. Un prefijo "-" indica un error de
+  // presentacion (no de signo contable) que confunde al lector.
+  const negLiabilityPattern = /total\s+pasivo\s*[|:].*?-\s?\$/i;
+  const negEquityPattern = /total\s+patrimonio\s*[|:].*?-\s?\$/i;
+  if (
+    negLiabilityPattern.test(consolidatedMarkdown) ||
+    negEquityPattern.test(consolidatedMarkdown)
+  ) {
+    warnings.push(
+      'Presentacion de signos: se detectaron Pasivo/Patrimonio con prefijo "-". ' +
+      'Politica Pulido Diamante exige valores absolutos en Balance y P&L.',
+    );
+  }
+
+  // -----------------------------------------------------------------------
   // 5) Broken Markdown tables — WARNING (no bloqueante)
   // -----------------------------------------------------------------------
   const tableWarning = detectBrokenTables(consolidatedMarkdown);

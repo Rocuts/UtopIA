@@ -127,6 +127,22 @@ export interface FinancialReport {
   generatedAt: string;
   /** Post-render validation result (placeholders, sections, numeric sanity). */
   validation?: ReportValidationResult;
+  /** Flags de auditoría sobre los ajustes deterministas aplicados por el Curator (R1, R5, R6, R7). */
+  annotations?: FinancialReportAnnotations;
+}
+
+/**
+ * Flags de auditoría producidos por el Curator NIIF tras correr R1 / R5 / R6 / R7.
+ * Permiten al renderer y al validator post-pipeline saber qué ajustes
+ * deterministas se aplicaron al snapshot antes de que los agentes LLM lo vieran.
+ */
+export interface FinancialReportAnnotations {
+  hasEquityConvergence: boolean;
+  hasCashFlowClosure: boolean;
+  hasNegativeAssetReclass: boolean;
+  hasPresumedCostWarning: boolean;
+  /** Total absoluto reclasificado por R1 (suma de effectiveTransferCop). */
+  reclassifiedAmountCop: number;
 }
 
 // ---------------------------------------------------------------------------

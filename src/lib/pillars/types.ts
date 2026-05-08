@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
-import type { CuratorResult } from '@/lib/preprocessing/curator-rules/types';
+import type { CuratorResult, PresumedCostWarning } from '@/lib/preprocessing/curator-rules/types';
 
 // ─── Status & severity ─────────────────────────────────────────────────────
 
@@ -73,6 +73,8 @@ export interface PillarMetrics {
   /** Errores capturados durante el cómputo (no rompen el pilar). */
   errors?: Record<string, string>;
   generatedAt: string;
+  /** Advertencia R7 (Curator) sobre costo de ventas posiblemente subestimado. */
+  presumedCostWarning?: PresumedCostWarning;
 }
 
 // ─── Resultado consolidado de los 4 pilares ────────────────────────────────
