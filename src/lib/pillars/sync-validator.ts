@@ -94,6 +94,12 @@ export function validateDashboardIntegrity(
     findings.push(...checkVerdadCards(verdadCards, snapshot));
   }
 
+  // ── 1d. Tarjetas ejecutivas Futuro (CAGR / Punto Quiebre / Prov.Trib / CapEx) ──
+  const futuroCards = metrics.futuro.futuroCards;
+  if (futuroCards) {
+    findings.push(...checkFuturoCards(futuroCards, snapshot));
+  }
+
   // ── 2. KPIs maestros NIIF del Pilar VALOR ────────────────────────────────
   findings.push(...checkValorKpis(metrics.valor, snapshot));
 
@@ -425,6 +431,104 @@ function checkVerdadCards(
   // parámetro queda para simetría con los otros checkers y por si añadimos
   // verificaciones contra el snapshot directamente en el futuro.
   void snapshot;
+  return findings;
+}
+
+function checkFuturoCards(
+  cards: NonNullable<PillarMetrics['futuroCards']>,
+  snapshot: PeriodSnapshot,
+): SyncFinding[] {
+  const findings: SyncFinding[] = [];
+  const ct = snapshot.controlTotals;
+
+  // ── Capacidad de Inversión ────────────────────────────────────────────
+  // = caja − provRenta − reserva60d. Validamos contra el audit.
+  const provRenta = Math.max(0, ct.utilidadNeta) * cards.audit.tasaRenta;
+  const reserva60d = (ct.gastos / 365) * 60;
+  const expectedCapInv = ct.efectivoCuenta11 - provRenta - reserva60d;
+  const driftCapInv = safeDelta(cards.capacidad_inversion.value, expectedCapInv);
+  if (driftCapInv !== null && Math.abs(driftCapInv) > COP_TOLERANCE) {
+    findings.push({
+      code: 'CAPACIDAD_INVERSION_DRIFT',
+      severity: 'warning',
+      field: 'Capacidad de Inversión',
+      displayed: cards.capacidad_inversion.value,
+      expected: expectedCapInv,
+      drift: driftCapInv,
+      messageEs:
+        `Capacidad de Inversión mostrada ($${formatCop(cards.capacidad_inversion.value)}) difiere del recalculado ` +
+        `($${formatCop(expectedCapInv)}) por $${formatCop(Math.abs(driftCapInv))}.`,
+      messageEn:
+        `Displayed Investment Capacity ($${formatCop(cards.capacidad_inversion.value)}) differs from recomputed ` +
+        `($${formatCop(expectedCapInv)}) by $${formatCop(Math.abs(driftCapInv))}.`,
+    });
+  }
+
+  // ── Provisión Tributaria Futura ────────────────────────────────────────
+  // = utilidadProyectadaAnual × 35%. Validamos contra el audit que ya tiene
+  // utilidadProyectadaAnual computada con el CAGR.
+  const expectedProvTrib = cards.audit.utilidadProyectadaAnual * cards.audit.tasaRenta;
+  const driftProvTrib = safeDelta(cards.provision_tributaria.value, expectedProvTrib);
+  if (driftProvTrib !== null && Math.abs(driftProvTrib) > COP_TOLERANCE) {
+    findings.push({
+      code: 'PROVISION_TRIBUTARIA_DRIFT',
+      severity: 'warning',
+      field: 'Provisión Tributaria Futura',
+      displayed: cards.provision_tributaria.value,
+      expected: expectedProvTrib,
+      drift: driftProvTrib,
+      messageEs:
+        `Provisión Tributaria mostrada ($${formatCop(cards.provision_tributaria.value)}) difiere del recalculado ` +
+        `($${formatCop(expectedProvTrib)}) por $${formatCop(Math.abs(driftProvTrib))}.`,
+      messageEn:
+        `Displayed Future Tax Provision ($${formatCop(cards.provision_tributaria.value)}) differs from recomputed ` +
+        `($${formatCop(expectedProvTrib)}) by $${formatCop(Math.abs(driftProvTrib))}.`,
+    });
+  }
+
+  // ── CAGR sanity check (rango razonable) ────────────────────────────────
+  // CAGR puede ser cualquier valor (incluso negativo), pero >5x o <-1 son sospechosos.
+  if (
+    cards.cagr.value !== null &&
+    (cards.cagr.value > 5 || cards.cagr.value < -0.99)
+  ) {
+    findings.push({
+      code: 'CAGR_OUT_OF_PLAUSIBLE_RANGE',
+      severity: 'info',
+      field: 'CAGR de Ingresos',
+      displayed: cards.cagr.value,
+      expected: null,
+      drift: null,
+      messageEs:
+        `CAGR ${formatPct(cards.cagr.value)} fuera de rango plausible. Verificar consistencia de los ingresos comparativos.`,
+      messageEn:
+        `CAGR ${formatPct(cards.cagr.value)} outside plausible range. Verify consistency of comparative revenue.`,
+    });
+  }
+
+  // ── Punto de Quiebre vs audit ──────────────────────────────────────────
+  // Si audit dice null pero card.value no es null (o viceversa), drift.
+  const auditPunto = cards.audit.mesesAlQuiebreConservador;
+  const cardPunto = cards.punto_quiebre.value;
+  const bothNull = auditPunto === null && cardPunto === null;
+  const valuesDiffer =
+    !bothNull &&
+    (auditPunto === null || cardPunto === null || auditPunto !== cardPunto);
+  if (valuesDiffer) {
+    findings.push({
+      code: 'PUNTO_QUIEBRE_DRIFT',
+      severity: 'warning',
+      field: 'Punto de Quiebre',
+      displayed: cardPunto,
+      expected: auditPunto,
+      drift: null,
+      messageEs:
+        `Punto de Quiebre mostrado (${cardPunto ?? 'sin riesgo'}) difiere del audit (${auditPunto ?? 'sin riesgo'}).`,
+      messageEn:
+        `Displayed Break-even Month (${cardPunto ?? 'no risk'}) differs from audit (${auditPunto ?? 'no risk'}).`,
+    });
+  }
+
   return findings;
 }
 

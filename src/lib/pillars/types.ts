@@ -81,6 +81,8 @@ export interface PillarMetrics {
   escudoCards?: EscudoExecutiveCards;
   /** 4 tarjetas ejecutivas (sólo pilar Verdad): Ecuación Maestra / Consistencia / Anomalías / Salud. */
   verdadCards?: VerdadExecutiveCards;
+  /** 4 tarjetas ejecutivas (sólo pilar Futuro): CAGR / Punto Quiebre / Prov. Tributaria / Capacidad Inv. */
+  futuroCards?: FuturoExecutiveCards;
 }
 
 // ─── Tarjetas ejecutivas (Pilar Valor) ─────────────────────────────────────
@@ -92,7 +94,9 @@ export type ExecutiveCardKey =
   // Pilar Escudo
   | 'autonomia' | 'cobertura_pasivos' | 'reserva_fiscal' | 'brecha_escudo'
   // Pilar Verdad
-  | 'ecuacion_maestra' | 'consistencia' | 'anomalias' | 'salud_contable';
+  | 'ecuacion_maestra' | 'consistencia' | 'anomalias' | 'salud_contable'
+  // Pilar Futuro
+  | 'cagr' | 'punto_quiebre' | 'provision_tributaria' | 'capacidad_inversion';
 
 export interface ExecutiveCard {
   key: ExecutiveCardKey;
@@ -106,8 +110,9 @@ export interface ExecutiveCard {
    *  - pct: porcentaje (multiplica por 100, sufijo %).
    *  - ratio: número crudo (toFixed(2)).
    *  - count: entero sin decimales (errores, anomalías).
-   *  - score: 0-100 sufijo /100. */
-  unit: 'cop' | 'pct' | 'ratio' | 'count' | 'score';
+   *  - score: 0-100 sufijo /100.
+   *  - months: meses (entero, sufijo "meses"/"months"). */
+  unit: 'cop' | 'pct' | 'ratio' | 'count' | 'score' | 'months';
   color: ExecutiveCardColor;
   status: PillarStatus;
   /** Variación vs periodo anterior, mismo unit. `null` si no hay comparativo. */
@@ -232,6 +237,49 @@ export interface VerdadExecutiveCards {
   /** # de Errores de Salud Contable acumulados (count, lower-better). */
   salud_contable: ExecutiveCard;
   audit: VerdadExecutiveCardsAudit;
+  generatedAt: string;
+}
+
+// ─── Tarjetas ejecutivas (Pilar Futuro) ────────────────────────────────────
+
+export interface FuturoExecutiveCardsAudit {
+  /** Tasa CAGR de ingresos. Null si no hay periodo comparativo. */
+  cagrIngresos: number | null;
+  /** # períodos usados para el CAGR (2 si hay current+comparative; null si no). */
+  periodosCagr: number | null;
+  /** Ingresos del periodo actual. */
+  ingresosActuales: number;
+  /** Ingresos del periodo anterior (null si no hay comparative). */
+  ingresosAnteriores: number | null;
+  /** Mes donde el escenario conservador (factor 0.85) cruza 0 en caja proyectada
+   *  a 36 meses. `null` si nunca cruza dentro del horizonte. */
+  mesesAlQuiebreConservador: number | null;
+  /** Mes donde el escenario base (factor 1.0) cruza 0. */
+  mesesAlQuiebreBase: number | null;
+  /** Utilidad neta anualizada proyectada al año siguiente (utilidadActual × (1+CAGR)). */
+  utilidadProyectadaAnual: number;
+  /** Provisión tributaria proyectada = utilidadProyectadaAnual × 35%. */
+  provisionTributariaFutura: number;
+  /** Capacidad de inversión actual = caja − provRenta − reserva60d. */
+  capacidadInversion: number;
+  /** Reserva 60 días de gastos en COP. */
+  reserva60Dias: number;
+  /** Caja proyectada al final del horizonte (escenario base). */
+  cajaProyectada36mBase: number;
+  /** Tasa de impuesto de renta (Art. 240 E.T.). */
+  tasaRenta: number;
+}
+
+export interface FuturoExecutiveCards {
+  /** CAGR de ingresos (proyección lineal, % anual). */
+  cagr: ExecutiveCard;
+  /** Mes hasta el punto de quiebre de caja (escenario conservador, lower-NOT-better visualmente). */
+  punto_quiebre: ExecutiveCard;
+  /** Provisión tributaria proyectada para el próximo año (COP). */
+  provision_tributaria: ExecutiveCard;
+  /** Capacidad de inversión: caja libre tras provisionar renta y reserva 60d (COP). */
+  capacidad_inversion: ExecutiveCard;
+  audit: FuturoExecutiveCardsAudit;
   generatedAt: string;
 }
 

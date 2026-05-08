@@ -13,6 +13,7 @@ import type { PillarsResult, PillarMetrics } from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
+import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
 import type {
   PnLWaterfallData,
   DuPontSegment,
@@ -160,6 +161,30 @@ export const MOCK_VERDAD_TREND: VerdadBarSeries[] = [
   { label: '2025', period: '2025', errores: 3,  descalces: 0, anomalias: 1, isInterpolated: false },
   { label: '2026', period: '2026', errores: 1,  descalces: 0, anomalias: 0, isInterpolated: false },
 ];
+
+export const MOCK_FUTURO_TREND: FuturoBarSeries[] = (() => {
+  const out: FuturoBarSeries[] = [];
+  // Caja inicial: $2.000M — base decrece levemente, conservadora cruza 0 en
+  // mes 8, agresiva sube sostenidamente.
+  let base = 2_000_000_000;
+  let cons = 2_000_000_000;
+  let agr = 2_000_000_000;
+  const INGRESO_MES = 1_000_000_000;
+  const EGRESO_MES = 1_050_000_000; // egresos ligeramente mayores → base decrece
+  for (let m = 1; m <= 12; m++) {
+    base = base + INGRESO_MES * 1.0 - EGRESO_MES;
+    cons = cons + INGRESO_MES * 0.85 - EGRESO_MES;
+    agr = agr + INGRESO_MES * 1.1 - EGRESO_MES;
+    out.push({
+      label: `M+${m}`,
+      monthIndex: m,
+      cajaBase: Math.round(base),
+      cajaConservadora: Math.round(cons),
+      cajaAgresiva: Math.round(agr),
+    });
+  }
+  return out;
+})();
 
 function monthLabel(offset: number): string {
   const d = new Date();

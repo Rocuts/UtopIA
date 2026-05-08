@@ -21,6 +21,7 @@ import type { PillarsResult } from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
+import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
 import type {
   CashInflectionPoint,
   DuPontSegment,
@@ -36,6 +37,7 @@ import { PillarHealthBadge } from './PillarHealthBadge';
 import {
   MOCK_DUPONT_SEGMENTS,
   MOCK_ESCUDO_TREND,
+  MOCK_FUTURO_TREND,
   MOCK_INFLECTION_SERIES,
   MOCK_PILLARS,
   MOCK_PNL_WATERFALL,
@@ -67,6 +69,8 @@ export interface PillarsCommandCenterProps {
   escudoTrend?: EscudoBarSeries[];
   /** Serie temporal Errores/Descalces/Anomalías para el gráfico de barras del pilar Verdad. */
   verdadTrend?: VerdadBarSeries[];
+  /** Serie de caja proyectada 12 meses (3 escenarios) para el gráfico de líneas del pilar Futuro. */
+  futuroTrend?: FuturoBarSeries[];
   /** Si no hay datos reales, marca los charts con un badge "DEMO". */
   demo?: boolean;
 }
@@ -174,7 +178,7 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
         <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} escudoTrend={props.escudoTrend ?? MOCK_ESCUDO_TREND} />
         <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={props.valorTrend ?? MOCK_VALOR_TREND} />
         <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} verdadTrend={props.verdadTrend ?? MOCK_VERDAD_TREND} />
-        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} />
+        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={props.futuroTrend ?? MOCK_FUTURO_TREND} />
       </div>
     </div>
   );

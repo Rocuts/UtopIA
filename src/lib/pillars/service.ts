@@ -16,6 +16,7 @@ import { computeValorExecutiveCards } from './valor-cards';
 import { computeVerdadPillar } from './verdad';
 import { computeVerdadExecutiveCards } from './verdad-cards';
 import { computeFuturoPillar } from './futuro';
+import { computeFuturoExecutiveCards } from './futuro-cards';
 import { scoreToStatus } from './health-score';
 import type {
   PillarMetrics,
@@ -80,6 +81,17 @@ export function aggregatePillars(input: PillarsAggregateInput): PillarsResult {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[pillars] verdad.verdadCards failed:', err);
     verdad.errors = { ...(verdad.errors ?? {}), verdadCards: message };
+  }
+
+  // Inyectar las 4 tarjetas ejecutivas del Pilar Futuro: CAGR / Punto Quiebre /
+  // Provisión Tributaria Futura / Capacidad de Inversión. Cierra el ciclo de
+  // las 4 ventanas (Verdad → Escudo → Valor → Futuro). Mismo patrón fail-soft.
+  try {
+    futuro.futuroCards = computeFuturoExecutiveCards(input);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[pillars] futuro.futuroCards failed:', err);
+    futuro.errors = { ...(futuro.errors ?? {}), futuroCards: message };
   }
 
   const overallScore = Math.round(

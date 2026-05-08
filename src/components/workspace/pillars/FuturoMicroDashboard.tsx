@@ -16,15 +16,19 @@ import type {
 } from '@/components/charts';
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarMetrics } from '@/lib/pillars/types';
+import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
 
 import { PillarHealthBadge } from './PillarHealthBadge';
 import { PillarKpiList } from './_kpi-list';
 import { PillarAlertsList } from './_alerts-list';
+import { FuturoTrendBars } from './FuturoTrendBars';
+import { FuturoExecutiveCards } from './FuturoExecutiveCards';
 
 interface Props {
   metrics: PillarMetrics;
   runway?: RunwayMonth[];
   inflectionSeries?: CashInflectionPoint[];
+  futuroTrend?: FuturoBarSeries[];
   density?: 'comfortable' | 'compact';
 }
 
@@ -32,6 +36,7 @@ export function FuturoMicroDashboard({
   metrics,
   runway,
   inflectionSeries,
+  futuroTrend,
   density,
 }: Props) {
   const { language } = useLanguage();
@@ -61,8 +66,21 @@ export function FuturoMicroDashboard({
         </p>
       </Card>
 
+      {/* Tarjetas ejecutivas (vista dueño): CAGR · Punto Quiebre · Prov. Tributaria · Capacidad Inv. */}
+      <FuturoExecutiveCards
+        cards={metrics.futuroCards}
+        language={language}
+        density={density}
+      />
+
       {runway && runway.length > 0 && (
         <RunwayProjection months={runway} density={density} />
+      )}
+
+      {futuroTrend && futuroTrend.length > 0 && (
+        <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
+          <FuturoTrendBars series={futuroTrend} language={language} density={density} />
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -71,7 +89,7 @@ export function FuturoMicroDashboard({
         )}
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <h3 className="font-serif-elite text-base font-normal text-n-1000 mb-2">
-            {isEs ? 'KPIs Maestros' : 'Master KPIs'}
+            {isEs ? 'KPIs Maestros NIIF' : 'NIIF Master KPIs'}
           </h3>
           <PillarKpiList kpis={metrics.kpis} language={language} />
         </Card>
