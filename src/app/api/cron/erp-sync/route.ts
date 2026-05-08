@@ -26,6 +26,7 @@ import { getDb } from '@/lib/db/client';
 import { erpCredentials } from '@/lib/db/schema';
 import { ERPAdapter } from '@/lib/erp/adapter';
 import type { ERPCredentials } from '@/lib/erp/types';
+import { loadCredentials } from '@/lib/erp/credentials';
 import { getLatestOpenPeriod, getCachedPreprocessedBalance } from '@/lib/cache/preprocessed-balance';
 
 export const maxDuration = 300;
@@ -73,18 +74,18 @@ async function syncWorkspace(row: typeof erpCredentials.$inferSelect): Promise<S
   const { workspaceId, provider } = row;
 
   try {
-    const meta = (row.metadata ?? {}) as Record<string, unknown>;
-
-    const credentials: ERPCredentials = {
-      provider: provider as ERPCredentials['provider'],
-      apiKey: typeof meta.apiKey === 'string' ? meta.apiKey : undefined,
-      apiToken: typeof meta.apiToken === 'string' ? meta.apiToken : undefined,
-      username: typeof meta.username === 'string' ? meta.username : undefined,
-      companyId: typeof meta.companyId === 'string' ? meta.companyId : undefined,
-      baseUrl: typeof meta.baseUrl === 'string' ? meta.baseUrl : undefined,
-      accessToken: typeof meta.accessToken === 'string' ? meta.accessToken : undefined,
-      tenantId: typeof meta.tenantId === 'string' ? meta.tenantId : undefined,
-    };
+    let credentials: ERPCredentials;
+    try {
+      credentials = loadCredentials(row);
+    } catch (err) {
+      console.error('[cron/erp-sync] credential decrypt failed, skipping workspace', {
+        workspaceId,
+        provider,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      const duration = Date.now() - start;
+      return { workspaceId, provider, status: 'error', duration, error: 'credential_decrypt_failed' };
+    }
 
     const period = currentPeriod();
     const adapter = new ERPAdapter({ provider: credentials.provider, credentials });

@@ -20,7 +20,8 @@
     "db:recover-elite": "dotenv -e .env.local -- tsx scripts/recover-elite-push.ts",
     "db:seed-calendar": "dotenv -e .env.local -- tsx scripts/seed-verified-calendar.ts",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
-    "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts"
+    "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts",
+    "db:encrypt-erp": "dotenv -e .env.local -- tsx scripts/encrypt-erp-credentials.ts"
   },
   "dependencies": {
     "@ai-sdk/cohere": "^3.0.33",

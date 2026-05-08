@@ -21,6 +21,10 @@ const connectSchema = z.object({
   }),
 });
 
+// TODO(e1-followup): when this route persists credentials, use
+// `serializeCredentials` from '@/lib/erp/credentials' to produce the
+// `{ encryptedSecret, metadata }` pair before db.insert(erpCredentials).
+// (keyVersion column queda diferida hasta el rebase de baseline 0005-0010.)
 export async function POST(req: Request) {
   try {
     const body = await req.json();

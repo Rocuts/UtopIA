@@ -37,9 +37,14 @@ export const workspaces = pgTable('workspaces', {
 });
 
 // Vault server-side de credenciales ERP.
-// `encrypted_secret` debe quedar cifrado AES-256-GCM con `UTOPIA_VAULT_KEY`
-// (el helper de cifrado se añadirá cuando migremos `ERPConnector` desde
-// localStorage). Por ahora la columna existe pero no se usa todavía.
+// `encrypted_secret` almacena un envelope AES-256-GCM en formato
+// `v1:gcm:<iv>:<tag>:<ct>` (ver src/lib/security/vault.ts). El payload
+// cifrado es un JSON con los campos secretos (apiKey, apiToken, password,
+// accessToken, refreshToken, clientSecret). Los campos no-secretos (baseUrl,
+// companyId, tenantId, etc.) viven plaintext en `metadata`.
+// CRITICAL: usar serializeCredentials/loadCredentials de src/lib/erp/credentials.ts.
+// TODO(e1-followup): añadir columna `key_version integer NULL` para telemetría
+// de rotación una vez se rebase la baseline de migrations (0005-0010 aún sin journalear).
 export const erpCredentials = pgTable('erp_credentials', {
   id: uuid('id').primaryKey().defaultRandom(),
   workspaceId: uuid('workspace_id')

@@ -138,6 +138,7 @@ Tools are defined in `src/lib/agents/tools/registry.ts` using the AI SDK v6 `too
 - `src/lib/security/pii-filter.ts`: redacts NIT, cédula, emails, phones, cards before LLM calls. Extracts NIT context (last digit) BEFORE redacting for personalization
 - `next.config.ts`: CSP headers restricting connections to OpenAI + Tavily APIs
 - `src/lib/validation/schemas.ts`: Zod schemas for all API request validation
+- `src/lib/security/vault.ts`: AES-256-GCM Node-side encryption for ERP credentials (`encrypted_secret` column on `erp_credentials`). Wire format `v1:gcm:<iv>:<tag>:<ct>` with base64url segments. Distinct from `encryption.ts` (pgcrypto for column-level PII). Key from `UTOPIA_VAULT_KEY`; rotation via `UTOPIA_VAULT_KEY_PREV` + `npm run db:encrypt-erp -- --rotate`. See `docs/SECURITY_ENCRYPTION.md`.
 
 ### State Management
 

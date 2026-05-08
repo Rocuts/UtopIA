@@ -34,6 +34,7 @@ import { getDb } from '@/lib/db/client';
 import { erpCredentials } from '@/lib/db/schema';
 import { ERPAdapter } from '@/lib/erp/adapter';
 import type { ERPCredentials } from '@/lib/erp/types';
+import { loadCredentials } from '@/lib/erp/credentials';
 import { getLatestOpenPeriod, getCachedPreprocessedBalance } from '@/lib/cache/preprocessed-balance';
 
 export const maxDuration = 60;
@@ -99,13 +100,7 @@ function parsePayload(provider: ValidProvider, body: unknown): { ok: true } | { 
 // DB helpers
 // ---------------------------------------------------------------------------
 
-interface CredentialRow {
-  id: string;
-  workspaceId: string;
-  provider: string;
-  encryptedSecret: string;
-  metadata: Record<string, unknown>;
-}
+type CredentialRow = typeof erpCredentials.$inferSelect;
 
 async function findCredentialByToken(
   provider: string,
@@ -141,13 +136,7 @@ async function findCredentialByToken(
       tokenBuf.length === secretBuf.length &&
       timingSafeEqual(a, b)
     ) {
-      return {
-        id: row.id,
-        workspaceId: row.workspaceId,
-        provider: row.provider,
-        encryptedSecret: row.encryptedSecret,
-        metadata: meta,
-      };
+      return row;
     }
   }
   return null;
@@ -163,22 +152,19 @@ async function syncTrialBalance(
 ): Promise<void> {
   const start = Date.now();
 
+  let credentials: ERPCredentials;
   try {
-    // Build ERPCredentials from metadata (decryption of encryptedSecret is
-    // handled by the adapter in production; for the webhook path we derive
-    // credentials from the metadata blob which stores non-secret config).
-    const meta = cred.metadata;
-    const credentials: ERPCredentials = {
-      provider: cred.provider as ERPCredentials['provider'],
-      apiKey: typeof meta.apiKey === 'string' ? meta.apiKey : undefined,
-      apiToken: typeof meta.apiToken === 'string' ? meta.apiToken : undefined,
-      username: typeof meta.username === 'string' ? meta.username : undefined,
-      companyId: typeof meta.companyId === 'string' ? meta.companyId : undefined,
-      baseUrl: typeof meta.baseUrl === 'string' ? meta.baseUrl : undefined,
-      accessToken: typeof meta.accessToken === 'string' ? meta.accessToken : undefined,
-      tenantId: typeof meta.tenantId === 'string' ? meta.tenantId : undefined,
-    };
+    credentials = loadCredentials(cred);
+  } catch (err) {
+    console.error('[erp/webhook] credential decrypt failed', {
+      workspaceId: cred.workspaceId,
+      provider: cred.provider,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return;
+  }
 
+  try {
     // Determine current fiscal period (YYYY-MM)
     const now = new Date();
     const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

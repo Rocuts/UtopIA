@@ -54,6 +54,18 @@ vi.mock('@/lib/cache/preprocessed-balance', () => ({
   getCachedPreprocessedBalance: vi.fn().mockResolvedValue(null),
 }));
 
+// ERP credentials — mock the vault boundary so loadCredentials never touches
+// AES-256-GCM decryption during webhook handler tests. CRED_ROW.encryptedSecret
+// remains a placeholder; the decrypted shape is injected here instead.
+vi.mock('@/lib/erp/credentials', () => ({
+  loadCredentials: vi.fn().mockReturnValue({
+    provider: 'sap_s4hana',
+    apiKey: 'demo-api-key',
+    baseUrl: 'http://erp.example.com',
+  }),
+  serializeCredentials: vi.fn().mockReturnValue('enc_secret'),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
