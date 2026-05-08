@@ -17,6 +17,7 @@
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
     "db:generate": "dotenv -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- tsx scripts/db-migrate.ts",
+    "db:recover-elite": "dotenv -e .env.local -- tsx scripts/recover-elite-push.ts",
     "db:seed-calendar": "dotenv -e .env.local -- tsx scripts/seed-verified-calendar.ts",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts"
@@ -45,6 +46,8 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.2",
+    "echarts": "^5.6.0",
+    "echarts-for-react": "^3.0.6",
     "exceljs": "^4.4.0",
     "geist": "^1.7.0",
     "hnswlib-node": "^3.0.0",

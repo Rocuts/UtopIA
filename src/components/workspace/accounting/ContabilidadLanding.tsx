@@ -20,6 +20,7 @@ import {
   ArrowRight,
   BookOpen,
   Calendar,
+  CalendarRange,
   FileText,
   Loader2,
   PlusCircle,
@@ -146,7 +147,7 @@ export function ContabilidadLanding() {
       {/* Primary actions */}
       <section
         aria-label={isEs ? 'Acciones principales' : 'Primary actions'}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10"
       >
         <ActionTile
           href="/workspace/contabilidad/asientos/nuevo"
@@ -168,6 +169,17 @@ export function ContabilidadLanding() {
           title={ac.openingBalance}
           description={ac.openingBalanceDesc}
           accent="verdad"
+        />
+        <ActionTile
+          href="/workspace/contabilidad/periodos"
+          icon={CalendarRange}
+          title={isEs ? 'Periodos Fiscales' : 'Fiscal Periods'}
+          description={
+            isEs
+              ? 'Apertura, cierre durable y bloqueo terminal de ciclos contables.'
+              : 'Opening, durable close and terminal lock of accounting cycles.'
+          }
+          accent="futuro"
         />
       </section>
 
