@@ -27,7 +27,10 @@ interface ChatMessage {
 // ---------------------------------------------------------------------------
 // Feature flag: set UTOPIA_AGENT_MODE=orchestrated to enable multi-agent
 // ---------------------------------------------------------------------------
-const useOrchestration = () => process.env.UTOPIA_AGENT_MODE === 'orchestrated';
+// Helper plain (NO React Hook a pesar del prefijo `use`). Renombrado a
+// `isOrchestrationMode` para satisfacer ESLint `react-hooks/rules-of-hooks`
+// que daba un falso positivo (FIX audit A1).
+const isOrchestrationMode = () => process.env.UTOPIA_AGENT_MODE === 'orchestrated';
 
 // ---------------------------------------------------------------------------
 // Orchestrated handler (new multi-agent system with SSE streaming)
@@ -619,7 +622,7 @@ export async function POST(req: Request) {
     const url = new URL(req.url);
     const stream = req.headers.get('X-Stream') === 'true' || url.searchParams.get('stream') === '1';
 
-    if (useOrchestration()) {
+    if (isOrchestrationMode()) {
       return handleOrchestrated(req, messages, language, useCase, documentContext, nitContext, stream, erpConnections);
     }
 

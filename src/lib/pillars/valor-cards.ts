@@ -118,7 +118,16 @@ export function computeValorExecutiveCards(
   const totalIngresos = ct.ingresos;
   const totalGastos = claseGastos?.auxiliaryTotal ?? 0;
   const totalCostos = claseCostos?.auxiliaryTotal ?? 0;
-  const utilidadOperacional = ct.utilidadNeta + ct.impuestosCuenta24;
+  // FIX (audit B1): construir utilidad operacional desde gasto del P&L del
+  // periodo, NO desde el saldo de pasivo cuenta 24 (que acumula periodos).
+  // EBITDA = utilidadNeta + Impuesto del periodo (5410+5415) + Intereses
+  // financieros (5305) + Depreciaciones (5160) + Amortizaciones (5165).
+  // Si el balance no segrega impuesto/intereses en clase 5, fallback
+  // conservador: usar utilidadNeta como proxy de EBIT (subestima EBITDA).
+  const impuestoPeriodo =
+    sumClassByPrefix(claseGastos, '5410') + sumClassByPrefix(claseGastos, '5415');
+  const interesesFinancieros = sumClassByPrefix(claseGastos, '5305');
+  const utilidadOperacional = ct.utilidadNeta + impuestoPeriodo + interesesFinancieros;
   const depreciaciones = sumClassByPrefix(claseGastos, '5160');
   const amortizaciones = sumClassByPrefix(claseGastos, '5165');
 
@@ -226,6 +235,7 @@ export function computeValorExecutiveCards(
       formulaEn: 'Operating Cash Flow (IAS 7 indirect) − CapEx (Class 15 PPE delta)',
     },
     audit: {
+      utilidadNeta: ct.utilidadNeta,
       utilidadOperacional,
       depreciaciones,
       amortizaciones,
@@ -252,8 +262,12 @@ function buildAudit(
   const claseGastos = snapshot.classes.find((c) => c.code === 5);
   const claseCostos = snapshot.classes.find((c) => c.code === 6);
   const efe = snapshot.cashFlowIndirecto;
+  const impuestoPeriodo =
+    sumClassByPrefix(claseGastos, '5410') + sumClassByPrefix(claseGastos, '5415');
+  const interesesFinancieros = sumClassByPrefix(claseGastos, '5305');
   return {
-    utilidadOperacional: ct.utilidadNeta + ct.impuestosCuenta24,
+    utilidadNeta: ct.utilidadNeta,
+    utilidadOperacional: ct.utilidadNeta + impuestoPeriodo + interesesFinancieros,
     depreciaciones: sumClassByPrefix(claseGastos, '5160'),
     amortizaciones: sumClassByPrefix(claseGastos, '5165'),
     totalGastos: claseGastos?.auxiliaryTotal ?? 0,

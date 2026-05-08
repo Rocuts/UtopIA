@@ -27,12 +27,19 @@ export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // 1. Auth: Vercel cron signature
+  // FIX (audit E4): fail-CLOSED cuando CRON_SECRET no está configurado.
+  // El cierre contable mensual NO debe correr en entornos sin secret
+  // provisionado — workflow crítico que muta datos contables.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers.get('authorization');
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!cronSecret) {
+    return NextResponse.json(
+      { error: 'CRON_SECRET no configurado en este entorno' },
+      { status: 401 },
+    );
+  }
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   // 2. Feature flag

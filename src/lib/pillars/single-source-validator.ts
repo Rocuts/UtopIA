@@ -83,12 +83,10 @@ export function validateCrossPillarCoherence(
   const futuroAudit = metrics.futuro.futuroCards?.audit ?? null;
 
   // ── 1. Utilidad Neta inter-pilar ─────────────────────────────────────────
-  // VALOR: utilidadOperacional = utilidadNeta + impuestosCuenta24
-  //        → utNeta ≈ valorAudit.utilidadOperacional − ct.impuestosCuenta24
-  const utNetaValor =
-    valorAudit !== null
-      ? valorAudit.utilidadOperacional - ct.impuestosCuenta24
-      : null;
+  // VALOR: el audit ahora expone `utilidadNeta` directamente (FIX audit B1).
+  // Antes derivábamos desde `utilidadOperacional - impuestosCuenta24` con la
+  // fórmula vieja; ahora la fuente es canónica.
+  const utNetaValor = valorAudit !== null ? valorAudit.utilidadNeta : null;
 
   // ESCUDO: rentaTeorica = utilidadNeta × 0.35
   //         → utNeta ≈ rentaTeorica / 0.35

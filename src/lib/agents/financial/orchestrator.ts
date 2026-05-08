@@ -185,14 +185,25 @@ function deriveValidation(preprocessed: unknown): {
     //
     // Política:
     //   - Si snap.summary.equationBalanced === true Y existe
-    //     snap.virtualCloseAdjustment (R8 actuó) → ignorar blocking.
+    //     snap.virtualCloseAdjustment (R8 actuó) Y el ajuste de centavos
+    //     es INMATERIAL (≤1% del activo) → ignorar blocking.
     //     Reasons originales pasan a `adjustments` (informativos).
     //   - Si la ecuación POST-Curator sigue descuadrando → blocking real,
     //     mantener comportamiento original.
+    //   - Si R8 absorbió un residual MATERIAL (>1% activo) en 3710VC, el
+    //     bridge NO se activa: el descuadre puede ser un error de captura
+    //     enmascarado y debe revisarse manualmente (FIX audit B3).
     const equationBalancedPostCurator =
       snap.summary?.equationBalanced === true;
     const r8Applied = snap.virtualCloseAdjustment !== undefined;
-    const bridgeActive = equationBalancedPostCurator && r8Applied;
+    const centsAdjustment = Math.abs(
+      snap.virtualCloseAdjustment?.centsAdjustment ?? 0,
+    );
+    const activoTotal = Math.abs(snap.controlTotals?.activo ?? 0);
+    const materialThreshold = Math.max(activoTotal * 0.01, 1_000_000);
+    const adjustmentIsImmaterial = centsAdjustment <= materialThreshold;
+    const bridgeActive =
+      equationBalancedPostCurator && r8Applied && adjustmentIsImmaterial;
 
     if (v.blocking && !bridgeActive) {
       blocking = true;

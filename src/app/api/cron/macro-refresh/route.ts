@@ -16,13 +16,20 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // Verificar Bearer token.
+  // FIX (audit E3): fail-CLOSED cuando CRON_SECRET no está configurado.
+  // El comportamiento previo (`if (cronSecret) { verificar }`) dejaba el
+  // endpoint completamente abierto en entornos sin la variable provisionada
+  // (preview/staging) — riesgo de ejecución no autorizada.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization') ?? '';
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!cronSecret) {
+    return NextResponse.json(
+      { error: 'CRON_SECRET no configurado en este entorno' },
+      { status: 401 },
+    );
+  }
+  const auth = req.headers.get('authorization') ?? '';
+  if (auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {

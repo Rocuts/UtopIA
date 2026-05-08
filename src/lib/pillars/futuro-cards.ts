@@ -55,13 +55,26 @@ function projectRunway(
   return { monthsToZero, cashAtMonth36: cash };
 }
 
-/** Calcula CAGR simple entre dos períodos. Null si no hay comparativo. */
+/**
+ * Calcula CAGR (Compound Annual Growth Rate) entre dos períodos.
+ * Null si no hay comparativo o el saldo previo es cero.
+ *
+ * Fórmula correcta: (V_final / V_inicial)^(1/n) − 1, donde n es el número
+ * de períodos transcurridos. Para n=1 (caso típico year-over-year) coincide
+ * con el rendimiento simple. Para n>1 es la tasa de crecimiento ANUALIZADA
+ * compuesta (FIX audit B4).
+ */
 function computeCagr(
   currentIngresos: number,
   prevIngresos: number | null,
+  periodosTranscurridos: number = 1,
 ): number | null {
   if (prevIngresos === null || prevIngresos === 0) return null;
-  return currentIngresos / prevIngresos - 1;
+  const n = Math.max(1, periodosTranscurridos);
+  // Para soportar pérdidas (ratio < 0), usamos sign-aware power.
+  const ratio = currentIngresos / prevIngresos;
+  if (ratio <= 0) return -1; // colapso total
+  return Math.pow(ratio, 1 / n) - 1;
 }
 
 /** Delta null-seguro entre valor actual y anterior. */
@@ -83,9 +96,10 @@ function buildFuturoAudit(
   const ingresoMes = ct.ingresos / 12;
   const egresoMes = ct.gastos / 12;
 
-  // CAGR
+  // CAGR — n = 1 (current vs comparative). Si en el futuro `history` permite
+  // múltiples períodos, pasar `periods.length - 1` como n para anualizar.
   const ingresosAnteriores = comparative?.controlTotals.ingresos ?? null;
-  const cagrIngresos = computeCagr(ct.ingresos, ingresosAnteriores);
+  const cagrIngresos = computeCagr(ct.ingresos, ingresosAnteriores, 1);
   const periodosCagr = comparative ? 2 : null;
 
   // Punto de quiebre — escenario conservador
@@ -111,7 +125,13 @@ function buildFuturoAudit(
   const provisionTributariaFutura = utilidadProyectadaAnual * TAX_RATE;
 
   // Capacidad de inversión
-  const provisionRenta = Math.max(0, ct.utilidadNeta) * TAX_RATE;
+  // FIX (audit B5): si la empresa YA provisionó renta en cuenta 24 (saldo de
+  // pasivo), restar `provisionRenta` completa duplica la deducción de caja
+  // (la cuenta 24 es deuda diferida que sí se paga, pero la caja ya reflejó
+  // ese pasivo). Restamos sólo el déficit pendiente: max(0, esperada − ya
+  // provisionada). Conservador (no asume sobre-provisión como sobrante).
+  const rentaTeoricaAnual = Math.max(0, ct.utilidadNeta) * TAX_RATE;
+  const provisionRenta = Math.max(0, rentaTeoricaAnual - ct.impuestosCuenta24);
   const reserva60Dias = (ct.gastos / 365) * 60;
   const capacidadInversion = ct.efectivoCuenta11 - provisionRenta - reserva60Dias;
 

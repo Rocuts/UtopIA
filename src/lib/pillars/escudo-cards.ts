@@ -199,7 +199,13 @@ export function computeEscudoExecutiveCards(
   const audit = buildEscudoAudit(snapshot, avgMonthlyEgresos, periodosUsados);
 
   // ─── 1. Autonomía Financiera (días) ─────────────────────────────────────
-  const liquidezTotal = audit.efectivoCuenta11 + audit.inversionesTemporales12;
+  // FIX (audit B2): saldos negativos en cuentas de inversiones (ej. 120505
+  // con balance crédito) NO deben restar a la liquidez disponible — un saldo
+  // crédito en activo es una incoherencia contable (NIC 1 párr. 32) que
+  // debe ser saneada por R1 del Curator antes de llegar aquí. Como capa
+  // defensiva clamp a 0 el componente de inversiones temporales.
+  const inversionesLiquidas = Math.max(0, audit.inversionesTemporales12);
+  const liquidezTotal = audit.efectivoCuenta11 + inversionesLiquidas;
   let autonomiaValue: number | null;
   if (avgMonthlyEgresos <= 0) {
     autonomiaValue = liquidezTotal > 0 ? 365 : null;

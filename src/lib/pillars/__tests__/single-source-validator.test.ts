@@ -115,8 +115,10 @@ function makeSnapshot(ct: ControlTotals): PeriodSnapshot {
  * matemáticamente del mismo snapshot canónico.
  */
 function makeConsistentMetrics(ct: ControlTotals): PillarsResult {
-  // utilidadOperacional = utilidadNeta + impuestosCuenta24
-  const utilidadOperacional = ct.utilidadNeta + ct.impuestosCuenta24;
+  // FIX (audit B1): utilidadOperacional ahora es utilidadNeta + impuesto5410
+  // + intereses5305. Sin clases 4-5 en el fixture, ambos son 0 → utilidadOperacional
+  // = utilidadNeta. El audit expone utilidadNeta directamente para el validator.
+  const utilidadOperacional = ct.utilidadNeta;
   // rentaTeorica = utilidadNeta × 0.35
   const rentaTeorica = Math.max(0, ct.utilidadNeta * 0.35);
   // CAGR null (sin comparativo)
@@ -130,6 +132,7 @@ function makeConsistentMetrics(ct: ControlTotals): PillarsResult {
     ratio: buildCard('ratio', 0.8),
     fcf: buildCard('fcf', null),
     audit: {
+      utilidadNeta: ct.utilidadNeta,
       utilidadOperacional,
       depreciaciones: 0,
       amortizaciones: 0,
@@ -270,19 +273,19 @@ describe('validateCrossPillarCoherence', () => {
     expect(report.canonicalHash).toMatch(/^[0-9a-f]{32}$/); // md5 hex
   });
 
-  it('utilidadOperacional de Valor manipulada → severity: critical, code: UTILIDAD_NETA_INCOHERENT', () => {
+  it('utilidadNeta de Valor manipulada → severity: critical, code: UTILIDAD_NETA_INCOHERENT', () => {
     const ct = makeControlTotals();
     const snapshot = makeSnapshot(ct);
     const metrics = makeConsistentMetrics(ct);
 
-    // Manipular el audit de Valor: inyectamos un utilidadOperacional 50M más alto
-    // que el canónico (utilidadNeta+impuestos = 200M+50M = 250M → manipulado a 300M).
+    // Manipular el audit de Valor: inyectamos utilidadNeta 50M más alta que
+    // el canónico del snapshot. El validator detecta drift directo (FIX B1).
     const valorCards = metrics.valor.executiveCards!;
     const tampered: ValorExecutiveCards = {
       ...valorCards,
       audit: {
         ...valorCards.audit,
-        utilidadOperacional: valorCards.audit.utilidadOperacional + 50_000_000,
+        utilidadNeta: valorCards.audit.utilidadNeta + 50_000_000,
       },
     };
     const tamperedMetrics: PillarsResult = {

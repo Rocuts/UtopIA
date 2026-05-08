@@ -23,6 +23,7 @@
  * to the function's max wall time (300s in vercel.ts for ERP webhook).
  */
 
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { after } from 'next/server';
 import { revalidateTag } from 'next/cache';
@@ -119,9 +120,27 @@ async function findCredentialByToken(
     .from(erpCredentials)
     .where(eq(erpCredentials.provider, provider));
 
+  // FIX (audit E2): comparación timing-safe del token. El comparador `===`
+  // de strings JS sale temprano en el primer byte distinto, lo que permite
+  // timing-attacks para enumerar tokens válidos byte por byte. Usamos
+  // `crypto.timingSafeEqual` con buffers de igual longitud (padding si
+  // las longitudes difieren para evitar leak por length-comparison early-exit).
+  const tokenBuf = Buffer.from(token);
   for (const row of rows) {
     const meta = (row.metadata ?? {}) as Record<string, unknown>;
-    if (typeof meta.webhookSecret === 'string' && meta.webhookSecret === token) {
+    if (typeof meta.webhookSecret !== 'string') continue;
+    const secretBuf = Buffer.from(meta.webhookSecret);
+    // timingSafeEqual requiere mismo length; igualamos longitudes con padding
+    // antes de comparar para no leakar la longitud del secret.
+    const maxLen = Math.max(tokenBuf.length, secretBuf.length);
+    const a = Buffer.alloc(maxLen);
+    const b = Buffer.alloc(maxLen);
+    tokenBuf.copy(a);
+    secretBuf.copy(b);
+    if (
+      tokenBuf.length === secretBuf.length &&
+      timingSafeEqual(a, b)
+    ) {
       return {
         id: row.id,
         workspaceId: row.workspaceId,

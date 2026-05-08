@@ -125,7 +125,11 @@ export interface ExecutiveCard {
 }
 
 export interface ValorExecutiveCardsAudit {
-  /** Utilidad operacional NIIF: utilidadNeta + impuestosCuenta24. */
+  /** Utilidad neta del periodo (espejo de controlTotals.utilidadNeta).
+   *  Expuesto explícitamente para que `single-source-validator` compare
+   *  directamente sin re-derivar desde utilidadOperacional (FIX audit B1). */
+  utilidadNeta: number;
+  /** Utilidad operacional NIIF: utilidadNeta + impuesto5410 + intereses5305. */
   utilidadOperacional: number;
   /** Suma cuentas Clase 5 con prefijo 5160 (Depreciaciones). */
   depreciaciones: number;
