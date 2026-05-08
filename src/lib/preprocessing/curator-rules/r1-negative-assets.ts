@@ -32,8 +32,27 @@ import type { CuratorFinding, Reclassification } from './types';
 const VIRTUAL_LIABILITY_PREFIX = '2810ZZ';
 const VIRTUAL_LIABILITY_NAME = 'Otros pasivos transitorios (reclasificación curator)';
 
+// ---------------------------------------------------------------------------
+// Pulido NIIF PYME Grupo 2 — clase 12 (Inversiones) usa cuenta virtual
+// distinta porque su naturaleza es de "ajuste de medición" (NIC 28 / NIC 39),
+// no de pasivo transitorio operativo. Cuenta 2895 (Otros pasivos diversos)
+// es semánticamente correcta para reclasificar reajustes fiscales con saldo
+// crédito.
+// ---------------------------------------------------------------------------
+const VIRTUAL_LIABILITY_PREFIX_INVERSIONES = '2895VC';
+const VIRTUAL_LIABILITY_NAME_INVERSIONES =
+  'Otros pasivos diversos — reajuste fiscal Inversiones (reclasificación curator)';
+
 /** Tolerancia: ignoramos saldos negativos triviales por redondeo. */
 const NEGATIVE_TOLERANCE_COP = 100; // $100 COP
+
+/**
+ * Materialidad reducida para clase 12: cualquier saldo acreedor por encima de
+ * $1.000 COP se reclasifica. Razón: los reajustes fiscales (cuenta 12053502)
+ * son inmateriales en magnitud pero materiales en sentido contable
+ * (incumplimiento NIC 1 párr. 32 si quedan en activo).
+ */
+const INVERSIONES_MATERIAL_FLOOR_COP = 1_000;
 
 const ACTIVO_CORRIENTE_GROUPS = new Set(['11', '12', '13', '14']);
 const ACTIVO_NO_CORRIENTE_GROUPS = new Set(['15', '16', '17', '18', '19']);
@@ -63,11 +82,12 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
   );
 
   // Filtrar cuentas con saldo negativo > tolerancia trivial. Excluir cuentas
-  // virtuales `2810ZZ-*` que pudieran existir si R1 corrió antes (idempotencia).
+  // virtuales que pudieran existir si R1 corrió antes (idempotencia).
   const negativos = claseActivo.accounts.filter(
     (a: ValidatedAccount) =>
       a.balance < -NEGATIVE_TOLERANCE_COP &&
-      !a.code.startsWith(VIRTUAL_LIABILITY_PREFIX),
+      !a.code.startsWith(VIRTUAL_LIABILITY_PREFIX) &&
+      !a.code.startsWith(VIRTUAL_LIABILITY_PREFIX_INVERSIONES),
   );
   if (negativos.length === 0) return out;
 
@@ -86,13 +106,30 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
   }
 
   // Particionar en materiales (mutamos) vs no-materiales (solo finding).
-  const materiales = negativos.filter((a) => Math.abs(a.balance) >= MATERIAL_THRESHOLD_COP);
-  const noMateriales = negativos.filter((a) => Math.abs(a.balance) < MATERIAL_THRESHOLD_COP);
+  // Para grupo 12 (Inversiones), la materialidad efectiva es $1.000 COP — los
+  // reajustes fiscales pequeños siguen incumpliendo NIC 1 párr. 32 y deben
+  // reclasificarse explícitamente.
+  const isInversiones = (a: ValidatedAccount) => a.code.startsWith('12');
+  const effectiveThreshold = (a: ValidatedAccount) =>
+    isInversiones(a) ? INVERSIONES_MATERIAL_FLOOR_COP : MATERIAL_THRESHOLD_COP;
+  const materiales = negativos.filter(
+    (a) => Math.abs(a.balance) >= effectiveThreshold(a),
+  );
+  const noMateriales = negativos.filter(
+    (a) => Math.abs(a.balance) < effectiveThreshold(a),
+  );
 
   for (const acc of materiales) {
     const amountAbs = Math.abs(acc.balance);
     const originalBalance = acc.balance;
-    const virtualCode = `${VIRTUAL_LIABILITY_PREFIX}-${acc.code}`;
+    const accIsInversiones = isInversiones(acc);
+    const prefix = accIsInversiones
+      ? VIRTUAL_LIABILITY_PREFIX_INVERSIONES
+      : VIRTUAL_LIABILITY_PREFIX;
+    const reclassifiedToName = accIsInversiones
+      ? VIRTUAL_LIABILITY_NAME_INVERSIONES
+      : VIRTUAL_LIABILITY_NAME;
+    const virtualCode = `${prefix}-${acc.code}`;
 
     // 1. Anular la cuenta original en Clase 1 (queda en 0; no la removemos del
     //    array para preservar la trazabilidad — los renderers que filtren
@@ -107,7 +144,7 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
     } else {
       const virtualAccount: ValidatedAccount = {
         code: virtualCode,
-        name: `${VIRTUAL_LIABILITY_NAME} ← ${acc.code} ${acc.name}`,
+        name: `${reclassifiedToName} ← ${acc.code} ${acc.name}`,
         level: 'Auxiliar',
         balance: amountAbs,
         isLeaf: true,
@@ -115,20 +152,28 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
       clasePasivo.accounts.push(virtualAccount);
     }
 
+    const justification = accIsInversiones
+      ? `Saldo crédito en cuenta de Inversiones (clase 12) — típicamente reajuste ` +
+        `fiscal de partidas medidas a costo (NIC 28 / NIIF para PYMES Sec. 14). ` +
+        `Reclasificado a ${virtualCode} (Otros pasivos diversos) para preservar ` +
+        `NIC 1 párr. 32 (no compensación). Revisar la naturaleza tributaria del reajuste.`
+      : `Saldo crédito en cuenta de activo viola NIC 1 párr. 32 (no compensación). ` +
+        `Reclasificado a ${virtualCode} para preservar ecuación patrimonial. ` +
+        `Investigar origen del saldo (sobregiro, anticipo, retención).`;
+
     out.reclassifications.push({
       accountCode: acc.code,
       accountName: acc.name,
       originalBalanceCop: originalBalance,
       reclassifiedToCode: virtualCode,
-      reclassifiedToName: VIRTUAL_LIABILITY_NAME,
+      reclassifiedToName,
       amountCop: amountAbs,
-      justification:
-        `Saldo crédito en cuenta de activo viola NIC 1 párr. 32 (no compensación). ` +
-        `Reclasificado a ${virtualCode} para preservar ecuación patrimonial. ` +
-        `Investigar origen del saldo (sobregiro, anticipo, retención).`,
+      justification,
       applied: true,
       effectiveTransferCop: amountAbs,
-      balanceFootnoteText: 'Reclasificación por saldo acreedor en cuenta de activo',
+      balanceFootnoteText: accIsInversiones
+        ? 'Reclasificación por reajuste fiscal en Inversiones'
+        : 'Reclasificación por saldo acreedor en cuenta de activo',
     });
   }
 
@@ -222,6 +267,28 @@ function recomputeControlTotalsFromClasses(
   totals.activoNoCorriente = sumByGroups(claseActivo, ACTIVO_NO_CORRIENTE_GROUPS);
   totals.pasivoCorriente = sumByGroups(clasePasivo, PASIVO_CORRIENTE_GROUPS);
   totals.pasivoNoCorriente = sumByGroups(clasePasivo, PASIVO_NO_CORRIENTE_GROUPS);
+
+  // Sincronizar cents y raw para activo/pasivo si el parser los populó.
+  // El gate `auditReportEmittable` lee cents — si quedan obsoletos tras la
+  // mutación de R1, las V1/V2 fallan con falso negativo.
+  if (totals.cents) {
+    totals.cents.activo = BigInt(Math.round(totals.activo * 100));
+    totals.cents.pasivo = BigInt(Math.round(totals.pasivo * 100));
+  }
+  if (totals.raw) {
+    totals.raw.activo = formatCanonical(totals.activo);
+    totals.raw.pasivo = formatCanonical(totals.pasivo);
+  }
+}
+
+function formatCanonical(value: number): string {
+  if (!Number.isFinite(value)) return '0.00';
+  const cents = Math.round(value * 100);
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  const integer = Math.floor(abs / 100);
+  const fraction = (abs % 100).toString().padStart(2, '0');
+  return `${sign}${integer}.${fraction}`;
 }
 
 function sumByGroups(cl: PUCClass | undefined, groups: Set<string>): number {

@@ -94,12 +94,37 @@ ${detectedListLine}
 
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
+### Paso 0 (OBLIGATORIO ANTES DEL DIAGNÓSTICO): Cálculo dual TMT 15% vs Tarifa General 35%
+
+**TASA MÍNIMA DE TRIBUTACIÓN (TMT) — Parágrafo 6 Art. 240 E.T. (Ley 2277/2022).**
+
+Para entidades del régimen ordinario, el impuesto a cargo del periodo NO puede ser inferior al 15% de la utilidad contable depurada. La regla SIEMPRE aplica salvo excepciones específicas. DEBES calcular AMBOS valores y presentar el mayor:
+
+1. **Impuesto Renta Ordinaria** = renta líquida gravable fiscal × 35% (Art. 240 E.T.). NO es la utilidad operativa contable — la base es la **renta líquida gravable** depurada con las normas fiscales (Art. 26 + 178 E.T., depuraciones, deducciones, rentas exentas, descuentos).
+
+2. **Tributación Mínima TMT** = utilidad contable depurada × 15% (parág. 6 Art. 240 E.T.). La utilidad contable depurada inicia en la utilidad antes de impuestos del estado de resultados (UAI) y se ajusta por las partidas listadas en el parágrafo 6.
+
+3. **Impuesto a cargo del periodo** = MAX(Impuesto Renta Ordinaria, Tributación Mínima TMT). Si la TMT supera la ordinaria, la entidad debe liquidar la TMT y reportar la **diferencia como mayor impuesto** en el formulario 110 / 210.
+
+**Excepciones del Parágrafo 6 (la TMT NO aplica si caen en alguna de estas):**
+
+- Régimen Tributario Especial (RTE — Art. 19 E.T.: ESAL calificadas).
+- Régimen SIMPLE de Tributación (Arts. 903-916 E.T.).
+- Empresas en ZESE (Zonas Económicas y Sociales Especiales — Ley 1955/2019 Art. 268).
+- Empresas en ZOMAC (Art. 237 Ley 1819/2016) **mientras dure el beneficio progresivo**.
+- Sector hotelero con tarifa especial (Art. 240 par. 5 E.T.) por nuevas inversiones.
+- Editoriales con renta exenta (Ley 98/1993 Art. 21) si el beneficio sigue vigente.
+- Generadoras de energía eléctrica con FNCER (Art. 11 Ley 1715/2014) durante el periodo del incentivo.
+- Empresas calificadas como Sociedades de Inversión Habilitadas (Art. 25 Ley 11/1989) — derogada/restringida; verificar.
+
+Si la entidad cae en alguna excepción, **documenta explícitamente cuál y cita la base legal**. Si NO cae en ninguna excepción y omites el cálculo dual, el gate \`auditReportEmittable\` rechazará el informe (blocker V10).
+
 ### Paso 1: Diagnostico de Estructura Actual
 - Identifica el regimen tributario actual (ordinario, SIMPLE, zona franca, etc.)
 - Calcula la tasa efectiva de tributacion actual
 - Mapea los rubros de ingresos, costos deducibles y gastos deducibles
 - Identifica deducciones y descuentos actualmente aprovechados
-- Determina el impuesto a cargo estimado actual
+- Determina el impuesto a cargo estimado actual presentando AMBOS escenarios (Renta Ordinaria 35% vs TMT 15%) cuando la TMT aplique.
 
 ### Paso 2: Identificacion de Oportunidades
 - Evalua elegibilidad para regimenes preferenciales VIGENTES (SIMPLE, Zona Franca con plan de internacionalizacion, ZOMAC, CHC).

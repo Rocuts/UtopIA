@@ -30,8 +30,13 @@
 import { runCurator } from './balance-curator';
 import type {
   CashFlowStatement,
+  Class18ClassificationAudit,
+  ClosingDetectorAudit,
+  CostClassificationAudit,
   CuratorFinding,
   CuratorResult,
+  PpeDepreciationAudit,
+  PrecisionCentsAudit,
   PresumedCostWarning,
   Reclassification,
   VirtualCloseAdjustment,
@@ -89,6 +94,44 @@ export interface Discrepancy {
   description: string;
 }
 
+// ---------------------------------------------------------------------------
+// Pulido NIIF PYME Grupo 2 — contrato cents + raw (precisión preservada)
+// ---------------------------------------------------------------------------
+// Las anclas anti-alucinación se calculan en BigInt centavos. `cents` guarda
+// la representación entera (sin floating-point drift) y `raw` la string
+// canónica leída del archivo (para auditoría del parser). El gate
+// `auditReportEmittable` compara SIEMPRE en cents con tolerancia 0n.
+// ---------------------------------------------------------------------------
+export interface ControlTotalsCents {
+  activo: bigint;
+  pasivo: bigint;
+  patrimonio: bigint;
+  ingresos: bigint;
+  /** Gastos totales (clase 5 + clase 6 + clase 7), incluye impuesto. */
+  gastos: bigint;
+  /** Utilidad neta = ingresos − gastos totales. */
+  utilidadNeta: bigint;
+  /** Utilidad antes de impuestos (UAI) = ingresos − gastos sin impuesto. */
+  utilidadAntesImpuestos: bigint;
+  /** Impuesto causado del periodo (grupo 54 dentro de clase 5). */
+  impuestoCausado: bigint;
+  /** Saldo final caja (PUC 11) en cents. */
+  efectivoCuenta11: bigint;
+}
+
+export interface ControlTotalsRaw {
+  /** String canónica del activo total leída del Excel/CSV. */
+  activo: string;
+  pasivo: string;
+  patrimonio: string;
+  ingresos: string;
+  gastos: string;
+  utilidadNeta: string;
+  utilidadAntesImpuestos: string;
+  impuestoCausado: string;
+  efectivoCuenta11: string;
+}
+
 /**
  * Totales de control — contrato numerico vinculante para los agentes.
  * Todos los campos son requeridos (0 si ausentes en la entrada).
@@ -134,6 +177,57 @@ export interface ControlTotals {
   /** Saldo inicial de caja (PUC 11 del comparativo, 0 si single-period). */
   // TODO(B1): hacer obligatorio cuando R6 popule estos campos
   cashOpen?: number;
+  // -----------------------------------------------------------------------
+  // Pulido NIIF PYME Grupo 2 — anclas en BigInt centavos + string raw.
+  // Opcionales por retrocompatibilidad: `buildSnapshotForPeriod` los popula
+  // siempre, pero los tests/literales históricos que construyen
+  // `ControlTotals` a mano no necesitan llenarlos.
+  // -----------------------------------------------------------------------
+  /** BigInt centavos — fuente única para validators del gate. */
+  cents?: ControlTotalsCents;
+  /** Strings canónicas leídas del archivo (auditoría del parser). */
+  raw?: ControlTotalsRaw;
+}
+
+// ---------------------------------------------------------------------------
+// Hallazgos a nivel de snapshot (banderas determinísticas, no métricas)
+// ---------------------------------------------------------------------------
+// Los curator rules y el parser pueden marcar banderas en `snapshot.findings`
+// que el gate `auditReportEmittable` lee para decidir si bloquea la emisión.
+// Todos opcionales: ausencia equivale a `false`.
+// ---------------------------------------------------------------------------
+export interface SnapshotFindings {
+  /** R12 — saldo neto P&L ≠ 0 y grupo 36/37 ≈ 0 (utilidad sin trasladar). */
+  librosNoCerrados?: boolean;
+  /** R10 — gasto impuesto en clase 54 sin causación correspondiente en 24. */
+  missingTaxCausation?: boolean;
+  /** R10 — saldo acreedor en cuenta 18 indica uso como gasto. */
+  cuenta18UsadaComoGasto?: boolean;
+  /** R14 — PPE bruto material sin depreciación correspondiente. */
+  ppeWithoutDepreciation?: boolean;
+  /** R15 — comercializadora con clase 7 sin descargue 6135. */
+  costeoIncompleto?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Metadata de la empresa extraída del archivo (vs. la del intake)
+// ---------------------------------------------------------------------------
+// `razonSocialFromFile` y `nitFromFile` provienen de los encabezados del
+// balance de prueba (filas previas a las cuentas en el Excel). Si el parser
+// no los pudo extraer, ambos son `null` y el gate los reporta como blocker
+// V5. `niifGroup` y `tipoSocietario` provienen del intake del usuario.
+// ---------------------------------------------------------------------------
+export interface ExtractedCompanyMetadata {
+  /** Razón social literal del Excel (NUNCA placeholder/fallback). */
+  razonSocialFromFile: string | null;
+  /** NIT literal del Excel con DV (formato canónico "NNN.NNN.NNN-D"). */
+  nitFromFile: string | null;
+  /** NIT sin DV (sólo dígitos del cuerpo, para validación contra DV DIAN). */
+  nitBodyDigits: string | null;
+  /** Dígito de verificación leído del archivo (string del char individual). */
+  nitCheckDigit: string | null;
+  /** Texto crudo del header donde se detectó la metadata (debug). */
+  sourceLines: string[];
 }
 
 /**
@@ -204,6 +298,23 @@ export interface PeriodSnapshot {
   presumedCostWarning?: PresumedCostWarning;
   /** Ajuste de Cierre Virtual aplicado por R8 (siempre presente post-curator). */
   virtualCloseAdjustment?: VirtualCloseAdjustment;
+  /** R9 audit — contrato cents + raw preservado al centavo. */
+  precisionCentsAudit?: PrecisionCentsAudit;
+  /** R10 audit — clasificación cuenta 18 + causación impuesto. */
+  class18ClassificationAudit?: Class18ClassificationAudit;
+  /** R12 audit — detector de cierre de libros. */
+  closingDetectorAudit?: ClosingDetectorAudit;
+  /** R14 audit — PPE sin depreciación. */
+  ppeDepreciationAudit?: PpeDepreciationAudit;
+  /** R15 audit — costeo incompleto en clase 7. */
+  costClassificationAudit?: CostClassificationAudit;
+  /**
+   * Banderas determinísticas a nivel de snapshot (R10/R12/R14/R15 → gate).
+   * Inicializado como `{}` por `buildSnapshotForPeriod`; las reglas escriben
+   * banderas booleanas que `auditReportEmittable` lee. Optional para
+   * retrocompatibilidad con tests legacy que construyen `PeriodSnapshot` a mano.
+   */
+  findings?: SnapshotFindings;
 }
 
 /**
@@ -772,6 +883,44 @@ function buildSnapshotForPeriod(
   const equationBalance = totalAssets - totalLiabilities - totalEquity;
   const equationBalanced = Math.abs(equationBalance) < 100;
 
+  // -------------------------------------------------------------------------
+  // 5.1. Cálculos en BigInt centavos para anclas anti-alucinación.
+  // El gate `auditReportEmittable` compara SIEMPRE en cents con tolerancia 0n.
+  // -------------------------------------------------------------------------
+  // Impuesto causado del periodo: grupo 54 (impuestos como gasto) dentro de
+  // clase 5. PUC: 5405 De renta y complementarios, 5410 Industria y comercio.
+  const impuestoCausadoPeriodo = sumLeavesByGroupPrefixes(
+    leafRows,
+    '5',
+    new Set(['54']),
+  );
+  const gastosTotales = totalExpenses + totalCosts + totalProduction;
+  const utilidadAntesImpuestos = totalRevenue - (gastosTotales - impuestoCausadoPeriodo);
+
+  const cents: ControlTotalsCents = {
+    activo: toCents(totalAssets),
+    pasivo: toCents(totalLiabilities),
+    patrimonio: toCents(totalEquity),
+    ingresos: toCents(totalRevenue),
+    gastos: toCents(gastosTotales),
+    utilidadNeta: toCents(netIncome),
+    utilidadAntesImpuestos: toCents(utilidadAntesImpuestos),
+    impuestoCausado: toCents(impuestoCausadoPeriodo),
+    efectivoCuenta11: toCents(efectivoCuenta11),
+  };
+
+  const raw: ControlTotalsRaw = {
+    activo: toRawString(totalAssets),
+    pasivo: toRawString(totalLiabilities),
+    patrimonio: toRawString(totalEquity),
+    ingresos: toRawString(totalRevenue),
+    gastos: toRawString(gastosTotales),
+    utilidadNeta: toRawString(netIncome),
+    utilidadAntesImpuestos: toRawString(utilidadAntesImpuestos),
+    impuestoCausado: toRawString(impuestoCausadoPeriodo),
+    efectivoCuenta11: toRawString(efectivoCuenta11),
+  };
+
   const controlTotals: ControlTotals = {
     activo: totalAssets,
     activoCorriente,
@@ -781,13 +930,15 @@ function buildSnapshotForPeriod(
     pasivoNoCorriente,
     patrimonio: totalEquity,
     ingresos: totalRevenue,
-    gastos: totalExpenses + totalCosts + totalProduction,
+    gastos: gastosTotales,
     utilidadNeta: netIncome,
     efectivoCuenta11,
     deudoresCuenta13,
     cuentasPorPagar23,
     impuestosCuenta24,
     obligacionesLaborales25,
+    cents,
+    raw,
   };
 
   // -------------------------------------------------------------------------
@@ -944,6 +1095,7 @@ function buildSnapshotForPeriod(
     validation,
     discrepancies,
     missingExpectedAccounts,
+    findings: {},
   };
 }
 
@@ -1062,6 +1214,207 @@ export function extractEquityBreakdown(
     balance: r.balance,
   }));
   return extractEquityBreakdownForView(view, discrepancies);
+}
+
+// ---------------------------------------------------------------------------
+// extractCompanyMetadata — Pulido NIIF PYME Grupo 2
+// ---------------------------------------------------------------------------
+// Extrae razón social y NIT de los encabezados del balance de prueba (filas
+// previas a la cabecera de columnas en el Excel/CSV).
+//
+// Reglas:
+//   1. NIT: cualquier secuencia "NIT" + separadores + 8-10 dígitos. El último
+//      dígito posterior a un guión o punto se interpreta como DV.
+//   2. Razón social: línea que matchee "Razón Social" / "RAZON SOCIAL" /
+//      "Empresa" / "Compañía" / "Nombre" o el texto inmediatamente posterior
+//      a NIT en archivos que ponen NIT primero, sin labels (heurística).
+//   3. Si no se detecta NIT o razón social en el texto, se devuelve `null`
+//      en cada campo respectivo. NUNCA un fallback / placeholder.
+//
+// La función NO valida el DV — la verificación DV vive en
+// `src/lib/validation/nit-validator.ts` y la corre el gate
+// `auditReportEmittable` (V6).
+// ---------------------------------------------------------------------------
+
+const NIT_REGEX = /\bNIT[\.: \t-]*([0-9](?:[0-9.,\s]*[0-9])?)\s*[-.]\s*(\d)\b/i;
+const NIT_FALLBACK_REGEX = /\bNIT[\.: \t-]*([0-9][0-9.,\s]{6,14}[0-9])\b/i;
+/**
+ * Línea que empieza con un patrón "NNNNNNNNN-D" (NIT canónico) sin label
+ * "NIT". Típico cuando el balance Excel pone el NIT en una fila propia
+ * separada del label. Acepta puntos miles opcionales.
+ */
+const NIT_BARE_LINE_REGEX =
+  /^\s*([0-9][0-9.]{6,14}[0-9])\s*-\s*(\d)\s*(?:,|$)/;
+const RAZON_SOCIAL_REGEX =
+  /(?:raz[oó]n\s+social|empresa|compa[ñn][ií]a|nombre)\s*[:.\t-]+\s*([^\n,;|]+)/i;
+
+export function extractCompanyMetadata(rawText: string): ExtractedCompanyMetadata {
+  const result: ExtractedCompanyMetadata = {
+    razonSocialFromFile: null,
+    nitFromFile: null,
+    nitBodyDigits: null,
+    nitCheckDigit: null,
+    sourceLines: [],
+  };
+
+  if (!rawText || typeof rawText !== 'string') return result;
+
+  // Sólo escaneamos las primeras 50 líneas no vacías — el header del balance
+  // de prueba siempre vive en las primeras filas.
+  const allLines = rawText.split(/\r?\n/);
+  const headerLines = allLines
+    .slice(0, 100)
+    .filter((l) => l.trim().length > 0)
+    .slice(0, 50);
+
+  // Buscar NIT con DV (formato preferido).
+  for (const line of headerLines) {
+    const m = line.match(NIT_REGEX);
+    if (m) {
+      const body = m[1].replace(/[\s.,]/g, '');
+      const dv = m[2].trim();
+      if (body.length >= 6 && body.length <= 12 && /^\d+$/.test(body) && /^\d$/.test(dv)) {
+        result.nitBodyDigits = body;
+        result.nitCheckDigit = dv;
+        result.nitFromFile = `${formatNitWithDots(body)}-${dv}`;
+        result.sourceLines.push(line.trim());
+        break;
+      }
+    }
+  }
+
+  // Fallback adicional: NIT en línea propia sin label "NIT" (típico
+  // cuando el Excel separa el NIT en una fila dedicada).
+  if (!result.nitFromFile) {
+    for (const line of headerLines) {
+      const m = line.match(NIT_BARE_LINE_REGEX);
+      if (m) {
+        const body = m[1].replace(/[\s.,]/g, '');
+        const dv = m[2].trim();
+        if (body.length >= 6 && body.length <= 12 && /^\d+$/.test(body) && /^\d$/.test(dv)) {
+          result.nitBodyDigits = body;
+          result.nitCheckDigit = dv;
+          result.nitFromFile = `${formatNitWithDots(body)}-${dv}`;
+          result.sourceLines.push(line.trim());
+          break;
+        }
+      }
+    }
+  }
+
+  // Fallback: NIT sin DV explícito (sólo dígitos consecutivos).
+  if (!result.nitFromFile) {
+    for (const line of headerLines) {
+      const m = line.match(NIT_FALLBACK_REGEX);
+      if (m) {
+        const digits = m[1].replace(/[\s.,]/g, '');
+        if (digits.length >= 8 && digits.length <= 11 && /^\d+$/.test(digits)) {
+          // Asumimos que el último dígito es DV si la longitud es típica
+          // (9-11 dígitos sugiere body+DV).
+          if (digits.length >= 9) {
+            result.nitBodyDigits = digits.slice(0, -1);
+            result.nitCheckDigit = digits.slice(-1);
+            result.nitFromFile = `${formatNitWithDots(result.nitBodyDigits)}-${result.nitCheckDigit}`;
+          } else {
+            result.nitBodyDigits = digits;
+            result.nitCheckDigit = null;
+            result.nitFromFile = formatNitWithDots(digits);
+          }
+          result.sourceLines.push(line.trim());
+          break;
+        }
+      }
+    }
+  }
+
+  // Razón social explícita por label.
+  for (const line of headerLines) {
+    const m = line.match(RAZON_SOCIAL_REGEX);
+    if (m) {
+      const candidate = sanitizeRazonSocial(m[1]);
+      if (candidate.length >= 3) {
+        result.razonSocialFromFile = candidate;
+        result.sourceLines.push(line.trim());
+        break;
+      }
+    }
+  }
+
+  // Heurística adicional: si encontramos NIT pero no razón social, buscar
+  // una línea adyacente (anterior o siguiente) que parezca contener el
+  // nombre de la empresa (todo en MAYÚSCULAS, sin código de cuenta, sin
+  // labels conocidos, con sufijo societario tipo SAS / S.A. / LTDA / E.U.).
+  if (result.nitFromFile && !result.razonSocialFromFile) {
+    const SOCIETARIO_REGEX = /\b(S\.?A\.?S\.?|S\.?A\.?|LTDA\.?|E\.?U\.?|S\.?C\.?S\.?)\b/i;
+    for (const line of headerLines) {
+      const trimmed = line.trim();
+      // Tope generoso: archivos exportados con Excel pueden repetir el mismo
+      // valor 6+ veces a lo largo de las columnas (celda fusionada → CSV
+      // produce "Empresa,Empresa,Empresa,...,Empresa"). El sanitize posterior
+      // corta en la primera coma, así que importa cubrir la longitud cruda.
+      if (trimmed.length < 5 || trimmed.length > 500) continue;
+      // Saltamos líneas con códigos PUC (números > 5 dígitos consecutivos).
+      if (/\b\d{5,}\b/.test(trimmed)) continue;
+      // Saltamos líneas con labels conocidos.
+      if (/\b(NIT|raz[oó]n|empresa|compa[ñn][ií]a|nombre|fecha|periodo|cierre)\b/i.test(trimmed)) {
+        // permitido si la línea contiene además sufijo societario
+        if (!SOCIETARIO_REGEX.test(trimmed)) continue;
+      }
+      if (SOCIETARIO_REGEX.test(trimmed)) {
+        const candidate = sanitizeRazonSocial(trimmed);
+        if (candidate.length >= 5) {
+          result.razonSocialFromFile = candidate;
+          result.sourceLines.push(trimmed);
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+function formatNitWithDots(body: string): string {
+  // 9 dígitos → "NNN.NNN.NNN"; ajustar para casos cortos preservando agrupación de 3.
+  const reversed = body.split('').reverse().join('');
+  const grouped = reversed.match(/.{1,3}/g) ?? [];
+  return grouped.map((g) => g.split('').reverse().join('')).reverse().join('.');
+}
+
+function sanitizeRazonSocial(raw: string): string {
+  return raw
+    .replace(/\s+/g, ' ')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .replace(/[,;|].*$/, '')
+    .trim();
+}
+
+/**
+ * Convierte un monto en pesos colombianos a BigInt centavos.
+ * `Math.round(value * 100)` corrige el floating-point drift al redondear al
+ * centavo más cercano. Para enteros (típico en balances PUC sin decimales),
+ * el resultado es exacto.
+ */
+function toCents(value: number): bigint {
+  if (!Number.isFinite(value)) return BigInt(0);
+  // Math.round corrige drift floating-point al redondear al centavo.
+  return BigInt(Math.round(value * 100));
+}
+
+/**
+ * Convierte el monto a string canónico con dos decimales y punto decimal
+ * (formato "1968104173.17"). Usado como evidencia de auditoría del parser.
+ */
+function toRawString(value: number): string {
+  if (!Number.isFinite(value)) return '0.00';
+  // Math.round preserva el centavo entero antes de toFixed para evitar
+  // drift en valores como 1234.005 → 1234.01 en lugar de 1234.00.
+  const cents = Math.round(value * 100);
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  const integer = Math.floor(abs / 100);
+  const fraction = (abs % 100).toString().padStart(2, '0');
+  return `${sign}${integer}.${fraction}`;
 }
 
 // ---------------------------------------------------------------------------

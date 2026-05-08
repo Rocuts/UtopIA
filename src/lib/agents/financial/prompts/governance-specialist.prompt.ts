@@ -30,8 +30,30 @@ export function buildGovernancePrompt(
     ? 'Junta de Socios'
     : 'Asamblea General de Accionistas';
   const memberTerm = isLtda ? 'socios' : 'accionistas';
+
+  // -----------------------------------------------------------------------
+  // BLOQUE VINCULANTE — RESERVA LEGAL EN SAS (Pulido NIIF PYME Grupo 2)
+  // -----------------------------------------------------------------------
+  // La Ley 1258 de 2008 NO obliga a las SAS a constituir reserva legal.
+  // Doctrina vinculante:
+  //   - Supersociedades, Oficio 220-115333 del 03/08/2009.
+  //   - Supersociedades, Oficio 220-069664 del 23/05/2017.
+  // Solo aplica si los estatutos lo prevén (remisión Art. 45 Ley 1258 al
+  // C.Co.). Para SAS sin habilitación estatutaria explícita, el campo
+  // `estatutosRequierenReservaLegal` será `false` y el acta NO debe
+  // constituir reserva legal.
+  // -----------------------------------------------------------------------
+  const estatutosRequierenReservaLegal =
+    (company as unknown as { estatutosRequierenReservaLegal?: boolean })
+      .estatutosRequierenReservaLegal === true;
+
+  const reservaLegalAplica =
+    (!isSAS) || estatutosRequierenReservaLegal;
+
   const reserveLegalCitation = isSAS
-    ? 'Art. 40 Ley 1258 de 2008'
+    ? estatutosRequierenReservaLegal
+      ? 'Art. 45 Ley 1258 de 2008 (remisión a C.Co.) — habilitación estatutaria expresa'
+      : '[Por confirmar contra estatutos] — Ley 1258/2008 NO obliga reserva legal en SAS'
     : 'Art. 452 C.Co.';
   const entityRegimeCitation = isSAS
     ? 'Ley 1258 de 2008 (SAS)'
@@ -149,7 +171,17 @@ Redacta un resumen profesional de las Notas a los Estados Financieros conforme a
 
 #### Nota 11: Patrimonio
 - Capital autorizado, suscrito y pagado (solo si los datos lo distinguen).
-- Reserva legal: constitucion obligatoria del 10% de la utilidad liquida hasta alcanzar el 50% del capital suscrito (${reserveLegalCitation}).
+${
+  reservaLegalAplica
+    ? `- Reserva legal: ${
+        isSAS
+          ? 'la entidad es SAS y los estatutos prevén constitución de reserva legal (Art. 45 Ley 1258 + remisión al C.Co.).'
+          : 'constitución obligatoria del 10% de la utilidad líquida hasta alcanzar el 50% del capital suscrito (' +
+            reserveLegalCitation +
+            ').'
+      }`
+    : `- **Reserva legal NO obligatoria — entidad SAS sin habilitación estatutaria.** La Ley 1258/2008 NO obliga a las SAS a constituir reserva legal (Supersociedades Oficio 220-115333/2009 y Oficio 220-069664/2017). PROHIBIDO citar "Art. 40 Ley 1258" o "Art. 452 C.Co." como obligación de reserva — esos artículos no regulan reserva legal en SAS sin remisión estatutaria. Si los datos del Agente 1 muestran un saldo en cuenta 3305 (Reserva legal), repórtalo como dato observado y agrega: "[Por confirmar contra estatutos]". NO calcules constitución del 10%.`
+}
 - Utilidades retenidas y del ejercicio.
 
 #### Nota 12: Ingresos Operacionales
@@ -183,13 +215,21 @@ El acta es un documento formal listo para firma. Redactala como documento ACABAD
    4. Presentacion y aprobacion de los estados financieros del periodo ${company.fiscalPeriod}.
    5. Presentacion del informe de gestion del Representante Legal (Art. 46 Ley 222/1995).
    ${company.fiscalAuditor ? '   6. Presentacion del dictamen del Revisor Fiscal (NIA 700/705/706).' : '   6. (Sin punto adicional de Revisor Fiscal — entidad sin revisor fiscal identificado en los insumos).'}
-   ${company.fiscalAuditor ? '   7' : '   6'}. Destinacion del resultado del ejercicio y constitucion de reserva legal (${reserveLegalCitation}).
+   ${company.fiscalAuditor ? '   7' : '   6'}. ${
+        reservaLegalAplica
+          ? `Destinacion del resultado del ejercicio y constitucion de reserva legal (${reserveLegalCitation}).`
+          : `Destinacion del resultado del ejercicio. (Reserva legal NO aplica — entidad SAS sin habilitación estatutaria.)`
+      }
    ${company.fiscalAuditor ? '   8' : '   7'}. Proposiciones y varios.
    ${company.fiscalAuditor ? '   9' : '   8'}. Aprobacion del acta y cierre.
 
 5. **Desarrollo del punto "Aprobacion de los estados financieros".** Menciona explicitamente los cinco componentes del juego completo (Estado de Situacion Financiera, Estado de Resultados Integral, Estado de Flujos de Efectivo, Estado de Cambios en el Patrimonio, Notas). **Incluye las cifras clave del ejercicio** extraidas de los insumos del Agente 1 y del bloque TOTALES VINCULANTES: Total Activo, Total Pasivo, Total Patrimonio, Ingresos Operacionales, Utilidad Neta del Ejercicio. Usa formato \`$1.234.567,89\`. Si una de esas cifras no esta disponible en TOTALES VINCULANTES, usa la cadena \`— (dato no suministrado)\` solo para esa cifra especifica y reportalo en \`### Notas del Preparador\`; las demas cifras se emiten con su valor real.
 
-6. **Desarrollo del punto "Destinacion del resultado".** Transcribe el monto literal de la Utilidad Neta del Ejercicio tomandolo del bloque TOTALES VINCULANTES. Calcula el 10% de reserva legal (${reserveLegalCitation}) y expresalo en pesos con formato colombiano. El resto se destina a dividendos y/o utilidades retenidas. IMPORTANTE: **los porcentajes de dividendos vs reinversion son una decision de los ${memberTerm}, no del agente IA.** Por lo tanto, redacta esa seccion como propuesta neutral: "Previa constitucion de la reserva legal obligatoria del 10% ( ${reserveLegalCitation} ), los ${memberTerm} decidiran la destinacion del remanente entre distribucion de ${isLtda ? 'participaciones' : 'dividendos'} y utilidades retenidas." NO inventes un split 50/50 ni emitas porcentajes que no vengan de los insumos. Si la reserva legal ya alcanzo el 50% del capital suscrito y los datos del Agente 1 lo confirman, declaralo explicitamente y omite el 10%.
+6. **Desarrollo del punto "Destinacion del resultado".** Transcribe el monto literal de la Utilidad Neta del Ejercicio tomandolo del bloque TOTALES VINCULANTES. ${
+        reservaLegalAplica
+          ? `Calcula el 10% de reserva legal (${reserveLegalCitation}) y expresalo en pesos con formato colombiano. El resto se destina a dividendos y/o utilidades retenidas. IMPORTANTE: **los porcentajes de dividendos vs reinversion son una decision de los ${memberTerm}, no del agente IA.** Por lo tanto, redacta esa seccion como propuesta neutral: "Previa constitucion de la reserva legal obligatoria del 10% (${reserveLegalCitation}), los ${memberTerm} decidiran la destinacion del remanente entre distribucion de ${isLtda ? 'participaciones' : 'dividendos'} y utilidades retenidas." NO inventes un split 50/50 ni emitas porcentajes que no vengan de los insumos. Si la reserva legal ya alcanzo el 50% del capital suscrito y los datos del Agente 1 lo confirman, declaralo explicitamente y omite el 10%.`
+          : `**No se constituye reserva legal** — la entidad es SAS sin habilitación estatutaria expresa (Ley 1258/2008 NO obliga; Supersociedades Oficios 220-115333/2009 y 220-069664/2017). Redacta la sección como propuesta neutral: "Los ${memberTerm} decidirán la destinación de la utilidad del ejercicio entre distribución de ${isLtda ? 'participaciones' : 'dividendos'} y utilidades retenidas, sin constitución de reserva legal por no exigirla los estatutos sociales (Art. 45 Ley 1258/2008 — remisión condicional al C.Co.)." NO calcules constitución del 10%. NO cites "Art. 40 Ley 1258" ni "Art. 452 C.Co." como obligación. Si los estatutos sí prevén la reserva, reportar el caso en \`### Notas del Preparador\` y solicitar reproceso con \`estatutosRequierenReservaLegal: true\`.`
+      }
 
 7. **Cierre.** Redaccion formal de cierre de la sesion con aprobacion del acta. Bloque de firmas al final con los nombres disponibles. Para firmas manuscritas usa una linea de firma construida con em-dashes unicode repetidos (p. ej. \`——————————\`) o simplemente deja un renglon en blanco debajo del rotulo "Firma:" para que la rubrica se coloque fisicamente. NO uses guiones bajos como relleno de linea de firma. Ejemplo aceptable de bloque de firma:
 \`\`\`
@@ -230,7 +270,11 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 - Las normas legales citadas deben existir y estar vigentes en Colombia en 2026 (ver Contexto Normativo Colombia 2026 seccion 5).
 - NO dejes espacios en blanco con placeholders visibles (ver Guardarrail Anti-Alucinacion seccion 1). Los datos faltantes se manejan con \`— (dato no suministrado)\` y listado en \`### Notas del Preparador\`.
 - Usa tono formal y juridico apropiado para documentos corporativos colombianos.
-- La reserva legal del 10% es obligatoria hasta alcanzar el 50% del capital suscrito (${reserveLegalCitation}).
+- ${
+  reservaLegalAplica
+    ? `La reserva legal del 10% es obligatoria hasta alcanzar el 50% del capital suscrito (${reserveLegalCitation}).`
+    : `**Reserva legal NO obligatoria para esta entidad** (SAS sin habilitación estatutaria — Ley 1258/2008 + Supersociedades Oficio 220-115333/2009). PROHIBIDO calcular constitución del 10% ni citar "Art. 40 Ley 1258" como obligación.`
+}
 - NO inventes datos legales (fechas de constitucion, numeros de matricula, etc.). Si no se tienen, omite la mencion.
 - El acta debe ser un documento listo para firma, con datos reales — no una plantilla.
 - La destinacion de utilidades mas alla de la reserva legal obligatoria es una decision societaria: NO inventes porcentajes de dividendos ni de reinversion.

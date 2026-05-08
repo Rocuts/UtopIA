@@ -455,9 +455,26 @@ describe('runCurator (orchestrator)', () => {
         // Suma = 400M (igual a controlTotals.patrimonio) → R5 no muta
       },
     });
-    const before = JSON.stringify(snap);
+    // Pulido NIIF PYME Grupo 2: las reglas R9/R10/R12/R14/R15 escriben
+    // SIEMPRE banderas en `snapshot.findings` y `snapshot.<rule>Audit` aunque
+    // no detecten patología. La aserción byte-wise legacy ya no aplica;
+    // verificamos en su lugar que los CAMPOS FINANCIEROS materiales
+    // (controlTotals, summary, classes, equityBreakdown) no muten.
+    const ctBefore = JSON.parse(JSON.stringify(snap.controlTotals));
+    const summaryBefore = JSON.parse(JSON.stringify(snap.summary));
+    const classesBefore = JSON.parse(JSON.stringify(snap.classes));
+    const equityBefore = JSON.parse(JSON.stringify(snap.equityBreakdown));
     runCurator(snap, null);
-    expect(JSON.stringify(snap)).toBe(before);
+    expect(snap.controlTotals).toEqual(ctBefore);
+    expect(snap.summary).toEqual(summaryBefore);
+    expect(snap.classes).toEqual(classesBefore);
+    expect(snap.equityBreakdown).toEqual(equityBefore);
+    // Las banderas de findings deben quedar todas en false (snapshot saludable).
+    expect(snap.findings?.librosNoCerrados ?? false).toBe(false);
+    expect(snap.findings?.cuenta18UsadaComoGasto ?? false).toBe(false);
+    expect(snap.findings?.missingTaxCausation ?? false).toBe(false);
+    expect(snap.findings?.ppeWithoutDepreciation ?? false).toBe(false);
+    expect(snap.findings?.costeoIncompleto ?? false).toBe(false);
   });
 
   it('SÍ muta el snapshot cuando R1 detecta saldos negativos materiales (contrato Pulido Diamante)', () => {
@@ -486,7 +503,11 @@ describe('runCurator (orchestrator)', () => {
     const class1 = snap.classes.find((c) => c.code === 1);
     const class2 = snap.classes.find((c) => c.code === 2);
     const negCuenta = class1?.accounts.find((a) => a.code === '120505');
-    const virtual = class2?.accounts.find((a) => a.code === '2810ZZ-120505');
+    // Pulido NIIF PYME Grupo 2: cuentas de Inversiones (clase 12) se reclasifican
+    // al pasivo virtual `2895VC-*` (Otros pasivos diversos) en lugar del
+    // genérico `2810ZZ-*`, porque la naturaleza de los reajustes fiscales es
+    // distinta a sobregiros / anticipos transitorios.
+    const virtual = class2?.accounts.find((a) => a.code === '2895VC-120505');
     expect(negCuenta?.balance).toBe(0);
     expect(virtual?.balance).toBe(10_000_000);
   });

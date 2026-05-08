@@ -239,13 +239,15 @@ Genera la tabla:
 
 El "Efectivo al final del periodo" del EFE DEBE ser EXACTAMENTE IGUAL a "Efectivo y Equivalentes" (PUC 11) del Balance del periodo actual. Tolerancia: $0.
 
-Si el bloque TOTALES VINCULANTES contiene \`cashFlowClosureAdjustment\` distinto de cero, el preprocesador absorbió la brecha en la línea de capital de trabajo. DEBES:
+**CITA TEXTUAL OBLIGATORIA — \`controlTotals.cashFlowClosure\` (NO RECALCULAR):**
 
-1. Reportar la línea LITERAL \`Variaciones en Capital de Trabajo (ajuste de cierre)\` dentro de "Actividades de Operación" con el monto de \`cashFlowClosureAdjustment\` (con su signo).
-2. El "Efectivo al final del periodo" debe coincidir EXACTO con \`controlTotals.efectivoCuenta11\` (PUC 11) del bloque vinculante.
+Si el bloque TOTALES VINCULANTES contiene \`cashFlowClosureAdjustment\` distinto de cero, el preprocesador absorbió la brecha en la línea de capital de trabajo. El monto y el saldo final de caja son AUTORITARIOS — NO los recalcules a partir del EFE crudo. DEBES:
+
+1. Reportar la línea LITERAL \`Variaciones en Capital de Trabajo (ajuste de cierre)\` dentro de "Actividades de Operación" con el monto de \`cashFlowClosureAdjustment\` (con su signo) tal como aparece en TOTALES VINCULANTES.
+2. El "Efectivo al final del periodo" debe COPIAR EXACTAMENTE el valor de \`controlTotals.efectivoCuenta11\` (PUC 11) del bloque vinculante. Si tu cálculo arroja un número diferente, el error está en tu lectura — NO en el preprocesador.
 3. Documentar en \`## 5. NOTAS TECNICAS\`: "Se aplicó un ajuste de cierre de $X COP en Variaciones en Capital de Trabajo para reconciliar el EFE con el saldo de PUC 11 al cierre del periodo (NIC 7 párr. 45)."
 
-Si \`cashFlowClosureAdjustment\` es 0 o ausente en el bloque vinculante, el EFE debe cerrar naturalmente.
+Si \`cashFlowClosureAdjustment\` es 0 o ausente en el bloque vinculante, el EFE debe cerrar naturalmente. AUN ASÍ, el "Efectivo al final del periodo" se cita textualmente desde \`controlTotals.efectivoCuenta11\` — nunca lo derives sumando los flujos.
 
 ### Paso 6: Estado de Cambios en el Patrimonio
 
@@ -296,7 +298,7 @@ NUNCA omitas estas sub-notas cuando hay ajustes aplicados — la ausencia genera
 3. **Hechos posteriores (NIC 10 / Seccion 32 PYMES)** — si no hay hechos posteriores identificados, afirmalo literalmente: "Al cierre del periodo no se identifican hechos posteriores que requieran ajuste o revelacion."
 4. **Variaciones significativas vs periodo anterior** — solo si hay comparativo; lista variaciones superiores al 10%.
 5. **Anomalias o inconsistencias detectadas** — cuentas cuya clasificacion fue ambigua, diferencias con TOTALES VINCULANTES ya reconciliadas, supuestos aplicados.
-${isGroup1 ? '6. **Preparacion IFRS 18 (Grupo 1 — obligatoria ejercicios desde 01/01/2027).** Dado que la entidad pertenece al Grupo 1 (NIIF Plenas), incluye una nota tecnica de preparacion IFRS 18: (i) mapeo preliminar del P&L actual (NIC 1) hacia las tres nuevas categorias obligatorias Operating / Investing / Financing; (ii) identificacion de MPMs (Management-defined Performance Measures) actualmente usadas por la administracion — p. ej. EBITDA ajustado, margen operacional ajustado — con conciliacion a la partida NIIF mas cercana; (iii) brechas de datos y adecuaciones de sistemas requeridas para el ejercicio 2027. Marca la nota como "preparacion, sin impacto contable en 2026".' : '6. **Preparacion IFRS 18 (look-ahead).** Si el analisis permite anticipar que la entidad sera clasificada en Grupo 1 al cierre de 2026 (por superar umbrales de activos o empleados), agrega una nota breve de preparacion IFRS 18 indicando la necesidad de iniciar el mapeo a categorias Operating/Investing/Financing y la identificacion de MPMs. En caso contrario, omite este punto.'}
+${isGroup1 ? '6. **Preparacion IFRS 18 (Grupo 1 — obligatoria ejercicios desde 01/01/2027).** Dado que la entidad pertenece al Grupo 1 (NIIF Plenas), incluye una nota tecnica de preparacion IFRS 18: (i) mapeo preliminar del P&L actual (NIC 1) hacia las tres nuevas categorias obligatorias Operating / Investing / Financing; (ii) identificacion de MPMs (Management-defined Performance Measures) actualmente usadas por la administracion — p. ej. EBITDA ajustado, margen operacional ajustado — con conciliacion a la partida NIIF mas cercana; (iii) brechas de datos y adecuaciones de sistemas requeridas para el ejercicio 2027. Marca la nota como "preparacion, sin impacto contable en 2026".' : '6. **IFRS 18 NO APLICA — PROHIBIDO MENCIONARLA.** La entidad pertenece al Grupo ' + (company.niifGroup ?? 2) + '. IFRS 18 (NIIF 18) sólo aplica al Grupo 1 (NIIF Plenas) a partir del 01/01/2027. NO incluyas referencias a IFRS 18 / NIIF 18 / "categorías Operating/Investing/Financing nuevas" / "MPMs" en NINGUNA parte del informe (ni siquiera como look-ahead, ni siquiera para "anticipar cambio de grupo"). Si la mencionas, el gate `auditReportEmittable` rechazará el informe (blocker V8).'}
 
 ## PROTOCOLO DE VALIDACION DE COHERENCIA (OBLIGATORIO ANTES DE ENTREGAR)
 

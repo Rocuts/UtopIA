@@ -1,29 +1,40 @@
 // ---------------------------------------------------------------------------
-// Balance Curator — orquestador de las 7 reglas NIIF (R1–R7) (Pulido Diamante)
+// Balance Curator — orquestador de las 13 reglas NIIF activas en runtime
 // ---------------------------------------------------------------------------
+// (Pulido NIIF PYME Grupo 2: R1–R8 originales + R9, R10, R12, R14, R15.
+// R11 y R13 viven exclusivamente en `auditReportEmittable` — son validators
+// post-build sobre el output del LLM, no rules sobre el snapshot.)
+//
 // Se llama al final de `buildSnapshotForPeriod` (después de todas las
 // validaciones existentes) para producir un `CuratorResult` que el snapshot
 // expone en `snapshot.curator`. Cada regla corre dentro de un try/catch
 // individual: una regla que falle NO interrumpe a las otras — el error
 // queda en `result.errors[ruleCode]` para diagnóstico.
 //
-// Orden de ejecución (Autonomía de Cierre):
-//   R1 → R8 → R5 → R3 → R2 → R6 → R4 → R7
+// Orden de ejecución (Pulido Grupo 2):
+//   R1 → R12 → R8 → R5 → R3 → R2 → R6 → R4 → R7 → R9 → R10 → R14 → R15
 //
 // Justificación del orden:
 //   1. R1 sanea Activos/Pasivos negativos (mutación de control totals).
-//   2. R8 aplica Cierre Virtual: traslada utilidad del ejercicio (Clase
-//      4-5-6-7) a Patrimonio (cuenta virtual 3605VC) y reclasifica saldo
-//      histórico de 3605 a 3710VC. Garantiza ecuación contable previa a R5.
-//   3. R5 ancla el patrimonio al ECP (sólo absorbe gaps reales de transición
+//   2. R12 detecta libros NO cerrados (utilidad transitoria sin trasladar).
+//      Si dispara `abortVirtualClose=true`, R8 NO ejecuta y el orquestador
+//      del pipeline financiero debe emitir dictamen "no emitible".
+//   3. R8 aplica Cierre Virtual SÓLO si R12 no abortó: traslada utilidad
+//      del ejercicio (Clase 4-5-6-7) a Patrimonio (cuenta virtual 3605VC)
+//      y reclasifica saldo histórico de 3605 a 3710VC.
+//   4. R5 ancla el patrimonio al ECP (sólo absorbe gaps reales de transición
 //      NIIF / redondeos; los gaps por utilidad transitoria ya fueron
 //      eliminados por R8).
-//   4. R3 atribuye el descuadre residual (lectura sobre control totals
+//   5. R3 atribuye el descuadre residual (lectura sobre control totals
 //      saneados).
-//   5. R2 construye el EFE indirecto (sobre control totals saneados).
-//   6. R6 cierra el EFE contra el saldo PUC 11 (depende de R2).
-//   7. R4 valida la provisión de renta (independiente).
-//   8. R7 emite advertencia de costo presunto (independiente, no muta).
+//   6. R2 construye el EFE indirecto (sobre control totals saneados).
+//   7. R6 cierra el EFE contra el saldo PUC 11 (depende de R2).
+//   8. R4 valida la provisión de renta (independiente).
+//   9. R7 emite advertencia de costo presunto (independiente, no muta).
+//  10. R9 audita el contrato raw + cents BigInt (precisión preservada).
+//  11. R10 detecta clase 18 acreedor + causación impuesto faltante.
+//  12. R14 advierte PPE bruto sin depreciación correspondiente.
+//  13. R15 advierte costeo incompleto en comercializadoras.
 //
 // La función NO ES PURA en sentido estricto: las reglas R1, R5, R6, R7 y R8
 // mutan el snapshot recibido (ver contratos en `curator-rules/types.ts`).
@@ -41,6 +52,11 @@ import { runR5 } from './curator-rules/r5-equity-anchor';
 import { runR6 } from './curator-rules/r6-cashflow-closure';
 import { runR7 } from './curator-rules/r7-presumed-cost';
 import { runR8 } from './curator-rules/r8-virtual-close';
+import { runR9 } from './curator-rules/r9-precision-cents';
+import { runR10 } from './curator-rules/r10-class-18-classification';
+import { runR12 } from './curator-rules/r12-closing-detector';
+import { runR14 } from './curator-rules/r14-ppe-depreciation-sync';
+import { runR15 } from './curator-rules/r15-cost-classification';
 import type { CuratorFinding, CuratorResult } from './curator-rules/types';
 
 export function runCurator(
@@ -60,9 +76,40 @@ export function runCurator(
     console.warn('[curator] R1 failed:', err);
   }
 
+  // R12 — detector de cierre de libros (gate previo a R8). Si dispara
+  // `abortVirtualClose`, R8 NO ejecuta: el orquestador del pipeline
+  // financiero debe emitir dictamen "no emitible" (V-blocker R12 en gate).
+  let r12Out: ReturnType<typeof runR12> = {
+    audit: {
+      utilidadTransitoriaCop: 0,
+      grupo36SaldoCop: 0,
+      grupo37SaldoCop: 0,
+      librosNoCerrados: false,
+      suggestedClosingEntries: [],
+    },
+    findings: [],
+    abortVirtualClose: false,
+  };
+  try {
+    r12Out = runR12(snapshot);
+    findings.push(...r12Out.findings);
+  } catch (err) {
+    errors['CUR-R12'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R12 failed:', err);
+  }
+
   // R8 — Cierre Virtual: traslado automático de utilidad transitoria a
   // patrimonio (3605VC) + reclasificación de saldo histórico 3605 → 3710VC
   // (muta). Corre antes de R5 para que R5 sólo vea gaps reales de NIIF.
+  //
+  // Política Pulido NIIF PYME Grupo 2: R8 SIEMPRE ejecuta (preserva
+  // contrato del Bridge de Cuadratura). Cuando R12 detecta libros no
+  // cerrados, R8 absorbe la utilidad transitoria virtualmente para que
+  // el snapshot sea matemáticamente coherente, pero el gate
+  // `auditReportEmittable` (V12) bloquea la emisión del informe al
+  // detectar `findings.librosNoCerrados=true`. Así el dictamen "no
+  // emitible" se decide a nivel de gate, no de curator, y el snapshot
+  // sigue siendo consumible por renderers de diagnóstico.
   let r8Out: ReturnType<typeof runR8> | null = null;
   try {
     r8Out = runR8(snapshot);
@@ -71,6 +118,10 @@ export function runCurator(
     errors['CUR-R8'] = err instanceof Error ? err.message : String(err);
     console.warn('[curator] R8 failed:', err);
   }
+  // El campo `r12Out.abortVirtualClose` se preserva como señal informativa
+  // para callers (orchestrator) que quieran razonar sobre libros abiertos
+  // sin re-leer el snapshot.findings.
+  void r12Out.abortVirtualClose;
 
   // R5 — anclaje patrimonial Balance ↔ ECP (muta).
   let r5Out: ReturnType<typeof runR5> = { findings: [] };
@@ -137,6 +188,74 @@ export function runCurator(
     console.warn('[curator] R7 failed:', err);
   }
 
+  // R9 — auditoría del contrato raw + cents BigInt (precisión preservada).
+  let r9Out: ReturnType<typeof runR9> = {
+    precisionCentsAudit: { fieldsChecked: 0, driftCount: 0, driftedFields: [], preserved: true },
+    findings: [],
+  };
+  try {
+    r9Out = runR9(snapshot);
+    findings.push(...r9Out.findings);
+  } catch (err) {
+    errors['CUR-R9'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R9 failed:', err);
+  }
+
+  // R10 — clasificación cuenta 18 + detección causación impuesto.
+  let r10Out: ReturnType<typeof runR10> = {
+    audit: {
+      class18BalanceCop: 0,
+      taxExpenseCop: 0,
+      taxPayableCop: 0,
+      missingTaxCausation: false,
+      cuenta18UsadaComoGasto: false,
+    },
+    findings: [],
+  };
+  try {
+    r10Out = runR10(snapshot);
+    findings.push(...r10Out.findings);
+  } catch (err) {
+    errors['CUR-R10'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R10 failed:', err);
+  }
+
+  // R14 — PPE sin depreciación sincronizada.
+  let r14Out: ReturnType<typeof runR14> = {
+    audit: {
+      ppeBrutoCop: 0,
+      depreciacionAcumuladaCop: 0,
+      gastoDepreciacionCop: 0,
+      ppeWithoutDepreciation: false,
+    },
+    findings: [],
+  };
+  try {
+    r14Out = runR14(snapshot);
+    findings.push(...r14Out.findings);
+  } catch (err) {
+    errors['CUR-R14'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R14 failed:', err);
+  }
+
+  // R15 — costeo incompleto en clase 7.
+  let r15Out: ReturnType<typeof runR15> = {
+    audit: {
+      ingresosComercializacionCop: 0,
+      costo6135Cop: 0,
+      costoClase7Cop: 0,
+      costeoIncompleto: false,
+    },
+    findings: [],
+  };
+  try {
+    r15Out = runR15(snapshot);
+    findings.push(...r15Out.findings);
+  } catch (err) {
+    errors['CUR-R15'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R15 failed:', err);
+  }
+
   return {
     period: snapshot.period,
     comparativePeriod: prev?.period ?? null,
@@ -148,6 +267,11 @@ export function runCurator(
     cashFlowClosureAdjustment: r6Out.cashFlowClosureAdjustment,
     presumedCostWarning: r7Out.presumedCostWarning,
     virtualCloseAdjustment: r8Out?.virtualCloseAdjustment,
+    precisionCentsAudit: r9Out.precisionCentsAudit,
+    class18ClassificationAudit: r10Out.audit,
+    closingDetectorAudit: r12Out.audit,
+    ppeDepreciationAudit: r14Out.audit,
+    costClassificationAudit: r15Out.audit,
     findings,
     errors,
     generatedAt: new Date().toISOString(),

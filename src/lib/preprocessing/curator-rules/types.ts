@@ -25,7 +25,14 @@ export type CuratorRuleCode =
   | 'CUR-R5'
   | 'CUR-R6'
   | 'CUR-R7'
-  | 'CUR-R8';
+  | 'CUR-R8'
+  | 'CUR-R9'
+  | 'CUR-R10'
+  | 'CUR-R11'
+  | 'CUR-R12'
+  | 'CUR-R13'
+  | 'CUR-R14'
+  | 'CUR-R15';
 
 export interface CuratorFinding {
   code: CuratorRuleCode;
@@ -206,6 +213,16 @@ export interface CuratorResult {
   presumedCostWarning?: PresumedCostWarning;
   /** R8: ajuste de Cierre Virtual (utilidad transitoria → patrimonio). */
   virtualCloseAdjustment?: VirtualCloseAdjustment;
+  /** R9: auditoría del contrato raw + cents (precisión preservada). */
+  precisionCentsAudit?: PrecisionCentsAudit;
+  /** R10: clasificación cuenta 18 + detección causación impuesto. */
+  class18ClassificationAudit?: Class18ClassificationAudit;
+  /** R12: detector de cierre de libros (gate previo a R8). */
+  closingDetectorAudit?: ClosingDetectorAudit;
+  /** R14: PPE sin depreciación sincronizada. */
+  ppeDepreciationAudit?: PpeDepreciationAudit;
+  /** R15: costos sin grupo 6135 en comercializadoras. */
+  costClassificationAudit?: CostClassificationAudit;
   /** Findings agregados de las reglas. */
   findings: CuratorFinding[];
   /** Errores capturados por regla (regla → mensaje). Para diagnóstico. */
@@ -318,4 +335,103 @@ export interface PresumedCostWarning {
   severidad: 'alto';
   calloutTitle: string;
   calloutBody: string;
+}
+
+// ---------------------------------------------------------------------------
+// R9 — Precision Cents (parser endurecido, contrato raw + cents bigint)
+// ---------------------------------------------------------------------------
+// Garantiza que la aritmética monetaria se preserva sin pérdida de precisión:
+// `controlTotals.raw` (string canónica) + `controlTotals.cents` (bigint en
+// centavos). Los validators del gate comparan SIEMPRE en cents (BigInt) con
+// tolerancia 0n.
+// ---------------------------------------------------------------------------
+export interface PrecisionCentsAudit {
+  /** Total de campos canónicos verificados. */
+  fieldsChecked: number;
+  /** Cantidad de campos con drift detectado entre raw → number → cents. */
+  driftCount: number;
+  /** Lista de campos con drift (debug). */
+  driftedFields: string[];
+  /** True si el contrato raw + cents está intacto al centavo. */
+  preserved: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// R10 — Clasificación cuenta 18 + detección de causación de impuesto
+// ---------------------------------------------------------------------------
+// Cuenta PUC 18xx ("Otros activos / Diferidos"): saldo deudor → siempre
+// Activo. Si la entidad reporta gasto de impuesto en clase 5 grupo 54 sin la
+// contraparte de pasivo en clase 2 grupo 24, marca `missingTaxCausation`.
+// La regla NO inventa asientos; sólo detecta y reporta.
+// ---------------------------------------------------------------------------
+export interface Class18ClassificationAudit {
+  /** Saldo neto agregado del grupo 18xx en clase 1 (puede ser 0). */
+  class18BalanceCop: number;
+  /** Saldo del grupo 54xx (impuestos como gasto) en clase 5. */
+  taxExpenseCop: number;
+  /** Saldo del grupo 24xx (impuestos por pagar) en clase 2. */
+  taxPayableCop: number;
+  /** True si hay gasto de impuesto sin causación correspondiente en pasivo. */
+  missingTaxCausation: boolean;
+  /** True si la cuenta 18 fue usada como gasto del periodo (saldo acreedor). */
+  cuenta18UsadaComoGasto: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// R12 — Detector de cierre de libros (gate previo a R8)
+// ---------------------------------------------------------------------------
+// Si saldoNeto(clase 4) − saldoNeto(clase 5) − saldoNeto(clase 6) − saldoNeto(clase 7)
+// ≠ 0 Y saldoNeto(grupo 36 + grupo 37) ≈ 0, los libros NO están cerrados:
+// la utilidad transitoria del P&L no fue trasladada al patrimonio.
+// Cuando se dispara, R8 (Cierre Virtual) NO ejecuta — el orchestrator emite
+// dictamen "no emitible" sin llegar al builder.
+// ---------------------------------------------------------------------------
+export interface ClosingDetectorAudit {
+  /** Utilidad transitoria del P&L (clase 4 − 5 − 6 − 7). */
+  utilidadTransitoriaCop: number;
+  /** Saldo neto del grupo 36 (resultados del ejercicio) en clase 3. */
+  grupo36SaldoCop: number;
+  /** Saldo neto del grupo 37 (resultados ejercicios anteriores) en clase 3. */
+  grupo37SaldoCop: number;
+  /** True si los libros NO están cerrados (utilidad sin trasladar). */
+  librosNoCerrados: boolean;
+  /** Asientos sugeridos (NO aplicados) para cerrar el periodo. */
+  suggestedClosingEntries: string[];
+}
+
+// ---------------------------------------------------------------------------
+// R14 — PPE sin depreciación sincronizada (Sección 17 NIIF para PYMES)
+// ---------------------------------------------------------------------------
+// Si saldo(15xxxx, excepto 1592) > umbral material AND saldo(1592xx) === 0
+// AND saldo(5160xx) === 0 (en TODOS los periodos), levantar warning.
+// NO muta el snapshot — sólo alerta.
+// ---------------------------------------------------------------------------
+export interface PpeDepreciationAudit {
+  /** PPE bruto excluyendo cuenta 1592 (depreciación acumulada). */
+  ppeBrutoCop: number;
+  /** Saldo cuenta 1592 (depreciación acumulada). */
+  depreciacionAcumuladaCop: number;
+  /** Saldo cuenta 5160 (gasto depreciación del periodo). */
+  gastoDepreciacionCop: number;
+  /** True si hay PPE material sin depreciación correspondiente. */
+  ppeWithoutDepreciation: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// R15 — Costos sin grupo 6135 (costeo incompleto en comercializadoras)
+// ---------------------------------------------------------------------------
+// Si la entidad reporta ingresos de comercialización (clase 41) AND
+// saldo(6135xx) === 0 AND hay movimiento clase 7 etiquetado como costo,
+// levantar `costeoIncompleto`. El renderer NO calcula margen bruto si este
+// flag está activo (o lo marca con warning prominente).
+// ---------------------------------------------------------------------------
+export interface CostClassificationAudit {
+  /** Ingresos de comercialización (grupo 4135 dentro de clase 41). */
+  ingresosComercializacionCop: number;
+  /** Saldo cuenta 6135 (costo de mercancías vendidas). */
+  costo6135Cop: number;
+  /** Saldo cuenta 7405 u otra clase 7 etiquetada como costo. */
+  costoClase7Cop: number;
+  /** True si el costeo está incompleto (clase 7 sin descargue 6135). */
+  costeoIncompleto: boolean;
 }

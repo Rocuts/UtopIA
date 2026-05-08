@@ -64,7 +64,7 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
   // -------------------------------------------------------------------------
   // ASERCIÓN 1 — R1: reclasificación de saldos negativos en activos.
   // -------------------------------------------------------------------------
-  it('Cuadratura 1 — R1 reclasifica 120505 (-$50M) a 2810ZZ-120505 con applied:true', () => {
+  it('Cuadratura 1 — R1 reclasifica 120505 (-$50M) a 2895VC-120505 con applied:true', () => {
     const result = loadSnapshot();
     const snap = result.primary;
     const reclas = snap.curator!.reclassifications;
@@ -80,15 +80,15 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
     ).toBeDefined();
     expect(r120505!.applied).toBe(true);
     expect(r120505!.effectiveTransferCop).toBe(50_000_000);
-    expect(r120505!.reclassifiedToCode).toBe('2810ZZ-120505');
+    expect(r120505!.reclassifiedToCode).toBe('2895VC-120505');
 
     // La cuenta virtual debe estar en Clase 2 con balance = $50M.
     const class2 = snap.classes.find((c) => c.code === 2);
     expect(class2, 'Clase 2 (Pasivo) ausente del snapshot').toBeDefined();
-    const virtual = class2!.accounts.find((a) => a.code === '2810ZZ-120505');
+    const virtual = class2!.accounts.find((a) => a.code === '2895VC-120505');
     expect(
       virtual,
-      `Esperaba cuenta virtual 2810ZZ-120505 en Clase 2. Recibidas: ${class2!.accounts
+      `Esperaba cuenta virtual 2895VC-120505 en Clase 2. Recibidas: ${class2!.accounts
         .map((a) => a.code)
         .join(', ')}`,
     ).toBeDefined();

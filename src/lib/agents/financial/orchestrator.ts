@@ -8,12 +8,18 @@ import { runNiifAnalyst } from './agents/niif-analyst';
 import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
 import {
+  extractCompanyMetadata,
   parseTrialBalanceCSV,
   preprocessTrialBalance,
+  type ExtractedCompanyMetadata,
   type PreprocessedBalance,
   type PeriodSnapshot,
   type EquityBreakdown,
 } from '@/lib/preprocessing/trial-balance';
+import {
+  auditReportEmittable,
+  type AuditCompanyContext,
+} from '@/lib/pillars/audit-report-emittable';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
 import { pullTrialBalanceForPeriod } from '@/lib/erp/pipeline';
 import type { PeriodSpec } from '@/lib/erp/adapter';
@@ -1045,6 +1051,55 @@ export async function orchestrateFinancialReport(
     validation,
   };
 
+  // -------------------------------------------------------------------------
+  // Pulido NIIF PYME Grupo 2 — gate `auditReportEmittable` (V1..V12).
+  // Si CUALQUIER blocker aparece, el reporte se etiqueta como "no-emitible"
+  // y el endpoint debe devolver la lista de blockers + ajustes sugeridos al
+  // cliente, NO los EEFF aparentes.
+  // -------------------------------------------------------------------------
+  // Extraer metadata directamente del rawData (idempotente, determinista).
+  // Si el upload route ya la inyectó en `preprocessed.extractedCompanyMetadata`
+  // la preferimos; si no, la extraemos aquí.
+  const extractedMeta =
+    getExtractedMetadataFromPreprocessed(preprocessed) ??
+    extractCompanyMetadata(effectiveRawData ?? '');
+  const auditCompanyContext: AuditCompanyContext = {
+    razonSocialFromFile: extractedMeta?.razonSocialFromFile ?? null,
+    nitFromFile: extractedMeta?.nitFromFile ?? null,
+    nit: effectiveCompany.nit ?? null,
+    niifGroup: effectiveCompany.niifGroup ?? 2,
+    tipoSocietario: normalizeTipoSocietario(effectiveCompany.entityType),
+    estatutosRequierenReservaLegal: getEstatutosFlag(effectiveCompany),
+  };
+
+  const primarySnapshotForGate = getPrimarySnapshot(preprocessed);
+  if (primarySnapshotForGate) {
+    const emittableResult = auditReportEmittable(
+      report,
+      primarySnapshotForGate,
+      auditCompanyContext,
+    );
+    report.emittability = {
+      kind: emittableResult.emittable ? 'emittable' : 'no-emitible',
+      blockers: emittableResult.blockers.map((b) => ({
+        code: b.code,
+        message: b.message,
+        detail: b.detail,
+      })),
+      suggestedAdjustments: emittableResult.suggestedAdjustments,
+    };
+
+    if (!emittableResult.emittable) {
+      onProgress?.({
+        type: 'warning',
+        warnings: [
+          'Informe NO emitible — gate auditReportEmittable bloqueó la emisión.',
+          ...emittableResult.blockers.map((b) => b.message),
+        ],
+      });
+    }
+  }
+
   onProgress?.({
     type: 'stage_complete',
     stage: 4,
@@ -1069,6 +1124,48 @@ export async function orchestrateFinancialReport(
 
   return report;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers para el gate auditReportEmittable
+// ---------------------------------------------------------------------------
+
+function getExtractedMetadataFromPreprocessed(
+  preprocessed: unknown,
+): ExtractedCompanyMetadata | null {
+  if (!preprocessed || typeof preprocessed !== 'object') return null;
+  const pp = preprocessed as { extractedCompanyMetadata?: ExtractedCompanyMetadata };
+  return pp.extractedCompanyMetadata ?? null;
+}
+
+function normalizeTipoSocietario(
+  raw: string | undefined,
+): AuditCompanyContext['tipoSocietario'] {
+  if (!raw) return undefined;
+  const upper = raw.toUpperCase().trim();
+  if (upper === 'SAS' || upper === 'S.A.S.' || upper === 'S.A.S') return 'SAS';
+  if (upper === 'SA' || upper === 'S.A.' || upper === 'S.A') return 'SA';
+  if (upper === 'LTDA' || upper === 'LTDA.') return 'LTDA';
+  if (upper === 'EU' || upper === 'E.U.' || upper === 'E.U') return 'EU';
+  if (upper === 'SCS' || upper === 'OTRO') return 'OTRO';
+  return 'OTRO';
+}
+
+function getEstatutosFlag(
+  company: FinancialReportRequest['company'],
+): boolean | undefined {
+  // El intake puede inyectar este flag; si no está, es `undefined` (tri-state).
+  const c = company as unknown as { estatutosRequierenReservaLegal?: boolean };
+  return typeof c.estatutosRequierenReservaLegal === 'boolean'
+    ? c.estatutosRequierenReservaLegal
+    : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// extractCompanyMetadata adapter — el upload route puede inyectar la metadata
+// extraída del Excel en `preprocessed.extractedCompanyMetadata`. Re-exportamos
+// la utility deterministic para callers que no usen el upload route.
+// ---------------------------------------------------------------------------
+export { extractCompanyMetadata };
 
 // ---------------------------------------------------------------------------
 // Build the final consolidated Markdown report

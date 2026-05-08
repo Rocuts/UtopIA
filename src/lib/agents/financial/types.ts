@@ -129,6 +129,24 @@ export interface FinancialReport {
   validation?: ReportValidationResult;
   /** Flags de auditoría sobre los ajustes deterministas aplicados por el Curator (R1, R5, R6, R7). */
   annotations?: FinancialReportAnnotations;
+  /**
+   * Pulido NIIF PYME Grupo 2 — discriminator del gate `auditReportEmittable`.
+   * Cuando `kind === 'no-emitible'`, el endpoint `/api/financial-report` debe
+   * devolver el objeto al cliente sin los EEFF visibles, sólo con la lista
+   * de blockers y los ajustes sugeridos. Cuando `kind === 'emittable'` (o el
+   * campo está ausente por retrocompat), el reporte se sirve tal cual.
+   */
+  emittability?: ReportEmittabilityState;
+}
+
+export type ReportEmittabilityKind = 'emittable' | 'no-emitible';
+
+export interface ReportEmittabilityState {
+  kind: ReportEmittabilityKind;
+  /** Códigos V1..V12 que dispararon el bloqueo (vacío si emittable). */
+  blockers: Array<{ code: string; message: string; detail?: string }>;
+  /** Sugerencias accionables (asientos pendientes, etc.). */
+  suggestedAdjustments: string[];
 }
 
 /**
