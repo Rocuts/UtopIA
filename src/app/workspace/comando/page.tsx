@@ -143,6 +143,7 @@ export default async function ComandoPage() {
         escudoTrend={escudoTrend}
         verdadTrend={verdadTrend}
         futuroTrend={futuroTrend}
+        balance={balance}
         demo={false}
       />
     );

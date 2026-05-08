@@ -17,6 +17,7 @@ import type {
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarMetrics } from '@/lib/pillars/types';
 import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 import { PillarHealthBadge } from './PillarHealthBadge';
 import { PillarKpiList } from './_kpi-list';
@@ -30,6 +31,8 @@ interface Props {
   inflectionSeries?: CashInflectionPoint[];
   futuroTrend?: FuturoBarSeries[];
   density?: 'comfortable' | 'compact';
+  /** Balance preprocesado para recalculación reactiva del escenario base. */
+  balance?: PreprocessedBalance;
 }
 
 export function FuturoMicroDashboard({
@@ -38,6 +41,7 @@ export function FuturoMicroDashboard({
   inflectionSeries,
   futuroTrend,
   density,
+  balance,
 }: Props) {
   const { language } = useLanguage();
   const isEs = language === 'es';
@@ -79,7 +83,7 @@ export function FuturoMicroDashboard({
 
       {futuroTrend && futuroTrend.length > 0 && (
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
-          <FuturoTrendBars series={futuroTrend} language={language} density={density} />
+          <FuturoTrendBars series={futuroTrend} language={language} density={density} balance={balance} />
         </Card>
       )}
 

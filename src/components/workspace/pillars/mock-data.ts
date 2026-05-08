@@ -181,6 +181,7 @@ export const MOCK_FUTURO_TREND: FuturoBarSeries[] = (() => {
       cajaBase: Math.round(base),
       cajaConservadora: Math.round(cons),
       cajaAgresiva: Math.round(agr),
+      capexAplicado: 0,
     });
   }
   return out;

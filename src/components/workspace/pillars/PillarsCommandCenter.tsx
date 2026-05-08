@@ -22,6 +22,7 @@ import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
 import type { FuturoBarSeries } from '@/lib/pillars/futuro-bars';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type {
   CashInflectionPoint,
   DuPontSegment,
@@ -73,6 +74,8 @@ export interface PillarsCommandCenterProps {
   futuroTrend?: FuturoBarSeries[];
   /** Si no hay datos reales, marca los charts con un badge "DEMO". */
   demo?: boolean;
+  /** Balance preprocesado — habilita el selector interactivo de crecimiento en FuturoTrendBars. */
+  balance?: PreprocessedBalance;
 }
 
 export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
@@ -178,7 +181,7 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
         <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} escudoTrend={props.escudoTrend ?? MOCK_ESCUDO_TREND} />
         <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={props.valorTrend ?? MOCK_VALOR_TREND} />
         <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} verdadTrend={props.verdadTrend ?? MOCK_VERDAD_TREND} />
-        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={props.futuroTrend ?? MOCK_FUTURO_TREND} />
+        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={props.futuroTrend ?? MOCK_FUTURO_TREND} balance={props.balance} />
       </div>
     </div>
   );
