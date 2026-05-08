@@ -88,6 +88,12 @@ export function validateDashboardIntegrity(
     findings.push(...checkEscudoCards(escudoCards, snapshot));
   }
 
+  // ── 1c. Tarjetas ejecutivas Verdad (Ecuación / Consistencia / Anomalías / Salud) ──
+  const verdadCards = metrics.verdad.verdadCards;
+  if (verdadCards) {
+    findings.push(...checkVerdadCards(verdadCards, snapshot));
+  }
+
   // ── 2. KPIs maestros NIIF del Pilar VALOR ────────────────────────────────
   findings.push(...checkValorKpis(metrics.valor, snapshot));
 
@@ -326,6 +332,99 @@ function checkEscudoCards(
     }
   }
 
+  return findings;
+}
+
+function checkVerdadCards(
+  cards: NonNullable<PillarMetrics['verdadCards']>,
+  snapshot: PeriodSnapshot,
+): SyncFinding[] {
+  const findings: SyncFinding[] = [];
+  const ct = snapshot.controlTotals;
+
+  // ── Ecuación Maestra ───────────────────────────────────────────────────
+  const expectedGap = ct.activo - ct.pasivo - ct.patrimonio;
+  const driftEcuacion = safeDelta(cards.ecuacion_maestra.value, expectedGap);
+  if (driftEcuacion !== null && Math.abs(driftEcuacion) > COP_TOLERANCE) {
+    findings.push({
+      code: 'ECUACION_MAESTRA_DRIFT',
+      severity: 'critical',
+      field: 'Ecuación Maestra',
+      displayed: cards.ecuacion_maestra.value,
+      expected: expectedGap,
+      drift: driftEcuacion,
+      messageEs:
+        `Ecuación Maestra mostrada ($${formatCop(cards.ecuacion_maestra.value)}) difiere del recalculado ` +
+        `($${formatCop(expectedGap)}) por $${formatCop(Math.abs(driftEcuacion))}.`,
+      messageEn:
+        `Displayed Master Equation ($${formatCop(cards.ecuacion_maestra.value)}) differs from recomputed ` +
+        `($${formatCop(expectedGap)}) by $${formatCop(Math.abs(driftEcuacion))}.`,
+    });
+  }
+
+  // ── Salud Contable (count) ─────────────────────────────────────────────
+  // = findingsCriticos*3 + findingsAltos + discrepancias + reclasificaciones.
+  const expectedSalud =
+    cards.audit.findingsCriticos * 3 +
+    cards.audit.findingsAltos +
+    cards.audit.discrepanciasPreprocessing +
+    cards.audit.reclasificacionesR1;
+  const driftSalud = safeDelta(cards.salud_contable.value, expectedSalud);
+  if (driftSalud !== null && Math.abs(driftSalud) > 0) {
+    findings.push({
+      code: 'SALUD_CONTABLE_DRIFT',
+      severity: 'warning',
+      field: 'Salud Contable',
+      displayed: cards.salud_contable.value,
+      expected: expectedSalud,
+      drift: driftSalud,
+      messageEs:
+        `Salud Contable mostrada (${cards.salud_contable.value}) difiere del recalculado (${expectedSalud}).`,
+      messageEn:
+        `Displayed Accounting Health (${cards.salud_contable.value}) differs from recomputed (${expectedSalud}).`,
+    });
+  }
+
+  // ── Consistencia (score 0-100) — sólo verificamos rango razonable ──────
+  if (
+    cards.consistencia.value !== null &&
+    (cards.consistencia.value < 0 || cards.consistencia.value > 100)
+  ) {
+    findings.push({
+      code: 'CONSISTENCIA_OUT_OF_RANGE',
+      severity: 'critical',
+      field: 'Consistencia',
+      displayed: cards.consistencia.value,
+      expected: null,
+      drift: null,
+      messageEs: `Consistencia fuera de rango [0-100]: ${cards.consistencia.value}.`,
+      messageEn: `Consistency out of range [0-100]: ${cards.consistencia.value}.`,
+    });
+  }
+
+  // ── Anomalías (count) — sanity check vs audit ──────────────────────────
+  const expectedAnomalias =
+    cards.audit.anomaliasVariacion + (cards.audit.posibleOmisionCostos ? 1 : 0);
+  const driftAnomalias = safeDelta(cards.anomalias.value, expectedAnomalias);
+  if (driftAnomalias !== null && Math.abs(driftAnomalias) > 0) {
+    findings.push({
+      code: 'ANOMALIAS_DRIFT',
+      severity: 'info',
+      field: 'Anomalías de Clasificación',
+      displayed: cards.anomalias.value,
+      expected: expectedAnomalias,
+      drift: driftAnomalias,
+      messageEs:
+        `Anomalías mostradas (${cards.anomalias.value}) difieren del recalculado (${expectedAnomalias}).`,
+      messageEn:
+        `Displayed Classification Anomalies (${cards.anomalias.value}) differ from recomputed (${expectedAnomalias}).`,
+    });
+  }
+
+  // No usamos `snapshot` en estos checks (todo está en `cards.audit`), pero el
+  // parámetro queda para simetría con los otros checkers y por si añadimos
+  // verificaciones contra el snapshot directamente en el futuro.
+  void snapshot;
   return findings;
 }
 

@@ -17,6 +17,7 @@ import {
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { buildValorBarSeries } from '@/lib/pillars/valor-bars';
 import { buildEscudoBarSeries } from '@/lib/pillars/escudo-bars';
+import { buildVerdadBarSeries } from '@/lib/pillars/verdad-bars';
 import type {
   CashInflectionPoint,
   PnLWaterfallData,
@@ -112,6 +113,9 @@ export default async function ComandoPage() {
     // Serie temporal Caja/Activo Corriente/Solvencia para el gráfico de barras del pilar Escudo.
     const escudoTrend = buildEscudoBarSeries(balance);
 
+    // Serie temporal Errores/Descalces/Anomalías para el gráfico de barras del pilar Verdad.
+    const verdadTrend = buildVerdadBarSeries(balance);
+
     // Gap attribution del Curator (R3) si hay descuadre.
     const curatorGap = balance.primary.curator?.balanceGapAttribution;
     const gapAttribution = curatorGap
@@ -133,6 +137,7 @@ export default async function ComandoPage() {
         gapAttribution={gapAttribution}
         valorTrend={valorTrend}
         escudoTrend={escudoTrend}
+        verdadTrend={verdadTrend}
         demo={false}
       />
     );

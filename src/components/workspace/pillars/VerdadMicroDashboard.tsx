@@ -11,11 +11,14 @@ import { ArrowRight, Scale } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarMetrics } from '@/lib/pillars/types';
+import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
 import { cn } from '@/lib/utils';
 
 import { PillarHealthBadge } from './PillarHealthBadge';
 import { PillarKpiList } from './_kpi-list';
 import { PillarAlertsList } from './_alerts-list';
+import { VerdadTrendBars } from './VerdadTrendBars';
+import { VerdadExecutiveCards } from './VerdadExecutiveCards';
 
 interface Props {
   metrics: PillarMetrics;
@@ -27,9 +30,11 @@ interface Props {
     zScore: number;
   };
   density?: 'comfortable' | 'compact';
+  /** Serie temporal Errores/Descalces/Anomalías para el gráfico de barras. */
+  verdadTrend?: VerdadBarSeries[];
 }
 
-export function VerdadMicroDashboard({ metrics, gapAttribution, density }: Props) {
+export function VerdadMicroDashboard({ metrics, gapAttribution, density, verdadTrend }: Props) {
   const { language } = useLanguage();
   const isEs = language === 'es';
 
@@ -60,6 +65,19 @@ export function VerdadMicroDashboard({ metrics, gapAttribution, density }: Props
         </p>
       </Card>
 
+      {/* Tarjetas ejecutivas (vista dueño): Ecuación · Consistencia · Anomalías · Salud */}
+      <VerdadExecutiveCards
+        cards={metrics.verdadCards}
+        language={language}
+        density={density}
+      />
+
+      {verdadTrend && verdadTrend.length > 0 && (
+        <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
+          <VerdadTrendBars series={verdadTrend} language={language} density={density} />
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'} className="text-center">
           <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500 font-medium">
@@ -84,7 +102,7 @@ export function VerdadMicroDashboard({ metrics, gapAttribution, density }: Props
         </Card>
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <h3 className="font-serif-elite text-base font-normal text-n-1000 mb-2">
-            {isEs ? 'KPIs Maestros' : 'Master KPIs'}
+            {isEs ? 'KPIs Maestros NIIF' : 'NIIF Master KPIs'}
           </h3>
           <PillarKpiList kpis={metrics.kpis} language={language} />
         </Card>

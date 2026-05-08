@@ -12,6 +12,7 @@
 import type { PillarsResult, PillarMetrics } from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
+import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
 import type {
   PnLWaterfallData,
   DuPontSegment,
@@ -151,6 +152,13 @@ export const MOCK_ESCUDO_TREND: EscudoBarSeries[] = [
   { label: '2024', period: '2024', efectivo: 1_050_000_000, activoCorriente: 3_800_000_000, pasivoCorriente: 2_400_000_000, solvencia: 1.58, isInterpolated: false },
   { label: '2025', period: '2025', efectivo: 1_300_000_000, activoCorriente: 4_200_000_000, pasivoCorriente: 2_600_000_000, solvencia: 1.62, isInterpolated: false },
   { label: '2026', period: '2026', efectivo: 1_600_000_000, activoCorriente: 4_700_000_000, pasivoCorriente: 2_900_000_000, solvencia: 1.62, isInterpolated: false },
+];
+
+export const MOCK_VERDAD_TREND: VerdadBarSeries[] = [
+  { label: '2023', period: '2023', errores: 8,  descalces: 1, anomalias: 3, isInterpolated: false },
+  { label: '2024', period: '2024', errores: 5,  descalces: 0, anomalias: 2, isInterpolated: false },
+  { label: '2025', period: '2025', errores: 3,  descalces: 0, anomalias: 1, isInterpolated: false },
+  { label: '2026', period: '2026', errores: 1,  descalces: 0, anomalias: 0, isInterpolated: false },
 ];
 
 function monthLabel(offset: number): string {

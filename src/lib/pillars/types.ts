@@ -79,6 +79,8 @@ export interface PillarMetrics {
   executiveCards?: ValorExecutiveCards;
   /** 4 tarjetas ejecutivas (sólo pilar Escudo): Autonomía / Cobertura / Reserva Fiscal / Brecha. */
   escudoCards?: EscudoExecutiveCards;
+  /** 4 tarjetas ejecutivas (sólo pilar Verdad): Ecuación Maestra / Consistencia / Anomalías / Salud. */
+  verdadCards?: VerdadExecutiveCards;
 }
 
 // ─── Tarjetas ejecutivas (Pilar Valor) ─────────────────────────────────────
@@ -88,7 +90,9 @@ export type ExecutiveCardKey =
   // Pilar Valor
   | 'ebitda' | 'waoo' | 'ratio' | 'fcf'
   // Pilar Escudo
-  | 'autonomia' | 'cobertura_pasivos' | 'reserva_fiscal' | 'brecha_escudo';
+  | 'autonomia' | 'cobertura_pasivos' | 'reserva_fiscal' | 'brecha_escudo'
+  // Pilar Verdad
+  | 'ecuacion_maestra' | 'consistencia' | 'anomalias' | 'salud_contable';
 
 export interface ExecutiveCard {
   key: ExecutiveCardKey;
@@ -97,7 +101,13 @@ export interface ExecutiveCard {
   /** Valor numérico crudo. `null` cuando no es calculable
    *  (ej. FCF sin periodo comparativo). */
   value: number | null;
-  unit: 'cop' | 'pct' | 'ratio';
+  /** Unidad para formateo en UI:
+   *  - cop: pesos colombianos abreviados ($1,2B / $1,2M).
+   *  - pct: porcentaje (multiplica por 100, sufijo %).
+   *  - ratio: número crudo (toFixed(2)).
+   *  - count: entero sin decimales (errores, anomalías).
+   *  - score: 0-100 sufijo /100. */
+  unit: 'cop' | 'pct' | 'ratio' | 'count' | 'score';
   color: ExecutiveCardColor;
   status: PillarStatus;
   /** Variación vs periodo anterior, mismo unit. `null` si no hay comparativo. */
@@ -178,6 +188,50 @@ export interface EscudoExecutiveCards {
   /** Brecha Escudo = Caja(11) − Proveedores(2205) en COP (negativo = riesgo). */
   brecha_escudo: ExecutiveCard;
   audit: EscudoExecutiveCardsAudit;
+  generatedAt: string;
+}
+
+// ─── Tarjetas ejecutivas (Pilar Verdad) ────────────────────────────────────
+
+export interface VerdadExecutiveCardsAudit {
+  /** Activo − Pasivo − Patrimonio (en COP, signo preservado). */
+  equationGap: number;
+  /** Cuentas Clase 1 (Activo) con saldo crédito (negativo). */
+  saldosNegativosActivo: number;
+  /** Cuentas Clase 2 (Pasivo) con saldo débito (positivo natural inverso). */
+  saldosPositivosPasivo: number;
+  /** Total de cuentas analizadas en la integridad de saldos. */
+  totalCuentasAnalizadas: number;
+  /** Reclasificaciones aplicadas por R1 (Curator). */
+  reclasificacionesR1: number;
+  /** Total de discrepancias del preprocessing. */
+  discrepanciasPreprocessing: number;
+  /** Findings 'critico' del Curator. */
+  findingsCriticos: number;
+  /** Findings 'alto' del Curator. */
+  findingsAltos: number;
+  /** Cuentas con variación absoluta >500% vs comparativo. */
+  anomaliasVariacion: number;
+  /** Margen bruto observado (Ingresos − Costos) / Ingresos. */
+  margenBruto: number | null;
+  /** Bandera margen bruto >95% (proxy de costos no registrados). */
+  posibleOmisionCostos: boolean;
+  /** Score forensic externo (si disponible). */
+  forensicScore: number | null;
+  /** % terceros con NIT válido (si disponible). */
+  integridadTerceros: number | null;
+}
+
+export interface VerdadExecutiveCards {
+  /** Ecuación Maestra = activo − pasivo − patrimonio (COP, 0 = sincronizado). */
+  ecuacion_maestra: ExecutiveCard;
+  /** Índice de Consistencia 0-100 (saldos signo + cuadratura + terceros). */
+  consistencia: ExecutiveCard;
+  /** # de Anomalías de Clasificación detectadas (count). */
+  anomalias: ExecutiveCard;
+  /** # de Errores de Salud Contable acumulados (count, lower-better). */
+  salud_contable: ExecutiveCard;
+  audit: VerdadExecutiveCardsAudit;
   generatedAt: string;
 }
 

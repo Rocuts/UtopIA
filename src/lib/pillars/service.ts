@@ -14,6 +14,7 @@ import { computeEscudoExecutiveCards } from './escudo-cards';
 import { computeValorPillar } from './valor';
 import { computeValorExecutiveCards } from './valor-cards';
 import { computeVerdadPillar } from './verdad';
+import { computeVerdadExecutiveCards } from './verdad-cards';
 import { computeFuturoPillar } from './futuro';
 import { scoreToStatus } from './health-score';
 import type {
@@ -69,6 +70,16 @@ export function aggregatePillars(input: PillarsAggregateInput): PillarsResult {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[pillars] escudo.escudoCards failed:', err);
     escudo.errors = { ...(escudo.errors ?? {}), escudoCards: message };
+  }
+
+  // Inyectar las 4 tarjetas ejecutivas del Pilar Verdad: Ecuación Maestra /
+  // Consistencia / Anomalías / Salud Contable. Mismo patrón fail-soft.
+  try {
+    verdad.verdadCards = computeVerdadExecutiveCards(input);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[pillars] verdad.verdadCards failed:', err);
+    verdad.errors = { ...(verdad.errors ?? {}), verdadCards: message };
   }
 
   const overallScore = Math.round(
