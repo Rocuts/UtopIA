@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { computeEscudoPillar } from './escudo';
+import { computeEscudoExecutiveCards } from './escudo-cards';
 import { computeValorPillar } from './valor';
 import { computeValorExecutiveCards } from './valor-cards';
 import { computeVerdadPillar } from './verdad';
@@ -58,6 +59,16 @@ export function aggregatePillars(input: PillarsAggregateInput): PillarsResult {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[pillars] valor.executiveCards failed:', err);
     valor.errors = { ...(valor.errors ?? {}), executiveCards: message };
+  }
+
+  // Inyectar las 4 tarjetas ejecutivas del Pilar Escudo: Autonomía / Cobertura
+  // de Pasivos / Reserva Fiscal / Brecha Escudo. Mismo patrón fail-soft.
+  try {
+    escudo.escudoCards = computeEscudoExecutiveCards(input);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[pillars] escudo.escudoCards failed:', err);
+    escudo.errors = { ...(escudo.errors ?? {}), escudoCards: message };
   }
 
   const overallScore = Math.round(

@@ -19,6 +19,7 @@ import { InsightInboxButton } from '@/components/notifications/InsightInboxButto
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarsResult } from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
+import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type {
   CashInflectionPoint,
   DuPontSegment,
@@ -33,6 +34,7 @@ import { FuturoMicroDashboard } from './FuturoMicroDashboard';
 import { PillarHealthBadge } from './PillarHealthBadge';
 import {
   MOCK_DUPONT_SEGMENTS,
+  MOCK_ESCUDO_TREND,
   MOCK_INFLECTION_SERIES,
   MOCK_PILLARS,
   MOCK_PNL_WATERFALL,
@@ -59,6 +61,8 @@ export interface PillarsCommandCenterProps {
   };
   /** Serie temporal EBITDA/FCF/Ingresos para el gráfico de barras del pilar Valor. */
   valorTrend?: ValorBarSeries[];
+  /** Serie temporal Caja/Activo Corriente/Solvencia para el gráfico de barras del pilar Escudo. */
+  escudoTrend?: EscudoBarSeries[];
   /** Si no hay datos reales, marca los charts con un badge "DEMO". */
   demo?: boolean;
 }
@@ -163,7 +167,7 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
 
       {/* Micro-dashboards apilados */}
       <div className="flex flex-col gap-10">
-        <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} />
+        <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} escudoTrend={props.escudoTrend ?? MOCK_ESCUDO_TREND} />
         <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={props.valorTrend ?? MOCK_VALOR_TREND} />
         <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} />
         <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} />

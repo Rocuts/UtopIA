@@ -13,10 +13,13 @@ import { Card } from '@/components/ui/Card';
 import { SpeedometerLiquidityGauge } from '@/components/charts';
 import { useLanguage } from '@/context/LanguageContext';
 import type { PillarMetrics } from '@/lib/pillars/types';
+import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 
 import { PillarHealthBadge } from './PillarHealthBadge';
 import { PillarKpiList } from './_kpi-list';
 import { PillarAlertsList } from './_alerts-list';
+import { EscudoTrendBars } from './EscudoTrendBars';
+import { EscudoExecutiveCards } from './EscudoExecutiveCards';
 
 interface Props {
   metrics: PillarMetrics;
@@ -26,10 +29,12 @@ interface Props {
     pruebaAcida?: number | null;
     diasAutonomia: number | null;
   };
+  /** Serie temporal de liquidez para el gráfico de barras del pilar Escudo. */
+  escudoTrend?: EscudoBarSeries[];
   density?: 'comfortable' | 'compact';
 }
 
-export function EscudoMicroDashboard({ metrics, liquidity, density }: Props) {
+export function EscudoMicroDashboard({ metrics, liquidity, escudoTrend, density }: Props) {
   const { language } = useLanguage();
   const isEs = language === 'es';
 
@@ -57,6 +62,19 @@ export function EscudoMicroDashboard({ metrics, liquidity, density }: Props) {
         </p>
       </Card>
 
+      {/* Tarjetas ejecutivas (vista dueño): Autonomía · Cobertura · Reserva Fiscal · Brecha */}
+      <EscudoExecutiveCards
+        cards={metrics.escudoCards}
+        language={language}
+        density={density}
+      />
+
+      {escudoTrend && escudoTrend.length > 0 && (
+        <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
+          <EscudoTrendBars series={escudoTrend} language={language} density={density} />
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {liquidity && (
           <SpeedometerLiquidityGauge
@@ -68,7 +86,7 @@ export function EscudoMicroDashboard({ metrics, liquidity, density }: Props) {
         )}
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <h3 className="font-serif-elite text-base font-normal text-n-1000 mb-2">
-            {isEs ? 'KPIs Maestros' : 'Master KPIs'}
+            {isEs ? 'KPIs Maestros NIIF' : 'NIIF Master KPIs'}
           </h3>
           <PillarKpiList kpis={metrics.kpis} language={language} />
         </Card>

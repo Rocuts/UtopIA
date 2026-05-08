@@ -82,6 +82,12 @@ export function validateDashboardIntegrity(
     findings.push(...checkExecutiveCards(cards, snapshot));
   }
 
+  // ── 1b. Tarjetas ejecutivas Escudo (Autonomía / Cobertura / Reserva / Brecha) ──
+  const escudoCards = metrics.escudo.escudoCards;
+  if (escudoCards) {
+    findings.push(...checkEscudoCards(escudoCards, snapshot));
+  }
+
   // ── 2. KPIs maestros NIIF del Pilar VALOR ────────────────────────────────
   findings.push(...checkValorKpis(metrics.valor, snapshot));
 
@@ -209,6 +215,115 @@ function checkExecutiveCards(
         `Displayed FCF ($${formatCop(cards.fcf.value)}) differs from recomputed ` +
         `($${formatCop(expectedFcf)}) by $${formatCop(Math.abs(driftFcf))}.`,
     });
+  }
+
+  return findings;
+}
+
+function checkEscudoCards(
+  cards: NonNullable<PillarMetrics['escudoCards']>,
+  snapshot: PeriodSnapshot,
+): SyncFinding[] {
+  const findings: SyncFinding[] = [];
+  const ct = snapshot.controlTotals;
+
+  // ── Cobertura de Pasivos ───────────────────────────────────────────────
+  // El motor recalcula desde classes con prefijos estrictos 11+12+13 / 21-24,
+  // que puede diferir del controlTotals.activoCorriente/pasivoCorriente
+  // (que usa grupos más amplios). Aquí validamos contra el audit, que es la
+  // fuente exacta del cómputo.
+  const expectedCobertura =
+    cards.audit.pasivoCorriente > 0
+      ? cards.audit.activoCorriente / cards.audit.pasivoCorriente
+      : null;
+  const driftCobertura = safeDelta(cards.cobertura_pasivos.value, expectedCobertura);
+  if (driftCobertura !== null && Math.abs(driftCobertura) > RATIO_TOLERANCE) {
+    findings.push({
+      code: 'COBERTURA_DRIFT',
+      severity: 'warning',
+      field: 'Cobertura de Pasivos',
+      displayed: cards.cobertura_pasivos.value,
+      expected: expectedCobertura,
+      drift: driftCobertura,
+      messageEs:
+        `Cobertura de Pasivos mostrada (${cards.cobertura_pasivos.value?.toFixed(3)}) difiere del recalculado ` +
+        `(${expectedCobertura?.toFixed(3) ?? '—'}).`,
+      messageEn:
+        `Displayed Liability Coverage (${cards.cobertura_pasivos.value?.toFixed(3)}) differs from recomputed ` +
+        `(${expectedCobertura?.toFixed(3) ?? '—'}).`,
+    });
+  }
+
+  // ── Reserva Fiscal ─────────────────────────────────────────────────────
+  // = provisión24 − utilidadNeta × 35%. Validamos contra impuestosCuenta24
+  // y utilidadNeta del snapshot directamente.
+  const rentaTeorica = Math.max(0, ct.utilidadNeta * 0.35);
+  const expectedReserva = ct.impuestosCuenta24 - rentaTeorica;
+  const driftReserva = safeDelta(cards.reserva_fiscal.value, expectedReserva);
+  if (driftReserva !== null && Math.abs(driftReserva) > COP_TOLERANCE) {
+    findings.push({
+      code: 'RESERVA_FISCAL_DRIFT',
+      severity: 'warning',
+      field: 'Reserva Fiscal',
+      displayed: cards.reserva_fiscal.value,
+      expected: expectedReserva,
+      drift: driftReserva,
+      messageEs:
+        `Reserva Fiscal mostrada ($${formatCop(cards.reserva_fiscal.value)}) difiere de la recalculada ` +
+        `($${formatCop(expectedReserva)}) por $${formatCop(Math.abs(driftReserva))}.`,
+      messageEn:
+        `Displayed Tax Reserve ($${formatCop(cards.reserva_fiscal.value)}) differs from recomputed ` +
+        `($${formatCop(expectedReserva)}) by $${formatCop(Math.abs(driftReserva))}.`,
+    });
+  }
+
+  // ── Brecha Escudo ──────────────────────────────────────────────────────
+  // = caja(11) − proveedores(2205). Validamos contra el audit.
+  const expectedBrecha =
+    cards.audit.efectivoCuenta11 - cards.audit.proveedoresCuenta2205;
+  const driftBrecha = safeDelta(cards.brecha_escudo.value, expectedBrecha);
+  if (driftBrecha !== null && Math.abs(driftBrecha) > COP_TOLERANCE) {
+    findings.push({
+      code: 'BRECHA_ESCUDO_DRIFT',
+      severity: 'warning',
+      field: 'Brecha Escudo',
+      displayed: cards.brecha_escudo.value,
+      expected: expectedBrecha,
+      drift: driftBrecha,
+      messageEs:
+        `Brecha Escudo mostrada ($${formatCop(cards.brecha_escudo.value)}) difiere de la recalculada ` +
+        `($${formatCop(expectedBrecha)}) por $${formatCop(Math.abs(driftBrecha))}.`,
+      messageEn:
+        `Displayed Shield Gap ($${formatCop(cards.brecha_escudo.value)}) differs from recomputed ` +
+        `($${formatCop(expectedBrecha)}) by $${formatCop(Math.abs(driftBrecha))}.`,
+    });
+  }
+
+  // ── Autonomía Financiera (días) ─────────────────────────────────────────
+  // value = (caja + inversiones12) / promedioEgresosMensuales × 30.
+  // Tolerancia más laxa (1 día) porque el cálculo tiene redondeos por mes/30.
+  if (cards.audit.promedioEgresosMensuales > 0) {
+    const expectedAutonomia =
+      ((cards.audit.efectivoCuenta11 + cards.audit.inversionesTemporales12) /
+        cards.audit.promedioEgresosMensuales) *
+      30;
+    const driftAutonomia = safeDelta(cards.autonomia.value, expectedAutonomia);
+    if (driftAutonomia !== null && Math.abs(driftAutonomia) > 1) {
+      findings.push({
+        code: 'AUTONOMIA_DRIFT',
+        severity: 'info',
+        field: 'Autonomía Financiera',
+        displayed: cards.autonomia.value,
+        expected: expectedAutonomia,
+        drift: driftAutonomia,
+        messageEs:
+          `Días de Autonomía mostrados (${cards.autonomia.value?.toFixed(1)}) difieren del recalculado ` +
+          `(${expectedAutonomia.toFixed(1)}).`,
+        messageEn:
+          `Displayed Days of Runway (${cards.autonomia.value?.toFixed(1)}) differ from recomputed ` +
+          `(${expectedAutonomia.toFixed(1)}).`,
+      });
+    }
   }
 
   return findings;

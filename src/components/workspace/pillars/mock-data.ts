@@ -11,6 +11,7 @@
 
 import type { PillarsResult, PillarMetrics } from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
+import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type {
   PnLWaterfallData,
   DuPontSegment,
@@ -143,6 +144,13 @@ export const MOCK_VALOR_TREND: ValorBarSeries[] = [
   { label: '2024', ebitda: 2_100_000_000, fcf: 850_000_000,   ingresos: 11_200_000_000, period: '2024', isInterpolated: false },
   { label: '2025', ebitda: 2_450_000_000, fcf: 1_100_000_000, ingresos: 12_000_000_000, period: '2025', isInterpolated: false },
   { label: '2026', ebitda: 2_800_000_000, fcf: 1_400_000_000, ingresos: 13_500_000_000, period: '2026', isInterpolated: false },
+];
+
+export const MOCK_ESCUDO_TREND: EscudoBarSeries[] = [
+  { label: '2023', period: '2023', efectivo:   800_000_000, activoCorriente: 3_200_000_000, pasivoCorriente: 2_100_000_000, solvencia: 1.52, isInterpolated: false },
+  { label: '2024', period: '2024', efectivo: 1_050_000_000, activoCorriente: 3_800_000_000, pasivoCorriente: 2_400_000_000, solvencia: 1.58, isInterpolated: false },
+  { label: '2025', period: '2025', efectivo: 1_300_000_000, activoCorriente: 4_200_000_000, pasivoCorriente: 2_600_000_000, solvencia: 1.62, isInterpolated: false },
+  { label: '2026', period: '2026', efectivo: 1_600_000_000, activoCorriente: 4_700_000_000, pasivoCorriente: 2_900_000_000, solvencia: 1.62, isInterpolated: false },
 ];
 
 function monthLabel(offset: number): string {

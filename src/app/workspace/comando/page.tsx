@@ -16,6 +16,7 @@ import {
 } from '@/lib/cache/preprocessed-balance';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { buildValorBarSeries } from '@/lib/pillars/valor-bars';
+import { buildEscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type {
   CashInflectionPoint,
   PnLWaterfallData,
@@ -108,6 +109,9 @@ export default async function ComandoPage() {
     // Serie temporal EBITDA/FCF/Ingresos para el gráfico de barras del pilar Valor.
     const valorTrend = buildValorBarSeries(balance);
 
+    // Serie temporal Caja/Activo Corriente/Solvencia para el gráfico de barras del pilar Escudo.
+    const escudoTrend = buildEscudoBarSeries(balance);
+
     // Gap attribution del Curator (R3) si hay descuadre.
     const curatorGap = balance.primary.curator?.balanceGapAttribution;
     const gapAttribution = curatorGap
@@ -128,6 +132,7 @@ export default async function ComandoPage() {
         inflectionSeries={inflectionSeries}
         gapAttribution={gapAttribution}
         valorTrend={valorTrend}
+        escudoTrend={escudoTrend}
         demo={false}
       />
     );

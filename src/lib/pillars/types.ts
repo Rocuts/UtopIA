@@ -77,12 +77,18 @@ export interface PillarMetrics {
   presumedCostWarning?: PresumedCostWarning;
   /** 4 tarjetas ejecutivas (sólo pilar Valor): EBITDA / Margen / Ratio / FCF. */
   executiveCards?: ValorExecutiveCards;
+  /** 4 tarjetas ejecutivas (sólo pilar Escudo): Autonomía / Cobertura / Reserva Fiscal / Brecha. */
+  escudoCards?: EscudoExecutiveCards;
 }
 
 // ─── Tarjetas ejecutivas (Pilar Valor) ─────────────────────────────────────
 
 export type ExecutiveCardColor = 'blue' | 'orange' | 'purple' | 'green';
-export type ExecutiveCardKey = 'ebitda' | 'waoo' | 'ratio' | 'fcf';
+export type ExecutiveCardKey =
+  // Pilar Valor
+  | 'ebitda' | 'waoo' | 'ratio' | 'fcf'
+  // Pilar Escudo
+  | 'autonomia' | 'cobertura_pasivos' | 'reserva_fiscal' | 'brecha_escudo';
 
 export interface ExecutiveCard {
   key: ExecutiveCardKey;
@@ -131,6 +137,47 @@ export interface ValorExecutiveCards {
   /** Free Cash Flow = Operating − CapEx. */
   fcf: ExecutiveCard;
   audit: ValorExecutiveCardsAudit;
+  generatedAt: string;
+}
+
+// ─── Tarjetas ejecutivas (Pilar Escudo) ────────────────────────────────────
+
+export interface EscudoExecutiveCardsAudit {
+  /** Suma cuentas Clase 1 grupo 11 (Disponible / efectivo y equivalentes). */
+  efectivoCuenta11: number;
+  /** Suma cuentas Clase 1 grupo 12 (Inversiones temporales). */
+  inversionesTemporales12: number;
+  /** Total Clase 5+6+7 — gastos + costos del periodo. */
+  totalEgresosPeriodo: number;
+  /** Promedio mensual de egresos (totalEgresosPeriodo / 12 si anual,
+   *  o promedio de los últimos N meses si multi-período). */
+  promedioEgresosMensuales: number;
+  /** Activo Corriente (clases 11 + 12 + 13). */
+  activoCorriente: number;
+  /** Pasivo Corriente (clases 21 + 22 + 23 + 24). */
+  pasivoCorriente: number;
+  /** Provisión registrada en cuenta 24 (Impuestos por Pagar). */
+  provisionCuenta24: number;
+  /** Renta teórica = utilidadNeta × 35% (Art. 240 E.T.). */
+  rentaTeorica: number;
+  /** Saldo de cuenta 2205 (Proveedores) — proxy de exigible 30 días. */
+  proveedoresCuenta2205: number;
+  /** Tasa de impuesto de renta aplicada (default 0.35). */
+  tasaRenta: number;
+  /** Cantidad de períodos usados para promedio (1 = anual, 3 = trimestre). */
+  periodosUsados: number;
+}
+
+export interface EscudoExecutiveCards {
+  /** Días de Autonomía Financiera = (caja + inversiones12) / promEgresosMes. */
+  autonomia: ExecutiveCard;
+  /** Cobertura de Pasivos = Activo Corriente / Pasivo Corriente. */
+  cobertura_pasivos: ExecutiveCard;
+  /** Reserva Fiscal = provisión24 − utilidadNeta×35% (negativo = déficit). */
+  reserva_fiscal: ExecutiveCard;
+  /** Brecha Escudo = Caja(11) − Proveedores(2205) en COP (negativo = riesgo). */
+  brecha_escudo: ExecutiveCard;
+  audit: EscudoExecutiveCardsAudit;
   generatedAt: string;
 }
 
