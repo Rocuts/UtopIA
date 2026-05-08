@@ -45,6 +45,8 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.2",
+    "echarts": "^5.6.0",
+    "echarts-for-react": "^3.0.6",
     "exceljs": "^4.4.0",
     "geist": "^1.7.0",
     "hnswlib-node": "^3.0.0",

@@ -27,6 +27,13 @@
 // Types
 // ---------------------------------------------------------------------------
 
+import { runCurator } from './balance-curator';
+import type {
+  CashFlowStatement,
+  CuratorFinding,
+  CuratorResult,
+} from './curator-rules/types';
+
 export interface RawAccountRow {
   /** Account code (e.g. "110505", "1105", "1") */
   code: string;
@@ -161,6 +168,12 @@ export interface PeriodSnapshot {
   validation: ValidationResult;
   discrepancies: Discrepancy[];
   missingExpectedAccounts: string[];
+  /** Resultado del Curator NIIF middleware (R1–R4). Inyectado por
+   *  `preprocessTrialBalance` después de construir el snapshot. */
+  curator?: CuratorResult;
+  /** Estado de Flujos de Efectivo método indirecto (NIC 7), generado por
+   *  R2 cuando hay periodo comparativo. */
+  cashFlowIndirecto?: CashFlowStatement;
 }
 
 /**
@@ -531,11 +544,26 @@ export function preprocessTrialBalance(
   const periods = sortPeriodsAscending([...periodSet]);
 
   // -------------------------------------------------------------------------
-  // 2. Construir un PeriodSnapshot por cada periodo.
+  // 2. Construir un PeriodSnapshot por cada periodo + ejecutar Curator (R1–R4).
   // -------------------------------------------------------------------------
   const snapshots: PeriodSnapshot[] = [];
-  for (const p of periods) {
-    snapshots.push(buildSnapshotForPeriod(rows, p));
+  for (let i = 0; i < periods.length; i++) {
+    const snap = buildSnapshotForPeriod(rows, periods[i]);
+    const prev = i > 0 ? snapshots[i - 1] : null;
+    const curatorResult = runCurator(snap, prev);
+    snap.curator = curatorResult;
+    if (curatorResult.cashFlowIndirecto) {
+      snap.cashFlowIndirecto = curatorResult.cashFlowIndirecto;
+    }
+    // Inyectar findings del curator como discrepancies para que aparezcan en
+    // el reporte multiperiodo y en el `bindingTotalsBlock` que reciben los
+    // agentes LLM. Mantenemos shape `Discrepancy` (location/reported/calculated/
+    // difference/description) — los findings del curator son cualitativos, así
+    // que reported=0 y calculated=0 con el contenido en `description`.
+    for (const f of curatorResult.findings) {
+      snap.discrepancies.push(curatorFindingToDiscrepancy(f, snap));
+    }
+    snapshots.push(snap);
   }
 
   const primary = snapshots[snapshots.length - 1];
@@ -1221,6 +1249,27 @@ function formatCOP(amount: number): string {
   const abs = Math.abs(amount);
   const formatted = abs.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return amount < 0 ? `-${formatted}` : formatted;
+}
+
+/**
+ * Convierte un CuratorFinding en el shape `Discrepancy` que ya consume el
+ * resto del pipeline. Los findings cualitativos del curator no llevan
+ * montos numéricos en sí mismos (esos viven en sus subobjetos: reclassifications,
+ * balanceGapAttribution, taxProvisionRisk), así que aquí solo proyectamos
+ * la severidad + texto en `description`.
+ */
+function curatorFindingToDiscrepancy(
+  f: CuratorFinding,
+  snap: PeriodSnapshot,
+): Discrepancy {
+  const sev = f.severity.toUpperCase();
+  return {
+    location: `[CURATOR ${f.code} · ${sev}] ${f.title} [${snap.period}]`,
+    reported: 0,
+    calculated: 0,
+    difference: 0,
+    description: `${f.description} | Norma: ${f.normReference} | Recomendación: ${f.recommendation}`,
+  };
 }
 
 /**

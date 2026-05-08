@@ -44,6 +44,7 @@ import { cn } from '@/lib/utils';
 import { AreaNav } from './AreaNav';
 import { NiifEliteButton } from './NiifEliteButton';
 import { ThemeToggle } from './ThemeToggle';
+import { InsightInboxButton } from '@/components/notifications/InsightInboxButton';
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
 
@@ -401,6 +402,7 @@ export function EliteHeader({ className }: EliteHeaderProps) {
           className="hidden md:inline-block h-6 w-px bg-gold-500/22"
           aria-hidden="true"
         />
+        <InsightInboxButton />
         <LanguageToggle />
         <ThemeToggle />
         <UserMenu />

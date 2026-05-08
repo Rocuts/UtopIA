@@ -70,6 +70,12 @@ export const config: VercelConfig = {
     // D5.3 — Forensic Anomaly Detection cron.
     // 300s para iterar todos los workspaces con 6 reglas deterministas cada uno.
     'src/app/api/cron/anomaly-detection/route.ts': { maxDuration: 300 },
+
+    // Ola Élite — Sentinel proactivo (P6).
+    // 60s suficiente: cada check evalúa 4 triggers puros + 1 query DB de
+    // alerts pending. Sin LLM, sin red externa más allá de Resend.
+    'src/app/api/sentinel/check/route.ts': { maxDuration: 60 },
+    'src/app/api/cron/sentinel/route.ts': { maxDuration: 300 },
   },
 
   // Cron jobs (production deployment only). Endpoints under /api/cron/* are
@@ -80,5 +86,9 @@ export const config: VercelConfig = {
     { path: '/api/cron/monthly-close', schedule: '0 6 1 * *' },
     // D5.3: escaneo forense nocturno — 04:00 UTC = 23:00 Colombia (UTC-5).
     { path: '/api/cron/anomaly-detection', schedule: '0 4 * * *' },
+    // Ola Élite Sentinel: cada 6 horas — chequea los 4 triggers de pilares
+    // y escala alerts >48h sin acción. Suficiente cadencia para insights
+    // financieros (no necesita real-time).
+    { path: '/api/cron/sentinel', schedule: '0 */6 * * *' },
   ],
 };

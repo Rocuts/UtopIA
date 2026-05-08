@@ -9,7 +9,7 @@
  * la lógica de "hay periodos creados / no hay periodos".
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ import {
   JournalEntryForm,
   type PeriodOption,
 } from './JournalEntryForm';
+import { QuickStartPeriodButton } from './QuickStartPeriodButton';
 
 export function NewEntryWorkspace() {
   const { t, language } = useLanguage();
@@ -26,13 +27,17 @@ export function NewEntryWorkspace() {
   const [defaultPeriodId, setDefaultPeriodId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  const refetchPeriods = useCallback(() => setRefreshTick((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        setLoading(true);
         const year = new Date().getFullYear();
-        const res = await fetch(`/api/accounting/periods?year=${year}`);
+        const res = await fetch(`/api/accounting/periods?year=${year}`, { cache: 'no-store' });
         if (!res.ok) throw new Error('periods_failed');
         const json = (await res.json()) as
           | { ok: true; periods: PeriodOption[] }
@@ -46,6 +51,7 @@ export function NewEntryWorkspace() {
         setPeriods(list);
         const open = list.find((p) => p.status === 'open');
         setDefaultPeriodId(open?.id ?? list[0]?.id ?? null);
+        setError(null);
       } catch {
         if (!cancelled) setError(ac.errorGeneric);
       } finally {
@@ -55,7 +61,7 @@ export function NewEntryWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [ac.errorGeneric]);
+  }, [ac.errorGeneric, refreshTick]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -90,15 +96,23 @@ export function NewEntryWorkspace() {
           <span>{error}</span>
         </div>
       ) : periods.length === 0 ? (
-        <div
-          className={cn(
-            'rounded-xl border border-dashed border-gold-500/30 bg-n-0',
-            'p-10 text-center text-sm text-n-700',
-          )}
-        >
-          {language === 'es'
-            ? 'Aún no hay periodos contables creados. Solicita la apertura de un periodo antes de registrar asientos.'
-            : 'No accounting periods yet. Open one before registering entries.'}
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className={cn(
+              'rounded-xl border border-dashed border-gold-500/30 bg-n-0',
+              'p-6 text-center text-sm text-n-700 max-w-md',
+            )}
+          >
+            {language === 'es'
+              ? 'Aún no hay periodos contables creados. Solicita la apertura de un periodo antes de registrar asientos.'
+              : 'No accounting periods yet. Open one before registering entries.'}
+          </div>
+          <QuickStartPeriodButton
+            year={new Date().getFullYear()}
+            month={new Date().getMonth() + 1}
+            variant="card"
+            onPeriodOpened={refetchPeriods}
+          />
         </div>
       ) : (
         <JournalEntryForm

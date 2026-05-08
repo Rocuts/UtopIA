@@ -702,3 +702,4 @@ export * from './schema-tax';
 export * from './schema-banking';
 export * from './schema-adjustments';
 export * from './schema-notifications';
+export * from './schema-sentinel';
