@@ -183,6 +183,9 @@ function formatCardValue(value: number | null, unit: ExecutiveCard['unit']): str
   if (unit === 'cop') return formatCopAbbr(value);
   if (unit === 'pct') return `${(value * 100).toFixed(1)}%`;
   if (unit === 'ratio') return value.toFixed(2);
+  if (unit === 'count') return formatCount(value);
+  if (unit === 'score') return formatScore(value);
+  if (unit === 'months') return formatMonths(value);
   return String(value);
 }
 
@@ -201,7 +204,34 @@ function formatDelta(value: number | null, unit: ExecutiveCard['unit']): string 
     const sign = value > 0 ? '+' : '−';
     return `${sign}${abs.toFixed(2)}`;
   }
+  if (unit === 'count') {
+    const sign = value > 0 ? '+' : '−';
+    return `${sign}${Math.round(abs)}`;
+  }
+  if (unit === 'score') {
+    const sign = value > 0 ? '+' : '−';
+    return `${sign}${abs.toFixed(0)} pts`;
+  }
+  if (unit === 'months') {
+    const sign = value > 0 ? '+' : '−';
+    return `${sign}${Math.round(abs)} meses`;
+  }
   return null;
+}
+
+/** Formato count: entero sin sufijo. */
+function formatCount(value: number): string {
+  return `${Math.round(value)}`;
+}
+
+/** Formato score: entero / 100. */
+function formatScore(value: number): string {
+  return `${value.toFixed(0)} / 100`;
+}
+
+/** Formato months: X meses. */
+function formatMonths(value: number): string {
+  return `${Math.round(value)} meses`;
 }
 
 /** Formato COP abreviado: $X,XB / $X,XM / $X.XXX. Negativo se prefija con −. */

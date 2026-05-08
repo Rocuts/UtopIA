@@ -239,4 +239,24 @@ describe('computeFuturoExecutiveCards', () => {
     expect(cards.capacidad_inversion.status).toBe('critical');
     expect(cards.audit.capacidadInversion).toBeLessThan(0);
   });
+
+  it('utilidadNeta negativa → provision_tributaria.value = 0 y utilidadProyectadaAnual = 0', () => {
+    // utilidadNeta = -200M → Math.max(0, utilidadNeta) = 0
+    // utilidadProyectadaAnual = 0 × (1 + 0.05) = 0
+    // provision = 0 × 0.35 = 0 (no provisión negativa)
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        ingresos: 800_000_000,
+        gastos: 1_000_000_000,
+        utilidadNeta: -200_000_000,
+        efectivoCuenta11: 100_000_000,
+      }),
+    });
+
+    const cards = computeFuturoExecutiveCards({ snapshot: snap });
+
+    expect(cards.provision_tributaria.value).toBe(0);
+    expect(cards.audit.utilidadProyectadaAnual).toBe(0);
+  });
 });

@@ -220,7 +220,7 @@ function makeConsistentMetrics(ct: ControlTotals): PillarsResult {
     kpis: [],
     alerts: [],
     generatedAt: new Date().toISOString(),
-    ...(id === 'valor' ? { executiveCards: valorCards } : {}),
+    ...(id === 'valor' ? { valorCards: valorCards } : {}),
     ...(id === 'escudo' ? { escudoCards } : {}),
     ...(id === 'verdad' ? { verdadCards } : {}),
     ...(id === 'futuro' ? { futuroCards } : {}),
@@ -280,7 +280,7 @@ describe('validateCrossPillarCoherence', () => {
 
     // Manipular el audit de Valor: inyectamos utilidadNeta 50M más alta que
     // el canónico del snapshot. El validator detecta drift directo (FIX B1).
-    const valorCards = metrics.valor.executiveCards!;
+    const valorCards = metrics.valor.valorCards!;
     const tampered: ValorExecutiveCards = {
       ...valorCards,
       audit: {
@@ -290,7 +290,7 @@ describe('validateCrossPillarCoherence', () => {
     };
     const tamperedMetrics: PillarsResult = {
       ...metrics,
-      valor: { ...metrics.valor, executiveCards: tampered },
+      valor: { ...metrics.valor, valorCards: tampered },
     };
 
     const report = validateCrossPillarCoherence(tamperedMetrics, snapshot);

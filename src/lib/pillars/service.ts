@@ -56,11 +56,11 @@ export function aggregatePillars(input: PillarsAggregateInput): PillarsResult {
   // el pilar Valor. Try/catch independiente — si falla, las cards no aparecen
   // pero el pilar Valor (con sus 3 KPIs NIIF clásicos) sigue intacto.
   try {
-    valor.executiveCards = computeValorExecutiveCards(input);
+    valor.valorCards = computeValorExecutiveCards(input);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn('[pillars] valor.executiveCards failed:', err);
-    valor.errors = { ...(valor.errors ?? {}), executiveCards: message };
+    console.warn('[pillars] valor.valorCards failed:', err);
+    valor.errors = { ...(valor.errors ?? {}), valorCards: message };
   }
 
   // Inyectar las 4 tarjetas ejecutivas del Pilar Escudo: Autonomía / Cobertura

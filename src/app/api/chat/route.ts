@@ -614,9 +614,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // Redact PII from the latest user message
-    const lastUserMessage = redactPII(messages[messages.length - 1].content);
-    messages[messages.length - 1].content = lastUserMessage;
+    // Apply PII redaction to ALL messages in history (not just the last one).
+    // In orchestrated mode the entire conversation history is passed to LLMs.
+    for (let i = 0; i < messages.length; i++) {
+      if (typeof messages[i].content === 'string') {
+        messages[i].content = redactPII(messages[i].content);
+      }
+    }
 
     // Check for streaming request (header or query param)
     const url = new URL(req.url);

@@ -8,10 +8,10 @@
  * Datos 100% derivados del balance procesado por el Curator.
  *
  * Contrato visual:
- *   CAGR                → verde   (emerald)
+ *   CAGR                → azul    (sky)
  *   Punto de Quiebre    → naranja (amber)
- *   Provisión Tributaria → azul   (sky)
- *   Capacidad Inversión → morada  (violet)
+ *   Provisión Tributaria → morada (violet)
+ *   Capacidad Inversión → verde   (emerald)
  */
 
 import { useMemo } from 'react';

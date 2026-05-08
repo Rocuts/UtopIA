@@ -77,7 +77,7 @@ export function validateDashboardIntegrity(
   const findings: SyncFinding[] = [];
 
   // ── 1. Tarjetas ejecutivas (EBITDA / WAOO / Ratio / FCF) ────────────────
-  const cards = metrics.valor.executiveCards;
+  const cards = metrics.valor.valorCards;
   if (cards) {
     findings.push(...checkExecutiveCards(cards, snapshot));
   }
@@ -131,7 +131,7 @@ export function validateDashboardIntegrity(
 // ---------------------------------------------------------------------------
 
 function checkExecutiveCards(
-  cards: NonNullable<PillarMetrics['executiveCards']>,
+  cards: NonNullable<PillarMetrics['valorCards']>,
   snapshot: PeriodSnapshot,
 ): SyncFinding[] {
   const findings: SyncFinding[] = [];

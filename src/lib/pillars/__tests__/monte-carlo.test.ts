@@ -312,6 +312,28 @@ describe('runMonteCarlo — ROI probabilístico', () => {
   });
 });
 
+describe('runMonteCarlo — iteraciones degeneradas', () => {
+  it('iterations=1 retorna distribución degenerada (p10=p50=p90) y no crashea', () => {
+    const snap = makeSnapshot(
+      makeControlTotals({
+        ingresos: 1_200_000_000,
+        gastos: 900_000_000,
+        efectivoCuenta11: 100_000_000,
+      }),
+    );
+
+    const result = runMonteCarlo(snap, { iterations: 1 });
+
+    expect(result.iterations).toBe(1);
+    // Con un solo valor, p10 = p50 = p90 (distribución degenerada)
+    expect(result.cajaFinal.p10).toBe(result.cajaFinal.p50);
+    expect(result.cajaFinal.p50).toBe(result.cajaFinal.p90);
+    // No crashea — probabilidadQuiebre es un número válido [0,1]
+    expect(result.probabilidadQuiebre12m).toBeGreaterThanOrEqual(0);
+    expect(result.probabilidadQuiebre12m).toBeLessThanOrEqual(1);
+  });
+});
+
 describe('runMonteCarlo — performance', () => {
   it('9600 simulaciones × 12 meses completan en <500ms', () => {
     const snap = makeSnapshot(

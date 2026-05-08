@@ -9,9 +9,9 @@
  *
  * Contrato visual:
  *   Ecuación Maestra  → azul    (sky)
- *   Consistencia      → verde   (emerald)
- *   Anomalías         → naranja (amber)
- *   Salud Contable    → morada  (violet)
+ *   Consistencia      → naranja (amber)
+ *   Anomalías         → morada  (violet)
+ *   Salud Contable    → verde   (emerald)
  */
 
 import { useMemo } from 'react';

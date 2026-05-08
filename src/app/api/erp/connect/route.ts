@@ -60,8 +60,12 @@ export async function POST(req: Request) {
       providerName: ERP_PROVIDERS[provider as ERPProvider].name,
       message: `Conectado exitosamente a ${ERP_PROVIDERS[provider as ERPProvider].name}`,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Connection error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[erp-connect] error:', message);
+    return NextResponse.json(
+      { error: 'No se pudo establecer la conexión con el ERP. Verifique las credenciales y vuelva a intentar.' },
+      { status: 502 },
+    );
   }
 }

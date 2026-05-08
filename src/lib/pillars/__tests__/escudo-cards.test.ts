@@ -344,6 +344,32 @@ describe('computeEscudoExecutiveCards', () => {
     expect(conCapex.audit.cantidadEventosProximos).toBe(0);
   });
 
+  it('caja = 0 con proveedores → brecha negativa critical', () => {
+    const snap = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({
+        ingresos: 500_000_000,
+        gastos: 400_000_000,
+        utilidadNeta: 100_000_000,
+        efectivoCuenta11: 0,
+      }),
+      classes: [
+        makeClass(1, [
+          // Sin efectivo en cuenta 11
+        ]),
+        makeClass(2, [
+          { code: '220505', name: 'Proveedores Nacionales', balance: 100_000_000 },
+        ]),
+      ],
+    });
+
+    const cards = computeEscudoExecutiveCards({ snapshot: snap });
+
+    // brecha = caja(0) - proveedores(100M) = -100M
+    expect(cards.brecha_escudo.value).toBeLessThan(0);
+    expect(cards.brecha_escudo.status).toBe('critical');
+  });
+
   it('Pasivo corriente = 0 → cobertura saturada a 999 (sin division by zero)', () => {
     const snap = makeSnapshot({
       period: '2026',

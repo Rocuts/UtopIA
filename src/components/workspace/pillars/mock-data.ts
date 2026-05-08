@@ -9,7 +9,15 @@
 // módulo no se invoca.
 // ---------------------------------------------------------------------------
 
-import type { PillarsResult, PillarMetrics } from '@/lib/pillars/types';
+import type {
+  PillarsResult,
+  PillarMetrics,
+  ExecutiveCard,
+  ValorExecutiveCards,
+  EscudoExecutiveCards,
+  VerdadExecutiveCards,
+  FuturoExecutiveCards,
+} from '@/lib/pillars/types';
 import type { ValorBarSeries } from '@/lib/pillars/valor-bars';
 import type { EscudoBarSeries } from '@/lib/pillars/escudo-bars';
 import type { VerdadBarSeries } from '@/lib/pillars/verdad-bars';
@@ -22,6 +30,112 @@ import type {
 } from '@/components/charts';
 
 const NOW = new Date().toISOString();
+
+// ---------------------------------------------------------------------------
+// buildCard — helper minimal para mock ExecutiveCards
+// ---------------------------------------------------------------------------
+
+function buildCard(
+  fields: Omit<ExecutiveCard, 'deltaVsComparative' | 'descriptionEs' | 'descriptionEn' | 'formulaEs' | 'formulaEn'> & Partial<Pick<ExecutiveCard, 'deltaVsComparative' | 'descriptionEs' | 'descriptionEn' | 'formulaEs' | 'formulaEn'>>,
+): ExecutiveCard {
+  return {
+    deltaVsComparative: null,
+    descriptionEs: '',
+    descriptionEn: '',
+    formulaEs: '',
+    formulaEn: '',
+    ...fields,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mock executive cards (modo demo)
+// ---------------------------------------------------------------------------
+
+const MOCK_VALOR_EXECUTIVE_CARDS: ValorExecutiveCards = {
+  ebitda: buildCard({ key: 'ebitda', labelEs: 'EBITDA', labelEn: 'EBITDA', value: 2_228_000_000, unit: 'cop', color: 'blue', status: 'healthy', deltaVsComparative: 128_000_000 }),
+  waoo: buildCard({ key: 'waoo', labelEs: 'Margen EBITDA', labelEn: 'EBITDA Margin', value: 0.186, unit: 'pct', color: 'orange', status: 'healthy', deltaVsComparative: 0.012 }),
+  ratio: buildCard({ key: 'ratio', labelEs: 'Ratio Eficiencia', labelEn: 'Efficiency Ratio', value: 0.81, unit: 'ratio', color: 'purple', status: 'watch', deltaVsComparative: -0.02 }),
+  fcf: buildCard({ key: 'fcf', labelEs: 'Flujo Libre de Caja', labelEn: 'Free Cash Flow', value: 850_000_000, unit: 'cop', color: 'green', status: 'healthy', deltaVsComparative: 50_000_000 }),
+  audit: {
+    utilidadNeta: 1_550_000_000,
+    utilidadOperacional: 2_100_000_000,
+    depreciaciones: 128_000_000,
+    amortizaciones: 0,
+    totalGastos: 2_800_000_000,
+    totalCostos: 6_500_000_000,
+    totalIngresos: 12_000_000_000,
+    capex: 300_000_000,
+    operatingCashFlow: 1_150_000_000,
+  },
+  generatedAt: NOW,
+};
+
+const MOCK_ESCUDO_EXECUTIVE_CARDS: EscudoExecutiveCards = {
+  autonomia: buildCard({ key: 'autonomia', labelEs: 'Días de Autonomía', labelEn: 'Days of Runway', value: 95, unit: 'count', color: 'blue', status: 'healthy', deltaVsComparative: 5 }),
+  cobertura_pasivos: buildCard({ key: 'cobertura_pasivos', labelEs: 'Cobertura de Pasivos', labelEn: 'Liabilities Coverage', value: 1.85, unit: 'ratio', color: 'orange', status: 'healthy', deltaVsComparative: 0.05 }),
+  reserva_fiscal: buildCard({ key: 'reserva_fiscal', labelEs: 'Reserva Fiscal', labelEn: 'Fiscal Reserve', value: 30_000_000, unit: 'cop', color: 'purple', status: 'healthy', deltaVsComparative: null }),
+  brecha_escudo: buildCard({ key: 'brecha_escudo', labelEs: 'Brecha Escudo', labelEn: 'Shield Gap', value: 200_000_000, unit: 'cop', color: 'green', status: 'watch', deltaVsComparative: -20_000_000 }),
+  audit: {
+    efectivoCuenta11: 1_600_000_000,
+    inversionesTemporales12: 200_000_000,
+    totalEgresosPeriodo: 9_650_000_000,
+    promedioEgresosMensuales: 804_166_667,
+    activoCorriente: 4_700_000_000,
+    pasivoCorriente: 2_540_540_540,
+    provisionCuenta24: 572_500_000,
+    rentaTeorica: 542_500_000,
+    proveedoresCuenta2205: 1_400_000_000,
+    tasaRenta: 0.35,
+    periodosUsados: 1,
+  },
+  generatedAt: NOW,
+};
+
+const MOCK_VERDAD_EXECUTIVE_CARDS: VerdadExecutiveCards = {
+  ecuacion_maestra: buildCard({ key: 'ecuacion_maestra', labelEs: 'Ecuación Maestra', labelEn: 'Master Equation', value: 0, unit: 'cop', color: 'blue', status: 'healthy', deltaVsComparative: null }),
+  consistencia: buildCard({ key: 'consistencia', labelEs: 'Índice de Consistencia', labelEn: 'Consistency Index', value: 92, unit: 'score', color: 'orange', status: 'healthy', deltaVsComparative: 2 }),
+  anomalias: buildCard({ key: 'anomalias', labelEs: 'Anomalías de Clasificación', labelEn: 'Classification Anomalies', value: 1, unit: 'count', color: 'purple', status: 'watch', deltaVsComparative: -1 }),
+  salud_contable: buildCard({ key: 'salud_contable', labelEs: 'Salud Contable', labelEn: 'Accounting Health', value: 2, unit: 'count', color: 'green', status: 'watch', deltaVsComparative: -1 }),
+  audit: {
+    equationGap: 0,
+    saldosNegativosActivo: 0,
+    saldosPositivosPasivo: 0,
+    totalCuentasAnalizadas: 48,
+    reclasificacionesR1: 1,
+    discrepanciasPreprocessing: 0,
+    findingsCriticos: 0,
+    findingsAltos: 1,
+    anomaliasVariacion: 1,
+    margenBruto: 0.46,
+    posibleOmisionCostos: false,
+    forensicScore: 94,
+    integridadTerceros: null,
+  },
+  generatedAt: NOW,
+};
+
+const MOCK_FUTURO_EXECUTIVE_CARDS: FuturoExecutiveCards = {
+  cagr: buildCard({ key: 'cagr', labelEs: 'Crecimiento de Ingresos (CAGR)', labelEn: 'Revenue Growth (CAGR)', value: 0.12, unit: 'pct', color: 'blue', status: 'healthy', deltaVsComparative: null }),
+  punto_quiebre: buildCard({ key: 'punto_quiebre', labelEs: 'Punto de Quiebre de Caja', labelEn: 'Cash Break-Even Point', value: null, unit: 'months', color: 'orange', status: 'healthy', deltaVsComparative: null }),
+  provision_tributaria: buildCard({ key: 'provision_tributaria', labelEs: 'Provisión Tributaria Futura', labelEn: 'Future Tax Provision', value: 115_000_000, unit: 'cop', color: 'purple', status: 'healthy', deltaVsComparative: 10_000_000 }),
+  capacidad_inversion: buildCard({ key: 'capacidad_inversion', labelEs: 'Capacidad de Inversión', labelEn: 'Investment Capacity', value: 300_000_000, unit: 'cop', color: 'green', status: 'watch', deltaVsComparative: null }),
+  audit: {
+    cagrIngresos: 0.12,
+    periodosCagr: 2,
+    ingresosActuales: 12_000_000_000,
+    ingresosAnteriores: 10_714_285_714,
+    mesesAlQuiebreConservador: null,
+    mesesAlQuiebreBase: null,
+    utilidadProyectadaAnual: 1_736_000_000,
+    provisionTributariaFutura: 115_000_000,
+    capacidadInversion: 300_000_000,
+    reserva60Dias: 1_185_000_000,
+    cajaProyectada36mBase: 4_480_000_000,
+    tasaRenta: 0.35,
+  },
+  generatedAt: NOW,
+};
 
 function mkKpi(
   key: string,
@@ -48,6 +162,7 @@ export const MOCK_PILLARS: PillarsResult = {
       mkKpi('cobertura_fiscal', 'Cobertura de Riesgo Fiscal', 'Tax Risk Coverage', 0.65, 'ratio', 75),
     ],
     alerts: [],
+    escudoCards: MOCK_ESCUDO_EXECUTIVE_CARDS,
     generatedAt: NOW,
   },
   valor: {
@@ -60,6 +175,7 @@ export const MOCK_PILLARS: PillarsResult = {
       mkKpi('eva', 'EVA', 'EVA', 1_200_000_000, 'cop', 75),
     ],
     alerts: [],
+    valorCards: MOCK_VALOR_EXECUTIVE_CARDS,
     generatedAt: NOW,
   },
   verdad: {
@@ -72,6 +188,7 @@ export const MOCK_PILLARS: PillarsResult = {
       mkKpi('indice_conciliacion', 'Índice de Conciliación', 'Reconciliation Index', 0.87, 'pct', 95),
     ],
     alerts: [],
+    verdadCards: MOCK_VERDAD_EXECUTIVE_CARDS,
     generatedAt: NOW,
   },
   futuro: {
@@ -84,6 +201,7 @@ export const MOCK_PILLARS: PillarsResult = {
       mkKpi('punto_inflexion', 'Punto de Inflexión', 'Inflection Point', null, 'months', 95),
     ],
     alerts: [],
+    futuroCards: MOCK_FUTURO_EXECUTIVE_CARDS,
     generatedAt: NOW,
   },
   overallScore: 82,

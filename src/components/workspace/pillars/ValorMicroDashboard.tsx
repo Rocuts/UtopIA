@@ -63,7 +63,7 @@ export function ValorMicroDashboard({ metrics, pnlBridge, segments, density, val
 
       {/* Tarjetas ejecutivas (vista dueño): EBITDA · Margen · Ratio · FCF */}
       <ValorExecutiveCards
-        cards={metrics.executiveCards}
+        cards={metrics.valorCards}
         language={language}
         density={density}
       />

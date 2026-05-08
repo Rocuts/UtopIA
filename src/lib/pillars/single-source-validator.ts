@@ -77,7 +77,7 @@ export function validateCrossPillarCoherence(
   const ct = snapshot.controlTotals;
 
   // Shorthand a los audits de tarjetas ejecutivas
-  const valorAudit = metrics.valor.executiveCards?.audit ?? null;
+  const valorAudit = metrics.valor.valorCards?.audit ?? null;
   const escudoAudit = metrics.escudo.escudoCards?.audit ?? null;
   const verdadAudit = metrics.verdad.verdadCards?.audit ?? null;
   const futuroAudit = metrics.futuro.futuroCards?.audit ?? null;

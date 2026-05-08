@@ -251,14 +251,9 @@ export async function GET(request: NextRequest) {
       summary,
     });
   } catch (err) {
-    console.error('[cron.anomaly-detection] fatal error:', err);
+    console.error('[cron/anomaly-detection] error:', err instanceof Error ? err.message : err);
     return Response.json(
-      {
-        ok: false,
-        reason: 'internal_error',
-        error: String(err),
-        durationMs: Date.now() - startedAt,
-      },
+      { ok: false, reason: 'internal_error' },
       { status: 500 },
     );
   }

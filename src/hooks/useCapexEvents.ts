@@ -9,7 +9,16 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { z } from 'zod';
 import type { CapexEvent } from '@/lib/pillars/futuro-bars';
+
+const CapexEventSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(200),
+  monthOffset: z.number().int().min(1).max(12),
+  amountCop: z.number().nonnegative(),
+});
+const CapexEventsArraySchema = z.array(CapexEventSchema);
 
 function storageKey(workspaceId: string): string {
   return `utopia:capex-events:${workspaceId}`;
@@ -20,9 +29,9 @@ function readFromStorage(workspaceId: string): CapexEvent[] {
   try {
     const raw = window.localStorage.getItem(storageKey(workspaceId));
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as CapexEvent[];
+    const parsed = CapexEventsArraySchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return [];
+    return parsed.data;
   } catch {
     return [];
   }

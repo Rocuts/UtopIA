@@ -76,7 +76,7 @@ export interface PillarMetrics {
   /** Advertencia R7 (Curator) sobre costo de ventas posiblemente subestimado. */
   presumedCostWarning?: PresumedCostWarning;
   /** 4 tarjetas ejecutivas (sólo pilar Valor): EBITDA / Margen / Ratio / FCF. */
-  executiveCards?: ValorExecutiveCards;
+  valorCards?: ValorExecutiveCards;
   /** 4 tarjetas ejecutivas (sólo pilar Escudo): Autonomía / Cobertura / Reserva Fiscal / Brecha. */
   escudoCards?: EscudoExecutiveCards;
   /** 4 tarjetas ejecutivas (sólo pilar Verdad): Ecuación Maestra / Consistencia / Anomalías / Salud. */
