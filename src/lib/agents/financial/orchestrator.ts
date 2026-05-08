@@ -172,9 +172,52 @@ function deriveValidation(preprocessed: unknown): {
     const v = snap.validation;
     if (!v) continue;
     const tag = `[${snap.period}] `;
-    if (v.blocking) blocking = true;
-    for (const r of asStringArray(v.reasons)) reasons.push(`${tag}${r}`);
-    for (const a of asStringArray(v.suggestedAccounts)) suggestedAccounts.push(a);
+
+    // ── BRIDGE DE CUADRATURA ────────────────────────────────────────────
+    // El flag `validation.blocking` se setea en `buildSnapshotForPeriod`
+    // ANTES de que el Curator (R8 Cierre Virtual) corra. Después de R8,
+    // la ecuación contable puede haber sido absorbida por la utilidad del
+    // periodo (cuenta virtual 3605VC + ajuste residual 3710VC). Si el
+    // modelo de datos transformado YA cuadra al centavo, el blocking
+    // pre-R8 queda obsoleto y debemos levantarlo automáticamente —
+    // de lo contrario, balances perfectamente cuadrables (con utilidad
+    // sin trasladar) son rechazados injustamente por el agente de Auditoría.
+    //
+    // Política:
+    //   - Si snap.summary.equationBalanced === true Y existe
+    //     snap.virtualCloseAdjustment (R8 actuó) → ignorar blocking.
+    //     Reasons originales pasan a `adjustments` (informativos).
+    //   - Si la ecuación POST-Curator sigue descuadrando → blocking real,
+    //     mantener comportamiento original.
+    const equationBalancedPostCurator =
+      snap.summary?.equationBalanced === true;
+    const r8Applied = snap.virtualCloseAdjustment !== undefined;
+    const bridgeActive = equationBalancedPostCurator && r8Applied;
+
+    if (v.blocking && !bridgeActive) {
+      blocking = true;
+    }
+
+    if (bridgeActive && v.blocking) {
+      // Bridge de Cuadratura activo: las razones pre-R8 son informativas,
+      // no bloqueantes. El operador ve el ajuste documentado.
+      const monto = snap.virtualCloseAdjustment?.dynamicNetIncome ?? 0;
+      adjustments.push(
+        `${tag}Bridge de Cuadratura aplicado: utilidad transitoria de ` +
+          `$${monto.toLocaleString('es-CO', { maximumFractionDigits: 0 })} ` +
+          `trasladada a Patrimonio (cuenta virtual 3605VC). Ecuación post-R8 cuadra al centavo.`,
+      );
+      for (const r of asStringArray(v.reasons)) {
+        adjustments.push(`${tag}[informativo, no-bloqueante] ${r}`);
+      }
+    } else {
+      for (const r of asStringArray(v.reasons)) reasons.push(`${tag}${r}`);
+    }
+
+    // suggestedAccounts solo se reportan si el bloqueo es real.
+    if (!bridgeActive || v.blocking === false) {
+      for (const a of asStringArray(v.suggestedAccounts)) suggestedAccounts.push(a);
+    }
     for (const adj of asStringArray(v.adjustments)) adjustments.push(`${tag}${adj}`);
   }
 
