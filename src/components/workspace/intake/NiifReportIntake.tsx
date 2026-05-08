@@ -372,10 +372,17 @@ export function NiifReportIntake() {
   // so debounced re-renders (e.g. autosave from useIntakePersistence) can't
   // re-trigger prefill and yank the user back mid-edit.
   const hasAutoAdvancedRef = useRef(false);
+  // Snapshot the step at the moment extraction starts. Auto-advance only
+  // fires if the user is still on step 0 when OCR finishes — otherwise we'd
+  // pull them back from a step they're already editing.
+  const stepAtUploadRef = useRef(0);
   useEffect(() => {
     if (extractionState.status === 'idle') {
       hasAutoAdvancedRef.current = false;
       return;
+    }
+    if (extractionState.status === 'uploading' || extractionState.status === 'extracting') {
+      stepAtUploadRef.current = step;
     }
     if (
       extractionState.status === 'done' &&
@@ -385,37 +392,49 @@ export function NiifReportIntake() {
       hasAutoAdvancedRef.current = true;
       const { extracted } = extractionState;
 
-      // Pre-fill values from extraction
+      // Pre-fill values from extraction — but never overwrite a field the
+      // user already typed. OCR runs async; if they jumped ahead and started
+      // filling fields manually, their input wins.
       setValues((prev) => {
         const updatedCompany = { ...prev.company };
+        const fillIfEmpty = <K extends keyof CompanyMetadata>(
+          key: K,
+          value: CompanyMetadata[K] | undefined,
+        ) => {
+          if (value && !String(prev.company[key] ?? '').trim()) {
+            updatedCompany[key] = value;
+          }
+        };
 
-        // Apply extracted company fields
-        if (extracted.company.name) updatedCompany.name = extracted.company.name;
-        if (extracted.company.nit) updatedCompany.nit = extracted.company.nit;
-        if (extracted.company.entityType) updatedCompany.entityType = extracted.company.entityType;
-        if (extracted.company.sector) updatedCompany.sector = extracted.company.sector;
-        if (extracted.company.city) updatedCompany.city = extracted.company.city;
-        if (extracted.company.legalRepresentative)
-          updatedCompany.legalRepresentative = extracted.company.legalRepresentative;
-        if (extracted.company.accountant)
-          updatedCompany.accountant = extracted.company.accountant;
-        if (extracted.company.fiscalAuditor)
-          updatedCompany.fiscalAuditor = extracted.company.fiscalAuditor;
+        fillIfEmpty('name', extracted.company.name);
+        fillIfEmpty('nit', extracted.company.nit);
+        fillIfEmpty('entityType', extracted.company.entityType);
+        fillIfEmpty('sector', extracted.company.sector);
+        fillIfEmpty('city', extracted.company.city);
+        fillIfEmpty('legalRepresentative', extracted.company.legalRepresentative);
+        fillIfEmpty('accountant', extracted.company.accountant);
+        fillIfEmpty('fiscalAuditor', extracted.company.fiscalAuditor);
 
         return {
           ...prev,
           company: updatedCompany,
-          fiscalPeriod: extracted.fiscalPeriod ?? prev.fiscalPeriod,
-          niifGroup: extracted.niifGroup ?? prev.niifGroup,
+          fiscalPeriod:
+            extracted.fiscalPeriod && !prev.fiscalPeriod?.trim()
+              ? extracted.fiscalPeriod
+              : prev.fiscalPeriod,
+          niifGroup: extracted.niifGroup && !prev.niifGroup ? extracted.niifGroup : prev.niifGroup,
           rawData: extracted.rawText || prev.rawData,
         };
       });
 
-      // Auto-advance after a brief delay to show the completed state
-      const timer = setTimeout(() => setStep(1), 800);
-      return () => clearTimeout(timer);
+      // Only auto-advance if the user hasn't already moved past the upload
+      // step. If they skipped manually or are filling step 1+, leave them be.
+      if (stepAtUploadRef.current === 0 && step === 0) {
+        const timer = setTimeout(() => setStep(1), 800);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [extractionState.status, extractionState.extracted, setValues]);
+  }, [extractionState.status, extractionState.extracted, setValues, step]);
 
   const updateCompany = useCallback(
     <K extends keyof CompanyMetadata>(key: K, val: CompanyMetadata[K]) => {
