@@ -4,10 +4,14 @@
 
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
-import { buildOpinionDrafterPrompt } from '../prompts/opinion-drafter.prompt';
+import {
+  buildOpinionDrafterPrompt,
+  type OpinionDrafterPromptHints,
+} from '../prompts/opinion-drafter.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
+import type { AuditReport, AuditFinding } from '../../audit/types';
 import type {
   GoingConcernResult,
   MisstatementResult,
@@ -18,6 +22,22 @@ import type {
   FiscalOpinionProgressEvent,
 } from '../types';
 
+// ---------------------------------------------------------------------------
+// Inputs externos opcionales para reforzar la coherencia opinion ↔ hallazgos
+// ---------------------------------------------------------------------------
+
+export interface OpinionDrafterExtraContext {
+  /** Audit report consolidado (output del 4-auditor pipeline) si esta disponible. */
+  auditReport?: AuditReport;
+  /**
+   * Snapshot del preprocesador. Lo usamos solo para detectar
+   * `reclasificacionesNoCompensacion` (R-NoCompensation) y
+   * `comparativos_impracticables` (NIC 1 par. 38). Tipo defensivo: el
+   * preprocesador esta evolucionando en paralelo.
+   */
+  preprocessed?: unknown;
+}
+
 export async function runOpinionDrafter(
   reportContent: string,
   goingConcern: GoingConcernResult,
@@ -26,6 +46,7 @@ export async function runOpinionDrafter(
   company: CompanyInfo,
   language: 'es' | 'en',
   onProgress?: (event: FiscalOpinionProgressEvent) => void,
+  extra?: OpinionDrafterExtraContext,
 ): Promise<FiscalOpinionDictamen> {
   onProgress?.({
     type: 'drafter_progress',
@@ -35,12 +56,24 @@ export async function runOpinionDrafter(
   // Build consolidated input from 3 evaluators
   const evaluatorInput = buildEvaluatorSummary(goingConcern, misstatementReview, complianceCheck);
 
+  // Detectar disparadores de modificacion / parrafo de enfasis ANTES del LLM.
+  const v14State = detectV14Blocker(extra?.auditReport);
+  const reclasState = detectReclasificacionesNoCompensacion(extra?.preprocessed);
+  const comparativosImpracticables = detectComparativosImpracticables(extra?.preprocessed);
+
+  const hints: OpinionDrafterPromptHints = {
+    hasReclasificacionesNoCompensacion: reclasState.hasAny,
+    notaReferenceLabel: reclasState.notaLabel,
+    comparativosImpracticables,
+    hasMaterialMeasurementBlocker: v14State.detected,
+  };
+
   const result = await withRetry(
     () =>
       generateText({
         model: MODELS.FINANCIAL_PIPELINE,
         messages: [
-          { role: 'system', content: buildOpinionDrafterPrompt(company, language) },
+          { role: 'system', content: buildOpinionDrafterPrompt(company, language, hints) },
           {
             role: 'user',
             content: [
@@ -66,15 +99,117 @@ export async function runOpinionDrafter(
 
   const fullContent = result.text || '';
 
+  // Override post-parse: si V14 disparo y el LLM emitio "limpia", forzamos
+  // modificada (NIA 705 §7 con salvedades; o desfavorable si pervasive).
+  // Si reclasificaciones-no-compensacion + reveladas → garantizamos parrafo
+  // de enfasis NIA 706 §A1 (no override de opinion, solo augment).
+  let opinionType = parseOpinionType(fullContent);
+  if (v14State.detected && opinionType === 'limpia') {
+    opinionType = v14State.pervasive ? 'adversa' : 'con_salvedades';
+  }
+
+  let emphasisParagraphs = parseEmphasisParagraphs(fullContent);
+  if (reclasState.hasAny && !hasReclasEmphasis(emphasisParagraphs)) {
+    // Why: la regla NIA 706 §A1 es vinculante cuando las reclasificaciones
+    // estan reveladas en notas. Si el LLM omitio el parrafo, lo reinyectamos
+    // con el cierre literal exigido. No alteramos opinionType en este caso.
+    emphasisParagraphs = [
+      ...emphasisParagraphs,
+      `Llamamos la atencion sobre la Nota ${reclasState.notaLabel} a los estados financieros, en la cual se describen las reclasificaciones realizadas sin compensacion conforme a NIIF for SMEs §2.52. Nuestra opinion no se modifica respecto a esta cuestion.`,
+    ];
+  }
+
   return {
-    opinionType: parseOpinionType(fullContent),
+    opinionType,
     dictamenText: parseDictamen(fullContent),
     keyAuditMatters: parseKeyAuditMatters(fullContent),
-    emphasisParagraphs: parseEmphasisParagraphs(fullContent),
+    emphasisParagraphs,
     otherMatterParagraphs: parseOtherMatterParagraphs(fullContent),
     managementLetter: parseManagementLetter(fullContent),
     fullContent,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Detectores deterministas (corren ANTES del LLM, override DESPUES)
+// ---------------------------------------------------------------------------
+
+function detectV14Blocker(auditReport: AuditReport | undefined): {
+  detected: boolean;
+  pervasive: boolean;
+} {
+  if (!auditReport) return { detected: false, pervasive: false };
+  const findings: AuditFinding[] = Array.isArray(auditReport.consolidatedFindings)
+    ? auditReport.consolidatedFindings
+    : [];
+  // Capturar V14 (margen bruto fuera de banda CIIU) en code o title.
+  // Tambien aceptamos sinonimos comunes que puede emitir el auditor NIIF.
+  const RX_V14 = /(\bV14\b|margen\s+bruto.*ciiu|gross\s+margin.*ciiu)/i;
+  const matches = findings.filter(
+    (f) =>
+      (typeof f.code === 'string' && RX_V14.test(f.code)) ||
+      (typeof f.title === 'string' && RX_V14.test(f.title)),
+  );
+  if (matches.length === 0) return { detected: false, pervasive: false };
+
+  // Pervasive si severity critico o si la descripcion menciona "generalizado".
+  const pervasive = matches.some(
+    (f) =>
+      f.severity === 'critico' ||
+      (typeof f.description === 'string' &&
+        /generaliz|pervasive|materializa[a-z]*\s+y\s+generaliz/i.test(f.description)),
+  );
+
+  return { detected: true, pervasive };
+}
+
+function detectReclasificacionesNoCompensacion(preprocessed: unknown): {
+  hasAny: boolean;
+  notaLabel: string;
+} {
+  if (!preprocessed || typeof preprocessed !== 'object') {
+    return { hasAny: false, notaLabel: 'X' };
+  }
+  const pp = preprocessed as Record<string, unknown>;
+  const reclas = pp.reclasificacionesNoCompensacion;
+  // Aceptamos shape array OR primary.reclasificacionesNoCompensacion (si el
+  // preprocesador anida por periodo).
+  let arr: unknown[] | null = null;
+  if (Array.isArray(reclas)) {
+    arr = reclas;
+  } else {
+    const primary = pp.primary as { reclasificacionesNoCompensacion?: unknown } | undefined;
+    if (primary && Array.isArray(primary.reclasificacionesNoCompensacion)) {
+      arr = primary.reclasificacionesNoCompensacion;
+    }
+  }
+  if (!arr || arr.length === 0) return { hasAny: false, notaLabel: 'X' };
+
+  // Si alguno trae { notaRef: 'Nota 12' } usar ese texto, sino label generico.
+  let notaLabel = 'X';
+  for (const item of arr) {
+    if (item && typeof item === 'object') {
+      const ref = (item as { notaRef?: unknown; nota?: unknown }).notaRef ??
+        (item as { notaRef?: unknown; nota?: unknown }).nota;
+      if (typeof ref === 'string' && ref.trim().length > 0) {
+        notaLabel = ref.replace(/^Nota\s*/i, '').trim() || ref.trim();
+        break;
+      }
+    }
+  }
+  return { hasAny: true, notaLabel };
+}
+
+function detectComparativosImpracticables(preprocessed: unknown): boolean {
+  if (!preprocessed || typeof preprocessed !== 'object') return false;
+  const pp = preprocessed as { comparativos_impracticables?: unknown };
+  return pp.comparativos_impracticables === true;
+}
+
+function hasReclasEmphasis(paragraphs: string[]): boolean {
+  return paragraphs.some((p) =>
+    /reclasifica|nuestra\s+opinion\s+no\s+se\s+modifica/i.test(p),
+  );
 }
 
 // ---------------------------------------------------------------------------

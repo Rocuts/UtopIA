@@ -28,6 +28,17 @@ export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom(),
   nit: text('nit'),
   name: text('name'),
+  // Firmantes (Ley 43/1990 + Codigo de Comercio Art. 38 + Art. 581 E.T.) ─────
+  // Datos de los responsables que aparecen en el bloque de firma del dictamen
+  // de revisoria fiscal, certificacion del contador y acta de asamblea. Son
+  // opcionales: si null, el renderer pinta lineas placeholder en el PDF.
+  // El formato de Tarjeta Profesional sigue lo exigido por la Junta Central
+  // de Contadores: '<numero>-T' (ej. '12345-T'). Migracion via db:generate.
+  representanteLegalNombre: text('representante_legal_nombre'),
+  revisorFiscalNombre: text('revisor_fiscal_nombre'),
+  revisorFiscalTp: text('revisor_fiscal_tp'),
+  contadorPublicoNombre: text('contador_publico_nombre'),
+  contadorPublicoTp: text('contador_publico_tp'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

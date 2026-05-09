@@ -37,7 +37,8 @@ export async function runFiscalReviewer(
 
   const fullContent = result.text || '';
   const { score, findings, summary } = parseAuditorOutput(fullContent, 'revisoria', defaultPeriod);
-  const opinionType = parseOpinionType(fullContent);
+  const rawOpinionType = parseOpinionType(fullContent);
+  const opinionType = enforceOpinionCoherence(rawOpinionType, findings);
   const dictamen = parseDictamen(fullContent);
 
   return {
@@ -51,6 +52,35 @@ export async function runFiscalReviewer(
     opinionType,
     dictamen,
   };
+}
+
+/**
+ * Override post-parse: garantiza que la opinion del Revisor Fiscal sea
+ * COHERENTE con los hallazgos que el mismo emitio. Evita "blanqueo" del
+ * dictamen — un patron observado donde el LLM emite findings criticos pero
+ * concluye con opinion FAVORABLE.
+ *
+ * Reglas (NIA 705 §7-§10):
+ *  - 1+ findings "critico" → DESFAVORABLE como minimo.
+ *  - 1+ findings "alto" → CON SALVEDADES como minimo.
+ *  - Resto → respeta la opinion del LLM.
+ */
+function enforceOpinionCoherence(
+  raw: AuditOpinionType,
+  findings: AuditFinding[],
+): AuditOpinionType {
+  const hasCritico = findings.some((f) => f.severity === 'critico');
+  const hasAlto = findings.some((f) => f.severity === 'alto');
+
+  if (hasCritico) {
+    if (raw === 'favorable' || raw === 'con_salvedades') return 'desfavorable';
+    return raw;
+  }
+  if (hasAlto) {
+    if (raw === 'favorable') return 'con_salvedades';
+    return raw;
+  }
+  return raw;
 }
 
 function parseOpinionType(content: string): AuditOpinionType {

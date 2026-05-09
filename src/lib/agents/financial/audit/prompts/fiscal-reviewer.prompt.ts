@@ -5,11 +5,20 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
+import {
+  signatoriesFromCompany,
+  renderSignatureBlock,
+} from '../../fiscal-opinion/signatories';
 
 export function buildFiscalReviewerPrompt(company: CompanyInfo, language: 'es' | 'en'): string {
   const langInstruction = language === 'en'
     ? 'CRITICAL: RESPOND ENTIRELY IN ENGLISH.'
     : 'CRITICO: RESPONDE COMPLETAMENTE EN ESPANOL.';
+
+  // Bloque de firma resuelto desde signatories (canonico) o legacy strings.
+  // Se inyecta literalmente al prompt para que el Revisor Fiscal NO fabrique
+  // numeros de Tarjeta Profesional (Junta Central de Contadores).
+  const signatureBlock = renderSignatureBlock(signatoriesFromCompany(company));
 
   return `Eres el **Auditor de Revisoria Fiscal / Aseguramiento** del equipo de auditoria de 1+1.
 
@@ -181,6 +190,22 @@ Para CADA hallazgo, reporta con esta estructura JSON. El campo 'period':
 - 40-59: Tendencia a opinion desfavorable — incorrecciones materiales generalizadas
 - 0-39: Abstencion o opinion desfavorable — evidencia insuficiente o EEFF no confiables
 
+## CERTIFICACION FORMAL (BLOQUE DE FIRMA OBLIGATORIO)
+
+Cuando emitas el dictamen formal en la seccion "## DICTAMEN", cierra con el siguiente bloque LITERAL — copia exacto, no inventes nombres ni numeros de Tarjeta Profesional:
+
+\`\`\`
+${signatureBlock}
+\`\`\`
+
+## COHERENCIA OPINION ↔ HALLAZGOS (NO BLANQUEO)
+
+Tu \`## TIPO DE OPINION\` DEBE ser coherente con los \`## HALLAZGOS\` que tu mismo emitiste:
+- Si emitiste 1+ findings con severity = "critico" → opinion DESFAVORABLE (adversa) o ABSTENSION.
+- Si emitiste 1+ findings "alto" sobre medicion material (V14 margen bruto vs banda CIIU, signo invertido del impuesto en P&L, going concern con duda sustancial sin disclosure) → opinion CON SALVEDADES como minimo.
+- Si emitiste solo findings "medio"/"bajo"/"informativo" → opinion FAVORABLE (limpia) ES ACEPTABLE.
+- NUNCA emitas opinion FAVORABLE con findings criticos o altos pendientes — el motor aguas abajo revertira tu opinion y bloqueara el reporte.
+
 ## REGLAS CRITICAS
 - Sé INDEPENDIENTE y OBJETIVO — como lo exige la Ley 43/1990
 - La materialidad es CUANTITATIVA (calculala con las cifras del reporte)
@@ -188,6 +213,7 @@ Para CADA hallazgo, reporta con esta estructura JSON. El campo 'period':
 - Cada hallazgo debe evaluar si es material y generalizado (determina la opinion)
 - Si los estados financieros estan bien preparados, emite opinion favorable sin inventar problemas
 - Diferencia entre DEFICIENCIA SIGNIFICATIVA (reportar a direccion) y DEBILIDAD MATERIAL (afecta opinion)
+- **BLOQUE DE FIRMA:** copia LITERAL del bloque inyectado arriba. Si trae placeholders ("____________"), NO los rellenes — la firma humana se completa fuera del LLM.
 
 ${langInstruction}`;
 }

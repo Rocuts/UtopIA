@@ -1,4 +1,5 @@
-// pages/ClosingPage.tsx — back cover with disclaimer + signature block + watermark.
+// pages/ClosingPage.tsx — back cover with emphasis paragraphs (NIA 706),
+// disclaimer, dynamic signature block, and watermark.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
 import type { EditorialReport } from '../types';
@@ -12,13 +13,18 @@ interface Props {
 const DISCLAIMER_ES = `Este informe ha sido generado por UtopIA mediante la orquestación de agentes especializados en NIIF para Pymes (Decreto 2420/2015), Estatuto Tributario colombiano y normativa contable vigente al ${''}cierre del periodo. Su contenido constituye un análisis informativo y NO sustituye el dictamen de un Contador Público autorizado ni la asesoría legal independiente. La emisión final del estado financiero requiere la firma y responsabilidad del Contador y, cuando aplique, del Revisor Fiscal de la entidad.`;
 
 export function ClosingPage({ doc }: Props) {
+  // Bloque de firma dinamico — viene de signatories (canonico) o legacy.
+  // Si todos los slots son null, `rendered` ya trae las lineas placeholder.
+  const signatureLines = (doc.signatureBlock?.rendered ?? '').split('\n');
+  const emphasis = doc.emphasisParagraphs ?? [];
+
   return (
     <Page
       size="A4"
       style={{
         backgroundColor: N0,
         paddingHorizontal: 48,
-        paddingTop: 96,
+        paddingTop: 64,
         paddingBottom: 96,
         position: 'relative',
       }}
@@ -31,8 +37,49 @@ export function ClosingPage({ doc }: Props) {
           alignItems: 'center',
         }}
       >
+        {/* Parrafos de Enfasis / Otras Cuestiones (NIA 706 §A1, §8-9).
+            Posicion: post-opinion, ANTES del disclaimer y firmas. */}
+        {emphasis.length > 0 ? (
+          <View style={{ maxWidth: 460, marginBottom: 32, width: '100%' }}>
+            {emphasis.map((p, i) => (
+              <View
+                key={`emp-${i}`}
+                style={{
+                  marginBottom: 16,
+                  borderLeftWidth: 2,
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: N1000,
+                  paddingLeft: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: 'Geist',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: N1000,
+                    marginBottom: 4,
+                  }}
+                >
+                  {p.heading}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: 'Geist',
+                    fontSize: 9,
+                    color: N700,
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {p.bodyMarkdown}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Legal disclaimer */}
-        <View style={{ maxWidth: 400, marginBottom: 64 }}>
+        <View style={{ maxWidth: 400, marginBottom: 48 }}>
           <Text
             style={{
               fontFamily: 'Geist',
@@ -46,89 +93,48 @@ export function ClosingPage({ doc }: Props) {
           </Text>
         </View>
 
-        {/* Signature block */}
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: 24,
-            width: '100%',
-            maxWidth: 460,
-          }}
-        >
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <View
-              style={{
-                width: '100%',
-                borderTopWidth: 0.5,
-                borderTopColor: N1000,
-                marginBottom: 6,
-                paddingTop: 6,
-              }}
-            >
+        {/* Signature block — render dinamico desde signatureBlock.rendered.
+            Cada linea se renderiza tal cual; las lineas que son '__________________________________'
+            se estilizan como linea de firma. */}
+        <View style={{ width: '100%', maxWidth: 460, alignItems: 'center' }}>
+          {signatureLines.map((line, i) => {
+            const isUnderline = /^_{20,}$/.test(line.trim());
+            const isEmpty = line.trim().length === 0;
+            if (isEmpty) {
+              return <View key={`sig-${i}`} style={{ height: 8 }} />;
+            }
+            if (isUnderline) {
+              return (
+                <View
+                  key={`sig-${i}`}
+                  style={{
+                    width: 220,
+                    borderTopWidth: 0.5,
+                    borderTopColor: N1000,
+                    marginTop: 12,
+                  }}
+                />
+              );
+            }
+            return (
               <Text
+                key={`sig-${i}`}
                 style={{
                   fontFamily: 'Geist',
-                  fontSize: 8,
+                  fontSize: 9,
                   color: N700,
                   textAlign: 'center',
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
+                  lineHeight: 1.4,
                 }}
               >
-                Contador
+                {line}
               </Text>
-            </View>
-            <Text
-              style={{
-                fontFamily: 'Geist',
-                fontSize: 8,
-                color: N300,
-                textAlign: 'center',
-                marginTop: 4,
-              }}
-            >
-              T.P. ____________________
-            </Text>
-          </View>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <View
-              style={{
-                width: '100%',
-                borderTopWidth: 0.5,
-                borderTopColor: N1000,
-                marginBottom: 6,
-                paddingTop: 6,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: 'Geist',
-                  fontSize: 8,
-                  color: N700,
-                  textAlign: 'center',
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                }}
-              >
-                Revisor Fiscal
-              </Text>
-            </View>
-            <Text
-              style={{
-                fontFamily: 'Geist',
-                fontSize: 8,
-                color: N300,
-                textAlign: 'center',
-                marginTop: 4,
-              }}
-            >
-              T.P. ____________________
-            </Text>
-          </View>
+            );
+          })}
         </View>
 
         {/* Generation timestamp + integrity hash placeholder */}
-        <View style={{ marginTop: 64, alignItems: 'center' }}>
+        <View style={{ marginTop: 48, alignItems: 'center' }}>
           <Text
             style={{
               fontFamily: 'Geist Mono',

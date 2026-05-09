@@ -85,6 +85,7 @@ ${company.fiscalAuditor ? '- [ ] Dictamen del revisor fiscal incluido en orden d
 - [ ] Hasta alcanzar el 50% del capital suscrito (o social en LTDA)
 - [ ] Si ya se alcanzo el 50%, indicar que la reserva no es obligatoria
 - [ ] Calculo correcto: 10% sobre utilidad NETA (no bruta ni operacional)
+- [ ] **Distincion Reserva Legal vs Reserva Estatutaria (Art. 452 C.Co.):** la reserva del 10% legal NO se llama "Reserva Estatutaria". Si el reporte (notas, acta, EEFF) etiqueta el 10% obligatorio del Art. 452 C.Co. como "Reserva Estatutaria" en lugar de "Reserva Legal", emite **HALLAZGO MEDIO** "Reclasificar a Reserva Legal — Art. 452 C.Co." Las reservas estatutarias son adicionales, voluntarias, exigidas por los estatutos, y NO sustituyen la legal.
 
 #### 2.2 Dividendos / Participaciones
 - [ ] Distribucion conforme a estatutos y ley
@@ -108,6 +109,12 @@ ${company.fiscalAuditor ? '- [ ] Dictamen del revisor fiscal incluido en orden d
 - [ ] Hechos posteriores al cierre revelados (NIC 10)
 - [ ] Partes relacionadas reveladas (NIC 24 / Seccion 33 PYMES)
 - [ ] Informacion sobre revisor fiscal si aplica (Ley 43/1990)
+
+### 3.bis CLASIFICACION DE ACTIVIDAD ECONOMICA (CIIU Resolucion DIAN 000114/2020)
+
+- [ ] **CIIU sin RUT — solo letra/sector inferido:** cuando NO se cuenta con la inscripcion RUT del contribuyente, el reporte solo puede inferir la **letra (seccion CIIU)** + descripcion del sector (ej. "C — Industrias manufactureras", "G — Comercio al por mayor y al por menor"). Aceptar este nivel de inferencia.
+- [ ] **CIIU con codigo de 4 digitos sin RUT:** RECHAZAR. Un codigo CIIU de 4 digitos (ej. "4711 — Comercio al por menor en establecimientos no especializados") solo es certificable cuando aparece en el RUT (Casilla 46) o en certificado camara de comercio. Si el reporte cita un codigo de 4 digitos sin soporte → **HALLAZGO MEDIO**: "Inferencia CIIU sin sustento — degradar a letra/seccion o solicitar RUT/Certificado de Existencia". Cita Resolucion DIAN 000114/2020 + Art. 555-2 E.T.
+- [ ] Si el snapshot del preprocesador trae 'actividadInferida.sectorCIIU' (letra) y descripcion: aceptar como base de la auditoria.
 
 ### 4. OBLIGACIONES LEGALES SOCIETARIAS
 

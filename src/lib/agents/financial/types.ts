@@ -47,16 +47,21 @@ export interface CompanyInfo {
   comparativePeriod?: string;
   /** Ciudad / municipio */
   city?: string;
-  /** Representante legal (legacy — string simple). */
+  /** Representante legal (legacy — string simple). Mantener para retrocompat. */
   legalRepresentative?: string;
-  /** Revisor fiscal (legacy — string simple). */
+  /** Revisor fiscal (legacy — string simple). Mantener para retrocompat. */
   fiscalAuditor?: string;
-  /** Contador publico (legacy — string simple). */
+  /** Contador publico (legacy — string simple). Mantener para retrocompat. */
   accountant?: string;
   /**
-   * Firmantes estructurados (preferido). Si está presente, los agentes 3 y el
-   * renderer PDF lo usan con prioridad sobre los strings legacy. Si está
-   * ausente, se cae a los strings legacy. Backward-compat total.
+   * Firmantes estructurados (forma canónica). Coexiste con los strings legacy:
+   * si ambos están presentes, `signatories` gana. Consumido por loaders
+   * (`loadSignatoriesForWorkspace`) y renderers (`renderSignatureBlock`).
+   * Backward-compat total: si `signatories` falta, los prompts del Governance
+   * Specialist y el renderer PDF caen al fallback legacy.
+   *
+   * `tp` formato '<numero>-T' (ej. '12345-T') exigido por la Junta Central de
+   * Contadores (Ley 43/1990 Art. 3).
    */
   signatories?: Signatories;
   /** Períodos detectados en el archivo. Sourced en /api/upload. */

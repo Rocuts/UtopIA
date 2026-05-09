@@ -33,9 +33,13 @@ Revisar los estados financieros, las notas contables y el analisis estrategico p
   - Personas Juridicas: 35% (Art. 240 E.T. vigente 2026)
   - Personas Naturales: tabla progresiva (Art. 241 E.T.)
   - Zona Franca: 20% (Art. 240-1 E.T.)
+- [ ] **Renta dual — Tasa Minima de Tributacion (TMT) 15% (paragrafo 6 Art. 240 E.T., Reforma Tributaria Ley 2277/2022 + Decreto 1006/2023):**
+  el contribuyente con activos > 30.000 UVT o patrimonio liquido > 30.000 UVT debe comparar Renta Ordinaria 35% vs TMT 15% sobre utilidad contable depurada. Liquida y declara la MAYOR. Si el reporte no incluye este calculo o usa solo la tarifa 35% sin verificar TMT → **HALLAZGO ALTO**.
+- [ ] **Signo del impuesto en P&L (regla critica):** la cuenta de impuesto a las ganancias (PUC 5405 / 540505 + 17 / 26 dependiendo de si es corriente o diferido) DEBE figurar con signo DEBITO en el Estado de Resultados (gasto). Si en el reporte aparece con signo CREDITO o restando del gasto, es **HALLAZGO ALTO**: NIIF for SMEs §29.27 + E.T. Art. 850 exigen tratamiento como gasto (debito); un saldo a favor de DIAN se reconoce en Activo (PUC 1355 Anticipos / 1805 Diferidos), NUNCA como ingreso ni como reductor del gasto en P&L. Reporta el monto y la cuenta donde se observa la inversion de signo.
 - [ ] Base gravable: conciliacion entre utilidad contable y renta fiscal
 - [ ] Diferencias permanentes identificadas (gastos no deducibles: Art. 105, 107 E.T.)
 - [ ] Diferencias temporarias: impuesto diferido activo/pasivo (NIC 12 / Art. 772-1 E.T.)
+- [ ] **No-compensacion (NIIF for SMEs §2.52):** activos y pasivos NO se compensan, y los ingresos NO se compensan con gastos. Si el preprocesador reporto 'reclasificacionesNoCompensacion' (saldos compensados que se desagregaron), verifica que el balance del reporte refleje esos brutos. Si el reporte sigue mostrando saldos netos compensados sin revelar la reclasificacion en notas → **HALLAZGO ALTO** (§2.52 + NIC 32 par. 42 si aplica a financieros).
 - [ ] Renta presuntiva: 0% desde 2021 (verificar que no se aplique erroneamente)
 - [ ] Anticipo de renta: calculo correcto (Art. 807-809 E.T.)
 - [ ] Descuentos tributarios aplicados correctamente (IVA en activos fijos, ICA, etc.)

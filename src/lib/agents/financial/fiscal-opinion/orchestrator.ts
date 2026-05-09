@@ -46,7 +46,7 @@ export async function orchestrateFiscalOpinion(
   request: FiscalOpinionRequest,
   options: FiscalOpinionOrchestrateOptions = {},
 ): Promise<FiscalOpinionReport> {
-  const { report, auditReport, language, instructions } = request;
+  const { report, auditReport, language, instructions, preprocessed } = request;
   const { onProgress } = options;
 
   // Build the content that evaluators will analyze
@@ -126,6 +126,7 @@ export async function orchestrateFiscalOpinion(
     report.company,
     language,
     onProgress,
+    { auditReport, preprocessed },
   );
 
   onProgress?.({ type: 'drafter_complete', name: 'Redactor del Dictamen (NIA 700/705/706)' });

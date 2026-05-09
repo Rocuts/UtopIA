@@ -45,6 +45,13 @@
       "tag": "0004b_accounting_triggers",
       "breakpoints": true,
       "hash": "accounting-triggers-manual"
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778297845647,
+      "tag": "0006_nasty_darwin",
+      "breakpoints": true
     }
   ]
 }
