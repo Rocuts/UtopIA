@@ -4,7 +4,10 @@
 
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
-import { buildStrategyDirectorPrompt } from '../prompts/strategy-director.prompt';
+import {
+  buildStrategyDirectorPrompt,
+  type StrategyDirectorEliteContext,
+} from '../prompts/strategy-director.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -36,8 +39,9 @@ export async function runStrategyDirector(
   bindingTotals: string,
   preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
+  elite?: StrategyDirectorEliteContext,
 ): Promise<StrategicAnalysisResult> {
-  const systemPrompt = buildStrategyDirectorPrompt(company, language, preprocessed);
+  const systemPrompt = buildStrategyDirectorPrompt(company, language, preprocessed, elite);
 
   const userContent = [
     bindingTotals,

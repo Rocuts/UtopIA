@@ -13,10 +13,22 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
+/**
+ * Contexto Élite consumido por el Agente 3 desde el orchestrator. Optional
+ * chaining defensivo. Incluye `actividadInferida` (descripción + letra CIIU)
+ * para que el agente NO emita "no se suministró información" cuando A ya
+ * dedujo el sector económico.
+ */
+export interface GovernanceEliteContext {
+  comparativosImpracticables?: boolean;
+  actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+}
+
 export function buildGovernancePrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
   preprocessed?: PreprocessedBalance,
+  elite?: GovernanceEliteContext,
 ): string {
   const langInstruction =
     language === 'en'
@@ -94,6 +106,136 @@ El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeri
 `
       : '';
 
+  // -----------------------------------------------------------------------
+  // ELITE CONTEXT — A está extendiendo el shape; defensivo
+  // -----------------------------------------------------------------------
+  const ppLoose = preprocessed as unknown as {
+    comparativos_impracticables?: boolean;
+    actividadInferida?: { sectorCIIU?: string; descripcion?: string; evidencia?: string };
+  } | undefined;
+
+  const comparativosImpracticables =
+    elite?.comparativosImpracticables ?? ppLoose?.comparativos_impracticables ?? null;
+  const actividadInferida =
+    elite?.actividadInferida ?? (ppLoose?.actividadInferida
+      ? {
+          sectorCIIU: ppLoose.actividadInferida.sectorCIIU ?? '',
+          descripcion: ppLoose.actividadInferida.descripcion ?? '',
+          evidencia: ppLoose.actividadInferida.evidencia,
+        }
+      : null);
+
+  // -----------------------------------------------------------------------
+  // FIRMANTES — `signatories` estructurado tiene prioridad; fallback a
+  // strings legacy. Backward-compat total.
+  // -----------------------------------------------------------------------
+  const sig = company.signatories;
+  const repLegalNombre =
+    sig?.representanteLegal?.nombre ?? company.legalRepresentative ?? null;
+  const revisorFiscalNombre =
+    sig?.revisorFiscal?.nombre ?? company.fiscalAuditor ?? null;
+  const revisorFiscalTP = sig?.revisorFiscal?.tp ?? null;
+  const contadorNombre = sig?.contadorPublico?.nombre ?? company.accountant ?? null;
+  const contadorTP = sig?.contadorPublico?.tp ?? null;
+
+  // Renderiza la línea de firma con plantilla "{nombre} / {cargo} / T.P. {numero}-T"
+  // o, si no hay TP, "{nombre} / {cargo}". Si no hay nombre, placeholder visible
+  // explícito "[NOMBRE — Cargo — T.P. _______-T]" (Ley 43/1990 art. 10 y 13).
+  const firmaRepresentanteLegal = repLegalNombre
+    ? `${repLegalNombre} / Representante Legal`
+    : '[NOMBRE — Representante Legal]';
+  const firmaRevisorFiscal = revisorFiscalNombre
+    ? `${revisorFiscalNombre} / Revisor Fiscal${revisorFiscalTP ? ` / T.P. ${revisorFiscalTP}` : ' / T.P. _______-T'}`
+    : '[NOMBRE — Revisor Fiscal — T.P. _______-T]';
+  const firmaContador = contadorNombre
+    ? `${contadorNombre} / Contador Público${contadorTP ? ` / T.P. ${contadorTP}` : ' / T.P. _______-T'}`
+    : '[NOMBRE — Contador Público — T.P. _______-T]';
+
+  // Bloque ÉLITE Governance: actividad económica + pasivo laboral + reservas
+  // legal/ocasional + capitalización 40% + firmas Ley 43/1990.
+  const eliteBlock = `
+## BLOQUE ÉLITE — REGLAS DE ALTO NIVEL (PRECEDEN CUALQUIER OTRA INSTRUCCIÓN)
+
+### R-Élite 0 — Prohibición de frases evasivas
+
+**PROHIBIDO** emitir en CUALQUIER nota, párrafo o sección del acta las frases:
+- "no se suministró información"
+- "información no detallada"
+- "datos no disponibles"
+- "información no provista por el cliente"
+- equivalentes que sugieran debilidad de los EEFF.
+
+Cuando falte un dato genuino, usa la cita normativa de impracticabilidad correspondiente (NIIF for SMEs §3.14 / §10.21 para comparativos, §29.27 para impuestos, etc.) o el placeholder estructural \`— (dato no suministrado)\` listado en \`### Notas del Preparador\`. La nota técnica del informe NO debe sugerir debilidad cuando el dato es inferible o ya fue declarado por el preprocesador.
+
+### R-Élite — Actividad económica (Nota 1)
+
+${
+  actividadInferida && actividadInferida.descripcion
+    ? `El preprocesador inferió la actividad económica como **CIIU letra ${actividadInferida.sectorCIIU} — ${actividadInferida.descripcion}**${actividadInferida.evidencia ? ` (evidencia: ${actividadInferida.evidencia})` : ''}. La Nota 1 (Entidad y Actividad Económica) DEBE usar esta descripción LITERALMENTE como objeto social, sin atribuir un código CIIU específico de 4 dígitos (no se cuenta con RUT verificado). Solo letra (${actividadInferida.sectorCIIU}). PROHIBIDO escribir "actividad económica no detallada" o "objeto social no suministrado".`
+    : `Si el preprocesador inyecta \`actividadInferida.descripcion\`, úsala LITERALMENTE en la Nota 1. Si no, redacta el objeto social a partir del comportamiento de las cuentas (Clase 4 Ingresos vs Clase 6 Costos) y declara la inferencia. PROHIBIDO emitir "objeto social no suministrado" — la actividad SIEMPRE es deducible del balance.`
+}
+
+### R-Élite — Pasivo laboral colombiano (Nota 10) — SIN auxiliares
+
+Cuando no hay auxiliares de Clase 25 (Obligaciones Laborales), la composición se estima por porcentajes legales. PROHIBIDO usar "35/35/30" — esos son legalmente incorrectos. La distribución estructural correcta es:
+
+| Concepto | % de la base laboral | Norma |
+|----------|----------------------|-------|
+| Cesantías | **38,17%** | Ley 50/1990 art. 99 + CST art. 249 |
+| Intereses sobre Cesantías | **4,58%** | Ley 52/1975 art. 1 |
+| Prima de Servicios | **38,17%** | CST art. 306 |
+| Vacaciones | **19,08%** | CST art. 186 |
+
+Total: 100,00%. La Nota 10 DEBE presentar esta tabla con monto absoluto en COP por concepto + porcentaje legal correspondiente. Citar las cuatro normas LITERALMENTE. NO inventar otra distribución.
+
+### R-Élite — Reservas patrimoniales en el Acta (Punto "Destinación del resultado")
+
+Con independencia del régimen societario, en el Acta del ejercicio ${primaryPeriod ?? company.fiscalPeriod} la propuesta de distribución de utilidad neta del periodo se redacta así (los porcentajes son LEGALMENTE TIPIFICADOS — no inventar otros):
+
+1. **10% — Reserva LEGAL** (Art. 452 C.Co.). Obligatoria hasta el 50% del capital suscrito. **NUNCA llamarla "Reserva Estatutaria".** La Reserva Estatutaria es una figura distinta (creada por estatutos) y no aplica aquí salvo cláusula expresa.
+2. **50% — Reserva OCASIONAL para Futuros Crecimientos** (Ley 222/1995 art. 187 — decisión motivada de la Asamblea para protección de patrimonio y reinversión productiva). Esta reserva CONVIVE con la legal — no la sustituye.
+3. **40% — Distribuible a los ${memberTerm}** (saldo después de las dos reservas).
+
+La sección "Destinación del resultado" del Acta DEBE usar EXACTAMENTE estas tres líneas (texto + cita normativa) y mostrar los tres montos en pesos COP. Si la Reserva Legal ya alcanzó el 50% del capital suscrito, declararlo y trasladar ese 10% al rubro distribuible (50% reserva ocasional + 50% distribuible). PROHIBIDO inventar splits 50/50 sin sustento.
+
+### R-Élite — Capitalización 40% utilidades retenidas acumuladas (Recomendación de Reforma Estatutaria)
+
+Adicional al punto de "Destinación del resultado", el Acta DEBE incluir como Proposición separada (en "Proposiciones y varios" o en un punto dedicado) la siguiente recomendación LITERAL:
+
+> **Capitalización del 40% de utilidades retenidas acumuladas históricas.** La Asamblea propone capitalizar el 40% del saldo de utilidades retenidas acumuladas (cuenta PUC 36) a la cuenta de Capital Social, mediante reforma estatutaria conforme **Ley 1258/2008 art. 5 (SAS)** ${isSAS ? '— aplicable a esta entidad SAS, documento privado inscrito en Cámara de Comercio' : '— aplicable a SAS; para sociedades reguladas por el C.Co. se requiere escritura pública'}. El monto de la capitalización se calcula sobre el SALDO ACUMULADO de utilidades retenidas (no sobre la utilidad del periodo). Este movimiento queda exento del impuesto a los dividendos conforme **E.T. art. 36-3**, al constituir una reorganización patrimonial sin distribución efectiva.
+
+Esta proposición NO es opcional cuando hay utilidades retenidas materiales — es una recomendación CFO estructural para fortalecer la solvencia patrimonial proyectada.
+
+### R-Élite — Bloque de firmas (Ley 43/1990 art. 10 y 13)
+
+El Acta y los EEFF firmables DEBEN cerrar con un bloque de firmas con la siguiente plantilla EXACTA por cada firmante (formato \`{nombre} / {cargo} / T.P. {numero}-T\` cuando aplique T.P.):
+
+\`\`\`
+${firmaRepresentanteLegal}
+Firma: ____________________
+
+${firmaRevisorFiscal}
+Firma: ____________________
+
+${firmaContador}
+Firma: ____________________
+\`\`\`
+
+Reglas:
+- Si \`company.signatories\` está presente en los insumos, sus campos toman PRIORIDAD sobre los strings legacy (\`legalRepresentative\`, \`fiscalAuditor\`, \`accountant\`).
+- Cuando un nombre falta, escribe el placeholder explícito \`[NOMBRE — Cargo${''} — T.P. _______-T]\` (con guiones bajos para que el firmante físico lo complete a mano). PROHIBIDO escribir "no suministrado".
+- T.P. del Revisor Fiscal y del Contador Público SIEMPRE en formato \`12345-T\` (Ley 43/1990 art. 3 — Junta Central de Contadores).
+- Si la entidad NO está obligada a Revisor Fiscal (Art. 203 C.Co. + Ley 43/1990 art. 13 — umbrales de activos / ingresos), omite la línea del Revisor Fiscal y declara en \`### Notas del Preparador\`: "Entidad no obligada a Revisor Fiscal por umbral de Art. 203 C.Co.". NO emitir placeholder vacío en ese caso.
+
+${
+  comparativosImpracticables === true
+    ? `### R-Élite 1 (delegada) — Comparativos impracticables
+
+El Agente 1 declaró impracticabilidad del comparativo (NIIF for SMEs §3.14, §10.21). Cada nota material referencia ÚNICAMENTE el periodo ${primaryPeriod ?? company.fiscalPeriod}. NO emitir columnas comparativas en las Notas. La Nota 13 (Hechos Posteriores) y todas las demás se redactan single-period. PROHIBIDO inventar saldos del comparativo.`
+    : ''
+}
+`;
+
   return `${guardrail}
 
 ${context2026}
@@ -111,10 +253,11 @@ Dar sustento legal y normativo a los estados financieros y al analisis estrategi
 - **Regimen Societario:** ${entityRegimeCitation}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
 - **Ciudad:** ${company.city || '— (dato no suministrado)'}
-${company.legalRepresentative ? `- **Representante Legal:** ${company.legalRepresentative}` : '- **Representante Legal:** — (dato no suministrado)'}
-${company.fiscalAuditor ? `- **Revisor Fiscal:** ${company.fiscalAuditor}` : '- **Revisor Fiscal:** — (dato no suministrado)'}
-${company.accountant ? `- **Contador Publico:** ${company.accountant}` : '- **Contador Publico:** — (dato no suministrado)'}
+${repLegalNombre ? `- **Representante Legal:** ${repLegalNombre}` : '- **Representante Legal:** [NOMBRE — Representante Legal] (a completar al firmar)'}
+${revisorFiscalNombre ? `- **Revisor Fiscal:** ${revisorFiscalNombre}${revisorFiscalTP ? ` — T.P. ${revisorFiscalTP}` : ' — T.P. _______-T'}` : '- **Revisor Fiscal:** [NOMBRE — Revisor Fiscal — T.P. _______-T] (a completar al firmar — Ley 43/1990 art. 10)'}
+${contadorNombre ? `- **Contador Público:** ${contadorNombre}${contadorTP ? ` — T.P. ${contadorTP}` : ' — T.P. _______-T'}` : '- **Contador Público:** [NOMBRE — Contador Público — T.P. _______-T] (a completar al firmar — Ley 43/1990 art. 13)'}
 ${comparativeBlock}
+${eliteBlock}
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
 ### DOCUMENTO 1: NOTAS A LOS ESTADOS FINANCIEROS

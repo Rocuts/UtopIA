@@ -15,10 +15,50 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
+/**
+ * Contexto Élite consumido por el Agente 1 desde el orchestrator. Todos los
+ * campos son opcionales con optional chaining defensivo: A (preprocessor) está
+ * extendiendo el shape de `PreprocessedBalance` y este contrato evita romper
+ * tsc mientras esos campos se materializan. Cuando ausentes, el agente cae al
+ * comportamiento legacy.
+ */
+export interface NiifAnalystEliteContext {
+  /**
+   * R-Élite: cuando `true`, los comparativos del periodo anterior NO pueden
+   * inferirse — declarar impracticabilidad NIIF for SMEs §3.14 / §10.21
+   * literalmente en notas. Cuando `false`, usar el Opening Balance del
+   * comparativo como columna del periodo anterior.
+   */
+  comparativosImpracticables?: boolean;
+  /**
+   * Actividad económica inferida sin RUT. Solo letra CIIU (G = Comercio),
+   * nunca código de 4 dígitos sin RUT verificado.
+   */
+  actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+  /**
+   * Reclasificaciones No Compensación detectadas por el preprocesador
+   * (NIIF for SMEs §2.52). Cada elemento ya viene con cuenta origen, saldo
+   * invertido en cents, cuenta destino y norma motivante.
+   */
+  reclasificacionesNoCompensacion?: Array<{
+    cuenta_origen: string;
+    saldo_invertido_centavos: bigint;
+    cuenta_destino_pasivo: string;
+    motivo_norma: string;
+  }>;
+  /**
+   * Saldo a favor del impuesto de renta (PUC 1355 / 1805). Se presenta
+   * SEPARADO en el Activo, NUNCA neteado contra el gasto causado.
+   * Sustento: NIIF for SMEs §29.27 + NIC 12 §58 + E.T. art. 850.
+   */
+  saldoAFavorImpuestoCents?: bigint;
+}
+
 export function buildNiifAnalystPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
   preprocessed?: PreprocessedBalance,
+  elite?: NiifAnalystEliteContext,
 ): string {
   const langInstruction =
     language === 'en'
@@ -49,6 +89,54 @@ export function buildNiifAnalystPrompt(
   const isComparative = periods.length >= 2 && !!primaryPeriod && !!comparativePeriod;
   const periodsListed = periods.map((p) => p.period).join(', ');
 
+  // -----------------------------------------------------------------------
+  // ELITE CONTEXT — A (preprocessor) está extendiendo el shape; leemos del
+  // contexto explícito si está, fallback a `preprocessed` con optional
+  // chaining (tipos `unknown` para no acoplar a campos no nacidos).
+  // -----------------------------------------------------------------------
+  const ppLoose = preprocessed as unknown as {
+    comparativos_impracticables?: boolean;
+    actividadInferida?: { sectorCIIU?: string; descripcion?: string; evidencia?: string };
+    reclasificacionesNoCompensacion?: Array<{
+      cuenta_origen?: string;
+      saldo_invertido_centavos?: bigint | number;
+      cuenta_destino_pasivo?: string;
+      motivo_norma?: string;
+    }>;
+  } | undefined;
+
+  const comparativosImpracticables =
+    elite?.comparativosImpracticables ?? ppLoose?.comparativos_impracticables ?? null;
+  const actividadInferida =
+    elite?.actividadInferida ?? (ppLoose?.actividadInferida
+      ? {
+          sectorCIIU: ppLoose.actividadInferida.sectorCIIU ?? '',
+          descripcion: ppLoose.actividadInferida.descripcion ?? '',
+          evidencia: ppLoose.actividadInferida.evidencia,
+        }
+      : null);
+  const reclasifNoComp = elite?.reclasificacionesNoCompensacion
+    ?? (Array.isArray(ppLoose?.reclasificacionesNoCompensacion)
+      ? ppLoose!.reclasificacionesNoCompensacion!.map((r) => ({
+          cuenta_origen: r.cuenta_origen ?? '',
+          saldo_invertido_centavos: BigInt(r.saldo_invertido_centavos ?? 0),
+          cuenta_destino_pasivo: r.cuenta_destino_pasivo ?? '',
+          motivo_norma: r.motivo_norma ?? '',
+        }))
+      : []);
+  const saldoAFavorCents = elite?.saldoAFavorImpuestoCents
+    ?? (preprocessed?.primary?.controlTotals?.cents as
+        unknown as { saldoAFavorImpuesto?: bigint } | undefined)?.saldoAFavorImpuesto;
+  const tieneSaldoAFavor =
+    typeof saldoAFavorCents === 'bigint' && saldoAFavorCents > BigInt(0);
+
+  // EFE indirecto — nombres REALES del curator R2:
+  // `cashFlowIndirecto.operating.{varCuentasPorCobrar, varInventarios, varCuentasPorPagar}`.
+  const efeOp = preprocessed?.primary?.cashFlowIndirecto?.operating;
+  const efeVarCxC = efeOp?.varCuentasPorCobrar;
+  const efeVarInv = efeOp?.varInventarios;
+  const efeVarCxP = efeOp?.varCuentasPorPagar;
+
   const comparativeBlock = isComparative
     ? `
 ## MODO COMPARATIVO (OBLIGATORIO — el preprocesador detecto ${periods.length} periodos: ${periodsListed})
@@ -74,6 +162,118 @@ El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeri
 `
       : '';
 
+  // -----------------------------------------------------------------------
+  // BLOQUE ÉLITE — Reglas CFO/Auditor de alto nivel (Grupo Empresarial 2 Tres)
+  // -----------------------------------------------------------------------
+  // Cubre 4 reglas inviolables del usuario:
+  //   1. Comparativos impracticables → declarar §3.14, NO inferir 2024.
+  //   2. EFE indirecto → leer SIEMPRE `varCuentasPorCobrar / varInventarios /
+  //      varCuentasPorPagar` PLURAL desde `cashFlowIndirecto.operating`.
+  //   3. Signo impuesto → gasto causado SIEMPRE débito en P&L; saldo a favor
+  //      SEPARADO en Activo (PUC 1355/1805), NO neteado.
+  //   4. Reclasificaciones No Compensación → nota dedicada + tabla cuando
+  //      el preprocesador detecta saldo contranatura.
+  // -----------------------------------------------------------------------
+  const eliteBlock = `
+## BLOQUE ÉLITE — REGLAS CFO/AUDITOR (PRECEDEN CUALQUIER OTRA INSTRUCCIÓN)
+
+### R-Élite 1 — Comparativos impracticables (NIIF for SMEs §3.14, §10.21 / NIC 1 §41)
+
+${
+  comparativosImpracticables === true
+    ? `**El preprocesador determinó que el comparativo del periodo anterior es IMPRACTICABLE de reconstruir.** Tu salida DEBE:
+
+1. NO inventar cifras del periodo comparativo. PROHIBIDO inferir saldos 2024 a partir de variaciones, promedios o expectativas razonables.
+2. En cada estado financiero, presentar UNA SOLA columna (periodo actual ${primaryPeriod ?? company.fiscalPeriod}).
+3. Insertar en \`## 5. NOTAS TECNICAS\` la siguiente nota LITERAL (Nota de Impracticabilidad):
+
+   > **Nota — Impracticabilidad del comparativo (NIIF for SMEs §3.14, §10.21).** Los estados financieros se presentan sin comparativos del periodo ${comparativePeriod ?? '2024'} dado que la información necesaria para reconstruirlos resultó impracticable de obtener (NIIF for SMEs §3.14, §10.21). Esta limitación no afecta la confiabilidad de las cifras del periodo ${primaryPeriod ?? company.fiscalPeriod}. La administración de la entidad efectuó esfuerzos razonables para obtener la información comparativa y documentó las gestiones realizadas.
+
+4. PROHIBIDO usar las frases "no se suministró información", "información no detallada", "datos no disponibles". La impracticabilidad técnica se invoca con la cita normativa LITERAL anterior.`
+    : comparativosImpracticables === false && primaryPeriod && comparativePeriod
+      ? `El preprocesador confirmó que el Opening Balance del periodo ${comparativePeriod} está disponible — usar como columna comparativa en TODOS los estados financieros. NO declarar impracticabilidad cuando los datos sí están.`
+      : `Si no se inyectó la bandera \`comparativos_impracticables\` desde el preprocesador, decide en función de los datos del CSV: si existen saldos del periodo ${comparativePeriod ?? 'comparativo'}, úsalos; si no existen, aplica la nota de impracticabilidad LITERAL del párrafo anterior. PROHIBIDO inventar saldos del comparativo.`
+}
+
+### R-Élite 2 — Estado de Flujos de Efectivo (Método Indirecto, NIC 7 / Sec. 7 PYMES)
+
+La sección "Cambios en Capital de Trabajo" del EFE indirecto DEBE construirse leyendo TEXTUALMENTE los siguientes campos del bloque vinculante (curator R2 — \`cashFlowIndirecto.operating\`):
+
+| Línea EFE | Campo vinculante (NOMBRE EXACTO) | Convención de signo |
+|-----------|----------------------------------|---------------------|
+| Δ Cuentas por Cobrar | \`varCuentasPorCobrar\` | Aumento de CxC RESTA caja (signo negativo en EFE) |
+| Δ Inventarios (PLURAL) | \`varInventarios\` | Aumento de Inventario RESTA caja (signo negativo en EFE) |
+| Δ Cuentas por Pagar | \`varCuentasPorPagar\` | Aumento de CxP SUMA caja (signo positivo en EFE) |
+
+${
+  efeVarCxC !== undefined || efeVarInv !== undefined || efeVarCxP !== undefined
+    ? `**Valores autoritativos para el periodo ${primaryPeriod ?? company.fiscalPeriod}:**
+${typeof efeVarCxC === 'number' ? `- ΔCxC = \`${efeVarCxC.toLocaleString('es-CO', { maximumFractionDigits: 2 })}\` (signo ya aplicado por el curator).` : ''}
+${typeof efeVarInv === 'number' ? `- ΔInventarios = \`${efeVarInv.toLocaleString('es-CO', { maximumFractionDigits: 2 })}\` (signo ya aplicado).` : ''}
+${typeof efeVarCxP === 'number' ? `- ΔCxP = \`${efeVarCxP.toLocaleString('es-CO', { maximumFractionDigits: 2 })}\` (signo ya aplicado).` : ''}
+
+Cita la fuente como "NIC 7 §18(b) / Sec. 7.7-7.8 PYMES" y registra una sub-línea explicativa cuando un AUMENTO de Inventario RESTE caja (caso típico Grupo 2 Tres SAS: ΔInventarios ≈ +$1.670M resta caja; ΔCxP ≈ +$1.801M suma caja).`
+    : `Cuando el bloque vinculante incluya valores para los tres campos PLURAL (\`varCuentasPorCobrar\`, \`varInventarios\`, \`varCuentasPorPagar\`), cítalos LITERALMENTE — NO los recalcules desde el balance crudo.`
+}
+
+PROHIBIDO usar nombres en singular ("varCuentaPorCobrar", "varInventario") — son inválidos. PROHIBIDO sumar a mano las variaciones cuenta por cuenta cuando el curator ya las consolidó.
+
+### R-Élite 3 — Signo del impuesto de renta y saldo a favor (NIIF for SMEs §29.27 + NIC 12 §58 + E.T. art. 850)
+
+**Gasto por impuesto de renta y complementarios (P&L).** SIEMPRE débito (resta de UAI). NUNCA presentar el impuesto causado con signo positivo en el P&L. La línea es:
+
+\`(-) Gasto por impuesto de renta y complementarios (Art. 240 E.T. — 35%)\`
+
+**Saldo a favor del impuesto (PUC 1355 o 1805).**
+
+${
+  tieneSaldoAFavor
+    ? `El preprocesador detectó un SALDO A FAVOR del impuesto de renta de \`${(Number(saldoAFavorCents) / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} COP\`. DEBES:
+
+1. Presentar el saldo a favor SEPARADO dentro del Activo, en cuenta PUC 1355 (Anticipos y avances) o PUC 1805 (Bienes y derechos en fideicomiso) según corresponda al hecho económico — NUNCA neteado contra el gasto causado del P&L.
+2. Insertar nota técnica con cita LITERAL: "Saldo a favor del impuesto de renta presentado por separado en el Activo conforme NIIF for SMEs §29.27 (presentación de impuestos), NIC 12 §58 (compensación) y E.T. art. 850 (devolución de saldos a favor). NO se compensa contra el gasto causado del periodo."
+3. El gasto causado del P&L conserva su signo débito completo (sin reducción por el saldo a favor).`
+    : `Si \`controlTotals.cents.saldoAFavorImpuesto > 0n\`, presenta el saldo a favor SEPARADO en cuenta PUC 1355 / 1805 dentro del Activo, NUNCA neteado contra el gasto causado del P&L. Cita "NIIF for SMEs §29.27 + NIC 12 §58 + E.T. art. 850". Si el campo es 0 o ausente, no añadir esta nota.`
+}
+
+### R-Élite 4 — Reclasificaciones No Compensación (NIIF for SMEs §2.52)
+
+${
+  reclasifNoComp.length > 0
+    ? `El preprocesador detectó **${reclasifNoComp.length} cuenta(s)** con saldo contranatura que requieren reclasificación al pasivo correspondiente. DEBES generar una Nota DEDICADA dentro de \`## 5. NOTAS TECNICAS\` con la siguiente estructura LITERAL:
+
+> **Nota — Reclasificaciones No Compensación (NIIF for SMEs §2.52).** Conforme a la prohibición de compensación de saldos (NIIF for SMEs §2.52 / NIC 1 §32), las cuentas que presentaban saldo contranatura se reclasificaron al pasivo correspondiente:
+>
+> | Cuenta origen | Saldo invertido | Cuenta destino (Pasivo) | Motivo / norma |
+> |---------------|-----------------|-------------------------|----------------|
+${reclasifNoComp
+  .map(
+    (r) =>
+      `> | ${r.cuenta_origen} | $${(Number(r.saldo_invertido_centavos) / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | ${r.cuenta_destino_pasivo} | ${r.motivo_norma} |`,
+  )
+  .join('\n')}
+
+Esta nota NO sustituye la sub-nota de Defensa Tributaria Art. 647 E.T. especificada en la NOTA MAESTRA — ambas conviven.`
+    : `Si el bloque vinculante incluye \`reclasificacionesNoCompensacion[]\` con length > 0, generar la Nota dedicada con la estructura literal especificada en la versión Élite del prompt: tabla con cuenta origen, saldo invertido, cuenta destino y motivo, citando "NIIF for SMEs §2.52" + "NIC 1 §32 — no compensación". Si length === 0, omitir silenciosamente.`
+}
+
+### R-Élite 5 — Margen bruto vs sector (verdad financiera condicionada)
+
+${
+  actividadInferida && actividadInferida.sectorCIIU?.toUpperCase().startsWith('G')
+    ? `La actividad económica inferida es **CIIU letra ${actividadInferida.sectorCIIU} — ${actividadInferida.descripcion}** (Comercio). Para este sector, un margen bruto reportado superior al 80% NO es defendible sin descargue completo de costos (NIIF for SMEs §13.20). Si tu cálculo arroja margen bruto > 80% para esta entidad, INSERTA en \`## 5. NOTAS TECNICAS\` la siguiente nota:
+
+> **Nota — Verdad financiera condicionada (NIIF for SMEs §13.20).** El margen bruto reportado del periodo (\`[X]%\`) no es defendible para una empresa comercial (CIIU letra G — ${actividadInferida.descripcion}) sin descargue completo de costos de inventario. La verdad financiera del ejercicio queda condicionada a la validación del descargue de inventarios en el cierre del próximo trimestre. Recomendamos al Revisor Fiscal emitir opinión con salvedad (NIA 705 §7) hasta que se complete dicha validación.
+
+NO atribuyas un código CIIU específico de 4 dígitos sin RUT verificado — solo letra (G).`
+    : `Si la actividad económica inferida indica sector CIIU letra G (Comercio) Y el margen bruto calculado supera 80%, generar la nota de "verdad financiera condicionada" citando NIIF for SMEs §13.20 y NIA 705 §7. Si la actividad no está inferida o no es G, omitir.`
+}
+
+### R-Élite 0 — Prohibición de frases evasivas
+
+PROHIBIDO emitir las frases "no se suministró información", "información no detallada", "datos no disponibles" o equivalentes en CUALQUIER nota o sección del informe. Cuando un dato falte, declara la impracticabilidad con cita normativa específica (NIIF for SMEs §3.14 / §10.21 para comparativos, §29.27 para impuestos, etc.) o usa el placeholder estructural \`— (dato no suministrado)\` previsto por el Guardarrail.
+`;
+
   return `${guardrail}
 
 ${context2026}
@@ -92,6 +292,7 @@ Procesar datos contables en bruto (balances de prueba, CSVs, exportaciones de ER
 - **Periodo Fiscal:** ${company.fiscalPeriod}
 ${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
 ${comparativeBlock}
+${eliteBlock}
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
 ### Paso 1: Lectura y Mapeo de Datos
