@@ -218,7 +218,7 @@ function CollapsedRail({
         onClick={onNewChat}
         className={cn(
           'w-10 h-10 rounded-md flex items-center justify-center',
-          'text-n-500 hover:text-n-900 hover:bg-gold-500/10 transition-colors',
+          'text-n-700 hover:text-n-1000 hover:bg-gold-500/10 transition-colors',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
         )}
         aria-label={language === 'es' ? 'Nuevo chat' : 'New chat'}
@@ -228,7 +228,7 @@ function CollapsedRail({
       </button>
       {messageCount > 1 && (
         <span
-          className="text-2xs font-mono text-n-500 mt-1"
+          className="text-2xs font-mono text-n-800 mt-1"
           aria-label={`${messageCount} ${language === 'es' ? 'mensajes' : 'messages'}`}
         >
           {messageCount}
@@ -300,7 +300,7 @@ function HistoryPanel({
           {language === 'es' ? 'Nuevo chat' : 'New chat'}
         </button>
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-n-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-n-600" />
           <input
             type="text"
             value={searchQuery}
@@ -318,7 +318,7 @@ function HistoryPanel({
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto styled-scrollbar">
         {filtered.length === 0 ? (
-          <p className="text-center text-xs text-n-400 py-6 px-3">
+          <p className="text-center text-xs text-n-600 py-6 px-3">
             {language === 'es'
               ? searchQuery.trim()
                 ? 'Sin resultados'
@@ -362,7 +362,7 @@ function HistoryPanel({
                           >
                             {c.title || (language === 'es' ? 'Sin título' : 'Untitled')}
                           </span>
-                          <span className="block text-2xs text-n-500 truncate mt-0.5 num">
+                          <span className="block text-2xs text-n-700 truncate mt-0.5 num">
                             {c.messages.length}{' '}
                             {language === 'es' ? 'mensajes' : 'messages'}
                           </span>
@@ -398,7 +398,7 @@ function TypingDots({ language }: { language: 'es' | 'en' }) {
         animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
         transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
       />
-      <span className="text-2xs text-n-500 uppercase tracking-wider ml-1">
+      <span className="text-2xs text-n-700 uppercase tracking-wider ml-1">
         {language === 'es' ? 'Pensando…' : 'Thinking…'}
       </span>
     </div>
@@ -503,7 +503,7 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
                   <h5 className="text-xs font-medium text-n-900 mt-1.5 mb-0.5">{children}</h5>
                 ),
                 blockquote: ({ children }) => (
-                  <blockquote className="border-l-2 border-gold-500/30 pl-2 my-1.5 text-n-500 italic">
+                  <blockquote className="border-l-2 border-gold-500/30 pl-2 my-1.5 text-n-800 italic">
                     {children}
                   </blockquote>
                 ),
@@ -550,12 +550,16 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
   }, [resolvedUseCase, language]);
 
   // ─── Collapse state (local, persisted) ─────────────────────────────────────
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
+  // Stable SSR seed (false) so the server and first client render match.
+  // The persisted value is hydrated post-mount in the effect below — same
+  // pattern as `conversationId` / `messages` (see comment further down).
+  const [collapsed, setCollapsed] = useState<boolean>(false);
+  useEffect(() => {
     try {
-      return window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1';
-    } catch { return false; }
-  });
+      const saved = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      if (saved === '1') setCollapsed(true);
+    } catch { /* noop */ }
+  }, []);
 
   // Mobile auto-collapse
   const [isMobile, setIsMobile] = useState(false);
@@ -1072,7 +1076,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                 type="button"
                 onClick={() => setCollapsed(true)}
                 className={cn(
-                  'p-1.5 rounded-md text-n-500 hover:text-n-900',
+                  'p-1.5 rounded-md text-n-700 hover:text-n-1000',
                   'hover:bg-gold-500/10 transition-colors',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
                 )}
@@ -1099,7 +1103,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                   'transition-colors relative',
                   tab === 'chat'
                     ? 'text-n-900'
-                    : 'text-n-500 hover:text-n-900',
+                    : 'text-n-700 hover:text-n-1000',
                 )}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -1122,7 +1126,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                   'transition-colors relative',
                   tab === 'history'
                     ? 'text-n-900'
-                    : 'text-n-500 hover:text-n-900',
+                    : 'text-n-700 hover:text-n-1000',
                 )}
               >
                 <History className="w-3.5 h-3.5" />
@@ -1201,7 +1205,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       onClick={handleNewChat}
                       className={cn(
                         'flex items-center gap-1 px-2 py-1 rounded text-xs-mono',
-                        'text-n-400 hover:text-n-900 hover:bg-gold-500/6',
+                        'text-n-600 hover:text-n-900 hover:bg-gold-500/6',
                         'transition-colors',
                       )}
                       title={labels.clear}

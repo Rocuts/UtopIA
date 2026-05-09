@@ -120,7 +120,7 @@ export function IntakeModal() {
               <button
                 type="button"
                 onClick={handleClose}
-                className="p-1.5 rounded-lg text-n-400 hover:text-n-600 hover:bg-n-100 transition-colors"
+                className="p-1.5 rounded-lg text-n-700 hover:text-n-1000 hover:bg-n-100 transition-colors"
                 aria-label="Cerrar"
               >
                 <X className="w-5 h-5" />

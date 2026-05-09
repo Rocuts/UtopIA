@@ -222,7 +222,7 @@ export function DianDefenseIntake() {
     <div className="space-y-4 pb-6">
       <div>
         <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-400">
+        <p className="text-xs text-n-600">
           Cargue el requerimiento, liquidación o acto administrativo de la DIAN
         </p>
       </div>
@@ -410,7 +410,7 @@ export function DianDefenseIntake() {
       {/* Monto en disputa */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Monto en disputa (COP) <ConfidenceDot level={extractedConfidence.disputedAmount} /> <span className="text-n-400 font-normal ml-1">-- opcional</span>
+          Monto en disputa (COP) <ConfidenceDot level={extractedConfidence.disputedAmount} /> <span className="text-n-600 font-normal ml-1">-- opcional</span>
         </label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-n-500">$</span>
@@ -441,7 +441,7 @@ export function DianDefenseIntake() {
       {/* Numero de expediente */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Número de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-n-400 font-normal ml-1">-- opcional</span>
+          Número de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-n-600 font-normal ml-1">-- opcional</span>
         </label>
         <input
           type="text"

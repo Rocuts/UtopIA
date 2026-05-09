@@ -106,7 +106,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
         <div className="space-y-4 pb-6">
           <div>
             <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-            <p className="text-xs text-n-400">
+            <p className="text-xs text-n-600">
               1+1 extrae automáticamente los datos de su archivo y pre-llena el formulario
             </p>
           </div>
@@ -278,7 +278,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
         <div className="space-y-5 pb-6">
           <div>
             <h3 className="text-base font-semibold text-n-900 mb-1">{title}</h3>
-            <p className="text-xs text-n-400">{subtitle}</p>
+            <p className="text-xs text-n-600">{subtitle}</p>
           </div>
 
           {/* Company summary */}
@@ -288,16 +288,16 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
               <span className="text-xs font-semibold text-n-900 uppercase tracking-wider">Empresa</span>
             </div>
             <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <div><span className="text-n-400">Razón Social:</span> <span className="text-n-900 font-medium">{company.name || '—'}</span></div>
-              <div><span className="text-n-400">NIT:</span> <span className="text-n-900 font-[family-name:var(--font-geist-mono)]">{company.nit || '—'}</span></div>
-              <div><span className="text-n-400">Tipo:</span> <span className="text-n-900">{company.entityType}</span></div>
-              <div><span className="text-n-400">Periodo:</span> <span className="text-n-900 font-[family-name:var(--font-geist-mono)]">{period}</span></div>
+              <div><span className="text-n-600">Razón Social:</span> <span className="text-n-900 font-medium">{company.name || '—'}</span></div>
+              <div><span className="text-n-600">NIT:</span> <span className="text-n-900 font-[family-name:var(--font-geist-mono)]">{company.nit || '—'}</span></div>
+              <div><span className="text-n-600">Tipo:</span> <span className="text-n-900">{company.entityType}</span></div>
+              <div><span className="text-n-600">Periodo:</span> <span className="text-n-900 font-[family-name:var(--font-geist-mono)]">{period}</span></div>
             </div>
           </div>
 
           {/* Pipeline */}
           <div className="bg-n-0 border border-n-200 rounded-xl p-4">
-            <span className="text-2xs font-bold text-n-400 uppercase tracking-wider font-[family-name:var(--font-geist-mono)]">
+            <span className="text-2xs font-bold text-n-700 uppercase tracking-wider font-[family-name:var(--font-geist-mono)]">
               Pipeline que se ejecutará
             </span>
             <div className="flex items-center gap-2 mt-3 overflow-x-auto styled-scrollbar pb-2">
@@ -307,18 +307,18 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
                     <p className="text-2xs font-bold text-gold-500 font-[family-name:var(--font-geist-mono)]">Agente {i + 1}</p>
                     <p className="text-xs font-medium text-gold-700 mt-0.5">{agent}</p>
                   </div>
-                  {i < agents.length - 1 && <ChevronRight className="w-4 h-4 text-n-300 mx-1 shrink-0" />}
+                  {i < agents.length - 1 && <ChevronRight className="w-4 h-4 text-n-500 mx-1 shrink-0" aria-hidden="true" />}
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-2xs text-n-400">
+          <div className="flex items-center gap-3 text-2xs text-n-600">
             <span>Modelo: GPT-5.4 mini · 400K contexto</span>
             <span>·</span>
             <span>~3-5 min</span>
           </div>
-          <p className="text-2xs text-n-400">
+          <p className="text-2xs text-n-600">
             Su información es redactada (PII) antes de enviarse al LLM
           </p>
         </div>

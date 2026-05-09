@@ -166,7 +166,7 @@ export function TaxRefundIntake() {
     <div className="space-y-4 pb-6">
       <div>
         <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-400">
+        <p className="text-xs text-n-600">
           Cargue la declaración tributaria o solicitud de devolución
         </p>
       </div>
@@ -284,7 +284,7 @@ export function TaxRefundIntake() {
                   {selected && <ConfidenceDot level={extractedConfidence.taxType} />}
                 </div>
                 <p className="text-xs text-n-500 mb-1.5">{tax.description}</p>
-                <span className="text-2xs font-mono text-n-400 bg-n-100 px-2 py-0.5 rounded">
+                <span className="text-2xs font-mono text-n-700 bg-n-100 border border-n-200 px-2 py-0.5 rounded">
                   {tax.reference}
                 </span>
               </div>
@@ -320,7 +320,7 @@ export function TaxRefundIntake() {
       {/* Monto aproximado */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Monto aproximado (COP) <ConfidenceDot level={extractedConfidence.approximateAmount} /> <span className="text-n-400 font-normal ml-1">-- opcional</span>
+          Monto aproximado (COP) <ConfidenceDot level={extractedConfidence.approximateAmount} /> <span className="text-n-600 font-normal ml-1">-- opcional</span>
         </label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-n-500">$</span>

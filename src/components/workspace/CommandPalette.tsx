@@ -309,9 +309,12 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — z-[80] sits above the EliteHeader (z-50) and its
+              user-menu dropdown (z-[60]) so an open dropdown doesn't bleed
+              through the palette overlay. Stays below GlassModal/IntakeModal
+              (z-[100]) which can co-exist (e.g. palette opens an intake). */}
           <motion.div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -325,7 +328,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
             role="dialog"
             aria-modal="true"
             aria-label={language === 'es' ? 'Paleta de comandos' : 'Command palette'}
-            className="fixed inset-0 z-50 flex items-start justify-center pt-[min(20vh,160px)]"
+            className="fixed inset-0 z-[80] flex items-start justify-center pt-[min(20vh,160px)]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -341,7 +344,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
             >
               {/* Search input */}
               <div className="flex items-center gap-3 px-4 border-b border-n-200">
-                <Search className="w-4 h-4 text-n-500 shrink-0" aria-hidden="true" />
+                <Search className="w-4 h-4 text-n-600 shrink-0" aria-hidden="true" />
                 <input
                   ref={inputRef}
                   type="text"
@@ -363,9 +366,9 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                   type="button"
                   onClick={onClose}
                   aria-label={language === 'es' ? 'Cerrar paleta' : 'Close palette'}
-                  className="hidden sm:inline-flex items-center gap-0.5 text-2xs text-n-500 font-mono outline-none rounded-xs hover:text-n-700 focus-visible:ring-1 focus-visible:ring-gold-500 transition-colors cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-0.5 text-2xs text-n-700 font-mono outline-none rounded-xs hover:text-n-900 focus-visible:ring-1 focus-visible:ring-gold-500 transition-colors cursor-pointer"
                 >
-                  <kbd className="bg-n-100 border border-n-200 px-1.5 py-0.5 rounded-xs">esc</kbd>
+                  <kbd className="bg-n-100 border border-n-300 text-n-800 px-1.5 py-0.5 rounded-xs">esc</kbd>
                 </button>
               </div>
 
@@ -378,14 +381,14 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                 className="max-h-[min(50vh,400px)] overflow-y-auto analysis-scroll"
               >
                 {flatItems.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-n-500">
+                  <div className="px-4 py-8 text-center text-sm text-n-700">
                     {t.noResults}
                   </div>
                 ) : (
                   grouped.map((section) => (
                     <div key={section.key} className="py-2">
                       {/* Section header */}
-                      <div className="px-4 pb-1.5 pt-1 text-2xs uppercase tracking-eyebrow text-n-500 font-mono font-medium select-none">
+                      <div className="px-4 pb-1.5 pt-1 text-2xs uppercase tracking-eyebrow text-n-700 font-mono font-medium select-none">
                         {section.label}
                       </div>
 
@@ -416,7 +419,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                               'w-8 h-8 rounded-xs flex items-center justify-center shrink-0',
                               isSelected ? 'bg-n-100 border border-gold-500/30' : 'bg-n-100'
                             )}>
-                              <Icon className="w-4 h-4 text-n-600" aria-hidden="true" />
+                              <Icon className="w-4 h-4 text-n-700" aria-hidden="true" />
                             </div>
 
                             <div className="flex-1 min-w-0">
@@ -424,14 +427,14 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
                                 {item.title}
                               </p>
                               {item.subtitle && (
-                                <p className="text-xs text-n-500 truncate">
+                                <p className="text-xs text-n-600 truncate">
                                   {item.subtitle}
                                 </p>
                               )}
                             </div>
 
                             {item.shortcut && (
-                              <kbd className="hidden sm:inline-flex items-center shrink-0 bg-n-100 border border-n-200 text-2xs text-n-500 px-1.5 py-0.5 rounded-xs font-mono">
+                              <kbd className="hidden sm:inline-flex items-center shrink-0 bg-n-100 border border-n-300 text-2xs text-n-800 px-1.5 py-0.5 rounded-xs font-mono">
                                 {item.shortcut}
                               </kbd>
                             )}
@@ -444,7 +447,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
               </div>
 
               {/* Footer hints */}
-              <div className="flex items-center gap-4 px-4 py-2 border-t border-n-200 text-2xs text-n-500 font-mono">
+              <div className="flex items-center gap-4 px-4 py-2 border-t border-n-200 text-2xs text-n-700 font-mono">
                 <span className="inline-flex items-center gap-1">
                   <ArrowUp className="w-3 h-3" aria-hidden="true" />
                   <ArrowDown className="w-3 h-3" aria-hidden="true" />

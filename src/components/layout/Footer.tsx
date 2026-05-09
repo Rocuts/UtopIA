@@ -50,7 +50,7 @@ export function Footer() {
 
         </div>
 
-        <div className="border-t border-n-200 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-n-400">
+        <div className="border-t border-n-200 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-n-600">
           <p>&copy; {currentYear} 1+1. {t.footer.rights}</p>
           <div className="flex gap-4">
             <Link href="#" className="hover:text-n-900 transition-colors">{t.footer.privacy}</Link>

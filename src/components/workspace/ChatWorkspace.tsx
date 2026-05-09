@@ -313,7 +313,7 @@ function CaseHeader({
           {labels[useCase] ?? useCase}
         </span>
       </div>
-      <span className="text-xs-mono text-n-400 font-mono num">
+      <span className="text-xs-mono text-n-600 font-mono num">
         TC-{caseId.slice(5, 13)}
       </span>
     </div>
@@ -341,7 +341,7 @@ function PipelineBanner({
           Analizado por: {vizState.nodes.filter(n => n.status === 'complete').map(n => n.label).join(' + ')}
         </span>
         <DSBadge variant="tier" tier={vizState.tier} label="" size="sm" />
-        <span className="text-2xs text-n-400 ml-auto">
+        <span className="text-2xs text-n-600 ml-auto">
           {vizState.toolLog.length} herramientas · ver detalle
         </span>
       </button>
@@ -363,7 +363,7 @@ function PipelineBanner({
       <button
         type="button"
         onClick={onToggle}
-        className="text-2xs text-n-400 hover:text-n-600 mt-1"
+        className="text-2xs text-n-700 hover:text-n-1000 mt-1"
       >
         Colapsar
       </button>
@@ -399,7 +399,7 @@ function TypingIndicator({ language, progressStatus }: { language: 'es' | 'en'; 
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
           style={{ transformOrigin: 'left' }}
         />
-        <span className="text-xs text-n-400 font-mono">{label}</span>
+        <span className="text-xs text-n-600 font-mono">{label}</span>
       </div>
     </motion.div>
   );
@@ -418,7 +418,7 @@ function UserMessage({ message }: { message: ChatMessage }) {
           <span className="text-xs font-medium text-n-600">Usted</span>
           <time
             dateTime={message.timestamp}
-            className="text-xs text-n-400 font-mono"
+            className="text-xs text-n-600 font-mono"
           >
             {formatTime(message.timestamp)}
           </time>
@@ -716,19 +716,19 @@ function AssistantMessage({
           {/* Inline header: author + meta */}
           <div className="flex items-center gap-2 mb-2 text-xs">
             <span className="font-medium text-n-900">1+1</span>
-            <span className="text-n-400">·</span>
-            <span className="text-n-400 font-mono">
+            <span className="text-n-500">·</span>
+            <span className="text-n-600 font-mono">
               {language === 'es' ? 'Análisis' : 'Analysis'}
             </span>
             {message.tier && (
               <>
-                <span className="text-n-400">·</span>
+                <span className="text-n-500">·</span>
                 <DSBadge variant="tier" tier={message.tier as AgentTier} label="" size="sm" />
               </>
             )}
             <time
               dateTime={message.timestamp}
-              className="text-n-400 font-mono ml-auto num"
+              className="text-n-600 font-mono ml-auto num"
             >
               {formatTime(message.timestamp)}
             </time>
@@ -813,7 +813,7 @@ function AssistantMessage({
               >
                 <div className="bg-n-50 border border-n-200 rounded-lg p-4">
                   <div className="flex items-baseline justify-between mb-2">
-                    <span className="text-xs text-n-400 font-mono">
+                    <span className="text-xs text-n-600 font-mono">
                       {message.sanctionCalculation.article}
                     </span>
                     <span className="text-lg font-bold text-n-900 font-mono num">
@@ -823,7 +823,7 @@ function AssistantMessage({
                   <p className="text-xs text-n-600 font-mono mb-1">
                     {message.sanctionCalculation.formula}
                   </p>
-                  <p className="text-xs text-n-400">{message.sanctionCalculation.explanation}</p>
+                  <p className="text-xs text-n-600">{message.sanctionCalculation.explanation}</p>
                 </div>
               </CollapsibleSection>
             </div>
@@ -950,7 +950,9 @@ export function ChatWorkspace({
       id: '1',
       role: 'assistant' as const,
       content: (INITIAL_MSG[useCase === 'general' ? 'general' : 'default'] ?? INITIAL_MSG.default)[language],
-      timestamp: new Date().toISOString(),
+      // Empty string keeps SSR/CSR markup identical. The actual time is stamped
+      // post-mount in an effect (or for new outbound messages).
+      timestamp: '',
     }];
   });
   const [input, setInput] = useState('');
@@ -1468,7 +1470,7 @@ export function ChatWorkspace({
             <p className="text-sm font-medium text-n-900">
               {language === 'es' ? 'Suelte su documento aquí' : 'Drop your document here'}
             </p>
-            <p className="text-xs text-n-400">
+            <p className="text-xs text-n-600">
               PDF, Excel, Word, CSV, imágenes
             </p>
           </motion.div>
@@ -1562,7 +1564,7 @@ export function ChatWorkspace({
                 <div key={`${doc.filename}-${i}`} className="flex items-center gap-1.5 bg-n-0 border border-n-200 rounded px-2 py-1 shrink-0">
                   <FileText className="w-3 h-3 text-n-600" />
                   <span className="text-xs text-n-900 max-w-[120px] truncate">{doc.filename}</span>
-                  <button type="button" onClick={() => removeDocument(doc.filename)} className="p-0.5 text-n-400 hover:text-danger transition-colors" aria-label={`Remover ${doc.filename}`}>
+                  <button type="button" onClick={() => removeDocument(doc.filename)} className="p-0.5 text-n-700 hover:text-danger transition-colors" aria-label={`Remover ${doc.filename}`}>
                     <X className="w-3 h-3" />
                   </button>
                 </div>
@@ -1620,7 +1622,7 @@ export function ChatWorkspace({
               </button>
             )}
           </form>
-          <p className="text-center text-xs text-n-400 mt-3 font-mono num">
+          <p className="text-center text-xs text-n-600 mt-3 font-mono num">
             {t.chat.disclaimer}
           </p>
         </div>

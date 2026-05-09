@@ -214,7 +214,7 @@ function CollapsibleSection({
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.2 }}
         >
-          <ChevronDown className="w-3.5 h-3.5 text-n-400" />
+          <ChevronDown className="w-3.5 h-3.5 text-n-600" />
         </motion.span>
       </button>
       <AnimatePresence initial={false}>
@@ -252,7 +252,7 @@ function ElapsedTimer({ startedAt }: { startedAt: Date }) {
   const seconds = elapsed % 60;
 
   return (
-    <span className="text-2xs font-mono text-n-400 flex items-center gap-1">
+    <span className="text-2xs font-mono text-n-600 flex items-center gap-1">
       <Clock className="w-3 h-3" />
       {minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`}
     </span>
@@ -300,7 +300,10 @@ function StageDots({
                 )}
               />
             </div>
-            <span className="text-2xs text-n-400 max-w-[60px] text-center leading-tight truncate">
+            <span
+              className="text-2xs text-n-600 max-w-[60px] text-center leading-tight truncate"
+              title={label}
+            >
               {label}
             </span>
           </div>
@@ -339,7 +342,7 @@ function AuditorDots({
                     : 'bg-n-200',
               )}
             />
-            <span className="text-2xs text-n-400">{DOMAIN_LABELS[key].slice(0, 4)}</span>
+            <span className="text-2xs text-n-600">{DOMAIN_LABELS[key].slice(0, 4)}</span>
           </div>
         );
       })}
@@ -388,7 +391,7 @@ function DocStatusIcon({ status }: { status: string }) {
     case 'error':
       return <XCircle className="w-3.5 h-3.5 text-danger shrink-0" />;
     default:
-      return <FileText className="w-3.5 h-3.5 text-n-400 shrink-0" />;
+      return <FileText className="w-3.5 h-3.5 text-n-600 shrink-0" />;
   }
 }
 
@@ -530,7 +533,7 @@ export function AnalysisPanel({
           Seleccione un tipo de consulta para ver informacion relevante. Este panel se actualizara en tiempo real a medida que interactue con la plataforma.
         </p>
         <div className="border-t border-n-200 pt-3">
-          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
+          <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider mb-2">
             Referencias Rápidas
           </h4>
           <div className="space-y-1.5">
@@ -582,14 +585,14 @@ export function AnalysisPanel({
                 Gobierno Corporativo (actas, notas)
               </li>
             </ul>
-            <p className="text-2xs text-n-400">
+            <p className="text-2xs text-n-600">
               + 4 auditores en paralelo + Meta-auditor de calidad
             </p>
           </div>
         )}
 
         <div>
-          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
+          <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider mb-2">
             Referencias Clave
           </h4>
           <div className="space-y-1.5">
@@ -620,7 +623,7 @@ export function AnalysisPanel({
         </p>
 
         <div className="space-y-2">
-          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider">
+          <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider">
             Capacidades habilitadas
           </h4>
           {[
@@ -639,24 +642,24 @@ export function AnalysisPanel({
         {activeCaseType === 'niif_report' && (
           <div className="bg-n-100 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xs font-medium text-n-400 uppercase tracking-wider">
+              <span className="text-2xs font-medium text-n-600 uppercase tracking-wider">
                 Agentes estimados
               </span>
             </div>
             <p className="text-xs text-n-600">3 agentes secuenciales + 4 auditores paralelos</p>
-            <p className="text-2xs text-n-400 mt-1">Tiempo estimado: 2-4 minutos</p>
+            <p className="text-2xs text-n-600 mt-1">Tiempo estimado: 2-4 minutos</p>
           </div>
         )}
 
         {activeCaseType && activeCaseType !== 'niif_report' && (
           <div className="bg-n-100 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xs font-medium text-n-400 uppercase tracking-wider">
+              <span className="text-2xs font-medium text-n-600 uppercase tracking-wider">
                 Agentes estimados
               </span>
             </div>
             <p className="text-xs text-n-600">1-3 agentes segun complejidad (T1/T2/T3)</p>
-            <p className="text-2xs text-n-400 mt-1">Tiempo estimado: 10-30 segundos</p>
+            <p className="text-2xs text-n-600 mt-1">Tiempo estimado: 10-30 segundos</p>
           </div>
         )}
       </div>
@@ -668,7 +671,7 @@ export function AnalysisPanel({
       <div className="px-4 py-4 space-y-4">
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider">
+            <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider">
               Actividad del Agente
             </h4>
           </div>
@@ -678,7 +681,7 @@ export function AnalysisPanel({
               <Loader2 className="w-3.5 h-3.5 text-gold-500 animate-spin" />
               <span className="text-xs text-n-600">Procesando consulta...</span>
             </div>
-            <p className="text-2xs text-n-400">
+            <p className="text-2xs text-n-600">
               Consultando base normativa y evaluando complejidad del caso.
             </p>
           </div>
@@ -709,7 +712,7 @@ export function AnalysisPanel({
         {/* Show references if case type selected */}
         {activeCaseType && (
           <div>
-            <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
+            <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider mb-2">
               Referencias del Caso
             </h4>
             <div className="space-y-1.5">
@@ -810,7 +813,7 @@ export function AnalysisPanel({
                   <DocStatusIcon status={doc.chunks > 0 ? 'ready' : 'processing'} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-n-900 truncate">{doc.filename}</p>
-                    <p className="text-2xs text-n-400">
+                    <p className="text-2xs text-n-600">
                       {(doc.size / 1024).toFixed(0)} KB
                     </p>
                   </div>
@@ -818,7 +821,7 @@ export function AnalysisPanel({
                     <button
                       type="button"
                       onClick={() => onRemoveDocument(doc.filename)}
-                      className="p-1 text-n-400 hover:text-danger transition-colors"
+                      className="p-1 text-n-600 hover:text-danger transition-colors"
                       aria-label={`Eliminar ${doc.filename}`}
                     >
                       <X className="w-3 h-3" />
@@ -852,7 +855,7 @@ export function AnalysisPanel({
               {pipelineState.mode === 'auditing' && 'Auditando...'}
               {pipelineState.mode === 'quality' && 'Evaluación de calidad...'}
             </p>
-            <p className="text-2xs text-n-400">
+            <p className="text-2xs text-n-600">
               {pipelineState.mode === 'running' && `Etapa ${pipelineState.currentStage + 1} de ${pipelineState.stageLabels.length}`}
               {pipelineState.mode === 'auditing' && `${pipelineState.auditorsComplete.length}/4 auditores completos`}
               {pipelineState.mode === 'quality' && 'Meta-auditor evaluando calidad'}
@@ -862,7 +865,7 @@ export function AnalysisPanel({
 
         {/* Agent stages */}
         <div>
-          <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
+          <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider mb-2">
             Agentes de Reporte
           </h4>
           <StageDots
@@ -876,7 +879,7 @@ export function AnalysisPanel({
         {/* Auditor stages */}
         {(pipelineState.mode === 'auditing' || pipelineState.mode === 'quality') && (
           <div>
-            <h4 className="text-2xs font-medium text-n-400 uppercase tracking-wider mb-2">
+            <h4 className="text-2xs font-medium text-n-600 uppercase tracking-wider mb-2">
               Auditores
             </h4>
             <AuditorDots
@@ -913,7 +916,7 @@ export function AnalysisPanel({
                 score={intelligencePanelData.qualityScore ?? 0}
                 size="md"
               />
-              <p className="text-2xs text-n-400 text-center">
+              <p className="text-2xs text-n-600 text-center">
                 Calificación general basada en 12 dimensiones de calidad
               </p>
 
@@ -929,7 +932,7 @@ export function AnalysisPanel({
                     {intelligencePanelData.qualityDimensions.map((dim: QualityDimension, i: number) => (
                       <div key={i} className="flex items-center justify-between">
                         <span className="text-xs text-n-600 flex-1 truncate">{dim.name}</span>
-                        <span className="text-2xs font-mono text-n-400">
+                        <span className="text-2xs font-mono text-n-600">
                           {dim.score}/{dim.maxScore}
                         </span>
                         <div className="w-12 h-1.5 rounded-full bg-n-100 ml-2 overflow-hidden">
@@ -1037,7 +1040,7 @@ export function AnalysisPanel({
                   <DocStatusIcon status={doc.chunks > 0 ? 'ready' : 'processing'} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-n-900 truncate">{doc.filename}</p>
-                    <p className="text-2xs text-n-400">
+                    <p className="text-2xs text-n-600">
                       {(doc.size / 1024).toFixed(0)} KB
                     </p>
                   </div>
@@ -1161,7 +1164,7 @@ export function AnalysisPanel({
               <button
                 type="button"
                 onClick={onToggle}
-                className="p-1.5 rounded-sm text-n-400 hover:text-n-900 hover:bg-n-50 transition-colors"
+                className="p-1.5 rounded-sm text-n-600 hover:text-n-900 hover:bg-n-50 transition-colors"
                 aria-label="Cerrar panel"
               >
                 <X className="w-4 h-4" />

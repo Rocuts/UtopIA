@@ -194,7 +194,7 @@ export function DueDiligenceIntake() {
     <div className="space-y-4 pb-6">
       <div>
         <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-400">
+        <p className="text-xs text-n-600">
           Cargue estados financieros, certificado de existencia o declaraciones
         </p>
       </div>

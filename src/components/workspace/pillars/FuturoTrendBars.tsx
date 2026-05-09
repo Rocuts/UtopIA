@@ -427,7 +427,7 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
               : `Expected growth: ${formatGrowthPct(growthOverride)} (base scenario)`}
           </p>
         ) : (
-          <p className="text-xs text-n-500 italic">
+          <p className="text-xs text-n-700 italic">
             {isEs
               ? 'Sube un balance para activar el ajuste de crecimiento'
               : 'Upload a balance to activate growth adjustment'}

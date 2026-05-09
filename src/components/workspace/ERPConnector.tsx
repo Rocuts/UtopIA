@@ -310,8 +310,13 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
             <Plug className="w-4 h-4 text-gold-500" />
             <h3 id="connect-form-title" className="text-sm font-semibold text-n-900">Conectar {provider.name}</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 text-n-400 hover:text-n-600 transition-colors">
-            <X className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-n-700 hover:text-n-1000 transition-colors"
+            aria-label="Cerrar"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -321,12 +326,12 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
             <div className="text-center py-4">
               <CheckCircle className="w-10 h-10 text-success mx-auto mb-2" />
               <p className="text-sm font-semibold text-success">Conectado exitosamente</p>
-              <p className="text-xs text-n-400 mt-1">Ya puede importar datos desde {provider.name}</p>
+              <p className="text-xs text-n-600 mt-1">Ya puede importar datos desde {provider.name}</p>
             </div>
           ) : (
             <>
-              <p className="text-xs text-n-400">
-                Autenticación: <span className="text-n-600 font-medium">{provider.authType}</span>
+              <p className="text-xs text-n-600">
+                Autenticación: <span className="text-n-700 font-medium">{provider.authType}</span>
               </p>
 
               {fieldDefs.map(field => (
@@ -339,7 +344,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
                     className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors"
                     placeholder={field.placeholder}
                   />
-                  {field.hint && <p className="text-2xs text-n-400 mt-0.5">{field.hint}</p>}
+                  {field.hint && <p className="text-2xs text-n-600 mt-0.5">{field.hint}</p>}
                 </div>
               ))}
 
@@ -376,7 +381,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
                 'px-5 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5',
                 status === 'connecting'
                   ? 'bg-gold-500/50 text-n-0 cursor-wait'
-                  : 'bg-gold-500 hover:bg-gold-600 text-n-0 disabled:bg-n-200 disabled:text-n-400 disabled:cursor-not-allowed',
+                  : 'bg-gold-500 hover:bg-gold-600 text-n-0 disabled:bg-n-200 disabled:text-n-600 disabled:cursor-not-allowed',
               )}
             >
               {status === 'connecting' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -422,7 +427,7 @@ function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalP
             </div>
             <h3 id="disconnect-modal-title" className="text-sm font-semibold text-n-900">¿Desconectar {providerName}?</h3>
           </div>
-          <p className="text-xs text-n-400">
+          <p className="text-xs text-n-600">
             Se eliminarán las credenciales almacenadas. Deberá volver a conectar para sincronizar datos.
           </p>
         </div>
@@ -528,8 +533,13 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
             <Download className="w-4 h-4 text-gold-500" />
             <h3 id="sync-modal-title" className="text-sm font-semibold text-n-900">Sincronizar {provider.name}</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 text-n-400 hover:text-n-600 transition-colors">
-            <X className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-n-700 hover:text-n-1000 transition-colors"
+            aria-label="Cerrar"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -541,7 +551,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
                 <p className="text-sm font-semibold text-success">
                   {result.recordCount} registros sincronizados
                 </p>
-                <p className="text-xs text-n-400 mt-1">
+                <p className="text-xs text-n-600 mt-1">
                   Datos importados exitosamente desde {provider.name}
                 </p>
               </div>
@@ -615,7 +625,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
                 'px-5 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5',
                 syncing
                   ? 'bg-gold-500/50 text-n-0 cursor-wait'
-                  : 'bg-gold-500 hover:bg-gold-600 text-n-0 disabled:bg-n-200 disabled:text-n-400 disabled:cursor-not-allowed',
+                  : 'bg-gold-500 hover:bg-gold-600 text-n-0 disabled:bg-n-200 disabled:text-n-600 disabled:cursor-not-allowed',
               )}
             >
               {syncing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -678,7 +688,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
             <span className="text-sm font-semibold text-n-900">{provider.name}</span>
             <span className={cn(
               'inline-flex items-center gap-1 text-2xs font-medium shrink-0',
-              isConnected ? 'text-success' : 'text-n-400',
+              isConnected ? 'text-success' : 'text-n-700',
             )}>
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full',
@@ -687,7 +697,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
               {isConnected ? 'Conectado' : 'No conectado'}
             </span>
           </div>
-          <p className="text-xs-mono text-n-500 mt-0.5 leading-snug">{provider.description}</p>
+          <p className="text-xs-mono text-n-700 mt-0.5 leading-snug">{provider.description}</p>
         </div>
       </div>
 
@@ -724,7 +734,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
             <button
               type="button"
               onClick={onDisconnect}
-              className="p-1.5 rounded-lg text-n-400 hover:text-danger hover:bg-danger/10 transition-colors"
+              className="p-1.5 rounded-lg text-n-600 hover:text-danger hover:bg-danger/10 transition-colors"
               title="Desconectar"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -811,7 +821,7 @@ export function ERPConnector() {
         <div className="flex items-center gap-2 mb-3">
           <Shield className="w-4 h-4 text-gold-500" />
           <h3 className="text-xs font-bold text-n-900 uppercase tracking-wider">ERPs Colombianos</h3>
-          <span className="text-2xs text-n-400 font-[family-name:var(--font-geist-mono)]">PUC + DIAN</span>
+          <span className="text-2xs text-n-600 font-[family-name:var(--font-geist-mono)]">PUC + DIAN</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {COLOMBIAN_PROVIDERS.map(p => (

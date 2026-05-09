@@ -119,7 +119,7 @@ export function BankAccountForm({ initial, onSave, onCancel, loading }: Props) {
           className={fieldClass}
           required
         />
-        <p className="mt-1 text-xs text-n-400">
+        <p className="mt-1 text-xs text-n-600">
           {es
             ? 'Usa el autocomplete del PUC para buscar la cuenta 1110 / 1120 correspondiente.'
             : 'Use the PUC autocomplete to find the corresponding 1110/1120 account.'}

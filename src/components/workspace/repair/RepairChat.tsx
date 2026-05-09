@@ -721,7 +721,7 @@ export function RepairChat({
                 type="button"
                 onClick={() => void handleSend()}
                 aria-label={copy.sendLabel}
-                className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-600 disabled:bg-n-100 disabled:text-n-400 disabled:cursor-not-allowed transition-colors shrink-0"
+                className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-600 disabled:bg-n-100 disabled:text-n-600 disabled:cursor-not-allowed transition-colors shrink-0"
               >
                 <Send className="w-3.5 h-3.5" aria-hidden="true" />
                 {copy.sendLabel}

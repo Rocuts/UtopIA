@@ -469,7 +469,7 @@ export function AreaCard({
           )}
         >
           {alertsCount > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-sm text-n-500 group-hover:text-gold-600 transition-colors">
+            <span className="inline-flex items-center gap-1.5 text-sm text-n-800 group-hover:text-gold-600 transition-colors">
               <span
                 aria-hidden="true"
                 className="inline-flex h-1.5 w-1.5 rounded-full bg-warning"

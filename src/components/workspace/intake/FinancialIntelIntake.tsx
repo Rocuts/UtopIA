@@ -197,7 +197,7 @@ export function FinancialIntelIntake() {
     <div className="space-y-4 pb-6">
       <div>
         <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-400">
+        <p className="text-xs text-n-600">
           Cargue estados financieros o datos de soporte
         </p>
       </div>
@@ -361,7 +361,7 @@ export function FinancialIntelIntake() {
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5">
           Pregunta o instrucción específica{' '}
-          <span className="text-n-400 font-normal">-- opcional, max 500 caracteres</span>
+          <span className="text-n-600 font-normal">-- opcional, max 500 caracteres</span>
         </label>
         <textarea
           value={values.specificQuestion ?? ''}
@@ -375,7 +375,7 @@ export function FinancialIntelIntake() {
           className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 resize-none focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
         <div className="text-right mt-1">
-          <span className="text-2xs text-n-400">
+          <span className="text-2xs text-n-600">
             {(values.specificQuestion ?? '').length}/500
           </span>
         </div>

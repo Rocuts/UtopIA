@@ -98,7 +98,7 @@ export function Methodology() {
                   </div>
 
                   <h3 className="text-lg font-semibold mb-3 flex items-baseline gap-3 text-n-900">
-                    <span className="text-xs text-n-400 font-mono num">0{index + 1}</span>
+                    <span className="text-xs text-n-600 font-mono num">0{index + 1}</span>
                     {step.title}
                   </h3>
                   <p className="text-n-600 leading-relaxed text-sm lg:text-base">

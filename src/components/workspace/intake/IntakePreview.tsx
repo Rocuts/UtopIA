@@ -129,10 +129,10 @@ function PipelineVisualization() {
           <div key={agent.label} className="flex items-center gap-2 flex-1">
             <div className="flex-1 rounded-lg border border-n-200 p-2.5 bg-n-50">
               <div className="text-xs-mono font-semibold text-n-900">{agent.label}</div>
-              <div className="text-2xs text-n-400">{agent.sublabel}</div>
+              <div className="text-2xs text-n-600">{agent.sublabel}</div>
             </div>
             {i < agents.length - 1 && (
-              <ArrowRight className="w-3.5 h-3.5 text-n-300 shrink-0" />
+              <ArrowRight className="w-3.5 h-3.5 text-n-500 shrink-0" aria-hidden="true" />
             )}
           </div>
         ))}
@@ -354,7 +354,7 @@ export function IntakePreview({ caseType, data, onSubmit, submitLabel }: IntakeP
                 <CheckCircle
                   className={cn('w-3.5 h-3.5 shrink-0', enabled ? 'text-success' : 'text-n-300')}
                 />
-                <span className={cn('text-xs', enabled ? 'text-n-900' : 'text-n-400 line-through')}>
+                <span className={cn('text-xs', enabled ? 'text-n-900' : 'text-n-500 line-through')}>
                   {OUTPUT_LABELS[key as keyof NiifOutputOptions] ?? key}
                 </span>
               </div>

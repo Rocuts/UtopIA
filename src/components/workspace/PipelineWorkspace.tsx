@@ -256,7 +256,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
             <Loader2 className={cn('w-4 h-4', state.mode !== 'complete' && 'animate-spin')} />
             {state.mode === 'complete' ? 'REPORTE COMPLETO' : 'GENERANDO REPORTE NIIF ELITE'}
           </h2>
-          <p className="text-xs text-n-400 mt-0.5 font-mono">
+          <p className="text-xs text-n-600 mt-0.5 font-mono">
             <Clock className="w-3 h-3 inline mr-1" />
             {timeStr} · Tiempo estimado: 3-5 min
           </p>
@@ -266,7 +266,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
 
       {/* Phase 1: Agents */}
       <div className="px-6 py-4">
-        <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-3 font-mono">
+        <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-3 font-mono">
           Fase 1 — Generacion de Reporte
         </h3>
         <div className="flex items-center gap-2 overflow-x-auto styled-scrollbar pb-2">
@@ -274,7 +274,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
             <div key={i} className="flex items-center">
               <StageNode index={i} state={state} label={s.label} sublabel={s.sublabel} />
               {i < STAGE_LABELS.length - 1 && (
-                <ChevronRight className="w-5 h-5 text-n-300 mx-1 shrink-0" />
+                <ChevronRight className="w-5 h-5 text-n-500 mx-1 shrink-0" aria-hidden="true" />
               )}
             </div>
           ))}
@@ -283,7 +283,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
 
       {/* Phase 2: Auditors */}
       <div className="px-6 py-4 border-t border-n-100">
-        <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-3 font-mono">
+        <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-3 font-mono">
           Fase 2 — Auditoria (4 en paralelo)
         </h3>
         <div className="flex items-center gap-3 flex-wrap">
@@ -316,7 +316,7 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
 
       {/* Phase 3: Quality */}
       <div className="px-6 py-4 border-t border-n-100">
-        <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-2 font-mono">
+        <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-2 font-mono">
           Fase 3 — Meta-Auditoria de Calidad
         </h3>
         {state.qualityGrade ? (
@@ -327,8 +327,8 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-xs text-n-400">
-            <div className="w-3 h-3 rounded-full border border-n-300" />
+          <div className="flex items-center gap-1.5 text-xs text-n-600">
+            <div className="w-3 h-3 rounded-full border border-n-400" />
             {state.mode === 'quality' ? 'Evaluando calidad...' : 'Esperando auditoria completa'}
           </div>
         )}
@@ -552,7 +552,7 @@ function ReportViewer({
       {/* Document navigation */}
       {sections.length > 0 && (
         <nav className="report-toc w-[200px] shrink-0 border-r border-n-200 overflow-y-auto styled-scrollbar py-4 hidden lg:block">
-          <h3 className="px-4 text-2xs font-bold text-n-400 uppercase tracking-wider mb-2 font-mono">
+          <h3 className="px-4 text-2xs font-bold text-n-700 uppercase tracking-wider mb-2 font-mono">
             {language === 'es' ? 'Contenido' : 'Contents'}
           </h3>
           <ul className="space-y-0.5">
@@ -1370,7 +1370,7 @@ export function PipelineWorkspace() {
       )}
 
       {!pipelineInput && !isRunning && (
-        <div className="flex-1 flex items-center justify-center text-sm text-n-400 px-6 text-center">
+        <div className="flex-1 flex items-center justify-center text-sm text-n-600 px-6 text-center">
           No hay pipeline activo. Inicie un nuevo reporte desde &quot;Nueva Consulta&quot;.
         </div>
       )}
@@ -1378,7 +1378,7 @@ export function PipelineWorkspace() {
       {/* Live streaming preview */}
       {streamedContent && (
         <div className="flex-1 border-t border-n-200 px-8 py-6 overflow-y-auto styled-scrollbar">
-          <h3 className="text-2xs font-bold text-n-400 uppercase tracking-wider mb-3 font-mono">
+          <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-3 font-mono">
             Vista previa en tiempo real
           </h3>
           <StreamingText isStreaming={isRunning}>
@@ -1392,7 +1392,7 @@ export function PipelineWorkspace() {
       )}
 
       {!streamedContent && isRunning && !error && (
-        <div className="flex-1 flex items-center justify-center text-sm text-n-400">
+        <div className="flex-1 flex items-center justify-center text-sm text-n-600">
           <motion.div
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 2, repeat: Infinity }}

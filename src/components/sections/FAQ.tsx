@@ -29,7 +29,7 @@ export function FAQ() {
       <Reveal>
         <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6 md:gap-12 mb-16 items-end">
           <div>
-            <span className="inline-flex items-center gap-2 text-xs tracking-eyebrow uppercase text-n-400 font-medium mb-4">
+            <span className="inline-flex items-center gap-2 text-xs tracking-eyebrow uppercase text-n-600 font-medium mb-4">
               <span className="h-px w-5 bg-n-300" aria-hidden="true" />
               FAQ
             </span>
@@ -61,16 +61,16 @@ export function FAQ() {
               >
                 <button
                   onClick={() => toggleFaq(idx)}
-                  className="w-full flex items-center gap-4 p-5 sm:p-6 text-left focus:outline-none"
+                  className="w-full flex items-center gap-4 p-5 sm:p-6 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0"
                   aria-expanded={isOpen}
                 >
-                  <span className="text-xs font-mono text-n-400 tabular-nums select-none">
+                  <span className="text-xs font-mono text-n-600 tabular-nums select-none">
                     {String(idx + 1).padStart(2, '0')}
                   </span>
                   <h3 className="flex-1 text-base font-medium text-n-900">{faq.question}</h3>
                   <ChevronDown
                     className={cn(
-                      "w-4 h-4 text-n-400 transition-transform duration-150 flex-shrink-0",
+                      "w-4 h-4 text-n-600 transition-transform duration-150 flex-shrink-0",
                       { "rotate-180": isOpen }
                     )}
                   />

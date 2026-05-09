@@ -155,7 +155,10 @@ export function GlassModal({
   );
 
   const hasStringTitle = typeof title === 'string';
-  const labelledBy = title ? titleId : undefined;
+  // Only associate aria-labelledby when the title actually renders with the id.
+  // Non-string titles render without an id, so labelledBy must stay undefined
+  // and the caller should pass `ariaLabel` instead.
+  const labelledBy = hasStringTitle ? titleId : undefined;
   const describedBy = description ? descId : undefined;
 
   const backdropMotion = shouldReduce
@@ -202,7 +205,7 @@ export function GlassModal({
             className={cn(
               'relative w-full outline-none',
               'glass-elite-elevated glow-gold-soft',
-              'text-n-100',
+              'text-n-1000',
               SIZE_CLASSES[size],
               'max-h-[90vh] flex flex-col',
               panelClassName,
@@ -216,7 +219,7 @@ export function GlassModal({
                     <div
                       id={hasStringTitle ? titleId : undefined}
                       className={cn(
-                        'font-serif-elite text-2xl leading-tight font-normal text-n-100',
+                        'font-serif-elite text-2xl leading-tight font-normal text-n-1000',
                       )}
                     >
                       {title}
@@ -238,10 +241,10 @@ export function GlassModal({
                     aria-label="Cerrar"
                     className={cn(
                       'shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md',
-                      'text-n-500 hover:text-n-100',
-                      'bg-transparent hover:bg-n-0/5',
+                      'text-n-700 hover:text-n-1000',
+                      'bg-transparent hover:bg-n-200/50',
                       'transition-colors duration-150',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-900',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
                     )}
                   >
                     <X className="h-4 w-4" aria-hidden="true" />

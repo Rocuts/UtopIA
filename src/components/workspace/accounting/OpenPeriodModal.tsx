@@ -203,7 +203,7 @@ export function OpenPeriodModal({
 
 const selectClass = cn(
   'w-full rounded-md border border-gold-500/25 bg-n-1000/60 px-3 py-2',
-  'text-sm text-n-100 font-mono',
+  'text-sm text-n-1000 font-mono',
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
   'disabled:opacity-50',
 );

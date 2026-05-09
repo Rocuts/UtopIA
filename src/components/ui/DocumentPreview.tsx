@@ -106,7 +106,7 @@ export function DocumentPreview({
 
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-n-900 truncate">{filename}</p>
-            <p className="text-xs text-n-400 font-[family-name:var(--font-geist-mono)]">{formatFileSize(size)}</p>
+            <p className="text-xs text-n-600 font-[family-name:var(--font-geist-mono)]">{formatFileSize(size)}</p>
           </div>
 
           <Badge
@@ -136,7 +136,7 @@ export function DocumentPreview({
             {onRemove && (
               <button
                 onClick={onRemove}
-                className="p-1.5 rounded-sm text-n-400 hover:text-danger hover:bg-danger/10 transition-colors"
+                className="p-1.5 rounded-sm text-n-700 hover:text-danger hover:bg-danger/10 transition-colors"
                 aria-label="Remove document"
               >
                 <X className="w-4 h-4" />

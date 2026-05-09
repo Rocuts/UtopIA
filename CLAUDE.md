@@ -158,6 +158,33 @@ Tools are defined in `src/lib/agents/tools/registry.ts` using the AI SDK v6 `too
 - New financial pipeline agents are standalone functions in `src/lib/agents/financial/agents/`, wired in `src/lib/agents/financial/orchestrator.ts`
 - New audit agents follow the same pattern in `src/lib/agents/financial/audit/agents/`, wired in the audit orchestrator. Each auditor outputs structured JSON findings parsed by `parseAuditorOutput()`
 
+## Visual Token Polarity (mandatory)
+
+UtopIA uses an **adaptive `n-0..n-1000` scale** that inverts by mode (light/dark). This makes the same class produce inverse colors in each mode — which is what enables a single component to look correct in both. The rule for picking a tint is **what role the text plays**, not what color you want it to be.
+
+### Tint hierarchy — never violate
+
+| Role | Token | When to use |
+|---|---|---|
+| Primary ink (reading, headings, KPI values, modal body) | `text-n-1000` | Default for any text the user must read |
+| Secondary ink (descriptions, helper text, button labels in glass surfaces, "X" close icons that must be visible on hover) | `text-n-700` / `text-n-800` | Body copy on glass, secondary action labels |
+| Tertiary / decorative | `text-n-500` / `text-n-600` | Eyebrow uppercase labels, neutral state indicators (`flat`, "no data"), separators, icons adjacent to a labeled text |
+| Forbidden as readable ink | `text-n-100` / `text-n-200` / `text-n-300` / `text-n-400` | These tokens are surface/border level — they collapse against `n-0/n-50/glass-elite-elevated` to <2:1 in light mode |
+
+### Hard rules
+
+1. **Never use `text-n-100..n-400` as the tint of text the user must read or click.** They are reserved for: borders (`border-n-200/300`), surfaces (`bg-n-100/200`), placeholders (`placeholder:text-n-400`), and disabled states **with a non-text affordance** (icon + opacity).
+2. **Disabled buttons** must use `disabled:text-n-600` minimum (not `n-400`) — WCAG AA disabled threshold is 3:1, `n-400` on `n-0` is below.
+3. **Hover states must not invert polarity.** A button with `text-n-700` hover-ing to `text-n-100` becomes invisible in light mode (the GlassModal X-close bug). Hover should darken/intensify, not fade: `text-n-700 hover:text-n-1000` is canonical.
+4. **`ring-offset-*` follows surface, not mode.** Inside a light modal use `ring-offset-n-0`, not `ring-offset-n-900`.
+5. **Eyebrows / decorative-only text** (uppercase tracking-eyebrow font-mono labels, separators like `|`, neutral state pills) MAY use `n-500/n-600` because the form already signals "this is metadata, not content."
+
+### When you find a violation
+
+Apply the minimum-blast-radius fix: change the tint, don't restructure the component. If the bug appears in a shared primitive (`Button`, `GlassModal`, `IntakeModal`), fix it once at the primitive — the cascade is the win.
+
+The `utopia-contrast-auditor` agent enforces these rules. Run it on any "no se ve / fantasma / muy claro / low contrast / WCAG" signal before touching components manually.
+
 ## Layout Gotchas
 
 - **Lenis smooth scroll is global.** `src/app/layout.tsx` wraps the whole app with `<SmoothScroll>` → `ReactLenis root`. Lenis hijacks wheel events at the document level to drive smooth scrolling. Any subtree that relies on internal `overflow-y-auto` containers (e.g. the workspace shell `src/app/workspace/layout.tsx`, fullscreen modals) **must** carry `data-lenis-prevent` on an ancestor or wheel events never reach the scrollable child and mouse-wheel scroll dies silently. The workspace shell root `<div>` already has it — preserve it when editing that layout.

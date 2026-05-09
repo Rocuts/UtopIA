@@ -124,7 +124,7 @@ export function CapexEventsModal({
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 mb-5">
         {/* Nombre */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-n-400 uppercase tracking-wide font-mono" htmlFor="capex-name">
+          <label className="text-xs text-n-700 uppercase tracking-wide font-mono" htmlFor="capex-name">
             {isEs ? 'Nombre del evento' : 'Event name'}
           </label>
           <input
@@ -146,7 +146,7 @@ export function CapexEventsModal({
         {/* Mes + Monto (fila) */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-n-400 uppercase tracking-wide font-mono" htmlFor="capex-month">
+            <label className="text-xs text-n-700 uppercase tracking-wide font-mono" htmlFor="capex-month">
               {isEs ? 'Mes (1-12)' : 'Month (1-12)'}
             </label>
             <input
@@ -168,7 +168,7 @@ export function CapexEventsModal({
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-n-400 uppercase tracking-wide font-mono" htmlFor="capex-amount">
+            <label className="text-xs text-n-700 uppercase tracking-wide font-mono" htmlFor="capex-amount">
               {isEs ? 'Monto COP' : 'Amount COP'}
             </label>
             <input
@@ -236,7 +236,7 @@ export function CapexEventsModal({
               )}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-n-100 truncate">{ev.name}</p>
+                <p className="text-sm text-n-1000 truncate">{ev.name}</p>
                 <p className="text-xs text-n-500">
                   {isEs ? `Mes ${ev.monthOffset}` : `Month ${ev.monthOffset}`}
                   {' · '}

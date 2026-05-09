@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useIsMac } from '@/hooks/useIsMac';
 import { cn } from '@/lib/utils';
 import { AreaNav } from './AreaNav';
 import { NiifEliteButton } from './NiifEliteButton';
@@ -101,16 +102,11 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 
 function SearchTrigger() {
   const { language } = useLanguage();
+  const isMac = useIsMac();
 
   const handleClick = useCallback(() => {
     // The shell listens for Cmd+K on window; synthesize the event so the
     // trigger is a discoverable visual surface without duplicating state.
-    // Using KeyboardEvent constructor (not `new KeyboardEvent('keydown', {...})`
-    // directly because `metaKey`/`ctrlKey` aren't on `KeyboardEventInit` in
-    // older TS libs — we cast to the DOM standard init dict).
-    const isMac = typeof navigator !== 'undefined'
-      ? navigator.platform.toLowerCase().includes('mac')
-      : true;
     const event = new KeyboardEvent('keydown', {
       key: 'k',
       code: 'KeyK',
@@ -119,7 +115,7 @@ function SearchTrigger() {
       ...(isMac ? { metaKey: true } : { ctrlKey: true }),
     } as KeyboardEventInit);
     window.dispatchEvent(event);
-  }, []);
+  }, [isMac]);
 
   return (
     <button
@@ -128,24 +124,23 @@ function SearchTrigger() {
       aria-label={language === 'es' ? 'Abrir búsqueda' : 'Open search'}
       className={cn(
         'hidden lg:flex items-center gap-2 w-72 px-3 h-9 rounded-md',
-        'bg-n-50 border border-n-200 text-n-500 text-sm',
-        'hover:border-gold-500/40 hover:text-n-700 transition-colors',
+        'bg-n-50 border border-n-200 text-n-700 text-sm',
+        'hover:border-gold-500/40 hover:text-n-900 transition-colors',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
       )}
     >
-      <Search className="w-4 h-4" />
-      <span className="truncate">
+      <Search className="w-4 h-4 shrink-0" />
+      <span className="truncate min-w-0 flex-1 text-left">
         {language === 'es' ? 'Buscar caso, cliente, norma…' : 'Search case, client, norm…'}
       </span>
       <kbd
+        suppressHydrationWarning
         className={cn(
-          'ml-auto font-mono text-xs-mono px-1.5 py-0.5 rounded-xs',
-          'bg-n-100 text-n-600 border border-n-200',
+          'shrink-0 whitespace-nowrap font-mono text-xs-mono px-1.5 py-0.5 rounded-xs',
+          'bg-n-100 text-n-800 border border-n-300',
         )}
       >
-        {typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
-          ? '⌘K'
-          : 'Ctrl K'}
+        {isMac ? '⌘K' : 'Ctrl+K'}
       </kbd>
     </button>
   );
@@ -163,7 +158,7 @@ function LanguageToggle() {
       className={cn(
         'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
         'font-mono text-xs-mono font-medium uppercase',
-        'text-n-500 hover:text-n-900 transition-colors',
+        'text-n-700 hover:text-n-1000 transition-colors',
         'border border-transparent hover:border-gold-500/25',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
       )}
@@ -280,7 +275,7 @@ function UserMenu() {
                 <FileText className="w-3.5 h-3.5 text-gold-500" />
                 <span className="flex-1 min-w-0">
                   <span className="block font-medium truncate">{labels.lastReport}</span>
-                  <span className="block text-2xs text-n-500 truncate">
+                  <span className="block text-2xs text-n-700 truncate">
                     {lastCompletedReport.company.name}
                   </span>
                 </span>

@@ -247,7 +247,7 @@ export function ReportDiff({
             >
               {t.label}
               {t.id === 'changes' && hasChanges && (
-                <span className="ml-2 text-2xs font-mono text-n-500">
+                <span className="ml-2 text-2xs font-mono text-n-700">
                   +{diff.stats.added} / -{diff.stats.removed}
                 </span>
               )}
@@ -271,7 +271,7 @@ export function ReportDiff({
       >
         <div className="px-6 py-4">
           {before.trim().length === 0 ? (
-            <p className="text-xs text-n-500 italic">{labels.emptyBefore}</p>
+            <p className="text-xs text-n-700 italic">{labels.emptyBefore}</p>
           ) : (
             <div className="prose prose-sm max-w-none text-n-900 prose-headings:text-n-900 prose-headings:font-semibold prose-p:leading-relaxed prose-strong:text-n-900">
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
@@ -295,20 +295,20 @@ export function ReportDiff({
         data-lenis-prevent
       >
         {/* Stats strip */}
-        <div className="sticky top-0 z-10 border-b border-n-100 bg-n-50/95 backdrop-blur-sm px-4 py-2 flex items-center gap-3 text-2xs font-mono text-n-600">
+        <div className="sticky top-0 z-10 border-b border-n-100 bg-n-50/95 backdrop-blur-sm px-4 py-2 flex items-center gap-3 text-2xs font-mono text-n-700">
           <span className="text-success">
-            +{diff.stats.added} <span className="text-n-500 font-normal">{labels.statsAdded}</span>
+            +{diff.stats.added} <span className="text-n-700 font-normal">{labels.statsAdded}</span>
           </span>
           <span className="text-danger">
-            -{diff.stats.removed} <span className="text-n-500 font-normal">{labels.statsRemoved}</span>
+            -{diff.stats.removed} <span className="text-n-700 font-normal">{labels.statsRemoved}</span>
           </span>
           <span>
-            {diff.stats.unchanged} <span className="text-n-500 font-normal">{labels.statsUnchanged}</span>
+            {diff.stats.unchanged} <span className="text-n-700 font-normal">{labels.statsUnchanged}</span>
           </span>
         </div>
 
         {!hasChanges ? (
-          <div className="px-6 py-8 text-center text-xs text-n-500">
+          <div className="px-6 py-8 text-center text-xs text-n-700">
             {labels.noChanges}
           </div>
         ) : (
@@ -339,7 +339,7 @@ export function ReportDiff({
       >
         <div className="px-6 py-4">
           {after.trim().length === 0 ? (
-            <p className="text-xs text-n-500 italic">{labels.emptyAfter}</p>
+            <p className="text-xs text-n-700 italic">{labels.emptyAfter}</p>
           ) : (
             <div className="prose prose-sm max-w-none text-n-900 prose-headings:text-n-900 prose-headings:font-semibold prose-p:leading-relaxed prose-strong:text-n-900">
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>

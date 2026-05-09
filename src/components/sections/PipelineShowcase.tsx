@@ -83,7 +83,7 @@ export function PipelineShowcase() {
         >
           {/* Phase 1: Agents */}
           <div className="mb-6">
-            <span className="text-xs font-bold text-n-400 uppercase tracking-eyebrow font-mono">
+            <span className="text-xs font-bold text-n-700 uppercase tracking-eyebrow font-mono">
               Fase 1 · Generacion Secuencial
             </span>
             <div className="flex items-center gap-2 mt-3 overflow-x-auto styled-scrollbar pb-2">
@@ -99,10 +99,10 @@ export function PipelineShowcase() {
                       Agente {i + 1}
                     </p>
                     <p className="text-xs font-semibold text-gold-700">{agent.label}</p>
-                    <p className="text-xs text-n-400">{agent.sub}</p>
+                    <p className="text-xs text-n-600">{agent.sub}</p>
                   </motion.div>
                   {i < AGENTS.length - 1 && (
-                    <ArrowRight className="w-4 h-4 text-n-300 mx-1 shrink-0" />
+                    <ArrowRight className="w-4 h-4 text-n-500 mx-1 shrink-0" aria-hidden="true" />
                   )}
                 </div>
               ))}
@@ -111,7 +111,7 @@ export function PipelineShowcase() {
 
           {/* Phase 2: Auditors */}
           <div className="mb-6">
-            <span className="text-xs font-bold text-n-400 uppercase tracking-eyebrow font-mono">
+            <span className="text-xs font-bold text-n-700 uppercase tracking-eyebrow font-mono">
               Fase 2 · 4 Auditores en Paralelo
             </span>
             <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -131,7 +131,7 @@ export function PipelineShowcase() {
 
           {/* Phase 3: Meta-Auditor */}
           <div>
-            <span className="text-xs font-bold text-n-400 uppercase tracking-eyebrow font-mono">
+            <span className="text-xs font-bold text-n-700 uppercase tracking-eyebrow font-mono">
               Fase 3 · Meta-Auditoria de Calidad
             </span>
             <motion.div

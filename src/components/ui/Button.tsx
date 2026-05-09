@@ -81,10 +81,10 @@ const ELITE_VARIANT_CLASSES: Record<'elite' | 'wine' | 'secondary' | 'ghost', st
     'focus-visible:ring-gold-500',
   ),
   ghost: cn(
-    'text-n-400',
+    'text-n-700',
     'bg-transparent',
-    'hover:text-n-100 hover:bg-n-0/5',
-    'focus-visible:ring-n-100',
+    'hover:text-n-1000 hover:bg-n-100/60',
+    'focus-visible:ring-n-700',
   ),
 };
 

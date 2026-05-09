@@ -72,7 +72,7 @@ function MetricCard({
             <AnimatedCounter value={value} />
           </div>
           <p className="text-sm font-medium text-n-900 mb-2">{label}</p>
-          <p className="text-xs text-n-400">{description}</p>
+          <p className="text-xs text-n-600">{description}</p>
         </div>
       </GlassPanel>
     </Reveal>

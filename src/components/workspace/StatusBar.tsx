@@ -111,7 +111,7 @@ export function StatusBar({
       {/* Center: case info */}
       <div className="flex-1 flex items-center justify-center gap-2 min-w-0 px-2">
         {caseId && (
-          <span className="text-xs text-n-400 font-mono hidden md:inline truncate">
+          <span className="text-xs text-n-600 font-mono hidden md:inline truncate">
             {caseId}
           </span>
         )}

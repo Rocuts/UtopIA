@@ -220,7 +220,7 @@ export function PromoteEntries({
               <button
                 type="button"
                 onClick={handleClose}
-                className="text-n-500 hover:text-n-1000 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-sm"
+                className="text-n-700 hover:text-n-1000 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-sm"
                 aria-label={tt.cancel}
               >
                 <X className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
@@ -272,11 +272,11 @@ export function PromoteEntries({
                             {e.pucHint ? (
                               <span className="inline-flex items-center gap-1">
                                 <span className="font-mono">{e.pucHint}</span>
-                                <span className="text-n-400">·</span>
-                                <span className="text-n-500">{e.category ?? '—'}</span>
+                                <span className="text-n-500">·</span>
+                                <span className="text-n-600">{e.category ?? '—'}</span>
                               </span>
                             ) : (
-                              <span className="text-n-400">{tt.no_account}</span>
+                              <span className="text-n-600">{tt.no_account}</span>
                             )}
                           </td>
                         </tr>

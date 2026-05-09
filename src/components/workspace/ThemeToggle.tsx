@@ -64,7 +64,7 @@ export function ThemeToggle() {
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
               selected
                 ? 'bg-gold-500/12 text-n-900'
-                : 'text-n-500 hover:text-n-900',
+                : 'text-n-700 hover:text-n-1000',
             )}
           >
             <Icon className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />

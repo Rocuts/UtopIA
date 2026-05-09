@@ -381,7 +381,7 @@ function CreateBookDialog({
           onClick={onClose}
           disabled={submitting}
           aria-label={tt.new_book_cancel}
-          className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-n-600 hover:bg-n-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+          className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-n-700 hover:text-n-1000 hover:bg-n-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
         >
           <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
         </button>

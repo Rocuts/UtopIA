@@ -111,7 +111,7 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
             disabled={submitting}
             className={cn(
               'inline-flex items-center px-4 py-2 rounded-md',
-              'border border-gold-500/30 text-n-100 hover:bg-gold-500/10 transition-colors',
+              'border border-gold-500/30 text-n-800 hover:bg-gold-500/10 transition-colors',
               'text-sm disabled:opacity-50',
             )}
           >
@@ -146,7 +146,7 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
       <div className="flex flex-col gap-4 py-2">
         <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 flex items-start gap-3">
           <ShieldAlert className="h-5 w-5 text-warning shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="text-sm text-n-100 leading-relaxed">
+          <div className="text-sm text-n-800 leading-relaxed">
             {isEs
               ? 'El cierre ejecuta health check (cuadratura, conciliación bancaria, drafts pendientes), genera asientos de cierre, calcula hash SHA-256 encadenado al periodo anterior y bloquea el registro de nuevos asientos. Es reversible vía Reabrir hasta que se Bloquee.'
               : 'Closing runs health check (balance, bank reconciliation, pending drafts), generates closing entries, computes SHA-256 hash chained to the previous period, and blocks new entries. Reversible via Reopen until Locked.'}
@@ -166,7 +166,7 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
             disabled={submitting}
             className="mt-1 h-4 w-4 rounded border-gold-500/40 bg-n-1000/60 text-gold-500 focus:ring-gold-500"
           />
-          <span className="text-sm text-n-100">
+          <span className="text-sm text-n-800">
             {isEs
               ? 'Acepto que este cierre ejecutará un workflow durable y bloqueará nuevos asientos en el periodo.'
               : 'I accept this close will run a durable workflow and block new entries in the period.'}
@@ -181,7 +181,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500">{label}</p>
-      <p className="mt-0.5 text-n-100 font-medium">{value}</p>
+      <p className="mt-0.5 text-n-1000 font-medium">{value}</p>
     </div>
   );
 }

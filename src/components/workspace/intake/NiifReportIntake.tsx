@@ -842,10 +842,10 @@ export function NiifReportIntake() {
         <div>
           <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
             Revisor Fiscal{' '}
-            <span className="text-n-400 font-normal">-- opcional</span>
+            <span className="text-n-600 font-normal">-- opcional</span>
             <ConfidenceDot level={getFieldConfidence('fiscalAuditor')} />
             <span className="inline-block relative group">
-              <Info className="w-3 h-3 text-n-400 inline" />
+              <Info className="w-3 h-3 text-n-600 inline" />
               <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-n-900 text-n-0 text-2xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 Obligatorio para sociedades con activos brutos &gt; 5.000 SMLMV o ingresos &gt;
                 3.000 SMLMV (Art. 203 Cod. Comercio)
@@ -900,7 +900,7 @@ export function NiifReportIntake() {
           </div>
           <div>
             <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
-              Periodo Comparativo <span className="text-n-400 font-normal">-- opcional</span>
+              Periodo Comparativo <span className="text-n-600 font-normal">-- opcional</span>
             </label>
             <select
               value={values.comparativePeriod ?? ''}
@@ -1039,7 +1039,7 @@ export function NiifReportIntake() {
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5">
           Instrucciones especiales{' '}
-          <span className="text-n-400 font-normal">-- opcional</span>
+          <span className="text-n-600 font-normal">-- opcional</span>
         </label>
         <textarea
           value={values.specialInstructions ?? ''}

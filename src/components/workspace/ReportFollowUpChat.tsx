@@ -401,15 +401,15 @@ export function ReportFollowUpChat({
           <MessageSquare className="w-4 h-4 text-gold-500" />
           {expanded ? copy.toggleExpanded : copy.toggleCollapsed}
           {turns.length > 0 && (
-            <span className="text-xs text-n-400 font-mono">
+            <span className="text-xs text-n-600 font-mono">
               ({turns.length})
             </span>
           )}
         </span>
         {expanded ? (
-          <ChevronDown className="w-4 h-4 text-n-400" />
+          <ChevronDown className="w-4 h-4 text-n-600" />
         ) : (
-          <ChevronUp className="w-4 h-4 text-n-400" />
+          <ChevronUp className="w-4 h-4 text-n-600" />
         )}
       </button>
 
@@ -433,7 +433,7 @@ export function ReportFollowUpChat({
               className="flex-1 min-h-0 overflow-y-auto styled-scrollbar px-6 py-4 space-y-3"
             >
               {turns.length === 0 ? (
-                <div className="text-xs text-n-400">
+                <div className="text-xs text-n-600">
                   <div className="mb-3 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-gold-500" />
                     <span className="font-semibold">{copy.emptyHint}</span>
@@ -475,7 +475,7 @@ export function ReportFollowUpChat({
                               {turn.content}
                             </ReactMarkdown>
                           ) : (
-                            <span className="text-n-400 italic text-xs">{copy.streaming}</span>
+                            <span className="text-n-600 italic text-xs">{copy.streaming}</span>
                           )}
                         </div>
                       ) : (
