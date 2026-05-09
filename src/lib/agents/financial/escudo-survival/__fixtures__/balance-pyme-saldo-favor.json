@@ -1,0 +1,144 @@
+{
+  "__testCase": "Empresa con retenciones acumuladas 1355 = $50M, impuesto proyectado $30M → saldo a favor $20M. Capa 2 espera acciones[].length >= 1 (certif_no_retencion / compensacion / devolucion). Capa 1 verifica que 135505 = retencionesAcumuladas reportadas. TET ~ 23% (verde).",
+
+  "periods": [
+    {
+      "period": "2026",
+      "classes": [
+        {
+          "code": 1,
+          "name": "Activo",
+          "auxiliaryTotal": 220000000,
+          "reportedTotal": 220000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "11", "name": "Efectivo y equivalentes", "level": "Grupo", "balance": 30000000, "isLeaf": false },
+            { "code": "1105", "name": "Caja", "level": "Cuenta", "balance": 5000000, "isLeaf": false },
+            { "code": "110505", "name": "Caja general", "level": "Auxiliar", "balance": 5000000, "isLeaf": true },
+            { "code": "1110", "name": "Bancos", "level": "Cuenta", "balance": 15000000, "isLeaf": false },
+            { "code": "111005", "name": "Banco Bogotá cta cte", "level": "Auxiliar", "balance": 15000000, "isLeaf": true },
+            { "code": "1120", "name": "Cuentas de ahorro", "level": "Cuenta", "balance": 10000000, "isLeaf": false },
+            { "code": "112005", "name": "Bancolombia ahorro", "level": "Auxiliar", "balance": 10000000, "isLeaf": true },
+            { "code": "13", "name": "Deudores", "level": "Grupo", "balance": 140000000, "isLeaf": false },
+            { "code": "1305", "name": "Clientes", "level": "Cuenta", "balance": 90000000, "isLeaf": false },
+            { "code": "130505", "name": "Clientes nacionales", "level": "Auxiliar", "balance": 90000000, "isLeaf": true },
+            { "code": "1355", "name": "Anticipo de impuestos y contribuciones", "level": "Cuenta", "balance": 50000000, "isLeaf": false },
+            { "code": "135505", "name": "Retenciones en la fuente a favor", "level": "Auxiliar", "balance": 30000000, "isLeaf": true },
+            { "code": "135510", "name": "Autorretenciones a favor", "level": "Auxiliar", "balance": 20000000, "isLeaf": true },
+            { "code": "15", "name": "Propiedades planta y equipo", "level": "Grupo", "balance": 50000000, "isLeaf": false },
+            { "code": "1504", "name": "Maquinaria y equipo", "level": "Cuenta", "balance": 65000000, "isLeaf": false },
+            { "code": "150405", "name": "Maquinaria producción", "level": "Auxiliar", "balance": 65000000, "isLeaf": true },
+            { "code": "1592", "name": "Depreciación acumulada", "level": "Cuenta", "balance": -15000000, "isLeaf": false },
+            { "code": "159205", "name": "Depreciación maquinaria", "level": "Auxiliar", "balance": -15000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 2,
+          "name": "Pasivo",
+          "auxiliaryTotal": 30000000,
+          "reportedTotal": 30000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "24", "name": "Impuestos gravámenes y tasas", "level": "Grupo", "balance": 30000000, "isLeaf": false },
+            { "code": "2404", "name": "Impuesto de renta y complementarios", "level": "Cuenta", "balance": 30000000, "isLeaf": false },
+            { "code": "240405", "name": "Impuesto renta corriente 2026", "level": "Auxiliar", "balance": 30000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 3,
+          "name": "Patrimonio",
+          "auxiliaryTotal": 190000000,
+          "reportedTotal": 190000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "31", "name": "Capital social", "level": "Grupo", "balance": 80000000, "isLeaf": false },
+            { "code": "3115", "name": "Capital suscrito y pagado", "level": "Cuenta", "balance": 80000000, "isLeaf": false },
+            { "code": "311505", "name": "Capital SAS", "level": "Auxiliar", "balance": 80000000, "isLeaf": true },
+            { "code": "33", "name": "Reservas", "level": "Grupo", "balance": 20000000, "isLeaf": false },
+            { "code": "3305", "name": "Reserva legal", "level": "Cuenta", "balance": 20000000, "isLeaf": false },
+            { "code": "330505", "name": "Reserva legal acumulada", "level": "Auxiliar", "balance": 20000000, "isLeaf": true },
+            { "code": "36", "name": "Resultados del ejercicio", "level": "Grupo", "balance": 90000000, "isLeaf": false },
+            { "code": "3605", "name": "Utilidad del ejercicio", "level": "Cuenta", "balance": 90000000, "isLeaf": false },
+            { "code": "360505", "name": "Utilidad neta 2026", "level": "Auxiliar", "balance": 90000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 4,
+          "name": "Ingresos",
+          "auxiliaryTotal": 400000000,
+          "reportedTotal": 400000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "41", "name": "Ingresos operacionales", "level": "Grupo", "balance": 400000000, "isLeaf": false },
+            { "code": "4135", "name": "Comercio al por mayor", "level": "Cuenta", "balance": 400000000, "isLeaf": false },
+            { "code": "413505", "name": "Ventas nacionales", "level": "Auxiliar", "balance": 400000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 5,
+          "name": "Gastos",
+          "auxiliaryTotal": 310000000,
+          "reportedTotal": 310000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "51", "name": "Gastos operacionales de administración", "level": "Grupo", "balance": 280000000, "isLeaf": false },
+            { "code": "5105", "name": "Gastos de personal", "level": "Cuenta", "balance": 200000000, "isLeaf": false },
+            { "code": "510506", "name": "Sueldos y salarios", "level": "Auxiliar", "balance": 200000000, "isLeaf": true },
+            { "code": "5135", "name": "Servicios", "level": "Cuenta", "balance": 80000000, "isLeaf": false },
+            { "code": "513505", "name": "Servicios públicos", "level": "Auxiliar", "balance": 80000000, "isLeaf": true },
+            { "code": "54", "name": "Impuesto de renta y complementarios", "level": "Grupo", "balance": 30000000, "isLeaf": false },
+            { "code": "5405", "name": "Impuesto de renta corriente", "level": "Cuenta", "balance": 30000000, "isLeaf": false },
+            { "code": "540505", "name": "Impuesto renta 2026", "level": "Auxiliar", "balance": 30000000, "isLeaf": true }
+          ]
+        }
+      ],
+      "controlTotals": {
+        "activo": 220000000,
+        "activoCorriente": 170000000,
+        "activoNoCorriente": 50000000,
+        "pasivo": 30000000,
+        "pasivoCorriente": 30000000,
+        "pasivoNoCorriente": 0,
+        "patrimonio": 190000000,
+        "ingresos": 400000000,
+        "gastos": 310000000,
+        "utilidadNeta": 90000000,
+        "efectivoCuenta11": 30000000,
+        "deudoresCuenta13": 140000000,
+        "cuentasPorPagar23": 0,
+        "impuestosCuenta24": 30000000,
+        "obligacionesLaborales25": 0
+      },
+      "equityBreakdown": {
+        "capitalSuscritoPagado": 80000000,
+        "reservaLegal": 20000000,
+        "utilidadEjercicio": 90000000
+      },
+      "summary": {
+        "totalAssets": 220000000,
+        "totalLiabilities": 30000000,
+        "totalEquity": 190000000,
+        "totalRevenue": 400000000,
+        "totalExpenses": 310000000,
+        "totalCosts": 0,
+        "totalProduction": 0,
+        "netIncome": 90000000,
+        "equationBalance": 0,
+        "equationBalanced": true
+      },
+      "validation": {
+        "blocking": false,
+        "reasons": [],
+        "suggestedAccounts": [],
+        "adjustments": []
+      },
+      "discrepancies": [],
+      "missingExpectedAccounts": []
+    }
+  ],
+  "comparative": null,
+  "rawRows": [],
+  "auxiliaryCount": 12,
+  "cleanData": "",
+  "validationReport": "Balance de prueba saldo a favor — fixture de regresión"
+}

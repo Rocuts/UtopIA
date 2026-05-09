@@ -1,0 +1,148 @@
+{
+  "__testCase": "Balance trampa Art. 647: financieramente correcto, pero el report simulado (construido en run-validation.ts) cita 'Art. 130 E.T.' sin marcarlo como derogado. Ese artículo fue derogado por Ley 1819/2016. La capa 3 check 'descuentos_no_norma_derogada' debe detectarlo y fallar. También verifica el stress test defensaArt647. Balance en sí es limpio: TET 20%, sin saldo a favor, sin pagos en efectivo problemáticos.",
+
+  "periods": [
+    {
+      "period": "2026",
+      "classes": [
+        {
+          "code": 1,
+          "name": "Activo",
+          "auxiliaryTotal": 200000000,
+          "reportedTotal": 200000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "11", "name": "Efectivo y equivalentes", "level": "Grupo", "balance": 35000000, "isLeaf": false },
+            { "code": "1105", "name": "Caja", "level": "Cuenta", "balance": 3000000, "isLeaf": false },
+            { "code": "110505", "name": "Caja general", "level": "Auxiliar", "balance": 3000000, "isLeaf": true },
+            { "code": "1110", "name": "Bancos", "level": "Cuenta", "balance": 20000000, "isLeaf": false },
+            { "code": "111005", "name": "Banco Bogotá cta cte", "level": "Auxiliar", "balance": 20000000, "isLeaf": true },
+            { "code": "1120", "name": "Cuentas de ahorro", "level": "Cuenta", "balance": 12000000, "isLeaf": false },
+            { "code": "112005", "name": "Bancolombia ahorro", "level": "Auxiliar", "balance": 12000000, "isLeaf": true },
+            { "code": "13", "name": "Deudores", "level": "Grupo", "balance": 65000000, "isLeaf": false },
+            { "code": "1305", "name": "Clientes", "level": "Cuenta", "balance": 61000000, "isLeaf": false },
+            { "code": "130505", "name": "Clientes nacionales", "level": "Auxiliar", "balance": 61000000, "isLeaf": true },
+            { "code": "1355", "name": "Anticipo de impuestos y contribuciones", "level": "Cuenta", "balance": 4000000, "isLeaf": false },
+            { "code": "135505", "name": "Retenciones en la fuente a favor", "level": "Auxiliar", "balance": 4000000, "isLeaf": true },
+            { "code": "15", "name": "Propiedades planta y equipo", "level": "Grupo", "balance": 100000000, "isLeaf": false },
+            { "code": "1504", "name": "Maquinaria y equipo", "level": "Cuenta", "balance": 130000000, "isLeaf": false },
+            { "code": "150405", "name": "Maquinaria producción", "level": "Auxiliar", "balance": 130000000, "isLeaf": true },
+            { "code": "1592", "name": "Depreciación acumulada", "level": "Cuenta", "balance": -30000000, "isLeaf": false },
+            { "code": "159205", "name": "Depreciación maquinaria", "level": "Auxiliar", "balance": -30000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 2,
+          "name": "Pasivo",
+          "auxiliaryTotal": 40000000,
+          "reportedTotal": 40000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "21", "name": "Obligaciones financieras", "level": "Grupo", "balance": 18000000, "isLeaf": false },
+            { "code": "2105", "name": "Bancos nacionales", "level": "Cuenta", "balance": 18000000, "isLeaf": false },
+            { "code": "210505", "name": "Banco Bogotá pagaré", "level": "Auxiliar", "balance": 18000000, "isLeaf": true },
+            { "code": "24", "name": "Impuestos gravámenes y tasas", "level": "Grupo", "balance": 22000000, "isLeaf": false },
+            { "code": "2404", "name": "Impuesto de renta y complementarios", "level": "Cuenta", "balance": 22000000, "isLeaf": false },
+            { "code": "240405", "name": "Impuesto renta corriente 2026", "level": "Auxiliar", "balance": 22000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 3,
+          "name": "Patrimonio",
+          "auxiliaryTotal": 160000000,
+          "reportedTotal": 160000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "31", "name": "Capital social", "level": "Grupo", "balance": 70000000, "isLeaf": false },
+            { "code": "3115", "name": "Capital suscrito y pagado", "level": "Cuenta", "balance": 70000000, "isLeaf": false },
+            { "code": "311505", "name": "Capital SAS", "level": "Auxiliar", "balance": 70000000, "isLeaf": true },
+            { "code": "33", "name": "Reservas", "level": "Grupo", "balance": 20000000, "isLeaf": false },
+            { "code": "3305", "name": "Reserva legal", "level": "Cuenta", "balance": 20000000, "isLeaf": false },
+            { "code": "330505", "name": "Reserva legal acumulada", "level": "Auxiliar", "balance": 20000000, "isLeaf": true },
+            { "code": "36", "name": "Resultados del ejercicio", "level": "Grupo", "balance": 70000000, "isLeaf": false },
+            { "code": "3605", "name": "Utilidad del ejercicio", "level": "Cuenta", "balance": 70000000, "isLeaf": false },
+            { "code": "360505", "name": "Utilidad neta 2026", "level": "Auxiliar", "balance": 70000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 4,
+          "name": "Ingresos",
+          "auxiliaryTotal": 450000000,
+          "reportedTotal": 450000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "41", "name": "Ingresos operacionales", "level": "Grupo", "balance": 450000000, "isLeaf": false },
+            { "code": "4135", "name": "Comercio al por mayor", "level": "Cuenta", "balance": 450000000, "isLeaf": false },
+            { "code": "413505", "name": "Ventas nacionales", "level": "Auxiliar", "balance": 450000000, "isLeaf": true }
+          ]
+        },
+        {
+          "code": 5,
+          "name": "Gastos",
+          "auxiliaryTotal": 380000000,
+          "reportedTotal": 380000000,
+          "discrepancy": 0,
+          "accounts": [
+            { "code": "51", "name": "Gastos operacionales de administración", "level": "Grupo", "balance": 358000000, "isLeaf": false },
+            { "code": "5105", "name": "Gastos de personal", "level": "Cuenta", "balance": 250000000, "isLeaf": false },
+            { "code": "510506", "name": "Sueldos y salarios", "level": "Auxiliar", "balance": 250000000, "isLeaf": true },
+            { "code": "5135", "name": "Servicios", "level": "Cuenta", "balance": 70000000, "isLeaf": false },
+            { "code": "513505", "name": "Servicios públicos", "level": "Auxiliar", "balance": 70000000, "isLeaf": true },
+            { "code": "5195", "name": "Diversos", "level": "Cuenta", "balance": 38000000, "isLeaf": false },
+            { "code": "519595", "name": "Otros gastos administrativos", "level": "Auxiliar", "balance": 38000000, "isLeaf": true },
+            { "code": "54", "name": "Impuesto de renta y complementarios", "level": "Grupo", "balance": 22000000, "isLeaf": false },
+            { "code": "5405", "name": "Impuesto de renta corriente", "level": "Cuenta", "balance": 22000000, "isLeaf": false },
+            { "code": "540505", "name": "Impuesto renta 2026", "level": "Auxiliar", "balance": 22000000, "isLeaf": true }
+          ]
+        }
+      ],
+      "controlTotals": {
+        "activo": 200000000,
+        "activoCorriente": 100000000,
+        "activoNoCorriente": 100000000,
+        "pasivo": 40000000,
+        "pasivoCorriente": 40000000,
+        "pasivoNoCorriente": 0,
+        "patrimonio": 160000000,
+        "ingresos": 450000000,
+        "gastos": 380000000,
+        "utilidadNeta": 70000000,
+        "efectivoCuenta11": 35000000,
+        "deudoresCuenta13": 65000000,
+        "cuentasPorPagar23": 0,
+        "impuestosCuenta24": 22000000,
+        "obligacionesLaborales25": 0
+      },
+      "equityBreakdown": {
+        "capitalSuscritoPagado": 70000000,
+        "reservaLegal": 20000000,
+        "utilidadEjercicio": 70000000
+      },
+      "summary": {
+        "totalAssets": 200000000,
+        "totalLiabilities": 40000000,
+        "totalEquity": 160000000,
+        "totalRevenue": 450000000,
+        "totalExpenses": 380000000,
+        "totalCosts": 0,
+        "totalProduction": 0,
+        "netIncome": 70000000,
+        "equationBalance": 0,
+        "equationBalanced": true
+      },
+      "validation": {
+        "blocking": false,
+        "reasons": [],
+        "suggestedAccounts": [],
+        "adjustments": []
+      },
+      "discrepancies": [],
+      "missingExpectedAccounts": []
+    }
+  ],
+  "comparative": null,
+  "rawRows": [],
+  "auxiliaryCount": 14,
+  "cleanData": "",
+  "validationReport": "Balance trampa Art. 647 — el error está en el report simulado, no en el balance"
+}

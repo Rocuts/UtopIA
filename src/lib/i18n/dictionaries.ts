@@ -236,6 +236,73 @@ export const dict = {
               title: 'Devoluciones',
               description: 'Ingeniería de saldos a favor.',
             },
+            supervivencia: {
+              title: 'Modo Supervivencia Élite',
+              description: 'Análisis fiscal-patrimonial en tiempo real.',
+            },
+          },
+          modes: {
+            supervivenciaElite: {
+              title: 'Modo Supervivencia Élite',
+              subtitle: 'Optimización fiscal y protección patrimonial en tiempo real',
+              intro: 'Cinco análisis paralelos sobre tu balance bajo la normativa tributaria colombiana 2026.',
+              statusLabels: {
+                idle: 'Listo para analizar',
+                running: 'Analizando...',
+                done: 'Análisis completo',
+                error: 'Error en análisis',
+              },
+              progressStages: {
+                preprocessing: 'Procesando balance',
+                tet: 'Calculando TET',
+                retention: 'Escudo de retenciones',
+                antiDian: 'Auditoría preventiva',
+                reserve: 'Reserva de contingencia',
+                dividend: 'Optimización de dividendos',
+                synthesis: 'Sintetizando dictamen',
+                validation: 'Validando',
+              },
+              cards: {
+                tet: {
+                  title: 'Tasa Efectiva de Tributación',
+                  metric: 'TET',
+                  norma: 'Art. 240 E.T.',
+                },
+                retention: {
+                  title: 'Escudo de Retenciones',
+                  metric: 'Saldo a favor proyectado',
+                  norma: 'Art. 670 E.T.',
+                },
+                antiDian: {
+                  title: 'Anti-DIAN Preventivo',
+                  metric: 'Mayor impuesto si no se actúa',
+                  norma: 'Art. 771-5 E.T.',
+                },
+                reserve: {
+                  title: 'Reserva Fiscal de Contingencia',
+                  metric: 'Reserva sugerida',
+                  norma: 'Buena práctica financiera',
+                },
+                dividend: {
+                  title: 'Optimización de Dividendos',
+                  metric: 'Ahorro vs distribuir',
+                  norma: 'Art. 242 / Art. 36-3 E.T.',
+                },
+              },
+              synthesis: {
+                title: 'Dictamen ejecutivo',
+                cta: 'Ver dictamen completo',
+              },
+              actions: {
+                upload: 'Cargar balance',
+                runAgain: 'Analizar de nuevo',
+                cancel: 'Cancelar',
+              },
+              submodule: {
+                title: 'Modo Supervivencia Élite',
+                description: 'Análisis fiscal-patrimonial en tiempo real',
+              },
+            },
           },
         },
         valor: {
@@ -821,6 +888,73 @@ export const dict = {
             devoluciones: {
               title: 'Tax Refunds',
               description: 'Engineering of favorable balances.',
+            },
+            supervivencia: {
+              title: 'Elite Survival Mode',
+              description: 'Real-time fiscal and asset protection analysis.',
+            },
+          },
+          modes: {
+            supervivenciaElite: {
+              title: 'Elite Survival Mode',
+              subtitle: 'Real-time tax optimization and asset protection',
+              intro: 'Five parallel analyses of your balance sheet under Colombian 2026 tax regulations.',
+              statusLabels: {
+                idle: 'Ready to analyze',
+                running: 'Analyzing...',
+                done: 'Analysis complete',
+                error: 'Analysis error',
+              },
+              progressStages: {
+                preprocessing: 'Processing balance sheet',
+                tet: 'Calculating TET',
+                retention: 'Retention shield',
+                antiDian: 'Preventive audit',
+                reserve: 'Contingency reserve',
+                dividend: 'Dividend optimization',
+                synthesis: 'Synthesizing report',
+                validation: 'Validating',
+              },
+              cards: {
+                tet: {
+                  title: 'Effective Tax Rate',
+                  metric: 'TET',
+                  norma: 'Art. 240 E.T.',
+                },
+                retention: {
+                  title: 'Retention Shield',
+                  metric: 'Projected balance in favor',
+                  norma: 'Art. 670 E.T.',
+                },
+                antiDian: {
+                  title: 'Preventive Anti-DIAN',
+                  metric: 'Additional tax if unaddressed',
+                  norma: 'Art. 771-5 E.T.',
+                },
+                reserve: {
+                  title: 'Fiscal Contingency Reserve',
+                  metric: 'Suggested reserve',
+                  norma: 'Financial best practice',
+                },
+                dividend: {
+                  title: 'Dividend Optimizer',
+                  metric: 'Savings vs distributing',
+                  norma: 'Art. 242 / Art. 36-3 E.T.',
+                },
+              },
+              synthesis: {
+                title: 'Executive report',
+                cta: 'View full report',
+              },
+              actions: {
+                upload: 'Upload balance sheet',
+                runAgain: 'Analyze again',
+                cancel: 'Cancel',
+              },
+              submodule: {
+                title: 'Elite Survival Mode',
+                description: 'Real-time fiscal and asset protection analysis',
+              },
             },
           },
         },

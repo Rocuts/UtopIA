@@ -49,3 +49,6 @@ src/data/uploads/
 # Generated vector store (rebuild with: npm run db:ingest)
 src/data/vector_store/
 .env*.local
+
+# Claude Code worktrees (created by Agent tool isolation:worktree)
+.claude/worktrees/

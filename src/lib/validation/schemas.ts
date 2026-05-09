@@ -260,3 +260,18 @@ export const fiscalAuditOpinionRequestSchema = z.object({
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(2_000).optional(),
 });
+
+// ---- Escudo Survival (Modo Supervivencia Elite) route ----
+export const escudoSurvivalRequestSchema = z.object({
+  rawData: z.string().min(1, 'Financial data is required').max(2_000_000, 'Data too large'),
+  company: z
+    .object({
+      name: z.string().optional(),
+      nit: z.string().optional(),
+      sector: z.string().optional(),
+      ciiu: z.string().optional(),
+    })
+    .optional(),
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(5_000).optional(),
+});

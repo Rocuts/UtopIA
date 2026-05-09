@@ -28,6 +28,7 @@ import {
   ArrowRight,
   Clock,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -63,7 +64,8 @@ type SubmoduleKey =
   | 'defensaDian'
   | 'planeacionTributaria'
   | 'preciosTransferencia'
-  | 'devoluciones';
+  | 'devoluciones'
+  | 'supervivencia';
 
 interface SubmoduleDef {
   key: SubmoduleKey;
@@ -97,6 +99,12 @@ const SUBMODULES: SubmoduleDef[] = [
     href: '/workspace/escudo/devoluciones',
     icon: PiggyBank,
     status: 'pronto',
+  },
+  {
+    key: 'supervivencia',
+    href: '/workspace/escudo/supervivencia',
+    icon: Zap,
+    status: 'listo',
   },
 ];
 
