@@ -25,12 +25,30 @@ export interface CompanyInfo {
   comparativePeriod?: string;
   /** Ciudad / municipio */
   city?: string;
-  /** Representante legal */
+  /** Representante legal — campo legacy (string nombre). Mantener para retrocompat. */
   legalRepresentative?: string;
-  /** Revisor fiscal */
+  /** Revisor fiscal — campo legacy (string nombre). Mantener para retrocompat. */
   fiscalAuditor?: string;
-  /** Contador publico */
+  /** Contador publico — campo legacy (string nombre). Mantener para retrocompat. */
   accountant?: string;
+  /**
+   * Firmantes estructurados (forma canónica nueva). Coexiste con los campos
+   * legacy `legalRepresentative` / `fiscalAuditor` / `accountant`: si ambos
+   * están presentes, `signatories` gana. Loaders (`loadSignatoriesForWorkspace`)
+   * y renderers (`renderSignatureBlock`) consumen esta forma.
+   *
+   * - `representanteLegal.nombre` → bloque de firma en dictamen / acta.
+   * - `revisorFiscal.{nombre, tp}` → '12345-T' formato Tarjeta Profesional.
+   * - `contadorPublico.{nombre, tp}` → idem.
+   *
+   * `tp` debe seguir el formato '<numero>-T' (ej. '12345-T') exigido por la
+   * Junta Central de Contadores (JCC) bajo Ley 43/1990 Art. 3.
+   */
+  signatories?: {
+    representanteLegal?: { nombre: string };
+    revisorFiscal?: { nombre: string; tp: string };
+    contadorPublico?: { nombre: string; tp: string };
+  };
   /** Períodos detectados en el archivo. Sourced en /api/upload. */
   detectedPeriods?: string[];
 }

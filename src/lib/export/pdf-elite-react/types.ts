@@ -125,6 +125,15 @@ export interface ReportMeta {
   language: 'es' | 'en';
   /** Si presente, modifica el CoverPage (BORRADOR amarillo, BLOQUEADO bordeaux). */
   watermark?: WatermarkKind;
+  /**
+   * Subtitulo del watermark — se renderiza debajo del titulo en CoverPage cuando
+   * existe. Casos canonicos:
+   *  - 'COMPARATIVOS IMPRACTICABLES' (NIC 1 par. 38): los datos no permiten
+   *    presentar info comparativa fiable; el dictamen se emite con borrador.
+   *  - 'PROVISIONAL' / 'DRAFT': borrador a la espera de validacion humana.
+   * El compose.ts lo emite junto con `watermark` segun los disparadores.
+   */
+  watermarkSubtitle?: string;
 }
 
 export interface CoverSpec {
@@ -166,6 +175,29 @@ export interface AppendixSpec {
   bindingTotalsBlock?: string;
 }
 
+/**
+ * Bloque de firma renderizado por `renderSignatureBlock()` en formato
+ * Ley 43/1990. Se inyecta en el PDF al cierre del dictamen y de la
+ * certificacion del contador. Si null → placeholders con lineas
+ * "__________________________________".
+ */
+export interface SignatureBlockSpec {
+  /** Texto pre-renderizado por renderSignatureBlock — multilinea. */
+  rendered: string;
+}
+
+/**
+ * Parrafo de Enfasis NIA 706 §A1 — encabezado bold + cuerpo + cierre literal
+ * "Nuestra opinion no se modifica respecto a esta cuestion". Se posiciona
+ * post-opinion y antes de "Otras responsabilidades / Cuestiones".
+ */
+export interface EmphasisParagraphSpec {
+  /** Titulo en negrita ("Parrafo de Enfasis", "Parrafo de Otras Cuestiones"). */
+  heading: string;
+  /** Cuerpo (Markdown limpio, sin tablas ni HTML). */
+  bodyMarkdown: string;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // EditorialReport — IR canónico que recibe EditorialReportDoc.
 // ───────────────────────────────────────────────────────────────────────────
@@ -183,6 +215,16 @@ export interface EditorialReport {
   notes: { blocks: NoteBlock[] };
   recommendations: { items: RecommendationItem[] };
   appendix: AppendixSpec;
+  /**
+   * Firmas dinamicas (Representante Legal, Revisor Fiscal, Contador Publico).
+   * Si null/undefined → ClosingPage / DirectorLetter usan placeholders.
+   */
+  signatureBlock?: SignatureBlockSpec;
+  /**
+   * Parrafos de Enfasis NIA 706 §A1 / Otras Cuestiones NIA 706 §8-9.
+   * Se renderizan post-opinion en la pagina del dictamen / closing.
+   */
+  emphasisParagraphs?: EmphasisParagraphSpec[];
 }
 
 /** Estado del gate "informe no emitible" (extensible cuando audit-report-emittable aterrice). */

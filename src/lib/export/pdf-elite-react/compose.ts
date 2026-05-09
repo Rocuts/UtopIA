@@ -16,6 +16,7 @@ import type {
   DialGaugeSpec,
   EditorialReport,
   EmittableGate,
+  EmphasisParagraphSpec,
   KpiCell,
   KpiGridSpec,
   NormCitation,
@@ -26,6 +27,7 @@ import type {
   PortraitSpec,
   RecommendationItem,
   ReportMeta,
+  SignatureBlockSpec,
   TocEntry,
   WaterfallItem,
 } from './types';
@@ -36,6 +38,11 @@ import type {
   PeriodSnapshot,
 } from '@/lib/preprocessing/trial-balance';
 import type { PillarsResult, PillarMetrics, PillarKpi } from '@/lib/pillars/types';
+import type { FiscalOpinionDictamen } from '@/lib/agents/financial/fiscal-opinion/types';
+import {
+  signatoriesFromCompany,
+  renderSignatureBlock,
+} from '@/lib/agents/financial/fiscal-opinion/signatories';
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -45,10 +52,16 @@ export interface ComposeInput {
   pillars?: PillarsResult | null;
   language: 'es' | 'en';
   emittable?: EmittableGate;
+  /**
+   * Dictamen del Revisor Fiscal (NIA 700/705/706) — output del Opinion Drafter.
+   * Si presente, su `emphasisParagraphs` se mapea al IR para que el PDF
+   * editorial los renderice post-opinion (NIA 706 §A1).
+   */
+  dictamen?: FiscalOpinionDictamen;
 }
 
 export function composeEditorialReport(input: ComposeInput): EditorialReport {
-  const { report, preprocessed, pillars, language, emittable } = input;
+  const { report, preprocessed, pillars, language, emittable, dictamen } = input;
 
   const meta = buildMeta(report, language, emittable, preprocessed);
   const cover = buildCover(report, language);
@@ -63,6 +76,8 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const notes = { blocks: buildNotes(report) };
   const recommendations = { items: buildRecommendations(report) };
   const appendix = buildAppendix(report, preprocessed, totals, emittable);
+  const signatureBlock = buildSignatureBlock(report);
+  const emphasisParagraphs = buildEmphasisParagraphs(dictamen);
 
   const out: EditorialReport = {
     meta,
@@ -76,10 +91,14 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     notes,
     recommendations,
     appendix,
+    signatureBlock,
   };
 
   if (pillarsSpec) {
     out.pillars = pillarsSpec;
+  }
+  if (emphasisParagraphs.length > 0) {
+    out.emphasisParagraphs = emphasisParagraphs;
   }
 
   return out;
@@ -275,8 +294,24 @@ function buildMeta(
   preprocessed: PreprocessedBalance | null | undefined,
 ): ReportMeta {
   let watermark: ReportMeta['watermark'] | undefined;
+  let watermarkSubtitle: string | undefined;
+
+  // Disparador 3 (NIC 1 par. 38 + NIA 710): comparativos impracticables
+  // — el dictamen se emite con borrador hasta que la fuente del periodo N-1
+  // este disponible. Tipo defensivo (`unknown`) porque el preprocesador esta
+  // siendo extendido en paralelo.
+  const comparativosImpracticables =
+    !!preprocessed &&
+    typeof preprocessed === 'object' &&
+    (preprocessed as { comparativos_impracticables?: boolean }).comparativos_impracticables === true;
+
   if (emittable && emittable.ok === false) {
     watermark = 'BLOQUEADO';
+  } else if (comparativosImpracticables) {
+    watermark = 'BORRADOR';
+    watermarkSubtitle = language === 'en'
+      ? 'COMPARATIVES IMPRACTICABLE'
+      : 'COMPARATIVOS IMPRACTICABLES';
   } else if (
     preprocessed &&
     typeof preprocessed === 'object' &&
@@ -297,6 +332,7 @@ function buildMeta(
     generatedAt: report.generatedAt ?? new Date().toISOString(),
     language,
     ...(watermark ? { watermark } : {}),
+    ...(watermarkSubtitle ? { watermarkSubtitle } : {}),
   };
 }
 
@@ -787,4 +823,48 @@ function formatPct(n: number | undefined | null): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
   const pct = n * 100;
   return `${pct.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+// ─── Signature block + emphasis paragraphs ───────────────────────────────────
+
+/**
+ * Construye el bloque de firma a partir de `company.signatories` (forma
+ * canonica nueva) o de los strings legacy `legalRepresentative`/`fiscalAuditor`/
+ * `accountant`. Si todos los slots son null → renderSignatureBlock() emite
+ * placeholders, y la pagina de cierre renderiza lineas vacias para firma manual.
+ */
+function buildSignatureBlock(report: FinancialReport): SignatureBlockSpec {
+  const signs = signatoriesFromCompany(report.company ?? {});
+  return {
+    rendered: renderSignatureBlock(signs),
+  };
+}
+
+/**
+ * Mapea los `emphasisParagraphs` y `otherMatterParagraphs` del Dictamen NIA al
+ * IR del PDF editorial. NIA 706 §A1 exige encabezado bold "Parrafo de Enfasis"
+ * y cierre literal "Nuestra opinion no se modifica respecto a esta cuestion".
+ *
+ * Regla de presentacion (NIA 706 par. 7-9):
+ *  - "Parrafo de Enfasis" se posiciona post-opinion, antes de "Otras
+ *    responsabilidades / Cuestiones".
+ *  - "Parrafo de Otras Cuestiones" va despues del de enfasis.
+ */
+function buildEmphasisParagraphs(
+  dictamen: FiscalOpinionDictamen | undefined,
+): EmphasisParagraphSpec[] {
+  if (!dictamen) return [];
+  const out: EmphasisParagraphSpec[] = [];
+
+  for (const p of dictamen.emphasisParagraphs ?? []) {
+    if (typeof p === 'string' && p.trim().length > 0) {
+      out.push({ heading: 'Parrafo de Enfasis', bodyMarkdown: p.trim() });
+    }
+  }
+  for (const p of dictamen.otherMatterParagraphs ?? []) {
+    if (typeof p === 'string' && p.trim().length > 0) {
+      out.push({ heading: 'Parrafo de Otras Cuestiones', bodyMarkdown: p.trim() });
+    }
+  }
+  return out;
 }

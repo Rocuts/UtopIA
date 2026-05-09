@@ -3,10 +3,32 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
+import { signatoriesFromCompany, renderSignatureBlock } from '../signatories';
+
+export interface OpinionDrafterPromptHints {
+  /**
+   * Si los preprocesadores reportaron reclasificaciones materiales sin
+   * compensacion (V14 / no-compensation rule, NIIF for SMEs §2.52), el
+   * dictamen DEBE incluir Parrafo de Enfasis NIA 706 §A1 cuando esten
+   * reveladas en notas, o salvedad NIA 705 si NO estan reveladas.
+   */
+  hasReclasificacionesNoCompensacion?: boolean;
+  /** Texto humanizado de la nota X que el dictamen debe referenciar. */
+  notaReferenceLabel?: string;
+  /** Si los datos no permiten comparativos NIC 1 par. 38 (impracticables). */
+  comparativosImpracticables?: boolean;
+  /**
+   * Si el auditReport detecto blockers materiales (V14 margen bruto vs CIIU
+   * fuera de banda) → forzar opinion modificada. El override final se aplica
+   * post-parse en el agent (no se confia solo en el LLM).
+   */
+  hasMaterialMeasurementBlocker?: boolean;
+}
 
 export function buildOpinionDrafterPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
+  hints?: OpinionDrafterPromptHints,
 ): string {
   const langInstruction =
     language === 'en'
@@ -21,6 +43,41 @@ export function buildOpinionDrafterPrompt(
   const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
   const isMultiPeriod =
     (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
+  // Bloque de firma resuelto desde signatories (canonico) o legacy strings.
+  // Se inyecta literalmente al prompt para que el LLM no fabrique TPs.
+  const signatureBlock = renderSignatureBlock(signatoriesFromCompany(company));
+
+  // Reglas adicionales NIA 706 / NIA 705 cuando hay reclasificaciones o
+  // imposibilidad de comparativos (NIC 1 par. 38).
+  const emphasisRules: string[] = [];
+  if (hints?.hasReclasificacionesNoCompensacion) {
+    emphasisRules.push(
+      `**OBLIGATORIO — Parrafo de Enfasis NIA 706 §A1:**
+Si los EEFF revelan adecuadamente en notas las reclasificaciones materiales realizadas sin compensar (regla NIIF for SMEs §2.52), DEBES incluir un Parrafo de Enfasis con:
+   (i) Encabezado en negrita: **Parrafo de Enfasis**
+   (ii) Posicion: inmediatamente despues del parrafo de Opinion y ANTES de "Otras responsabilidades / Cuestiones".
+   (iii) Cuerpo: "Llamamos la atencion sobre la Nota ${hints.notaReferenceLabel || 'X'} a los estados financieros, que describe [breve descripcion de la reclasificacion sin compensacion realizada y su norma de soporte NIIF for SMEs §2.52 / NIIF 1 par. 32]."
+   (iv) Cierre LITERAL obligatorio (texto exacto NIA 706 §A1): "Nuestra opinion no se modifica respecto a esta cuestion."
+
+Si las reclasificaciones NO estan reveladas en notas → NO uses parrafo de enfasis: en su lugar, opinion CON SALVEDADES (NIA 705 §7) o DESFAVORABLE si los efectos son generalizados.`,
+    );
+  }
+  if (hints?.comparativosImpracticables) {
+    emphasisRules.push(
+      `**Comparativos impracticables (NIC 1 par. 38 + NIA 710):** Los datos no permiten presentar informacion comparativa fiable. Incluye Parrafo de Otras Cuestiones (NIA 706 par. 8-9) explicando que el dictamen se emite sobre estados financieros sin comparativo y referencia NIC 1 par. 43 (excepcion por impracticabilidad).`,
+    );
+  }
+  if (hints?.hasMaterialMeasurementBlocker) {
+    emphasisRules.push(
+      `**Blocker de medicion material detectado (V14 margen bruto vs banda CIIU):** la auditoria previa identifico una desviacion material que afecta la fiabilidad de los EEFF. NO emitas opinion LIMPIA. Selecciona entre CON SALVEDADES (efecto material pero NO generalizado) o DESFAVORABLE (efecto material y generalizado). Documenta el blocker en el parrafo de "Fundamento de la Opinion Modificada" citando NIA 705 §7-§9.`,
+    );
+  }
+  const emphasisRulesBlock =
+    emphasisRules.length > 0
+      ? '\n## REGLAS NIA 705/706 ESPECIFICAS PARA ESTE DICTAMEN\n\n' +
+        emphasisRules.join('\n\n')
+      : '';
 
   return `Eres el **Redactor Senior del Dictamen del Revisor Fiscal** del equipo de 1+1.
 Tu especialidad son las NIA 700, 701, 705, 706 y 720 (adoptadas en Colombia via Decreto 2420 de 2015) y la forma del dictamen conforme a la Ley 43 de 1990.
@@ -120,11 +177,9 @@ INFORME SOBRE OTROS REQUERIMIENTOS LEGALES
 [Cumplimiento Art. 209 C.Co.]
 
 
-____________________________
-[Nombre del Revisor Fiscal]
-Revisor Fiscal
-Tarjeta Profesional No. ___________
-Designado por [firma de auditoria / asamblea]
+[BLOQUE DE FIRMA — usar EXACTAMENTE el siguiente literal, sin alterar TPs ni nombres:]
+
+${signatureBlock}
 
 [Ciudad], [Fecha]
 \`\`\`
@@ -189,13 +244,14 @@ Estructura tu respuesta EXACTAMENTE con estos encabezados Markdown:
 \`\`\`
 
 ## REGLAS CRITICAS
-- Solo cita normas REALES: NIA 700, 701, 705, 706, 720, Art. 207-209 C.Co., Ley 43/1990 Art. 10, Decreto 2420/2015. NO inventes articulos o parrafos.
+- Solo cita normas REALES: NIA 700, 701, 705, 706, 720, Art. 207-209 C.Co., Ley 43/1990 Art. 10, Decreto 2420/2015, NIIF for SMEs §2.52, NIC 1 par. 38, NIC 8. NO inventes articulos o parrafos.
 - El dictamen debe ser un documento PROFESIONAL que podria presentarse ante SuperSociedades — usa lenguaje formal juridico-contable colombiano.
-- SIEMPRE incluye el espacio de firma con las lineas: nombre, cargo "Revisor Fiscal", "Tarjeta Profesional No. ___________", "Designado por ___________", ciudad y fecha.
+- **BLOQUE DE FIRMA OBLIGATORIO:** copia LITERAL del bloque inyectado arriba. NO inventes nombres ni numeros de Tarjeta Profesional. Si el slot trae placeholder ("____________"), conservalo — la firma humana se completa fuera del LLM.
 - NO omitas ninguna seccion del formato colombiano, aunque el contenido sea "No aplica".
 - La Carta de Gerencia es un documento SEPARADO del dictamen — redactalo con formato de carta formal.
 - UVT 2026 = $52.374 COP.
 - Usa formato de moneda colombiana: $1.234.567,89
+- **Coherencia opinion ↔ findings (override no-blanqueo):** si recibes hints/findings que indican blockers materiales (V14 margen bruto vs banda CIIU, reclasificaciones materiales sin revelar, incertidumbre de empresa en marcha sin disclosure), NUNCA emitas opinion LIMPIA — ese sera revertido aguas abajo y bloqueara el reporte.${emphasisRulesBlock}
 
 ## MULTIPERIODO (OBLIGATORIO si hay comparativo)
 ${

@@ -24,6 +24,15 @@ export interface FiscalOpinionRequest {
   language: 'es' | 'en';
   /** Additional context or instructions */
   instructions?: string;
+  /**
+   * Snapshot del preprocesador (forma evolutiva). Si esta disponible, el
+   * Opinion Drafter detecta `reclasificacionesNoCompensacion` (NIIF for SMEs
+   * §2.52 → Parrafo de Enfasis NIA 706 §A1) y `comparativos_impracticables`
+   * (NIC 1 par. 38 → Parrafo de Otras Cuestiones).
+   * Tipo `unknown` defensivo: el Curator NIIF (sub-agent A) esta extendiendo
+   * el shape en paralelo.
+   */
+  preprocessed?: unknown;
 }
 
 // ---------------------------------------------------------------------------

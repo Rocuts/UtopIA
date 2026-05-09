@@ -16,6 +16,8 @@ interface Props {
 
 export function CoverPage({ doc }: Props) {
   const isBlocked = doc.meta.watermark === 'BLOQUEADO';
+  const isDraft = doc.meta.watermark === 'BORRADOR';
+  const watermarkSubtitle = doc.meta.watermarkSubtitle;
 
   return (
     <Page
@@ -92,6 +94,32 @@ export function CoverPage({ doc }: Props) {
                 </View>
               ))}
             </View>
+          </>
+        ) : isDraft ? (
+          <>
+            <EditorialTitle
+              leadText="Informe"
+              emphasisText="BORRADOR"
+              emphasisStyle="box"
+              areaAccent="valor"
+              size="hero"
+              tone="light-on-dark"
+            />
+            {watermarkSubtitle ? (
+              <View style={{ marginTop: 24, alignItems: 'center' }}>
+                <Text
+                  style={{
+                    fontFamily: 'Geist',
+                    fontSize: 12,
+                    color: GOLD_500,
+                    letterSpacing: 1.5,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {watermarkSubtitle}
+                </Text>
+              </View>
+            ) : null}
           </>
         ) : (
           <EditorialTitle
