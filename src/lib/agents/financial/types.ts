@@ -8,6 +8,28 @@
 // Input
 // ---------------------------------------------------------------------------
 
+/**
+ * Firmantes legales del informe financiero (Ley 43/1990 art. 10 y 13).
+ *
+ * Contrato compartido con C (`elite-C-fiscal-pdf`): el renderer del PDF firma
+ * la plantilla `{nombre} / {cargo} / T.P. {numero}-T` cuando estos campos
+ * están presentes. Si el caller no los inyecta, los prompts del Governance
+ * Specialist caen al fallback de strings legacy (`legalRepresentative`,
+ * `fiscalAuditor`, `accountant`) sin romper retrocompatibilidad.
+ *
+ * Why: la firma del Revisor Fiscal y del Contador Público bajo Ley 43/1990
+ * requiere número de Tarjeta Profesional (T.P.) — sin ella el dictamen no es
+ * válido. La estructura tipada evita que el LLM invente T.P.s.
+ */
+export interface Signatories {
+  /** Representante Legal — Ley 222/1995 art. 23 + Art. 196 C.Co. */
+  representanteLegal?: { nombre: string };
+  /** Revisor Fiscal — Ley 43/1990 art. 10. T.P. formato '12345-T'. */
+  revisorFiscal?: { nombre: string; tp: string };
+  /** Contador Público — Ley 43/1990 art. 13. T.P. formato '12345-T'. */
+  contadorPublico?: { nombre: string; tp: string };
+}
+
 export interface CompanyInfo {
   /** Razon social */
   name: string;
@@ -25,12 +47,18 @@ export interface CompanyInfo {
   comparativePeriod?: string;
   /** Ciudad / municipio */
   city?: string;
-  /** Representante legal */
+  /** Representante legal (legacy — string simple). */
   legalRepresentative?: string;
-  /** Revisor fiscal */
+  /** Revisor fiscal (legacy — string simple). */
   fiscalAuditor?: string;
-  /** Contador publico */
+  /** Contador publico (legacy — string simple). */
   accountant?: string;
+  /**
+   * Firmantes estructurados (preferido). Si está presente, los agentes 3 y el
+   * renderer PDF lo usan con prioridad sobre los strings legacy. Si está
+   * ausente, se cae a los strings legacy. Backward-compat total.
+   */
+  signatories?: Signatories;
   /** Períodos detectados en el archivo. Sourced en /api/upload. */
   detectedPeriods?: string[];
 }

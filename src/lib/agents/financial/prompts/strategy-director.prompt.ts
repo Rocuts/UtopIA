@@ -18,10 +18,21 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
+/**
+ * Contexto Élite consumido por el Agente 2 desde el orchestrator. Optional
+ * chaining defensivo idéntico al del Agente 1 — A está extendiendo el shape
+ * y este contrato evita romper tsc mientras esos campos se materializan.
+ */
+export interface StrategyDirectorEliteContext {
+  comparativosImpracticables?: boolean;
+  actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+}
+
 export function buildStrategyDirectorPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
   preprocessed?: PreprocessedBalance,
+  elite?: StrategyDirectorEliteContext,
 ): string {
   const langInstruction =
     language === 'en'
@@ -44,6 +55,25 @@ export function buildStrategyDirectorPrompt(
   const comparativePeriod = preprocessed?.comparative?.period ?? null;
   const isComparative = periods.length >= 2 && !!primaryPeriod && !!comparativePeriod;
   const periodsListed = periods.map((p) => p.period).join(', ');
+
+  // -----------------------------------------------------------------------
+  // ELITE CONTEXT — A está extendiendo el shape; defensivo
+  // -----------------------------------------------------------------------
+  const ppLoose = preprocessed as unknown as {
+    comparativos_impracticables?: boolean;
+    actividadInferida?: { sectorCIIU?: string; descripcion?: string; evidencia?: string };
+  } | undefined;
+
+  const comparativosImpracticables =
+    elite?.comparativosImpracticables ?? ppLoose?.comparativos_impracticables ?? null;
+  const actividadInferida =
+    elite?.actividadInferida ?? (ppLoose?.actividadInferida
+      ? {
+          sectorCIIU: ppLoose.actividadInferida.sectorCIIU ?? '',
+          descripcion: ppLoose.actividadInferida.descripcion ?? '',
+          evidencia: ppLoose.actividadInferida.evidencia,
+        }
+      : null);
 
   const comparativeBlock = isComparative
     ? `
@@ -69,6 +99,72 @@ El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeri
 `
       : '';
 
+  // -----------------------------------------------------------------------
+  // BLOQUE ÉLITE — Diagnóstico CFO de alto nivel + 3 escenarios de SOLVENCIA
+  // -----------------------------------------------------------------------
+  const isComercio =
+    actividadInferida && (actividadInferida.sectorCIIU || '').toUpperCase().startsWith('G');
+
+  const eliteBlock = `
+## BLOQUE ÉLITE — DIAGNÓSTICO CFO + ESCENARIOS DE SOLVENCIA
+
+### R-Élite 5 — Diagnóstico de margen bruto vs sector (verdad financiera condicionada)
+
+${
+  isComercio
+    ? `La actividad inferida es **CIIU letra ${actividadInferida!.sectorCIIU} — ${actividadInferida!.descripcion}** (Comercio). Si el margen bruto reportado del periodo ${primaryPeriod ?? company.fiscalPeriod} supera el 80%, INCLUYE en \`## 5. RECOMENDACIONES ESTRATEGICAS\` (o como nota previa al dashboard) el siguiente diagnóstico LITERAL:
+
+> **Diagnóstico — Verdad financiera condicionada (NIIF for SMEs §13.20).** El margen bruto reportado del [X]% no es defendible para una empresa comercial sin descargue completo de costos de inventario. La verdad financiera del periodo ${primaryPeriod ?? company.fiscalPeriod} está condicionada a la validación del descargue de inventarios en el cierre del próximo trimestre. Recomendamos al Revisor Fiscal emitir opinión con salvedad NIA 705 §7 hasta que se complete dicha validación.
+
+Esta nota convive con (no sustituye a) la sección de Recomendaciones Estratégicas regular.`
+    : `Si la actividad económica inferida indica sector CIIU letra G (Comercio) Y el margen bruto calculado supera 80%, incluir el diagnóstico de "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7. Si la actividad no es G o no está inferida, omitir esta sección.`
+}
+
+### R-Élite 6 — 3 ESCENARIOS DE SOLVENCIA ESTRATÉGICA (no solo flujo de caja)
+
+Las proyecciones del Paso 4 ahora se complementan con un análisis de SOLVENCIA estratégica a 3 años, NO únicamente flujo de caja proyectado. Para cada uno de los TRES ESCENARIOS (Conservador, Base, Agresivo) DEBES presentar una tabla con los siguientes 6 indicadores PROYECTADOS por año (Ano +1, Ano +2, Ano +3):
+
+| Indicador | Fórmula | Banda objetivo |
+|-----------|---------|----------------|
+| Razón Corriente | Activo Corriente / Pasivo Corriente | > 1,5 saludable |
+| Prueba Ácida | (AC − Inventarios) / PC | > 1,0 |
+| Endeudamiento Total | Pasivo / Activo × 100 | < 60% |
+| Autonomía Financiera | Patrimonio / Activo × 100 | > 40% |
+| ROE | Utilidad Neta / Patrimonio promedio × 100 | > costo de capital |
+| ROA | Utilidad Neta / Activo promedio × 100 | > tasa libre riesgo |
+
+**Macro-supuestos vinculantes Colombia 2026:**
+- PIB esperado: 2-3% (BanRep / DANE referencial).
+- Inflación IPC: 4-5% (BanRep meta 3% +/- rango).
+- UVT 2026: \`$52.374\` COP (DIAN Resolución oficial).
+- Tarifa renta PJ: 35% (Art. 240 E.T., Ley 2277/2022).
+- Tarifa Mínima de Tributación (TMT): 15% (Art. 240 parágrafo 6 E.T.).
+
+**Estructura de los 3 escenarios:**
+- **Conservador:** ingresos −15% YoY, costos indexados a inflación máxima (5%), TMT 15% activa.
+- **Base:** ingresos crecen al PIB esperado (2,5%), costos a inflación esperada (4%), tarifa renta 35% sobre UAI.
+- **Agresivo:** ingresos +15% YoY (justificado por palanca específica del negocio), costos a inflación mínima (4%), tarifa renta 35%.
+
+Para cada escenario, después de la tabla de los 6 indicadores, redacta un párrafo de **Diagnóstico de Solvencia Estratégica** que articule:
+- Si la entidad mantiene capacidad de pago de Pasivo Corriente bajo este escenario.
+- Si la estructura patrimonial soporta el endeudamiento proyectado sin causal de disolución (Art. 457 C.Co. para SA, Art. 35 Ley 1258/2008 para SAS — patrimonio negativo o pérdidas que reduzcan patrimonio bajo el 50% del capital suscrito).
+- Punto de inflexión donde el ROE supera/cruza el costo de capital implícito.
+
+PROHIBIDO emitir un solo escenario. PROHIBIDO emitir tablas vacías. Cada cifra debe derivarse explícitamente de los supuestos macro declarados.
+
+### R-Élite 0 — Prohibición de frases evasivas
+
+PROHIBIDO emitir las frases "no se suministró información", "información no detallada", "datos no disponibles" o equivalentes. Cuando un dato falte, declara la impracticabilidad con cita normativa o usa el placeholder \`— (dato no suministrado)\` previsto por el Guardarrail.
+
+${
+  comparativosImpracticables === true
+    ? `### R-Élite 1 (delegada) — Comparativos impracticables (NIIF for SMEs §3.14)
+
+El Agente 1 ya declaró impracticabilidad del comparativo. Tu sección "Análisis de Tendencias" (Paso 3) DEBE reconocer este hecho y NO calcular YoY: declara LITERAL "El análisis YoY no es presentable dada la impracticabilidad del comparativo declarada conforme NIIF for SMEs §3.14". Las proyecciones se calibran sin ancla histórica YoY — usa los macro-supuestos declarados arriba como única referencia.`
+    : ''
+}
+`;
+
   return `${guardrail}
 
 ${context2026}
@@ -85,6 +181,7 @@ Interpretar los estados financieros NIIF generados por el Agente 1 — Analista 
 - **Periodo Fiscal:** ${company.fiscalPeriod}
 ${company.comparativePeriod ? `- **Periodo Comparativo:** ${company.comparativePeriod}` : ''}
 ${comparativeBlock}
+${eliteBlock}
 ## INSTRUCCIONES OPERATIVAS (SEGUIR EN ORDEN ESTRICTO)
 
 ### Paso 1: Dashboard Ejecutivo

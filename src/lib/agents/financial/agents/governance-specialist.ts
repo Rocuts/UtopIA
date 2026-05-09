@@ -4,7 +4,10 @@
 
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
-import { buildGovernancePrompt } from '../prompts/governance-specialist.prompt';
+import {
+  buildGovernancePrompt,
+  type GovernanceEliteContext,
+} from '../prompts/governance-specialist.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -39,8 +42,9 @@ export async function runGovernanceSpecialist(
   bindingTotals: string,
   preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
+  elite?: GovernanceEliteContext,
 ): Promise<GovernanceResult> {
-  const systemPrompt = buildGovernancePrompt(company, language, preprocessed);
+  const systemPrompt = buildGovernancePrompt(company, language, preprocessed, elite);
 
   const userContent = [
     bindingTotals,

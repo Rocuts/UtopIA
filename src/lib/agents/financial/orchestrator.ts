@@ -797,6 +797,68 @@ export async function orchestrateFinancialReport(
   const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
 
   // ---------------------------------------------------------------------------
+  // ELITE CONTEXT — Lectura defensiva de los nuevos campos que A está
+  // produciendo (`comparativos_impracticables`, `actividadInferida`,
+  // `reclasificacionesNoCompensacion`, `controlTotals.cents.saldoAFavorImpuesto`).
+  // Optional chaining + casts a `unknown` para no acoplarnos al shape antes
+  // de que A haga merge. Si los campos no existen, los prompts caen al
+  // comportamiento legacy.
+  // ---------------------------------------------------------------------------
+  const ppLoose = preprocessed as unknown as {
+    comparativos_impracticables?: boolean;
+    actividadInferida?: { sectorCIIU?: string; descripcion?: string; evidencia?: string };
+    reclasificacionesNoCompensacion?: Array<{
+      cuenta_origen?: string;
+      saldo_invertido_centavos?: bigint | number;
+      cuenta_destino_pasivo?: string;
+      motivo_norma?: string;
+    }>;
+  } | undefined;
+
+  const eliteActividadInferida = ppLoose?.actividadInferida
+    ? {
+        sectorCIIU: ppLoose.actividadInferida.sectorCIIU ?? '',
+        descripcion: ppLoose.actividadInferida.descripcion ?? '',
+        evidencia: ppLoose.actividadInferida.evidencia,
+      }
+    : undefined;
+
+  const eliteReclasif = Array.isArray(ppLoose?.reclasificacionesNoCompensacion)
+    ? ppLoose!.reclasificacionesNoCompensacion!.map((r) => ({
+        cuenta_origen: r.cuenta_origen ?? '',
+        saldo_invertido_centavos: BigInt(r.saldo_invertido_centavos ?? 0),
+        cuenta_destino_pasivo: r.cuenta_destino_pasivo ?? '',
+        motivo_norma: r.motivo_norma ?? '',
+      }))
+    : undefined;
+
+  const elitePrimaryCents = getPrimarySnapshot(preprocessed)?.controlTotals?.cents as
+    | (Record<string, unknown> & { saldoAFavorImpuesto?: bigint })
+    | undefined;
+
+  const eliteSaldoAFavor =
+    typeof elitePrimaryCents?.saldoAFavorImpuesto === 'bigint'
+      ? elitePrimaryCents.saldoAFavorImpuesto
+      : undefined;
+
+  const eliteForNiif = {
+    comparativosImpracticables: ppLoose?.comparativos_impracticables,
+    actividadInferida: eliteActividadInferida,
+    reclasificacionesNoCompensacion: eliteReclasif,
+    saldoAFavorImpuestoCents: eliteSaldoAFavor,
+  };
+
+  const eliteForStrategy = {
+    comparativosImpracticables: ppLoose?.comparativos_impracticables,
+    actividadInferida: eliteActividadInferida,
+  };
+
+  const eliteForGovernance = {
+    comparativosImpracticables: ppLoose?.comparativos_impracticables,
+    actividadInferida: eliteActividadInferida,
+  };
+
+  // ---------------------------------------------------------------------------
   // Multiperiodo: si el preprocesador detecto >=2 periodos pero el caller no
   // declaro `company.comparativePeriod`, lo autocompletamos con el penultimo
   // periodo detectado. Asi el copy "Periodo Comparativo: YYYY" en los prompts
@@ -904,6 +966,7 @@ export async function orchestrateFinancialReport(
           bindingTotalsBlock,
           ppForAgents,
           onProgress,
+          eliteForNiif,
         );
         return { ...acc, niif: niifResult } satisfies SequentialAccumulator;
       },
@@ -927,6 +990,7 @@ export async function orchestrateFinancialReport(
           bindingTotalsBlock,
           ppForAgents,
           onProgress,
+          eliteForStrategy,
         );
         return { ...acc, strategy: strategyResult } satisfies SequentialAccumulator;
       },
@@ -951,6 +1015,7 @@ export async function orchestrateFinancialReport(
           bindingTotalsBlock,
           ppForAgents,
           onProgress,
+          eliteForGovernance,
         );
         return { ...acc, governance: governanceResult } satisfies SequentialAccumulator;
       },

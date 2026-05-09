@@ -4,7 +4,10 @@
 
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
-import { buildNiifAnalystPrompt } from '../prompts/niif-analyst.prompt';
+import {
+  buildNiifAnalystPrompt,
+  type NiifAnalystEliteContext,
+} from '../prompts/niif-analyst.prompt';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -30,8 +33,9 @@ export async function runNiifAnalyst(
   bindingTotals: string,
   preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
+  elite?: NiifAnalystEliteContext,
 ): Promise<NiifAnalysisResult> {
-  const systemPrompt = buildNiifAnalystPrompt(company, language, preprocessed);
+  const systemPrompt = buildNiifAnalystPrompt(company, language, preprocessed, elite);
 
   // El bindingTotals se antepone al raw data para que el Agente 1 lo lea
   // ANTES de ver los auxiliares. Esto evita que el modelo re-sume y divaga.
