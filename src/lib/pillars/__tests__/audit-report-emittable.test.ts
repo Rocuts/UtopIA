@@ -24,6 +24,7 @@ function buildSnapshot(opts: {
   uai?: number;
   impuestoCausado?: number;
   efectivoCuenta11?: number;
+  saldoAFavorImpuesto?: number;
   findings?: PeriodSnapshot['findings'];
 } = {}): PeriodSnapshot {
   const activo = opts.activo ?? 1_000_000;
@@ -73,6 +74,7 @@ function buildSnapshot(opts: {
         utilidadAntesImpuestos: toCents(uai),
         impuestoCausado: toCents(impuestoCausado),
         efectivoCuenta11: toCents(efectivoCuenta11),
+        saldoAFavorImpuesto: toCents(opts.saldoAFavorImpuesto ?? 0),
       },
       raw: {
         activo: toRaw(activo),
@@ -84,6 +86,7 @@ function buildSnapshot(opts: {
         utilidadAntesImpuestos: toRaw(uai),
         impuestoCausado: toRaw(impuestoCausado),
         efectivoCuenta11: toRaw(efectivoCuenta11),
+        saldoAFavorImpuesto: toRaw(opts.saldoAFavorImpuesto ?? 0),
       },
     },
     equityBreakdown: {},
@@ -315,5 +318,139 @@ describe('helpers de inspección de reporte', () => {
     expect(reportIncluyeTMTCalculada('parágrafo 6 del Art. 240 ET')).toBe(true);
     expect(reportIncluyeTMTCalculada('renta ordinaria 35% sin TMT')).toBe(true);
     expect(reportIncluyeTMTCalculada('renta ordinaria 35% sin nada más')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// V13/V14/V15 — Pulido NIIF PYME Grupo 2 (signo impuesto, margen CIIU G,
+// comparativos impracticables). Estos tres bloqueadores consumen el
+// `EmittableEliteContext` opcional (4º parámetro del gate).
+// ---------------------------------------------------------------------------
+
+describe('auditReportEmittable — V13 (signo del impuesto de renta)', () => {
+  it('impuestoCausado >= 0 → V13 NO dispara', () => {
+    const snap = buildSnapshot({ impuestoCausado: 50 });
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany);
+    expect(r.blockers.some((b) => b.code === 'V13')).toBe(false);
+  });
+
+  it('impuestoCausado < 0 (presentado como ingreso) → blocker V13', () => {
+    // ingresos 1000, gastos 700, UAI = 300, impuesto = -50 (crédito) → uNeta = 350.
+    const snap = buildSnapshot({
+      ingresos: 1000,
+      gastos: 700,
+      uai: 300,
+      impuestoCausado: -50,
+      utilidadNeta: 350,
+    });
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany);
+    expect(r.blockers.some((b) => b.code === 'V13')).toBe(true);
+  });
+
+  it('impuestoCausado === 0 con saldoAFavor > 0 → V13 NO dispara (caso correcto)', () => {
+    const snap = buildSnapshot({ impuestoCausado: 0, saldoAFavorImpuesto: 3_840_000 });
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany);
+    expect(r.blockers.some((b) => b.code === 'V13')).toBe(false);
+  });
+});
+
+describe('auditReportEmittable — V14 (margen bruto CIIU G + costos no descargados)', () => {
+  it('sin actividadInferida → V14 NO dispara', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany);
+    expect(r.blockers.some((b) => b.code === 'V14')).toBe(false);
+  });
+
+  it('actividadInferida sectorCIIU=G + evidencia "clase 6 ausente" → blocker V14', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany, {
+      actividadInferida: {
+        sectorCIIU: 'G',
+        descripcion: 'Comercio al por mayor y al por menor',
+        evidencia: [
+          'Cuenta 1435 (Mercancías no fabricadas) = $1.668M (67% del activo corriente).',
+          'Clase 6 (Costo de Ventas) ausente del balance.',
+        ],
+      },
+    });
+    expect(r.blockers.some((b) => b.code === 'V14')).toBe(true);
+  });
+
+  it('actividadInferida sectorCIIU=G + evidencia "clase 6 inmaterial" → blocker V14', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany, {
+      actividadInferida: {
+        sectorCIIU: 'G',
+        descripcion: 'Comercio',
+        evidencia: ['Clase 6 (Costo de Ventas) inmaterial: $5.000 < 1% de los ingresos.'],
+      },
+    });
+    expect(r.blockers.some((b) => b.code === 'V14')).toBe(true);
+  });
+
+  it('actividadInferida sectorCIIU=G pero sin evidencia de costeo incompleto → V14 NO dispara', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany, {
+      actividadInferida: {
+        sectorCIIU: 'G',
+        descripcion: 'Comercio',
+        // Inferencia (b): inventarios > 30% activo, pero clase 6 sí presente y material.
+        evidencia: ['Inventarios totales (Clase 14) = $500M (35% del activo total).'],
+      },
+    });
+    expect(r.blockers.some((b) => b.code === 'V14')).toBe(false);
+  });
+
+  it('actividadInferida sectorCIIU=F (construcción) → V14 NO dispara aunque haya costeo incompleto', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany, {
+      actividadInferida: {
+        sectorCIIU: 'F',
+        descripcion: 'Construcción',
+        evidencia: ['Clase 6 (Costo de Ventas) ausente del balance.'],
+      },
+    });
+    // V14 sólo es para CIIU G — otros sectores (servicios, construcción) tienen
+    // estructuras de costo distintas que no se diagnostican igual.
+    expect(r.blockers.some((b) => b.code === 'V14')).toBe(false);
+  });
+});
+
+describe('auditReportEmittable — V15 (comparativos impracticables sin declaración)', () => {
+  it('comparativos_impracticables=false → V15 NO dispara', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany, {
+      comparativos_impracticables: false,
+    });
+    expect(r.blockers.some((b) => b.code === 'V15')).toBe(false);
+  });
+
+  it('comparativos_impracticables=true + reporte SIN declaración → blocker V15', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(buildReport(HEALTHY_REPORT), snap, validCompany, {
+      comparativos_impracticables: true,
+    });
+    expect(r.blockers.some((b) => b.code === 'V15')).toBe(true);
+  });
+
+  it('comparativos_impracticables=true + reporte CON declaración explícita ("impracticable") → V15 NO dispara', () => {
+    const snap = buildSnapshot();
+    const reportWithDeclaration = `${HEALTHY_REPORT}
+Los estados financieros se presentan sin comparativos del periodo 2024 dado que la información necesaria para reconstruirlos resultó impracticable de obtener (NIIF for SMEs §3.14, §10.21).`;
+    const r = auditReportEmittable(buildReport(reportWithDeclaration), snap, validCompany, {
+      comparativos_impracticables: true,
+    });
+    expect(r.blockers.some((b) => b.code === 'V15')).toBe(false);
+  });
+
+  it('comparativos_impracticables=true + reporte cita §3.14 → V15 NO dispara', () => {
+    const snap = buildSnapshot();
+    const r = auditReportEmittable(
+      buildReport(`${HEALTHY_REPORT}\nNota X: comparativos no disponibles (NIIF for SMEs §3.14).`),
+      snap,
+      validCompany,
+      { comparativos_impracticables: true },
+    );
+    expect(r.blockers.some((b) => b.code === 'V15')).toBe(false);
   });
 });

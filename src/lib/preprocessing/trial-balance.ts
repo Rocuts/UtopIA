@@ -117,6 +117,19 @@ export interface ControlTotalsCents {
   impuestoCausado: bigint;
   /** Saldo final caja (PUC 11) en cents. */
   efectivoCuenta11: bigint;
+  /**
+   * Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
+   * Detector cents:
+   *   1. Si grupo 5404 acreedor (saldo crédito) → magnitud absoluta del crédito.
+   *   2. Si 5404 ausente y 1805 (Impuesto corriente activo) > 0 → saldo de 1805.
+   *   3. Si 1355 (Anticipo de impuestos) > 0 sin 1805 ni 5404 → ese saldo.
+   *   0n cuando no hay saldo a favor identificable.
+   * Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente como
+   * activo (1355 / 1805), nunca neteado contra el gasto (clase 54). V13 lee este
+   * campo para validar que el reporte declara el saldo a favor en cuenta de
+   * activo y NO compensa contra gasto en P&L.
+   */
+  saldoAFavorImpuesto: bigint;
 }
 
 export interface ControlTotalsRaw {
@@ -130,6 +143,8 @@ export interface ControlTotalsRaw {
   utilidadAntesImpuestos: string;
   impuestoCausado: string;
   efectivoCuenta11: string;
+  /** String canónica del saldo a favor del impuesto de renta. */
+  saldoAFavorImpuesto: string;
 }
 
 /**
@@ -317,6 +332,58 @@ export interface PeriodSnapshot {
   findings?: SnapshotFindings;
 }
 
+// ---------------------------------------------------------------------------
+// Pulido NIIF PYME Grupo 2 — actividad inferida desde el balance.
+// ---------------------------------------------------------------------------
+// `sectorCIIU` es la **letra** del CIIU rev. 4 A.C. (DANE), NUNCA un código
+// numérico. La inferencia es informativa, no autoritativa: el intake del
+// usuario sigue siendo la fuente formal de actividad económica.
+//
+// Detector AMPLIADO (sector G — Comercio):
+//   Dispara si CUALQUIERA se cumple:
+//     (a) 1435 (Mercancías no fabricadas) material (>5% activo corriente) Y
+//         clase 6 ausente o <1% de los ingresos.
+//     (b) Clase 14 (Inventarios) > 30% del activo total.
+//
+// Why: en NIIF para PYMES Sec. 13 + Decreto 2650/93, una empresa con
+// concentración fuerte en inventario de mercancías es comercializadora aunque
+// no haya descargado el CMV en clase 6. V14 usa esta inferencia + margen bruto
+// para detectar costeo incompleto enmascarado como rentabilidad alta.
+// ---------------------------------------------------------------------------
+export interface ActividadInferida {
+  /** Letra CIIU rev. 4 (G, F, C, etc.). NUNCA código numérico. */
+  sectorCIIU: string;
+  /** Descripción legible del sector. */
+  descripcion: string;
+  /** Lista de criterios que dispararon la inferencia (auditable). */
+  evidencia: string[];
+}
+
+/**
+ * Reclasificación NIC 1 párr. 32 (no compensación) — contrato externo.
+ *
+ * Diferente del shape interno `Reclassification` (que vive en R1 con códigos
+ * virtuales `2810ZZ-*` / `2895VC-*`). Aquí mapeamos al contrato PUC-aware
+ * que los agentes del pipeline financiero y los renderers consumen:
+ *
+ *   - `cuenta_destino_pasivo='2895'` para clase 12 (Inversiones, NIC 28).
+ *   - `cuenta_destino_pasivo='2105'` para clase 11 (sobregiros bancarios).
+ *   - `cuenta_destino_pasivo='2810'` para el resto del activo (default).
+ *
+ * Why: el LLM en producción debe citar códigos PUC reales, no códigos
+ * virtuales internos. Este mapeo aísla el contrato externo del detalle de
+ * implementación de R1.
+ */
+export interface ReclasificacionNoCompensacion {
+  cuenta_origen: string;
+  /** Magnitud absoluta del saldo invertido (en centavos, BigInt). */
+  saldo_invertido_centavos: bigint;
+  /** Cuenta PUC de destino: '2895' | '2810' | '2105'. */
+  cuenta_destino_pasivo: string;
+  /** Norma + justificación legible. */
+  motivo_norma: string;
+}
+
 /**
  * Resultado del preprocesamiento multiperiodo. `periods` esta ordenado
  * ascendentemente (mas antiguo -> mas reciente). `primary` apunta siempre al
@@ -336,6 +403,32 @@ export interface PreprocessedBalance {
   cleanData: string;
   /** Markdown human-readable que documenta TODOS los periodos. */
   validationReport: string;
+  // -------------------------------------------------------------------------
+  // Pulido NIIF PYME Grupo 2 — banderas y contratos a nivel cross-period.
+  // -------------------------------------------------------------------------
+  /**
+   * `true` si NO existe periodo comparativo material (single-period import o
+   * comparative con auxiliaryTotal ≈ 0 en TODAS las clases). `false` si hay
+   * comparativo con saldos de cualquier clase.
+   *
+   * Why: NIIF para PYMES §3.14 + §10.21 exigen presentar comparativos. Cuando
+   * son impracticables, la entidad debe declararlo explícitamente — NO
+   * reconstruir cuentas individuales desde Utilidades Retenidas (§10.19 lo
+   * prohíbe). V15 valida que el reporte declare la impracticabilidad cuando
+   * este flag es `true`.
+   */
+  comparativos_impracticables: boolean;
+  /**
+   * Sector CIIU inferido del balance + criterios que lo soportan. Opcional:
+   * sólo se popula cuando el detector tiene evidencia suficiente.
+   */
+  actividadInferida?: ActividadInferida;
+  /**
+   * Lista PUC-aware de reclasificaciones por no-compensación (NIC 1 párr. 32)
+   * aplicadas por R1. Vacío `[]` si no hubo. Why: contrato externo estable
+   * que los agentes citan; aísla códigos PUC reales del detalle interno R1.
+   */
+  reclasificacionesNoCompensacion: ReclasificacionNoCompensacion[];
 }
 
 /** Alias de compatibilidad hacia atras. */
@@ -721,6 +814,17 @@ export function preprocessTrialBalance(
     0,
   );
 
+  // -------------------------------------------------------------------------
+  // 4. Pulido NIIF PYME Grupo 2 — banderas y contratos cross-period.
+  // -------------------------------------------------------------------------
+  const comparativos_impracticables = detectComparativosImpracticables(
+    snapshots,
+    comparative,
+  );
+  const actividadInferida = inferActividadFromSnapshot(primary);
+  const reclasificacionesNoCompensacion =
+    buildReclasificacionesNoCompensacion(primary);
+
   return {
     periods: snapshots,
     primary,
@@ -729,7 +833,165 @@ export function preprocessTrialBalance(
     auxiliaryCount,
     cleanData,
     validationReport,
+    comparativos_impracticables,
+    actividadInferida,
+    reclasificacionesNoCompensacion,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Pulido NIIF PYME Grupo 2 — detectores cross-period
+// ---------------------------------------------------------------------------
+
+/**
+ * Detector de comparativos impracticables (NIIF for SMEs §3.14, §10.21).
+ *
+ * `false` cuando:
+ *   - Hay 2+ snapshots Y el comparative tiene saldos materiales en CUALQUIER
+ *     clase (suma de auxiliaryTotal en valor absoluto > $1.000 COP).
+ *
+ * `true` cuando:
+ *   - Sólo hay 1 snapshot (no hay opening balance), O
+ *   - El comparative existe pero todas las clases tienen auxiliaryTotal ≈ 0.
+ *
+ * NUNCA inferir el flag desde Utilidades Retenidas — §10.19 prohíbe
+ * reconstruir cuentas individuales desde Utilidades Retenidas.
+ */
+function detectComparativosImpracticables(
+  snapshots: PeriodSnapshot[],
+  comparative: PeriodSnapshot | null,
+): boolean {
+  if (snapshots.length < 2 || !comparative) return true;
+  const TOL = 1_000;
+  const totalAbs = comparative.classes.reduce(
+    (s, c) => s + Math.abs(c.auxiliaryTotal),
+    0,
+  );
+  return totalAbs <= TOL;
+}
+
+/**
+ * Inferencia de sector CIIU (rev. 4 A.C., letra) desde el primary snapshot.
+ *
+ * Detector AMPLIADO sector G (Comercio):
+ *   Dispara si CUALQUIERA se cumple:
+ *     (a) 1435 (Mercancías no fabricadas) > 5% del activo corriente
+ *         Y (clase 6 ausente o |clase6| < 1% de ingresos).
+ *     (b) Clase 14 (Inventarios) > 30% del activo total.
+ *
+ * Why: el balance Grupo Empresarial 2 Tres SAS (fixture testigo) tiene
+ * 1435 material y NO tiene 6135 — pero sí 7405 (clase 7 usada como costo).
+ * El detector original (clase 6 obligatoria) lo perdía. Ampliado captura
+ * comercializadoras que descargan costos a clase 7.
+ *
+ * Devuelve `undefined` si no hay evidencia suficiente.
+ */
+function inferActividadFromSnapshot(
+  snap: PeriodSnapshot,
+): ActividadInferida | undefined {
+  const evidencia: string[] = [];
+  const activoTotal = snap.controlTotals.activo;
+  const activoCorriente = snap.controlTotals.activoCorriente;
+  const ingresos = snap.controlTotals.ingresos;
+
+  if (activoTotal <= 0) return undefined;
+
+  const class6 = snap.classes.find((c) => c.code === 6);
+  const class14 = snap.classes.find((c) => c.code === 1)?.accounts ?? [];
+  const inv1435 = class14
+    .filter((a) => a.code.startsWith('1435'))
+    .reduce((s, a) => s + a.balance, 0);
+  const totalInventarios = class14
+    .filter((a) => a.code.startsWith('14'))
+    .reduce((s, a) => s + a.balance, 0);
+
+  const class6Total = class6 ? Math.abs(class6.auxiliaryTotal) : 0;
+  const class6Ausente = !class6 || class6.accounts.length === 0;
+  const class6MenorThan1Pct =
+    ingresos > 0 ? class6Total < ingresos * 0.01 : class6Ausente;
+
+  // Criterio (a): 1435 material + clase 6 ausente o irrelevante.
+  const inv1435PctAC =
+    activoCorriente > 0 ? inv1435 / activoCorriente : 0;
+  const triggerA = inv1435PctAC > 0.05 && (class6Ausente || class6MenorThan1Pct);
+
+  if (triggerA) {
+    evidencia.push(
+      `Cuenta 1435 (Mercancías no fabricadas) = $${formatCOP(inv1435)} ` +
+        `(${(inv1435PctAC * 100).toFixed(1)}% del activo corriente).`,
+    );
+    if (class6Ausente) {
+      evidencia.push('Clase 6 (Costo de Ventas) ausente del balance.');
+    } else {
+      evidencia.push(
+        `Clase 6 (Costo de Ventas) inmaterial: $${formatCOP(class6Total)} ` +
+          `< 1% de los ingresos ($${formatCOP(ingresos)}).`,
+      );
+    }
+  }
+
+  // Criterio (b): clase 14 > 30% del activo total.
+  const inv14PctActivo = totalInventarios / activoTotal;
+  const triggerB = inv14PctActivo > 0.30;
+
+  if (triggerB) {
+    evidencia.push(
+      `Inventarios totales (Clase 14) = $${formatCOP(totalInventarios)} ` +
+        `(${(inv14PctActivo * 100).toFixed(1)}% del activo total).`,
+    );
+  }
+
+  if (!triggerA && !triggerB) return undefined;
+
+  return {
+    sectorCIIU: 'G',
+    descripcion:
+      'Comercio al por mayor y al por menor (CIIU rev. 4, sección G). ' +
+      'Inferencia automática del balance — el intake del usuario sigue siendo ' +
+      'la fuente formal.',
+    evidencia,
+  };
+}
+
+/**
+ * Mapea las reclasificaciones internas R1 al contrato externo PUC-aware.
+ *
+ * Reglas de mapeo:
+ *   - Origen clase 11 (códigos `11xx`) → destino '2105' (sobregiros).
+ *   - Origen clase 12 (códigos `12xx`) → destino '2895' (NIC 28).
+ *   - Resto del activo → destino '2810' (otros pasivos diversos).
+ *
+ * Why: el contrato externo cita códigos PUC reales que el LLM puede
+ * referenciar. R1 internamente usa códigos virtuales `2810ZZ-*` / `2895VC-*`
+ * para preservar trazabilidad — ese detalle NO viaja al prompt.
+ */
+function buildReclasificacionesNoCompensacion(
+  snap: PeriodSnapshot,
+): ReclasificacionNoCompensacion[] {
+  const out: ReclasificacionNoCompensacion[] = [];
+  const reclas = snap.reclassifications ?? [];
+  for (const r of reclas) {
+    if (!r.applied) continue;
+    const origin = r.accountCode;
+    let destino = '2810';
+    if (origin.startsWith('11')) destino = '2105';
+    else if (origin.startsWith('12')) destino = '2895';
+
+    const amountCents = BigInt(
+      Math.round(Math.abs(r.effectiveTransferCop ?? r.amountCop) * 100),
+    );
+
+    out.push({
+      cuenta_origen: origin,
+      saldo_invertido_centavos: amountCents,
+      cuenta_destino_pasivo: destino,
+      motivo_norma:
+        `NIC 1 párr. 32 (no compensación): saldo crédito en cuenta ${origin} ` +
+        `(${r.accountName}) reclasificado a pasivo PUC ${destino}. ` +
+        r.justification,
+    });
+  }
+  return out;
 }
 
 /**
@@ -897,6 +1159,37 @@ function buildSnapshotForPeriod(
   const gastosTotales = totalExpenses + totalCosts + totalProduction;
   const utilidadAntesImpuestos = totalRevenue - (gastosTotales - impuestoCausadoPeriodo);
 
+  // -------------------------------------------------------------------------
+  // Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
+  // Detector cents:
+  //   1. Si grupo 5404 acreedor (saldo crédito → balance < 0 en clase 5
+  //      cuya naturaleza es deudora) → magnitud absoluta del crédito.
+  //   2. Si 5404 ausente y 1805 (Impuesto corriente activo) > 0 → ese saldo.
+  //   3. Si 1355 (Anticipo de impuestos) > 0 sin 1805 ni 5404 → ese saldo.
+  //   0 cuando no hay saldo a favor identificable.
+  // Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente
+  // como activo (1355 / 1805), nunca neteado contra el gasto (clase 54).
+  // -------------------------------------------------------------------------
+  const saldo5404 = leafRows
+    .filter((r) => r.code.startsWith('5404'))
+    .reduce((s, r) => s + r.balance, 0);
+  const saldo1805 = leafRows
+    .filter((r) => r.code.startsWith('1805'))
+    .reduce((s, r) => s + r.balance, 0);
+  const saldo1355 = leafRows
+    .filter((r) => r.code.startsWith('1355'))
+    .reduce((s, r) => s + r.balance, 0);
+
+  let saldoAFavorImpuesto = 0;
+  if (saldo5404 < 0) {
+    // 5404 acreedor: clase 5 con saldo negativo es crédito (Art. 850 E.T.).
+    saldoAFavorImpuesto = Math.abs(saldo5404);
+  } else if (saldo1805 > 0) {
+    saldoAFavorImpuesto = saldo1805;
+  } else if (saldo1355 > 0) {
+    saldoAFavorImpuesto = saldo1355;
+  }
+
   const cents: ControlTotalsCents = {
     activo: toCents(totalAssets),
     pasivo: toCents(totalLiabilities),
@@ -907,6 +1200,7 @@ function buildSnapshotForPeriod(
     utilidadAntesImpuestos: toCents(utilidadAntesImpuestos),
     impuestoCausado: toCents(impuestoCausadoPeriodo),
     efectivoCuenta11: toCents(efectivoCuenta11),
+    saldoAFavorImpuesto: toCents(saldoAFavorImpuesto),
   };
 
   const raw: ControlTotalsRaw = {
@@ -919,6 +1213,7 @@ function buildSnapshotForPeriod(
     utilidadAntesImpuestos: toRawString(utilidadAntesImpuestos),
     impuestoCausado: toRawString(impuestoCausadoPeriodo),
     efectivoCuenta11: toRawString(efectivoCuenta11),
+    saldoAFavorImpuesto: toRawString(saldoAFavorImpuesto),
   };
 
   const controlTotals: ControlTotals = {

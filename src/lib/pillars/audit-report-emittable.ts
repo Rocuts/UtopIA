@@ -21,7 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import type { FinancialReport } from '@/lib/agents/financial/types';
-import type { ExtractedCompanyMetadata, PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
+import type { ExtractedCompanyMetadata, PeriodSnapshot, ActividadInferida, ReclasificacionNoCompensacion } from '@/lib/preprocessing/trial-balance';
 import { validateNITCheckDigit } from '@/lib/validation/nit-validator';
 
 /**
@@ -51,7 +51,22 @@ export type AuditBlockerCode =
   | 'V9'
   | 'V10'
   | 'V11'
-  | 'V12';
+  | 'V12'
+  | 'V13'
+  | 'V14'
+  | 'V15';
+
+/**
+ * Subset cross-period del `PreprocessedBalance` que el gate consume para
+ * V14 (margen bruto sospechoso en CIIU G) y V15 (impracticabilidad de
+ * comparativos NIIF for SMEs §3.14 / §10.21). Pick para que el gate no
+ * necesite importar el shape completo del preprocesador.
+ */
+export interface EmittableEliteContext {
+  comparativos_impracticables?: boolean;
+  actividadInferida?: ActividadInferida;
+  reclasificacionesNoCompensacion?: ReclasificacionNoCompensacion[];
+}
 
 export interface AuditBlocker {
   code: AuditBlockerCode;
@@ -82,6 +97,7 @@ export function auditReportEmittable(
   report: FinancialReport,
   snapshot: PeriodSnapshot,
   company: AuditCompanyContext,
+  elite?: EmittableEliteContext,
 ): AuditReportEmittableResult {
   const blockers: AuditBlocker[] = [];
   const suggestedAdjustments: string[] = [];
@@ -276,6 +292,84 @@ export function auditReportEmittable(
         'V11: causación impuesto del periodo no verificada en BP. Grupo 54xx (gasto impuesto) ' +
         '> 0 pero grupo 24xx (impuestos por pagar) ≈ 0. Pasar el asiento Dr. 5405 / Cr. 2404.',
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // V13 — signo del impuesto de renta (NIIF for SMEs §29.27 + E.T. art. 850).
+  // El gasto por impuesto causado del periodo es siempre DÉBITO en P&L
+  // (≥ 0n). Si el cierre tributario produjo saldo a favor, va a 1355 / 1805
+  // separado en el activo (campo `saldoAFavorImpuesto`), nunca neteado contra
+  // el causado del periodo. Un valor `< 0` significa que el reporte presenta
+  // el impuesto como ingreso (crédito), lo que viola la presentación NIIF.
+  // -------------------------------------------------------------------------
+  if (cents && cents.impuestoCausado < CENTS_TOLERANCE_ZERO) {
+    blockers.push({
+      code: 'V13',
+      message:
+        'V13: gasto por impuesto de renta presentado con signo crédito. ' +
+        'NIIF for SMEs §29.27 + E.T. art. 850 exigen presentación como gasto débito; ' +
+        'si el periodo cerró con saldo a favor, va a cuenta 1355/1805 en el activo, ' +
+        'no se neta contra el causado en P&L.',
+      detail: `impuestoCausado=${formatBigCents(cents.impuestoCausado)}`,
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // V14 — margen bruto > 80% en CIIU G con costos no descargados.
+  // Se dispara cuando la actividad inferida es Comercio (sector G) Y la
+  // evidencia de la inferencia incluye que la Clase 6 (Costo de Ventas) está
+  // ausente o es inmaterial. Esa combinación es la huella exacta del costeo
+  // incompleto que NIIF for SMEs §13.20 prohíbe (el costo se reconoce como
+  // gasto al momento de la venta) y dispara salvedad NIA 705 §7.
+  //
+  // La lógica reusa el detector ampliado de A en `inferActividadFromSnapshot`
+  // — el gate NO recalcula margen bruto: confía en la evidencia ya validada.
+  // -------------------------------------------------------------------------
+  if (elite?.actividadInferida?.sectorCIIU === 'G') {
+    const evidenciaCosteoIncompleto = elite.actividadInferida.evidencia.some(
+      (e) => /clase\s*6.*ausente/i.test(e) || /clase\s*6.*inmaterial/i.test(e),
+    );
+    if (evidenciaCosteoIncompleto) {
+      blockers.push({
+        code: 'V14',
+        message:
+          'V14: actividad comercial (CIIU G) con costo de ventas no descargado. ' +
+          'NIIF for SMEs §13.20 exige reconocer el costo como gasto cuando se vende; ' +
+          'omitirlo infla utilidad e inventario simultáneamente. La opinión limpia no es ' +
+          'defendible — el revisor fiscal debe emitir salvedad NIA 705 §7 (o adversa §8 ' +
+          'si el efecto es generalizado), nunca énfasis NIA 706 (§7 lo prohíbe expresamente).',
+        detail: elite.actividadInferida.evidencia.join(' | '),
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // V15 — comparativos impracticables sin declaración explícita.
+  // Si el preprocesador detectó que NO hay periodo comparativo material
+  // (`comparativos_impracticables===true`), el reporte DEBE declarar la
+  // impracticabilidad NIIF for SMEs §3.14 / §10.21 explícitamente en notas.
+  // Si el reporte presenta una columna 2024 con números sin esta declaración,
+  // es manipulación contable: §10.19 prohíbe reconstruir cuentas individuales
+  // desde Utilidades Retenidas.
+  // -------------------------------------------------------------------------
+  if (elite?.comparativos_impracticables === true) {
+    const declaresImpracticabilidad =
+      /\bimpracticabl[ei]\b/i.test(reportText) ||
+      /§\s*3\.14/i.test(reportText) ||
+      /§\s*10\.21/i.test(reportText) ||
+      /sin\s+comparativos\s+del\s+periodo\s+(2024|anterior)/i.test(reportText);
+
+    if (!declaresImpracticabilidad) {
+      blockers.push({
+        code: 'V15',
+        message:
+          'V15: el preprocesador detectó que no hay comparativos materiales del periodo ' +
+          'anterior, pero el informe NO declara impracticabilidad NIIF for SMEs §3.14 / §10.21. ' +
+          'Reconstruir cuentas individuales desde Utilidades Retenidas viola §10.19 (es ' +
+          'manipulación). Declarar la impracticabilidad explícitamente en notas, o presentar ' +
+          'comparativos reales obtenidos de los libros de 2024.',
+      });
+    }
   }
 
   return {

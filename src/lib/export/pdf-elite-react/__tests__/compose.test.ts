@@ -74,6 +74,8 @@ function stubPreprocessed(): PreprocessedBalance {
     auxiliaryCount: 0,
     cleanData: '',
     validationReport: '',
+    comparativos_impracticables: true,
+    reclasificacionesNoCompensacion: [],
   };
 }
 

@@ -103,6 +103,8 @@ function makeBalance(snap: PeriodSnapshot): PreprocessedBalance {
     auxiliaryCount: 0,
     cleanData: '',
     validationReport: '',
+    comparativos_impracticables: true,
+    reclasificacionesNoCompensacion: [],
   };
 }
 

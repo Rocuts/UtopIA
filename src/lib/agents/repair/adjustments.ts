@@ -148,6 +148,9 @@ function cloneBalance(pp: PreprocessedBalance): PreprocessedBalance {
     auxiliaryCount: pp.auxiliaryCount,
     cleanData: pp.cleanData,
     validationReport: pp.validationReport,
+    comparativos_impracticables: pp.comparativos_impracticables,
+    actividadInferida: pp.actividadInferida,
+    reclasificacionesNoCompensacion: pp.reclasificacionesNoCompensacion.map((r) => ({ ...r })),
   };
 }
 

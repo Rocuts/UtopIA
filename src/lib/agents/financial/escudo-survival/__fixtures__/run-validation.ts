@@ -46,6 +46,8 @@ function buildBalance(raw: typeof balanceTetAltaRaw): PreprocessedBalance {
     auxiliaryCount: raw.auxiliaryCount,
     cleanData: raw.cleanData,
     validationReport: raw.validationReport,
+    comparativos_impracticables: true,
+    reclasificacionesNoCompensacion: [],
   };
 }
 

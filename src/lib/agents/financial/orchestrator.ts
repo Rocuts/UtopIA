@@ -1074,10 +1074,23 @@ export async function orchestrateFinancialReport(
 
   const primarySnapshotForGate = getPrimarySnapshot(preprocessed);
   if (primarySnapshotForGate) {
+    // `preprocessed` está tipado como `unknown` para mantener el contrato
+    // desacoplado del shape exacto del preprocesador. Cast defensivo para
+    // pasar los campos del Pulido NIIF PYME Grupo 2 que V14/V15 leen.
+    const eliteCtx = preprocessed as {
+      comparativos_impracticables?: boolean;
+      actividadInferida?: import('@/lib/preprocessing/trial-balance').ActividadInferida;
+      reclasificacionesNoCompensacion?: import('@/lib/preprocessing/trial-balance').ReclasificacionNoCompensacion[];
+    };
     const emittableResult = auditReportEmittable(
       report,
       primarySnapshotForGate,
       auditCompanyContext,
+      {
+        comparativos_impracticables: eliteCtx?.comparativos_impracticables,
+        actividadInferida: eliteCtx?.actividadInferida,
+        reclasificacionesNoCompensacion: eliteCtx?.reclasificacionesNoCompensacion,
+      },
     );
     report.emittability = {
       kind: emittableResult.emittable ? 'emittable' : 'no-emitible',
