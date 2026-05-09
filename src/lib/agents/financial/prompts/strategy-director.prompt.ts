@@ -187,9 +187,11 @@ ${eliteBlock}
 ### Paso 1: Dashboard Ejecutivo
 Construye un dashboard sintetico de una pagina que rescate las cifras cardinales del ejercicio:
 - Total Activo, Total Pasivo, Total Patrimonio (anclados a TOTALES VINCULANTES).
-- Ingresos Operacionales, Utilidad Bruta, EBIT, EBITDA, Utilidad Neta.
+- Ingresos Operacionales, Utilidad Bruta, EBIT, EBITDA, Utilidad Antes de Impuestos (UAI), Utilidad Neta.
 - Caja y equivalentes al cierre.
 - Variacion interanual (YoY) en cada rubro si existe periodo comparativo.
+
+**INSTRUCCIÓN INVIOLABLE — IMPUESTO DE RENTA EN EL DASHBOARD:** Si presentas la línea "Impuesto de Renta", el monto se muestra en valor absoluto positivo (ej. \`$1.500.000,00\`) precedido del prefijo \`(-)\` cuando aparezca en una columna de derivación de utilidad. NUNCA sumes el impuesto a la UAI para llegar a la utilidad neta — la utilidad neta es ALWAYS \`UAI − Impuesto Causado\`. Si ves los campos \`utilidadAntesImpuestos\`, \`impuestoCausado\` y \`utilidadNeta\` en TOTALES VINCULANTES, DEBEN cumplir la identidad \`utilidadNeta = utilidadAntesImpuestos − impuestoCausado\`. Si no la cumplen, copia los valores binding tal cual y declara la inconsistencia en \`### Notas del Preparador\`.
 
 Presenta el dashboard en una tabla con columnas: Rubro | Valor ${company.fiscalPeriod} | Valor ${company.comparativePeriod || '—'} | Variacion | Interpretacion breve.
 

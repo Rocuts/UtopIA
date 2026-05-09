@@ -327,7 +327,49 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   lines.push(`- Total Patrimonio: ${fmtCop(totals.patrimonio)} COP`);
   lines.push(`- Total Ingresos: ${fmtCop(totals.ingresos)} COP`);
   lines.push(`- Total Gastos: ${fmtCop(totals.gastos)} COP`);
-  lines.push(`- Utilidad Neta (P&L): ${fmtCop(totals.utilidadNeta)} COP`);
+  // Bloque de impuesto vinculante (Bug 2 fix): UAI + impuesto + utilidad neta
+  // SIEMPRE explícitos para que el Agente 1 NO confunda el signo del impuesto.
+  // Lee desde `controlTotals.cents` (BigInt centavos) si está disponible — es
+  // la fuente de mayor precisión que populá el preprocesador. Si por alguna
+  // razón no está (tests legacy / consumers viejos), simplemente omitimos
+  // las líneas explícitas — el LLM cae al binding heredado vía utilidadNeta.
+  // Usamos lookup defensivo porque `totals` aquí es `ControlTotalsInput`
+  // (validador) que NO declara `cents`/`utilidadAntesImpuestos`/`impuestoCausado`,
+  // pero el dato real viene de `snap.controlTotals` que sí los trae.
+  const totalsExt = totals as ControlTotalsInput & {
+    cents?: { utilidadAntesImpuestos?: bigint; impuestoCausado?: bigint };
+    utilidadAntesImpuestos?: number;
+    impuestoCausado?: number;
+  };
+  let uaiNumber: number | undefined;
+  let impuestoNumber: number | undefined;
+  if (totalsExt.cents) {
+    if (typeof totalsExt.cents.utilidadAntesImpuestos === 'bigint') {
+      uaiNumber = Number(totalsExt.cents.utilidadAntesImpuestos) / 100;
+    }
+    if (typeof totalsExt.cents.impuestoCausado === 'bigint') {
+      impuestoNumber = Number(totalsExt.cents.impuestoCausado) / 100;
+    }
+  }
+  // Fallback a campos number-level si por algún motivo cents no estaba poblado.
+  if (uaiNumber === undefined && typeof totalsExt.utilidadAntesImpuestos === 'number') {
+    uaiNumber = totalsExt.utilidadAntesImpuestos;
+  }
+  if (impuestoNumber === undefined && typeof totalsExt.impuestoCausado === 'number') {
+    impuestoNumber = totalsExt.impuestoCausado;
+  }
+  if (typeof uaiNumber === 'number' && Number.isFinite(uaiNumber)) {
+    lines.push(`- Utilidad Antes de Impuestos (UAI): ${fmtCop(uaiNumber)} COP`);
+  }
+  if (typeof impuestoNumber === 'number' && Number.isFinite(impuestoNumber)) {
+    lines.push(
+      `- Impuesto de Renta causado del periodo (clase 54): ${fmtCop(impuestoNumber)} COP ` +
+        `[presentar en P&L precedido de "(-)"; SIEMPRE RESTA de UAI]`,
+    );
+  }
+  lines.push(
+    `- Utilidad Neta (P&L) [= UAI − Impuesto]: ${fmtCop(totals.utilidadNeta)} COP`,
+  );
 
   const hasAnyBigFourField =
     typeof totals.efectivoCuenta11 === 'number' ||
@@ -480,6 +522,87 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     }
     lines.push(
       `- Sustento NIIF: NIC 1 parr. 106 (componentes del Estado de Cambios en el Patrimonio).`,
+    );
+  }
+
+  // --- Seccion C0 — EFE Indirecto Pre-calculado (Curator R2) ---
+  // Bug 3 fix (2026-05-08): el cashFlowIndirecto que produce R2 se inyecta
+  // EXPLICITAMENTE al bloque vinculante para que el Agente 1 NIIF cite los
+  // valores literalmente en el Estado de Flujos de Efectivo, en lugar de
+  // omitir las líneas de capital de trabajo. Si R2 corrió en single-period
+  // mode (sin comparativo), el sub-bloque incluye un warning explícito.
+  const cfi = snap.cashFlowIndirecto;
+  if (cfi) {
+    lines.push('');
+    lines.push('## EFE INDIRECTO PRECALCULADO (Curator R2 — NIC 7)');
+    const isSinglePeriod = cfi.comparativePeriod === '(sin_comparativo)';
+    if (isSinglePeriod) {
+      lines.push(
+        `- MODO PARCIAL — sin balance comparativo: las variaciones asumen ` +
+          `saldo inicial = $0. NO es un EFE oficial NIIF. Pendiente: cargar ` +
+          `balance del año anterior. Severity: medio.`,
+      );
+    } else {
+      lines.push(
+        `- Variación calculada entre periodos ${cfi.comparativePeriod} → ${cfi.period}.`,
+      );
+    }
+    lines.push('### Actividades de Operación');
+    lines.push(`  - Utilidad neta: ${fmtCop(cfi.operating.utilidadNeta)}`);
+    lines.push(
+      `  - (+) Depreciación / Amortización: ${fmtCop(cfi.operating.depreciacionAmortizacion)}`,
+    );
+    lines.push(
+      `  - (+/-) Variación Cuentas por Cobrar (ΔCxC): ${fmtCop(cfi.operating.varCuentasPorCobrar)}`,
+    );
+    lines.push(
+      `  - (+/-) Variación Inventarios (ΔInv): ${fmtCop(cfi.operating.varInventarios)}`,
+    );
+    lines.push(
+      `  - (+/-) Variación Proveedores (ΔProv): ${fmtCop(cfi.operating.varProveedores)}`,
+    );
+    lines.push(
+      `  - (+/-) Variación Cuentas por Pagar (ΔCxP): ${fmtCop(cfi.operating.varCuentasPorPagar)}`,
+    );
+    lines.push(
+      `  - (+/-) Variación Impuestos por Pagar (ΔImp): ${fmtCop(cfi.operating.varImpuestosPorPagar)}`,
+    );
+    lines.push(
+      `  - (+/-) Variación Obligaciones Laborales (ΔLab): ${fmtCop(cfi.operating.varObligacionesLaborales)}`,
+    );
+    lines.push(
+      `  - = Flujo neto Actividades de Operación: ${fmtCop(cfi.operating.total)}`,
+    );
+    lines.push('### Actividades de Inversión');
+    lines.push(`  - Variación PPE bruto: ${fmtCop(cfi.investing.varPPE)}`);
+    lines.push(`  - Otros: ${fmtCop(cfi.investing.otros)}`);
+    lines.push(
+      `  - = Flujo neto Actividades de Inversión: ${fmtCop(cfi.investing.total)}`,
+    );
+    lines.push('### Actividades de Financiación');
+    lines.push(
+      `  - Variación Obligaciones Financieras: ${fmtCop(cfi.financing.varObligacionesFinancieras)}`,
+    );
+    lines.push(
+      `  - Variación Capital + Reservas: ${fmtCop(cfi.financing.varCapitalReservas)}`,
+    );
+    lines.push(
+      `  - Dividendos estimados: ${fmtCop(cfi.financing.dividendosEstimados)}`,
+    );
+    lines.push(
+      `  - = Flujo neto Actividades de Financiación: ${fmtCop(cfi.financing.total)}`,
+    );
+    lines.push(`### Cierre`);
+    lines.push(`  - Variación neta de efectivo: ${fmtCop(cfi.netChangeInCash)}`);
+    lines.push(
+      `  - Variación observada en PUC 11: ${fmtCop(cfi.observedChangeInCash)}`,
+    );
+    lines.push(`  - Brecha de reconciliación: ${fmtCop(cfi.reconciliationGap)}`);
+    lines.push(`  - Reconciliado: ${cfi.reconciled ? 'sí' : 'no'}`);
+    lines.push(
+      `- AUTORIDAD: estos valores son VINCULANTES para el Estado de Flujos ` +
+        `de Efectivo del Agente 1 NIIF. Cita las líneas de capital de trabajo ` +
+        `LITERALMENTE — NO omitas ΔInventario ni ΔProveedores aunque sean $0.`,
     );
   }
 

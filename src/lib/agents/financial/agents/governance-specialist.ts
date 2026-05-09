@@ -73,8 +73,10 @@ export async function runGovernanceSpecialist(
           { role: 'user', content: userContent },
         ],
         temperature: 0.1,
-        // 16384: notas NIIF completas + acta de asamblea requieren margen amplio.
-        maxOutputTokens: 16384,
+        // 24576: notas NIIF completas + acta de asamblea + certificación final
+        // + bloque de firmas + dictamen del Revisor Fiscal. Los 16384 anteriores
+        // cortaban antes de cerrar la sección de Certificación/Firmas (Bug 5).
+        maxOutputTokens: 24576,
         seed: 42,
       }),
     { label: 'governance_specialist', maxAttempts: 3 },

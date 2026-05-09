@@ -75,10 +75,15 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
   // material threshold definible.
   if (snapshot.controlTotals.activo === 0) return out;
 
-  // Materialidad: max(0.01% activo, $50.000).
+  // Materialidad: max(0.01% activo, $1.000).
+  // El principio NIIF de no compensación (NIC 1 párr. 32) NO admite umbrales
+  // razonables de materialidad para saldos opuestos a la naturaleza de la
+  // cuenta. Cualquier saldo crédito en una cuenta de activo debe reclasificarse
+  // explícitamente — el piso de $1.000 sólo deja fuera saldos triviales por
+  // redondeo (ya cubiertos también por NEGATIVE_TOLERANCE_COP = $100).
   const MATERIAL_THRESHOLD_COP = Math.max(
     Math.abs(snapshot.controlTotals.activo) * 0.0001,
-    50_000,
+    1_000,
   );
 
   // Filtrar cuentas con saldo negativo > tolerancia trivial. Excluir cuentas

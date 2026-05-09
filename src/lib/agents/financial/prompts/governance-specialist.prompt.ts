@@ -308,6 +308,8 @@ Redacta un resumen profesional de las Notas a los Estados Financieros conforme a
 - Impuesto diferido (NIC 12): diferencias temporarias deducibles e imponibles.
 - IVA por pagar / a favor, ICA, retencion en la fuente, autorretencion especial — solo los tributos materialmente presentes en el balance.
 
+**INSTRUCCIÓN INVIOLABLE — SIGNO DEL IMPUESTO EN LA NOTA 9:** Si la nota presenta una conciliación entre la utilidad antes de impuestos y la utilidad neta, el impuesto SIEMPRE aparece como una RESTA (precedido del prefijo \`(-)\`), nunca como suma. La utilidad neta del ejercicio es siempre menor o igual a la utilidad antes de impuestos (en valor absoluto, asumiendo UAI positiva). Si los binding totals traen \`utilidadAntesImpuestos\`, \`impuestoCausado\` y \`utilidadNeta\`, cita los tres valores literalmente y respeta la identidad \`utilidadNeta = utilidadAntesImpuestos − impuestoCausado\`.
+
 #### Nota 10: Pasivos Laborales
 - Cesantias, intereses sobre cesantias, prima, vacaciones, aportes a seguridad social.
 - Provision actuarial si aplica (Grupo 1 bajo NIC 19).
@@ -384,6 +386,64 @@ Firmas requeridas:
    - Secretario de la reunion.
    ${company.legalRepresentative ? '   - Representante Legal: ' + company.legalRepresentative + '.' : ''}
    ${company.fiscalAuditor ? '   - Revisor Fiscal: ' + company.fiscalAuditor + '.' : ''}
+
+### PASO FINAL OBLIGATORIO — CERTIFICACIÓN Y FIRMAS
+
+Al término del Acta de ${assemblyType}, agrega EXPLÍCITAMENTE este bloque (NO es opcional — el reporte falla validación si lo omites):
+
+\`\`\`markdown
+---
+
+## CERTIFICACIÓN
+
+Se deja constancia de que esta Acta de ${assemblyType} Ordinaria fue elaborada conforme a:
+- Ley 222 de 1995 (régimen societario colombiano).
+- ${entityRegimeCitation}.
+- Estatutos sociales de la sociedad.
+- Normas Internacionales de Información Financiera (${
+    company.niifGroup === 1
+      ? 'NIIF Plenas, Decreto 2420/2015'
+      : company.niifGroup === 3
+        ? 'Contabilidad Simplificada Decreto 2706/2012'
+        : 'NIIF para PYMES, Decreto 2420/2015 — anexo 2'
+  }).
+
+### Firmas
+
+| Cargo | Nombre | Firma | C.C. |
+|---|---|---|---|
+| Presidente de ${assemblyType} | ——————— | ——————— | ——————— |
+| Secretario de ${assemblyType} | ——————— | ——————— | ——————— |
+| Representante Legal | ${company.legalRepresentative || '— (dato no suministrado)'} | ——————— | ——————— |
+${
+  company.accountant
+    ? `| Contador Público | ${company.accountant} | ——————— | ——————— |`
+    : '| Contador Público | — (dato no suministrado) | ——————— | ——————— |'
+}
+${
+  company.fiscalAuditor
+    ? `| Revisor Fiscal | ${company.fiscalAuditor} | ——————— | ——————— |`
+    : ''
+}
+
+### Dictamen del Revisor Fiscal
+
+${
+  company.fiscalAuditor
+    ? `${company.fiscalAuditor}, en su calidad de Revisor Fiscal de ${company.name} (NIT ${company.nit}), emite el siguiente dictamen sobre los estados financieros del periodo ${company.fiscalPeriod}:
+
+**Dictamen:** [Síntesis breve del dictamen — favorable / con salvedades / desfavorable / abstención — siguiendo NIA 700/705/706 y Art. 207-209 C.Co.]
+
+**Sustento normativo:** Ley 43 de 1990 (ejercicio de la profesión contable), Art. 207-209 C.Co. (funciones del Revisor Fiscal), NIA 700/705/706 (informes de auditoría).`
+    : '[La sociedad no cuenta con Revisor Fiscal identificado en los insumos. Si la sociedad está obligada a tener Revisor Fiscal por Art. 203 C.Co. (sociedades por acciones, sucursales de extranjeras, sociedades cuya naturaleza lo requiere por estatutos, o que superen los topes del Art. 13 Ley 43/1990: activos > 5.000 SMMLV o ingresos brutos > 3.000 SMMLV en el año inmediatamente anterior), debe designarse Revisor Fiscal. En caso contrario, esta sección se omite legítimamente.]'
+}
+
+**FIN DEL ACTA**
+
+---
+\`\`\`
+
+NUNCA termines la Parte III sin este bloque de Certificación + Firmas + Dictamen. Si te quedas sin tokens, PRIORIZA cerrar este bloque sobre extender otras notas. Mejor un acta corta y firmable que una larga y truncada.
 
 ### REGLA DE INTEGRIDAD DEL ACTA
 - Una acta en blanco/plantilla NO es un entregable valido. Si la informacion minima (razon social, NIT, periodo fiscal, ciudad) esta disponible, el acta debe quedar sustancialmente completa.
