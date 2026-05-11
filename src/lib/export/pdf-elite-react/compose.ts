@@ -13,6 +13,12 @@
 import type {
   AdjustmentRow,
   AreaKey,
+  AuditFindingDomain,
+  AuditFindingRow,
+  AuditFindingSeverity,
+  AuditFindingsSpec,
+  AuditOpinionKind,
+  AuditorScoreCard,
   DialGaugeSpec,
   EditorialReport,
   EmittableGate,
@@ -25,6 +31,8 @@ import type {
   PillarSatellite,
   PillarsSpec,
   PortraitSpec,
+  QualityDimensionBar,
+  QualityScoresSpec,
   RecommendationItem,
   ReportMeta,
   SignatureBlockSpec,
@@ -32,6 +40,8 @@ import type {
   WaterfallItem,
 } from './types';
 import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { AuditReport } from '@/lib/agents/financial/audit/types';
+import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 import type {
   ControlTotals,
   PreprocessedBalance,
@@ -58,10 +68,31 @@ export interface ComposeInput {
    * editorial los renderice post-opinion (NIA 706 §A1).
    */
   dictamen?: FiscalOpinionDictamen;
+  /**
+   * Salida del pipeline de Auditoría Especializada (`/api/financial-audit`).
+   * Si presente, se renderiza `AuditFindingsPage` con los 4 auditores +
+   * findings + opinion. Si undefined la página se omite.
+   */
+  auditReport?: AuditReport | null;
+  /**
+   * Salida del meta-auditor de calidad (`/api/financial-quality`).
+   * Si presente, se renderiza `QualityMetaAuditPage` con 12 dimensiones +
+   * IFRS 18 + ISO 25012 + ISO 42001. Si undefined la página se omite.
+   */
+  qualityReport?: QualityAssessment | null;
 }
 
 export function composeEditorialReport(input: ComposeInput): EditorialReport {
-  const { report, preprocessed, pillars, language, emittable, dictamen } = input;
+  const {
+    report,
+    preprocessed,
+    pillars,
+    language,
+    emittable,
+    dictamen,
+    auditReport,
+    qualityReport,
+  } = input;
 
   const meta = buildMeta(report, language, emittable, preprocessed);
   const cover = buildCover(report, language);
@@ -109,11 +140,119 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   if (shareholderMinutes) {
     out.shareholderMinutes = shareholderMinutes;
   }
+  const auditFindings = buildAuditFindings(auditReport ?? null);
+  if (auditFindings) {
+    out.auditFindings = auditFindings;
+  }
+  const qualityScores = buildQualityScores(qualityReport ?? null);
+  if (qualityScores) {
+    out.qualityScores = qualityScores;
+  }
   if (emphasisParagraphs.length > 0) {
     out.emphasisParagraphs = emphasisParagraphs;
   }
 
   return out;
+}
+
+// ─── Audit findings builder ───────────────────────────────────────────────────
+// Map AuditReport (4-auditor pipeline) → AuditFindingsSpec for the PDF page.
+// We sort findings by severity descending and take the top N so the page fits
+// comfortably; the appendix-style full list would need pagination handling
+// outside the current scope.
+
+const SEVERITY_ORDER: Record<AuditFindingSeverity, number> = {
+  critico: 0,
+  alto: 1,
+  medio: 2,
+  bajo: 3,
+  informativo: 4,
+};
+
+const MAX_TOP_FINDINGS = 12;
+
+function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | undefined {
+  if (!audit) return undefined;
+
+  const auditorCards: AuditorScoreCard[] = (audit.auditorResults ?? []).map((r) => ({
+    domain: r.domain as AuditFindingDomain,
+    auditorName: r.auditorName,
+    complianceScore: Math.round(r.complianceScore),
+    findingCount: r.findings?.length ?? 0,
+    failed: !!r.failed,
+  }));
+
+  const sorted = [...(audit.consolidatedFindings ?? [])].sort(
+    (a, b) =>
+      (SEVERITY_ORDER[a.severity as AuditFindingSeverity] ?? 9) -
+      (SEVERITY_ORDER[b.severity as AuditFindingSeverity] ?? 9),
+  );
+
+  const topFindings: AuditFindingRow[] = sorted.slice(0, MAX_TOP_FINDINGS).map((f) => ({
+    code: f.code,
+    severity: f.severity as AuditFindingSeverity,
+    domain: f.domain as AuditFindingDomain,
+    title: f.title,
+    description: f.description,
+    normReference: f.normReference,
+    recommendation: f.recommendation,
+    impact: f.impact,
+  }));
+
+  // Defensive: severity counts may be empty if the orchestrator didn't fill them.
+  const findingCounts: Record<AuditFindingSeverity, number> = {
+    critico: audit.findingCounts?.critico ?? 0,
+    alto: audit.findingCounts?.alto ?? 0,
+    medio: audit.findingCounts?.medio ?? 0,
+    bajo: audit.findingCounts?.bajo ?? 0,
+    informativo: audit.findingCounts?.informativo ?? 0,
+  };
+
+  return {
+    overallScore: Math.round(audit.overallScore ?? 0),
+    opinionType: (audit.opinionType ?? 'abstension') as AuditOpinionKind,
+    opinionText: audit.opinionText ?? '',
+    auditorCards,
+    topFindings,
+    findingCounts,
+    executiveSummary: audit.executiveSummary ?? '',
+  };
+}
+
+// ─── Quality scores builder ───────────────────────────────────────────────────
+// Map QualityAssessment (meta-auditor) → QualityScoresSpec.
+
+function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | undefined {
+  if (!q) return undefined;
+
+  const dimensions: QualityDimensionBar[] = (q.dimensions ?? []).map((d) => ({
+    name: d.name,
+    score: Math.round(d.score),
+    framework: d.framework,
+  }));
+
+  return {
+    overallScore: Math.round(q.overallScore ?? 0),
+    grade: q.grade ?? 'F',
+    dimensions,
+    ifrs18Ready: !!q.ifrs18Readiness?.ready,
+    ifrs18Score: Math.round(q.ifrs18Readiness?.score ?? 0),
+    ifrs18Gaps: q.ifrs18Readiness?.gaps ?? [],
+    dataQuality: {
+      completeness: Math.round(q.dataQuality?.completeness ?? 0),
+      accuracy: Math.round(q.dataQuality?.accuracy ?? 0),
+      consistency: Math.round(q.dataQuality?.consistency ?? 0),
+      timeliness: Math.round(q.dataQuality?.timeliness ?? 0),
+      validity: Math.round(q.dataQuality?.validity ?? 0),
+    },
+    aiGovernance: {
+      traceability: Math.round(q.aiGovernance?.traceability ?? 0),
+      explainability: Math.round(q.aiGovernance?.explainability ?? 0),
+      antiHallucination: Math.round(q.aiGovernance?.antiHallucination ?? 0),
+      humanOversight: Math.round(q.aiGovernance?.humanOversight ?? 0),
+    },
+    executiveSummary: q.executiveSummary ?? '',
+  };
 }
 
 // ─── Norm citation regex (binding contract — referenced in tests) ────────────

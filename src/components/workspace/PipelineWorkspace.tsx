@@ -52,6 +52,7 @@ import type {
   AuditProgressEvent,
   AuditDomain,
 } from '@/lib/agents/financial/audit/types';
+import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { ReportIterationTurn } from './types';
 import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
 
@@ -356,6 +357,17 @@ interface ReportViewerProps {
   language: 'es' | 'en';
   conversationId?: string;
   initialTurns?: ReportIterationTurn[];
+  /**
+   * Reporte completo de auditoría (4 auditores) si el usuario activó la
+   * Fase 2. Reenviado al endpoint /api/financial-report/export para que
+   * el PDF editorial incluya AuditFindingsPage.
+   */
+  auditReport?: BackendAuditReport | null;
+  /**
+   * Reporte completo de meta-auditoría de calidad si el usuario activó la
+   * Fase 3. Habilita QualityMetaAuditPage en el PDF editorial.
+   */
+  qualityReport?: BackendQualityAssessment | null;
   onReset?: () => void;
   onPatchReport?: (newConsolidatedMarkdown: string) => void;
   onTurnsChange?: (turns: ReportIterationTurn[]) => void;
@@ -381,6 +393,8 @@ function ReportViewer({
   language,
   conversationId,
   initialTurns,
+  auditReport,
+  qualityReport,
   onReset,
   onPatchReport,
   onTurnsChange,
@@ -474,6 +488,10 @@ function ReportViewer({
           rawData,
           company,
           language,
+          // Fase 2/3 — solo se envían si el usuario los activó. El endpoint
+          // tolera null/undefined (las páginas se omiten en el render).
+          auditReport: auditReport ?? null,
+          qualityReport: qualityReport ?? null,
           format: 'pdf-elite',
         }),
       });
@@ -505,7 +523,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, rawData, company, language, isExportingPdf]);
+  }, [report, rawData, company, language, auditReport, qualityReport, isExportingPdf]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -816,6 +834,12 @@ export function PipelineWorkspace() {
   const [initialTurns, setInitialTurns] = useState<ReportIterationTurn[]>(
     lastCompletedReport?.turns ?? [],
   );
+  // Fase 2/3 — reportes completos del audit y meta-auditor. Se llenan tras
+  // las fases 2 y 3 si el usuario los activó. Antes solo guardábamos resumen
+  // (findingCounts, grade, score), perdiendo el detalle que el PDF editorial
+  // necesita para AuditFindingsPage + QualityMetaAuditPage.
+  const [auditReport, setAuditReport] = useState<BackendAuditReport | null>(null);
+  const [qualityReport, setQualityReport] = useState<BackendQualityAssessment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
@@ -1063,6 +1087,9 @@ export function PipelineWorkspace() {
               auditFindings: findingCounts,
               auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
             }));
+            // Conservar el reporte completo para que el botón Exportar PDF
+            // pueda incluir AuditFindingsPage con los 4 auditores + hallazgos.
+            setAuditReport(phase2Report);
           }
         } catch (err) {
           if ((err as Error)?.name === 'AbortError') return;
@@ -1079,10 +1106,10 @@ export function PipelineWorkspace() {
       if (pipelineInput.outputOptions.metaAudit) {
         setPipelineState((prev) => ({ ...prev, mode: 'quality' }));
         try {
-          const quality = await fetchJSONWithRetry<{
-            grade?: QualityGrade;
-            score?: number;
-          }>(
+          // Tipamos como QualityAssessment completo — antes solo extraíamos
+          // {grade, score}, descartando dimensiones / IFRS18 / ISO 25012 /
+          // ISO 42001. Ese detalle es necesario para QualityMetaAuditPage.
+          const quality = await fetchJSONWithRetry<BackendQualityAssessment>(
             '/api/financial-quality',
             {
               method: 'POST',
@@ -1098,9 +1125,10 @@ export function PipelineWorkspace() {
           );
           setPipelineState((prev) => ({
             ...prev,
-            qualityGrade: quality.grade,
-            qualityScore: quality.score,
+            qualityGrade: quality.grade as QualityGrade,
+            qualityScore: quality.overallScore,
           }));
+          setQualityReport(quality);
         } catch (err) {
           if ((err as Error)?.name === 'AbortError') return;
           const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -1323,6 +1351,8 @@ export function PipelineWorkspace() {
             language={language}
             conversationId={conversationId || undefined}
             initialTurns={initialTurns}
+            auditReport={auditReport}
+            qualityReport={qualityReport}
             onReset={handleReset}
             onPatchReport={handlePatchReport}
             onTurnsChange={handleTurnsChange}

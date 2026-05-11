@@ -131,6 +131,88 @@ export interface ShareholderMinutesSpec {
   citations: NormCitation[];
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Audit specialized — 4 auditores (NIIF / Tributario / Legal / Fiscal)
+// ───────────────────────────────────────────────────────────────────────────
+
+export type AuditFindingSeverity = 'critico' | 'alto' | 'medio' | 'bajo' | 'informativo';
+export type AuditFindingDomain = 'niif' | 'tributario' | 'legal' | 'revisoria';
+export type AuditOpinionKind = 'favorable' | 'con_salvedades' | 'desfavorable' | 'abstension';
+
+export interface AuditFindingRow {
+  code: string;
+  severity: AuditFindingSeverity;
+  domain: AuditFindingDomain;
+  title: string;
+  description: string;
+  normReference: string;
+  recommendation: string;
+  impact: string;
+}
+
+export interface AuditorScoreCard {
+  domain: AuditFindingDomain;
+  auditorName: string;
+  complianceScore: number;
+  findingCount: number;
+  failed: boolean;
+}
+
+/**
+ * Resumen visual de la Auditoría Especializada. Compuesto desde un
+ * `AuditReport` (4-auditor pipeline `/api/financial-audit`). Renderizado por
+ * `AuditFindingsPage`. Si undefined, la página se omite — el usuario no
+ * activó `outputOptions.auditPipeline` o la corrida falló.
+ */
+export interface AuditFindingsSpec {
+  overallScore: number;
+  opinionType: AuditOpinionKind;
+  opinionText: string;
+  auditorCards: AuditorScoreCard[];
+  /** Top-N findings ordenados por severidad descendente. */
+  topFindings: AuditFindingRow[];
+  findingCounts: Record<AuditFindingSeverity, number>;
+  executiveSummary: string;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Quality meta-audit — 12 dimensiones (ISO 25012, ISO 42001, IASB)
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface QualityDimensionBar {
+  name: string;
+  score: number;
+  framework: string;
+}
+
+/**
+ * Resumen visual de la Meta-auditoría de Calidad. Compuesto desde un
+ * `QualityAssessment` (single-agent meta-auditor `/api/financial-quality`).
+ * Renderizado por `QualityMetaAuditPage`. Si undefined, la página se omite.
+ */
+export interface QualityScoresSpec {
+  overallScore: number;
+  grade: string;
+  dimensions: QualityDimensionBar[];
+  ifrs18Ready: boolean;
+  ifrs18Score: number;
+  ifrs18Gaps: string[];
+  dataQuality: {
+    completeness: number;
+    accuracy: number;
+    consistency: number;
+    timeliness: number;
+    validity: number;
+  };
+  aiGovernance: {
+    traceability: number;
+    explainability: number;
+    antiHallucination: number;
+    humanOversight: number;
+  };
+  executiveSummary: string;
+}
+
 export interface RecommendationItem {
   title: string;
   bodyMarkdown: string;
@@ -250,6 +332,10 @@ export interface EditorialReport {
   recommendations: { items: RecommendationItem[] };
   /** Acta de asamblea / minutas (opcional — página se omite si vacía). */
   shareholderMinutes?: ShareholderMinutesSpec;
+  /** Auditoría Especializada (4 auditores). Omitida si el pipeline no corrió. */
+  auditFindings?: AuditFindingsSpec;
+  /** Meta-auditoría de Calidad (12 dimensiones). Omitida si no se corrió. */
+  qualityScores?: QualityScoresSpec;
   appendix: AppendixSpec;
   /**
    * Firmas dinamicas (Representante Legal, Revisor Fiscal, Contador Publico).

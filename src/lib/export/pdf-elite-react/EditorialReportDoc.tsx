@@ -46,6 +46,8 @@ import { ClosingPage } from './pages/ClosingPage';
 import { BreakEvenPage } from './pages/BreakEvenPage';
 import { ProjectedCashFlowPage } from './pages/ProjectedCashFlowPage';
 import { ShareholderMinutesPage } from './pages/ShareholderMinutesPage';
+import { AuditFindingsPage } from './pages/AuditFindingsPage';
+import { QualityMetaAuditPage } from './pages/QualityMetaAuditPage';
 
 interface Props {
   doc: EditorialReport;
@@ -111,6 +113,12 @@ export function EditorialReportDoc({ doc }: Props) {
       {/* Acta de Asamblea — governance.shareholderMinutes (Art. 187 Ley 222/1995).
           Omitida si el agente de Gobierno no produjo borrador. */}
       <ShareholderMinutesPage doc={doc} />
+      {/* Auditoría Especializada (4 auditores NIA 700/705/706) + Meta-auditoría
+          de Calidad (ISO 25012/42001/IFRS 18). Pipelines opcionales — cada
+          página retorna null si el composer no recibió el reporte de su
+          pipeline (usuario destildó el output o falló la corrida). */}
+      <AuditFindingsPage doc={doc} />
+      <QualityMetaAuditPage doc={doc} />
       <NormativeAppendix doc={doc} />
       <ClosingPage doc={doc} />
     </Document>

@@ -16,6 +16,8 @@ import {
 } from '@/lib/export/pdf-elite-react';
 import { aggregatePillars } from '@/lib/pillars/service';
 import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { AuditReport } from '@/lib/agents/financial/audit/types';
+import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/export
@@ -195,6 +197,12 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     company?: FinancialReport['company'];
     language?: 'es' | 'en';
     instructions?: string;
+    // Phase 2 inputs — optional. When PipelineWorkspace finishes Phase 2/3
+    // (audit + quality), it forwards the full reports here so the PDF renders
+    // AuditFindingsPage + QualityMetaAuditPage. If absent, those pages are
+    // omitted by the composer (page-level null guards take care of it).
+    auditReport?: AuditReport | null;
+    qualityReport?: QualityAssessment | null;
   };
 
   // FAST PATH: client already has a completed FinancialReport in state (e.g.
@@ -232,6 +240,8 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       preprocessed: preprocessed ?? null,
       pillars,
       language,
+      auditReport: b.auditReport ?? null,
+      qualityReport: b.qualityReport ?? null,
     });
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, report.company.name);
