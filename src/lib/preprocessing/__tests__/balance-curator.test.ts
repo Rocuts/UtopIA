@@ -172,15 +172,23 @@ describe('R1 — Saldos Incoherentes en Activos', () => {
 // ---------------------------------------------------------------------------
 
 describe('R2 — Flujo Efectivo Método Indirecto', () => {
-  it('retorna findings vacío sin comparativo', () => {
+  it('infiere EFE parcial single-period (sin comparativo) y no emite finding crítico', () => {
+    // Bug 3 fix (2026-05-08, r2-indirect-cashflow.ts:33): sin comparativo R2
+    // ya NO retorna undefined — emite un EFE PARCIAL asumiendo prev=0 para
+    // todas las variaciones, marcándolo `inferred: true` y
+    // `comparativePeriod: '(sin_comparativo)'`. El finding de limitación es
+    // severity 'medio', nunca 'alto', porque es dato faltante (no error).
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({ utilidadNeta: 100_000_000 }),
       classes: [],
     });
     const out = runR2(snap, null);
-    expect(out.cashFlowIndirecto).toBeUndefined();
-    expect(out.findings).toHaveLength(0);
+    expect(out.cashFlowIndirecto).toBeDefined();
+    expect(out.cashFlowIndirecto?.inferred).toBe(true);
+    expect(out.cashFlowIndirecto?.comparativePeriod).toBe('(sin_comparativo)');
+    // Cero findings 'alto/crítico' — la inferencia es legítima por diseño.
+    expect(out.findings.every((f) => f.severity !== 'alto' && f.severity !== 'crítico')).toBe(true);
   });
 
   it('genera flujo indirecto con comparativo y reconcilia con Δ caja', () => {
@@ -465,8 +473,13 @@ describe('runCurator (orchestrator)', () => {
     const classesBefore = JSON.parse(JSON.stringify(snap.classes));
     const equityBefore = JSON.parse(JSON.stringify(snap.equityBreakdown));
     runCurator(snap, null);
-    expect(snap.controlTotals).toEqual(ctBefore);
-    expect(snap.summary).toEqual(summaryBefore);
+    // `toMatchObject` en lugar de `toEqual`: las reglas de cierre virtual (R8)
+    // y EFE indirecto (R2) añaden campos computados como `cashOpen`/`cashClose`
+    // a `controlTotals` aunque el snapshot esté cuadrado. El contrato es que
+    // los CAMPOS FINANCIEROS preexistentes no muten (esos siguen verificados
+    // por toMatchObject), pero las claves nuevas computadas son aceptables.
+    expect(snap.controlTotals).toMatchObject(ctBefore);
+    expect(snap.summary).toMatchObject(summaryBefore);
     expect(snap.classes).toEqual(classesBefore);
     expect(snap.equityBreakdown).toEqual(equityBefore);
     // Las banderas de findings deben quedar todas en false (snapshot saludable).

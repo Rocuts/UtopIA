@@ -65,6 +65,14 @@ function stubSnapshot(period = '2026'): PeriodSnapshot {
 }
 
 function stubPreprocessed(): PreprocessedBalance {
+  // Happy-path stub for the "produces a complete EditorialReport" test. The
+  // assertion at line ~242 expects `meta.watermark` to be undefined, so we
+  // MUST NOT trigger any of compose.ts:296-324 watermark conditions:
+  //   - `comparativos_impracticables: true` → 'BORRADOR'
+  //   - `provisional: true` → 'BORRADOR'
+  //   - emittable.ok === false → 'BLOQUEADO'
+  // If you need a BORRADOR fixture, create a separate `stubPreprocessedBorrador()`
+  // for a dedicated test rather than mutating this happy-path one.
   const snap = stubSnapshot('2026');
   return {
     periods: [snap],
@@ -74,7 +82,7 @@ function stubPreprocessed(): PreprocessedBalance {
     auxiliaryCount: 0,
     cleanData: '',
     validationReport: '',
-    comparativos_impracticables: true,
+    comparativos_impracticables: false,
     reclasificacionesNoCompensacion: [],
   };
 }
