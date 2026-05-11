@@ -120,19 +120,23 @@ export function CoverPage({ doc }: Props) {
         />
       </View>
 
-      {/* LEFT column — 60% */}
+      {/* LEFT column — 60%. Uses space-between so the bottom credits block
+          (gold rule + "Generado por...") is anchored to the page bottom and
+          can NEVER overlap the period text, regardless of how tall the
+          editorial title block above grows. */}
       <View
         style={{
           width: LEFT_W,
           height: PAGE_H,
           paddingLeft: PAGE_MARGIN,
           paddingRight: S6,
-          paddingTop: PAGE_MARGIN + S8,
+          paddingTop: PAGE_MARGIN + S4,
           paddingBottom: PAGE_MARGIN,
           flexDirection: 'column',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
         }}
       >
+       <View>
         {/* Eyebrow label */}
         <View style={{ marginBottom: S3 }}>
           <Text
@@ -261,10 +265,13 @@ export function CoverPage({ doc }: Props) {
             ))}
           </View>
         ) : null}
+       </View>
 
-        {/* Bottom caption */}
-        <View style={{ position: 'absolute', bottom: PAGE_MARGIN, left: PAGE_MARGIN }}>
-          {/* Gold rule line */}
+        {/* Bottom credits block — anchored to page bottom via flex
+            justifyContent:'space-between' on parent. Was previously absolute-
+            positioned, which made it overlap the Period text when the title
+            grew. */}
+        <View>
           <View
             style={{
               width: 200,

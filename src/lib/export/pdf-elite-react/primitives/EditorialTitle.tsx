@@ -20,7 +20,7 @@ import {
   FONT_DISPLAY,
   N0,
   N1000,
-  TYPE_HERO,
+  TYPE_H1,
   TYPE_PAGE,
   TYPE_SECTION,
 } from '../tokens';
@@ -48,7 +48,11 @@ export interface EditorialTitleProps {
 function sizeFor(size: EditorialTitleSize): number {
   switch (size) {
     case 'hero':
-      return TYPE_HERO;
+      // TYPE_H1 (54pt) — cover title, section divider title, closing greeting.
+      // TYPE_HERO (120pt) is reserved for direct use on KPI mega-numbers and
+      // the oversized "01"/"02" numerals on SectionDivider, NOT for prose
+      // titles which need to share vertical space with subtitle + meta blocks.
+      return TYPE_H1;
     case 'page':
       return TYPE_PAGE;
     case 'section':
