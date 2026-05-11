@@ -43,6 +43,9 @@ import { NotesPage } from './pages/NotesPage';
 import { RecommendationsPage } from './pages/RecommendationsPage';
 import { NormativeAppendix } from './pages/NormativeAppendix';
 import { ClosingPage } from './pages/ClosingPage';
+import { BreakEvenPage } from './pages/BreakEvenPage';
+import { ProjectedCashFlowPage } from './pages/ProjectedCashFlowPage';
+import { ShareholderMinutesPage } from './pages/ShareholderMinutesPage';
 
 interface Props {
   doc: EditorialReport;
@@ -88,6 +91,12 @@ export function EditorialReportDoc({ doc }: Props) {
       {StatementsPages({ doc })}
       <WaterfallPnLPage doc={doc} />
       <DialGaugePage doc={doc} />
+      {/* Punto de Equilibrio + Flujo de Caja Proyectado — narrative pages from
+          strategicAnalysis. Each renders null when its IR field is undefined
+          (composer emits the field only when the agent produced non-empty
+          markdown), so omission is automatic. */}
+      <BreakEvenPage doc={doc} />
+      <ProjectedCashFlowPage doc={doc} />
       {hasPillars && (
         <SectionDivider
           areaAccent="verdad"
@@ -99,6 +108,9 @@ export function EditorialReportDoc({ doc }: Props) {
       {/* NotesPage returns array, one per block */}
       {NotesPage({ doc })}
       <RecommendationsPage doc={doc} />
+      {/* Acta de Asamblea — governance.shareholderMinutes (Art. 187 Ley 222/1995).
+          Omitida si el agente de Gobierno no produjo borrador. */}
+      <ShareholderMinutesPage doc={doc} />
       <NormativeAppendix doc={doc} />
       <ClosingPage doc={doc} />
     </Document>

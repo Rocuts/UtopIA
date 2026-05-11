@@ -101,6 +101,36 @@ export interface NoteBlock {
   citations: NormCitation[];
 }
 
+/**
+ * Análisis de punto de equilibrio operativo. Markdown limpio producido por
+ * el Director de Estrategia (`report.strategicAnalysis.breakEvenAnalysis`).
+ * Renderizado por `BreakEvenPage`. Si vacío, la página se omite.
+ */
+export interface BreakEvenSpec {
+  bodyMarkdown: string;
+  citations: NormCitation[];
+}
+
+/**
+ * Proyección de flujo de caja a 12 meses. Markdown del Director de Estrategia
+ * (`report.strategicAnalysis.projectedCashFlow`). Renderizado por
+ * `ProjectedCashFlowPage`. Si vacío, la página se omite.
+ */
+export interface ProjectedCashFlowSpec {
+  bodyMarkdown: string;
+  citations: NormCitation[];
+}
+
+/**
+ * Borrador del acta de asamblea (aprobación de EEFF, Art. 187 Ley 222/1995).
+ * Markdown del Especialista de Gobierno (`report.governance.shareholderMinutes`).
+ * Renderizado por `ShareholderMinutesPage`. Si vacío, la página se omite.
+ */
+export interface ShareholderMinutesSpec {
+  bodyMarkdown: string;
+  citations: NormCitation[];
+}
+
 export interface RecommendationItem {
   title: string;
   bodyMarkdown: string;
@@ -212,8 +242,14 @@ export interface EditorialReport {
   /** Opcional — si pillars del orchestrator no se calculan, OrbitalPillarsPage se omite. */
   pillars?: PillarsSpec;
   statements: FinancialStatementsSpec;
+  /** Punto de equilibrio (opcional — página se omite si bodyMarkdown vacío). */
+  breakEven?: BreakEvenSpec;
+  /** Flujo de caja proyectado 12m (opcional — página se omite si vacío). */
+  projectedCashFlow?: ProjectedCashFlowSpec;
   notes: { blocks: NoteBlock[] };
   recommendations: { items: RecommendationItem[] };
+  /** Acta de asamblea / minutas (opcional — página se omite si vacía). */
+  shareholderMinutes?: ShareholderMinutesSpec;
   appendix: AppendixSpec;
   /**
    * Firmas dinamicas (Representante Legal, Revisor Fiscal, Contador Publico).

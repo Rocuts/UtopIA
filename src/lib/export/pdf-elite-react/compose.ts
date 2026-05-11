@@ -73,8 +73,11 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const dialGauges = { gauges: buildDialGauges(totals) };
   const pillarsSpec = buildPillarsSpec(pillars ?? null);
   const statements = buildStatements(report);
+  const breakEven = buildBreakEven(report);
+  const projectedCashFlow = buildProjectedCashFlow(report);
   const notes = { blocks: buildNotes(report) };
   const recommendations = { items: buildRecommendations(report) };
+  const shareholderMinutes = buildShareholderMinutes(report);
   const appendix = buildAppendix(report, preprocessed, totals, emittable);
   const signatureBlock = buildSignatureBlock(report);
   const emphasisParagraphs = buildEmphasisParagraphs(dictamen);
@@ -96,6 +99,15 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
 
   if (pillarsSpec) {
     out.pillars = pillarsSpec;
+  }
+  if (breakEven) {
+    out.breakEven = breakEven;
+  }
+  if (projectedCashFlow) {
+    out.projectedCashFlow = projectedCashFlow;
+  }
+  if (shareholderMinutes) {
+    out.shareholderMinutes = shareholderMinutes;
   }
   if (emphasisParagraphs.length > 0) {
     out.emphasisParagraphs = emphasisParagraphs;
@@ -675,6 +687,37 @@ function buildNotes(report: FinancialReport) {
     bodyMarkdown: s.body,
     citations: extractCitations(s.body),
   }));
+}
+
+// ─── Break-Even Analysis ──────────────────────────────────────────────────────
+// Punto de equilibrio — markdown del Director de Estrategia (FinancialReport.
+// strategicAnalysis.breakEvenAnalysis). Retorna undefined si el campo está
+// vacío para que la página se omita.
+
+function buildBreakEven(report: FinancialReport) {
+  const md = (report.strategicAnalysis?.breakEvenAnalysis ?? '').trim();
+  if (!md) return undefined;
+  return { bodyMarkdown: md, citations: extractCitations(md) };
+}
+
+// ─── Projected Cash Flow ──────────────────────────────────────────────────────
+// Proyección de flujo de caja 12 meses — markdown del Director de Estrategia
+// (FinancialReport.strategicAnalysis.projectedCashFlow). Undefined si vacío.
+
+function buildProjectedCashFlow(report: FinancialReport) {
+  const md = (report.strategicAnalysis?.projectedCashFlow ?? '').trim();
+  if (!md) return undefined;
+  return { bodyMarkdown: md, citations: extractCitations(md) };
+}
+
+// ─── Shareholder Minutes ──────────────────────────────────────────────────────
+// Acta de asamblea (Art. 187 Ley 222/1995) — markdown del Especialista de
+// Gobierno (FinancialReport.governance.shareholderMinutes). Undefined si vacío.
+
+function buildShareholderMinutes(report: FinancialReport) {
+  const md = (report.governance?.shareholderMinutes ?? '').trim();
+  if (!md) return undefined;
+  return { bodyMarkdown: md, citations: extractCitations(md) };
 }
 
 // ─── Recommendations ──────────────────────────────────────────────────────────
