@@ -1,41 +1,20 @@
 // ---------------------------------------------------------------------------
 // Submódulo 1: TET Calculator
 // ---------------------------------------------------------------------------
-// Calcula la Tasa Efectiva de Tributación (TET) y la Tasa de Tributación
-// Depurada (TTD, parágrafo 6 Art. 240 ET) sobre los anchors deterministicos
-// del balance preprocesado. Una sola llamada al modelo con
-// `experimental_output` para obtener {markdown, warnings, data} en una pasada.
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` + `TetReportSchema`
+// migrado a `contracts/escudo-survival.ts` + `MODELS_CONFIG.tetCalculator`.
+//
+// El shape de salida ({markdown, warnings, data}) se preserva al 100% porque
+// `survival-validators.ts` lo lee directo. No hace falta adapter; el schema
+// migrado es identico al inline previo.
 // ---------------------------------------------------------------------------
 
-import { generateText, Output } from 'ai';
-import { z } from 'zod';
-import { MODELS } from '@/lib/config/models';
-import { withRetry } from '@/lib/agents/utils/retry';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildTetCalculatorPrompt } from '../prompts/tet-calculator.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { TetReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, TetCalculatorResult } from '../types';
-
-const tetSchema = z.object({
-  markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
-  data: z.object({
-    tet: z.number(),
-    ttd: z.number(),
-    nivelAlerta: z.enum(['verde', 'amarillo', 'rojo']),
-    impuestoProyectado: z.number(),
-    uai: z.number(),
-    sugerenciasOptimizacion: z
-      .array(
-        z.object({
-          norma: z.string(),
-          ahorroEstimado: z.number(),
-          requisitos: z.array(z.string()),
-          factibilidad: z.enum(['alta', 'media', 'baja']),
-        }),
-      )
-      .default([]),
-  }),
-});
 
 export async function runTetCalculator(
   input: SurvivalAgentInput,
@@ -48,8 +27,6 @@ export async function runTetCalculator(
     ? `${company.name ?? 'empresa'} (NIT ${company.nit}, sector ${company.sector ?? 'no especificado'}, CIIU ${company.ciiu ?? 'no especificado'})`
     : undefined;
 
-  const systemPrompt = buildTetCalculatorPrompt(input.language, undefined, nitContext);
-
   const userContent = [
     'Calcula la TET, la TTD (parag. 6 Art. 240 E.T.) y nivel de alerta sobre los siguientes totales vinculantes:',
     '',
@@ -60,20 +37,18 @@ export async function runTetCalculator(
     .filter(Boolean)
     .join('\n');
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 4000,
-        experimental_output: Output.object({ schema: tetSchema }),
-      }),
-    { label: 'escudo_survival_tet', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'escudo-survival-tet',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: TetReportSchema,
+    system: buildTetCalculatorPrompt(input.language, undefined, nitContext),
+    userContent,
+    ...MODELS_CONFIG.tetCalculator,
+  });
 
-  return result.experimental_output;
+  // El shape de TetReportSchema coincide con TetCalculatorResult (extensions de
+  // AgentResultBase). La aseveracion `as TetCalculatorResult` evita un mapeo
+  // identidad ruidoso — Zod ya garantizo el shape, y los tests del validator
+  // confirman compatibilidad.
+  return json as TetCalculatorResult;
 }

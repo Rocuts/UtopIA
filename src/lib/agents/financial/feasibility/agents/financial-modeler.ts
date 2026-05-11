@@ -1,12 +1,17 @@
 // ---------------------------------------------------------------------------
-// Agente 2: Modelador Financiero (Project Evaluation & Projections)
+// Agente 2: Modelador Financiero (Feasibility)
+// ---------------------------------------------------------------------------
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `FinancialModelReportSchema` + `MODELS_CONFIG.financialModeler`.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildFinancialModelerPrompt } from '../prompts/financial-modeler.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  FinancialModelReportSchema,
+  type FinancialModelReportJson,
+} from '../../contracts/feasibility';
 import type { ProjectInfo, MarketAnalysisResult, FinancialModelResult, FeasibilityProgressEvent } from '../types';
 
 /**
@@ -19,7 +24,7 @@ export async function runFinancialModeler(
   language: 'es' | 'en',
   onProgress?: (event: FeasibilityProgressEvent) => void,
 ): Promise<FinancialModelResult> {
-  const systemPrompt = buildFinancialModelerPrompt(project, language);
+  onProgress?.({ type: 'stage_progress', stage: 2, detail: 'Construyendo estados pro-forma y calculando WACC...' });
 
   const userContent = [
     'ANALISIS DE MERCADO GENERADO POR EL ANALISTA DE MERCADO:',
@@ -27,54 +32,51 @@ export async function runFinancialModeler(
     marketOutput.fullContent,
   ].join('\n');
 
-  onProgress?.({ type: 'stage_progress', stage: 2, detail: 'Construyendo estados pro-forma y calculando WACC...' });
+  const { json } = await callFinancialAgent({
+    agentName: 'financial-modeler',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: FinancialModelReportSchema,
+    system: buildFinancialModelerPrompt(project, language),
+    userContent,
+    ...MODELS_CONFIG.financialModeler,
+  });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'financial_modeler', maxAttempts: 3 },
-  );
-
-  assertFinishedCleanly(result, 'financial_modeler');
-
-  const fullContent = result.text || '';
-
-  const sections = parseSections(fullContent);
-
-  return {
-    proFormaStatements: sections['1. ESTADOS FINANCIEROS PRO-FORMA'] || sections['1'] || '',
-    capitalStructure: sections['2. ESTRUCTURA DE CAPITAL Y WACC'] || sections['2'] || '',
-    projectEvaluation: sections['3. EVALUACION DEL PROYECTO'] || sections['3'] || '',
-    sensitivityAnalysis: sections['4. ANALISIS DE SENSIBILIDAD Y ESCENARIOS'] || sections['4'] || '',
-    breakEvenAnalysis: sections['5. PUNTO DE EQUILIBRIO'] || sections['5'] || '',
-    fullContent,
-  };
+  return toLegacyShape(json);
 }
 
-/**
- * Parse numbered `## N. TITLE` sections from Markdown content.
- */
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
+// ---------------------------------------------------------------------------
+// Adapter local — JSON-strict -> FinancialModelResult legacy
+// ---------------------------------------------------------------------------
 
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
+function toLegacyShape(json: FinancialModelReportJson): FinancialModelResult {
+  const fullContent = [
+    '## 1. ESTADOS FINANCIEROS PRO-FORMA',
+    '',
+    json.proFormaStatements,
+    '',
+    '## 2. ESTRUCTURA DE CAPITAL Y WACC',
+    '',
+    json.capitalStructure,
+    '',
+    '## 3. EVALUACION DEL PROYECTO',
+    '',
+    json.projectEvaluation,
+    '',
+    '## 4. ANALISIS DE SENSIBILIDAD Y ESCENARIOS',
+    '',
+    json.sensitivityAnalysis,
+    '',
+    '## 5. PUNTO DE EQUILIBRIO',
+    '',
+    json.breakEvenAnalysis,
+  ].join('\n');
 
-  return sections;
+  return {
+    proFormaStatements: json.proFormaStatements,
+    capitalStructure: json.capitalStructure,
+    projectEvaluation: json.projectEvaluation,
+    sensitivityAnalysis: json.sensitivityAnalysis,
+    breakEvenAnalysis: json.breakEvenAnalysis,
+    fullContent,
+  };
 }

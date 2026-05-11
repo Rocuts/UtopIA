@@ -1,12 +1,18 @@
 // ---------------------------------------------------------------------------
-// Agente 3: Evaluador de Riesgos (Risk Assessment & Go/No-Go)
+// Agente 3: Evaluador de Riesgos (Feasibility)
+// ---------------------------------------------------------------------------
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `RiskAssessmentReportSchema` + `MODELS_CONFIG.riskAssessor`.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildRiskAssessorPrompt } from '../prompts/risk-assessor.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  RiskAssessmentReportSchema,
+  type RiskAssessmentReportJson,
+  type RiskItemJson,
+} from '../../contracts/feasibility';
 import type {
   ProjectInfo,
   MarketAnalysisResult,
@@ -26,7 +32,7 @@ export async function runRiskAssessor(
   language: 'es' | 'en',
   onProgress?: (event: FeasibilityProgressEvent) => void,
 ): Promise<RiskAssessmentResult> {
-  const systemPrompt = buildRiskAssessorPrompt(project, language);
+  onProgress?.({ type: 'stage_progress', stage: 3, detail: 'Evaluando riesgos y construyendo matriz probabilidad-impacto...' });
 
   const userContent = [
     '=== ANALISIS DE MERCADO (Agente 1) ===',
@@ -38,55 +44,83 @@ export async function runRiskAssessor(
     financialOutput.fullContent,
   ].join('\n');
 
-  onProgress?.({ type: 'stage_progress', stage: 3, detail: 'Evaluando riesgos y construyendo matriz probabilidad-impacto...' });
+  const { json } = await callFinancialAgent({
+    agentName: 'risk-assessor',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: RiskAssessmentReportSchema,
+    system: buildRiskAssessorPrompt(project, language),
+    userContent,
+    ...MODELS_CONFIG.riskAssessor,
+  });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'risk_assessor', maxAttempts: 3 },
-  );
+  return toLegacyShape(json);
+}
 
-  assertFinishedCleanly(result, 'risk_assessor');
+// ---------------------------------------------------------------------------
+// Adapter local — JSON-strict -> RiskAssessmentResult legacy
+// ---------------------------------------------------------------------------
 
-  const fullContent = result.text || '';
+function toLegacyShape(json: RiskAssessmentReportJson): RiskAssessmentResult {
+  const decisionLabel: Record<typeof json.goNoGoDecision, string> = {
+    go: 'GO — Recomendado',
+    go_con_condiciones: 'GO CON CONDICIONES',
+    no_go: 'NO-GO',
+  };
 
-  const sections = parseSections(fullContent);
+  const riskMatrixMd = renderRiskMatrix(json.riskMatrix);
+  const goNoGoMd = `**Decision:** ${decisionLabel[json.goNoGoDecision]}\n\n${json.goNoGoRationale}`;
+
+  const fullContent = [
+    '## 1. MATRIZ DE RIESGOS',
+    '',
+    riskMatrixMd,
+    '',
+    '## 2. VPN AJUSTADO POR RIESGO',
+    '',
+    json.riskAdjustedNpv,
+    '',
+    '## 3. ESTRATEGIAS DE MITIGACION',
+    '',
+    json.mitigationStrategies,
+    '',
+    '## 4. RECOMENDACIONES DE SEGUROS Y COBERTURAS',
+    '',
+    json.insuranceRecommendations,
+    '',
+    '## 5. RECOMENDACION GO / NO-GO',
+    '',
+    goNoGoMd,
+    '',
+    '## 6. RESUMEN EJECUTIVO',
+    '',
+    json.executiveSummary,
+  ].join('\n');
 
   return {
-    riskMatrix: sections['1. MATRIZ DE RIESGOS'] || sections['1'] || '',
-    riskAdjustedNpv: sections['2. VPN AJUSTADO POR RIESGO'] || sections['2'] || '',
-    mitigationStrategies: sections['3. ESTRATEGIAS DE MITIGACION'] || sections['3'] || '',
-    insuranceRecommendations: sections['4. RECOMENDACIONES DE SEGUROS Y COBERTURAS'] || sections['4'] || '',
-    goNoGoRecommendation: sections['5. RECOMENDACION GO / NO-GO'] || sections['5'] || '',
-    executiveSummary: sections['6. RESUMEN EJECUTIVO'] || sections['6'] || '',
+    riskMatrix: riskMatrixMd,
+    riskAdjustedNpv: json.riskAdjustedNpv,
+    mitigationStrategies: json.mitigationStrategies,
+    insuranceRecommendations: json.insuranceRecommendations,
+    goNoGoRecommendation: goNoGoMd,
+    executiveSummary: json.executiveSummary,
     fullContent,
   };
 }
 
-/**
- * Parse numbered `## N. TITLE` sections from Markdown content.
- */
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
-
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
-
-  return sections;
+function renderRiskMatrix(items: RiskItemJson[]): string {
+  if (items.length === 0) return '(Sin riesgos identificados)';
+  const header = '| # | Categoria | Descripcion | P | I | Score | Clasificacion | Norma |';
+  const sep = '|---|---|---|---:|---:|---:|---|---|';
+  const rows = items
+    .map(
+      (r, idx) =>
+        `| ${idx + 1} | ${r.category} | ${r.description.replace(/\|/g, '\\|')} | ${r.probability} | ${r.impact} | ${r.score} | ${r.classification} | ${r.normReference ?? '—'} |`,
+    )
+    .join('\n');
+  const mitigations = items
+    .filter((r) => r.classification === 'alto' || r.classification === 'critico')
+    .map((r, idx) => `${idx + 1}. (${r.category}) ${r.description} → Mitigacion: ${r.mitigation}`)
+    .join('\n');
+  return [header, sep, rows, '', '**Mitigaciones para riesgos altos/criticos:**', '', mitigations || '(Sin riesgos altos/criticos)']
+    .join('\n');
 }
