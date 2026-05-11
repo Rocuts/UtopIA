@@ -1,16 +1,31 @@
 // ---------------------------------------------------------------------------
-// Agente 3: Especialista en Gobierno Corporativo (Legal & Compliance)
+// Agente 3: Especialista en Gobierno Corporativo (outcome-first GPT-5.4)
+// ---------------------------------------------------------------------------
+// Refactor Fase 2.A (2026-05): contrato `GovernanceReportSchema` + adapter
+// LOCAL `toGovernanceResult` que sintetiza el struct legacy Markdown
+// consumido por PDF Élite y validators v1.
+//
+// La validación anti-evasivo del struct legacy se conserva aplicada al
+// fullContent post-render — si el JSON contiene una frase prohibida en
+// algún `body` libre, el detector la captura. (En Fase 3 el detector se
+// migra a operar directo sobre los strings del JSON estructurado.)
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from './runtime';
+import {
+  GovernanceReportSchema,
+  type GovernanceReportJson,
+  type FinancialNoteSchema,
+  type ShareholderMinutesSchema,
+} from '../contracts/governance-report';
+import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import {
   buildGovernancePrompt,
   type GovernanceEliteContext,
 } from '../prompts/governance-specialist.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { z } from 'zod';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -19,19 +34,23 @@ import type {
   FinancialProgressEvent,
 } from '../types';
 
+type FinancialNote = z.infer<typeof FinancialNoteSchema>;
+type ShareholderMinutes = z.infer<typeof ShareholderMinutesSchema>;
+
 /**
- * Takes the outputs from Agent 1 (NIIF) and Agent 2 (Strategy) to produce
- * Notes to Financial Statements and Shareholder Assembly Minutes.
+ * Takes outputs from Agents 1 and 2 and produces Notes to FS + Shareholder
+ * Assembly Minutes, validated against `GovernanceReportSchema`.
  *
- * @param niifOutput      Output del Agente 1.
- * @param strategyOutput  Output del Agente 2.
+ * @param niifOutput      Output del Agente 1 (legacy struct).
+ * @param strategyOutput  Output del Agente 2 (legacy struct).
  * @param company         Metadata de la empresa.
  * @param language        es | en
- * @param instructions    Instrucciones adicionales del usuario (propagacion A2).
- * @param bindingTotals   Totales vinculantes pre-calculados — se antepone al
- *                        contexto para que las Notas citen cifras correctas.
- * @param preprocessed    PreprocessedBalance completo. Activa modo comparativo
- *                        en notas y acta cuando hay >=2 periodos.
+ * @param instructions    Instrucciones adicionales del usuario.
+ * @param bindingTotals   Totales vinculantes pre-calculados.
+ * @param preprocessed    PreprocessedBalance completo.
+ * @param onProgress      Callback SSE.
+ * @param elite           Contexto Élite (comparativos impracticables, actividad).
+ * @param signal          AbortSignal opcional.
  */
 export async function runGovernanceSpecialist(
   niifOutput: NiifAnalysisResult,
@@ -43,6 +62,7 @@ export async function runGovernanceSpecialist(
   preprocessed: PreprocessedBalance | undefined,
   onProgress?: (event: FinancialProgressEvent) => void,
   elite?: GovernanceEliteContext,
+  signal?: AbortSignal,
 ): Promise<GovernanceResult> {
   const systemPrompt = buildGovernancePrompt(company, language, preprocessed, elite);
 
@@ -53,7 +73,7 @@ export async function runGovernanceSpecialist(
     '',
     niifOutput.fullContent,
     '',
-    '=== ANALISIS ESTRATEGICO (Agente 2) ===',
+    '=== ANÁLISIS ESTRATÉGICO (Agente 2) ===',
     '',
     strategyOutput.fullContent,
     '',
@@ -62,97 +82,183 @@ export async function runGovernanceSpecialist(
     .filter(Boolean)
     .join('\n');
 
-  onProgress?.({ type: 'stage_progress', stage: 3, detail: 'Redactando notas contables y acta de asamblea...' });
+  onProgress?.({
+    type: 'stage_progress',
+    stage: 3,
+    detail: 'Redactando notas contables y acta de asamblea...',
+  });
 
-  const generate = () =>
-    generateText({
-      model: MODELS.FINANCIAL_PIPELINE,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-      temperature: 0.1,
-      // 24576: notas NIIF completas + acta de asamblea + certificación final
-      // + bloque de firmas + dictamen del Revisor Fiscal. Los 16384 anteriores
-      // cortaban antes de cerrar la sección de Certificación/Firmas (Bug 5).
-      maxOutputTokens: 24576,
-      seed: 42,
-    });
+  const { json } = await callFinancialAgent({
+    agentName: 'governance-specialist',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: GovernanceReportSchema,
+    system: systemPrompt,
+    userContent,
+    ...MODELS_CONFIG.governanceSpecialist,
+    signal,
+  });
 
-  let result = await withRetry(generate, { label: 'governance_specialist', maxAttempts: 3 });
-  assertFinishedCleanlyOrThrow(result, 'Governance Specialist');
-  let fullContent = result.text || '';
+  const result = toGovernanceResult(json);
 
-  // ITEM 3 ORDEN DE CIERRE — validador anti-evasivo (post-generación).
-  // El prompt prohíbe explícitamente las frases evasivas, pero los LLMs a
-  // veces las cuelan en notas técnicas. Verificamos con regex; si detectamos
-  // alguna, re-promptamos UNA vez con corrección dirigida. Tope: 1 reintento.
-  // Si persiste, dejamos pasar pero loggeamos para revisión manual.
-  const evasiveHits = detectForbiddenPhrases(fullContent);
+  // Validador anti-evasivo (post-generación) — conservado de la versión
+  // anterior. Solo registra warnings si el JSON contiene frases prohibidas
+  // en algún `body` libre; no re-promptea (el schema strict ya reduce
+  // dramáticamente la incidencia).
+  const evasiveHits = detectForbiddenPhrases(result.fullContent);
   if (evasiveHits.length > 0) {
+    console.warn(
+      '[governance-specialist] Frases evasivas detectadas en JSON estructurado:',
+      evasiveHits.slice(0, 3).map((h) => h.match).join(' | '),
+    );
     onProgress?.({
       type: 'stage_progress',
       stage: 3,
-      detail: `Detectadas ${evasiveHits.length} frase(s) evasiva(s); re-promptando para corrección...`,
+      detail: `Atención: detectadas ${evasiveHits.length} frase(s) evasiva(s) en notas técnicas.`,
     });
-
-    const correctionPrompt = buildEvasiveCorrectionPrompt(evasiveHits);
-    const retry = await generateText({
-      model: MODELS.FINANCIAL_PIPELINE,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-        { role: 'assistant', content: fullContent },
-        { role: 'user', content: correctionPrompt },
-      ],
-      temperature: 0.1,
-      maxOutputTokens: 24576,
-      seed: 43,
-    });
-    assertFinishedCleanlyOrThrow(retry, 'Governance Specialist (retry anti-evasivo)');
-    const retryContent = retry.text || '';
-    const retryHits = detectForbiddenPhrases(retryContent);
-
-    if (retryHits.length < evasiveHits.length) {
-      // Mejoró — adoptamos el retry.
-      result = retry;
-      fullContent = retryContent;
-    }
-    // Si NO mejoró, conservamos el original (a veces el retry empeora el
-    // resultado por overcorrection). Loggeamos para diagnóstico.
-    if (retryHits.length > 0) {
-      console.warn(
-        '[governance-specialist] Frases evasivas persistentes tras retry:',
-        retryHits.slice(0, 3).map((h) => h.match).join(' | '),
-      );
-    }
   }
 
-  const sections = parseSections(fullContent);
+  return result;
+}
 
+// ---------------------------------------------------------------------------
+// Adapter local privado: GovernanceReportJson -> GovernanceResult legacy
+// ---------------------------------------------------------------------------
+
+function renderFinancialNotes(notes: readonly FinancialNote[]): string {
+  const lines: string[] = ['## 1. NOTAS A LOS ESTADOS FINANCIEROS'];
+  const sorted = [...notes].sort((a, b) => a.number - b.number);
+  for (const n of sorted) {
+    if (n.materiality === 'omitted') continue;
+    lines.push('', `### Nota ${n.number}: ${n.title}`);
+    lines.push(n.body);
+    if (n.normReference) lines.push(`_Norma:_ ${n.normReference}`);
+  }
+  return lines.join('\n');
+}
+
+function renderShareholderMinutes(minutes: ShareholderMinutes, company: GovernanceReportJson['company']): string {
+  const lines: string[] = [];
+  lines.push(`## 2. ACTA DE ${minutes.assemblyType.toUpperCase()} ORDINARIA`);
+  lines.push('');
+  lines.push(`**${company.name.toUpperCase()}** — NIT ${company.nit}`);
+  lines.push(`Régimen: ${minutes.entityRegimeCitation}`);
+  if (minutes.city) lines.push(`Ciudad: ${minutes.city}`);
+  if (minutes.meetingDate) lines.push(`Fecha: ${minutes.meetingDate}`);
+
+  lines.push('', '### Quorum', minutes.quorumStatement);
+
+  lines.push('', '### Orden del día');
+  for (const item of minutes.agenda) {
+    lines.push(`${item.number}. ${item.topic}`);
+  }
+
+  lines.push('', '### Desarrollo de los puntos');
+  for (const dev of minutes.developments) {
+    lines.push('', `**Punto ${dev.itemNumber}**`);
+    lines.push(dev.body);
+  }
+
+  lines.push('', '### Destinación del resultado del ejercicio');
+  const dist = minutes.resultDistribution;
+  lines.push(
+    `Utilidad Neta del Ejercicio: ${formatCopFromCents(parseMoneyCop(dist.netIncomeCop), true)}`,
+  );
+  if (dist.applies && dist.lines.length > 0) {
+    lines.push('');
+    lines.push('| Concepto | Monto | Norma |');
+    lines.push('|---|---:|---|');
+    for (const ln of dist.lines) {
+      lines.push(
+        `| ${ln.label} | ${formatCopFromCents(parseMoneyCop(ln.amountCop), true)} | ${ln.normReference} |`,
+      );
+    }
+  } else if (dist.neutralProposalText) {
+    lines.push('', dist.neutralProposalText);
+  }
+
+  if (minutes.capitalizationProposal.applies) {
+    lines.push(
+      '',
+      '### Proposición — Capitalización 40% de utilidades retenidas acumuladas',
+      minutes.capitalizationProposal.body,
+      `_Base:_ ${formatCopFromCents(parseMoneyCop(minutes.capitalizationProposal.retainedEarningsBaseCop), true)}`,
+      `_Monto a capitalizar:_ ${formatCopFromCents(parseMoneyCop(minutes.capitalizationProposal.capitalizationAmountCop), true)}`,
+      `_Fundamento:_ ${minutes.capitalizationProposal.legalReference}`,
+    );
+  }
+
+  lines.push('', '### Cierre', minutes.closingStatement);
+
+  lines.push('', '---', '', '## CERTIFICACIÓN');
+  lines.push('', '### Firmas');
+  lines.push('| Cargo | Nombre | Identificación | Firma |');
+  lines.push('|---|---|---|---|');
+  const roleLabel = {
+    presidente_asamblea: `Presidente de ${minutes.assemblyType}`,
+    secretario_asamblea: `Secretario de ${minutes.assemblyType}`,
+    representante_legal: 'Representante Legal',
+    revisor_fiscal: 'Revisor Fiscal',
+    contador_publico: 'Contador Público',
+  } as const;
+  for (const sig of minutes.signatures) {
+    const name = sig.name ?? '— (a completar al firmar)';
+    const id = sig.identification ?? '———————';
+    lines.push(`| ${roleLabel[sig.role]} | ${name} | ${id} | ——————— |`);
+  }
+
+  const op = minutes.fiscalReviewerOpinion;
+  lines.push('', '### Dictamen del Revisor Fiscal');
+  if (op.applies) {
+    const opTypeLabel = {
+      favorable: 'favorable',
+      con_salvedades: 'con salvedades',
+      desfavorable: 'desfavorable',
+      abstension: 'abstención',
+    } as const;
+    lines.push(
+      `${op.reviewerName ?? '— (a completar al firmar)'}${op.reviewerTp ? ` — T.P. ${op.reviewerTp}` : ''}, Revisor Fiscal de ${company.name} (NIT ${company.nit}), emite dictamen ${op.opinionType ? opTypeLabel[op.opinionType] : 'pendiente'}.`,
+    );
+    if (op.opinionBody) lines.push('', op.opinionBody);
+    lines.push('', '_Sustento normativo:_ Ley 43 de 1990, Art. 207-209 C.Co., NIA 700/705/706.');
+  } else {
+    lines.push(op.exemptionReason ?? 'Entidad no obligada a Revisor Fiscal por umbral Art. 203 C.Co.');
+  }
+
+  lines.push('', '**FIN DEL ACTA**', '');
+  return lines.join('\n');
+}
+
+function renderPreparerNotes(json: GovernanceReportJson): string {
+  if (json.preparerNotes.length === 0) return '';
+  return [
+    '### Notas del Preparador',
+    ...json.preparerNotes.map((n) => `- ${n.body}${n.norma ? ` (${n.norma})` : ''}`),
+  ].join('\n');
+}
+
+function toGovernanceResult(json: GovernanceReportJson): GovernanceResult {
+  const financialNotes = renderFinancialNotes(json.financialNotes);
+  const shareholderMinutes = renderShareholderMinutes(json.shareholderMinutes, json.company);
+  const preparerNotes = renderPreparerNotes(json);
+  const fullContent = [financialNotes, '', shareholderMinutes, preparerNotes ? `\n${preparerNotes}` : '']
+    .filter(Boolean)
+    .join('\n');
   return {
-    financialNotes: sections['1. NOTAS A LOS ESTADOS FINANCIEROS'] || sections['1'] || '',
-    shareholderMinutes: sections['2'] || findSectionByPrefix(sections, '2.') || '',
+    financialNotes,
+    shareholderMinutes,
     fullContent,
+    // Exposición del JSON estricto para consumers post-Fase-3.
+    json,
   };
 }
 
 // ---------------------------------------------------------------------------
-// ITEM 3 ORDEN DE CIERRE — detector de frases evasivas (anti-hedging).
-// ---------------------------------------------------------------------------
-// Regex compilados una sola vez. Cada patrón captura una variante canónica de
-// la frase prohibida; el match contiene el span original para incluirlo en el
-// prompt de corrección.
-//
-// Las frases en `### Notas del Preparador` están permitidas — el detector
-// SOLO escanea fuera de ese bloque. Why: el preparador SÍ puede listar datos
-// faltantes ahí, pero las notas técnicas y el acta NO deben hedgear.
+// Detector de frases evasivas — conservado de la versión legacy.
 // ---------------------------------------------------------------------------
 
 interface EvasiveHit {
   pattern: string;
   match: string;
-  /** Index absoluto en el texto donde aparece la frase. */
   offset: number;
 }
 
@@ -170,12 +276,8 @@ const FORBIDDEN_PATTERNS: { id: string; rx: RegExp }[] = [
 
 function detectForbiddenPhrases(text: string): EvasiveHit[] {
   if (!text) return [];
-
-  // Excluir el bloque "### Notas del Preparador" donde el placeholder
-  // `— (dato no suministrado)` está autorizado.
   const preparerSectionRx = /###\s*Notas\s+del\s+Preparador[\s\S]*?(?=\n##\s|$)/i;
   const scanText = text.replace(preparerSectionRx, '');
-
   const hits: EvasiveHit[] = [];
   for (const { id, rx } of FORBIDDEN_PATTERNS) {
     const m = rx.exec(scanText);
@@ -184,57 +286,4 @@ function detectForbiddenPhrases(text: string): EvasiveHit[] {
     }
   }
   return hits;
-}
-
-function buildEvasiveCorrectionPrompt(hits: EvasiveHit[]): string {
-  const samples = hits
-    .slice(0, 5)
-    .map((h, i) => `${i + 1}. Patrón \`${h.pattern}\` — texto detectado: «${h.match}»`)
-    .join('\n');
-
-  return [
-    'CORRECCIÓN ANTI-HEDGING — ITEM 3 ORDEN DE CIERRE.',
-    '',
-    'El output anterior contiene frases evasivas que están EXPRESAMENTE PROHIBIDAS por la',
-    'regla R-Élite 0 del system prompt. Frases detectadas:',
-    '',
-    samples,
-    '',
-    'INSTRUCCIONES DE REESCRITURA:',
-    '',
-    '1. Reescribe el output COMPLETO, eliminando TODAS las frases prohibidas.',
-    '2. Donde una frase evasiva aparezca, reemplázala por la cifra/dato real del bloque',
-    '   `TOTALES VINCULANTES` (que SÍ se entregó) o por la cita normativa de',
-    '   impracticabilidad correspondiente (NIIF for SMEs §3.14 / §10.21 / §29.27).',
-    '3. El placeholder `— (dato no suministrado)` SÓLO se permite dentro de la sección',
-    '   `### Notas del Preparador`, NUNCA en notas técnicas ni en el acta.',
-    '4. Conserva la estructura `## 1. NOTAS A LOS ESTADOS FINANCIEROS` y',
-    '   `## 2. ACTA DE ASAMBLEA ...` EXACTAMENTE como antes. Mantén las cifras numéricas.',
-    '5. NO inventes datos nuevos — sólo reemplaza el hedging por afirmaciones',
-    '   firmes basadas en los TOTALES VINCULANTES ya entregados.',
-    '',
-    'Devuelve SOLO el output corregido (Markdown completo), sin meta-comentario.',
-  ].join('\n');
-}
-
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
-
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
-
-  return sections;
-}
-
-function findSectionByPrefix(sections: Record<string, string>, prefix: string): string {
-  const key = Object.keys(sections).find((k) => k.startsWith(prefix));
-  return key ? sections[key] : '';
 }

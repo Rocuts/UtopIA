@@ -1,17 +1,22 @@
 // ---------------------------------------------------------------------------
 // Evaluador de Empresa en Marcha (NIA 570)
 // ---------------------------------------------------------------------------
+// Refactor outcome-first GPT-5.4: usa `callFinancialAgent` con
+// `GoingConcernReportSchema` + `MODELS_CONFIG.goingConcernAuditor`. El adapter
+// local convierte el JSON validado al `GoingConcernResult` legacy que consumen
+// el orchestrator y el opinion-drafter.
+// ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildGoingConcernPrompt } from '../prompts/going-concern.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  GoingConcernReportSchema,
+  type GoingConcernReportJson,
+} from '../../contracts/fiscal-opinion';
 import type { CompanyInfo } from '../../types';
 import type {
   GoingConcernResult,
-  GoingConcernConclusion,
-  GoingConcernIndicator,
   FiscalOpinionProgressEvent,
 } from '../types';
 
@@ -27,106 +32,63 @@ export async function runGoingConcernEvaluator(
     detail: 'Evaluando hipotesis de empresa en marcha (NIA 570)...',
   });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: buildGoingConcernPrompt(company, language) },
-          { role: 'user', content: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}` },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'going_concern_evaluator', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'going-concern',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: GoingConcernReportSchema,
+    system: buildGoingConcernPrompt(company, language),
+    userContent: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}`,
+    ...MODELS_CONFIG.goingConcernAuditor,
+  });
 
-  assertFinishedCleanly(result, 'going_concern_evaluator');
+  return toLegacyShape(json);
+}
 
-  const fullContent = result.text || '';
+// ---------------------------------------------------------------------------
+// Adapter local — JSON-strict -> GoingConcernResult legacy
+// ---------------------------------------------------------------------------
 
+function toLegacyShape(json: GoingConcernReportJson): GoingConcernResult {
+  const fullContent = renderGoingConcernMarkdown(json);
   return {
-    assessment: parseAssessment(fullContent),
-    conclusion: parseConclusion(fullContent),
-    indicators: parseIndicators(fullContent),
-    recommendedDisclosures: parseDisclosures(fullContent),
-    analysis: parseAnalysis(fullContent),
+    assessment: json.assessment,
+    conclusion: json.conclusion,
+    indicators: json.indicators.map((i) => ({
+      category: i.category,
+      description: i.description,
+      severity: i.severity,
+      normReference: i.normReference,
+    })),
+    recommendedDisclosures: [...json.recommendedDisclosures],
+    analysis: json.analysis,
     fullContent,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Parsers
-// ---------------------------------------------------------------------------
-
-function parseAssessment(content: string): GoingConcernResult['assessment'] {
-  const match = content.match(/##\s*EVALUACION\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (match) {
-    const text = match[1].trim().toLowerCase();
-    if (text.includes('doubt') || text.includes('duda')) return 'doubt';
-    if (text.includes('caution') || text.includes('precaucion') || text.includes('caucion')) return 'caution';
-    if (text.includes('pass') || text.includes('pasa') || text.includes('adecuad')) return 'pass';
-  }
-  return 'caution';
-}
-
-function parseConclusion(content: string): GoingConcernConclusion {
-  const match = content.match(/##\s*CONCLUSION\s+NIA\s+570\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (match) {
-    const text = match[1].trim().toLowerCase();
-    if (text.includes('base_inadecuada') || text.includes('inadecuada')) return 'base_inadecuada';
-    if (text.includes('incertidumbre_material') || text.includes('incertidumbre')) return 'incertidumbre_material';
-    if (text.includes('sin_incertidumbre') || text.includes('sin incertidumbre')) return 'sin_incertidumbre';
-  }
-  return 'sin_incertidumbre';
-}
-
-function parseIndicators(content: string): GoingConcernIndicator[] {
-  const match = content.match(/##\s*INDICADORES\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  const jsonClean = match[1]
-    .trim()
-    .replace(/^```json?\s*\n?/i, '')
-    .replace(/\n?```\s*$/i, '')
-    .trim();
-
-  try {
-    const parsed = JSON.parse(jsonClean);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.map((ind: Record<string, unknown>) => ({
-      category: validateCategory(ind.category as string),
-      description: (ind.description as string) || '',
-      severity: validateIndicatorSeverity(ind.severity as string),
-      normReference: (ind.normReference as string) || '',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function parseDisclosures(content: string): string[] {
-  const match = content.match(/##\s*REVELACIONES\s+RECOMENDADAS\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  return match[1]
-    .trim()
-    .split('\n')
-    .filter((line) => line.trim().startsWith('-'))
-    .map((line) => line.trim().replace(/^-\s*/, ''));
-}
-
-function parseAnalysis(content: string): string {
-  const match = content.match(/##\s*ANALISIS\s+DETALLADO\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  return match ? match[1].trim() : '';
-}
-
-function validateCategory(c: string): GoingConcernIndicator['category'] {
-  const valid = ['financiero', 'operacional', 'regulatorio'];
-  return valid.includes(c) ? c as GoingConcernIndicator['category'] : 'financiero';
-}
-
-function validateIndicatorSeverity(s: string): GoingConcernIndicator['severity'] {
-  const valid = ['alto', 'medio', 'bajo'];
-  return valid.includes(s) ? s as GoingConcernIndicator['severity'] : 'medio';
+function renderGoingConcernMarkdown(json: GoingConcernReportJson): string {
+  const indicatorLines = json.indicators
+    .map((i) => `- [${i.severity.toUpperCase()}] (${i.category}) ${i.description} — ${i.normReference}`)
+    .join('\n');
+  const disclosureLines = json.recommendedDisclosures.map((d) => `- ${d}`).join('\n');
+  return [
+    '## EVALUACION',
+    '',
+    json.assessment,
+    '',
+    '## CONCLUSION NIA 570',
+    '',
+    json.conclusion,
+    '',
+    '## INDICADORES',
+    '',
+    indicatorLines || '(Ninguno)',
+    '',
+    '## REVELACIONES RECOMENDADAS',
+    '',
+    disclosureLines || '(Ninguna)',
+    '',
+    '## ANALISIS DETALLADO',
+    '',
+    json.analysis,
+  ].join('\n');
 }

@@ -1,42 +1,16 @@
 // ---------------------------------------------------------------------------
 // Submódulo 2: Escudo de Retenciones
 // ---------------------------------------------------------------------------
-// Lee saldo cuenta 1355 (Anticipos), proyecta saldo a favor y sugiere
-// acciones para liberar capital atrapado en la DIAN.
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `RetentionShieldReportSchema` + `MODELS_CONFIG.retentionShield`.
 // ---------------------------------------------------------------------------
 
-import { generateText, Output } from 'ai';
-import { z } from 'zod';
-import { MODELS } from '@/lib/config/models';
-import { withRetry } from '@/lib/agents/utils/retry';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildRetentionShieldPrompt } from '../prompts/retention-shield.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { RetentionShieldReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, RetentionShieldResult } from '../types';
-
-const retentionSchema = z.object({
-  markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
-  data: z.object({
-    retencionesAcumuladas: z.number(),
-    impuestoProyectado: z.number(),
-    saldoAFavorProyectado: z.number(),
-    acciones: z
-      .array(
-        z.object({
-          tipo: z.enum([
-            'certif_no_retencion',
-            'autorretenedor',
-            'compensacion',
-            'devolucion',
-          ]),
-          norma: z.string(),
-          dificultad: z.enum(['baja', 'media', 'alta']),
-          riesgo: z.string(),
-        }),
-      )
-      .default([]),
-  }),
-});
 
 export async function runRetentionShield(
   input: SurvivalAgentInput,
@@ -49,11 +23,8 @@ export async function runRetentionShield(
     ? `${company.name ?? 'empresa'} (NIT ${company.nit})`
     : undefined;
 
-  const systemPrompt = buildRetentionShieldPrompt(input.language, undefined, nitContext);
-
-  // Hint del impuesto proyectado (UAI x 35%) para que el modelo no tenga que
-  // recalcularlo. Este es el caso default cuando el TET Calculator no le ha
-  // pasado un valor — los 5 agentes corren en paralelo, no en serie.
+  // Hint del impuesto proyectado (UAI x 35%) para evitar recalculo. Los 5
+  // agentes corren en paralelo (no en serie), por eso este hint suple al TET.
   const impuestoHint = Math.max(0, anchors.utilidadAntesImpuestos) * 0.35;
 
   const userContent = [
@@ -68,20 +39,14 @@ export async function runRetentionShield(
     .filter(Boolean)
     .join('\n');
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 4000,
-        experimental_output: Output.object({ schema: retentionSchema }),
-      }),
-    { label: 'escudo_survival_retention', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'escudo-survival-retention',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: RetentionShieldReportSchema,
+    system: buildRetentionShieldPrompt(input.language, undefined, nitContext),
+    userContent,
+    ...MODELS_CONFIG.retentionShield,
+  });
 
-  return result.experimental_output;
+  return json as RetentionShieldResult;
 }

@@ -1,18 +1,20 @@
 // ---------------------------------------------------------------------------
 // Verificador de Cumplimiento Estatutario (Art. 207 C.Co.)
 // ---------------------------------------------------------------------------
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `ComplianceCheckReportSchema` + `MODELS_CONFIG.complianceChecker`.
+// ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildComplianceCheckerPrompt } from '../prompts/compliance-checker.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  ComplianceCheckReportSchema,
+  type ComplianceCheckReportJson,
+} from '../../contracts/fiscal-opinion';
 import type { CompanyInfo } from '../../types';
 import type {
   ComplianceResult,
-  StatutoryFunction,
-  ComplianceItem,
-  ComplianceStatus,
   FiscalOpinionProgressEvent,
 } from '../types';
 
@@ -28,138 +30,81 @@ export async function runComplianceChecker(
     detail: 'Verificando cumplimiento estatutario (Art. 207 C.Co.)...',
   });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: buildComplianceCheckerPrompt(company, language) },
-          { role: 'user', content: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}` },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'compliance_checker', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'compliance-checker',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: ComplianceCheckReportSchema,
+    system: buildComplianceCheckerPrompt(company, language),
+    userContent: `ESTADOS FINANCIEROS E INFORMACION A EVALUAR:\n\n${reportContent}`,
+    ...MODELS_CONFIG.complianceChecker,
+  });
 
-  assertFinishedCleanly(result, 'compliance_checker');
+  return toLegacyShape(json);
+}
 
-  const fullContent = result.text || '';
+// ---------------------------------------------------------------------------
+// Adapter local — JSON-strict -> ComplianceResult legacy
+// ---------------------------------------------------------------------------
 
-  const statutoryFunctions = parseStatutoryFunctions(fullContent);
-  const regulatoryItems = parseRegulatoryItems(fullContent);
-  const nonComplianceItems = parseNonComplianceItems(fullContent);
-  const complianceScore = parseScore(fullContent);
-  const independenceAssessment = parseIndependence(fullContent);
-  const analysis = parseAnalysis(fullContent);
-
+function toLegacyShape(json: ComplianceCheckReportJson): ComplianceResult {
+  const fullContent = renderComplianceMarkdown(json);
   return {
-    statutoryFunctions,
-    regulatoryItems,
-    independenceAssessment,
-    nonComplianceItems,
-    complianceScore,
-    analysis,
+    statutoryFunctions: json.statutoryFunctions.map((f) => ({ ...f })),
+    regulatoryItems: json.regulatoryItems.map((i) => ({ ...i })),
+    independenceAssessment: json.independenceAssessment,
+    nonComplianceItems: json.nonComplianceItems.map((i) => ({ ...i })),
+    complianceScore: Math.min(100, Math.max(0, Math.round(json.complianceScore))),
+    analysis: json.analysis,
     fullContent,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Parsers
-// ---------------------------------------------------------------------------
+function renderComplianceMarkdown(json: ComplianceCheckReportJson): string {
+  const fnLines = json.statutoryFunctions
+    .sort((a, b) => a.number - b.number)
+    .map(
+      (f) =>
+        `- Funcion ${f.number}: ${f.status.toUpperCase()} — ${f.description}${f.observations ? ` (${f.observations})` : ''}`,
+    )
+    .join('\n');
 
-function parseStatutoryFunctions(content: string): StatutoryFunction[] {
-  const match = content.match(/##\s*MATRIZ\s+ESTATUTARIA\s*\(ART\.\s*207\s*C\.Co\.\)\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
+  const regLines = json.regulatoryItems
+    .map(
+      (i) =>
+        `- [${i.code}] (${i.area}) ${i.requirement} — ${i.status.toUpperCase()} — ${i.normReference}${i.observation ? `: ${i.observation}` : ''}`,
+    )
+    .join('\n');
 
-  const jsonClean = match[1]
-    .trim()
-    .replace(/^```json?\s*\n?/i, '')
-    .replace(/\n?```\s*$/i, '')
-    .trim();
+  const incLines = json.nonComplianceItems
+    .map(
+      (i) =>
+        `- [${i.code}] (${i.area}) ${i.requirement} — ${i.normReference}: ${i.observation}`,
+    )
+    .join('\n');
 
-  try {
-    const parsed = JSON.parse(jsonClean);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.map((f: Record<string, unknown>) => ({
-      number: Number(f.number) || 0,
-      description: (f.description as string) || '',
-      status: validateComplianceStatus(f.status as string),
-      observations: (f.observations as string) || '',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function parseRegulatoryItems(content: string): ComplianceItem[] {
-  const match = content.match(/##\s*CUMPLIMIENTO\s+REGULATORIO\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  const jsonClean = match[1]
-    .trim()
-    .replace(/^```json?\s*\n?/i, '')
-    .replace(/\n?```\s*$/i, '')
-    .trim();
-
-  try {
-    const parsed = JSON.parse(jsonClean);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.map((item: Record<string, unknown>) => ({
-      code: (item.code as string) || 'COMP-000',
-      area: (item.area as string) || '',
-      requirement: (item.requirement as string) || '',
-      status: validateComplianceStatus(item.status as string),
-      normReference: (item.normReference as string) || '',
-      observation: (item.observation as string) || '',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function parseNonComplianceItems(content: string): ComplianceItem[] {
-  const match = content.match(/##\s*INCUMPLIMIENTOS\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  const jsonClean = match[1]
-    .trim()
-    .replace(/^```json?\s*\n?/i, '')
-    .replace(/\n?```\s*$/i, '')
-    .trim();
-
-  try {
-    const parsed = JSON.parse(jsonClean);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.map((item: Record<string, unknown>) => ({
-      code: (item.code as string) || 'INC-000',
-      area: (item.area as string) || '',
-      requirement: (item.requirement as string) || '',
-      status: validateComplianceStatus(item.status as string),
-      normReference: (item.normReference as string) || '',
-      observation: (item.observation as string) || '',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function parseScore(content: string): number {
-  const match = content.match(/##\s*SCORE\s*\n+(\d+)/i);
-  return match ? Math.min(100, Math.max(0, parseInt(match[1], 10))) : 50;
-}
-
-function parseIndependence(content: string): string {
-  const match = content.match(/##\s*INDEPENDENCIA\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  return match ? match[1].trim() : '';
-}
-
-function parseAnalysis(content: string): string {
-  const match = content.match(/##\s*ANALISIS\s+DETALLADO\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  return match ? match[1].trim() : '';
-}
-
-function validateComplianceStatus(s: string): ComplianceStatus {
-  const valid = ['cumple', 'cumple_parcial', 'no_cumple', 'no_evaluado'];
-  return valid.includes(s) ? s as ComplianceStatus : 'no_evaluado';
+  return [
+    '## MATRIZ ESTATUTARIA (ART. 207 C.Co.)',
+    '',
+    fnLines,
+    '',
+    '## CUMPLIMIENTO REGULATORIO',
+    '',
+    regLines || '(Sin items)',
+    '',
+    '## INDEPENDENCIA',
+    '',
+    json.independenceAssessment,
+    '',
+    '## INCUMPLIMIENTOS',
+    '',
+    incLines || '(Ninguno)',
+    '',
+    '## SCORE',
+    '',
+    `${json.complianceScore}`,
+    '',
+    '## ANALISIS DETALLADO',
+    '',
+    json.analysis,
+  ].join('\n');
 }

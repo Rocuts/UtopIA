@@ -1,12 +1,17 @@
 // ---------------------------------------------------------------------------
-// Agente 1: Analista de Mercado (Market Research & Sectoral Analysis)
+// Agente 1: Analista de Mercado (Feasibility)
+// ---------------------------------------------------------------------------
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `MarketAnalysisReportSchema` + `MODELS_CONFIG.marketAnalyst`.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildMarketAnalystPrompt } from '../prompts/market-analyst.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  MarketAnalysisReportSchema,
+  type MarketAnalysisReportJson,
+} from '../../contracts/feasibility';
 import type { ProjectInfo, MarketAnalysisResult, FeasibilityProgressEvent } from '../types';
 
 /**
@@ -20,7 +25,7 @@ export async function runMarketAnalyst(
   instructions?: string,
   onProgress?: (event: FeasibilityProgressEvent) => void,
 ): Promise<MarketAnalysisResult> {
-  const systemPrompt = buildMarketAnalystPrompt(project, language);
+  onProgress?.({ type: 'stage_progress', stage: 1, detail: 'Dimensionando mercado y analizando segmento objetivo...' });
 
   const userContent = [
     'DATOS DEL PROYECTO PARA ANALISIS DE MERCADO:',
@@ -32,54 +37,51 @@ export async function runMarketAnalyst(
     .filter(Boolean)
     .join('\n');
 
-  onProgress?.({ type: 'stage_progress', stage: 1, detail: 'Dimensionando mercado y analizando segmento objetivo...' });
+  const { json } = await callFinancialAgent({
+    agentName: 'market-analyst',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: MarketAnalysisReportSchema,
+    system: buildMarketAnalystPrompt(project, language),
+    userContent,
+    ...MODELS_CONFIG.marketAnalyst,
+  });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'market_analyst', maxAttempts: 3 },
-  );
-
-  assertFinishedCleanly(result, 'market_analyst');
-
-  const fullContent = result.text || '';
-
-  const sections = parseSections(fullContent);
-
-  return {
-    marketSize: sections['1. DIMENSIONAMIENTO DEL MERCADO'] || sections['1'] || '',
-    targetSegment: sections['2. ANALISIS DEL SEGMENTO OBJETIVO'] || sections['2'] || '',
-    competitiveLandscape: sections['3. PANORAMA COMPETITIVO'] || sections['3'] || '',
-    demandProjections: sections['4. PROYECCIONES DE DEMANDA'] || sections['4'] || '',
-    entryBarriers: sections['5. BARRERAS DE ENTRADA Y REQUISITOS REGULATORIOS'] || sections['5'] || '',
-    fullContent,
-  };
+  return toLegacyShape(json);
 }
 
-/**
- * Parse numbered `## N. TITLE` sections from Markdown content.
- */
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
+// ---------------------------------------------------------------------------
+// Adapter local — JSON-strict -> MarketAnalysisResult legacy
+// ---------------------------------------------------------------------------
 
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
+function toLegacyShape(json: MarketAnalysisReportJson): MarketAnalysisResult {
+  const fullContent = [
+    '## 1. DIMENSIONAMIENTO DEL MERCADO',
+    '',
+    json.marketSize,
+    '',
+    '## 2. ANALISIS DEL SEGMENTO OBJETIVO',
+    '',
+    json.targetSegment,
+    '',
+    '## 3. PANORAMA COMPETITIVO',
+    '',
+    json.competitiveLandscape,
+    '',
+    '## 4. PROYECCIONES DE DEMANDA',
+    '',
+    json.demandProjections,
+    '',
+    '## 5. BARRERAS DE ENTRADA Y REQUISITOS REGULATORIOS',
+    '',
+    json.entryBarriers,
+  ].join('\n');
 
-  return sections;
+  return {
+    marketSize: json.marketSize,
+    targetSegment: json.targetSegment,
+    competitiveLandscape: json.competitiveLandscape,
+    demandProjections: json.demandProjections,
+    entryBarriers: json.entryBarriers,
+    fullContent,
+  };
 }

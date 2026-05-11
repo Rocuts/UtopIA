@@ -1,12 +1,18 @@
 // ---------------------------------------------------------------------------
-// Auditor Legal/Societario — validates corporate governance docs
+// Auditor Legal/Societario — outcome-first GPT-5.4 (Fase 2.B)
+// ---------------------------------------------------------------------------
+// Llama a `callFinancialAgent` con `LegalAuditReportSchema` y adapta el JSON
+// validado al struct legacy `AuditorResult`.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
 import { buildLegalAuditorPrompt } from '../prompts/legal-auditor.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  LegalAuditReportSchema,
+  type LegalAuditReportJson,
+  type AuditFindingJson,
+} from '../../contracts/audit-report';
 import type { CompanyInfo } from '../../types';
 import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
 
@@ -17,95 +23,79 @@ export async function runLegalAuditor(
   onProgress?: (event: AuditProgressEvent) => void,
   defaultPeriod?: string,
 ): Promise<AuditorResult> {
-  onProgress?.({ type: 'auditor_progress', domain: 'legal', detail: 'Validando documentos de gobierno corporativo...' });
+  onProgress?.({
+    type: 'auditor_progress',
+    domain: 'legal',
+    detail: 'Validando documentos de gobierno corporativo...',
+  });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: buildLegalAuditorPrompt(company, language) },
-          { role: 'user', content: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}` },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 6144,
-      }),
-    { label: 'legal_auditor', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'legal-auditor',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: LegalAuditReportSchema,
+    system: buildLegalAuditorPrompt(company, language),
+    userContent: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}`,
+    ...MODELS_CONFIG.legalAuditor,
+  });
 
-  assertFinishedCleanly(result, 'legal_auditor');
+  return toLegacyAuditorResult(json, defaultPeriod);
+}
 
-  const fullContent = result.text || '';
-  const { score, findings, summary } = parseAuditorOutput(fullContent, 'legal', defaultPeriod);
+// ---------------------------------------------------------------------------
+// Adapter local: JSON strict -> AuditorResult legacy
+// ---------------------------------------------------------------------------
 
+function toLegacyAuditorResult(
+  json: LegalAuditReportJson,
+  defaultPeriod: string | undefined,
+): AuditorResult {
+  const findings: AuditFinding[] = json.findings.map((f) => mapFinding(f, defaultPeriod));
   return {
     domain: 'legal',
     auditorName: 'Auditor Legal/Societario',
-    complianceScore: score,
+    complianceScore: json.complianceScore,
     findings,
-    summary,
-    fullContent,
+    summary: json.executiveSummary,
+    fullContent: renderMarkdown(json, findings),
     failed: false,
   };
 }
 
-function parseAuditorOutput(
-  content: string,
-  domain: 'niif' | 'tributario' | 'legal' | 'revisoria',
-  defaultPeriod?: string,
-): { score: number; findings: AuditFinding[]; summary: string } {
-  const scoreMatch = content.match(/##\s*SCORE\s*\n+(\d+)/i);
-  const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 50;
-
-  let findings: AuditFinding[] = [];
-  const findingsMatch = content.match(/##\s*HALLAZGOS\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  if (findingsMatch) {
-    const jsonClean = findingsMatch[1].trim().replace(/^```json?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-    try {
-      const parsed = JSON.parse(jsonClean);
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      findings = arr.map((f: Record<string, unknown>) => ({
-        code: (f.code as string) || `${domain.toUpperCase()}-000`,
-        severity: validateSeverity(f.severity as string),
-        domain,
-        title: (f.title as string) || '',
-        description: (f.description as string) || '',
-        normReference: (f.normReference as string) || '',
-        recommendation: (f.recommendation as string) || '',
-        impact: (f.impact as string) || '',
-        period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
-      }));
-    } catch {
-      const objectRegex = /\{[^{}]*\}/g;
-      const matches = jsonClean.match(objectRegex);
-      if (matches) {
-        for (const m of matches) {
-          try {
-            const f = JSON.parse(m) as Record<string, unknown>;
-            findings.push({
-              code: (f.code as string) || `${domain.toUpperCase()}-000`,
-              severity: validateSeverity(f.severity as string),
-              domain,
-              title: (f.title as string) || '',
-              description: (f.description as string) || '',
-              normReference: (f.normReference as string) || '',
-              recommendation: (f.recommendation as string) || '',
-              impact: (f.impact as string) || '',
-              period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
-            });
-          } catch { /* skip */ }
-        }
-      }
-    }
-  }
-
-  const summaryMatch = content.match(/##\s*RESUMEN EJECUTIVO\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  const summary = summaryMatch ? summaryMatch[1].trim() : '';
-
-  return { score, findings, summary };
+function mapFinding(
+  f: AuditFindingJson,
+  defaultPeriod: string | undefined,
+): AuditFinding {
+  return {
+    code: f.code,
+    severity: f.severity,
+    domain: 'legal',
+    title: f.title,
+    description: f.description,
+    normReference: f.normReference,
+    recommendation: f.recommendation,
+    impact: f.impact,
+    period: f.period ?? defaultPeriod,
+  };
 }
 
-function validateSeverity(s: string): AuditFinding['severity'] {
-  const valid = ['critico', 'alto', 'medio', 'bajo', 'informativo'];
-  return valid.includes(s) ? s as AuditFinding['severity'] : 'medio';
+function renderMarkdown(json: LegalAuditReportJson, findings: AuditFinding[]): string {
+  const lines: string[] = [];
+  lines.push(`## SCORE\n${json.complianceScore}`);
+  lines.push('');
+  lines.push(`## RESUMEN EJECUTIVO\n${json.executiveSummary}`);
+  lines.push('');
+  lines.push('## HALLAZGOS');
+  for (const f of findings) {
+    lines.push('');
+    lines.push(`### ${f.code}: ${f.title}`);
+    lines.push(`- **Severidad:** ${f.severity.toUpperCase()}`);
+    lines.push(`- **Norma:** ${f.normReference}`);
+    lines.push(`- **Descripcion:** ${f.description}`);
+    lines.push(`- **Recomendacion:** ${f.recommendation}`);
+    lines.push(`- **Impacto:** ${f.impact}`);
+    if (f.period) lines.push(`- **Periodo:** ${f.period}`);
+  }
+  lines.push('');
+  lines.push(`## CONCLUSION\n${json.conclusion}`);
+  return lines.join('\n');
 }

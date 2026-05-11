@@ -1,12 +1,20 @@
 // ---------------------------------------------------------------------------
-// Agente 1: Optimizador Tributario (Tax Planning Strategist)
+// Agente 1: Tax Optimizer (Tax Planning Strategist) — outcome-first GPT-5.4
+// ---------------------------------------------------------------------------
+// Consume datos crudos y emite `TaxOptimizationReportJson` validado por Zod.
+// El adapter local `toLegacyShape` mantiene el contrato `TaxOptimizerResult`
+// (strings markdown) que esperan downstream agents y el orchestrator de
+// consolidación. Cuando se migre el consumer en Fase 3, el adapter desaparece.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import {
+  TaxOptimizationReportSchema,
+  type TaxOptimizationReportJson,
+} from '../../contracts/tax-planning';
+import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import { buildTaxOptimizerPrompt } from '../prompts/tax-optimizer.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type { TaxOptimizerResult, TaxPlanningProgressEvent } from '../types';
 
@@ -20,15 +28,17 @@ export async function runTaxOptimizer(
   language: 'es' | 'en',
   instructions?: string,
   onProgress?: (event: TaxPlanningProgressEvent) => void,
+  signal?: AbortSignal,
 ): Promise<TaxOptimizerResult> {
-  const systemPrompt = buildTaxOptimizerPrompt(company, language);
+  const system = buildTaxOptimizerPrompt(company, language);
 
   const userContent = [
+    '<context>',
     'DATOS FINANCIEROS Y TRIBUTARIOS DE LA EMPRESA:',
     '',
     rawData,
-    '',
-    instructions ? `INSTRUCCIONES ADICIONALES DEL USUARIO:\n${instructions}` : '',
+    instructions ? `\nINSTRUCCIONES ADICIONALES DEL USUARIO:\n${instructions}` : '',
+    '</context>',
   ]
     .filter(Boolean)
     .join('\n');
@@ -39,56 +49,153 @@ export async function runTaxOptimizer(
     detail: 'Analizando estructura tributaria actual y evaluando regimenes...',
   });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'tax_optimizer', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'tax-optimizer',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: TaxOptimizationReportSchema,
+    system,
+    userContent,
+    ...MODELS_CONFIG.taxOptimizer,
+    signal,
+  });
 
-  assertFinishedCleanly(result, 'tax_optimizer');
+  return toLegacyShape(json);
+}
 
-  const fullContent = result.text || '';
+// ---------------------------------------------------------------------------
+// Adapter local: JSON estricto -> shape legacy con secciones markdown
+// ---------------------------------------------------------------------------
+// El orchestrator de consolidación y el Agente 2 (NIIF Impact) leen
+// `fullContent` como prosa markdown. Hasta que esos consumers migren al
+// shape JSON, este adapter sintetiza markdown legible desde el JSON.
 
-  // Parse sections from the Markdown output
-  const sections = parseSections(fullContent);
+function toLegacyShape(json: TaxOptimizationReportJson): TaxOptimizerResult {
+  const currentStructureAnalysis = renderCurrentDiagnosis(json);
+  const optimizationStrategies = renderRecommendations(json);
+  const projectedSavings = renderSavingsProjection(json);
+  const implementationRoadmap = renderRoadmap(json);
+
+  const fullContent = [
+    '## 1. DIAGNOSTICO DE ESTRUCTURA TRIBUTARIA ACTUAL',
+    '',
+    currentStructureAnalysis,
+    '',
+    '## 2. ESTRATEGIAS DE OPTIMIZACION TRIBUTARIA',
+    '',
+    optimizationStrategies,
+    '',
+    '## 3. PROYECCION DE AHORROS',
+    '',
+    projectedSavings,
+    '',
+    '## 4. HOJA DE RUTA DE IMPLEMENTACION',
+    '',
+    implementationRoadmap,
+    json.preparerNotes.length > 0
+      ? ['', '### Notas del Preparador', ...json.preparerNotes.map((n) => `- ${n}`)].join('\n')
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return {
-    currentStructureAnalysis:
-      sections['1. DIAGNOSTICO DE ESTRUCTURA TRIBUTARIA ACTUAL'] || sections['1'] || '',
-    optimizationStrategies:
-      sections['2. ESTRATEGIAS DE OPTIMIZACION TRIBUTARIA'] || sections['2'] || '',
-    projectedSavings:
-      sections['3. PROYECCION DE AHORROS'] || sections['3'] || '',
-    implementationRoadmap:
-      sections['4. HOJA DE RUTA DE IMPLEMENTACION'] || sections['4'] || '',
+    currentStructureAnalysis,
+    optimizationStrategies,
+    projectedSavings,
+    implementationRoadmap,
     fullContent,
   };
 }
 
-/**
- * Parse numbered `## N. TITLE` sections from Markdown content.
- */
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
+function renderCurrentDiagnosis(json: TaxOptimizationReportJson): string {
+  const d = json.currentDiagnosis;
+  const dc = d.dualCalculation;
+  const benefitsRows = d.currentBenefitsUsed
+    .map((b) => `| ${b.norma} | ${b.descripcion} | ${money(b.ahorroEstimadoCents)} |`)
+    .join('\n');
 
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
+  return [
+    `- **Régimen actual:** ${d.currentRegime}`,
+    `- **Renta líquida gravable:** ${money(d.taxableIncomeCents)}`,
+    `- **Utilidad contable antes de impuestos (UAI):** ${money(d.accountingProfitBeforeTaxCents)}`,
+    `- **Tasa efectiva actual:** ${d.effectiveTaxRatePct.toFixed(2)}%`,
+    '',
+    '**Cálculo dual TMT (Art. 240 parág. 6 E.T.):**',
+    '',
+    '| Concepto | Valor |',
+    '|---|---|',
+    `| Renta Ordinaria 35% (Art. 240 E.T.) | ${money(dc.rentaOrdinaria35Cents)} |`,
+    `| Tributación Mínima 15% (parág. 6 Art. 240 E.T.) | ${money(dc.tributacionMinima15Cents)} |`,
+    `| Impuesto a cargo del periodo (MAX) | ${money(dc.impuestoACargoCents)} |`,
+    `| TMT aplicable | ${dc.tmtAplicable ? 'Sí' : 'No'} |`,
+    dc.tmtExemptionReason ? `| Excepción aplicable | ${dc.tmtExemptionReason} |` : '',
+    '',
+    benefitsRows
+      ? ['**Beneficios actualmente aprovechados:**', '', '| Norma | Descripción | Ahorro estimado |', '|---|---|---|', benefitsRows].join('\n')
+      : '',
+    '',
+    d.diagnosticNotes,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 
-  return sections;
+function renderRecommendations(json: TaxOptimizationReportJson): string {
+  if (json.recommendations.length === 0) return '_Sin estrategias propuestas._';
+  return json.recommendations
+    .map((r) => {
+      const lines = [
+        `### ${r.id}. ${r.title}`,
+        `- **Base normativa:** ${r.norma}`,
+        r.regimeTarget ? `- **Régimen objetivo:** ${r.regimeTarget}` : '',
+        `- **Diagnóstico:** ${r.rationale}`,
+        `- **Ahorro estimado:** ${money(r.estimatedSavingsCents)}`,
+        `- **Costo de implementación:** ${money(r.implementationCostCents)}`,
+        r.roiPct !== null ? `- **ROI:** ${r.roiPct.toFixed(1)}%` : '',
+        `- **Horizonte:** ${r.horizon}`,
+        `- **Prioridad:** ${r.priority}`,
+        `- **Riesgo regulatorio:** ${r.riskLevel}`,
+        r.preconditions.length > 0
+          ? `- **Precondiciones:** ${r.preconditions.join('; ')}`
+          : '',
+      ];
+      return lines.filter(Boolean).join('\n');
+    })
+    .join('\n\n');
+}
+
+function renderSavingsProjection(json: TaxOptimizationReportJson): string {
+  const p = json.savingsProjection;
+  return [
+    '| Escenario | Impuesto a cargo | Tasa efectiva |',
+    '|---|---|---|',
+    `| Actual | ${money(p.currentScenarioTaxCents)} | ${p.effectiveRateBeforePct.toFixed(2)}% |`,
+    `| Optimizado | ${money(p.optimizedScenarioTaxCents)} | ${p.effectiveRateAfterPct.toFixed(2)}% |`,
+    `| **Ahorro anual proyectado** | **${money(p.totalAnnualSavingsCents)}** | — |`,
+    '',
+    p.assumptions.length > 0
+      ? ['**Supuestos del modelo:**', '', ...p.assumptions.map((a) => `- ${a}`)].join('\n')
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function renderRoadmap(json: TaxOptimizationReportJson): string {
+  if (json.implementationRoadmap.length === 0) return '_Sin hoja de ruta definida._';
+  const rows = json.implementationRoadmap
+    .map(
+      (s) =>
+        `| ${s.recommendationId} | ${s.action} | ${s.owner} | ${s.dueDaysFromKickoff}d | ${s.dependencies.length > 0 ? s.dependencies.join(', ') : '—'} |`,
+    )
+    .join('\n');
+  return [
+    '| Estrategia | Acción | Responsable | Plazo (días) | Dependencias |',
+    '|---|---|---|---|---|',
+    rows,
+  ].join('\n');
+}
+
+function money(cents: string): string {
+  return formatCopFromCents(parseMoneyCop(cents), false);
 }

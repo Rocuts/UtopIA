@@ -1,12 +1,18 @@
 // ---------------------------------------------------------------------------
-// Agente 3: Validador de Cumplimiento Regulatorio (Compliance & Risk)
+// Agente 3: Compliance Validator — outcome-first GPT-5.4
+// ---------------------------------------------------------------------------
+// Consume los outputs legacy del Tax Optimizer (Agente 1) y del NIIF Impact
+// Analyst (Agente 2). Emite `ComplianceValidationReportJson`. Adapter local
+// sintetiza el shape legacy `ComplianceValidatorResult`.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import {
+  ComplianceValidationReportSchema,
+  type ComplianceValidationReportJson,
+} from '../../contracts/tax-planning';
 import { buildComplianceValidatorPrompt } from '../prompts/compliance-validator.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   TaxOptimizerResult,
@@ -16,8 +22,10 @@ import type {
 } from '../types';
 
 /**
- * Takes the outputs from Agent 1 (Tax Optimizer) and Agent 2 (NIIF Impact) and
- * validates regulatory compliance, anti-abuse risk, and documentation requirements.
+ * Takes outputs from Agent 1 (Tax Optimizer) and Agent 2 (NIIF Impact) and
+ * validates regulatory compliance, anti-abuse risk, and documentation
+ * requirements. Builds the Art. 647 E.T. defense (Diferencia de Criterio)
+ * for medium/high-risk strategies.
  */
 export async function runComplianceValidator(
   taxOptimizerOutput: TaxOptimizerResult,
@@ -25,10 +33,12 @@ export async function runComplianceValidator(
   company: CompanyInfo,
   language: 'es' | 'en',
   onProgress?: (event: TaxPlanningProgressEvent) => void,
+  signal?: AbortSignal,
 ): Promise<ComplianceValidatorResult> {
-  const systemPrompt = buildComplianceValidatorPrompt(company, language);
+  const system = buildComplianceValidatorPrompt(company, language);
 
   const userContent = [
+    '<context>',
     '=== ESTRATEGIAS DEL OPTIMIZADOR TRIBUTARIO (Agente 1) ===',
     '',
     taxOptimizerOutput.fullContent,
@@ -36,6 +46,7 @@ export async function runComplianceValidator(
     '=== ANALISIS DE IMPACTO NIIF (Agente 2) ===',
     '',
     niifImpactOutput.fullContent,
+    '</context>',
   ].join('\n');
 
   onProgress?.({
@@ -44,55 +55,128 @@ export async function runComplianceValidator(
     detail: 'Validando cumplimiento regulatorio y evaluando riesgos anti-abuso...',
   });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'compliance_validator', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'compliance-validator',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: ComplianceValidationReportSchema,
+    system,
+    userContent,
+    ...MODELS_CONFIG.complianceValidator,
+    signal,
+  });
 
-  assertFinishedCleanly(result, 'compliance_validator');
+  return toLegacyShape(json);
+}
 
-  const fullContent = result.text || '';
+// ---------------------------------------------------------------------------
+// Adapter local
+// ---------------------------------------------------------------------------
 
-  const sections = parseSections(fullContent);
+function toLegacyShape(json: ComplianceValidationReportJson): ComplianceValidatorResult {
+  const riskAssessment = renderRiskAssessment(json);
+  const complianceChecklist = renderChecklist(json);
+  const documentationRequirements = renderDocs(json);
+  const regulatoryRedFlags = renderRedFlags(json);
+
+  const fullContent = [
+    `**Dictamen consolidado:** ${json.overallVerdict.toUpperCase()}`,
+    '',
+    `${json.verdictRationale}`,
+    '',
+    json.blockers.length > 0
+      ? [
+          '**Bloqueantes identificados:**',
+          '',
+          ...json.blockers.map((b) => `- [${b.recommendationId}] ${b.reason} (${b.norma})`),
+        ].join('\n')
+      : '',
+    '',
+    '## 1. EVALUACION DE RIESGO REGULATORIO POR ESTRATEGIA',
+    '',
+    riskAssessment,
+    '',
+    '## 2. CHECKLIST DE CUMPLIMIENTO REGULATORIO',
+    '',
+    complianceChecklist,
+    '',
+    '## 3. REQUISITOS DOCUMENTALES',
+    '',
+    documentationRequirements,
+    '',
+    '## 4. BANDERAS ROJAS Y ALERTAS REGULATORIAS',
+    '',
+    regulatoryRedFlags,
+    json.preparerNotes.length > 0
+      ? ['', '### Notas del Preparador', ...json.preparerNotes.map((n) => `- ${n}`)].join('\n')
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return {
-    riskAssessment:
-      sections['1. EVALUACION DE RIESGO REGULATORIO POR ESTRATEGIA'] || sections['1'] || '',
-    complianceChecklist:
-      sections['2. CHECKLIST DE CUMPLIMIENTO REGULATORIO'] || sections['2'] || '',
-    documentationRequirements:
-      sections['3. REQUISITOS DOCUMENTALES'] || sections['3'] || '',
-    regulatoryRedFlags:
-      sections['4. BANDERAS ROJAS Y ALERTAS REGULATORIAS'] || sections['4'] || '',
+    riskAssessment,
+    complianceChecklist,
+    documentationRequirements,
+    regulatoryRedFlags,
     fullContent,
   };
 }
 
-/**
- * Parse numbered `## N. TITLE` sections from Markdown content.
- */
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
+function renderRiskAssessment(json: ComplianceValidationReportJson): string {
+  if (json.riskAssessments.length === 0) return '_Sin evaluaciones disponibles._';
+  return json.riskAssessments
+    .map((r) => {
+      const defense = r.art647DefenseAvailable
+        ? `\n- **Defensa Art. 647 E.T. (Diferencia de Criterio):** disponible.\n  - **Sustento:** ${r.art647DefenseRationale ?? '— (sustento doctrinal a confirmar)'}`
+        : '\n- **Defensa Art. 647 E.T.:** no aplicable a esta estrategia.';
+      return [
+        `### Estrategia ${r.recommendationId}`,
+        `- **Riesgo:** ${r.riskLevel.toUpperCase()}`,
+        `- **Test de propósito comercial (Art. 869 E.T.):** ${r.businessPurposeTestPasses ? 'SUPERA' : 'NO SUPERA'}`,
+        `- **Normas potencialmente invocables por DIAN:** ${r.potentialNormas.join('; ')}`,
+        `- **Argumento:** ${r.rationale}${defense}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+}
 
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
+function renderChecklist(json: ComplianceValidationReportJson): string {
+  if (json.riskAssessments.length === 0) return '_Sin checklist disponible._';
+  return json.riskAssessments
+    .map((r) => {
+      const rows = r.checklist
+        .map((c) => `- [${c.passes ? 'x' : ' '}] ${c.question}${c.gapAction ? ` — Acción: ${c.gapAction}` : ''}`)
+        .join('\n');
+      return [`### Estrategia ${r.recommendationId}`, '', rows].join('\n');
+    })
+    .join('\n\n');
+}
 
-  return sections;
+function renderDocs(json: ComplianceValidationReportJson): string {
+  if (json.documentationRequirements.length === 0) return '_Sin requisitos documentales identificados._';
+  return json.documentationRequirements
+    .map((d) => {
+      const rows = d.documents
+        .map(
+          (doc) =>
+            `- **${doc.document}** (${doc.mandatory ? 'obligatorio' : 'recomendado'})${doc.norma ? ` — ${doc.norma}` : ''}`,
+        )
+        .join('\n');
+      return [`### Estrategia ${d.recommendationId}`, '', rows].join('\n');
+    })
+    .join('\n\n');
+}
+
+function renderRedFlags(json: ComplianceValidationReportJson): string {
+  if (json.redFlags.length === 0) return '_Sin banderas rojas identificadas._';
+  return json.redFlags
+    .map((f) =>
+      [
+        `### [${f.severity.toUpperCase()}] ${f.flag}`,
+        `- **Norma:** ${f.norma}`,
+        `- **Estrategias afectadas:** ${f.affectedRecommendations.join(', ')}`,
+        `- **Mitigación:** ${f.mitigation}`,
+      ].join('\n'),
+    )
+    .join('\n\n');
 }

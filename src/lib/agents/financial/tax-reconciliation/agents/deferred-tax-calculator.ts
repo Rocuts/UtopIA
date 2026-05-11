@@ -1,12 +1,18 @@
 // ---------------------------------------------------------------------------
-// Agente 2: Calculador de Impuesto Diferido (NIC 12)
+// Agente 2: Deferred Tax Calculator (NIC 12) — outcome-first GPT-5.4
+// ---------------------------------------------------------------------------
+// Schema: DeferredTaxReportSchema. Adapter local mantiene el shape legacy
+// `DeferredTaxResult` consumido por el orchestrator de consolidación.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import {
+  DeferredTaxReportSchema,
+  type DeferredTaxReportJson,
+} from '../../contracts/tax-reconciliation';
+import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import { buildDeferredTaxCalculatorPrompt } from '../prompts/deferred-tax-calculator.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
 import type { CompanyInfo } from '../../types';
 import type {
   DifferenceIdentifierResult,
@@ -15,22 +21,25 @@ import type {
 } from '../types';
 
 /**
- * Takes the identified NIIF-fiscal differences from Agent 1 and calculates
+ * Takes identified NIIF-fiscal differences from Agent 1 and calculates
  * deferred tax assets/liabilities, effective tax rate reconciliation,
- * Formato 2516 mapping, and journal entry recommendations.
+ * Formato 2516 mapping and journal entry recommendations.
  */
 export async function runDeferredTaxCalculator(
   differenceOutput: DifferenceIdentifierResult,
   company: CompanyInfo,
   language: 'es' | 'en',
   onProgress?: (event: TaxReconciliationProgressEvent) => void,
+  signal?: AbortSignal,
 ): Promise<DeferredTaxResult> {
-  const systemPrompt = buildDeferredTaxCalculatorPrompt(company, language);
+  const system = buildDeferredTaxCalculatorPrompt(company, language);
 
   const userContent = [
+    '<context>',
     'ANALISIS DE DIFERENCIAS NIIF-FISCAL IDENTIFICADAS POR EL AGENTE 1:',
     '',
     differenceOutput.fullContent,
+    '</context>',
   ].join('\n');
 
   onProgress?.({
@@ -39,75 +48,183 @@ export async function runDeferredTaxCalculator(
     detail: 'Calculando impuesto diferido y conciliando tasa efectiva...',
   });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'deferred_tax_calculator', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'deferred-tax-calculator',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: DeferredTaxReportSchema,
+    system,
+    userContent,
+    ...MODELS_CONFIG.deferredTaxCalculator,
+    signal,
+  });
 
-  assertFinishedCleanly(result, 'deferred_tax_calculator');
+  return toLegacyShape(json);
+}
 
-  const fullContent = result.text || '';
+// ---------------------------------------------------------------------------
+// Adapter local
+// ---------------------------------------------------------------------------
 
-  const sections = parseSections(fullContent);
+function toLegacyShape(json: DeferredTaxReportJson): DeferredTaxResult {
+  const deferredTaxWorksheet = renderWorksheet(json);
+  const dtaDtlSchedule = renderDtaDtl(json);
+  const currentVsDeferredBreakdown = renderBreakdown(json);
+  const effectiveTaxRateReconciliation = renderEffectiveRate(json);
+  const formato2516Mapping = renderFormato(json);
+  const journalEntries = renderJournalEntries(json);
+
+  const fullContent = [
+    '## 1. HOJA DE CALCULO DE IMPUESTO DIFERIDO',
+    '',
+    deferredTaxWorksheet,
+    '',
+    '## 2. CUADRO DTA / DTL',
+    '',
+    dtaDtlSchedule,
+    '',
+    '## 3. DESGLOSE GASTO CORRIENTE VS DIFERIDO',
+    '',
+    currentVsDeferredBreakdown,
+    '',
+    '## 4. CONCILIACION DE TASA EFECTIVA',
+    '',
+    effectiveTaxRateReconciliation,
+    '',
+    '## 5. MAPEO FORMATO 2516 DIAN',
+    '',
+    formato2516Mapping,
+    '',
+    '## 6. ASIENTOS CONTABLES RECOMENDADOS',
+    '',
+    journalEntries,
+    json.preparerNotes.length > 0
+      ? ['', '### Notas del Preparador', ...json.preparerNotes.map((n) => `- ${n}`)].join('\n')
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return {
-    deferredTaxWorksheet:
-      sections['1. HOJA DE CALCULO DE IMPUESTO DIFERIDO'] || sections['1'] || '',
-    dtaDtlSchedule: sections['2. CUADRO DTA / DTL'] || sections['2'] || '',
-    currentVsDeferredBreakdown:
-      sections['3. DESGLOSE GASTO CORRIENTE VS DIFERIDO'] ||
-      sections['3'] ||
-      findSectionByPrefix(sections, '3.') ||
-      '',
-    effectiveTaxRateReconciliation:
-      sections['4. CONCILIACION DE TASA EFECTIVA'] ||
-      sections['4'] ||
-      findSectionByPrefix(sections, '4.') ||
-      '',
-    formato2516Mapping:
-      sections['5. MAPEO FORMATO 2516 DIAN'] ||
-      sections['5'] ||
-      findSectionByPrefix(sections, '5.') ||
-      '',
-    journalEntries:
-      sections['6. ASIENTOS CONTABLES RECOMENDADOS'] ||
-      sections['6'] ||
-      findSectionByPrefix(sections, '6.') ||
-      '',
+    deferredTaxWorksheet,
+    dtaDtlSchedule,
+    currentVsDeferredBreakdown,
+    effectiveTaxRateReconciliation,
+    formato2516Mapping,
+    journalEntries,
     fullContent,
   };
 }
 
-/**
- * Parse numbered `## N. TITLE` sections from Markdown content.
- */
-function parseSections(content: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const pattern = /^##\s+(\d+\.?\s*[^\n]*)/gm;
-  const matches = [...content.matchAll(pattern)];
-
-  for (let i = 0; i < matches.length; i++) {
-    const key = matches[i][1].trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : content.length;
-    sections[key] = content.slice(start, end).trim();
-    const numMatch = key.match(/^(\d+)/);
-    if (numMatch) sections[numMatch[1]] = sections[key];
-  }
-
-  return sections;
+function renderWorksheet(json: DeferredTaxReportJson): string {
+  if (json.worksheet.length === 0) return '_No hay diferencias temporarias._';
+  const rows = json.worksheet
+    .map(
+      (w) =>
+        `| ${w.differenceItemId} | ${w.concept} | ${money(w.temporaryDifferenceCents)} | ${w.type} | ${w.taxRatePct}% | ${money(w.dtaCents)} | ${money(w.dtlCents)} | ${w.dtaRecognized ? 'Sí' : 'No'} | ${money(w.recognizedDtaCents)} |`,
+    )
+    .join('\n');
+  return [
+    '| ID | Concepto | Diferencia temporaria | Tipo | Tarifa | DTA bruto | DTL | DTA reconocido | DTA en balance |',
+    '|---|---|---|---|---|---|---|---|---|',
+    rows,
+  ].join('\n');
 }
 
-function findSectionByPrefix(sections: Record<string, string>, prefix: string): string {
-  const key = Object.keys(sections).find((k) => k.startsWith(prefix));
-  return key ? sections[key] : '';
+function renderDtaDtl(json: DeferredTaxReportJson): string {
+  const s = json.dtaDtlSummary;
+  const m = json.movement;
+  return [
+    '**Resumen DTA/DTL:**',
+    '',
+    '| Concepto | Importe |',
+    '|---|---|',
+    `| Total DTA bruto | ${money(s.totalDtaCents)} |`,
+    `| Total DTA reconocido (NIC 12 §24) | ${money(s.totalRecognizedDtaCents)} |`,
+    `| Total DTL | ${money(s.totalDtlCents)} |`,
+    `| **Posición neta** | **${money(s.netPositionCents)}** |`,
+    '',
+    '**Movimiento del ejercicio:**',
+    '',
+    '| Concepto | DTA | DTL |',
+    '|---|---|---|',
+    `| Saldo inicial | ${m.openingBalanceDtaCents !== null ? money(m.openingBalanceDtaCents) : '— (single-period)'} | ${m.openingBalanceDtlCents !== null ? money(m.openingBalanceDtlCents) : '— (single-period)'} |`,
+    `| Cargo a resultados | ${m.pnlChargeDtaCents !== null ? money(m.pnlChargeDtaCents) : '—'} | ${m.pnlChargeDtlCents !== null ? money(m.pnlChargeDtlCents) : '—'} |`,
+    `| Cargo a ORI | ${m.oriChargeDtaCents !== null ? money(m.oriChargeDtaCents) : '—'} | ${m.oriChargeDtlCents !== null ? money(m.oriChargeDtlCents) : '—'} |`,
+    `| **Saldo final** | **${money(m.closingBalanceDtaCents)}** | **${money(m.closingBalanceDtlCents)}** |`,
+  ].join('\n');
+}
+
+function renderBreakdown(json: DeferredTaxReportJson): string {
+  const b = json.expenseBreakdown;
+  return [
+    '| Componente | Importe |',
+    '|---|---|',
+    `| Utilidad contable antes de impuestos (NIIF) | ${money(b.accountingProfitBeforeTaxCents)} |`,
+    `| (+) Diferencias permanentes que incrementan la renta | ${money(b.permanentIncreaseCents)} |`,
+    `| (−) Diferencias permanentes que disminuyen la renta | ${money(b.permanentDecreaseCents)} |`,
+    `| (+/−) Diferencias temporarias del periodo | ${money(b.temporaryNetCents)} |`,
+    `| = **Renta líquida fiscal** | **${money(b.taxableIncomeCents)}** |`,
+    `| × Tarifa nominal | ${b.taxRatePct}% |`,
+    `| = **Impuesto corriente** | **${money(b.currentTaxCents)}** |`,
+    `| (+/−) Gasto (ingreso) por impuesto diferido del periodo | ${money(b.deferredTaxExpenseCents)} |`,
+    `| = **Gasto total por impuesto de renta (NIC 12)** | **${money(b.totalTaxExpenseCents)}** |`,
+  ].join('\n');
+}
+
+function renderEffectiveRate(json: DeferredTaxReportJson): string {
+  const e = json.effectiveRateReconciliation;
+  const itemRows = e.reconcilingItems
+    .map(
+      (i) =>
+        `| ${i.concept} | ${i.effectPctPoints > 0 ? '+' : ''}${i.effectPctPoints.toFixed(2)} pp | ${i.norma ?? '—'} |`,
+    )
+    .join('\n');
+  return [
+    '| Concepto | Efecto (pp) | Norma |',
+    '|---|---|---|',
+    `| Tasa nominal (Art. 240 E.T.) | ${e.nominalRatePct.toFixed(2)}% | Art. 240 E.T. |`,
+    itemRows,
+    `| **Tasa efectiva** | **${e.effectiveRatePct.toFixed(2)}%** | — |`,
+  ].join('\n');
+}
+
+function renderFormato(json: DeferredTaxReportJson): string {
+  if (json.formato2516Mapping.length === 0) return '_Sin mapeo Formato 2516._';
+  const sectionLabel: Record<string, string> = {
+    I_ingresos: 'Sección I — Ingresos',
+    II_costos_deducciones: 'Sección II — Costos y Deducciones',
+    III_patrimonio: 'Sección III — Patrimonio',
+    IV_temporarias_permanentes: 'Sección IV — Temporarias / Permanentes',
+  };
+  return json.formato2516Mapping
+    .map((s) => {
+      const rows = s.rowReferences.map((r) => `- [${r.differenceItemId}] → ${r.formRowLabel}`).join('\n');
+      return [`**${sectionLabel[s.section]}:**`, '', rows].join('\n');
+    })
+    .join('\n\n');
+}
+
+function renderJournalEntries(json: DeferredTaxReportJson): string {
+  if (json.journalEntries.length === 0) return '_Sin asientos requeridos._';
+  return json.journalEntries
+    .map((j) => {
+      const rows = j.lines
+        .map(
+          (l) =>
+            `| ${l.pucAccount} | ${l.accountName} | ${money(l.debitCents)} | ${money(l.creditCents)} |`,
+        )
+        .join('\n');
+      return [
+        `### ${j.description} (${j.date})`,
+        '',
+        '| Cuenta | Nombre | Débito | Crédito |',
+        '|---|---|---|---|',
+        rows,
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
+function money(cents: string): string {
+  return formatCopFromCents(parseMoneyCop(cents), false);
 }

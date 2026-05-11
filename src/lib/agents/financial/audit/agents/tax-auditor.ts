@@ -1,14 +1,29 @@
 // ---------------------------------------------------------------------------
-// Auditor Tributario — validates tax compliance against E.T. 2026
+// Auditor Tributario — outcome-first GPT-5.4 (Fase 2.B)
+// ---------------------------------------------------------------------------
+// Llama a `callFinancialAgent` con `TaxAuditReportSchema` y adapta el JSON
+// validado al struct legacy `AuditorResult`. Mantiene el `impactCop` en el
+// Markdown legacy concatenando "Exposicion COP: $X.XXX" al campo impact si
+// el modelo lo cuantifico — los renderers downstream (PDF Elite/Excel) ya
+// saben leer ese formato.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
 import { buildTaxAuditorPrompt } from '../prompts/tax-auditor.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  TaxAuditReportSchema,
+  type TaxAuditReportJson,
+  type AuditFindingJson,
+} from '../../contracts/audit-report';
+import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import type { CompanyInfo } from '../../types';
 import type { AuditorResult, AuditFinding, AuditProgressEvent } from '../types';
+
+/** Format MoneyCop (string en centavos) -> "$X.XXX,XX" estilo COP. */
+function fmtMoneyCop(value: string): string {
+  return formatCopFromCents(parseMoneyCop(value), /* absolute */ true);
+}
 
 export async function runTaxAuditor(
   reportContent: string,
@@ -17,95 +32,95 @@ export async function runTaxAuditor(
   onProgress?: (event: AuditProgressEvent) => void,
   defaultPeriod?: string,
 ): Promise<AuditorResult> {
-  onProgress?.({ type: 'auditor_progress', domain: 'tributario', detail: 'Validando cumplimiento tributario contra E.T. 2026...' });
+  onProgress?.({
+    type: 'auditor_progress',
+    domain: 'tributario',
+    detail: 'Validando cumplimiento tributario contra E.T. 2026...',
+  });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: buildTaxAuditorPrompt(company, language) },
-          { role: 'user', content: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}` },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 6144,
-      }),
-    { label: 'tax_auditor', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'tax-auditor',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: TaxAuditReportSchema,
+    system: buildTaxAuditorPrompt(company, language),
+    userContent: `REPORTE FINANCIERO A AUDITAR:\n\n${reportContent}`,
+    ...MODELS_CONFIG.taxAuditor,
+  });
 
-  assertFinishedCleanly(result, 'tax_auditor');
+  return toLegacyAuditorResult(json, defaultPeriod);
+}
 
-  const fullContent = result.text || '';
-  const { score, findings, summary } = parseAuditorOutput(fullContent, 'tributario', defaultPeriod);
+// ---------------------------------------------------------------------------
+// Adapter local: JSON strict -> AuditorResult legacy
+// ---------------------------------------------------------------------------
 
+function toLegacyAuditorResult(
+  json: TaxAuditReportJson,
+  defaultPeriod: string | undefined,
+): AuditorResult {
+  const findings: AuditFinding[] = json.findings.map((f) => mapFinding(f, defaultPeriod));
   return {
     domain: 'tributario',
     auditorName: 'Auditor Tributario',
-    complianceScore: score,
+    complianceScore: json.complianceScore,
     findings,
-    summary,
-    fullContent,
+    summary: json.executiveSummary,
+    fullContent: renderMarkdown(json, findings),
     failed: false,
   };
 }
 
-function parseAuditorOutput(
-  content: string,
-  domain: 'niif' | 'tributario' | 'legal' | 'revisoria',
-  defaultPeriod?: string,
-): { score: number; findings: AuditFinding[]; summary: string } {
-  const scoreMatch = content.match(/##\s*SCORE\s*\n+(\d+)/i);
-  const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 50;
+function mapFinding(
+  f: AuditFindingJson,
+  defaultPeriod: string | undefined,
+): AuditFinding {
+  // El AuditFinding legacy no tiene impactCop. Concatenamos la exposicion al
+  // campo `impact` cuando el LLM la cuantifique — el renderer PDF Elite ya
+  // sabe extraerla del impact text.
+  const baseImpact = f.impact;
+  const cop = f.impactCop;
+  const exposureLine =
+    cop !== null
+      ? ` (Exposicion estimada: ${fmtMoneyCop(cop)})`
+      : '';
 
-  let findings: AuditFinding[] = [];
-  const findingsMatch = content.match(/##\s*HALLAZGOS\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  if (findingsMatch) {
-    const jsonClean = findingsMatch[1].trim().replace(/^```json?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-    try {
-      const parsed = JSON.parse(jsonClean);
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      findings = arr.map((f: Record<string, unknown>) => ({
-        code: (f.code as string) || `${domain.toUpperCase()}-000`,
-        severity: validateSeverity(f.severity as string),
-        domain,
-        title: (f.title as string) || '',
-        description: (f.description as string) || '',
-        normReference: (f.normReference as string) || '',
-        recommendation: (f.recommendation as string) || '',
-        impact: (f.impact as string) || '',
-        period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
-      }));
-    } catch {
-      const objectRegex = /\{[^{}]*\}/g;
-      const matches = jsonClean.match(objectRegex);
-      if (matches) {
-        for (const m of matches) {
-          try {
-            const f = JSON.parse(m) as Record<string, unknown>;
-            findings.push({
-              code: (f.code as string) || `${domain.toUpperCase()}-000`,
-              severity: validateSeverity(f.severity as string),
-              domain,
-              title: (f.title as string) || '',
-              description: (f.description as string) || '',
-              normReference: (f.normReference as string) || '',
-              recommendation: (f.recommendation as string) || '',
-              impact: (f.impact as string) || '',
-              period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
-            });
-          } catch { /* skip */ }
-        }
-      }
-    }
-  }
-
-  const summaryMatch = content.match(/##\s*RESUMEN EJECUTIVO\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  const summary = summaryMatch ? summaryMatch[1].trim() : '';
-
-  return { score, findings, summary };
+  return {
+    code: f.code,
+    severity: f.severity,
+    domain: 'tributario',
+    title: f.title,
+    description: f.description,
+    normReference: f.normReference,
+    recommendation: f.recommendation,
+    impact: `${baseImpact}${exposureLine}`,
+    period: f.period ?? defaultPeriod,
+  };
 }
 
-function validateSeverity(s: string): AuditFinding['severity'] {
-  const valid = ['critico', 'alto', 'medio', 'bajo', 'informativo'];
-  return valid.includes(s) ? s as AuditFinding['severity'] : 'medio';
+function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): string {
+  const lines: string[] = [];
+  lines.push(`## SCORE\n${json.complianceScore}`);
+  lines.push('');
+  lines.push(`## RESUMEN EJECUTIVO\n${json.executiveSummary}`);
+  if (json.totalFiscalExposureCop !== null) {
+    lines.push('');
+    lines.push(
+      `**Exposicion fiscal total estimada:** ${fmtMoneyCop(json.totalFiscalExposureCop)}`,
+    );
+  }
+  lines.push('');
+  lines.push('## HALLAZGOS');
+  for (const f of findings) {
+    lines.push('');
+    lines.push(`### ${f.code}: ${f.title}`);
+    lines.push(`- **Severidad:** ${f.severity.toUpperCase()}`);
+    lines.push(`- **Norma:** ${f.normReference}`);
+    lines.push(`- **Descripcion:** ${f.description}`);
+    lines.push(`- **Recomendacion:** ${f.recommendation}`);
+    lines.push(`- **Impacto:** ${f.impact}`);
+    if (f.period) lines.push(`- **Periodo:** ${f.period}`);
+  }
+  lines.push('');
+  lines.push(`## CONCLUSION\n${json.conclusion}`);
+  return lines.join('\n');
 }

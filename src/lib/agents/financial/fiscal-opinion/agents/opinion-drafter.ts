@@ -1,15 +1,25 @@
 // ---------------------------------------------------------------------------
 // Redactor del Dictamen del Revisor Fiscal (NIA 700/705/706)
 // ---------------------------------------------------------------------------
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `FiscalOpinionDraftSchema` + `MODELS_CONFIG.opinionDrafter`.
+//
+// Mantiene LITERAL la logica de detectores deterministicos pre-LLM y los
+// overrides post-LLM (V14 blocker forza opinion modificada; reclasificacion
+// sin emphasis reinjecta el parrafo NIA 706 §A1). El adapter local convierte
+// el JSON validado al `FiscalOpinionDictamen` legacy.
+// ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import {
   buildOpinionDrafterPrompt,
   type OpinionDrafterPromptHints,
 } from '../prompts/opinion-drafter.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  FiscalOpinionDraftSchema,
+  type FiscalOpinionDraftJson,
+} from '../../contracts/fiscal-opinion';
 import type { CompanyInfo } from '../../types';
 import type { AuditReport, AuditFinding } from '../../audit/types';
 import type {
@@ -17,8 +27,6 @@ import type {
   MisstatementResult,
   ComplianceResult,
   FiscalOpinionDictamen,
-  OpinionType,
-  KeyAuditMatter,
   FiscalOpinionProgressEvent,
 } from '../types';
 
@@ -30,9 +38,8 @@ export interface OpinionDrafterExtraContext {
   /** Audit report consolidado (output del 4-auditor pipeline) si esta disponible. */
   auditReport?: AuditReport;
   /**
-   * Snapshot del preprocesador. Lo usamos solo para detectar
-   * `reclasificacionesNoCompensacion` (R-NoCompensation) y
-   * `comparativos_impracticables` (NIC 1 par. 38). Tipo defensivo: el
+   * Snapshot del preprocesador para detectar `reclasificacionesNoCompensacion`
+   * y `comparativos_impracticables`. Tipo defensivo (`unknown`) porque el
    * preprocesador esta evolucionando en paralelo.
    */
   preprocessed?: unknown;
@@ -56,7 +63,7 @@ export async function runOpinionDrafter(
   // Build consolidated input from 3 evaluators
   const evaluatorInput = buildEvaluatorSummary(goingConcern, misstatementReview, complianceCheck);
 
-  // Detectar disparadores de modificacion / parrafo de enfasis ANTES del LLM.
+  // Detectores deterministicos pre-LLM (no se confia solo en el modelo).
   const v14State = detectV14Blocker(extra?.auditReport);
   const reclasState = detectReclasificacionesNoCompensacion(extra?.preprocessed);
   const comparativosImpracticables = detectComparativosImpracticables(extra?.preprocessed);
@@ -68,66 +75,107 @@ export async function runOpinionDrafter(
     hasMaterialMeasurementBlocker: v14State.detected,
   };
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: buildOpinionDrafterPrompt(company, language, hints) },
-          {
-            role: 'user',
-            content: [
-              'ESTADOS FINANCIEROS ORIGINALES:',
-              '',
-              reportContent,
-              '',
-              '---',
-              '',
-              'RESULTADOS DE LOS EVALUADORES:',
-              '',
-              evaluatorInput,
-            ].join('\n'),
-          },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'opinion_drafter', maxAttempts: 3 },
-  );
+  const userContent = [
+    'ESTADOS FINANCIEROS ORIGINALES:',
+    '',
+    reportContent,
+    '',
+    '---',
+    '',
+    'RESULTADOS DE LOS EVALUADORES:',
+    '',
+    evaluatorInput,
+  ].join('\n');
 
-  assertFinishedCleanly(result, 'opinion_drafter');
+  const { json } = await callFinancialAgent({
+    agentName: 'opinion-drafter',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: FiscalOpinionDraftSchema,
+    system: buildOpinionDrafterPrompt(company, language, hints),
+    userContent,
+    ...MODELS_CONFIG.opinionDrafter,
+  });
 
-  const fullContent = result.text || '';
+  return toLegacyShape(json, v14State, reclasState);
+}
 
-  // Override post-parse: si V14 disparo y el LLM emitio "limpia", forzamos
-  // modificada (NIA 705 §7 con salvedades; o desfavorable si pervasive).
-  // Si reclasificaciones-no-compensacion + reveladas → garantizamos parrafo
-  // de enfasis NIA 706 §A1 (no override de opinion, solo augment).
-  let opinionType = parseOpinionType(fullContent);
+// ---------------------------------------------------------------------------
+// Adapter local — JSON-strict -> FiscalOpinionDictamen legacy
+// ---------------------------------------------------------------------------
+
+function toLegacyShape(
+  json: FiscalOpinionDraftJson,
+  v14State: { detected: boolean; pervasive: boolean },
+  reclasState: { hasAny: boolean; notaLabel: string },
+): FiscalOpinionDictamen {
+  // Override post-LLM: si V14 disparo y el LLM emitio "limpia", forzamos
+  // modificada (NIA 705 §7 con_salvedades; o adversa si pervasive).
+  let opinionType = json.opinionType;
   if (v14State.detected && opinionType === 'limpia') {
     opinionType = v14State.pervasive ? 'adversa' : 'con_salvedades';
   }
 
-  let emphasisParagraphs = parseEmphasisParagraphs(fullContent);
+  // Si reclasificaciones-no-compensacion + reveladas → garantizamos parrafo
+  // de enfasis NIA 706 §A1 (no override de opinion, solo augment).
+  const emphasisParagraphs = [...json.emphasisParagraphs];
   if (reclasState.hasAny && !hasReclasEmphasis(emphasisParagraphs)) {
     // Why: la regla NIA 706 §A1 es vinculante cuando las reclasificaciones
     // estan reveladas en notas. Si el LLM omitio el parrafo, lo reinyectamos
-    // con el cierre literal exigido. No alteramos opinionType en este caso.
-    emphasisParagraphs = [
-      ...emphasisParagraphs,
+    // con el cierre literal exigido.
+    emphasisParagraphs.push(
       `Llamamos la atencion sobre la Nota ${reclasState.notaLabel} a los estados financieros, en la cual se describen las reclasificaciones realizadas sin compensacion conforme a NIIF for SMEs §2.52. Nuestra opinion no se modifica respecto a esta cuestion.`,
-    ];
+    );
   }
+
+  const fullContent = renderOpinionMarkdown({
+    ...json,
+    opinionType,
+    emphasisParagraphs,
+  });
 
   return {
     opinionType,
-    dictamenText: parseDictamen(fullContent),
-    keyAuditMatters: parseKeyAuditMatters(fullContent),
+    dictamenText: json.dictamenText,
+    keyAuditMatters: json.keyAuditMatters.map((k) => ({ ...k })),
     emphasisParagraphs,
-    otherMatterParagraphs: parseOtherMatterParagraphs(fullContent),
-    managementLetter: parseManagementLetter(fullContent),
+    otherMatterParagraphs: [...json.otherMatterParagraphs],
+    managementLetter: json.managementLetter,
     fullContent,
   };
+}
+
+function renderOpinionMarkdown(json: FiscalOpinionDraftJson): string {
+  const kamLines = json.keyAuditMatters
+    .map((k, idx) => `### ${idx + 1}. ${k.title}\n${k.description}\n\n**Respuesta de auditoria:** ${k.auditResponse}`)
+    .join('\n\n');
+  const empLines = json.emphasisParagraphs.map((p) => `- ${p}`).join('\n');
+  const otherLines = json.otherMatterParagraphs.map((p) => `- ${p}`).join('\n');
+
+  return [
+    '## TIPO DE OPINION',
+    '',
+    json.opinionType,
+    '',
+    '## DICTAMEN',
+    '',
+    json.dictamenText,
+    '',
+    '## ASUNTOS CLAVE DE AUDITORIA',
+    '',
+    kamLines || '(Ninguno)',
+    '',
+    '## PARRAFOS DE ENFASIS',
+    '',
+    empLines || '(No aplica)',
+    '',
+    '## PARRAFOS DE OTRAS CUESTIONES',
+    '',
+    otherLines || '(No aplica)',
+    '',
+    '## CARTA DE GERENCIA',
+    '',
+    json.managementLetter,
+  ].join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -142,8 +190,6 @@ function detectV14Blocker(auditReport: AuditReport | undefined): {
   const findings: AuditFinding[] = Array.isArray(auditReport.consolidatedFindings)
     ? auditReport.consolidatedFindings
     : [];
-  // Capturar V14 (margen bruto fuera de banda CIIU) en code o title.
-  // Tambien aceptamos sinonimos comunes que puede emitir el auditor NIIF.
   const RX_V14 = /(\bV14\b|margen\s+bruto.*ciiu|gross\s+margin.*ciiu)/i;
   const matches = findings.filter(
     (f) =>
@@ -152,7 +198,6 @@ function detectV14Blocker(auditReport: AuditReport | undefined): {
   );
   if (matches.length === 0) return { detected: false, pervasive: false };
 
-  // Pervasive si severity critico o si la descripcion menciona "generalizado".
   const pervasive = matches.some(
     (f) =>
       f.severity === 'critico' ||
@@ -172,8 +217,6 @@ function detectReclasificacionesNoCompensacion(preprocessed: unknown): {
   }
   const pp = preprocessed as Record<string, unknown>;
   const reclas = pp.reclasificacionesNoCompensacion;
-  // Aceptamos shape array OR primary.reclasificacionesNoCompensacion (si el
-  // preprocesador anida por periodo).
   let arr: unknown[] | null = null;
   if (Array.isArray(reclas)) {
     arr = reclas;
@@ -185,7 +228,6 @@ function detectReclasificacionesNoCompensacion(preprocessed: unknown): {
   }
   if (!arr || arr.length === 0) return { hasAny: false, notaLabel: 'X' };
 
-  // Si alguno trae { notaRef: 'Nota 12' } usar ese texto, sino label generico.
   let notaLabel = 'X';
   for (const item of arr) {
     if (item && typeof item === 'object') {
@@ -281,77 +323,4 @@ ${compliance.independenceAssessment || 'No evaluada'}
 
 **Analisis completo:**
 ${compliance.analysis}`;
-}
-
-// ---------------------------------------------------------------------------
-// Parsers
-// ---------------------------------------------------------------------------
-
-function parseOpinionType(content: string): OpinionType {
-  const match = content.match(/##\s*TIPO\s+DE\s+OPINION\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (match) {
-    const text = match[1].trim().toLowerCase();
-    if (text.includes('limpia') || (text.includes('favorable') && !text.includes('desfavorable') && !text.includes('salvedad'))) return 'limpia';
-    if (text.includes('con_salvedades') || text.includes('salvedades') || text.includes('qualified')) return 'con_salvedades';
-    if (text.includes('adversa') || text.includes('desfavorable')) return 'adversa';
-    if (text.includes('abstencion') || text.includes('disclaimer')) return 'abstencion';
-  }
-  return 'con_salvedades'; // conservative default
-}
-
-function parseDictamen(content: string): string {
-  const match = content.match(/##\s*DICTAMEN\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  return match ? match[1].trim() : '';
-}
-
-function parseKeyAuditMatters(content: string): KeyAuditMatter[] {
-  const match = content.match(/##\s*ASUNTOS\s+CLAVE\s+DE\s+AUDITORIA\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  const jsonClean = match[1]
-    .trim()
-    .replace(/^```json?\s*\n?/i, '')
-    .replace(/\n?```\s*$/i, '')
-    .trim();
-
-  try {
-    const parsed = JSON.parse(jsonClean);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.map((m: Record<string, unknown>) => ({
-      title: (m.title as string) || '',
-      description: (m.description as string) || '',
-      auditResponse: (m.auditResponse as string) || '',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function parseEmphasisParagraphs(content: string): string[] {
-  const match = content.match(/##\s*PARRAFOS\s+DE\s+ENFASIS\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  return match[1]
-    .trim()
-    .split('\n')
-    .filter((line) => line.trim().startsWith('-'))
-    .map((line) => line.trim().replace(/^-\s*/, ''))
-    .filter((line) => !line.toLowerCase().includes('no aplica'));
-}
-
-function parseOtherMatterParagraphs(content: string): string[] {
-  const match = content.match(/##\s*PARRAFOS\s+DE\s+OTRAS\s+CUESTIONES\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!match) return [];
-
-  return match[1]
-    .trim()
-    .split('\n')
-    .filter((line) => line.trim().startsWith('-'))
-    .map((line) => line.trim().replace(/^-\s*/, ''))
-    .filter((line) => !line.toLowerCase().includes('no aplica'));
-}
-
-function parseManagementLetter(content: string): string {
-  const match = content.match(/##\s*CARTA\s+DE\s+GERENCIA\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  return match ? match[1].trim() : '';
 }

@@ -1,30 +1,16 @@
 // ---------------------------------------------------------------------------
 // Submódulo 4: Reserva de Contingencia
 // ---------------------------------------------------------------------------
-// 10% de la utilidad neta como provision de caja para impuestos. Se diferencia
-// explicitamente de la reserva legal del Art. 452 C.Co.
+// Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
+// `ContingencyReserveReportSchema` + `MODELS_CONFIG.contingencyReserve`.
 // ---------------------------------------------------------------------------
 
-import { generateText, Output } from 'ai';
-import { z } from 'zod';
-import { MODELS } from '@/lib/config/models';
-import { withRetry } from '@/lib/agents/utils/retry';
+import { callFinancialAgent } from '../../agents/runtime';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildContingencyReservePrompt } from '../prompts/contingency-reserve.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { ContingencyReserveReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, ContingencyReserveResult } from '../types';
-
-const reserveSchema = z.object({
-  markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
-  data: z.object({
-    utilidadNeta: z.number(),
-    reservaSugerida: z.number(),
-    pctUtilidad: z.number(),
-    cuentaSugerida: z.string(),
-    reservaLegalActual: z.number().optional(),
-    gapReservaLegal: z.number().optional(),
-  }),
-});
 
 export async function runContingencyReserve(
   input: SurvivalAgentInput,
@@ -37,8 +23,6 @@ export async function runContingencyReserve(
     ? `${company.name ?? 'empresa'} (NIT ${company.nit})`
     : undefined;
 
-  const systemPrompt = buildContingencyReservePrompt(input.language, undefined, nitContext);
-
   const userContent = [
     'Calcula la reserva de contingencia (10% utilidad neta) y revisa la reserva legal del Art. 452 C.Co. sobre los totales:',
     '',
@@ -49,20 +33,14 @@ export async function runContingencyReserve(
     .filter(Boolean)
     .join('\n');
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 3000,
-        experimental_output: Output.object({ schema: reserveSchema }),
-      }),
-    { label: 'escudo_survival_reserve', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'escudo-survival-reserve',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: ContingencyReserveReportSchema,
+    system: buildContingencyReservePrompt(input.language, undefined, nitContext),
+    userContent,
+    ...MODELS_CONFIG.contingencyReserve,
+  });
 
-  return result.experimental_output;
+  return json as ContingencyReserveResult;
 }

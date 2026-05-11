@@ -1,14 +1,28 @@
 // ---------------------------------------------------------------------------
-// Auditor de Revisoria Fiscal — statutory auditor / ISA perspective
+// Auditor de Revisoria Fiscal — outcome-first GPT-5.4 (Fase 2.B)
+// ---------------------------------------------------------------------------
+// Llama a `callFinancialAgent` con `FiscalReviewReportSchema` y adapta al
+// struct legacy. Mantiene el override `enforceOpinionCoherence` (no-blanqueo)
+// que ya existia en la version anterior — es una salvaguarda determinista que
+// debe sobrevivir al refactor.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../../agents/runtime';
 import { buildFiscalReviewerPrompt } from '../prompts/fiscal-reviewer.prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../../utils/finish-reason-check';
+import {
+  FiscalReviewReportSchema,
+  type FiscalReviewReportJson,
+  type AuditFindingJson,
+} from '../../contracts/audit-report';
+import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import type { CompanyInfo } from '../../types';
-import type { AuditorResult, AuditFinding, AuditOpinionType, AuditProgressEvent } from '../types';
+import type {
+  AuditorResult,
+  AuditFinding,
+  AuditOpinionType,
+  AuditProgressEvent,
+} from '../types';
 
 export async function runFiscalReviewer(
   reportContent: string,
@@ -17,50 +31,54 @@ export async function runFiscalReviewer(
   onProgress?: (event: AuditProgressEvent) => void,
   defaultPeriod?: string,
 ): Promise<AuditorResult & { opinionType: AuditOpinionType; dictamen: string }> {
-  onProgress?.({ type: 'auditor_progress', domain: 'revisoria', detail: 'Evaluando razonabilidad y materialidad (NIA/ISA)...' });
+  onProgress?.({
+    type: 'auditor_progress',
+    domain: 'revisoria',
+    detail: 'Evaluando razonabilidad y materialidad (NIA/ISA)...',
+  });
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: buildFiscalReviewerPrompt(company, language) },
-          { role: 'user', content: `REPORTE FINANCIERO COMPLETO A AUDITAR:\n\n${reportContent}` },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'fiscal_reviewer', maxAttempts: 3 },
-  );
+  const { json } = await callFinancialAgent({
+    agentName: 'fiscal-reviewer',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: FiscalReviewReportSchema,
+    system: buildFiscalReviewerPrompt(company, language),
+    userContent: `REPORTE FINANCIERO COMPLETO A AUDITAR:\n\n${reportContent}`,
+    ...MODELS_CONFIG.fiscalReviewer,
+  });
 
-  assertFinishedCleanly(result, 'fiscal_reviewer');
+  return toLegacyAuditorResult(json, defaultPeriod);
+}
 
-  const fullContent = result.text || '';
-  const { score, findings, summary } = parseAuditorOutput(fullContent, 'revisoria', defaultPeriod);
-  const rawOpinionType = parseOpinionType(fullContent);
-  const opinionType = enforceOpinionCoherence(rawOpinionType, findings);
-  const dictamen = parseDictamen(fullContent);
+// ---------------------------------------------------------------------------
+// Adapter local: JSON strict -> AuditorResult legacy + opinionType + dictamen
+// ---------------------------------------------------------------------------
+
+function toLegacyAuditorResult(
+  json: FiscalReviewReportJson,
+  defaultPeriod: string | undefined,
+): AuditorResult & { opinionType: AuditOpinionType; dictamen: string } {
+  const findings: AuditFinding[] = json.findings.map((f) => mapFinding(f, defaultPeriod));
+
+  // Why: salvaguarda determinista — el LLM puede emitir findings criticos y
+  // concluir con opinion favorable (blanqueo). Forzamos coherencia minima.
+  const opinionType = enforceOpinionCoherence(json.opinionType, findings);
 
   return {
     domain: 'revisoria',
     auditorName: 'Auditor de Revisoria Fiscal',
-    complianceScore: score,
+    complianceScore: json.complianceScore,
     findings,
-    summary,
-    fullContent,
+    summary: json.executiveSummary,
+    fullContent: renderMarkdown(json, findings, opinionType),
     failed: false,
     opinionType,
-    dictamen,
+    dictamen: json.dictamen,
   };
 }
 
 /**
  * Override post-parse: garantiza que la opinion del Revisor Fiscal sea
- * COHERENTE con los hallazgos que el mismo emitio. Evita "blanqueo" del
- * dictamen — un patron observado donde el LLM emite findings criticos pero
- * concluye con opinion FAVORABLE.
- *
- * Reglas (NIA 705 §7-§10):
+ * COHERENTE con los hallazgos que el mismo emitio. Reglas (NIA 705 §7-§10):
  *  - 1+ findings "critico" → DESFAVORABLE como minimo.
  *  - 1+ findings "alto" → CON SALVEDADES como minimo.
  *  - Resto → respeta la opinion del LLM.
@@ -83,80 +101,63 @@ function enforceOpinionCoherence(
   return raw;
 }
 
-function parseOpinionType(content: string): AuditOpinionType {
-  const match = content.match(/##\s*TIPO DE OPINION\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  if (match) {
-    const text = match[1].trim().toLowerCase();
-    if (text.includes('favorable') && !text.includes('desfavorable') && !text.includes('salvedad')) return 'favorable';
-    if (text.includes('salvedad')) return 'con_salvedades';
-    if (text.includes('desfavorable') || text.includes('adversa')) return 'desfavorable';
-    if (text.includes('abstension') || text.includes('abstencion')) return 'abstension';
+function mapFinding(
+  f: AuditFindingJson,
+  defaultPeriod: string | undefined,
+): AuditFinding {
+  return {
+    code: f.code,
+    severity: f.severity,
+    domain: 'revisoria',
+    title: f.title,
+    description: f.description,
+    normReference: f.normReference,
+    recommendation: f.recommendation,
+    impact: f.impact,
+    period: f.period ?? defaultPeriod,
+  };
+}
+
+function renderMarkdown(
+  json: FiscalReviewReportJson,
+  findings: AuditFinding[],
+  opinionType: AuditOpinionType,
+): string {
+  const lines: string[] = [];
+  lines.push(`## SCORE\n${json.complianceScore}`);
+  lines.push('');
+  lines.push(`## RESUMEN EJECUTIVO\n${json.executiveSummary}`);
+  lines.push('');
+  lines.push('## MATERIALIDAD');
+  lines.push(`- **Benchmark:** ${json.materiality.benchmarkLabel}`);
+  lines.push(`- **Materialidad:** ${formatCopFromCents(parseMoneyCop(json.materiality.materialityAmountCop), true)}`);
+  lines.push(`- **Materialidad de ejecucion:** ${formatCopFromCents(parseMoneyCop(json.materiality.performanceMateriality), true)}`);
+  lines.push(`- **Comentario:** ${json.materiality.comment}`);
+  lines.push('');
+  lines.push('## EMPRESA EN FUNCIONAMIENTO');
+  lines.push(
+    `- **Incertidumbre material:** ${json.goingConcern.hasMaterialUncertainty ? 'SI' : 'NO'}`,
+  );
+  if (json.goingConcern.indicatorsFound.length > 0) {
+    lines.push('- **Indicadores observados:**');
+    for (const ind of json.goingConcern.indicatorsFound) lines.push(`  - ${ind}`);
   }
-  return 'con_salvedades'; // conservative default
-}
-
-function parseDictamen(content: string): string {
-  const match = content.match(/##\s*DICTAMEN\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  return match ? match[1].trim() : '';
-}
-
-function parseAuditorOutput(
-  content: string,
-  domain: 'niif' | 'tributario' | 'legal' | 'revisoria',
-  defaultPeriod?: string,
-): { score: number; findings: AuditFinding[]; summary: string } {
-  const scoreMatch = content.match(/##\s*SCORE\s*\n+(\d+)/i);
-  const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 50;
-
-  let findings: AuditFinding[] = [];
-  const findingsMatch = content.match(/##\s*HALLAZGOS\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i);
-  if (findingsMatch) {
-    const jsonClean = findingsMatch[1].trim().replace(/^```json?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-    try {
-      const parsed = JSON.parse(jsonClean);
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      findings = arr.map((f: Record<string, unknown>) => ({
-        code: (f.code as string) || `${domain.toUpperCase()}-000`,
-        severity: validateSeverity(f.severity as string),
-        domain,
-        title: (f.title as string) || '',
-        description: (f.description as string) || '',
-        normReference: (f.normReference as string) || '',
-        recommendation: (f.recommendation as string) || '',
-        impact: (f.impact as string) || '',
-        period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
-      }));
-    } catch {
-      const objectRegex = /\{[^{}]*\}/g;
-      const matches = jsonClean.match(objectRegex);
-      if (matches) {
-        for (const m of matches) {
-          try {
-            const f = JSON.parse(m) as Record<string, unknown>;
-            findings.push({
-              code: (f.code as string) || `${domain.toUpperCase()}-000`,
-              severity: validateSeverity(f.severity as string),
-              domain,
-              title: (f.title as string) || '',
-              description: (f.description as string) || '',
-              normReference: (f.normReference as string) || '',
-              recommendation: (f.recommendation as string) || '',
-              impact: (f.impact as string) || '',
-              period: typeof f.period === 'string' && f.period.length > 0 ? f.period : defaultPeriod,
-            });
-          } catch { /* skip */ }
-        }
-      }
-    }
+  lines.push(`- **Conclusion:** ${json.goingConcern.conclusion}`);
+  lines.push('');
+  lines.push('## HALLAZGOS');
+  for (const f of findings) {
+    lines.push('');
+    lines.push(`### ${f.code}: ${f.title}`);
+    lines.push(`- **Severidad:** ${f.severity.toUpperCase()}`);
+    lines.push(`- **Norma:** ${f.normReference}`);
+    lines.push(`- **Descripcion:** ${f.description}`);
+    lines.push(`- **Recomendacion:** ${f.recommendation}`);
+    lines.push(`- **Impacto:** ${f.impact}`);
+    if (f.period) lines.push(`- **Periodo:** ${f.period}`);
   }
-
-  const summaryMatch = content.match(/##\s*RESUMEN EJECUTIVO\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  const summary = summaryMatch ? summaryMatch[1].trim() : '';
-
-  return { score, findings, summary };
-}
-
-function validateSeverity(s: string): AuditFinding['severity'] {
-  const valid = ['critico', 'alto', 'medio', 'bajo', 'informativo'];
-  return valid.includes(s) ? s as AuditFinding['severity'] : 'medio';
+  lines.push('');
+  lines.push(`## TIPO DE OPINION\n${opinionType}`);
+  lines.push('');
+  lines.push(`## DICTAMEN\n${json.dictamen}`);
+  return lines.join('\n');
 }

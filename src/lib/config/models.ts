@@ -120,3 +120,98 @@ export const MODELS = {
 export const EMBEDDING_MODEL_ID = MODEL_IDS.EMBEDDINGS;
 
 export type ModelKey = keyof typeof MODELS;
+
+// ---------------------------------------------------------------------------
+// MODELS_CONFIG — reasoning_effort y textVerbosity calibrados por agente
+// ---------------------------------------------------------------------------
+// La familia GPT-5.4 expone dos parámetros que el AI SDK pasa por
+// `providerOptions.openai.reasoningEffort` y `.textVerbosity`. La guía oficial
+// OpenAI 2026 recomienda:
+//
+//   - `minimal` : latencia mínima, sin cadena de razonamiento. Para tareas
+//                 deterministas y de routing.
+//   - `low`     : razonamiento corto (~1-2k tokens reasoning). OCR, validators.
+//   - `medium`  : default OpenAI. Razonamiento balanceado (~5-10k). Pipelines
+//                 contables y auditoría.
+//   - `high`    : razonamiento profundo (~20k+). Reservar para dictámenes y
+//                 decisiones estratégicas donde el costo se justifica.
+//
+// Centralizar aquí evita que cada agente improvise su nivel. El `callFinancialAgent`
+// (`src/lib/agents/financial/agents/runtime.ts`) consume estos defaults.
+// ---------------------------------------------------------------------------
+
+export type ReasoningEffortLevel = 'minimal' | 'low' | 'medium' | 'high';
+export type TextVerbosityLevel = 'low' | 'medium' | 'high';
+
+export interface AgentRuntimeConfig {
+  reasoningEffort: ReasoningEffortLevel;
+  textVerbosity: TextVerbosityLevel;
+  /** Token budget para la respuesta. Mapea a `max_completion_tokens`. */
+  maxOutputTokens: number;
+}
+
+export const MODELS_CONFIG = {
+  // -- Chat orchestrator / routing -----------------------------------------
+  classifier: { reasoningEffort: 'minimal', textVerbosity: 'low', maxOutputTokens: 150 } as const,
+  promptEnhancer: { reasoningEffort: 'low', textVerbosity: 'medium', maxOutputTokens: 500 } as const,
+  synthesizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 2000 } as const,
+  specialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 4000 } as const,
+
+  // -- OCR / vision --------------------------------------------------------
+  ocr: { reasoningEffort: 'low', textVerbosity: 'low', maxOutputTokens: 16000 } as const,
+  ocrLight: { reasoningEffort: 'minimal', textVerbosity: 'low', maxOutputTokens: 8000 } as const,
+
+  // -- Pipeline financiero base (NIIF -> Strategy -> Governance) -----------
+  niifAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
+  strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+  governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+
+  // -- Auditoría especializada (paralelo) ----------------------------------
+  niifAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  taxAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  legalAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  fiscalReviewer: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+
+  // -- Meta-auditoría de calidad ------------------------------------------
+  qualityMetaAuditor: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+
+  // -- Tax planning (secuencial) ------------------------------------------
+  taxOptimizer: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+  niifImpactAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
+  complianceValidator: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+
+  // -- Transfer pricing (secuencial) --------------------------------------
+  tpAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+  comparableAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+  tpDocumentationWriter: { reasoningEffort: 'medium', textVerbosity: 'high', maxOutputTokens: 12000 } as const,
+
+  // -- Valuation (híbrido) ------------------------------------------------
+  dcfModeler: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+  marketComparables: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+  valuationSynthesizer: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+
+  // -- Fiscal audit opinion (híbrido) -------------------------------------
+  goingConcernAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  misstatementReviewer: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  complianceChecker: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  opinionDrafter: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+
+  // -- Tax reconciliation (secuencial) ------------------------------------
+  differenceIdentifier: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 8000 } as const,
+  deferredTaxCalculator: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
+
+  // -- Feasibility (secuencial) -------------------------------------------
+  marketAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+  financialModeler: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+  riskAssessor: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+
+  // -- Escudo de Supervivencia (paralelo + sintetizador) ------------------
+  tetCalculator: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  retentionShield: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  antiDianAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  contingencyReserve: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 4000 } as const,
+  dividendOptimizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
+  escudoSynthesizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+} as const satisfies Record<string, AgentRuntimeConfig>;
+
+export type AgentSlot = keyof typeof MODELS_CONFIG;

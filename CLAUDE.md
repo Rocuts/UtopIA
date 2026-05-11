@@ -185,6 +185,55 @@ Apply the minimum-blast-radius fix: change the tint, don't restructure the compo
 
 The `utopia-contrast-auditor` agent enforces these rules. Run it on any "no se ve / fantasma / muy claro / low contrast / WCAG" signal before touching components manually.
 
+## Prompt patterns GPT-5.4 (outcome-first)
+
+The GPT-5.4 family (default for every financial agent) is a reasoning model. OpenAI's official 2026 prompting guide and the AI SDK v6 docs prescribe a very different prompt shape than what worked on gpt-4o. Older prompts that were procedural (`Paso 1 …  Paso 2 …`), heavy on `ALWAYS / NEVER / MUST`, and embedded the output schema in prose **degrade quality on GPT-5.4** — they induce tool-call repetition, endless planning, and high output variance. Follow the rules below for every new or refactored financial prompt.
+
+### Canonical prompt shape (CTCO + XML)
+
+```
+[stable header — composes well with the prompt cache]
+  - Anti-hallucination guardrail
+  - Colombia 2026 normative context
+
+<task>{one-line outcome statement}</task>
+
+<context>
+  {dynamic per-request payload: preprocessed balance, TOTALES VINCULANTES,
+   instructions, comparativos}
+</context>
+
+<constraints>
+  - Reglas duras (safety rails) en ALWAYS/NEVER/MUST.
+  - Reglas de juicio en formato `If X then Y otherwise Z`.
+</constraints>
+
+<success_criteria>
+  - Cuadres invariantes (e.g. Activo = Pasivo + Patrimonio, tolerancia $0).
+  - Identidades cruzadas (e.g. EFE cash closing == PUC 11 balance).
+</success_criteria>
+```
+
+The output **schema is NOT described in prose**. It is enforced by `experimental_output: Output.object({ schema })` (Zod) — the runtime helper `callFinancialAgent` (`src/lib/agents/financial/agents/runtime.ts`) wires this for every financial agent.
+
+### Hard rules
+
+1. **No procedural numbering.** Don't write `Paso 1 / Paso 2 / Paso 3` or `R-Élite 1 / R-Élite 2`. Replace with XML tags and `<success_criteria>`. The reasoning model finds a better path when not handcuffed to your prescribed sequence.
+2. **Reserve `ALWAYS / NEVER / MUST` for safety rails.** Anti-hallucination (cite or omit), anti-PII (mask NIT, cédula), defensa Art. 647 E.T. — these stay as MUST. Accounting judgment moves to `If X then Y otherwise Z`.
+3. **No "be THOROUGH" / "double-check" language.** OpenAI's GPT-5 troubleshooting guide explicitly lists this as counterproductive — it triggers redundant tool calls and tortured outputs.
+4. **Cache-friendly layout.** Stable content at the top of the system prompt, dynamic content at the bottom. Maximizes the GPT-5.4 prompt cache (40–80% better hit rate than the legacy layout).
+5. **Strict schema, no optional fields.** Zod schemas for `Output.object` use `.nullable()` — never `.optional()` — because OpenAI strict json_schema rejects undefined-or-missing.
+6. **`reasoning_effort` is per-slot.** Never default `high` for everything. Use `MODELS_CONFIG` in `src/lib/config/models.ts` — `minimal/low` for routing/OCR, `medium` for financial pipelines and audit, `high` only for strategic dictámenes (tax-optimizer, valuation synth, fiscal opinion).
+7. **MoneyCop convention.** Cash amounts travel as strings in centavos (e.g. `"1500000"` = $15.000,00) in every JSON contract. JS `number` overflows above 2^53; `BigInt` doesn't serialize to JSON. Helpers in `src/lib/agents/financial/contracts/money.ts`.
+
+### Runtime contract
+
+Every refactored financial agent calls `callFinancialAgent({ agentName, model, schema, system, userContent, ...MODELS_CONFIG[slot] })`. It returns `{ json, meta }` where `json` is the Zod-validated output and `meta` exposes reasoning/cache telemetry. Downstream renderers that still need Markdown (PDF Élite, Excel) consume a deterministic JSON → Markdown adapter — the LLM never composes Markdown directly.
+
+### Migration checkpoints
+
+The refactor is tracked on `feat/prompts-gpt54-refactor`. Until that branch lands, the old `*.prompt.ts` builders coexist with the new contract — agents flip one at a time. When a financial agent file imports `callFinancialAgent`, it is on the new pattern; when it still calls `generateText` directly, it is legacy and pending.
+
 ## Layout Gotchas
 
 - **Lenis smooth scroll is global.** `src/app/layout.tsx` wraps the whole app with `<SmoothScroll>` → `ReactLenis root`. Lenis hijacks wheel events at the document level to drive smooth scrolling. Any subtree that relies on internal `overflow-y-auto` containers (e.g. the workspace shell `src/app/workspace/layout.tsx`, fullscreen modals) **must** carry `data-lenis-prevent` on an ancestor or wheel events never reach the scrollable child and mouse-wheel scroll dies silently. The workspace shell root `<div>` already has it — preserve it when editing that layout.
