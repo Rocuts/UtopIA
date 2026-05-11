@@ -1,20 +1,22 @@
 // ---------------------------------------------------------------------------
-// Meta-Auditor de Calidad y Best Practices 2026
+// Meta-Auditor de Calidad y Best Practices 2026 — outcome-first GPT-5.4
 // ---------------------------------------------------------------------------
-// Evaluates the ENTIRE pipeline output (report + audit + preprocessed data)
-// against international and Colombian 2026 standards:
-//   - IASB Conceptual Framework (qualitative characteristics)
-//   - IFRS 18 readiness (effective 2027)
-//   - ISO/IEC 25012 (data quality dimensions)
+// Evalua el pipeline completo (3 agentes + 4 auditores) contra:
+//   - IASB Conceptual Framework
+//   - IFRS 18 readiness (efectiva 2027)
+//   - ISO/IEC 25012 (data quality)
 //   - ISO/IEC 42001 (AI governance)
-//   - Colombian CTCP + Decreto 2420/2496
+//   - CTCP + Decreto 2420/2496
+//
+// Llama a `callFinancialAgent` con `QualityReportSchema` y adapta el JSON
+// validado al struct legacy `QualityAssessment` que consumen el endpoint
+// `/api/financial-quality` y el renderer PDF Elite.
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
-import { MODELS } from '@/lib/config/models';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../agents/runtime';
 import { buildQualityAuditorPrompt } from './prompt';
-import { withRetry } from '@/lib/agents/utils/retry';
-import { assertFinishedCleanly } from '../utils/finish-reason-check';
+import { QualityReportSchema, type QualityReportJson } from '../contracts/quality-report';
 import type { FinancialReport } from '../types';
 import type { AuditReport } from '../audit/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -32,8 +34,25 @@ export interface QualityAuditInput {
  */
 export async function runQualityAudit(input: QualityAuditInput): Promise<QualityAssessment> {
   const systemPrompt = buildQualityAuditorPrompt(input.report.company, input.language);
+  const userContent = buildUserContent(input);
 
-  // Build comprehensive context for the auditor
+  const { json } = await callFinancialAgent({
+    agentName: 'quality-meta-auditor',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: QualityReportSchema,
+    system: systemPrompt,
+    userContent,
+    ...MODELS_CONFIG.qualityMetaAuditor,
+  });
+
+  return toLegacyQualityAssessment(json);
+}
+
+// ---------------------------------------------------------------------------
+// User content composer — concatena reporte + auditoria + preprocesador
+// ---------------------------------------------------------------------------
+
+function buildUserContent(input: QualityAuditInput): string {
   const sections: string[] = [];
 
   sections.push('=== REPORTE FINANCIERO CONSOLIDADO (3 Agentes) ===');
@@ -50,8 +69,6 @@ export async function runQualityAudit(input: QualityAuditInput): Promise<Quality
   if (input.preprocessed) {
     const periods = input.preprocessed.periods;
     const totalDiscrepancies = periods.reduce((acc, p) => acc + p.discrepancies.length, 0);
-
-    // Multiperiodo: ecuacion cuadra si TODOS los periodos cuadran
     const allBalanced = periods.every((p) => p.summary.equationBalanced);
     const failingPeriods = periods.filter((p) => !p.summary.equationBalanced).map((p) => p.period);
 
@@ -60,17 +77,18 @@ export async function runQualityAudit(input: QualityAuditInput): Promise<Quality
     sections.push(`\nCuentas auxiliares procesadas: ${input.preprocessed.auxiliaryCount}`);
     sections.push(`Periodos detectados: ${periods.length} (${periods.map((p) => p.period).join(', ')})`);
     sections.push(`Periodo primario: ${input.preprocessed.primary.period}`);
+
     if (input.preprocessed.comparative) {
       sections.push(`Periodo comparativo: ${input.preprocessed.comparative.period}`);
     } else if (periods.length === 1) {
       sections.push('Sin periodo comparativo disponible');
     }
+
     sections.push(`Discrepancias totales (todos los periodos): ${totalDiscrepancies}`);
     sections.push(
       `Ecuacion patrimonial: ${allBalanced ? 'CUADRA en todos los periodos' : `NO CUADRA en ${failingPeriods.join(', ')}`}`,
     );
 
-    // Senal explicita al meta-auditor sobre uso de comparativo en el reporte
     if (periods.length > 1) {
       sections.push(
         `\n[META-AUDITORIA] Hay ${periods.length} periodos disponibles. ` +
@@ -82,158 +100,98 @@ export async function runQualityAudit(input: QualityAuditInput): Promise<Quality
     }
   }
 
-  const userContent = sections.join('\n');
-
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.05,
-        maxOutputTokens: 8192,
-      }),
-    { label: 'quality_auditor', maxAttempts: 3 },
-  );
-
-  assertFinishedCleanly(result, 'quality_auditor');
-
-  const fullReport = result.text || '';
-  return parseQualityAssessment(fullReport);
+  return sections.join('\n');
 }
 
 // ---------------------------------------------------------------------------
-// Parser
+// Adapter local: JSON strict -> QualityAssessment legacy
 // ---------------------------------------------------------------------------
 
-function parseQualityAssessment(content: string): QualityAssessment {
-  // Score
-  const scoreMatch = content.match(/##\s*SCORE GLOBAL\s*\n+(\d+)/i);
-  const overallScore = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 50;
-
-  // Grade
-  const gradeMatch = content.match(/##\s*GRADE\s*\n+([A-F][+]?)/i);
-  const grade = gradeMatch ? gradeMatch[1] : deriveGrade(overallScore);
-
-  // Executive summary
-  const summaryMatch = content.match(/##\s*RESUMEN EJECUTIVO\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  const executiveSummary = summaryMatch ? summaryMatch[1].trim() : '';
-
-  // Dimensions
-  const dimensions = parseDimensions(content);
-
-  // Data quality (ISO 25012)
-  const dataQuality = parseDataQuality(content);
-
-  // AI governance (ISO 42001)
-  const aiGovernance = parseAIGovernance(content);
-
-  // IFRS 18
-  const ifrs18Readiness = parseIFRS18(content);
+function toLegacyQualityAssessment(json: QualityReportJson): QualityAssessment {
+  const dimensions: QualityDimension[] = json.dimensions.map((d) => ({
+    name: d.name,
+    score: d.score,
+    framework: d.framework,
+    findings: d.findings,
+    recommendations: d.recommendations,
+  }));
 
   return {
-    overallScore,
-    grade,
+    overallScore: json.overallScore,
+    grade: json.grade,
     dimensions,
-    ifrs18Readiness,
-    dataQuality,
-    aiGovernance,
-    executiveSummary,
-    fullReport: content,
+    ifrs18Readiness: {
+      ready: json.ifrs18Readiness.ready,
+      score: json.ifrs18Readiness.score,
+      gaps: json.ifrs18Readiness.gaps,
+    },
+    dataQuality: {
+      completeness: json.dataQuality.completeness,
+      accuracy: json.dataQuality.accuracy,
+      consistency: json.dataQuality.consistency,
+      timeliness: json.dataQuality.timeliness,
+      validity: json.dataQuality.validity,
+    },
+    aiGovernance: {
+      traceability: json.aiGovernance.traceability,
+      explainability: json.aiGovernance.explainability,
+      antiHallucination: json.aiGovernance.antiHallucination,
+      humanOversight: json.aiGovernance.humanOversight,
+    },
+    executiveSummary: json.executiveSummary,
+    fullReport: renderMarkdown(json),
     generatedAt: new Date().toISOString(),
   };
 }
 
-function deriveGrade(score: number): string {
-  if (score >= 95) return 'A+';
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B';
-  if (score >= 70) return 'C';
-  if (score >= 60) return 'D';
-  return 'F';
-}
-
-function parseDimensions(content: string): QualityDimension[] {
-  const dimMatch = content.match(/##\s*DIMENSIONES DE CALIDAD\s*\n+([\s\S]*?)(?=\n##\s)/i);
-  if (!dimMatch) return [];
-
-  const jsonBlock = dimMatch[1].trim().replace(/^```json?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-  try {
-    const parsed = JSON.parse(jsonBlock);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.map((d: Record<string, unknown>) => ({
-      name: (d.name as string) || '',
-      score: typeof d.score === 'number' ? d.score : 50,
-      framework: (d.framework as string) || '',
-      findings: Array.isArray(d.findings) ? d.findings as string[] : [],
-      recommendations: Array.isArray(d.recommendations) ? d.recommendations as string[] : [],
-    }));
-  } catch {
-    return [];
+function renderMarkdown(json: QualityReportJson): string {
+  const lines: string[] = [];
+  lines.push(`## SCORE GLOBAL\n${json.overallScore}`);
+  lines.push('');
+  lines.push(`## GRADE\n${json.grade}`);
+  lines.push('');
+  lines.push(`## RESUMEN EJECUTIVO\n${json.executiveSummary}`);
+  lines.push('');
+  lines.push('## DIMENSIONES DE CALIDAD');
+  for (const d of json.dimensions) {
+    lines.push('');
+    lines.push(`### ${d.name} (${d.score}/100) — ${d.framework}`);
+    if (d.findings.length > 0) {
+      lines.push('**Hallazgos:**');
+      for (const f of d.findings) lines.push(`- ${f}`);
+    }
+    if (d.recommendations.length > 0) {
+      lines.push('**Recomendaciones:**');
+      for (const r of d.recommendations) lines.push(`- ${r}`);
+    }
   }
-}
-
-function parseDataQuality(content: string): QualityAssessment['dataQuality'] {
-  const section = content.match(/##\s*CALIDAD DE DATOS[^#]*\n([\s\S]*?)(?=\n##\s)/i);
-  const defaults = { completeness: 50, accuracy: 50, consistency: 50, timeliness: 50, validity: 50 };
-  if (!section) return defaults;
-
-  const text = section[1];
-  const extract = (key: string) => {
-    const m = text.match(new RegExp(`${key}\\s*:\\s*(\\d+)`, 'i'));
-    return m ? Math.min(100, parseInt(m[1], 10)) : 50;
-  };
-
-  return {
-    completeness: extract('completeness|completitud'),
-    accuracy: extract('accuracy|exactitud'),
-    consistency: extract('consistency|consistencia'),
-    timeliness: extract('timeliness|actualidad'),
-    validity: extract('validity|validez'),
-  };
-}
-
-function parseAIGovernance(content: string): QualityAssessment['aiGovernance'] {
-  const section = content.match(/##\s*GOBERNANZA IA[^#]*\n([\s\S]*?)(?=\n##\s)/i);
-  const defaults = { traceability: 50, explainability: 50, antiHallucination: 50, humanOversight: 50 };
-  if (!section) return defaults;
-
-  const text = section[1];
-  const extract = (key: string) => {
-    const m = text.match(new RegExp(`${key}\\s*:\\s*(\\d+)`, 'i'));
-    return m ? Math.min(100, parseInt(m[1], 10)) : 50;
-  };
-
-  return {
-    traceability: extract('traceability|trazabilidad'),
-    explainability: extract('explainability|explicabilidad'),
-    antiHallucination: extract('anti.?hallucination|anti.?alucinacion'),
-    humanOversight: extract('human.?oversight|supervision.?humana'),
-  };
-}
-
-function parseIFRS18(content: string): QualityAssessment['ifrs18Readiness'] {
-  const section = content.match(/##\s*PREPARACION IFRS 18[^#]*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
-  if (!section) return { ready: false, score: 0, gaps: [] };
-
-  const text = section[1];
-  const readyMatch = text.match(/ready\s*:\s*(true|false)/i);
-  const scoreMatch = text.match(/score\s*:\s*(\d+)/i);
-  const gapsMatch = text.match(/gaps\s*:\s*\[([\s\S]*?)\]/i);
-
-  let gaps: string[] = [];
-  if (gapsMatch) {
-    gaps = gapsMatch[1]
-      .split('\n')
-      .map((l) => l.replace(/^[-*"',\s]+/, '').replace(/["',\s]+$/, '').trim())
-      .filter((l) => l.length > 0);
+  lines.push('');
+  lines.push('## CALIDAD DE DATOS (ISO 25012)');
+  lines.push(`completeness: ${json.dataQuality.completeness}`);
+  lines.push(`accuracy: ${json.dataQuality.accuracy}`);
+  lines.push(`consistency: ${json.dataQuality.consistency}`);
+  lines.push(`timeliness: ${json.dataQuality.timeliness}`);
+  lines.push(`validity: ${json.dataQuality.validity}`);
+  lines.push('');
+  lines.push('## GOBERNANZA IA (ISO 42001)');
+  lines.push(`traceability: ${json.aiGovernance.traceability}`);
+  lines.push(`explainability: ${json.aiGovernance.explainability}`);
+  lines.push(`anti_hallucination: ${json.aiGovernance.antiHallucination}`);
+  lines.push(`human_oversight: ${json.aiGovernance.humanOversight}`);
+  lines.push('');
+  lines.push('## PREPARACION IFRS 18');
+  lines.push(`ready: ${json.ifrs18Readiness.ready}`);
+  lines.push(`score: ${json.ifrs18Readiness.score}`);
+  if (json.ifrs18Readiness.gaps.length > 0) {
+    lines.push('gaps:');
+    for (const g of json.ifrs18Readiness.gaps) lines.push(`- ${g}`);
   }
-
-  return {
-    ready: readyMatch ? readyMatch[1].toLowerCase() === 'true' : false,
-    score: scoreMatch ? parseInt(scoreMatch[1], 10) : 0,
-    gaps,
-  };
+  lines.push('');
+  lines.push('## RECOMENDACIONES PRIORITARIAS');
+  for (const r of json.priorityRecommendations) {
+    lines.push(`- [${r.priority.toUpperCase()}] ${r.action} (${r.framework})`);
+  }
+  lines.push('');
+  lines.push(`## CONCLUSION\n${json.conclusion}`);
+  return lines.join('\n');
 }
