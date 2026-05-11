@@ -417,8 +417,37 @@ function addBalanceSheet(
         color: { argb: comparative.summary.equationBalanced ? COLORS.green : COLORS.red },
       };
     }
+  } else if (report.niifAnalysis.json) {
+    // Fase 3.2 — fallback estructurado desde JSON-strict del NIIF Analyst
+    // cuando el preprocessed no está disponible (caso raro). Mucho más limpio
+    // que pegar markdown crudo y preserva las cifras exactas en centavos.
+    const json = report.niifAnalysis.json;
+    const fmt = (cents: string, abs = true) => {
+      const big = BigInt(cents);
+      const ZERO = BigInt(0);
+      const neg = big < ZERO;
+      const a = neg ? -big : big;
+      const s = a.toString().padStart(3, '0');
+      const whole = (s.slice(0, -2) || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      const dec = s.slice(-2);
+      const out = `$${whole},${dec}`;
+      if (abs) return out;
+      return neg ? `(${out})` : out;
+    };
+    ws.getRow(row).getCell(1).value = 'Datos NIIF (preprocesador no disponible — render desde JSON-strict):';
+    ws.getRow(row).getCell(1).font = { name: FONT_MAIN, italic: true, size: 10 };
+    row++;
+    const writeLine = (account: string, primary: string, comp: string | null) => {
+      const r = ws.getRow(row++);
+      r.getCell(2).value = account;
+      r.getCell(3).value = fmt(primary);
+      if (comp !== null) r.getCell(4).value = fmt(comp);
+    };
+    writeLine('TOTAL ACTIVOS', json.balanceSheet.totalAssetsPrimary, json.balanceSheet.totalAssetsComparative);
+    writeLine('TOTAL PASIVOS', json.balanceSheet.totalLiabilitiesPrimary, json.balanceSheet.totalLiabilitiesComparative);
+    writeLine('TOTAL PATRIMONIO', json.balanceSheet.totalEquityPrimary, json.balanceSheet.totalEquityComparative);
   } else {
-    // Fallback: paste the NIIF analyst's Markdown as text
+    // Último fallback: markdown crudo (compat con reportes pre-Fase-2).
     ws.getRow(row).getCell(1).value = 'Datos del reporte NIIF (ver pestaña Resumen para el contenido completo):';
     ws.getRow(row).getCell(1).font = { name: FONT_MAIN, italic: true, size: 10 };
     row++;
