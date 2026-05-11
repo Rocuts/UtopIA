@@ -54,6 +54,12 @@ import {
   signatoriesFromCompany,
   renderSignatureBlock,
 } from '@/lib/agents/financial/fiscal-opinion/signatories';
+import {
+  niifJsonToBalanceTable,
+  niifJsonToCashFlowTable,
+  niifJsonToEquityTable,
+  niifJsonToIncomeTable,
+} from './compose-statements-from-json';
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -821,6 +827,18 @@ function formatPillarValue(kpi: PillarKpi): string {
 // ─── Statements ───────────────────────────────────────────────────────────────
 
 function buildStatements(report: FinancialReport) {
+  // Fase 3.1 — prefer JSON-strict del NIIF Analyst cuando esté disponible.
+  // Parser Markdown queda como fallback para reportes legacy ingestados antes
+  // del refactor (e.g. reportes históricos en DB / fixtures viejos).
+  const json = report.niifAnalysis?.json;
+  if (json) {
+    return {
+      balance: niifJsonToBalanceTable(json),
+      income: niifJsonToIncomeTable(json),
+      cashFlow: niifJsonToCashFlowTable(json),
+      equity: niifJsonToEquityTable(json),
+    };
+  }
   return {
     balance: parseStatementTable(report.niifAnalysis?.balanceSheet),
     income: parseStatementTable(report.niifAnalysis?.incomeStatement),

@@ -247,6 +247,8 @@ function toGovernanceResult(json: GovernanceReportJson): GovernanceResult {
     financialNotes,
     shareholderMinutes,
     fullContent,
+    // Exposición del JSON estricto para consumers post-Fase-3.
+    json,
   };
 }
 

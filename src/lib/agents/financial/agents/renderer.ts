@@ -225,5 +225,8 @@ export function toNiifAnalysisResult(json: NiifReportJson): NiifAnalysisResult {
     equityChangesStatement,
     technicalNotes,
     fullContent,
+    // Exposición del JSON estricto para los consumers post-Fase-3 (PDF Élite,
+    // Excel, validators). Los consumers legacy ignoran este campo.
+    json,
   };
 }

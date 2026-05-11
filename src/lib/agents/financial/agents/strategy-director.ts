@@ -324,5 +324,7 @@ function toStrategicAnalysisResult(json: StrategyReportJson): StrategicAnalysisR
     projectedCashFlow,
     strategicRecommendations,
     fullContent,
+    // Exposición del JSON estricto para consumers post-Fase-3.
+    json,
   };
 }

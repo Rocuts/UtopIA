@@ -4,6 +4,10 @@
 // Pipeline: Raw Data -> Agent 1 (NIIF) -> Agent 2 (Strategy) -> Agent 3 (Governance) -> Consolidation
 // ---------------------------------------------------------------------------
 
+import type { NiifReportJson } from './contracts/niif-report';
+import type { StrategyReportJson } from './contracts/strategy-report';
+import type { GovernanceReportJson } from './contracts/governance-report';
+
 // ---------------------------------------------------------------------------
 // Input
 // ---------------------------------------------------------------------------
@@ -116,6 +120,14 @@ export interface NiifAnalysisResult {
   technicalNotes: string;
   /** Raw content as a single Markdown block for downstream agents */
   fullContent: string;
+  /**
+   * JSON-strict del NIIF Analyst (Fase 2 outcome-first). Disponible cuando el
+   * agente corre vía `callFinancialAgent` (default actual). Los renderers
+   * post-Fase-3 lo consumen DIRECTO en lugar de parsear los strings Markdown.
+   * Los consumers legacy (PDF Élite, Excel) hacen optional chaining y caen al
+   * Markdown si está ausente.
+   */
+  json?: NiifReportJson;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +145,8 @@ export interface StrategicAnalysisResult {
   strategicRecommendations: string;
   /** Raw content as a single Markdown block */
   fullContent: string;
+  /** JSON-strict del Strategy Director (Fase 2 outcome-first). Ver `NiifAnalysisResult.json`. */
+  json?: StrategyReportJson;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +160,8 @@ export interface GovernanceResult {
   shareholderMinutes: string;
   /** Raw content as a single Markdown block */
   fullContent: string;
+  /** JSON-strict del Governance Specialist (Fase 2 outcome-first). Ver `NiifAnalysisResult.json`. */
+  json?: GovernanceReportJson;
 }
 
 // ---------------------------------------------------------------------------
