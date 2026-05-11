@@ -57,6 +57,7 @@ import { runR10 } from './curator-rules/r10-class-18-classification';
 import { runR12 } from './curator-rules/r12-closing-detector';
 import { runR14 } from './curator-rules/r14-ppe-depreciation-sync';
 import { runR15 } from './curator-rules/r15-cost-classification';
+import { runR16 } from './curator-rules/r16-tax-anticipo-netting';
 import type { CuratorFinding, CuratorResult } from './curator-rules/types';
 
 export function runCurator(
@@ -254,6 +255,18 @@ export function runCurator(
   } catch (err) {
     errors['CUR-R15'] = err instanceof Error ? err.message : String(err);
     console.warn('[curator] R15 failed:', err);
+  }
+
+  // R16 — anticipo de renta (PUC 135515) → neto contra pasivo PUC 2404.
+  // Why: ITEM 2 ORDEN DE CIERRE — presentar "Neto a Pagar" en Balance
+  // conforme práctica revisoría fiscal Ley 43/1990 + NIC 12 §71 + Art. 850 E.T.
+  // No muta saldos individuales; expone `controlTotals.impuestoRentaNeto`.
+  try {
+    const r16Out = runR16(snapshot);
+    findings.push(...r16Out.findings);
+  } catch (err) {
+    errors['CUR-R16'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R16 failed:', err);
   }
 
   return {

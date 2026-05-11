@@ -112,8 +112,14 @@ export const companyInfoSchema = z.object({
   comparativePeriod: z.string().max(20).optional(),
   city: z.string().max(100).optional(),
   legalRepresentative: z.string().max(200).optional(),
+  /** ITEM 5 ORDEN DE CIERRE — C.C. del Representante Legal (sin DV). */
+  legalRepresentativeId: z.string().max(30).optional(),
   fiscalAuditor: z.string().max(200).optional(),
+  /** ITEM 5 ORDEN DE CIERRE — T.P. del Revisor Fiscal (formato '12345-T'). */
+  fiscalAuditorTp: z.string().max(20).optional(),
   accountant: z.string().max(200).optional(),
+  /** ITEM 5 ORDEN DE CIERRE — T.P. del Contador Público (formato '12345-T'). */
+  accountantTp: z.string().max(20).optional(),
   /** Períodos detectados en el archivo subido (e.g. ["2024","2025"]). */
   detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
 });

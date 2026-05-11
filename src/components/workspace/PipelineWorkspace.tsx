@@ -902,10 +902,36 @@ export function PipelineWorkspace() {
 
   useEffect(() => {
     if (!pipelineInput || lastProcessedInputRef.current === pipelineInput) return;
+    const isRerun = lastProcessedInputRef.current !== null;
     lastProcessedInputRef.current = pipelineInput;
     setError(null);
     setReport(null);
     setStreamedContent('');
+    // ITEM 4 ORDEN DE CIERRE — Reparación Fase 3 reconnection.
+    // En re-runs (regenerateWithAdjustments / markProvisional / reintento), las
+    // Fases 2 y 3 vuelven a correr — pero las fases anteriores dejaban estado
+    // residual: `auditFindings`, `qualityGrade`, `qualityScore`, `auditReport`,
+    // `qualityReport` seguían apuntando a la corrida ANTERIOR. El usuario veía
+    // el "Score 95/100" estancado hasta que la nueva corrida terminaba 3 min
+    // después. Aquí limpiamos TODO el estado audit + quality al inicio del
+    // re-run para que la UI refleje el progreso correctamente.
+    if (isRerun) {
+      setAuditReport(null);
+      setQualityReport(null);
+      setPipelineState((prev) => ({
+        ...prev,
+        mode: 'running',
+        currentStage: 1,
+        completedStages: [],
+        auditorsStarted: [],
+        auditorsComplete: [],
+        auditFindings: {},
+        qualityGrade: undefined,
+        qualityScore: undefined,
+        phase2Error: undefined,
+        phase3Error: undefined,
+      }));
+    }
     const controller = new AbortController();
 
     (async () => {
@@ -928,6 +954,14 @@ export function PipelineWorkspace() {
         const provisional = intakeWithExtras.provisional;
         const adjustmentLedger = intakeWithExtras.adjustmentLedger;
 
+        // ITEM 5 ORDEN DE CIERRE — propagar T.P. + C.C. al backend si están
+        // presentes en el intake. `companyExt` lookup defensivo: el shape del
+        // intake del workspace todavía puede no declararlos (campos nuevos).
+        const companyExt = pipelineInput.company as typeof pipelineInput.company & {
+          legalRepresentativeId?: string;
+          fiscalAuditorTp?: string;
+          accountantTp?: string;
+        };
         const phase1Body: Record<string, unknown> = {
           rawData: pipelineInput.rawData,
           company: {
@@ -937,8 +971,11 @@ export function PipelineWorkspace() {
             sector: pipelineInput.company.sector,
             city: pipelineInput.company.city,
             legalRepresentative: pipelineInput.company.legalRepresentative,
+            legalRepresentativeId: companyExt.legalRepresentativeId,
             fiscalAuditor: pipelineInput.company.fiscalAuditor,
+            fiscalAuditorTp: companyExt.fiscalAuditorTp,
             accountant: pipelineInput.company.accountant,
+            accountantTp: companyExt.accountantTp,
             niifGroup: pipelineInput.niifGroup,
             fiscalPeriod: pipelineInput.fiscalPeriod,
             comparativePeriod: pipelineInput.comparativePeriod,

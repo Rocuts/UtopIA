@@ -32,7 +32,8 @@ export type CuratorRuleCode =
   | 'CUR-R12'
   | 'CUR-R13'
   | 'CUR-R14'
-  | 'CUR-R15';
+  | 'CUR-R15'
+  | 'CUR-R16';
 
 export interface CuratorFinding {
   code: CuratorRuleCode;

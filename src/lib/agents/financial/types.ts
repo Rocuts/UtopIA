@@ -22,8 +22,12 @@
  * válido. La estructura tipada evita que el LLM invente T.P.s.
  */
 export interface Signatories {
-  /** Representante Legal — Ley 222/1995 art. 23 + Art. 196 C.Co. */
-  representanteLegal?: { nombre: string };
+  /**
+   * Representante Legal — Ley 222/1995 art. 23 + Art. 196 C.Co.
+   * `cedula` opcional (ITEM 5 ORDEN DE CIERRE): cuando está presente, los
+   * prompts y el renderer PDF la incluyen debajo del nombre como "C.C. XXX".
+   */
+  representanteLegal?: { nombre: string; cedula?: string };
   /** Revisor Fiscal — Ley 43/1990 art. 10. T.P. formato '12345-T'. */
   revisorFiscal?: { nombre: string; tp: string };
   /** Contador Público — Ley 43/1990 art. 13. T.P. formato '12345-T'. */
@@ -49,10 +53,26 @@ export interface CompanyInfo {
   city?: string;
   /** Representante legal (legacy — string simple). Mantener para retrocompat. */
   legalRepresentative?: string;
+  /**
+   * ITEM 5 ORDEN DE CIERRE — Cédula del Representante Legal.
+   * Aceptado en formato '80.123.456' o '80123456' (sin DV — la cédula no
+   * lleva dígito de verificación). Si falta, la firma usa placeholder.
+   */
+  legalRepresentativeId?: string;
   /** Revisor fiscal (legacy — string simple). Mantener para retrocompat. */
   fiscalAuditor?: string;
+  /**
+   * ITEM 5 ORDEN DE CIERRE — Tarjeta Profesional del Revisor Fiscal.
+   * Formato Junta Central de Contadores: '12345-T'. Ley 43/1990 Art. 3.
+   */
+  fiscalAuditorTp?: string;
   /** Contador publico (legacy — string simple). Mantener para retrocompat. */
   accountant?: string;
+  /**
+   * ITEM 5 ORDEN DE CIERRE — Tarjeta Profesional del Contador Público.
+   * Formato Junta Central de Contadores: '12345-T'. Ley 43/1990 Art. 13.
+   */
+  accountantTp?: string;
   /**
    * Firmantes estructurados (forma canónica). Coexiste con los strings legacy:
    * si ambos están presentes, `signatories` gana. Consumido por loaders

@@ -25,6 +25,12 @@ import { workspaces } from '@/lib/db/schema';
 
 export interface SignatoryName {
   nombre: string;
+  /**
+   * ITEM 5 ORDEN DE CIERRE — Cédula del Representante Legal.
+   * Opcional: cuando está presente, se renderiza en el bloque de firma.
+   * Formato sugerido '80.123.456'. Sin DV (la cédula no lleva DV).
+   */
+  cedula?: string;
 }
 
 export interface SignatoryWithCard {
@@ -190,8 +196,13 @@ export function renderSignatureBlock(s: Signatories | null): string {
   if (s.representanteLegal) {
     lines.push(s.representanteLegal.nombre);
     lines.push('Representante Legal');
+    // ITEM 5 ORDEN DE CIERRE — rinde la C.C. si la tenemos.
+    if (s.representanteLegal.cedula) {
+      lines.push(`C.C. ${s.representanteLegal.cedula}`);
+    }
   } else {
     lines.push('Representante Legal');
+    lines.push('C.C. ____________');
   }
 
   return lines.join('\n');
@@ -212,13 +223,16 @@ export function renderSignatureBlock(s: Signatories | null): string {
  */
 export function signatoriesFromCompany(company: {
   signatories?: {
-    representanteLegal?: { nombre: string };
+    representanteLegal?: { nombre: string; cedula?: string };
     revisorFiscal?: { nombre: string; tp: string };
     contadorPublico?: { nombre: string; tp: string };
   };
   legalRepresentative?: string;
+  legalRepresentativeId?: string;
   fiscalAuditor?: string;
+  fiscalAuditorTp?: string;
   accountant?: string;
+  accountantTp?: string;
 }): Signatories {
   const out: Signatories = {
     representanteLegal: null,
@@ -231,6 +245,7 @@ export function signatoriesFromCompany(company: {
     if (company.signatories.representanteLegal?.nombre) {
       out.representanteLegal = {
         nombre: company.signatories.representanteLegal.nombre,
+        cedula: company.signatories.representanteLegal.cedula,
       };
     }
     if (
@@ -253,15 +268,29 @@ export function signatoriesFromCompany(company: {
     }
   }
 
-  // Fallback a legacy strings si no hay forma canonica.
+  // ITEM 5 ORDEN DE CIERRE — Fallback a legacy strings.
+  // Cuando el caller sólo proporciona los strings legacy + los nuevos campos
+  // `legalRepresentativeId`, `fiscalAuditorTp`, `accountantTp`, construimos
+  // los slots estructurados desde ahí. Esto evita romper consumidores que
+  // todavía no migraron al shape canónico `signatories`.
   if (!out.representanteLegal && company.legalRepresentative) {
-    out.representanteLegal = { nombre: company.legalRepresentative };
+    out.representanteLegal = {
+      nombre: company.legalRepresentative,
+      cedula: company.legalRepresentativeId,
+    };
   }
-  // Legacy NO traia TP — solo se acepta como senial cualitativa, no se rellena
-  // el slot estructurado para no falsificar la TP. En su lugar dejamos null,
-  // y el renderer pinta el placeholder de TP.
-  // (Si en algun consumidor legacy hace falta no perder el nombre, abrir un
-  // slot intermedio en una iteracion posterior.)
+  if (!out.revisorFiscal && company.fiscalAuditor && company.fiscalAuditorTp) {
+    out.revisorFiscal = {
+      nombre: company.fiscalAuditor,
+      tp: company.fiscalAuditorTp,
+    };
+  }
+  if (!out.contadorPublico && company.accountant && company.accountantTp) {
+    out.contadorPublico = {
+      nombre: company.accountant,
+      tp: company.accountantTp,
+    };
+  }
 
   return out;
 }

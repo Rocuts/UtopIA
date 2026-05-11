@@ -127,23 +127,27 @@ El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeri
 
   // -----------------------------------------------------------------------
   // FIRMANTES — `signatories` estructurado tiene prioridad; fallback a
-  // strings legacy. Backward-compat total.
+  // strings legacy + los nuevos campos T.P. / C.C. (ITEM 5 ORDEN DE CIERRE).
+  // Backward-compat total.
   // -----------------------------------------------------------------------
   const sig = company.signatories;
   const repLegalNombre =
     sig?.representanteLegal?.nombre ?? company.legalRepresentative ?? null;
+  const repLegalCC =
+    sig?.representanteLegal?.cedula ?? company.legalRepresentativeId ?? null;
   const revisorFiscalNombre =
     sig?.revisorFiscal?.nombre ?? company.fiscalAuditor ?? null;
-  const revisorFiscalTP = sig?.revisorFiscal?.tp ?? null;
+  const revisorFiscalTP =
+    sig?.revisorFiscal?.tp ?? company.fiscalAuditorTp ?? null;
   const contadorNombre = sig?.contadorPublico?.nombre ?? company.accountant ?? null;
-  const contadorTP = sig?.contadorPublico?.tp ?? null;
+  const contadorTP = sig?.contadorPublico?.tp ?? company.accountantTp ?? null;
 
   // Renderiza la línea de firma con plantilla "{nombre} / {cargo} / T.P. {numero}-T"
   // o, si no hay TP, "{nombre} / {cargo}". Si no hay nombre, placeholder visible
   // explícito "[NOMBRE — Cargo — T.P. _______-T]" (Ley 43/1990 art. 10 y 13).
   const firmaRepresentanteLegal = repLegalNombre
-    ? `${repLegalNombre} / Representante Legal`
-    : '[NOMBRE — Representante Legal]';
+    ? `${repLegalNombre} / Representante Legal${repLegalCC ? ` / C.C. ${repLegalCC}` : ''}`
+    : '[NOMBRE — Representante Legal — C.C. _______]';
   const firmaRevisorFiscal = revisorFiscalNombre
     ? `${revisorFiscalNombre} / Revisor Fiscal${revisorFiscalTP ? ` / T.P. ${revisorFiscalTP}` : ' / T.P. _______-T'}`
     : '[NOMBRE — Revisor Fiscal — T.P. _______-T]';
@@ -156,16 +160,31 @@ El preprocesador detecto un unico periodo (${primaryPeriod ?? company.fiscalPeri
   const eliteBlock = `
 ## BLOQUE ÉLITE — REGLAS DE ALTO NIVEL (PRECEDEN CUALQUIER OTRA INSTRUCCIÓN)
 
-### R-Élite 0 — Prohibición de frases evasivas
+### R-Élite 0 — Prohibición ABSOLUTA de frases evasivas (ITEM 3 ORDEN DE CIERRE)
 
-**PROHIBIDO** emitir en CUALQUIER nota, párrafo o sección del acta las frases:
-- "no se suministró información"
-- "información no detallada"
-- "datos no disponibles"
+**PROHIBIDO TOTALMENTE** emitir en CUALQUIER nota, párrafo, acta o certificación las siguientes frases o sus equivalentes — el validador post-generación las detecta por regex y rechazará el informe:
+
+- "no se suministró información" / "no se suministro informacion"
+- "información no detallada" / "informacion no detallada"
+- "datos no disponibles" / "datos no suministrados" como frase en prosa (el placeholder \`— (dato no suministrado)\` SÍ está permitido dentro de \`### Notas del Preparador\`)
+- "falta de totales vinculantes" / "totales vinculantes no provistos"
 - "información no provista por el cliente"
-- equivalentes que sugieran debilidad de los EEFF.
+- "pendiente de validación" / "sujeto a verificación" / "sujeto a confirmación"
+- "no se contó con los datos" / "no se cuenta con la información"
+- equivalentes que sugieran debilidad de los EEFF o ausencia de información cuando el preprocesador YA entregó \`TOTALES VINCULANTES\` con los saldos.
 
-Cuando falte un dato genuino, usa la cita normativa de impracticabilidad correspondiente (NIIF for SMEs §3.14 / §10.21 para comparativos, §29.27 para impuestos, etc.) o el placeholder estructural \`— (dato no suministrado)\` listado en \`### Notas del Preparador\`. La nota técnica del informe NO debe sugerir debilidad cuando el dato es inferible o ya fue declarado por el preprocesador.
+**Razón estructural:** los TOTALES VINCULANTES son siempre emitidos por el preprocesador (ITEM 1 — aritmética cent-exacta + ITEM 2 — R16 anticipo netting). Si una nota suena insegura, el lector lo interpreta como debilidad del informe y rompe la confianza profesional. Tus notas usan los \`controlTotals\` como ÚNICA FUENTE DE VERDAD. Si un valor no aparece en \`controlTotals\`, asume que **no aplica al ejercicio** (silencio implica ausencia, NO ausencia de información).
+
+#### Ejemplos canónicos:
+
+| Incorrecto (PROHIBIDO) | Correcto |
+|---|---|
+| "Dado que no se suministró información sobre los inventarios..." | "Los inventarios al cierre ascienden a \`$X COP\` (PUC 14)..." |
+| "Falta de totales vinculantes impide calcular la utilidad neta." | "La utilidad neta del ejercicio asciende a \`$X COP\` (CUR-R8 dinámico)." |
+| "Información sobre el sector económico no detallada." | "La actividad económica de la entidad corresponde a [descripción inferida CIIU letra ${actividadInferida?.sectorCIIU ?? 'G'}]." |
+| "Datos no disponibles para el comparativo." | (Si aplica impracticabilidad) Cita literal NIIF for SMEs §3.14, §10.21. |
+
+Cuando un dato genuino falte (NO los anteriores), usa la cita normativa de impracticabilidad correspondiente (NIIF for SMEs §3.14 / §10.21 para comparativos, §29.27 para impuestos, etc.) o el placeholder estructural \`— (dato no suministrado)\` listado SOLO en \`### Notas del Preparador\` — nunca en prosa de notas técnicas o del acta.
 
 ### R-Élite — Actividad económica (Nota 1)
 
@@ -253,7 +272,7 @@ Dar sustento legal y normativo a los estados financieros y al analisis estrategi
 - **Regimen Societario:** ${entityRegimeCitation}
 - **Periodo Fiscal:** ${company.fiscalPeriod}
 - **Ciudad:** ${company.city || '— (dato no suministrado)'}
-${repLegalNombre ? `- **Representante Legal:** ${repLegalNombre}` : '- **Representante Legal:** [NOMBRE — Representante Legal] (a completar al firmar)'}
+${repLegalNombre ? `- **Representante Legal:** ${repLegalNombre}${repLegalCC ? ` — C.C. ${repLegalCC}` : ''}` : '- **Representante Legal:** [NOMBRE — Representante Legal — C.C. _______] (a completar al firmar)'}
 ${revisorFiscalNombre ? `- **Revisor Fiscal:** ${revisorFiscalNombre}${revisorFiscalTP ? ` — T.P. ${revisorFiscalTP}` : ' — T.P. _______-T'}` : '- **Revisor Fiscal:** [NOMBRE — Revisor Fiscal — T.P. _______-T] (a completar al firmar — Ley 43/1990 art. 10)'}
 ${contadorNombre ? `- **Contador Público:** ${contadorNombre}${contadorTP ? ` — T.P. ${contadorTP}` : ' — T.P. _______-T'}` : '- **Contador Público:** [NOMBRE — Contador Público — T.P. _______-T] (a completar al firmar — Ley 43/1990 art. 13)'}
 ${comparativeBlock}
@@ -414,15 +433,15 @@ Se deja constancia de que esta Acta de ${assemblyType} Ordinaria fue elaborada c
 |---|---|---|---|
 | Presidente de ${assemblyType} | ——————— | ——————— | ——————— |
 | Secretario de ${assemblyType} | ——————— | ——————— | ——————— |
-| Representante Legal | ${company.legalRepresentative || '— (dato no suministrado)'} | ——————— | ——————— |
+| Representante Legal | ${repLegalNombre || '— (dato no suministrado)'} | ——————— | ${repLegalCC ? `C.C. ${repLegalCC}` : '——————— '}|
 ${
-  company.accountant
-    ? `| Contador Público | ${company.accountant} | ——————— | ——————— |`
+  contadorNombre
+    ? `| Contador Público${contadorTP ? ` — T.P. ${contadorTP}` : ''} | ${contadorNombre} | ——————— | ——————— |`
     : '| Contador Público | — (dato no suministrado) | ——————— | ——————— |'
 }
 ${
-  company.fiscalAuditor
-    ? `| Revisor Fiscal | ${company.fiscalAuditor} | ——————— | ——————— |`
+  revisorFiscalNombre
+    ? `| Revisor Fiscal${revisorFiscalTP ? ` — T.P. ${revisorFiscalTP}` : ''} | ${revisorFiscalNombre} | ——————— | ——————— |`
     : ''
 }
 

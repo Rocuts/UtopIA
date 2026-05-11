@@ -148,6 +148,35 @@ export interface ControlTotalsRaw {
 }
 
 /**
+ * ITEM 2 — Sincronización Impuesto Renta (Elite Protocol Layer 2 + 3).
+ * Resultado de la R16 (`r16-tax-anticipo-netting`): bruto del pasivo
+ * (PUC 2404) − anticipo en activo (PUC 135515) = neto a pagar a la DIAN.
+ *
+ * Sustento NIIF + fiscal:
+ *   - NIC 12 §71 — compensación de impuestos corrientes cuando la entidad
+ *     tiene derecho legal exigible.
+ *   - Art. 850 E.T. — devolución / aplicación de saldos a favor.
+ *   - Práctica revisoría fiscal Ley 43/1990 — el "Neto a Pagar" es la
+ *     exposición real al fisco, no el bruto.
+ *
+ * Why: si la cuenta 2404 reporta $10M y la 135515 reporta $3.8M de anticipo,
+ * el revisor fiscal espera ver "Impuesto Renta — Neto a Pagar = $6.2M" en
+ * el Balance. Presentar sólo el bruto sobre-expone la posición fiscal del
+ * usuario y desinforma al órgano social. R16 NO muta 2404 ni 135515
+ * (siguen en el detalle); sólo expone el neto como ancla vinculante.
+ */
+export interface ImpuestoRentaNeto {
+  /** Saldo bruto del pasivo PUC 2404 (Impuesto de Renta por Pagar). */
+  brutoPasivo2404: number;
+  /** Saldo del anticipo PUC 135515 (Anticipos del Impuesto de Renta). */
+  anticipoActivo135515: number;
+  /** Neto = bruto − anticipo, presentación NIIF/NIC 12 §71. */
+  netoAPagar: number;
+  /** True si hay material netting (ambos saldos > 0 con tolerancia $1k). */
+  applicable: boolean;
+}
+
+/**
  * Totales de control — contrato numerico vinculante para los agentes.
  * Todos los campos son requeridos (0 si ausentes en la entrada).
  */
@@ -202,6 +231,13 @@ export interface ControlTotals {
   cents?: ControlTotalsCents;
   /** Strings canónicas leídas del archivo (auditoría del parser). */
   raw?: ControlTotalsRaw;
+  /**
+   * ITEM 2 — Neto del Impuesto de Renta (R16). Presente sólo cuando R16
+   * detecta saldos materiales en PUC 2404 (pasivo) y/o 135515 (activo).
+   * El NIIF Analyst lo cita literalmente en el Balance como "Impuesto Renta —
+   * Neto a Pagar" debajo del rubro de Impuestos Corrientes (Pasivo).
+   */
+  impuestoRentaNeto?: ImpuestoRentaNeto;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,6 +258,11 @@ export interface SnapshotFindings {
   ppeWithoutDepreciation?: boolean;
   /** R15 — comercializadora con clase 7 sin descargue 6135. */
   costeoIncompleto?: boolean;
+  /**
+   * R16 — anticipo de renta material (PUC 135515) que debe netearse contra
+   * el pasivo PUC 2404 para mostrar el "Neto a Pagar" al fisco.
+   */
+  anticipoRentaMaterial?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1059,7 +1100,10 @@ function buildSnapshotForPeriod(
   const discrepancies: Discrepancy[] = [];
 
   for (const [classCode, data] of classMap) {
-    const auxiliaryTotal = data.leaves.reduce((sum, r) => sum + r.balance, 0);
+    // ITEM 1 — cent-exact: acumulamos en BigInt centavos para evitar drift
+    // floating-point. La suma de auxiliares debe COINCIDIR al centavo con el
+    // total reportado del balance crudo cuando este es correcto.
+    const auxiliaryTotal = sumLeavesPrecise(data.leaves);
     const reportedTotal = data.reportedRow ? data.reportedRow.balance : null;
     const discrepancy = reportedTotal !== null ? Math.abs(auxiliaryTotal - reportedTotal) : 0;
 
@@ -1170,15 +1214,12 @@ function buildSnapshotForPeriod(
   // Why: el Art. 850 E.T. exige que un saldo a favor de renta se presente
   // como activo (1355 / 1805), nunca neteado contra el gasto (clase 54).
   // -------------------------------------------------------------------------
-  const saldo5404 = leafRows
-    .filter((r) => r.code.startsWith('5404'))
-    .reduce((s, r) => s + r.balance, 0);
-  const saldo1805 = leafRows
-    .filter((r) => r.code.startsWith('1805'))
-    .reduce((s, r) => s + r.balance, 0);
-  const saldo1355 = leafRows
-    .filter((r) => r.code.startsWith('1355'))
-    .reduce((s, r) => s + r.balance, 0);
+  // ITEM 1 — cent-exact: estos saldos se restan/comparan contra
+  // controlTotals al centavo (R16, art. 850 E.T.). Acumular en cents
+  // garantiza que el "Neto a Pagar" cuadre exactamente.
+  const saldo5404 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('5404')));
+  const saldo1805 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1805')));
+  const saldo1355 = sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1355')));
 
   let saldoAFavorImpuesto = 0;
   if (saldo5404 < 0) {
@@ -1906,17 +1947,46 @@ function buildMissingAccountsForView(
   return out;
 }
 
+/**
+ * Suma auxiliares filtrados por clase + grupo PUC con precisión al centavo.
+ *
+ * ITEM 1 — Aritmética cent-exacta (Elite Protocol Layer 1): la acumulación
+ * naïve en `number` introduce drift de centavos cuando se suman saldos con
+ * 2 decimales (típico balance NIIF). Acumulamos en BigInt centavos y
+ * convertimos al final dividiendo por 100. Resultado: la suma de los
+ * auxiliares coincide al centavo con el TOTAL ACTIVO reportado.
+ *
+ * Why: Johan exige que la SUMA DE AUXILIARES de Clase 1 (Efectivo, Inversiones,
+ * Deudores, Inventarios, Impuestos) cuadre exactamente con TOTAL ACTIVO al
+ * centavo. Sin acumulación en cents, `0.10 + 0.20 = 0.30000000000000004`
+ * propaga error por todo el balance.
+ */
 function sumLeavesByGroupPrefixes(
   leafRows: ViewRow[],
   classDigit: string,
   groupSet: Set<string>,
 ): number {
-  return leafRows.reduce((sum, r) => {
-    if (!r.code.startsWith(classDigit)) return sum;
+  let acc = BigInt(0);
+  for (const r of leafRows) {
+    if (!r.code.startsWith(classDigit)) continue;
     const grp = r.code.length >= 2 ? r.code.slice(0, 2) : r.code;
-    if (groupSet.has(grp)) return sum + r.balance;
-    return sum;
-  }, 0);
+    if (groupSet.has(grp)) acc += toCents(r.balance);
+  }
+  // Conversión BigInt → number: centavos → pesos. Para magnitudes <
+  // 2^53 / 100 ≈ $90 billones COP, no hay pérdida (suficiente para
+  // cualquier balance comercial colombiano realista).
+  return Number(acc) / 100;
+}
+
+/**
+ * Suma un subconjunto de leafRows con precisión al centavo. Helper común
+ * para R16 (anticipo netting) y otros consumers que necesitan precisión cents
+ * sin filtrar por grupo PUC.
+ */
+function sumLeavesPrecise(leafRows: ViewRow[]): number {
+  let acc = BigInt(0);
+  for (const r of leafRows) acc += toCents(r.balance);
+  return Number(acc) / 100;
 }
 
 function formatCOP(amount: number): string {

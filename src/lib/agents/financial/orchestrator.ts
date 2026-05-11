@@ -371,6 +371,35 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     `- Utilidad Neta (P&L) [= UAI − Impuesto]: ${fmtCop(totals.utilidadNeta)} COP`,
   );
 
+  // ITEM 2 ORDEN DE CIERRE — Impuesto Renta Neto a Pagar (Curator R16).
+  // Cuando hay anticipo material en PUC 135515 vs bruto en PUC 2404, exponemos
+  // el neto al LLM para que lo presente en el Balance debajo de "Impuestos
+  // Corrientes" (Pasivo). NIC 12 §71 + NIIF for SMEs §29.29 + Art. 850 E.T.
+  const totalsExtTax = totals as ControlTotalsInput & {
+    impuestoRentaNeto?: {
+      brutoPasivo2404: number;
+      anticipoActivo135515: number;
+      netoAPagar: number;
+      applicable: boolean;
+    };
+  };
+  const irn = totalsExtTax.impuestoRentaNeto;
+  if (irn && irn.applicable) {
+    lines.push('');
+    lines.push('## Impuesto de Renta — Neto a Pagar (Curator R16, NIC 12 §71 + Art. 850 E.T.)');
+    lines.push(
+      `- Bruto PUC 2404 (Impuesto de Renta por Pagar): ${fmtCop(irn.brutoPasivo2404)} COP.`,
+    );
+    lines.push(
+      `- (−) Anticipo PUC 135515 (Anticipo Renta — saldo en Activo): ${fmtCop(irn.anticipoActivo135515)} COP.`,
+    );
+    lines.push(
+      `- = NETO A PAGAR a la DIAN: ${fmtCop(irn.netoAPagar)} COP. ` +
+        `Esta es la cifra VINCULANTE que el Balance debe presentar en Pasivo Corriente — ` +
+        `Impuestos. NO uses el bruto. NIC 12 §71 + NIIF for SMEs §29.29 + Art. 850 E.T.`,
+    );
+  }
+
   const hasAnyBigFourField =
     typeof totals.efectivoCuenta11 === 'number' ||
     typeof totals.deudoresCuenta13 === 'number' ||

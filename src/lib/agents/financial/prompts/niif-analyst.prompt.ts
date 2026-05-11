@@ -52,6 +52,19 @@ export interface NiifAnalystEliteContext {
    * Sustento: NIIF for SMEs §29.27 + NIC 12 §58 + E.T. art. 850.
    */
   saldoAFavorImpuestoCents?: bigint;
+  /**
+   * ITEM 2 ORDEN DE CIERRE — Impuesto Renta Neto a Pagar (Curator R16).
+   * Cuando R16 detecta saldo material en PUC 135515 (Anticipo Renta — Activo)
+   * frente a PUC 2404 (Impuesto Renta por Pagar — Pasivo), el balance DEBE
+   * presentar el NETO en Pasivo Corriente. Sustento: NIC 12 §71 +
+   * NIIF for SMEs §29.29 + Art. 850 E.T. + Art. 855 E.T.
+   */
+  impuestoRentaNeto?: {
+    brutoPasivo2404: number;
+    anticipoActivo135515: number;
+    netoAPagar: number;
+    applicable: boolean;
+  };
 }
 
 export function buildNiifAnalystPrompt(
@@ -129,6 +142,19 @@ export function buildNiifAnalystPrompt(
         unknown as { saldoAFavorImpuesto?: bigint } | undefined)?.saldoAFavorImpuesto;
   const tieneSaldoAFavor =
     typeof saldoAFavorCents === 'bigint' && saldoAFavorCents > BigInt(0);
+
+  // ITEM 2 ORDEN DE CIERRE — Impuesto Renta Neto a Pagar (R16).
+  const impuestoRentaNeto =
+    elite?.impuestoRentaNeto
+    ?? (preprocessed?.primary?.controlTotals as
+        unknown as { impuestoRentaNeto?: {
+          brutoPasivo2404: number;
+          anticipoActivo135515: number;
+          netoAPagar: number;
+          applicable: boolean;
+        } } | undefined)?.impuestoRentaNeto;
+  const tieneAnticipoRentaMaterial =
+    !!impuestoRentaNeto && impuestoRentaNeto.applicable === true;
 
   // EFE indirecto — nombres REALES del curator R2:
   // `cashFlowIndirecto.operating.{varCuentasPorCobrar, varInventarios, varCuentasPorPagar}`.
@@ -236,6 +262,34 @@ ${
     : `Si \`controlTotals.cents.saldoAFavorImpuesto > 0n\`, presenta el saldo a favor SEPARADO en cuenta PUC 1355 / 1805 dentro del Activo, NUNCA neteado contra el gasto causado del P&L. Cita "NIIF for SMEs §29.27 + NIC 12 §58 + E.T. art. 850". Si el campo es 0 o ausente, no añadir esta nota.`
 }
 
+### R-Élite 3.b — Impuesto de Renta Neto a Pagar (NIC 12 §71 + Art. 850 E.T. + Art. 855 E.T.)
+
+${
+  tieneAnticipoRentaMaterial && impuestoRentaNeto
+    ? `El preprocesador detectó un ANTICIPO MATERIAL del impuesto de renta:
+
+- PUC 2404 (Impuesto de Renta por Pagar — Pasivo) bruto: \`${impuestoRentaNeto.brutoPasivo2404.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} COP\`.
+- PUC 135515 (Anticipo del Impuesto de Renta — Activo): \`${impuestoRentaNeto.anticipoActivo135515.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} COP\`.
+- **Neto a Pagar = bruto − anticipo = \`${impuestoRentaNeto.netoAPagar.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} COP\`**.
+
+DEBES presentar el Balance de Situación Financiera con TRES líneas explícitas dentro del Pasivo Corriente, rubro "Impuestos Corrientes":
+
+\`\`\`
+Impuesto de Renta — Bruto (PUC 2404)         $${impuestoRentaNeto.brutoPasivo2404.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+(-) Anticipo aplicable (PUC 135515)          $${impuestoRentaNeto.anticipoActivo135515.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+= Impuesto de Renta — Neto a Pagar           $${impuestoRentaNeto.netoAPagar.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+\`\`\`
+
+Reglas inviolables:
+
+1. El **Total Pasivo Corriente** debe incluir SOLO el Neto a Pagar (NO el bruto). El detalle bruto + anticipo es informativo presentacional.
+2. La cuenta 135515 (Anticipo en Activo) se NETEA contra 2404 (Bruto en Pasivo) — NO la presentes adicionalmente como Activo Corriente. NIC 12 §71 permite compensación porque la entidad tiene derecho legal exigible (Art. 855 E.T.) y la intención de liquidar neto contra la DIAN.
+3. Insertar nota técnica con cita LITERAL en \`## 5. NOTAS TECNICAS\`:
+
+   > **Nota — Impuesto de Renta Neto a Pagar (NIC 12 §71 + Art. 850 E.T.).** Conforme a NIC 12 §71 + NIIF for SMEs §29.29, el saldo del Impuesto de Renta corriente se presenta NETO en el Pasivo Corriente (\`$${impuestoRentaNeto.netoAPagar.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\`) por cuanto la entidad tiene el derecho legal exigible (Art. 855 E.T. — devolución del anticipo) y la intención de liquidar neto contra la DIAN. El bruto del pasivo (\`$${impuestoRentaNeto.brutoPasivo2404.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\`) y el anticipo en activo (\`$${impuestoRentaNeto.anticipoActivo135515.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\`) se conservan en el detalle de auxiliares para auditoría. Defensa Art. 647 E.T.: la presentación neto-bruto es estricta lectura técnica de la NIC 12; cualquier diferencia con liquidación DIAN configura "diferencia de criterio" no sancionable.`
+    : `Si \`controlTotals.impuestoRentaNeto.applicable === true\`, presenta SIEMPRE el Balance con la desagregación Bruto (PUC 2404) − Anticipo (PUC 135515) = Neto a Pagar dentro de Pasivo Corriente — Impuestos Corrientes. El Total Pasivo Corriente DEBE usar el Neto. NIC 12 §71 + Art. 850/855 E.T. PROHIBIDO presentar el bruto como pasivo final cuando hay anticipo material en 135515: eso sobre-expone fiscalmente al usuario. Si el campo está ausente o \`applicable === false\`, omitir esta presentación.`
+}
+
 ### R-Élite 4 — Reclasificaciones No Compensación (NIIF for SMEs §2.52)
 
 ${
@@ -326,13 +380,16 @@ Clasifica TODAS las cuentas siguiendo el Plan Unico de Cuentas:
 - **Formula:** Utilidad Neta = Clase 4 (total) - Clase 6 (total) - Clase 5 (total).
 - Cuando leas las columnas del CSV, asegurate de distinguir: la columna de CODIGO (identificador numerico de la cuenta) de la columna de SALDO (valor monetario).
 
-### AUTORIDAD DEL BLOQUE TOTALES VINCULANTES
+### AUTORIDAD DEL BLOQUE TOTALES VINCULANTES (ITEM 1 — Aritmética cent-exacta)
 
-Si las instrucciones del orquestador incluyen un bloque **"TOTALES VINCULANTES"** (o su equivalente "TOTALES PRE-CALCULADOS"), esos valores fueron calculados con precision decimal desde las cuentas auxiliares por un modulo aritmetico determinista (sin LLM). Son **AUTORITARIOS**:
+Si las instrucciones del orquestador incluyen un bloque **"TOTALES VINCULANTES"** (o su equivalente "TOTALES PRE-CALCULADOS"), esos valores fueron calculados con precisión **al centavo (BigInt cents)** desde las cuentas auxiliares por un módulo aritmético determinista (sin LLM). Son **AUTORITARIOS**:
 
-- Tus estados financieros DEBEN reproducir esos totales sin desviacion material.
-- **Si tu clasificacion produce un numero que difiere de los TOTALES VINCULANTES por mas del 1%, el error esta en tu clasificacion — nunca en el preprocesador.** Corrige tu mapeo: probablemente una cuenta fue asignada a la clase incorrecta, o confundiste un codigo con un saldo (ver regla anterior).
-- Las cifras de Total Activo, Total Pasivo, Total Patrimonio, Utilidad Neta del Ejercicio e Ingresos Operacionales DEBEN anclarse a este bloque. Si el bloque no existe, anclalas al balance de prueba crudo.
+- Tus estados financieros DEBEN reproducir esos totales **sin desviación al centavo**. Tolerancia: $0,01 COP.
+- **NO RE-CALCULES los totales desde el balance crudo.** El preprocesador ya sumó los auxiliares en BigInt cents (ITEM 1 — Elite Protocol Layer 1) y la SUMA DE AUXILIARES es la única fuente de verdad. Si el "TOTAL ACTIVO" del balance crudo difiere de la suma de auxiliares, **prevalece la suma de auxiliares** y debes registrar la discrepancia como nota técnica explícita (no en silencio).
+- **No redondees.** Mantén formato \`$1.234.567,89\` con dos decimales en todas las cifras de los estados financieros y notas.
+- **Si tu clasificación produce un número que difiere de los TOTALES VINCULANTES por más de $0,01, el error está en tu clasificación — nunca en el preprocesador.** Corrige tu mapeo: probablemente una cuenta fue asignada a la clase incorrecta, o confundiste un código con un saldo (ver regla anterior).
+- Las cifras de Total Activo, Total Pasivo, Total Patrimonio, Utilidad Neta del Ejercicio e Ingresos Operacionales DEBEN anclarse a este bloque. Si el bloque no existe, ancla al balance de prueba crudo.
+- La ecuación patrimonial \`Activo = Pasivo + Patrimonio\` debe cuadrar al centavo (partida doble). Si los TOTALES VINCULANTES la cumplen al centavo, tu reporte también — sin excepciones.
 - NUNCA inventes una cifra global desde memoria del modelo. Ver Guardarrail Anti-Alucinacion seccion 5.
 
 ### REGLA DE SIGNOS — PRESENTACIÓN VISUAL ABSOLUTA
