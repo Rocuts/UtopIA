@@ -368,6 +368,12 @@ interface ReportViewerProps {
    * Fase 3. Habilita QualityMetaAuditPage en el PDF editorial.
    */
   qualityReport?: BackendQualityAssessment | null;
+  /**
+   * Toggle del intake (10 entregables destildables). Se reenvía al export
+   * endpoint para que EditorialReportDoc omita las páginas correspondientes.
+   * Si null/undefined → el PDF incluye TODO (default histórico).
+   */
+  outputOptions?: NiifReportIntake['outputOptions'] | null;
   onReset?: () => void;
   onPatchReport?: (newConsolidatedMarkdown: string) => void;
   onTurnsChange?: (turns: ReportIterationTurn[]) => void;
@@ -395,6 +401,7 @@ function ReportViewer({
   initialTurns,
   auditReport,
   qualityReport,
+  outputOptions,
   onReset,
   onPatchReport,
   onTurnsChange,
@@ -492,6 +499,10 @@ function ReportViewer({
           // tolera null/undefined (las páginas se omiten en el render).
           auditReport: auditReport ?? null,
           qualityReport: qualityReport ?? null,
+          // Toggle de los 10 entregables del intake. Si undefined el PDF
+          // incluye todo (default). Si presente, EditorialReportDoc gatea
+          // cada página según el flag correspondiente.
+          outputOptions: outputOptions ?? null,
           format: 'pdf-elite',
         }),
       });
@@ -523,7 +534,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, rawData, company, language, auditReport, qualityReport, isExportingPdf]);
+  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -1353,6 +1364,7 @@ export function PipelineWorkspace() {
             initialTurns={initialTurns}
             auditReport={auditReport}
             qualityReport={qualityReport}
+            outputOptions={pipelineInput?.outputOptions ?? null}
             onReset={handleReset}
             onPatchReport={handlePatchReport}
             onTurnsChange={handleTurnsChange}

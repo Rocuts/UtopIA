@@ -74,6 +74,25 @@ export function EditorialReportDoc({ doc }: Props) {
     doc.directorLetter && doc.directorLetter.bodyMarkdown.trim().length > 0;
   const hasPillars = !!doc.pillars;
 
+  // Toggle del intake — cuando undefined, todo se renderiza (default
+  // histórico para callers que no envían el toggle, p.ej. tests). Cuando
+  // presente, cada flag false omite la página correspondiente. `?? true`
+  // garantiza que un flag ausente equivale a "incluir" — solo se omite
+  // si está EXPLÍCITAMENTE en false.
+  const opts = doc.outputOptions;
+  const showStatements = opts?.financialStatements ?? true;
+  const showKpi = opts?.kpiDashboard ?? true;
+  const showCashFlowProj = opts?.cashFlowProjection ?? true;
+  const showBreakEven = opts?.breakevenAnalysis ?? true;
+  const showNotes = opts?.notesToFinancialStatements ?? true;
+  const showShareholderMinutes = opts?.shareholdersMinutes ?? true;
+  // Audit + Quality son adicionalmente gated por la presencia del reporte
+  // (su pipeline tuvo que correr). El toggle aquí es una segunda barrera
+  // — si el usuario destildó el output pero el pipeline corrió igual,
+  // respetamos su decisión y no renderizamos.
+  const showAudit = (opts?.auditPipeline ?? true) && !!doc.auditFindings;
+  const showQuality = (opts?.metaAudit ?? true) && !!doc.qualityScores;
+
   return (
     <Document
       title={`UtopIA · Reporte NIIF Élite · ${doc.meta.companyName}`}
@@ -83,22 +102,25 @@ export function EditorialReportDoc({ doc }: Props) {
       <CoverPage doc={doc} />
       {hasDirectorBody && <DirectorLetter doc={doc} />}
       <TocPage doc={doc} />
-      <KPIGridPage doc={doc} />
-      <SectionDivider
-        areaAccent="valor"
-        sectionTitle="Estados"
-        sectionEmphasis="financieros"
-      />
+      {showKpi && <KPIGridPage doc={doc} />}
+      {showStatements && (
+        <SectionDivider
+          areaAccent="valor"
+          sectionTitle="Estados"
+          sectionEmphasis="financieros"
+        />
+      )}
       {/* StatementsPages returns array of 4 <Page> elements */}
-      {StatementsPages({ doc })}
-      <WaterfallPnLPage doc={doc} />
-      <DialGaugePage doc={doc} />
+      {showStatements && StatementsPages({ doc })}
+      {showKpi && <WaterfallPnLPage doc={doc} />}
+      {showKpi && <DialGaugePage doc={doc} />}
       {/* Punto de Equilibrio + Flujo de Caja Proyectado — narrative pages from
           strategicAnalysis. Each renders null when its IR field is undefined
           (composer emits the field only when the agent produced non-empty
-          markdown), so omission is automatic. */}
-      <BreakEvenPage doc={doc} />
-      <ProjectedCashFlowPage doc={doc} />
+          markdown), so omission is automatic. Toggle es una segunda capa
+          de gating sobre el ya implícito del composer. */}
+      {showBreakEven && <BreakEvenPage doc={doc} />}
+      {showCashFlowProj && <ProjectedCashFlowPage doc={doc} />}
       {hasPillars && (
         <SectionDivider
           areaAccent="verdad"
@@ -108,17 +130,17 @@ export function EditorialReportDoc({ doc }: Props) {
       )}
       {hasPillars && <OrbitalPillarsPage doc={doc} />}
       {/* NotesPage returns array, one per block */}
-      {NotesPage({ doc })}
+      {showNotes && NotesPage({ doc })}
       <RecommendationsPage doc={doc} />
       {/* Acta de Asamblea — governance.shareholderMinutes (Art. 187 Ley 222/1995).
-          Omitida si el agente de Gobierno no produjo borrador. */}
-      <ShareholderMinutesPage doc={doc} />
+          Omitida si el agente de Gobierno no produjo borrador o el usuario
+          destildó el toggle. */}
+      {showShareholderMinutes && <ShareholderMinutesPage doc={doc} />}
       {/* Auditoría Especializada (4 auditores NIA 700/705/706) + Meta-auditoría
-          de Calidad (ISO 25012/42001/IFRS 18). Pipelines opcionales — cada
-          página retorna null si el composer no recibió el reporte de su
-          pipeline (usuario destildó el output o falló la corrida). */}
-      <AuditFindingsPage doc={doc} />
-      <QualityMetaAuditPage doc={doc} />
+          de Calidad (ISO 25012/42001/IFRS 18). Gating dual: toggle + presencia
+          del reporte respectivo en el IR. */}
+      {showAudit && <AuditFindingsPage doc={doc} />}
+      {showQuality && <QualityMetaAuditPage doc={doc} />}
       <NormativeAppendix doc={doc} />
       <ClosingPage doc={doc} />
     </Document>

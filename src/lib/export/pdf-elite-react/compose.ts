@@ -26,6 +26,7 @@ import type {
   KpiCell,
   KpiGridSpec,
   NormCitation,
+  OutputOptionsToggle,
   ParsedTable,
   ParsedTableRow,
   PillarSatellite,
@@ -80,6 +81,12 @@ export interface ComposeInput {
    * IFRS 18 + ISO 25012 + ISO 42001. Si undefined la página se omite.
    */
   qualityReport?: QualityAssessment | null;
+  /**
+   * Toggle del intake — qué entregables incluir en el PDF. Si undefined
+   * EditorialReportDoc renderiza el set completo (comportamiento histórico).
+   * Si presente, cada flag false omite la(s) página(s) correspondiente(s).
+   */
+  outputOptions?: OutputOptionsToggle | null;
 }
 
 export function composeEditorialReport(input: ComposeInput): EditorialReport {
@@ -92,6 +99,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     dictamen,
     auditReport,
     qualityReport,
+    outputOptions,
   } = input;
 
   const meta = buildMeta(report, language, emittable, preprocessed);
@@ -127,6 +135,13 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     appendix,
     signatureBlock,
   };
+
+  if (outputOptions) {
+    // Almacenamos el toggle en el IR. EditorialReportDoc lo lee y gatea
+    // cada página. No mutamos data (statements/notes/etc. siguen siendo
+    // canónicos); solo metadata de render.
+    out.outputOptions = outputOptions;
+  }
 
   if (pillarsSpec) {
     out.pillars = pillarsSpec;

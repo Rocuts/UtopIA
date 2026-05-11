@@ -310,11 +310,50 @@ export interface EmphasisParagraphSpec {
   bodyMarkdown: string;
 }
 
+/**
+ * Toggle del intake — controla qué páginas del PDF renderizar. El usuario
+ * destilda entregables en la pantalla "Configuración del Reporte" (paso 3
+ * de NiifReportIntake). Se propaga al export y EditorialReportDoc gatea cada
+ * página con el flag correspondiente. Si undefined → renderiza TODO (modo
+ * defensivo: si el cliente no envía toggles, asumimos el set completo).
+ *
+ * Mapeo flag → página(s):
+ *   financialStatements      → SectionDivider "Estados" + StatementsPages
+ *   kpiDashboard             → KPIGridPage + DialGaugePage + WaterfallPnLPage
+ *   cashFlowProjection       → ProjectedCashFlowPage
+ *   breakevenAnalysis        → BreakEvenPage
+ *   notesToFinancialStatements → NotesPage
+ *   shareholdersMinutes      → ShareholderMinutesPage
+ *   auditPipeline            → (ya gated por auditFindings spec)
+ *   metaAudit                → (ya gated por qualityScores spec)
+ *   excelExport              → N/A (botón separado, no PDF)
+ *   comparativeAnalysis      → columnas comparativas dentro de StatementsPages
+ *                              (implícito — siempre se renderiza si existen)
+ */
+export interface OutputOptionsToggle {
+  financialStatements?: boolean;
+  kpiDashboard?: boolean;
+  cashFlowProjection?: boolean;
+  breakevenAnalysis?: boolean;
+  notesToFinancialStatements?: boolean;
+  shareholdersMinutes?: boolean;
+  auditPipeline?: boolean;
+  metaAudit?: boolean;
+  excelExport?: boolean;
+  comparativeAnalysis?: boolean;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // EditorialReport — IR canónico que recibe EditorialReportDoc.
 // ───────────────────────────────────────────────────────────────────────────
 export interface EditorialReport {
   meta: ReportMeta;
+  /**
+   * Toggle del intake — si undefined, EditorialReportDoc renderiza el set
+   * completo (default histórico). Si presente, cada página se gatea contra
+   * el flag correspondiente.
+   */
+  outputOptions?: OutputOptionsToggle;
   cover: CoverSpec;
   toc: TocSpec;
   directorLetter: DirectorLetterSpec;

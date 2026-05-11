@@ -18,6 +18,7 @@ import { aggregatePillars } from '@/lib/pillars/service';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
+import type { OutputOptionsToggle } from '@/lib/export/pdf-elite-react/types';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/export
@@ -203,6 +204,8 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     // omitted by the composer (page-level null guards take care of it).
     auditReport?: AuditReport | null;
     qualityReport?: QualityAssessment | null;
+    // Toggle del intake — qué entregables incluir. Omitido o null = todos.
+    outputOptions?: OutputOptionsToggle | null;
   };
 
   // FAST PATH: client already has a completed FinancialReport in state (e.g.
@@ -242,6 +245,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       language,
       auditReport: b.auditReport ?? null,
       qualityReport: b.qualityReport ?? null,
+      outputOptions: b.outputOptions ?? null,
     });
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, report.company.name);
