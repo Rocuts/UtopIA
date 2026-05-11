@@ -1166,30 +1166,29 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       type="button"
                       onClick={handleNewChat}
                       className={cn(
-                        'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono shrink-0',
+                        'flex items-center justify-center w-7 h-7 rounded shrink-0',
                         'text-n-700 hover:text-n-1000 hover:bg-gold-500/6',
                         'transition-colors',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
                       )}
+                      aria-label={labels.new}
                       title={labels.new}
                     >
-                      <Plus className="w-3 h-3 text-gold-500" />
-                      <span className="hidden sm:inline">{labels.new}</span>
+                      <Plus className="w-3.5 h-3.5 text-gold-500" />
                     </button>
                     <Link
                       href="/workspace/contabilidad"
                       prefetch={false}
                       className={cn(
-                        'flex items-center gap-1.5 px-2 py-1 rounded text-xs-mono shrink-0',
+                        'flex items-center justify-center w-7 h-7 rounded shrink-0',
                         'text-n-700 hover:text-n-1000 hover:bg-gold-500/6',
                         'transition-colors',
                         'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
                       )}
+                      aria-label={language === 'es' ? 'Contabilidad' : 'Accounting'}
                       title={language === 'es' ? 'Contabilidad' : 'Accounting'}
                     >
-                      <BookOpen className="w-3 h-3 text-gold-500" />
-                      <span className="hidden sm:inline">
-                        {language === 'es' ? 'Contabilidad' : 'Accounting'}
-                      </span>
+                      <BookOpen className="w-3.5 h-3.5 text-gold-500" />
                     </Link>
                     <span
                       className="shrink-0 text-[10px] font-mono uppercase tracking-eyebrow text-n-700 px-2 py-0.5 rounded-full border border-gold-500/15 truncate"
@@ -1204,13 +1203,15 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                       type="button"
                       onClick={handleNewChat}
                       className={cn(
-                        'flex items-center gap-1 px-2 py-1 rounded text-xs-mono',
-                        'text-n-600 hover:text-n-900 hover:bg-gold-500/6',
+                        'flex items-center justify-center w-7 h-7 rounded shrink-0 ml-2',
+                        'text-n-700 hover:text-n-1000 hover:bg-gold-500/6',
                         'transition-colors',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
                       )}
+                      aria-label={labels.clear}
                       title={labels.clear}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
