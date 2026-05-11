@@ -96,9 +96,10 @@ export function IntakeModal() {
           transition={{ duration: 0.2 }}
           className="fixed inset-0 z-[100] flex items-center justify-center bg-n-1000/50 backdrop-blur-sm"
           role="presentation"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) handleClose();
-          }}
+          // INTENTIONAL: no backdrop-click close. Intake modals contain forms
+          // with user-typed data + uploaded files; a misclick on the empty band
+          // around the modal would lose all progress silently. Close paths are:
+          // (1) explicit X button, (2) ESC via useFocusTrap, (3) handleSubmit.
         >
           <motion.div
             key="intake-container"
