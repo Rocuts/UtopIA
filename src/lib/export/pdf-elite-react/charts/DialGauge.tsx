@@ -1,15 +1,17 @@
-// charts/DialGauge.tsx — semicircle gauge with 3 colored zones + needle.
-// Hand-coded SVG. Self-contained.
+// charts/DialGauge.tsx — Semicircle gauge with 3 colored zones + needle.
+// Hand-coded SVG. Palette: SAGE_500 (low zone) → SAND_500 (mid) → WINE_700 (high).
+// Track: SAND_200. Needle + center dot: FOREST_900.
+// Spec §3.8: arc width 14pt, numeral Fraunces 32pt FOREST_900.
 import React from 'react';
 import { Svg, Path, Line, Circle, Text as SvgText, G } from '@react-pdf/renderer';
 import type { DialGaugeSpec } from '../types';
 import {
-  WINE_500,
-  GOLD_400,
-  AREA_VALOR,
-  N1000,
-  N700,
-  N300,
+  CHARCOAL_700,
+  FOREST_900,
+  SAGE_500,
+  SAND_200,
+  SAND_500,
+  WINE_700,
 } from '../tokens';
 
 interface Props {
@@ -17,26 +19,14 @@ interface Props {
   size?: number;
 }
 
-/**
- * Polar -> cartesian for a semicircle from 180° (left) to 0° (right).
- * Angle in degrees: 180 = left, 90 = top, 0 = right.
- */
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (Math.PI / 180) * angleDeg;
   return {
     x: cx + r * Math.cos(rad),
-    // SVG y grows downward; we want "top" at angle=90 to be visually up,
-    // so y = cy - r * sin(angle).
     y: cy - r * Math.sin(rad),
   };
 }
 
-/**
- * SVG arc path from `startAngle` to `endAngle` (degrees, 180→0 sweep).
- * Uses A (elliptical arc) command. For a half-circle going clockwise from
- * 180° down to 0°, we sweep flag = 0 (counter-clockwise in SVG screen coords
- * because we inverted Y). This is the conventional editorial gauge orientation.
- */
 function arcPath(
   cx: number,
   cy: number,
@@ -47,7 +37,6 @@ function arcPath(
   const start = polar(cx, cy, r, startAngle);
   const end = polar(cx, cy, r, endAngle);
   const largeArcFlag = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
-  // sweep 0 because Y is inverted (visual screen coords)
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
 }
 
@@ -57,30 +46,33 @@ function clamp(v: number, lo: number, hi: number) {
 
 export function DialGauge({ gauge, size = 180 }: Props) {
   const W = size;
-  const H = size * 0.78; // semicircle + room for label
+  const H = size * 0.78;
   const cx = W / 2;
   const cy = H * 0.78;
   const radius = size * 0.42;
-  const arcThickness = Math.max(8, size * 0.07);
+  // Spec §3.8: arc width 14pt. Scale with gauge size proportionally from 180pt base.
+  const arcThickness = Math.round(14 * (size / 180));
 
   const { value, min, max, thresholds, label, caption } = gauge;
   const [low, mid, high] = thresholds;
 
-  // Map value range [min, max] to angle range [180°, 0°]
   function valueToAngle(v: number): number {
     const t = clamp((v - min) / (max - min || 1), 0, 1);
     return 180 - t * 180;
   }
 
-  // Three zones
+  // Zone colors per spec §3.8: SAGE_500 (low) → SAND_500 (mid) → WINE_700 (high)
   const zones: Array<{ from: number; to: number; color: string }> = [
-    { from: min, to: low, color: WINE_500 },
-    { from: low, to: mid, color: GOLD_400 },
-    { from: mid, to: high, color: AREA_VALOR },
+    { from: min, to: low, color: SAGE_500 },
+    { from: low, to: mid, color: SAND_500 },
+    { from: mid, to: high, color: WINE_700 },
   ];
 
   const needleAngle = valueToAngle(value);
   const needleEnd = polar(cx, cy, radius - arcThickness / 2, needleAngle);
+
+  // Spec §3.8: numeral Fraunces 32pt FOREST_900 (from size 180 baseline)
+  const numeralSize = Math.round(32 * (size / 180));
 
   const valueText =
     Math.abs(value) >= 100
@@ -91,19 +83,18 @@ export function DialGauge({ gauge, size = 180 }: Props) {
 
   return (
     <Svg width={W} height={H + 36}>
-      {/* Background arc (full track, lightly tinted) */}
+      {/* Background arc track — SAND_200 (spec §3.8) */}
       <Path
         d={arcPath(cx, cy, radius, 180, 0)}
-        stroke={N300}
+        stroke={SAND_200}
         strokeWidth={arcThickness}
         fill="none"
       />
 
-      {/* Three colored zones */}
+      {/* Three colored zone arcs */}
       {zones.map((z, i) => {
         const a1 = valueToAngle(z.from);
         const a2 = valueToAngle(z.to);
-        // Skip degenerate zones (from === to) — they'd produce zero-length arcs
         if (Math.abs(a1 - a2) < 0.5) return null;
         return (
           <Path
@@ -116,57 +107,69 @@ export function DialGauge({ gauge, size = 180 }: Props) {
         );
       })}
 
-      {/* Needle */}
+      {/* Needle — FOREST_900 (spec §3.8) */}
       <Line
         x1={cx}
         y1={cy}
         x2={needleEnd.x}
         y2={needleEnd.y}
-        stroke={N1000}
+        stroke={FOREST_900}
         strokeWidth={2}
       />
-      <Circle cx={cx} cy={cy} r={4} fill={N1000} />
+      <Circle cx={cx} cy={cy} r={4} fill={FOREST_900} />
 
-      {/* Big numeric */}
+      {/* Numeral — Fraunces, FOREST_900 (spec §3.8) */}
       <SvgText
         x={cx}
         y={cy + 4}
         style={{
           fontFamily: 'Fraunces',
           fontWeight: 700,
-          fontSize: size * 0.13,
-          fill: N1000,
+          fontSize: numeralSize,
+          fill: FOREST_900,
           textAnchor: 'middle',
         }}
       >
         {valueText}
       </SvgText>
 
-      {/* Label uppercase letterspaced */}
+      {/* Label — Geist 12pt 600 FOREST_900 (spec §3.8) */}
       <SvgText
         x={cx}
         y={H + 14}
         style={{
           fontFamily: 'Geist',
-          fontSize: 8,
-          fill: N700,
+          fontSize: Math.round(12 * (size / 180)),
+          fill: FOREST_900,
           textAnchor: 'middle',
-          letterSpacing: 1,
-          textTransform: 'uppercase',
+          letterSpacing: 0.3,
+          fontWeight: 600,
         }}
       >
         {label}
       </SvgText>
 
+      {/* SAND_200 underline 50pt (spec §3.8) */}
+      <Line
+        x1={cx - 25}
+        y1={H + 20}
+        x2={cx + 25}
+        y2={H + 20}
+        strokeWidth={0.5}
+        stroke={SAND_200}
+      />
+
+      {/* Caption — Geist 9pt CHARCOAL_700 italic (spec §3.8) */}
       {caption && (
         <SvgText
           x={cx}
-          y={H + 26}
+          y={H + 30}
           style={{
             fontFamily: 'Geist',
-            fontSize: 7,
-            fill: N300,
+            fontSize: Math.round(9 * (size / 180)),
+            fill: CHARCOAL_700,
             textAnchor: 'middle',
+            fontStyle: 'italic',
           }}
         >
           {caption}

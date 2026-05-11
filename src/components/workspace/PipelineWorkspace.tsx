@@ -389,6 +389,7 @@ function ReportViewer({
 }: ReportViewerProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
   const [showDiff, setShowDiff] = useState(false);
@@ -451,12 +452,60 @@ function ReportViewer({
   }, [report, rawData, isExportingExcel, language]);
 
   // ─── Exportar PDF ────────────────────────────────────────────────────────
-  // MVP: window.print() + hoja de estilos @media print inyectada abajo.
-  const handlePrintPdf = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.print();
+  // POST /api/financial-report/export con { report, rawData, company,
+  // language, format:'pdf-elite' } — el endpoint reutiliza el reporte que el
+  // cliente ya tiene en estado (fast-path: sin re-correr los 3 agentes) y
+  // responde con un .pdf editorial multipágina.
+  //
+  // Antes este botón llamaba window.print() y solo imprimía la primera página
+  // porque el contenedor `flex-1 overflow-y-auto` ancestro hijacka el viewport
+  // de impresión. Renderizar server-side con @react-pdf/renderer elimina ese
+  // problema porque las páginas las define el documento, no el browser.
+  const handleExportPdf = useCallback(async () => {
+    if (!report || isExportingPdf) return;
+    setIsExportingPdf(true);
+    setExportError(null);
+    try {
+      const res = await fetch('/api/financial-report/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report,
+          rawData,
+          company,
+          language,
+          format: 'pdf-elite',
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? ' — ' + errBody.slice(0, 200) : ''}`);
+      }
+
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] || `Reporte_Editorial_${Date.now()}.pdf`;
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      setExportError(
+        language === 'es'
+          ? `No se pudo generar el PDF: ${msg}`
+          : `Could not generate PDF: ${msg}`,
+      );
+    } finally {
+      setIsExportingPdf(false);
     }
-  }, []);
+  }, [report, rawData, company, language, isExportingPdf]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -603,12 +652,24 @@ function ReportViewer({
           </button>
           <button
             type="button"
-            onClick={handlePrintPdf}
-            aria-label={language === 'es' ? 'Exportar a PDF (Imprimir)' : 'Export to PDF (Print)'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-n-200 text-n-600 text-xs font-medium hover:bg-n-50 transition-colors"
+            onClick={handleExportPdf}
+            disabled={isExportingPdf || !report}
+            aria-label={language === 'es' ? 'Exportar a PDF editorial' : 'Export to editorial PDF'}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
+              isExportingPdf || !report
+                ? 'border-n-200 text-n-400 cursor-not-allowed'
+                : 'border-n-200 text-n-700 hover:bg-n-50 hover:text-n-1000',
+            )}
           >
-            <FileText className="w-3.5 h-3.5" />
-            {language === 'es' ? 'Exportar PDF' : 'Export PDF'}
+            {isExportingPdf ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileText className="w-3.5 h-3.5" />
+            )}
+            {isExportingPdf
+              ? language === 'es' ? 'Generando PDF...' : 'Generating PDF...'
+              : language === 'es' ? 'Exportar PDF' : 'Export PDF'}
           </button>
           <button
             type="button"

@@ -1,6 +1,14 @@
 // EditorialTitle.tsx — Mixed-weight display title with optional shaded
 // keyword box. Emulates the ESLOP CI editorial signature ("Informe DE
 // sostenibilidad" with one keyword in a colored shade box).
+//
+// Reworked to compose MixedWeightHeadline internally for the 'box' emphasis
+// path so the highlight-rect logic is shared. The 'italic' path keeps its
+// own inline rendering (it needs per-word accent color overrides that
+// MixedWeightHeadline intentionally does not expose — see Why comment below).
+//
+// External API is unchanged: existing page components continue to import
+// EditorialTitle with the same props.
 // ───────────────────────────────────────────────────────────────────────────
 
 import * as React from 'react';
@@ -12,13 +20,11 @@ import {
   FONT_DISPLAY,
   N0,
   N1000,
-  R_SM,
-  S1,
-  S2,
   TYPE_HERO,
   TYPE_PAGE,
   TYPE_SECTION,
 } from '../tokens';
+import { MixedWeightHeadline } from './MixedWeightHeadline';
 
 export type EditorialTitleSize = 'hero' | 'page' | 'section';
 export type EditorialTitleEmphasis = 'italic' | 'box';
@@ -54,12 +60,17 @@ function sizeFor(size: EditorialTitleSize): number {
 /**
  * Mixed-weight editorial title.
  *
- * `'italic'`: the emphasis word renders inline with `fontStyle: italic` and
- * the area accent color (no background).
- * `'box'`: the emphasis word renders inside a `<View>` with the area accent
- * at 65% opacity as background, the word in the OPPOSITE tone for contrast.
+ * `'box'` emphasis delegates to `MixedWeightHeadline` with `highlight: true`
+ * on the emphasis part — renders the ESLOP sage slab behind the word.
  *
- * Lead and emphasis are concatenated with a single intervening space.
+ * `'italic'` emphasis uses inline rendering with the area accent color applied
+ * directly to the emphasis Text node.
+ *
+ * Why MixedWeightHeadline is NOT used for 'italic': that primitive is
+ * intentionally color-neutral (tone-palette only, no per-part accent override)
+ * to keep it composable. Wiring in an accent color escape hatch would complicate
+ * the primitive for a single caller. The 'italic' branch is simple enough to
+ * keep inline.
  */
 export function EditorialTitle(props: EditorialTitleProps): React.ReactElement {
   const {
@@ -74,20 +85,21 @@ export function EditorialTitle(props: EditorialTitleProps): React.ReactElement {
   const fontSize = sizeFor(size);
   const accentHex = areaAccent ? AREA_HEX[areaAccent] : AREA_VALOR;
   const baseColor = tone === 'dark-on-light' ? N1000 : N0;
-  const oppositeColor = tone === 'dark-on-light' ? N0 : N1000;
 
-  // Box uses accent at 65% opacity as background; word renders in the
-  // opposite tone so it remains legible regardless of accent luminance.
-  const boxBg = withAlpha(accentHex, 0.65);
+  if (emphasisStyle === 'box') {
+    return (
+      <MixedWeightHeadline
+        fontSize={fontSize}
+        tone={tone}
+        parts={[
+          { text: leadText, weight: 'bold', highlight: false },
+          { text: emphasisText, weight: 'bold', highlight: true },
+        ]}
+      />
+    );
+  }
 
-  const baseStyle = {
-    fontFamily: FONT_DISPLAY,
-    fontWeight: 'bold' as const,
-    fontSize,
-    color: baseColor,
-    lineHeight: 1.05,
-  };
-
+  // 'italic' — inline rendering with accent color override on emphasis word.
   return (
     <View
       style={{
@@ -96,54 +108,30 @@ export function EditorialTitle(props: EditorialTitleProps): React.ReactElement {
         alignItems: 'baseline',
       }}
     >
-      <Text style={baseStyle}>{leadText} </Text>
-
-      {emphasisStyle === 'italic' ? (
-        <Text
-          style={{
-            ...baseStyle,
-            fontStyle: 'italic',
-            color: accentHex,
-          }}
-        >
-          {emphasisText}
-        </Text>
-      ) : (
-        // 'box' — wrap the emphasis token in a colored shade box.
-        <View
-          style={{
-            backgroundColor: boxBg,
-            borderRadius: R_SM,
-            paddingHorizontal: S2,
-            paddingVertical: S1,
-          }}
-        >
-          <Text
-            style={{
-              ...baseStyle,
-              fontStyle: 'italic',
-              color: oppositeColor,
-            }}
-          >
-            {emphasisText}
-          </Text>
-        </View>
-      )}
+      <Text
+        style={{
+          fontFamily: FONT_DISPLAY,
+          fontWeight: 'bold',
+          fontSize,
+          color: baseColor,
+          lineHeight: 1.05,
+          marginRight: fontSize * 0.28,
+        }}
+      >
+        {leadText}
+      </Text>
+      <Text
+        style={{
+          fontFamily: FONT_DISPLAY,
+          fontWeight: 'bold',
+          fontStyle: 'italic',
+          fontSize,
+          color: accentHex,
+          lineHeight: 1.05,
+        }}
+      >
+        {emphasisText}
+      </Text>
     </View>
   );
-}
-
-/**
- * Convert a `#rrggbb` hex into an `rgba(r,g,b,a)` string. React-PDF accepts
- * rgba in `backgroundColor`, but not the modern `#rrggbbaa` form on every
- * platform/version, so we render explicit rgba to be safe.
- */
-function withAlpha(hex: string, alpha: number): string {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
-  if (!m) return hex;
-  const v = parseInt(m[1], 16);
-  const r = (v >> 16) & 0xff;
-  const g = (v >> 8) & 0xff;
-  const b = v & 0xff;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

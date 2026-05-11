@@ -189,6 +189,57 @@ export async function POST(req: Request) {
 // and renders the full editorial document.
 
 async function handlePdfElite(body: unknown): Promise<Response> {
+  const b = (body ?? {}) as {
+    report?: FinancialReport;
+    rawData?: string;
+    company?: FinancialReport['company'];
+    language?: 'es' | 'en';
+    instructions?: string;
+  };
+
+  // FAST PATH: client already has a completed FinancialReport in state (e.g.
+  // PipelineWorkspace just finished the 3-agent run). Skip orchestration; only
+  // re-preprocess the trial balance so the editorial template can show full
+  // statements + pillar aggregates without paying the 30-60s LLM cost again.
+  if (b.report?.consolidatedReport) {
+    const report = b.report;
+    const language: 'es' | 'en' = b.language ?? 'es';
+
+    let preprocessed;
+    if (typeof b.rawData === 'string' && b.rawData.length > 0) {
+      try {
+        const rows = parseTrialBalanceCSV(b.rawData);
+        preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+      } catch (err) {
+        console.warn('[pdf-elite/fast] preprocess failed:', err);
+      }
+    }
+
+    let pillars = null;
+    if (preprocessed?.primary) {
+      try {
+        pillars = aggregatePillars({
+          snapshot: preprocessed.primary,
+          comparative: preprocessed.comparative ?? null,
+        });
+      } catch (err) {
+        console.warn('[pdf-elite/fast] aggregatePillars failed:', err);
+      }
+    }
+
+    const doc = composeEditorialReport({
+      report,
+      preprocessed: preprocessed ?? null,
+      pillars,
+      language,
+    });
+    const stream = await renderEditorialReportToStream(doc);
+    return pdfResponse(stream, report.company.name);
+  }
+
+  // SLOW PATH: no pre-built report — re-run the full pipeline (used by callers
+  // that only have rawData + company, e.g. server-side cron jobs or programmatic
+  // exports). Same behavior as before this fast path was added.
   const parsed = financialReportRequestSchema.safeParse(body);
   if (!parsed.success) {
     const errors = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
