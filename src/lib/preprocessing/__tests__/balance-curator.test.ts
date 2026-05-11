@@ -188,7 +188,7 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
     expect(out.cashFlowIndirecto?.inferred).toBe(true);
     expect(out.cashFlowIndirecto?.comparativePeriod).toBe('(sin_comparativo)');
     // Cero findings 'alto/crítico' — la inferencia es legítima por diseño.
-    expect(out.findings.every((f) => f.severity !== 'alto' && f.severity !== 'crítico')).toBe(true);
+    expect(out.findings.every((f) => f.severity !== 'alto' && f.severity !== 'critico')).toBe(true);
   });
 
   it('genera flujo indirecto con comparativo y reconcilia con Δ caja', () => {
