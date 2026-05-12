@@ -57,7 +57,7 @@ const adjustmentLedgerSchema = z
 // Supports SSE streaming via X-Stream: true header for real-time progress.
 // ---------------------------------------------------------------------------
 
-export const maxDuration = 300; // 5 minutes — financial analysis is compute-heavy
+export const maxDuration = 800; // 800s para acomodar gpt-5.5 medium con outputs 30-50K tokens (latencia medida ~24min en pipeline secuencial NIIF→Strategy→Governance)
 
 export async function POST(req: Request) {
   try {

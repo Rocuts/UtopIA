@@ -10,15 +10,14 @@
 // que SI se pudo calcular.
 // ---------------------------------------------------------------------------
 
-import { generateText, Output } from 'ai';
 import { z } from 'zod';
 import {
   parseTrialBalanceCSV,
   preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
-import { MODELS } from '@/lib/config/models';
-import { withRetry } from '@/lib/agents/utils/retry';
+import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
+import { callFinancialAgent } from '../agents/runtime';
 import { runTetCalculator } from './agents/tet-calculator';
 import { runRetentionShield } from './agents/retention-shield';
 import { runAntiDianAuditor } from './agents/anti-dian-auditor';
@@ -249,22 +248,21 @@ ${langLine}`;
 ${JSON.stringify(payload, null, 2)}
 \`\`\``;
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.1,
-        maxOutputTokens: 3000,
-        experimental_output: Output.object({ schema: synthesizerSchema }),
-      }),
-    { label: 'escudo_survival_synth', maxAttempts: 2 },
-  );
+  // Migrado a `callFinancialAgent` para recuperar el auto-fallback contra
+  // `finish_reason=length` (introducido en commit 13a0dfd) y la telemetria
+  // unificada. El refactor outcome-first del prompt (CTCO + XML) queda fuera
+  // de scope en esta fase — solo se migra la LLAMADA al runtime canonico.
+  const { json } = await callFinancialAgent({
+    agentName: 'escudo-survival-synth',
+    model: MODELS.FINANCIAL_PIPELINE,
+    schema: synthesizerSchema,
+    system: systemPrompt,
+    userContent,
+    ...MODELS_CONFIG.escudoSynthesizer,
+    maxAttempts: 2,
+  });
 
-  return result.experimental_output;
+  return json;
 }
 
 // ---------------------------------------------------------------------------

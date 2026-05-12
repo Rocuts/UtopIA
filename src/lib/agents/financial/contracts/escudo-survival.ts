@@ -77,8 +77,8 @@ export type RetentionShieldReportJson = z.infer<typeof RetentionShieldReportSche
 // ---------------------------------------------------------------------------
 
 export const CashPaymentViolationSchema = z.object({
-  beneficiarioNit: z.string().optional(),
-  beneficiarioNombre: z.string().optional(),
+  beneficiarioNit: z.string().nullable(),
+  beneficiarioNombre: z.string().nullable(),
   monto: z.number(),
   excesoUvt: z.number().describe('Exceso sobre 100 UVT'),
   norma: z.literal('Art. 771-5 §2 E.T.'),
@@ -86,7 +86,7 @@ export const CashPaymentViolationSchema = z.object({
 
 export const ExogenaCrossSchema = z.object({
   cuenta: z.string().min(1).describe('Codigo PUC de la cuenta cruzada'),
-  terceroNit: z.string().optional(),
+  terceroNit: z.string().nullable(),
   diferenciaEstimada: z.number(),
   norma: z.string().min(1).describe('Cita Resolucion DIAN (ej. "Resolucion DIAN 000227/2025")'),
 });
@@ -117,8 +117,8 @@ export const ContingencyReserveReportSchema = z.object({
     reservaSugerida: z.number(),
     pctUtilidad: z.number().describe('Constante 0.10 (10%)'),
     cuentaSugerida: z.string().min(1),
-    reservaLegalActual: z.number().optional(),
-    gapReservaLegal: z.number().optional(),
+    reservaLegalActual: z.number().nullable(),
+    gapReservaLegal: z.number().nullable(),
   }),
 });
 
@@ -132,7 +132,7 @@ export const DividendScenarioSchema = z.object({
   ahorroSocio: z.number(),
   impuestoSocio: z.number(),
   netoSocio: z.number(),
-  fortPatrimonio: z.number().optional(),
+  fortPatrimonio: z.number().nullable(),
 });
 
 export const DividendOptimizationReportSchema = z.object({
