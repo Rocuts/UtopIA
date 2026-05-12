@@ -55,11 +55,24 @@ export const MODEL_IDS = {
   CHAT: envModel('OPENAI_MODEL_CHAT', 'gpt-5.4-mini'),
 
   /**
-   * Financial pipelines (NIIF report, audit, tax-planning, transfer-pricing,
-   * valuation, fiscal-opinion, tax-reconciliation, feasibility, quality).
-   * Necesita contexto grande para balances de prueba y salida markdown estructurada.
+   * Financial pipelines (audit, tax-planning, transfer-pricing, valuation,
+   * fiscal-opinion, tax-reconciliation, feasibility, quality). Necesita
+   * contexto grande para balances de prueba y salida JSON estructurada.
    */
   FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'gpt-5.4-mini'),
+
+  /**
+   * Pipeline financiero base PREMIUM (NIIF Analyst, Strategy Director,
+   * Governance Specialist). Modelo más capaz (gpt-5.5) con 128K de output
+   * ceiling y 19-34% menos tokens reasoning — blinda el reporte NIIF contra
+   * el bug intermitente `finish_reason=length` que afecta a reasoning models
+   * de la familia GPT-5 cuando combinan prompts grandes + schemas Zod
+   * complejos. Costo ~10x sobre mini, pero el reporte NIIF es la pieza más
+   * crítica del producto y los costos absolutos siguen siendo bajos.
+   *
+   * Override via `OPENAI_MODEL_FINANCIAL_PREMIUM`. Default a `gpt-5.5`.
+   */
+  FINANCIAL_PIPELINE_PREMIUM: envModel('OPENAI_MODEL_FINANCIAL_PREMIUM', 'gpt-5.5'),
 
   /** Classifier T1/T2/T3 — query routing barato y rapido. */
   CLASSIFIER: envModel('OPENAI_MODEL_CLASSIFIER', 'gpt-5.4-nano'),
@@ -96,6 +109,9 @@ export const MODELS = {
 
   /** Financial / audit / tax / valuation / etc. pipelines. */
   FINANCIAL_PIPELINE: openai(MODEL_IDS.FINANCIAL_PIPELINE) as LanguageModel,
+
+  /** Pipeline financiero PREMIUM (NIIF Analyst, Strategy, Governance) — gpt-5.5. */
+  FINANCIAL_PIPELINE_PREMIUM: openai(MODEL_IDS.FINANCIAL_PIPELINE_PREMIUM) as LanguageModel,
 
   /** Classifier T1/T2/T3. */
   CLASSIFIER: openai(MODEL_IDS.CLASSIFIER) as LanguageModel,

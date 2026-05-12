@@ -114,6 +114,12 @@ export interface CallFinancialAgentResult<TSchema extends z.ZodTypeAny> {
     reasoningTokens?: number;
     cachedInputTokens?: number;
     elapsedMs: number;
+    /**
+     * `true` si la salvaguarda contra `finish_reason=length` se activó y el
+     * agente se ejecutó con `effort='low'`. Útil para observabilidad — si
+     * sucede frecuentemente, considerar subir `maxOutputTokens` del slot.
+     */
+    fallbackUsed: boolean;
   };
 }
 
@@ -152,32 +158,57 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
 
   const t0 = Date.now();
 
-  const result = await withRetry(
-    () =>
-      generateText({
-        model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0,
-        maxOutputTokens,
-        experimental_output: Output.object({ schema }),
-        abortSignal: signal,
-        providerOptions: {
-          openai: {
-            // Persistencia de reasoning entre turnos — Responses API.
-            store,
-            // Reasoning effort específico GPT-5.4 (no es param top-level).
-            reasoningEffort,
-            // Verbosity del texto libre (no afecta campos estructurados).
-            textVerbosity,
-            ...(metadata ? { metadata } : {}),
+  /**
+   * Ejecuta una pasada al modelo con un `reasoningEffort` específico. Se llama
+   * dos veces como mucho: primero con el effort solicitado por el caller, y si
+   * el modelo devuelve `finish_reason=length` con output vacío (bug conocido
+   * GPT-5: el reasoning agotó el budget), una segunda vez con effort
+   * degradado a `low` — libera ~8K tokens internos para output.
+   */
+  const runPass = async (effort: ReasoningEffort) =>
+    withRetry(
+      () =>
+        generateText({
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: userContent },
+          ],
+          temperature: 0,
+          maxOutputTokens,
+          experimental_output: Output.object({ schema }),
+          abortSignal: signal,
+          providerOptions: {
+            openai: {
+              store,
+              reasoningEffort: effort,
+              textVerbosity,
+              ...(metadata ? { metadata } : {}),
+            },
           },
-        },
-      }),
-    { maxAttempts, label: `financial-agent:${agentName}`, signal },
-  );
+        }),
+      { maxAttempts, label: `financial-agent:${agentName}:${effort}`, signal },
+    );
+
+  let result = await runPass(reasoningEffort);
+  let fallbackUsed = false;
+
+  // Salvaguarda contra el bug `finish_reason=length` + textLen=0 propio de los
+  // reasoning models GPT-5: si el reasoning consumió todo el budget, reintentar
+  // UNA vez con effort='low' (solo si el caller pidió medium/high — bajar
+  // desde 'low' o 'minimal' no aporta).
+  const hitLengthBug =
+    result.finishReason === 'length' &&
+    (result.experimental_output === undefined || result.experimental_output === null);
+
+  if (hitLengthBug && (reasoningEffort === 'medium' || reasoningEffort === 'high')) {
+    console.warn(
+      `[callFinancialAgent:${agentName}] hit finish_reason=length con effort=${reasoningEffort}; ` +
+        `reintentando con effort='low' (auto-fallback).`,
+    );
+    result = await runPass('low');
+    fallbackUsed = true;
+  }
 
   assertFinishedCleanlyOrThrow(result, agentName);
 
@@ -200,6 +231,7 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
       reasoningTokens: usage.reasoningTokens,
       cachedInputTokens: usage.cachedInputTokens,
       elapsedMs: Date.now() - t0,
+      fallbackUsed,
     },
   };
 }

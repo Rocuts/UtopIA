@@ -75,7 +75,9 @@ export async function runStrategyDirector(
 
   const { json } = await callFinancialAgent({
     agentName: 'strategy-director',
-    model: MODELS.FINANCIAL_PIPELINE,
+    // PREMIUM (gpt-5.5): consume el JSON del NIIF Analyst y produce
+    // KPIs + proyecciones — schema rico, amerita el techo amplio.
+    model: MODELS.FINANCIAL_PIPELINE_PREMIUM,
     schema: StrategyReportSchema,
     system: systemPrompt,
     userContent,

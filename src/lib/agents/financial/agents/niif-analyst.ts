@@ -71,7 +71,9 @@ export async function runNiifAnalyst(
 
   const { json } = await callFinancialAgent({
     agentName: 'niif-analyst',
-    model: MODELS.FINANCIAL_PIPELINE,
+    // PREMIUM (gpt-5.5): 128K output ceiling + reasoning más eficiente para
+    // blindar contra `finish_reason=length` con schemas Zod complejos.
+    model: MODELS.FINANCIAL_PIPELINE_PREMIUM,
     schema: NiifReportSchema,
     system: systemPrompt,
     userContent,

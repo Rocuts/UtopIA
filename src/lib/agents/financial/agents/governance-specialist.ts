@@ -90,7 +90,9 @@ export async function runGovernanceSpecialist(
 
   const { json } = await callFinancialAgent({
     agentName: 'governance-specialist',
-    model: MODELS.FINANCIAL_PIPELINE,
+    // PREMIUM (gpt-5.5): produce notas a EEFF (14 secciones) + acta — schema
+    // muy rico, amerita el techo de 128K output del modelo premium.
+    model: MODELS.FINANCIAL_PIPELINE_PREMIUM,
     schema: GovernanceReportSchema,
     system: systemPrompt,
     userContent,
