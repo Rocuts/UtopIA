@@ -102,15 +102,15 @@ export async function runGovernanceSpecialist(
 
   const result = toGovernanceResult(json);
 
-  // Validador anti-evasivo (post-generación) — conservado de la versión
-  // anterior. Solo registra warnings si el JSON contiene frases prohibidas
-  // en algún `body` libre; no re-promptea (el schema strict ya reduce
-  // dramáticamente la incidencia).
-  const evasiveHits = detectForbiddenPhrases(result.fullContent);
+  // Validador anti-evasivo (post-generación) — Wave 2.F3 refactor.
+  // Ahora opera sobre el JSON estructurado y exonera `disclaimers[]` por
+  // contrato (textos literales del spec Parte 9). Esto elimina los falsos
+  // positivos donde un disclaimer válido se confundía con frase evasiva.
+  const evasiveHits = detectForbiddenPhrasesInJson(json);
   if (evasiveHits.length > 0) {
     console.warn(
-      '[governance-specialist] Frases evasivas detectadas en JSON estructurado:',
-      evasiveHits.slice(0, 3).map((h) => h.match).join(' | '),
+      '[governance-specialist] Frases evasivas detectadas en campos de body libre:',
+      evasiveHits.slice(0, 3).map((h) => h.pattern).join(' | '),
     );
     onProgress?.({
       type: 'stage_progress',
@@ -146,6 +146,11 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
   lines.push(`Régimen: ${minutes.entityRegimeCitation}`);
   if (minutes.city) lines.push(`Ciudad: ${minutes.city}`);
   if (minutes.meetingDate) lines.push(`Fecha: ${minutes.meetingDate}`);
+
+  // Why: Art. 424 C.Co. — declaración de convocatoria precede al quorum
+  // porque sin convocatoria válida la asamblea es impugnable.
+  lines.push('', '### Verificación de Convocatoria', minutes.convocationStatement);
+  lines.push('_Norma:_ Art. 424 Código de Comercio.');
 
   lines.push('', '### Quorum', minutes.quorumStatement);
 
@@ -238,11 +243,56 @@ function renderPreparerNotes(json: GovernanceReportJson): string {
   ].join('\n');
 }
 
+// Why: Parte III §3 spec v2.0 — checklist tipado debe aparecer al cierre del
+// documento de Gobierno con tabla auditable.
+function renderComplianceChecklist(json: GovernanceReportJson): string {
+  if (json.complianceChecklist.length === 0) return '';
+  const statusLabel: Record<typeof json.complianceChecklist[number]['status'], string> = {
+    cumplido: 'Cumplido',
+    parcial: 'Parcial',
+    pendiente: 'Pendiente',
+    no_aplica: 'No aplica',
+  };
+  const lines: string[] = [
+    '## 3. CHECKLIST DE CUMPLIMIENTO NORMATIVO',
+    '',
+    '| Área | Norma | Estado | Evidencia | Acción requerida |',
+    '|---|---|---|---|---|',
+  ];
+  for (const item of json.complianceChecklist) {
+    const accion = item.accionRequerida ?? '—';
+    lines.push(`| ${item.topic} | ${item.norma} | ${statusLabel[item.status]} | ${item.evidencia} | ${accion} |`);
+  }
+  return lines.join('\n');
+}
+
+// Why: Parte 9 spec v2.0 — disclaimers automáticos con texto literal.
+// Renderizan en sección dedicada al final del documento para no contaminar
+// las notas técnicas con avisos de limitación.
+function renderDisclaimers(json: GovernanceReportJson): string {
+  if (json.disclaimers.length === 0) return '';
+  const lines: string[] = ['## 4. LIMITACIONES Y DISCLAIMERS AUTOMÁTICOS', ''];
+  for (const d of json.disclaimers) {
+    lines.push(`- ${d.texto}`);
+    lines.push(`  _Activador:_ ${d.trigger}`);
+  }
+  return lines.join('\n');
+}
+
 function toGovernanceResult(json: GovernanceReportJson): GovernanceResult {
   const financialNotes = renderFinancialNotes(json.financialNotes);
   const shareholderMinutes = renderShareholderMinutes(json.shareholderMinutes, json.company);
+  const complianceChecklist = renderComplianceChecklist(json);
+  const disclaimers = renderDisclaimers(json);
   const preparerNotes = renderPreparerNotes(json);
-  const fullContent = [financialNotes, '', shareholderMinutes, preparerNotes ? `\n${preparerNotes}` : '']
+  const fullContent = [
+    financialNotes,
+    '',
+    shareholderMinutes,
+    complianceChecklist ? `\n${complianceChecklist}` : '',
+    disclaimers ? `\n${disclaimers}` : '',
+    preparerNotes ? `\n${preparerNotes}` : '',
+  ]
     .filter(Boolean)
     .join('\n');
   return {
@@ -255,8 +305,23 @@ function toGovernanceResult(json: GovernanceReportJson): GovernanceResult {
 }
 
 // ---------------------------------------------------------------------------
-// Detector de frases evasivas — conservado de la versión legacy.
+// Detector de frases evasivas — refactor Wave 2.F3 (2026-05-12)
 // ---------------------------------------------------------------------------
+// Why: el detector legacy bloqueaba indiscriminadamente cualquier ocurrencia
+// de "no se suministró información" en el fullContent. El problema: los 6
+// disclaimers válidos del spec Parte 9 USAN frases con "no se suministró"
+// como prefijo CALIFICADO (ej. "No se suministró detalle de obligaciones
+// laborales") — el detector los confundía con frases evasivas y disparaba
+// falsos positivos que bloqueaban informes legítimos.
+//
+// Fix estructural:
+//   1. Los disclaimers ahora viven en `json.disclaimers[]` con `code`
+//      enumerado — son entidades de primera clase, no prosa libre.
+//   2. El detector solo escanea campos de body LIBRE (financialNotes.body,
+//      shareholderMinutes prosa). Los disclaimers están EXENTOS por contrato.
+//   3. Los patrones EVASIVE_PHRASES llevan look-ahead negativo para no
+//      atrapar las frases calificadas del spec — solo las EVASIVAS reales
+//      (sin complemento que especifique qué falta).
 
 interface EvasiveHit {
   pattern: string;
@@ -264,10 +329,18 @@ interface EvasiveHit {
   offset: number;
 }
 
-const FORBIDDEN_PATTERNS: { id: string; rx: RegExp }[] = [
-  { id: 'no_suministro_informacion', rx: /no\s+se\s+suministr[oó]\s+(?:la\s+)?informaci[oó]n/i },
-  { id: 'informacion_no_detallada', rx: /informaci[oó]n\s+no\s+(?:detallada|provista|disponible)/i },
-  { id: 'datos_no_disponibles', rx: /datos\s+no\s+(?:disponibles|suministrados)(?!\s*\))/i },
+// Why: las frases evasivas REALES no llevan complemento calificador.
+// "no se suministró información" → evasivo (qué información? ninguna pista).
+// "no se suministró detalle de obligaciones laborales" → disclaimer válido
+// (especifica qué información falta y por qué se omite el rubro).
+const FORBIDDEN_EVASIVE_PHRASES: { id: string; rx: RegExp }[] = [
+  // "no se suministró información" sin complemento que califique qué.
+  { id: 'no_suministro_informacion', rx: /no\s+se\s+suministr[oó]\s+(?:la\s+)?informaci[oó]n(?!\s+(?:detalle|específica|sobre|respecto|de))/i },
+  // "información no detallada" sin razón.
+  { id: 'informacion_no_detallada', rx: /informaci[oó]n\s+no\s+(?:detallada|provista|disponible)(?!\s+(?:por|debido|sobre|respecto))/i },
+  // "datos no disponibles" sin complemento.
+  { id: 'datos_no_disponibles', rx: /datos\s+no\s+(?:disponibles|suministrados)(?!\s*\)|\s+(?:para|sobre|respecto|de))/i },
+  // Estos sí son siempre evasivos sin matiz aceptable.
   { id: 'falta_totales_vinculantes', rx: /(?:falta|ausencia)\s+de\s+totales\s+vinculantes/i },
   { id: 'totales_no_provistos', rx: /totales\s+vinculantes\s+no\s+(?:provistos|disponibles)/i },
   { id: 'pendiente_validacion', rx: /pendiente\s+de\s+validaci[oó]n/i },
@@ -276,15 +349,61 @@ const FORBIDDEN_PATTERNS: { id: string; rx: RegExp }[] = [
   { id: 'no_se_cuenta_informacion', rx: /no\s+se\s+cuenta\s+con\s+(?:la\s+)?informaci[oó]n/i },
 ];
 
-function detectForbiddenPhrases(text: string): EvasiveHit[] {
-  if (!text) return [];
-  const preparerSectionRx = /###\s*Notas\s+del\s+Preparador[\s\S]*?(?=\n##\s|$)/i;
-  const scanText = text.replace(preparerSectionRx, '');
+/**
+ * Escanea SOLO los campos de body libre del JSON estructurado.
+ * NO escanea `disclaimers[]` (textos literales del spec Parte 9 — válidos por
+ * contrato) ni `preparerNotes[]` (notas explícitas del preparador).
+ *
+ * Por qué Wave 2.F3 reformó esto:
+ *   El detector legacy operaba sobre `fullContent` (Markdown ya renderizado),
+ *   donde disclaimers válidos y frases evasivas se mezclaban indistinguibles.
+ *   Ahora opera sobre el JSON estructurado: los disclaimers tienen su propio
+ *   campo tipado (`code` enumerado) y se exoneran by-design.
+ */
+function detectForbiddenPhrasesInJson(json: GovernanceReportJson): EvasiveHit[] {
+  const freeTextSegments: { field: string; text: string }[] = [];
+
+  for (const note of json.financialNotes) {
+    if (note.materiality === 'omitted') continue;
+    freeTextSegments.push({ field: `financialNotes[${note.number}].body`, text: note.body });
+  }
+
+  const m = json.shareholderMinutes;
+  freeTextSegments.push({ field: 'shareholderMinutes.quorumStatement', text: m.quorumStatement });
+  freeTextSegments.push({ field: 'shareholderMinutes.convocationStatement', text: m.convocationStatement });
+  freeTextSegments.push({ field: 'shareholderMinutes.closingStatement', text: m.closingStatement });
+  for (const dev of m.developments) {
+    freeTextSegments.push({ field: `shareholderMinutes.developments[${dev.itemNumber}].body`, text: dev.body });
+  }
+  if (m.resultDistribution.neutralProposalText) {
+    freeTextSegments.push({ field: 'shareholderMinutes.resultDistribution.neutralProposalText', text: m.resultDistribution.neutralProposalText });
+  }
+  if (m.capitalizationProposal.applies) {
+    freeTextSegments.push({ field: 'shareholderMinutes.capitalizationProposal.body', text: m.capitalizationProposal.body });
+  }
+  if (m.fiscalReviewerOpinion.applies && m.fiscalReviewerOpinion.opinionBody) {
+    freeTextSegments.push({ field: 'shareholderMinutes.fiscalReviewerOpinion.opinionBody', text: m.fiscalReviewerOpinion.opinionBody });
+  }
+  // complianceChecklist.evidencia/accionRequerida: campos cortos, pero
+  // los escaneamos porque siguen siendo prosa libre.
+  for (let i = 0; i < json.complianceChecklist.length; i += 1) {
+    const item = json.complianceChecklist[i];
+    freeTextSegments.push({ field: `complianceChecklist[${i}].evidencia`, text: item.evidencia });
+    if (item.accionRequerida) {
+      freeTextSegments.push({ field: `complianceChecklist[${i}].accionRequerida`, text: item.accionRequerida });
+    }
+  }
+  // disclaimers[] EXENTO por contrato — textos literales del spec Parte 9.
+  // preparerNotes[] EXENTO — notas explícitas del preparador (legacy).
+
   const hits: EvasiveHit[] = [];
-  for (const { id, rx } of FORBIDDEN_PATTERNS) {
-    const m = rx.exec(scanText);
-    if (m && typeof m.index === 'number') {
-      hits.push({ pattern: id, match: m[0], offset: m.index });
+  for (const { field, text } of freeTextSegments) {
+    if (!text) continue;
+    for (const { id, rx } of FORBIDDEN_EVASIVE_PHRASES) {
+      const match = rx.exec(text);
+      if (match && typeof match.index === 'number') {
+        hits.push({ pattern: `${field} :: ${id}`, match: match[0], offset: match.index });
+      }
     }
   }
   return hits;

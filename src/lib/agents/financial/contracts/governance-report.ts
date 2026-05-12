@@ -53,15 +53,67 @@ export const FinancialNoteNumberSchema = z.union([
   z.literal(12),
   z.literal(13),
   z.literal(14),
+  // Why: NIC 24 §13-22 / Sec. 33 PYMES — revelar transacciones con partes
+  // vinculadas y personal clave directivo. Omitir esta nota es no-conformidad
+  // material según CTCP doctrina 2022.
+  z.literal(15),
+  // Why: NIC 10 §17 / Sec. 32.9 PYMES — fecha de autorización para publicación
+  // y órgano que la autoriza. Requisito explícito de la norma.
+  z.literal(16),
 ]);
 
 export const FinancialNoteSchema = z.object({
-  number: FinancialNoteNumberSchema.describe('Número fijo 1..14 — Entidad, Políticas, Efectivo, Deudores, Inventarios, PPE, Obligaciones Financieras, CxP, Impuestos, Pasivos Laborales, Patrimonio, Ingresos, Contingencias, IFRS 18'),
+  number: FinancialNoteNumberSchema.describe('Número fijo 1..16 — Entidad, Políticas, Efectivo, Deudores, Inventarios, PPE, Obligaciones Financieras, CxP, Impuestos, Pasivos Laborales, Patrimonio, Ingresos, Contingencias, IFRS 18, Partes Vinculadas (NIC 24), Autorización Publicación (NIC 10 §17)'),
   title: z.string().min(1).describe('Título de la nota'),
   body: z.string().min(1).describe('Cuerpo en prosa profesional — cifras con formato COP'),
   normReference: NormaRef.nullable().describe('Cita normativa principal cuando aplique'),
   materiality: z.enum(['material', 'immaterial', 'omitted']).describe('Si la nota es material, immaterial o se omitió por no aplicar'),
 });
+
+// ---------------------------------------------------------------------------
+// Checklist de Cumplimiento Normativo (Parte III §3 spec v2.0)
+// ---------------------------------------------------------------------------
+// Why: el spec exige cerrar el documento de Gobierno con un checklist tipado
+// que evidencie qué normas se aplicaron, qué falta y qué no aplica. Hasta
+// ahora vivía como prosa libre dentro de las notas — sin estructura no era
+// auditable. Schema estructurado permite: (a) auditor team valida coverage,
+// (b) PDF Élite lo renderiza como tabla, (c) downstream pipelines pueden
+// activarse según `status='pendiente'`.
+
+export const ComplianceChecklistItemSchema = z.object({
+  topic: z.string().min(1).describe('Área normativa: ej "NIIF PYMES", "Distribución Utilidades"'),
+  norma: z.string().min(1).describe('Cita normativa: ej "Decreto 2420/2015", "C.Co. Art. 446"'),
+  status: z.enum(['cumplido', 'parcial', 'pendiente', 'no_aplica']),
+  evidencia: z.string().min(1).describe('Evidencia o referencia al hecho que sustenta el status'),
+  accionRequerida: z.string().nullable().describe('Si status != "cumplido", qué falta'),
+});
+
+export type ComplianceChecklistItemJson = z.infer<typeof ComplianceChecklistItemSchema>;
+
+// ---------------------------------------------------------------------------
+// Disclaimers Automáticos (Parte 9 spec v2.0)
+// ---------------------------------------------------------------------------
+// Why: los 6 disclaimers de la Parte 9 son entidades estructuradas con
+// texto LITERAL fijado por spec — no pueden emitirse como prosa libre porque
+// el detector regex evasivo del agente las confundía con frases prohibidas.
+// Modelarlos con `code` enumerado + texto literal LES da estatus de primera
+// clase: el detector las exonera por contrato (viven en campo dedicado, no
+// en `body` libre).
+
+export const DisclaimerSchema = z.object({
+  code: z.enum([
+    'laboral_sin_detalle',
+    'costo_insuficiente',
+    'impuesto_no_reconciliable',
+    'sin_comparativo',
+    'ajuste_3605',
+    'inversiones_negativas',
+  ]),
+  texto: z.string().min(1).describe('Texto literal del disclaimer (Parte 9 spec v2.0)'),
+  trigger: z.string().min(1).describe('Condición observada que activa el disclaimer'),
+});
+
+export type DisclaimerJson = z.infer<typeof DisclaimerSchema>;
 
 // ---------------------------------------------------------------------------
 // Acta de Asamblea / Junta Ordinaria
@@ -124,8 +176,17 @@ export const ShareholderMinutesSchema = z.object({
   entityRegimeCitation: NormaRef.describe('Régimen societario aplicable. Ej: "Ley 1258 de 2008 (SAS)"'),
   city: z.string().nullable().describe('Ciudad de la reunión. Null si no se conoce'),
   meetingDate: z.string().nullable().describe('Fecha de la reunión (libre formato). Null si no se conoce'),
+  // Why: Art. 424 C.Co. — sin verificación de convocatoria documentada, la
+  // asamblea es impugnable por defecto de convocatoria. Schema estructurado
+  // obliga al LLM a declarar modalidad + antelación, sin lo cual el acta no
+  // tiene valor probatorio.
+  convocationStatement: z.string().min(1).describe('Declaración LITERAL de verificación de convocatoria (Art. 424 C.Co.) — modalidad y antelación con que se citó'),
   quorumStatement: z.string().min(1).describe('Afirmación de quorum — sin porcentajes inventados'),
-  agenda: z.array(AgendaItemSchema).min(5).describe('Orden del día — mínimo 5 puntos canónicos'),
+  // Why: orden del día canónico Art. 187 Ley 222/1995 — 8 puntos mínimos
+  // incluyendo gestión administradores (§3), designación cargos (§4) y
+  // verificación convocatoria (Art. 424 C.Co.). El min anterior (5) permitía
+  // omitir puntos legalmente obligatorios.
+  agenda: z.array(AgendaItemSchema).min(8).describe('Orden del día — mínimo 8 puntos canónicos (Art. 187 Ley 222/1995): convocatoria, quorum, aprobación EEFF, informe gestión, aprobación gestión administradores §3, distribución/reservas, designación cargos §4, varios+cierre'),
   developments: z.array(AgendaDevelopmentSchema).describe('Desarrollo de cada punto del orden del día'),
   resultDistribution: ResultDistributionSchema,
   capitalizationProposal: CapitalizationProposalSchema,
@@ -147,9 +208,20 @@ export const GovernanceReportSchema = z.object({
    */
   signatories: SignatoriesSchema.nullable(),
   // -- DOCUMENTO 1: Notas a los Estados Financieros ------------------------
-  financialNotes: z.array(FinancialNoteSchema).min(1).describe('Notas 1..14 — material/immaterial/omitted'),
+  financialNotes: z.array(FinancialNoteSchema).min(1).describe('Notas 1..16 — material/immaterial/omitted'),
   // -- DOCUMENTO 2: Acta de Asamblea ---------------------------------------
   shareholderMinutes: ShareholderMinutesSchema,
+  // -- DOCUMENTO 3: Checklist de Cumplimiento Normativo (Parte III §3) -----
+  // Why: el spec exige checklist tipado al cierre del documento de Gobierno.
+  // Mínimo 8 ítems para garantizar coverage de las áreas críticas (NIIF,
+  // distribución utilidades, reserva legal, RF, libros, IGS, partes
+  // vinculadas, autorización publicación).
+  complianceChecklist: z.array(ComplianceChecklistItemSchema).min(8).describe('Checklist de cumplimiento normativo (Parte III §3 spec v2.0) — mínimo 8 ítems'),
+  // -- DOCUMENTO 4: Disclaimers automáticos (Parte 9) ----------------------
+  // Why: 6 disclaimers literales del spec viven aquí como entidades tipadas
+  // con `code` enumerado para que el detector regex evasivo los exonere.
+  // Array puede ser vacío si ninguna condición aplica.
+  disclaimers: z.array(DisclaimerSchema).describe('Disclaimers automáticos (Parte 9 spec v2.0) — vacío si ninguna condición aplica'),
   // -- Notas del preparador (datos faltantes) ------------------------------
   preparerNotes: z.array(StatementNoteSchema),
 });

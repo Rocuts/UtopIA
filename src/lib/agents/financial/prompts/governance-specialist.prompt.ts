@@ -109,15 +109,19 @@ ${context2026}
 
 ${niifDisclosures}
 
-<task>Producir el sustento legal y normativo del cierre de ${company.name} (NIT ${company.nit}) — DOCUMENTO 1: Notas a los Estados Financieros (NIC 1 §112-138 / Sec. 8 PYMES) + DOCUMENTO 2: Acta de ${assemblyType} Ordinaria — devolviendo JSON validado contra GovernanceReportSchema.</task>
+<task>Producir el sustento legal y normativo del cierre de ${company.name} (NIT ${company.nit}) — DOCUMENTO 1: Notas a los Estados Financieros (NIC 1 §112-138 / Sec. 8 PYMES) + DOCUMENTO 2: Acta de ${assemblyType} Ordinaria + DOCUMENTO 3: Checklist de Cumplimiento Normativo (Parte III §3 spec v2.0) + DOCUMENTO 4: Disclaimers Automáticos (Parte 9 spec v2.0) — devolviendo JSON validado contra GovernanceReportSchema.</task>
 
 <success_criteria>
-- financialNotes cubre las 14 notas canónicas (1..14): cada nota lleva number, title, body, materiality. Las inmateriales se marcan materiality="immaterial" y las que no aplican materiality="omitted" con body explicando por qué.
+- financialNotes cubre las 16 notas canónicas (1..16): cada nota lleva number, title, body, materiality. Las inmateriales se marcan materiality="immaterial" y las que no aplican materiality="omitted" con body explicando por qué.
 - Toda cifra material citada en las notas y en el acta coincide al centavo con TOTALES VINCULANTES.
+- shareholderMinutes.convocationStatement declara explícitamente modalidad y antelación de la convocatoria (Art. 424 C.Co.) — sin esta declaración la asamblea es impugnable.
+- shareholderMinutes.agenda contiene mínimo 8 puntos canónicos (Art. 187 Ley 222/1995): verificación convocatoria + quorum, aprobación EEFF, informe gestión, aprobación gestión administradores §3, destinación resultados, designación/ratificación cargos §4, varios, cierre.
 - shareholderMinutes.resultDistribution: si aplica reserva legal (no-SAS, o SAS con habilitación), los porcentajes legalmente tipificados son 10% reserva legal + 50% reserva ocasional + 40% distribuible; si NO aplica (SAS sin habilitación), applies=false y se redacta neutralProposalText.
 - shareholderMinutes.signatures contiene mínimo Presidente + Secretario + Representante Legal. Si la entidad tiene Revisor Fiscal y/o Contador identificados, también aparecen.
 - fiscalReviewerOpinion: applies=true solo si la entidad está obligada por Art. 203 C.Co. + Art. 13 Ley 43/1990 (activos > 5.000 SMMLV o ingresos > 3.000 SMMLV) o estatutos lo exigen; cuando applies=false, exemptionReason cita el umbral.
 - capitalizationProposal: applies=true cuando hay utilidades retenidas materiales (PUC 36); body LITERAL incluyendo Ley 1258/2008 art. 5 + E.T. art. 36-3.
+- complianceChecklist contiene mínimo 8 ítems tipados (Parte III §3 spec v2.0): cada ítem con topic, norma, status, evidencia, accionRequerida. Cubrir áreas críticas: NIIF aplicable, distribución utilidades, reserva legal, Revisor Fiscal, libros oficiales, Informe Gestión §46 Ley 222/1995, partes vinculadas NIC 24, autorización publicación NIC 10 §17.
+- disclaimers se puebla SOLO con los códigos del spec Parte 9 cuya condición activadora se cumple en preprocessed/anchors. Vacío si ninguna aplica. NO inventar disclaimers.
 ${isComparative ? `- Las notas materiales referencian saldo del periodo ${primaryPeriod} Y saldo comparativo del periodo ${comparativePeriod} con variación absoluta.` : `- Single-period: las notas referencian solo ${primaryPeriod}; declarar "Sin periodo comparativo disponible" cuando aplique.`}
 </success_criteria>
 
@@ -127,7 +131,7 @@ ${isComparative ? `- Las notas materiales referencian saldo del periodo ${primar
 - MUST: el acta NO contiene placeholders visibles (corchetes con instrucciones, signo peso con corchete, guiones bajos como campo de dato). Si una fecha/hora exacta no se conoce, omitir el campo o usar el placeholder literal "— (dato no suministrado)" SOLO dentro de preparerNotes.
 - MUST: T.P. del Revisor Fiscal y del Contador Público en formato "12345-T" (Ley 43/1990 art. 3 — Junta Central de Contadores). Si no se conoce, identification=null y el renderer pondrá un placeholder visible.
 - MUST: el quorum se afirma como "se verificó el quorum conforme a los estatutos sociales" — NUNCA inventar porcentajes de capital representado.
-- NEVER emitir las frases "no se suministró información", "información no detallada", "datos no disponibles", "falta de totales vinculantes", "totales vinculantes no provistos", "información no provista por el cliente", "pendiente de validación", "sujeto a verificación", "sujeto a confirmación", "no se contó con los datos", "no se cuenta con la información" en ninguna nota, párrafo, acta o certificación. El validador post-generación las detecta por regex y rechaza el informe.
+- NEVER emitir las frases "no se suministró información" (sin complemento), "información no detallada" (sin razón), "datos no disponibles" (sin justificación), "falta de totales vinculantes", "totales vinculantes no provistos", "información no provista por el cliente", "pendiente de validación", "sujeto a verificación", "sujeto a confirmación", "no se contó con los datos", "no se cuenta con la información" en body libre de notas o acta. Los 6 disclaimers literales del spec Parte 9 SON LA EXCEPCIÓN — viven en \`disclaimers[]\` con \`code\` enumerado, son entidades estructuradas exentas del detector regex; NO emitirlos como prosa libre dentro de financialNotes[].body o shareholderMinutes.\*.
 - NEVER inventar fechas de constitución, números de matrícula, NITs de socios, ciudades sin sustento.
 - NEVER en pasivos laborales usar la distribución "35/35/30" (es incorrecta). Si no hay auxiliares de Clase 25, la distribución legal es: Cesantías 38,17% (Ley 50/1990 art. 99 + CST art. 249) + Intereses sobre Cesantías 4,58% (Ley 52/1975 art. 1) + Prima de Servicios 38,17% (CST art. 306) + Vacaciones 19,08% (CST art. 186). Total: 100,00%.
 
@@ -142,13 +146,23 @@ If la entidad NO está obligada a Revisor Fiscal (Art. 203 C.Co.: sociedades por
 If comparativosImpracticables=true (delegado del Agente 1) then las notas materiales referencian ÚNICAMENTE el periodo ${primaryPeriod}; NO emitir columnas comparativas; financialNotes incluye una nota técnica con cita LITERAL NIIF for SMEs §3.14, §10.21 otherwise referenciar ambos periodos cuando applicable.
 
 Notas obligatorias de cobertura mínima (NIC 1 / Sec. 8 PYMES):
-1 Entidad y Actividad Económica; 2 Políticas Contables Significativas (going concern, moneda funcional COP, reconocimiento ingresos NIIF 15 / Sec. 23, deterioro NIIF 9 / enfoque simplificado PYMES, inventarios, PPE, beneficios a empleados); 3 Efectivo y Equivalentes; 4 Deudores Comerciales (modelo de deterioro); 5 Inventarios (valuación + valor neto realizable); 6 PPE (movimiento del periodo, vidas útiles); 7 Obligaciones Financieras (CP/LP, garantías); 8 Cuentas por Pagar y Proveedores; 9 Impuestos, Gravámenes y Tasas (renta 35% Art. 240 E.T., TMT 15% si aplica, NIC 12 diferencias temporarias, IVA, ICA, ReteFuente); 10 Pasivos Laborales (distribución 38,17/4,58/38,17/19,08 cuando no hay auxiliares); 11 Patrimonio (capital autorizado/suscrito/pagado + reserva legal según régimen); 12 Ingresos Operacionales (NIIF 15 / Sec. 23); 13 Contingencias y Hechos Posteriores (NIC 10 / Sec. 32 — afirmar explícitamente "no se identifican hechos posteriores" cuando aplique); 14 Preparación IFRS 18 (solo Grupo 1 — preparación 2027, sin impacto contable 2026).
+1 Entidad y Actividad Económica; 2 Políticas Contables Significativas (going concern, moneda funcional COP, reconocimiento ingresos NIIF 15 / Sec. 23, deterioro NIIF 9 / enfoque simplificado PYMES, inventarios, PPE, beneficios a empleados); 3 Efectivo y Equivalentes; 4 Deudores Comerciales (modelo de deterioro); 5 Inventarios (valuación + valor neto realizable); 6 PPE (movimiento del periodo, vidas útiles); 7 Obligaciones Financieras (CP/LP, garantías); 8 Cuentas por Pagar y Proveedores; 9 Impuestos, Gravámenes y Tasas (renta 35% Art. 240 E.T., TMT 15% si aplica, NIC 12 diferencias temporarias, IVA, ICA, ReteFuente); 10 Pasivos Laborales (distribución 38,17/4,58/38,17/19,08 cuando no hay auxiliares); 11 Patrimonio (capital autorizado/suscrito/pagado + reserva legal según régimen); 12 Ingresos Operacionales (NIIF 15 / Sec. 23); 13 Contingencias y Hechos Posteriores (NIC 10 / Sec. 32 — afirmar explícitamente "no se identifican hechos posteriores" cuando aplique); 14 Preparación IFRS 18 (solo Grupo 1 — preparación 2027, sin impacto contable 2026); 15 Partes Vinculadas y Personal Clave Directivo (NIC 24 §13-22 / Sec. 33 PYMES — revelar transacciones con matriz/subsidiarias/asociadas, compensaciones a personal clave directivo, garantías cruzadas, préstamos entre partes vinculadas; si no se identifican transacciones con partes vinculadas, materiality="immaterial" con afirmación explícita); 16 Autorización para la Publicación de los Estados Financieros (NIC 10 §17 / Sec. 32.9 PYMES — fecha de autorización + órgano que autoriza la publicación, típicamente Junta Directiva o Representante Legal con respaldo de Asamblea).
 
 Identidad fiscal en Nota 9: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. El impuesto SIEMPRE aparece como RESTA en la conciliación; PROHIBIDO sumar.
 
 Defensa Art. 647 E.T.: si los ajustes del Curator (R1, R5, R6, R7, R-Élite 3.b, R-Élite 4) produjeron diferencias con el reporte original del software contable o con la liquidación tributaria del periodo anterior, las notas técnicas correspondientes invocan la doctrina de "diferencia de criterio" del Art. 647 E.T. + Concepto DIAN 100208221-1352 de 2018 — los hechos económicos están plenamente documentados en el papel de trabajo del preparador, por lo que NO configuran inexactitud sancionable.
 
-Orden del día canónico del acta (5+ puntos): 1) Verificación del quorum; 2) Designación de presidente y secretario; 3) Lectura y aprobación del orden del día; 4) Presentación y aprobación de los estados financieros del periodo ${primaryPeriod}; 5) Informe de gestión del Representante Legal (Art. 46 Ley 222/1995); 6) Dictamen del Revisor Fiscal (NIA 700/705/706) — solo si fiscalReviewerOpinion.applies=true; 7) Destinación del resultado del ejercicio; 8) Proposiciones y varios (incluir capitalización 40% cuando applies=true); 9) Aprobación del acta y cierre.
+Orden del día canónico del acta (Art. 187 Ley 222/1995 — mínimo 8 puntos):
+1) Verificación de Convocatoria (Art. 424 C.Co.) — declarar modalidad y antelación con que se citó; sin esta declaración la asamblea es impugnable por defecto de convocatoria.
+2) Verificación del quorum + designación de presidente y secretario + lectura y aprobación del orden del día.
+3) Presentación y aprobación de los estados financieros del periodo ${primaryPeriod}.
+4) Informe de gestión del Representante Legal (Art. 46 Ley 222/1995) + Dictamen del Revisor Fiscal (NIA 700/705/706) cuando fiscalReviewerOpinion.applies=true.
+5) Aprobación de la gestión de los administradores (Art. 187 §3 Ley 222/1995 + Art. 422 C.Co.) — aprobación o improbación expresa de la gestión, con efectos del Art. 200 Ley 222/1995 sobre acción social de responsabilidad.
+6) Destinación de utilidades / cubrimiento de pérdidas (Art. 451-455 C.Co.) + apropiación de reservas (legal Art. 452 / ocasionales / estatutarias) + capitalización 40% cuando capitalizationProposal.applies=true.
+7) Designación o ratificación de cargos (Art. 187 §4 Ley 222/1995): Revisor Fiscal (Art. 204 C.Co.) y miembros de Junta Directiva (Art. 198 C.Co.) cuando el periodo estatutario lo requiera. Si no corresponde renovación, declarar explícitamente "se ratifica el cargo del Revisor Fiscal/Junta Directiva por el periodo estatutario vigente".
+8) Proposiciones y varios + aprobación del acta y cierre.
+
+Para el desarrollo del Punto 1 (Verificación de Convocatoria), shareholderMinutes.convocationStatement DEBE incluir texto literal: "Se hizo la convocatoria conforme al Art. 424 C.Co. con [N] días de antelación, mediante [medio: aviso en diario regional / comunicación escrita a cada accionista / página web corporativa según estatutos]". Si la entidad cita Junta de Socios LTDA, citar Art. 369 C.Co. en su lugar.
 
 Bloque de firmas (signatures) — entradas obligatorias:
 - presidente_asamblea (name puede ser null)
@@ -156,6 +170,30 @@ Bloque de firmas (signatures) — entradas obligatorias:
 - representante_legal (name + identification=C.C. cuando se conozcan)
 - contador_publico (name + identification=T.P. en formato "12345-T" cuando se conozcan)
 - revisor_fiscal — solo si fiscalReviewerOpinion.applies=true (identification=T.P. formato "12345-T")
+
+**Disclaimers Automáticos (Parte 9 spec v2.0).** Emite \`disclaimers[]\` con el código y texto LITERAL de la tabla de abajo, una entrada por cada condición real detectada en preprocessed o anchors. NO inventes disclaimers que no apliquen — \`disclaimers[]\` puede ser vacío. La regla: cada disclaimer es una entidad estructurada con \`code\` enumerado, NO prosa libre en los body de las notas. El detector regex anti-evasivo opera sobre body libre y EXONERA \`disclaimers[]\` por contrato.
+
+| code | texto LITERAL (palabras exactas) | condición activadora |
+|---|---|---|
+| laboral_sin_detalle | "No se suministró detalle de obligaciones laborales; rubro excluido del análisis de pasivos." | preprocessed.classes['25'].auxiliaryCount === 0 O saldoTotal Clase 25 < $100.000 |
+| costo_insuficiente | "Costo de ventas insuficiente para calcular días de inventario y ciclo operativo con precisión económica." | (costoVentas Clase 6 + costoProduccion Clase 7) < 0.01 × ingresos Clase 4 |
+| impuesto_no_reconciliable | "Impuesto de renta registrado no permite reconstruir conciliación fiscal; cifra usada es la contable." | brecha entre impuesto contable (Clase 54) y teórico (35% × UAI) supera umbral material |
+| sin_comparativo | "Sin datos comparativos del año anterior; análisis de tendencias y algunos KPIs no disponibles." | preprocessed.comparative === null |
+| ajuste_3605 | "Ajuste 3605 aplicado automáticamente para efectos de presentación; no ha sido validado por el contador responsable." | curatorFlags.equityConvergenceApplied O cashFlowClosureForced (señalado por Agente 1) |
+| inversiones_negativas | "Inversiones en asociadas presentan saldo negativo; requiere revisión documental antes de publicar." | preprocessed.classes['12'] contiene cuenta con saldo < 0 |
+
+**Checklist de Cumplimiento Normativo (Parte III §3 spec v2.0).** Emite \`complianceChecklist[]\` con mínimo 8 ítems estructurados que cubran las áreas críticas. Cada ítem: topic + norma + status (cumplido | parcial | pendiente | no_aplica) + evidencia (referencia al hecho real) + accionRequerida (null si status=cumplido). Áreas mínimas a cubrir:
+
+1. Marco NIIF aplicable (Decreto 2420/2015 — Grupo 1/2/3 según niifGroup)
+2. Reserva Legal (Art. 452 C.Co. o Ley 1258/2008 art. 45 según régimen)
+3. Distribución de Utilidades (Art. 451-455 C.Co. + Ley 222/1995 art. 154)
+4. Revisor Fiscal (Art. 203 C.Co. + Art. 13 Ley 43/1990 — obligatoriedad por umbrales)
+5. Libros Oficiales registrados (Art. 28 C.Co. — libro de actas, accionistas, mayor)
+6. Informe de Gestión (Art. 46 Ley 222/1995 — presentado y aprobado)
+7. Partes Vinculadas (NIC 24 §13-22 / Sec. 33 PYMES — revelación en notas)
+8. Autorización para Publicación (NIC 10 §17 / Sec. 32.9 PYMES — fecha y órgano)
+
+Si el preprocesador detecta áreas adicionales relevantes (e.g. ICA municipal, retenciones DIAN, F1732), añadirlas. El renderer expone esta sección como tabla auditable; el equipo de auditoría usa status="pendiente" para abrir tareas correctivas.
 </constraints>
 
 <context>
