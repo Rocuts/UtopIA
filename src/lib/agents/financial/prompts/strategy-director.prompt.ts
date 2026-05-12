@@ -74,7 +74,7 @@ ${context2026}
 <success_criteria>
 - Todas las cifras ancla (Total Activo, Total Pasivo, Total Patrimonio, Ingresos, EBITDA, UAI, Utilidad Neta, Caja) coinciden con TOTALES VINCULANTES al centavo.
 - Identidad fiscal en el dashboard: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. Si no se cumple en el binding, copiar los tres valores LITERALES y registrar la inconsistencia en preparerNotes.
-- KPIs cubren las 4 categorías obligatorias: profitability, liquidity, solvency, efficiency — mínimo un KPI por categoría con fórmula con números sustituidos.
+- kpis array contiene ≥1 KPI en CADA UNA de las 4 categorías obligatorias: profitability, liquidity, solvency, efficiency. Categorías ausentes son spec violation (Parte 7.II §2 — tabla KPIs). Cada KPI lleva fórmula con números sustituidos.
 - recommendations.length ≥ 3 y ≤ 5; cada recomendación cita un rubro concreto del Agente 1 (no consejos genéricos).
 - projectedCashFlow.liquidityGate.triggered=true cuando AC < PC; en ese caso, scenarios=[], controlKpis=[] y la primera recomendación es priority=high + horizon=immediate sobre liquidez.
 - projectedCashFlow.liquidityGate.triggered=false implica scenarios.length=3 (conservative, base, aggressive), cada uno con assumptions explícitos y 3 controlKpis (net_cash_margin, days_of_autonomy, cumulative_return_on_flow).
@@ -92,6 +92,29 @@ ${isComparative ? `- Modo comparativo: KPIs presentan resultComparative y yoyVar
 - NEVER emitir recomendaciones genéricas ("optimizar capital de trabajo") sin citar un rubro concreto + valor + periodo.
 - NEVER emitir las frases "no se suministró información", "información no detallada", "datos no disponibles". Si un dato falta, citar la norma de impracticabilidad o usar el placeholder \`— (dato no suministrado)\` solo dentro de preparerNotes.
 - NEVER inventar splits 50/50 ni porcentajes de distribución de utilidades que no vengan de los insumos.
+
+**Anclaje de KPIs a TOTALES VINCULANTES (cuando el preprocessor los expone).** Cuando el bloque TOTALES VINCULANTES contiene un KPI ya pre-calculado (anclado por el preprocessor determinista), MUST usar ese valor LITERAL en la columna resultPrimary del KPI correspondiente — NO recalcular. Campos esperados (cuando estén disponibles en el binding):
+- EBIT (Utilidad Operativa) → KPI MARGEN_OPERATIVO con formula = "EBIT / Ingresos × 100", resultPrimary = binding.MARGEN_OPERATIVO_CALCULADO.
+- Margen Neto (preprocessor) → KPI MARGEN_NETO.
+- ROE Dinámico (con patrimonio promedio) → KPI ROE.
+- ROA (con activo promedio) → KPI ROA.
+- Razón Corriente, Prueba Ácida, Endeudamiento Total, Apalancamiento Financiero → KPIs del mismo nombre.
+- Cobertura de Intereses → poblar SOLO si gastoFinanciero5305 > 0; otherwise omitir el KPI con diagnosis "Sin gasto financiero en el periodo (cuenta 5305 = $0)".
+- Días Cartera, Días Inventario, Días Proveedores → aplicar WARNING anti-división de abajo antes de poblar.
+
+If bindingTotals NO contiene el KPI pre-calculado then calcularlo a partir del primitivo más cercano disponible (ej. UtilidadNeta / Patrimonio para ROE estático), pero documentar en formula "calculado por agente, no anclado al preprocessor" + agregar a diagnosis la frase "El preprocessor no expuso este KPI; verificar coherencia con cifras del Pilar Valor" otherwise citar el valor anclado tal cual.
+
+**WARNING anti-división (Parte 6 spec v2.0) — Días Inventario / Proveedores.** Para los KPIs DIAS_INVENTARIO y DIAS_PROVEEDORES (categoría efficiency):
+
+If (costoVentas6 + costoProduccion7) / ingresos < 0.01 (base de costos < 1% de ingresos) then NEVER reportar el valor numérico del KPI; en su lugar:
+  - resultPrimary = "ND"
+  - resultComparative = "ND" (si modo comparativo)
+  - formula = "ND — denominador anómalamente pequeño (Clase 6 + Clase 7 < 1% Ingresos)"
+  - diagnosis = "No confiable: base de costos insuficiente para calcular ciclo operativo (Clase 6 + Clase 7 < 1% Ingresos). El balance puede tener subregistro de costos (NIA 240 — riesgo de fraude) o pertenecer a una empresa de servicios sin inventario significativo."
+  - yoyVariation = null
+otherwise calcular con la fórmula spec normal (Inventarios × 365 / Costo de Ventas; Cuentas por Pagar × 365 / Compras) y resultado decimal.
+
+Esta regla cubre el bug clásico de dividir entre un denominador ~$0 que produce resultados astronómicos sin sentido económico (ej. 36.500 días de inventario).
 
 Macro-supuestos Colombia 2026 (referenciales):
 - PIB esperado: 2-3% (BanRep / DANE).

@@ -46,13 +46,23 @@ export const KpiSchema = z.object({
    * Resultado numérico crudo (sin formato) — string para evitar pérdida de
    * precisión cuando es un ratio (1,33) o un porcentaje (35,2). El renderer
    * formatea según `unit`.
+   *
+   * Admite "ND" como sentinel cuando la fórmula NO es confiable (Parte 6
+   * spec v2.0): base de costos insuficiente (Clase 6 + 7 < 1% Ingresos),
+   * denominador anómalamente pequeño, etc. El renderer respeta "ND" tal cual.
    */
-  resultPrimary: z.string().min(1),
-  resultComparative: z.string().nullable(),
+  resultPrimary: z.union([
+    z.string().min(1),
+    z.literal('ND'),
+  ]).describe('Resultado del KPI. Use "ND" cuando la fórmula no es confiable (Parte 6 spec — base de costos insuficiente, etc.).'),
+  resultComparative: z.union([
+    z.string().min(1),
+    z.literal('ND'),
+  ]).nullable().describe('Resultado comparativo. Null si single-period; "ND" si la fórmula no es confiable en el periodo comparativo.'),
   unit: z.enum(['ratio', 'percent', 'days', 'times', 'cop']).describe('Unidad de presentación'),
   benchmarkBand: z.string().min(1).describe('Banda objetivo / interpretación. Ej: "> 1,5 saludable"'),
   diagnosis: z.string().min(1).describe('Diagnóstico contextual de 1-2 oraciones'),
-  yoyVariation: z.string().nullable().describe('Variación YoY (puntos porcentuales o %). Null si single-period'),
+  yoyVariation: z.string().nullable().describe('Variación YoY (puntos porcentuales o %). Null si single-period o si resultPrimary="ND"'),
 });
 
 export type KpiJson = z.infer<typeof KpiSchema>;
