@@ -275,6 +275,77 @@ curl -H "x-admin-token: $UTOPIA_ADMIN_TOKEN" https://utopia.example.com/api/admi
 
 Devuelve totales (calls, costo USD, fallback rate, unclean finish rate), `perAgent` desglose y `alerts` activadas según los thresholds del audit team: fallback >3% → P1, finishReason!=stop >1% → P0, costo diario >$50 → P1. Requiere `UTOPIA_ADMIN_TOKEN` env var; sin ella, el endpoint responde 503 (fail-closed).
 
+## Pending: Fase 3 — Chunked Schema (NIIF Report)
+
+**Status:** designed, not implemented. Documented here so a future session can execute it without recovering context.
+
+**Why this is the optimal long-term fix for the financial pipeline**
+
+`NiifReportJson` is a single fat schema (~30 fields, ~8-12K output tokens). Combined with `gpt-5.5` reasoning (~5-10K reasoning tokens for medium effort), each call sits dangerously close to the 32K `maxOutputTokens` budget. We blinded this with (a) gpt-5.5 premium (128K output ceiling) and (b) auto-fallback to `reasoning='low'` on `finish_reason=length`. Both are mitigations, not root-cause fixes — and both cost more than necessary.
+
+Splitting `NiifReportJson` into 3 sub-schemas executed sequentially gives each pass its own reasoning budget, **eliminates the bug by construction**, and allows reverting `niifAnalyst` from `gpt-5.5` ($30/1M output) back to `gpt-5.4-mini` ($4.50/1M) → **~6x cost reduction** (~$8K/month savings at 100 reports/day per the audit team's projections).
+
+**Architecture (3 sequential passes inside `runNiifAnalyst`):**
+
+```
+Pass 1: BalanceAndPnlSubSchema
+  - balanceSheet (assets, liabilities, equity, totales)
+  - incomeStatement (lines, totales, ORI)
+  - curatorFlags
+
+Pass 2: CashFlowAndEquitySubSchema
+  - cashFlow (3 secciones + closure)
+  - equityChanges (rows + notes)
+  - Input contextual: passes Pass-1 totales as `<previously_computed>` block
+    so the model anchors numbers consistently (no recomputation).
+
+Pass 3: TechnicalNotesSubSchema
+  - technicalNotes (reclasificaciones, impracticabilidades, mapping PUC)
+  - Input contextual: passes Pass-1 + Pass-2 outputs as `<previously_computed>`
+    so notes reference real numbers from earlier passes.
+
+Final assembly: merge `{ ...pass1, ...pass2, ...pass3 }` → validate against
+full `NiifReportSchema` (estructural, no LLM) → run cross-invariant checks
+(Activo=Pasivo+Patrimonio, EFE=PUC 11, ECP=Patrimonio, todos a $0 centavos).
+```
+
+**Files to touch:**
+
+1. `src/lib/agents/financial/contracts/niif-report.ts` — split exports:
+   - Keep `NiifReportSchema` (unchanged, becomes the assembly target)
+   - Add `BalanceAndPnlSubSchema`, `CashFlowAndEquitySubSchema`, `TechnicalNotesSubSchema`
+   - Add `assembleNiifReport(pass1, pass2, pass3): NiifReportJson` deterministic merger
+2. `src/lib/agents/financial/prompts/niif-analyst.prompt.ts` — split into 3 builder functions:
+   - `buildNiifAnalystPass1Prompt()` (Balance + P&L)
+   - `buildNiifAnalystPass2Prompt(pass1Output)` (EFE + ECP, with `<previously_computed>` block)
+   - `buildNiifAnalystPass3Prompt(pass1Output, pass2Output)` (notes)
+   - Each prompt retains anti-hallucination + colombia-2026 + niif-knowledge headers (cache-friendly stays intact).
+3. `src/lib/agents/financial/agents/niif-analyst.ts` — orchestrate 3 sequential `callFinancialAgent` calls:
+   - Each pass uses `MODELS.FINANCIAL_PIPELINE` (mini) instead of `FINANCIAL_PIPELINE_PREMIUM` (gpt-5.5)
+   - Each pass uses its own `MODELS_CONFIG.niifAnalystPass1/2/3` slot (add to `models.ts`, budgets ~12K each instead of 32K shared)
+   - On any pass failure, fail fast with diagnostic about which pass broke
+4. `src/lib/config/models.ts` — add 3 slots (`niifAnalystPass1`, `niifAnalystPass2`, `niifAnalystPass3`) each with `maxOutputTokens: 12000`, `reasoningEffort: 'medium'`. The aggregate budget (36K) is BIGGER than the current 32K monolithic, but each pass has full reasoning budget so the bug becomes impossible.
+5. Tests in `src/lib/agents/financial/__tests__/`:
+   - Unit test for `assembleNiifReport` (deterministic merger).
+   - Snapshot test: feed a known fixture through `runNiifAnalyst`, assert the final `NiifReportJson` shape matches Pass-1+2+3 assembled.
+
+**What stays the same:**
+- `runNiifAnalyst` public signature (returns `NiifAnalysisResult`, same callers).
+- `toNiifAnalysisResult` adapter (renderer.ts) — consumes assembled JSON, unchanged.
+- PDF Élite + Excel — they read assembled JSON, no changes.
+- Validators — they validate assembled JSON, no changes.
+- Strategy Director + Governance Specialist — they consume `niifOutput.fullContent`, no changes (they can also benefit from chunked pattern but that's Fase 4).
+
+**Estimated effort:** 8h (1 senior dev session). The risk is low because the assembled output must pass `NiifReportSchema.parse()` at the end — if the structure breaks, tests catch it before deploy.
+
+**Validation:**
+- `npx tsc --noEmit` exit 0 throughout.
+- Existing 536 tests pass + 2 new tests (assembler + integration).
+- Compare 5 real reports pre-vs-post via `__fixtures__/`: numeric outputs identical at $0 cents (deterministic invariants enforce this).
+- Cost reduction confirmed via `/api/admin/telemetry` after 1 week: `perAgent` for `niif-analyst` should show `modelId: gpt-5.4-mini` (not gpt-5.5) and `costUsdMicros` aggregate ~6x lower.
+
+**When to do it:** when the audit team's monitoring (or your own ops sense) shows that either (a) `gpt-5.5` costs are uncomfortable, or (b) fallback rate > 1% across reports indicates the monolithic budget is fragile despite the blindaje. Until then, the current setup is production-safe per the audit team's verdict.
+
 ## Layout Gotchas
 
 - **Lenis smooth scroll is global.** `src/app/layout.tsx` wraps the whole app with `<SmoothScroll>` → `ReactLenis root`. Lenis hijacks wheel events at the document level to drive smooth scrolling. Any subtree that relies on internal `overflow-y-auto` containers (e.g. the workspace shell `src/app/workspace/layout.tsx`, fullscreen modals) **must** carry `data-lenis-prevent` on an ancestor or wheel events never reach the scrollable child and mouse-wheel scroll dies silently. The workspace shell root `<div>` already has it — preserve it when editing that layout.
