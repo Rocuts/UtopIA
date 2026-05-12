@@ -242,4 +242,23 @@ export type FinancialProgressEvent =
   | { type: 'stage_complete'; stage: 1 | 2 | 3 | 4; label: string }
   | { type: 'warning'; warnings: string[] }
   | { type: 'error'; message: string }
+  | {
+      /**
+       * Telemetría por-agente para observabilidad UI/dashboard. Lo emite cada
+       * agent.ts después de su `callFinancialAgent`, vía el callback
+       * `onTelemetry`. Incluye señal diagnóstica del primer pase cuando el
+       * auto-fallback se activó (`fallbackUsed=true`).
+       */
+      type: 'agent_telemetry';
+      agentName: string;
+      modelId?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+      elapsedMs: number;
+      fallbackUsed: boolean;
+      firstPassReasoningTokens?: number;
+      firstPassFinishReason?: string;
+    }
   | { type: 'done' };

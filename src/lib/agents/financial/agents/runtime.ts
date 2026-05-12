@@ -100,6 +100,13 @@ export interface CallFinancialAgentOptions<TSchema extends z.ZodTypeAny> {
   signal?: AbortSignal;
   /** Intentos máximos (incluye el primero). Default 3 — coincide con `withRetry`. */
   maxAttempts?: number;
+  /**
+   * Callback opcional para emitir telemetría (e.g. al SSE consumer). Se invoca
+   * justo antes del return con el `meta` final. El caller (cada agent.ts)
+   * decide qué hacer con él — típicamente emitir el SSE event `agent_telemetry`
+   * vía su propio `onProgress`. No bloquea: si el callback lanza, propaga.
+   */
+  onTelemetry?: (meta: CallFinancialAgentResult<TSchema>['meta']) => void;
 }
 
 export interface CallFinancialAgentResult<TSchema extends z.ZodTypeAny> {
@@ -120,6 +127,20 @@ export interface CallFinancialAgentResult<TSchema extends z.ZodTypeAny> {
      * sucede frecuentemente, considerar subir `maxOutputTokens` del slot.
      */
     fallbackUsed: boolean;
+    /**
+     * Reasoning tokens consumidos por el PRIMER pase, cuando el auto-fallback
+     * se activó (`fallbackUsed=true`). Es la señal diagnóstica clave: dice
+     * cuánto razonamiento gastó GPT-5 antes de quedarse sin budget. Si suele
+     * acercarse al `maxOutputTokens` del slot, subir el budget.
+     * `undefined` cuando no hubo fallback o el provider no expone `usage`.
+     */
+    firstPassReasoningTokens?: number;
+    /**
+     * `finishReason` del PRIMER pase fallido (típicamente `'length'`). Se
+     * captura solo cuando el auto-fallback se activa — antes esta señal se
+     * perdía porque `meta.finishReason` reflejaba el segundo pase exitoso.
+     */
+    firstPassFinishReason?: string;
   };
 }
 
@@ -192,6 +213,11 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
 
   let result = await runPass(reasoningEffort);
   let fallbackUsed = false;
+  // Captura del PRIMER pase fallido cuando el auto-fallback se activa. Antes
+  // se perdía esta señal porque `result` quedaba sobrescrito por el segundo
+  // pase. Es el indicador diagnóstico clave (cuánto reasoning consumió GPT-5
+  // antes de morir con finish_reason=length).
+  let firstPassMeta: { reasoningTokens?: number; finishReason: string } | null = null;
 
   // Salvaguarda contra el bug `finish_reason=length` + textLen=0 propio de los
   // reasoning models GPT-5: si el reasoning consumió todo el budget, reintentar
@@ -202,8 +228,15 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
     (result.experimental_output === undefined || result.experimental_output === null);
 
   if (hitLengthBug && (reasoningEffort === 'medium' || reasoningEffort === 'high')) {
+    const firstUsage =
+      (result as unknown as { usage?: Record<string, number | undefined> }).usage ?? {};
+    firstPassMeta = {
+      reasoningTokens: firstUsage.reasoningTokens,
+      finishReason: result.finishReason,
+    };
     console.warn(
-      `[callFinancialAgent:${agentName}] hit finish_reason=length con effort=${reasoningEffort}; ` +
+      `[callFinancialAgent:${agentName}] hit finish_reason=length con effort=${reasoningEffort} ` +
+        `(reasoningTokens=${firstUsage.reasoningTokens ?? 'n/a'}); ` +
         `reintentando con effort='low' (auto-fallback).`,
     );
     result = await runPass('low');
@@ -221,17 +254,20 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
   // accedemos con optional chaining sobre `unknown` para no acoplar a versiones.
   const usage = (result as unknown as { usage?: Record<string, number | undefined> }).usage ?? {};
 
-  return {
-    json,
-    meta: {
-      agentName,
-      finishReason: result.finishReason,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      reasoningTokens: usage.reasoningTokens,
-      cachedInputTokens: usage.cachedInputTokens,
-      elapsedMs: Date.now() - t0,
-      fallbackUsed,
-    },
+  const meta: CallFinancialAgentResult<TSchema>['meta'] = {
+    agentName,
+    finishReason: result.finishReason,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    reasoningTokens: usage.reasoningTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    elapsedMs: Date.now() - t0,
+    fallbackUsed,
+    firstPassReasoningTokens: firstPassMeta?.reasoningTokens,
+    firstPassFinishReason: firstPassMeta?.finishReason,
   };
+
+  opts.onTelemetry?.(meta);
+
+  return { json, meta };
 }
