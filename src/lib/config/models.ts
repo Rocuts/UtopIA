@@ -202,14 +202,21 @@ export const MODELS_CONFIG = {
   // ~6x mas barato en output.
   //
   // Pass 1 (Backbone): company + balanceSheet + incomeStatement + curatorFlags.
-  // Schema mas rico — ~5K output visible + ~7-8K reasoning. 16K total.
-  niifAnalystPass1: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
+  // Schema mas rico — ~5K output visible + ~7-8K reasoning.
+  // 2026-05-12 bump 16K → 24K tras Wave 2: F1 anadio ~40 lineas de prompt
+  // (anti-dup G53 + 8 anomalias + cascada impuestos + disclaimers Parte 9)
+  // y F4 anadio ~25 lineas al bindingTotals (14 KPIs + 4175 + periodoTipo).
+  // Input crecio significativamente; reasoning necesita mas budget.
+  niifAnalystPass1: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
   // Pass 2 (Derivados): cashFlow + equityChanges. Recibe anchors de Pass 1
   // en bloque <previously_computed>. ~4K output visible + ~6K reasoning.
-  niifAnalystPass2: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+  // 2026-05-12 bump 12K → 16K por las mismas razones.
+  niifAnalystPass2: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
   // Pass 3 (Narrativa): technicalNotes. Recibe anchors de Pass 1 + 2.
   // ~4K output visible (notas wordy + Art. 647 E.T.) + ~6K reasoning.
-  niifAnalystPass3: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+  // 2026-05-12 bump 12K → 16K — Wave 2.F1 anadio 6 disclaimers condicionales
+  // + nota Going Concern dedicada + consolidacion de 8 anomalias.
+  niifAnalystPass3: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
   strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
   governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
 
