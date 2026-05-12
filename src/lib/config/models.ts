@@ -186,7 +186,30 @@ export const MODELS_CONFIG = {
   // strict JSON). Budget DEBE acomodar reasoning + output — si no, finish_reason
   // = 'length' con textLen=0 (bug conocido OpenAI dev community 2026).
   // 16k → 32k para NIIF Analyst que tiene el schema más rico (NiifReportSchema).
+  /**
+   * @deprecated 2026-05-12 — Fase 3 reemplaza este slot por niifAnalystPass1/2/3.
+   * Se conserva como referencia. NO usar en codigo nuevo; el agente
+   * `runNiifAnalyst` (Fase 3.D) usa los 3 slots Pass1/2/3 con mini en lugar
+   * de gpt-5.5.
+   */
   niifAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 32000 } as const,
+  // -- NIIF Analyst chunked (Fase 3 — 3 passes secuenciales) ---------------
+  // Reasoning models GPT-5.4 family: budget = max_tokens x 0.5 con medium
+  // effort (formula OpenRouter 2026). Cada pass tiene reasoning completo
+  // para su scope, por lo que el bug `finish_reason=length` se vuelve
+  // estructuralmente imposible — y el modelo base puede revertir de
+  // FINANCIAL_PIPELINE_PREMIUM (gpt-5.5) a FINANCIAL_PIPELINE (mini),
+  // ~6x mas barato en output.
+  //
+  // Pass 1 (Backbone): company + balanceSheet + incomeStatement + curatorFlags.
+  // Schema mas rico — ~5K output visible + ~7-8K reasoning. 16K total.
+  niifAnalystPass1: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
+  // Pass 2 (Derivados): cashFlow + equityChanges. Recibe anchors de Pass 1
+  // en bloque <previously_computed>. ~4K output visible + ~6K reasoning.
+  niifAnalystPass2: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+  // Pass 3 (Narrativa): technicalNotes. Recibe anchors de Pass 1 + 2.
+  // ~4K output visible (notas wordy + Art. 647 E.T.) + ~6K reasoning.
+  niifAnalystPass3: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
   strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
   governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
 
