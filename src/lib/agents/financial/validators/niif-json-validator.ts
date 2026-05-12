@@ -62,13 +62,13 @@ function findEquityClosingRow(json: NiifReportJson): EquityChangeRowJson | null 
  * pérdida de precisión.
  *
  * @param json     Output del NIIF Analyst validado por Zod.
- * @param options  `cashAccountPuc11` opcional: cifra de Efectivo (PUC 11) en
- *                 centavos según el preprocessor — para cruzar contra el cash
- *                 closing del EFE.
+ * @param options  Anclas del preprocessor para checks cruzados:
+ *   - `cashAccountPuc11Cents`: Efectivo (PUC 11) en centavos — cruza contra cashClosing del EFE.
+ *   - `totalExpensesClass5Cents`: Total Clase 5 preprocesado — detecta duplicación Grupo 53.
  */
 export function validateNiifReportJson(
   json: NiifReportJson,
-  options: { cashAccountPuc11Cents?: string } = {},
+  options: { cashAccountPuc11Cents?: string; totalExpensesClass5Cents?: string } = {},
 ): ReportValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -161,6 +161,64 @@ export function validateNiifReportJson(
           `E6. Δ(ORI) en ECP (${fmtCop(oriDelta)}) ≠ ORI del P&G (${fmtCop(oriPnl)}). Brecha: ${fmtCop(gap)}.`,
         );
       }
+    }
+  }
+
+  // -- E7. Utilidad Neta P&L vs Variación 3605 ECP (Parte 8.1 CHECK 2 spec v2.0) --
+  //
+  // El incremento de resultadoEjercicio entre opening_balance y closing_balance
+  // del ECP DEBE coincidir con la Utilidad Neta del P&L del periodo.
+  // Tolerancia 0.5% para absorber redondeos de cents → pesos en presentación.
+  // Capa 1 Elite Protocol — invariante de consistencia entre EEFF.
+  {
+    const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+    if (!openingRow || !closing) {
+      errors.push('E7. ECP debe incluir opening_balance y closing_balance para verificar Utilidad Neta.');
+    } else {
+      const openingResult = parseMoneyCop(openingRow.resultadoEjercicio);
+      const closingResult = parseMoneyCop(closing.resultadoEjercicio);
+      const delta = closingResult - openingResult;
+      const netIncome = parseMoneyCop(json.incomeStatement.netIncomePrimary);
+      const absNetIncome = netIncome < ZERO ? -netIncome : netIncome;
+      // Tolerancia: 0.5% del netIncome (mín $10.000 cents = $100 COP para casos cercanos a cero)
+      const tolerance = absNetIncome / BigInt(200) + BigInt(10000);
+      const diff = delta > netIncome ? delta - netIncome : netIncome - delta;
+      if (diff > tolerance) {
+        errors.push(
+          `E7. Variación resultadoEjercicio ECP (${fmtCop(delta)}) ≠ Utilidad Neta P&L (${fmtCop(netIncome)}); ` +
+            `diferencia ${fmtCop(diff)} excede tolerancia ${fmtCop(tolerance)}. ` +
+            `Capa 1 Elite — Parte 8.1 CHECK 2 spec v2.0.`,
+        );
+      }
+    }
+  }
+
+  // -- E8. Anti-duplicación Grupo 53 (Parte 8.1 CHECK 4 spec v2.0) -----------
+  //
+  // Verifica que Σ líneas de incomeStatement con código de cuenta que empieza
+  // por '5' NO excede `totalExpensesClass5Cents` del preprocessor. Si el LLM
+  // listó "Grupo 53 (total)" y también subcuentas "5305", "5395" como líneas
+  // independientes, la suma será mayor que el total real de Clase 5.
+  // Tolerancia 1% del total anchored (mín $100.000 cents = $1.000 COP).
+  // Capa 1 Elite Protocol — anti-doble-contabilización.
+  if (options.totalExpensesClass5Cents !== undefined) {
+    const totalAnchored = parseMoneyCop(options.totalExpensesClass5Cents);
+    const absAnchored = totalAnchored < ZERO ? -totalAnchored : totalAnchored;
+    let sumLines = ZERO;
+    for (const line of json.incomeStatement.lines) {
+      if (line.account !== null && line.account.startsWith('5')) {
+        const lineAmt = parseMoneyCop(line.amountPrimary);
+        sumLines += lineAmt < ZERO ? -lineAmt : lineAmt;
+      }
+    }
+    // Tolerancia: 1% del total anchored + $100.000 cents floor
+    const tolerance = absAnchored / BigInt(100) + BigInt(100000);
+    if (sumLines > absAnchored + tolerance) {
+      errors.push(
+        `E8. Σ líneas Clase 5 en incomeStatement (${fmtCop(sumLines)}) excede total preprocesado ` +
+          `(${fmtCop(absAnchored)}) en más de tolerancia (${fmtCop(tolerance)}). ` +
+          `Posible duplicación Grupo 53 + subcuentas 5305/5395 — Parte 8.1 CHECK 4 spec v2.0.`,
+      );
     }
   }
 

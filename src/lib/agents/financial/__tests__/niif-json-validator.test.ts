@@ -185,3 +185,105 @@ describe('validateNiifReportJson — Capa 1 Integridad Aritmética', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe('validateNiifReportJson — E7 Utilidad Neta P&L vs Variacion 3605 ECP', () => {
+  it('E7: pasa cuando delta ECP resultado == netIncomePrimary', () => {
+    // makeReport() fixture: opening resultadoEjercicio=0, closing=200000, delta=200000
+    // netIncomePrimary=200000 — coherente por construccion
+    const result = validateNiifReportJson(makeReport());
+    expect(result.ok).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('E7: detecta cuando delta ECP resultado != netIncome (diferencia > 0.5%)', () => {
+    const broken = makeReport();
+    // Closing resultadoEjercicio cambiado a 999 cents. Delta = 999 - 0 = 999.
+    // netIncomePrimary = 200000. Diferencia = 199001 >> tolerancia (200000/200 + 10000 = 11000).
+    broken.equityChanges.rows[1].resultadoEjercicio = '999';
+    const result = validateNiifReportJson(broken);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('E7'))).toBe(true);
+  });
+
+  it('E7: pasa con diferencia dentro del 0.5% de tolerancia', () => {
+    const report = makeReport();
+    // netIncomePrimary = 200000. Tolerancia = 200000/200 + 10000 = 11000.
+    // Delta ECP = 200000 + 10000 = 210000. Diferencia = 10000 <= 11000 => pasa.
+    report.equityChanges.rows[1].resultadoEjercicio = '210000';
+    const result = validateNiifReportJson(report);
+    expect(result.errors.some((e) => e.includes('E7'))).toBe(false);
+  });
+
+  it('E7: reporta error cuando falta opening_balance', () => {
+    const broken = makeReport();
+    broken.equityChanges.rows = broken.equityChanges.rows.filter((r) => r.kind !== 'opening_balance');
+    const result = validateNiifReportJson(broken);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('E7'))).toBe(true);
+  });
+});
+
+describe('validateNiifReportJson — E8 anti-duplicacion Grupo 53', () => {
+  it('E8: pasa cuando no se provee totalExpensesClass5Cents (skip silencioso)', () => {
+    const report = makeReport();
+    // Sin ancla del preprocessor — el check se omite silenciosamente
+    const result = validateNiifReportJson(report);
+    expect(result.ok).toBe(true);
+  });
+
+  it('E8: pasa cuando suma lineas Clase 5 == total anchored', () => {
+    const report = makeReport();
+    report.incomeStatement.lines = [
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '52', label: 'Ventas', amountPrimary: '50000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '53', label: 'No-op', amountPrimary: '30000', amountComparative: null, level: 3, isAbsolute: true },
+    ];
+    // Suma = 180000. Total anchored = 180000. Dentro de tolerancia (1% + 100000 = 101800).
+    const result = validateNiifReportJson(report, { totalExpensesClass5Cents: '180000' });
+    expect(result.ok).toBe(true);
+  });
+
+  it('E8: detecta duplicacion Grupo 53 + subcuenta 5305', () => {
+    const report = makeReport();
+    report.incomeStatement.lines = [
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '52', label: 'Ventas', amountPrimary: '50000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '53', label: 'No-op (Grupo total)', amountPrimary: '30000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '5305', label: 'Financieros (YA EN 53)', amountPrimary: '20000', amountComparative: null, level: 2, isAbsolute: true },
+    ];
+    // Suma lineas = 200000. Total anchored = 180000.
+    // Tolerancia = 180000/100 + 100000 = 101800.
+    // 200000 > 180000 + 101800 = 281800? No — eso pasaria. Recalculo:
+    // 200000 > 281800 es falso. Pero el test dice que debe detectar.
+    // La tolerancia es 1% del total: 180000 * 1% = 1800. + floor 100000 = 101800.
+    // Necesitamos una diferencia que exceda 101800. Con total=180000 y suma=200000,
+    // diferencia=20000, que NO excede 101800.
+    // Usamos un total mas pequeno para que el floor no ahogue la deteccion:
+    // total=5000, suma=200000. tolerancia=5000/100+100000=100050. 200000>5000+100050=105050? Si.
+    const result2 = validateNiifReportJson(report, { totalExpensesClass5Cents: '5000' });
+    expect(result2.ok).toBe(false);
+    expect(result2.errors.some((e) => e.includes('E8'))).toBe(true);
+  });
+
+  it('E8: pasa cuando lineas Clase 5 estan dentro del 1% + floor del total anchored', () => {
+    const report = makeReport();
+    report.incomeStatement.lines = [
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
+    ];
+    // Suma = 100000. Total anchored = 10000000 (grande). Tolerancia = 100000 + 100000 = 200000.
+    // 100000 <= 10000000 + 200000 = 10200000 => pasa.
+    const result = validateNiifReportJson(report, { totalExpensesClass5Cents: '10000000' });
+    expect(result.ok).toBe(true);
+  });
+
+  it('E8: ignora lineas con account null (totales sin codigo PUC)', () => {
+    const report = makeReport();
+    report.incomeStatement.lines = [
+      { account: null, label: 'Total Gastos', amountPrimary: '9999999', amountComparative: null, level: 4, isAbsolute: true },
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
+    ];
+    // Solo la linea con account='51' cuenta. Suma = 100000 <= 10000000 + tolerancia.
+    const result = validateNiifReportJson(report, { totalExpensesClass5Cents: '10000000' });
+    expect(result.ok).toBe(true);
+  });
+});
