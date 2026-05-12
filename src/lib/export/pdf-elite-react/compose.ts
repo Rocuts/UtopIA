@@ -692,28 +692,49 @@ function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
 function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
   if (!totals) return [];
 
-  // Razón Corriente — thresholds [1.0, 1.5, 2.5] (sourced from financial pipeline
-  // KPI conventions; standard NIIF PYME ratio bands).
+  // Razón Corriente — consume pre-calculado de Wave 2.F4 cuando existe;
+  // fallback defensivo al cálculo local para balances cacheados pre-F4.
   const razonCorriente =
-    totals.pasivoCorriente !== 0 ? totals.activoCorriente / totals.pasivoCorriente : 0;
+    totals.razonCorriente != null
+      ? totals.razonCorriente
+      : totals.pasivoCorriente !== 0
+        ? totals.activoCorriente / totals.pasivoCorriente
+        : 0;
 
-  // Prueba ácida — inventario approximated as 0 (controlTotals doesn't carry an
-  // inventario field). Thresholds [0.7, 1.0, 2.0].
-  const inventario = 0;
+  // Prueba Ácida — consume pre-calculado de Wave 2.F4 (usa inventarios14 real).
+  // Fallback: resta inventarios14 si el campo existe, si no aproxima con 0.
+  // Why: el fallback con inventario=0 era idéntico a Razón Corriente — KPI falso.
   const pruebaAcida =
-    totals.pasivoCorriente !== 0
-      ? (totals.activoCorriente - inventario) / totals.pasivoCorriente
-      : 0;
+    totals.pruebaAcida != null
+      ? totals.pruebaAcida
+      : totals.pasivoCorriente !== 0
+        ? (totals.activoCorriente - (totals.inventarios14 ?? 0)) / totals.pasivoCorriente
+        : 0;
 
-  // Endeudamiento — lower-better. Thresholds [0.3, 0.5, 0.7].
-  const endeudamiento = totals.activo !== 0 ? totals.pasivo / totals.activo : 0;
+  // Endeudamiento — consume pre-calculado (porcentaje decimal, ej. 40 = 40%);
+  // el dial espera 0..1, así que si viene como % lo normalizamos.
+  const endeudamientoRaw =
+    totals.endeudamientoTotal != null
+      ? totals.endeudamientoTotal
+      : totals.activo !== 0
+        ? (totals.pasivo / totals.activo) * 100
+        : 0;
+  // Wave 2.F4 almacena endeudamientoTotal como porcentaje (0-100). El gauge
+  // trabaja en escala 0-1, por lo que dividimos entre 100.
+  const endeudamiento = endeudamientoRaw > 1 ? endeudamientoRaw / 100 : endeudamientoRaw;
 
-  // Cobertura intereses (approximated): utilidadNeta / 0 or fallback 0 since
-  // gastoFinanciero is not directly exposed. We use utilidadNeta as proxy. A
-  // future iteration with broken-out interest expense will replace this.
-  const coberturaInt = 0;
+  // Cobertura de Intereses — consume pre-calculado de Wave 2.F4.
+  // null significa "sin gasto financiero" (gastoFinanciero5305 === 0); se
+  // renderiza como "N/A" en lugar de 0, que sería información falsa.
+  const coberturaIntereses =
+    'coberturaIntereses' in totals
+      ? totals.coberturaIntereses // puede ser number | null
+      : null; // campo ausente en balances pre-F4 → omitir gauge
 
-  return [
+  // Construir array de gauges; Cobertura Intereses solo se incluye cuando el
+  // ratio es computable (not null) — evita mostrar dial con valor 0 cuando el
+  // KPI no aplica para la empresa.
+  const gauges: DialGaugeSpec[] = [
     {
       label: 'Razón Corriente',
       value: clampForGauge(razonCorriente, 0, 5),
@@ -743,14 +764,16 @@ function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
     },
     {
       label: 'Cobertura Intereses',
-      value: clampForGauge(coberturaInt, 0, 10),
+      value: coberturaIntereses != null ? clampForGauge(coberturaIntereses, 0, 10) : 0,
       min: 0,
       max: 10,
       thresholds: [1.5, 3.0, 6.0],
       areaAccent: 'futuro' as AreaKey,
-      caption: 'Óptimo ≥ 3,0',
+      caption: coberturaIntereses != null ? 'Óptimo ≥ 3,0' : 'Sin gasto financiero',
     },
   ];
+
+  return gauges;
 }
 
 function clampForGauge(v: number, min: number, max: number): number {
