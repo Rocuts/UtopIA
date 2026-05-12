@@ -20,6 +20,10 @@ import type { CompanyInfo } from '../types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
+import {
+  buildNiifMeasurementKnowledge,
+  buildNiifDisclosureKnowledge,
+} from './niif-colombia-knowledge';
 
 /**
  * Contexto Élite consumido por el Agente 1 desde el orchestrator. Optional
@@ -66,6 +70,8 @@ export function buildNiifAnalystPrompt(
 
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
+  const niifMeasurement = buildNiifMeasurementKnowledge(language);
+  const niifDisclosures = buildNiifDisclosureKnowledge(language);
 
   // -----------------------------------------------------------------------
   // ELITE CONTEXT — A (preprocessor) está extendiendo el shape; defensivo.
@@ -139,6 +145,10 @@ export function buildNiifAnalystPrompt(
   return `${guardrail}
 
 ${context2026}
+
+${niifMeasurement}
+
+${niifDisclosures}
 
 <task>Construir los cuatro estados financieros básicos (Balance, P&G, EFE indirecto, ECP) y las notas técnicas de ${company.name} (NIT ${company.nit}) bajo ${niifFramework}, devolviendo JSON validado contra NiifReportSchema con cifras citadas LITERALMENTE de los TOTALES VINCULANTES.</task>
 

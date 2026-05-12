@@ -20,6 +20,7 @@ import type { CompanyInfo } from '../types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
+import { buildNiifDisclosureKnowledge } from './niif-colombia-knowledge';
 
 export interface GovernanceEliteContext {
   comparativosImpracticables?: boolean;
@@ -65,6 +66,7 @@ export function buildGovernancePrompt(
 
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
+  const niifDisclosures = buildNiifDisclosureKnowledge(language);
 
   // Modo comparativo
   const periods = preprocessed?.periods ?? [];
@@ -104,6 +106,8 @@ export function buildGovernancePrompt(
   return `${guardrail}
 
 ${context2026}
+
+${niifDisclosures}
 
 <task>Producir el sustento legal y normativo del cierre de ${company.name} (NIT ${company.nit}) — DOCUMENTO 1: Notas a los Estados Financieros (NIC 1 §112-138 / Sec. 8 PYMES) + DOCUMENTO 2: Acta de ${assemblyType} Ordinaria — devolviendo JSON validado contra GovernanceReportSchema.</task>
 

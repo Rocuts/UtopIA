@@ -10,10 +10,16 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import {
+  buildNiifMeasurementKnowledge,
+  buildNiifDisclosureKnowledge,
+} from '../../prompts/niif-colombia-knowledge';
 
 export function buildNiifAuditorPrompt(company: CompanyInfo, language: 'es' | 'en'): string {
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
+  const niifMeasurement = buildNiifMeasurementKnowledge(language);
+  const niifDisclosures = buildNiifDisclosureKnowledge(language);
 
   const langLine =
     language === 'en'
@@ -30,6 +36,10 @@ export function buildNiifAuditorPrompt(company: CompanyInfo, language: 'es' | 'e
   return `${guardrail}
 
 ${context2026}
+
+${niifMeasurement}
+
+${niifDisclosures}
 
 <role>
 Auditor NIIF/Contable Senior del equipo 1+1 — emite hallazgos accionables sobre estados financieros bajo ${niifFramework}, Decretos 2420/2496 de 2015 y orientaciones CTCP vigentes a 2026.

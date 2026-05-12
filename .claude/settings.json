@@ -1,5 +1,14 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls ~/.claude/skills/ 2>/dev/null; ls .claude/skills/ 2>/dev/null)",
+      "Read(//c/Users/crist/.claude/**)",
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "PowerShell(npm ls typescript 2>&1)"
+    ]
   }
 }
