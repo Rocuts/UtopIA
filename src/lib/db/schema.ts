@@ -783,3 +783,59 @@ export const macroFactors = pgTable('macro_factors', {
 
 export type MacroFactorsRow = typeof macroFactors.$inferSelect;
 export type NewMacroFactorsRow = typeof macroFactors.$inferInsert;
+
+// ─── Telemetría por llamada a agente LLM ────────────────────────────────────
+//
+// Una row = una invocación a `callFinancialAgent` (runtime canónico de
+// `src/lib/agents/financial/agents/runtime.ts`). Persiste el `meta` que ya
+// devuelve el helper hoy (audit team observó que se construye pero se
+// descarta — sin esto no hay dashboard ni alertas posibles).
+//
+// `costUsdMicros` se calcula server-side antes del insert con pricing
+// oficial OpenAI (ver `src/lib/db/telemetry-pricing.ts`). 1 USD = 1_000_000
+// micros — preservamos 6 decimales sin pérdida en SQL integer.
+//
+// `fallbackUsed=true` + `firstPass*` capturan el caso del auto-fallback
+// `reasoningEffort='low'` cuando el modelo hit `finish_reason=length` con
+// output vacío: la telemetría del PRIMER pase fallido sirve para tunear
+// `maxOutputTokens` por slot si la salvaguarda dispara frecuentemente.
+//
+// FK `reportId` es nullable + onDelete: 'set null' — algunos pipelines
+// (audit, quality meta) no producen una row en `reports`, y si el reporte
+// se elimina queremos preservar la telemetría histórica.
+
+export const agentTelemetry = pgTable('agent_telemetry', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  /** Identificador del reporte que disparó la llamada (nullable — algunos pipelines no producen report row). */
+  reportId: uuid('report_id').references(() => reports.id, { onDelete: 'set null' }),
+  /** Slot del agente: 'niif-analyst', 'strategy-director', 'tax-optimizer', etc. */
+  agentName: text('agent_name').notNull(),
+  /** Modelo OpenAI usado: 'gpt-5.5', 'gpt-5.4-mini', etc. */
+  modelId: text('model_id').notNull(),
+  /** Tokens de input consumidos. */
+  inputTokens: integer('input_tokens'),
+  /** Tokens de output devueltos al cliente. */
+  outputTokens: integer('output_tokens'),
+  /** Tokens de reasoning interno (GPT-5 family). */
+  reasoningTokens: integer('reasoning_tokens'),
+  /** Tokens de input servidos por cache. */
+  cachedInputTokens: integer('cached_input_tokens'),
+  /** Costo calculado server-side en USD (en micro-USD para precisión: integer). */
+  costUsdMicros: integer('cost_usd_micros'),
+  /** Tiempo total de la llamada en milisegundos. */
+  elapsedMs: integer('elapsed_ms').notNull(),
+  /** Razón de finalización: 'stop' | 'length' | 'content-filter' | etc. */
+  finishReason: text('finish_reason'),
+  /** Si true, la salvaguarda auto-fallback (reasoning='low') se activó. */
+  fallbackUsed: boolean('fallback_used').notNull().default(false),
+  /** Si fallbackUsed=true, los tokens consumidos por el PRIMER pase fallido (señal diagnóstica). */
+  firstPassReasoningTokens: integer('first_pass_reasoning_tokens'),
+  firstPassFinishReason: text('first_pass_finish_reason'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export type AgentTelemetry = typeof agentTelemetry.$inferSelect;
+export type NewAgentTelemetry = typeof agentTelemetry.$inferInsert;
