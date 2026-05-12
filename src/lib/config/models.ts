@@ -162,12 +162,21 @@ export const MODELS_CONFIG = {
   ocrLight: { reasoningEffort: 'minimal', textVerbosity: 'low', maxOutputTokens: 8000 } as const,
 
   // -- Pipeline financiero base (NIIF -> Strategy -> Governance) -----------
-  niifAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
-  strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
-  governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
+  // GPT-5.4 BUG NOTE: `max_completion_tokens` INCLUYE los tokens de reasoning
+  // (invisibles). Con `reasoning_effort: 'medium'` el modelo gasta ~5-10k
+  // tokens internos. Estos agents tienen prompts grandes post-cableado
+  // niif-colombia-knowledge (guardrail + colombia-2026 + niif-measurement +
+  // niif-disclosures = ~5k input) y schemas Zod complejos (~8-12k output
+  // strict JSON). Budget DEBE acomodar reasoning + output — si no, finish_reason
+  // = 'length' con textLen=0 (bug conocido OpenAI dev community 2026).
+  // 16k → 32k para NIIF Analyst que tiene el schema más rico (NiifReportSchema).
+  niifAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 32000 } as const,
+  strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
+  governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
 
   // -- Auditoría especializada (paralelo) ----------------------------------
-  niifAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  // niifAuditor también recibe niif-measurement + niif-disclosures: budget ampliado.
+  niifAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 12000 } as const,
   taxAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
   legalAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
   fiscalReviewer: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
