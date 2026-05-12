@@ -33,7 +33,11 @@ export type CuratorRuleCode =
   | 'CUR-R13'
   | 'CUR-R14'
   | 'CUR-R15'
-  | 'CUR-R16';
+  | 'CUR-R16'
+  // Wave 2.F4 — Parte 5 spec v2.0 anomalías catalogadas como reglas curator.
+  | 'CUR-R17'
+  | 'CUR-R18'
+  | 'CUR-R19';
 
 export interface CuratorFinding {
   code: CuratorRuleCode;

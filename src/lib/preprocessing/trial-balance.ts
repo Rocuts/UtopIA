@@ -117,6 +117,17 @@ export interface ControlTotalsCents {
   impuestoCausado: bigint;
   /** Saldo final caja (PUC 11) en cents. */
   efectivoCuenta11: bigint;
+  // -----------------------------------------------------------------------
+  // Wave 2.F4 — Parte 1.3 spec v2.0: ingresos netos de devoluciones 4175.
+  // Devoluciones 4175: cuentas auxiliares de Clase 4 cuyo código empieza por
+  // '4175'. Tienen naturaleza débito (restan ingresos); las restamos del
+  // bruto para obtener `ingresosNetos`. NIIF 15 §47 + Decreto 2649/93 PUC
+  // grupo 4175 (Devoluciones en ventas) — presentación neta obligatoria.
+  // -----------------------------------------------------------------------
+  /** Σ |saldo de cuentas 4175xx| en cents (devoluciones en ventas). */
+  totalDevoluciones: bigint;
+  /** Ingresos netos = |ingresos bruto Clase 4| − totalDevoluciones, en cents. */
+  ingresosNetos: bigint;
   /**
    * Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
    * Detector cents:
@@ -145,6 +156,10 @@ export interface ControlTotalsRaw {
   efectivoCuenta11: string;
   /** String canónica del saldo a favor del impuesto de renta. */
   saldoAFavorImpuesto: string;
+  /** Wave 2.F4 — Devoluciones 4175 en string canónica. */
+  totalDevoluciones: string;
+  /** Wave 2.F4 — Ingresos netos (bruto − devoluciones) en string canónica. */
+  ingresosNetos: string;
 }
 
 /**
@@ -238,6 +253,68 @@ export interface ControlTotals {
    * Neto a Pagar" debajo del rubro de Impuestos Corrientes (Pasivo).
    */
   impuestoRentaNeto?: ImpuestoRentaNeto;
+  // -----------------------------------------------------------------------
+  // Wave 2.F4 — Parte 1.3 spec v2.0: ingresos netos de devoluciones 4175 +
+  // 14 KPIs deterministicos derivados (Parte 6 spec). Fuente única de verdad
+  // que ELIMINA divergencia LLM vs valor.ts vs PDF compose. Opcionales por
+  // retrocompatibilidad con tests/literales que construyen `ControlTotals` a
+  // mano; `buildSnapshotForPeriod` SIEMPRE los popula.
+  // -----------------------------------------------------------------------
+  /** Σ |saldo cuentas 4175xx| — devoluciones en ventas (PUC 4175). */
+  totalDevoluciones?: number;
+  /** Ingresos netos = |ingresos bruto Clase 4| − totalDevoluciones. NIIF 15 §47. */
+  ingresosNetos?: number;
+  // -----------------------------------------------------------------------
+  // Sub-bloque P&L de soporte para los KPIs (no expuesto antes; sin ellos
+  // los ratios divergen entre LLM y renderers).
+  // -----------------------------------------------------------------------
+  /** EBIT = utilidadBruta − gastosOp51 − gastosAdmin52. Excluye impuesto y financieros. */
+  ebit?: number;
+  /** Saldo cuenta 14 (Inventarios). */
+  inventarios14?: number;
+  /** Saldo cuenta 22 (Proveedores) — DIFERENCIADO de cuentasPorPagar23. */
+  proveedores22?: number;
+  /** Saldo cuenta 6 (Costo de Ventas — clase 6). */
+  costoVentas6?: number;
+  /** Saldo cuenta 7 (Costo de Producción — clase 7). */
+  costoProduccion7?: number;
+  /** Σ auxiliares 5305xx — gasto financiero (intereses). */
+  gastoFinanciero5305?: number;
+  /** Promedio patrimonial = (actual + comparativo) / 2 (= actual si no hay comparativo). */
+  patrimonioPromedio?: number;
+  /** Promedio del activo = (actual + comparativo) / 2 (= actual si no hay comparativo). */
+  activoPromedio?: number;
+  // -----------------------------------------------------------------------
+  // 14 KPIs Wave 2.F4 — fuente única de verdad. Strings decimales o numéricos
+  // según contrato (no centavos). `null` cuando el denominador es 0/anómalo
+  // para que el renderer pinte 'ND' explícitamente, NUNCA un fallback silencioso.
+  // -----------------------------------------------------------------------
+  /** Razón corriente = activoCorriente / pasivoCorriente. */
+  razonCorriente?: number | null;
+  /** Prueba ácida = (activoCorriente − inventarios14) / pasivoCorriente. */
+  pruebaAcida?: number | null;
+  /** Endeudamiento total = pasivo / activo × 100 (porcentaje). */
+  endeudamientoTotal?: number | null;
+  /** Apalancamiento financiero = pasivo / patrimonio. */
+  apalancamientoFinanciero?: number | null;
+  /** Cobertura de intereses = ebit / |gastoFinanciero5305|. null si sin gasto financiero. */
+  coberturaIntereses?: number | null;
+  /** Margen operativo = ebit / ingresosNetos × 100 (porcentaje). */
+  margenOperativo?: number | null;
+  /** Margen neto = utilidadNeta / ingresosNetos × 100 (porcentaje). */
+  margenNeto?: number | null;
+  /** ROE = utilidadNeta / patrimonioPromedio × 100 (porcentaje). */
+  roe?: number | null;
+  /** ROA = utilidadNeta / activoPromedio × 100 (porcentaje). */
+  roa?: number | null;
+  /** Rotación de activos = ingresosNetos / activoPromedio. */
+  rotacionActivos?: number | null;
+  /** Días de cartera = (deudoresCuenta13 / ingresosNetos) × 365. null si ingresos = 0. */
+  diasCartera?: number | null;
+  /** Días de inventario = (inventarios14 / (costoVentas6 + costoProduccion7)) × 365. null si costos anómalos. */
+  diasInventario?: number | null;
+  /** Días de proveedores = (proveedores22 / (costoVentas6 + costoProduccion7)) × 365. null si costos anómalos. */
+  diasProveedores?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +397,18 @@ export interface EquityBreakdown {
  */
 export interface PeriodSnapshot {
   period: string;
+  // -----------------------------------------------------------------------
+  // Wave 2.F4 — Parte 2.1 VERIFICACIÓN 4 + Parte 3 ramificación R8.
+  // Tipo de período fiscal:
+  //   - 'cerrado'      → año fiscal completo Enero-Diciembre (Ene-Dic).
+  //   - 'parcial'      → corte intermedio del año fiscal (e.g. Ene-Jun).
+  //   - 'indeterminado' → no se pudo inferir desde el header (solo año).
+  // R8 (Cierre Virtual) bifurca la nota OBLIGATORIA (cerrado) vs EXPLICATIVA
+  // (parcial) según este campo. Opcional por retrocompatibilidad: tests/
+  // literales legacy no lo necesitan. `buildSnapshotForPeriod` SIEMPRE lo
+  // popula con 'indeterminado' como fallback seguro.
+  // -----------------------------------------------------------------------
+  periodoTipo?: 'cerrado' | 'parcial' | 'indeterminado';
   classes: PUCClass[];
   controlTotals: ControlTotals;
   equityBreakdown: EquityBreakdown;
@@ -535,6 +624,56 @@ export function detectYearFromString(value: string | undefined | null): string |
   if (!value) return null;
   const m = String(value).match(YEAR_REGEX);
   return m ? m[1] : null;
+}
+
+// ---------------------------------------------------------------------------
+// Wave 2.F4 — inferencia del tipo de período (Parte 2.1 VERIFICACIÓN 4).
+// ---------------------------------------------------------------------------
+// El parser actual sólo guarda el año en `period` ("2024"). Sin embargo, una
+// cadena más rica del header (por ejemplo "Saldo Final 2024-12" o "Ene-Dic
+// 2024") es comúnmente accesible vía `forcePeriod` u opciones del CSV. La
+// función inspecciona la cadena `period` (post-resolución del parser) y
+// devuelve:
+//   - 'cerrado'      cuando hay evidencia de año completo (mes 12 / "Dic" /
+//                    "Ene-Dic" / "Enero-Diciembre" / "Jan-Dec").
+//   - 'parcial'      cuando hay un mes específico distinto a 12 / un rango
+//                    incompleto (e.g. "2024-06", "Ene-Jun 2024").
+//   - 'indeterminado' cuando sólo se reconoce el año (caso más común hoy).
+// La inferencia NUNCA falla — si el patrón es ambiguo, devuelve
+// 'indeterminado' (fallback seguro: R8 emite la nota EXPLICATIVA suave).
+// ---------------------------------------------------------------------------
+const MONTH_NUMERIC_REGEX = /\b(20\d{2})[-_/](\d{1,2})\b/;
+const FULL_YEAR_HINT_REGEX =
+  /\b(ene[-_/\s]*(?:a[-_/\s]*)?dic|enero[-_/\s]*(?:a[-_/\s]*)?diciembre|jan[-_/\s]*(?:to[-_/\s]*)?dec|january[-_/\s]*(?:to[-_/\s]*)?december|cierre|fin\s+de\s+año|full\s*year)\b/i;
+const PARTIAL_MONTH_HINT_REGEX =
+  /\b(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|jan(?:uary)?|feb(?:ruary)?|march|april|june|july|august|september|october|november)\b/i;
+
+export function inferPeriodoTipo(
+  periodLabel: string | null | undefined,
+): 'cerrado' | 'parcial' | 'indeterminado' {
+  if (!periodLabel) return 'indeterminado';
+  const s = String(periodLabel).trim();
+  if (s.length === 0) return 'indeterminado';
+
+  // Patrón numérico "YYYY-MM" — chequea el mes específico.
+  const num = s.match(MONTH_NUMERIC_REGEX);
+  if (num) {
+    const month = parseInt(num[2], 10);
+    if (!Number.isNaN(month) && month >= 1 && month <= 12) {
+      return month === 12 ? 'cerrado' : 'parcial';
+    }
+  }
+
+  // Patrones textuales de año completo (mayor prioridad que match parcial).
+  if (FULL_YEAR_HINT_REGEX.test(s)) return 'cerrado';
+
+  // Mes textual aislado → parcial (e.g. "Junio 2024", "Saldo Ago-2024").
+  if (PARTIAL_MONTH_HINT_REGEX.test(s) && !/dic|dec/i.test(s)) {
+    return 'parcial';
+  }
+
+  // Solo el año detectado, sin contexto de mes → indeterminado.
+  return 'indeterminado';
 }
 
 /**
@@ -843,6 +982,58 @@ export function preprocessTrialBalance(
 
   const primary = snapshots[snapshots.length - 1];
   const comparative = snapshots.length >= 2 ? snapshots[snapshots.length - 2] : null;
+
+  // -------------------------------------------------------------------------
+  // 2.5. Wave 2.F4 — RECOMPUTAR KPIs post-curator.
+  // Why: `buildSnapshotForPeriod` calcula KPIs sobre el snapshot CRUDO, pero
+  // R8 (Cierre Virtual) muta patrimonio y deja el balance cuadrado al
+  // centavo. Los ratios derivados del patrimonio (apalancamiento, ROE) y los
+  // promedios cross-periodo (ROE/ROA/Rotación) son ESTALES hasta que se
+  // recalculen aquí. También recomputamos los KPIs del comparativo con su
+  // propio post-curator. Determinístico, sin LLM.
+  // -------------------------------------------------------------------------
+  for (let i = 0; i < snapshots.length; i++) {
+    const snap = snapshots[i];
+    const prev = i > 0 ? snapshots[i - 1] : null;
+    const ct = snap.controlTotals;
+    const patrimonioPromedio =
+      prev !== null ? (ct.patrimonio + prev.controlTotals.patrimonio) / 2 : ct.patrimonio;
+    const activoPromedio =
+      prev !== null ? (ct.activo + prev.controlTotals.activo) / 2 : ct.activo;
+    ct.patrimonioPromedio = patrimonioPromedio;
+    ct.activoPromedio = activoPromedio;
+    const recomputed = computeDerivedKpis({
+      activoCorriente: ct.activoCorriente,
+      pasivoCorriente: ct.pasivoCorriente,
+      inventarios14: ct.inventarios14 ?? 0,
+      pasivo: ct.pasivo,
+      activo: ct.activo,
+      patrimonio: ct.patrimonio,
+      ebit: ct.ebit ?? 0,
+      gastoFinanciero5305: ct.gastoFinanciero5305 ?? 0,
+      ingresosNetos: ct.ingresosNetos ?? Math.abs(ct.ingresos),
+      utilidadNeta: ct.utilidadNeta,
+      patrimonioPromedio,
+      activoPromedio,
+      deudoresCuenta13: ct.deudoresCuenta13,
+      costoVentas6: ct.costoVentas6 ?? 0,
+      costoProduccion7: ct.costoProduccion7 ?? 0,
+      proveedores22: ct.proveedores22 ?? 0,
+    });
+    ct.razonCorriente = recomputed.razonCorriente;
+    ct.pruebaAcida = recomputed.pruebaAcida;
+    ct.endeudamientoTotal = recomputed.endeudamientoTotal;
+    ct.apalancamientoFinanciero = recomputed.apalancamientoFinanciero;
+    ct.coberturaIntereses = recomputed.coberturaIntereses;
+    ct.margenOperativo = recomputed.margenOperativo;
+    ct.margenNeto = recomputed.margenNeto;
+    ct.roe = recomputed.roe;
+    ct.roa = recomputed.roa;
+    ct.rotacionActivos = recomputed.rotacionActivos;
+    ct.diasCartera = recomputed.diasCartera;
+    ct.diasInventario = recomputed.diasInventario;
+    ct.diasProveedores = recomputed.diasProveedores;
+  }
 
   // -------------------------------------------------------------------------
   // 3. Reportes y datos limpios consolidados (etiquetados por periodo).
@@ -1231,6 +1422,76 @@ function buildSnapshotForPeriod(
     saldoAFavorImpuesto = saldo1355;
   }
 
+  // -------------------------------------------------------------------------
+  // Wave 2.F4 — Devoluciones 4175 (Parte 1.3 spec v2.0).
+  // Detecta cuentas auxiliares de Clase 4 cuyo código empieza por '4175'.
+  // PUC 4175 (Devoluciones en ventas) tiene naturaleza débito — saldos
+  // positivos representan ventas devueltas que RESTAN del bruto.
+  // NIIF 15 §47: ingresos se presentan netos de devoluciones, descuentos
+  // comerciales y rebajas. Decreto 2649/93 PUC grupo 4175.
+  // -------------------------------------------------------------------------
+  const devolucionesAuxiliares = leafRows.filter((r) => r.code.startsWith('4175'));
+  const ZERO_BIG = BigInt(0);
+  const totalDevolucionesCents = devolucionesAuxiliares.reduce<bigint>(
+    (acc, r) => {
+      const cents = toCents(r.balance);
+      const absCents = cents < ZERO_BIG ? -cents : cents;
+      return acc + absCents;
+    },
+    ZERO_BIG,
+  );
+  const totalDevoluciones = Number(totalDevolucionesCents) / 100;
+  const ingresosBrutoAbs = Math.abs(totalRevenue);
+  const ingresosNetos = ingresosBrutoAbs - totalDevoluciones;
+  // -------------------------------------------------------------------------
+  // Wave 2.F4 — Sub-bloque P&L de soporte para KPIs.
+  // EBIT = utilidadBruta − gastos operacionales (grupo 51 + 52).
+  // utilidadBruta = ingresosNetos − costos (clase 6 + clase 7).
+  // -------------------------------------------------------------------------
+  const gastosOp51 = sumLeavesByGroupPrefixes(leafRows, '5', new Set(['51']));
+  const gastosAdmin52 = sumLeavesByGroupPrefixes(leafRows, '5', new Set(['52']));
+  const costoVentas6 = totalCosts;
+  const costoProduccion7 = totalProduction;
+  const utilidadBrutaForEbit = ingresosNetos - (costoVentas6 + costoProduccion7);
+  const ebit = utilidadBrutaForEbit - gastosOp51 - gastosAdmin52;
+  const inventarios14 = sumLeavesByGroupPrefixes(leafRows, '1', new Set(['14']));
+  const proveedores22 = sumLeavesByGroupPrefixes(leafRows, '2', new Set(['22']));
+  const gastoFinanciero5305Raw = sumLeavesByGroupPrefixes(
+    leafRows,
+    '5',
+    new Set(['53']),
+  );
+  // Why: grupo 5305 (Financieros) → en este pase usamos el grupo 53 entero
+  // (Gastos no operacionales financieros) como aproximación. Si el balance
+  // detalla 5305xx específicamente, el filtro directo lo captura.
+  const saldo5305 = sumLeavesPrecise(
+    leafRows.filter((r) => r.code.startsWith('5305')),
+  );
+  const gastoFinanciero5305 = saldo5305 !== 0 ? saldo5305 : gastoFinanciero5305Raw;
+
+  // KPIs averages: en single-period, promedio = actual. preprocessTrialBalance
+  // (cuando hay comparative) patchea estos campos con el verdadero promedio.
+  const patrimonioPromedio = totalEquity;
+  const activoPromedio = totalAssets;
+  const kpis = computeDerivedKpis({
+    activoCorriente,
+    pasivoCorriente,
+    inventarios14,
+    pasivo: totalLiabilities,
+    activo: totalAssets,
+    patrimonio: totalEquity,
+    ebit,
+    gastoFinanciero5305,
+    ingresosNetos,
+    utilidadNeta: netIncome,
+    patrimonioPromedio,
+    activoPromedio,
+    deudoresCuenta13,
+    costoVentas6,
+    costoProduccion7,
+    proveedores22,
+  });
+
   const cents: ControlTotalsCents = {
     activo: toCents(totalAssets),
     pasivo: toCents(totalLiabilities),
@@ -1242,6 +1503,8 @@ function buildSnapshotForPeriod(
     impuestoCausado: toCents(impuestoCausadoPeriodo),
     efectivoCuenta11: toCents(efectivoCuenta11),
     saldoAFavorImpuesto: toCents(saldoAFavorImpuesto),
+    totalDevoluciones: totalDevolucionesCents,
+    ingresosNetos: toCents(ingresosNetos),
   };
 
   const raw: ControlTotalsRaw = {
@@ -1255,6 +1518,8 @@ function buildSnapshotForPeriod(
     impuestoCausado: toRawString(impuestoCausadoPeriodo),
     efectivoCuenta11: toRawString(efectivoCuenta11),
     saldoAFavorImpuesto: toRawString(saldoAFavorImpuesto),
+    totalDevoluciones: toRawString(totalDevoluciones),
+    ingresosNetos: toRawString(ingresosNetos),
   };
 
   const controlTotals: ControlTotals = {
@@ -1275,6 +1540,18 @@ function buildSnapshotForPeriod(
     obligacionesLaborales25,
     cents,
     raw,
+    // Wave 2.F4 — campos nuevos para fuente única de KPIs.
+    totalDevoluciones,
+    ingresosNetos,
+    ebit,
+    inventarios14,
+    proveedores22,
+    costoVentas6,
+    costoProduccion7,
+    gastoFinanciero5305,
+    patrimonioPromedio,
+    activoPromedio,
+    ...kpis,
   };
 
   // -------------------------------------------------------------------------
@@ -1424,6 +1701,8 @@ function buildSnapshotForPeriod(
 
   return {
     period,
+    // Wave 2.F4 — Parte 2.1 VERIFICACIÓN 4: tipo de período inferido del label.
+    periodoTipo: inferPeriodoTipo(period),
     classes,
     controlTotals,
     equityBreakdown,
@@ -1735,6 +2014,116 @@ function toCents(value: number): bigint {
   if (!Number.isFinite(value)) return BigInt(0);
   // Math.round corrige drift floating-point al redondear al centavo.
   return BigInt(Math.round(value * 100));
+}
+
+// ---------------------------------------------------------------------------
+// Wave 2.F4 — KPIs deterministicos derivados (Parte 6 spec v2.0).
+// ---------------------------------------------------------------------------
+// 14 ratios calculados desde controlTotals como fuente única de verdad. Cuando
+// el denominador es 0 o anómalo, el KPI devuelve `null` para que el renderer
+// pinte 'ND' explícitamente — nunca un fallback silencioso (NIA 240 §A1-A6:
+// la ausencia de información se DECLARA, no se enmascara).
+// ---------------------------------------------------------------------------
+
+/** Tolerancia para considerar un denominador "anómalo" (< 1% ingresos netos). */
+const KPI_ANOMALY_TOL_PCT = 0.01;
+
+interface DerivedKpiInputs {
+  activoCorriente: number;
+  pasivoCorriente: number;
+  inventarios14: number;
+  pasivo: number;
+  activo: number;
+  patrimonio: number;
+  ebit: number;
+  gastoFinanciero5305: number;
+  ingresosNetos: number;
+  utilidadNeta: number;
+  patrimonioPromedio: number;
+  activoPromedio: number;
+  deudoresCuenta13: number;
+  costoVentas6: number;
+  costoProduccion7: number;
+  proveedores22: number;
+}
+
+interface DerivedKpis {
+  razonCorriente: number | null;
+  pruebaAcida: number | null;
+  endeudamientoTotal: number | null;
+  apalancamientoFinanciero: number | null;
+  coberturaIntereses: number | null;
+  margenOperativo: number | null;
+  margenNeto: number | null;
+  roe: number | null;
+  roa: number | null;
+  rotacionActivos: number | null;
+  diasCartera: number | null;
+  diasInventario: number | null;
+  diasProveedores: number | null;
+}
+
+function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
+  const safeDiv = (num: number, den: number): number | null => {
+    if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
+    return num / den;
+  };
+
+  const ingresosBase = Math.abs(inputs.ingresosNetos);
+  const costoTotalForRotation = inputs.costoVentas6 + inputs.costoProduccion7;
+  const rotationAnomalyFloor =
+    Math.max(ingresosBase * KPI_ANOMALY_TOL_PCT, 0);
+  // Why: rotación de inventario/proveedores con costos < 1% de ingresos da
+  // resultados absurdos (días >> 1000) que el LLM cita literalmente y rompe
+  // el reporte. Marcamos ND para forzar al especialista a investigar antes
+  // de citar (NIA 240 §A1-A6 fraude por subregistro de costos).
+  const costsAnomalous =
+    Math.abs(costoTotalForRotation) < rotationAnomalyFloor || costoTotalForRotation === 0;
+
+  return {
+    razonCorriente: safeDiv(inputs.activoCorriente, inputs.pasivoCorriente),
+    pruebaAcida: safeDiv(
+      inputs.activoCorriente - inputs.inventarios14,
+      inputs.pasivoCorriente,
+    ),
+    endeudamientoTotal: (() => {
+      const r = safeDiv(inputs.pasivo, inputs.activo);
+      return r === null ? null : r * 100;
+    })(),
+    apalancamientoFinanciero: safeDiv(inputs.pasivo, inputs.patrimonio),
+    coberturaIntereses: (() => {
+      const den = Math.abs(inputs.gastoFinanciero5305);
+      if (den === 0) return null;
+      return inputs.ebit / den;
+    })(),
+    margenOperativo: (() => {
+      const r = safeDiv(inputs.ebit, ingresosBase);
+      return r === null ? null : r * 100;
+    })(),
+    margenNeto: (() => {
+      const r = safeDiv(inputs.utilidadNeta, ingresosBase);
+      return r === null ? null : r * 100;
+    })(),
+    roe: (() => {
+      const r = safeDiv(inputs.utilidadNeta, inputs.patrimonioPromedio);
+      return r === null ? null : r * 100;
+    })(),
+    roa: (() => {
+      const r = safeDiv(inputs.utilidadNeta, inputs.activoPromedio);
+      return r === null ? null : r * 100;
+    })(),
+    rotacionActivos: safeDiv(ingresosBase, inputs.activoPromedio),
+    diasCartera: (() => {
+      if (ingresosBase === 0) return null;
+      return (inputs.deudoresCuenta13 / ingresosBase) * 365;
+    })(),
+    diasInventario: costsAnomalous
+      ? null
+      : (inputs.inventarios14 / costoTotalForRotation) * 365,
+    diasProveedores: costsAnomalous
+      ? null
+      : (inputs.proveedores22 / costoTotalForRotation) * 365,
+  };
 }
 
 /**

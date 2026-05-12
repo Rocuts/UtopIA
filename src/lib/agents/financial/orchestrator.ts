@@ -310,6 +310,12 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     return lines;
   }
 
+  // Wave 2.F4 — Parte 2.1 VERIFICACIÓN 4: el tipo de período condiciona la
+  // ramificación de notas (R8 cierre virtual obligatoria vs explicativa). El
+  // LLM debe verlo explícito para citarlo en las notas técnicas.
+  if (snap.periodoTipo) {
+    lines.push(`- Tipo de período: ${snap.periodoTipo}`);
+  }
   lines.push(`- Total Activo: ${fmtCop(totals.activo)} COP`);
   if (typeof totals.activoCorriente === 'number') {
     lines.push(`  - Activo Corriente: ${fmtCop(totals.activoCorriente)} COP`);
@@ -325,7 +331,24 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     lines.push(`  - Pasivo No Corriente: ${fmtCop(totals.pasivoNoCorriente)} COP`);
   }
   lines.push(`- Total Patrimonio: ${fmtCop(totals.patrimonio)} COP`);
-  lines.push(`- Total Ingresos: ${fmtCop(totals.ingresos)} COP`);
+  // Wave 2.F4 — Parte 1.3 spec v2.0: emitir Ingresos BRUTO y NETO de
+  // devoluciones 4175 con etiquetas inequívocas para que el LLM NUNCA confunda
+  // qué cifra usar en el P&L. NIIF 15 §47 obliga presentación neta.
+  lines.push(`- Total Ingresos (bruto Clase 4): ${fmtCop(totals.ingresos)} COP`);
+  const totalsForRev = totals as ControlTotalsInput & {
+    ingresosNetos?: number;
+    totalDevoluciones?: number;
+  };
+  if (
+    typeof totalsForRev.ingresosNetos === 'number' &&
+    Number.isFinite(totalsForRev.ingresosNetos)
+  ) {
+    const devs = totalsForRev.totalDevoluciones ?? 0;
+    lines.push(
+      `- Total Ingresos Netos (neto de devoluciones 4175): ${fmtCop(totalsForRev.ingresosNetos)} COP ` +
+        `(devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)`,
+    );
+  }
   lines.push(`- Total Gastos: ${fmtCop(totals.gastos)} COP`);
   // Bloque de impuesto vinculante (Bug 2 fix): UAI + impuesto + utilidad neta
   // SIEMPRE explícitos para que el Agente 1 NO confunda el signo del impuesto.
@@ -442,6 +465,109 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     if (desglose.length > 0) {
       lines.push(`- Desglose patrimonio: ${desglose.join(', ')}`);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Wave 2.F4 — 14 KPIs PRE-CALCULADOS (Parte 6 spec v2.0).
+  // Fuente única de verdad: estos ratios vienen de `controlTotals` (preprocesador
+  // determinístico). Cuando un denominador es 0 o anómalo, el campo es `null`
+  // y la línea sale como "ND" para que el LLM NO invente cifras.
+  // ---------------------------------------------------------------------------
+  const totalsKpi = totals as ControlTotalsInput & {
+    razonCorriente?: number | null;
+    pruebaAcida?: number | null;
+    endeudamientoTotal?: number | null;
+    apalancamientoFinanciero?: number | null;
+    coberturaIntereses?: number | null;
+    margenOperativo?: number | null;
+    margenNeto?: number | null;
+    roe?: number | null;
+    roa?: number | null;
+    rotacionActivos?: number | null;
+    diasCartera?: number | null;
+    diasInventario?: number | null;
+    diasProveedores?: number | null;
+    ingresosNetos?: number;
+    costoVentas6?: number;
+    costoProduccion7?: number;
+  };
+
+  const hasAnyKpi =
+    totalsKpi.razonCorriente !== undefined ||
+    totalsKpi.pruebaAcida !== undefined ||
+    totalsKpi.endeudamientoTotal !== undefined ||
+    totalsKpi.apalancamientoFinanciero !== undefined ||
+    totalsKpi.coberturaIntereses !== undefined ||
+    totalsKpi.margenOperativo !== undefined ||
+    totalsKpi.margenNeto !== undefined ||
+    totalsKpi.roe !== undefined ||
+    totalsKpi.roa !== undefined ||
+    totalsKpi.rotacionActivos !== undefined;
+
+  if (hasAnyKpi) {
+    const fmtRatio = (n: number | null | undefined, suffix: string = ''): string => {
+      if (n === null || n === undefined || !Number.isFinite(n)) return 'ND';
+      const formatted = n.toLocaleString('es-CO', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      return `${formatted}${suffix}`;
+    };
+    const fmtPct = (n: number | null | undefined): string => {
+      if (n === null || n === undefined || !Number.isFinite(n)) return 'ND';
+      return `${n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+    };
+    const fmtDays = (n: number | null | undefined, ndReason?: string): string => {
+      if (n === null || n === undefined || !Number.isFinite(n))
+        return ndReason ? `ND (${ndReason})` : 'ND';
+      const rounded = Math.round(n);
+      return `${rounded} días`;
+    };
+
+    // Detectar costos anómalos para etiquetar ND en días inv/prov con razón.
+    const ingNetos = totalsKpi.ingresosNetos ?? 0;
+    const costoTotal = (totalsKpi.costoVentas6 ?? 0) + (totalsKpi.costoProduccion7 ?? 0);
+    const costsAnomalous =
+      ingNetos > 0 && Math.abs(costoTotal) < ingNetos * 0.01;
+    const costsND = costsAnomalous ? 'base costos insuficiente' : undefined;
+    const revenueND = ingNetos === 0 ? 'sin ingresos' : undefined;
+    const interestND =
+      totalsKpi.coberturaIntereses === null ? 'sin gasto financiero' : undefined;
+
+    lines.push('');
+    lines.push(
+      '## KPIs PRE-CALCULADOS (preprocessor — fuente única, NO recalcular)',
+    );
+    lines.push(`- Razón Corriente: ${fmtRatio(totalsKpi.razonCorriente)}`);
+    lines.push(`- Prueba Ácida: ${fmtRatio(totalsKpi.pruebaAcida)}`);
+    lines.push(`- Endeudamiento Total: ${fmtPct(totalsKpi.endeudamientoTotal)}`);
+    lines.push(
+      `- Apalancamiento Financiero: ${fmtRatio(totalsKpi.apalancamientoFinanciero)}`,
+    );
+    lines.push(
+      `- Cobertura de Intereses: ${
+        interestND
+          ? `ND — ${interestND}`
+          : fmtRatio(totalsKpi.coberturaIntereses)
+      }`,
+    );
+    lines.push(`- Margen Operativo: ${fmtPct(totalsKpi.margenOperativo)}`);
+    lines.push(`- Margen Neto: ${fmtPct(totalsKpi.margenNeto)}`);
+    lines.push(`- ROE: ${fmtPct(totalsKpi.roe)}`);
+    lines.push(`- ROA: ${fmtPct(totalsKpi.roa)}`);
+    lines.push(`- Rotación de Activos: ${fmtRatio(totalsKpi.rotacionActivos)}`);
+    lines.push(
+      `- Días de Cartera: ${fmtDays(totalsKpi.diasCartera, revenueND)}`,
+    );
+    lines.push(
+      `- Días de Inventario: ${fmtDays(totalsKpi.diasInventario, costsND)}`,
+    );
+    lines.push(
+      `- Días de Proveedores: ${fmtDays(totalsKpi.diasProveedores, costsND)}`,
+    );
+    lines.push(
+      '- AUTORIDAD: estos KPIs son VINCULANTES. NO los recalcules. Cita los valores LITERALMENTE; cuando un KPI sea "ND", DECLARA "ND" y justifica brevemente la causa — NUNCA inventes un valor de respaldo.',
+    );
   }
 
   if (discrepancies.length > 0) {

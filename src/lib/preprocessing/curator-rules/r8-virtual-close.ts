@@ -248,6 +248,32 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
   // -------------------------------------------------------------------------
   // 11. Construir el adjustment + finding(s).
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Wave 2.F4 — Parte 3 ramificación R8: bifurcación de la nota según
+  // `periodoTipo`. Si el período es 'cerrado' (Enero-Diciembre), la falta de
+  // traslado en 3605 es un ERROR de cierre que el contador DEBE corregir
+  // antes de firmar EEFF definitivos (nota OBLIGATORIA). Si es 'parcial',
+  // el ajuste es práctica habitual de corte intermedio (nota EXPLICATIVA).
+  // 'indeterminado' usa la nota EXPLICATIVA por defecto (fallback seguro).
+  // -------------------------------------------------------------------------
+  const periodoTipo = snapshot.periodoTipo ?? 'indeterminado';
+  const justificationBase =
+    'Cierre Virtual: traslado automático de utilidad transitoria (Clase 4 − 5 − 6 − 7) ' +
+    'a Patrimonio, garantizando ecuación contable Activo = Pasivo + Patrimonio sin requerir ' +
+    'asiento de cierre del contador. Compatible con balances de cualquier ERP en cualquier corte temporal.';
+  const justificationNotaPeriodo =
+    periodoTipo === 'cerrado'
+      ? ` NOTA OBLIGATORIA — AJUSTE DE CIERRE (cuenta 3605, año cerrado ${snapshot.period}): ` +
+        `el sistema detectó que la cuenta 3605 no contiene el traslado del resultado del periodo, ` +
+        `lo cual es un ERROR de cierre contable en un año fiscal completo (Enero-Diciembre). ` +
+        `El sistema aplicó el ajuste automáticamente para efectos del informe NIIF; el contador ` +
+        `responsable DEBE corregir el asiento de cierre antes de firmar los EEFF definitivos.`
+      : ` NOTA EXPLICATIVA — AJUSTE DE CIERRE (cuenta 3605, periodo ` +
+        `${periodoTipo === 'parcial' ? 'parcial' : 'sin tipo confirmado'}): ` +
+        `el presente balance corresponde a un corte intermedio del año fiscal. Es práctica habitual ` +
+        `que la cuenta 3605 no contenga la utilidad del periodo hasta el cierre definitivo. El ` +
+        `sistema aplicó el ajuste automáticamente solo para efectos de presentación de este informe.`;
+
   const adjustment: VirtualCloseAdjustment = {
     dynamicNetIncome,
     csvUtilidadEjercicio,
@@ -261,10 +287,7 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
     virtualCurrentName: VIRTUAL_CURRENT_NAME,
     virtualRetainedCode: VIRTUAL_RETAINED_CODE,
     virtualRetainedName: VIRTUAL_RETAINED_NAME,
-    justification:
-      'Cierre Virtual: traslado automático de utilidad transitoria (Clase 4 − 5 − 6 − 7) ' +
-      'a Patrimonio, garantizando ecuación contable Activo = Pasivo + Patrimonio sin requerir ' +
-      'asiento de cierre del contador. Compatible con balances de cualquier ERP en cualquier corte temporal.',
+    justification: justificationBase + justificationNotaPeriodo,
   };
 
   // Marcar el ajuste a nivel snapshot (acceso rápido por renderers).

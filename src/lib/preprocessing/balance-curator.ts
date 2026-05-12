@@ -58,6 +58,9 @@ import { runR12 } from './curator-rules/r12-closing-detector';
 import { runR14 } from './curator-rules/r14-ppe-depreciation-sync';
 import { runR15 } from './curator-rules/r15-cost-classification';
 import { runR16 } from './curator-rules/r16-tax-anticipo-netting';
+import { runR17 } from './curator-rules/r17-supplier-debit-balance';
+import { runR18 } from './curator-rules/r18-equity-negative';
+import { runR19 } from './curator-rules/r19-net-margin-over-70';
 import type { CuratorFinding, CuratorResult } from './curator-rules/types';
 
 export function runCurator(
@@ -267,6 +270,41 @@ export function runCurator(
   } catch (err) {
     errors['CUR-R16'] = err instanceof Error ? err.message : String(err);
     console.warn('[curator] R16 failed:', err);
+  }
+
+  // -------------------------------------------------------------------------
+  // Wave 2.F4 — Anomalías Parte 5 spec v2.0 (R17, R18, R19).
+  // Las tres corren AL FINAL del Curator porque:
+  //  - R17 (proveedores Cta 22 saldo débito) sólo lee snapshot.classes.
+  //  - R18 (patrimonio negativo) lee controlTotals.patrimonio post-R8/R5
+  //    (autoritativo).
+  //  - R19 (margen neto > 70%) lee utilidadNeta + ingresosNetos post-R8
+  //    (utilidad dinámica autoritativa).
+  // Ninguna MUTA el snapshot — sólo emiten findings. Errores aislados en
+  // try/catch siguiendo la convención del orquestador.
+  // -------------------------------------------------------------------------
+  try {
+    const r17Out = runR17(snapshot);
+    findings.push(...r17Out.findings);
+  } catch (err) {
+    errors['CUR-R17'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R17 failed:', err);
+  }
+
+  try {
+    const r18Out = runR18(snapshot);
+    findings.push(...r18Out.findings);
+  } catch (err) {
+    errors['CUR-R18'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R18 failed:', err);
+  }
+
+  try {
+    const r19Out = runR19(snapshot);
+    findings.push(...r19Out.findings);
+  } catch (err) {
+    errors['CUR-R19'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] R19 failed:', err);
   }
 
   return {

@@ -75,6 +75,9 @@ function buildSnapshot(opts: {
         impuestoCausado: toCents(impuestoCausado),
         efectivoCuenta11: toCents(efectivoCuenta11),
         saldoAFavorImpuesto: toCents(opts.saldoAFavorImpuesto ?? 0),
+        // Wave 2.F4 — Devoluciones 4175 + ingresos netos (defaults 0/ingresos).
+        totalDevoluciones: toCents(0),
+        ingresosNetos: toCents(Math.abs(ingresos)),
       },
       raw: {
         activo: toRaw(activo),
@@ -87,6 +90,8 @@ function buildSnapshot(opts: {
         impuestoCausado: toRaw(impuestoCausado),
         efectivoCuenta11: toRaw(efectivoCuenta11),
         saldoAFavorImpuesto: toRaw(opts.saldoAFavorImpuesto ?? 0),
+        totalDevoluciones: toRaw(0),
+        ingresosNetos: toRaw(Math.abs(ingresos)),
       },
     },
     equityBreakdown: {},
