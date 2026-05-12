@@ -234,6 +234,47 @@ Every refactored financial agent calls `callFinancialAgent({ agentName, model, s
 
 The refactor is tracked on `feat/prompts-gpt54-refactor`. Until that branch lands, the old `*.prompt.ts` builders coexist with the new contract — agents flip one at a time. When a financial agent file imports `callFinancialAgent`, it is on the new pattern; when it still calls `generateText` directly, it is legacy and pending.
 
+## Telemetry & Observability (Financial Pipelines)
+
+Each call to `callFinancialAgent` returns a `meta` object with `inputTokens`, `outputTokens`, `reasoningTokens`, `cachedInputTokens`, `elapsedMs`, `fallbackUsed`, `firstPassReasoningTokens`, `firstPassFinishReason`. To persist this telemetry to Postgres (`agent_telemetry` table), pass the optional `onTelemetry` callback:
+
+```ts
+import { callFinancialAgent } from '../agents/runtime';
+import { persistAgentTelemetry } from '@/lib/db/telemetry';
+import { MODEL_IDS } from '@/lib/config/models';
+
+const { json, meta } = await callFinancialAgent({
+  // ...existing options...
+  onTelemetry: (m) => {
+    void persistAgentTelemetry({
+      workspaceId,                          // del cookie httpOnly utopia_workspace_id
+      reportId: reportRowId ?? null,        // si el orchestrator ya creó la row
+      agentName: m.agentName,
+      modelId: MODEL_IDS.FINANCIAL_PIPELINE_PREMIUM, // o el que corresponda
+      inputTokens: m.inputTokens ?? null,
+      outputTokens: m.outputTokens ?? null,
+      reasoningTokens: m.reasoningTokens ?? null,
+      cachedInputTokens: m.cachedInputTokens ?? null,
+      elapsedMs: m.elapsedMs,
+      finishReason: m.finishReason,
+      fallbackUsed: m.fallbackUsed,
+      firstPassReasoningTokens: m.firstPassReasoningTokens ?? null,
+      firstPassFinishReason: m.firstPassFinishReason ?? null,
+    });
+  },
+});
+```
+
+El callback es fire-and-forget: errores de DB se loggean pero no rompen el pipeline. Para activar telemetría en un nuevo agent, propagar `workspaceId` (y opcionalmente `reportId`) desde el route handler a través del orchestrator. Helpers: `src/lib/db/telemetry.ts` (insert) y `src/lib/db/telemetry-pricing.ts` (cálculo de costo en micros USD con pricing oficial OpenAI 2026-05-12).
+
+Para inspeccionar la telemetría agregada (últimas 24h por default, `?hours=N` para extender):
+
+```bash
+curl -H "x-admin-token: $UTOPIA_ADMIN_TOKEN" https://utopia.example.com/api/admin/telemetry
+```
+
+Devuelve totales (calls, costo USD, fallback rate, unclean finish rate), `perAgent` desglose y `alerts` activadas según los thresholds del audit team: fallback >3% → P1, finishReason!=stop >1% → P0, costo diario >$50 → P1. Requiere `UTOPIA_ADMIN_TOKEN` env var; sin ella, el endpoint responde 503 (fail-closed).
+
 ## Layout Gotchas
 
 - **Lenis smooth scroll is global.** `src/app/layout.tsx` wraps the whole app with `<SmoothScroll>` → `ReactLenis root`. Lenis hijacks wheel events at the document level to drive smooth scrolling. Any subtree that relies on internal `overflow-y-auto` containers (e.g. the workspace shell `src/app/workspace/layout.tsx`, fullscreen modals) **must** carry `data-lenis-prevent` on an ancestor or wheel events never reach the scrollable child and mouse-wheel scroll dies silently. The workspace shell root `<div>` already has it — preserve it when editing that layout.
