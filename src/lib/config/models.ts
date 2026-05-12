@@ -201,13 +201,16 @@ export const MODELS_CONFIG = {
 
   // -- Fiscal audit opinion (híbrido) -------------------------------------
   goingConcernAuditor: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
-  misstatementReviewer: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
+  // misstatementReviewer recibe niif-measurement + niif-disclosures (~5K input
+  // extra). Budget ampliado para acomodar reasoning + output strict JSON.
+  misstatementReviewer: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 12000 } as const,
   complianceChecker: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 6000 } as const,
   opinionDrafter: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
 
   // -- Tax reconciliation (secuencial) ------------------------------------
-  differenceIdentifier: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 8000 } as const,
-  deferredTaxCalculator: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
+  // Ambos reciben niif-measurement (~3K input extra) — budget ampliado.
+  differenceIdentifier: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 16000 } as const,
+  deferredTaxCalculator: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 12000 } as const,
 
   // -- Feasibility (secuencial) -------------------------------------------
   marketAnalyst: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,

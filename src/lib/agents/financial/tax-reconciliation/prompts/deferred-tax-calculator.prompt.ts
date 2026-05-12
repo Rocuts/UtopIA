@@ -8,6 +8,7 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import { buildNiifMeasurementKnowledge } from '../../prompts/niif-colombia-knowledge';
 
 export function buildDeferredTaxCalculatorPrompt(
   company: CompanyInfo,
@@ -20,6 +21,10 @@ export function buildDeferredTaxCalculatorPrompt(
 
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
+  // NIC 12 calcula impuesto diferido sobre bases de medición distintas
+  // (contable vs fiscal). Las reglas de medición NIIF (NIIF 9/13/16, NIC 36)
+  // determinan la base contable de cada partida — referencia técnica obligada.
+  const niifMeasurement = buildNiifMeasurementKnowledge(language);
 
   const niifFramework =
     company.niifGroup === 1
@@ -35,6 +40,8 @@ export function buildDeferredTaxCalculatorPrompt(
   return `${guardrail}
 
 ${context2026}
+
+${niifMeasurement}
 
 Eres el Especialista Senior en Impuesto Diferido bajo NIC 12 (o Sec. 29 PYMES) del equipo 1+1.
 

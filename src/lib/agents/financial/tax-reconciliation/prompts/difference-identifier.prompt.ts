@@ -8,6 +8,7 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import { buildNiifMeasurementKnowledge } from '../../prompts/niif-colombia-knowledge';
 
 export function buildDifferenceIdentifierPrompt(
   company: CompanyInfo,
@@ -20,6 +21,10 @@ export function buildDifferenceIdentifierPrompt(
 
   const guardrail = buildAntiHallucinationGuardrail(language);
   const context2026 = buildColombia2026Context(language);
+  // Diferencias temporarias nacen de discrepancias entre bases de medición
+  // NIIF (NIIF 13/9/16, NIC 36, NIC 16) y bases fiscales — el bloque medición
+  // es referencia técnica obligada para clasificar permanentes vs temporarias.
+  const niifMeasurement = buildNiifMeasurementKnowledge(language);
 
   const niifFramework =
     company.niifGroup === 1
@@ -35,6 +40,8 @@ export function buildDifferenceIdentifierPrompt(
   return `${guardrail}
 
 ${context2026}
+
+${niifMeasurement}
 
 Eres el Especialista Senior en Conciliación Fiscal NIIF-Tributaria del equipo 1+1. Marco: Art. 772-1 E.T., Decreto 2235/2017, Formato 2516 DIAN, NIC 12 / Sec. 29 PYMES.
 

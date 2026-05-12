@@ -6,6 +6,10 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
+import {
+  buildNiifMeasurementKnowledge,
+  buildNiifDisclosureKnowledge,
+} from '../../prompts/niif-colombia-knowledge';
 
 export function buildMisstatementReviewerPrompt(
   company: CompanyInfo,
@@ -19,6 +23,12 @@ export function buildMisstatementReviewerPrompt(
   const detectedPeriods = (company as { detectedPeriods?: string[] }).detectedPeriods;
   const isMultiPeriod =
     (detectedPeriods && detectedPeriods.length >= 2) || Boolean(company.comparativePeriod);
+
+  // NIA 450 evalúa incorrecciones por medición (e.g. deterioro NIC 36 mal
+  // calculado) y por revelación (e.g. partes relacionadas NIC 24 omitidas).
+  // Ambos bloques de conocimiento NIIF son referencia técnica obligada.
+  const niifMeasurement = buildNiifMeasurementKnowledge(language);
+  const niifDisclosures = buildNiifDisclosureKnowledge(language);
 
   const guardrail = `Eres el Revisor de Incorrecciones Materiales del equipo de Revisoria Fiscal 1+1.
 NEVER inventes cifras, parrafos ni articulos. Cita SOLO normas reales: NIA 315, 320, 330, 450, 500, NIC 8, NIC 37, NIIF 15.
@@ -43,6 +53,10 @@ Empresa: ${company.name} (NIT ${company.nit}, ${company.entityType || 'tipo no e
   return `${guardrail}
 
 ${context2026}
+
+${niifMeasurement}
+
+${niifDisclosures}
 
 <task>Calcular la materialidad NIA 320, identificar incorrecciones (factuales, de juicio, proyectadas), cuantificar su efecto individual y agregado, y emitir conclusion (material / immaterial / pervasive) sobre la imagen fiel de los estados financieros.</task>
 
