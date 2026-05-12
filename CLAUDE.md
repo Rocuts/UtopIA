@@ -275,76 +275,83 @@ curl -H "x-admin-token: $UTOPIA_ADMIN_TOKEN" https://utopia.example.com/api/admi
 
 Devuelve totales (calls, costo USD, fallback rate, unclean finish rate), `perAgent` desglose y `alerts` activadas según los thresholds del audit team: fallback >3% → P1, finishReason!=stop >1% → P0, costo diario >$50 → P1. Requiere `UTOPIA_ADMIN_TOKEN` env var; sin ella, el endpoint responde 503 (fail-closed).
 
-## Pending: Fase 3 — Chunked Schema (NIIF Report)
+## Chunked NIIF Analyst — 3 sequential passes (Fase 3 DONE 2026-05-12)
 
-**Status:** designed, not implemented. Documented here so a future session can execute it without recovering context.
+The NIIF Analyst (`src/lib/agents/financial/agents/niif-analyst.ts`) ejecuta 3 `callFinancialAgent` secuenciales contra `MODELS.FINANCIAL_PIPELINE` (gpt-5.4-mini) en lugar de UNA llamada a `FINANCIAL_PIPELINE_PREMIUM` (gpt-5.5). El bug `finish_reason=length` que el blindaje gpt-5.5 mitigaba se vuelve estructuralmente imposible — cada pass tiene su propio reasoning budget contra un sub-schema más pequeño.
 
-**Why this is the optimal long-term fix for the financial pipeline**
-
-`NiifReportJson` is a single fat schema (~30 fields, ~8-12K output tokens). Combined with `gpt-5.5` reasoning (~5-10K reasoning tokens for medium effort), each call sits dangerously close to the 32K `maxOutputTokens` budget. We blinded this with (a) gpt-5.5 premium (128K output ceiling) and (b) auto-fallback to `reasoning='low'` on `finish_reason=length`. Both are mitigations, not root-cause fixes — and both cost more than necessary.
-
-Splitting `NiifReportJson` into 3 sub-schemas executed sequentially gives each pass its own reasoning budget, **eliminates the bug by construction**, and allows reverting `niifAnalyst` from `gpt-5.5` ($30/1M output) back to `gpt-5.4-mini` ($4.50/1M) → **~6x cost reduction** (~$8K/month savings at 100 reports/day per the audit team's projections).
-
-**Architecture (3 sequential passes inside `runNiifAnalyst`):**
+**Arquitectura (no tocar sin entender por qué cada pieza está donde está):**
 
 ```
-Pass 1: BalanceAndPnlSubSchema
-  - balanceSheet (assets, liabilities, equity, totales)
-  - incomeStatement (lines, totales, ORI)
-  - curatorFlags
+Pass 1 — niif-analyst-pass1 (slot niifAnalystPass1, 16K maxOutputTokens, medium)
+  Schema: BalanceAndPnlSubSchema
+    - company, balanceSheet, incomeStatement, curatorFlags
+  System prompt: buildNiifAnalystPass1Prompt(company, language, preprocessed, elite)
+  Output: BalanceAndPnlSubJson
 
-Pass 2: CashFlowAndEquitySubSchema
-  - cashFlow (3 secciones + closure)
-  - equityChanges (rows + notes)
-  - Input contextual: passes Pass-1 totales as `<previously_computed>` block
-    so the model anchors numbers consistently (no recomputation).
+Pass 2 — niif-analyst-pass2 (slot niifAnalystPass2, 12K, medium)
+  Schema: CashFlowAndEquitySubSchema
+    - cashFlow (3 secciones + closure), equityChanges (rows + notes)
+  System prompt: buildNiifAnalystPass2Prompt(company, lang, pass1Anchors, preprocessed, elite)
+    - <previously_computed> con: totalAssetsPrimary, totalLiabilitiesPrimary,
+      totalEquityPrimary, netIncomePrimary, oriPrimary, curatorFlags
+  Output: CashFlowAndEquitySubJson
 
-Pass 3: TechnicalNotesSubSchema
-  - technicalNotes (reclasificaciones, impracticabilidades, mapping PUC)
-  - Input contextual: passes Pass-1 + Pass-2 outputs as `<previously_computed>`
-    so notes reference real numbers from earlier passes.
+Pass 3 — niif-analyst-pass3 (slot niifAnalystPass3, 12K, medium)
+  Schema: TechnicalNotesSubSchema
+    - technicalNotes (incluye sub-notas Defensa Art. 647 E.T.)
+  System prompt: buildNiifAnalystPass3Prompt(company, lang, pass1Anchors, pass2Anchors, preprocessed, elite)
+    - <previously_computed> con anchors de Pass-1 + Pass-2 (cashClosing, ecpClosingTotal)
+  Output: TechnicalNotesSubJson
 
-Final assembly: merge `{ ...pass1, ...pass2, ...pass3 }` → validate against
-full `NiifReportSchema` (estructural, no LLM) → run cross-invariant checks
-(Activo=Pasivo+Patrimonio, EFE=PUC 11, ECP=Patrimonio, todos a $0 centavos).
+Ensamblaje (pura función determinística, sin LLM):
+  assembled = assembleNiifReport(pass1.json, pass2.json, pass3.json)
+  parsed = NiifReportSchema.safeParse(assembled)  // red de seguridad estructural
+  result = toNiifAnalysisResult(parsed.data)       // adapter → NiifAnalysisResult legacy
 ```
 
-**Files to touch:**
+**Por qué dividir el schema en este eje específico:**
 
-1. `src/lib/agents/financial/contracts/niif-report.ts` — split exports:
-   - Keep `NiifReportSchema` (unchanged, becomes the assembly target)
-   - Add `BalanceAndPnlSubSchema`, `CashFlowAndEquitySubSchema`, `TechnicalNotesSubSchema`
-   - Add `assembleNiifReport(pass1, pass2, pass3): NiifReportJson` deterministic merger
-2. `src/lib/agents/financial/prompts/niif-analyst.prompt.ts` — split into 3 builder functions:
-   - `buildNiifAnalystPass1Prompt()` (Balance + P&L)
-   - `buildNiifAnalystPass2Prompt(pass1Output)` (EFE + ECP, with `<previously_computed>` block)
-   - `buildNiifAnalystPass3Prompt(pass1Output, pass2Output)` (notes)
-   - Each prompt retains anti-hallucination + colombia-2026 + niif-knowledge headers (cache-friendly stays intact).
-3. `src/lib/agents/financial/agents/niif-analyst.ts` — orchestrate 3 sequential `callFinancialAgent` calls:
-   - Each pass uses `MODELS.FINANCIAL_PIPELINE` (mini) instead of `FINANCIAL_PIPELINE_PREMIUM` (gpt-5.5)
-   - Each pass uses its own `MODELS_CONFIG.niifAnalystPass1/2/3` slot (add to `models.ts`, budgets ~12K each instead of 32K shared)
-   - On any pass failure, fail fast with diagnostic about which pass broke
-4. `src/lib/config/models.ts` — add 3 slots (`niifAnalystPass1`, `niifAnalystPass2`, `niifAnalystPass3`) each with `maxOutputTokens: 12000`, `reasoningEffort: 'medium'`. The aggregate budget (36K) is BIGGER than the current 32K monolithic, but each pass has full reasoning budget so the bug becomes impossible.
-5. Tests in `src/lib/agents/financial/__tests__/`:
-   - Unit test for `assembleNiifReport` (deterministic merger).
-   - Snapshot test: feed a known fixture through `runNiifAnalyst`, assert the final `NiifReportJson` shape matches Pass-1+2+3 assembled.
+- Pass 1 es el "backbone numérico": Balance + P&L comparten la identidad `netIncome → resultadoEjercicio del ECP`. Dejarlos juntos enforza el bridge automáticamente y produce los anchors que Pass-2 necesita (`totalEquityPrimary`, `cashClosing implícito en PUC 11`). `curatorFlags` viven con los anchors porque son ecos deterministas del orchestrator.
+- Pass 2 es el "estados derivados": EFE y ECP dependen ambos de cifras de Pass-1 (`cashClosing ≡ PUC 11 balance`, `ECP saldo final ≡ totalEquity`). Mantenerlos juntos en un mismo pass es coherente con la coherencia cruzada del flujo y patrimonio (cierre del ECP usa la utilidad ya anclada en Pass-1).
+- Pass 3 es la "narrativa técnica" — sólo notas. Recibe anchors de los 2 passes anteriores y sus activadores Élite filtrados. No produce cifras nuevas, sólo cita las ya emitidas.
 
-**What stays the same:**
-- `runNiifAnalyst` public signature (returns `NiifAnalysisResult`, same callers).
-- `toNiifAnalysisResult` adapter (renderer.ts) — consumes assembled JSON, unchanged.
-- PDF Élite + Excel — they read assembled JSON, no changes.
-- Validators — they validate assembled JSON, no changes.
-- Strategy Director + Governance Specialist — they consume `niifOutput.fullContent`, no changes (they can also benefit from chunked pattern but that's Fase 4).
+**Cumplimiento normativo (NIC 1 §10 / NIIF for SMEs §3.17):**
 
-**Estimated effort:** 8h (1 senior dev session). The risk is low because the assembled output must pass `NiifReportSchema.parse()` at the end — if the structure breaks, tests catch it before deploy.
+La normativa exige presentar un "conjunto completo de Estados Financieros" — eso es un requisito de **presentación**, no de generación. El output reensamblado (`NiifReportSchema.parse(assembled)`) cumple §3.17 byte-a-byte como cumplía antes; sólo se chunkó la generación interna. La validación post-ensamblaje (`validateNiifReportJson`, Capa 1 Elite Protocol) verifica los invariantes (Activo = Pasivo + Patrimonio, EFE = PUC 11, ECP saldo final = totalEquity, todos a $0 centavos).
 
-**Validation:**
-- `npx tsc --noEmit` exit 0 throughout.
-- Existing 536 tests pass + 2 new tests (assembler + integration).
-- Compare 5 real reports pre-vs-post via `__fixtures__/`: numeric outputs identical at $0 cents (deterministic invariants enforce this).
-- Cost reduction confirmed via `/api/admin/telemetry` after 1 week: `perAgent` for `niif-analyst` should show `modelId: gpt-5.4-mini` (not gpt-5.5) and `costUsdMicros` aggregate ~6x lower.
+**Telemetría — ahora 3 entradas por reporte:**
 
-**When to do it:** when the audit team's monitoring (or your own ops sense) shows that either (a) `gpt-5.5` costs are uncomfortable, or (b) fallback rate > 1% across reports indicates the monolithic budget is fragile despite the blindaje. Until then, the current setup is production-safe per the audit team's verdict.
+El bus `agent_telemetry` (ver sección "Telemetry & Observability" arriba) ya no recibe UN evento por reporte; recibe **tres**, una por pass:
+- `agentName: 'niif-analyst-pass1'` con `modelId: gpt-5.4-mini` (no gpt-5.5)
+- `agentName: 'niif-analyst-pass2'`
+- `agentName: 'niif-analyst-pass3'`
+
+Cuando consultes `/api/admin/telemetry?hours=N`, `perAgent.niif-analyst*` desglosa los tres. El costo agregado por reporte debe ser ~4-5x menor que el legado gpt-5.5 (input ligeramente sube por la triple re-emisión del system prompt; mitigado por `cachedInputTokens`).
+
+**Diagnóstico de fallos por pass:**
+
+Si Pass-N falla, el error se propaga con mensaje `"runNiifAnalyst: Pass N (descripción) falló — <causa>"` + el `cause` original preservado. NO es genérico. Cada pass se aísla.
+
+**Reversibilidad:**
+
+Un sólo `git revert` del commit final (Fase F) restaura el comportamiento monolítico premium. Los commits incrementales (B1, B2, C, D, E1, E2) se diseñaron para ser revertibles individualmente sin tocar otros — cada uno toca un archivo distinto. El slot legacy `niifAnalyst` (32K, premium) se conservó como `@deprecated` en `MODELS_CONFIG` por si se necesita revertir rápido sin re-introducirlo.
+
+**Lo que NO cambió (contract con consumers downstream):**
+
+- `runNiifAnalyst()` signature pública.
+- `toNiifAnalysisResult()` adapter.
+- PDF Élite + Excel — siguen leyendo el `NiifReportJson` ensamblado.
+- `validateNiifReportJson` — Capa 1 Elite Protocol intacta.
+- Strategy Director + Governance Specialist — siguen consumiendo `niifOutput.fullContent` (Markdown legacy). Su chunking es Fase 4 (no se incluyó aquí; el cuello de botella era niif-analyst).
+
+**Cuando rompa en producción (runbook):**
+
+1. Mira `/api/admin/telemetry?hours=24` — busca `perAgent.niif-analyst-passN.unclean_finish_rate` > 0.
+2. Si Pass-1 rompe → puede que el schema esté demasiado denso para 16K; sube a 20K en `MODELS_CONFIG.niifAnalystPass1`.
+3. Si Pass-2 rompe → probablemente el ECP/EFE de un fixture exótico desborda 12K; sube a 16K.
+4. Si Pass-3 rompe → notas Art. 647 E.T. demasiado largas; sube a 16K.
+5. Si el assembled falla `NiifReportSchema.safeParse(...)` post-ensamblaje (raro, estructuralmente impossible si los sub-schemas pasaron) → bug en `assembleNiifReport`; corre `npx vitest run src/lib/agents/financial/__tests__/assemble-niif-report.test.ts` para localizar.
+6. Cualquier regresión grave: `git revert <hash final Fase F>` y redeploy.
 
 ## Layout Gotchas
 
