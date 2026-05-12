@@ -477,6 +477,7 @@ ${ctx.niifDisclosures}
 - Toda cifra global (totalAssetsPrimary, totalLiabilitiesPrimary, totalEquityPrimary, netIncomePrimary) coincide al centavo con TOTALES VINCULANTES.
 - curatorFlags refleja LITERALMENTE el bloque vinculante (sin re-cálculo).
 ${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}); cuando un saldo comparativo no exista, amountComparative = null y se documenta en balanceSheet.notes / incomeStatement.notes.` : '- isComparative=false: amountComparative = null en TODAS las líneas; totalAssetsComparative et al = null.'}
+- CHECK 4 (Parte 8.1 spec — no duplicación gastos): TOTAL_GASTOS_P&L = Grupo 51 + Grupo 52 + Grupo 53 (cada grupo una sola vez). Subcuentas 53xx NO se cuentan en adición al total Grupo 53. Σ líneas de gastos en incomeStatement.lines ≤ controlTotals.gastos del bloque vinculante (tolerancia $1.000).
 </success_criteria>
 
 <constraints>
@@ -489,6 +490,25 @@ ${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPer
 - NEVER usar Clase 5 (Gastos) ni Clase 6 (Costos) como Ingresos. Los ingresos son EXCLUSIVAMENTE Clase 4.
 - NEVER confundir CÓDIGO de cuenta (ej. "41", "52") con VALOR monetario.
 
+Devoluciones 4175 (Parte 1.3 spec v2.0). TOTALES VINCULANTES expone (cuando F4 lande) \`ingresosNetos\` = |Σ 41xx crédito| − |Σ 4175xx débito|. If quieres desglosar ingresos en incomeStatement.lines (Opción B) then incluir línea separada "(-) Devoluciones en ventas (Cta 4175)" con valor absoluto y signo NEGATIVO; verificar que Ingresos brutos − Devoluciones = ingresosNetos. Else if Opción A (consolidado) then una sola línea "(+) Ingresos de actividades ordinarias (Grupo 41, neto de devoluciones)" con el monto ingresosNetos. NEVER duplicar la resta de 4175 cuando TOTALES VINCULANTES ya entrega el monto neto.
+
+Anti-duplicación Grupo 53 (CRÍTICO — Parte 1.3 spec v2.0). NEVER presentar simultáneamente el total del Grupo 53 (consolidado) Y sus subcuentas individuales (5305 Financieros, 5395 Diversos, 5310 Comisiones, etc.) como líneas independientes sumadas en \`incomeStatement.lines\`. Las subcuentas 53xx YA ESTÁN INCLUIDAS dentro del total Grupo 53; sumar ambos genera DOBLE CONTABILIZACIÓN (caso documentado: $30.262.041 de gastos no operacionales duplicados).
+
+If quieres detalle de gastos no operacionales (Opción B del spec) then desglosar SOLO subcuentas (Σ 53xx = Grupo 53 total verificable al centavo) otherwise mostrar SOLO la línea consolidada "(-) Otros gastos no operacionales y financieros (Grupo 53)" (Opción A).
+
+Las dos opciones son mutuamente excluyentes. Nunca ambas combinadas. Esta es la falla cubierta por CHECK 4 (Parte 8.1 spec) — el validator post-LLM la detecta y bloquea el reporte.
+
+Detección de Anomalías (Tabla 8 — Parte 5 spec v2.0). Para CADA condición detectada en TOTALES VINCULANTES o auxiliares, emitir nota en \`balanceSheet.notes\` (anomalías de Activo/Pasivo/Patrimonio) o \`incomeStatement.notes\` (anomalías P&L):
+
+- If preprocessed contiene cuenta auxiliar Clase 14 con saldo < 0 then nota "Anomalía A1: Inventarios con saldo negativo (Clase 14 < 0) — error contable; revisar kardex y movimientos (NIC 2 §9-10)".
+- If preprocessed contiene cuenta auxiliar Clase 11/13/14 con saldo crédito (negativo en convención PUC) then nota "Anomalía A2: Activo con saldo inverso (cta XXXX) — inconsistencia contable; revisar imputación (NIC 1 §32 No compensación)".
+- If preprocessed contiene Clase 12 (Inversiones) con saldo < 0 then nota "Anomalía A3: Inversiones con saldo negativo — requiere revisión documental (NIC 28 §10 / Sec. 14 PYMES)".
+- If (Clase 6 + Clase 7) / Clase 4 < 1% then nota "Anomalía A4: Costo de ventas/producción < 1% de ingresos — posible subregistro de costos; KPIs de ciclo operativo distorsionados (NIA 240 §A1-A6 fraude por subregistro)".
+- If |Clase 54 actual| << 35% × utilidad operativa (UAI > 0 Y impuesto contable < 30% de teórico) then nota "Anomalía A5: Brecha entre impuesto contable y teórico — conciliación fiscal pendiente (NIC 12 §80 + Art. 240 E.T.; Defensa Art. 647 E.T. diferencia de criterio)".
+- If preprocessed contiene cta 22xx (Proveedores) con saldo débito (saldo positivo en convención PUC Clase 2) then nota "Anomalía A6: Proveedores con saldo débito — posible anticipo o error de imputación; revisar".
+- If totalEquityPrimary < 0 then nota DEDICADA "Anomalía A7: PATRIMONIO NEGATIVO — alerta de continuidad de negocio (NIC 1 §25 Going Concern; C.Co. Art. 459 — disolución por pérdidas cuando patrimonio < 50% capital suscrito). El representante legal DEBE convocar disolución conforme C.Co. Art. 459.".
+- If (utilidadNeta / ingresos) > 0.70 Y costoVentas < 30% ingresos then nota "Anomalía A8: Margen neto > 70% con costos < 30% — costo de ventas posiblemente subregistrado o ingresos sobreestimados (NIA 240 + R7 curator)".
+
 If TOTALES VINCULANTES contiene reclassifications[] con applied=true then mostrar la cuenta virtual "2810ZZ — Otros pasivos transitorios (reclasificación curator)" dentro de balanceSheet.liabilities con el monto absoluto, NO mostrar la cuenta de Activo original con saldo negativo, y emitir balanceSheet.notes con la Nota de Reclasificación + sub-nota Defensa Art. 647 E.T. (NIC 1 §32 — no compensación) otherwise omitir silenciosamente.
 
 If reclasifNoComp.length > 0 (R-Élite 4 — saldos contranatura en Activo) then presentar las cuentas reclasificadas dentro de balanceSheet.liabilities (mantener saldo absoluto, citar cuenta de origen como referencia en notes) otherwise omitir.
@@ -500,6 +520,12 @@ If impuestoRentaNeto.applicable=true (R-Élite 3.b — anticipo material PUC 135
 If comparativosImpracticables=true then balanceSheet e incomeStatement presentan amountComparative=null en todas las líneas otherwise usar el Opening Balance del periodo ${ctx.comparativePeriod ?? 'comparativo'} cuando exista.
 
 Signo del impuesto de renta (R-Élite 3): el "Gasto por impuesto de renta y complementarios" SIEMPRE aparece como línea débito en incomeStatement (resta de UAI). NUNCA presentar el impuesto causado con signo positivo. La línea label es "(-) Gasto por impuesto de renta y complementarios (Art. 240 E.T. — 35%)".
+
+Cascada impuesto de renta (Parte 4.1 spec v2.0).
+If TOTALES VINCULANTES contiene \`impuestoCausadoPeriodo\` (Clase 54 con saldo) then usar ese valor.
+Else if TOTALES VINCULANTES contiene \`anticipoActivo\` (Cta 1805/135515 con saldo > 0) then usar como referencia + emitir balanceSheet.notes con la R-Élite 3.b (presentación neto-bruto, ya existente).
+Else if UAI > 0 Y no hay ni Clase 54 ni 1805/135515 then calcular impuesto teórico = UAI × 35% (Art. 240 E.T. 2026), presentar línea LITERAL "(-) Provisión teórica de impuesto de renta (Art. 240 E.T. — 35%; pendiente confirmación contador)" en incomeStatement.lines, anclar el monto como cálculo del modelo (NO como anchor de TOTALES VINCULANTES), y emitir nota en incomeStatement.notes: "El balance no registra Clase 54 ni Cta 1805/135515; se aplicó provisión teórica del 35% sobre la utilidad antes de impuestos pendiente de confirmación por el contador responsable (Art. 240 E.T.; Defensa Art. 647 E.T. — diferencia de criterio documentada)."
+Else (UAI ≤ 0 sin impuesto) then no aplicar línea de impuesto; emitir nota "No se causa impuesto de renta del periodo: utilidad antes de impuestos no positiva (Art. 14 E.T.)".
 
 curatorFlags refleja LITERALMENTE lo que el orquestador inyectó: \`equityConvergenceApplied\`, \`cashFlowClosureForced\`, \`negativeAssetReclassified\`, \`presumedCostWarning\`, \`reclassifiedAmountCop\` (suma absoluta en MoneyCop). NO recalcules; copia desde TOTALES VINCULANTES.
 
@@ -690,6 +716,8 @@ ${ctx.comparativosImpracticables === true ? '- Nota literal de impracticabilidad
 ${ctx.isGroup1 ? '- Nota preparatoria IFRS 18 presente (Grupo 1 — obligatoria a partir de 2027).' : `- IFRS 18 NUNCA mencionada (la entidad pertenece al Grupo ${company.niifGroup ?? 2}; mencionarla activa el blocker V8 del gate auditReportEmittable).`}
 ${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '- Si margen bruto > 80% (derivable de los anchors P&L): nota "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7.' : ''}
 - Notas de mapeo PUC, reclasificaciones e impracticabilidades cuando apliquen.
+- If alguna nota Anomalía A1..A8 fue emitida en Pass-1 then technicalNotes incluye SECCIÓN dedicada "Anomalías e Inconsistencias Detectadas" agrupando las notas (consolidación para el lector ejecutivo).
+- If totalEquityPrimary (anchor Pass-1) < 0 then technicalNotes DEBE incluir nota dedicada con label "Hipótesis de Empresa en Marcha" citando NIC 1 §25-26 + NIA 570 + C.Co. Art. 459, describiendo: (a) la situación de patrimonio negativo, (b) la causa probable (pérdidas acumuladas materiales), (c) la obligación legal del representante legal de convocar asamblea para evaluar disolución cuando el patrimonio quede < 50% del capital suscrito, (d) declaración del Defensa Art. 647 E.T.: "La revelación de la situación es transparente y documentada; la sanción aplicable es de naturaleza societaria (C.Co. Art. 459), no tributaria."
 </success_criteria>
 
 <constraints>
@@ -710,6 +738,18 @@ If reclasifNoComp.length > 0 (R-Élite 4) then emitir technicalNotes con una not
 If curatorFlags.negativeAssetReclassified=true (R1) then emitir technicalNotes con Nota de Reclasificación + sub-nota Defensa Art. 647 E.T. (NIC 1 §32 — no compensación), citando reclassifiedAmountCop del Pass-1 anchor otherwise omitir.
 
 Nota Maestra — Defensa Tributaria Art. 647 E.T.: por CADA ajuste automático del Curator activo en el reporte (R1, R5, R6, R7, R-Élite 3.b, R-Élite 4), agregar una nota a technicalNotes con esta estructura: "Concepto: [ajuste]. Sustento NIIF: [norma]. Defensa tributaria (Art. 647 E.T.): el presente ajuste corresponde a una diferencia de criterio en la aplicación del marco técnico contable y NO constituye omisión, alteración o registro deliberadamente inexacto. Conforme al inciso final del Art. 647 E.T. y la doctrina DIAN (Concepto 100208221-1352 de 2018), las diferencias de criterio sobre el tratamiento contable o tributario no configuran inexactitud sancionable cuando los hechos económicos están plenamente documentados. Origen documental: [papel de trabajo / curator finding]."
+
+Disclaimers Automáticos (Parte 9 spec v2.0 — 6 items condicionales).
+Para CADA condición real detectada en preprocessed o anchors, technicalNotes DEBE incluir el disclaimer LITERAL correspondiente. NO inventar disclaimers que no apliquen:
+
+1. If preprocessed.classes['25'] no tiene auxiliares O su saldo total < $100.000 then disclaimer "No se suministró detalle de obligaciones laborales; rubro excluido del análisis de pasivos."
+2. If (costoVentas6 + costoProduccion7) < 0.01 × ingresos then disclaimer "Costo de ventas insuficiente para calcular días de inventario y ciclo operativo con precisión económica."
+3. If Anomalía A5 (brecha impuesto) detectada then disclaimer "Impuesto de renta registrado no permite reconstruir conciliación fiscal; cifra usada es la contable."
+4. If no isComparative (single period) then disclaimer "Sin datos comparativos del año anterior; análisis de tendencias y algunos KPIs no disponibles."
+5. If curatorFlags.equityConvergenceApplied O cashFlowClosureForced O negativeAssetReclassified then disclaimer "Ajuste 3605 aplicado automáticamente para efectos de presentación; no ha sido validado por el contador responsable."
+6. If Anomalía A3 (Clase 12 < 0) detectada then disclaimer "Inversiones en asociadas presentan saldo negativo; requiere revisión documental antes de publicar."
+
+NOTA — reconciliación con la regla "NEVER 'no se suministró información'": la prohibición es sobre frases EVASIVAS genéricas (sin contexto / sin cita normativa). Los 6 disclaimers arriba son CALIFICADOS (atados a rubro contable concreto + condición auditable) y por lo tanto AUTORIZADOS — no son evasivos. Si la condición no aplica, OMITIR el disclaimer (no emitirlo vacío).
 </constraints>
 
 <previously_computed>
