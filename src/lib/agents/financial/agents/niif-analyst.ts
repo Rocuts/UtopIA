@@ -131,12 +131,12 @@ export async function runNiifAnalyst(
   onProgress?: (event: FinancialProgressEvent) => void,
   elite?: NiifAnalystEliteContext,
   signal?: AbortSignal,
-  // Why: F0 sólo cablea la propagación; F4 leerá `reportMode` desde el
-  // builder. Marcamos el binding void aquí para que tsc/lint no fallen por
-  // parámetro no usado pero el contrato externo quede declarado.
+  // Why: F4 cablea `reportMode` a los 3 prompt builders para que el bloque
+  // "MODO DEL REPORTE" (v8.1 §2) gobierne verbos, layout y secciones
+  // condicionales como "Limitaciones de Información". Default
+  // `'COMPARATIVO_COMPLETO'` para callers legacy que no propagan el valor.
   reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): Promise<NiifAnalysisResult> {
-  void reportMode;
   // El bindingTotals se antepone al raw data para que cada pass lo lea ANTES
   // de ver los auxiliares. Compartido entre los 3 pases — maximiza el prompt
   // cache de GPT-5.4 mini (stable prefix + per-pass dynamic suffix).
@@ -164,7 +164,7 @@ export async function runNiifAnalyst(
       agentName: 'niif-analyst-pass1',
       model: MODELS.FINANCIAL_PIPELINE,
       schema: BalanceAndPnlSubSchema,
-      system: buildNiifAnalystPass1Prompt(company, language, preprocessed, elite),
+      system: buildNiifAnalystPass1Prompt(company, language, reportMode, preprocessed, elite),
       userContent,
       ...MODELS_CONFIG.niifAnalystPass1,
       signal,
@@ -191,7 +191,7 @@ export async function runNiifAnalyst(
       agentName: 'niif-analyst-pass2',
       model: MODELS.FINANCIAL_PIPELINE,
       schema: CashFlowAndEquitySubSchema,
-      system: buildNiifAnalystPass2Prompt(company, language, pass1Anchors, preprocessed, elite),
+      system: buildNiifAnalystPass2Prompt(company, language, reportMode, pass1Anchors, preprocessed, elite),
       userContent,
       ...MODELS_CONFIG.niifAnalystPass2,
       signal,
@@ -221,6 +221,7 @@ export async function runNiifAnalyst(
       system: buildNiifAnalystPass3Prompt(
         company,
         language,
+        reportMode,
         pass1Anchors,
         pass2Anchors,
         preprocessed,
