@@ -21,7 +21,8 @@
     "db:seed-calendar": "dotenv -e .env.local -- tsx scripts/seed-verified-calendar.ts",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts",
-    "db:encrypt-erp": "dotenv -e .env.local -- tsx scripts/encrypt-erp-credentials.ts"
+    "db:encrypt-erp": "dotenv -e .env.local -- tsx scripts/encrypt-erp-credentials.ts",
+    "lint:strict-mode": "node scripts/lint-strict-mode.mjs"
   },
   "dependencies": {
     "@ai-sdk/cohere": "^3.0.33",
