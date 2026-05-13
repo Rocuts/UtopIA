@@ -311,3 +311,110 @@ export function computeReportHash(payload: ReportHashPayload): string {
   const serialized = stableStringify(payload);
   return createHash('sha256').update(serialized).digest('hex');
 }
+
+// ---------------------------------------------------------------------------
+// §1.5 — Confianza global agregada (Slide 12 "CONFIDENCE_GLOBAL")
+// ---------------------------------------------------------------------------
+
+/**
+ * Bucket de confianza global v8.1 §5 Slide 12. Espejo del `ConfidenceBucket`
+ * Zod que vive en `src/lib/agents/financial/contracts/html-editor.ts`. Lo
+ * replicamos como interface TS aquí para que `aggregateConfidence` pueda
+ * tipar su retorno sin crear un import circular con contratos del agente.
+ */
+export interface ConfidenceBucket {
+  highPct: number;
+  mediumPct: number;
+  lowPct: number;
+}
+
+/**
+ * Niveles de confianza canónicos (espejo de `ConfidenceLevelSchema`). Mantener
+ * en sync con `src/lib/agents/financial/contracts/base.ts`.
+ */
+type ConfLevel = 'high' | 'medium' | 'low';
+
+/**
+ * Recorre recursivamente el payload de un agente (NIIF / Strategy / Governance)
+ * acumulando los valores literales del campo `confidence`. La spec v8.1 §1.5
+ * declara: `null | undefined` → confianza implícita `high` (sin dot visual);
+ * `'medium'`/`'low'` activan el dot del renderer. Para el bucket global
+ * tratamos `null/undefined` como `high` para coincidir con el contrato.
+ *
+ * Why recursivo: los 3 agentes emiten `confidence` en MUCHOS lugares:
+ *   - NIIF: cada `StatementLineV8Schema.confidence` (balance, P&L, etc).
+ *   - Strategy: `KpiSchema.confidence`, root `confidence`, `executiveDashboardRow`.
+ *   - Governance: cada nota `NotaSchema.confidence`.
+ * No vale la pena enumerar las rutas — un walk genérico es estable frente a
+ * extensiones del schema sin tocar este helper.
+ */
+function collectConfidences(value: unknown, sink: { high: number; medium: number; low: number }): void {
+  if (value == null) return;
+  if (typeof value !== 'object') return;
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectConfidences(item, sink);
+    return;
+  }
+
+  const obj = value as Record<string, unknown>;
+  // Captura el campo `confidence` cuando es un literal canónico. Si es null/
+  // undefined, NO sumamos — el contrato §1.5 lo trata como `high` implícito;
+  // sumarlo distorsionaría el bucket (los campos sin confianza explícita
+  // dominarían el conteo).
+  if ('confidence' in obj) {
+    const c = obj.confidence;
+    if (c === 'high' || c === 'medium' || c === 'low') {
+      sink[c as ConfLevel] += 1;
+    }
+  }
+
+  // Walk recursivo de TODOS los valores del objeto (incluido `confidence` —
+  // es un string, el branch arriba ya lo capturó). Costo O(n) sobre los nodos
+  // del JSON. Profundidades típicas <10, tamaño total <500 nodos por reporte.
+  for (const key of Object.keys(obj)) {
+    if (key === 'confidence') continue;
+    collectConfidences(obj[key], sink);
+  }
+}
+
+/**
+ * Calcula el bucket de confianza global recorriendo los 3 JSONs de los
+ * agentes secuenciales (NIIF Analyst, Strategy Director, Governance
+ * Specialist). El renderer del Slide 12 consume `highPct` como el indicador
+ * "CONFIDENCE_GLOBAL" del bloque de transparencia.
+ *
+ * Determinismo: dos llamadas con el mismo payload producen el mismo bucket
+ * byte-a-byte (no se itera por orden de inserción, sólo se cuentan literales).
+ *
+ * Edge case: si NO hay un sólo `confidence: 'high'|'medium'|'low'` en los 3
+ * JSONs, el bucket queda en `{100, 0, 0}` por convención (no podemos dividir
+ * por cero; spec §1.5 dice "null equivale a high implícito" → ausencia de
+ * disenso = full high).
+ */
+export function aggregateConfidence(payload: {
+  niif: unknown;
+  strategy: unknown;
+  governance: unknown;
+}): ConfidenceBucket {
+  const sink = { high: 0, medium: 0, low: 0 };
+  collectConfidences(payload.niif, sink);
+  collectConfidences(payload.strategy, sink);
+  collectConfidences(payload.governance, sink);
+
+  const total = sink.high + sink.medium + sink.low;
+  if (total === 0) {
+    // Sin ningún confidence explícito — todo se interpreta como `high` implícito.
+    return { highPct: 100, mediumPct: 0, lowPct: 0 };
+  }
+
+  // Round a 1 decimal para consistencia con el formato del Slide 12. Garantizamos
+  // que la suma sea ~100 ± epsilon de redondeo (no normalizamos al 100 exacto
+  // porque distorsionaría el indicador y el renderer tolera la holgura).
+  const round1 = (v: number) => Math.round((v / total) * 1000) / 10;
+  return {
+    highPct: round1(sink.high),
+    mediumPct: round1(sink.medium),
+    lowPct: round1(sink.low),
+  };
+}

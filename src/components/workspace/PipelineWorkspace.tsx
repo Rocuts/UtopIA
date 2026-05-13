@@ -17,6 +17,7 @@ import {
   Check,
   Stethoscope,
   GitCompare,
+  Globe,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -30,6 +31,7 @@ import { ProgressRing } from '@/design-system/components/ProgressRing';
 import { ReportFollowUpChat } from './ReportFollowUpChat';
 import { RepairChat } from './repair/RepairChat';
 import { ReportDiff } from './ReportDiff';
+import { HtmlReportViewer } from './HtmlReportViewer';
 import type {
   ProvisionalFlag,
   Adjustment,
@@ -198,6 +200,254 @@ async function runSSEPhase<T>(
   }
 
   return box.value;
+}
+
+// ─── Wave 4.F8 — helpers cliente para metadata determinístico HTML v8.1 ────
+// El endpoint `/api/financial-report/html` exige un bloque `metadata`
+// pre-cocinado por el caller (hash SHA-256, cobertura por clase PUC,
+// confianza global). Los helpers de `src/lib/preprocessing/v8-helpers.ts`
+// son server-side (importan `node:crypto`) — bundlearlos en un client
+// component rompe el build, así que reimplementamos los 3 cómputos aquí con
+// Web Crypto API + walk genérico del JSON. Misma semántica determinística.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Espejo del `CoverageByClass` Zod en `contracts/html-editor.ts`. */
+interface ClientCoverageRow {
+  classCode: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '25';
+  auxiliariesCount: number;
+  totalSaldoCop: string;
+  percentOfFolio: string;
+}
+
+/** Espejo del `ConfidenceBucket` Zod. */
+interface ClientConfidenceBucket {
+  highPct: number;
+  mediumPct: number;
+  lowPct: number;
+}
+
+/** Formatea decimal a `es-CO` con coma y 1 decimal — determinístico (sin Intl). */
+function formatPercentEsCoClient(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  const sign = rounded < 0 ? '-' : '';
+  const abs = Math.abs(rounded).toFixed(1);
+  return sign + abs.replace('.', ',');
+}
+
+/** MoneyCop: pesos → centavos como string. Mismo helper que server. */
+function toMoneyCopStringClient(pesos: number): string {
+  return Math.round(pesos * 100).toString();
+}
+
+/**
+ * Cobertura por clase PUC para el Slide 12 — re-implementación cliente del
+ * `summarizeCoverage()` server. El `preprocessed` viaja como `unknown` por
+ * SSE; aquí lo navegamos defensivamente. Si la shape no matchea (snapshot
+ * de versión vieja, p.ej.), retornamos array vacío para no romper el HTML.
+ */
+function clientSummarizeCoverage(preprocessed: unknown): ClientCoverageRow[] {
+  if (!preprocessed || typeof preprocessed !== 'object') return [];
+  const root = preprocessed as Record<string, unknown>;
+  const primary = root.primary as Record<string, unknown> | undefined;
+  if (!primary) return [];
+
+  // Control totals → activo total (denominador del % cobertura).
+  const ct = primary.controlTotals as Record<string, unknown> | undefined;
+  const totalAssetsRaw = ct && typeof ct.activo === 'number' ? (ct.activo as number) : 0;
+  const totalAssets = Math.abs(totalAssetsRaw);
+
+  // `classes: PUCClass[]` — cada clase tiene `accounts[]` con `code, balance, isLeaf, level`.
+  const classes = Array.isArray(primary.classes) ? (primary.classes as Array<Record<string, unknown>>) : [];
+
+  const codes: ClientCoverageRow['classCode'][] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '25'];
+
+  return codes.map((classCode) => {
+    let auxiliariesCount = 0;
+    let total = 0;
+
+    if (classCode === '25') {
+      const class2 = classes.find((c) => c.code === 2);
+      if (class2 && Array.isArray(class2.accounts)) {
+        const accounts25 = (class2.accounts as Array<Record<string, unknown>>).filter(
+          (acc) => typeof acc.code === 'string' && (acc.code as string).startsWith('25'),
+        );
+        auxiliariesCount = accounts25.filter(
+          (acc) => acc.isLeaf === true || acc.level === 'Auxiliar',
+        ).length;
+        total = accounts25.reduce(
+          (sum, acc) => sum + (acc.isLeaf === true && typeof acc.balance === 'number' ? (acc.balance as number) : 0),
+          0,
+        );
+      }
+    } else {
+      const cls = classes.find((c) => c.code === parseInt(classCode, 10));
+      if (cls && Array.isArray(cls.accounts)) {
+        const accounts = cls.accounts as Array<Record<string, unknown>>;
+        auxiliariesCount = accounts.filter(
+          (acc) => acc.isLeaf === true || acc.level === 'Auxiliar',
+        ).length;
+        total = accounts.reduce(
+          (sum, acc) => sum + (acc.isLeaf === true && typeof acc.balance === 'number' ? (acc.balance as number) : 0),
+          0,
+        );
+      }
+    }
+
+    const percent = totalAssets > 0 ? (Math.abs(total) / totalAssets) * 100 : 0;
+    return {
+      classCode,
+      auxiliariesCount,
+      totalSaldoCop: toMoneyCopStringClient(total),
+      percentOfFolio: formatPercentEsCoClient(percent),
+    };
+  });
+}
+
+/**
+ * Walk recursivo del JSON contando literales `confidence`. Espejo cliente del
+ * `aggregateConfidence` server. Spec §1.5: null/undefined → high implícito
+ * (NO se cuenta), 'medium'/'low' activan el dot visual.
+ */
+function clientAggregateConfidence(payload: {
+  niif: unknown;
+  strategy: unknown;
+  governance: unknown;
+}): ClientConfidenceBucket {
+  const sink = { high: 0, medium: 0, low: 0 };
+  const visit = (val: unknown) => {
+    if (val == null || typeof val !== 'object') return;
+    if (Array.isArray(val)) {
+      for (const item of val) visit(item);
+      return;
+    }
+    const obj = val as Record<string, unknown>;
+    if ('confidence' in obj) {
+      const c = obj.confidence;
+      if (c === 'high' || c === 'medium' || c === 'low') sink[c as 'high' | 'medium' | 'low'] += 1;
+    }
+    for (const key of Object.keys(obj)) {
+      if (key === 'confidence') continue;
+      visit(obj[key]);
+    }
+  };
+  visit(payload.niif);
+  visit(payload.strategy);
+  visit(payload.governance);
+
+  const total = sink.high + sink.medium + sink.low;
+  if (total === 0) return { highPct: 100, mediumPct: 0, lowPct: 0 };
+  const round1 = (v: number) => Math.round((v / total) * 1000) / 10;
+  return {
+    highPct: round1(sink.high),
+    mediumPct: round1(sink.medium),
+    lowPct: round1(sink.low),
+  };
+}
+
+/**
+ * Stable stringify: ordena claves de objetos recursivamente para que el hash
+ * sea estable frente a re-ordenamientos. Mismo enfoque que el server.
+ * BigInt → string decimal (preserva precisión).
+ */
+function stableStringifyClient(value: unknown): string {
+  return JSON.stringify(value, (_key, val) => {
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      const ordered: Record<string, unknown> = {};
+      for (const k of Object.keys(val).sort()) ordered[k] = (val as Record<string, unknown>)[k];
+      return ordered;
+    }
+    if (typeof val === 'bigint') return (val as bigint).toString();
+    return val;
+  });
+}
+
+/**
+ * Hash SHA-256 hex del payload consolidado vía Web Crypto. Equivalente al
+ * `computeReportHash` server pero sin `node:crypto`. Async porque `crypto
+ * .subtle.digest` lo es.
+ */
+async function clientComputeReportHash(payload: {
+  niif: unknown;
+  strategy: unknown;
+  governance: unknown;
+}): Promise<string> {
+  const serialized = stableStringifyClient(payload);
+  const buf = new TextEncoder().encode(serialized);
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Cuenta alertas técnicas del Strategy Director por severidad y findings de
+ * auditoría por severidad. Compatible con campos legacy (severity literal
+ * de cualquier shape). Devuelve {high, medium, low} para Slide 12.
+ */
+function countAlertsBySeverity(
+  strategyJson: unknown,
+  auditReport: { auditorResults?: Array<{ findings?: Array<{ severity?: string }> }> } | null,
+): { high: number; medium: number; low: number } {
+  const counts = { high: 0, medium: 0, low: 0 };
+
+  // technicalAlerts del Strategy: severity 'red' | 'amber' | 'green'.
+  const strat = strategyJson as Record<string, unknown> | null;
+  const alerts = strat && Array.isArray(strat.technicalAlerts)
+    ? (strat.technicalAlerts as Array<{ severity?: string }>)
+    : [];
+  for (const a of alerts) {
+    if (a.severity === 'red') counts.high += 1;
+    else if (a.severity === 'amber') counts.medium += 1;
+    else if (a.severity === 'green') counts.low += 1;
+  }
+
+  // Findings de auditoría (severity 'high' | 'medium' | 'low' del schema legacy).
+  if (auditReport && Array.isArray(auditReport.auditorResults)) {
+    for (const r of auditReport.auditorResults) {
+      if (!Array.isArray(r.findings)) continue;
+      for (const f of r.findings) {
+        if (f.severity === 'high') counts.high += 1;
+        else if (f.severity === 'medium') counts.medium += 1;
+        else if (f.severity === 'low') counts.low += 1;
+      }
+    }
+  }
+  return counts;
+}
+
+/**
+ * Cuenta de auxiliares procesados — lee del campo top-level `auxiliaryCount`
+ * del `PreprocessedBalance` (definido en v8-helpers.ts como número entero).
+ */
+function readAuxiliariesProcessed(preprocessed: unknown): number {
+  if (!preprocessed || typeof preprocessed !== 'object') return 0;
+  const ac = (preprocessed as Record<string, unknown>).auxiliaryCount;
+  return typeof ac === 'number' ? ac : 0;
+}
+
+/**
+ * Extrae el sector CIIU inferido del balance (`actividadInferida.sectorCIIU`).
+ * Null si no hay inferencia o si el preprocessed es de versión previa.
+ */
+function readSectorCIIU(preprocessed: unknown): string | null {
+  if (!preprocessed || typeof preprocessed !== 'object') return null;
+  const ai = (preprocessed as Record<string, unknown>).actividadInferida;
+  if (!ai || typeof ai !== 'object') return null;
+  const sector = (ai as Record<string, unknown>).sectorCIIU;
+  return typeof sector === 'string' ? sector : null;
+}
+
+/**
+ * Extrae el reportMode del NIIF JSON (echo del orchestrator). Default
+ * 'LINEA_BASE' si el JSON no lo expone (fixtures pre-F4).
+ */
+function readReportMode(niifJson: unknown): 'LINEA_BASE' | 'TRANSICION' | 'COMPARATIVO_COMPLETO' {
+  if (!niifJson || typeof niifJson !== 'object') return 'LINEA_BASE';
+  const mode = (niifJson as Record<string, unknown>).reportMode;
+  if (mode === 'LINEA_BASE' || mode === 'TRANSICION' || mode === 'COMPARATIVO_COMPLETO') {
+    return mode;
+  }
+  return 'LINEA_BASE';
 }
 
 // Reproduce el `buildConsolidatedReport` del orchestrator backend para que el
@@ -549,6 +799,17 @@ interface ReportViewerProps {
    * Se pasan al `<ReportDiff>` para subrayar las lineas que los mencionan.
    */
   affectedAccounts?: string[];
+  // ─── Wave 4.F8 — Editor Jefe HTML (cap-stone visual) ────────────────────
+  /** Disparador del agente HTML 1+1 v8.1. Undefined si el host no lo quiere ofrecer. */
+  onGenerateHtml?: () => void;
+  /** True mientras corre la generación — el botón se muestra disabled + spinner. */
+  isGeneratingHtml?: boolean;
+  /** True cuando ya existe un HTML generado — el botón cambia a "Ver HTML". */
+  htmlReady?: boolean;
+  /** Abre el viewer del HTML existente sin re-generar. */
+  onShowHtml?: () => void;
+  /** Error de la última corrida de HTML — se muestra como banner inline. */
+  htmlError?: string | null;
 }
 
 function ReportViewer({
@@ -568,6 +829,11 @@ function ReportViewer({
   onTurnsChange,
   originalContent,
   affectedAccounts,
+  onGenerateHtml,
+  isGeneratingHtml,
+  htmlReady,
+  onShowHtml,
+  htmlError,
 }: ReportViewerProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
@@ -881,6 +1147,41 @@ function ReportViewer({
             )}
             {copyLabel}
           </button>
+          {/* Wave 4.F8 — Editor Jefe HTML (cap-stone visual). El botón aparece
+              sólo si el host expone el handler `onGenerateHtml` (= reporte
+              completado). Cambia su label cuando el HTML ya existe — el
+              usuario puede ver el HTML pre-generado sin re-disparar el agente. */}
+          {onGenerateHtml && (
+            <button
+              type="button"
+              onClick={htmlReady && onShowHtml ? onShowHtml : onGenerateHtml}
+              disabled={isGeneratingHtml || !report}
+              aria-label={
+                htmlReady
+                  ? language === 'es' ? 'Ver reporte HTML' : 'View HTML report'
+                  : language === 'es' ? 'Generar reporte HTML' : 'Generate HTML report'
+              }
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
+                isGeneratingHtml || !report
+                  ? 'border-n-200 text-n-600 cursor-not-allowed'
+                  : htmlReady
+                    ? 'border-success/30 bg-success/10 text-success hover:bg-success/20'
+                    : 'border-n-200 text-n-700 hover:bg-n-50 hover:text-n-1000',
+              )}
+            >
+              {isGeneratingHtml ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Globe className="w-3.5 h-3.5" />
+              )}
+              {isGeneratingHtml
+                ? language === 'es' ? 'Generando HTML...' : 'Generating HTML...'
+                : htmlReady
+                  ? language === 'es' ? 'Ver HTML' : 'View HTML'
+                  : language === 'es' ? 'Generar HTML' : 'Generate HTML'}
+            </button>
+          )}
           {hasDiff && (
             <button
               type="button"
@@ -936,6 +1237,15 @@ function ReportViewer({
           <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span className="whitespace-pre-wrap break-words">{exportError}</span>
+          </div>
+        )}
+
+        {/* Wave 4.F8 — error de generación HTML. Banner inline (no destruye el
+            reporte Markdown) para que el usuario reintente con un click. */}
+        {htmlError && (
+          <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="whitespace-pre-wrap break-words">{htmlError}</span>
           </div>
         )}
 
@@ -1012,6 +1322,23 @@ export function PipelineWorkspace() {
   // necesita para AuditFindingsPage + QualityMetaAuditPage.
   const [auditReport, setAuditReport] = useState<BackendAuditReport | null>(null);
   const [qualityReport, setQualityReport] = useState<BackendQualityAssessment | null>(null);
+  // ─── Wave 4.F8 — HTML Editor Jefe (cap-stone visual) ─────────────────────
+  // Estado del 4° entregable opcional. Se llena cuando el usuario clic
+  // "Generar HTML" post-Phase 3. NO se persiste en localStorage para mantener
+  // el blast radius pequeño — el HTML es regenerable desde el reporte vivo.
+  // `htmlChecklistFailures` se popula con el linter §11 del agente y se muestra
+  // como banner dentro de `<HtmlReportViewer>` si el agente detectó issues.
+  const [htmlReport, setHtmlReport] = useState<string | null>(null);
+  const [htmlChecklistFailures, setHtmlChecklistFailures] = useState<
+    Array<{ rule: string; detail: string; severity: 'block' | 'warn' }>
+  >([]);
+  const [isGeneratingHtml, setIsGeneratingHtml] = useState(false);
+  const [htmlError, setHtmlError] = useState<string | null>(null);
+  const [showHtmlViewer, setShowHtmlViewer] = useState(false);
+  // Cache local de `niifContext.preprocessed` capturado durante Phase 1 — necesario
+  // para que `clientSummarizeCoverage` corra al solicitar el HTML. Se llena en el
+  // checkpoint NIIF.
+  const [cachedPreprocessed, setCachedPreprocessed] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
@@ -1214,6 +1541,10 @@ export function PipelineWorkspace() {
 
         niifResult = niifPayload.niif;
         niifContext = niifPayload.context;
+        // Capturamos el `preprocessed` para que el handler "Generar HTML"
+        // pueda calcular `summarizeCoverage` / `auxiliariesProcessed` /
+        // `sectorCIIU` sin necesidad de re-disparar Phase 1.
+        setCachedPreprocessed(niifContext.preprocessed);
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
         const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -1514,6 +1845,13 @@ export function PipelineWorkspace() {
     setRepairConvId('');
     setOriginalReport(null);
     setDiffAffectedAccounts([]);
+    // Wave 4.F8 — limpieza del 4° entregable opcional.
+    setHtmlReport(null);
+    setHtmlChecklistFailures([]);
+    setHtmlError(null);
+    setShowHtmlViewer(false);
+    setIsGeneratingHtml(false);
+    setCachedPreprocessed(null);
     lastProcessedInputRef.current = null;
     setPipelineInput(null);
     setPipelineState((prev) => ({
@@ -1637,6 +1975,132 @@ export function PipelineWorkspace() {
     [pipelineInput, setPipelineInput, backendReport, report],
   );
 
+  // ─── Wave 4.F8 — Generar reporte HTML 1+1 v8.1 (cap-stone visual) ───────
+  // Post-Phase 3. Compone el payload exigido por `/api/financial-report/html`:
+  //   - 3 JSONs estructurados (NIIF + Strategy + Governance).
+  //   - Echo de `company`.
+  //   - `metadata` pre-cocinada determinísticamente en cliente: hash SHA-256
+  //     vía Web Crypto, cobertura por clase PUC, confianza global agregada,
+  //     conteos de alertas/findings por severidad.
+  //
+  // Diseño no-bloqueante: si el endpoint falla, NO destruye el reporte
+  // existente — sólo se muestra `htmlError` y el viewer Markdown queda
+  // intacto. Permite reintentar haciendo click otra vez.
+  const handleGenerateHtml = useCallback(async () => {
+    if (!backendReport || !companyInfo || !cachedPreprocessed || isGeneratingHtml) return;
+
+    setHtmlError(null);
+    setIsGeneratingHtml(true);
+
+    try {
+      // Extraer los 3 JSONs estructurados del reporte backend. Pre-Fase-2 los
+      // agentes legacy no emitían `.json`; en producción 2026-05-13 todos
+      // emiten — pero hacemos lookup defensivo.
+      const niifJson = backendReport.niifAnalysis.json;
+      const strategyJson = backendReport.strategicAnalysis.json;
+      const governanceJson = backendReport.governance.json;
+
+      if (!niifJson || !strategyJson || !governanceJson) {
+        throw new Error(
+          language === 'es'
+            ? 'El reporte no contiene los JSONs estructurados requeridos por el Editor Jefe HTML. Regenera el reporte para habilitar esta opción.'
+            : 'The report is missing the structured JSON outputs required by the HTML Editor. Regenerate the report to enable this option.',
+        );
+      }
+
+      // Pre-cocinado de metadata determinístico.
+      const reportMode = readReportMode(niifJson);
+      const coverage = clientSummarizeCoverage(cachedPreprocessed);
+      const globalConfidence = clientAggregateConfidence({
+        niif: niifJson,
+        strategy: strategyJson,
+        governance: governanceJson,
+      });
+      const hash = await clientComputeReportHash({
+        niif: niifJson,
+        strategy: strategyJson,
+        governance: governanceJson,
+      });
+      const alertsCounts = countAlertsBySeverity(strategyJson, auditReport);
+      const auxiliariesProcessed = readAuxiliariesProcessed(cachedPreprocessed);
+      const sectorCIIU = readSectorCIIU(cachedPreprocessed);
+      const fiscalPeriod = backendReport.company.fiscalPeriod || pipelineInput?.fiscalPeriod || '';
+      // Fiscal period es YYYY (validado por `FiscalYear` Zod). Derivamos los
+      // límites canónicos del año fiscal — si en el futuro el intake exige
+      // cortes parciales, esto pasaría a leer `preprocessed.primary.periodoTipo`.
+      const periodStart = `${fiscalPeriod}-01-01`;
+      const periodEnd = `${fiscalPeriod}-12-31`;
+      const generatedAt = new Date().toISOString();
+      // `extractedAt` ideal = momento de upload del balance. No lo tenemos en
+      // el estado actual del workspace; usamos `generatedAt` como fallback.
+      // El renderer Slide 12 los diferencia visualmente — sin breakage si
+      // coinciden.
+      const extractedAt = backendReport.generatedAt ?? generatedAt;
+
+      const metadata = {
+        reportMode,
+        entityNit: backendReport.company.nit,
+        entityName: backendReport.company.name,
+        periodStart,
+        periodEnd,
+        generatedAt,
+        extractedAt,
+        modelId: 'gpt-5.5',
+        agentVersion: '1+1 v8.1' as const,
+        globalConfidence,
+        alertsCounts,
+        auxiliariesProcessed,
+        coverageByClass: coverage,
+        sectorCIIU,
+        reportHashSha256: hash,
+      };
+
+      const body = {
+        niifReport: niifJson,
+        strategyReport: strategyJson,
+        governanceReport: governanceJson,
+        company: backendReport.company,
+        metadata,
+        language,
+      };
+
+      const controller = new AbortController();
+      const result = await runSSEPhase<{
+        html: string;
+        metadata: typeof metadata;
+        checklistFailures: Array<{ rule: string; detail: string; severity: 'block' | 'warn' }>;
+      }>(
+        '/api/financial-report/html',
+        body,
+        'html_phase',
+        controller.signal,
+        language === 'es' ? 'Editor Jefe HTML' : 'HTML Editor',
+      );
+
+      setHtmlReport(result.html);
+      setHtmlChecklistFailures(result.checklistFailures ?? []);
+      setShowHtmlViewer(true);
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return;
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      setHtmlError(
+        language === 'es'
+          ? `No se pudo generar el HTML: ${msg}`
+          : `Could not generate HTML: ${msg}`,
+      );
+    } finally {
+      setIsGeneratingHtml(false);
+    }
+  }, [
+    backendReport,
+    companyInfo,
+    cachedPreprocessed,
+    isGeneratingHtml,
+    auditReport,
+    language,
+    pipelineInput,
+  ]);
+
   // ─── "Continuar de todas formas" shortcut ────────────────────────────────
   const handleContinueAnyway = useCallback(() => {
     setRepairSeed(
@@ -1658,6 +2122,27 @@ export function PipelineWorkspace() {
 
   if (isComplete && report) {
     const hasWarnings = Boolean(pipelineState.phase2Error || pipelineState.phase3Error);
+    // Wave 4.F8 — el HtmlReportViewer toma el área completa cuando el usuario
+    // clic "Generar HTML" y el agente respondió OK. El botón "Cerrar" vuelve
+    // al ReportViewer Markdown. NO desmontamos `<ReportViewer>` (queda en
+    // memoria para preservar scroll position + turns del chat de seguimiento)
+    // — sólo lo ocultamos vía conditional rendering.
+    if (showHtmlViewer && htmlReport) {
+      return (
+        <div className="h-full flex flex-col">
+          <HtmlReportViewer
+            html={htmlReport}
+            nit={backendReport?.company.nit ?? companyInfo?.nit ?? ''}
+            fiscalPeriod={
+              backendReport?.company.fiscalPeriod ?? pipelineInput?.fiscalPeriod ?? ''
+            }
+            checklistFailures={htmlChecklistFailures}
+            language={language}
+            onClose={() => setShowHtmlViewer(false)}
+          />
+        </div>
+      );
+    }
     return (
       <div className="h-full flex flex-col">
         {hasWarnings && (
@@ -1698,6 +2183,11 @@ export function PipelineWorkspace() {
             onTurnsChange={handleTurnsChange}
             originalContent={originalReport}
             affectedAccounts={diffAffectedAccounts}
+            onGenerateHtml={handleGenerateHtml}
+            isGeneratingHtml={isGeneratingHtml}
+            htmlReady={htmlReport !== null}
+            onShowHtml={() => setShowHtmlViewer(true)}
+            htmlError={htmlError}
           />
         </div>
       </div>
