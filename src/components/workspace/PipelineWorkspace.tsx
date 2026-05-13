@@ -46,6 +46,9 @@ import type {
   FinancialReport as BackendFinancialReport,
   FinancialProgressEvent,
   CompanyInfo,
+  NiifAnalysisResult,
+  StrategicAnalysisResult,
+  GovernanceResult,
 } from '@/lib/agents/financial/types';
 import type {
   AuditReport as BackendAuditReport,
@@ -127,6 +130,164 @@ async function fetchJSONWithRetry<T>(
     }
   }
   throw lastErr;
+}
+
+// ─── Wave 3.F2 — orquestación cliente de los 3 endpoints split ────────────
+// `runSSEPhase` envuelve `fetchSSEWithRetry + consumeSSE` para los 3 endpoints
+// nuevos (`/niif`, `/strategy`, `/governance`). Cada endpoint emite el mismo
+// canal `progress` (FinancialProgressEvent passthrough) y un evento nombrado
+// específico cuyo payload acarrea el resultado. El helper centraliza el
+// patrón: una sola caja `{ value }` se llena desde el handler del evento
+// específico, los progress events se propagan al UI, y los errores se
+// re-lanzan con un mensaje contextualizado por sub-fase (Capa 3 — diagnóstico
+// por fase concreta, no genérico "Phase 1 falló").
+//
+// `phaseLabel` se inyecta en el wrapper de error → el usuario ve "Strategy
+// Director falló: <detail backend>" en vez del legacy "Phase 1 falló".
+// ────────────────────────────────────────────────────────────────────────────
+
+interface SubPhaseHandlers {
+  /** Callback para FinancialProgressEvent (stage_start, stage_progress, stage_complete). */
+  onProgress?: (evt: FinancialProgressEvent) => void;
+}
+
+async function runSSEPhase<T>(
+  url: string,
+  body: unknown,
+  eventName: string,
+  signal: AbortSignal,
+  phaseLabel: string,
+  handlers: SubPhaseHandlers = {},
+): Promise<T> {
+  const res = await fetchSSEWithRetry(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(
+      `${phaseLabel} falló (HTTP ${res.status}): ${errBody.slice(0, 300)}`,
+    );
+  }
+
+  const box: { value: T | null } = { value: null };
+
+  await consumeSSE(res, signal, {
+    progress: (raw) => {
+      handlers.onProgress?.(raw as FinancialProgressEvent);
+    },
+    [eventName]: (raw) => {
+      box.value = raw as T;
+    },
+    error: (raw) => {
+      const { detail } = raw as { detail?: string };
+      // Contextualizamos el error con el nombre de la sub-fase. El backend ya
+      // tradujo el error técnico (`toFriendlyError`); aquí solo prepondemos
+      // qué fase fue la que falló para que la UI sepa qué reintentar.
+      throw new Error(`${phaseLabel} falló: ${detail || 'error desconocido del backend'}`);
+    },
+  });
+
+  if (box.value === null) {
+    throw new Error(
+      `${phaseLabel} no devolvió el evento '${eventName}' antes de cerrar el stream.`,
+    );
+  }
+
+  return box.value;
+}
+
+// Reproduce el `buildConsolidatedReport` del orchestrator backend para que el
+// cliente pueda ensamblar el Markdown final tras correr las 3 sub-fases. No es
+// 100% idéntico al server-side: este cliente NO ejecuta `validateConsolidatedReport`,
+// `provisionalWatermark`, ni `buildAdjustmentsAuditSection`. Esos validators viven
+// solo en el endpoint legacy `/api/financial-report` (mantenido por compat con
+// `/export`). Wave 4 los moverá a un endpoint `/consolidate` dedicado si el
+// audit team detecta regresiones medibles.
+function buildClientConsolidatedReport(
+  company: CompanyInfo,
+  niifContent: string,
+  strategyContent: string,
+  governanceContent: string,
+  language: 'es' | 'en',
+): string {
+  const title =
+    language === 'en'
+      ? 'CONSOLIDATED FINANCIAL REPORT'
+      : 'REPORTE FINANCIERO CONSOLIDADO';
+  const subtitle =
+    language === 'en'
+      ? 'NIIF Elite Corporate Analysis'
+      : 'Analisis Corporativo Elite NIIF';
+  const date = new Date().toLocaleDateString(
+    language === 'es' ? 'es-CO' : 'en-US',
+    { year: 'numeric', month: 'long', day: 'numeric' },
+  );
+
+  return `# ${title}
+## ${subtitle}
+
+---
+
+| Campo | Detalle |
+|-------|---------|
+| **Empresa** | ${company.name} |
+| **NIT** | ${company.nit} |
+| **Tipo Societario** | ${company.entityType || 'N/A'} |
+| **Periodo Fiscal** | ${company.fiscalPeriod} |
+| **Fecha de Generacion** | ${date} |
+| **Generado por** | 1+1 — Financial Orchestrator (3 Agentes Especializados) |
+
+---
+
+# PARTE I: ESTADOS FINANCIEROS NIIF
+*Preparado por: Agente Analista Contable NIIF*
+
+${niifContent}
+
+---
+
+# PARTE II: ANALISIS ESTRATEGICO Y PROYECCIONES
+*Preparado por: Agente Director de Estrategia Financiera*
+
+${strategyContent}
+
+---
+
+# PARTE III: GOBIERNO CORPORATIVO Y DOCUMENTOS LEGALES
+*Preparado por: Agente Especialista en Gobierno Corporativo*
+
+${governanceContent}
+
+---
+
+> **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las cifras, analisis y documentos legales deben ser validados por un Contador Publico certificado y un abogado antes de su uso oficial. 1+1 no reemplaza la asesoria profesional.
+`;
+}
+
+// Stubs vacíos para `strategicAnalysis` y `governance` cuando se construye el
+// checkpoint parcial post-NIIF. El tipo `BackendFinancialReport` exige ambos
+// campos; los stubs permiten que el localStorage roundtrip funcione sin
+// cambiar el contrato. La UI sabe que el reporte está incompleto vía
+// `pipelineState.phase2Error` / banner explícito.
+function emptyStrategy(): StrategicAnalysisResult {
+  return {
+    kpiDashboard: '',
+    breakEvenAnalysis: '',
+    projectedCashFlow: '',
+    strategicRecommendations: '',
+    fullContent: '',
+  };
+}
+function emptyGovernance(): GovernanceResult {
+  return {
+    financialNotes: '',
+    shareholderMinutes: '',
+    fullContent: '',
+  };
 }
 
 function splitReportIntoSections(markdown: string): ReportSection[] {
@@ -935,105 +1096,124 @@ export function PipelineWorkspace() {
     const controller = new AbortController();
 
     (async () => {
-      // ─── Phase 1: Financial Report (CRITICA) ───────────────────────────
-      // Si Fase 1 falla, no hay reporte que mostrar — abortamos y mostramos
-      // error fatal. Es la unica fase cuyo fallo destruye la corrida.
+      // ─── Phase 1: Financial Report (CRÍTICA, ahora 3 sub-fases) ───────
+      // Wave 3.F2: en lugar de UNA llamada monolítica a /api/financial-report
+      // (que acumulaba 5-15 min y disparaba "network error" mid-stream en
+      // producción), orquestamos 3 sub-fases secuenciales contra los endpoints
+      // split por F1. Cada endpoint tiene su propio maxDuration=800s — los
+      // timeouts ya no se suman.
+      //
+      // Checkpoint progresivo: tras NIIF persistimos un reporte parcial en
+      // localStorage. Si /strategy o /governance fallan, el NIIF NO se pierde
+      // y el usuario puede ver/exportar lo que tiene + reintentar la sub-fase
+      // fallida. Diagnóstico por sub-fase: el mensaje de error indica
+      // exactamente qué agente reventó (no genérico "Phase 1 falló").
       let phase1Report: BackendFinancialReport | null = null;
-      try {
-        // The provisional flag may have been attached locally by the repair chat
-        // (handleMarkProvisional) — it is not on the NiifReportIntake type yet
-        // so we read it via a narrow lookup. The Backend agent extends the
-        // /api/financial-report request schema to accept it.
-        // Phase 2: same pattern for `adjustmentLedger`, attached locally by
-        // handleRegenerateWithAdjustments. Backend route accepts it as
-        // optional and applies adjustments post-preprocessing.
-        const intakeWithExtras = pipelineInput as NiifReportIntake & {
-          provisional?: ProvisionalFlag;
-          adjustmentLedger?: AdjustmentLedger;
-        };
-        const provisional = intakeWithExtras.provisional;
-        const adjustmentLedger = intakeWithExtras.adjustmentLedger;
+      let niifResult: NiifAnalysisResult | null = null;
+      let strategyResult: StrategicAnalysisResult | null = null;
+      let governanceResult: GovernanceResult | null = null;
+      let niifContext: {
+        bindingTotals: string;
+        preprocessed: unknown;
+        company: CompanyInfo;
+      } | null = null;
+      // Conv id estable para todo el ciclo: minted antes de la primera sub-fase
+      // para que el checkpoint progresivo no rote ids entre updates.
+      const nextConvId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-        // ITEM 5 ORDEN DE CIERRE — propagar T.P. + C.C. al backend si están
-        // presentes en el intake. `companyExt` lookup defensivo: el shape del
-        // intake del workspace todavía puede no declararlos (campos nuevos).
-        const companyExt = pipelineInput.company as typeof pipelineInput.company & {
-          legalRepresentativeId?: string;
-          fiscalAuditorTp?: string;
-          accountantTp?: string;
-        };
-        const phase1Body: Record<string, unknown> = {
+      // The provisional flag may have been attached locally by the repair chat
+      // (handleMarkProvisional) — it is not on the NiifReportIntake type yet
+      // so we read it via a narrow lookup. The Backend agent extends the
+      // /api/financial-report/niif request schema to accept it.
+      // Phase 2: same pattern for `adjustmentLedger`, attached locally by
+      // handleRegenerateWithAdjustments. Backend route accepts it as
+      // optional and applies adjustments post-preprocessing.
+      const intakeWithExtras = pipelineInput as NiifReportIntake & {
+        provisional?: ProvisionalFlag;
+        adjustmentLedger?: AdjustmentLedger;
+      };
+      const provisional = intakeWithExtras.provisional;
+      const adjustmentLedger = intakeWithExtras.adjustmentLedger;
+
+      // ITEM 5 ORDEN DE CIERRE — propagar T.P. + C.C. al backend si están
+      // presentes en el intake. `companyExt` lookup defensivo: el shape del
+      // intake del workspace todavía puede no declararlos (campos nuevos).
+      const companyExt = pipelineInput.company as typeof pipelineInput.company & {
+        legalRepresentativeId?: string;
+        fiscalAuditorTp?: string;
+        accountantTp?: string;
+      };
+      const companyBody = {
+        name: pipelineInput.company.name,
+        nit: pipelineInput.company.nit,
+        entityType: pipelineInput.company.entityType,
+        sector: pipelineInput.company.sector,
+        city: pipelineInput.company.city,
+        legalRepresentative: pipelineInput.company.legalRepresentative,
+        legalRepresentativeId: companyExt.legalRepresentativeId,
+        fiscalAuditor: pipelineInput.company.fiscalAuditor,
+        fiscalAuditorTp: companyExt.fiscalAuditorTp,
+        accountant: pipelineInput.company.accountant,
+        accountantTp: companyExt.accountantTp,
+        niifGroup: pipelineInput.niifGroup,
+        fiscalPeriod: pipelineInput.fiscalPeriod,
+        comparativePeriod: pipelineInput.comparativePeriod,
+      };
+
+      // Handler común de progress events para las 3 sub-fases — mantiene la
+      // misma semántica que el legacy: stage_start/complete actualizan el
+      // indicador del PipelineMonitor (1=NIIF, 2=Strategy, 3=Governance),
+      // stage_progress alimenta la vista en vivo de streamedContent.
+      const onSubPhaseProgress = (evt: FinancialProgressEvent) => {
+        if (evt.type === 'stage_start' && evt.stage <= 3) {
+          setPipelineState((prev) => ({
+            ...prev,
+            mode: 'running',
+            currentStage: evt.stage as 1 | 2 | 3,
+          }));
+        } else if (evt.type === 'stage_complete' && evt.stage <= 3) {
+          const stageNum = evt.stage;
+          setPipelineState((prev) => ({
+            ...prev,
+            completedStages: prev.completedStages.includes(stageNum)
+              ? prev.completedStages
+              : [...prev.completedStages, stageNum],
+          }));
+        } else if (evt.type === 'stage_progress') {
+          setStreamedContent((prev) => prev + (prev ? '\n\n' : '') + `**${evt.detail}**`);
+        }
+      };
+
+      // ─── Sub-fase 1.1: Analista NIIF ───────────────────────────────────
+      // Si esta falla, no hay reporte que mostrar — abortamos y mostramos
+      // error fatal. Las sub-fases 1.2/1.3 son recuperables vía checkpoint;
+      // 1.1 no.
+      try {
+        const niifBody: Record<string, unknown> = {
           rawData: pipelineInput.rawData,
-          company: {
-            name: pipelineInput.company.name,
-            nit: pipelineInput.company.nit,
-            entityType: pipelineInput.company.entityType,
-            sector: pipelineInput.company.sector,
-            city: pipelineInput.company.city,
-            legalRepresentative: pipelineInput.company.legalRepresentative,
-            legalRepresentativeId: companyExt.legalRepresentativeId,
-            fiscalAuditor: pipelineInput.company.fiscalAuditor,
-            fiscalAuditorTp: companyExt.fiscalAuditorTp,
-            accountant: pipelineInput.company.accountant,
-            accountantTp: companyExt.accountantTp,
-            niifGroup: pipelineInput.niifGroup,
-            fiscalPeriod: pipelineInput.fiscalPeriod,
-            comparativePeriod: pipelineInput.comparativePeriod,
-          },
+          company: companyBody,
           language,
           instructions: pipelineInput.specialInstructions,
           ...(provisional ? { provisional } : {}),
         };
         if (adjustmentLedger?.adjustments?.length) {
-          phase1Body.adjustmentLedger = adjustmentLedger;
+          niifBody.adjustmentLedger = adjustmentLedger;
         }
 
-        const phase1Res = await fetchSSEWithRetry('/api/financial-report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
-          body: JSON.stringify(phase1Body),
-          signal: controller.signal,
-        });
+        const niifPayload = await runSSEPhase<{
+          niif: NiifAnalysisResult;
+          context: { bindingTotals: string; preprocessed: unknown; company: CompanyInfo };
+        }>(
+          '/api/financial-report/niif',
+          niifBody,
+          'niif_phase',
+          controller.signal,
+          'Analista NIIF',
+          { onProgress: onSubPhaseProgress },
+        );
 
-        if (!phase1Res.ok) {
-          const errBody = await phase1Res.text().catch(() => '');
-          throw new Error(`Reporte NIIF falló (HTTP ${phase1Res.status}): ${errBody.slice(0, 300)}`);
-        }
-
-        const phase1Box: { value: BackendFinancialReport | null } = { value: null };
-
-        await consumeSSE(phase1Res, controller.signal, {
-          progress: (raw) => {
-            const evt = raw as FinancialProgressEvent;
-            if (evt.type === 'stage_start' && evt.stage <= 3) {
-              setPipelineState((prev) => ({
-                ...prev,
-                mode: 'running',
-                currentStage: evt.stage as 1 | 2 | 3,
-              }));
-            } else if (evt.type === 'stage_complete' && evt.stage <= 3) {
-              const stageNum = evt.stage;
-              setPipelineState((prev) => ({
-                ...prev,
-                completedStages: prev.completedStages.includes(stageNum)
-                  ? prev.completedStages
-                  : [...prev.completedStages, stageNum],
-              }));
-            } else if (evt.type === 'stage_progress') {
-              setStreamedContent((prev) => prev + (prev ? '\n\n' : '') + `**${evt.detail}**`);
-            }
-          },
-          result: (raw) => {
-            phase1Box.value = raw as BackendFinancialReport;
-          },
-          error: (raw) => {
-            const { detail } = raw as { detail?: string };
-            throw new Error(detail || 'Error en reporte financiero');
-          },
-        });
-
-        phase1Report = phase1Box.value;
-        if (!phase1Report) throw new Error('El endpoint de reporte no devolvió un resultado.');
+        niifResult = niifPayload.niif;
+        niifContext = niifPayload.context;
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
         const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -1042,18 +1222,129 @@ export function PipelineWorkspace() {
         return;
       }
 
-      // ─── CHECKPOINT: persistir Fase 1 ANTES de fases opcionales ────────
-      // Esta linea es el corazon del fix: a partir de aqui, aunque la red se
-      // caiga y el usuario recargue, el reporte NIIF vive en localStorage via
-      // `saveReport` (WorkspaceContext.setLastCompletedReport). Antes del
-      // parche, el checkpoint ocurria al final de las 3 fases, asi que un
-      // `Failed to fetch` en Fase 3 borraba 5+ minutos de trabajo NIIF.
-      const nextConvId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      setBackendReport(phase1Report);
+      // ─── CHECKPOINT 1: persistir NIIF parcial ANTES de strategy/governance ─
+      // A partir de aquí, aunque la red se caiga y el usuario recargue, el
+      // reporte NIIF vive en localStorage. Los stubs vacíos para
+      // strategicAnalysis/governance permiten que el contrato BackendFinancialReport
+      // se mantenga sin opcional-explosion; la UI muestra el reporte parcial
+      // con un banner "Strategy/Governance pendiente — reintenta".
+      const partialConsolidated = buildClientConsolidatedReport(
+        niifContext.company,
+        niifResult.fullContent,
+        '',
+        '',
+        language,
+      );
+      const partialReport: BackendFinancialReport = {
+        company: niifContext.company,
+        niifAnalysis: niifResult,
+        strategicAnalysis: emptyStrategy(),
+        governance: emptyGovernance(),
+        consolidatedReport: partialConsolidated,
+        generatedAt: new Date().toISOString(),
+      };
+      setBackendReport(partialReport);
       setRawData(pipelineInput.rawData);
-      setCompanyInfo(phase1Report.company);
+      setCompanyInfo(niifContext.company);
       setConversationId(nextConvId);
       setInitialTurns([]);
+      setLastCompletedReport({
+        report: partialReport,
+        rawData: pipelineInput.rawData,
+        company: niifContext.company,
+        conversationId: nextConvId,
+        turns: [],
+      });
+
+      // ─── Sub-fase 1.2: Director de Estrategia ──────────────────────────
+      // Si esta falla, persiste el checkpoint NIIF y el pipeline continúa
+      // hasta que el usuario decida reintentar. Marcamos `phase2Error` con
+      // el mensaje específico de la sub-fase para que el banner lo muestre.
+      try {
+        const strategyBody = {
+          niifResult,
+          bindingTotals: niifContext.bindingTotals,
+          preprocessed: niifContext.preprocessed,
+          company: niifContext.company,
+          language,
+          instructions: pipelineInput.specialInstructions,
+        };
+
+        const strategyPayload = await runSSEPhase<{ strategy: StrategicAnalysisResult }>(
+          '/api/financial-report/strategy',
+          strategyBody,
+          'strategy_phase',
+          controller.signal,
+          'Director de Estrategia',
+          { onProgress: onSubPhaseProgress },
+        );
+
+        strategyResult = strategyPayload.strategy;
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        const msg = err instanceof Error ? err.message : 'Error desconocido';
+        // Sub-fase 1.2 falló — el NIIF parcial sigue persistido. Mostramos el
+        // error como fatal de Fase 1 (no quedó reporte completo) pero NO
+        // borramos el checkpoint NIIF: el usuario verá el reporte parcial al
+        // recargar y podrá reintentar.
+        setError(msg);
+        setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
+        return;
+      }
+
+      // ─── Sub-fase 1.3: Gobierno Corporativo ────────────────────────────
+      try {
+        const governanceBody = {
+          niifResult,
+          strategyResult,
+          bindingTotals: niifContext.bindingTotals,
+          preprocessed: niifContext.preprocessed,
+          company: niifContext.company,
+          language,
+          instructions: pipelineInput.specialInstructions,
+        };
+
+        const governancePayload = await runSSEPhase<{ governance: GovernanceResult }>(
+          '/api/financial-report/governance',
+          governanceBody,
+          'governance_phase',
+          controller.signal,
+          'Gobierno Corporativo',
+          { onProgress: onSubPhaseProgress },
+        );
+
+        governanceResult = governancePayload.governance;
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        const msg = err instanceof Error ? err.message : 'Error desconocido';
+        setError(msg);
+        setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
+        return;
+      }
+
+      // ─── Ensamblaje final: construir BackendFinancialReport completo ────
+      // Las 3 sub-fases corrieron OK. Reemplazamos los stubs del checkpoint
+      // parcial con los resultados reales y reconstruimos el consolidatedReport
+      // canónico (concatenación de los 3 fullContent — mismo formato que el
+      // orchestrator legacy en `buildConsolidatedReport`).
+      const fullConsolidated = buildClientConsolidatedReport(
+        niifContext.company,
+        niifResult.fullContent,
+        strategyResult.fullContent,
+        governanceResult.fullContent,
+        language,
+      );
+      phase1Report = {
+        company: niifContext.company,
+        niifAnalysis: niifResult,
+        strategicAnalysis: strategyResult,
+        governance: governanceResult,
+        consolidatedReport: fullConsolidated,
+        generatedAt: new Date().toISOString(),
+      };
+
+      // ─── CHECKPOINT 2: actualizar reporte completo en localStorage ──────
+      setBackendReport(phase1Report);
       setLastCompletedReport({
         report: phase1Report,
         rawData: pipelineInput.rawData,
