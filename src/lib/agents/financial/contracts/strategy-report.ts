@@ -310,10 +310,13 @@ export const StrategyReportSchema = z.object({
    *
    * Default `[]` para tolerar reportes "limpios" (ninguna alerta dispara).
    */
+  // Why: OpenAI strict mode (Zod v4 + ai@6 experimental_output) rechaza .default()
+  // porque el schema JSON resultante contiene "default": [] que strict json_schema
+  // no admite. El LLM DEBE emitir el campo explícitamente (ver constraint MUST en
+  // strategy-director.prompt.ts).
   technicalAlerts: z
     .array(TechnicalAlertSchema)
-    .default([])
-    .describe('Alertas técnicas para Slide 03 Bloque 3 (v8.1 §3). Vacío si no hay alertas.'),
+    .describe('Alertas técnicas para Slide 03 Bloque 3 (v8.1 §3). Emitir [] explícito cuando no hay alertas.'),
 
   // -- 2. KPIs financieros obligatorios ------------------------------------
   kpis: z.array(KpiSchema).min(1).describe('Profitability, Liquidity, Solvency, Efficiency — mínimo un KPI por categoría'),

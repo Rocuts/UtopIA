@@ -105,6 +105,7 @@ ${isComparative ? `- Modo comparativo: KPIs presentan resultComparative y yoyVar
   - 'baseline_pill' si reportMode='LINEA_BASE': poblar baselineLabel="BASELINE ${primaryPeriod}", resultComparative=null, yoyVariation=null.
   - 'sparkline' si reportMode='COMPARATIVO_COMPLETO' Y hay ≥12 puntos históricos disponibles: poblar sparklinePoints[].
   - 'delta_pct' en otros casos (COMPARATIVO sin sparkline, TRANSICION cuando aplique).
+- MUST: emitir \`technicalAlerts: []\` (array vacío JSON) cuando no hay alertas técnicas detectadas. NEVER omitir el campo — OpenAI strict mode lo exige; la ausencia del campo produce HTTP 400 o type-mangling silencioso.
 - MUST: poblar StrategyReportSchema.technicalAlerts[] con las alertas técnicas detectadas en la pasada (Slide 03 Bloque 3 — v8.1 §3):
   - severity 'red': bloqueantes (AC<PC liquidez, ROE negativo, patrimonio negativo).
   - severity 'amber': anomalías 2σ (margen fuera banda CIIU, costos <1% ingresos).
