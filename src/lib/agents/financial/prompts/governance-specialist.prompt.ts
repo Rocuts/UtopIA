@@ -18,6 +18,7 @@
 
 import type { CompanyInfo } from '../types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { ReportMode } from '../contracts/base';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 import { buildNiifDisclosureKnowledge } from './niif-colombia-knowledge';
@@ -32,6 +33,7 @@ export function buildGovernancePrompt(
   language: 'es' | 'en',
   preprocessed?: PreprocessedBalance,
   elite?: GovernanceEliteContext,
+  reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): string {
   const langInstruction =
     language === 'en'
@@ -146,9 +148,18 @@ If la entidad NO está obligada a Revisor Fiscal (Art. 203 C.Co.: sociedades por
 If comparativosImpracticables=true (delegado del Agente 1) then las notas materiales referencian ÚNICAMENTE el periodo ${primaryPeriod}; NO emitir columnas comparativas; financialNotes incluye una nota técnica con cita LITERAL NIIF for SMEs §3.14, §10.21 otherwise referenciar ambos periodos cuando applicable.
 
 Notas obligatorias de cobertura mínima (NIC 1 / Sec. 8 PYMES):
-1 Entidad y Actividad Económica; 2 Políticas Contables Significativas (going concern, moneda funcional COP, reconocimiento ingresos NIIF 15 / Sec. 23, deterioro NIIF 9 / enfoque simplificado PYMES, inventarios, PPE, beneficios a empleados); 3 Efectivo y Equivalentes; 4 Deudores Comerciales (modelo de deterioro); 5 Inventarios (valuación + valor neto realizable); 6 PPE (movimiento del periodo, vidas útiles); 7 Obligaciones Financieras (CP/LP, garantías); 8 Cuentas por Pagar y Proveedores; 9 Impuestos, Gravámenes y Tasas (renta 35% Art. 240 E.T., TMT 15% si aplica, NIC 12 diferencias temporarias, IVA, ICA, ReteFuente); 10 Pasivos Laborales (distribución 38,17/4,58/38,17/19,08 cuando no hay auxiliares); 11 Patrimonio (capital autorizado/suscrito/pagado + reserva legal según régimen); 12 Ingresos Operacionales (NIIF 15 / Sec. 23); 13 Contingencias y Hechos Posteriores (NIC 10 / Sec. 32 — afirmar explícitamente "no se identifican hechos posteriores" cuando aplique); 14 Preparación IFRS 18 (solo Grupo 1 — preparación 2027, sin impacto contable 2026); 15 Partes Vinculadas y Personal Clave Directivo (NIC 24 §13-22 / Sec. 33 PYMES — revelar transacciones con matriz/subsidiarias/asociadas, compensaciones a personal clave directivo, garantías cruzadas, préstamos entre partes vinculadas; si no se identifican transacciones con partes vinculadas, materiality="immaterial" con afirmación explícita); 16 Autorización para la Publicación de los Estados Financieros (NIC 10 §17 / Sec. 32.9 PYMES — fecha de autorización + órgano que autoriza la publicación, típicamente Junta Directiva o Representante Legal con respaldo de Asamblea).
+1 Entidad y Actividad Económica; 2 Políticas Contables Significativas (going concern, moneda funcional COP, reconocimiento ingresos NIIF 15 / Sec. 23, deterioro NIIF 9 / enfoque simplificado PYMES, inventarios, PPE, beneficios a empleados); 3 Efectivo y Equivalentes; 4 Deudores Comerciales (modelo de deterioro); 5 Inventarios (valuación + valor neto realizable); 6 PPE (movimiento del periodo, vidas útiles); 7 Obligaciones Financieras (CP/LP, garantías); 8 Cuentas por Pagar y Proveedores; 9 Impuestos, Gravámenes y Tasas (renta 35% Art. 240 E.T., TMT 15% si aplica, NIC 12 diferencias temporarias, IVA, ICA, ReteFuente); 10 Pasivos Laborales (distribución 38,17/4,58/38,17/19,08 cuando no hay auxiliares); 11 Patrimonio (capital autorizado/suscrito/pagado + reserva legal según régimen); 12 Ingresos Operacionales (NIIF 15 / Sec. 23); 13 Contingencias y Hechos Posteriores (NIC 10 / Sec. 32 — afirmar explícitamente "no se identifican hechos posteriores" cuando aplique); 14 Preparación IFRS 18 — NUNCA omitir esta nota, siempre presente con su materiality correspondiente: If company.niifGroup === 1 then materiality="material" con body que cita IFRS 18 (vigencia 2027 para Grupo 1 Colombia), identifica MPMs candidatas del sector, y describe brechas de datos conocidas — la entidad DEBE iniciar preparación en 2026 para adoptar en 2027. If company.niifGroup ∈ {2, 3} then materiality="immaterial" con body LITERAL: "IFRS 18 no aplica directamente para Grupo ${niifGroupNumLabel(company.niifGroup)}; se informa como horizonte normativo del Grupo 1 (vigencia 2027). La entidad no está obligada a su preparación conforme Decreto 2420/2015." — NO silenciar la nota, NO emitirla como omitted; 15 Partes Vinculadas y Personal Clave Directivo (NIC 24 §13-22 / Sec. 33 PYMES — revelar transacciones con matriz/subsidiarias/asociadas, compensaciones a personal clave directivo, garantías cruzadas, préstamos entre partes vinculadas; si no se identifican transacciones con partes vinculadas, materiality="immaterial" con afirmación explícita); 16 Autorización para la Publicación de los Estados Financieros (NIC 10 §17 / Sec. 32.9 PYMES — fecha de autorización + órgano que autoriza la publicación, típicamente Junta Directiva o Representante Legal con respaldo de Asamblea).
 
 Identidad fiscal en Nota 9: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. El impuesto SIEMPRE aparece como RESTA en la conciliación; PROHIBIDO sumar.
+
+MUST: cada FinancialNote con cifra crítica lleva confidence ∈ {high, medium, low}. Usar high cuando la cifra proviene LITERALMENTE de TOTALES VINCULANTES. Usar medium cuando el auxiliar fuente es parcial o inferido. Usar low cuando la cifra está pendiente de validación humana. Null es equivalente a high — solo omitir si no hay cifra crítica en la nota.
+
+MUST: notas técnicas (financialNotes[].body) usan tono impersonal, presente indicativo.
+- Permitido: "Se reconoce", "Se mide", "Se presenta", "La entidad reconoce", "Se clasifica", "Se deprecia".
+- Prohibido: "Se reconoció", "Se midió", "Se presentó", "La entidad reconoció" — EXCEPTO cuando la nota describe hecho histórico específico del periodo (asamblea pasada, evento subsecuente ya ocurrido, constitución de una reserva concreta en el ejercicio cerrado). En ese caso el pasado es correcto y obligatorio.
+
+NEVER usar en body de financialNotes[], en el body del acta (shareholderMinutes.*), en fiscalReviewerOpinion.opinionBody, en complianceChecklist[].evidencia ni en complianceChecklist[].accionRequerida los siguientes términos: "Élite", "Excelencia", "Premium", "Excepcional", "Único", "Mejor" (como adjetivo absoluto), "Sólido", "Robusto", "Extraordinario", "excelente", "buen año", "fuerte" (como elogio), "destacado".
+La autoridad del reporte proviene de la precisión y del respaldo normativo, no del adjetivo (§1.6 spec v8.1). El detector regex post-generación captura estas palabras como violaciones bloqueantes.
 
 Defensa Art. 647 E.T.: si los ajustes del Curator (R1, R5, R6, R7, R-Élite 3.b, R-Élite 4) produjeron diferencias con el reporte original del software contable o con la liquidación tributaria del periodo anterior, las notas técnicas correspondientes invocan la doctrina de "diferencia de criterio" del Art. 647 E.T. + Concepto DIAN 100208221-1352 de 2018 — los hechos económicos están plenamente documentados en el papel de trabajo del preparador, por lo que NO configuran inexactitud sancionable.
 
@@ -197,6 +208,18 @@ Si el preprocesador detecta áreas adicionales relevantes (e.g. ICA municipal, r
 </constraints>
 
 <context>
+## FRONTERA DE RESPONSABILIDADES (Wave 4 — v8.1 §5 Slide 10)
+- Governance produce: financialNotes (1..16), shareholderMinutes, fiscalReviewerOpinion, complianceChecklist (normativo, mínimo 8 ítems), disclaimers[] (6 codes Parte 9), capitalizationProposal, resultDistribution, signatories.
+- Governance NO produce: metadatos Slide 12 (hash del documento, fechas de extracción/emisión, % cobertura de cuentas), disclaimer reformulado positivo de §5 Slide 12 ("Este reporte fue generado con..."), §11 checklist de emisión spec v8.1. Esos elementos son responsabilidad del Editor Jefe HTML downstream.
+- El campo complianceChecklist de este schema es el checklist normativo de la entidad (Decreto 2420/2015, C.Co., DIAN exógena, etc.) — NO es el §11 checklist de emisión.
+
+## MODO DEL REPORTE (v8.1 §2 — eco del orchestrator, NO derivar)
+- Valor: ${reportMode}
+- MUST: emitir reportMode="${reportMode}" LITERAL en el campo raíz del JSON. NO recomputar ni inferir un modo distinto.
+- Si reportMode="LINEA_BASE": verbos prohibidos en notas y acta: "creció", "mejoró", "varió". Usar: "establece", "documenta", "constituye".
+- If reportMode="TRANSICION" then notas materiales usan: "reconcilia, donde es comparable". Aclarar en cada nota de variación que la comparabilidad es parcial.
+- If reportMode="COMPARATIVO_COMPLETO" then usar libremente: "varió", "creció", "se contrajo", "mejoró", "evolucionó".
+
 ## DATOS DE LA EMPRESA
 - Razón Social: ${company.name}
 - NIT: ${company.nit}
@@ -239,4 +262,12 @@ function niifFrameworkLabel(group: number | undefined): string {
   if (group === 1) return '- NIIF Plenas (Grupo 1 — Decreto 2420/2015).';
   if (group === 3) return '- Contabilidad Simplificada (Grupo 3 — Decreto 2706/2012, compilado en 2420/2015).';
   return '- NIIF para PYMES (Grupo 2 — Decreto 2420/2015 anexo 2).';
+}
+
+// Why: el body de Nota 14 para Grupo 2/3 necesita citar el número de grupo
+// como texto legible para el LLM — se evalúa en TS al construir el prompt.
+function niifGroupNumLabel(group: number | undefined | null): string {
+  if (group === 1) return '1 (NIIF Plenas)';
+  if (group === 3) return '3 (Contabilidad Simplificada)';
+  return '2 (NIIF PYMES)';
 }

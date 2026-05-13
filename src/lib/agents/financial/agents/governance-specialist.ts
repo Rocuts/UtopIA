@@ -70,8 +70,7 @@ export async function runGovernanceSpecialist(
   signal?: AbortSignal,
   reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): Promise<GovernanceResult> {
-  void reportMode;
-  const systemPrompt = buildGovernancePrompt(company, language, preprocessed, elite);
+  const systemPrompt = buildGovernancePrompt(company, language, preprocessed, elite, reportMode);
 
   const userContent = [
     bindingTotals,
@@ -340,20 +339,39 @@ interface EvasiveHit {
 // "no se suministró información" → evasivo (qué información? ninguna pista).
 // "no se suministró detalle de obligaciones laborales" → disclaimer válido
 // (especifica qué información falta y por qué se omite el rubro).
+//
+// Por qué los patrones de marketing usan \b (word boundary):
+//   Evitan falsos positivos en strings normativos legítimos:
+//   "Decreto 2420/2015" no hace match a ningún patrón.
+//   "Excelencia" matchea porque es adjetivo publicitario prohibido (§1.6 v8.1).
+//   El detector NO escanea disclaimers[] ni preparerNotes[] — exentos por contrato.
+//   El detector NO escanea complianceChecklist[].topic ni .norma — son códigos
+//   normativos legítimos (ej. "Decreto 2420/2015", "Art. 452 C.Co.").
 const FORBIDDEN_EVASIVE_PHRASES: { id: string; rx: RegExp }[] = [
-  // "no se suministró información" sin complemento que califique qué.
+  // Frases evasivas de entrega — sin complemento calificador.
   { id: 'no_suministro_informacion', rx: /no\s+se\s+suministr[oó]\s+(?:la\s+)?informaci[oó]n(?!\s+(?:detalle|específica|sobre|respecto|de))/i },
-  // "información no detallada" sin razón.
   { id: 'informacion_no_detallada', rx: /informaci[oó]n\s+no\s+(?:detallada|provista|disponible)(?!\s+(?:por|debido|sobre|respecto))/i },
-  // "datos no disponibles" sin complemento.
   { id: 'datos_no_disponibles', rx: /datos\s+no\s+(?:disponibles|suministrados)(?!\s*\)|\s+(?:para|sobre|respecto|de))/i },
-  // Estos sí son siempre evasivos sin matiz aceptable.
   { id: 'falta_totales_vinculantes', rx: /(?:falta|ausencia)\s+de\s+totales\s+vinculantes/i },
   { id: 'totales_no_provistos', rx: /totales\s+vinculantes\s+no\s+(?:provistos|disponibles)/i },
   { id: 'pendiente_validacion', rx: /pendiente\s+de\s+validaci[oó]n/i },
   { id: 'sujeto_verificacion', rx: /sujeto\s+(?:a\s+)?(?:verificaci[oó]n|confirmaci[oó]n)/i },
   { id: 'no_se_conto_datos', rx: /no\s+se\s+cont[oó]\s+con\s+(?:los\s+)?datos/i },
   { id: 'no_se_cuenta_informacion', rx: /no\s+se\s+cuenta\s+con\s+(?:la\s+)?informaci[oó]n/i },
+  // Vocabulario marketing prohibido (§1.6 spec v8.1).
+  // Why: la autoridad del reporte proviene de la precisión normativa, no del
+  // adjetivo. Estos términos se detectan en body libre y son violaciones
+  // bloqueantes. No se escanean en complianceChecklist.norma/topic porque
+  // esos campos contienen códigos normativos, no prosa libre.
+  { id: 'marketing_elite', rx: /\b[ÉéEe]lite\b/i },
+  { id: 'marketing_excelencia', rx: /\bexcelencia\b/i },
+  { id: 'marketing_premium', rx: /\bpremium\b/i },
+  { id: 'marketing_excepcional', rx: /\bexcepcional\b/i },
+  { id: 'marketing_unico', rx: /\b[úu]nico\b/i },
+  { id: 'marketing_mejor', rx: /\b(?:el|la|lo)\s+mejor\b/i },
+  { id: 'marketing_solido', rx: /\bs[óo]lido\b/i },
+  { id: 'marketing_robusto', rx: /\brobusto\b/i },
+  { id: 'marketing_extraordinario', rx: /\bextraordinario\b/i },
 ];
 
 /**
@@ -391,8 +409,12 @@ function detectForbiddenPhrasesInJson(json: GovernanceReportJson): EvasiveHit[] 
   if (m.fiscalReviewerOpinion.applies && m.fiscalReviewerOpinion.opinionBody) {
     freeTextSegments.push({ field: 'shareholderMinutes.fiscalReviewerOpinion.opinionBody', text: m.fiscalReviewerOpinion.opinionBody });
   }
-  // complianceChecklist.evidencia/accionRequerida: campos cortos, pero
-  // los escaneamos porque siguen siendo prosa libre.
+  // complianceChecklist: escaneamos SOLO evidencia y accionRequerida (prosa libre).
+  // NOT escaneamos topic ni norma — son códigos normativos legítimos (ej.
+  // "Decreto 2420/2015", "Art. 452 C.Co.") que no contienen marketing prohibido.
+  // Why: los patrones de marketing usan \b word-boundary; "Decreto 2420/2015"
+  // no dispara ningún patrón. Pero para seguridad arquitectural, excluimos
+  // los campos de código normativo del scanner por diseño.
   for (let i = 0; i < json.complianceChecklist.length; i += 1) {
     const item = json.complianceChecklist[i];
     freeTextSegments.push({ field: `complianceChecklist[${i}].evidencia`, text: item.evidencia });
