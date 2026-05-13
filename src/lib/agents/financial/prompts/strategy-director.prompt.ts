@@ -151,6 +151,23 @@ If una sección entera (ej. dupontAnalysis completo, trends completo, controlKpi
 
 If bindingTotals NO contiene el KPI pre-calculado then calcularlo a partir del primitivo más cercano disponible (ej. UtilidadNeta / Patrimonio para ROE estático), pero documentar en formula "calculado por agente, no anclado al preprocessor" + agregar a diagnosis la frase "El preprocessor no expuso este KPI; verificar coherencia con cifras del Pilar Valor" otherwise citar el valor anclado tal cual.
 
+**Corrección 3 v2.1 — ROE con UNA SOLA fórmula consistente en TODO el informe.**
+
+MUST: el ROE en TODA emisión del reporte (KpiSchema con name='ROE' o 'ROE Dinámico', executiveDashboard.rows si incluye ROE, dupontAnalysis.roe, trends.qualitativeCommentary cuando mencione ROE, recommendations.diagnosis o expectedImpact cuando mencionen ROE, projectedCashFlow.scenarios cuando proyecten ROE) usa UNA SOLA fórmula:
+
+  ROE = Utilidad Neta / Patrimonio Promedio × 100
+
+  donde Patrimonio Promedio = (Patrimonio Inicio + Patrimonio Fin) / 2.
+
+If bindingTotals expone \`KPIs PRE-CALCULADOS — ROE: <valor>\` (preprocessor determinista, computa con patrimonio promedio cuando hay comparativo y con patrimonio actual en LINEA_BASE) then MUST citar ese valor LITERAL en TODA emisión de ROE. NO recalcular con patrimonio cierre. NO recalcular con patrimonio promedio "alternativo".
+
+NEVER usar dos denominadores distintos para ROE en el mismo informe (caso histórico: KPIs reportaban ROE con patrimonio cierre = 100%, dupontAnalysis con patrimonio promedio = 117,3%). NEVER omitir el patrimonio promedio cuando hay periodo comparativo disponible.
+
+If reportMode='LINEA_BASE' (sin comparativo material) then Patrimonio Promedio = Patrimonio Cierre actual (no hay otro periodo) y KpiSchema.formula DEBE leer LITERAL: "ROE = UtilidadNeta / Patrimonio (cierre — sin comparativo disponible) × 100".
+If reportMode != 'LINEA_BASE' (TRANSICION o COMPARATIVO_COMPLETO) then KpiSchema.formula DEBE leer LITERAL: "ROE = UtilidadNeta / ((Patrimonio_Inicio + Patrimonio_Fin)/2) × 100" Y resultPrimary == binding.ROE.
+
+CHECK auto-validable: si Strategy emite ROE en 2+ secciones con valores numéricos DIFERENTES (más allá de redondeo a 0,1 pp), es violación de la spec v2.1 corrección 3 y debe corregirse antes de retornar el JSON. Verificar específicamente que dupontAnalysis.roe == el resultPrimary del KPI ROE (ambos LITERAL desde el binding).
+
 **WARNING anti-división (Parte 6 spec v2.0) — Días Inventario / Proveedores.** Para los KPIs DIAS_INVENTARIO y DIAS_PROVEEDORES (categoría efficiency):
 
 If (costoVentas6 + costoProduccion7) / ingresos < 0.01 (base de costos < 1% de ingresos) then NEVER reportar el valor numérico del KPI; en su lugar:
