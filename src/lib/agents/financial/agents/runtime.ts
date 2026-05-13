@@ -211,6 +211,22 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
       { maxAttempts, label: `financial-agent:${agentName}:${effort}`, signal },
     );
 
+  /**
+   * Lectura segura de `experimental_output`. AI SDK v6 lo expone como GETTER
+   * que LANZA `NoOutputGeneratedError` cuando el output interno es null
+   * (ver node_modules/ai/dist/index.js L4886-4898). Tocar el getter sin
+   * try/catch hacia escapar el error antes de que llegáramos a nuestro
+   * auto-fallback — el bug Pass-1 "No output generated" observado en prod
+   * tras Wave 2 (2026-05-12/13) era exactamente esto.
+   */
+  const safeOutput = (r: unknown): unknown => {
+    try {
+      return (r as { experimental_output?: unknown }).experimental_output;
+    } catch {
+      return null;
+    }
+  };
+
   let result = await runPass(reasoningEffort);
   let fallbackUsed = false;
   // Captura del PRIMER pase fallido cuando el auto-fallback se activa. Antes
@@ -222,12 +238,15 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
   // Salvaguarda contra el bug `finish_reason=length` + textLen=0 propio de los
   // reasoning models GPT-5: si el reasoning consumió todo el budget, reintentar
   // UNA vez con effort='low' (solo si el caller pidió medium/high — bajar
-  // desde 'low' o 'minimal' no aporta).
-  const hitLengthBug =
-    result.finishReason === 'length' &&
-    (result.experimental_output === undefined || result.experimental_output === null);
+  // desde 'low' o 'minimal' no aporta). Tras Wave 2 ampliamos la detección
+  // para incluir el caso finishReason='stop' con output null — el reasoning
+  // model puede agotar el budget interno sin marcar finishReason='length'.
+  const firstOutput = safeOutput(result);
+  const noOutput = firstOutput === undefined || firstOutput === null;
+  const hitLengthBug = result.finishReason === 'length' && noOutput;
+  const hitStopButEmpty = result.finishReason === 'stop' && noOutput;
 
-  if (hitLengthBug && (reasoningEffort === 'medium' || reasoningEffort === 'high')) {
+  if ((hitLengthBug || hitStopButEmpty) && (reasoningEffort === 'medium' || reasoningEffort === 'high')) {
     const firstUsage =
       (result as unknown as { usage?: Record<string, number | undefined> }).usage ?? {};
     firstPassMeta = {
@@ -235,8 +254,8 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
       finishReason: result.finishReason,
     };
     console.warn(
-      `[callFinancialAgent:${agentName}] hit finish_reason=length con effort=${reasoningEffort} ` +
-        `(reasoningTokens=${firstUsage.reasoningTokens ?? 'n/a'}); ` +
+      `[callFinancialAgent:${agentName}] sin output con effort=${reasoningEffort} ` +
+        `(finishReason=${result.finishReason}, reasoningTokens=${firstUsage.reasoningTokens ?? 'n/a'}); ` +
         `reintentando con effort='low' (auto-fallback).`,
     );
     result = await runPass('low');
@@ -245,9 +264,14 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
 
   assertFinishedCleanlyOrThrow(result, agentName);
 
-  const json = result.experimental_output as z.infer<TSchema>;
+  const json = safeOutput(result) as z.infer<TSchema>;
   if (json === undefined || json === null) {
-    throw new Error(`callFinancialAgent[${agentName}]: experimental_output vacío`);
+    throw new Error(
+      `callFinancialAgent[${agentName}]: experimental_output vacío ` +
+        `(finishReason=${result.finishReason}, fallbackUsed=${fallbackUsed}). ` +
+        `Probable causa: prompt + bindingTotals demasiado grande para el budget del slot, ` +
+        `o el modelo emitió JSON no parseable. Subir maxOutputTokens del slot o simplificar prompt.`,
+    );
   }
 
   // Telemetría — los nombres exactos en `usage` dependen del provider;
