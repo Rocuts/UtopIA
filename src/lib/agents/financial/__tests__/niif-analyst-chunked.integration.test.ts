@@ -88,6 +88,7 @@ function makePass1Fixture(): BalanceAndPnlSubJson {
       totalEquityPrimary: '600000',
       totalEquityComparative: null,
       notes: [],
+      modeBanner: null,
     },
     incomeStatement: {
       lines: [],
@@ -100,6 +101,7 @@ function makePass1Fixture(): BalanceAndPnlSubJson {
       oriPrimary: '0',
       oriComparative: null,
       notes: [],
+      modeBanner: null,
     },
     curatorFlags: {
       equityConvergenceApplied: false,
@@ -108,6 +110,7 @@ function makePass1Fixture(): BalanceAndPnlSubJson {
       presumedCostWarning: false,
       reclassifiedAmountCop: '0',
     },
+    reportMode: null,
   };
 }
 
@@ -123,6 +126,7 @@ function makePass2Fixture(): CashFlowAndEquitySubJson {
       cashOpening: '100000',
       cashClosing: '170000',
       methodNote: 'indirect',
+      degeneracyFlag: null,
     },
     equityChanges: {
       rows: [
@@ -482,7 +486,9 @@ describe('runNiifAnalyst chunked (Fase 3 — 3 passes secuenciales)', () => {
     expect(pass2System).toMatch(/totalAssetsComparative:\s+N\/A/);
   });
 
-  it('NiifReportSchema.safeParse del output ensamblado devuelve todos los 7 campos top-level', async () => {
+  it('NiifReportSchema.safeParse del output ensamblado devuelve todos los 8 campos top-level', async () => {
+    // Hotfix Wave 4 (2026-05-13): `reportMode` ahora se propaga literal desde
+    // Pass-1 tras endurecer el schema a `.nullable()` puro (8 campos vs 7 pre-fix).
     callFinancialAgentMock
       .mockResolvedValueOnce({ json: makePass1Fixture(), meta: makeBaseMeta('niif-analyst-pass1') })
       .mockResolvedValueOnce({ json: makePass2Fixture(), meta: makeBaseMeta('niif-analyst-pass2') })
@@ -509,6 +515,7 @@ describe('runNiifAnalyst chunked (Fase 3 — 3 passes secuenciales)', () => {
       'curatorFlags',
       'equityChanges',
       'incomeStatement',
+      'reportMode',
       'technicalNotes',
     ]);
   });

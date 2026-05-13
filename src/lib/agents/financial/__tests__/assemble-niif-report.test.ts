@@ -42,6 +42,7 @@ function makePass1(overrides: Partial<BalanceAndPnlSubJson> = {}): BalanceAndPnl
       totalEquityPrimary: '600000',
       totalEquityComparative: null,
       notes: [],
+      modeBanner: null,
     },
     incomeStatement: {
       lines: [],
@@ -54,6 +55,7 @@ function makePass1(overrides: Partial<BalanceAndPnlSubJson> = {}): BalanceAndPnl
       oriPrimary: '0',
       oriComparative: null,
       notes: [],
+      modeBanner: null,
     },
     curatorFlags: {
       equityConvergenceApplied: false,
@@ -62,6 +64,7 @@ function makePass1(overrides: Partial<BalanceAndPnlSubJson> = {}): BalanceAndPnl
       presumedCostWarning: false,
       reclassifiedAmountCop: '0',
     },
+    reportMode: null,
   };
   return { ...base, ...overrides };
 }
@@ -78,6 +81,7 @@ function makePass2(overrides: Partial<CashFlowAndEquitySubJson> = {}): CashFlowA
       cashOpening: '100000',
       cashClosing: '170000',
       methodNote: 'indirect',
+      degeneracyFlag: null,
     },
     equityChanges: {
       rows: [
@@ -330,8 +334,10 @@ describe('assembleNiifReport — Fase 3 merger determinístico', () => {
   });
 
   // Test 8: Assembled estructura no contiene campos extra no declarados en NiifReportSchema
-  // Garantiza que el assembler no inyecta propiedades phantom que rompan downstream
-  it('sin campos extra: assembled tiene exactamente los 7 campos de NiifReportSchema', () => {
+  // Garantiza que el assembler no inyecta propiedades phantom que rompan downstream.
+  // Hotfix Wave 4 (2026-05-13): `reportMode` se propaga literal desde pass1
+  // tras endurecer el schema a `.nullable()` puro — el top-level pasó de 7 a 8.
+  it('sin campos extra: assembled tiene exactamente los 8 campos de NiifReportSchema', () => {
     const [p1, p2, p3] = makeValidTriple();
     const assembled = assembleNiifReport(p1, p2, p3);
 
@@ -343,6 +349,7 @@ describe('assembleNiifReport — Fase 3 merger determinístico', () => {
       'curatorFlags',
       'equityChanges',
       'incomeStatement',
+      'reportMode',
       'technicalNotes',
     ]);
   });

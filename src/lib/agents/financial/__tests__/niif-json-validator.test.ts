@@ -29,6 +29,7 @@ function makeReport(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       totalEquityPrimary: '600000',
       totalEquityComparative: null,
       notes: [],
+      modeBanner: null,
     },
     incomeStatement: {
       lines: [],
@@ -41,6 +42,7 @@ function makeReport(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       oriPrimary: '0',
       oriComparative: null,
       notes: [],
+      modeBanner: null,
     },
     cashFlow: {
       sections: [
@@ -52,6 +54,7 @@ function makeReport(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       cashOpening: '100000',
       cashClosing: '170000',
       methodNote: 'indirect',
+      degeneracyFlag: null,
     },
     equityChanges: {
       rows: [
@@ -90,6 +93,7 @@ function makeReport(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       presumedCostWarning: false,
       reclassifiedAmountCop: '0',
     },
+    reportMode: null,
   };
   return { ...base, ...overrides };
 }
@@ -127,6 +131,7 @@ describe('validateNiifReportJson — Capa 1 Integridad Aritmética', () => {
         cashOpening: '100000',
         cashClosing: '999', // Should be 200000
         methodNote: 'indirect',
+        degeneracyFlag: null,
       },
     });
     const result = validateNiifReportJson(broken);
@@ -234,9 +239,9 @@ describe('validateNiifReportJson — E8 anti-duplicacion Grupo 53', () => {
   it('E8: pasa cuando suma lineas Clase 5 == total anchored', () => {
     const report = makeReport();
     report.incomeStatement.lines = [
-      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
-      { account: '52', label: 'Ventas', amountPrimary: '50000', amountComparative: null, level: 3, isAbsolute: true },
-      { account: '53', label: 'No-op', amountPrimary: '30000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
+      { account: '52', label: 'Ventas', amountPrimary: '50000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
+      { account: '53', label: 'No-op', amountPrimary: '30000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
     ];
     // Suma = 180000. Total anchored = 180000. Dentro de tolerancia (1% + 100000 = 101800).
     const result = validateNiifReportJson(report, { totalExpensesClass5Cents: '180000' });
@@ -246,10 +251,10 @@ describe('validateNiifReportJson — E8 anti-duplicacion Grupo 53', () => {
   it('E8: detecta duplicacion Grupo 53 + subcuenta 5305', () => {
     const report = makeReport();
     report.incomeStatement.lines = [
-      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
-      { account: '52', label: 'Ventas', amountPrimary: '50000', amountComparative: null, level: 3, isAbsolute: true },
-      { account: '53', label: 'No-op (Grupo total)', amountPrimary: '30000', amountComparative: null, level: 3, isAbsolute: true },
-      { account: '5305', label: 'Financieros (YA EN 53)', amountPrimary: '20000', amountComparative: null, level: 2, isAbsolute: true },
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
+      { account: '52', label: 'Ventas', amountPrimary: '50000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
+      { account: '53', label: 'No-op (Grupo total)', amountPrimary: '30000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
+      { account: '5305', label: 'Financieros (YA EN 53)', amountPrimary: '20000', amountComparative: null, level: 2, isAbsolute: true, confidence: null, anomalyFlag: null },
     ];
     // Suma lineas = 200000. Total anchored = 180000.
     // Tolerancia = 180000/100 + 100000 = 101800.
@@ -268,7 +273,7 @@ describe('validateNiifReportJson — E8 anti-duplicacion Grupo 53', () => {
   it('E8: pasa cuando lineas Clase 5 estan dentro del 1% + floor del total anchored', () => {
     const report = makeReport();
     report.incomeStatement.lines = [
-      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
     ];
     // Suma = 100000. Total anchored = 10000000 (grande). Tolerancia = 100000 + 100000 = 200000.
     // 100000 <= 10000000 + 200000 = 10200000 => pasa.
@@ -279,8 +284,8 @@ describe('validateNiifReportJson — E8 anti-duplicacion Grupo 53', () => {
   it('E8: ignora lineas con account null (totales sin codigo PUC)', () => {
     const report = makeReport();
     report.incomeStatement.lines = [
-      { account: null, label: 'Total Gastos', amountPrimary: '9999999', amountComparative: null, level: 4, isAbsolute: true },
-      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true },
+      { account: null, label: 'Total Gastos', amountPrimary: '9999999', amountComparative: null, level: 4, isAbsolute: true, confidence: null, anomalyFlag: null },
+      { account: '51', label: 'Admin', amountPrimary: '100000', amountComparative: null, level: 3, isAbsolute: true, confidence: null, anomalyFlag: null },
     ];
     // Solo la linea con account='51' cuenta. Suma = 100000 <= 10000000 + tolerancia.
     const result = validateNiifReportJson(report, { totalExpensesClass5Cents: '10000000' });

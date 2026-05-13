@@ -70,27 +70,25 @@ import {
 //   3. `degeneracyFlag` en EFE (§5 Slide 08).
 //   4. `reportMode` en el root (§3, echo del input).
 //
-// Por qué `.nullable().optional()` y no `.nullable()` puro:
+// Hotfix Wave 4 (2026-05-13): los 8 campos arriba se endurecieron a
+// `.nullable()` puro (antes eran `.nullable().optional()` = `.nullish()`).
+// Razón: OpenAI strict mode (`experimental_output: Output.object({ schema })`
+// en AI SDK v6) EXIGE que cada property esté listada en `required[]` del
+// JSON schema generado. Zod `.optional()` produce `required[]` sin la clave,
+// que OpenAI rechaza con error en runtime:
 //
-// La spec literal dice `.nullable()`. PERO Zod `.nullable()` exige el campo
-// presente con valor `null` (no acepta `undefined`/missing). Esto rompería:
-//   (a) las 5 fixtures de tests (`assemble-niif-report.test.ts`,
-//       `niif-json-validator.test.ts`, `niif-analyst-chunked.integration.test.ts`,
-//       `spec-v2-integration.test.ts`, `bridge-cuadratura.test.ts`) que
-//       construyen objetos sin estos campos — Vitest rechazaría compilar.
-//   (b) la regla "git diff --stat debe mostrar SOLO niif-report.ts" — tocar
-//       las 5 fixtures es fuera de scope para F1.
-//   (c) la regla "vitest 635 tests siguen verdes sin tocar fixtures".
+//   "Invalid schema for response_format 'response': In context=(...),
+//   'required' is required to be supplied and to be an array including every
+//   key in properties. Missing 'confidence'."
 //
-// `.nullable().optional()` (= `.nullish()` en Zod) permite undefined/missing/null,
-// y Zod aplica `null` semánticamente equivalente cuando el consumer hace
-// `value ?? null`. Es la única lectura que satisface las 3 reglas a la vez.
+// Bajo `.nullable()` puro el campo es `T | null` (NUNCA undefined): Zod
+// emite el field en `required[]` con `type: [..., 'null']`, lo que OpenAI
+// strict acepta. Las fixtures de tests se actualizaron en el mismo hotfix
+// para incluir los campos explícitamente como `null`.
 //
-// La regla GPT-5.4 "Strict schema, no optional fields" (CLAUDE.md §"Prompt
-// patterns GPT-5.4" hard rule 5) aplica a schemas que VAN al LLM via
-// `experimental_output: Output.object({ schema })`. F1 NO toca el prompt — eso
-// es F4. Cuando F4 cablee la emisión, endurecerá a `.nullable()` puro y
-// actualizará las fixtures juntas en su scope.
+// CLAUDE.md §"Prompt patterns GPT-5.4" hard rule 5 ("Strict schema, no
+// optional fields") es ahora ley dura: `.nullable()` siempre, `.optional()`
+// nunca, en schemas que vayan al LLM.
 //
 // Refs:
 //   - docs/spec/financial-report-v8.1.md §1.3 (anomalyFlag por línea)
@@ -110,12 +108,12 @@ import {
  * `level`, `isAbsolute`) viene tal cual de `StatementLineSchema` en `./base`.
  */
 const StatementLineV8Schema = StatementLineSchema.extend({
-  confidence: ConfidenceLevelSchema.nullable()
-    .optional()
-    .describe('Nivel de confianza de la cifra (v8.1 §1.5). Null/undefined = high implícito (sin dot visual).'),
-  anomalyFlag: AnomalyFlagSchema.nullable()
-    .optional()
-    .describe('Flag de anomalía sectorial CIIU (v8.1 §1.3). Null/undefined = sin outlier detectado.'),
+  confidence: ConfidenceLevelSchema.nullable().describe(
+    'Nivel de confianza de la cifra (v8.1 §1.5). Null = high implícito (sin dot visual).',
+  ),
+  anomalyFlag: AnomalyFlagSchema.nullable().describe(
+    'Flag de anomalía sectorial CIIU (v8.1 §1.3). Null = sin outlier detectado.',
+  ),
 });
 
 // ---------------------------------------------------------------------------
@@ -179,8 +177,7 @@ export const CashFlowStatementSchema = z.object({
   degeneracyFlag: z
     .enum(['none', 'indirect_method_unreliable'])
     .nullable()
-    .optional()
-    .describe('Flag de degeneración del método indirecto (v8.1 §5 Slide 08). Null/undefined = no evaluado aún (pre-F4).'),
+    .describe('Flag de degeneración del método indirecto (v8.1 §5 Slide 08). Null = no evaluado / no aplica.'),
 });
 
 // ---------------------------------------------------------------------------
@@ -202,13 +199,13 @@ const BalanceSheetSchema = z.object({
   totalEquityComparative: MoneyCop.nullable(),
   notes: z.array(StatementNoteSchema),
   // Spec v8.1 §1.7 — banner explicativo del modo del reporte. Texto canónico
-  // inyectado por Pass-1 (F4 cablea la emisión). Opcional/null pre-F4 para
-  // backward compat con fixtures (ver header sobre `.nullable().optional()`).
+  // inyectado por Pass-1.
   modeBanner: z
     .string()
     .nullable()
-    .optional()
-    .describe('Banner explicativo del modo del reporte (LINEA_BASE/TRANSICION/COMPARATIVO_COMPLETO). v8.1 §1.7. Null/undefined = no banner.'),
+    .describe(
+      'Banner explicativo del modo del reporte (LINEA_BASE/TRANSICION/COMPARATIVO_COMPLETO). v8.1 §1.7. Null = no banner.',
+    ),
 });
 
 const IncomeStatementSchema = z.object({
@@ -223,12 +220,11 @@ const IncomeStatementSchema = z.object({
   oriComparative: MoneyCop.nullable(),
   notes: z.array(StatementNoteSchema),
   // Spec v8.1 §1.7 — banner explicativo del modo del reporte para P&L. Mismo
-  // contrato que `balanceSheet.modeBanner`. Opcional/null pre-F4.
+  // contrato que `balanceSheet.modeBanner`.
   modeBanner: z
     .string()
     .nullable()
-    .optional()
-    .describe('Banner explicativo del modo del reporte para P&L. v8.1 §1.7. Null/undefined = no banner.'),
+    .describe('Banner explicativo del modo del reporte para P&L. v8.1 §1.7. Null = no banner.'),
 });
 
 const EquityChangesSchema = z.object({
@@ -272,15 +268,11 @@ export const NiifReportSchema = z.object({
 
   // -- 7. Modo del reporte (eco del input, spec v8.1 §3) -------------------
   // Echo del `reportMode` derivado por `deriveReportMode()` en el orchestrator
-  // (F0) y propagado a Pass-1. Pre-F4 es opcional (el assembler no lo emite
-  // todavía — ver `assembleNiifReport`). F4 cablea la emisión literal desde
-  // el prompt Pass-1 y simultáneamente actualiza el assembler para echoarlo
-  // y las fixtures para incluirlo.
-  reportMode: ReportModeSchema.nullable()
-    .optional()
-    .describe(
-      'Modo del reporte (LINEA_BASE | TRANSICION | COMPARATIVO_COMPLETO). v8.1 §3. Echo del input al pipeline. Opcional/null pre-F4.',
-    ),
+  // (F0) y propagado a Pass-1. El assembler lo propaga literal desde Pass-1
+  // (ver `assembleNiifReport`).
+  reportMode: ReportModeSchema.nullable().describe(
+    'Modo del reporte (LINEA_BASE | TRANSICION | COMPARATIVO_COMPLETO). v8.1 §3. Echo del input al pipeline. Null si no derivado.',
+  ),
 });
 
 export type NiifReportJson = z.infer<typeof NiifReportSchema>;
@@ -312,12 +304,10 @@ export const BalanceAndPnlSubSchema = z.object({
   incomeStatement: IncomeStatementSchema,
   curatorFlags: CuratorFlagsSchema,
   // Spec v8.1 §3 — Pass-1 recibe `reportMode` del orchestrator (F0) por
-  // `<context>` y lo emite literal. F4 cablea la emisión desde el prompt
-  // builder; en F1 el campo es opcional para no romper fixtures de pass1
-  // existentes (assemble-niif-report.test.ts, niif-analyst-chunked.integration).
-  reportMode: ReportModeSchema.nullable()
-    .optional()
-    .describe('Eco literal del reportMode derivado por el orchestrator. v8.1 §3. Opcional/null pre-F4.'),
+  // `<context>` y lo emite literal.
+  reportMode: ReportModeSchema.nullable().describe(
+    'Eco literal del reportMode derivado por el orchestrator. v8.1 §3. Null si no derivado.',
+  ),
 });
 
 export type BalanceAndPnlSubJson = z.infer<typeof BalanceAndPnlSubSchema>;
@@ -377,21 +367,10 @@ export function assembleNiifReport(
   pass2: CashFlowAndEquitySubJson,
   pass3: TechnicalNotesSubJson,
 ): NiifReportJson {
-  // Pre-F1 los 7 picks explícitos garantizaban la shape mínima. Wave 4.F1
-  // añade campos al schema (reportMode, modeBanner, confidence, anomalyFlag,
-  // degeneracyFlag) declarados como `.nullable().optional()` — pre-F4 el
-  // prompt no los emite todavía, así que su ausencia en el output del
-  // assembler es válida (Zod `safeParse` post-assemble los acepta como
-  // undefined sin error, y los consumers downstream que los lean obtienen
-  // `null`/`undefined` consistentemente).
-  //
-  // Por qué NO añadir `reportMode: pass1.reportMode` aquí: si lo escribimos
-  // literal en este pick, el output keys crece a 8 y los snapshot tests
-  // existentes que chequean la shape exacta
-  // (assemble-niif-report.test.ts §"sin campos extra: assembled tiene
-  // exactamente los 7 campos") romperían. F4 cablea la propagación explícita
-  // junto con el cableado del prompt para que el LLM emita el valor real,
-  // y entonces actualizará tanto este assembler como el test snapshot juntos.
+  // Tras el hotfix Wave 4 (endurecimiento OpenAI strict mode), `reportMode`
+  // dejó de ser opcional — el schema lo exige presente (null válido). El
+  // assembler propaga el valor literal desde Pass-1, que es quien lo recibe
+  // del orchestrator vía `deriveReportMode()` (v8.1 §3).
   return {
     company: pass1.company,
     balanceSheet: pass1.balanceSheet,
@@ -400,5 +379,6 @@ export function assembleNiifReport(
     equityChanges: pass2.equityChanges,
     technicalNotes: pass3.technicalNotes,
     curatorFlags: pass1.curatorFlags,
+    reportMode: pass1.reportMode,
   };
 }

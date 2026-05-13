@@ -61,6 +61,7 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       totalEquityPrimary: '600000',
       totalEquityComparative: null,
       notes: [],
+      modeBanner: null,
     },
     incomeStatement: {
       lines: [],
@@ -73,6 +74,7 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       oriPrimary: '0',
       oriComparative: null,
       notes: [],
+      modeBanner: null,
     },
     cashFlow: {
       sections: [
@@ -84,6 +86,7 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       cashOpening: '100000',
       cashClosing: '170000',
       methodNote: 'indirect',
+      degeneracyFlag: null,
     },
     equityChanges: {
       rows: [
@@ -122,6 +125,7 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       presumedCostWarning: false,
       reclassifiedAmountCop: '0',
     },
+    reportMode: null,
   };
   return { ...base, ...overrides };
 }
@@ -207,6 +211,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 3,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
       {
         account: '52',
@@ -215,6 +221,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 3,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
       {
         account: '53',
@@ -223,6 +231,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 3,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
       {
         // Esta línea YA está incluida dentro del Grupo 53 — duplica el gasto.
@@ -232,6 +242,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 2,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
     ];
     // Suma de líneas con cuenta que empieza en '5' = 5M + 3M + 2M + 1.5M = 11.5M centavos.
@@ -252,6 +264,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 3,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
       {
         account: '52',
@@ -260,6 +274,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 3,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
       {
         account: '53',
@@ -268,6 +284,8 @@ describe('Wave 2.F7 — Test 2 — Validator E8 anti-duplicación Grupo 53', () 
         amountComparative: null,
         level: 3,
         isAbsolute: true,
+        confidence: null,
+        anomalyFlag: null,
       },
     ];
     // Suma = 180000. Total anchored = 180000. Diferencia = 0 <= tolerancia.
