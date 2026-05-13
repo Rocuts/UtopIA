@@ -136,6 +136,44 @@ export const financialReportRequestSchema = z.object({
   detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
 });
 
+// ---- Financial report split endpoints (Wave 3.F1) ----
+// `/api/financial-report/strategy` and `/api/financial-report/governance` son
+// stateless por diseño: el caller envia el output del agente anterior + los
+// totales vinculantes pre-calculados. El shape de `niifResult` / `preprocessed`
+// se valida con un `z.object({}).passthrough()` permisivo + cast en el handler
+// (mismo patron que `financialAuditRequestSchema`) porque los schemas Zod
+// recursivos completos de NiifAnalysisResult / PreprocessedBalance son
+// prohibitivamente caros y la informacion de tipos vive en el codigo TS.
+
+/**
+ * Body para POST /api/financial-report/strategy. El caller envia el
+ * `niifResult` ya generado por /niif, el bloque `bindingTotals` que /niif
+ * pre-calculo, y opcionalmente el `preprocessed` completo (recomendado para
+ * activar modo comparativo + elite context).
+ */
+export const strategyPhaseRequestSchema = z.object({
+  niifResult: z.object({ fullContent: z.string().min(1) }).passthrough(),
+  bindingTotals: z.string().min(1, 'bindingTotals (pre-calculados por phase 1) is required'),
+  preprocessed: z.unknown().optional(),
+  company: companyInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+});
+
+/**
+ * Body para POST /api/financial-report/governance. Igual a strategy pero
+ * incluye tambien el `strategyResult`.
+ */
+export const governancePhaseRequestSchema = z.object({
+  niifResult: z.object({ fullContent: z.string().min(1) }).passthrough(),
+  strategyResult: z.object({ fullContent: z.string().min(1) }).passthrough(),
+  bindingTotals: z.string().min(1, 'bindingTotals (pre-calculados por phase 1) is required'),
+  preprocessed: z.unknown().optional(),
+  company: companyInfoSchema,
+  language: z.enum(['es', 'en']).default('es'),
+  instructions: z.string().max(2_000).optional(),
+});
+
 /**
  * Output format hint for `/api/financial-report/export`.
  *

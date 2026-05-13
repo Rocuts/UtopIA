@@ -55,6 +55,14 @@ const adjustmentLedgerSchema = z
 // pipeline, and returns a consolidated NIIF financial report.
 //
 // Supports SSE streaming via X-Stream: true header for real-time progress.
+//
+// @deprecated (Wave 3.F1) — preferir los 3 endpoints separados:
+//   * POST /api/financial-report/niif       (Stage 1 — NIIF Analyst chunked)
+//   * POST /api/financial-report/strategy   (Stage 2 — Strategy Director)
+//   * POST /api/financial-report/governance (Stage 3 — Governance Specialist)
+// Cada uno tiene su propio `maxDuration` y SSE stream — eliminan el timeout
+// production al desacoplar las latencias acumuladas. Este endpoint sigue vivo
+// para callers que no requieren el control por-fase (export route + tests).
 // ---------------------------------------------------------------------------
 
 export const maxDuration = 800; // 800s para acomodar gpt-5.5 medium con outputs 30-50K tokens (latencia medida ~24min en pipeline secuencial NIIF→Strategy→Governance)

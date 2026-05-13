@@ -31,13 +31,13 @@ import type {
   NiifAnalysisResult,
   StrategicAnalysisResult,
   GovernanceResult,
+  CompanyInfo,
 } from './types';
 import type {
   AdjustmentLedger,
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
-import { BasePipeline, type PipelineStage } from './base-pipeline';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
@@ -954,33 +954,82 @@ function niifOutputMentionsBindingTotals(
 }
 
 // ---------------------------------------------------------------------------
-// Main entry point
+// Sub-orchestrators (Wave 3.F1) — phase splitting
+// ---------------------------------------------------------------------------
+// El endpoint legacy `/api/financial-report` ejecuta los 3 stages NIIF +
+// Strategy + Governance en una sola request. Con NIIF chunked (3 passes
+// internos) + Strategy + Governance, la latencia acumulada excede el budget
+// Vercel Pro+Fluid Compute para reportes complejos y rompe el SSE stream.
+//
+// La solución: 3 endpoints separados (`/niif`, `/strategy`, `/governance`)
+// cada uno con su propio `maxDuration` independiente. Las funciones siguientes
+// son los sub-orchestrators reutilizables:
+//
+//   prepareFinancialContext  — Stage 0 (ERP pull, preprocess, adjustments,
+//                              gate, bindingTotalsBlock, eliteFor*). Comparte
+//                              estado entre los 3 phase runners.
+//   runNiifPhase             — Stage 1 (NIIF Analyst 3-pass chunked).
+//   runStrategyPhase         — Stage 2 (Strategy Director).
+//   runGovernancePhase       — Stage 3 (Governance Specialist).
+//
+// El legacy `orchestrateFinancialReport` queda como composer secuencial que
+// llama a los 3 phase runners — backward-compat total (export route, tests).
 // ---------------------------------------------------------------------------
 
 /**
- * Execute the full financial reporting pipeline.
- *
- * Sequential flow with SSE progress events:
- * 0. Preprocess raw data (idempotent) -> binding totals
- * 1. NIIF Analyst processes raw data -> 4 financial statements
- * 2. Strategy Director interprets statements -> KPIs, projections, recommendations
- * 3. Governance Specialist produces legal docs -> notes + assembly minutes
- * 4. Orchestrator consolidates everything -> post-render validation
+ * Resultado de `prepareFinancialContext` — todo lo que los phase runners
+ * necesitan para invocar a su agente correspondiente. Expuesto para que los
+ * route handlers `/niif` puedan reusar Stage 0 sin re-implementar la logica.
  */
-export async function orchestrateFinancialReport(
+export interface FinancialPipelineContext {
+  effectiveRawData: string;
+  effectiveCompany: CompanyInfo;
+  preprocessed: unknown;
+  ppForAgents: PreprocessedBalance | undefined;
+  bindingTotalsBlock: string;
+  eliteForNiif: {
+    comparativosImpracticables: boolean | undefined;
+    actividadInferida: { sectorCIIU: string; descripcion: string; evidencia?: string } | undefined;
+    reclasificacionesNoCompensacion:
+      | Array<{
+          cuenta_origen: string;
+          saldo_invertido_centavos: bigint;
+          cuenta_destino_pasivo: string;
+          motivo_norma: string;
+        }>
+      | undefined;
+    saldoAFavorImpuestoCents: bigint | undefined;
+  };
+  eliteForStrategy: {
+    comparativosImpracticables: boolean | undefined;
+    actividadInferida: { sectorCIIU: string; descripcion: string; evidencia?: string } | undefined;
+  };
+  eliteForGovernance: {
+    comparativosImpracticables: boolean | undefined;
+    actividadInferida: { sectorCIIU: string; descripcion: string; evidencia?: string } | undefined;
+  };
+  /** Detalle de ajustes aplicados via Doctor de Datos (Phase 2). */
+  adjustmentsApplicationDetail: ReturnType<typeof applyAdjustments> | null;
+  /** Lista de ajustes confirmados que se intentaron aplicar. */
+  appliedAdjustments: NonNullable<AdjustmentLedger['adjustments']>;
+}
+
+/**
+ * Stage 0 compartido: ERP pull → preprocess → ajustes → gate → bindingTotals.
+ *
+ * Lanza `BalanceValidationError` si el balance no cuadra y `options.provisional`
+ * no esta activo. Los route handlers (legacy y nuevos) capturan ese error y
+ * devuelven 422.
+ */
+export async function prepareFinancialContext(
   request: FinancialReportRequest,
   options: OrchestrateFinancialOptions = {},
-): Promise<FinancialReport> {
-  const { rawData, company, language, instructions } = request;
+): Promise<FinancialPipelineContext> {
+  const { rawData, company } = request;
   const { onProgress } = options;
 
   // ---------------------------------------------------------------------------
   // Stage 0.0: Auto-pull desde ERP si el caller no entrego rawData explicito
-  // ---------------------------------------------------------------------------
-  // Cuando el usuario tiene un ERP conectado y no pasa un CSV manual, tiramos
-  // el balance de prueba en vivo y lo serializamos al mismo contrato CSV que
-  // consume `parseTrialBalanceCSV`. Si el ERP falla, propagamos via onProgress
-  // y lanzamos — el route handler captura y devuelve el error al cliente.
   // ---------------------------------------------------------------------------
   let effectiveRawData = rawData;
   if (!effectiveRawData?.trim() && options?.erpConnections?.length && options?.period) {
@@ -1007,7 +1056,6 @@ export async function orchestrateFinancialReport(
         preprocessed = preprocessTrialBalance(rows);
       }
     } catch (err) {
-      // No-fatal: seguimos sin bindingTotals si el CSV es exotico.
       console.warn(
         '[financial-orchestrator] Preprocess fallo, continuando sin bindingTotals:',
         err instanceof Error ? err.message : err,
@@ -1015,14 +1063,7 @@ export async function orchestrateFinancialReport(
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Stage 0.4: Aplicar adjustmentLedger (Phase 2 — Doctor de Datos)
-  // ---------------------------------------------------------------------------
-  // Si el usuario confirmo ajustes en el repair chat, los aplicamos AHORA
-  // sobre el preprocessed antes del gate de validacion. Esto permite que un
-  // balance que fallaba el gate en su forma original pase con los ajustes
-  // aprobados por el usuario.
-  // ---------------------------------------------------------------------------
+  // Stage 0.4: Aplicar adjustmentLedger
   const appliedAdjustments =
     options.adjustmentLedger?.adjustments?.filter((a) => a.status === 'applied') ?? [];
   let adjustmentsApplicationDetail: ReturnType<typeof applyAdjustments> | null = null;
@@ -1032,10 +1073,7 @@ export async function orchestrateFinancialReport(
     typeof preprocessed === 'object' &&
     isPreprocessedBalance(preprocessed)
   ) {
-    adjustmentsApplicationDetail = applyAdjustments(
-      preprocessed,
-      appliedAdjustments,
-    );
+    adjustmentsApplicationDetail = applyAdjustments(preprocessed, appliedAdjustments);
     preprocessed = adjustmentsApplicationDetail.balance;
     onProgress?.({
       type: 'stage_progress',
@@ -1044,17 +1082,7 @@ export async function orchestrateFinancialReport(
     });
   }
 
-  // ---------------------------------------------------------------------------
   // Stage 0.5: Gate de validacion aritmetica
-  // ---------------------------------------------------------------------------
-  // Si el preprocesador marco el balance como "blocking" (p.ej. la ecuacion
-  // Activo = Pasivo + Patrimonio descuadra >1%), abortamos aqui en vez de
-  // gastar tokens generando un reporte que sera incorrecto. El usuario recibe
-  // razones y cuentas sugeridas para corregir el Excel.
-  //
-  // Si el preprocesador aplico auto-reparaciones (p.ej. reinyeccion de la
-  // utilidad del ejercicio), las reportamos como progreso informativo.
-  // ---------------------------------------------------------------------------
   const balanceValidation = deriveValidation(preprocessed);
   if (balanceValidation.adjustments.length > 0) {
     for (const adj of balanceValidation.adjustments) {
@@ -1074,24 +1102,19 @@ export async function orchestrateFinancialReport(
 
   const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
 
-  // ---------------------------------------------------------------------------
-  // ELITE CONTEXT — Lectura defensiva de los nuevos campos que A está
-  // produciendo (`comparativos_impracticables`, `actividadInferida`,
-  // `reclasificacionesNoCompensacion`, `controlTotals.cents.saldoAFavorImpuesto`).
-  // Optional chaining + casts a `unknown` para no acoplarnos al shape antes
-  // de que A haga merge. Si los campos no existen, los prompts caen al
-  // comportamiento legacy.
-  // ---------------------------------------------------------------------------
-  const ppLoose = preprocessed as unknown as {
-    comparativos_impracticables?: boolean;
-    actividadInferida?: { sectorCIIU?: string; descripcion?: string; evidencia?: string };
-    reclasificacionesNoCompensacion?: Array<{
-      cuenta_origen?: string;
-      saldo_invertido_centavos?: bigint | number;
-      cuenta_destino_pasivo?: string;
-      motivo_norma?: string;
-    }>;
-  } | undefined;
+  // ELITE CONTEXT — lectura defensiva
+  const ppLoose = preprocessed as unknown as
+    | {
+        comparativos_impracticables?: boolean;
+        actividadInferida?: { sectorCIIU?: string; descripcion?: string; evidencia?: string };
+        reclasificacionesNoCompensacion?: Array<{
+          cuenta_origen?: string;
+          saldo_invertido_centavos?: bigint | number;
+          cuenta_destino_pasivo?: string;
+          motivo_norma?: string;
+        }>;
+      }
+    | undefined;
 
   const eliteActividadInferida = ppLoose?.actividadInferida
     ? {
@@ -1136,12 +1159,7 @@ export async function orchestrateFinancialReport(
     actividadInferida: eliteActividadInferida,
   };
 
-  // ---------------------------------------------------------------------------
-  // Multiperiodo: si el preprocesador detecto >=2 periodos pero el caller no
-  // declaro `company.comparativePeriod`, lo autocompletamos con el penultimo
-  // periodo detectado. Asi el copy "Periodo Comparativo: YYYY" en los prompts
-  // queda alineado con el preprocesado real.
-  // ---------------------------------------------------------------------------
+  // Multiperiodo: autocompletar comparativePeriod si falta
   let effectiveCompany = company;
   if (
     !effectiveCompany.comparativePeriod &&
@@ -1154,7 +1172,6 @@ export async function orchestrateFinancialReport(
       comparativePeriod: dp[dp.length - 2],
     };
   } else {
-    // Si no viene detectedPeriods en company, derivarlo del preprocesado.
     const ppPeriods =
       preprocessed && typeof preprocessed === 'object'
         ? (preprocessed as { periods?: PeriodSnapshot[] }).periods ?? []
@@ -1170,154 +1187,258 @@ export async function orchestrateFinancialReport(
     }
   }
 
-  // PreprocessedBalance tipado para los agents (nuevo contrato T1).
   const ppForAgents: PreprocessedBalance | undefined =
     preprocessed && isPreprocessedBalance(preprocessed) ? preprocessed : undefined;
 
-  // ---------------------------------------------------------------------------
-  // Stages 1-3: NIIF Analyst -> Strategy Director -> Governance Specialist
-  // ---------------------------------------------------------------------------
-  // Coordinados via BasePipeline.runSequential. Cada stage emite SSE
-  // `stage_start`/`stage_complete` con el shape FinancialProgressEvent ya
-  // existente — preservamos el contrato del API route. Los stages internos
-  // que ya emiten `stage_progress` (token streaming desde los agentes via
-  // onProgress) siguen funcionando porque la callback es la misma.
-  //
-  // Acumulador: encadenamos los outputs (NIIF -> Strategy y NIIF+Strategy ->
-  // Governance) en un objeto que cada stage agranda monotonicamente. Esto
-  // permite que cada stage reciba lo que necesita sin perder el output
-  // previo, y que el caller obtenga el shape final en un solo pase.
-  // ---------------------------------------------------------------------------
-
-  type SequentialAccumulator = {
-    niif?: NiifAnalysisResult;
-    strategy?: StrategicAnalysisResult;
-    governance?: GovernanceResult;
+  return {
+    effectiveRawData,
+    effectiveCompany,
+    preprocessed,
+    ppForAgents,
+    bindingTotalsBlock,
+    eliteForNiif,
+    eliteForStrategy,
+    eliteForGovernance,
+    adjustmentsApplicationDetail,
+    appliedAdjustments,
   };
+}
 
-  const stageLabels: Record<1 | 2 | 3, { start: string; complete: string }> = {
-    1: {
-      start:
-        'Analista Contable NIIF — Procesando datos y construyendo estados financieros',
-      complete: 'Estados financieros NIIF generados',
-    },
-    2: {
-      start: 'Director de Estrategia — Analizando KPIs y proyecciones',
-      complete: 'Dashboard ejecutivo y proyecciones completados',
-    },
-    3: {
-      start:
-        'Especialista en Gobierno Corporativo — Redactando documentos legales',
-      complete: 'Notas contables y acta de asamblea redactadas',
-    },
-  };
+/**
+ * Stage 1: NIIF Analyst (3-pass chunked). Emite los SSE
+ * stage_start/stage_complete (stage=1) y delega los stage_progress por-pass
+ * al `runNiifAnalyst` interno.
+ *
+ * Devuelve el `NiifAnalysisResult` + el `context` (para que el caller pueda
+ * encadenarlo a Strategy/Governance sin re-correr Stage 0).
+ */
+export async function runNiifPhase(
+  request: FinancialReportRequest,
+  options: OrchestrateFinancialOptions = {},
+): Promise<{ niif: NiifAnalysisResult; context: FinancialPipelineContext }> {
+  const { language, instructions } = request;
+  const { onProgress } = options;
 
-  const stages: ReadonlyArray<PipelineStage<unknown, unknown>> = [
-    {
-      name: 'niif-analyst',
-      onStart: () =>
-        onProgress?.({ type: 'stage_start', stage: 1, label: stageLabels[1].start }),
-      onSuccess: (out) => {
-        const acc = out as SequentialAccumulator;
-        // Sanity-check no-fatal: el Agente 1 deberia citar las cifras vinculantes.
-        if (
-          acc.niif &&
-          !niifOutputMentionsBindingTotals(acc.niif.fullContent, preprocessed)
-        ) {
-          onProgress?.({
-            type: 'stage_progress',
-            stage: 1,
-            detail:
-              'Advertencia: el output NIIF no cita ninguno de los totales vinculantes pre-calculados. ' +
-              'Los Agentes 2 y 3 recibiran igualmente los bindingTotals.',
-          });
-        }
-        onProgress?.({ type: 'stage_complete', stage: 1, label: stageLabels[1].complete });
-      },
-      run: async (input) => {
-        const acc = (input as SequentialAccumulator) ?? {};
-        const niifResult = await runNiifAnalyst(
-          effectiveRawData,
-          effectiveCompany,
-          language,
-          instructions,
-          bindingTotalsBlock,
-          ppForAgents,
-          onProgress,
-          eliteForNiif,
-        );
-        return { ...acc, niif: niifResult } satisfies SequentialAccumulator;
-      },
-    },
-    {
-      name: 'strategy-director',
-      onStart: () =>
-        onProgress?.({ type: 'stage_start', stage: 2, label: stageLabels[2].start }),
-      onSuccess: () =>
-        onProgress?.({ type: 'stage_complete', stage: 2, label: stageLabels[2].complete }),
-      run: async (input) => {
-        const acc = input as SequentialAccumulator;
-        if (!acc?.niif) {
-          throw new Error('strategy-director: missing NIIF output in accumulator');
-        }
-        const strategyResult = await runStrategyDirector(
-          acc.niif,
-          effectiveCompany,
-          language,
-          instructions,
-          bindingTotalsBlock,
-          ppForAgents,
-          onProgress,
-          eliteForStrategy,
-        );
-        return { ...acc, strategy: strategyResult } satisfies SequentialAccumulator;
-      },
-    },
-    {
-      name: 'governance-specialist',
-      onStart: () =>
-        onProgress?.({ type: 'stage_start', stage: 3, label: stageLabels[3].start }),
-      onSuccess: () =>
-        onProgress?.({ type: 'stage_complete', stage: 3, label: stageLabels[3].complete }),
-      run: async (input) => {
-        const acc = input as SequentialAccumulator;
-        if (!acc?.niif || !acc?.strategy) {
-          throw new Error('governance-specialist: missing prior outputs in accumulator');
-        }
-        const governanceResult = await runGovernanceSpecialist(
-          acc.niif,
-          acc.strategy,
-          effectiveCompany,
-          language,
-          instructions,
-          bindingTotalsBlock,
-          ppForAgents,
-          onProgress,
-          eliteForGovernance,
-        );
-        return { ...acc, governance: governanceResult } satisfies SequentialAccumulator;
-      },
-    },
-  ];
+  const context = await prepareFinancialContext(request, options);
 
-  const pipeline = new BasePipeline({ name: 'financial-report' });
-  const sequentialResult = await pipeline.runSequential<SequentialAccumulator>(
-    stages,
-    {} as SequentialAccumulator,
+  const stageLabel = 'Analista Contable NIIF — Procesando datos y construyendo estados financieros';
+  const completeLabel = 'Estados financieros NIIF generados';
+
+  onProgress?.({ type: 'stage_start', stage: 1, label: stageLabel });
+
+  const niif = await runNiifAnalyst(
+    context.effectiveRawData,
+    context.effectiveCompany,
+    language,
+    instructions,
+    context.bindingTotalsBlock,
+    context.ppForAgents,
+    onProgress,
+    context.eliteForNiif,
   );
 
-  if (
-    !sequentialResult.niif ||
-    !sequentialResult.strategy ||
-    !sequentialResult.governance
-  ) {
-    // Imposible si runSequential resolvio sin lanzar — guarda defensivo.
-    throw new Error('financial-pipeline: incomplete sequential output');
+  if (!niifOutputMentionsBindingTotals(niif.fullContent, context.preprocessed)) {
+    onProgress?.({
+      type: 'stage_progress',
+      stage: 1,
+      detail:
+        'Advertencia: el output NIIF no cita ninguno de los totales vinculantes pre-calculados. ' +
+        'Los Agentes 2 y 3 recibiran igualmente los bindingTotals.',
+    });
   }
 
-  const niifResult = sequentialResult.niif;
-  const strategyResult = sequentialResult.strategy;
-  const governanceResult = sequentialResult.governance;
+  onProgress?.({ type: 'stage_complete', stage: 1, label: completeLabel });
+
+  return { niif, context };
+}
+
+/**
+ * Input para `runStrategyPhase` / `runGovernancePhase` cuando el caller ya
+ * ejecuto Stage 0 + NIIF (el caso normal de los endpoints separados).
+ *
+ * El caller envia las cifras pre-calculadas (`bindingTotalsBlock`,
+ * `preprocessed`) + el output del agente anterior. Asi cada endpoint es
+ * stateless y la red no carga con re-procesos.
+ */
+export interface PhaseHandoffInput {
+  /** Output del NIIF Analyst (Phase 1). */
+  niifResult: NiifAnalysisResult;
+  /** Bloque Markdown TOTALES VINCULANTES (pre-calculado por phase 1). */
+  bindingTotals: string;
+  /** PreprocessedBalance completo (forma del nuevo contrato T1). */
+  preprocessed?: PreprocessedBalance;
+  /** Metadata de la empresa (con `comparativePeriod` ya hidratado). */
+  company: CompanyInfo;
+  /** Idioma del reporte. */
+  language: 'es' | 'en';
+  /** Instrucciones adicionales del usuario. */
+  instructions?: string;
+  /** Contexto Elite — pasado opcionalmente (default: undefined → comportamiento legacy). */
+  elite?: {
+    comparativosImpracticables?: boolean;
+    actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+  };
+}
+
+/**
+ * Stage 2: Strategy Director. Consume el NIIF + bindingTotals y produce KPIs.
+ * Emite SSE stage_start/stage_complete (stage=2).
+ */
+export async function runStrategyPhase(
+  input: PhaseHandoffInput,
+  options: Pick<OrchestrateFinancialOptions, 'onProgress'> = {},
+): Promise<StrategicAnalysisResult> {
+  const { niifResult, bindingTotals, preprocessed, company, language, instructions, elite } = input;
+  const { onProgress } = options;
+
+  const stageLabel = 'Director de Estrategia — Analizando KPIs y proyecciones';
+  const completeLabel = 'Dashboard ejecutivo y proyecciones completados';
+
+  onProgress?.({ type: 'stage_start', stage: 2, label: stageLabel });
+
+  const strategy = await runStrategyDirector(
+    niifResult,
+    company,
+    language,
+    instructions,
+    bindingTotals,
+    preprocessed,
+    onProgress,
+    elite,
+  );
+
+  onProgress?.({ type: 'stage_complete', stage: 2, label: completeLabel });
+
+  return strategy;
+}
+
+/**
+ * Input adicional para Governance: ademas de NIIF requiere StrategyResult.
+ */
+export interface GovernancePhaseInput extends PhaseHandoffInput {
+  /** Output del Strategy Director (Phase 2). */
+  strategyResult: StrategicAnalysisResult;
+}
+
+/**
+ * Stage 3: Governance Specialist. Consume NIIF + Strategy y produce notas +
+ * acta. Emite SSE stage_start/stage_complete (stage=3).
+ */
+export async function runGovernancePhase(
+  input: GovernancePhaseInput,
+  options: Pick<OrchestrateFinancialOptions, 'onProgress'> = {},
+): Promise<GovernanceResult> {
+  const {
+    niifResult,
+    strategyResult,
+    bindingTotals,
+    preprocessed,
+    company,
+    language,
+    instructions,
+    elite,
+  } = input;
+  const { onProgress } = options;
+
+  const stageLabel = 'Especialista en Gobierno Corporativo — Redactando documentos legales';
+  const completeLabel = 'Notas contables y acta de asamblea redactadas';
+
+  onProgress?.({ type: 'stage_start', stage: 3, label: stageLabel });
+
+  const governance = await runGovernanceSpecialist(
+    niifResult,
+    strategyResult,
+    company,
+    language,
+    instructions,
+    bindingTotals,
+    preprocessed,
+    onProgress,
+    elite,
+  );
+
+  onProgress?.({ type: 'stage_complete', stage: 3, label: completeLabel });
+
+  return governance;
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point (legacy — composer secuencial)
+// ---------------------------------------------------------------------------
+
+/**
+ * @deprecated Usa los 3 sub-orchestrators (`runNiifPhase`, `runStrategyPhase`,
+ * `runGovernancePhase`) detras de los endpoints `/api/financial-report/{niif,
+ * strategy,governance}` cuando necesites controlar latencia por fase. Esta
+ * funcion sigue corriendo el pipeline completo en una sola request — utilizada
+ * por `/api/financial-report` (legacy) y `/api/financial-report/export`.
+ *
+ * Sequential flow with SSE progress events:
+ * 0. Preprocess raw data (idempotent) -> binding totals
+ * 1. NIIF Analyst processes raw data -> 4 financial statements
+ * 2. Strategy Director interprets statements -> KPIs, projections, recommendations
+ * 3. Governance Specialist produces legal docs -> notes + assembly minutes
+ * 4. Orchestrator consolidates everything -> post-render validation
+ */
+export async function orchestrateFinancialReport(
+  request: FinancialReportRequest,
+  options: OrchestrateFinancialOptions = {},
+): Promise<FinancialReport> {
+  const { language, instructions } = request;
+  const { onProgress } = options;
+
+  // ---------------------------------------------------------------------------
+  // Stage 0 + 1: prepareFinancialContext + NIIF Analyst (chunked 3 passes).
+  // El sub-orchestrator `runNiifPhase` corre el preprocesado, el gate de
+  // validacion, construye los bindingTotals + elite ctx, y luego ejecuta el
+  // Analista NIIF emitiendo los SSE stage_start/stage_complete (stage=1).
+  // ---------------------------------------------------------------------------
+  const niifPhase = await runNiifPhase(request, options);
+  const niifResult = niifPhase.niif;
+  const ctx = niifPhase.context;
+
+  // ---------------------------------------------------------------------------
+  // Stage 2: Strategy Director — consume el output NIIF + bindingTotals.
+  // ---------------------------------------------------------------------------
+  const strategyResult = await runStrategyPhase(
+    {
+      niifResult,
+      bindingTotals: ctx.bindingTotalsBlock,
+      preprocessed: ctx.ppForAgents,
+      company: ctx.effectiveCompany,
+      language,
+      instructions,
+      elite: ctx.eliteForStrategy,
+    },
+    { onProgress },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Stage 3: Governance Specialist — consume NIIF + Strategy.
+  // ---------------------------------------------------------------------------
+  const governanceResult = await runGovernancePhase(
+    {
+      niifResult,
+      strategyResult,
+      bindingTotals: ctx.bindingTotalsBlock,
+      preprocessed: ctx.ppForAgents,
+      company: ctx.effectiveCompany,
+      language,
+      instructions,
+      elite: ctx.eliteForGovernance,
+    },
+    { onProgress },
+  );
+
+  // Acceso conveniente a los campos del context para Stage 4 (consolidation +
+  // validation + emittability gate).
+  const {
+    effectiveCompany,
+    effectiveRawData,
+    preprocessed,
+    adjustmentsApplicationDetail,
+    appliedAdjustments,
+  } = ctx;
 
   // ---------------------------------------------------------------------------
   // Stage 4: Consolidation + post-render validation
