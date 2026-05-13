@@ -622,11 +622,23 @@ If comparativosImpracticables=true then balanceSheet e incomeStatement presentan
 
 Signo del impuesto de renta (Regla R3 — Saldo a favor): el "Gasto por impuesto de renta y complementarios" SIEMPRE aparece como línea débito en incomeStatement (resta de UAI). NUNCA presentar el impuesto causado con signo positivo. La línea label es "(-) Gasto por impuesto de renta y complementarios (Art. 240 E.T. — 35%)".
 
-Cascada impuesto de renta (Parte 4.1 spec v2.0).
-If TOTALES VINCULANTES contiene \`impuestoCausadoPeriodo\` (Clase 54 con saldo) then usar ese valor.
-Else if TOTALES VINCULANTES contiene \`anticipoActivo\` (Cta 1805/135515 con saldo > 0) then usar como referencia + emitir balanceSheet.notes con la Regla R3.b (presentación neto-bruto, ya existente).
+Cascada impuesto de renta (Parte 4.1 spec v2.0; Corrección 4 spec v2.1).
+If TOTALES VINCULANTES contiene \`impuestoCausadoPeriodo\` (Clase 54 con saldo) then usar ese valor (caso a).
+Else if TOTALES VINCULANTES contiene \`anticipoActivo\` (Cta 1805/135515 con saldo > 0) then usar el monto Cta.1805 (caso b — formato literal abajo).
 Else if UAI > 0 Y no hay ni Clase 54 ni 1805/135515 then calcular impuesto teórico = UAI × 35% (Art. 240 E.T. 2026), presentar línea LITERAL "(-) Provisión teórica de impuesto de renta (Art. 240 E.T. — 35%; pendiente confirmación contador)" en incomeStatement.lines, anclar el monto como cálculo del modelo (NO como anchor de TOTALES VINCULANTES), y emitir nota en incomeStatement.notes: "El balance no registra Clase 54 ni Cta 1805/135515; se aplicó provisión teórica del 35% sobre la utilidad antes de impuestos pendiente de confirmación por el contador responsable (Art. 240 E.T.; Defensa Art. 647 E.T. — diferencia de criterio documentada)."
 Else (UAI ≤ 0 sin impuesto) then no aplicar línea de impuesto; emitir nota "No se causa impuesto de renta del periodo: utilidad antes de impuestos no positiva (Art. 14 E.T.)".
+
+**Formato literal en incomeStatement.lines cuando se usa Cta.1805 (caso b — Corrección 4 spec v2.1):**
+
+If TOTALES VINCULANTES no contiene \`impuestoCausadoPeriodo\` (sin Clase 54) Y contiene \`anticipoActivo\` (Cta.1805) then en incomeStatement.lines emitir línea con label LITERAL:
+- label: "(-) Impuesto de renta (Cta.1805 — retenciones anticipadas; sin Clase 54 en el período)"
+- amountPrimary: monto Cta.1805 en centavos (MoneyCop string entero)
+- isAbsolute: false (signo negativo en valor o paréntesis según renderer)
+
+Y en incomeStatement.notes emitir nota obligatoria con texto LITERAL (sin variantes):
+"El gasto de impuesto de renta del período corresponde a retenciones y anticipos registrados en Cta.1805. No se identificó gasto de impuesto Clase 54 en el balance de prueba. La provisión del impuesto corriente al 35% (Art.240 ET) requiere conciliación fiscal formal antes del cierre definitivo."
+
+Esta nota es OBLIGATORIA cuando aplica el caso b. NO inventar otra redacción.
 
 curatorFlags refleja LITERALMENTE lo que el orquestador inyectó: \`equityConvergenceApplied\`, \`cashFlowClosureForced\`, \`negativeAssetReclassified\`, \`presumedCostWarning\`, \`reclassifiedAmountCop\` (suma absoluta en MoneyCop). NO recalcules; copia desde TOTALES VINCULANTES.
 
@@ -731,6 +743,38 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
 - If reportMode='LINEA_BASE' then NEVER usar en methodNote ni equityChanges.notes verbos comparativos: "mejoró", "creció", "aumentó", "se redujo", "evolucionó", "varió respecto a", "incrementó", "disminuyó", "se contrajo". Usar en su lugar verbos de estado: "establece", "documenta", "constituye", "declara", "registra", "presenta".
   If reportMode='TRANSICION' then verbos comparativos SÓLO en líneas con comparativo disponible.
+
+- CRÍTICO — Asiento 3605 (cierre contable) NUNCA en el Estado de Flujos de Efectivo (Corrección 2 spec v2.1).
+
+  REGLA ABSOLUTA: el traslado de utilidad a la cuenta 3605 (asiento de cierre) es un movimiento PURAMENTE CONTABLE. NO representa flujo de efectivo bajo ninguna circunstancia. NEVER incluirlo en cashFlow.sections — ni en operating, ni en investing, ni en financing.
+
+  PROHIBIDO en cashFlow.sections[financing].lines (ni en ninguna otra sección):
+  - "Distribución/cancelación resultado acumulado YYYY: \$X" → falso flujo de salida.
+  - "Traslado utilidad ejercicio a 3605: \$X" → asiento contable, no cash.
+  - Cualquier referencia al cierre 3605 dentro de cashFlow.
+
+  If el EFE no cuadra (cashClosing != cashOpening + netChange) then:
+    1. Revisar variaciones de capital de trabajo (varCuentasPorCobrar, varInventarios, varCuentasPorPagar) y ajustar magnitudes/signos hasta que el EFE cuadre matemáticamente con tolerancia $0 al centavo.
+    2. NEVER usar el asiento 3605 como "comodín" para hacer cuadrar el EFE.
+    3. Si pese a los ajustes el EFE sigue sin cuadrar, emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
+
+- CRÍTICO — ECP traslado a 3605: usar saldo REAL de la cuenta, NO utilidad P&L (Corrección 5 spec v2.1).
+
+  REGLA: el ECP debe usar el saldo REAL de la cuenta 3605 del balance, NO la utilidad del Estado de Resultados. Pueden diferir por el tratamiento de la Cta.3710 (convergencia NIIF — naturaleza débito/crédito distinta).
+
+  Cálculo correcto del traslado en equityChanges.rows:
+    saldo3605 = totalEquityPrimary − saldoCta3710
+
+    Donde:
+    - totalEquityPrimary viene del anchor Pass-1 (\`<previously_computed>\`, vinculante).
+    - saldoCta3710 viene de \`preprocessed.primary.classes['37']\` (capital convergencia NIIF) o equivalente expuesto por el orquestador.
+
+  Para emitir el ECP:
+  - INCORRECTO: equityChanges.rows[closing_balance].resultadoEjercicio = netIncomePrimary directo.
+  - CORRECTO: equityChanges.rows[traslado].resultadosAcumulados = saldo3605 (calculado arriba).
+
+  If saldo3605 == netIncomePrimary (tolerancia $0 al centavo) then proceed normal — no hay efecto Cta.3710.
+  Else if saldo3605 != netIncomePrimary then la diferencia se atribuye a Cta.3710 (convergencia NIIF). Documentar en equityChanges.notes citando NIC 1 §106 + Decreto 2420/2015 (transición NIIF) y emitir el monto del saldo3605 explícitamente en la fila de traslado.
 
 - EFE degenerado (§5 Slide 08 spec v8.1). If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (típicamente por ausencia de auxiliares de variaciones de capital de trabajo — el balance solo expone saldos agregados sin movimientos) then poblar \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y emitir methodNote LITERAL: "EFE Método Indirecto no computado por ausencia de auxiliares de variaciones de capital de trabajo. Variación neta de caja como dato único defensible (cashClosing − cashOpening). NIC 7 §18 + NIA 705 §7 limitación al alcance." Else \`cashFlow.degeneracyFlag = 'none'\` y construir EFE Indirecto completo.
 
@@ -839,7 +883,7 @@ ${ctx.niifDisclosures}
 <task>Emitir las Notas Técnicas globales del reporte NIIF de ${company.name} (NIT ${company.nit}) bajo ${ctx.niifFramework}, devolviendo JSON validado contra TechnicalNotesSubSchema con notas que citen las cifras vinculantes ya computadas en Pass-1 + Pass-2.</task>
 
 <success_criteria>
-- Cada Nota Maestra Defensa Art. 647 E.T. requerida (R1, R5, R6, R7, Regla R3.b, Regla R4) está emitida con estructura: "Concepto / Sustento NIIF / Defensa tributaria / Origen documental".
+- Defensa Art.647 E.T. emitida como UNA SOLA nota consolidada al FINAL de technicalNotes con label LITERAL "Diferencias de criterio contable (Art.647 E.T.)" cuando aplique cualquier ajuste curator (Corrección 9 spec v2.1). Máximo 1 nota Art.647 en todo el reporte.
 ${ctx.comparativosImpracticables === true ? '- Nota literal de impracticabilidad NIIF for SMEs §3.14, §10.21 presente.' : '- Sin nota de impracticabilidad (comparativo disponible o no declarado).'}
 ${ctx.isGroup1 ? '- Nota preparatoria IFRS 18 presente (Grupo 1 — obligatoria a partir de 2027).' : `- IFRS 18 NUNCA mencionada (la entidad pertenece al Grupo ${company.niifGroup ?? 2}; mencionarla activa el blocker V8 del gate auditReportEmittable).`}
 ${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '- Si margen bruto > 80% (derivable de los anchors P&L): nota "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7.' : ''}
@@ -861,7 +905,18 @@ ${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '-
 
 - NEVER emitir las frases "no se suministró información", "información no detallada", "datos no disponibles". Si un dato falta, citar la norma de impracticabilidad correspondiente (NIIF for SMEs §3.14, §10.21, §29.27).
 
-- NEVER en notas, labels ni body: "Élite", "Excelencia", "Premium", "Excepcional", "Único", "Mejor", "Sólido", "Robusto", "Extraordinario", "Sin precedentes", "De clase mundial" (§1.6 spec v8.1 — prohibición vocabulario marketing). El registro narrativo es técnico-contable, no comercial.
+- NEVER en notas, labels ni body: "Élite", "Excelencia", "Premium", "Excepcional", "Único", "Mejor", "Sólido", "Robusto", "Extraordinario", "Sin precedentes", "De clase mundial" (§1.6 spec v8.1 — prohibición vocabulario marketing). El registro narrativo es technico-contable, no comercial.
+
+- NEVER en technicalNotes (Corrección 7 spec v2.1 — eliminación de notas internas):
+  - Sección "Notas internas del preparador" o cualquier variante (ej. "Notas del modelo", "Notas internas", "Apuntes del sistema").
+  - Notas marcadas "(NO incluir en EEFF firmables)" o "(uso interno)".
+  - Advertencias internas de valoración del modelo (auto-evaluaciones de confianza, comentarios sobre el reasoning del LLM).
+  - Metadata del sistema de procesamiento interno (Pass-1, Pass-2, Pass-3, anchors, curatorFlags como nombres literales en notas, netIncomePrimary, etc. — son nombres internos, NO van al cliente).
+  - Comentarios sobre el proceso de generación (ej. "Esta nota fue generada por...", "El modelo determinó...", "Se aplicó la regla R5...").
+
+  Las limitaciones reales del informe van EXCLUSIVAMENTE en:
+  - Sección "Limitaciones de Información" (al final, una sola vez si reportMode != 'COMPARATIVO_COMPLETO').
+  - Notas técnicas NIIF cuando aplique (brevemente, citando norma de impracticabilidad NIIF for SMEs §3.14, §10.21, §29.27).
 
 - If reportMode='LINEA_BASE' then NEVER usar en technicalNotes verbos comparativos: "mejoró", "creció", "aumentó", "se redujo", "evolucionó", "varió respecto a", "incrementó", "disminuyó", "se contrajo". Usar en su lugar verbos de estado: "establece", "documenta", "constituye", "declara", "registra", "presenta".
   If reportMode='COMPARATIVO_COMPLETO' then verbos comparativos PERMITIDOS y esperados.
@@ -881,7 +936,16 @@ If reclasifNoComp.length > 0 (Regla R4 — No-Compensación NIC 1 §32) then emi
 
 If curatorFlags.negativeAssetReclassified=true (R1) then emitir technicalNotes con Nota de Reclasificación + sub-nota Defensa Art. 647 E.T. (NIC 1 §32 — no compensación), citando reclassifiedAmountCop del Pass-1 anchor otherwise omitir.
 
-Nota Maestra — Defensa Tributaria Art. 647 E.T.: por CADA ajuste automático del Curator activo en el reporte (R1, R5, R6, R7, Regla R3.b, Regla R4), agregar una nota a technicalNotes con esta estructura: "Concepto: [ajuste]. Sustento NIIF: [norma]. Defensa tributaria (Art. 647 E.T.): el presente ajuste corresponde a una diferencia de criterio en la aplicación del marco técnico contable y NO constituye omisión, alteración o registro deliberadamente inexacto. Conforme al inciso final del Art. 647 E.T. y la doctrina DIAN (Concepto 100208221-1352 de 2018), las diferencias de criterio sobre el tratamiento contable o tributario no configuran inexactitud sancionable cuando los hechos económicos están plenamente documentados. Origen documental: [papel de trabajo / curator finding]."
+**Defensa Art.647 ET — UNA SOLA nota consolidada (Corrección 9 spec v2.1; reemplaza patrón de sub-notas por curator rule).**
+
+If CUALQUIER ajuste curator se aplicó (curatorFlags.equityConvergenceApplied OR curatorFlags.cashFlowClosureForced OR curatorFlags.negativeAssetReclassified OR curatorFlags.presumedCostWarning OR ctx.tieneAnticipoRentaMaterial OR ctx.reclasifNoComp.length > 0) then emitir UNA SOLA nota al FINAL de technicalNotes con label LITERAL "Diferencias de criterio contable (Art.647 E.T.)" y body LITERAL (sin variantes ni paráfrasis):
+
+"NOTA GENERAL — Diferencias de criterio contable (Art.647 E.T.)
+Los ajustes de presentación, reclasificaciones y criterios de aplicación del marco técnico NIIF incluidos en este informe corresponden a diferencias de criterio contable. Conforme al Art.647 E.T. y el Concepto DIAN 100208221-1352 de 2018, estas diferencias no constituyen inexactitud sancionable cuando los hechos económicos están plenamente documentados. Referencia: NIIF for SMEs §2.52; NIC 1 §32; Decreto 2420/2015."
+
+PROHIBIDO emitir múltiples notas Defensa Art.647 (una por curator rule R1/R5/R6/R7/R3.b/R4). MÁXIMO 1 nota Defensa Art.647 en TODO technicalNotes.
+
+If NINGÚN ajuste curator se aplicó then NO emitir esta nota.
 
 Disclaimers Automáticos (Parte 9 spec v2.0 — 6 items condicionales).
 Para CADA condición real detectada en preprocessed o anchors, technicalNotes DEBE incluir el disclaimer LITERAL correspondiente. NO inventar disclaimers que no apliquen:
