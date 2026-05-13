@@ -52,6 +52,7 @@ import {
   type PreviouslyComputedPass2Anchors,
 } from '../prompts/niif-analyst.prompt';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { ReportMode } from '../contracts/base';
 import type { CompanyInfo, NiifAnalysisResult, FinancialProgressEvent } from '../types';
 
 /**
@@ -102,6 +103,11 @@ function extractPass2Anchors(pass2: CashFlowAndEquitySubJson): PreviouslyCompute
  * @param onProgress    Callback de progreso SSE — emite 3 stage_progress events.
  * @param elite         Contexto Élite (R-1..R-6) inyectado por el orquestador.
  * @param signal        AbortSignal opcional para cancelación temprana.
+ * @param reportMode    Modo del reporte (v8.1 §2) — pre-derivado por
+ *                      `prepareFinancialContext`. Default
+ *                      `'COMPARATIVO_COMPLETO'` para backward compat. Los
+ *                      prompts internos NO lo consumen aún (F4 lo cableará
+ *                      a `buildNiifAnalystPass1/2/3Prompt`).
  */
 export async function runNiifAnalyst(
   rawData: string,
@@ -113,7 +119,12 @@ export async function runNiifAnalyst(
   onProgress?: (event: FinancialProgressEvent) => void,
   elite?: NiifAnalystEliteContext,
   signal?: AbortSignal,
+  // Why: F0 sólo cablea la propagación; F4 leerá `reportMode` desde el
+  // builder. Marcamos el binding void aquí para que tsc/lint no fallen por
+  // parámetro no usado pero el contrato externo quede declarado.
+  reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): Promise<NiifAnalysisResult> {
+  void reportMode;
   // El bindingTotals se antepone al raw data para que cada pass lo lea ANTES
   // de ver los auxiliares. Compartido entre los 3 pases — maximiza el prompt
   // cache de GPT-5.4 mini (stable prefix + per-pass dynamic suffix).

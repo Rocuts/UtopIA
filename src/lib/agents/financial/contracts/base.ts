@@ -56,6 +56,81 @@ export const NormaRef = z
   .describe('Referencia normativa exacta. Ej: "E.T. Art. 240", "NIIF for SMEs §17.5", "Decreto 2420/2015 Anexo 2"');
 
 // ---------------------------------------------------------------------------
+// Spec v8.1 — Modo del reporte, confianza, anomalías sectoriales
+// ---------------------------------------------------------------------------
+// Estos building blocks vienen del prompt "Editor Jefe HTML" (v8.1 §2, §1.3,
+// §1.5). Se exponen aquí para que TODOS los agentes financieros (NIIF Analyst,
+// Strategy Director, Governance Specialist, futuro Editor Jefe) compartan el
+// mismo contrato vinculante:
+//
+//   - `ReportMode` controla absolutamente toda decisión narrativa (verbos,
+//     layout de estados financieros, copy del resumen ejecutivo).
+//   - `ConfidenceLevel` se marca a cada cifra crítica para que el renderer
+//     pinte el dot visual (`.conf.medium` / `.conf.low`) junto al número.
+//   - `AnomalyFlag` es el contrato del callout `△ Anomalía a validar` con
+//     banda de benchmark sectorial CIIU.
+//
+// El árbol de decisión que deriva `ReportMode` desde un `PreprocessedBalance`
+// vive en `src/lib/preprocessing/v8-helpers.ts` — `deriveReportMode()`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Modo del reporte — primer comentario HTML del documento final (v8.1 §2).
+ *
+ *   - `LINEA_BASE`: no hay periodo comparativo material, o el comparativo es
+ *     primer NIIF adoption. Verbos prohibidos: "creció", "mejoró", "varió".
+ *     Verbos permitidos: "establece", "documenta", "constituye".
+ *   - `TRANSICION`: comparativo existe pero >=3 líneas materiales faltantes
+ *     (o `partial_data == true`). Verbos: "reconcilia, donde es comparable".
+ *   - `COMPARATIVO_COMPLETO`: comparativo robusto. Verbos: "varió, creció,
+ *     se contrajo, mejoró, evolucionó".
+ */
+export const ReportModeSchema = z.enum([
+  'LINEA_BASE',
+  'TRANSICION',
+  'COMPARATIVO_COMPLETO',
+]);
+export type ReportMode = z.infer<typeof ReportModeSchema>;
+
+/**
+ * Nivel de confianza de una cifra crítica (v8.1 §1.5). El renderer marca
+ * `medium` y `low` con un dot visual al lado del número. `high` se omite
+ * (default implícito) para no saturar el documento.
+ */
+export const ConfidenceLevelSchema = z.enum(['high', 'medium', 'low']);
+export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
+
+/**
+ * Bandera de anomalía sectorial (v8.1 §1.3 + Slide 03 callout `.anomaly`).
+ * Aplica cuando un margen, ratio o porcentaje cae a más de 2σ del benchmark
+ * del CIIU correspondiente — el agente DEBE emitir la flag con la banda
+ * sectorial visible para que el usuario contextualice el outlier antes de
+ * presentarlo como logro.
+ *
+ *   - `severity: 'high'`   → callout `△ Anomalía a validar` (fondo amber).
+ *   - `severity: 'medium'` → marca atención (dot ámbar).
+ *   - `severity: 'low'`    → nota al pie sin callout visual.
+ *
+ * `benchmarkBand` es opcional porque algunas anomalías son cualitativas
+ * (e.g. "saldo acreedor en cuenta de activo"). Cuando se provee, el renderer
+ * pinta la barra horizontal con banda verde + dot ámbar para el observado.
+ */
+export const AnomalyFlagSchema = z.object({
+  severity: ConfidenceLevelSchema,
+  message: z.string().min(1).describe('Texto humano que explica la anomalía. Sin adjetivos prohibidos.'),
+  normaRef: NormaRef.nullable().describe('Norma sectorial o NIIF que define el rango esperado.'),
+  benchmarkBand: z
+    .object({
+      lowerBound: z.string().describe('Cota inferior sectorial. Ej: "5%"'),
+      upperBound: z.string().describe('Cota superior sectorial. Ej: "15%"'),
+      observed: z.string().describe('Valor observado en el reporte. Ej: "32%"'),
+    })
+    .nullable()
+    .describe('Banda visual de benchmark CIIU. Null si la anomalía es cualitativa.'),
+});
+export type AnomalyFlag = z.infer<typeof AnomalyFlagSchema>;
+
+// ---------------------------------------------------------------------------
 // Company / Signatories — espejo Zod de los interfaces TS en `../types.ts`
 // ---------------------------------------------------------------------------
 

@@ -21,6 +21,7 @@ import {
   type StrategyDirectorEliteContext,
 } from '../prompts/strategy-director.prompt';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { ReportMode } from '../contracts/base';
 import type {
   CompanyInfo,
   NiifAnalysisResult,
@@ -42,6 +43,10 @@ import type {
  * @param onProgress    Callback SSE.
  * @param elite         Contexto Élite (R-5/R-6 — verdad financiera condicionada / escenarios).
  * @param signal        AbortSignal opcional.
+ * @param reportMode    Modo del reporte (v8.1 §2) — pre-derivado por
+ *                      `prepareFinancialContext`. Default
+ *                      `'COMPARATIVO_COMPLETO'` para backward compat. F5
+ *                      lo cableará al `buildStrategyDirectorPrompt`.
  */
 export async function runStrategyDirector(
   niifOutput: NiifAnalysisResult,
@@ -53,7 +58,9 @@ export async function runStrategyDirector(
   onProgress?: (event: FinancialProgressEvent) => void,
   elite?: StrategyDirectorEliteContext,
   signal?: AbortSignal,
+  reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): Promise<StrategicAnalysisResult> {
+  void reportMode;
   const systemPrompt = buildStrategyDirectorPrompt(company, language, preprocessed, elite);
 
   const userContent = [

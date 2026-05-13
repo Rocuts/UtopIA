@@ -16,6 +16,7 @@ import {
   type PeriodSnapshot,
   type EquityBreakdown,
 } from '@/lib/preprocessing/trial-balance';
+import { deriveReportMode, type ReportMode } from '@/lib/preprocessing/v8-helpers';
 import {
   auditReportEmittable,
   type AuditCompanyContext,
@@ -987,6 +988,17 @@ export interface FinancialPipelineContext {
   preprocessed: unknown;
   ppForAgents: PreprocessedBalance | undefined;
   bindingTotalsBlock: string;
+  /**
+   * Modo del reporte derivado deterministically por `deriveReportMode()`
+   * (spec v8.1 §2). Controla absolutamente toda decisión narrativa de los
+   * 3 agentes secuenciales (verbos permitidos, layout de estados financieros,
+   * copy del resumen ejecutivo).
+   *
+   * Default seguro `'COMPARATIVO_COMPLETO'` cuando no hay `ppForAgents`
+   * (fallback: el comportamiento legacy preserva al máximo la riqueza
+   * narrativa). F4-F6 leen este campo desde los prompt builders.
+   */
+  reportMode: ReportMode;
   eliteForNiif: {
     comparativosImpracticables: boolean | undefined;
     actividadInferida: { sectorCIIU: string; descripcion: string; evidencia?: string } | undefined;
@@ -1190,12 +1202,20 @@ export async function prepareFinancialContext(
   const ppForAgents: PreprocessedBalance | undefined =
     preprocessed && isPreprocessedBalance(preprocessed) ? preprocessed : undefined;
 
+  // Spec v8.1 §2 — derivar el modo del reporte determinísticamente desde el
+  // preprocesado. Sin un `PreprocessedBalance` bien formado caemos al default
+  // `COMPARATIVO_COMPLETO` (riqueza narrativa completa, backward compatible).
+  const reportMode: ReportMode = ppForAgents
+    ? deriveReportMode(ppForAgents)
+    : 'COMPARATIVO_COMPLETO';
+
   return {
     effectiveRawData,
     effectiveCompany,
     preprocessed,
     ppForAgents,
     bindingTotalsBlock,
+    reportMode,
     eliteForNiif,
     eliteForStrategy,
     eliteForGovernance,
@@ -1235,6 +1255,8 @@ export async function runNiifPhase(
     context.ppForAgents,
     onProgress,
     context.eliteForNiif,
+    undefined,
+    context.reportMode,
   );
 
   if (!niifOutputMentionsBindingTotals(niif.fullContent, context.preprocessed)) {
@@ -1278,6 +1300,12 @@ export interface PhaseHandoffInput {
     comparativosImpracticables?: boolean;
     actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
   };
+  /**
+   * Modo del reporte v8.1 §2 — pre-derivado en `prepareFinancialContext`.
+   * Default `'COMPARATIVO_COMPLETO'` cuando el endpoint legacy no lo provee.
+   * F5/F6 leen este campo desde sus respectivos prompt builders.
+   */
+  reportMode?: ReportMode;
 }
 
 /**
@@ -1288,7 +1316,7 @@ export async function runStrategyPhase(
   input: PhaseHandoffInput,
   options: Pick<OrchestrateFinancialOptions, 'onProgress'> = {},
 ): Promise<StrategicAnalysisResult> {
-  const { niifResult, bindingTotals, preprocessed, company, language, instructions, elite } = input;
+  const { niifResult, bindingTotals, preprocessed, company, language, instructions, elite, reportMode } = input;
   const { onProgress } = options;
 
   const stageLabel = 'Director de Estrategia — Analizando KPIs y proyecciones';
@@ -1305,6 +1333,8 @@ export async function runStrategyPhase(
     preprocessed,
     onProgress,
     elite,
+    undefined,
+    reportMode,
   );
 
   onProgress?.({ type: 'stage_complete', stage: 2, label: completeLabel });
@@ -1337,6 +1367,7 @@ export async function runGovernancePhase(
     language,
     instructions,
     elite,
+    reportMode,
   } = input;
   const { onProgress } = options;
 
@@ -1355,6 +1386,8 @@ export async function runGovernancePhase(
     preprocessed,
     onProgress,
     elite,
+    undefined,
+    reportMode,
   );
 
   onProgress?.({ type: 'stage_complete', stage: 3, label: completeLabel });
@@ -1409,6 +1442,7 @@ export async function orchestrateFinancialReport(
       language,
       instructions,
       elite: ctx.eliteForStrategy,
+      reportMode: ctx.reportMode,
     },
     { onProgress },
   );
@@ -1426,6 +1460,7 @@ export async function orchestrateFinancialReport(
       language,
       instructions,
       elite: ctx.eliteForGovernance,
+      reportMode: ctx.reportMode,
     },
     { onProgress },
   );

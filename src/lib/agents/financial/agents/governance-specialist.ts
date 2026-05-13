@@ -25,6 +25,7 @@ import {
   type GovernanceEliteContext,
 } from '../prompts/governance-specialist.prompt';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { ReportMode } from '../contracts/base';
 import type { z } from 'zod';
 import type {
   CompanyInfo,
@@ -51,6 +52,10 @@ type ShareholderMinutes = z.infer<typeof ShareholderMinutesSchema>;
  * @param onProgress      Callback SSE.
  * @param elite           Contexto Élite (comparativos impracticables, actividad).
  * @param signal          AbortSignal opcional.
+ * @param reportMode      Modo del reporte (v8.1 §2) — pre-derivado por
+ *                        `prepareFinancialContext`. Default
+ *                        `'COMPARATIVO_COMPLETO'` para backward compat. F6
+ *                        lo cableará al `buildGovernancePrompt`.
  */
 export async function runGovernanceSpecialist(
   niifOutput: NiifAnalysisResult,
@@ -63,7 +68,9 @@ export async function runGovernanceSpecialist(
   onProgress?: (event: FinancialProgressEvent) => void,
   elite?: GovernanceEliteContext,
   signal?: AbortSignal,
+  reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): Promise<GovernanceResult> {
+  void reportMode;
   const systemPrompt = buildGovernancePrompt(company, language, preprocessed, elite);
 
   const userContent = [
