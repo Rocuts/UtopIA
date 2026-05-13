@@ -45,8 +45,9 @@ import type {
  * @param signal        AbortSignal opcional.
  * @param reportMode    Modo del reporte (v8.1 §2) — pre-derivado por
  *                      `prepareFinancialContext`. Default
- *                      `'COMPARATIVO_COMPLETO'` para backward compat. F5
- *                      lo cableará al `buildStrategyDirectorPrompt`.
+ *                      `'COMPARATIVO_COMPLETO'` para backward compat. Wave 4.F5
+ *                      lo cablea al `buildStrategyDirectorPrompt` para que el
+ *                      prompt emita el bloque MODO DEL REPORTE y modere verbos.
  */
 export async function runStrategyDirector(
   niifOutput: NiifAnalysisResult,
@@ -60,8 +61,7 @@ export async function runStrategyDirector(
   signal?: AbortSignal,
   reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): Promise<StrategicAnalysisResult> {
-  void reportMode;
-  const systemPrompt = buildStrategyDirectorPrompt(company, language, preprocessed, elite);
+  const systemPrompt = buildStrategyDirectorPrompt(company, language, preprocessed, elite, reportMode);
 
   const userContent = [
     bindingTotals,

@@ -14,6 +14,7 @@
 
 import type { CompanyInfo } from '../types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { ReportMode } from '../contracts/base';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 
@@ -27,6 +28,7 @@ export function buildStrategyDirectorPrompt(
   language: 'es' | 'en',
   preprocessed?: PreprocessedBalance,
   elite?: StrategyDirectorEliteContext,
+  reportMode: ReportMode = 'COMPARATIVO_COMPLETO',
 ): string {
   const langInstruction =
     language === 'en'
@@ -74,10 +76,16 @@ ${context2026}
 <success_criteria>
 - Todas las cifras ancla (Total Activo, Total Pasivo, Total Patrimonio, Ingresos, EBITDA, UAI, Utilidad Neta, Caja) coinciden con TOTALES VINCULANTES al centavo.
 - Identidad fiscal en el dashboard: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. Si no se cumple en el binding, copiar los tres valores LITERALES y registrar la inconsistencia en preparerNotes.
-- kpis array contiene ≥1 KPI en CADA UNA de las 4 categorías obligatorias: profitability, liquidity, solvency, efficiency. Categorías ausentes son spec violation (Parte 7.II §2 — tabla KPIs). Cada KPI lleva fórmula con números sustituidos.
+- kpis array contiene ≥1 KPI en CADA UNA de las 4 categorías obligatorias: profitability, liquidity, solvency, efficiency. Categorías ausentes son spec violation (Parte 7.II §2 — tabla KPIs + v8.1 §1.5). Cada KPI lleva fórmula con números sustituidos.
+- Cada KPI lleva confidence ∈ {high, medium, low} (v8.1 §1.5). KPIs con resultPrimary="ND" o con denominador anómalo deben llevar confidence='low'.
+- Cada KPI lleva presentationMode coherente con reportMode: 'baseline_pill' (LINEA_BASE), 'delta_pct' (TRANSICION/COMPARATIVO sin serie), 'sparkline' (COMPARATIVO con ≥12 puntos).
+- StrategyReportSchema.reportMode === "${reportMode}" (echo literal — NO recalcular).
+- StrategyReportSchema.technicalAlerts[] cubre las alertas detectadas en la pasada: red (bloqueantes), amber (anomalías 2σ), green (metas alcanzadas). Vacío sólo si NINGUNA alerta se cumple — documentar la decisión en preparerNotes cuando se entregue vacío.
 - recommendations.length ≥ 3 y ≤ 5; cada recomendación cita un rubro concreto del Agente 1 (no consejos genéricos).
 - projectedCashFlow.liquidityGate.triggered=true cuando AC < PC; en ese caso, scenarios=[], controlKpis=[] y la primera recomendación es priority=high + horizon=immediate sobre liquidez.
 - projectedCashFlow.liquidityGate.triggered=false implica scenarios.length=3 (conservative, base, aggressive), cada uno con assumptions explícitos y 3 controlKpis (net_cash_margin, days_of_autonomy, cumulative_return_on_flow).
+- Anti-$0 huérfanos (v8.1 §1.7): si una sección entera no tiene inputs reales, emitir null + nota en preparerNotes con la limitación. NEVER renderizar placeholder "$0 / $0 / $0" en una sección entera.
+- Vocabulario auto-elogio (v8.1 §1.6) y anglicismos no consolidados (v8.1 §9) AUSENTES del cuerpo narrativo.
 ${isComparative ? `- Modo comparativo: KPIs presentan resultComparative y yoyVariation; trends.qualitativeCommentary cita variaciones absolutas y % YoY.` : `- Modo single-period: KPIs presentan resultComparative=null; trends=null.`}
 </success_criteria>
 
@@ -89,9 +97,47 @@ ${isComparative ? `- Modo comparativo: KPIs presentan resultComparative y yoyVar
 - MUST: Cuentas por Pagar (PUC 23), Obligaciones Laborales (PUC 25) e Impuestos por Pagar (PUC 24) son salidas obligatorias del Año +1 (exigibilidad legal CST + calendario DIAN).
 - MUST: provisión de renta = Utilidad Operativa Proyectada × 35% (Art. 240 E.T.); pago de caja se refleja en el periodo SIGUIENTE (calendario DIAN marzo-abril).
 - MUST: separar Gastos Fijos Administrativos (indexados a inflación 4-5% IPC) de Costos de Operación (escalables a ingresos). Documentar el factor en assumptionsNote.
+- MUST: cada KPI lleva confidence ∈ {high, medium, low} (v8.1 §1.5):
+  - high: cifra anclada a TOTALES VINCULANTES sin ajuste.
+  - medium: derivada de cálculo con un solo input ajustado por el curator.
+  - low: derivada con denominador cerca de 0, impactada por presumedCostWarning, o ND.
+- MUST: poblar KpiSchema.presentationMode (v8.1 §1.3 + Slide 03):
+  - 'baseline_pill' si reportMode='LINEA_BASE': poblar baselineLabel="BASELINE ${primaryPeriod}", resultComparative=null, yoyVariation=null.
+  - 'sparkline' si reportMode='COMPARATIVO_COMPLETO' Y hay ≥12 puntos históricos disponibles: poblar sparklinePoints[].
+  - 'delta_pct' en otros casos (COMPARATIVO sin sparkline, TRANSICION cuando aplique).
+- MUST: poblar StrategyReportSchema.technicalAlerts[] con las alertas técnicas detectadas en la pasada (Slide 03 Bloque 3 — v8.1 §3):
+  - severity 'red': bloqueantes (AC<PC liquidez, ROE negativo, patrimonio negativo).
+  - severity 'amber': anomalías 2σ (margen fuera banda CIIU, costos <1% ingresos).
+  - severity 'green': metas alcanzadas (cobertura intereses >3x con gasto financiero presente, etc.).
+  Cada alerta lleva normReference (NIC X / NIIF Y / Art. E.T.) cuando aplique. Ordenadas por severidad descendente (red → amber → green).
 - NEVER emitir recomendaciones genéricas ("optimizar capital de trabajo") sin citar un rubro concreto + valor + periodo.
 - NEVER emitir las frases "no se suministró información", "información no detallada", "datos no disponibles". Si un dato falta, citar la norma de impracticabilidad o usar el placeholder \`— (dato no suministrado)\` solo dentro de preparerNotes.
 - NEVER inventar splits 50/50 ni porcentajes de distribución de utilidades que no vengan de los insumos.
+- NEVER usar vocabulario marketing/auto-elogio en el cuerpo de diagnosis, executiveCommentary, qualitativeCommentary, recommendations.diagnosis ni en expectedImpact (v8.1 §1.6 + §9): "Élite", "Excelencia", "Premium", "Excepcional", "Único", "Mejor", "Sólido", "Robusto", "Extraordinario", "excelente", "buen año", "fuerte", "destacado". Reemplazar por cifras concretas o descripciones técnicas neutras (ej. "razón corriente 1,33; cubre obligaciones de corto plazo" en vez de "liquidez sólida").
+- NEVER usar anglicismos cuando exista término técnico en español (v8.1 §9): "cash flow" → "flujo de caja"; "leverage" → "apalancamiento"; "working capital" → "capital de trabajo"; "EBITDA margin" → "margen EBITDA"; "break-even" en prosa → "punto de equilibrio" (el campo JSON se llama breakEven, eso no cambia — sólo la prosa); "performance" → "desempeño"; "compliance" → "cumplimiento". Excepción: acrónimos consolidados (EBITDA, ROE, ROA, DSO, NIIF, NIC, NIA).
+- Tono executiveCommentary y diagnosis: declarativo, evidence-first; cada afirmación acompañada de una cifra anclada al binding. NEVER afirmaciones sin evidencia numérica.
+- Tono recommendations.title y recommendations.action: imperativo SUAVE (Implementar, Completar, Validar, Documentar, Habilitar, Conciliar, Reconstruir, Revisar). Evitar imperativos duros (Reducir, Cortar, Eliminar) salvo cuando el dato lo exija explícitamente.
+
+WARNING anomaly 2σ banda sectorial CIIU (v8.1 §1.3 + Slide 03 anomaly callout):
+
+If un KPI material está fuera de 2σ del benchmark sectorial del CIIU then poblar KpiSchema.anomalyFlag = {
+  severity: 'high' (si la desviación bloquea conclusiones) | 'medium' (si requiere validación) | 'low' (nota al pie),
+  message: "KPI fuera de banda sectorial X-Y% (observado Z%)",
+  normaRef: "NIA 240 §A1 + benchmark CTCP/DANE" (o la norma sectorial específica),
+  benchmarkBand: { lowerBound: 'X%', upperBound: 'Y%', observed: 'Z%' }
+} otherwise anomalyFlag=null.
+
+NEVER presentar un outlier como logro: cuando anomalyFlag!=null, diagnosis usa un verbo neutro ("la entidad reporta margen Z% — cifra fuera del rango sectorial X-Y%; requiere validación antes de firmar EEFF") en vez de adjetivos celebratorios.
+
+Verbos por modo del reporte (v8.1 §2 + §1.6) — aplica a qualitativeCommentary, diagnosis, executiveCommentary, recommendations.diagnosis:
+
+If reportMode='LINEA_BASE' then NEVER usar verbos comparativos: "mejoró", "creció", "aumentó", "se redujo", "evolucionó", "varió respecto a". Preferir verbos de constatación: "establece", "documenta", "constituye", "declara", "presenta", "registra".
+If reportMode='COMPARATIVO_COMPLETO' then verbos comparativos PERMITIDOS y esperados; usar "creció", "se contrajo", "mejoró", "evolucionó" anclados a la cifra YoY.
+If reportMode='TRANSICION' then verbos comparativos SÓLO en líneas donde el comparativo NO sea n/c; en líneas con comparativo faltante usar verbos de constatación + nota "reconcilia, donde es comparable".
+
+Anti-$0 huérfanos en secciones enteras (v8.1 §1.7):
+
+If una sección entera (ej. dupontAnalysis completo, trends completo, controlKpis enteros) saldría en ceros/nulos por falta de inputs then emitir null (el campo es .nullable()) + agregar una entrada en preparerNotes citando la limitación con norma (ej. "DuPont no calculable: patrimonio promedio = $0 — NIC 1 §31"). NEVER renderizar placeholder "$0 / $0 / $0" en una sección entera sin nota explicativa.
 
 **Anclaje de KPIs a TOTALES VINCULANTES (cuando el preprocessor los expone).** Cuando el bloque TOTALES VINCULANTES contiene un KPI ya pre-calculado (anclado por el preprocessor determinista), MUST usar ese valor LITERAL en la columna resultPrimary del KPI correspondiente — NO recalcular. Campos esperados (cuando estén disponibles en el binding):
 - EBIT (Utilidad Operativa) → KPI MARGEN_OPERATIVO con formula = "EBIT / Ingresos × 100", resultPrimary = binding.MARGEN_OPERATIVO_CALCULADO.
@@ -150,6 +196,17 @@ Defensa Art. 647 E.T.: si una recomendación invoca un ajuste técnico-contable 
 </constraints>
 
 <context>
+## MODO DEL REPORTE (v8.1 §2)
+- Valor: ${reportMode}
+- Implicación narrativa: ${
+    reportMode === 'LINEA_BASE'
+      ? 'No hay comparativo material. Verbos comparativos PROHIBIDOS — usar "establece", "documenta", "constituye", "declara", "presenta", "registra". KPIs llevan presentationMode="baseline_pill" con baselineLabel="BASELINE ' + primaryPeriod + '"; resultComparative=null; yoyVariation=null; trends=null.'
+      : reportMode === 'TRANSICION'
+        ? 'Comparativo existe pero parcialmente reconcilia. Verbos comparativos PERMITIDOS sólo en líneas donde el comparativo NO sea n/c; en las demás usar verbos de constatación con la nota "reconcilia, donde es comparable". KPIs presentationMode="delta_pct".'
+        : 'Comparativo robusto. Verbos comparativos PERMITIDOS y esperados ("creció", "se contrajo", "mejoró", "evolucionó") siempre anclados a la cifra YoY. KPIs presentationMode="delta_pct" o "sparkline" si hay ≥12 puntos históricos.'
+  }
+- Echo obligatorio: el campo StrategyReportSchema.reportMode debe valer LITERAL "${reportMode}" — NO recalcular.
+
 ## DATOS DE LA EMPRESA
 - Razón Social: ${company.name}
 - NIT: ${company.nit}
