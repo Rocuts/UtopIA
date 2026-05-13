@@ -372,7 +372,7 @@ function BeStat({
           {label}
         </span>
       </div>
-      <p className="font-serif-elite text-lg text-n-100 tabular-nums leading-tight">
+      <p className="font-serif-elite text-lg text-n-1000 tabular-nums leading-tight">
         {value}
       </p>
     </div>
@@ -609,7 +609,6 @@ export default function InteligenciaFinancieraPage() {
     <div
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
       )}
     >
       <div
@@ -654,7 +653,7 @@ export default function InteligenciaFinancieraPage() {
           <p className={cn(
             'font-serif-elite font-normal',
             'text-xl sm:text-xl leading-[1.6]',
-            'text-n-300',
+            'text-n-700',
           )}>
             {language === 'es'
               ? 'Convierta la contabilidad en inteligencia accionable. Predecimos su flujo de caja, calculamos el punto de equilibrio exacto por producto y disparamos alertas cuando un KPI sale de banda — antes de que duela.'

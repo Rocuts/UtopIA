@@ -143,7 +143,7 @@ export default function DefensaDianPage() {
 
   return (
     <div
-      className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
+      className="relative w-full min-h-full overflow-y-auto"
     >
       <div
         aria-hidden="true"
@@ -195,7 +195,7 @@ export default function DefensaDianPage() {
             {/* Narrativa larga */}
             <motion.div
               {...fadeItem(2)}
-              className="prose prose-invert max-w-none mb-10 space-y-5 text-md leading-relaxed text-n-300"
+              className="prose max-w-none mb-10 space-y-5 text-md leading-relaxed text-n-700"
             >
               <p>
                 {language === 'es'
@@ -294,7 +294,7 @@ export default function DefensaDianPage() {
                     {language === 'es' ? 'Tips del experto' : 'Expert tips'}
                   </span>
                 </div>
-                <ul role="list" className="space-y-3 text-sm leading-relaxed text-n-300">
+                <ul role="list" className="space-y-3 text-sm leading-relaxed text-n-700">
                   <li className="flex gap-2">
                     <span
                       aria-hidden="true"

@@ -301,7 +301,6 @@ export default function ValoracionPage() {
     <div
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient */}
@@ -404,7 +403,7 @@ export default function ValoracionPage() {
               <div className="flex flex-col gap-5">
                 {/* EBITDA */}
                 <div>
-                  <label htmlFor="calc-ebitda" className="flex items-center justify-between text-xs font-medium text-n-300 mb-1.5">
+                  <label htmlFor="calc-ebitda" className="flex items-center justify-between text-xs font-medium text-n-700 mb-1.5">
                     <span>{language === 'es' ? 'EBITDA anual (COP)' : 'Annual EBITDA (COP)'}</span>
                     <span className="text-gold-600 tabular-nums">{formatCop(state.ebitda)}</span>
                   </label>
@@ -427,7 +426,7 @@ export default function ValoracionPage() {
 
                 {/* Industry */}
                 <div>
-                  <label htmlFor="calc-industry" className="block text-xs font-medium text-n-300 mb-1.5">
+                  <label htmlFor="calc-industry" className="block text-xs font-medium text-n-700 mb-1.5">
                     {language === 'es' ? 'Industria' : 'Industry'}
                   </label>
                   <select
@@ -447,7 +446,7 @@ export default function ValoracionPage() {
                     )}
                   >
                     {INDUSTRY_OPTIONS.map((opt) => (
-                      <option key={opt.key} value={opt.key} className="bg-n-900">
+                      <option key={opt.key} value={opt.key}>
                         {language === 'es' ? opt.labelEs : opt.labelEn} — {INDUSTRY_MULTIPLES[opt.key]}x
                       </option>
                     ))}
@@ -456,7 +455,7 @@ export default function ValoracionPage() {
 
                 {/* Growth rate */}
                 <div>
-                  <label htmlFor="calc-growth" className="flex items-center justify-between text-xs font-medium text-n-300 mb-1.5">
+                  <label htmlFor="calc-growth" className="flex items-center justify-between text-xs font-medium text-n-700 mb-1.5">
                     <span>{language === 'es' ? 'Tasa de crecimiento esperada' : 'Expected growth rate'}</span>
                     <span className="text-gold-600 tabular-nums">{pct(state.growthRate)}</span>
                   </label>
@@ -476,7 +475,7 @@ export default function ValoracionPage() {
 
                 {/* WACC */}
                 <div>
-                  <label htmlFor="calc-wacc" className="flex items-center justify-between text-xs font-medium text-n-300 mb-1.5">
+                  <label htmlFor="calc-wacc" className="flex items-center justify-between text-xs font-medium text-n-700 mb-1.5">
                     <span>{language === 'es' ? 'WACC' : 'WACC'}</span>
                     <span className="text-gold-600 tabular-nums">{pct(state.wacc)}</span>
                   </label>
@@ -496,7 +495,7 @@ export default function ValoracionPage() {
 
                 {/* Net debt */}
                 <div>
-                  <label htmlFor="calc-debt" className="flex items-center justify-between text-xs font-medium text-n-300 mb-1.5">
+                  <label htmlFor="calc-debt" className="flex items-center justify-between text-xs font-medium text-n-700 mb-1.5">
                     <span>{language === 'es' ? 'Deuda neta (COP)' : 'Net debt (COP)'}</span>
                     <span className="text-gold-600 tabular-nums">{formatCop(state.netDebt)}</span>
                   </label>

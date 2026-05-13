@@ -257,7 +257,6 @@ export default function EscenariosPage() {
     <div
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient orbs (gold + wine mix) */}
@@ -316,7 +315,7 @@ export default function EscenariosPage() {
           className={cn(
             'font-serif-elite font-normal',
             'text-xl sm:text-xl md:text-2xl leading-[1.55]',
-            'text-n-300 max-w-3xl mb-10',
+            'text-n-700 max-w-3xl mb-10',
           )}
         >
           {isEs
@@ -407,7 +406,7 @@ export default function EscenariosPage() {
             <div className="mt-5 pt-5 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.16)] flex items-center justify-between gap-3 text-xs text-n-500">
               <span>
                 {isEs ? 'Ingresos base (Año 0):' : 'Base revenue (Year 0):'}{' '}
-                <span className="text-n-300 tabular-nums">
+                <span className="text-n-700 tabular-nums">
                   {formatCopShort(controls.baseRevenue)} COP
                 </span>
               </span>
@@ -444,7 +443,7 @@ export default function EscenariosPage() {
               </div>
               <div className="flex items-center gap-4 text-xs">
                 {SCENARIOS.map((s) => (
-                  <span key={s.key} className="inline-flex items-center gap-1.5 text-n-300">
+                  <span key={s.key} className="inline-flex items-center gap-1.5 text-n-700">
                     <span
                       aria-hidden="true"
                       className="inline-block h-2 w-2 rounded-full"
@@ -546,7 +545,7 @@ function SliderControl({
           <Icon className="h-3 w-3 text-gold-600" strokeWidth={2} aria-hidden="true" />
           {label}
         </span>
-        <span className="text-xs font-medium text-n-100 tabular-nums">
+        <span className="text-xs font-medium text-n-1000 tabular-nums">
           {formatter(value)}
         </span>
       </div>

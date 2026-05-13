@@ -283,7 +283,6 @@ export default function DueDiligencePage() {
     <div
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
       )}
     >
       <div
@@ -329,7 +328,7 @@ export default function DueDiligencePage() {
           <p className={cn(
             'font-serif-elite font-normal',
             'text-xl sm:text-xl leading-[1.6]',
-            'text-n-300',
+            'text-n-700',
           )}>
             {language === 'es'
               ? 'Un due diligence riguroso revela el valor oculto y los riesgos antes de que se conviertan en sorpresas costosas. Cruzamos la contabilidad con los contratos, los procesos judiciales y las declaraciones fiscales para entregar un reporte que blinda la transacción.'
@@ -426,7 +425,7 @@ export default function DueDiligencePage() {
 
         {/* Checklist por categorías */}
         <motion.section {...fade(4)} className="mb-10" aria-label={language === 'es' ? 'Checklist Due Diligence' : 'Due Diligence checklist'}>
-          <h2 className="font-serif-elite text-2xl md:text-3xl text-n-100 mb-5">
+          <h2 className="font-serif-elite text-2xl md:text-3xl text-n-1000 mb-5">
             {language === 'es' ? 'Checklist estructurado' : 'Structured checklist'}
           </h2>
           <div className="grid gap-5 md:grid-cols-2">
@@ -491,7 +490,7 @@ export default function DueDiligencePage() {
                             <div className="flex-1 min-w-0">
                               <p
                                 className={cn(
-                                  'text-n-300',
+                                  'text-n-700',
                                   item.status === 'pending' && 'text-n-500',
                                 )}
                               >

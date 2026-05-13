@@ -125,7 +125,7 @@ export default function PreciosTransferenciaPage() {
 
   return (
     <div
-      className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
+      className="relative w-full min-h-full overflow-y-auto"
     >
       <div
         aria-hidden="true"
@@ -175,7 +175,7 @@ export default function PreciosTransferenciaPage() {
         {/* Narrativa */}
         <motion.div
           {...fadeItem(2)}
-          className="max-w-3xl space-y-5 text-md leading-relaxed text-n-300 mb-12"
+          className="max-w-3xl space-y-5 text-md leading-relaxed text-n-700 mb-12"
         >
           <p>
             {language === 'es'
@@ -210,7 +210,7 @@ export default function PreciosTransferenciaPage() {
             {methods.map((m) => (
               <li
                 key={m.code}
-                className="flex items-baseline gap-2 text-sm text-n-300"
+                className="flex items-baseline gap-2 text-sm text-n-700"
               >
                 <span className="font-semibold text-gold-500 tabular-nums w-10 shrink-0">
                   {m.code}

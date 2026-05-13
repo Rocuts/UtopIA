@@ -334,7 +334,6 @@ export default function FactibilidadPage() {
     <div
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient orbs */}
@@ -386,7 +385,7 @@ export default function FactibilidadPage() {
           className={cn(
             'font-serif-elite font-normal',
             'text-xl sm:text-xl md:text-2xl leading-[1.55]',
-            'text-n-300 max-w-3xl mb-10',
+            'text-n-700 max-w-3xl mb-10',
           )}
         >
           {isEs
@@ -457,7 +456,7 @@ export default function FactibilidadPage() {
                 <span className="uppercase tracking-[0.14em] text-2xs font-medium text-n-500">
                   {isEs ? 'Horizonte de proyección' : 'Projection horizon'}
                 </span>
-                <span className="text-base text-n-300">
+                <span className="text-base text-n-700">
                   {years} {isEs ? 'años' : 'years'}
                 </span>
               </div>
@@ -646,7 +645,7 @@ export default function FactibilidadPage() {
                     key={s.id}
                     className="flex items-center justify-between gap-3 text-xs p-2 rounded-md bg-[rgba(10,10,10,0.4)] border border-[rgb(var(--color-gold-500-rgb)_/_0.12)]"
                   >
-                    <span className="text-n-300 truncate">{s.label}</span>
+                    <span className="text-n-700 truncate">{s.label}</span>
                     <div className="flex items-center gap-4 shrink-0 tabular-nums">
                       <span className="text-n-500">
                         VPN{' '}
@@ -692,7 +691,7 @@ export default function FactibilidadPage() {
             </div>
             <ul
               role="list"
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm text-n-300"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm text-n-700"
             >
               <ChecklistItem icon={Users} label={isEs ? 'Mercado' : 'Market'} />
               <ChecklistItem icon={Brain} label={isEs ? 'Técnico' : 'Technical'} />

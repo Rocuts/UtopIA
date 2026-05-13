@@ -485,7 +485,6 @@ export default function MacroeconomiaPage() {
     <div
       className={cn(
         'relative w-full min-h-full overflow-y-auto',
-        'bg-n-1000 text-n-100',
       )}
     >
       {/* Ambient orbs */}
@@ -567,7 +566,7 @@ export default function MacroeconomiaPage() {
           className={cn(
             'font-serif-elite font-normal',
             'text-xl sm:text-xl md:text-2xl leading-[1.55]',
-            'text-n-300 max-w-3xl mb-10',
+            'text-n-700 max-w-3xl mb-10',
           )}
         >
           {isEs
@@ -646,7 +645,7 @@ export default function MacroeconomiaPage() {
                   {isEs ? 'Outlook 2026' : '2026 Outlook'}
                 </span>
               </div>
-              <p className="text-base leading-relaxed text-n-300">
+              <p className="text-base leading-relaxed text-n-700">
                 {isEs ? sectorDef.outlookEs : sectorDef.outlookEn}
               </p>
             </div>

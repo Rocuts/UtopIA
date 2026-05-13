@@ -111,7 +111,7 @@ export default function DevolucionesPage() {
 
   return (
     <div
-      className="relative w-full min-h-full overflow-y-auto bg-n-1000 text-n-100"
+      className="relative w-full min-h-full overflow-y-auto"
     >
       <div
         aria-hidden="true"
@@ -172,7 +172,7 @@ export default function DevolucionesPage() {
         {/* Narrativa */}
         <motion.div
           {...fadeItem(3)}
-          className="max-w-3xl space-y-5 text-md leading-relaxed text-n-300 mb-12"
+          className="max-w-3xl space-y-5 text-md leading-relaxed text-n-700 mb-12"
         >
           <p>
             {language === 'es'
