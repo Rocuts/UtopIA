@@ -140,12 +140,14 @@ export async function runHtmlEditor(
 }
 
 /**
- * Linter de DOM básico — verifica los 4 checks más críticos sin linkedom.
+ * Linter de DOM básico — verifica los checks más críticos sin linkedom.
  *
  * Cubre:
  *   - §10 mandatory HTML comments (REPORT_MODE, ENTITY, AGENT_VERSION).
  *   - §1.6 vocabulario prohibido (lista de adjetivos de marketing).
  *   - §5 Slide 12 hash verificación coincide con metadata.reportHashSha256.
+ *   - Wave 6.F4 (v2.1 corrección 8): metadatos internos del pipeline (Pass-1,
+ *     anchors, curatorFlags, *Primary/Comparative, cifras en centavos crudos).
  *
  * Lo que NO cubre (F9 lo añade con linkedom):
  *   - Estructura de las 12 slides en orden.
@@ -221,5 +223,107 @@ function lightweightChecklist(
     });
   }
 
+  // Wave 6.F4 — metadatos internos del pipeline NUNCA en el output final
+  // (v2.1 corrección 8). Estos son nombres de variables internas, etapas del
+  // pipeline chunked, o cifras en centavos crudos sin formato. Si el LLM los
+  // copia textuales del prompt al HTML, el linter los detecta como BLOCK.
+  //
+  // Why se excluye la zona de comentarios HTML §10: los comments declarativos
+  // (REPORT_MODE, ENTITY, AGENT_VERSION, REPORT_HASH_SHA256) son metadata
+  // legítima y obligatoria. Solo escaneamos el cuerpo del HTML después de
+  // strippar los comments para evitar falsos positivos en `AGENT_VERSION:
+  // 1+1 v8.1` que es valor canónico §10.
+  const htmlSinComments = html.replace(/<!--[\s\S]*?-->/g, '');
+  for (const { pattern, label, rule } of FORBIDDEN_METADATA_PATTERNS) {
+    const match = htmlSinComments.match(pattern);
+    if (match) {
+      failures.push({
+        rule,
+        detail: `Metadato interno detectado: "${match[0]}" (lista: ${label})`,
+        severity: 'block',
+      });
+    }
+  }
+
   return failures;
 }
+
+// ---------------------------------------------------------------------------
+// Patrones prohibidos de metadatos internos (Wave 6.F4 — v2.1 corrección 8)
+// ---------------------------------------------------------------------------
+// Estos patrones cubren los METADATOS INTERNOS del sistema que NUNCA deben
+// aparecer en el output final entregado al cliente:
+//
+//   - "Pass-1", "Pass-2", "Pass-3" — nombres de las 3 etapas chunked del
+//     NIIF Analyst (Fase 3). Son detalles de implementación interna.
+//   - "anchors", "curatorFlags" — variables internas del orchestrator que se
+//     pasan al LLM como contexto pre-computado pero nunca al output.
+//   - "netIncomePrimary", "totalAssetsPrimary", "ecpClosingTotal" — nombres
+//     de campos del schema Zod que el LLM usa para anclar cifras pero NO
+//     debe citar literalmente al cliente.
+//   - Cifras en CENTAVOS CRUDOS (≥10 dígitos consecutivos seguidos de la
+//     palabra "centavos" o "cents"). El renderer determinístico siempre
+//     produce $X.XXX.XXX,XX — si aparece "222849678973 centavos" es bug del
+//     LLM copiando el JSON crudo.
+//
+// Word boundaries (`\b`) evitan falsos positivos: "passenger" no matchea
+// "Pass-?", "anchorman" no matchea "anchors". Para palabras con guiones
+// (Pass-1) usamos pattern explícito que cubre "Pass1", "Pass-1", "Pass 1".
+// ---------------------------------------------------------------------------
+
+const FORBIDDEN_METADATA_PATTERNS: Array<{
+  pattern: RegExp;
+  label: string;
+  rule: string;
+}> = [
+  {
+    pattern: /\bPass[\s-]?[123]\b/i,
+    label: 'Pass-1/2/3',
+    rule: '§v2.1 corrección 8 — etapas internas pipeline',
+  },
+  {
+    pattern: /\banchors?\b/i,
+    label: 'anchors',
+    rule: '§v2.1 corrección 8 — variables internas del orchestrator',
+  },
+  {
+    pattern: /\bcuratorFlags?\b/,
+    label: 'curatorFlags',
+    rule: '§v2.1 corrección 8 — variables internas del curator',
+  },
+  {
+    pattern: /\bnetIncomePrimary\b/,
+    label: 'netIncomePrimary',
+    rule: '§v2.1 corrección 8 — nombres de campos Zod',
+  },
+  {
+    pattern: /\btotalAssetsPrimary\b/,
+    label: 'totalAssetsPrimary',
+    rule: '§v2.1 corrección 8 — nombres de campos Zod',
+  },
+  {
+    pattern: /\btotalLiabilitiesPrimary\b/,
+    label: 'totalLiabilitiesPrimary',
+    rule: '§v2.1 corrección 8 — nombres de campos Zod',
+  },
+  {
+    pattern: /\btotalEquityPrimary\b/,
+    label: 'totalEquityPrimary',
+    rule: '§v2.1 corrección 8 — nombres de campos Zod',
+  },
+  {
+    pattern: /\becpClosingTotal\b/,
+    label: 'ecpClosingTotal',
+    rule: '§v2.1 corrección 8 — nombres de campos Zod',
+  },
+  {
+    pattern: /\bcashClosing\b/,
+    label: 'cashClosing',
+    rule: '§v2.1 corrección 8 — nombres de campos Zod',
+  },
+  {
+    pattern: /\b\d{10,}\s*(?:centavos|cents)\b/i,
+    label: 'cifras en centavos crudos',
+    rule: '§v2.1 corrección 8 — formato moneda (debe ser $X.XXX.XXX,XX)',
+  },
+];

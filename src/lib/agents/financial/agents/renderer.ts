@@ -19,6 +19,20 @@
 //     Balance y P&G). Cuando false, negativos van entre paréntesis (convención
 //     NIIF Markdown).
 //   - El renderer es PURO — sin LLM, sin side-effects.
+//
+// Wave 6.F4 (v2.1 corrección 1, 2026-05-13): los 4 renderers ahora producen
+// tablas Markdown REALES (GFM tables) en lugar del formato inline pipe-
+// separated del MVP (`label : $X | $Y`). El formato inline causaba el error
+// presentacional del informe del 13-may-2026 — el renderer del PDF Élite ya
+// parseaba GFM (`parseStatementTable` en `compose.ts`) pero el output legacy
+// se mostraba inline al usuario en otras superficies. Las tablas se construyen
+// con el helper `buildMarkdownTable` que enforza:
+//   - Header row con nombres de columna ("Rubro", "YYYY", "YYYY-1").
+//   - Separator con alineación: `:---` (left) para rubros, `---:` (right) para
+//     cifras. El parser PDF Élite ya tolera ambas.
+//   - Filas con `| label | $X | $Y |`.
+//   - Totales/subtotales en `**negrita**`, categorías en `**MAYÚSCULAS**`.
+//   - Indentación: 2 espacios antes del label en sub-líneas.
 // ---------------------------------------------------------------------------
 
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
@@ -27,26 +41,119 @@ import type { StatementLineJson, StatementNoteJson } from '../contracts/base';
 import type { NiifAnalysisResult } from '../types';
 
 // ---------------------------------------------------------------------------
-// Bloques internos
+// Helper: construir tabla Markdown GFM
 // ---------------------------------------------------------------------------
 
-function renderLine(line: StatementLineJson): string {
-  const indent = '  '.repeat(line.level);
-  const cents = parseMoneyCop(line.amountPrimary);
-  const primary = formatCopFromCents(cents, line.isAbsolute);
-  const comparative = line.amountComparative !== null
-    ? formatCopFromCents(parseMoneyCop(line.amountComparative), line.isAbsolute)
-    : '';
-  const label = line.account ? `${line.account} — ${line.label}` : line.label;
-  // Emphasis para totales y subtotales
-  const formattedLabel = line.level >= 3 ? `**${label}**` : label;
-  const cols = comparative ? `${primary} | ${comparative}` : primary;
-  return `${indent}${formattedLabel} : ${cols}`;
+interface MarkdownTableRow {
+  /** Label de la primera columna. Puede contener `**negrita**` o indentación. */
+  label: string;
+  /** Cifras de las columnas siguientes (ya formateadas como string). */
+  values: string[];
+  /** Si true, envuelve TODAS las celdas en `**...**` (totales/subtotales). */
+  bold?: boolean;
 }
 
-function renderLines(lines: readonly StatementLineJson[]): string {
-  return lines.map(renderLine).join('\n');
+interface MarkdownTableSpec {
+  /** Encabezados de columna. La primera es el rubro, las demás son periodos. */
+  headers: string[];
+  /** Alineación por columna: 'left' produce `:---`, 'right' produce `---:`. */
+  alignment: ('left' | 'right')[];
+  /** Filas en orden de presentación. */
+  rows: MarkdownTableRow[];
 }
+
+/**
+ * Construye una tabla Markdown GFM con header + separator alineado + rows.
+ *
+ * Output canónico (ejemplo Balance):
+ *
+ * ```
+ * | Rubro                            |         2025         |         2024         |
+ * |:---------------------------------|---------------------:|---------------------:|
+ * | **ACTIVO**                       |                      |                      |
+ * |   11 — Efectivo y equivalentes   | $2.413.677.888,64    | $1.563.485.554,01    |
+ * | **TOTAL ACTIVO**                 | **$4.196.558.242,90**| **$2.820.294.796,28**|
+ * ```
+ *
+ * El parser `parseStatementTable` (PDF Élite) detecta el header por la presencia
+ * del separator (regex `^\|[\s:|-]+\|$`), así que cumplir el formato GFM es
+ * suficiente para que tanto el viewer Markdown como el PDF Élite lo procesen
+ * correctamente.
+ */
+function buildMarkdownTable(spec: MarkdownTableSpec): string {
+  const { headers, alignment, rows } = spec;
+  if (headers.length !== alignment.length) {
+    throw new Error(
+      `buildMarkdownTable: headers (${headers.length}) y alignment (${alignment.length}) deben tener la misma longitud`,
+    );
+  }
+
+  const headerRow = `| ${headers.join(' | ')} |`;
+  const separatorRow = `| ${alignment
+    .map((a) => (a === 'left' ? ':---' : '---:'))
+    .join(' | ')} |`;
+
+  const dataRows = rows.map((r) => {
+    const cells = [r.label, ...r.values];
+    if (cells.length !== headers.length) {
+      throw new Error(
+        `buildMarkdownTable: row "${r.label}" tiene ${cells.length} celdas pero header tiene ${headers.length}`,
+      );
+    }
+    if (r.bold) {
+      return `| ${cells.map((c) => `**${c}**`).join(' | ')} |`;
+    }
+    return `| ${cells.join(' | ')} |`;
+  });
+
+  return [headerRow, separatorRow, ...dataRows].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Conversión de StatementLine → MarkdownTableRow
+// ---------------------------------------------------------------------------
+
+/**
+ * Convierte una línea de estado financiero en una row de tabla Markdown.
+ *
+ * Reglas:
+ *   - `level >= 3` → bold (subtotal/total). Categorías sección (level 0) usan
+ *     bold + MAYÚSCULAS por convención del label upstream.
+ *   - `level >= 2` se indenta con 2 espacios (sub-líneas de detalle/subgrupo).
+ *     Level 0/1 son secciones — sin indent.
+ *   - El label se prefija con el código PUC si existe (`11 — Efectivo`).
+ *   - Las cifras se formatean con `formatCopFromCents(parseMoneyCop(...))` —
+ *     SIEMPRE produce `$X.XXX.XXX,XX` (es-CO). Negativos entre paréntesis
+ *     cuando `isAbsolute === false`.
+ */
+function lineToTableRow(
+  line: StatementLineJson,
+  hasComparative: boolean,
+): MarkdownTableRow {
+  const cents = parseMoneyCop(line.amountPrimary);
+  const primary = formatCopFromCents(cents, line.isAbsolute);
+  const comparative =
+    line.amountComparative !== null
+      ? formatCopFromCents(parseMoneyCop(line.amountComparative), line.isAbsolute)
+      : '';
+
+  const baseLabel = line.account ? `${line.account} — ${line.label}` : line.label;
+  // Indentación: 2 espacios para subgrupos/detalle (level 2), sin indent para
+  // secciones (level 0/1) ni para totales (level 3/4 que ya van en bold).
+  const indent = line.level === 2 ? '  ' : '';
+  const label = `${indent}${baseLabel}`;
+
+  const values = hasComparative ? [primary, comparative] : [primary];
+  return {
+    label,
+    values,
+    bold: line.level >= 3,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Notas (formato inalterado — no van en tabla)
+// ---------------------------------------------------------------------------
 
 function renderNote(note: StatementNoteJson, idx: number): string {
   const ref = note.ref ?? `Nota ${idx + 1}`;
@@ -65,54 +172,154 @@ function renderNotes(notes: readonly StatementNoteJson[], title = 'Notas'): stri
 
 export function renderBalanceSheet(json: NiifReportJson): string {
   const { balanceSheet: b, company } = json;
+  const hasComparative = company.comparativePeriod !== null;
+  const periodLabel = company.fiscalPeriod;
+  const comparativeLabel = company.comparativePeriod ?? '';
+
   const header = [
     `### Estado de Situación Financiera`,
     `**${company.name}** — NIT ${company.nit}`,
-    `Al 31 de diciembre de ${company.fiscalPeriod}${company.comparativePeriod ? ` (comparativo ${company.comparativePeriod})` : ''}`,
+    `Al 31 de diciembre de ${periodLabel}${hasComparative ? ` (comparativo ${comparativeLabel})` : ''}`,
     `(Cifras en pesos colombianos)`,
     '',
   ].join('\n');
 
-  const totals = [
-    '',
-    `**TOTAL ACTIVOS** : ${formatCopFromCents(parseMoneyCop(b.totalAssetsPrimary), true)}${b.totalAssetsComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(b.totalAssetsComparative), true)}` : ''}`,
-    `**TOTAL PASIVOS** : ${formatCopFromCents(parseMoneyCop(b.totalLiabilitiesPrimary), true)}${b.totalLiabilitiesComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(b.totalLiabilitiesComparative), true)}` : ''}`,
-    `**TOTAL PATRIMONIO** : ${formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true)}${b.totalEquityComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(b.totalEquityComparative), true)}` : ''}`,
-  ].join('\n');
+  // Filas: categoría ACTIVO + assets + categoría PASIVO + liabilities + equity + totales
+  const rows: MarkdownTableRow[] = [];
 
-  return [
-    header,
-    '#### ACTIVOS',
-    renderLines(b.assets),
-    '',
-    '#### PASIVOS Y PATRIMONIO',
-    renderLines(b.liabilities),
-    '',
-    renderLines(b.equity),
-    totals,
-    renderNotes(b.notes),
-  ].join('\n');
+  // Sección ACTIVO
+  rows.push({ label: '**ACTIVO**', values: hasComparative ? ['', ''] : [''] });
+  for (const line of b.assets) {
+    rows.push(lineToTableRow(line, hasComparative));
+  }
+  rows.push({
+    label: 'TOTAL ACTIVOS',
+    values: hasComparative
+      ? [
+          formatCopFromCents(parseMoneyCop(b.totalAssetsPrimary), true),
+          b.totalAssetsComparative !== null
+            ? formatCopFromCents(parseMoneyCop(b.totalAssetsComparative), true)
+            : '',
+        ]
+      : [formatCopFromCents(parseMoneyCop(b.totalAssetsPrimary), true)],
+    bold: true,
+  });
+
+  // Sección PASIVO
+  rows.push({ label: '**PASIVO**', values: hasComparative ? ['', ''] : [''] });
+  for (const line of b.liabilities) {
+    rows.push(lineToTableRow(line, hasComparative));
+  }
+  rows.push({
+    label: 'TOTAL PASIVOS',
+    values: hasComparative
+      ? [
+          formatCopFromCents(parseMoneyCop(b.totalLiabilitiesPrimary), true),
+          b.totalLiabilitiesComparative !== null
+            ? formatCopFromCents(parseMoneyCop(b.totalLiabilitiesComparative), true)
+            : '',
+        ]
+      : [formatCopFromCents(parseMoneyCop(b.totalLiabilitiesPrimary), true)],
+    bold: true,
+  });
+
+  // Sección PATRIMONIO
+  rows.push({ label: '**PATRIMONIO**', values: hasComparative ? ['', ''] : [''] });
+  for (const line of b.equity) {
+    rows.push(lineToTableRow(line, hasComparative));
+  }
+  rows.push({
+    label: 'TOTAL PATRIMONIO',
+    values: hasComparative
+      ? [
+          formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true),
+          b.totalEquityComparative !== null
+            ? formatCopFromCents(parseMoneyCop(b.totalEquityComparative), true)
+            : '',
+        ]
+      : [formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true)],
+    bold: true,
+  });
+
+  const headers = hasComparative
+    ? ['Rubro', periodLabel, comparativeLabel]
+    : ['Rubro', periodLabel];
+  const alignment: ('left' | 'right')[] = hasComparative
+    ? ['left', 'right', 'right']
+    : ['left', 'right'];
+
+  const table = buildMarkdownTable({ headers, alignment, rows });
+
+  return [header, table, renderNotes(b.notes)].join('\n');
 }
 
 export function renderIncomeStatement(json: NiifReportJson): string {
   const { incomeStatement: p, company } = json;
+  const hasComparative = company.comparativePeriod !== null;
+  const periodLabel = company.fiscalPeriod;
+  const comparativeLabel = company.comparativePeriod ?? '';
+
   const header = [
     `### Estado de Resultados Integral`,
     `**${company.name}** — NIT ${company.nit}`,
-    `Por el año terminado el 31 de diciembre de ${company.fiscalPeriod}${company.comparativePeriod ? ` (comparativo ${company.comparativePeriod})` : ''}`,
+    `Por el año terminado el 31 de diciembre de ${periodLabel}${hasComparative ? ` (comparativo ${comparativeLabel})` : ''}`,
     `(Cifras en pesos colombianos)`,
     '',
   ].join('\n');
 
-  const totals = [
-    '',
-    `**UTILIDAD BRUTA** : ${formatCopFromCents(parseMoneyCop(p.grossProfitPrimary), true)}${p.grossProfitComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(p.grossProfitComparative), true)}` : ''}`,
-    `**UTILIDAD OPERATIVA (EBIT)** : ${formatCopFromCents(parseMoneyCop(p.operatingProfitPrimary), true)}${p.operatingProfitComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(p.operatingProfitComparative), true)}` : ''}`,
-    `**UTILIDAD NETA DEL PERÍODO** : ${formatCopFromCents(parseMoneyCop(p.netIncomePrimary), true)}${p.netIncomeComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(p.netIncomeComparative), true)}` : ''}`,
-    `**OTRO RESULTADO INTEGRAL (ORI)** : ${formatCopFromCents(parseMoneyCop(p.oriPrimary), true)}${p.oriComparative !== null ? ` | ${formatCopFromCents(parseMoneyCop(p.oriComparative), true)}` : ''}`,
-  ].join('\n');
+  const rows: MarkdownTableRow[] = [];
+  for (const line of p.lines) {
+    rows.push(lineToTableRow(line, hasComparative));
+  }
 
-  return [header, renderLines(p.lines), totals, renderNotes(p.notes)].join('\n');
+  // Totales canónicos del P&L — siempre en negrita
+  const totals: { label: string; primary: string; comparative: string | null }[] = [
+    {
+      label: 'UTILIDAD BRUTA',
+      primary: p.grossProfitPrimary,
+      comparative: p.grossProfitComparative,
+    },
+    {
+      label: 'UTILIDAD OPERATIVA (EBIT)',
+      primary: p.operatingProfitPrimary,
+      comparative: p.operatingProfitComparative,
+    },
+    {
+      label: 'UTILIDAD NETA DEL PERÍODO',
+      primary: p.netIncomePrimary,
+      comparative: p.netIncomeComparative,
+    },
+    {
+      label: 'OTRO RESULTADO INTEGRAL (ORI)',
+      primary: p.oriPrimary,
+      comparative: p.oriComparative,
+    },
+  ];
+  for (const t of totals) {
+    rows.push({
+      label: t.label,
+      values: hasComparative
+        ? [
+            formatCopFromCents(parseMoneyCop(t.primary), true),
+            t.comparative !== null
+              ? formatCopFromCents(parseMoneyCop(t.comparative), true)
+              : '',
+          ]
+        : [formatCopFromCents(parseMoneyCop(t.primary), true)],
+      bold: true,
+    });
+  }
+
+  const headers = hasComparative
+    ? ['Rubro', periodLabel, comparativeLabel]
+    : ['Rubro', periodLabel];
+  const alignment: ('left' | 'right')[] = hasComparative
+    ? ['left', 'right', 'right']
+    : ['left', 'right'];
+
+  const table = buildMarkdownTable({ headers, alignment, rows });
+
+  return [header, table, renderNotes(p.notes)].join('\n');
 }
 
 export function renderCashFlowStatement(json: NiifReportJson): string {
@@ -123,33 +330,55 @@ export function renderCashFlowStatement(json: NiifReportJson): string {
     financing: 'ACTIVIDADES DE FINANCIAMIENTO',
   };
 
+  const periodLabel = company.fiscalPeriod;
+
   const header = [
     `### Estado de Flujos de Efectivo (Método Indirecto — NIC 7 / Sec. 7 PYMES)`,
     `**${company.name}** — NIT ${company.nit}`,
-    `Por el año terminado el 31 de diciembre de ${company.fiscalPeriod}`,
+    `Por el año terminado el 31 de diciembre de ${periodLabel}`,
     `(Cifras en pesos colombianos)`,
     '',
   ].join('\n');
 
-  const sections = cf.sections
-    .map((s) => {
-      const net = formatCopFromCents(parseMoneyCop(s.netFlow), false);
-      return [
-        `#### ${sectionTitle[s.section]}`,
-        renderLines(s.lines),
-        `**FLUJO NETO ${sectionTitle[s.section]}** : ${net}`,
-      ].join('\n');
-    })
-    .join('\n\n');
+  // Tabla principal: una sola tabla con 3 secciones agrupadas por categoría.
+  // Cada sección tiene un row de categoría (en bold) + sus líneas + flujo neto.
+  // El EFE no usa comparativo en este pipeline (cf.sections solo expone primary).
+  const rows: MarkdownTableRow[] = [];
+  for (const s of cf.sections) {
+    rows.push({ label: `**${sectionTitle[s.section]}**`, values: [''] });
+    for (const line of s.lines) {
+      rows.push(lineToTableRow(line, false));
+    }
+    rows.push({
+      label: `FLUJO NETO ${sectionTitle[s.section]}`,
+      values: [formatCopFromCents(parseMoneyCop(s.netFlow), false)],
+      bold: true,
+    });
+  }
 
-  const closure = [
-    '',
-    `**AUMENTO (DISMINUCIÓN) NETO EN EFECTIVO** : ${formatCopFromCents(parseMoneyCop(cf.netChange), false)}`,
-    `Efectivo al inicio del período : ${formatCopFromCents(parseMoneyCop(cf.cashOpening), true)}`,
-    `**EFECTIVO AL FINAL DEL PERÍODO** : ${formatCopFromCents(parseMoneyCop(cf.cashClosing), true)}`,
-  ].join('\n');
+  // Closure: aumento neto + saldo apertura + saldo cierre
+  rows.push({
+    label: 'AUMENTO (DISMINUCIÓN) NETO EN EFECTIVO',
+    values: [formatCopFromCents(parseMoneyCop(cf.netChange), false)],
+    bold: true,
+  });
+  rows.push({
+    label: 'Efectivo al inicio del período',
+    values: [formatCopFromCents(parseMoneyCop(cf.cashOpening), true)],
+  });
+  rows.push({
+    label: 'EFECTIVO AL FINAL DEL PERÍODO',
+    values: [formatCopFromCents(parseMoneyCop(cf.cashClosing), true)],
+    bold: true,
+  });
 
-  return [header, sections, closure].join('\n');
+  const table = buildMarkdownTable({
+    headers: ['Rubro', periodLabel],
+    alignment: ['left', 'right'],
+    rows,
+  });
+
+  return [header, table].join('\n');
 }
 
 export function renderEquityChanges(json: NiifReportJson): string {
@@ -160,31 +389,55 @@ export function renderEquityChanges(json: NiifReportJson): string {
     `Por el año terminado el 31 de diciembre de ${company.fiscalPeriod}`,
     `(Cifras en pesos colombianos)`,
     '',
-    `| Movimiento | Capital | Prima | Reserva Legal | Otras Reservas | Result. Acumulados | Result. Ejercicio | ORI | TOTAL |`,
-    `|---|---:|---:|---:|---:|---:|---:|---:|---:|`,
   ].join('\n');
 
-  const rows = ec.rows
-    .map((r) => {
-      const cells = [
-        r.label,
-        formatCopFromCents(parseMoneyCop(r.capitalSocial), true),
-        formatCopFromCents(parseMoneyCop(r.primaColocacion), true),
-        formatCopFromCents(parseMoneyCop(r.reservaLegal), true),
-        formatCopFromCents(parseMoneyCop(r.otrasReservas), true),
-        formatCopFromCents(parseMoneyCop(r.resultadosAcumulados), true),
-        formatCopFromCents(parseMoneyCop(r.resultadoEjercicio), true),
-        formatCopFromCents(parseMoneyCop(r.ori), true),
-        formatCopFromCents(parseMoneyCop(r.total), true),
-      ];
-      const bold = r.kind === 'opening_balance' || r.kind === 'closing_balance';
-      return bold
-        ? `| **${cells[0]}** | ${cells.slice(1).map((c) => `**${c}**`).join(' | ')} |`
-        : `| ${cells.join(' | ')} |`;
-    })
-    .join('\n');
+  // ECP es matricial: filas = movimientos, columnas = rubros patrimoniales.
+  // Mantenemos las 8 columnas + label + total — formato GFM con alignment.
+  const ecpHeaders = [
+    'Movimiento',
+    'Capital',
+    'Prima',
+    'Reserva Legal',
+    'Otras Reservas',
+    'Result. Acumulados',
+    'Result. Ejercicio',
+    'ORI',
+    'TOTAL',
+  ];
+  const ecpAlignment: ('left' | 'right')[] = [
+    'left',
+    'right',
+    'right',
+    'right',
+    'right',
+    'right',
+    'right',
+    'right',
+    'right',
+  ];
 
-  return [header, rows, renderNotes(ec.notes)].join('\n');
+  const rows: MarkdownTableRow[] = ec.rows.map((r) => {
+    const values = [
+      formatCopFromCents(parseMoneyCop(r.capitalSocial), true),
+      formatCopFromCents(parseMoneyCop(r.primaColocacion), true),
+      formatCopFromCents(parseMoneyCop(r.reservaLegal), true),
+      formatCopFromCents(parseMoneyCop(r.otrasReservas), true),
+      formatCopFromCents(parseMoneyCop(r.resultadosAcumulados), true),
+      formatCopFromCents(parseMoneyCop(r.resultadoEjercicio), true),
+      formatCopFromCents(parseMoneyCop(r.ori), true),
+      formatCopFromCents(parseMoneyCop(r.total), true),
+    ];
+    const bold = r.kind === 'opening_balance' || r.kind === 'closing_balance';
+    return { label: r.label, values, bold };
+  });
+
+  const table = buildMarkdownTable({
+    headers: ecpHeaders,
+    alignment: ecpAlignment,
+    rows,
+  });
+
+  return [header, table, renderNotes(ec.notes)].join('\n');
 }
 
 export function renderTechnicalNotes(json: NiifReportJson): string {
@@ -230,3 +483,13 @@ export function toNiifAnalysisResult(json: NiifReportJson): NiifAnalysisResult {
     json,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Export helper para tests/herramientas (Wave 6.F4)
+// ---------------------------------------------------------------------------
+// Exportamos `buildMarkdownTable` para que tests unitarios y futuras
+// herramientas internas puedan reutilizar el helper sin duplicar lógica de
+// alineación + bold + validación.
+
+export { buildMarkdownTable };
+export type { MarkdownTableSpec, MarkdownTableRow };
