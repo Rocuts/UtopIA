@@ -67,6 +67,18 @@ function extractPass1Anchors(pass1: BalanceAndPnlSubJson): PreviouslyComputedPas
     totalEquityPrimary: pass1.balanceSheet.totalEquityPrimary,
     netIncomePrimary: pass1.incomeStatement.netIncomePrimary,
     oriPrimary: pass1.incomeStatement.oriPrimary,
+    // 2026-05-13 hotfix regresion comparativo: propagar los 7 *Comparative
+    // a Pass-2/Pass-3 para que puedan emitir amountComparative != null.
+    // Sin esto el modelo null-eaba todo el comparativo silenciosamente
+    // porque "MUST anclar a previously_computed" + "previously_computed solo
+    // contenia Primary" => interpretacion: comparativo fuera del contrato.
+    totalAssetsComparative: pass1.balanceSheet.totalAssetsComparative,
+    totalLiabilitiesComparative: pass1.balanceSheet.totalLiabilitiesComparative,
+    totalEquityComparative: pass1.balanceSheet.totalEquityComparative,
+    grossProfitComparative: pass1.incomeStatement.grossProfitComparative,
+    operatingProfitComparative: pass1.incomeStatement.operatingProfitComparative,
+    netIncomeComparative: pass1.incomeStatement.netIncomeComparative,
+    oriComparative: pass1.incomeStatement.oriComparative,
     curatorFlags: pass1.curatorFlags,
   };
 }

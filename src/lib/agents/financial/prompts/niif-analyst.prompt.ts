@@ -70,6 +70,18 @@ export interface PreviouslyComputedPass1Anchors {
   totalEquityPrimary: string;
   netIncomePrimary: string;
   oriPrimary: string;
+  // 2026-05-13 hotfix regresion comparativo (Wave 4 investigador):
+  // Pass-2/Pass-3 leen este bloque y null-ean amountComparative cuando los
+  // campos *Comparative no estan presentes. Antes de Fase 3 chunked, el
+  // single-pass tenia visibilidad directa al bindingTotals con periodo
+  // comparativo; ahora hay que propagarlos explicitamente entre passes.
+  totalAssetsComparative: string | null;
+  totalLiabilitiesComparative: string | null;
+  totalEquityComparative: string | null;
+  grossProfitComparative: string | null;
+  operatingProfitComparative: string | null;
+  netIncomeComparative: string | null;
+  oriComparative: string | null;
   curatorFlags: {
     equityConvergenceApplied: boolean;
     cashFlowClosureForced: boolean;
@@ -406,12 +418,27 @@ CIIU letra ${ctx.actividadInferida.sectorCIIU} — ${ctx.actividadInferida.descr
  * y Pass-3). Se cita LITERALMENTE: el modelo no debe recalcular.
  */
 function renderPass1AnchorsBlock(anchors: PreviouslyComputedPass1Anchors): string {
-  return `## Anchors de Pass 1 (Balance + P&G — ya emitidos, no recalcular)
+  // 2026-05-13 hotfix: emitir tambien los anchors comparativos cuando existen,
+  // para que Pass-2 (EFE/ECP) y Pass-3 (notas) puedan citar las dos columnas
+  // sin null-ear amountComparative. Si la cifra comparativa no existe (null),
+  // emitir "N/A" explicito en lugar de omitir la linea -- evita que el modelo
+  // interprete ausencia como autorizacion para null-ear todo el comparativo.
+  const fmt = (v: string | null): string => (v === null ? 'N/A (sin comparativo)' : `$${v}`);
+  return `## Anchors de Pass 1 (Balance + P&G - ya emitidos, no recalcular)
 - totalAssetsPrimary: $${anchors.totalAssetsPrimary}
 - totalLiabilitiesPrimary: $${anchors.totalLiabilitiesPrimary}
 - totalEquityPrimary: $${anchors.totalEquityPrimary}
 - netIncomePrimary: $${anchors.netIncomePrimary}
 - oriPrimary: $${anchors.oriPrimary}
+
+## Anchors comparativos de Pass 1 (cuando isComparative=true)
+- totalAssetsComparative: ${fmt(anchors.totalAssetsComparative)}
+- totalLiabilitiesComparative: ${fmt(anchors.totalLiabilitiesComparative)}
+- totalEquityComparative: ${fmt(anchors.totalEquityComparative)}
+- grossProfitComparative: ${fmt(anchors.grossProfitComparative)}
+- operatingProfitComparative: ${fmt(anchors.operatingProfitComparative)}
+- netIncomeComparative: ${fmt(anchors.netIncomeComparative)}
+- oriComparative: ${fmt(anchors.oriComparative)}
 
 ## curatorFlags (literal del orchestrator)
 - equityConvergenceApplied: ${anchors.curatorFlags.equityConvergenceApplied}
