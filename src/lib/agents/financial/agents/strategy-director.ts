@@ -170,7 +170,10 @@ function renderKpis(json: StrategyReportJson): string {
       const result = fmt(k.resultPrimary, k.unit);
       const comparative = k.resultComparative !== null ? fmt(k.resultComparative, k.unit) : '—';
       const yoy = k.yoyVariation ?? '—';
-      return `| ${k.category} | ${k.name} | ${k.formula} | ${result} | ${comparative} | ${k.benchmarkBand} | ${yoy} | ${k.diagnosis} |`;
+      // Wave 4.F2: benchmarkBand pasó de string a objeto estructurado.
+      // El adapter Markdown sólo consume `description` — las cotas
+      // numéricas (lowerBound/upperBound) las usa el renderer Slide 03.
+      return `| ${k.category} | ${k.name} | ${k.formula} | ${result} | ${comparative} | ${k.benchmarkBand.description} | ${yoy} | ${k.diagnosis} |`;
     })
     .join('\n');
 

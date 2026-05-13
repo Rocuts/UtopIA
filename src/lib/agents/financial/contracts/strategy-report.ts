@@ -25,7 +25,15 @@
 // ---------------------------------------------------------------------------
 
 import { z } from 'zod';
-import { CompanyInfoSchema, MoneyCop, NormaRef, StatementNoteSchema } from './base';
+import {
+  AnomalyFlagSchema,
+  CompanyInfoSchema,
+  ConfidenceLevelSchema,
+  MoneyCop,
+  NormaRef,
+  ReportModeSchema,
+  StatementNoteSchema,
+} from './base';
 
 // ---------------------------------------------------------------------------
 // KPI dashboard
@@ -37,6 +45,47 @@ export const KpiCategorySchema = z.enum([
   'solvency', // Endeudamiento, Apalancamiento, Cobertura de Intereses
   'efficiency', // Rotación de Activos, Ciclo Operativo, CCE
 ]);
+
+/**
+ * Banda objetivo / interpretación de un KPI (v8.1 §1.5 — Slide 03 dial chips).
+ *
+ * Reformateo Wave 4.F2: antes era `z.string().min(1)`, ahora objeto estructurado.
+ * Why: el renderer Slide 03 necesita las cotas separadas para pintar la barra
+ * `.bench-strip` (lowerBound..upperBound con dot del observado). Mantener
+ * `description` legible asegura backward compat — el adapter Markdown sólo
+ * consume `description`, no las cotas numéricas.
+ *
+ *   - `lowerBound`: cota inferior textual (ej. "1,5"). `null` si la banda es
+ *     abierta por abajo ("< X").
+ *   - `upperBound`: cota superior textual (ej. "3,0"). `null` si abierta por
+ *     arriba ("> X saludable").
+ *   - `description`: la frase original que usaban los renderers Markdown.
+ *     Ej: "> 1,5 saludable", "30%–45% sector".
+ */
+export const KpiBenchmarkBandSchema = z.object({
+  description: z.string().min(1).describe('Banda objetivo legible. Ej: "> 1,5 saludable"'),
+  lowerBound: z.string().nullable().describe('Cota inferior. Ej: "1,5". Null si banda abierta por abajo.'),
+  upperBound: z.string().nullable().describe('Cota superior. Ej: "3,0". Null si banda abierta por arriba.'),
+});
+
+export type KpiBenchmarkBandJson = z.infer<typeof KpiBenchmarkBandSchema>;
+
+/**
+ * Modo de presentación de un KPI según `ReportMode` (v8.1 §1.3 + Slide 03).
+ *
+ *   - `baseline_pill`: pill estática "BASELINE 2025" — sin variación. Modo
+ *     LINEA_BASE (primer NIIF adoption / sin comparativo material).
+ *   - `delta_pct`: badge de variación porcentual + tendencia. Modo
+ *     COMPARATIVO_COMPLETO.
+ *   - `sparkline`: micro-gráfico de tendencia histórica con ≥12 puntos.
+ *     Usado cuando hay serie temporal robusta.
+ */
+export const KpiPresentationModeSchema = z.enum([
+  'baseline_pill',
+  'delta_pct',
+  'sparkline',
+]);
+export type KpiPresentationMode = z.infer<typeof KpiPresentationModeSchema>;
 
 export const KpiSchema = z.object({
   category: KpiCategorySchema,
@@ -60,9 +109,29 @@ export const KpiSchema = z.object({
     z.literal('ND'),
   ]).nullable().describe('Resultado comparativo. Null si single-period; "ND" si la fórmula no es confiable en el periodo comparativo.'),
   unit: z.enum(['ratio', 'percent', 'days', 'times', 'cop']).describe('Unidad de presentación'),
-  benchmarkBand: z.string().min(1).describe('Banda objetivo / interpretación. Ej: "> 1,5 saludable"'),
+  benchmarkBand: KpiBenchmarkBandSchema.describe(
+    'Banda objetivo / interpretación con cotas estructuradas. Ver KpiBenchmarkBandSchema.',
+  ),
   diagnosis: z.string().min(1).describe('Diagnóstico contextual de 1-2 oraciones'),
   yoyVariation: z.string().nullable().describe('Variación YoY (puntos porcentuales o %). Null si single-period o si resultPrimary="ND"'),
+  // ---------------------------------------------------------------------
+  // Spec v8.1 — confianza, anomalía sectorial, modo de presentación
+  // ---------------------------------------------------------------------
+  confidence: ConfidenceLevelSchema.nullable().describe(
+    'Nivel de confianza per KPI (v8.1 §1.5). `medium`/`low` marca dot visual; `high` se omite; null si no aplica.',
+  ),
+  anomalyFlag: AnomalyFlagSchema.nullable().describe(
+    'Bandera de anomalía sectorial (v8.1 §1.3 + Slide 03 `.anomaly`). Null si el KPI está dentro de la banda 2σ del CIIU.',
+  ),
+  presentationMode: KpiPresentationModeSchema.nullable().describe(
+    'Modo de presentación del KPI (v8.1 §1.3). `baseline_pill` para LINEA_BASE; `delta_pct` para COMPARATIVO_COMPLETO; `sparkline` cuando hay serie histórica. Null si el renderer decide automáticamente.',
+  ),
+  baselineLabel: z.string().nullable().describe(
+    'Etiqueta de baseline. Ej: "BASELINE 2025". Sólo aplica cuando presentationMode === "baseline_pill".',
+  ),
+  sparklinePoints: z.array(z.number()).nullable().describe(
+    'Serie histórica para el micro-gráfico. Mínimo 12 puntos si presentationMode === "sparkline"; null en otros modos.',
+  ),
 });
 
 export type KpiJson = z.infer<typeof KpiSchema>;
@@ -165,6 +234,30 @@ export const StrategicRecommendationSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Alertas técnicas (Slide 03 Bloque 3 — v8.1 §3 + Slide 03)
+// ---------------------------------------------------------------------------
+//
+// `TechnicalAlert` materializa el bloque "Alertas Técnicas Relevantes" que
+// alimenta el semáforo del Resumen Ejecutivo (Slide 03). Una alerta NO es
+// una recomendación (`StrategicRecommendationSchema`) — es una observación
+// que requiere actuación o validación previa a firmar EEFF.
+//
+//   - `severity: 'red'`  → bloqueante (gating). Render con fondo `.alert.red`.
+//   - `severity: 'amber'`→ atención (advertencia). Render `.alert.amber`.
+//   - `severity: 'green'`→ confirmación positiva. Render `.alert.green`.
+// ---------------------------------------------------------------------------
+
+export const TechnicalAlertSchema = z.object({
+  severity: z.enum(['red', 'amber', 'green']),
+  title: z.string().min(1).describe('Título corto de la alerta. Ej: "Saldo negativo en Anticipos"'),
+  description: z.string().min(1).describe('Descripción accionable de 1-2 oraciones'),
+  normReference: NormaRef.nullable().describe(
+    'Cita normativa que respalda la alerta. Null si la alerta es operativa, no normativa.',
+  ),
+});
+export type TechnicalAlertJson = z.infer<typeof TechnicalAlertSchema>;
+
+// ---------------------------------------------------------------------------
 // Callout R7 — Advertencia INTERNA de costos sub-registrados (no firmable)
 // ---------------------------------------------------------------------------
 
@@ -185,11 +278,42 @@ export const PresumedCostWarningSchema = z.object({
 export const StrategyReportSchema = z.object({
   company: CompanyInfoSchema,
 
+  // -- Spec v8.1 — modo del reporte + confianza global ---------------------
+  /**
+   * Modo del reporte (echo del input pre-derivado por
+   * `prepareFinancialContext`). Controla verbos narrativos, layout de KPIs
+   * (baseline pill vs delta %) y copy del resumen ejecutivo (v8.1 §2).
+   */
+  reportMode: ReportModeSchema.describe(
+    'Modo del reporte (v8.1 §2). Echo del input — el Strategy Director NO recalcula este valor.',
+  ),
+  /**
+   * Confianza global del análisis (v8.1 §1.5). Null si todos los KPIs son
+   * `high` (default implícito); `medium`/`low` cuando datos faltantes o
+   * supuestos materiales degradan la confiabilidad global.
+   */
+  confidence: ConfidenceLevelSchema.nullable().describe(
+    'Confianza global del análisis (v8.1 §1.5). Null si default `high`.',
+  ),
+
   // -- 1. Dashboard Ejecutivo ----------------------------------------------
   executiveDashboard: z.object({
     rows: z.array(ExecutiveDashboardRowSchema).min(1),
     executiveCommentary: z.string().min(1).describe('Comentario ejecutivo de 2-3 oraciones sobre el cierre'),
   }),
+
+  // -- Slide 03 Bloque 3 — Alertas Técnicas Relevantes (v8.1 §3) ----------
+  /**
+   * Lista de alertas técnicas que alimentan el semáforo del Resumen
+   * Ejecutivo. F5 cablea la emisión desde el prompt builder (mapeo:
+   * `R-17/R-18/R-19` curator flags → `severity: 'red'/'amber'`).
+   *
+   * Default `[]` para tolerar reportes "limpios" (ninguna alerta dispara).
+   */
+  technicalAlerts: z
+    .array(TechnicalAlertSchema)
+    .default([])
+    .describe('Alertas técnicas para Slide 03 Bloque 3 (v8.1 §3). Vacío si no hay alertas.'),
 
   // -- 2. KPIs financieros obligatorios ------------------------------------
   kpis: z.array(KpiSchema).min(1).describe('Profitability, Liquidity, Solvency, Efficiency — mínimo un KPI por categoría'),
