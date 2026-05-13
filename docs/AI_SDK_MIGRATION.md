@@ -170,3 +170,19 @@ Because UtopIA has no automated tests, every migration release should manually e
 3. `POST /api/financial-report` — tests sequential pipeline (`generateText` × 3)
 4. `POST /api/financial-audit` — tests `Promise.allSettled` parallel pipeline
 5. `POST /api/upload` with a scanned PDF — tests `{ type: 'file' }` part against the Gateway
+
+## Appendix — Zod strict mode
+
+Schemas that travel to the LLM via `experimental_output: Output.object({ schema })` or `generateObject`
+must follow the canonical pattern documented in `docs/spec/zod-strict-mode-2026.md`.
+
+Short rule: use `.nullable()` for optional values, never `.optional()` / `.nullish()` / `.default()` /
+`.passthrough()` / `z.record()`. OpenAI strict mode requires every property in `required[]` and
+`additionalProperties: false` at every level — constructs that violate this produce HTTP 400 (Zod v3) or
+silent type mangling (Zod v4).
+
+Guardrail CI: `npm run lint:strict-mode` (implemented in `scripts/lint-strict-mode.mjs`, Wave 5.F3).
+
+Historical bugs: Wave 4 left `.nullable().optional()` in `niif-report.ts` (7 fields) and `.default([])` in
+`strategy-report.ts` and `escudo-survival.ts`; all fixed in Wave 5.F1/F2. See the spec doc for the full
+table.

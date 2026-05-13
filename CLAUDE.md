@@ -44,6 +44,8 @@ Optional model overrides (pass plain OpenAI model IDs — no `openai/` prefix; i
 - RAG embeddings use `@langchain/openai`'s own client with `OPENAI_API_KEY` (LangChain doesn't share the AI SDK provider chain). `MODELS.EMBEDDINGS` is exported as a plain string for that consumer.
 - The Vercel AI Gateway is **not** used. An earlier iteration routed everything through it, but the gateway requires a credit card on file and was failing in production. Direct OpenAI calls are simpler and use the existing `OPENAI_API_KEY` the user already provisions.
 
+**Zod strict mode (2026):** los schemas que viajan al LLM via `experimental_output: Output.object(...)` o `generateObject` DEBEN seguir el patron canonico documentado en `docs/spec/zod-strict-mode-2026.md`. Regla corta: `.nullable()` siempre, NUNCA `.optional()` / `.nullish()` / `.default()` / `.passthrough()` / `z.record()`. Guardrail CI: `npm run lint:strict-mode`.
+
 ## Architecture
 
 ### Path Alias
