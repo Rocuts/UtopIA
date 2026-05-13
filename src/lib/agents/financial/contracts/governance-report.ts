@@ -254,7 +254,14 @@ export const GovernanceReportSchema = z.object({
   // con `code` enumerado para que el detector regex evasivo los exonere.
   // Array puede ser vacío si ninguna condición aplica.
   disclaimers: z.array(DisclaimerSchema).describe('Disclaimers automáticos (Parte 9 spec v2.0) — vacío si ninguna condición aplica'),
-  // -- Notas del preparador (datos faltantes) ------------------------------
+  // -- Notas del preparador (datos faltantes del preparador HUMANO) --------
+  // Why: este campo es EXCLUSIVAMENTE para datos faltantes declarados por el
+  // preparador humano responsable (ej. "Cédula del representante legal
+  // pendiente de confirmación"). NEVER usar para notas de proceso de
+  // generación AI, comentarios internos del sistema, ni limitaciones de datos
+  // — esas limitaciones van en disclaimers[] con code enumerado (Parte 9
+  // spec v2.0). Corrección 7 v2.1. Si no hay datos faltantes reales del
+  // preparador humano, el LLM emite preparerNotes=[] (array vacío).
   preparerNotes: z.array(StatementNoteSchema),
 });
 
