@@ -55,20 +55,26 @@ export const MODEL_IDS = {
   CHAT: envModel('OPENAI_MODEL_CHAT', 'gpt-5.4-mini'),
 
   /**
-   * Financial pipelines (audit, tax-planning, transfer-pricing, valuation,
-   * fiscal-opinion, tax-reconciliation, feasibility, quality). Necesita
-   * contexto grande para balances de prueba y salida JSON estructurada.
+   * Financial pipelines (NIIF Analyst chunked, Strategy Director, Governance
+   * Specialist, audit, tax-planning, transfer-pricing, valuation,
+   * fiscal-opinion, tax-reconciliation, feasibility, quality, escudo).
+   *
+   * 2026-05-13: default subido de `gpt-5.4-mini` a `gpt-5.5` por decisión del
+   * usuario tras incidentes "No output generated" / "network error" en Wave 2.
+   * gpt-5.5 tiene 128K output ceiling y ~19-34% menos tokens reasoning ->
+   * el bug `finish_reason=length` se vuelve estructuralmente imposible y la
+   * latencia por pass baja significativamente.
+   *
+   * Costo: ~6x sobre mini en output. Para 100 reportes/dia esto pasa de
+   * ~$100/dia a ~$600/dia. Override a mini via `OPENAI_MODEL_FINANCIAL=gpt-5.4-mini`
+   * si el cliente necesita rebaja temporal.
    */
-  FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'gpt-5.4-mini'),
+  FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'gpt-5.5'),
 
   /**
-   * Pipeline financiero base PREMIUM (NIIF Analyst, Strategy Director,
-   * Governance Specialist). Modelo más capaz (gpt-5.5) con 128K de output
-   * ceiling y 19-34% menos tokens reasoning — blinda el reporte NIIF contra
-   * el bug intermitente `finish_reason=length` que afecta a reasoning models
-   * de la familia GPT-5 cuando combinan prompts grandes + schemas Zod
-   * complejos. Costo ~10x sobre mini, pero el reporte NIIF es la pieza más
-   * crítica del producto y los costos absolutos siguen siendo bajos.
+   * Alias retrocompatible — apunta al mismo modelo que FINANCIAL_PIPELINE
+   * tras el cambio 2026-05-13. Se conserva el slot por si en el futuro
+   * queremos diferenciar (ej. un modelo aun mas capaz para Strategy/Governance).
    *
    * Override via `OPENAI_MODEL_FINANCIAL_PREMIUM`. Default a `gpt-5.5`.
    */
