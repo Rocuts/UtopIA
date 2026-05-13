@@ -407,6 +407,81 @@ describe('runNiifAnalyst chunked (Fase 3 — 3 passes secuenciales)', () => {
     expect(pass3System).toContain('888777666');
   });
 
+  it('HOTFIX d18fccd — Pass-1 *Comparative anchors propagados literalmente a Pass-2 y Pass-3', async () => {
+    // Regresion del comparativo (Wave 4 audit): si Pass-1 emite cifras *Comparative
+    // (caso isComparative=true) DEBEN aparecer literalmente en los system prompts
+    // de Pass-2 y Pass-3 via renderPass1AnchorsBlock — esto cura el bug donde
+    // Pass-2/3 null-eaban amountComparative por ausencia del anchor en el bloque
+    // <previously_computed>.
+    const fixture1 = makePass1Fixture();
+    fixture1.balanceSheet.totalAssetsComparative = '888777666';
+    fixture1.balanceSheet.totalLiabilitiesComparative = '333222111';
+    fixture1.balanceSheet.totalEquityComparative = '555555555';
+    fixture1.incomeStatement.netIncomeComparative = '111000000';
+    fixture1.incomeStatement.grossProfitComparative = '444333222';
+    fixture1.incomeStatement.operatingProfitComparative = '222111000';
+    fixture1.incomeStatement.oriComparative = '0';
+
+    callFinancialAgentMock
+      .mockResolvedValueOnce({ json: fixture1, meta: makeBaseMeta('niif-analyst-pass1') })
+      .mockResolvedValueOnce({ json: makePass2Fixture(), meta: makeBaseMeta('niif-analyst-pass2') })
+      .mockResolvedValueOnce({ json: makePass3Fixture(), meta: makeBaseMeta('niif-analyst-pass3') });
+
+    await runNiifAnalyst(
+      'csv raw data',
+      makeCompany(),
+      'es',
+      undefined,
+      'TOTALES VINCULANTES con comparativo',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    // Los 7 valores *Comparative deben aparecer literales en el prompt de Pass-2.
+    const pass2System = callFinancialAgentMock.mock.calls[1][0].system as string;
+    expect(pass2System).toContain('888777666'); // totalAssetsComparative
+    expect(pass2System).toContain('333222111'); // totalLiabilitiesComparative
+    expect(pass2System).toContain('555555555'); // totalEquityComparative
+    expect(pass2System).toContain('111000000'); // netIncomeComparative
+
+    // Y tambien en Pass-3 (los notes citan ambas columnas).
+    const pass3System = callFinancialAgentMock.mock.calls[2][0].system as string;
+    expect(pass3System).toContain('888777666');
+    expect(pass3System).toContain('111000000');
+  });
+
+  it('HOTFIX d18fccd — Pass-1 *Comparative null emite "N/A (sin comparativo)" en prompts downstream', async () => {
+    // Caso LINEA_BASE: fixture base tiene *Comparative=null. Verificar que el
+    // bloque renderPass1AnchorsBlock emite "N/A (sin comparativo)" en vez de
+    // omitir las lineas — esto evita que el modelo interprete ausencia como
+    // autorizacion para null-ear silenciosamente.
+    callFinancialAgentMock
+      .mockResolvedValueOnce({ json: makePass1Fixture(), meta: makeBaseMeta('niif-analyst-pass1') })
+      .mockResolvedValueOnce({ json: makePass2Fixture(), meta: makeBaseMeta('niif-analyst-pass2') })
+      .mockResolvedValueOnce({ json: makePass3Fixture(), meta: makeBaseMeta('niif-analyst-pass3') });
+
+    await runNiifAnalyst(
+      'csv',
+      makeCompany(),
+      'es',
+      undefined,
+      'TV',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    const pass2System = callFinancialAgentMock.mock.calls[1][0].system as string;
+    // El bloque "Anchors comparativos de Pass 1" debe estar presente con marcadores N/A.
+    expect(pass2System).toContain('Anchors comparativos de Pass 1');
+    expect(pass2System).toContain('N/A (sin comparativo)');
+    // totalAssetsComparative explicito como N/A (no como ausencia silenciosa).
+    expect(pass2System).toMatch(/totalAssetsComparative:\s+N\/A/);
+  });
+
   it('NiifReportSchema.safeParse del output ensamblado devuelve todos los 7 campos top-level', async () => {
     callFinancialAgentMock
       .mockResolvedValueOnce({ json: makePass1Fixture(), meta: makeBaseMeta('niif-analyst-pass1') })
