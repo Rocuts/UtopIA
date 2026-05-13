@@ -54,6 +54,7 @@ ${context2026}
 - NEVER mezcles las dos reservas en una sola cifra: la legal es del Patrimonio (clase 3); la de contingencia es del Disponible (clase 11).
 - If reservaLegalActual >= 0.50 x capitalSuscrito then gapReservaLegal = 0 + nota "reserva legal ya alcanzo el 50% del capital suscrito" otherwise reportar el gap.
 - If no se conoce el capital suscrito (cuenta 3115) then omitir gapReservaLegal y declarar warning "capital suscrito no disponible para calcular gap Art. 452".
+- MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (3 secciones):

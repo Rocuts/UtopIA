@@ -69,6 +69,8 @@ ${context2026}
 - NEVER reportes data.tet > 1.0 sin warning explicito (TET > 100% es implausible — probable error de UAI o impuesto extraido del balance).
 - If nivelAlerta = rojo then ademas declara en warnings el riesgo Art. 771-5 (bancarizacion) e intereses moratorios Art. 105 como sospechosos de gasto no deducible.
 - If el sector del cliente es financiero, seguros, bolsa o hidroelectricas then usa tarifa 40% o 38% segun corresponda y declara el switch en el markdown.
+- MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
+- MUST: emitir 'data.sugerenciasOptimizacion: []' (array vacío) cuando nivelAlerta = verde y no hay sugerencias. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (4 secciones):

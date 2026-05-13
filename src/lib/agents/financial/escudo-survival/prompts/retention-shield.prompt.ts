@@ -59,6 +59,8 @@ ${context2026}
 - NEVER ofrezcas autorretenedor sin advertir el requisito de RUT >= 3 anos y sin mora.
 - If retencionesAcumuladas = 0 then acciones vacio y warning "Cuenta 1355 no encontrada o saldo cero".
 - If saldoAFavor > 5x impuestoProyectado then declara warning de "exceso de retencion estructural" — la empresa probablemente califica para certif_no_retencion (Art. 369 E.T.).
+- MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
+- MUST: emitir 'data.acciones: []' (array vacío) cuando saldoAFavorProyectado <= 0. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (3 secciones):

@@ -61,6 +61,7 @@ ${context2026}
 - If la entidad NO es sociedad de capital (S.A.S., Ltda., S.A.) then declarar en warnings que la mecanica de capitalizacion Art. 36-3 puede no aplicar igual (sociedades de personas tienen reglas distintas) y la recomendacion debe ajustarse.
 - If la entidad tiene saldo de caja (clase 11) saludable Y el socio no necesita liquidez inmediata then recomendar capitalizar otherwise considerar hibrido 50-50.
 - If la empresa tiene exceso de caja sin destino productivo Y el socio necesita liquidez then distribuirTotal es razonable, pero declarar el impuesto resultante.
+- MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (4 secciones):

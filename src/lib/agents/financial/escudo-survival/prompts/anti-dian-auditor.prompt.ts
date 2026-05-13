@@ -67,6 +67,9 @@ ${context2026}
 - NEVER omitas el calculo del minimo en el tope general — el exceso es la diferencia respecto al MENOR de las tres condiciones, no a una sola.
 - If sumaIndividuales > pagosEfectivoTotal then hay inconsistencia logica — declarar warning y revisar (el listado individual es subconjunto del total).
 - If no hay cuenta 1105 en el balance then pagosEfectivoTotal = 0, excesoNoDeducibleGeneral = 0, mayorImpuestoEstimado = 0 y warning explicativo.
+- MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
+- MUST: emitir 'data.pagosNoDeduciblesIndividuales: []' (array vacío) cuando no hay pagos individuales > 100 UVT identificables. OpenAI strict mode lo exige — NO omitir el campo.
+- MUST: emitir 'data.crucesExogenaSospechosos: []' (array vacío) cuando no se detectan cruces sospechosos. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (4 secciones):

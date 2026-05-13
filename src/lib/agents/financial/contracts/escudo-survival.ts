@@ -9,8 +9,7 @@
 //
 // Reglas:
 //   - Cifras en `number` (no centavos) por compatibilidad con `types.ts`.
-//   - `warnings` y arrays anidados usan `.default([])` para conservar la
-//     tolerancia previa cuando el modelo omite un campo.
+//   - Strict mode Zod: arrays siempre presentes. Si vacío, el LLM emite [] explícito (instruido en el prompt). NUNCA .default([]) — OpenAI strict no lo admite.
 //   - Las normas Art. 242 / Art. 36-3 / Art. 771-5 §2 son `z.literal` o `z.enum`
 //     para forzar citación textual (defensa Art. 647 E.T.).
 // ---------------------------------------------------------------------------
@@ -30,14 +29,14 @@ export const TetOptimizationSuggestionSchema = z.object({
 
 export const TetReportSchema = z.object({
   markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
+  warnings: z.array(z.string()),
   data: z.object({
     tet: z.number().describe('Tasa Efectiva de Tributación como decimal [0,1+]'),
     ttd: z.number().describe('Tasa de Tributación Depurada (paragrafo 6 Art. 240 ET)'),
     nivelAlerta: z.enum(['verde', 'amarillo', 'rojo']),
     impuestoProyectado: z.number(),
     uai: z.number().describe('Utilidad Antes de Impuestos'),
-    sugerenciasOptimizacion: z.array(TetOptimizationSuggestionSchema).default([]),
+    sugerenciasOptimizacion: z.array(TetOptimizationSuggestionSchema),
   }),
 });
 
@@ -61,12 +60,12 @@ export const RetentionActionSchema = z.object({
 
 export const RetentionShieldReportSchema = z.object({
   markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
+  warnings: z.array(z.string()),
   data: z.object({
     retencionesAcumuladas: z.number(),
     impuestoProyectado: z.number(),
     saldoAFavorProyectado: z.number(),
-    acciones: z.array(RetentionActionSchema).default([]),
+    acciones: z.array(RetentionActionSchema),
   }),
 });
 
@@ -93,12 +92,12 @@ export const ExogenaCrossSchema = z.object({
 
 export const AntiDianAuditReportSchema = z.object({
   markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
+  warnings: z.array(z.string()),
   data: z.object({
     pagosEfectivoTotal: z.number(),
-    pagosNoDeduciblesIndividuales: z.array(CashPaymentViolationSchema).default([]),
+    pagosNoDeduciblesIndividuales: z.array(CashPaymentViolationSchema),
     excesoNoDeducibleGeneral: z.number(),
-    crucesExogenaSospechosos: z.array(ExogenaCrossSchema).default([]),
+    crucesExogenaSospechosos: z.array(ExogenaCrossSchema),
     mayorImpuestoEstimado: z.number(),
   }),
 });
@@ -111,7 +110,7 @@ export type AntiDianAuditReportJson = z.infer<typeof AntiDianAuditReportSchema>;
 
 export const ContingencyReserveReportSchema = z.object({
   markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
+  warnings: z.array(z.string()),
   data: z.object({
     utilidadNeta: z.number(),
     reservaSugerida: z.number(),
@@ -137,7 +136,7 @@ export const DividendScenarioSchema = z.object({
 
 export const DividendOptimizationReportSchema = z.object({
   markdown: z.string().min(20),
-  warnings: z.array(z.string()).default([]),
+  warnings: z.array(z.string()),
   data: z.object({
     utilidadDistribuible: z.number(),
     escenarios: z.object({
