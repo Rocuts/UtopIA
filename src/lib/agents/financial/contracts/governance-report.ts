@@ -23,13 +23,33 @@
 //   (lista de objetos), bloque de firmas (estructurado), dictamen RF opcional.
 // - Las firmas usan la estructura canónica de `SignatoriesSchema` definida en
 //   `base.ts`, no strings sueltos — evita que el LLM invente T.P.
+//
+// ---------------------------------------------------------------------------
+// FRONTERAS DE RESPONSABILIDAD (Wave 4.A3 audit gaps #5/#9/#10)
+// ---------------------------------------------------------------------------
+//
+// Governance NO produce metadatos Slide 12 (hash del documento, fecha de
+// extracción, fecha de emisión, % cobertura de cuentas). Esos metadatos son
+// responsabilidad del Editor Jefe HTML downstream, que los genera sobre su
+// propio output final.
+//
+// Governance NO produce el disclaimer reformulado positivo de §5 Slide 12
+// ("Este reporte fue generado con..."). Ese disclaimer lo emite el Editor
+// Jefe HTML en el momento de componer el documento final de entrega.
+//
+// El §11 checklist de emisión de la spec v8.1 lo ejecuta el Editor Jefe HTML
+// sobre su propio output — NO el Governance Specialist. El campo
+// `complianceChecklist` de este schema es el checklist normativo de la entidad
+// (DECRETO 2420, C.Co., DIAN exógena, etc.); no es el §11 checklist de emisión.
 // ---------------------------------------------------------------------------
 
 import { z } from 'zod';
 import {
   CompanyInfoSchema,
+  ConfidenceLevelSchema,
   MoneyCop,
   NormaRef,
+  ReportModeSchema,
   SignatoriesSchema,
   StatementNoteSchema,
 } from './base';
@@ -68,6 +88,10 @@ export const FinancialNoteSchema = z.object({
   body: z.string().min(1).describe('Cuerpo en prosa profesional — cifras con formato COP'),
   normReference: NormaRef.nullable().describe('Cita normativa principal cuando aplique'),
   materiality: z.enum(['material', 'immaterial', 'omitted']).describe('Si la nota es material, immaterial o se omitió por no aplicar'),
+  // Why: el Editor Jefe HTML downstream renderiza un dot visual junto al
+  // número de la nota cuando confidence != 'high' (`.conf.medium` ámbar,
+  // `.conf.low` rojo). `null` es equivalente a 'high' — sin dot, sin ruido.
+  confidence: ConfidenceLevelSchema.nullable().describe('Nivel de confianza de la cifra / contenido de la nota. Null equivale a high (sin dot visual). medium y low activan el dot del Editor Jefe HTML.'),
 });
 
 // ---------------------------------------------------------------------------
@@ -201,6 +225,14 @@ export const ShareholderMinutesSchema = z.object({
 
 export const GovernanceReportSchema = z.object({
   company: CompanyInfoSchema,
+  /**
+   * Echo del modo en que se procesó el reporte (v8.1 §1.5 / §2).
+   * Recibe el valor derivado por `deriveReportMode()` en el preprocessor y lo
+   * devuelve intacto — el renderer downstream lo usa para anclar el tono
+   * narrativo del documento (verbos LINEA_BASE vs COMPARATIVO_COMPLETO).
+   * Governance NO lo deriva: lo recibe del orchestrator como input vinculante.
+   */
+  reportMode: ReportModeSchema,
   /**
    * Firmantes estructurados. Espejo de `CompanyInfo.signatories` — el agente
    * los repite para que el renderer Markdown pueda armar el bloque de firmas
