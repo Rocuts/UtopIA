@@ -27,12 +27,18 @@ const MOCK_METADATA = {
   reportMode: 'LINEA_BASE' as const,
   entityNit: '900123456-1',
   entityName: 'Empresa Test SAS',
+  entityCity: 'Cali',
+  entityType: 'SAS',
+  entityLaw: 'Ley 1258/2008',
+  entityGroup: 'Grupo 2',
   periodStart: '2025-01-01',
   periodEnd: '2025-12-31',
+  periodYear: '2025',
   generatedAt: '2026-05-13T10:00:00Z',
   extractedAt: '2026-05-12T08:00:00Z',
+  issuedAtHuman: '13 de mayo de 2026',
   modelId: 'gpt-5.4-mini',
-  agentVersion: '1+1 v8.1' as const,
+  agentVersion: '1+1 v10.1' as const,
   globalConfidence: { highPct: 80, mediumPct: 15, lowPct: 5 },
   alertsCounts: { high: 0, medium: 1, low: 2 },
   auxiliariesProcessed: 120,
@@ -52,10 +58,10 @@ const MOCK_HTML_OUTPUT = {
   html: `<!DOCTYPE html><html lang="es"><head><title>Test</title></head><body>
     <!-- REPORT_MODE: LINEA_BASE -->
     <!-- ENTITY: 900123456-1 -->
-    <!-- AGENT_VERSION: 1+1 v8.1 -->
+    <!-- AGENT_VERSION: 1+1 v10.1 -->
     <h1>Reporte Financiero 2025</h1>
     <p>Hash: ${HASH}</p>
-    <section><h2>Cómo se construyó este reporte</h2></section>
+    <section><h2>Cómo se construyó este informe</h2></section>
     <section><h2>Limitaciones de Información</h2></section>
   </body></html>`,
   metadata: MOCK_METADATA,

@@ -1,17 +1,17 @@
 // ---------------------------------------------------------------------------
-// POST /api/financial-report/html (Wave 4.F7)
+// POST /api/financial-report/html (v10.1)
 // ---------------------------------------------------------------------------
 //
 // Stage 4 del pipeline financiero — cap-stone visual. Corre el Editor Jefe HTML
-// que compone el documento HTML 12-slide auto-contenido siguiendo
-// `docs/spec/financial-report-v8.1.md`.
+// que compone el documento HTML autocontenido de 15 páginas A4 portrait
+// siguiendo `docs/spec/financial-report-v10.1.md`.
 //
-// Patrón idéntico a `/api/financial-report/niif/route.ts` (Wave 3.F1):
+// Patrón idéntico a `/api/financial-report/niif/route.ts`:
 //
 //   - SSE streaming opt-in via header `X-Stream: true` o query `?stream=1`.
 //   - Modo no-streaming devuelve `{ html, metadata, checklistFailures }`.
-//   - `maxDuration = 800` para acomodar HTML 32K tokens en gpt-5.5
-//     (~30-60s end-to-end).
+//   - `maxDuration = 800` para acomodar HTML 32-48K tokens en gpt-5.5
+//     (~45-90s end-to-end con cache miss).
 //
 // SSE events:
 //   - `event: progress`     FinancialProgressEvent
@@ -19,13 +19,9 @@
 //   - `event: done`         { stage: 'html' }
 //   - `event: error`        { error, code, detail }
 //
-// Wave 4.F8 cableará el frontend (intake toggle `outputOptions.htmlReport` +
-// 4ª sub-fase post-Quality) para invocar este endpoint cuando el usuario
-// pida el HTML elite.
-//
 // Refs:
 //   - src/app/api/financial-report/niif/route.ts (patrón a replicar)
-//   - docs/spec/financial-report-v8.1.md
+//   - docs/spec/financial-report-v10.1.md
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from 'next/server';

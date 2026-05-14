@@ -2037,16 +2037,51 @@ export function PipelineWorkspace() {
       // coinciden.
       const extractedAt = backendReport.generatedAt ?? generatedAt;
 
+      // Datos editoriales v10.1 — la portada + cierre (Página 14) los emiten
+      // literalmente. Si el `companyInfo` del intake no los trae, derivamos
+      // defaults defensivos: SAS Ley 1258/2008 es el caso más común en MIPYMEs
+      // colombianas; Grupo 2 es el grupo NIIF para Pymes (Decreto 2420/2015).
+      // Estos defaults son visibles en el output — el usuario puede corregirlos
+      // editando el intake antes de regenerar.
+      //
+      // entityLaw se infiere del entityType: SAS → Ley 1258/2008, SA → Cód. Co.
+      // Art. 110 ss., LTDA → Cód. Co. Art. 353 ss. Si en el futuro el intake
+      // expone un campo `constitutiveLaw` explícito, esto deja de ser inferencia.
+      const entityCity = companyInfo?.city?.trim() || 'Colombia';
+      const entityType = companyInfo?.entityType?.trim() || 'SAS';
+      const entityLawByType: Record<string, string> = {
+        SAS: 'Ley 1258/2008',
+        SA: 'C. Co. Art. 110',
+        LTDA: 'C. Co. Art. 353',
+      };
+      const entityLaw = entityLawByType[entityType.toUpperCase()] ?? 'Ley 1258/2008';
+      // niifGroup viene como número 1|2|3 — lo formateamos como "Grupo N" texto.
+      const niifGroupNum = companyInfo?.niifGroup ?? 2;
+      const entityGroup = `Grupo ${niifGroupNum}`;
+
+      // Fecha de emisión human-readable en español: "13 de mayo de 2026"
+      const issuedDate = new Date(generatedAt);
+      const issuedAtHuman = issuedDate.toLocaleDateString(
+        language === 'es' ? 'es-CO' : 'en-US',
+        { year: 'numeric', month: 'long', day: 'numeric' },
+      );
+
       const metadata = {
         reportMode,
         entityNit: backendReport.company.nit,
         entityName: backendReport.company.name,
+        entityCity,
+        entityType,
+        entityLaw,
+        entityGroup,
         periodStart,
         periodEnd,
+        periodYear: fiscalPeriod,
         generatedAt,
         extractedAt,
+        issuedAtHuman,
         modelId: 'gpt-5.5',
-        agentVersion: '1+1 v8.1' as const,
+        agentVersion: '1+1 v10.1' as const,
         globalConfidence,
         alertsCounts,
         auxiliariesProcessed,

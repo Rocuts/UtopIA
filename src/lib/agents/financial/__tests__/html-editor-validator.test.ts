@@ -1,14 +1,14 @@
-// Tests del validador profundo §11 spec v8.1 — html-editor-validator.ts
+// Tests del validador profundo §11 spec v10.1 — html-editor-validator.ts
 //
-// Cubre los 21 checks del checklist §11 con fixtures HTML sintéticos.
-// El validador usa linkedom como DOM parser — no requiere browser real.
+// Cubre los checks del checklist §11 con fixtures HTML sintéticos. El
+// validador usa linkedom como DOM parser — no requiere browser real.
 //
 // Convención de fixtures:
-//   - `makeValidHtml(overrides?)` — HTML mínimo que pasa TODOS los checks.
+//   - `makeValidHtml(overrides?)` — HTML mínimo que pasa TODOS los checks block.
 //   - Tests individuales corrompen partes del HTML válido para disparar fallos.
 //
 // Refs:
-//   - docs/spec/financial-report-v8.1.md §11 (checklist completo)
+//   - docs/spec/financial-report-v10.1.md §11 (checklist completo)
 //   - src/lib/agents/financial/agents/html-editor-validator.ts
 
 import { describe, it, expect } from 'vitest';
@@ -25,12 +25,18 @@ const BASE_METADATA: HtmlEditorMetadata = {
   reportMode: 'LINEA_BASE',
   entityNit: '900123456-1',
   entityName: 'Empresa Test SAS',
+  entityCity: 'Cali',
+  entityType: 'SAS',
+  entityLaw: 'Ley 1258/2008',
+  entityGroup: 'Grupo 2',
   periodStart: '2025-01-01',
   periodEnd: '2025-12-31',
+  periodYear: '2025',
   generatedAt: '2026-05-13T10:00:00Z',
   extractedAt: '2026-05-12T08:00:00Z',
+  issuedAtHuman: '13 de mayo de 2026',
   modelId: 'gpt-5.4-mini',
-  agentVersion: '1+1 v8.1',
+  agentVersion: '1+1 v10.1',
   globalConfidence: { highPct: 80, mediumPct: 15, lowPct: 5 },
   alertsCounts: { high: 0, medium: 1, low: 2 },
   auxiliariesProcessed: 120,
@@ -53,10 +59,7 @@ const BASE_METADATA: HtmlEditorMetadata = {
 };
 
 // ---------------------------------------------------------------------------
-// HTML fixture mínimo válido
-//
-// Construye un HTML que pasa todos los checks del §11. Los tests corrompen
-// secciones específicas para disparar fallos individuales.
+// HTML fixture mínimo válido (v10.1)
 // ---------------------------------------------------------------------------
 
 function makeValidHtml(
@@ -65,13 +68,14 @@ function makeValidHtml(
     omitEntityComment?: boolean;
     omitAgentVersionComment?: boolean;
     reportMode?: string;
-    omitComparableColumn?: boolean;
     omitLimitaciones?: boolean;
     omitHowBuilt?: boolean;
     omitHash?: boolean;
     injectForbiddenWord?: string;
+    injectGoldToken?: string;
     injectOrphanZero?: boolean;
-    reportModeForNarrative?: string;
+    injectPlusJakarta?: boolean;
+    injectAspectRatio16x9?: boolean;
   } = {},
 ): string {
   const mode = overrides.reportMode ?? 'LINEA_BASE';
@@ -83,118 +87,94 @@ function makeValidHtml(
     : `<!-- ENTITY: 900123456-1 -->`;
   const agentVersionComment = overrides.omitAgentVersionComment
     ? ''
-    : `<!-- AGENT_VERSION: 1+1 v8.1 -->`;
+    : `<!-- AGENT_VERSION: 1+1 v10.1 -->`;
   const hash = overrides.omitHash ? '' : HASH;
-  const comparableCol = overrides.omitComparableColumn
-    ? ''
-    : '<th>[ Comparable 2026 → ]</th>';
   const limitaciones = overrides.omitLimitaciones
     ? ''
     : '<section id="limitaciones"><h2>Limitaciones de Información</h2></section>';
   const howBuilt = overrides.omitHowBuilt
     ? ''
-    : '<section id="slide-12"><h2>Cómo se construyó este reporte</h2></section>';
+    : '<section id="page-14"><h2>Cómo se construyó este informe</h2></section>';
   const forbiddenWord = overrides.injectForbiddenWord ?? '';
+  const goldToken = overrides.injectGoldToken ?? '';
   const orphanZero = overrides.injectOrphanZero ? '<td>$0</td>' : '';
+  const fontFamily = overrides.injectPlusJakarta
+    ? 'family=Plus+Jakarta+Sans:wght@400;600'
+    : 'family=Source+Serif+4:wght@300;400&family=Inter:wght@400;600&family=IBM+Plex+Mono:wght@400';
+  const pageGeometry = overrides.injectAspectRatio16x9
+    ? '.page { aspect-ratio: 16/9; max-width: 1440px; }'
+    : '@page { size: A4 portrait; margin: 0; } .page { width: 210mm; min-height: 297mm; }';
 
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Reporte NIIF 2025 — Empresa Test SAS</title>
-  <style>
-    :root {
-      --gold-d: #c49a2e;
-      font-variant-numeric: tabular-nums;
-    }
-    .conf { display: inline-block; }
-    .conf.medium::before { content: '·'; color: orange; }
-    .conf.low::before { content: '··'; color: red; }
-  </style>
+  <title>Informe Financiero NIIF 2025 — Empresa Test SAS</title>
   ${reportModeComment}
   ${entityComment}
   ${agentVersionComment}
   <!-- PERIOD: 2025-01-01 a 2025-12-31 -->
   <!-- GENERATED_AT: 2026-05-13T10:00:00Z -->
   <!-- CONFIDENCE_GLOBAL: medium -->
+  <link href="https://fonts.googleapis.com/css2?${fontFamily}&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #FAF8F3;
+      --accent: #1E3A5F;
+      ${goldToken}
+    }
+    ${pageGeometry}
+    .ft { font-variant-numeric: tabular-nums; }
+  </style>
 </head>
 <body>
-  <div class="mode-banner">Modo activo: Línea Base — primer informe NIIF</div>
-  ${forbiddenWord}
-  ${orphanZero}
-
-  <section id="slide-03">
-    <h2>Composición del Período</h2>
-    <p>Este ciclo cierra; el siguiente se medirá contra esta base.</p>
-    <p>La entidad establece la línea base documental para el período 2025.</p>
-  </section>
-
-  <section id="slide-06">
+  <article class="page" id="portada">
+    <h1>2025</h1>
+    <p>Primer cierre formal bajo NIIF — la línea base del negocio.</p>
+    <p>Hash: ${hash}</p>
+  </article>
+  <article class="page" id="toc"><h2>Tabla de Contenido</h2></article>
+  <article class="page" id="page-02"><h2>Mensaje del Representante Legal</h2></article>
+  <article class="page" id="page-03">
+    <h1>El ejercicio 2025 en cifras</h1>
+    <p>La entidad establece la línea base documental para el período 2025. Sin período comparativo.</p>
+    <p>Indicador: razón corriente 2,13×. Margen neto fuera de banda <sup class="n">△</sup>.</p>
+    <p>Confianza media · conciliar antes de firmar.</p>
+    ${forbiddenWord}
+    ${orphanZero}
+  </article>
+  <article class="page" id="page-04">
     <h2>Estado de Situación Financiera</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Concepto</th>
-          <th>2025 COP</th>
-          ${comparableCol}
-        </tr>
-      </thead>
+    <table class="ft">
+      <thead><tr><th>Concepto</th><th>Activo</th><th>Pasivo</th><th>Total</th></tr></thead>
       <tbody>
-        <tr>
-          <td>Total Activos</td>
-          <td class="num">$1.000.000</td>
-          <td class="num">—</td>
-        </tr>
-        <tr>
-          <td>Total Pasivos</td>
-          <td class="num">$400.000</td>
-          <td class="num">—</td>
-        </tr>
-        <tr>
-          <td>Patrimonio</td>
-          <td class="num">$600.000</td>
-          <td class="num">—</td>
-        </tr>
+        <tr><td>Línea 1</td><td>400</td><td>200</td><td>600</td></tr>
       </tbody>
+      <tfoot><tr><td>Total general</td><td>400</td><td>200</td><td class="total">600</td></tr></tfoot>
     </table>
-  </section>
-
-  <section id="slide-08">
-    <h2>Flujo de Efectivo</h2>
+  </article>
+  <article class="page" id="page-05"><h2>Cascada de utilidad</h2></article>
+  <article class="page" id="page-06"><h2>Estado de Resultados Integrales</h2></article>
+  <article class="page" id="page-07">
+    <h2>Estado de Flujos de Efectivo</h2>
     <p>Efectivo al inicio del período: $100.000</p>
-    <table>
-      <tbody>
-        <tr><td>Actividades operativas</td><td class="num">$150.000</td></tr>
-        <tr><td>Actividades inversión</td><td class="num">-$50.000</td></tr>
-        <tr><td>Actividades financiación</td><td class="num">-$30.000</td></tr>
-        <tr><td class="total">Variación neta efectivo</td><td class="num total">$70.000</td></tr>
-        <tr><td>Saldo inicial de efectivo</td><td class="num">$100.000</td></tr>
-        <tr><td>Efectivo al cierre</td><td class="num">$170.000</td></tr>
-      </tbody>
-    </table>
-    <p>Activo corriente de alta liquidez: $100.000</p>
-  </section>
-
-  <section id="slide-09">
-    <h2>Notas — Parte 1</h2>
-    <p>Los ingresos ordinarios provienen exclusivamente de Clase 4 (Arts. 600-699 PUC).</p>
-    <p>Las políticas contables se aplican conforme a NIIF Pymes Sección 10.</p>
-    <p>Razón corriente: 2.5x. Endeudamiento: 40%.</p>
-    <span class="conf medium">Confianza media en ratios sectoriales</span>
-  </section>
-
-  ${limitaciones}
-  ${howBuilt}
-
-  <section id="slide-12-transparency">
-    <h2>Transparencia — Hash de Verificación</h2>
+    <p>Total activo: $4.196.558.243</p>
+  </article>
+  <article class="page" id="page-08"><h2>Estado de Cambios en el Patrimonio</h2></article>
+  <article class="page" id="page-09"><h2>Notas — Parte 1</h2></article>
+  <article class="page" id="page-10">
+    <h2>Notas — Parte 2</h2>
+    ${limitaciones}
+  </article>
+  <article class="page" id="page-11"><h2>Indicadores</h2></article>
+  <article class="page" id="page-12"><h2>Análisis editorial</h2></article>
+  <article class="page" id="page-13"><h2>Recomendaciones</h2></article>
+  <article class="page" id="page-14">
+    <h2>Cierre y Trazabilidad</h2>
+    ${howBuilt}
     <p>Hash SHA-256: <code>${hash}</code></p>
-    <div class="qr" id="qr-code">QR de verificación</div>
-    <p>Agentes utilizados: NIIF Analyst · Strategy Director · Governance Specialist · Editor Jefe HTML</p>
-    <p>Fecha extracción: 2026-05-12T08:00:00Z</p>
-    <p>Modelo: gpt-5.4-mini · Versión: 1+1 v8.1</p>
-    <p>Este reporte proporciona una base documental verificable para el período fiscal 2025.</p>
-  </section>
+    <p>1+1 · Plataforma Contable Colombia</p>
+  </article>
 </body>
 </html>`;
 }
@@ -203,14 +183,13 @@ function makeValidHtml(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('validateHtmlChecklist — §11 spec v8.1', () => {
+describe('validateHtmlChecklist — §11 spec v10.1', () => {
   // ── 1. Happy path ──────────────────────────────────────────────────────────
 
-  it('happy path: HTML válido → 0 failures (solo warns tolerados)', () => {
+  it('happy path: HTML válido → 0 failures block', () => {
     const html = makeValidHtml();
     const failures = validateHtmlChecklist(html, BASE_METADATA);
     const blockFailures = failures.filter((f) => f.severity === 'block');
-    // El happy path no debe tener ningún bloqueo
     expect(blockFailures).toHaveLength(0);
   });
 
@@ -244,9 +223,9 @@ describe('validateHtmlChecklist — §11 spec v8.1', () => {
     expect(match?.severity).toBe('block');
   });
 
-  // ── 5. §1.6 — vocabulario prohibido: "Élite" ──────────────────────────────
+  // ── 5. §1.6 — vocabulario prohibido ───────────────────────────────────────
 
-  it('failure §1.6 Check 17: "Élite" en cuerpo → block', () => {
+  it('failure §1.6 Check 15: "Élite" en cuerpo → block', () => {
     const html = makeValidHtml({ injectForbiddenWord: '<p>Reporte Élite financiero</p>' });
     const failures = validateHtmlChecklist(html, BASE_METADATA);
     const match = failures.find((f) => f.rule.includes('vocabulario prohibido'));
@@ -255,7 +234,7 @@ describe('validateHtmlChecklist — §11 spec v8.1', () => {
     expect(match?.detail).toContain('Élite');
   });
 
-  it('failure §1.6 Check 17: "Premium" en cuerpo → block', () => {
+  it('failure §1.6 Check 15: "Premium" en cuerpo → block', () => {
     const html = makeValidHtml({ injectForbiddenWord: '<p>Servicio Premium para clientes</p>' });
     const failures = validateHtmlChecklist(html, BASE_METADATA);
     const match = failures.find((f) => f.rule.includes('vocabulario prohibido'));
@@ -263,127 +242,7 @@ describe('validateHtmlChecklist — §11 spec v8.1', () => {
     expect(match?.detail).toContain('Premium');
   });
 
-  // ── 6. §5 — hash SHA-256 ausente ──────────────────────────────────────────
-
-  it('failure §5 Check 15: sin hash SHA-256 → block', () => {
-    const html = makeValidHtml({ omitHash: true });
-    const failures = validateHtmlChecklist(html, BASE_METADATA);
-    const match = failures.find((f) => f.rule.includes('hash SHA-256'));
-    expect(match).toBeDefined();
-    expect(match?.severity).toBe('block');
-  });
-
-  // ── 7. §3 — columna [ Comparable ] ausente en LINEA_BASE ─────────────────
-
-  it('failure §3 Check 6: LINEA_BASE sin columna [ Comparable ] → block', () => {
-    const html = makeValidHtml({ omitComparableColumn: true, reportMode: 'LINEA_BASE' });
-    const failures = validateHtmlChecklist(html, BASE_METADATA);
-    const match = failures.find((f) => f.rule.includes('columna [ Comparable ]'));
-    expect(match).toBeDefined();
-    expect(match?.severity).toBe('block');
-  });
-
-  // ── 8. §11 — sección Limitaciones de Información ausente en LINEA_BASE ────
-
-  it('failure §11 Check 13: LINEA_BASE sin sección "Limitaciones de Información" → block', () => {
-    const html = makeValidHtml({ omitLimitaciones: true });
-    const failures = validateHtmlChecklist(html, BASE_METADATA);
-    const match = failures.find((f) => f.rule.includes('Limitaciones de Información'));
-    expect(match).toBeDefined();
-    expect(match?.severity).toBe('block');
-  });
-
-  // ── 9. §1.8 — bloque "Cómo se construyó este reporte" ausente ─────────────
-
-  it('failure §1.8 Check 14: sin bloque "Cómo se construyó" → block', () => {
-    const html = makeValidHtml({ omitHowBuilt: true });
-    const failures = validateHtmlChecklist(html, BASE_METADATA);
-    const match = failures.find((f) => f.rule.includes('Cómo se construyó'));
-    expect(match).toBeDefined();
-    expect(match?.severity).toBe('block');
-  });
-
-  // ── 10. §1.2 — $0 huérfanos sin nota ─────────────────────────────────────
-
-  it('failure §1.2 Check 8: $0 huérfano sin nota → block', () => {
-    const html = makeValidHtml({ injectOrphanZero: true });
-    const failures = validateHtmlChecklist(html, BASE_METADATA);
-    const match = failures.find((f) => f.rule.includes('$0 huérfanos'));
-    expect(match).toBeDefined();
-    expect(match?.severity).toBe('block');
-  });
-
-  // ── 11. §3 Check 4 — título resumen ejecutivo incorrecto ──────────────────
-
-  it('failure §3 Check 4: TRANSICION con título de LINEA_BASE → block', () => {
-    // Metadata en modo TRANSICION pero HTML con título de LINEA_BASE
-    const metadataTransicion: HtmlEditorMetadata = {
-      ...BASE_METADATA,
-      reportMode: 'TRANSICION',
-    };
-    // El HTML makeValidHtml pone el título "Composición del Período" (LINEA_BASE)
-    const html = makeValidHtml({ reportMode: 'TRANSICION' });
-    // Con modo TRANSICION, el título "Composición del Período" es incorrecto
-    // La metadata dice TRANSICION, el HTML tiene título de LINEA_BASE
-    // Nota: el HTML fixture usa "Composición del Período" que no está en los
-    // títulos esperados para TRANSICION — debería disparar el check.
-    const failures = validateHtmlChecklist(html, metadataTransicion);
-    const match = failures.find((f) => f.rule.includes('título resumen ejecutivo'));
-    expect(match).toBeDefined();
-    expect(match?.severity).toBe('block');
-  });
-
-  // ── 12. Modo COMPARATIVO_COMPLETO — no requiere [ Comparable ] ────────────
-
-  it('modo COMPARATIVO_COMPLETO: ausencia de [ Comparable ] NO dispara failure §6', () => {
-    const metadataComp: HtmlEditorMetadata = {
-      ...BASE_METADATA,
-      reportMode: 'COMPARATIVO_COMPLETO',
-    };
-    const html = makeValidHtml({
-      omitComparableColumn: true,
-      reportMode: 'COMPARATIVO_COMPLETO',
-    });
-    const failures = validateHtmlChecklist(html, metadataComp);
-    const match = failures.find((f) => f.rule.includes('columna [ Comparable ]'));
-    // No debe dispararse para COMPARATIVO_COMPLETO
-    expect(match).toBeUndefined();
-  });
-
-  // ── 13. Modo COMPARATIVO_COMPLETO — no requiere Limitaciones ──────────────
-
-  it('modo COMPARATIVO_COMPLETO: ausencia de Limitaciones NO dispara failure §13', () => {
-    const metadataComp: HtmlEditorMetadata = {
-      ...BASE_METADATA,
-      reportMode: 'COMPARATIVO_COMPLETO',
-    };
-    const html = makeValidHtml({
-      omitLimitaciones: true,
-      reportMode: 'COMPARATIVO_COMPLETO',
-    });
-    const failures = validateHtmlChecklist(html, metadataComp);
-    const match = failures.find((f) => f.rule.includes('Limitaciones de Información'));
-    // COMPARATIVO_COMPLETO no requiere esta sección (§11 la pide solo en LINEA_BASE/TRANSICION)
-    expect(match).toBeUndefined();
-  });
-
-  // ── 14. Múltiples fallos acumulados ───────────────────────────────────────
-
-  it('HTML con múltiples violaciones → múltiples failures acumulados', () => {
-    const html = makeValidHtml({
-      omitReportModeComment: true,
-      omitHash: true,
-      injectForbiddenWord: '<p>Robusto reporte financiero</p>',
-    });
-    const failures = validateHtmlChecklist(html, BASE_METADATA);
-    const blockFailures = failures.filter((f) => f.severity === 'block');
-    // Al menos: REPORT_MODE + hash + vocabulario prohibido
-    expect(blockFailures.length).toBeGreaterThanOrEqual(3);
-  });
-
-  // ── 15. Check 17 — múltiples palabras prohibidas ──────────────────────────
-
-  it('failure §1.6 Check 17: "Excepcional" detectado como block', () => {
+  it('failure §1.6 Check 15: "Excepcional" en cuerpo → block', () => {
     const html = makeValidHtml({
       injectForbiddenWord: '<p>Resultado Excepcional del ejercicio</p>',
     });
@@ -395,22 +254,144 @@ describe('validateHtmlChecklist — §11 spec v8.1', () => {
     expect(match?.severity).toBe('block');
   });
 
+  // ── 6. §11 — hash SHA-256 ausente ─────────────────────────────────────────
+
+  it('failure §11 Check 13: sin hash SHA-256 → block', () => {
+    const html = makeValidHtml({ omitHash: true });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('hash SHA-256'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 7. §11 — Limitaciones de Información ausente en LINEA_BASE ────────────
+
+  it('failure §11 Check 11: LINEA_BASE sin sección "Limitaciones" → block', () => {
+    const html = makeValidHtml({ omitLimitaciones: true });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('Limitaciones de Información'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 8. §1.8 — bloque "Cómo se construyó este informe" ausente ─────────────
+
+  it('failure §1.8 Check 12: sin bloque "Cómo se construyó" → block', () => {
+    const html = makeValidHtml({ omitHowBuilt: true });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('Cómo se construyó'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 9. §1.2 — $0 huérfanos sin nota ──────────────────────────────────────
+
+  it('failure §1.2 Check 6: $0 huérfano sin nota → block', () => {
+    const html = makeValidHtml({ injectOrphanZero: true });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('$0 huérfanos'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 10. §6 — paleta sin oro (v10.1) ──────────────────────────────────────
+
+  it('failure §6 Check 16: token --gold detectado → block', () => {
+    const html = makeValidHtml({ injectGoldToken: '--gold: #C49A2E;' });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('paleta sin oro'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  it('failure §6 Check 16: hex #C49A2E detectado → block', () => {
+    const html = makeValidHtml({ injectGoldToken: '--brand-color: #C49A2E;' });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.detail.includes('#C49A2E'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 11. §7 — sin Plus Jakarta Sans (es v8.1 leak) ────────────────────────
+
+  it('failure §7 Check 17: Plus Jakarta Sans detectada → block', () => {
+    const html = makeValidHtml({ injectPlusJakarta: true });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('sin Plus Jakarta Sans'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 12. §10 — aspect-ratio 16/9 es v8.1 leak ──────────────────────────────
+
+  it('failure §10 Check 18: aspect-ratio 16/9 detectado → block', () => {
+    const html = makeValidHtml({ injectAspectRatio16x9: true });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const match = failures.find((f) => f.rule.includes('aspect-ratio v8.1'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 13. §3 Check 4 — título resumen ejecutivo incorrecto ──────────────────
+
+  it('failure §3 Check 4: TRANSICION con título de LINEA_BASE → block', () => {
+    const metadataTransicion: HtmlEditorMetadata = {
+      ...BASE_METADATA,
+      reportMode: 'TRANSICION',
+    };
+    const html = makeValidHtml({ reportMode: 'TRANSICION' });
+    // El fixture trae "El ejercicio 2025 en cifras" (LINEA_BASE) — incorrecto para TRANSICION
+    const failures = validateHtmlChecklist(html, metadataTransicion);
+    const match = failures.find((f) => f.rule.includes('título resumen ejecutivo'));
+    expect(match).toBeDefined();
+    expect(match?.severity).toBe('block');
+  });
+
+  // ── 14. Modo COMPARATIVO_COMPLETO — no requiere Limitaciones ──────────────
+
+  it('modo COMPARATIVO_COMPLETO: ausencia de Limitaciones NO dispara failure', () => {
+    const metadataComp: HtmlEditorMetadata = {
+      ...BASE_METADATA,
+      reportMode: 'COMPARATIVO_COMPLETO',
+    };
+    const html = makeValidHtml({
+      omitLimitaciones: true,
+      reportMode: 'COMPARATIVO_COMPLETO',
+    });
+    const failures = validateHtmlChecklist(html, metadataComp);
+    const match = failures.find((f) => f.rule.includes('Limitaciones de Información'));
+    expect(match).toBeUndefined();
+  });
+
+  // ── 15. Múltiples fallos acumulados ───────────────────────────────────────
+
+  it('HTML con múltiples violaciones → múltiples failures acumulados', () => {
+    const html = makeValidHtml({
+      omitReportModeComment: true,
+      omitHash: true,
+      injectForbiddenWord: '<p>Robusto reporte financiero</p>',
+    });
+    const failures = validateHtmlChecklist(html, BASE_METADATA);
+    const blockFailures = failures.filter((f) => f.severity === 'block');
+    expect(blockFailures.length).toBeGreaterThanOrEqual(3);
+  });
+
   // ── 16. Hash correcto en metadata y HTML → no dispara failure ─────────────
 
-  it('hash correcto en HTML y metadata → sin failure §15', () => {
+  it('hash correcto en HTML y metadata → sin failure §13', () => {
     const html = makeValidHtml();
     const failures = validateHtmlChecklist(html, BASE_METADATA);
     const match = failures.find((f) => f.rule.includes('hash SHA-256'));
     expect(match).toBeUndefined();
   });
 
-  // ── 17. Metadata con hash diferente → failure §15 ─────────────────────────
+  // ── 17. Metadata con hash diferente → failure §13 ─────────────────────────
 
-  it('failure §15: metadata con hash diferente al declarado en HTML → block', () => {
-    const html = makeValidHtml(); // HTML contiene HASH='aaa...64'
+  it('failure §13: metadata con hash diferente al declarado en HTML → block', () => {
+    const html = makeValidHtml();
     const metaDifferentHash: HtmlEditorMetadata = {
       ...BASE_METADATA,
-      reportHashSha256: 'b'.repeat(64), // hash diferente
+      reportHashSha256: 'b'.repeat(64),
     };
     const failures = validateHtmlChecklist(html, metaDifferentHash);
     const match = failures.find((f) => f.rule.includes('hash SHA-256'));

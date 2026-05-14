@@ -277,15 +277,16 @@ export const MODELS_CONFIG = {
   dividendOptimizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
   escudoSynthesizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
 
-  // -- HTML Editor (Wave 4.F7 — Editor Jefe HTML cap-stone visual) --------
-  // Produce HTML 12-slide auto-contenido (~24-32K tokens). Reasoning effort
-  // medium porque el agente compone, no decide (decisiones contables ya las
-  // tomaron NIIF/Strategy/Governance). Verbosity high porque HTML es verboso
-  // por naturaleza (tags + atributos + prosa institucional). Budget 32K para
-  // acomodar el output completo + reasoning del modelo (gpt-5.5 hoy por
-  // default, donde el ceiling de 128K hace estructuralmente imposible el bug
-  // `finish_reason=length`).
-  htmlEditor: { reasoningEffort: 'medium', textVerbosity: 'high', maxOutputTokens: 32000 } as const,
+  // -- HTML Editor (v10.1 — Editor Jefe HTML cap-stone visual) -----------
+  // Produce HTML autocontenido de 15 páginas A4 portrait (~32-48K tokens en
+  // v10.1, vs 12 slides 16:9 en v8.1). Reasoning effort medium porque el
+  // agente compone, no decide (decisiones contables ya las tomaron NIIF /
+  // Strategy / Governance). Verbosity high porque HTML es verboso por
+  // naturaleza (tags + atributos + prosa institucional + SVG inline para la
+  // cascada). Budget 48K para acomodar el output completo + reasoning del
+  // modelo (gpt-5.5 hoy por default, donde el ceiling de 128K hace
+  // estructuralmente imposible el bug `finish_reason=length`).
+  htmlEditor: { reasoningEffort: 'medium', textVerbosity: 'high', maxOutputTokens: 48000 } as const,
 } as const satisfies Record<string, AgentRuntimeConfig>;
 
 export type AgentSlot = keyof typeof MODELS_CONFIG;

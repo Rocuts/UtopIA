@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // HtmlReportViewer (Wave 4.F8 — cap-stone visual viewer)
 // ---------------------------------------------------------------------------
-// Viewer ligero del HTML 12-slide v8.1 producido por el Editor Jefe HTML
+// Viewer ligero del HTML 15-page A4 v10.1 producido por el Editor Jefe HTML
 // (agente F7). Se muestra inline en `PipelineWorkspace` cuando el usuario hace
 // click en "Generar HTML" tras completar Phase 3.
 //
@@ -11,7 +11,7 @@
 //   - Iframe `sandbox="allow-same-origin"` SIN `allow-scripts`. El HTML es
 //     auto-contenido (CSS inline, sin JS) — no necesita ejecución para
 //     renderizar y mantenerlo sin scripts elimina el vector XSS si en el
-//     futuro un prompt malformado cuela algo. La spec v8.1 §10 declara que
+//     futuro un prompt malformado cuela algo. La spec v10.1 §10 declara que
 //     el documento es estático.
 //   - Botón "Descargar HTML" blob-iza el string y dispara download como
 //     `reporte-{nit}-{period}.html`.
@@ -79,7 +79,7 @@ export function HtmlReportViewer({
       {/* Header con acciones */}
       <div className="shrink-0 border-b border-n-200 px-6 py-3 flex items-center gap-2 flex-wrap">
         <h2 className="text-sm font-bold text-n-1000">
-          {language === 'es' ? 'Reporte HTML 1+1 v8.1' : 'HTML Report 1+1 v8.1'}
+          {language === 'es' ? 'Reporte HTML 1+1 v10.1' : 'HTML Report 1+1 v10.1'}
         </h2>
         <button
           type="button"
@@ -155,7 +155,7 @@ export function HtmlReportViewer({
       <iframe
         srcDoc={html}
         sandbox="allow-same-origin"
-        title={language === 'es' ? 'Reporte HTML 1+1 v8.1' : 'HTML Report 1+1 v8.1'}
+        title={language === 'es' ? 'Reporte HTML 1+1 v10.1' : 'HTML Report 1+1 v10.1'}
         className="flex-1 w-full border-0 bg-n-0"
       />
     </div>

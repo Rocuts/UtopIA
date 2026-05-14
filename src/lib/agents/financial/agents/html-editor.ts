@@ -1,11 +1,12 @@
 // ---------------------------------------------------------------------------
-// Agente final: Editor Jefe HTML (Wave 4.F7 — cap-stone visual)
+// Agente final: Editor Jefe HTML (v10.1 — cap-stone visual)
 // ---------------------------------------------------------------------------
 //
 // Recibe los JSONs consolidados de los 3 agentes anteriores + metadata
 // pre-cocinada (hash determinístico, cobertura por clase PUC, confianza
-// global agregada) y produce HTML 12-slide auto-contenido siguiendo
-// `docs/spec/financial-report-v8.1.md` verbatim como system prompt.
+// global agregada, datos editoriales de la entidad) y produce HTML autoconte-
+// nido de 15 páginas A4 portrait siguiendo `docs/spec/financial-report-v10.1.md`
+// verbatim como system prompt.
 //
 // Diferencias respecto a los 3 agentes anteriores:
 //
@@ -13,22 +14,20 @@
 //      output es HTML, no JSON, por lo que `experimental_output: Output.object`
 //      no aplica — se invoca `generateText` directo del SDK.
 //
-//   2. Validación post-emisión liviana: `lightweightChecklist` cubre los 4
-//      checks más críticos del §10/§1.6/§5 sin parser DOM. El validador
-//      profundo con linkedom (23 viñetas §11) se difiere a Wave 4.F9 cuando
-//      los snapshots de regression aún no existen y meter linkedom en el
-//      build path sin necesidad sería overengineering.
+//   2. Validación post-emisión liviana: `lightweightChecklist` cubre los
+//      checks más críticos del §10 / §1.6 / §1.9 / §11 sin parser DOM. El
+//      validador profundo con linkedom vive en `html-editor-validator.ts`.
 //
 //   3. `MODELS.FINANCIAL_PIPELINE` (gpt-5.5 premium por default según
-//      models.ts post-2026-05-13) — el HTML de 32K tokens necesita el ceiling
-//      de 128K de gpt-5.5; gpt-5.4-mini se quedaría sin budget con prompt
-//      cache miss en cold start.
+//      models.ts post-2026-05-13) — el HTML de 32-48K tokens necesita el
+//      ceiling de 128K de gpt-5.5; gpt-5.4-mini se quedaría sin budget con
+//      prompt cache miss en cold start.
 //
 // SSE: emite un único `stage_progress` antes de invocar el modelo. El consumer
 // (`/api/financial-report/html`) lo reenvía como `event: progress` al cliente.
 //
 // Refs:
-//   - docs/spec/financial-report-v8.1.md §10 §11 §1.6 §5
+//   - docs/spec/financial-report-v10.1.md §10 §11 §1.6 §1.9 §13
 //   - CLAUDE.md §"Prompt patterns GPT-5.4 (outcome-first)"
 // ---------------------------------------------------------------------------
 
@@ -48,7 +47,7 @@ import type { FinancialProgressEvent } from '../types';
 import { withRetry } from '@/lib/agents/utils/retry';
 
 /**
- * Editor Jefe HTML — agente cap-stone del pipeline 1+1 v8.1.
+ * Editor Jefe HTML — agente cap-stone del pipeline 1+1 v10.1.
  *
  * @param input     - HtmlEditorInput validado por Zod (niif + strategy +
  *                    governance + company + metadata + language).
@@ -89,7 +88,7 @@ export async function runHtmlEditor(
   onProgress?.({
     type: 'stage_progress',
     stage: 4,
-    detail: 'Editor Jefe HTML — componiendo 12 slides según spec v8.1...',
+    detail: 'Editor Jefe HTML — componiendo 15 páginas A4 según spec v10.1...',
   });
 
   // 2 attempts en lugar de 3 (default `withRetry`): el HTML de ~28K tokens
@@ -145,15 +144,17 @@ export async function runHtmlEditor(
  * Cubre:
  *   - §10 mandatory HTML comments (REPORT_MODE, ENTITY, AGENT_VERSION).
  *   - §1.6 vocabulario prohibido (lista de adjetivos de marketing).
- *   - §5 Slide 12 hash verificación coincide con metadata.reportHashSha256.
- *   - Wave 6.F4 (v2.1 corrección 8): metadatos internos del pipeline (Pass-1,
- *     anchors, curatorFlags, *Primary/Comparative, cifras en centavos crudos).
+ *   - §11 hash verificación coincide con metadata.reportHashSha256.
+ *   - §1.9 metadatos internos del pipeline (Pass-1, anchors, curatorFlags,
+ *     *Primary/Comparative, cifras en centavos crudos).
+ *   - v10.1 paleta — NO oro (#C49A2E / #9A7418 / #DDB94A / --gold). El
+ *     acento es azul prusia #1E3A5F.
  *
- * Lo que NO cubre (F9 lo añade con linkedom):
- *   - Estructura de las 12 slides en orden.
+ * Lo que NO cubre (lo añade `html-editor-validator.ts` con linkedom):
+ *   - Estructura de las 15 páginas en orden.
  *   - Tabular-nums aplicado a columnas numéricas.
- *   - WCAG AA contrast verificado en oro sobre blanco.
  *   - Cero $0 huérfanos sin nota.
+ *   - Cuadre aritmético de totales.
  *
  * Why regex y no string contains naive: las palabras prohibidas (Élite,
  * Sólido) pueden aparecer como substring de palabras legítimas (e.g.
@@ -172,7 +173,7 @@ function lightweightChecklist(
   const requiredComments = [
     { needle: `REPORT_MODE: ${metadata.reportMode}`, label: 'REPORT_MODE' },
     { needle: `ENTITY: ${metadata.entityNit}`, label: 'ENTITY' },
-    { needle: 'AGENT_VERSION: 1+1 v8.1', label: 'AGENT_VERSION' },
+    { needle: 'AGENT_VERSION: 1+1 v10.1', label: 'AGENT_VERSION' },
   ];
   for (const { needle, label } of requiredComments) {
     if (!html.includes(needle)) {
@@ -245,6 +246,21 @@ function lightweightChecklist(
     }
   }
 
+  // v10.1 §6 paleta — NO oro. La spec v10.1 reemplaza la paleta oro de v8.1
+  // por azul prusia (#1E3A5F) como acento único. Si el LLM regresa al
+  // muscle memory de v8.1 emitiendo --gold, #C49A2E, #9A7418 o #DDB94A,
+  // el linter lo detecta como BLOCK.
+  for (const { pattern, label } of FORBIDDEN_GOLD_PATTERNS) {
+    const match = htmlSinComments.match(pattern);
+    if (match) {
+      failures.push({
+        rule: '§6 v10.1 — paleta sin oro',
+        detail: `Color/token oro detectado: "${match[0]}" (${label}). Acento único v10.1 = #1E3A5F.`,
+        severity: 'block',
+      });
+    }
+  }
+
   return failures;
 }
 
@@ -270,6 +286,28 @@ function lightweightChecklist(
 // "Pass-?", "anchorman" no matchea "anchors". Para palabras con guiones
 // (Pass-1) usamos pattern explícito que cubre "Pass1", "Pass-1", "Pass 1".
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Patrones prohibidos de paleta oro (v10.1 §6 — acento único azul prusia)
+// ---------------------------------------------------------------------------
+// La spec v10.1 reemplaza la paleta oro de v8.1 por azul prusia (#1E3A5F)
+// como acento único. Estos patrones detectan el regreso accidental a oro:
+//
+//   - Tokens CSS: --gold, --gold-d, --gold-l, --accent-gold
+//   - Hex literals: #C49A2E (oro), #9A7418 (oro oscuro), #DDB94A (oro claro)
+//   - Nombres de clase: .gold, .accent-gold (si el LLM inventa)
+//
+// Nota: el patrón evita falsos positivos en palabras españolas comunes (oro
+// no es token CSS sino sustantivo). Por eso requerimos el contexto técnico:
+// el guion `--`, el `#` hex, o el punto `.` de clase CSS.
+// ---------------------------------------------------------------------------
+
+const FORBIDDEN_GOLD_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /--gold(?:-[dl])?\b/, label: 'CSS token --gold/--gold-d/--gold-l' },
+  { pattern: /#C49A2E\b/i, label: 'hex #C49A2E (oro v8.1)' },
+  { pattern: /#9A7418\b/i, label: 'hex #9A7418 (oro oscuro v8.1)' },
+  { pattern: /#DDB94A\b/i, label: 'hex #DDB94A (oro claro v8.1)' },
+];
 
 const FORBIDDEN_METADATA_PATTERNS: Array<{
   pattern: RegExp;
