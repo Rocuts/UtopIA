@@ -289,7 +289,7 @@ export function CoverPage({ doc }: Props) {
               letterSpacing: 0.5,
             }}
           >
-            Generado por UtopIA · {doc.meta.generatedAt.slice(0, 10)}
+            Generado por 1+1 · {doc.meta.generatedAt.slice(0, 10)}
           </Text>
         </View>
       </View>

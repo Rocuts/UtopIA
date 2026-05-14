@@ -270,7 +270,7 @@ export interface DirectorLetterSpec {
   /** Markdown ya filtrado. */
   bodyMarkdown: string;
   citations: NormCitation[];
-  /** Nombre del firmante ("Vanessa Espinal", "Equipo UtopIA"). */
+  /** Nombre del firmante ("Vanessa Espinal", "Equipo 1+1"). */
   signerName: string;
   signerRole: string;
 }

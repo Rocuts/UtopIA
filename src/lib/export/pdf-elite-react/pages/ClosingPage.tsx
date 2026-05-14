@@ -49,7 +49,7 @@ interface Props {
 
 // Disclaimer text — Capa 3 Élite: invokes fundamental Ley 43/1990 framing.
 const DISCLAIMER_ES =
-  'Este informe ha sido generado por UtopIA mediante la orquestación de agentes especializados ' +
+  'Este informe ha sido generado por 1+1 mediante la orquestación de agentes especializados ' +
   'en NIIF para Pymes (Decreto 2420/2015), Estatuto Tributario colombiano y normativa contable ' +
   'vigente al cierre del periodo. Su contenido constituye un análisis informativo y NO sustituye ' +
   'el dictamen de un Contador Público autorizado (Ley 43/1990) ni la asesoría legal independiente. ' +
@@ -62,9 +62,9 @@ interface SignatorySlot {
 }
 
 const FALLBACK_SIGNATORIES: [SignatorySlot, SignatorySlot, SignatorySlot] = [
-  { initials: 'NA', name: 'Analista NIIF', role: 'NIIF Analyst · UtopIA' },
-  { initials: 'SD', name: 'Director Estratégico', role: 'Strategy Director · UtopIA' },
-  { initials: 'GS', name: 'Especialista Gobierno', role: 'Governance Specialist · UtopIA' },
+  { initials: 'NA', name: 'Analista NIIF', role: 'NIIF Analyst · 1+1' },
+  { initials: 'SD', name: 'Director Estratégico', role: 'Strategy Director · 1+1' },
+  { initials: 'GS', name: 'Especialista Gobierno', role: 'Governance Specialist · 1+1' },
 ];
 
 function buildSignatories(doc: EditorialReport): [SignatorySlot, SignatorySlot, SignatorySlot] {
@@ -169,7 +169,7 @@ export function ClosingPage({ doc }: Props) {
           />
         </View>
 
-        {/* UtopIA platform credit */}
+        {/* 1+1 platform credit */}
         <View style={{ alignItems: 'center', marginBottom: S6 }}>
           <Text
             style={{
@@ -179,7 +179,7 @@ export function ClosingPage({ doc }: Props) {
               textAlign: 'center',
             }}
           >
-            Generado por UtopIA — Plataforma Contable y Tributaria Colombia 2026
+            Generado por 1+1 — Plataforma Contable y Tributaria Colombia 2026
           </Text>
         </View>
 

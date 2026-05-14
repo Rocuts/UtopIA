@@ -185,7 +185,7 @@ export function TocPage({ doc }: Props) {
         ))}
       </View>
 
-      {/* Bottom rule + UtopIA generation tag */}
+      {/* Bottom rule + 1+1 generation tag */}
       <View
         style={{
           position: 'absolute',
@@ -201,7 +201,7 @@ export function TocPage({ doc }: Props) {
             letterSpacing: 0.5,
           }}
         >
-          UtopIA — Plataforma Contable y Tributaria Colombia
+          1+1 — Plataforma Contable y Tributaria Colombia
         </Text>
       </View>
 

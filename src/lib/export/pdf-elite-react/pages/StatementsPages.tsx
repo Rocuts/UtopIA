@@ -72,11 +72,14 @@ function formatNumber(s: string): string {
 // ─── Table renderer (left panel) ─────────────────────────────────────────────
 function LeftTable({ table }: { table: ParsedTable }) {
   const colCount = table.headers.length;
-  // Account column gets ~52% of width; remaining split among value columns.
-  const accountW = Math.round(LEFT_CONTENT_W * 0.52);
+  // Account column shrinks as more value columns appear, so currency strings
+  // never collide. 2 cols ⇒ 56%; 3 cols ⇒ 48%; 4 cols ⇒ 42%.
+  const accountPct = colCount >= 4 ? 0.42 : colCount === 3 ? 0.48 : 0.56;
+  const accountW = Math.round(LEFT_CONTENT_W * accountPct);
   const valW = colCount > 1
     ? Math.round((LEFT_CONTENT_W - accountW) / (colCount - 1))
     : LEFT_CONTENT_W;
+  const cellPadL = 6; // gutter between value columns
 
   return (
     <View style={{ flexDirection: 'column', width: LEFT_CONTENT_W }}>
@@ -102,7 +105,8 @@ function LeftTable({ table }: { table: ParsedTable }) {
               textTransform: 'uppercase',
               width: i === 0 ? accountW : valW,
               textAlign: i === 0 ? 'left' : 'right',
-              paddingHorizontal: 3,
+              paddingLeft: i === 0 ? 3 : cellPadL,
+              paddingRight: 3,
             }}
           >
             {h}
@@ -183,7 +187,7 @@ function LeftTable({ table }: { table: ParsedTable }) {
                   color: CHARCOAL_900,
                   width: valW,
                   textAlign: 'right',
-                  paddingLeft: 4,
+                  paddingLeft: cellPadL,
                 }}
               >
                 {cell}
@@ -365,82 +369,77 @@ function RightPanel({
       </View>
 
       {/* Abstraction groups */}
-      <View style={{ flexDirection: 'column', gap: 16, flex: 1 }}>
-        {groups.map((g, gi) => (
-          <View key={gi} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-            {/* Figure column */}
-            <View style={{ flexDirection: 'column', flex: 1 }}>
-              {g.rows.map((r, ri) => (
-                <Text
-                  key={ri}
-                  style={{
-                    fontFamily: FONT_MONO,
-                    fontSize: TYPE_BODY,
-                    color: `rgba(251,248,241,0.82)`, // CREAM_0 at 82%
-                    lineHeight: 1.6,
-                    textAlign: 'right',
-                  }}
-                >
-                  {r}
-                </Text>
-              ))}
-              {g.groupTotal ? (
-                <Text
-                  style={{
-                    fontFamily: FONT_DISPLAY,
-                    fontWeight: 'bold',
-                    fontSize: TYPE_LEAD,
-                    color: SAND_300,
-                    marginTop: 4,
-                    textAlign: 'right',
-                    borderTopWidth: 0.5,
-                    borderTopColor: `rgba(229,210,171,0.4)`,
-                    paddingTop: 2,
-                  }}
-                >
-                  {g.groupTotal.startsWith('-') ? g.groupTotal : `+ ${g.groupTotal}`}
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Bracket */}
-            {g.rows.length > 0 && (
-              <View style={{ marginTop: 2 }}>
-                <BracketSvg
-                  height={Math.max(20, g.rows.length * 16 + (g.groupTotal ? 20 : 0))}
-                  color={SAND_300}
-                />
+      <View style={{ flexDirection: 'column', gap: 20, flex: 1 }}>
+        {groups.map((g, gi) => {
+          const rowLineH = Math.round(TYPE_BODY * 1.6); // ≈16pt
+          const bracketH = Math.max(rowLineH, g.rows.length * rowLineH);
+          return (
+            <View
+              key={gi}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+            >
+              {/* Figure column — line items only, no duplicated total */}
+              <View style={{ flexDirection: 'column', flex: 1 }}>
+                {g.rows.map((r, ri) => (
+                  <Text
+                    key={ri}
+                    style={{
+                      fontFamily: FONT_MONO,
+                      fontSize: TYPE_BODY,
+                      color: `rgba(251,248,241,0.82)`, // CREAM_0 at 82%
+                      lineHeight: 1.6,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {r}
+                  </Text>
+                ))}
               </View>
-            )}
 
-            {/* Group label */}
-            <View style={{ width: RIGHT_CONTENT_W * 0.38, justifyContent: 'center' }}>
-              <Text
+              {/* Bracket connector */}
+              {g.rows.length > 0 ? (
+                <View>
+                  <BracketSvg height={bracketH} color={SAND_300} />
+                </View>
+              ) : (
+                <View style={{ width: 12 }} />
+              )}
+
+              {/* Group label + total (single source of truth for the total) */}
+              <View
                 style={{
-                  fontFamily: FONT_SANS,
-                  fontWeight: 'bold',
-                  fontSize: TYPE_BODY,
-                  color: `rgba(251,248,241,0.95)`,
+                  width: RIGHT_CONTENT_W * 0.42,
+                  justifyContent: 'center',
                 }}
               >
-                {g.groupLabel}
-              </Text>
-              {g.groupTotal ? (
                 <Text
                   style={{
-                    fontFamily: FONT_DISPLAY,
+                    fontFamily: FONT_SANS,
                     fontWeight: 'bold',
-                    fontSize: TYPE_LEAD,
-                    color: SAND_500,
-                    marginTop: 2,
+                    fontSize: TYPE_BODY,
+                    color: `rgba(251,248,241,0.95)`,
+                    letterSpacing: 0.4,
                   }}
                 >
-                  {g.groupTotal.startsWith('-') ? g.groupTotal : `+ ${g.groupTotal}`}
+                  {g.groupLabel}
                 </Text>
-              ) : null}
+                {g.groupTotal ? (
+                  <Text
+                    style={{
+                      fontFamily: FONT_DISPLAY,
+                      fontWeight: 'bold',
+                      fontSize: TYPE_LEAD,
+                      color: SAND_500,
+                      marginTop: 3,
+                    }}
+                  >
+                    {g.groupTotal.startsWith('-') ? g.groupTotal : `+ ${g.groupTotal}`}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       {/* Final total */}

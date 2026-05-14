@@ -59,8 +59,8 @@ export function EditorialReportDoc({ doc }: Props) {
   if (isBlocked) {
     return (
       <Document
-        title={`UtopIA · Informe BLOQUEADO · ${doc.meta.companyName}`}
-        author="UtopIA"
+        title={`1+1 · Informe BLOQUEADO · ${doc.meta.companyName}`}
+        author="1+1"
         subject="Informe NIIF (BLOQUEADO)"
       >
         <CoverPage doc={doc} />
@@ -95,8 +95,8 @@ export function EditorialReportDoc({ doc }: Props) {
 
   return (
     <Document
-      title={`UtopIA · Reporte NIIF Élite · ${doc.meta.companyName}`}
-      author="UtopIA"
+      title={`1+1 · Reporte NIIF Élite · ${doc.meta.companyName}`}
+      author="1+1"
       subject="Informe NIIF Élite"
     >
       <CoverPage doc={doc} />

@@ -557,7 +557,7 @@ function buildDirectorLetter(report: FinancialReport, language: 'es' | 'en') {
     portrait,
     bodyMarkdown: pickFromEither,
     citations,
-    signerName: language === 'en' ? 'UtopIA Team' : 'Equipo UtopIA',
+    signerName: language === 'en' ? '1+1 Team' : 'Equipo 1+1',
     signerRole: language === 'en' ? 'Editorial Director' : 'Director Editorial',
   };
 }
