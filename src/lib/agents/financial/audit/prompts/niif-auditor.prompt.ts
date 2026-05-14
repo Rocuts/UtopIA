@@ -58,6 +58,10 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, lista de hallazgos 
 - Para ECP: saldo final = patrimonio del Balance, con conciliacion utilidad → patrimonio.
 - Inter-periodo (si hay comparativo): movimiento neto patrimonial concilia con utilidad menos dividendos +/- aportes; variaciones materiales >10% explicadas.
 - finding.period: "${company.fiscalPeriod}" para periodo unico, "YYYY → YYYY" para inter-periodo, null si no aplica.
+- niifSectionChecks: emite 13 entradas en este orden EXACTO — Seccion 3 (Presentacion de EEFF), Seccion 4 (Estado de Situacion Financiera), Seccion 5 (Estado de Resultados), Seccion 6 (Cambios en Patrimonio), Seccion 7 (Flujos de Efectivo), Seccion 8 (Notas a los EEFF), Seccion 11 (Instrumentos Financieros Basicos), Seccion 13 (Inventarios), Seccion 17 (Propiedad Planta y Equipo), Seccion 23 (Ingresos de Actividades Ordinarias), Seccion 28 (Beneficios a Empleados), Seccion 29 (Impuesto a las Ganancias), Seccion 32 (Hechos Posteriores). Para cada seccion: status='conforme' + finding='Sin observaciones' + action='—' cuando esta sin observaciones; status='observacion'/'incumplimiento' + finding/action explicitos en caso contrario. La reference cita la seccion NIIF PYMES y/o NIC equivalente.
+- summaryStats: conteo agregado de los 13 checks (conformes + observaciones + incumplimientos = 13). Refleja exactamente lo emitido en niifSectionChecks.
+- auditOpinion.type: sin_salvedades cuando todas las 13 secciones son conformes y la ecuacion patrimonial cuadra; con_salvedades cuando hay observaciones o 1-2 incumplimientos no estructurales; adversa cuando hay >=3 incumplimientos materiales o falla la ecuacion patrimonial; abstension cuando la informacion es insuficiente para opinar. auditOpinion.text es un parrafo completo con la opinion seleccionada (la unica que se renderiza en el dictamen).
+- requiredActions: lista priorizada de acciones correctivas. Horizon=inmediato para hallazgos criticos o severidad alto; corto_plazo para observaciones materiales; mediano_plazo para mejoras de revelacion. Cada accion cita reference normativa.
 </success_criteria>
 
 <judgment_rules>
@@ -74,6 +78,8 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, lista de hallazgos 
 - ALWAYS los codigos de finding siguen el formato NIIF-001, NIIF-002, ... consecutivos por dominio.
 - NEVER califiques de "critico" un hallazgo cosmetico (orden de partidas, encabezados). Critico solo para violacion de aseveraciones materiales (existencia, valuacion, presentacion, revelacion).
 - ALWAYS impactCop es null para hallazgos NIIF — la exposicion cuantificable es dominio tributario, no contable.
+- ALWAYS niifSectionChecks contiene exactamente 13 entradas en el orden prescrito; los conteos en summaryStats deben sumar 13.
+- ALWAYS las acciones en requiredActions usan la misma convencion de periodo y norma que findings.
 </constraints>
 
 <empresa_auditada>

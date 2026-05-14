@@ -91,6 +91,97 @@ const ComplianceScore = z
 // Per-auditor reports
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Spec v2.1 Dictamen 1 — sub-schemas estructurados para el Auditor NIIF
+// ---------------------------------------------------------------------------
+// La auditora externa exige un dictamen formal con secciones numeradas: alcance,
+// hallazgos por seccion NIIF, lista minima de verificacion, opinion y acciones.
+// Estos building blocks viven en `NiifAuditReportSchema` como campos nullable
+// para preservar backward compatibility: cuando el agente no los emite, el
+// renderer cae al formato legacy (findings sueltos).
+// ---------------------------------------------------------------------------
+
+/** Estado de cumplimiento por seccion NIIF for SMEs revisada. */
+export const NiifSectionStatusEnum = z.enum([
+  'conforme',
+  'observacion',
+  'incumplimiento',
+]);
+export type NiifSectionStatusJson = z.infer<typeof NiifSectionStatusEnum>;
+
+/**
+ * Check de cumplimiento por seccion NIIF for SMEs. El dictamen v2.1 exige
+ * cubrir 13 secciones materiales: 3, 4, 5, 6, 7, 8, 11, 13, 17, 23, 28, 29, 32.
+ */
+export const NiifSectionCheckSchema = z.object({
+  section: z
+    .string()
+    .min(1)
+    .describe('Identificador de seccion. Ej: "Seccion 3", "Seccion 17", "NIC 1"'),
+  sectionTitle: z
+    .string()
+    .min(1)
+    .describe('Titulo legible de la seccion. Ej: "Presentacion de EEFF"'),
+  status: NiifSectionStatusEnum,
+  finding: z
+    .string()
+    .min(1)
+    .describe('Hallazgo breve. Si status=conforme, usar "Sin observaciones".'),
+  reference: NormaRef.describe('Norma citada (ej. "Seccion 3 NIIF PYMES")'),
+  /** Accion correctiva. Cuando status=conforme se devuelve "—". */
+  action: z
+    .string()
+    .min(1)
+    .describe('Accion requerida o "—" si la seccion esta conforme'),
+});
+export type NiifSectionCheckJson = z.infer<typeof NiifSectionCheckSchema>;
+
+/**
+ * Conteo agregado de secciones revisadas. El renderer lo usa para el bloque
+ * "RESUMEN ESTADISTICO" del dictamen.
+ */
+export const NiifSummaryStatsSchema = z.object({
+  conformes: z.number().int().min(0).describe('Secciones sin observaciones'),
+  observaciones: z.number().int().min(0).describe('Secciones con observaciones menores'),
+  incumplimientos: z.number().int().min(0).describe('Secciones con incumplimientos graves'),
+});
+export type NiifSummaryStatsJson = z.infer<typeof NiifSummaryStatsSchema>;
+
+/** Tipos de opinion NIIF conforme a NIA 700-706. */
+export const NiifOpinionTypeEnum = z.enum([
+  'sin_salvedades',
+  'con_salvedades',
+  'adversa',
+  'abstension',
+]);
+export type NiifOpinionTypeJson = z.infer<typeof NiifOpinionTypeEnum>;
+
+/** Bloque de opinion formal NIIF del dictamen. */
+export const NiifOpinionSchema = z.object({
+  type: NiifOpinionTypeEnum,
+  text: z
+    .string()
+    .min(1)
+    .describe('Parrafo completo de opinion. Solo se renderiza la opinion seleccionada.'),
+});
+export type NiifOpinionJson = z.infer<typeof NiifOpinionSchema>;
+
+/** Horizonte de ejecucion de una accion correctiva. */
+export const ActionHorizonEnum = z.enum([
+  'inmediato',
+  'corto_plazo',
+  'mediano_plazo',
+]);
+export type ActionHorizonJson = z.infer<typeof ActionHorizonEnum>;
+
+/** Accion requerida en el dictamen NIIF — accionable + horizonte + referencia. */
+export const NiifRequiredActionSchema = z.object({
+  action: z.string().min(1).describe('Accion correctiva especifica'),
+  horizon: ActionHorizonEnum,
+  reference: NormaRef.describe('Norma de respaldo'),
+});
+export type NiifRequiredActionJson = z.infer<typeof NiifRequiredActionSchema>;
+
 export const NiifAuditReportSchema = z.object({
   complianceScore: ComplianceScore,
   executiveSummary: z
@@ -102,8 +193,198 @@ export const NiifAuditReportSchema = z.object({
     .string()
     .min(1)
     .describe('Parrafo final sobre la calidad de los estados financieros'),
+  // ---------- v2.1 Dictamen 1 (additive) ----------
+  /**
+   * Checks de las 13 secciones NIIF for SMEs materiales del dictamen v2.1:
+   * 3 (Presentacion), 4 (Balance), 5 (Resultados), 6 (ECP), 7 (EFE),
+   * 8 (Notas), 11 (Instrumentos financieros basicos), 13 (Inventarios),
+   * 17 (PPE), 23 (Ingresos), 28 (Beneficios empleados), 29 (Impuestos),
+   * 32 (Hechos posteriores). Cuando una seccion no aplica, emite status=
+   * conforme con finding="Sin observaciones". Null si el agente cae al
+   * formato legacy.
+   */
+  niifSectionChecks: z
+    .array(NiifSectionCheckSchema)
+    .nullable()
+    .describe('13 checks de seccion NIIF PYMES en orden. Null para formato legacy.'),
+  /** Conteo agregado de las secciones revisadas. Null si niifSectionChecks=null. */
+  summaryStats: NiifSummaryStatsSchema
+    .nullable()
+    .describe('Conteo de conformes/observaciones/incumplimientos. Null si no aplica.'),
+  /** Opinion formal NIIF (solo se renderiza la opcion seleccionada). */
+  auditOpinion: NiifOpinionSchema
+    .nullable()
+    .describe('Bloque de opinion formal. Null cuando se omite el dictamen v2.1.'),
+  /** Acciones requeridas con horizonte de ejecucion. */
+  requiredActions: z
+    .array(NiifRequiredActionSchema)
+    .nullable()
+    .describe('Acciones correctivas priorizadas. Null si no aplica formato v2.1.'),
 });
 export type NiifAuditReportJson = z.infer<typeof NiifAuditReportSchema>;
+
+// ---------------------------------------------------------------------------
+// Spec v2.1 Dictamen 2 — sub-schemas estructurados para el Auditor Tributario
+// ---------------------------------------------------------------------------
+// El dictamen v2.1 exige analisis numerados 2-9: renta (cascada), retenciones,
+// IVA/ICA, TMT, riesgos, calendario, opinion, acciones. Cada bloque vive como
+// schema nullable en `TaxAuditReportSchema` para preservar el formato legacy.
+// ---------------------------------------------------------------------------
+
+/** Resultado del cuadre teorico de renta vs registrado. */
+export const TaxEvaluacionEnum = z.enum([
+  'coherente',
+  'observacion',
+  'incoherente',
+]);
+export type TaxEvaluacionJson = z.infer<typeof TaxEvaluacionEnum>;
+
+/**
+ * Analisis 2 — Impuesto de renta (cascada 35% sobre utilidad antes de
+ * impuestos vs impuesto registrado).
+ */
+export const RentaAnalysisSchema = z.object({
+  tarifaGeneralPct: z
+    .number()
+    .describe('Tarifa general renta persona juridica 2026 (35)'),
+  utilidadAntesImpuestosCop: MoneyCop
+    .nullable()
+    .describe('Utilidad contable antes de impuestos en centavos. Null si no se infiere.'),
+  provisionTeoricaCop: MoneyCop
+    .nullable()
+    .describe('Provision teorica = utilidadAntesImpuestos x tarifa / 100. Null si no se calcula.'),
+  impuestoRegistradoCop: MoneyCop
+    .nullable()
+    .describe('Impuesto registrado en P&L o estimado por Cta.1805. Null si no se identifica.'),
+  brechaCop: MoneyCop
+    .nullable()
+    .describe('Brecha = provisionTeorica - impuestoRegistrado. Null si falta cualquiera de los dos.'),
+  evaluacion: TaxEvaluacionEnum,
+  accion: z.string().min(1).describe('Accion recomendada concreta'),
+  reference: NormaRef.describe(
+    'Referencias normativas. Ej: "Art. 240 E.T.; Ley 2277 de 2022; NIIF PYMES Sec. 29"',
+  ),
+});
+export type RentaAnalysisJson = z.infer<typeof RentaAnalysisSchema>;
+
+/**
+ * Analisis 3 — Retenciones, anticipos y posicion fiscal neta.
+ *
+ * Convencion de signos: los saldos se entregan en centavos absolutos; el
+ * orquestador ya emitio Cta.1355/1805 (debitos) y Cta.24 (acreedoras). El
+ * agente reporta posicionFiscalNeta como activo (saldo a favor) cuando es
+ * positivo, pasivo (saldo a pagar) cuando es negativo.
+ */
+export const RetencionesAnalysisSchema = z.object({
+  saldo1355Cop: MoneyCop.nullable().describe('Saldo Cta.1355 (anticipos)'),
+  saldo1805Cop: MoneyCop.nullable().describe('Saldo Cta.1805 (impuesto diferido activo)'),
+  saldo24Cop: MoneyCop.nullable().describe('Saldo Cta.24 (impuestos por pagar)'),
+  posicionFiscalNetaCop: MoneyCop
+    .nullable()
+    .describe('Posicion fiscal neta. Positivo=saldo a favor, negativo=saldo a pagar.'),
+  evaluacion: z.string().min(1).describe('Conclusion breve sobre la posicion fiscal'),
+  reference: NormaRef.describe('Norma de respaldo (Art. 850 E.T., Decreto 2235/2017, etc.)'),
+});
+export type RetencionesAnalysisJson = z.infer<typeof RetencionesAnalysisSchema>;
+
+/** Regimen IVA aplicable al contribuyente segun el dictamen. */
+export const RegimenIvaEnum = z.enum([
+  'responsable',
+  'no_responsable',
+  'no_aplica',
+]);
+export type RegimenIvaJson = z.infer<typeof RegimenIvaEnum>;
+
+/** Analisis 4 — IVA / ICA / Impuestos territoriales. */
+export const IvaIcaAnalysisSchema = z.object({
+  pasivoIvaNetoCop: MoneyCop
+    .nullable()
+    .describe('Pasivo neto de IVA al cierre (Cta.2408 - Cta.1355 IVA). Null si no se infiere.'),
+  regimenIva: RegimenIvaEnum
+    .nullable()
+    .describe('Regimen IVA inferido. Null si no hay datos suficientes.'),
+  icaComment: z.string().min(1).describe('Comentario sobre ICA (municipio, actividad gravada)'),
+  reference: NormaRef.describe('Referencias (Art. 437-1 E.T., Acuerdos municipales)'),
+});
+export type IvaIcaAnalysisJson = z.infer<typeof IvaIcaAnalysisSchema>;
+
+/** Estado TMT (Tasa Minima de Tributacion, paragrafo 6 Art. 240 E.T.). */
+export const TmtStatusEnum = z.enum(['cumple', 'no_cumple', 'no_aplica']);
+export type TmtStatusJson = z.infer<typeof TmtStatusEnum>;
+
+/**
+ * Analisis 5 — Tasa Minima de Tributacion (Ley 2277/2022).
+ * Aplica cuando activos o patrimonio liquido > 30.000 UVT.
+ */
+export const TmtAnalysisSchema = z.object({
+  tasaMinimaExigidaPct: z
+    .number()
+    .describe('Tasa minima exigida (15 conforme paragrafo 6 Art. 240 E.T.)'),
+  tasaEfectivaPct: z
+    .number()
+    .nullable()
+    .describe('Tasa efectiva = impuestoRegistrado / utilidadAntesImpuestos x 100. Null si no se calcula.'),
+  status: TmtStatusEnum,
+  reference: NormaRef.describe('Norma TMT. Ej: "Art. 240-1 E.T.; Ley 2277/2022"'),
+});
+export type TmtAnalysisJson = z.infer<typeof TmtAnalysisSchema>;
+
+/** Probabilidad de un riesgo tributario. */
+export const RiesgoProbabilidadEnum = z.enum(['alta', 'media', 'baja']);
+export type RiesgoProbabilidadJson = z.infer<typeof RiesgoProbabilidadEnum>;
+
+/** Analisis 6 — Riesgo tributario priorizado con exposicion estimada. */
+export const RiesgoTributarioSchema = z.object({
+  descripcion: z.string().min(1).describe('Descripcion del riesgo'),
+  probabilidad: RiesgoProbabilidadEnum,
+  exposicionCop: MoneyCop
+    .nullable()
+    .describe('Exposicion estimada en centavos. Null si no es cuantificable.'),
+  reference: NormaRef.describe('Norma o concepto DIAN aplicable'),
+});
+export type RiesgoTributarioJson = z.infer<typeof RiesgoTributarioSchema>;
+
+/** Analisis 7 — Calendario tributario 2026. Cada obligacion + fecha + nota. */
+export const CalendarioObligacionSchema = z.object({
+  obligacion: z.string().min(1).describe('Obligacion. Ej: "Renta persona juridica 2025"'),
+  fechaLimite: z
+    .string()
+    .min(1)
+    .describe('Fecha limite. Texto libre. Si no se conoce: "Por confirmar".'),
+  notes: z.string().nullable().describe('Notas adicionales o null'),
+  reference: NormaRef.describe('Resolucion DIAN o decreto vigente'),
+});
+export type CalendarioObligacionJson = z.infer<typeof CalendarioObligacionSchema>;
+
+/** Tipo de opinion tributaria del dictamen v2.1. */
+export const TaxOpinionTypeEnum = z.enum([
+  'sin_hallazgos',
+  'con_observaciones',
+  'con_hallazgos_criticos',
+]);
+export type TaxOpinionTypeJson = z.infer<typeof TaxOpinionTypeEnum>;
+
+/** Analisis 8 — Opinion tributaria formal con exposicion total. */
+export const TaxOpinionSchema = z.object({
+  type: TaxOpinionTypeEnum,
+  text: z.string().min(1).describe('Parrafo de opinion seleccionada. Solo se renderiza esta.'),
+  exposicionTotalCop: MoneyCop
+    .nullable()
+    .describe('Exposicion fiscal total en centavos. Null si no es cuantificable.'),
+});
+export type TaxOpinionJson = z.infer<typeof TaxOpinionSchema>;
+
+/** Prioridad de una accion correctiva tributaria. */
+export const TaxActionPriorityEnum = z.enum(['alta', 'media', 'baja']);
+export type TaxActionPriorityJson = z.infer<typeof TaxActionPriorityEnum>;
+
+/** Analisis 9 — Acciones correctivas priorizadas. */
+export const TaxRequiredActionSchema = z.object({
+  action: z.string().min(1).describe('Accion correctiva concreta'),
+  priority: TaxActionPriorityEnum,
+  reference: NormaRef.describe('Norma de respaldo'),
+});
+export type TaxRequiredActionJson = z.infer<typeof TaxRequiredActionSchema>;
 
 export const TaxAuditReportSchema = z.object({
   complianceScore: ComplianceScore,
@@ -120,6 +401,42 @@ export const TaxAuditReportSchema = z.object({
     .nullable()
     .describe('Suma de exposiciones fiscales cuantificables en centavos. Null si ninguna lo es.'),
   conclusion: z.string().min(1).describe('Parrafo final con opinion sobre el riesgo tributario global'),
+  // ---------- v2.1 Dictamen 2 (additive) ----------
+  /** Analisis 2 — Impuesto de renta (cascada teorica vs registrado). */
+  rentaAnalysis: RentaAnalysisSchema
+    .nullable()
+    .describe('Analisis cascada de renta. Null si se omite formato v2.1.'),
+  /** Analisis 3 — Retenciones, anticipos y posicion fiscal neta. */
+  retencionesAnalysis: RetencionesAnalysisSchema
+    .nullable()
+    .describe('Analisis de retenciones y posicion fiscal. Null si se omite formato v2.1.'),
+  /** Analisis 4 — IVA / ICA / Impuestos territoriales. */
+  ivaIcaAnalysis: IvaIcaAnalysisSchema
+    .nullable()
+    .describe('Analisis de IVA e ICA. Null si se omite formato v2.1.'),
+  /** Analisis 5 — Tasa Minima de Tributacion (paragrafo 6 Art. 240 E.T.). */
+  tmtAnalysis: TmtAnalysisSchema
+    .nullable()
+    .describe('Analisis TMT. Null si se omite formato v2.1.'),
+  /** Analisis 6 — Riesgos tributarios priorizados. */
+  riesgosTributarios: z
+    .array(RiesgoTributarioSchema)
+    .nullable()
+    .describe('Lista de riesgos tributarios con exposicion. Null si se omite formato v2.1.'),
+  /** Analisis 7 — Calendario tributario 2026 aplicable. */
+  calendario2026: z
+    .array(CalendarioObligacionSchema)
+    .nullable()
+    .describe('Calendario tributario aplicable al contribuyente. Null si se omite formato v2.1.'),
+  /** Analisis 8 — Opinion tributaria formal con exposicion total. */
+  auditOpinion: TaxOpinionSchema
+    .nullable()
+    .describe('Opinion tributaria formal. Null si se omite formato v2.1.'),
+  /** Analisis 9 — Acciones correctivas priorizadas. */
+  requiredActions: z
+    .array(TaxRequiredActionSchema)
+    .nullable()
+    .describe('Acciones priorizadas. Null si se omite formato v2.1.'),
 });
 export type TaxAuditReportJson = z.infer<typeof TaxAuditReportSchema>;
 
