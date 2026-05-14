@@ -8,7 +8,8 @@
       "Read(//c/Users/crist/.claude/**)",
       "Bash(npx tsc *)",
       "Bash(./node_modules/.bin/tsc --noEmit)",
-      "PowerShell(npm ls typescript 2>&1)"
+      "PowerShell(npm ls typescript 2>&1)",
+      "Bash(grep -nE 'text-n-\\(100|200|300|400\\)\\([^0-9]|$\\)' src/app/workspace/escudo/planeacion-tributaria/page.tsx src/app/workspace/escudo/precios-transferencia/page.tsx src/app/workspace/escudo/devoluciones/page.tsx src/app/workspace/escudo/defensa-dian/page.tsx src/app/workspace/verdad/dictamenes/page.tsx src/app/workspace/verdad/revisoria-fiscal/page.tsx src/app/workspace/verdad/conciliacion-fiscal/page.tsx src/app/workspace/valor/inteligencia-financiera/page.tsx src/app/workspace/valor/valoracion/page.tsx src/app/workspace/valor/due-diligence/page.tsx src/app/workspace/futuro/escenarios/page.tsx src/app/workspace/futuro/factibilidad/page.tsx src/app/workspace/futuro/macroeconomia/page.tsx)"
     ]
   }
 }

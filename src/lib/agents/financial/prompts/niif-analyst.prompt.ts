@@ -6,7 +6,7 @@
 // cache-friendly (anti-hallucination + colombia-2026 + niif-measurement +
 // niif-disclosures) para maximizar el prompt-cache hit rate de GPT-5.4.
 //
-// Justificación (CLAUDE.md "Pending: Fase 3 — Chunked Schema (NIIF Report)"):
+// Justificación (docs/wave-notes/chunked-niif-analyst.md):
 // el schema monolítico `NiifReportSchema` sumado al reasoning de GPT-5.5 se
 // acerca peligrosamente al budget de 32K output tokens. Tres pases con
 // schemas más estrechos eliminan el bug por construcción y permiten volver

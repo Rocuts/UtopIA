@@ -147,7 +147,7 @@ export async function GET(req: Request) {
         },
         emptyReason:
           totalCalls === 0
-            ? 'Telemetría aún no cableada en los agents.ts. Ver CLAUDE.md sección "Architecture / Financial Pipeline / Telemetry" para activar.'
+            ? 'Telemetría aún no cableada en los agents.ts. Ver docs/TELEMETRY.md para activar.'
             : null,
       },
       { status: 200 },
