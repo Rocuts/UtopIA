@@ -770,6 +770,7 @@ ${ctx.niifDisclosures}
 - Saldo final del ECP (closing_balance row.total) == totalEquityPrimary del Pass-1 anchor, tolerancia $0.
 - Resultado del ejercicio en closing_balance row.resultadoEjercicio == netIncomePrimary del Pass-1 anchor, tolerancia $0.
 - cashFlow.sections[operating].lines[0] ancla EXACTAMENTE al netIncomePrimary del Pass-1 anchor (\`<previously_computed>\`). El label canónico es "Utilidad neta del ejercicio" (o "Resultado neto del período"). PROHIBIDO emitir como primer ítem el Δ saldo de la cuenta 3605 entre cierre y apertura ("3605-movimiento-periodo", "Δ Utilidades acumuladas", o cualquier variante similar).
+- Corrección v2.5 (ECP cuadre matricial): equityChanges.rows SIEMPRE incluye una fila kind="profit_for_period" cuyo resultadoEjercicio == netIncomePrimary del Pass-1 anchor (al centavo). Esta fila es la fuente autoritativa del resultado registrado en el ECP — NO se infiere del delta closing − opening. Si opening_balance.resultadoEjercicio es material (|saldo| > $1.000.000 COP, típico cuando PUC 3605 no fue cerrado vía asiento contable al cierre prior), equityChanges.rows ADEMÁS incluye una fila kind="prior_period_result_cancellation" con resultadoEjercicio = -opening_balance.resultadoEjercicio (signo negativo, mismo monto al centavo) y total = el mismo monto negativo. La suma matricial columna a columna (opening + Σ movement rows = closing) DEBE cerrar exactamente.
 - EFE Método Indirecto presenta las 3 secciones operating / investing / financing con sus respectivas líneas y subtotales.
 - Las tres líneas de Cambios en Capital de Trabajo del EFE usan los nombres PLURAL del curator R2 (\`varCuentasPorCobrar\`, \`varInventarios\`, \`varCuentasPorPagar\`) — singular es inválido.
 ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}) donde aplique; cuando un saldo comparativo no exista, amountComparative = null.` : '- isComparative=false: amountComparative = null en TODAS las líneas.'}
@@ -857,6 +858,49 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 EFE Método Indirecto (Regla R2 — EFE Indirecto): el campo cashFlow.sections[operating].lines DEBE incluir las tres líneas de Cambios en Capital de Trabajo usando los nombres PLURAL del curator R2: \`varCuentasPorCobrar\` (Δ CxC — aumento RESTA caja), \`varInventarios\` (Δ Inventarios — aumento RESTA caja), \`varCuentasPorPagar\` (Δ CxP — aumento SUMA caja). Cita "NIC 7 §18(b) / Sec. 7.7-7.8 PYMES" en cashFlow.methodNote.
 
 If TOTALES VINCULANTES contiene \`cashFlowClosureAdjustment\` ≠ 0 then incluir una línea LITERAL "Variaciones en Capital de Trabajo (ajuste de cierre)" dentro de cashFlow.sections[operating].lines con el monto y signo del bloque vinculante, y emitir cashFlow.methodNote o equityChanges.notes con la Nota Maestra Defensa Art. 647 E.T. citando NIC 7 §45 ("Se aplicó un ajuste de cierre de \$X para reconciliar el EFE con PUC 11") otherwise el EFE debe cerrar naturalmente; cashClosing se copia desde controlTotals.efectivoCuenta11.
+
+- CRÍTICO — ECP MATRICIAL v2.5 (Corrección 14 spec v2.5 — cuadre opening + Σ movement rows = closing al centavo).
+
+  REGLA ABSOLUTA: equityChanges.rows SIEMPRE construye la matriz como una secuencia explícita de movimientos. PROHIBIDO presentar un ECP de dos filas (solo opening + closing) cuando hay utilidad del período material o cuando opening_balance arrastra resultado del periodo prior.
+
+  Filas obligatorias (orden cronológico):
+
+    1) kind="opening_balance" — saldo inicial. Si opening_balance.resultadoEjercicio NO es cero, ese saldo corresponde a la utilidad del periodo prior arrastrada en PUC 3605 porque el asiento de cierre Dr.3605/Cr.3705 NO se booked al cierre prior (situación común en SAS colombianas donde PUC 3605 se "sobreescribe" anualmente sin traslado).
+
+    2) kind="prior_period_result_cancellation" (CONDICIONAL — incluir SOLO cuando |opening_balance.resultadoEjercicio| > $1.000.000 COP).
+       - label LITERAL: "(-) Cancelación resultado [AÑO_PRIOR] — asiento cierre contable"
+       - capitalSocial, primaColocacion, reservaLegal, otrasReservas, resultadosAcumulados, ori = "0"
+       - resultadoEjercicio = -opening_balance.resultadoEjercicio (signo NEGATIVO en centavos como string, mismo monto absoluto)
+       - total = mismo valor negativo
+       Esta fila representa el asiento contable de cierre del resultado del periodo anterior — reduce el patrimonio total porque PUC 3605 se sobreescribe, no se traslada. NO es distribución de dividendos, NO es devolución de aportes, NO genera flujo de efectivo.
+
+    3) kind="profit_for_period" (OBLIGATORIA SIEMPRE — autoritativa).
+       - label aceptado: "Resultado del ejercicio [AÑO_ACTUAL]" / "Utilidad neta del periodo" / "Resultado neto del período"
+       - resultadoEjercicio = netIncomePrimary del Pass-1 anchor (centavos como string, al centavo)
+       - total = mismo valor (signo coherente con netIncomePrimary)
+       - resto de columnas = "0"
+
+    4) Otras filas de movimiento condicionales (capital_contribution, dividend_distribution, reserve_appropriation, other_comprehensive_income, convergence_adjustment) — incluir cuando los datos las sustenten.
+
+    5) kind="closing_balance" — saldo final. closing_balance.total == totalEquityPrimary del Pass-1 anchor; closing_balance.resultadoEjercicio == netIncomePrimary del Pass-1 anchor; demás columnas se construyen sumando opening + movement rows en cada columna.
+
+  CHECK pre-emisión OBLIGATORIO (ejecutar ANTES de devolver el JSON, columna a columna):
+    Para cada col ∈ {capitalSocial, primaColocacion, reservaLegal, otrasReservas, resultadosAcumulados, resultadoEjercicio, ori, total}:
+      Σ filas_no_closing[col] ?= closing_balance[col]    (tolerancia $1.000 COP)
+    Y además:
+      fila profit_for_period.resultadoEjercicio ?= netIncomePrimary    (tolerancia $100 COP)
+      |opening_balance.resultadoEjercicio| > $1M ⇒ fila prior_period_result_cancellation.resultadoEjercicio ?= -opening_balance.resultadoEjercicio    (tolerancia $100 COP)
+    Si cualquiera falla → NO emitir el ECP; ajustar montos hasta cuadrar.
+
+  NOTA TÉCNICA OBLIGATORIA en equityChanges.notes cuando se incluye la fila prior_period_result_cancellation:
+    title: "Cancelación del resultado del periodo anterior — asiento de cierre PUC 3605"
+    body LITERAL (sustituir [AÑO_PRIOR] por el año real): "La fila '(-) Cancelación resultado [AÑO_PRIOR] — asiento cierre contable' corresponde al asiento que cierra el resultado acumulado del período anterior en la cuenta PUC 3605, conforme al mecanismo de liquidación anual de cuentas de resultado del Plan Único de Cuentas colombiano. Este movimiento reduce el patrimonio en el importe del resultado anterior y NO representa distribución de dividendos, devolución de aportes ni ningún flujo de efectivo. El efecto combinado con el resultado del ejercicio actual produce el cambio neto real en patrimonio entre apertura y cierre. Sustento: NIIF para PYMES Sec. 6 (Estado de Cambios en el Patrimonio); Decreto 2420/2015 Anexo 2; Defensa Art. 647 E.T.: la presentación documenta de forma transparente el mecanismo contable del PUC y NO configura inexactitud sancionable (Concepto DIAN 100208221-1352 de 2018)."
+
+  PROHIBIDO ABSOLUTO:
+  - Emitir un ECP de 2 filas (solo opening + closing) cuando hay utilidad del período material.
+  - Inferir el resultado del ECP del delta closing.resultadoEjercicio − opening.resultadoEjercicio — la fila profit_for_period es la fuente autoritativa.
+  - Usar kind="dividend_distribution" para la cancelación del resultado prior (NO es distribución de dividendos).
+  - Usar kind="convergence_adjustment" para la cancelación del resultado prior (convergence_adjustment es para R5/Cta.3710 NIIF, no para 3605).
 
 If TOTALES VINCULANTES contiene \`equityAnchorAdjustment\` ≠ 0 (curatorFlags.equityConvergenceApplied=true) then insertar una fila ECP con kind=convergence_adjustment y resultadosAcumulados=ese monto (con su signo) como ANTEÚLTIMA fila antes de closing_balance, y emitir equityChanges.notes con la sub-nota Defensa Art. 647 E.T. citando NIC 1 §106 otherwise el ECP cuadra sin línea de ajuste.
 

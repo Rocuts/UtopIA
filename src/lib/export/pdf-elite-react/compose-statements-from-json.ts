@@ -280,17 +280,20 @@ export function niifJsonToEquityTable(json: NiifReportJson): ParsedTable {
     'ORI',
     'TOTAL',
   ];
+  // v2.5: ECP preserva signo (paréntesis para negativos). La cancelación de
+  // resultado prior (prior_period_result_cancellation), la distribución de
+  // dividendos y las pérdidas acumuladas se renderizan con su signo natural.
   const rowToRow = (r: EquityChangeRowJson): ParsedTableRow => {
     const bold = r.kind === 'opening_balance' || r.kind === 'closing_balance';
     const cells = [
-      fmtCop(r.capitalSocial, true),
-      fmtCop(r.primaColocacion, true),
-      fmtCop(r.reservaLegal, true),
-      fmtCop(r.otrasReservas, true),
-      fmtCop(r.resultadosAcumulados, true),
-      fmtCop(r.resultadoEjercicio, true),
-      fmtCop(r.ori, true),
-      fmtCop(r.total, true),
+      fmtCop(r.capitalSocial, false),
+      fmtCop(r.primaColocacion, false),
+      fmtCop(r.reservaLegal, false),
+      fmtCop(r.otrasReservas, false),
+      fmtCop(r.resultadosAcumulados, false),
+      fmtCop(r.resultadoEjercicio, false),
+      fmtCop(r.ori, false),
+      fmtCop(r.total, false),
     ];
     return bold ? { account: r.label, cells, emphasis: 'total' } : { account: r.label, cells };
   };

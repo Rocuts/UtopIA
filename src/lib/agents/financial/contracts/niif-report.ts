@@ -126,6 +126,7 @@ export const EquityChangeRowSchema = z.object({
   kind: z
     .enum([
       'opening_balance',
+      'prior_period_result_cancellation',
       'profit_for_period',
       'other_comprehensive_income',
       'capital_contribution',
@@ -134,7 +135,7 @@ export const EquityChangeRowSchema = z.object({
       'convergence_adjustment',
       'closing_balance',
     ])
-    .describe('Tipo de fila — taxonomía controlada para validación determinística'),
+    .describe('Tipo de fila — taxonomía controlada para validación determinística. `prior_period_result_cancellation` (v2.5) es el asiento de cierre que cancela el resultado del periodo anterior arrastrado en PUC 3605 cuando ese saldo no fue trasladado a PUC 37 al cierre prior — la fila lleva resultadoEjercicio con signo NEGATIVO igual a opening_balance.resultadoEjercicio y total NEGATIVO de la misma magnitud (no es distribución de dividendos ni flujo de efectivo).'),
   label: z.string().min(1).describe('Etiqueta legible. Ej: "Saldo al 1 de enero de 2025"'),
   capitalSocial: MoneyCop,
   primaColocacion: MoneyCop,

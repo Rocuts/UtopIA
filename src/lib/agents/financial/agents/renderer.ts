@@ -478,16 +478,20 @@ export function renderEquityChanges(json: NiifReportJson): string {
     'right',
   ];
 
+  // v2.5: ECP preserva signo (las disminuciones de patrimonio se muestran con
+  // paréntesis). Aplica a la fila prior_period_result_cancellation que lleva
+  // resultadoEjercicio negativo, dividend_distribution con dividendos pagados,
+  // y resultadosAcumulados negativos (pérdidas acumuladas).
   const rows: MarkdownTableRow[] = ec.rows.map((r) => {
     const values = [
-      formatCopFromCents(parseMoneyCop(r.capitalSocial), true),
-      formatCopFromCents(parseMoneyCop(r.primaColocacion), true),
-      formatCopFromCents(parseMoneyCop(r.reservaLegal), true),
-      formatCopFromCents(parseMoneyCop(r.otrasReservas), true),
-      formatCopFromCents(parseMoneyCop(r.resultadosAcumulados), true),
-      formatCopFromCents(parseMoneyCop(r.resultadoEjercicio), true),
-      formatCopFromCents(parseMoneyCop(r.ori), true),
-      formatCopFromCents(parseMoneyCop(r.total), true),
+      formatCopFromCents(parseMoneyCop(r.capitalSocial)),
+      formatCopFromCents(parseMoneyCop(r.primaColocacion)),
+      formatCopFromCents(parseMoneyCop(r.reservaLegal)),
+      formatCopFromCents(parseMoneyCop(r.otrasReservas)),
+      formatCopFromCents(parseMoneyCop(r.resultadosAcumulados)),
+      formatCopFromCents(parseMoneyCop(r.resultadoEjercicio)),
+      formatCopFromCents(parseMoneyCop(r.ori)),
+      formatCopFromCents(parseMoneyCop(r.total)),
     ];
     const bold = r.kind === 'opening_balance' || r.kind === 'closing_balance';
     return { label: r.label, values, bold };

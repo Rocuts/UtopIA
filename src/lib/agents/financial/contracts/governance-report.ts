@@ -167,9 +167,9 @@ export const ResultDistributionSchema = z.object({
 });
 
 export const CapitalizationProposalSchema = z.object({
-  applies: z.boolean().describe('True cuando hay utilidades retenidas materiales que justifiquen capitalizar 40%'),
-  retainedEarningsBaseCop: MoneyCop.describe('Saldo acumulado de utilidades retenidas (PUC 36)'),
-  capitalizationAmountCop: MoneyCop.describe('40% × retainedEarningsBaseCop'),
+  applies: z.boolean().describe('True cuando la utilidad neta del ejercicio aprobado es material y justifica capitalizar 40%'),
+  retainedEarningsBaseCop: MoneyCop.describe('Base de la capitalización (v2.5 corrección #13): Utilidad Neta del Ejercicio del P&L (netIncomePrimary). El nombre del campo se conserva por retrocompat — el contenido pasó de "saldo acumulado PUC 36" a "utilidad neta del ejercicio" en v2.5 para alinear el acta con la utilidad efectivamente aprobada en la misma asamblea. El saldo acumulado de PUC 36 se referencia como contexto informativo en el body, NO como base del 40%.'),
+  capitalizationAmountCop: MoneyCop.describe('40% × retainedEarningsBaseCop (i.e., 40% de la utilidad neta del ejercicio bajo v2.5)'),
   legalReference: NormaRef.describe('Cita LITERAL. Ej: "Ley 1258/2008 art. 5 (SAS) + E.T. art. 36-3"'),
   body: z.string().min(1).describe('Texto LITERAL de la proposición — palabras exactas para el acta'),
 });

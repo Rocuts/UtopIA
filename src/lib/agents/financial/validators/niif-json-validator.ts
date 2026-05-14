@@ -230,31 +230,130 @@ export function validateNiifReportJson(
     }
   }
 
-  // -- E7. Utilidad Neta P&L vs Variación 3605 ECP (Parte 8.1 CHECK 2 spec v2.0) --
+  // -- E7. Utilidad Neta del periodo registrada en el ECP (v2.5) ------------
   //
-  // El incremento de resultadoEjercicio entre opening_balance y closing_balance
-  // del ECP DEBE coincidir con la Utilidad Neta del P&L del periodo.
-  // Tolerancia 0.5% para absorber redondeos de cents → pesos en presentación.
-  // Capa 1 Elite Protocol — invariante de consistencia entre EEFF.
+  // Antes (v2.0) se comparaba el delta `closing.resultadoEjercicio −
+  // opening.resultadoEjercicio` contra netIncomePrimary. Esa heurística
+  // fallaba cuando el opening_balance arrastraba el resultado del periodo
+  // anterior (PUC 3605 no cerrado vía asiento Dr.3605/Cr.3705 al cierre
+  // prior — práctica común en SAS colombianas donde 3605 se "sobreescribe"
+  // anualmente).
+  //
+  // v2.5 introduce el modo matricial estricto cuando existe fila
+  // `profit_for_period`:
+  //   E7a — profit_for_period.resultadoEjercicio == netIncomePrimary.
+  //   E7b — Si opening_balance.resultadoEjercicio es material y ≠ 0,
+  //         DEBE existir una fila prior_period_result_cancellation con
+  //         resultadoEjercicio = -opening.resultadoEjercicio.
+  //   E7c — Cuadre matricial: opening + Σ(movement rows) == closing,
+  //         columna a columna, tolerancia $1.000 COP.
+  //
+  // Modo legacy (sin profit_for_period): delta opening→closing como
+  // proxy, válido SOLO cuando opening.resultadoEjercicio no es material.
   {
     const openingRow = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+    const profitRow = json.equityChanges.rows.find((r) => r.kind === 'profit_for_period');
+    const cancellationRow = json.equityChanges.rows.find(
+      (r) => r.kind === 'prior_period_result_cancellation',
+    );
+
     if (!openingRow || !closing) {
-      errors.push('E7. ECP debe incluir opening_balance y closing_balance para verificar Utilidad Neta.');
+      errors.push('E7. ECP debe incluir opening_balance y closing_balance.');
     } else {
-      const openingResult = parseMoneyCop(openingRow.resultadoEjercicio);
-      const closingResult = parseMoneyCop(closing.resultadoEjercicio);
-      const delta = closingResult - openingResult;
       const netIncome = parseMoneyCop(json.incomeStatement.netIncomePrimary);
       const absNetIncome = netIncome < ZERO ? -netIncome : netIncome;
       // Tolerancia: 0.5% del netIncome (mín $10.000 cents = $100 COP para casos cercanos a cero)
       const tolerance = absNetIncome / BigInt(200) + BigInt(10000);
-      const diff = delta > netIncome ? delta - netIncome : netIncome - delta;
-      if (diff > tolerance) {
-        errors.push(
-          `E7. Variación resultadoEjercicio ECP (${fmtCop(delta)}) ≠ Utilidad Neta P&L (${fmtCop(netIncome)}); ` +
-            `diferencia ${fmtCop(diff)} excede tolerancia ${fmtCop(tolerance)}. ` +
-            `Capa 1 Elite — Parte 8.1 CHECK 2 spec v2.0.`,
-        );
+      const openingResult = parseMoneyCop(openingRow.resultadoEjercicio);
+      const absOpeningResult = openingResult < ZERO ? -openingResult : openingResult;
+      const MATERIALITY = BigInt(100_000_000); // $1.000.000 COP en centavos
+
+      if (profitRow) {
+        // -- Modo v2.5 -----------------------------------------------------
+        // E7a — profit_for_period autoritativo.
+        const profitInEcp = parseMoneyCop(profitRow.resultadoEjercicio);
+        const diff = profitInEcp > netIncome ? profitInEcp - netIncome : netIncome - profitInEcp;
+        if (diff > tolerance) {
+          errors.push(
+            `E7a. ECP fila profit_for_period.resultadoEjercicio (${fmtCop(profitInEcp)}) ≠ ` +
+              `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(diff)} ` +
+              `excede tolerancia ${fmtCop(tolerance)}. Parte 8.1 CHECK 2 spec v2.5.`,
+          );
+        }
+
+        // E7b — Cancelación obligatoria si opening arrastra resultado prior material.
+        if (absOpeningResult > MATERIALITY) {
+          if (!cancellationRow) {
+            errors.push(
+              `E7b. ECP: opening_balance.resultadoEjercicio material (${fmtCop(openingResult)}) ` +
+                `exige fila kind="prior_period_result_cancellation" que cancele ese saldo. ` +
+                `Cierre contable PUC 3605 no trasladado a PUC 37 al cierre prior (v2.5).`,
+            );
+          } else {
+            const cancellation = parseMoneyCop(cancellationRow.resultadoEjercicio);
+            const expected = -openingResult;
+            const cancelDiff =
+              cancellation > expected ? cancellation - expected : expected - cancellation;
+            if (cancelDiff > BigInt(10000)) {
+              errors.push(
+                `E7b. ECP fila prior_period_result_cancellation.resultadoEjercicio ` +
+                  `(${fmtCop(cancellation)}) ≠ -opening_balance.resultadoEjercicio ` +
+                  `(${fmtCop(expected)}); diferencia ${fmtCop(cancelDiff)} excede $100 COP. v2.5.`,
+              );
+            }
+          }
+        }
+
+        // E7c — Cuadre matricial columna a columna.
+        const cols = [
+          'capitalSocial',
+          'primaColocacion',
+          'reservaLegal',
+          'otrasReservas',
+          'resultadosAcumulados',
+          'resultadoEjercicio',
+          'ori',
+          'total',
+        ] as const;
+        const TOL = BigInt(100_000); // $1.000 COP en centavos
+        for (const col of cols) {
+          const computed = json.equityChanges.rows.reduce<bigint>((acc, row) => {
+            if (row.kind === 'closing_balance') return acc;
+            return acc + parseMoneyCop(row[col]);
+          }, ZERO);
+          const closingVal = parseMoneyCop(closing[col]);
+          const diff = computed > closingVal ? computed - closingVal : closingVal - computed;
+          if (diff > TOL) {
+            errors.push(
+              `E7c. ECP columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
+                `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(diff)}. ` +
+                `v2.5 cuadre matricial: opening + Σ(movements) == closing.`,
+            );
+          }
+        }
+      } else {
+        // -- Modo legacy: delta opening→closing ----------------------------
+        // SOLO válido cuando opening.resultadoEjercicio no es material. Si es
+        // material y no hay profit_for_period, el reporte viola v2.5.
+        if (absOpeningResult > MATERIALITY) {
+          errors.push(
+            `E7. ECP: opening_balance.resultadoEjercicio material (${fmtCop(openingResult)}) ` +
+              `exige fila kind="profit_for_period" (+ kind="prior_period_result_cancellation" ` +
+              `cuando aplique). Modo legacy delta opening→closing solo aplica cuando ` +
+              `opening.resultadoEjercicio = $0 (v2.5).`,
+          );
+        } else {
+          const closingResult = parseMoneyCop(closing.resultadoEjercicio);
+          const delta = closingResult - openingResult;
+          const diff = delta > netIncome ? delta - netIncome : netIncome - delta;
+          if (diff > tolerance) {
+            errors.push(
+              `E7. Variación resultadoEjercicio ECP (${fmtCop(delta)}) ≠ ` +
+                `Utilidad Neta P&L (${fmtCop(netIncome)}); diferencia ${fmtCop(diff)} ` +
+                `excede tolerancia ${fmtCop(tolerance)}. Parte 8.1 CHECK 2.`,
+            );
+          }
+        }
       }
     }
   }
