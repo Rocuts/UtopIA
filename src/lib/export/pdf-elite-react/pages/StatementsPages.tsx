@@ -70,19 +70,45 @@ function formatNumber(s: string): string {
 }
 
 // ─── Table renderer (left panel) ─────────────────────────────────────────────
-function LeftTable({ table }: { table: ParsedTable }) {
+// `containerWidth` lets the caller render the same table at a narrow split-layout
+// width (Balance / Income, ~441pt) OR at the full landscape content width
+// (Cash Flow / Equity, ~746pt). The Equity statement carries 8 columns
+// (MOVIMIENTO + 7 patrimonio components) and would collide at 441pt — see
+// `FullStatementPage` for the wider call site.
+function LeftTable({
+  table,
+  containerWidth = LEFT_CONTENT_W,
+}: {
+  table: ParsedTable;
+  containerWidth?: number;
+}) {
   const colCount = table.headers.length;
   // Account column shrinks as more value columns appear, so currency strings
-  // never collide. 2 cols ⇒ 56%; 3 cols ⇒ 48%; 4 cols ⇒ 42%.
-  const accountPct = colCount >= 4 ? 0.42 : colCount === 3 ? 0.48 : 0.56;
-  const accountW = Math.round(LEFT_CONTENT_W * accountPct);
+  // never collide. ≥7 cols (equity statement) ⇒ 22%; 6 ⇒ 28%; 4–5 ⇒ 38%;
+  // 3 ⇒ 48%; 2 ⇒ 56%.
+  const accountPct =
+    colCount >= 7 ? 0.22
+    : colCount >= 6 ? 0.28
+    : colCount >= 4 ? 0.38
+    : colCount === 3 ? 0.48
+    : 0.56;
+  const accountW = Math.round(containerWidth * accountPct);
   const valW = colCount > 1
-    ? Math.round((LEFT_CONTENT_W - accountW) / (colCount - 1))
-    : LEFT_CONTENT_W;
-  const cellPadL = 6; // gutter between value columns
+    ? Math.round((containerWidth - accountW) / (colCount - 1))
+    : containerWidth;
+  // Many-column tables (equity ≥6 cols) need smaller monospace + tighter
+  // padding so $2.228.490.789,73 fits inside its column without overlapping
+  // the next header. TYPE_SMALL=9pt monospace at 18 chars was ~99pt and
+  // collided at the previous ~42pt valW; TYPE_CAPTION=8pt at ~77pt valW fits
+  // comfortably for 7 value columns at full landscape width.
+  const dense = colCount >= 6;
+  const cellFontSize = dense ? TYPE_CAPTION : TYPE_SMALL;
+  const headerFontSize = dense ? TYPE_CAPTION : TYPE_SMALL;
+  const headerLetterSpacing = dense ? 0.2 : 0.6;
+  const cellPadL = dense ? 3 : 6; // gutter between value columns
 
   return (
-    <View style={{ flexDirection: 'column', width: LEFT_CONTENT_W }}>
+    <View style={{ flexDirection: 'column', width: containerWidth }}>
       {/* Column headers */}
       <View
         style={{
@@ -91,6 +117,7 @@ function LeftTable({ table }: { table: ParsedTable }) {
           borderBottomColor: FOREST_900,
           paddingBottom: S1,
           marginBottom: S1,
+          alignItems: 'flex-end',
         }}
       >
         {table.headers.map((h, i) => (
@@ -99,14 +126,15 @@ function LeftTable({ table }: { table: ParsedTable }) {
             style={{
               fontFamily: FONT_SANS,
               fontWeight: 'bold',
-              fontSize: TYPE_SMALL,
+              fontSize: headerFontSize,
               color: FOREST_900,
-              letterSpacing: 0.6,
+              letterSpacing: headerLetterSpacing,
               textTransform: 'uppercase',
               width: i === 0 ? accountW : valW,
               textAlign: i === 0 ? 'left' : 'right',
               paddingLeft: i === 0 ? 3 : cellPadL,
               paddingRight: 3,
+              lineHeight: 1.15,
             }}
           >
             {h}
@@ -141,19 +169,39 @@ function LeftTable({ table }: { table: ParsedTable }) {
           );
         }
 
-        const bgColor = isTotal
-          ? SAND_400
-          : isSubtotal
-            ? `rgba(229,210,171,0.28)` // SAND_300 at ~28% opacity
-            : ri % 2 === 1
-              ? CREAM_100
-              : 'transparent';
+        // Ecuación patrimonial (v2.2 #1): el título del bloque arranca con
+        // ✅ (cuadra) o ⚠ (descuadre). Cambiamos el tono respecto al SAND_400
+        // default de "total" para que sea visualmente distinto a TOTAL ACTIVOS /
+        // TOTAL PATRIMONIO. El check usa un tinte sage (SAGE_500 @ ~18%); el
+        // warning usa un tinte clay/wine (WINE_500 @ ~18%, inline porque no
+        // hay CLAY_700 en tokens.ts y v2.2 pide minimum-blast-radius).
+        const isEquationCheck = row.account.startsWith('✅');
+        const isEquationWarn = row.account.startsWith('⚠');
+        const isEquationTitle = isEquationCheck || isEquationWarn;
 
-        const borderTop = isTotal
-          ? { borderTopWidth: 1, borderTopColor: FOREST_900 }
-          : isSubtotal
-            ? { borderTopWidth: 0.5, borderTopColor: FOREST_700 }
-            : {};
+        const bgColor = isEquationCheck
+          ? `rgba(90,143,123,0.18)` // SAGE_500 at ~18% opacity
+          : isEquationWarn
+            ? `rgba(160,72,85,0.18)` // WINE_500 at ~18% opacity
+            : isTotal
+              ? SAND_400
+              : isSubtotal
+                ? `rgba(229,210,171,0.28)` // SAND_300 at ~28% opacity
+                : ri % 2 === 1
+                  ? CREAM_100
+                  : 'transparent';
+
+        const borderTop = isEquationTitle
+          ? { borderTopWidth: 1, borderTopColor: isEquationWarn ? '#722F37' : FOREST_700 }
+          : isTotal
+            ? { borderTopWidth: 1, borderTopColor: FOREST_900 }
+            : isSubtotal
+              ? { borderTopWidth: 0.5, borderTopColor: FOREST_700 }
+              : {};
+
+        // Color del texto del título de la ecuación: forest verde para ✅,
+        // wine bordeaux para ⚠. El resto sigue el FOREST_900 por defecto.
+        const accountTextColor = isEquationWarn ? '#722F37' : FOREST_900;
 
         return (
           <View
@@ -170,9 +218,10 @@ function LeftTable({ table }: { table: ParsedTable }) {
               style={{
                 fontFamily: FONT_SANS,
                 fontWeight: isTotal || isSubtotal ? 'bold' : 'normal',
-                fontSize: TYPE_SMALL,
-                color: FOREST_900,
+                fontSize: cellFontSize,
+                color: accountTextColor,
                 width: accountW,
+                lineHeight: 1.25,
               }}
             >
               {row.account}
@@ -183,11 +232,12 @@ function LeftTable({ table }: { table: ParsedTable }) {
                 style={{
                   fontFamily: FONT_MONO,
                   fontWeight: isTotal || isSubtotal ? 'bold' : 'normal',
-                  fontSize: TYPE_SMALL,
-                  color: CHARCOAL_900,
+                  fontSize: cellFontSize,
+                  color: isEquationWarn ? '#722F37' : CHARCOAL_900,
                   width: valW,
                   textAlign: 'right',
                   paddingLeft: cellPadL,
+                  lineHeight: 1.25,
                 }}
               >
                 {cell}
@@ -560,6 +610,12 @@ function FullStatementPage({
   // Build a forest summary band from total rows
   const totalRows = table.rows.filter(r => r.emphasis === 'total').slice(0, 3);
 
+  // Use the full landscape content width (≈746pt) instead of the split-layout
+  // LEFT_CONTENT_W (≈441pt). The Equity statement has 8 columns and was
+  // overflowing inside the narrower width — currency strings collided with the
+  // next column header.
+  const fullContentW = PAGE_W - PAGE_MARGIN * 2;
+
   return (
     <Page
       size="A4"
@@ -599,7 +655,7 @@ function FullStatementPage({
 
       {/* Table */}
       <View wrap style={{ flex: 1 }}>
-        <LeftTable table={table} />
+        <LeftTable table={table} containerWidth={fullContentW} />
       </View>
 
       {/* Forest summary band at the bottom */}

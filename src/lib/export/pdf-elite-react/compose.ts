@@ -61,6 +61,69 @@ import {
   niifJsonToIncomeTable,
 } from './compose-statements-from-json';
 
+// ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
+//
+// El composer es la última frontera entre LLM-output y client-facing output.
+// Cualquier cadena que salga de aquí hacia PDF/HTML pasa por scrubNotes() o
+// scrubInternalMetadata(). Los patrones eliminan identificadores de pase,
+// nombres de variables internas, cuentas virtuales y cifras en centavos crudos
+// que el modelo puede filtrar en notas técnicas o texto de análisis.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Lista de patrones (case-insensitive) que se eliminan o reescriben antes de
+// renderizar a PDF/HTML. v2.2 — correcciones #6, #11, #12 (notas internas).
+const FORBIDDEN_REGEXES: Array<{ pattern: RegExp; replacement: string }> = [
+  // Pase del agente
+  { pattern: /\bPass[\s-]?[123]\b/gi, replacement: '' },
+  { pattern: /\banchor(?:s)?\s+Pass[-\s]?[123]\b/gi, replacement: '' },
+  { pattern: /\bsegún el orquestador\b/gi, replacement: 'según el sistema' },
+  { pattern: /\bel orquestador\b/gi, replacement: 'el sistema' },
+  { pattern: /\bel preprocesador\b/gi, replacement: 'el preprocesamiento' },
+  // Variables internas
+  { pattern: /\bnetIncomePrimary\b/g, replacement: 'utilidad neta del período' },
+  { pattern: /\btotalEquityPrimary\b/g, replacement: 'total patrimonio' },
+  { pattern: /\btotalAssetsPrimary\b/g, replacement: 'total activo' },
+  { pattern: /\btotalLiabilitiesPrimary\b/g, replacement: 'total pasivo' },
+  { pattern: /\bamountPrimary\b/g, replacement: 'valor del período actual' },
+  { pattern: /\bamountComparative\b/g, replacement: 'valor del período comparativo' },
+  { pattern: /\bcuratorFlags\b/g, replacement: '' },
+  { pattern: /\bequityConvergenceApplied\b/g, replacement: 'ajuste de convergencia patrimonial' },
+  { pattern: /\bcashFlowClosureForced\b/g, replacement: 'cierre EFE asistido' },
+  { pattern: /\bnegativeAssetReclassified\b/g, replacement: 'reclasificación de activo con saldo contrario' },
+  { pattern: /\bpresumedCostWarning\b/g, replacement: 'alerta de costo presunto' },
+  { pattern: /\breclassifiedAmountCop\b/g, replacement: 'monto reclasificado' },
+  // Cuentas ficticias del curator
+  { pattern: /\b2810ZZ\b/g, replacement: 'cuenta de pasivo transitorio' },
+  // Movimientos internos
+  { pattern: /\b3605-movimiento-periodo\b/g, replacement: 'movimiento de utilidades acumuladas (cuenta 3605)' },
+  // Cifras en centavos crudos: 9+ dígitos sin separadores entre comillas o palabras
+  { pattern: /\b(\d{9,})\s*centavos\b/gi, replacement: '' },
+  { pattern: /"(\d{9,})"/g, replacement: '' },
+  // Encabezados internos del preparador
+  { pattern: /^\s*NOTAS INTERNAS DEL PREPARADOR.*$/gim, replacement: '' },
+  { pattern: /^\s*NO incluir en EEFF firmables.*$/gim, replacement: '' },
+  { pattern: /^\s*Advertencia interna de Valoración.*$/gim, replacement: '' },
+  { pattern: /^\s*Notas del Preparador\s*$/gim, replacement: '' },
+];
+
+function scrubInternalMetadata(note: string): string {
+  let out = note;
+  for (const { pattern, replacement } of FORBIDDEN_REGEXES) {
+    out = out.replace(pattern, replacement);
+  }
+  // Colapsa espacios múltiples y limpia trailing punctuation que quedó huérfana
+  out = out.replace(/[ \t]{2,}/g, ' ');
+  out = out.replace(/\s+([,.;:])/g, '$1');
+  out = out.replace(/\(\s*\)/g, '');
+  return out.trim();
+}
+
+// scrubNotes: scrubbing aplicado en cada punto de ingesta de arrays de notas
+function scrubNotes(notes: string[] | null | undefined): string[] {
+  if (!notes) return [];
+  return notes.map(scrubInternalMetadata).filter((n) => n.length > 0);
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export interface ComposeInput {
@@ -213,11 +276,11 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
     code: f.code,
     severity: f.severity as AuditFindingSeverity,
     domain: f.domain as AuditFindingDomain,
-    title: f.title,
-    description: f.description,
+    title: scrubInternalMetadata(f.title),
+    description: scrubInternalMetadata(f.description),
     normReference: f.normReference,
-    recommendation: f.recommendation,
-    impact: f.impact,
+    recommendation: scrubInternalMetadata(f.recommendation),
+    impact: scrubInternalMetadata(f.impact),
   }));
 
   // Defensive: severity counts may be empty if the orchestrator didn't fill them.
@@ -232,11 +295,11 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
   return {
     overallScore: Math.round(audit.overallScore ?? 0),
     opinionType: (audit.opinionType ?? 'abstension') as AuditOpinionKind,
-    opinionText: audit.opinionText ?? '',
+    opinionText: scrubInternalMetadata(audit.opinionText ?? ''),
     auditorCards,
     topFindings,
     findingCounts,
-    executiveSummary: audit.executiveSummary ?? '',
+    executiveSummary: scrubInternalMetadata(audit.executiveSummary ?? ''),
   };
 }
 
@@ -258,7 +321,7 @@ function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | un
     dimensions,
     ifrs18Ready: !!q.ifrs18Readiness?.ready,
     ifrs18Score: Math.round(q.ifrs18Readiness?.score ?? 0),
-    ifrs18Gaps: q.ifrs18Readiness?.gaps ?? [],
+    ifrs18Gaps: scrubNotes(q.ifrs18Readiness?.gaps),
     dataQuality: {
       completeness: Math.round(q.dataQuality?.completeness ?? 0),
       accuracy: Math.round(q.dataQuality?.accuracy ?? 0),
@@ -272,7 +335,7 @@ function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | un
       antiHallucination: Math.round(q.aiGovernance?.antiHallucination ?? 0),
       humanOversight: Math.round(q.aiGovernance?.humanOversight ?? 0),
     },
-    executiveSummary: q.executiveSummary ?? '',
+    executiveSummary: scrubInternalMetadata(q.executiveSummary ?? ''),
   };
 }
 
@@ -547,11 +610,12 @@ function buildDirectorLetter(report: FinancialReport, language: 'es' | 'en') {
     initials: 'EU',
     areaAccent: 'valor',
   };
-  const pickFromEither =
+  const raw =
     extractFirstParagraphs(report.governance?.fullContent, 3) ||
     extractFirstParagraphs(report.strategicAnalysis?.fullContent, 3) ||
     extractFirstParagraphs(report.niifAnalysis?.fullContent, 3) ||
     '';
+  const pickFromEither = scrubInternalMetadata(raw);
   const citations = extractCitations(pickFromEither);
   return {
     portrait,
@@ -877,11 +941,14 @@ function buildNotes(report: FinancialReport) {
   const sections = parseHeadingSections(md, 2);
   // Fallback to level 3 if level 2 yielded nothing (defensive).
   const eff = sections.length > 0 ? sections : parseHeadingSections(md, 3);
-  return eff.map((s) => ({
-    heading: s.heading,
-    bodyMarkdown: s.body,
-    citations: extractCitations(s.body),
-  }));
+  return eff.map((s) => {
+    const body = scrubInternalMetadata(s.body);
+    return {
+      heading: scrubInternalMetadata(s.heading),
+      bodyMarkdown: body,
+      citations: extractCitations(body),
+    };
+  });
 }
 
 // ─── Break-Even Analysis ──────────────────────────────────────────────────────
@@ -890,8 +957,9 @@ function buildNotes(report: FinancialReport) {
 // vacío para que la página se omita.
 
 function buildBreakEven(report: FinancialReport) {
-  const md = (report.strategicAnalysis?.breakEvenAnalysis ?? '').trim();
-  if (!md) return undefined;
+  const raw = (report.strategicAnalysis?.breakEvenAnalysis ?? '').trim();
+  if (!raw) return undefined;
+  const md = scrubInternalMetadata(raw);
   return { bodyMarkdown: md, citations: extractCitations(md) };
 }
 
@@ -900,8 +968,9 @@ function buildBreakEven(report: FinancialReport) {
 // (FinancialReport.strategicAnalysis.projectedCashFlow). Undefined si vacío.
 
 function buildProjectedCashFlow(report: FinancialReport) {
-  const md = (report.strategicAnalysis?.projectedCashFlow ?? '').trim();
-  if (!md) return undefined;
+  const raw = (report.strategicAnalysis?.projectedCashFlow ?? '').trim();
+  if (!raw) return undefined;
+  const md = scrubInternalMetadata(raw);
   return { bodyMarkdown: md, citations: extractCitations(md) };
 }
 
@@ -910,8 +979,9 @@ function buildProjectedCashFlow(report: FinancialReport) {
 // Gobierno (FinancialReport.governance.shareholderMinutes). Undefined si vacío.
 
 function buildShareholderMinutes(report: FinancialReport) {
-  const md = (report.governance?.shareholderMinutes ?? '').trim();
-  if (!md) return undefined;
+  const raw = (report.governance?.shareholderMinutes ?? '').trim();
+  if (!raw) return undefined;
+  const md = scrubInternalMetadata(raw);
   return { bodyMarkdown: md, citations: extractCitations(md) };
 }
 
@@ -923,8 +993,8 @@ function buildRecommendations(report: FinancialReport): RecommendationItem[] {
   const md = report.strategicAnalysis?.strategicRecommendations ?? '';
   const items = parseNumberedList(md);
   return items.map((it, idx) => ({
-    title: it.title,
-    bodyMarkdown: it.body,
+    title: scrubInternalMetadata(it.title),
+    bodyMarkdown: scrubInternalMetadata(it.body),
     areaAccent: ROTATION[idx % ROTATION.length],
   }));
 }
@@ -950,18 +1020,18 @@ function buildAppendix(
   if (preprocessed) {
     const primary = (preprocessed as { primary?: PeriodSnapshot }).primary;
     const primaryWarnings = primary?.validation?.reasons ?? [];
-    for (const w of primaryWarnings) validationWarnings.push(String(w));
+    for (const w of primaryWarnings) validationWarnings.push(scrubInternalMetadata(String(w)));
     const adjustments = primary?.validation?.adjustments ?? [];
-    for (const a of adjustments) validationWarnings.push(String(a));
+    for (const a of adjustments) validationWarnings.push(scrubInternalMetadata(String(a)));
   }
   if (emittable && !emittable.ok) {
     for (const b of emittable.blockers ?? []) {
-      validationWarnings.push(String(b));
+      validationWarnings.push(scrubInternalMetadata(String(b)));
     }
   }
   if (Array.isArray(report.emittability?.blockers)) {
     for (const b of report.emittability!.blockers) {
-      validationWarnings.push(`${b.code}: ${b.message}`);
+      validationWarnings.push(scrubInternalMetadata(`${b.code}: ${b.message}`));
     }
   }
 

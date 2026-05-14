@@ -27,11 +27,25 @@ function fmtCop(value: string, absolute: boolean): string {
   return formatCopFromCents(parseMoneyCop(value), absolute);
 }
 
-function lineToRow(line: StatementLineJson): ParsedTableRow {
+// Placeholder visible cuando el reporte declara comparativo (company.comparativePeriod
+// ≠ null) pero una línea no trae amountComparative. Antes se renderizaba como
+// celda vacía, lo cual (a) desalineaba columnas con el header y (b) ocultaba
+// fallas de Pass-1 que null-eaba el comparativo silenciosamente. Render
+// explícito "n/c" surface la falla y mantiene el ancho de tabla constante
+// — spec v8.1 §1 patrón "no compara" (TRANSICION).
+const NO_COMPARATIVE_PLACEHOLDER = 'n/c';
+
+function lineToRow(line: StatementLineJson, hasComparative: boolean): ParsedTableRow {
   const account = line.account ? `${line.account} — ${line.label}` : line.label;
   const primary = fmtCop(line.amountPrimary, line.isAbsolute);
-  const comparative = line.amountComparative !== null ? fmtCop(line.amountComparative, line.isAbsolute) : '';
-  const cells = comparative ? [primary, comparative] : [primary];
+  const cells: string[] = [primary];
+  if (hasComparative) {
+    cells.push(
+      line.amountComparative !== null
+        ? fmtCop(line.amountComparative, line.isAbsolute)
+        : NO_COMPARATIVE_PLACEHOLDER,
+    );
+  }
   const emphasis: ParsedTableRow['emphasis'] | undefined =
     line.level === 4 ? 'total' : line.level === 3 ? 'subtotal' : undefined;
   return emphasis ? { account, cells, emphasis } : { account, cells };
@@ -45,42 +59,57 @@ function buildHeaders(json: NiifReportJson, kind: 'balance' | 'income'): string[
   return headers;
 }
 
+function totalCells(
+  primary: string,
+  comparative: string | null,
+  hasComparative: boolean,
+): string[] {
+  const cells: string[] = [fmtCop(primary, true)];
+  if (hasComparative) {
+    cells.push(
+      comparative !== null
+        ? fmtCop(comparative, true)
+        : NO_COMPARATIVE_PLACEHOLDER,
+    );
+  }
+  return cells;
+}
+
 // ---------------------------------------------------------------------------
 // Tablas
 // ---------------------------------------------------------------------------
 
 export function niifJsonToBalanceTable(json: NiifReportJson): ParsedTable {
   const b = json.balanceSheet;
+  const hasComparative = json.company.comparativePeriod !== null;
   const rows: ParsedTableRow[] = [];
   // ACTIVOS
   rows.push({ account: 'ACTIVOS', cells: [], emphasis: 'subtotal' });
-  rows.push(...b.assets.map(lineToRow));
-  // Total Activos
-  const totA = fmtCop(b.totalAssetsPrimary, true);
-  const totAcmp = b.totalAssetsComparative !== null ? fmtCop(b.totalAssetsComparative, true) : '';
+  rows.push(...b.assets.map((l) => lineToRow(l, hasComparative)));
   rows.push({
     account: 'TOTAL ACTIVOS',
-    cells: totAcmp ? [totA, totAcmp] : [totA],
+    cells: totalCells(b.totalAssetsPrimary, b.totalAssetsComparative, hasComparative),
     emphasis: 'total',
   });
   // PASIVOS Y PATRIMONIO
   rows.push({ account: 'PASIVOS Y PATRIMONIO', cells: [], emphasis: 'subtotal' });
-  rows.push(...b.liabilities.map(lineToRow));
-  const totL = fmtCop(b.totalLiabilitiesPrimary, true);
-  const totLcmp = b.totalLiabilitiesComparative !== null ? fmtCop(b.totalLiabilitiesComparative, true) : '';
+  rows.push(...b.liabilities.map((l) => lineToRow(l, hasComparative)));
   rows.push({
     account: 'TOTAL PASIVOS',
-    cells: totLcmp ? [totL, totLcmp] : [totL],
+    cells: totalCells(b.totalLiabilitiesPrimary, b.totalLiabilitiesComparative, hasComparative),
     emphasis: 'total',
   });
-  rows.push(...b.equity.map(lineToRow));
-  const totE = fmtCop(b.totalEquityPrimary, true);
-  const totEcmp = b.totalEquityComparative !== null ? fmtCop(b.totalEquityComparative, true) : '';
+  rows.push(...b.equity.map((l) => lineToRow(l, hasComparative)));
   rows.push({
     account: 'TOTAL PATRIMONIO',
-    cells: totEcmp ? [totE, totEcmp] : [totE],
+    cells: totalCells(b.totalEquityPrimary, b.totalEquityComparative, hasComparative),
     emphasis: 'total',
   });
+
+  // ── ECUACIÓN PATRIMONIAL (v2.2 #1) ────────────────────────────────────────
+  // Verificación visible A = P + C inmediatamente después de TOTAL PATRIMONIO.
+  // El renderer lo destaca con tinte sage cuando cuadra y tinte clay cuando no.
+  rows.push(...buildEquationTrailer(b, hasComparative));
 
   return {
     caption: 'Estado de Situación Financiera',
@@ -89,15 +118,104 @@ export function niifJsonToBalanceTable(json: NiifReportJson): ParsedTable {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Ecuación patrimonial — trailer A = P + C (v2.2 #1)
+// ---------------------------------------------------------------------------
+//
+// Anexa 6 filas al final del Balance:
+//   0. Grupo "VERIFICACIÓN" (separador visual)
+//   1. Título — "✅ ECUACIÓN PATRIMONIAL — A = P + C" o "⚠ DESCUADRE..."
+//   2. Activo                        = totalAssetsPrimary [+ comparative]
+//   3. = Pasivo                      = totalLiabilitiesPrimary [+ comparative]
+//   4. + Patrimonio                  = totalEquityPrimary [+ comparative]
+//   5. Diferencia (debe ser $0,00)   = (A − P − C) por columna (firmado)
+//
+// El título mantiene siempre el check (cuadre exitoso del periodo primary
+// que es la convención del reporte). El descuadre real por columna se hace
+// visible en la fila "Diferencia": $0,00 cuando cuadra, ($X) cuando no.
+// Si el primary descuadra → la cabecera muta a "⚠ DESCUADRE DETECTADO".
+function buildEquationTrailer(
+  b: NiifReportJson['balanceSheet'],
+  hasComparative: boolean,
+): ParsedTableRow[] {
+  const aPrim = parseMoneyCop(b.totalAssetsPrimary);
+  const lPrim = parseMoneyCop(b.totalLiabilitiesPrimary);
+  const ePrim = parseMoneyCop(b.totalEquityPrimary);
+  const diffPrim = aPrim - lPrim - ePrim;
+  const primaryBalanced = diffPrim === BigInt(0);
+
+  const titleLabel = primaryBalanced
+    ? '✅ ECUACIÓN PATRIMONIAL — A = P + C'
+    : '⚠ DESCUADRE DETECTADO — A ≠ P + C';
+
+  // Title row cells: muestran el TOTAL ACTIVOS de cada periodo (la igualdad
+  // declarada). El visual ya se acentúa en el renderer por el prefijo del
+  // account (✅ / ⚠).
+  const titleCells: string[] = [fmtCop(b.totalAssetsPrimary, true)];
+  if (hasComparative) {
+    titleCells.push(
+      b.totalAssetsComparative !== null
+        ? fmtCop(b.totalAssetsComparative, true)
+        : NO_COMPARATIVE_PLACEHOLDER,
+    );
+  }
+
+  // Diferencia (debe ser $0,00). Mantenemos signo (absolute=false) para que
+  // un descuadre se vea como ($X) — la convención NIIF de paréntesis para
+  // negativos refuerza el "algo está roto".
+  const diffCells: string[] = [formatCopFromCents(diffPrim, false)];
+  if (hasComparative) {
+    if (
+      b.totalAssetsComparative !== null &&
+      b.totalLiabilitiesComparative !== null &&
+      b.totalEquityComparative !== null
+    ) {
+      const diffComp =
+        parseMoneyCop(b.totalAssetsComparative) -
+        parseMoneyCop(b.totalLiabilitiesComparative) -
+        parseMoneyCop(b.totalEquityComparative);
+      diffCells.push(formatCopFromCents(diffComp, false));
+    } else {
+      diffCells.push(NO_COMPARATIVE_PLACEHOLDER);
+    }
+  }
+
+  return [
+    { account: 'VERIFICACIÓN', cells: [], emphasis: 'subtotal' },
+    { account: titleLabel, cells: titleCells, emphasis: 'total' },
+    {
+      account: 'Activo',
+      cells: totalCells(b.totalAssetsPrimary, b.totalAssetsComparative, hasComparative),
+    },
+    {
+      account: '= Pasivo',
+      cells: totalCells(b.totalLiabilitiesPrimary, b.totalLiabilitiesComparative, hasComparative),
+    },
+    {
+      account: '+ Patrimonio',
+      cells: totalCells(b.totalEquityPrimary, b.totalEquityComparative, hasComparative),
+    },
+    {
+      account: 'Diferencia (debe ser $0,00)',
+      cells: diffCells,
+      emphasis: 'subtotal',
+    },
+  ];
+}
+
 export function niifJsonToIncomeTable(json: NiifReportJson): ParsedTable {
   const p = json.incomeStatement;
-  const rows: ParsedTableRow[] = p.lines.map(lineToRow);
+  const hasComparative = json.company.comparativePeriod !== null;
+  const rows: ParsedTableRow[] = p.lines.map((l) => lineToRow(l, hasComparative));
   // Append los totales emphasized si no vinieron como líneas.
   const accounts = new Set(rows.map((r) => r.account.toUpperCase()));
   const pushTotal = (label: string, primary: string, comp: string | null) => {
     if (accounts.has(label.toUpperCase())) return;
-    const cells = comp !== null ? [fmtCop(primary, true), fmtCop(comp, true)] : [fmtCop(primary, true)];
-    rows.push({ account: label, cells, emphasis: 'total' });
+    rows.push({
+      account: label,
+      cells: totalCells(primary, comp, hasComparative),
+      emphasis: 'total',
+    });
   };
   pushTotal('UTILIDAD BRUTA', p.grossProfitPrimary, p.grossProfitComparative);
   pushTotal('UTILIDAD OPERATIVA (EBIT)', p.operatingProfitPrimary, p.operatingProfitComparative);
@@ -117,10 +235,14 @@ export function niifJsonToCashFlowTable(json: NiifReportJson): ParsedTable {
     investing: 'ACTIVIDADES DE INVERSIÓN',
     financing: 'ACTIVIDADES DE FINANCIAMIENTO',
   } as const;
+  // EFE en la plantilla editorial v8.1 se presenta single-period (la
+  // variación domina vs el saldo comparativo en flujos), por eso
+  // hasComparative=false aquí incluso si el reporte trae comparativo en
+  // Balance/P&L.
   const rows: ParsedTableRow[] = [];
   for (const s of cf.sections) {
     rows.push({ account: sectionLabel[s.section], cells: [], emphasis: 'subtotal' });
-    rows.push(...s.lines.map(lineToRow));
+    rows.push(...s.lines.map((l) => lineToRow(l, false)));
     rows.push({
       account: `FLUJO NETO ${sectionLabel[s.section]}`,
       cells: [fmtCop(s.netFlow, false)],

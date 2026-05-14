@@ -437,11 +437,18 @@ function addBalanceSheet(
     ws.getRow(row).getCell(1).value = 'Datos NIIF (preprocesador no disponible — render desde JSON-strict):';
     ws.getRow(row).getCell(1).font = { name: FONT_MAIN, italic: true, size: 10 };
     row++;
+    const hasComparativeXls = json.company.comparativePeriod !== null;
     const writeLine = (account: string, primary: string, comp: string | null) => {
       const r = ws.getRow(row++);
       r.getCell(2).value = account;
       r.getCell(3).value = fmt(primary);
-      if (comp !== null) r.getCell(4).value = fmt(comp);
+      // Wave 5 — 2026-05-14: cuando el reporte declara comparativo
+      // (company.comparativePeriod ≠ null) pero el total comparativo no llegó,
+      // escribir "n/c" hace visible el hueco en vez de dejar la celda en
+      // blanco (lo que enmascaraba la falla de Pass-1).
+      if (hasComparativeXls) {
+        r.getCell(4).value = comp !== null ? fmt(comp) : 'n/c';
+      }
     };
     writeLine('TOTAL ACTIVOS', json.balanceSheet.totalAssetsPrimary, json.balanceSheet.totalAssetsComparative);
     writeLine('TOTAL PASIVOS', json.balanceSheet.totalLiabilitiesPrimary, json.balanceSheet.totalLiabilitiesComparative);

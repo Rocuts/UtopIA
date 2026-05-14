@@ -144,6 +144,12 @@ interface SharedPromptContext {
   efeVarCxC: number | undefined;
   efeVarInv: number | undefined;
   efeVarCxP: number | undefined;
+  // Corrección v2.4 — Saldo INICIAL de Cta.3605 (= utilidad del ejercicio del
+  // periodo comparativo, que entra como utilidad acumulada en el patrimonio
+  // de apertura del periodo actual). Si > $0 material, debe traviajar como
+  // ajuste NO-CASH (signo negativo) en operating del EFE — nunca como salida
+  // ficticia de financiación.
+  openingUtilidadEjercicio3605: number | undefined;
   fmtCop: (cents: bigint | number) => string;
   company: CompanyInfo;
 }
@@ -187,8 +193,19 @@ function buildSharedContext(
 
   const periods = preprocessed?.periods ?? [];
   const primaryPeriod = preprocessed?.primary?.period ?? company.fiscalPeriod;
-  const comparativePeriod = preprocessed?.comparative?.period ?? null;
-  const isComparative = periods.length >= 2 && !!primaryPeriod && !!comparativePeriod;
+  // Wave 5 — 2026-05-14: el periodo comparativo se resuelve con prioridad
+  //   1. `preprocessed.comparative.period` (autoritativo cuando el preprocesador
+  //      consolida un PeriodSnapshot completo del año anterior),
+  //   2. `company.comparativePeriod` (echo desde `prepareFinancialContext` —
+  //      pre-llenado vía `detectedPeriods` en el orchestrator).
+  // Antes solo se consultaba (1). Cuando el preprocesador detectaba 2 periodos
+  // pero la consolidación de `comparative` fallaba (e.g. balance de 2024
+  // parcial), `isComparative` quedaba false y los prompts emitían MODO
+  // SINGLE-PERIOD, perdiendo silenciosamente el comparativo que el usuario
+  // sí solicitó. Ahora se respeta la intención de `company.comparativePeriod`.
+  const comparativePeriod =
+    preprocessed?.comparative?.period ?? company.comparativePeriod ?? null;
+  const isComparative = !!primaryPeriod && !!comparativePeriod;
   const periodsListed = periods.map((p) => p.period).join(', ');
 
   const comparativosImpracticables =
@@ -234,6 +251,12 @@ function buildSharedContext(
   const efeVarInv = efeOp?.varInventarios;
   const efeVarCxP = efeOp?.varCuentasPorPagar;
 
+  // Corrección v2.4 — utilidad del ejercicio del periodo comparativo,
+  // que para el periodo ACTUAL representa el saldo INICIAL de Cta.3605
+  // (utilidad acumulada arrastrada en el patrimonio de apertura).
+  const openingUtilidadEjercicio3605 =
+    preprocessed?.comparative?.equityBreakdown?.utilidadEjercicio;
+
   const fmtCop = (cents: bigint | number): string => {
     const n = typeof cents === 'bigint' ? Number(cents) / 100 : cents;
     return n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -263,6 +286,7 @@ function buildSharedContext(
     efeVarCxC,
     efeVarInv,
     efeVarCxP,
+    openingUtilidadEjercicio3605,
     fmtCop,
     company,
   };
@@ -406,10 +430,14 @@ Saldo a favor (PUC 1355/1805): $${ctx.fmtCop(ctx.saldoAFavorCents!)} COP. Presen
  * como anchor).
  */
 function renderEfeAuthoritativeBlock(ctx: SharedPromptContext): string {
+  const hasOpening3605 =
+    typeof ctx.openingUtilidadEjercicio3605 === 'number' &&
+    Math.abs(ctx.openingUtilidadEjercicio3605) > 0;
   const hasAny =
     typeof ctx.efeVarCxC === 'number' ||
     typeof ctx.efeVarInv === 'number' ||
-    typeof ctx.efeVarCxP === 'number';
+    typeof ctx.efeVarCxP === 'number' ||
+    hasOpening3605;
   if (!hasAny) return '';
   const lines: string[] = [];
   if (typeof ctx.efeVarCxC === 'number') {
@@ -420,6 +448,15 @@ function renderEfeAuthoritativeBlock(ctx: SharedPromptContext): string {
   }
   if (typeof ctx.efeVarCxP === 'number') {
     lines.push(`- ΔCxP = ${ctx.efeVarCxP.toLocaleString('es-CO', { maximumFractionDigits: 2 })} (signo aplicado).`);
+  }
+  // Corrección v2.4 — Saldo inicial Cta.3605 (= utilidad de periodos
+  // anteriores en el patrimonio de apertura). Material >0 → ajuste no-cash
+  // en operating con signo NEGATIVO.
+  if (hasOpening3605) {
+    const opening = ctx.openingUtilidadEjercicio3605!;
+    lines.push(
+      `- Saldo INICIAL Cta.3605 (utilidad de periodos anteriores en patrimonio de apertura) = $${ctx.fmtCop(opening)} COP — incluir como ajuste NO-CASH NEGATIVO en operating (NIC 7 §18(b) / NIIF for SMEs §7.7-7.8). NO va en financiación.`,
+    );
   }
   return `## Regla R2 (EFE Indirecto) — Valores autoritativos curator R2
 ${lines.join('\n')}`;
@@ -537,8 +574,14 @@ ${ctx.niifDisclosures}
 - Ingresos operacionales del P&L = SUMA COMPLETA de Clase 4 (41xx + 42xx), no un solo grupo.
 - Utilidad Neta del P&L coincide al centavo con TOTALES VINCULANTES (será el anchor para el closing_balance del ECP en Pass-2).
 - Toda cifra global (totalAssetsPrimary, totalLiabilitiesPrimary, totalEquityPrimary, netIncomePrimary) coincide al centavo con TOTALES VINCULANTES.
+- EBIT (operatingProfitPrimary) = grossProfit − Grupo 51 − Grupo 52. NO se deduce Grupo 53. Tolerancia $0.
+- UAI (utilidad antes de impuestos) = operatingProfitPrimary − Grupo 53.
+- netIncomePrimary = UAI − impuestoRenta. operatingProfitPrimary ≠ netIncomePrimary salvo cuando Grupo 53 = $0 e impuesto = $0.
 - curatorFlags refleja LITERALMENTE el bloque vinculante (sin re-cálculo).
-${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}); cuando un saldo comparativo no exista, amountComparative = null y se documenta en balanceSheet.notes / incomeStatement.notes.` : '- isComparative=false: amountComparative = null en TODAS las líneas; totalAssetsComparative et al = null.'}
+${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}); cuando un saldo comparativo no exista, amountComparative = null y se documenta en balanceSheet.notes / incomeStatement.notes.
+- COMPARATIVO COMPLETO (Wave 5 — 2026-05-14): los SEIS totales globales del periodo comparativo (${ctx.comparativePeriod}) — totalAssetsComparative, totalLiabilitiesComparative, totalEquityComparative, grossProfitComparative, operatingProfitComparative, netIncomeComparative — DEBEN viajar como MoneyCop string (NUNCA null) y coincidir al centavo con el bloque "=== Periodo comparativo (${ctx.comparativePeriod}) ===" de TOTALES VINCULANTES. El validator E9 rechaza el reporte si cualquiera de ellos viaja null.
+- Ecuación patrimonial comparativa: totalAssetsComparative = totalLiabilitiesComparative + totalEquityComparative, tolerancia $0 (centavo).
+- company.comparativePeriod DEBE ecoarse LITERALMENTE como "${ctx.comparativePeriod}" (string, no null) cuando isComparative=true.` : '- isComparative=false: amountComparative = null en TODAS las líneas; totalAssetsComparative et al = null. company.comparativePeriod = null.'}
 - CHECK 4 (Parte 8.1 spec — no duplicación gastos): TOTAL_GASTOS_P&L = Grupo 51 + Grupo 52 + Grupo 53 (cada grupo una sola vez). Subcuentas 53xx NO se cuentan en adición al total Grupo 53. Σ líneas de gastos en incomeStatement.lines ≤ controlTotals.gastos del bloque vinculante (tolerancia $1.000).
 - Cada línea material (>1% del rubro padre) en balanceSheet.assets/liabilities/equity e incomeStatement.lines lleva campo \`confidence\` ∈ {high, medium, low} asignado.
 - balanceSheet.modeBanner e incomeStatement.modeBanner reflejan el texto canónico del modo del reporte (o null cuando reportMode='COMPARATIVO_COMPLETO').
@@ -566,6 +609,17 @@ ${ctx.reportMode === 'COMPARATIVO_COMPLETO' ? '  balanceSheet.modeBanner = null;
   NEVER inventar otro texto distinto del canónico — copiar literal.
 
 - MUST: si reportMode != 'LINEA_BASE' Y \`comparativosImpracticables\` != true Y el bloque TOTALES VINCULANTES expone la cifra del periodo comparativo, \`amountComparative\` DEBE reflejar esa cifra (incluso si es "0"). \`amountComparative=null\` EXCLUSIVAMENTE cuando: (a) reportMode='LINEA_BASE', o (b) la cuenta NO existe en preprocessed.comparative (es cuenta nueva del periodo actual). NUNCA null-ear silenciosamente.
+
+- MUST (Wave 5 hard-anchor — 2026-05-14): cuando el bloque TOTALES VINCULANTES contiene una sección "=== Periodo comparativo (${ctx.comparativePeriod ?? 'YYYY'}) ===", los SEIS totales globales del periodo comparativo se LEEN LITERALMENTE de esa sección y se emiten así:
+  - balanceSheet.totalAssetsComparative = "Total Activo" del bloque comparativo (centavos string).
+  - balanceSheet.totalLiabilitiesComparative = "Total Pasivo" del bloque comparativo.
+  - balanceSheet.totalEquityComparative = "Total Patrimonio" del bloque comparativo.
+  - incomeStatement.grossProfitComparative = Utilidad Bruta del periodo comparativo (Ingresos − Costos del bloque comparativo).
+  - incomeStatement.operatingProfitComparative = EBIT del periodo comparativo (Utilidad Bruta − Gastos operacionales del bloque comparativo).
+  - incomeStatement.netIncomeComparative = "Utilidad Neta (P&L)" del bloque comparativo.
+  PROHIBIDO emitir null en cualquiera de los seis cuando isComparative=true (validator E9 rechaza). PROHIBIDO redondear o re-derivar; los valores son AUTORITARIOS del preprocesador. Tolerancia $0 al centavo.
+
+- MUST: \`company.comparativePeriod\` se ecoa EXACTAMENTE como ${ctx.isComparative ? `"${ctx.comparativePeriod}"` : 'null'} (echo literal del bloque DATOS DE LA EMPRESA). PROHIBIDO inventar otro año o emitir null cuando isComparative=true — bloquea el renderer comparativo en PDF/Excel/HTML.
 
 - MUST: TODA política contable elegida, TODA agrupación de subcuentas y TODA presentación lleva cita normativa entre paréntesis (§1.4 spec v8.1: NIIF Pymes Sec. X / IAS Y / NIC Z / Art. E.T. / Ley X). Sin cita, sin afirmación.
 
@@ -610,7 +664,9 @@ Detección de Anomalías (Tabla 8 — Parte 5 spec v2.0). Para CADA condición d
 - If totalEquityPrimary < 0 then nota DEDICADA "Anomalía A7: PATRIMONIO NEGATIVO — alerta de continuidad de negocio (NIC 1 §25 Going Concern; C.Co. Art. 459 — disolución por pérdidas cuando patrimonio < 50% capital suscrito). El representante legal DEBE convocar disolución conforme C.Co. Art. 459.".
 - If (utilidadNeta / ingresos) > 0.70 Y costoVentas < 30% ingresos then nota "Anomalía A8: Margen neto > 70% con costos < 30% — costo de ventas posiblemente subregistrado o ingresos sobreestimados (NIA 240 + R7 curator)".
 
-If TOTALES VINCULANTES contiene reclassifications[] con applied=true then mostrar la cuenta virtual "2810ZZ — Otros pasivos transitorios (reclasificación curator)" dentro de balanceSheet.liabilities con el monto absoluto, NO mostrar la cuenta de Activo original con saldo negativo, y emitir balanceSheet.notes con la Nota de Reclasificación + sub-nota Defensa Art. 647 E.T. (NIC 1 §32 — no compensación) otherwise omitir silenciosamente.
+If TOTALES VINCULANTES contiene reclassifications[] con applied=true then mantener la cuenta de Activo original con saldo absoluto NEGATIVO (e.g. "12 — Inversiones en asociadas (saldo contrario — ver Nota R1)") dentro de balanceSheet.assets, NO crear cuenta virtual PUC con sufijo "ZZ" / "XX" / "transitorio", y emitir balanceSheet.notes con la Nota R1 de Anomalía: "La cuenta {cuenta_origen} presenta saldo contrario por {monto}. Se requiere revisión documental. Conforme al principio de trazabilidad se mantiene el registro tal como aparece en el balance de prueba, agregando la presente nota de anomalía. Sustento NIIF: NIC 1 §32 (no compensación de activos y pasivos). Defensa tributaria Art. 647 E.T.: documentación de inconsistencia detectada, no constituye omisión deliberada." otherwise omitir silenciosamente.
+
+NEVER inventar códigos PUC con sufijos no canónicos (ZZ, XX, transitorio, virtual, curator). El PUC colombiano (Decreto 2650/1993) tiene un catálogo cerrado; sufijos arbitrarios confunden al lector y rompen reconciliación con balance de prueba.
 
 If reclasifNoComp.length > 0 (Regla R4 — No-Compensación NIC 1 §32, saldos contranatura en Activo) then presentar las cuentas reclasificadas dentro de balanceSheet.liabilities (mantener saldo absoluto, citar cuenta de origen como referencia en notes) otherwise omitir.
 
@@ -713,11 +769,13 @@ ${ctx.niifDisclosures}
 - cashOpening == saldo PUC 11 al INICIO del periodo (preprocessed.comparative.controlTotals.efectivoCuenta11 o cashClosing - netChange si el orchestrator solo lo expone derivable).
 - Saldo final del ECP (closing_balance row.total) == totalEquityPrimary del Pass-1 anchor, tolerancia $0.
 - Resultado del ejercicio en closing_balance row.resultadoEjercicio == netIncomePrimary del Pass-1 anchor, tolerancia $0.
+- cashFlow.sections[operating].lines[0] ancla EXACTAMENTE al netIncomePrimary del Pass-1 anchor (\`<previously_computed>\`). El label canónico es "Utilidad neta del ejercicio" (o "Resultado neto del período"). PROHIBIDO emitir como primer ítem el Δ saldo de la cuenta 3605 entre cierre y apertura ("3605-movimiento-periodo", "Δ Utilidades acumuladas", o cualquier variante similar).
 - EFE Método Indirecto presenta las 3 secciones operating / investing / financing con sus respectivas líneas y subtotales.
 - Las tres líneas de Cambios en Capital de Trabajo del EFE usan los nombres PLURAL del curator R2 (\`varCuentasPorCobrar\`, \`varInventarios\`, \`varCuentasPorPagar\`) — singular es inválido.
 ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}) donde aplique; cuando un saldo comparativo no exista, amountComparative = null.` : '- isComparative=false: amountComparative = null en TODAS las líneas.'}
 - Cuando reportMode='LINEA_BASE': ni methodNote ni equityChanges.notes usan verbos comparativos (mejoró/creció/aumentó/se redujo/evolucionó).
 - If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (por ausencia de auxiliares de capital de trabajo) then \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y methodNote incluye literal de limitación al alcance.
+- Corrección v2.4: cashFlow.sections[].lines (en CUALQUIER sección, especialmente financing) NUNCA contiene ítems cuyo label encaje en las frases prohibidas v2.4 ("Distribución de utilidades de periodos anteriores", "Pagos a propietarios asociados con utilidades", "Cancelación resultado acumulado", "Traslado utilidad ejercicio a 3605"). El validator E10 rechaza el reporte si las detecta. Si existe saldo inicial Cta.3605 material en TOTALES VINCULANTES → la línea va en operating con signo negativo como ajuste no-cash, NUNCA en financing.
 </success_criteria>
 
 <constraints>
@@ -744,19 +802,37 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 - If reportMode='LINEA_BASE' then NEVER usar en methodNote ni equityChanges.notes verbos comparativos: "mejoró", "creció", "aumentó", "se redujo", "evolucionó", "varió respecto a", "incrementó", "disminuyó", "se contrajo". Usar en su lugar verbos de estado: "establece", "documenta", "constituye", "declara", "registra", "presenta".
   If reportMode='TRANSICION' then verbos comparativos SÓLO en líneas con comparativo disponible.
 
-- CRÍTICO — Asiento 3605 (cierre contable) NUNCA en el Estado de Flujos de Efectivo (Corrección 2 spec v2.1).
+- CRÍTICO — Asiento 3605 (cierre contable) NUNCA en el Estado de Flujos de Efectivo (Corrección 2 spec v2.1 + Corrección v2.4).
 
   REGLA ABSOLUTA: el traslado de utilidad a la cuenta 3605 (asiento de cierre) es un movimiento PURAMENTE CONTABLE. NO representa flujo de efectivo bajo ninguna circunstancia. NEVER incluirlo en cashFlow.sections — ni en operating, ni en investing, ni en financing.
 
-  PROHIBIDO en cashFlow.sections[financing].lines (ni en ninguna otra sección):
-  - "Distribución/cancelación resultado acumulado YYYY: \$X" → falso flujo de salida.
-  - "Traslado utilidad ejercicio a 3605: \$X" → asiento contable, no cash.
-  - Cualquier referencia al cierre 3605 dentro de cashFlow.
+  PROHIBIDO LITERAL — frases que NUNCA pueden aparecer en cashFlow.sections[].lines[].label (en ninguna sección):
+  - "Distribución de utilidades de periodos anteriores"
+  - "Distribución/cancelación resultado acumulado YYYY"
+  - "Pagos a propietarios asociados con utilidades"
+  - "Cancelación resultado acumulado"
+  - "Traslado utilidad ejercicio a 3605"
+  - Cualquier otra referencia al asiento contable de cierre de Cta.3605 dentro de cashFlow.
 
-  If el EFE no cuadra (cashClosing != cashOpening + netChange) then:
-    1. Revisar variaciones de capital de trabajo (varCuentasPorCobrar, varInventarios, varCuentasPorPagar) y ajustar magnitudes/signos hasta que el EFE cuadre matemáticamente con tolerancia $0 al centavo.
-    2. NEVER usar el asiento 3605 como "comodín" para hacer cuadrar el EFE.
-    3. Si pese a los ajustes el EFE sigue sin cuadrar, emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
+  Estos ítems SOLO pueden ir en \`cashFlow.sections[financing].lines\` con evidencia REAL de pago en efectivo a socios (acta de distribución de dividendos + comprobante de egreso bancario). Sin esa evidencia → el ítem NO va en el EFE.
+
+  REMEDIACIÓN — Corrección v2.4 — si el EFE NO cuadra (cashClosing != cashOpening + netChange), seguir este ORDEN ESTRICTO:
+
+    1. PRIMER PATH — Ajuste NO-CASH en operating por saldo inicial Cta.3605.
+       If TOTALES VINCULANTES expone \`openingUtilidadEjercicio3605\` (o equivalente en "Regla R2") con valor > $0 material (= utilidad del periodo comparativo arrastrada como utilidad acumulada en el patrimonio de apertura) then INCLUIR una línea en \`cashFlow.sections[operating].lines\` con:
+         - label LITERAL: "Resultado de periodos anteriores reconocido en patrimonio de apertura (ajuste de conciliación — no representa flujo de efectivo del período actual)"
+         - amountPrimary = saldo inicial Cta.3605 (signo NEGATIVO en centavos como string)
+         - isAbsolute = false (preserva signo)
+         - level = 1
+       Sustento NIIF: NIC 7 §18(b) / NIIF for SMEs §7.7-7.8 (método indirecto: ajuste de partidas no monetarias). Análogo a depreciación (gasto sin salida de caja → SUMA) ↔ resultado anterior (ingreso ya reconocido → RESTA). Citar en cashFlow.methodNote.
+
+    2. SEGUNDO PATH — Revisar magnitudes/signos de las variaciones de capital de trabajo (varCuentasPorCobrar, varInventarios, varCuentasPorPagar) hasta que el EFE cuadre matemáticamente con tolerancia $0 al centavo.
+
+    3. TERCER PATH (último recurso) — Si pese a los dos pasos anteriores el EFE sigue sin cuadrar, emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
+
+  NEVER usar el asiento 3605 como "comodín" en financing para hacer cuadrar el EFE. NEVER crear flujos ficticios de financiación. La sección financing solo acepta: dividendos pagados en efectivo (acta + comprobante), aportes de capital recibidos (ingreso bancario verificado), pago de créditos bancarios (Cta.21 disminuyó en el período).
+
+- MUST: la PRIMERA línea de cashFlow.sections.find(s => s.section==='operating').lines DEBE tener amountPrimary === netIncomePrimary (anchor Pass-1) al centavo. Label aceptado: "Utilidad neta del ejercicio" / "Resultado neto del período" / "Utilidad neta del período" (anclado al P&L). PROHIBIDO usar como primer ítem cualquiera de: "Δ 3605", "Movimiento 3605", "Variación utilidades acumuladas", "3605-movimiento-periodo", "Incremento utilidades retenidas".
 
 - CRÍTICO — ECP traslado a 3605: usar saldo REAL de la cuenta, NO utilidad P&L (Corrección 5 spec v2.1).
 

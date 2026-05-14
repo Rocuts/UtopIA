@@ -22,6 +22,8 @@ import {
   type AuditCompanyContext,
 } from '@/lib/pillars/audit-report-emittable';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
+import { validateNiifReportJson } from './validators/niif-json-validator';
+import { serializeMoneyCop } from './contracts/money';
 import { pullTrialBalanceForPeriod } from '@/lib/erp/pipeline';
 import type { PeriodSpec } from '@/lib/erp/adapter';
 import type { ERPServiceConnection } from '@/lib/erp/service';
@@ -124,6 +126,44 @@ function deriveControlTotalsFromSnapshot(
 /** Totales del periodo actual (primary). Usado por validator y guardas. */
 function deriveControlTotals(preprocessed: unknown): ControlTotalsInput | undefined {
   return deriveControlTotalsFromSnapshot(getPrimarySnapshot(preprocessed));
+}
+
+/**
+ * Construye las anclas del periodo comparativo para `validateNiifReportJson`
+ * (E9 cross-check). Toma cents BigInt cuando están disponibles
+ * (`controlTotals.cents`); si solo hay `ControlTotals` flotante, multiplica
+ * por 100 con `Math.round` (única vía sin un BigInt fuente).
+ *
+ * NOTA: grossProfit / operatingProfit no se cruzan porque el preprocesador no
+ * los computa directamente — el chequeo NOT-NULL en E9 todavía cubre que
+ * Pass-1 los emita. Cuando esos campos lleguen al preprocesador, agregar
+ * aquí.
+ */
+function buildComparativeAnchorsForValidator(
+  totals: ControlTotalsInput,
+  snap: PeriodSnapshot | null,
+):
+  | {
+      totalAssets?: string;
+      totalLiabilities?: string;
+      totalEquity?: string;
+      netIncome?: string;
+    }
+  | undefined {
+  const cents = snap?.controlTotals?.cents;
+  const toCentsString = (value: number | undefined, big: bigint | undefined): string | undefined => {
+    if (typeof big === 'bigint') return serializeMoneyCop(big);
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return serializeMoneyCop(BigInt(Math.round(value * 100)));
+    }
+    return undefined;
+  };
+  return {
+    totalAssets: toCentsString(totals.activo, cents?.activo),
+    totalLiabilities: toCentsString(totals.pasivo, cents?.pasivo),
+    totalEquity: toCentsString(totals.patrimonio, cents?.patrimonio),
+    netIncome: toCentsString(totals.utilidadNeta, cents?.utilidadNeta),
+  };
 }
 
 function deriveEquityBreakdownFromSnapshot(
@@ -1267,6 +1307,45 @@ export async function runNiifPhase(
         'Advertencia: el output NIIF no cita ninguno de los totales vinculantes pre-calculados. ' +
         'Los Agentes 2 y 3 recibiran igualmente los bindingTotals.',
     });
+  }
+
+  // Wave 5 — 2026-05-14: validator JSON-strict (E1..E9) sobre el output del
+  // NIIF Analyst. Cruza los SEIS totales del periodo comparativo emitidos
+  // por Pass-1 contra el preprocesador (tolerancia $0). Errores se emiten
+  // como SSE `warning` — no rompemos pipelines en producción, pero la falla
+  // queda visible en logs/UI y la telemetría puede alertar.
+  if (niif.json) {
+    const comparativeSnap = getComparativeSnapshot(context.preprocessed);
+    const comparativeTotals = deriveControlTotalsFromSnapshot(comparativeSnap);
+    const bindingComparativeTotalsCents = comparativeTotals
+      ? buildComparativeAnchorsForValidator(comparativeTotals, comparativeSnap)
+      : undefined;
+    const cashAnchorCents =
+      typeof comparativeSnap?.controlTotals?.efectivoCuenta11 === 'number'
+        ? serializeMoneyCop(
+            BigInt(Math.round(comparativeSnap.controlTotals.efectivoCuenta11 * 100)),
+          )
+        : undefined;
+    void cashAnchorCents; // PUC 11 del primary ya se cruza en validateConsolidatedReport
+    const jsonValidation = validateNiifReportJson(niif.json, {
+      bindingComparativeTotalsCents,
+    });
+    if (!jsonValidation.ok && jsonValidation.errors.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: jsonValidation.errors.map(
+          (e) => `[NIIF JSON validator E1..E9] ${e}`,
+        ),
+      });
+    }
+    if (jsonValidation.warnings.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: jsonValidation.warnings.map(
+          (w) => `[NIIF JSON validator soft-check] ${w}`,
+        ),
+      });
+    }
   }
 
   onProgress?.({ type: 'stage_complete', stage: 1, label: completeLabel });

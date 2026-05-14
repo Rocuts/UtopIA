@@ -110,6 +110,15 @@ ${JSON.stringify(input.governanceReport, null, 2)}
 - NEVER: usar paleta oro (#C49A2E / #9A7418 / #DDB94A / --gold / --gold-d / --gold-l). El acento único es azul prusia #1E3A5F (--accent).
 - NEVER: emit $0 huérfanos sin nota explicativa (§1.2) — usa "—" o "No disponible" en muted italic con marca [i] referenciada en "Limitaciones de Información".
 - NEVER: emitir metadatos internos del pipeline en el output final (§1.9): "Pass-1", "Pass-2", "Pass-3", "anchors", "curatorFlags", "netIncomePrimary", "totalAssetsPrimary", "ecpClosingTotal", "cashClosing", ni cifras en centavos crudos.
+- NEVER (REFUERZO v2.2 — correcciones #6, #11, #12). El cliente firmable JAMÁS lee:
+  - Identificadores de pases internos: "Pass-1", "Pass-2", "Pass-3", "anchor Pass-N", "primer pase del agente".
+  - Nombres de variables del sistema: netIncomePrimary, totalEquityPrimary, totalAssetsPrimary, totalLiabilitiesPrimary, amountPrimary, amountComparative, curatorFlags, equityConvergenceApplied, cashFlowClosureForced, negativeAssetReclassified, presumedCostWarning, reclassifiedAmountCop.
+  - Cuentas virtuales del curator: "2810ZZ" o cualquier código con sufijo ZZ/XX/transitorio/virtual.
+  - Movimientos internos: "3605-movimiento-periodo", "varCuentasPorCobrar"/"varInventarios"/"varCuentasPorPagar" (los conceptos contables sí son válidos; los nombres de variables NO).
+  - Referencias a la maquinaria: "el orquestador indicó", "el preprocesador reporta", "binding totals", "controlTotals", "según el sistema interno".
+  - Encabezados del preparador: "NOTAS INTERNAS DEL PREPARADOR", "NO incluir en EEFF firmables", "Advertencia interna de Valoración", "Notas del Preparador".
+  - Cifras en formato técnico: enteros de 9+ dígitos sin separadores ("241367788864"), notación científica ($2.23E9), "X centavos" donde X es un entero crudo de 9+ dígitos.
+  Si una nota técnica contiene cualquiera de los patrones anteriores, reescribirla en términos contables del cliente o omitirla. Toda cifra se renderiza en formato $1.234.567,89.
 - NEVER: invent values not present in the JSON payloads; only cite numbers from niif_report / strategy_report / governance_report / metadata.
 - NEVER: usar Plus Jakarta Sans, Geist, Helvetica, ni ninguna otra familia tipográfica fuera de Source Serif 4 / Inter / IBM Plex Mono.
 - If unsure about a presentation decision not covered by the spec, default to §12 principio de incertidumbre y omite el dato con marca <!-- DECISION_REQUIRED -->.
