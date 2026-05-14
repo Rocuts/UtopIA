@@ -229,7 +229,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
     rows.push(lineToTableRow(line, hasComparative));
   }
   rows.push({
-    label: 'TOTAL PATRIMONIO',
+    label: 'Total patrimonio',
     values: hasComparative
       ? [
           formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true),
@@ -238,6 +238,59 @@ export function renderBalanceSheet(json: NiifReportJson): string {
             : '',
         ]
       : [formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true)],
+    bold: true,
+  });
+
+  // Fila de cierre A = P + C (corrección v2.3 — ecuación patrimonial visible).
+  // Suma Pasivo + Patrimonio por período y verifica contra Total Activo con
+  // tolerancia de $100 (10.000 centavos). Si cuadra, prefija "✅"; si hay
+  // descuadre, prefija "⚠" y agrega "(DESCUADRE: $X)" en la celda afectada
+  // para que el lector lo detecte sin abrir el PDF/Excel.
+  const TOLERANCE_CENTS = BigInt(10000);
+  const liabPrimary = parseMoneyCop(b.totalLiabilitiesPrimary);
+  const eqPrimary = parseMoneyCop(b.totalEquityPrimary);
+  const sumPrimary = liabPrimary + eqPrimary;
+  const assetsPrimary = parseMoneyCop(b.totalAssetsPrimary);
+  const diffPrimary = sumPrimary - assetsPrimary;
+  const absDiffPrimary = diffPrimary < BigInt(0) ? -diffPrimary : diffPrimary;
+  const cuadraPrimary = absDiffPrimary <= TOLERANCE_CENTS;
+
+  let cuadraComparative = true;
+  let comparativeCell = '';
+  if (hasComparative) {
+    if (b.totalLiabilitiesComparative !== null && b.totalEquityComparative !== null) {
+      const liabComp = parseMoneyCop(b.totalLiabilitiesComparative);
+      const eqComp = parseMoneyCop(b.totalEquityComparative);
+      const sumComp = liabComp + eqComp;
+      const sumCompStr = formatCopFromCents(sumComp, true);
+      if (b.totalAssetsComparative !== null) {
+        const assetsComp = parseMoneyCop(b.totalAssetsComparative);
+        const diffComp = sumComp - assetsComp;
+        const absDiffComp = diffComp < BigInt(0) ? -diffComp : diffComp;
+        cuadraComparative = absDiffComp <= TOLERANCE_CENTS;
+        comparativeCell = cuadraComparative
+          ? sumCompStr
+          : `${sumCompStr} (DESCUADRE: ${formatCopFromCents(absDiffComp, true)})`;
+      } else {
+        comparativeCell = sumCompStr;
+      }
+    }
+  }
+
+  const sumPrimaryStr = formatCopFromCents(sumPrimary, true);
+  const primaryCell = cuadraPrimary
+    ? sumPrimaryStr
+    : `${sumPrimaryStr} (DESCUADRE: ${formatCopFromCents(absDiffPrimary, true)})`;
+  const cuadraAmbos = cuadraPrimary && cuadraComparative;
+  const closingLabel = cuadraAmbos
+    ? '✅ TOTAL PASIVO + PATRIMONIO'
+    : '⚠ TOTAL PASIVO + PATRIMONIO';
+
+  // Separador visual (fila vacía) antes de la línea de cierre.
+  rows.push({ label: '', values: hasComparative ? ['', ''] : [''] });
+  rows.push({
+    label: closingLabel,
+    values: hasComparative ? [primaryCell, comparativeCell] : [primaryCell],
     bold: true,
   });
 
@@ -250,7 +303,16 @@ export function renderBalanceSheet(json: NiifReportJson): string {
 
   const table = buildMarkdownTable({ headers, alignment, rows });
 
-  return [header, table, renderNotes(b.notes)].join('\n');
+  // Nota de descuadre (corrección v2.3) — solo si tolerance ±$100 superada.
+  const descuadreNote = !cuadraAmbos
+    ? `\n> ⚠ **El balance presenta un descuadre.** ${
+        !cuadraPrimary
+          ? `Período ${periodLabel}: diferencia de ${formatCopFromCents(absDiffPrimary, true)} entre TOTAL ACTIVO y TOTAL PASIVO + PATRIMONIO. `
+          : ''
+      }Revisar saldos antes de publicar.`
+    : '';
+
+  return [header, table, descuadreNote, renderNotes(b.notes)].filter(Boolean).join('\n');
 }
 
 export function renderIncomeStatement(json: NiifReportJson): string {

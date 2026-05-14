@@ -453,6 +453,25 @@ function addBalanceSheet(
     writeLine('TOTAL ACTIVOS', json.balanceSheet.totalAssetsPrimary, json.balanceSheet.totalAssetsComparative);
     writeLine('TOTAL PASIVOS', json.balanceSheet.totalLiabilitiesPrimary, json.balanceSheet.totalLiabilitiesComparative);
     writeLine('TOTAL PATRIMONIO', json.balanceSheet.totalEquityPrimary, json.balanceSheet.totalEquityComparative);
+    // Fila de cierre A = P + C (corrección v2.3) — visible incluso en fallback
+    // JSON-strict cuando el preprocesador no estuvo disponible.
+    const addBig = (a: string, b: string): string => {
+      const toBig = (v: string) => BigInt(v);
+      return (toBig(a) + toBig(b)).toString(10);
+    };
+    const sumPrimaryFallback = addBig(
+      json.balanceSheet.totalLiabilitiesPrimary,
+      json.balanceSheet.totalEquityPrimary,
+    );
+    const sumComparativeFallback =
+      json.balanceSheet.totalLiabilitiesComparative !== null &&
+      json.balanceSheet.totalEquityComparative !== null
+        ? addBig(
+            json.balanceSheet.totalLiabilitiesComparative,
+            json.balanceSheet.totalEquityComparative,
+          )
+        : null;
+    writeLine('TOTAL PASIVO + PATRIMONIO', sumPrimaryFallback, sumComparativeFallback);
   } else {
     // Último fallback: markdown crudo (compat con reportes pre-Fase-2).
     ws.getRow(row).getCell(1).value = 'Datos del reporte NIIF (ver pestaña Resumen para el contenido completo):';
