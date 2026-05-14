@@ -46,6 +46,14 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - impactCop es centavos COP cuando el hallazgo sea cuantificable; null en caso contrario.
 - totalFiscalExposureCop = suma de impactCop cuantificables, o null si ninguno lo es.
 - finding.period: "${company.fiscalPeriod}" para periodo unico, "YYYY → YYYY" para inter-periodo.
+- rentaAnalysis (analisis 2): tarifaGeneralPct=35; calcula provisionTeorica = utilidadAntesImpuestos * 0.35 en centavos; identifica impuestoRegistrado desde Clase 54 o Cta.1805; brecha = provisionTeorica - impuestoRegistrado; evaluacion=coherente cuando |brecha|/provisionTeorica < 10%, observacion entre 10-30%, incoherente si > 30%; reference="Art. 240 E.T.; Ley 2277 de 2022; NIIF PYMES Sec. 29".
+- retencionesAnalysis (analisis 3): identifica saldos Cta.1355 (anticipos), Cta.1805 (impuesto diferido activo), Cta.24 (impuestos por pagar); posicionFiscalNeta = (1355 + 1805) - 24; evaluacion describe si la posicion es saldo a favor o saldo a pagar y su materialidad; reference cita Art. 850 E.T. o decreto reglamentario aplicable.
+- ivaIcaAnalysis (analisis 4): pasivoIvaNeto = saldo neto Cta.2408 - IVA descontable; regimenIva inferido por estructura de cuentas (responsable / no_responsable / no_aplica); icaComment menciona municipio y actividad gravada cuando esten disponibles, sino "Informacion insuficiente"; reference cita Art. 437-1 E.T. y acuerdos municipales aplicables.
+- tmtAnalysis (analisis 5): tasaMinimaExigidaPct=15; tasaEfectiva = impuestoRegistrado / utilidadAntesImpuestos * 100; status=cumple cuando tasaEfectiva >= 15, no_cumple cuando < 15 y activos/patrimonio liquido > 30.000 UVT, no_aplica cuando esta debajo del umbral; reference="Art. 240-1 E.T.; Ley 2277/2022".
+- riesgosTributarios (analisis 6): lista priorizada de riesgos con descripcion, probabilidad (alta/media/baja), exposicion en centavos cuando se cuantifique y reference normativa. Cuando aplique Art. 647 E.T. (diferencia de criterio razonable), incluyelo como recommendation en el riesgo correspondiente.
+- calendario2026 (analisis 7): vencimientos DIAN aplicables al contribuyente: renta persona juridica, declaraciones bimestrales IVA, retenciones en la fuente, informacion exogena, etc. Cuando no se conoce fecha exacta, fechaLimite="Por confirmar segun ultimo digito NIT". reference cita la Resolucion DIAN vigente.
+- auditOpinion (analisis 8): type=sin_hallazgos cuando complianceScore >= 90 y no hay riesgos altos; con_observaciones cuando 75-89 o hay riesgos medios; con_hallazgos_criticos cuando < 75 o hay riesgos altos cuantificados. text es el parrafo completo de opinion. exposicionTotalCop = suma de todas las exposiciones cuantificadas (= totalFiscalExposureCop).
+- requiredActions (analisis 9): acciones priorizadas por priority (alta/media/baja); cada accion cita reference normativa y es accionable. Las acciones usan la misma convencion de periodo que findings.
 </success_criteria>
 
 <judgment_rules>
@@ -65,6 +73,8 @@ Producir un reporte JSON con score 0-100, resumen ejecutivo, hallazgos tributari
 - ALWAYS cuantifica el impacto en COP cuando los datos lo permitan (impactCop en centavos). Si no es cuantificable, impactCop = null.
 - ALWAYS los codigos de finding siguen el formato TRIB-001, TRIB-002, ... consecutivos.
 - NEVER fabriques benchmarks sectoriales, tarifas o UVT historicas — usa UVT 2026 = $52.374 COP.
+- ALWAYS los analisis 2-9 (rentaAnalysis, retencionesAnalysis, ivaIcaAnalysis, tmtAnalysis, riesgosTributarios, calendario2026, auditOpinion, requiredActions) usan la misma convencion de periodo y norma que findings.
+- ALWAYS cuando no se infiere una cifra del reporte, los campos *Cop correspondientes se emiten como null; no inventes valores ni interpoles.
 </constraints>
 
 <empresa_auditada>
