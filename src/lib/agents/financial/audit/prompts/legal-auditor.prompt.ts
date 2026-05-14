@@ -70,6 +70,27 @@ ${tipoSocietarioRules.join('\n')}
 - CIIU: con RUT en mano se puede certificar el codigo de 4 digitos; sin RUT solo la letra/seccion. Codigo de 4 digitos sin soporte = hallazgo medio.
 - Inter-periodo (si hay comparativo): movimiento patrimonial = utilidad del ejercicio - dividendos declarados +/- aportes. Reserva legal acumulativa creciente (salvo tope 50%).
 - finding.period: "${company.fiscalPeriod}", "YYYY → YYYY" o null si no aplica.
+- societaryObligations: arreglo de EXACTAMENTE 14 entradas en este ORDEN FIJO (no cambies el orden, no agregues, no quites):
+  1.  obligation="Convocatoria Asamblea" — reference="Art. 424 C.Co."
+  2.  obligation="Quorum" — reference="Art. 427 C.Co. / Art. 359 C.Co. / Art. 22 Ley 1258/2008" segun tipo societario
+  3.  obligation="Orden del dia" — reference="Art. 425 C.Co."
+  4.  obligation="EEFF aprobados" — reference="Art. 446 C.Co."
+  5.  obligation="Informe de gestion" — reference="Art. 47 Ley 222/1995"
+  6.  obligation="Destinacion utilidades" — reference="Art. 155 C.Co. / Art. 451 C.Co."
+  7.  obligation="Reserva legal 10%" — reference="Art. 452 C.Co."
+  8.  obligation="Libro de actas" — reference="Art. 189 C.Co."
+  9.  obligation="Libro de accionistas" — reference="Art. 195 C.Co. / Art. 12 Ley 1258/2008"
+  10. obligation="Matricula mercantil" — reference="Art. 19 C.Co."
+  11. obligation="Revisor Fiscal" — reference="Art. 203 C.Co. / Ley 43/1990 Art. 13"
+  12. obligation="RL en Camara" — reference="Art. 442 C.Co."
+  13. obligation="Beneficiario Final UIAF" — reference="Resolucion 164/2021 UIAF"
+  14. obligation="RUT/CIIU" — reference="Art. 555-2 E.T. / Resolucion DIAN 000114/2020"
+  status por entrada: 'cumplido' si la evidencia es suficiente; 'parcial' si hay evidencia parcial o ambigua; 'incumplido' si la evidencia confirma incumplimiento; 'no_aplica' si la obligacion no aplica al tipo societario (ej. SAS unipersonal sin asamblea).
+- patrimonyDistribution: calcula utilidadNetaCop a partir del reporte, montoReserva10pctCop = 10% sobre utilidadNetaCop si reservaLegalObligatoria=true (Art. 452 C.Co.), utilidadDisponibleCop = utilidadNetaCop - montoReserva10pctCop. Las cifras viajan en centavos COP como string (MoneyCop). impuestoDividendosComment SIEMPRE menciona Art. 242 E.T. (retencion 10% dividendos gravados).
+- capitalizacionAnalysis: emite null cuando NO se propone capitalizacion. Si proposed=true, baseLegal="Ley 1258/2008 Art. 5" (SAS) o equivalente; beneficioFiscal cita "Art. 36-3 E.T."; procedimiento lista pasos concretos (acta, escritura, registro, reforma estatutos).
+- riesgosLegales: emite null si no se identifican riesgos; de lo contrario, lista cada riesgo con normaAplicable EXACTA (no "el Codigo de Comercio").
+- auditOpinion.type: 'sin_observaciones' (sin findings altos/criticos), 'con_observaciones_subsanables' (1+ findings medio o alto subsanables), 'con_hallazgos_inmediatos' (1+ findings critico/alto que exigen accion inmediata). text formal, sin marketing.
+- requiredActions: ordenadas por priority desc (alta -> baja). Cada accion cita reference normativa y plazo si el articulo lo define (ej. "30 dias desde el cierre" para Art. 446 C.Co.). plazo=null cuando la norma no fija termino.
 </success_criteria>
 
 <judgment_rules>
@@ -89,6 +110,12 @@ ${tipoSocietarioRules.join('\n')}
 - NEVER asumas requisitos que no apliquen al tipo societario indicado en empresa_auditada.
 - ALWAYS distingue requisitos IMPERATIVOS (la ley exige, severity alto/critico) de RECOMENDACIONES (buenas practicas, severity informativo/bajo).
 - ALWAYS impactCop es null para hallazgos legales — la exposicion cuantificable corresponde al dominio tributario.
+- ALWAYS societaryObligations contiene las 14 entradas en el orden fijo del success_criteria. NUNCA agregues, quites ni reordenes.
+- ALWAYS la moneda de patrimonyDistribution viaja en centavos COP como string entero (solo digitos con signo opcional). Para $1.234.567,89 emite "123456789".
+- If no se identifica ningun riesgo legal especifico, Then emite riesgosLegales=null; Otherwise emite el arreglo con normaAplicable exacta.
+- If no se propone capitalizacion en el acta o notas, Then capitalizacionAnalysis=null; Otherwise emite el bloque completo.
+- ALWAYS auditOpinion.text mantiene tono formal de Auditor Legal. Sin adjetivos de marketing (Elite, Premium, Excelente, Solido) — el spec v2.1 los prohibe.
+- ALWAYS requiredActions ordena por priority descendente; misma prioridad mantiene orden de aparicion del finding asociado.
 </constraints>
 
 <empresa_auditada>

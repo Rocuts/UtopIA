@@ -440,6 +440,159 @@ export const TaxAuditReportSchema = z.object({
 });
 export type TaxAuditReportJson = z.infer<typeof TaxAuditReportSchema>;
 
+// ---------------------------------------------------------------------------
+// Legal Auditor — v2.1 Dictamen 3 (Wave 7.B1)
+// ---------------------------------------------------------------------------
+// La especificación v2.1 "Dictamen 3 — Auditor Legal" exige un dictamen
+// estructurado con secciones formales: (i) tabla de 14 obligaciones
+// societarias, (ii) análisis de distribución del patrimonio, (iii) análisis
+// de capitalización (Ley 1258/2008 Art. 5), (iv) riesgos legales, (v)
+// opinión del auditor legal y (vi) acciones requeridas.
+//
+// Todas las sub-secciones son `.nullable()` (no `.optional()`) para
+// compatibilidad estricta con `experimental_output: Output.object(...)` del
+// AI SDK v6 + OpenAI strict json_schema. El renderer fallback gracefully a
+// texto legacy cuando los campos son null.
+//
+// Las 14 obligaciones societarias canónicas (orden fijo, ver
+// `legal-auditor.prompt.ts` y `legal-auditor.ts:renderMarkdown`):
+//   1.  Convocatoria Asamblea (Art. 424 C.Co.)
+//   2.  Quórum (Art. 427 / 359 / Ley 1258 Art. 22)
+//   3.  Orden del día (Art. 425 C.Co.)
+//   4.  EEFF aprobados (Art. 446 C.Co.)
+//   5.  Informe de gestión (Art. 47 Ley 222/1995)
+//   6.  Destinación utilidades (Art. 155 / 451 C.Co.)
+//   7.  Reserva legal 10% (Art. 452 C.Co.)
+//   8.  Libro de actas (Art. 189 C.Co.)
+//   9.  Libro de accionistas (Art. 195 C.Co. / Art. 12 Ley 1258)
+//   10. Matrícula mercantil (Art. 19 C.Co.)
+//   11. Revisor Fiscal (Art. 203 C.Co. / Ley 43/1990)
+//   12. RL en Cámara (Art. 442 C.Co.)
+//   13. Beneficiario Final UIAF (Resolución 164/2021)
+//   14. RUT/CIIU (Art. 555-2 E.T. / Res. DIAN 000114/2020)
+// ---------------------------------------------------------------------------
+
+export const SocietaryObligationStatusEnum = z.enum([
+  'cumplido',
+  'parcial',
+  'incumplido',
+  'no_aplica',
+]);
+export type SocietaryObligationStatusJson = z.infer<typeof SocietaryObligationStatusEnum>;
+
+export const SocietaryObligationSchema = z.object({
+  obligation: z
+    .string()
+    .min(1)
+    .describe('Nombre de la obligación societaria. Ej: "Convocatoria Asamblea"'),
+  status: SocietaryObligationStatusEnum.describe('Estado de cumplimiento'),
+  reference: z
+    .string()
+    .min(1)
+    .describe('Referencia normativa exacta. Ej: "Art. 424 C.Co."'),
+  comment: z
+    .string()
+    .nullable()
+    .describe('Comentario breve cuando aplique. Null si no hay observación.'),
+});
+export type SocietaryObligationJson = z.infer<typeof SocietaryObligationSchema>;
+
+export const PatrimonyDistributionSchema = z.object({
+  utilidadNetaCop: MoneyCop
+    .nullable()
+    .describe('Utilidad neta del ejercicio en centavos COP. Null si no se identifica.'),
+  reservaLegalObligatoria: z
+    .boolean()
+    .describe('True si la entidad debe constituir reserva legal del 10% (Art. 452 C.Co.).'),
+  montoReserva10pctCop: MoneyCop
+    .nullable()
+    .describe('Monto del 10% de reserva legal sobre utilidad neta. Null si no aplica.'),
+  utilidadDisponibleCop: MoneyCop
+    .nullable()
+    .describe('Utilidad disponible para distribución tras reserva legal. Null si no calculable.'),
+  tipoDividendoPosible: z
+    .enum(['ordinario', 'preferencial', 'no_aplica'])
+    .nullable()
+    .describe('Tipo de dividendo distribuible bajo Art. 155 / 451 C.Co.'),
+  impuestoDividendosComment: z
+    .string()
+    .min(1)
+    .describe('Comentario sobre la retención del 10% (Art. 242 E.T.) o aplicabilidad.'),
+});
+export type PatrimonyDistributionJson = z.infer<typeof PatrimonyDistributionSchema>;
+
+export const CapitalizacionAnalysisSchema = z.object({
+  proposed: z
+    .boolean()
+    .describe('True si la asamblea aprobó capitalización de utilidades.'),
+  baseLegal: z
+    .string()
+    .min(1)
+    .describe('Base legal de la capitalización. Ej: "Ley 1258/2008 Art. 5"'),
+  documentoRequerido: z
+    .string()
+    .min(1)
+    .describe('Documento societario requerido. Ej: "Acta de Asamblea + Escritura pública"'),
+  beneficioFiscal: z
+    .string()
+    .min(1)
+    .describe('Beneficio fiscal aplicable. Ej: "Art. 36-3 E.T. — exento impuesto a dividendos"'),
+  procedimiento: z
+    .array(z.string().min(1))
+    .describe('Pasos del procedimiento de capitalización en orden cronológico.'),
+});
+export type CapitalizacionAnalysisJson = z.infer<typeof CapitalizacionAnalysisSchema>;
+
+export const RiesgoLegalSchema = z.object({
+  descripcion: z
+    .string()
+    .min(1)
+    .describe('Descripción concisa del riesgo legal identificado.'),
+  normaAplicable: NormaRef.describe('Norma aplicable que rige el riesgo.'),
+  consecuenciaPotencial: z
+    .string()
+    .min(1)
+    .describe('Consecuencia potencial: sanción, nulidad, multa, etc.'),
+  probabilidad: z
+    .enum(['alta', 'media', 'baja'])
+    .describe('Probabilidad de materialización del riesgo.'),
+});
+export type RiesgoLegalJson = z.infer<typeof RiesgoLegalSchema>;
+
+export const LegalAuditOpinionTypeEnum = z.enum([
+  'sin_observaciones',
+  'con_observaciones_subsanables',
+  'con_hallazgos_inmediatos',
+]);
+export type LegalAuditOpinionTypeJson = z.infer<typeof LegalAuditOpinionTypeEnum>;
+
+export const LegalAuditOpinionSchema = z.object({
+  type: LegalAuditOpinionTypeEnum.describe(
+    'Tipo de opinión legal: sin_observaciones / con_observaciones_subsanables / con_hallazgos_inmediatos',
+  ),
+  text: z
+    .string()
+    .min(1)
+    .describe('Texto de la opinión legal redactada con tono formal.'),
+});
+export type LegalAuditOpinionJson = z.infer<typeof LegalAuditOpinionSchema>;
+
+export const LegalRequiredActionSchema = z.object({
+  action: z
+    .string()
+    .min(1)
+    .describe('Acción correctiva específica a ejecutar.'),
+  priority: z
+    .enum(['alta', 'media', 'baja'])
+    .describe('Prioridad de la acción.'),
+  reference: NormaRef.describe('Referencia normativa que motiva la acción.'),
+  plazo: z
+    .string()
+    .nullable()
+    .describe('Plazo aplicable según norma. Null si no hay plazo legal explícito.'),
+});
+export type LegalRequiredActionJson = z.infer<typeof LegalRequiredActionSchema>;
+
 export const LegalAuditReportSchema = z.object({
   complianceScore: ComplianceScore,
   executiveSummary: z
@@ -447,6 +600,33 @@ export const LegalAuditReportSchema = z.object({
     .min(1)
     .describe('Resumen ejecutivo con hallazgos legales principales'),
   findings: z.array(AuditFindingSchema).describe('Lista de hallazgos legales/societarios'),
+  /**
+   * v2.1 Dictamen 3 — Lista canónica de 14 obligaciones societarias en orden
+   * fijo (ver header del archivo). Cuando se emite DEBE incluir las 14;
+   * status='no_aplica' si la obligación no aplica al tipo societario.
+   * Null para fallback al formato legacy.
+   */
+  societaryObligations: z
+    .array(SocietaryObligationSchema)
+    .nullable()
+    .describe('Tabla canónica de 14 obligaciones societarias (orden fijo del spec v2.1).'),
+  patrimonyDistribution: PatrimonyDistributionSchema
+    .nullable()
+    .describe('Análisis de distribución del patrimonio (Art. 155-156 / 451-452 C.Co.).'),
+  capitalizacionAnalysis: CapitalizacionAnalysisSchema
+    .nullable()
+    .describe('Análisis de capitalización de utilidades. Null si no se propone.'),
+  riesgosLegales: z
+    .array(RiesgoLegalSchema)
+    .nullable()
+    .describe('Lista de riesgos legales identificados. Null si no aplica.'),
+  auditOpinion: LegalAuditOpinionSchema
+    .nullable()
+    .describe('Opinión formal del Auditor Legal (Dictamen 3 v2.1).'),
+  requiredActions: z
+    .array(LegalRequiredActionSchema)
+    .nullable()
+    .describe('Acciones requeridas con prioridad y plazo. Null si no hay acciones pendientes.'),
   conclusion: z
     .string()
     .min(1)
