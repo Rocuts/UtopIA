@@ -666,6 +666,161 @@ export const FiscalReviewGoingConcernSchema = z.object({
 });
 export type FiscalReviewGoingConcernJson = z.infer<typeof FiscalReviewGoingConcernSchema>;
 
+// ---------------------------------------------------------------------------
+// Fiscal Reviewer — v2.1 Dictamen 4 (Wave 7.B2)
+// ---------------------------------------------------------------------------
+// El cuarto auditor del topology 1+1 cumple DOS roles complementarios:
+//
+//   1) Revisor Fiscal NIA-700/706 (Ley 43/1990) — emite materiality,
+//      goingConcern, opinionType y dictamen formal con bloque de firma. Esto
+//      EXISTIA antes de Wave 7 y se MANTIENE intacto.
+//
+//   2) Auditor Fiscal DIAN (v2.1 Dictamen 4 — Wave 7.B2) — emite las 10
+//      obligaciones formales, saldos criticos, 6 indicadores de riesgo DIAN,
+//      riesgo global de fiscalizacion, obligaciones 2026 (anticipo renta /
+//      ICA) y un opinion DIAN-specific (riesgo bajo/medio/alto) +
+//      fiscalRequiredActions.
+//
+// Los dos roles COEXISTEN en el mismo schema porque el spec v2.1 mantiene la
+// topologia de 4 auditores. El render produce primero el bloque "Dictamen 4
+// — Auditor Fiscal" v2.1 (cuando los campos estan poblados) y al final el
+// dictamen NIA-700 con bloque de firma literal (legacy preservado).
+//
+// Las 10 obligaciones formales canonicas (orden fijo):
+//   1.  Declaracion renta y complementarios
+//   2.  Declaracion IVA
+//   3.  Declaracion ICA (segun municipio)
+//   4.  Retencion en la fuente — renta
+//   5.  Retencion en la fuente — IVA (ReteIVA)
+//   6.  Retencion en la fuente — ICA (ReteICA)
+//   7.  Informacion exogena
+//   8.  Aportes a parafiscales y seguridad social
+//   9.  Formato 2516 (Conciliacion contable-fiscal)
+//   10. Formato 1125 / Precios de transferencia (si aplica)
+//
+// Los 6 indicadores de riesgo DIAN canonicos (orden fijo):
+//   1.  Margen neto vs sector CIIU (2σ banda sectorial)
+//   2.  Crecimiento ingresos vs sector
+//   3.  Variacion de proveedores anormal
+//   4.  Saldo retenciones a favor (Cta. 1355) creciente
+//   5.  Cumplimiento Formato 2516 / Conciliacion fiscal
+//   6.  Cumplimiento Beneficiario Final UIAF
+// ---------------------------------------------------------------------------
+
+export const FormalObligationStatusEnum = z.enum([
+  'al_dia',
+  'verificar',
+  'posible_mora',
+  'no_aplica',
+]);
+export type FormalObligationStatusJson = z.infer<typeof FormalObligationStatusEnum>;
+
+export const FormalObligationPeriodicidadEnum = z.enum([
+  'mensual',
+  'bimestral',
+  'cuatrimestral',
+  'anual',
+  'eventual',
+]);
+export type FormalObligationPeriodicidadJson = z.infer<typeof FormalObligationPeriodicidadEnum>;
+
+export const FormalObligationSchema = z.object({
+  obligation: z
+    .string()
+    .min(1)
+    .describe('Nombre de la obligacion DIAN. Ej: "Declaracion renta y complementarios"'),
+  periodicidad: FormalObligationPeriodicidadEnum.describe('Periodicidad de la obligacion'),
+  vencimientoProximo: z
+    .string()
+    .nullable()
+    .describe('Fecha del proximo vencimiento o "Calendario DIAN NIT [X]" si no se puede precisar.'),
+  status: FormalObligationStatusEnum.describe('Estado de la obligacion'),
+  reference: NormaRef.describe('Referencia normativa exacta. Ej: "Art. 7 E.T."'),
+});
+export type FormalObligationJson = z.infer<typeof FormalObligationSchema>;
+
+export const CriticalSaldosSchema = z.object({
+  retenciones2365Cop: MoneyCop
+    .nullable()
+    .describe('Saldo retenciones a favor de terceros (Cta. 2365) en centavos COP.'),
+  retenciones1355Cop: MoneyCop
+    .nullable()
+    .describe('Saldo retenciones y anticipos (Cta. 1355) en centavos COP.'),
+  ivaPorPagarNetoCop: MoneyCop
+    .nullable()
+    .describe('IVA por pagar neto (Cta. 2408 - Cta. 1355 IVA) en centavos COP.'),
+  anticipoRentaSiguienteCop: MoneyCop
+    .nullable()
+    .describe('Anticipo renta del siguiente periodo (Art. 807 E.T.) en centavos COP.'),
+  sancionPotencialMoraCop: MoneyCop
+    .nullable()
+    .describe('Sancion potencial por mora si aplica (Art. 641 E.T.) en centavos COP.'),
+});
+export type CriticalSaldosJson = z.infer<typeof CriticalSaldosSchema>;
+
+export const DianRiskLevelEnum = z.enum(['bajo', 'medio', 'alto']);
+export type DianRiskLevelJson = z.infer<typeof DianRiskLevelEnum>;
+
+export const DianRiskIndicatorSchema = z.object({
+  indicator: z
+    .string()
+    .min(1)
+    .describe('Nombre del indicador. Ej: "Margen neto > 70% del sector CIIU"'),
+  level: DianRiskLevelEnum.describe('Nivel de riesgo del indicador.'),
+  observation: z
+    .string()
+    .nullable()
+    .describe('Observacion contextual del indicador. Null si no aplica.'),
+});
+export type DianRiskIndicatorJson = z.infer<typeof DianRiskIndicatorSchema>;
+
+export const Obligations2026Schema = z.object({
+  anticipoRenta2026Cop: MoneyCop
+    .nullable()
+    .describe('Anticipo de renta 2026 estimado en centavos COP (Art. 807 E.T.).'),
+  baseAnticipo: z
+    .string()
+    .min(1)
+    .describe('Base de calculo del anticipo. Ej: "75% del impuesto causado 2025"'),
+  icaEstimado2026Cop: MoneyCop
+    .nullable()
+    .describe('ICA estimado 2026 en centavos COP. Null si no aplica.'),
+  baseIca: z
+    .string()
+    .nullable()
+    .describe('Base de calculo del ICA. Ej: "ingresos brutos por actividad, [X] por mil"'),
+});
+export type Obligations2026Json = z.infer<typeof Obligations2026Schema>;
+
+export const FiscalAuditOpinionTypeEnum = z.enum(['riesgo_bajo', 'riesgo_medio', 'riesgo_alto']);
+export type FiscalAuditOpinionTypeJson = z.infer<typeof FiscalAuditOpinionTypeEnum>;
+
+export const FiscalAuditOpinionSchema = z.object({
+  type: FiscalAuditOpinionTypeEnum.describe('Nivel de riesgo de fiscalizacion DIAN.'),
+  text: z
+    .string()
+    .min(1)
+    .describe('Texto formal de la opinion del Auditor Fiscal (riesgo DIAN).'),
+});
+export type FiscalAuditOpinionJson = z.infer<typeof FiscalAuditOpinionSchema>;
+
+export const FiscalRequiredActionSchema = z.object({
+  action: z
+    .string()
+    .min(1)
+    .describe('Accion correctiva especifica.'),
+  reference: NormaRef.describe('Referencia normativa. Ej: "Art. 641 E.T."'),
+  fechaLimite: z
+    .string()
+    .nullable()
+    .describe('Fecha limite o "Calendario DIAN" placeholder. Null si no hay plazo legal.'),
+  consecuenciaIncumplimiento: z
+    .string()
+    .min(1)
+    .describe('Consecuencia DIAN si no se ejecuta: sancion, intereses, etc.'),
+});
+export type FiscalRequiredActionJson = z.infer<typeof FiscalRequiredActionSchema>;
+
 export const FiscalReviewReportSchema = z.object({
   complianceScore: ComplianceScore,
   executiveSummary: z
@@ -680,5 +835,33 @@ export const FiscalReviewReportSchema = z.object({
     .string()
     .min(1)
     .describe('Dictamen formal del Revisor Fiscal con bloque de firma literal al cierre'),
+  /**
+   * v2.1 Dictamen 4 — Auditor Fiscal DIAN. Las 10 obligaciones formales en
+   * orden fijo (ver header del archivo). Null para fallback legacy.
+   */
+  formalObligations: z
+    .array(FormalObligationSchema)
+    .nullable()
+    .describe('Tabla canonica de 10 obligaciones formales DIAN (orden fijo del spec v2.1).'),
+  criticalSaldos: CriticalSaldosSchema
+    .nullable()
+    .describe('Saldos criticos relacionados con obligaciones DIAN.'),
+  dianRiskIndicators: z
+    .array(DianRiskIndicatorSchema)
+    .nullable()
+    .describe('6 indicadores canonicos de riesgo DIAN (orden fijo del spec v2.1).'),
+  riesgoFiscalizacionGlobal: DianRiskLevelEnum
+    .nullable()
+    .describe('Nivel global de riesgo de fiscalizacion DIAN.'),
+  obligations2026: Obligations2026Schema
+    .nullable()
+    .describe('Obligaciones del siguiente periodo (anticipo renta, ICA).'),
+  fiscalAuditOpinion: FiscalAuditOpinionSchema
+    .nullable()
+    .describe('Opinion formal del Auditor Fiscal (v2.1 Dictamen 4 — riesgo DIAN).'),
+  fiscalRequiredActions: z
+    .array(FiscalRequiredActionSchema)
+    .nullable()
+    .describe('Acciones requeridas DIAN con plazo y consecuencia.'),
 });
 export type FiscalReviewReportJson = z.infer<typeof FiscalReviewReportSchema>;
