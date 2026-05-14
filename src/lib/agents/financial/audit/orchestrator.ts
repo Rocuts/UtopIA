@@ -376,6 +376,32 @@ function buildExecutiveSummary(
   return lines.join('\n');
 }
 
+// ---------------------------------------------------------------------------
+// v2.1 visual frame helpers — Spec Parte V style banner around the report
+// ---------------------------------------------------------------------------
+// The 4 per-auditor `fullContent` blocks are owned by the individual auditor
+// agents (NIIF, Tax, Legal, Fiscal Reviewer) — we render them AS-IS, only
+// adding the surrounding frame, executive summary and findings matrix.
+
+const AUDIT_FRAME_TOP =
+  '╔════════════════════════════════════════════════════════════════════════════╗';
+const AUDIT_FRAME_BOT =
+  '╚════════════════════════════════════════════════════════════════════════════╝';
+
+function centerInAuditFrame(text: string): string {
+  const inner = 76; // characters between the two ║
+  let t = text;
+  if (t.length > inner) t = t.slice(0, inner - 1) + '…';
+  const total = inner - t.length;
+  const left = Math.floor(total / 2);
+  const right = total - left;
+  return `║${' '.repeat(left)}${t}${' '.repeat(right)}║`;
+}
+
+function escapeAuditCell(text: string): string {
+  return text.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+}
+
 function buildConsolidatedAuditReport(
   company: FinancialReport['company'],
   results: AuditorResult[],
@@ -399,12 +425,48 @@ function buildConsolidatedAuditReport(
     abstension: 'ABSTENCION DE OPINION',
   };
 
+  // --- v2.1 top banner -----------------------------------------------------
+  const headerBanner = [
+    AUDIT_FRAME_TOP,
+    centerInAuditFrame('INFORME DE AUDITORÍA INTEGRAL 1+1 — Spec v2.1'),
+    centerInAuditFrame(
+      `Informe: ${company.name} · NIT: ${company.nit} · Período: ${company.fiscalPeriod}`,
+    ),
+    AUDIT_FRAME_BOT,
+  ].join('\n');
+
+  // --- Metadata table (kept from legacy for downstream parsers) ------------
+  const metadataTable = [
+    '| Campo | Detalle |',
+    '|-------|---------|',
+    `| **Empresa** | ${company.name} |`,
+    `| **NIT** | ${company.nit} |`,
+    `| **Periodo Auditado** | ${company.fiscalPeriod} |`,
+    `| **Fecha de Auditoria** | ${date} |`,
+    `| **Score Global** | **${score}/100** |`,
+    `| **Opinion** | **${opinionLabels[opinion]}** |`,
+    `| **Total Hallazgos** | ${findings.length} (Criticos: ${counts.critico}, Altos: ${counts.alto}, Medios: ${counts.medio}) |`,
+    `| **Sistema** | 1+1 — Audit Pipeline (4 Auditores Especializados en Paralelo) |`,
+  ].join('\n');
+
+  // --- Findings matrix (count by severity, then full list) -----------------
+  const severityMatrix = [
+    '| Severidad | Cantidad |',
+    '|-----------|---------:|',
+    `| Crítico | ${counts.critico} |`,
+    `| Alto | ${counts.alto} |`,
+    `| Medio | ${counts.medio} |`,
+    `| Bajo | ${counts.bajo} |`,
+    `| Informativo | ${counts.informativo} |`,
+    `| **TOTAL** | **${findings.length}** |`,
+  ].join('\n');
+
   const findingsTable = findings.length > 0
     ? [
         '| Codigo | Severidad | Dominio | Hallazgo | Norma |',
         '|--------|-----------|---------|----------|-------|',
         ...findings.map((f) =>
-          `| ${f.code} | ${f.severity.toUpperCase()} | ${f.domain} | ${f.title} | ${f.normReference} |`,
+          `| ${escapeAuditCell(f.code)} | ${f.severity.toUpperCase()} | ${escapeAuditCell(f.domain)} | ${escapeAuditCell(f.title)} | ${escapeAuditCell(f.normReference)} |`,
         ),
       ].join('\n')
     : '*No se encontraron hallazgos.*';
@@ -418,26 +480,28 @@ function buildConsolidatedAuditReport(
         .join('\n\n')
     : '';
 
+  // --- Per-auditor sections — fullContent owned by each auditor (AS-IS) ----
   const auditorSections = results
     .filter((r) => !r.failed)
     .map((r) => `### ${r.auditorName} (Score: ${r.complianceScore}/100)\n\n${r.fullContent}`)
     .join('\n\n---\n\n');
 
-  return `# INFORME DE AUDITORIA INTEGRAL
+  // --- v2.1 closing banner -------------------------------------------------
+  const closingBanner = [
+    AUDIT_FRAME_TOP,
+    centerInAuditFrame('FIN DEL INFORME DE AUDITORÍA INTEGRAL'),
+    centerInAuditFrame(`Score Global ${score}/100 · Opinión: ${opinionLabels[opinion]}`),
+    AUDIT_FRAME_BOT,
+  ].join('\n');
+
+  return `${headerBanner}
+
+# INFORME DE AUDITORIA INTEGRAL
 ## ${company.name} — Periodo ${company.fiscalPeriod}
 
 ---
 
-| Campo | Detalle |
-|-------|---------|
-| **Empresa** | ${company.name} |
-| **NIT** | ${company.nit} |
-| **Periodo Auditado** | ${company.fiscalPeriod} |
-| **Fecha de Auditoria** | ${date} |
-| **Score Global** | **${score}/100** |
-| **Opinion** | **${opinionLabels[opinion]}** |
-| **Total Hallazgos** | ${findings.length} (Criticos: ${counts.critico}, Altos: ${counts.alto}, Medios: ${counts.medio}) |
-| **Sistema** | 1+1 — Audit Pipeline (4 Auditores Especializados en Paralelo) |
+${metadataTable}
 
 ---
 
@@ -455,7 +519,13 @@ ${dictamen || '*Opinion no disponible — el auditor de revisoria fiscal no pudo
 
 ---
 
-# MATRIZ DE HALLAZGOS
+# MATRIZ DE HALLAZGOS — CONTEO POR SEVERIDAD
+
+${severityMatrix}
+
+---
+
+# MATRIZ DE HALLAZGOS — LISTADO COMPLETO
 
 ${findingsTable}
 
@@ -474,5 +544,18 @@ ${auditorSections}
 ---
 
 > **Nota Legal:** Este informe de auditoria fue generado por 1+1, un sistema de inteligencia artificial. Los hallazgos, opiniones y recomendaciones deben ser validados por un Contador Publico certificado y un Revisor Fiscal independiente antes de su uso oficial. Este informe no constituye un dictamen de auditoria vinculante conforme a la Ley 43 de 1990.
+
+${closingBanner}
 `;
 }
+
+// ---------------------------------------------------------------------------
+// Test-only re-export
+// ---------------------------------------------------------------------------
+//
+// `buildConsolidatedAuditReport` is internal; the public surface is
+// `orchestrateAudit` (which spawns 4 LLM calls). We expose this thin alias so
+// the unit tests can assert the v2.1 frame structure without requiring LLM
+// dependencies. Do not import outside tests — production code reads
+// `AuditReport.consolidatedReport` instead.
+export const __test_buildConsolidatedAuditReport = buildConsolidatedAuditReport;
