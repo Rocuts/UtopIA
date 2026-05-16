@@ -204,6 +204,8 @@ export interface CuratorResult {
   comparativePeriod: string | null;
   /** R1: cuentas de activo con saldo negativo reclasificadas. */
   reclassifications: Reclassification[];
+  /** Presentation v3.0 — D&A explícita + ORI condicional + ECP inteligente. */
+  presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
   /** R2: flujo de efectivo método indirecto (si hay comparativo). */
   cashFlowIndirecto?: CashFlowStatement;
   /** R3: atribución de brecha de cuadratura (si hay descuadre). */

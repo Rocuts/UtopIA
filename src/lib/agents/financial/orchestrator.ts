@@ -1334,6 +1334,7 @@ export async function runNiifPhase(
     void cashAnchorCents; // PUC 11 del primary ya se cruza en validateConsolidatedReport
     const jsonValidation = validateNiifReportJson(niif.json, {
       bindingComparativeTotalsCents,
+      presentationV3: context.ppForAgents?.primary?.curator?.presentationV3,
     });
     if (!jsonValidation.ok && jsonValidation.errors.length > 0) {
       onProgress?.({

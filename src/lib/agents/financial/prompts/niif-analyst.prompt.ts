@@ -35,6 +35,7 @@ import {
   buildNiifDisclosureKnowledge,
 } from './niif-colombia-knowledge';
 import { buildResilienceSection0 } from './resilience-section0';
+import { buildPresentationV3, type PresentationV3Data } from './presentation-v3';
 
 /**
  * Contexto Élite consumido por el Agente 1 desde el orchestrator. Optional
@@ -154,6 +155,8 @@ interface SharedPromptContext {
   openingUtilidadEjercicio3605: number | undefined;
   fmtCop: (cents: bigint | number) => string;
   company: CompanyInfo;
+  presentationV3: string;
+  presentationV3Data: PresentationV3Data | undefined;
 }
 
 function buildSharedContext(
@@ -181,6 +184,7 @@ function buildSharedContext(
   const context2026 = buildColombia2026Context(language);
   const niifMeasurement = buildNiifMeasurementKnowledge(language);
   const niifDisclosures = buildNiifDisclosureKnowledge(language);
+  const presentationV3 = buildPresentationV3(language);
 
   // ELITE CONTEXT — A (preprocessor) está extendiendo el shape; defensivo.
   const ppLoose = preprocessed as unknown as {
@@ -260,6 +264,11 @@ function buildSharedContext(
   const openingUtilidadEjercicio3605 =
     preprocessed?.comparative?.equityBreakdown?.utilidadEjercicio;
 
+  // Presentation v3.0 — anchors emitidos por el curator (buildPresentationV3Data).
+  // El curator ya popula `primary.curator.presentationV3` al final de runCurator.
+  const presentationV3Data: PresentationV3Data | undefined =
+    preprocessed?.primary?.curator?.presentationV3;
+
   const fmtCop = (cents: bigint | number): string => {
     const n = typeof cents === 'bigint' ? Number(cents) / 100 : cents;
     return n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -293,6 +302,8 @@ function buildSharedContext(
     openingUtilidadEjercicio3605,
     fmtCop,
     company,
+    presentationV3,
+    presentationV3Data,
   };
 }
 
@@ -479,6 +490,25 @@ CIIU letra ${ctx.actividadInferida.sectorCIIU} — ${ctx.actividadInferida.descr
 }
 
 /**
+ * Sub-sección "PresentationV3 anchors" inyectada al final del bloque
+ * TOTALES VINCULANTES / <context>. Presente SOLO cuando el curator emitió
+ * `presentationV3` (post-cambio 2). Omitida silenciosamente en tests legacy
+ * y callers sin curator v3 — la doctrina V3 ya le dice al LLM qué hacer si
+ * los anchors están ausentes (modo simple).
+ */
+function renderPresentationV3AnchorsBlock(ctx: SharedPromptContext): string {
+  const d = ctx.presentationV3Data;
+  if (!d) return '';
+  const { depreciation, oriComponents, ecpColumns } = d;
+  return `## PresentationV3 anchors
+- daCop: $${depreciation.daCop.toLocaleString('es-CO', { maximumFractionDigits: 2 })}
+- roUAmortizationCop: $${depreciation.roUAmortizationCop.toLocaleString('es-CO', { maximumFractionDigits: 2 })}
+- impairmentCop: $${depreciation.impairmentCop.toLocaleString('es-CO', { maximumFractionDigits: 2 })}
+- oriComponents: ${JSON.stringify(oriComponents)}
+- ecpColumns: { capital: ${ecpColumns.capital}, premium: ${ecpColumns.premium}, legalReserve: ${ecpColumns.legalReserve}, otherReserves: ${ecpColumns.otherReserves}, retainedEarnings: ${ecpColumns.retainedEarnings}, periodResult: ${ecpColumns.periodResult}, oci: ${ecpColumns.oci} }`;
+}
+
+/**
  * Bloque `<previously_computed>` con anchors de Pass-1 (utilizado por Pass-2
  * y Pass-3). Se cita LITERALMENTE: el modelo no debe recalcular.
  */
@@ -566,6 +596,8 @@ export function buildNiifAnalystPass1Prompt(
   return `${ctx.guardrail}
 
 ${ctx.resilience0}
+
+${ctx.presentationV3}
 
 ${ctx.context2026}
 
@@ -726,6 +758,8 @@ ${renderSaldoAFavorBlock(ctx)}
 
 ${renderActividadInferidaBlock(ctx)}
 
+${renderPresentationV3AnchorsBlock(ctx)}
+
 ${ctx.langInstruction}
 </context>`;
 }
@@ -763,6 +797,8 @@ export function buildNiifAnalystPass2Prompt(
   return `${ctx.guardrail}
 
 ${ctx.resilience0}
+
+${ctx.presentationV3}
 
 ${ctx.context2026}
 
@@ -934,6 +970,8 @@ ${renderImpracticabilityBlock(ctx)}
 
 ${renderEfeAuthoritativeBlock(ctx)}
 
+${renderPresentationV3AnchorsBlock(ctx)}
+
 ${ctx.langInstruction}
 </context>`;
 }
@@ -1003,6 +1041,8 @@ ${eliteActivators.join('\n')}`
   return `${ctx.guardrail}
 
 ${ctx.resilience0}
+
+${ctx.presentationV3}
 
 ${ctx.context2026}
 
@@ -1114,6 +1154,8 @@ ${renderReclasifNoCompBlock(ctx)}
 ${renderSaldoAFavorBlock(ctx)}
 
 ${renderActividadInferidaBlock(ctx)}
+
+${renderPresentationV3AnchorsBlock(ctx)}
 
 ${ctx.langInstruction}
 </context>`;

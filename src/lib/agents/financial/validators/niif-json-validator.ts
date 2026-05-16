@@ -82,6 +82,10 @@ function findEquityClosingRow(json: NiifReportJson): EquityChangeRowJson | null 
  * contra los totales pre-calculados por el preprocesador. Esta es la red
  * dura que evita que el LLM "redondee" o re-derive las cifras del periodo
  * anterior — la única autoridad numérica es el preprocesador.
+ *
+ * `presentationV3` es opcional: cuando se suministra con componentes ORI
+ * materiales (`oriComponents.length > 0`), E13 verifica que la suma de los
+ * componentes ORI coincide con `oriPrimary` del P&L (desglose ↔ total).
  */
 export interface NiifJsonValidatorOptions {
   cashAccountPuc11Cents?: string;
@@ -94,6 +98,7 @@ export interface NiifJsonValidatorOptions {
     operatingProfit?: string;
     netIncome?: string;
   };
+  presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
 }
 
 /**
@@ -558,6 +563,37 @@ export function validateNiifReportJson(
             `Mantener la cuenta de origen con su saldo (incluso contranatura) + nota de anomalía.`,
         );
       }
+    }
+  }
+
+  // -- E13. Suma de componentes ORI ↔ ORI agregado del P&L (Presentation v3.0)
+  //
+  // Se activa SOLO cuando `options.presentationV3?.oriComponents.length > 0`
+  // (el curator detectó al menos un componente ORI material). En ese caso,
+  // la suma de `amountPrimary` de los componentes debe coincidir al centavo
+  // con `oriPrimary` del P&L emitido por el LLM.
+  //
+  // Es un WARNING no-blocking (doctrina Sección 0.7 — "siempre entregar el
+  // informe, alertas son para el contador, no para detener el sistema").
+  // El validador de desglose ORI ↔ ECP (E6) ya cubre el agregado; E13 cubre
+  // la coherencia interna del desglose por componente.
+  if (options.presentationV3 && options.presentationV3.oriComponents.length > 0) {
+    const { oriComponents } = options.presentationV3;
+    // Suma de amountPrimary como BigInt centavos (×100 para pasar de COP a cents).
+    const sumOriComponents = oriComponents.reduce<bigint>(
+      (acc, c) => acc + BigInt(Math.round(c.amountPrimary * 100)),
+      ZERO,
+    );
+    const oriTotal = parseMoneyCop(json.incomeStatement.oriPrimary);
+    if (sumOriComponents !== oriTotal) {
+      const gap = sumOriComponents - oriTotal;
+      warnings.push(
+        `E13. Suma de componentes ORI (${fmtCop(sumOriComponents)}) ≠ ORI agregado del P&L ` +
+          `(${fmtCop(oriTotal)}). Brecha: ${fmtCop(gap)}. ` +
+          `Verificar que el LLM desglosó todos los componentes ORI detectados por el curator ` +
+          `(Presentation v3.0 — Sección V3.2). La columna ORI del ECP también debe coincidir ` +
+          `(validación cruzada E6/E13).`,
+      );
     }
   }
 

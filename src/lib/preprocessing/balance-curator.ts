@@ -62,6 +62,7 @@ import { runR17 } from './curator-rules/r17-supplier-debit-balance';
 import { runR18 } from './curator-rules/r18-equity-negative';
 import { runR19 } from './curator-rules/r19-net-margin-over-70';
 import type { CuratorFinding, CuratorResult } from './curator-rules/types';
+import { buildPresentationV3Data } from '@/lib/agents/financial/prompts/presentation-v3';
 
 export function runCurator(
   snapshot: PeriodSnapshot,
@@ -307,6 +308,17 @@ export function runCurator(
     console.warn('[curator] R19 failed:', err);
   }
 
+  // Presentation v3.0 — D&A explícita + ORI condicional + ECP inteligente.
+  // El curator siempre lo computa; el niif-analyst prompt lo consume como
+  // anchors en el bloque TOTALES VINCULANTES (PresentationV3 anchors).
+  let presentationV3: CuratorResult['presentationV3'];
+  try {
+    presentationV3 = buildPresentationV3Data(snapshot, prev ?? null);
+  } catch (err) {
+    errors['CUR-PV3'] = err instanceof Error ? err.message : String(err);
+    console.warn('[curator] buildPresentationV3Data failed:', err);
+  }
+
   return {
     period: snapshot.period,
     comparativePeriod: prev?.period ?? null,
@@ -323,6 +335,7 @@ export function runCurator(
     closingDetectorAudit: r12Out.audit,
     ppeDepreciationAudit: r14Out.audit,
     costClassificationAudit: r15Out.audit,
+    presentationV3,
     findings,
     errors,
     generatedAt: new Date().toISOString(),
