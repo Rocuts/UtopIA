@@ -223,8 +223,13 @@ export const MODELS_CONFIG = {
   // 2026-05-12 bump 12K → 16K — Wave 2.F1 anadio 6 disclaimers condicionales
   // + nota Going Concern dedicada + consolidacion de 8 anomalias.
   niifAnalystPass3: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 16000 } as const,
-  strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
-  governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 24000 } as const,
+  // 2026-05-15 bump 24K → 32K — diagnosis Fase C: JSON output max estimado
+  // 23.5K + reasoning medium ~7K = 30.5K total, déficit ~6.5K en 24K budget
+  // disparaba auto-fallback effort='low' frecuente y latencia 60-180s que el
+  // browser SSE timeout (~300s) cerraba como "network error". +8K libera
+  // holgura sin tradeoff de calidad.
+  strategyDirector: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 32000 } as const,
+  governanceSpecialist: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 32000 } as const,
 
   // -- Auditoría especializada (paralelo) ----------------------------------
   // niifAuditor también recibe niif-measurement + niif-disclosures: budget ampliado.

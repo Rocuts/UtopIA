@@ -1418,7 +1418,7 @@ export async function runStrategyPhase(
     preprocessed,
     onProgress,
     elite,
-    undefined,
+    AbortSignal.timeout(720_000),
     reportMode,
   );
 
@@ -1471,7 +1471,7 @@ export async function runGovernancePhase(
     preprocessed,
     onProgress,
     elite,
-    undefined,
+    AbortSignal.timeout(720_000),
     reportMode,
   );
 
