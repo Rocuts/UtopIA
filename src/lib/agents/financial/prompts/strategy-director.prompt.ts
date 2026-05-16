@@ -17,6 +17,7 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { ReportMode } from '../contracts/base';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
+import { buildResilienceSection0 } from './resilience-section0';
 
 export interface StrategyDirectorEliteContext {
   comparativosImpracticables?: boolean;
@@ -36,6 +37,7 @@ export function buildStrategyDirectorPrompt(
       : 'Responde completamente en español.';
 
   const guardrail = buildAntiHallucinationGuardrail(language);
+  const resilience0 = buildResilienceSection0(language);
   const context2026 = buildColombia2026Context(language);
 
   const baseYear = parseInt(company.fiscalPeriod, 10);
@@ -68,6 +70,8 @@ export function buildStrategyDirectorPrompt(
     actividadInferida && (actividadInferida.sectorCIIU || '').toUpperCase().startsWith('G');
 
   return `${guardrail}
+
+${resilience0}
 
 ${context2026}
 

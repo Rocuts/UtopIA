@@ -22,6 +22,7 @@ import type { ReportMode } from '../contracts/base';
 import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 import { buildNiifDisclosureKnowledge } from './niif-colombia-knowledge';
+import { buildResilienceSection0 } from './resilience-section0';
 
 export interface GovernanceEliteContext {
   comparativosImpracticables?: boolean;
@@ -67,6 +68,7 @@ export function buildGovernancePrompt(
       : 'Ley 222 de 1995 y Código de Comercio';
 
   const guardrail = buildAntiHallucinationGuardrail(language);
+  const resilience0 = buildResilienceSection0(language);
   const context2026 = buildColombia2026Context(language);
   const niifDisclosures = buildNiifDisclosureKnowledge(language);
 
@@ -106,6 +108,8 @@ export function buildGovernancePrompt(
   const contadorTP = sig?.contadorPublico?.tp ?? company.accountantTp ?? null;
 
   return `${guardrail}
+
+${resilience0}
 
 ${context2026}
 

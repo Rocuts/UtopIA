@@ -208,7 +208,7 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
             },
           },
         }),
-      { maxAttempts, label: `financial-agent:${agentName}:${effort}`, signal },
+      { maxAttempts, baseDelayMs: 2000, maxDelayMs: 2000, label: `financial-agent:${agentName}:${effort}`, signal },
     );
 
   /**

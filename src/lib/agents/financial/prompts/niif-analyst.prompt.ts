@@ -34,6 +34,7 @@ import {
   buildNiifMeasurementKnowledge,
   buildNiifDisclosureKnowledge,
 } from './niif-colombia-knowledge';
+import { buildResilienceSection0 } from './resilience-section0';
 
 /**
  * Contexto Élite consumido por el Agente 1 desde el orchestrator. Optional
@@ -118,6 +119,7 @@ interface SharedPromptContext {
   niifFramework: string;
   isGroup1: boolean;
   guardrail: string;
+  resilience0: string;
   context2026: string;
   niifMeasurement: string;
   niifDisclosures: string;
@@ -175,6 +177,7 @@ function buildSharedContext(
   const isGroup1 = company.niifGroup === 1;
 
   const guardrail = buildAntiHallucinationGuardrail(language);
+  const resilience0 = buildResilienceSection0(language);
   const context2026 = buildColombia2026Context(language);
   const niifMeasurement = buildNiifMeasurementKnowledge(language);
   const niifDisclosures = buildNiifDisclosureKnowledge(language);
@@ -267,6 +270,7 @@ function buildSharedContext(
     niifFramework,
     isGroup1,
     guardrail,
+    resilience0,
     context2026,
     niifMeasurement,
     niifDisclosures,
@@ -561,6 +565,8 @@ export function buildNiifAnalystPass1Prompt(
 
   return `${ctx.guardrail}
 
+${ctx.resilience0}
+
 ${ctx.context2026}
 
 ${ctx.niifMeasurement}
@@ -755,6 +761,8 @@ export function buildNiifAnalystPass2Prompt(
   const ctx = buildSharedContext(company, language, reportMode, preprocessed, elite);
 
   return `${ctx.guardrail}
+
+${ctx.resilience0}
 
 ${ctx.context2026}
 
@@ -993,6 +1001,8 @@ ${eliteActivators.join('\n')}`
     : '';
 
   return `${ctx.guardrail}
+
+${ctx.resilience0}
 
 ${ctx.context2026}
 

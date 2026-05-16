@@ -27,6 +27,7 @@
 import type { HtmlEditorInput } from '../contracts/html-editor';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { buildResilienceSection0 } from './resilience-section0';
 
 /**
  * Memoización proceso-local del spec verbatim. Una sola I/O síncrona por
@@ -54,7 +55,7 @@ function loadSpecVerbatim(): string {
  * Esta separación es lo que permite cache hit rate >95%.
  */
 export function buildHtmlEditorSystemPrompt(): string {
-  return loadSpecVerbatim();
+  return `${buildResilienceSection0()}\n\n${loadSpecVerbatim()}`;
 }
 
 /**

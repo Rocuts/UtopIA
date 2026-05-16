@@ -16,6 +16,7 @@ import type {
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { classifyError, formatErrorAsUserNote } from '@/lib/agents/financial/prompts/resilience-section0';
 
 // Schema inline para el flag `provisional` — opcional, no se reusa en otras
 // rutas. Si esta presente, ambos campos son obligatorios.
@@ -309,8 +310,27 @@ function handleStreaming(
               // El orchestrator emite eventos `warning` cuando el override
               // provisional convierte errores en advertencias. Los pasamos a
               // un canal SSE dedicado para que la UI los muestre como banner.
+              // Seccion 0.6: formatear cada warning con formatErrorAsUserNote
+              // para mensajes coherentes con la doctrina de resiliencia.
               if (event.type === 'warning') {
-                send('warning', { warnings: event.warnings });
+                const message = event.warnings
+                  .map((w) => {
+                    const classified = classifyError(new Error(w));
+                    if (classified.tier === 'B') {
+                      return formatErrorAsUserNote({
+                        tier: 'B',
+                        step: 'validacion contable del reporte',
+                        service: 'validador determinista',
+                      });
+                    }
+                    return formatErrorAsUserNote({
+                      tier: classified.tier,
+                      step: 'generacion del reporte financiero',
+                      service: 'pipeline financiero',
+                    });
+                  })
+                  .join(' | ');
+                send('warning', { message });
                 return;
               }
               send('progress', event);

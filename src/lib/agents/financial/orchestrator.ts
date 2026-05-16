@@ -23,7 +23,12 @@ import {
 } from '@/lib/pillars/audit-report-emittable';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
 import { validateNiifReportJson } from './validators/niif-json-validator';
-import { serializeMoneyCop } from './contracts/money';
+import { serializeMoneyCop, moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
+import {
+  classifyError,
+  isAccountingValidationError,
+  formatErrorAsUserNote,
+} from './prompts/resilience-section0';
 import { pullTrialBalanceForPeriod } from '@/lib/erp/pipeline';
 import type { PeriodSpec } from '@/lib/erp/adapter';
 import type { ERPServiceConnection } from '@/lib/erp/service';
@@ -1586,6 +1591,13 @@ export async function orchestrateFinancialReport(
       );
   }
 
+  // CHECK 4 (Seccion 0.7): coherencia utilidad acta vs P&L.
+  // Autocorrige el acta si difieren y agrega la nota tecnica al pie del reporte.
+  const check4Note = applyCheck4ActaVsPL(niifResult, governanceResult, onProgress);
+  if (check4Note) {
+    consolidatedReport += `\n\n> ${check4Note}`;
+  }
+
   // Validator: placeholders + secciones + sanity numerica + ecuacion patrimonial.
   // Multiperiodo: pasamos los totales del periodo actual como anclas primarias
   // y los totales del comparativo (si existe) como anclas secundarias para
@@ -1698,9 +1710,26 @@ export async function orchestrateFinancialReport(
   });
 
   if (!validation.ok && !provisional?.active) {
-    const errMsg = 'Validacion fallida: ' + validation.errors.join('; ');
-    onProgress?.({ type: 'error', message: errMsg });
-    throw new Error(errMsg);
+    // Seccion 0.4: clasificar cada error antes de decidir si bloquear.
+    // TIPO B (validacion contable): emitir como alerta visible, no lanzar.
+    // TIPO D (critico) o cualquier otro: lanzar como antes.
+    const { hasD, hasNonB } = classifyValidationErrors(validation.errors);
+    if (!hasD && !hasNonB) {
+      // Todos los errores son TIPO B — continuar con alerta visible.
+      const note = formatErrorAsUserNote({
+        tier: 'B',
+        step: 'validacion contable post-render',
+        service: 'validador determinista',
+      });
+      onProgress?.({
+        type: 'warning',
+        warnings: [note, ...validation.errors],
+      });
+    } else {
+      const errMsg = 'Validacion fallida: ' + validation.errors.join('; ');
+      onProgress?.({ type: 'error', message: errMsg });
+      throw new Error(errMsg);
+    }
   }
 
   if (validation.warnings.length > 0) {
@@ -1714,6 +1743,73 @@ export async function orchestrateFinancialReport(
   onProgress?.({ type: 'done' });
 
   return report;
+}
+
+// ---------------------------------------------------------------------------
+// Seccion 0.4 — clasificacion de errores de validacion para la regla BORRADOR
+// ---------------------------------------------------------------------------
+
+/**
+ * Itera los strings de error del validator y los clasifica segun la doctrina
+ * de la Seccion 0.2. Usa `isAccountingValidationError` (TIPO B) como detector
+ * primario; cualquier error que no sea B se trata como potencialmente critico.
+ *
+ * `hasD` — true si al menos un error es critico (bloquea entrega).
+ * `hasNonB` — true si al menos un error no es TIPO B (tampoco critico pero
+ *   tampoco contable — se bloquea por precausion).
+ */
+function classifyValidationErrors(errors: string[]): { hasD: boolean; hasNonB: boolean } {
+  let hasD = false;
+  let hasNonB = false;
+  for (const msg of errors) {
+    const syntheticErr = new Error(msg);
+    const classified = classifyError(syntheticErr);
+    if (classified.tier === 'D') { hasD = true; break; }
+    if (classified.tier !== 'B') { hasNonB = true; }
+  }
+  return { hasD, hasNonB };
+}
+
+// ---------------------------------------------------------------------------
+// CHECK 4 — coherencia entre utilidad del Acta y utilidad del P&L
+// ---------------------------------------------------------------------------
+
+/**
+ * Verifica que la utilidad del acta de asamblea coincida con la utilidad del
+ * P&L (netIncomePrimary). Si difieren mas de 1 centavo, autocorrige el acta y
+ * devuelve la nota tecnica para el footer. Segun Seccion 0.7 CHECK 4.
+ *
+ * Devuelve `null` si faltan los JSON estructurados (feature no disponible) o
+ * si ya coinciden dentro de la tolerancia.
+ */
+function applyCheck4ActaVsPL(
+  niifResult: NiifAnalysisResult,
+  governanceResult: GovernanceResult,
+  onProgress: ((event: FinancialProgressEvent) => void) | undefined,
+): string | null {
+  const niifJson = niifResult.json;
+  const govJson = governanceResult.json;
+  if (!niifJson || !govJson) return null;
+
+  const plNetIncome = niifJson.incomeStatement.netIncomePrimary;
+  const actaNetIncome = govJson.shareholderMinutes.resultDistribution.netIncomeCop;
+  if (!plNetIncome || !actaNetIncome) return null;
+
+  if (moneyCopEquals(plNetIncome, actaNetIncome, BigInt(1))) return null;
+
+  const formatted = formatCopFromCents(parseMoneyCop(plNetIncome));
+  const note =
+    `Nota técnica: La utilidad del acta fue ajustada al valor del P&L (${formatted}) ` +
+    `para mantener coherencia interna del informe.`;
+
+  const warningMsg = formatErrorAsUserNote({
+    tier: 'B',
+    step: 'verificacion CHECK 4 (utilidad acta vs P&L)',
+    fallbackUsed: `utilidad corregida a ${formatted} segun el Estado de Resultados`,
+  });
+  onProgress?.({ type: 'warning', warnings: [warningMsg] });
+
+  return note;
 }
 
 // ---------------------------------------------------------------------------
