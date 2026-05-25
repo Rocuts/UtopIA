@@ -16,6 +16,7 @@ import type {
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { logActivity } from '@/lib/db/activity-log';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/niif (Wave 3.F1)
@@ -68,6 +69,7 @@ const adjustmentLedgerSchema = z
   .optional();
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   try {
     const body = await req.json();
     const parsed = financialReportRequestSchema.safeParse(body);
@@ -139,6 +141,7 @@ export async function POST(req: Request) {
         preprocessed,
         provisional,
         adjustmentLedger,
+        startedAt,
       });
     }
 
@@ -148,12 +151,31 @@ export async function POST(req: Request) {
       { preprocessed, provisional, adjustmentLedger },
     );
 
+    void logActivity({
+      category: 'financial',
+      action: 'financial-report.niif.completed',
+      level: 'info',
+      message: 'Fase NIIF completada',
+      durationMs: Date.now() - startedAt,
+      resourceType: 'financial_report',
+      metadata: { language, mode: 'sync' },
+    });
+
     return NextResponse.json({
       niif: phase.niif,
       context: extractSerializableContext(phase.context),
     });
   } catch (error) {
     if (error instanceof BalanceValidationError) {
+      void logActivity({
+        category: 'financial',
+        action: 'financial-report.niif.validation_failed',
+        level: 'warn',
+        message: 'Balance de prueba con inconsistencias críticas',
+        durationMs: Date.now() - startedAt,
+        resourceType: 'financial_report',
+        metadata: { reasons: error.reasons },
+      });
       return NextResponse.json(
         {
           error: 'El balance de prueba tiene inconsistencias criticas.',
@@ -168,6 +190,14 @@ export async function POST(req: Request) {
       '[financial-report/niif] API error:',
       error instanceof Error ? error.message : error,
     );
+    void logActivity({
+      category: 'financial',
+      action: 'financial-report.niif.failed',
+      level: 'error',
+      message: `Error en fase NIIF: ${error instanceof Error ? error.message : 'desconocido'}`,
+      durationMs: Date.now() - startedAt,
+      resourceType: 'financial_report',
+    });
     return NextResponse.json(
       { error: 'Internal server error during NIIF phase.' },
       { status: 500 },
@@ -211,9 +241,18 @@ function handleStreaming(args: {
   preprocessed: PreprocessedBalance | undefined;
   provisional: ProvisionalFlag | undefined;
   adjustmentLedger: AdjustmentLedger | undefined;
+  startedAt: number;
 }) {
-  const { rawData, company, language, instructions, preprocessed, provisional, adjustmentLedger } =
-    args;
+  const {
+    rawData,
+    company,
+    language,
+    instructions,
+    preprocessed,
+    provisional,
+    adjustmentLedger,
+    startedAt,
+  } = args;
   const encoder = new TextEncoder();
 
   const readableStream = new ReadableStream({
@@ -246,6 +285,15 @@ function handleStreaming(args: {
           context: extractSerializableContext(phase.context),
         });
         send('done', { stage: 'niif' });
+        void logActivity({
+          category: 'financial',
+          action: 'financial-report.niif.completed',
+          level: 'info',
+          message: 'Fase NIIF completada',
+          durationMs: Date.now() - startedAt,
+          resourceType: 'financial_report',
+          metadata: { language, mode: 'stream' },
+        });
       } catch (error) {
         if (error instanceof BalanceValidationError) {
           const intro =
@@ -265,6 +313,15 @@ function handleStreaming(args: {
             reasons: error.reasons,
             suggestedAccounts: error.suggestedAccounts,
           });
+          void logActivity({
+            category: 'financial',
+            action: 'financial-report.niif.validation_failed',
+            level: 'warn',
+            message: 'Balance de prueba con inconsistencias críticas',
+            durationMs: Date.now() - startedAt,
+            resourceType: 'financial_report',
+            metadata: { reasons: error.reasons },
+          });
         } else {
           console.error(
             '[financial-report/niif] Pipeline error:',
@@ -278,6 +335,15 @@ function handleStreaming(args: {
                 : 'Error durante la fase NIIF.',
             detail: friendly.message,
             code: friendly.code,
+          });
+          void logActivity({
+            category: 'financial',
+            action: 'financial-report.niif.failed',
+            level: 'error',
+            message: `Error en fase NIIF: ${friendly.code}`,
+            durationMs: Date.now() - startedAt,
+            resourceType: 'financial_report',
+            metadata: { code: friendly.code },
           });
         }
       } finally {

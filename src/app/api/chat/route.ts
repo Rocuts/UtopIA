@@ -13,6 +13,7 @@ import { chatRequestSchema, DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas'
 import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 import { orchestrate } from '@/lib/agents/orchestrator';
 import type { ProgressEvent } from '@/lib/agents/types';
+import { logApiActivity } from '@/lib/db/activity-log';
 
 // Vercel Fluid Compute: 300s ceiling for T3 parallel specialists + SSE.
 // `export const runtime = 'nodejs'` removido en Ola 2: incompatible con
@@ -626,6 +627,22 @@ export async function POST(req: Request) {
     const url = new URL(req.url);
     const stream = req.headers.get('X-Stream') === 'true' || url.searchParams.get('stream') === '1';
 
+    // Bitácora: una línea por consulta (sin contenido — sólo metadatos no-PII).
+    void logApiActivity(req, {
+      category: 'api',
+      action: 'chat.request',
+      level: 'info',
+      message: `Consulta de chat (${useCase})`,
+      resourceType: 'chat',
+      metadata: {
+        useCase,
+        language,
+        mode: isOrchestrationMode() ? 'orchestrated' : 'legacy',
+        stream,
+        messageCount: messages.length,
+      },
+    });
+
     if (isOrchestrationMode()) {
       return handleOrchestrated(req, messages, language, useCase, documentContext, nitContext, stream, erpConnections);
     }
@@ -633,6 +650,14 @@ export async function POST(req: Request) {
     return handleLegacy(messages, language, useCase, documentContext, nitContext);
   } catch (error) {
     console.error('[chat] API error:', error instanceof Error ? error.message : error);
+    void logApiActivity(req, {
+      category: 'api',
+      action: 'chat.failed',
+      level: 'error',
+      message: `Error en consulta de chat: ${error instanceof Error ? error.message : 'desconocido'}`,
+      statusCode: 500,
+      resourceType: 'chat',
+    });
     return NextResponse.json(
       { error: 'Internal server error during consultation.' },
       { status: 500 },

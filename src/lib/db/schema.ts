@@ -708,6 +708,7 @@ export type NewJournalLineRow = typeof journalLines.$inferInsert;
 //   - schema-banking.ts        (WS3) — Conciliación bancaria
 //   - schema-adjustments.ts    (WS4 + WS5) — NIIF Auto-Adjustments + monthly_close_runs
 //   - schema-notifications.ts  (WS6) — Notification subscriptions + log
+//   - schema-activity.ts       (Obs) — System activity log (Admin Logs)
 //
 // Importante sobre el ciclo schema ↔ split: cada split hace
 // `import { workspaces } from './schema'` para sus FK. El ciclo es seguro
@@ -721,6 +722,7 @@ export * from './schema-banking';
 export * from './schema-adjustments';
 export * from './schema-notifications';
 export * from './schema-sentinel';
+export * from './schema-activity';
 
 // ─── ERP Account Mapping ─────────────────────────────────────────────────────
 //

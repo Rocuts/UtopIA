@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getConnector, ERP_PROVIDERS } from '@/lib/erp/registry';
 import type { ERPProvider, ERPCredentials, ERPSyncResult } from '@/lib/erp/types';
+import { logApiActivity } from '@/lib/db/activity-log';
 
 export const maxDuration = 120;
 
@@ -15,6 +16,7 @@ const syncSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   try {
     const body = await req.json();
     const parsed = syncSchema.safeParse(body);
@@ -77,9 +79,31 @@ export async function POST(req: Request) {
       result.recordCount += contacts.length;
     }
 
+    void logApiActivity(req, {
+      category: 'erp',
+      action: `erp.sync.${syncType}`,
+      level: 'info',
+      message: `Sync ${provider} (${syncType}): ${result.recordCount} registros`,
+      durationMs: Date.now() - startedAt,
+      statusCode: 200,
+      resourceType: 'erp_sync',
+      resourceId: provider,
+      metadata: { provider, syncType, recordCount: result.recordCount },
+    });
+
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sync error';
+    void logApiActivity(req, {
+      category: 'erp',
+      action: 'erp.sync.failed',
+      level: 'error',
+      message: `Error en sync ERP: ${message}`,
+      durationMs: Date.now() - startedAt,
+      statusCode: 500,
+      resourceType: 'erp_sync',
+      metadata: { error: message },
+    });
     return NextResponse.json(
       {
         success: false,
