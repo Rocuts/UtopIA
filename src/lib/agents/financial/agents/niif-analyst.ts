@@ -55,6 +55,43 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { ReportMode } from '../contracts/base';
 import type { CompanyInfo, NiifAnalysisResult, FinancialProgressEvent } from '../types';
 
+// ---------------------------------------------------------------------------
+// Per-pass timeout budget (Wave 8.R — resilience preventiva 2026-05-27)
+// ---------------------------------------------------------------------------
+// Antes los 3 pases compartían el AbortSignal del request (techo 800s del
+// route). Si Pass-1 colgaba 700s, Pass-2 y Pass-3 se ahogaban dentro del
+// mismo budget y el route cerraba el SSE sin enviar `niif_phase`. Con
+// AbortSignal.timeout por pase encadenado al signal del caller, cada pase
+// muere limpio en su propio techo y `withRetry` no reintenta (AbortError no
+// es retryable — un timeout indica que el budget está agotado, no
+// transitoriedad).
+//
+// Valores calibrados contra latencias observadas con gpt-5.4-mini reasoning
+// medium (typical 60-180s; ver NOTA en MODELS_CONFIG.strategyDirector).
+// Worst case 3-pass: 500s, dentro de los 800s del route con holgura para
+// Stage 0 (preprocess) + Stage emit + network.
+const NIIF_PASS_TIMEOUT_MS = {
+  pass1: 200_000, // Balance + P&L: schema 24K + anti-dup G53 + cascada impuesto + 8 anomalías
+  pass2: 160_000, // EFE + ECP: schema 16K + ECP matricial v2.5 + ajuste Cta.3605 v2.4
+  pass3: 140_000, // Notas técnicas: schema 16K + 6 disclaimers condicionales + Going Concern
+} as const;
+
+/**
+ * Crea un AbortSignal compuesto que se dispara cuando CUALQUIERA de las
+ * señales de entrada se dispara. Filtra undefined para que el caller pueda
+ * pasar señales opcionales sin envolver en condicionales.
+ *
+ * - 0 señales válidas → undefined (sin cancelación)
+ * - 1 señal válida    → pasa directa (sin overhead de AbortSignal.any)
+ * - 2+ señales        → AbortSignal.any (Node 20+; Vercel Fluid es Node 24 LTS)
+ */
+function chainSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const valid = signals.filter((s): s is AbortSignal => s !== undefined);
+  if (valid.length === 0) return undefined;
+  if (valid.length === 1) return valid[0];
+  return AbortSignal.any(valid);
+}
+
 /**
  * Extrae los anchors numéricos que Pass-2 y Pass-3 necesitan citar
  * literalmente. MoneyCop strings (centavos) se pasan sin transformar — el
@@ -167,7 +204,7 @@ export async function runNiifAnalyst(
       system: buildNiifAnalystPass1Prompt(company, language, reportMode, preprocessed, elite),
       userContent,
       ...MODELS_CONFIG.niifAnalystPass1,
-      signal,
+      signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass1)),
     });
     pass1 = result.json;
   } catch (err) {
@@ -194,7 +231,7 @@ export async function runNiifAnalyst(
       system: buildNiifAnalystPass2Prompt(company, language, reportMode, pass1Anchors, preprocessed, elite),
       userContent,
       ...MODELS_CONFIG.niifAnalystPass2,
-      signal,
+      signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass2)),
     });
     pass2 = result.json;
   } catch (err) {
@@ -229,7 +266,7 @@ export async function runNiifAnalyst(
       ),
       userContent,
       ...MODELS_CONFIG.niifAnalystPass3,
-      signal,
+      signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass3)),
     });
     pass3 = result.json;
   } catch (err) {

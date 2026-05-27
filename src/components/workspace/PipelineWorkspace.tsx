@@ -195,7 +195,9 @@ async function runSSEPhase<T>(
 
   if (box.value === null) {
     throw new Error(
-      `${phaseLabel} no devolvió el evento '${eventName}' antes de cerrar el stream.`,
+      `${phaseLabel} cerró el stream sin enviar '${eventName}'. ` +
+        `Probable causa: alguno de los pases internos agotó su presupuesto de tiempo. ` +
+        `Reintenta — el siguiente intento aprovecha el caché de prompt y suele cerrar en la mitad del tiempo.`,
     );
   }
 
