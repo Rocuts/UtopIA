@@ -31,6 +31,7 @@ import { AntiDianCard } from '@/components/workspace/cards/AntiDianCard';
 import { ContingencyReserveCard } from '@/components/workspace/cards/ContingencyReserveCard';
 import { DividendOptimizerCard } from '@/components/workspace/cards/DividendOptimizerCard';
 import { SynthesisHeaderCard } from '@/components/workspace/cards/SynthesisHeaderCard';
+import { FiscalAnchorCard } from '@/components/workspace/cards/FiscalAnchorCard';
 import { useEscudoSurvival } from '@/hooks/useEscudoSurvival';
 import type { EscudoSurvivalProgressStage } from '@/lib/agents/financial/escudo-survival/types';
 
@@ -40,6 +41,7 @@ import type { EscudoSurvivalProgressStage } from '@/lib/agents/financial/escudo-
 
 const STAGE_ORDER: EscudoSurvivalProgressStage[] = [
   'preprocessing',
+  'fiscal_anchor',
   'tet',
   'retention',
   'antiDian',
@@ -191,7 +193,7 @@ export function SurvivalModePanel() {
               accept=".csv,.xlsx,.xls,.pdf,.docx,.txt"
               onUpload={handleFileUpload}
               label={survival.actions.upload}
-              sublabel={language === 'es' ? 'CSV, Excel o PDF — máx. 25 MB' : 'CSV, Excel or PDF — max 25 MB'}
+              sublabel={language === 'es' ? 'CSV, Excel o PDF — máx. 100 MB' : 'CSV, Excel or PDF — max 100 MB'}
               className="mb-5"
             />
 
@@ -380,10 +382,21 @@ export function SurvivalModePanel() {
         </motion.div>
       )}
 
+      {/* ── Bloque Âncora Fiscal — Capa 1 ────────────────────────────────── */}
+      {isDone && report?.fiscalAnchor && (
+        <motion.div {...fadeItem(2)}>
+          <FiscalAnchorCard
+            block={report.fiscalAnchor}
+            language={language}
+            t={t.elite.areas.escudo.fiscalAnchor}
+          />
+        </motion.div>
+      )}
+
       {/* ── 5-card grid ───────────────────────────────────────────────────── */}
       {(isRunning || isDone) && (
         <motion.section
-          {...fadeItem(2)}
+          {...fadeItem(3)}
           aria-label={language === 'es' ? 'Análisis de supervivencia fiscal' : 'Fiscal survival analysis'}
           className="grid grid-cols-1 md:grid-cols-2 gap-5"
         >
@@ -458,7 +471,7 @@ export function SurvivalModePanel() {
 
       {/* ── Done: reset CTA ───────────────────────────────────────────────── */}
       {isDone && (
-        <motion.div {...fadeItem(3)} className="flex justify-end">
+        <motion.div {...fadeItem(4)} className="flex justify-end">
           <button
             type="button"
             onClick={handleReset}

@@ -1,0 +1,57 @@
+{
+  "__testCase": "Caso borde: F04 < 0 (saldo a favor). Empresa con retenciones > impuesto referencia. NIT dígito 0. F01=50.000.000,00 → F02=17.500.000,00 → F03=25.000.000,00 → F04=−7.500.000,00 (negativo = saldo a favor). Alert SALDO_A_FAVOR presente. L1 check L1.6 y L3 check L3.4 deben pasar porque la alerta existe. L2 check L2.3 debe fallar (F10 = 142.9% > 100%).",
+
+  "f01": "5000000000",
+  "f02": "1750000000",
+  "f03": "2500000000",
+  "f04": "-750000000",
+  "f05": "350000000",
+  "f06": "80000000",
+  "f07": "5000000",
+  "f08": "650000000",
+  "f09": 0.0,
+  "f10": 142.9,
+
+  "calendarioDian": {
+    "nit": "800123456-0",
+    "ultimoDigito": 0,
+    "periodo": "2025",
+    "vencimientos": [
+      {
+        "obligacion": "Retención en la fuente",
+        "frecuencia": "mensual",
+        "proximoVencimiento": "2026-02-08",
+        "diasRestantes": 40,
+        "estado": "pendiente",
+        "baseCcv": "F03",
+        "valorEstimado": "2500000000",
+        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 0"
+      },
+      {
+        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "frecuencia": "anual",
+        "proximoVencimiento": "2026-04-09",
+        "diasRestantes": 130,
+        "estado": "pendiente",
+        "baseCcv": "F04",
+        "valorEstimado": "0",
+        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 0. SALDO A FAVOR: gestionar devolución Art. 850 E.T."
+      }
+    ],
+    "alertaAnticipacionDias": 15
+  },
+
+  "alertas": [
+    {
+      "codigo": "SALDO_A_FAVOR",
+      "severidad": "warning",
+      "mensaje": "Saldo a favor proyectado: $7.500.000,00. Opciones: compensar contra próxima declaración (Art. 815 E.T.) o solicitar devolución (Art. 850 E.T.). Plazo solicitud: 2 años desde vencimiento declaración.",
+      "norma": "Art. 850 E.T. — devolución saldos a favor; Art. 815 E.T. — compensación"
+    }
+  ],
+
+  "fuente": {
+    "periodo": "2025",
+    "balanceHash": "sha256-saldo-a-favor-test-2025"
+  }
+}

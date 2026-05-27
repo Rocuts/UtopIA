@@ -1,0 +1,70 @@
+{
+  "__testCase": "Golden record — Grupo Empresarial 2 Tres SAS · NIT 901714014-6 · período 2025. Valores exactos del spec sección 5. F02 = round(F01 × 35 / 100) con redondeo bancario half-up. F04 = F02 − F03. F10 = round(F03/F02 × 100, 1 decimal). Validator L1+L2+L3 debe producir CERO errores y CERO warnings cuando se invoca con clase54Cents > 0 y markdownBlock correcto.",
+
+  "f01": "222849678973",
+  "f02": "77997387641",
+  "f03": "4607340776",
+  "f04": "73390046865",
+  "f05": "10681325205",
+  "f06": "2558361940",
+  "f07": "15511991",
+  "f08": "10553782441",
+  "f09": 0.0,
+  "f10": 5.9,
+
+  "calendarioDian": {
+    "nit": "901714014-6",
+    "ultimoDigito": 6,
+    "periodo": "2025",
+    "vencimientos": [
+      {
+        "obligacion": "Retención en la fuente",
+        "frecuencia": "mensual",
+        "proximoVencimiento": "2026-02-13",
+        "diasRestantes": 45,
+        "estado": "pendiente",
+        "baseCcv": "F03",
+        "valorEstimado": "4607340776",
+        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 6"
+      },
+      {
+        "obligacion": "IVA bimestral",
+        "frecuencia": "bimestral",
+        "proximoVencimiento": "2026-03-18",
+        "diasRestantes": 78,
+        "estado": "pendiente",
+        "baseCcv": "F05",
+        "valorEstimado": "10681325205",
+        "norma": "Art. 600 E.T. — períodos gravables IVA bimestral, último dígito 6"
+      },
+      {
+        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "frecuencia": "anual",
+        "proximoVencimiento": "2026-04-14",
+        "diasRestantes": 135,
+        "estado": "pendiente",
+        "baseCcv": "F04",
+        "valorEstimado": "73390046865",
+        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 6"
+      },
+      {
+        "obligacion": "ICA Bogotá bimestral",
+        "frecuencia": "bimestral",
+        "proximoVencimiento": "2026-03-20",
+        "diasRestantes": 80,
+        "estado": "pendiente",
+        "baseCcv": "F06",
+        "valorEstimado": "2558361940",
+        "norma": "Decreto 807/1993 Bogotá — plazos ICA bimestral"
+      }
+    ],
+    "alertaAnticipacionDias": 15
+  },
+
+  "alertas": [],
+
+  "fuente": {
+    "periodo": "2025",
+    "balanceHash": "sha256-grupo2tres-sas-2025-golden"
+  }
+}

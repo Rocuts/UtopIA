@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 import {
+  extractCompanyMetadata,
   parseTrialBalanceCSV,
   preprocessTrialBalance,
   type PreprocessedBalance,
@@ -23,6 +24,8 @@ import { runRetentionShield } from './agents/retention-shield';
 import { runAntiDianAuditor } from './agents/anti-dian-auditor';
 import { runContingencyReserve } from './agents/contingency-reserve';
 import { runDividendOptimizer } from './agents/dividend-optimizer';
+import { buildFiscalAnchor } from './fiscal-anchor';
+import type { FiscalAnchorBlock } from './fiscal-anchor/types';
 import type {
   AntiDianResult,
   ContingencyReserveResult,
@@ -101,6 +104,35 @@ export async function orchestrateEscudoSurvival(
   );
 
   // -------------------------------------------------------------------------
+  // Stage 0.5: Bloque Âncora Fiscal F01..F10 + Calendario DIAN (determinístico)
+  // -------------------------------------------------------------------------
+  // Computación pura sin LLM. Si falla, marcamos `partial=true` pero no
+  // abortamos el pipeline — los 5 agentes aguas abajo siguen siendo útiles.
+  emit(onProgress, 'fiscal_anchor', 'started');
+  let fiscalAnchor: FiscalAnchorBlock | undefined;
+  let fiscalAnchorFailed = false;
+  try {
+    const extractedMeta = extractCompanyMetadata(input.rawData);
+    fiscalAnchor = buildFiscalAnchor({
+      preprocessed,
+      company,
+      hoy: new Date(),
+      nitFromFile: extractedMeta.nitFromFile,
+    });
+    emit(
+      onProgress,
+      'fiscal_anchor',
+      'completed',
+      `F09=${fiscalAnchor.f09.toFixed(1)}% · F10=${fiscalAnchor.f10.toFixed(1)}% · ${fiscalAnchor.alertas.length} alertas`,
+    );
+  } catch (err) {
+    fiscalAnchorFailed = true;
+    const msg = err instanceof Error ? err.message : 'fiscal_anchor_error';
+    console.warn('[escudo-survival] fiscal_anchor failed:', msg);
+    emit(onProgress, 'fiscal_anchor', 'failed', msg);
+  }
+
+  // -------------------------------------------------------------------------
   // Stage 1-5: Cinco agentes en paralelo (Promise.allSettled)
   // -------------------------------------------------------------------------
   const sharedInput: SurvivalAgentInput = {
@@ -135,6 +167,7 @@ export async function orchestrateEscudoSurvival(
   const dividendOptimizer = dividendSettled.value ?? buildFallbackDividend();
 
   const partial =
+    fiscalAnchorFailed ||
     tetSettled.failed ||
     retentionSettled.failed ||
     antiDianSettled.failed ||
@@ -173,6 +206,7 @@ export async function orchestrateEscudoSurvival(
     contingencyReserve,
     dividendOptimizer,
     synthesis,
+    fiscalAnchor,
     metadata: {
       uvt: UVT_2026,
       period: preprocessed.primary.period,

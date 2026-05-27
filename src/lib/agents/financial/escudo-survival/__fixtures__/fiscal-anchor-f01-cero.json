@@ -1,0 +1,57 @@
+{
+  "__testCase": "Caso borde: F01 = 0 (UAI cero — empresa sin utilidad). NIT dígito 5. La división F10 = F03/F02 no puede dividir por cero. F02 = 0 (35% de 0). F03 = 500.000,00 (retenciones históricas). F04 = 0 − retenciones = negativo. F10 debe ser 0 (convención cuando F02 = 0). Alerta SALDO_A_FAVOR debe estar presente. L3.1 no aplica porque F01 = 0. L1.4 calcF10: con F02=0 → retorna 0, que coincide con block.f10=0.",
+
+  "f01": "0",
+  "f02": "0",
+  "f03": "50000000",
+  "f04": "-50000000",
+  "f05": "12000000",
+  "f06": "3000000",
+  "f07": "500000",
+  "f08": "20000000",
+  "f09": 0.0,
+  "f10": 0.0,
+
+  "calendarioDian": {
+    "nit": "890123456-5",
+    "ultimoDigito": 5,
+    "periodo": "2025",
+    "vencimientos": [
+      {
+        "obligacion": "Retención en la fuente",
+        "frecuencia": "mensual",
+        "proximoVencimiento": "2026-02-12",
+        "diasRestantes": 44,
+        "estado": "pendiente",
+        "baseCcv": "F03",
+        "valorEstimado": "50000000",
+        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 5"
+      },
+      {
+        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "frecuencia": "anual",
+        "proximoVencimiento": "2026-04-12",
+        "diasRestantes": 133,
+        "estado": "pendiente",
+        "baseCcv": "F04",
+        "valorEstimado": "0",
+        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 5. UAI = $0: no hay impuesto a pagar."
+      }
+    ],
+    "alertaAnticipacionDias": 15
+  },
+
+  "alertas": [
+    {
+      "codigo": "SALDO_A_FAVOR",
+      "severidad": "warning",
+      "mensaje": "UAI = $0 y retenciones acumuladas = $500.000,00. Saldo a favor: $500.000,00. Gestionar compensación Art. 815 E.T. o devolución Art. 850 E.T.",
+      "norma": "Art. 850 E.T. — devolución saldos a favor; Art. 815 E.T. — compensación"
+    }
+  ],
+
+  "fuente": {
+    "periodo": "2025",
+    "balanceHash": "sha256-f01-cero-test-2025"
+  }
+}

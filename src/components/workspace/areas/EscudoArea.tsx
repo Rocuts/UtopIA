@@ -39,6 +39,7 @@ import { PremiumKpiCard } from '@/components/ui/PremiumKpiCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { calculateTef } from '@/lib/kpis/tax-efficiency';
 import type { KpiResult } from '@/types/kpis';
+import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
 
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
@@ -53,6 +54,8 @@ export interface EscudoDeadline {
 export interface EscudoAreaProps {
   kpi?: KpiResult;
   upcomingDeadlines?: EscudoDeadline[];
+  /** Bloque Âncora Fiscal — Capa 1. Cuando presente, sustituye mocks. */
+  fiscalAnchor?: FiscalAnchorBlock;
   /** Si true, renderiza una versión compacta (sin hero ni narrativa larga). */
   compact?: boolean;
   className?: string;
@@ -150,9 +153,39 @@ const SEVERITY_DOT: Record<DeadlineSeverity, string> = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+// ─── Helpers para derivar datos reales del fiscalAnchor ──────────────────────
+
+function severityFromDias(dias: number): DeadlineSeverity {
+  if (dias <= 15) return 'high';
+  if (dias <= 45) return 'medium';
+  return 'low';
+}
+
+function formatDeadlineDateShort(iso: string, language: 'es' | 'en'): string {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(language === 'es' ? 'es-CO' : 'en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(d);
+}
+
+function deadlinesFromAnchor(
+  anchor: FiscalAnchorBlock,
+  language: 'es' | 'en',
+): EscudoDeadline[] {
+  return anchor.calendarioDian.vencimientos.map((v) => ({
+    label: v.obligacion,
+    date: formatDeadlineDateShort(v.proximoVencimiento, language),
+    severity: severityFromDias(v.diasRestantes),
+  }));
+}
+
 export function EscudoArea({
   kpi,
   upcomingDeadlines,
+  fiscalAnchor,
   compact = false,
   className,
 }: EscudoAreaProps) {
@@ -160,13 +193,27 @@ export function EscudoArea({
   const escudo = t.elite.areas.escudo;
   const reduced = useReducedMotion();
 
-  const kpiData = useMemo<KpiResult>(() => kpi ?? buildMockTef(), [kpi]);
-  const deadlines = useMemo<EscudoDeadline[]>(
-    () =>
-      upcomingDeadlines ??
-      (language === 'es' ? MOCK_DEADLINES_ES : MOCK_DEADLINES_EN),
-    [upcomingDeadlines, language],
-  );
+  const hasRealData = Boolean(fiscalAnchor);
+
+  const kpiData = useMemo<KpiResult>(() => {
+    if (kpi) return kpi;
+    if (fiscalAnchor) {
+      const f10 = fiscalAnchor.f10;
+      const mock = buildMockTef();
+      return {
+        ...mock,
+        value: Number(f10.toFixed(2)),
+        formatted: `${f10.toFixed(1)}%`,
+      };
+    }
+    return buildMockTef();
+  }, [kpi, fiscalAnchor]);
+
+  const deadlines = useMemo<EscudoDeadline[]>(() => {
+    if (upcomingDeadlines) return upcomingDeadlines;
+    if (fiscalAnchor) return deadlinesFromAnchor(fiscalAnchor, language);
+    return language === 'es' ? MOCK_DEADLINES_ES : MOCK_DEADLINES_EN;
+  }, [upcomingDeadlines, fiscalAnchor, language]);
 
   // Fade-in stagger helpers
   const fadeItem = (index: number) =>
@@ -222,15 +269,40 @@ export function EscudoArea({
       <motion.div
         {...fadeItem(2)}
         className={cn(
-          'grid gap-5',
-          'grid-cols-1 md:grid-cols-5',
+          'flex flex-col gap-3',
           compact ? 'mb-8' : 'mb-14',
         )}
       >
+        {/* NIT eyebrow */}
+        <p
+          aria-label={
+            hasRealData
+              ? escudo.fiscalAnchor.eyebrow.replace('{nit}', fiscalAnchor!.calendarioDian.nit)
+              : escudo.fiscalAnchor.eyebrowDemo
+          }
+          className="text-xs uppercase tracking-eyebrow text-n-500 font-medium"
+        >
+          {hasRealData
+            ? escudo.fiscalAnchor.eyebrow.replace('{nit}', fiscalAnchor!.calendarioDian.nit)
+            : escudo.fiscalAnchor.eyebrowDemo}
+        </p>
+
+        <div
+          className={cn(
+            'grid gap-5',
+            'grid-cols-1 md:grid-cols-5',
+          )}
+        >
         {/* Primary KPI — TEF */}
         <div className="md:col-span-3">
           <PremiumKpiCard
-            label={escudo.kpiPrimary}
+            label={
+              hasRealData
+                ? (language === 'es'
+                  ? 'Cobertura de Retenciones · Art. 240 E.T.'
+                  : 'Withholding Coverage · Art. 240 E.T.')
+                : escudo.kpiPrimary
+            }
             value={kpiData.formatted}
             subvalue={
               kpiData.breakdown?.find((b) => b.label === 'Ahorro total')?.formatted ??
@@ -261,6 +333,7 @@ export function EscudoArea({
           deadlines={deadlines}
           language={language}
         />
+        </div>
       </motion.div>
 
       {/* Grid submódulos */}

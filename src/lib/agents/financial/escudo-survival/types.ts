@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
 
 export type Language = 'es' | 'en';
 
@@ -192,6 +193,11 @@ export interface EscudoSurvivalReport {
   dividendOptimizer: DividendOptimizerResult;
   synthesis: SynthesisResult;
   /**
+   * Bloque Âncora Fiscal — Capa 1. Lo calcula el agente fiscal-anchor
+   * (rama paralela). Opcional hasta que el merge unifique las ramas.
+   */
+  fiscalAnchor?: FiscalAnchorBlock;
+  /**
    * Lo adjunta el validator (rama paralela). Se tipa como `unknown` aqui para
    * evitar acoplar este modulo al shape de `SurvivalValidationResult` mientras
    * la rama del validator esta en flight; cuando se mergee, basta con
@@ -213,6 +219,7 @@ export interface EscudoSurvivalReport {
 
 export type EscudoSurvivalProgressStage =
   | 'preprocessing'
+  | 'fiscal_anchor'
   | 'tet'
   | 'retention'
   | 'antiDian'

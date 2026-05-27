@@ -1,0 +1,60 @@
+{
+  "__testCase": "Caso borde: F09 > 0 — empresa que SÍ provisionó impuesto de renta (Clase 54 presente). NIT dígito 9. F09 = Clase54/F01×100 = 35.0%. Validator L3 check L3.1 debe pasar porque clase54Cents > 0. F10 = 22.4% (razonable, sin doble conteo). Todo L1+L2+L3 debe pasar con este fixture + clase54Cents=7000000000n.",
+
+  "f01": "2000000000",
+  "f02": "700000000",
+  "f03": "157000000",
+  "f04": "543000000",
+  "f05": "80000000",
+  "f06": "18000000",
+  "f07": "3000000",
+  "f08": "250000000",
+  "f09": 35.0,
+  "f10": 22.4,
+
+  "calendarioDian": {
+    "nit": "900987654-9",
+    "ultimoDigito": 9,
+    "periodo": "2025",
+    "vencimientos": [
+      {
+        "obligacion": "Retención en la fuente",
+        "frecuencia": "mensual",
+        "proximoVencimiento": "2026-02-17",
+        "diasRestantes": 49,
+        "estado": "pendiente",
+        "baseCcv": "F03",
+        "valorEstimado": "157000000",
+        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 9"
+      },
+      {
+        "obligacion": "IVA bimestral",
+        "frecuencia": "bimestral",
+        "proximoVencimiento": "2026-03-19",
+        "diasRestantes": 79,
+        "estado": "pendiente",
+        "baseCcv": "F05",
+        "valorEstimado": "80000000",
+        "norma": "Art. 600 E.T. — períodos gravables IVA bimestral, último dígito 9"
+      },
+      {
+        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "frecuencia": "anual",
+        "proximoVencimiento": "2026-04-22",
+        "diasRestantes": 143,
+        "estado": "pendiente",
+        "baseCcv": "F04",
+        "valorEstimado": "543000000",
+        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 9"
+      }
+    ],
+    "alertaAnticipacionDias": 15
+  },
+
+  "alertas": [],
+
+  "fuente": {
+    "periodo": "2025",
+    "balanceHash": "sha256-clase54-presente-test-2025"
+  }
+}
