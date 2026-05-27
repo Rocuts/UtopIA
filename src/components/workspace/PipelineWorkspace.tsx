@@ -542,6 +542,108 @@ function emptyGovernance(): GovernanceResult {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Audit en paralelo — helper de fire-and-await
+// ---------------------------------------------------------------------------
+// Mayo 2026: optimización del pipeline. Antes el audit corría DESPUÉS de
+// Governance, sumando ~45s al critical path. Ahora se dispara en paralelo
+// con la cadena Strategy→Governance: el audit recibe `consolidatedReport`
+// con el contenido del Pass NIIF y placeholders vacíos para strategic /
+// governance. Los 4 auditores (que ya corren con Promise.allSettled) tienen
+// suficiente contexto para los hallazgos NIIF/contables y tributarios; los
+// hallazgos legales/de revisoría tendrán menos material pero el reporte se
+// entrega más rápido.
+//
+// La función devuelve `{ ok, value, error }` para que el caller la
+// pueda awaitear sin try/catch envolvente — el flujo del pipeline ya
+// maneja `phase2Error` como warning no-bloqueante.
+// ---------------------------------------------------------------------------
+interface ParallelAuditCallbacks {
+  onAuditorStarted: (domain: string) => void;
+  onAuditorComplete: (domain: AuditDomain) => void;
+  onAllAuditorsComplete: () => void;
+  onFindings: (counts: Record<string, number>) => void;
+}
+
+type ParallelAuditOutcome =
+  | { ok: true; value: BackendAuditReport | null }
+  | { ok: false; error: string };
+
+async function runAuditInBackground(args: {
+  niifResult: NiifAnalysisResult;
+  company: CompanyInfo;
+  language: 'es' | 'en';
+  signal: AbortSignal;
+  callbacks: ParallelAuditCallbacks;
+}): Promise<ParallelAuditOutcome> {
+  // Early-payload: niif-only consolidated; strategic + governance vacíos.
+  // El schema audit-request (financialAuditRequestSchema) requiere ambos
+  // como string — `''` pasa la validación; los auditors leen `consolidatedReport`.
+  const earlyReport: BackendFinancialReport = {
+    company: args.company,
+    niifAnalysis: args.niifResult,
+    strategicAnalysis: emptyStrategy(),
+    governance: emptyGovernance(),
+    consolidatedReport: args.niifResult.fullContent,
+    generatedAt: new Date().toISOString(),
+  };
+
+  let res: Response;
+  try {
+    res = await fetchSSEWithRetry('/api/financial-audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
+      body: JSON.stringify({ report: earlyReport, language: args.language }),
+      signal: args.signal,
+    });
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') return { ok: true, value: null };
+    return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    return {
+      ok: false,
+      error: `Auditoría falló (HTTP ${res.status}): ${body.slice(0, 300)}`,
+    };
+  }
+
+  const box: { value: BackendAuditReport | null } = { value: null };
+  try {
+    await consumeSSE(res, args.signal, {
+      progress: (raw) => {
+        const evt = raw as AuditProgressEvent;
+        if (evt.type === 'auditor_start') {
+          args.callbacks.onAuditorStarted(evt.domain);
+        } else if (evt.type === 'auditor_complete' || evt.type === 'auditor_failed') {
+          args.callbacks.onAuditorComplete(evt.domain as AuditDomain);
+        }
+      },
+      result: (raw) => {
+        box.value = raw as BackendAuditReport;
+      },
+      error: (raw) => {
+        const { detail } = raw as { detail?: string };
+        throw new Error(detail || 'Error en auditoría');
+      },
+    });
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') return { ok: true, value: null };
+    return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+
+  if (box.value) {
+    const findingCounts: Record<string, number> = {};
+    for (const r of box.value.auditorResults) {
+      findingCounts[r.domain] = r.findings.length;
+    }
+    args.callbacks.onFindings(findingCounts);
+    args.callbacks.onAllAuditorsComplete();
+  }
+  return { ok: true, value: box.value };
+}
+
 function splitReportIntoSections(markdown: string): ReportSection[] {
   if (!markdown) return [];
   const lines = markdown.split('\n');
@@ -1589,6 +1691,63 @@ export function PipelineWorkspace() {
         turns: [],
       });
 
+      // ─── Audit en paralelo (DISPARADO ahora, AWAITEADO tras Governance) ─
+      // Wave Mayo 2026 — optimización critical path. El audit usa el endpoint
+      // /api/financial-audit que ya corre los 4 auditores en Promise.allSettled
+      // internamente; lo único que cambia aquí es CUÁNDO se dispara: antes era
+      // post-Governance secuencial (~45s al critical path), ahora arranca en
+      // paralelo con Strategy→Governance y se awaitea justo antes de Quality.
+      // Trade-off: el audit recibe sólo el contenido NIIF; los hallazgos
+      // legales/governance tendrán menos material. Si la calidad no alcanza
+      // se puede mover este disparo a post-Strategy (mediano), o post-Governance
+      // (status quo).
+      const auditEnabled = pipelineInput.outputOptions.auditPipeline;
+      let auditPromise: Promise<ParallelAuditOutcome> = Promise.resolve({
+        ok: true,
+        value: null,
+      });
+      if (auditEnabled) {
+        setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
+        auditPromise = runAuditInBackground({
+          niifResult,
+          company: niifContext.company,
+          language,
+          signal: controller.signal,
+          callbacks: {
+            onAuditorStarted: (domain) => {
+              setPipelineState((prev) => ({
+                ...prev,
+                auditorsStarted: prev.auditorsStarted.includes(domain)
+                  ? prev.auditorsStarted
+                  : [...prev.auditorsStarted, domain],
+              }));
+            },
+            onAuditorComplete: (domain) => {
+              setPipelineState((prev) => ({
+                ...prev,
+                auditorsComplete: prev.auditorsComplete.includes(domain)
+                  ? prev.auditorsComplete
+                  : [...prev.auditorsComplete, domain],
+              }));
+            },
+            onAllAuditorsComplete: () => {
+              setPipelineState((prev) => ({
+                ...prev,
+                auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
+              }));
+            },
+            onFindings: (counts) => {
+              setPipelineState((prev) => ({ ...prev, auditFindings: counts }));
+            },
+          },
+        });
+        // Suprime unhandled-rejection si Strategy/Governance abortan el pipeline
+        // antes de que awaitemos abajo. `runAuditInBackground` ya transforma
+        // errores en `{ ok: false, error }`, así que .catch() es defensa en
+        // profundidad sobre AbortError.
+        auditPromise.catch(() => undefined);
+      }
+
       // ─── Sub-fase 1.2: Director de Estrategia ──────────────────────────
       // Si esta falla, persiste el checkpoint NIIF y el pipeline continúa
       // hasta que el usuario decida reintentar. Marcamos `phase2Error` con
@@ -1694,79 +1853,22 @@ export function PipelineWorkspace() {
         phase3Error: undefined,
       }));
 
-      // ─── Phase 2: Audit (OPCIONAL, no-bloqueante) ──────────────────────
-      // Fallos de red aqui NO destruyen el reporte. Se registra `phase2Error`
-      // y el pipeline continua. El usuario vera el reporte NIIF + un aviso
-      // "Auditoria no disponible" en la UI.
+      // ─── Phase 2: Audit (DISPARADO antes — solo awaiteamos el resultado) ──
+      // Wave Mayo 2026 — el audit ya está corriendo en paralelo desde antes
+      // de Strategy (kickoff arriba). Aquí sólo cosechamos el resultado.
+      // Fallos NO destruyen el reporte: se registran como `phase2Error`.
       let phase2Report: BackendAuditReport | null = null;
-      if (pipelineInput.outputOptions.auditPipeline) {
-        setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
-        try {
-          const phase2Res = await fetchSSEWithRetry('/api/financial-audit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
-            body: JSON.stringify({
-              report: phase1Report,
-              language,
-            }),
-            signal: controller.signal,
-          });
-
-          if (!phase2Res.ok) {
-            const errBody = await phase2Res.text().catch(() => '');
-            throw new Error(`Auditoría falló (HTTP ${phase2Res.status}): ${errBody.slice(0, 300)}`);
-          }
-
-          const phase2Box: { value: BackendAuditReport | null } = { value: null };
-          await consumeSSE(phase2Res, controller.signal, {
-            progress: (raw) => {
-              const evt = raw as AuditProgressEvent;
-              if (evt.type === 'auditor_start') {
-                const domain = evt.domain;
-                setPipelineState((prev) => ({
-                  ...prev,
-                  auditorsStarted: prev.auditorsStarted.includes(domain)
-                    ? prev.auditorsStarted
-                    : [...prev.auditorsStarted, domain],
-                }));
-              } else if (evt.type === 'auditor_complete' || evt.type === 'auditor_failed') {
-                const domain = evt.domain as AuditDomain;
-                setPipelineState((prev) => ({
-                  ...prev,
-                  auditorsComplete: prev.auditorsComplete.includes(domain)
-                    ? prev.auditorsComplete
-                    : [...prev.auditorsComplete, domain],
-                }));
-              }
-            },
-            result: (raw) => {
-              phase2Box.value = raw as BackendAuditReport;
-            },
-            error: (raw) => {
-              const { detail } = raw as { detail?: string };
-              throw new Error(detail || 'Error en auditoría');
-            },
-          });
-
-          phase2Report = phase2Box.value;
+      if (auditEnabled) {
+        const outcome = await auditPromise;
+        if (outcome.ok) {
+          phase2Report = outcome.value;
           if (phase2Report) {
-            const findingCounts: Record<string, number> = {};
-            for (const r of phase2Report.auditorResults) {
-              findingCounts[r.domain] = r.findings.length;
-            }
-            setPipelineState((prev) => ({
-              ...prev,
-              auditFindings: findingCounts,
-              auditorsComplete: ['niif', 'tributario', 'legal', 'revisoria'],
-            }));
             // Conservar el reporte completo para que el botón Exportar PDF
             // pueda incluir AuditFindingsPage con los 4 auditores + hallazgos.
             setAuditReport(phase2Report);
           }
-        } catch (err) {
-          if ((err as Error)?.name === 'AbortError') return;
-          const msg = err instanceof Error ? err.message : 'Error desconocido';
-          setPipelineState((prev) => ({ ...prev, phase2Error: msg }));
+        } else {
+          setPipelineState((prev) => ({ ...prev, phase2Error: outcome.error }));
         }
       }
 
