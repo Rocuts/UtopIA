@@ -107,6 +107,158 @@ export interface PreviouslyComputedPass2Anchors {
 }
 
 // ===========================================================================
+// REGLAS ABSOLUTAS — Agente 1 (Analista NIIF) · Mayo 2026
+// ===========================================================================
+// Estas 5 reglas tienen PRIORIDAD ABSOLUTA sobre cualquier otra instrucción
+// del prompt. Cuando exista conflicto entre una regla absoluta y otra parte
+// del prompt (knowledge headers, success_criteria, constraints, context),
+// las reglas absolutas GANAN SIEMPRE.
+//
+// Se inyectan en las PRIMERAS LÍNEAS del prompt de los 3 pases (Pass-1,
+// Pass-2, Pass-3) para que el modelo las internalice antes de leer cualquier
+// header técnico o el bloque <task>.
+// ===========================================================================
+
+function buildAbsoluteRulesAgente1(language: 'es' | 'en'): string {
+  if (language === 'en') {
+    return `# ABSOLUTE RULES — READ FIRST, ALWAYS
+These 5 rules override any other instruction in this prompt. When in conflict, ABSOLUTE RULES WIN.
+
+## RULE 1 — Cta.1805 and Cta.1355: BALANCE SHEET ONLY
+- Cta.1805 = Advance payments and withholdings paid = ASSET on the Balance Sheet.
+- Cta.1355 = Tax advance payments = ASSET on the Balance Sheet.
+- These accounts are NEVER subtracted in the P&L.
+- These accounts are NEVER income tax expense.
+- These accounts NEVER affect Net Income.
+- When Class 54 is NOT present in the trial balance: Income Tax in the P&L = $0.00; Net Income = Profit Before Tax; add note: "No income tax expense was recorded in Class 54. The fiscal reconciliation requires accountant review."
+- When Class 54 IS present: Income Tax in the P&L = Class 54 balance; Net Income = PBT − Class 54.
+- MANDATORY CHECK before closing the P&L: Did I subtract Cta.1805 or Cta.1355 from the P&L? If YES → ERROR → fix it. Is Class 54 present? If NO → income tax in P&L = $0.00.
+
+## RULE 2 — The "§" SYMBOL IS FORBIDDEN
+The "§" symbol MUST NOT appear anywhere in the report (notes, alerts, minutes, or any text). Mandatory replacements:
+- "NIIF for SMEs §3" → "NIIF para PYMES, Sección 3"
+- "NIIF for SMEs §4" → "NIIF para PYMES, Sección 4"
+- "NIIF for SMEs §5" → "NIIF para PYMES, Sección 5"
+- "NIIF for SMEs §6" → "NIIF para PYMES, Sección 6"
+- "NIIF for SMEs §7" → "NIIF para PYMES, Sección 7"
+- "NIIF for SMEs §8" → "NIIF para PYMES, Sección 8"
+- "NIIF for SMEs §10" → "NIIF para PYMES, Sección 10"
+- "NIIF for SMEs §11" → "NIIF para PYMES, Sección 11"
+- "NIIF for SMEs §13" → "NIIF para PYMES, Sección 13"
+- "NIIF for SMEs §14" → "NIIF para PYMES, Sección 14"
+- "NIIF for SMEs §17" → "NIIF para PYMES, Sección 17"
+- "NIIF for SMEs §23" → "NIIF para PYMES, Sección 23"
+- "NIIF for SMEs §28" → "NIIF para PYMES, Sección 28"
+- "NIIF for SMEs §29" → "NIIF para PYMES, Sección 29"
+- "NIIF for SMEs §32" → "NIIF para PYMES, Sección 32"
+- "NIC 1 §32" → "NIC 1, párrafo 32"
+- "NIC 7 §18" → "NIC 7, párrafo 18"
+- "NIC 12 §58" → "NIC 12, párrafo 58"
+- "NIC 12 §80" → "NIC 12, párrafo 80"
+- "NIC 28 §10" → "NIC 28, párrafo 10"
+- "NIA 240 §A1-A6" → "NIA 240"
+- "NIA 705 §7" → "NIA 705"
+- "NIA 706 §7" → "NIA 706"
+Verification before delivery: does "§" appear anywhere? If YES → replace it.
+
+## RULE 3 — CENTAVOS IN DISPLAYED TEXT: FORBIDDEN
+Monetary figures are NEVER displayed in centavos in the body of the report.
+- FORBIDDEN: "419655824290 centavos", "222849678973 centavos COP", "activo total 2025 419655824290", "156348555401 centavos".
+- MANDATORY Colombian format: "$4.196.558.242,90", "$2.228.496.789,73", "$2.413.677.888,64", "$1.563.485.554,01".
+- Conversion rule when the system uses centavos: divide by 100 before display (419655824290 ÷ 100 = $4.196.558.242,90).
+- This rule applies to displayed labels, narrative, notes, banners and headings — NOT to the internal MoneyCop centavos strings in the JSON output (those keep their string-of-centavos format as enforced by the schema).
+
+## RULE 4 — INTERNAL NOTES MUST NOT APPEAR IN THE FINAL REPORT
+The following section heading MUST NEVER appear in the output:
+- "NOTAS INTERNAS DEL PREPARADOR (NO incluir en EEFF firmables)"
+Also forbidden in any user-visible note, label or banner:
+- "Nota curatorFlags"
+- "anchors de Pass-1" / "anchors de Pass-2"
+- "amountComparative igual a null"
+- "bloque recibido no incluyó curatorFlags"
+- Any reference to internal system variables (curator, anchors, Pass-1/2/3, preprocessor, validator, schema, MoneyCop, etc.)
+These are system-internal notes — the client must never see them.
+
+## RULE 5 — "DESTINACIÓN" FIELD OF THE ACTA: SINGLE SOURCE OF TRUTH
+The "Net Income for the Period" field in the "Profit Allocation" section of the minutes has ONE single source: the last line of the Income Statement (netIncomePrimary).
+- NEVER divide that value by 100, by 1000, or by any number.
+- NEVER read it from internal system variables.
+- NEVER recompute it from another source.
+- Example: if Net Income in the P&L = $2.228.496.789,73 then the Allocation field = $2.228.496.789,73, the capitalization base = $2.228.496.789,73, and the 40% amount = $891.398.715,89.
+- Verification: does the Allocation value == last line of the P&L? If they differ by even one cent → FIX before publishing.
+
+---`;
+  }
+  return `# REGLAS ABSOLUTAS — LEER PRIMERO, SIEMPRE
+Estas 5 reglas tienen PRIORIDAD sobre cualquier otra instrucción de este prompt. Cuando exista conflicto entre una regla absoluta y otra parte del prompt (knowledge headers, success_criteria, constraints, context), las REGLAS ABSOLUTAS GANAN SIEMPRE.
+
+## REGLA 1 — Cta.1805 y Cta.1355: SOLO van en el Balance
+- Cta.1805 = Anticipos y retenciones pagadas = ACTIVO DEL BALANCE.
+- Cta.1355 = Anticipos de impuestos = ACTIVO DEL BALANCE.
+- Estas cuentas NUNCA se restan en el P&L.
+- Estas cuentas NUNCA son gasto de impuesto de renta.
+- Estas cuentas NUNCA afectan la Utilidad Neta.
+- Cuando NO existe Clase 54 en el balance de prueba: Impuesto de renta en el P&L = $0,00; Utilidad Neta = Utilidad Antes de Impuestos; agregar nota: "No se registró gasto de impuesto en Clase 54. La conciliación fiscal requiere revisión del contador."
+- Cuando SÍ existe Clase 54: Impuesto de renta en el P&L = saldo de Clase 54; Utilidad Neta = UAI − Clase 54.
+- VERIFICACIÓN OBLIGATORIA antes de cerrar el P&L: ¿Resté Cta.1805 o Cta.1355 del P&L? Si la respuesta es SÍ → ERROR → corregir. ¿Existe Clase 54 en el balance? Si NO → impuesto P&L = $0,00.
+
+## REGLA 2 — PROHIBIDO el símbolo "§"
+El símbolo "§" NO debe aparecer en ninguna parte del informe (ni notas, ni alertas, ni acta, ni ningún texto). Tabla de reemplazo obligatoria:
+- "NIIF for SMEs §3" → "NIIF para PYMES, Sección 3"
+- "NIIF for SMEs §4" → "NIIF para PYMES, Sección 4"
+- "NIIF for SMEs §5" → "NIIF para PYMES, Sección 5"
+- "NIIF for SMEs §6" → "NIIF para PYMES, Sección 6"
+- "NIIF for SMEs §7" → "NIIF para PYMES, Sección 7"
+- "NIIF for SMEs §8" → "NIIF para PYMES, Sección 8"
+- "NIIF for SMEs §10" → "NIIF para PYMES, Sección 10"
+- "NIIF for SMEs §11" → "NIIF para PYMES, Sección 11"
+- "NIIF for SMEs §13" → "NIIF para PYMES, Sección 13"
+- "NIIF for SMEs §14" → "NIIF para PYMES, Sección 14"
+- "NIIF for SMEs §17" → "NIIF para PYMES, Sección 17"
+- "NIIF for SMEs §23" → "NIIF para PYMES, Sección 23"
+- "NIIF for SMEs §28" → "NIIF para PYMES, Sección 28"
+- "NIIF for SMEs §29" → "NIIF para PYMES, Sección 29"
+- "NIIF for SMEs §32" → "NIIF para PYMES, Sección 32"
+- "NIC 1 §32" → "NIC 1, párrafo 32"
+- "NIC 7 §18" → "NIC 7, párrafo 18"
+- "NIC 12 §58" → "NIC 12, párrafo 58"
+- "NIC 12 §80" → "NIC 12, párrafo 80"
+- "NIC 28 §10" → "NIC 28, párrafo 10"
+- "NIA 240 §A1-A6" → "NIA 240"
+- "NIA 705 §7" → "NIA 705"
+- "NIA 706 §7" → "NIA 706"
+Verificación antes de entregar el informe: ¿aparece el símbolo "§" en alguna parte? Si SÍ → reemplazar.
+
+## REGLA 3 — CENTAVOS en texto visible: PROHIBIDO
+Las cifras monetarias NUNCA se escriben en centavos en el texto visible del informe.
+- PROHIBIDO: "419655824290 centavos", "222849678973 centavos COP", "activo total 2025 419655824290", "156348555401 centavos".
+- OBLIGATORIO formato colombiano: "$4.196.558.242,90", "$2.228.496.789,73", "$2.413.677.888,64", "$1.563.485.554,01".
+- Regla de conversión cuando el sistema trabaja en centavos: dividir por 100 antes de mostrar (419655824290 ÷ 100 = $4.196.558.242,90).
+- Esta regla aplica a labels visibles, narrativa, notas, banners y encabezados — NO al string interno MoneyCop en centavos del JSON (ese conserva su formato string-entero como exige el schema).
+
+## REGLA 4 — NOTAS INTERNAS no aparecen en el informe final
+El siguiente encabezado de sección NUNCA debe aparecer en el output:
+- "NOTAS INTERNAS DEL PREPARADOR (NO incluir en EEFF firmables)"
+Tampoco deben aparecer en ninguna nota, label o banner visible al cliente:
+- "Nota curatorFlags"
+- "anchors de Pass-1" / "anchors de Pass-2"
+- "amountComparative igual a null"
+- "bloque recibido no incluyó curatorFlags"
+- Cualquier referencia a variables internas del sistema (curator, anchors, Pass-1/2/3, preprocesador, validator, schema, MoneyCop, etc.).
+Estas son notas del sistema para uso interno. El cliente no las debe ver nunca.
+
+## REGLA 5 — Campo "Destinación" del acta: fuente única
+El campo "Utilidad Neta del Ejercicio" en la sección "Destinación del resultado" del acta tiene UNA SOLA fuente: el último renglón del Estado de Resultados (netIncomePrimary).
+- NUNCA dividir ese valor por 100, por 1000, ni por ningún número.
+- NUNCA leer de variables internas del sistema.
+- NUNCA recalcular desde otra fuente.
+- Ejemplo: si la Utilidad Neta del P&L = $2.228.496.789,73 entonces el campo Destinación = $2.228.496.789,73, la base de capitalización = $2.228.496.789,73 y el monto 40% = $891.398.715,89.
+- Verificación: ¿el valor de Destinación == último renglón del P&L? Si difieren en un solo centavo → CORREGIR antes de publicar.
+
+---`;
+}
+
+// ===========================================================================
 // SHARED CONTEXT BUILDER
 // ===========================================================================
 // Toda la lógica de unpacking del Elite context, periodos, formatters y
@@ -593,7 +745,9 @@ export function buildNiifAnalystPass1Prompt(
         ? 'Periodo de transición. Se compara donde la información histórica es suficiente; se marca n/c donde no.'
         : 'null';
 
-  return `${ctx.guardrail}
+  return `${buildAbsoluteRulesAgente1(language)}
+
+${ctx.guardrail}
 
 ${ctx.resilience0}
 
@@ -794,7 +948,9 @@ export function buildNiifAnalystPass2Prompt(
 ): string {
   const ctx = buildSharedContext(company, language, reportMode, preprocessed, elite);
 
-  return `${ctx.guardrail}
+  return `${buildAbsoluteRulesAgente1(language)}
+
+${ctx.guardrail}
 
 ${ctx.resilience0}
 
@@ -1038,7 +1194,9 @@ export function buildNiifAnalystPass3Prompt(
 ${eliteActivators.join('\n')}`
     : '';
 
-  return `${ctx.guardrail}
+  return `${buildAbsoluteRulesAgente1(language)}
+
+${ctx.guardrail}
 
 ${ctx.resilience0}
 
