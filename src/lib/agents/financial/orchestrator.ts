@@ -5,6 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import { runNiifAnalyst } from './agents/niif-analyst';
+import { buildNiifAncora } from './ancora/build-ancora';
+import type { NiifAncora } from './ancora/types';
 import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
 import {
@@ -1069,6 +1071,16 @@ export interface FinancialPipelineContext {
   adjustmentsApplicationDetail: ReturnType<typeof applyAdjustments> | null;
   /** Lista de ajustes confirmados que se intentaron aplicar. */
   appliedAdjustments: NonNullable<AdjustmentLedger['adjustments']>;
+  /**
+   * Bloque Âncora — cifras determinísticas (CCV NIIF A01..A19/X01..X04 +
+   * CCV Fiscal F01..F10 + checks + nitDigito) calculadas desde el
+   * PreprocessedBalance. Disponible para los Agentes 2 (Strategy), 3
+   * (Governance) y el pipeline Escudo como fuente de verdad numérica que
+   * NO depende del LLM. Siempre presente: cuando Stage 0 no produjo
+   * `preprocessed`, `buildNiifAncora` devuelve un Âncora "empty" con todos
+   * los campos a "0" sentinel.
+   */
+  ancora: NiifAncora;
 }
 
 /**
@@ -1254,6 +1266,11 @@ export async function prepareFinancialContext(
     ? deriveReportMode(ppForAgents)
     : 'COMPARATIVO_COMPLETO';
 
+  // Bloque Âncora — cálculo determinístico desde el preprocesado. No
+  // depende del LLM y nunca lanza; cuando `ppForAgents` es undefined,
+  // buildNiifAncora devuelve un Âncora "empty" coherente.
+  const ancora: NiifAncora = buildNiifAncora(ppForAgents, effectiveCompany);
+
   return {
     effectiveRawData,
     effectiveCompany,
@@ -1266,6 +1283,7 @@ export async function prepareFinancialContext(
     eliteForGovernance,
     adjustmentsApplicationDetail,
     appliedAdjustments,
+    ancora,
   };
 }
 
@@ -1280,7 +1298,11 @@ export async function prepareFinancialContext(
 export async function runNiifPhase(
   request: FinancialReportRequest,
   options: OrchestrateFinancialOptions = {},
-): Promise<{ niif: NiifAnalysisResult; context: FinancialPipelineContext }> {
+): Promise<{
+  niif: NiifAnalysisResult;
+  ancora: NiifAncora;
+  context: FinancialPipelineContext;
+}> {
   const { language, instructions } = request;
   const { onProgress } = options;
 
@@ -1356,7 +1378,7 @@ export async function runNiifPhase(
 
   onProgress?.({ type: 'stage_complete', stage: 1, label: completeLabel });
 
-  return { niif, context };
+  return { niif, ancora: context.ancora, context };
 }
 
 /**

@@ -163,6 +163,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       niif: phase.niif,
+      ancora: phase.ancora,
       context: extractSerializableContext(phase.context),
     });
   } catch (error) {
@@ -280,8 +281,14 @@ function handleStreaming(args: {
           },
         );
 
+        // Emisión separada del Bloque Âncora — los consumidores (UI Escudo,
+        // Strategy/Governance handoff) lo leen sin tener que parsear el
+        // payload pesado de `niif_phase`. El payload de `niif_phase` lo
+        // incluye también para callers legacy que ignoran el evento nuevo.
+        send('niif_ancora', { ancora: phase.ancora });
         send('niif_phase', {
           niif: phase.niif,
+          ancora: phase.ancora,
           context: extractSerializableContext(phase.context),
         });
         send('done', { stage: 'niif' });
