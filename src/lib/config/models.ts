@@ -282,6 +282,21 @@ export const MODELS_CONFIG = {
   dividendOptimizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
   escudoSynthesizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
 
+  // -- Escudo Capa 4 — Agente Fiscal (6 módulos + sintetizador) -----------
+  // Razonamiento `medium` default; `high` reservado para Módulos 5 (defensa
+  // DIAN — redacta argumentación jurídica) y 8 (supervivencia — decisiones
+  // estratégicas bajo crisis). Verbosity `medium` excepto cuando el módulo
+  // produce narrativa larga (defensa, supervivencia) o tabular comprimida
+  // (risk-score, ccv).
+  escudoFiscalCcv: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
+  escudoFiscalConciliacion: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+  escudoFiscalRiskScore: { reasoningEffort: 'medium', textVerbosity: 'low', maxOutputTokens: 4000 } as const,
+  escudoFiscalPlaneacion: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+  escudoFiscalDefensaDian: { reasoningEffort: 'high', textVerbosity: 'high', maxOutputTokens: 12000 } as const,
+  escudoFiscalDevoluciones: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 6000 } as const,
+  escudoFiscalSupervivencia: { reasoningEffort: 'high', textVerbosity: 'medium', maxOutputTokens: 10000 } as const,
+  escudoFiscalSynthesizer: { reasoningEffort: 'medium', textVerbosity: 'medium', maxOutputTokens: 8000 } as const,
+
   // -- HTML Editor (v10.1 — Editor Jefe HTML cap-stone visual) -----------
   // Produce HTML autocontenido de 15 páginas A4 portrait (~32-48K tokens en
   // v10.1, vs 12 slides 16:9 en v8.1). Reasoning effort medium porque el

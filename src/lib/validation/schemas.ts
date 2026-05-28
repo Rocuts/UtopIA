@@ -332,3 +332,42 @@ export const escudoSurvivalRequestSchema = z.object({
   language: z.enum(['es', 'en']).default('es'),
   instructions: z.string().max(5_000).optional(),
 });
+
+// ---- Escudo Capa 4 — Agente Fiscal route ----
+// Schema del request a `/api/escudo/fiscal`. NO viaja al LLM (es validación
+// del transporte HTTP) — por eso puede usar `.optional()` y `.default()`.
+// Los schemas que sí viajan al LLM viven en
+// `src/lib/agents/financial/escudo-survival/fiscal-agent/schemas.ts` y
+// siguen el strict mode (`.nullable()`).
+export const fiscalAgentRequestSchema = z.object({
+  rawData: z
+    .string()
+    .min(1, 'Financial data is required')
+    .max(2_000_000, 'Data too large'),
+  company: z
+    .object({
+      name: z.string().max(200).optional(),
+      nit: z.string().max(20).optional(),
+      sector: z.string().max(100).optional(),
+      ciiu: z.string().max(10).optional(),
+    })
+    .optional(),
+  language: z.enum(['es', 'en']).default('es'),
+  mode: z
+    .enum(['quick', 'full', 'supervivencia', 'defensa_dian', 'devolucion'])
+    .default('full'),
+  instructions: z.string().max(5_000).optional(),
+  /** Módulo 5 — texto del requerimiento DIAN. */
+  dianRequirementText: z.string().max(20_000).optional(),
+  /** Módulo 5 — tipo de requerimiento si el caller ya lo conoce. */
+  dianRequirementKind: z
+    .enum([
+      'requerimiento_ordinario',
+      'emplazamiento_corregir',
+      'emplazamiento_no_declarar',
+      'pliego_cargos',
+      'liquidacion_oficial_revision',
+      'desconocido',
+    ])
+    .optional(),
+});

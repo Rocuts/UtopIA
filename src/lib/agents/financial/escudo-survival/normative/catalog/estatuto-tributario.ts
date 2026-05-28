@@ -898,4 +898,69 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     // DIAN está en Art. 855.
     tags: ['devolucion', 'DIAN', 'plazo', '50_dias', '20_dias'],
   },
+
+  // ─── PROCEDIMIENTO DIAN — REQUERIMIENTOS Y RECURSOS ──────────────────────
+  // Capa 4 — Módulo 5 (Defensa DIAN). Estos artículos rigen los plazos y la
+  // estructura procesal de respuesta a actuaciones DIAN. Toda carta producida
+  // por `dian-letter-builder` cita uno de estos artículos según tipo.
+  {
+    id: 'ART_685_ET',
+    cita: 'Art. 685 E.T.',
+    titulo: 'Emplazamiento para corregir',
+    resumen:
+      'La DIAN puede emplazar al contribuyente para que corrija su declaración cuando existan indicios de inexactitud. El contribuyente tiene 1 mes contado desde la notificación para corregir voluntariamente o responder al emplazamiento. La corrección oportuna activa la reducción del Art. 644 E.T. (10% en lugar de 20%).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=685',
+    tags: ['procedimiento', 'DIAN', 'emplazamiento', 'corregir', 'plazo', '1_mes'],
+  },
+  {
+    id: 'ART_702_ET',
+    cita: 'Art. 702 E.T.',
+    titulo: 'Facultad de modificar la liquidación privada — Liquidación oficial de revisión',
+    resumen:
+      'La DIAN puede modificar por una sola vez la liquidación privada del contribuyente mediante liquidación oficial de revisión. Es el acto administrativo definitivo que cierra el proceso de determinación oficial del impuesto. Contra esta liquidación procede el recurso de reconsideración (Art. 720 E.T.), dentro de los 2 meses siguientes a su notificación.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=702',
+    tags: ['procedimiento', 'DIAN', 'liquidacion_oficial', 'revision'],
+  },
+  {
+    id: 'ART_715_ET',
+    cita: 'Art. 715 E.T.',
+    titulo: 'Emplazamiento previo por no declarar',
+    resumen:
+      'Procede cuando el contribuyente, obligado a presentar declaración, no la presenta. La DIAN lo emplaza para que la presente. Si no responde, se aplica la sanción por no declarar (Art. 643 E.T.) y se procede con liquidación de aforo. La presentación dentro del término reduce la sanción al amparo del Art. 716 E.T.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=715',
+    tags: ['procedimiento', 'DIAN', 'emplazamiento', 'no_declarar'],
+  },
+  {
+    id: 'ART_720_ET',
+    cita: 'Art. 720 E.T.',
+    titulo: 'Recurso de reconsideración',
+    resumen:
+      'Procede contra las liquidaciones oficiales, resoluciones que impongan sanciones u ordenen el reintegro de sumas devueltas, y demás actos producidos por la DIAN. Plazo: 2 meses contados desde la notificación del acto. Se interpone ante el funcionario que profirió el acto. Es el recurso obligatorio antes de acudir a la jurisdicción contencioso-administrativa.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=720',
+    tags: ['procedimiento', 'DIAN', 'recurso', 'reconsideracion', 'plazo', '2_meses'],
+  },
+  {
+    id: 'ART_752_ET',
+    cita: 'Art. 752 E.T.',
+    titulo: 'Requerimiento ordinario de información',
+    resumen:
+      'Faculta a la DIAN para solicitar a cualquier persona, dentro o fuera del proceso de determinación, la información que requiera para fines de control tributario. Plazo de respuesta: 15 días hábiles contados desde la notificación, prorrogables por petición motivada. La omisión genera sanción por no informar (Art. 651 E.T.).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial: 'https://estatuto.co/?articulo=752',
+    tags: ['procedimiento', 'DIAN', 'requerimiento', 'informacion', 'plazo', '15_dias_habiles'],
+  },
 ] as const;
