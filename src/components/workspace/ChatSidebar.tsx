@@ -72,6 +72,7 @@ import {
   type ConversationMessage,
 } from '@/lib/storage/conversation-history';
 import { cn } from '@/lib/utils';
+import { uploadDocument } from '@/lib/upload/blob-client';
 import { SkeletonText } from '@/components/ui/SkeletonText';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -939,12 +940,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
       if (!file) return;
       setIsUploading(true);
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('context', file.name);
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        const data = await uploadDocument(file, file.name);
         setMessages((prev) => [
           ...prev,
           {

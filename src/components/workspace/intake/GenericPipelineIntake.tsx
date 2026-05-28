@@ -159,7 +159,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
             <FileUploadZone
               accept=".csv,.xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png"
               onUpload={uploadAndExtract}
-              maxSizeMB={25}
+              maxSizeMB={100}
               label="Arrastre su archivo aquí"
               sublabel="Balance de prueba, estados financieros, acto administrativo, declaraciones"
             />

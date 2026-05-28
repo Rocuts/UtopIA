@@ -40,6 +40,7 @@ import { StreamingText } from '@/design-system/components/StreamingText';
 import { useToast } from '@/design-system/components/Toast';
 import { exportConversationPDF } from '@/lib/export/pdf-export';
 import { cn } from '@/lib/utils';
+import { uploadDocument } from '@/lib/upload/blob-client';
 import {
   loadConversation,
   saveConversation,
@@ -1390,13 +1391,8 @@ export function ChatWorkspace({
       // podría fallar. Guardaremos cuando llegue la respuesta.
       return next;
     });
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('context', file.name);
     try {
-      const response = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Upload failed');
+      const data = await uploadDocument(file, file.name);
       const fullText = data.extractedText || '';
       const finishedDoc: UploadedDocument = { ...newDoc, chunks: data.chunks || 0, textPreview: fullText.slice(0, 2000), extractedText: fullText };
       setUploadedDocs(prev => {

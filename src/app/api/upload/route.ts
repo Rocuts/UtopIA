@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
-import { uploadContextSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
+import { uploadContextSchema, blobUploadSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
   parseTrialBalanceCSV,
@@ -431,8 +431,301 @@ function classifyDocument(text: string, filename: string, ext: string): Detected
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// processDocument — pipeline comun de extraccion + RAG + preprocessing +
+// clasificacion. Ambos caminos de POST (JSON via Vercel Blob, multipart legado)
+// lo invocan despues de obtener el buffer. Lanza un `UploadError` con `status`
+// para los fallos esperables (400) y deja que los inesperados burbujeen (500).
+// ---------------------------------------------------------------------------
+
+class UploadError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = 'UploadError';
+    this.status = status;
+  }
+}
+
+/** Forma de la respuesta JSON — identica para ambos caminos. */
+interface ProcessDocumentResult {
+  success: true;
+  filename: string;
+  chunks: number;
+  extractedText: string;
+  validationReport: string | undefined;
+  detectedCaseType: DetectedCaseType;
+  isTrialBalance: boolean;
+  preprocessed: PreprocessedBalance | null;
+  detectedPeriods: string[];
+  message: string;
+}
+
+async function processDocument(
+  buffer: Buffer,
+  filename: string,
+  contextLabel: string,
+): Promise<ProcessDocumentResult> {
+  // Validate extension before any processing
+  const ext = path.extname(filename).toLowerCase();
+  if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+    throw new UploadError('Unsupported file type.');
+  }
+
+  if (buffer.length > MAX_UPLOAD_SIZE) {
+    throw new UploadError('Archivo demasiado grande. Máximo 100MB.');
+  }
+
+  let text: string;
+  try {
+    text = await extractText(buffer, filename);
+  } catch (extractError) {
+    // Return the specific error message so the frontend can display actionable feedback
+    const message = extractError instanceof Error
+      ? extractError.message
+      : 'Could not process file.';
+    throw new UploadError(message);
+  }
+
+  if (!text.trim()) {
+    throw new UploadError(
+      `File "${filename}" is empty or could not be read. Verify the file contains readable content.`,
+    );
+  }
+
+  // -----------------------------------------------------------------
+  // Vectorization (RAG) — Neon pgvector. Hybrid BM25+cosine search.
+  // Non-critical: si falla la insercion, el texto extraido sigue llegando
+  // a los agentes via documentContext. (No tagueamos workspaceId aun
+  // porque la cookie utopia_workspace_id se introducira con Ola 0.A —
+  // mientras tanto los uploads quedan como global por defecto.)
+  // -----------------------------------------------------------------
+  const chunksCount = await addDocumentsToStore([text], {
+    source: filename,
+    context: contextLabel,
+    docType: 'user_upload',
+  });
+  if (chunksCount > 0) {
+    invalidateVectorStore();
+  }
+
+  // Save file copy (best-effort, non-critical)
+  try {
+    if (!fs.existsSync(uploadsPath)) {
+      fs.mkdirSync(uploadsPath, { recursive: true });
+    }
+    const safeName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
+  } catch {
+    // Non-critical on Vercel's read-only filesystem
+  }
+
+  // -----------------------------------------------------------------
+  // Trial balance preprocessing — if the file looks like accounting
+  // data (CSV/Excel with account codes), run arithmetic validation
+  // and prepend the validation report to the extracted text.
+  //
+  // Tambien devolvemos el objeto PreprocessedBalance completo en la
+  // respuesta para que el cliente pueda re-enviarlo a /api/financial-report
+  // sin re-parsear — asi el orchestrator reusa los totales vinculantes.
+  // -----------------------------------------------------------------
+  let validationReport: string | undefined;
+  let preprocessed: PreprocessedBalance | null = null;
+  let detectedPeriods: string[] = [];
+  if (['.csv', '.xlsx', '.xls'].includes(ext)) {
+    try {
+      // Si el texto ya viene segmentado en bloques `[period=YYYY]...[/period]`
+      // (caso Excel con multiples hojas etiquetadas con año), parseamos cada
+      // bloque por separado forzando su periodo y consolidamos las filas.
+      const blockRegex = /\[period=([^\]]+)\]\n([\s\S]*?)\n\[\/period\]/g;
+      const blocks: Array<{ period: string; csv: string }> = [];
+      let m: RegExpExecArray | null;
+      while ((m = blockRegex.exec(text)) !== null) {
+        blocks.push({ period: m[1].trim(), csv: m[2] });
+      }
+
+      const allRows: ReturnType<typeof parseTrialBalanceCSV> = [];
+      if (blocks.length > 0) {
+        for (const b of blocks) {
+          const yr = detectYearFromString(b.period) ?? b.period;
+          const parsed = parseTrialBalanceCSV(b.csv, { forcePeriod: yr });
+          // Merge balances by code: si el mismo codigo aparece en varios
+          // bloques, fusionamos balancesByPeriod en una sola fila.
+          for (const row of parsed) {
+            const existing = allRows.find((r) => r.code === row.code);
+            if (existing) {
+              Object.assign(existing.balancesByPeriod, row.balancesByPeriod);
+            } else {
+              allRows.push(row);
+            }
+          }
+        }
+      } else {
+        // CSV sin segmentacion explicita: parser detecta columnas multi-año.
+        const parsed = parseTrialBalanceCSV(text);
+        allRows.push(...parsed);
+      }
+
+      if (allRows.length > 10) {
+        const pp = preprocessTrialBalance(allRows);
+        if (pp.auxiliaryCount > 0) {
+          preprocessed = pp;
+          validationReport = pp.validationReport;
+          detectedPeriods = pp.periods.map((p) => p.period);
+          // Prepend validation report so agents receive validated data
+          text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+          // Invalidate workspace-balance tag so ERP sync consumers and
+          // cached dashboard queries pick up the freshly uploaded balance.
+          // 'default' profile: 5 min stale / 15 min revalidate (same as
+          // invalidatePillarKpis — sufficient for manual upload cadence).
+          revalidateTag('workspace-balance', 'default');
+        }
+      }
+    } catch {
+      // Non-critical: if preprocessing fails, the raw text still works
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Smart document classification — detect what case type this file
+  // is best suited for so the frontend can auto-suggest the right flow.
+  // Uses keyword heuristics (zero LLM) for instant detection.
+  // -----------------------------------------------------------------
+  const detectedCaseType = classifyDocument(text, filename, ext);
+
+  return {
+    success: true,
+    filename,
+    chunks: chunksCount,
+    extractedText: text,
+    validationReport,
+    detectedCaseType,
+    isTrialBalance: !!validationReport,
+    preprocessed,
+    detectedPeriods,
+    message: chunksCount > 0
+      ? `Documento "${filename}" procesado en ${chunksCount} fragmentos e indexado.`
+      : `Documento "${filename}" procesado exitosamente. Texto extraido disponible para consulta.`,
+  };
+}
+
+/**
+ * Deriva un nombre de archivo legible del pathname de una URL de Vercel Blob.
+ * `addRandomSuffix: true` inserta un sufijo aleatorio antes de la extension
+ * (e.g. `balance-Xa9Kp2.csv`). Intentamos quitarlo; si el patron no calza,
+ * devolvemos el basename tal cual.
+ */
+function deriveFilenameFromBlobUrl(blobUrl: string): string {
+  let pathname: string;
+  try {
+    pathname = new URL(blobUrl).pathname;
+  } catch {
+    return 'documento';
+  }
+  const base = decodeURIComponent(pathname.split('/').pop() ?? '') || 'documento';
+  // Vercel Blob random suffix: `<name>-<22 chars alfanum>.<ext>`
+  const stripped = base.replace(/-[A-Za-z0-9]{20,}(\.[^.]+)$/, '$1');
+  return stripped || base;
+}
+
 export async function POST(req: Request) {
   try {
+    const contentType = req.headers.get('content-type') ?? '';
+
+    // -----------------------------------------------------------------
+    // Camino JSON (NUEVO, principal) — el cliente ya subio el archivo a
+    // Vercel Blob y nos envia solo la URL. Descargamos el binario desde
+    // Blob (no desde el body de la Function) — esto evita el 413 de
+    // plataforma y habilita archivos hasta 100MB.
+    // -----------------------------------------------------------------
+    if (contentType.includes('application/json')) {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return NextResponse.json({ error: 'Cuerpo JSON invalido.' }, { status: 400 });
+      }
+
+      const parsed = blobUploadSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message ?? 'Cuerpo de la solicitud invalido.' },
+          { status: 400 },
+        );
+      }
+      const { blobUrl, context, filename: bodyFilename } = parsed.data;
+
+      // Anti-SSRF: solo aceptamos URLs de Vercel Blob. El host debe terminar
+      // en `.vercel-storage.com` (cubre tambien `.blob.vercel-storage.com`).
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(blobUrl);
+      } catch {
+        return NextResponse.json({ error: 'blobUrl no es una URL valida.' }, { status: 400 });
+      }
+      const host = parsedUrl.hostname.toLowerCase();
+      const isVercelBlob =
+        parsedUrl.protocol === 'https:' &&
+        (host.endsWith('.vercel-storage.com') || host.endsWith('.blob.vercel-storage.com'));
+      if (!isVercelBlob) {
+        return NextResponse.json(
+          { error: 'blobUrl debe apuntar a Vercel Blob (*.vercel-storage.com).' },
+          { status: 400 },
+        );
+      }
+
+      // Resolver nombre de archivo y validar extension antes de descargar.
+      const filename = (bodyFilename && bodyFilename.trim())
+        ? bodyFilename.trim()
+        : deriveFilenameFromBlobUrl(blobUrl);
+      const ext = path.extname(filename).toLowerCase();
+      if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+        return NextResponse.json({ error: 'Unsupported file type.' }, { status: 400 });
+      }
+
+      // Sanitizar la etiqueta de contexto.
+      const contextParsed = uploadContextSchema.safeParse(context ?? 'Documento cargado por el usuario');
+      const contextLabel = contextParsed.success ? contextParsed.data : 'Documento cargado por el usuario';
+
+      // Descargar el binario desde Vercel Blob.
+      let res: Response;
+      try {
+        res = await fetch(blobUrl);
+      } catch {
+        return NextResponse.json(
+          { error: 'No fue posible descargar el archivo desde Vercel Blob.' },
+          { status: 400 },
+        );
+      }
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: `No fue posible descargar el archivo desde Vercel Blob (HTTP ${res.status}).` },
+          { status: 400 },
+        );
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length > MAX_UPLOAD_SIZE) {
+        return NextResponse.json(
+          { error: 'Archivo demasiado grande. Máximo 100MB.' },
+          { status: 400 },
+        );
+      }
+
+      try {
+        const result = await processDocument(buffer, filename, contextLabel);
+        return NextResponse.json(result);
+      } catch (err) {
+        if (err instanceof UploadError) {
+          return NextResponse.json({ error: err.message }, { status: err.status });
+        }
+        throw err;
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // Camino multipart/form-data (LEGADO) — se conserva intacto para
+    // compatibilidad con archivos pequenos que aun suben por el body.
+    // -----------------------------------------------------------------
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const rawContext = (formData.get('context') as string) || 'Documento cargado por el usuario';
@@ -452,155 +745,20 @@ export async function POST(req: Request) {
     }
 
     if (file.size > MAX_UPLOAD_SIZE) {
-      return NextResponse.json({ error: 'File too large. Max 4MB.' }, { status: 400 });
+      return NextResponse.json({ error: 'File too large. Max 100MB.' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    let text: string;
 
     try {
-      text = await extractText(buffer, file.name);
-    } catch (extractError) {
-      // Return the specific error message so the frontend can display actionable feedback
-      const message = extractError instanceof Error
-        ? extractError.message
-        : 'Could not process file.';
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-
-    if (!text.trim()) {
-      return NextResponse.json(
-        { error: `File "${file.name}" is empty or could not be read. Verify the file contains readable content.` },
-        { status: 400 }
-      );
-    }
-
-    // -----------------------------------------------------------------
-    // Vectorization (RAG) — Neon pgvector. Hybrid BM25+cosine search.
-    // Non-critical: si falla la insercion, el texto extraido sigue llegando
-    // a los agentes via documentContext. (No tagueamos workspaceId aun
-    // porque la cookie utopia_workspace_id se introducira con Ola 0.A —
-    // mientras tanto los uploads quedan como global por defecto.)
-    // -----------------------------------------------------------------
-    const chunksCount = await addDocumentsToStore([text], {
-      source: file.name,
-      context: contextLabel,
-      docType: 'user_upload',
-    });
-    if (chunksCount > 0) {
-      invalidateVectorStore();
-    }
-
-    // Save file copy (best-effort, non-critical)
-    try {
-      if (!fs.existsSync(uploadsPath)) {
-        fs.mkdirSync(uploadsPath, { recursive: true });
+      const result = await processDocument(buffer, file.name, contextLabel);
+      return NextResponse.json(result);
+    } catch (err) {
+      if (err instanceof UploadError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
       }
-      const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-      fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
-    } catch {
-      // Non-critical on Vercel's read-only filesystem
+      throw err;
     }
-
-    // -----------------------------------------------------------------
-    // Trial balance preprocessing — if the file looks like accounting
-    // data (CSV/Excel with account codes), run arithmetic validation
-    // and prepend the validation report to the extracted text.
-    //
-    // Tambien devolvemos el objeto PreprocessedBalance completo en la
-    // respuesta para que el cliente pueda re-enviarlo a /api/financial-report
-    // sin re-parsear — asi el orchestrator reusa los totales vinculantes.
-    // -----------------------------------------------------------------
-    let validationReport: string | undefined;
-    let preprocessed: PreprocessedBalance | null = null;
-    let detectedPeriods: string[] = [];
-    if (['.csv', '.xlsx', '.xls'].includes(ext)) {
-      try {
-        // Si el texto ya viene segmentado en bloques `[period=YYYY]...[/period]`
-        // (caso Excel con multiples hojas etiquetadas con año), parseamos cada
-        // bloque por separado forzando su periodo y consolidamos las filas.
-        const blockRegex = /\[period=([^\]]+)\]\n([\s\S]*?)\n\[\/period\]/g;
-        const blocks: Array<{ period: string; csv: string }> = [];
-        let m: RegExpExecArray | null;
-        while ((m = blockRegex.exec(text)) !== null) {
-          blocks.push({ period: m[1].trim(), csv: m[2] });
-        }
-
-        const allRows: ReturnType<typeof parseTrialBalanceCSV> = [];
-        if (blocks.length > 0) {
-          for (const b of blocks) {
-            const yr = detectYearFromString(b.period) ?? b.period;
-            const parsed = parseTrialBalanceCSV(b.csv, { forcePeriod: yr });
-            // Merge balances by code: si el mismo codigo aparece en varios
-            // bloques, fusionamos balancesByPeriod en una sola fila.
-            for (const row of parsed) {
-              const existing = allRows.find((r) => r.code === row.code);
-              if (existing) {
-                Object.assign(existing.balancesByPeriod, row.balancesByPeriod);
-              } else {
-                allRows.push(row);
-              }
-            }
-          }
-        } else {
-          // CSV sin segmentacion explicita: parser detecta columnas multi-año.
-          const parsed = parseTrialBalanceCSV(text);
-          allRows.push(...parsed);
-        }
-
-        if (allRows.length > 10) {
-          const pp = preprocessTrialBalance(allRows);
-          if (pp.auxiliaryCount > 0) {
-            preprocessed = pp;
-            validationReport = pp.validationReport;
-            detectedPeriods = pp.periods.map((p) => p.period);
-            // Prepend validation report so agents receive validated data
-            text = `${pp.validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
-            // Invalidate workspace-balance tag so ERP sync consumers and
-            // cached dashboard queries pick up the freshly uploaded balance.
-            // 'default' profile: 5 min stale / 15 min revalidate (same as
-            // invalidatePillarKpis — sufficient for manual upload cadence).
-            revalidateTag('workspace-balance', 'default');
-          }
-        }
-      } catch {
-        // Non-critical: if preprocessing fails, the raw text still works
-      }
-    }
-
-    // -----------------------------------------------------------------
-    // Smart document classification — detect what case type this file
-    // is best suited for so the frontend can auto-suggest the right flow.
-    // Uses keyword heuristics (zero LLM) for instant detection.
-    // -----------------------------------------------------------------
-    const detectedCaseType = classifyDocument(text, file.name, ext);
-
-    return NextResponse.json({
-      success: true,
-      filename: file.name,
-      chunks: chunksCount,
-      extractedText: text,
-      validationReport,
-      detectedCaseType,
-      isTrialBalance: !!validationReport,
-      /**
-       * PreprocessedBalance completo: el cliente lo puede re-enviar a
-       * /api/financial-report como `preprocessed` para que el orchestrator
-       * reuse los totales vinculantes sin re-parsear el CSV. `null` si
-       * el archivo no es un balance de prueba.
-       */
-      preprocessed,
-      /**
-       * Periodos fiscales detectados en el archivo (e.g. ["2024","2025"]).
-       * El cliente debe propagar este valor a los endpoints financieros via
-       * `company.detectedPeriods` para que los pipelines sepan que generar
-       * comparativos sin volver a inspeccionar el CSV.
-       */
-      detectedPeriods,
-      message: chunksCount > 0
-        ? `Documento "${file.name}" procesado en ${chunksCount} fragmentos e indexado.`
-        : `Documento "${file.name}" procesado exitosamente. Texto extraido disponible para consulta.`,
-    });
   } catch (error) {
     console.error('[upload] Unhandled error:', error instanceof Error ? error.message : error);
     return NextResponse.json(

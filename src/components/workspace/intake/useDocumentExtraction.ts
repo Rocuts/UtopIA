@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { CompanyMetadata } from '@/types/platform';
+import { uploadDocument } from '@/lib/upload/blob-client';
 
 export type FieldConfidence = 'high' | 'medium' | 'none';
 
@@ -118,25 +119,20 @@ export function useDocumentExtraction() {
   const uploadAndExtract = useCallback(async (file: File) => {
     setState({
       status: 'uploading',
-      progress: 20,
+      progress: 0,
       fileName: file.name,
       extracted: null,
       error: null,
     });
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('context', file.name);
+      // Subida directa a Blob: el callback reporta progreso real 0..100.
+      const data = await uploadDocument(file, file.name, pct =>
+        setState(s => ({ ...s, status: 'uploading', progress: pct })),
+      );
 
-      setState(s => ({ ...s, progress: 40 }));
-
-      const response = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || 'Upload failed');
-
-      setState(s => ({ ...s, status: 'extracting', progress: 70 }));
+      // Subida completa — el servidor está procesando (OCR/RAG/preprocesado).
+      setState(s => ({ ...s, status: 'extracting', progress: 100 }));
 
       const rawText = data.extractedText || '';
       const { fields, confidence } = extractCompanyFromText(rawText);

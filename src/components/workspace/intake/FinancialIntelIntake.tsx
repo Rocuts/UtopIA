@@ -249,7 +249,7 @@ export function FinancialIntelIntake() {
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
-          maxSizeMB={25}
+          maxSizeMB={100}
           label="Arrastre su archivo aquí"
           sublabel="Estados financieros, balances de prueba, datos de soporte"
         />
@@ -385,9 +385,9 @@ export function FinancialIntelIntake() {
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
         label="Estados financieros y datos de soporte"
-        sublabel="PDF, DOCX, XLSX, CSV -- Max 25MB"
+        sublabel="PDF, DOCX, XLSX, CSV -- Max 100MB"
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
-        maxSizeMB={25}
+        maxSizeMB={100}
       />
     </div>
   );

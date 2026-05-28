@@ -266,7 +266,7 @@ export function DianDefenseIntake() {
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
-          maxSizeMB={25}
+          maxSizeMB={100}
           label="Arrastre su archivo aquí"
           sublabel="Requerimientos, liquidaciones, actos administrativos DIAN"
         />
@@ -467,9 +467,9 @@ export function DianDefenseIntake() {
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
         label="Actos administrativos, declaraciones y soportes"
-        sublabel="PDF, DOCX, XLSX, imágenes -- Max 25MB"
+        sublabel="PDF, DOCX, XLSX, imágenes -- Max 100MB"
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
-        maxSizeMB={25}
+        maxSizeMB={100}
       />
     </div>
   );

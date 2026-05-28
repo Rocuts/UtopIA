@@ -97,9 +97,22 @@ export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp', '.heic',
 ]);
 
-// Vercel Functions rechaza bodies >4.5MB con un 413 de plataforma antes
-// de que la ruta se ejecute. Mantenemos 4MB hasta migrar a Vercel Blob.
-export const MAX_UPLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
+// Con Vercel Blob el archivo sube DIRECTO al store via `@vercel/blob/client`
+// `upload()` — el body de la Function nunca recibe el binario, asi que el
+// limite de plataforma de 4.5MB ya no aplica. 100MB es el tope de producto.
+export const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100 MB
+
+// ---- Blob upload route (body JSON de POST /api/upload, camino Vercel Blob) ----
+// Este schema NO viaja al LLM — la regla strict-mode 2026 no aplica.
+// Sigue el estilo del resto del archivo: `.optional()` para campos no obligatorios.
+export const blobUploadSchema = z.object({
+  /** URL del blob ya subido a Vercel Blob — validada contra host *.vercel-storage.com. */
+  blobUrl: z.string().url('blobUrl debe ser una URL valida'),
+  /** Etiqueta de contexto opcional (origen del documento). */
+  context: z.string().max(200).optional(),
+  /** Nombre original del archivo; si falta se deriva del pathname del blob. */
+  filename: z.string().max(300).optional(),
+});
 
 // ---- Financial report route ----
 export const companyInfoSchema = z.object({

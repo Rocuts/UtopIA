@@ -33,7 +33,7 @@ function formatSize(bytes: number): string {
 export function FileUploadZone({
   accept = '.csv,.xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png',
   onUpload,
-  maxSizeMB = 25,
+  maxSizeMB = 100,
   label = 'Arrastre su archivo aquí',
   sublabel = 'o haga clic para seleccionar',
   disabled = false,

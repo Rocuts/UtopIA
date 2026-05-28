@@ -566,9 +566,9 @@ export function NiifReportIntake() {
           <FileUploadZone
             onUpload={handleUpload}
             label="Arrastre su archivo aquí o haga clic para seleccionar"
-            sublabel="CSV, XLSX, XLS, PDF, DOCX -- Max 25MB"
+            sublabel="CSV, XLSX, XLS, PDF, DOCX -- Max 100MB"
             accept=".csv,.xlsx,.xls,.pdf,.docx"
-            maxSizeMB={25}
+            maxSizeMB={100}
             className="min-h-[260px]"
           />
 
