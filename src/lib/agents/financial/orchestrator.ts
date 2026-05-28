@@ -7,6 +7,7 @@
 import { runNiifAnalyst } from './agents/niif-analyst';
 import { buildNiifAncora } from './ancora/build-ancora';
 import type { NiifAncora } from './ancora/types';
+import { buildFiscalSnapshot } from './escudo-survival/fiscal-anchor/snapshot';
 import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
 import {
@@ -42,6 +43,7 @@ import type {
   StrategicAnalysisResult,
   GovernanceResult,
   CompanyInfo,
+  FiscalSnapshot,
 } from './types';
 import type {
   AdjustmentLedger,
@@ -1081,6 +1083,14 @@ export interface FinancialPipelineContext {
    * los campos a "0" sentinel.
    */
   ancora: NiifAncora;
+  /**
+   * Capa El Escudo — snapshot fiscal determinístico (F01-F10 + calendario DIAN
+   * + alertas + Score de Riesgo DIAN) calculado en Stage 0 reutilizando
+   * `buildFiscalAnchor` + `computeRiskScore`. `undefined` cuando no hay
+   * `ppForAgents` o el cálculo determinístico falla — el pipeline NIIF no
+   * aborta. Ver docs/wave-notes/escudo-autowire-contract.md §4.1.
+   */
+  fiscalSnapshot?: FiscalSnapshot;
 }
 
 /**
@@ -1271,6 +1281,26 @@ export async function prepareFinancialContext(
   // buildNiifAncora devuelve un Âncora "empty" coherente.
   const ancora: NiifAncora = buildNiifAncora(ppForAgents, effectiveCompany);
 
+  // Capa El Escudo (Capa 5) — snapshot fiscal determinístico. Solo posible con
+  // un `PreprocessedBalance` bien formado; `buildFiscalSnapshot` nunca lanza
+  // (devuelve undefined ante fallo) — el pipeline NIIF no aborta.
+  let fiscalSnapshot: FiscalSnapshot | undefined;
+  if (ppForAgents) {
+    const nitFromFile = effectiveRawData
+      ? extractCompanyMetadata(effectiveRawData).nitFromFile
+      : null;
+    fiscalSnapshot = buildFiscalSnapshot({
+      preprocessed: ppForAgents,
+      company: {
+        name: effectiveCompany.name,
+        nit: effectiveCompany.nit,
+        sector: effectiveCompany.sector,
+      },
+      hoy: new Date(),
+      nitFromFile,
+    });
+  }
+
   return {
     effectiveRawData,
     effectiveCompany,
@@ -1284,6 +1314,7 @@ export async function prepareFinancialContext(
     adjustmentsApplicationDetail,
     appliedAdjustments,
     ancora,
+    fiscalSnapshot,
   };
 }
 
@@ -1301,6 +1332,7 @@ export async function runNiifPhase(
 ): Promise<{
   niif: NiifAnalysisResult;
   ancora: NiifAncora;
+  fiscalSnapshot: FiscalSnapshot | undefined;
   context: FinancialPipelineContext;
 }> {
   const { language, instructions } = request;
@@ -1378,7 +1410,12 @@ export async function runNiifPhase(
 
   onProgress?.({ type: 'stage_complete', stage: 1, label: completeLabel });
 
-  return { niif, ancora: context.ancora, context };
+  return {
+    niif,
+    ancora: context.ancora,
+    fiscalSnapshot: context.fiscalSnapshot,
+    context,
+  };
 }
 
 /**
@@ -1662,6 +1699,9 @@ export async function orchestrateFinancialReport(
     consolidatedReport,
     generatedAt: new Date().toISOString(),
     validation,
+    // Capa El Escudo (Capa 5) — propaga el snapshot al reporte consolidado para
+    // que el pipeline legacy / `/export` también auto-pueblen El Escudo.
+    fiscalSnapshot: niifPhase.fiscalSnapshot,
   };
 
   // -------------------------------------------------------------------------

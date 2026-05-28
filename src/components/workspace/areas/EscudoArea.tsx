@@ -40,6 +40,8 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { calculateTef } from '@/lib/kpis/tax-efficiency';
 import type { KpiResult } from '@/types/kpis';
 import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
+import type { FiscalRiskScore } from '@/lib/agents/financial/types';
+import { FiscalAlertsPanel } from '@/components/workspace/escudo/FiscalAlertsPanel';
 
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
@@ -51,11 +53,33 @@ export interface EscudoDeadline {
   severity: DeadlineSeverity;
 }
 
+/**
+ * Vista-modelo de alerta fiscal — consumida por el UI (cruza por HTTP/JSON).
+ * Definida LOCALMENTE como view-model del consumidor (contrato §5 UI).
+ * No importar del backend; la forma viene de §4.3 del contrato.
+ */
+export interface AlertView {
+  id: string;
+  codigo: string;
+  severidad: 'error' | 'warning' | 'info';
+  titulo: string;
+  mensaje: string;
+  norma: string;
+  impacto?: string;
+  accion?: string;
+  status: 'pending' | 'snoozed' | 'resolved' | 'escalated';
+  createdAt: string;
+}
+
 export interface EscudoAreaProps {
   kpi?: KpiResult;
   upcomingDeadlines?: EscudoDeadline[];
   /** Bloque Âncora Fiscal — Capa 1. Cuando presente, sustituye mocks. */
   fiscalAnchor?: FiscalAnchorBlock;
+  /** Score de Riesgo DIAN — Capa 5. Cuando presente, muestra el KPI de riesgo. */
+  riskScore?: FiscalRiskScore;
+  /** Alertas fiscales accionables — Capa 5. Cuando presentes, muestra el panel. */
+  alertas?: AlertView[];
   /** Si true, renderiza una versión compacta (sin hero ni narrativa larga). */
   compact?: boolean;
   className?: string;
@@ -193,6 +217,8 @@ export function EscudoArea({
   kpi,
   upcomingDeadlines,
   fiscalAnchor,
+  riskScore,
+  alertas,
   compact = false,
   className,
 }: EscudoAreaProps) {
@@ -343,8 +369,20 @@ export function EscudoArea({
         </div>
       </motion.div>
 
+      {/* Capa 5 — Score DIAN + Alertas accionables */}
+      {(riskScore || (alertas && alertas.length > 0)) && (
+        <motion.div {...fadeItem(3)} className="mb-10 flex flex-col gap-5">
+          {riskScore && (
+            <RiskScoreKpiRow riskScore={riskScore} language={language} />
+          )}
+          {alertas && alertas.length > 0 && (
+            <FiscalAlertsPanel alertas={alertas} language={language} />
+          )}
+        </motion.div>
+      )}
+
       {/* Grid submódulos */}
-      <motion.div {...fadeItem(3)} className="grid gap-5 grid-cols-1 md:grid-cols-2">
+      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 4 : 3)} className="grid gap-5 grid-cols-1 md:grid-cols-2">
         {SUBMODULES.map((sub, i) => (
           <SubmoduleCard
             key={sub.key}
@@ -547,6 +585,109 @@ function SubmoduleCard({
         </EliteCard>
       </Link>
     </motion.div>
+  );
+}
+
+// ─── Capa 5 — Score de Riesgo DIAN (KPI row) ─────────────────────────────────
+
+type RiskNivel = FiscalRiskScore['nivel'];
+
+const NIVEL_COLOR: Record<RiskNivel, string> = {
+  bajo: 'text-success',
+  medio: 'text-warning',
+  alto: 'text-orange-500',
+  muy_alto: 'text-danger',
+  critico: 'text-danger',
+};
+
+const NIVEL_BG: Record<RiskNivel, string> = {
+  bajo: 'bg-[rgb(34_197_94_/_0.12)] border-[rgb(34_197_94_/_0.3)]',
+  medio: 'bg-[rgb(234_179_8_/_0.12)] border-[rgb(234_179_8_/_0.3)]',
+  alto: 'bg-[rgb(249_115_22_/_0.12)] border-[rgb(249_115_22_/_0.3)]',
+  muy_alto: 'bg-[rgb(239_68_68_/_0.12)] border-[rgb(239_68_68_/_0.3)]',
+  critico: 'bg-[rgb(220_38_38_/_0.14)] border-[rgb(220_38_38_/_0.4)]',
+};
+
+const NIVEL_LABEL: Record<RiskNivel, { es: string; en: string }> = {
+  bajo: { es: 'BAJO', en: 'LOW' },
+  medio: { es: 'MEDIO', en: 'MEDIUM' },
+  alto: { es: 'ALTO', en: 'HIGH' },
+  muy_alto: { es: 'ALTO', en: 'HIGH' },
+  critico: { es: 'ALTO', en: 'HIGH' },
+};
+
+interface RiskScoreKpiRowProps {
+  riskScore: FiscalRiskScore;
+  language: 'es' | 'en';
+}
+
+function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
+  const { score, nivel, factores } = riskScore;
+  const levelLabel = NIVEL_LABEL[nivel][language];
+  const colorClass = NIVEL_COLOR[nivel];
+  const bgClass = NIVEL_BG[nivel];
+  const topFactores = factores.slice(0, 3);
+
+  return (
+    <div
+      role="region"
+      aria-label={language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score'}
+      className="relative flex flex-col gap-4 p-6 rounded-xl glass-elite-elevated"
+      style={{ boxShadow: 'inset 0 0 0 1px rgb(168 56 56 / 0.4)' }}
+    >
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(168_56_56_/_0.16)] text-area-escudo"
+          >
+            <Shield className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div>
+            <p className="uppercase tracking-eyebrow text-xs font-medium text-n-500">
+              {language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score'}
+            </p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span
+                className={cn('font-serif-elite text-3xl font-normal leading-none num', colorClass)}
+                aria-label={`${score} de 100`}
+              >
+                {score}
+              </span>
+              <span className="text-sm text-n-500">/100</span>
+              <span
+                className={cn(
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-label border',
+                  bgClass,
+                  colorClass,
+                )}
+              >
+                {levelLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {topFactores.length > 0 && (
+          <ul
+            role="list"
+            aria-label={language === 'es' ? 'Factores principales' : 'Top factors'}
+            className="flex flex-col gap-1.5 min-w-0"
+          >
+            {topFactores.map((f) => (
+              <li key={f.factor} className="flex items-center gap-2 text-xs text-n-700">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-1.5 w-1.5 rounded-full shrink-0 bg-area-escudo"
+                />
+                <span className="truncate">{f.descripcion}</span>
+                <span className="shrink-0 font-medium text-n-800">+{f.puntos}pts</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 

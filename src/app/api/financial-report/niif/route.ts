@@ -164,6 +164,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       niif: phase.niif,
       ancora: phase.ancora,
+      fiscalSnapshot: phase.fiscalSnapshot ?? null,
       context: extractSerializableContext(phase.context),
     });
   } catch (error) {
@@ -286,9 +287,14 @@ function handleStreaming(args: {
         // payload pesado de `niif_phase`. El payload de `niif_phase` lo
         // incluye también para callers legacy que ignoran el evento nuevo.
         send('niif_ancora', { ancora: phase.ancora });
+        // Capa El Escudo (Capa 5) — evento ligero ANTES de `niif_phase` para
+        // que la UI auto-puebla El Escudo sin parsear el payload pesado.
+        // FiscalSnapshot es JSON-safe (strings de centavos + numbers).
+        send('fiscal_snapshot', { fiscalSnapshot: phase.fiscalSnapshot ?? null });
         send('niif_phase', {
           niif: phase.niif,
           ancora: phase.ancora,
+          fiscalSnapshot: phase.fiscalSnapshot ?? null,
           context: extractSerializableContext(phase.context),
         });
         send('done', { stage: 'niif' });

@@ -51,7 +51,9 @@ import type {
   NiifAnalysisResult,
   StrategicAnalysisResult,
   GovernanceResult,
+  FiscalSnapshot,
 } from '@/lib/agents/financial/types';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import type {
   AuditReport as BackendAuditReport,
   AuditProgressEvent,
@@ -60,6 +62,55 @@ import type {
 import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { ReportIterationTurn } from './types';
 import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
+
+// ─── Capa 5 — Helpers contexto fiscal ────────────────────────────────────────
+
+/**
+ * Construye el bloque de texto que se inyecta al asistente como contexto fiscal
+ * automático. Formateado en texto plano para máxima compatibilidad con el seed bus.
+ *
+ * Formato: "CONTEXTO FISCAL AUTOMÁTICO — {empresa} · {periodo}\nF01-F10 + score + alertas"
+ */
+function buildFiscalContextBlock(
+  snap: FiscalSnapshot,
+  company: CompanyInfo,
+  language: 'es' | 'en',
+): string {
+  const { anchor, riskScore, period } = snap;
+  const label = language === 'es'
+    ? `CONTEXTO FISCAL AUTOMÁTICO — ${company.name} · ${period}`
+    : `AUTOMATIC TAX CONTEXT — ${company.name} · ${period}`;
+
+  const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+
+  const lines: string[] = [
+    label,
+    '─'.repeat(60),
+    `F01 UAI Contable: ${formatCopFromCents(BigInt(anchor.f01))}`,
+    `F02 Impuesto Referencia (35%): ${formatCopFromCents(BigInt(anchor.f02))}`,
+    `F03 Retenciones Acumuladas: ${formatCopFromCents(BigInt(anchor.f03))}`,
+    `F04 Neto a Pagar/Saldo a Favor: ${formatCopFromCents(BigInt(anchor.f04))}`,
+    `F05 Provisión IVA: ${formatCopFromCents(BigInt(anchor.f05))}`,
+    `F06 Provisión ICA: ${formatCopFromCents(BigInt(anchor.f06))}`,
+    `F07 Predial/Vehículos: ${formatCopFromCents(BigInt(anchor.f07))}`,
+    `F08 Total Pasivos Fiscales: ${formatCopFromCents(BigInt(anchor.f08))}`,
+    `F09 Carga sobre Utilidad Neta: ${fmtPct(anchor.f09)}`,
+    `F10 Cobertura de Retenciones: ${fmtPct(anchor.f10)}`,
+    '─'.repeat(60),
+    `Score DIAN: ${riskScore.score}/100 — ${riskScore.nivel.toUpperCase()}`,
+  ];
+
+  if (anchor.alertas.length > 0) {
+    lines.push(language === 'es' ? 'Alertas:' : 'Alerts:');
+    for (const alerta of anchor.alertas) {
+      lines.push(`  · [${alerta.severidad.toUpperCase()}] ${alerta.codigo}: ${alerta.mensaje}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const SPRING = { stiffness: 400, damping: 25 };
 
@@ -151,6 +202,8 @@ async function fetchJSONWithRetry<T>(
 interface SubPhaseHandlers {
   /** Callback para FinancialProgressEvent (stage_start, stage_progress, stage_complete). */
   onProgress?: (evt: FinancialProgressEvent) => void;
+  /** Manejadores adicionales para eventos sidecar (ej. fiscal_snapshot). */
+  onExtra?: Record<string, (raw: unknown) => void>;
 }
 
 async function runSSEPhase<T>(
@@ -177,6 +230,8 @@ async function runSSEPhase<T>(
 
   const box: { value: T | null } = { value: null };
 
+  const extraHandlers: Record<string, (raw: unknown) => void> = handlers.onExtra ?? {};
+
   await consumeSSE(res, signal, {
     progress: (raw) => {
       handlers.onProgress?.(raw as FinancialProgressEvent);
@@ -184,6 +239,7 @@ async function runSSEPhase<T>(
     [eventName]: (raw) => {
       box.value = raw as T;
     },
+    ...extraHandlers,
     error: (raw) => {
       const { detail } = raw as { detail?: string };
       // Contextualizamos el error con el nombre de la sub-fase. El backend ya
@@ -1401,6 +1457,7 @@ export function PipelineWorkspace() {
     lastCompletedReport,
     setLastCompletedReport,
     updateReportTurns,
+    setPendingChatContext,
   } = useWorkspace();
   const [streamedContent, setStreamedContent] = useState('');
   const [report, setReport] = useState<FinancialReport | null>(null);
@@ -1443,6 +1500,10 @@ export function PipelineWorkspace() {
   // para que `clientSummarizeCoverage` corra al solicitar el HTML. Se llena en el
   // checkpoint NIIF.
   const [cachedPreprocessed, setCachedPreprocessed] = useState<unknown>(null);
+  // Capa 5 — FiscalSnapshot capturado durante Phase 1 SSE (evento fiscal_snapshot
+  // o campo fiscalSnapshot en niif_phase). Se asigna a report.fiscalSnapshot en
+  // los 3 checkpoints setLastCompletedReport y se envía a El Escudo vía POST.
+  const fiscalSnapshotRef = useRef<FiscalSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
@@ -1631,20 +1692,40 @@ export function PipelineWorkspace() {
           niifBody.adjustmentLedger = adjustmentLedger;
         }
 
+        // Reiniciamos el snapshot de la fase anterior (si hay un retry).
+        fiscalSnapshotRef.current = null;
+
         const niifPayload = await runSSEPhase<{
           niif: NiifAnalysisResult;
           context: { bindingTotals: string; preprocessed: unknown; company: CompanyInfo };
+          fiscalSnapshot?: FiscalSnapshot;
         }>(
           '/api/financial-report/niif',
           niifBody,
           'niif_phase',
           controller.signal,
           'Analista NIIF',
-          { onProgress: onSubPhaseProgress },
+          {
+            onProgress: onSubPhaseProgress,
+            // Captura el evento sidecar fiscal_snapshot si el backend lo emite
+            // ANTES de niif_phase (contrato §4.2). Es el camino rápido: el evento
+            // llega antes del payload principal y ya lo tenemos en el ref.
+            onExtra: {
+              fiscal_snapshot: (raw) => {
+                const { fiscalSnapshot } = raw as { fiscalSnapshot?: FiscalSnapshot };
+                if (fiscalSnapshot) fiscalSnapshotRef.current = fiscalSnapshot;
+              },
+            },
+          },
         );
 
         niifResult = niifPayload.niif;
         niifContext = niifPayload.context;
+        // Fallback: si fiscal_snapshot llegó embebido en niif_phase (contrato §4.2 —
+        // "añadir fiscalSnapshot al payload de niif_phase"), lo capturamos aquí.
+        if (!fiscalSnapshotRef.current && niifPayload.fiscalSnapshot) {
+          fiscalSnapshotRef.current = niifPayload.fiscalSnapshot;
+        }
         // Capturamos el `preprocessed` para que el handler "Generar HTML"
         // pueda calcular `summarizeCoverage` / `auxiliariesProcessed` /
         // `sectorCIIU` sin necesidad de re-disparar Phase 1.
@@ -1677,6 +1758,7 @@ export function PipelineWorkspace() {
         governance: emptyGovernance(),
         consolidatedReport: partialConsolidated,
         generatedAt: new Date().toISOString(),
+        ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
       };
       setBackendReport(partialReport);
       setRawData(pipelineInput.rawData);
@@ -1690,6 +1772,25 @@ export function PipelineWorkspace() {
         conversationId: nextConvId,
         turns: [],
       });
+      // Capa 5 — Persistencia DB del snapshot fiscal (best-effort, no bloquea UI).
+      // El backend creará/actualizará la fila en reports + upsertará alertas.
+      if (fiscalSnapshotRef.current) {
+        const _snap = fiscalSnapshotRef.current;
+        const _company = niifContext.company;
+        void (async () => {
+          try {
+            await fetch('/api/escudo/fiscal-anchor', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fiscalSnapshot: _snap, company: _company }),
+            });
+          } catch {
+            // Silencioso: la capa DB es best-effort. El snapshot ya está en localStorage.
+          }
+        })();
+        // Inyectar contexto fiscal al asistente (best-effort — canal pendingChatContext).
+        setPendingChatContext(buildFiscalContextBlock(_snap, _company, language));
+      }
 
       // ─── Audit en paralelo (DISPARADO ahora, AWAITEADO tras Governance) ─
       // Wave Mayo 2026 — optimización critical path. El audit usa el endpoint
@@ -1833,6 +1934,7 @@ export function PipelineWorkspace() {
         governance: governanceResult,
         consolidatedReport: fullConsolidated,
         generatedAt: new Date().toISOString(),
+        ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
       };
 
       // ─── CHECKPOINT 2: actualizar reporte completo en localStorage ──────
@@ -1929,7 +2031,7 @@ export function PipelineWorkspace() {
     return () => {
       controller.abort();
     };
-  }, [pipelineInput, language, setPipelineState, setLastCompletedReport]);
+  }, [pipelineInput, language, setPipelineState, setLastCompletedReport, setPendingChatContext]);
 
   const isRunning = pipelineState.mode !== 'idle' && pipelineState.mode !== 'complete';
   const isComplete = pipelineState.mode === 'complete';

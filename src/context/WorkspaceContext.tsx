@@ -96,6 +96,17 @@ export interface WorkspaceState {
    */
   pendingChatSeed: string | null;
   setPendingChatSeed: (seed: string | null) => void;
+
+  // ─── Chat context bus (Capa 5 — contexto fiscal automático) ─────────────────
+  /**
+   * Bloque de contexto fiscal automático producido por El Escudo cuando hay un
+   * FiscalSnapshot disponible. El ChatSidebar lo antepone como seed enriquecido
+   * al primer mensaje (si el input está vacío) o lo guarda para que el usuario
+   * lo incluya en su próxima consulta. Single-consumer — se limpia tras el
+   * primer consume. Formato: bloque de texto plano con F01-F10 + score + alertas.
+   */
+  pendingChatContext: string | null;
+  setPendingChatContext: (ctx: string | null) => void;
 }
 
 // ─── Reporte completado (expuesto al shell) ───────────────────────────────────
@@ -148,6 +159,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [intakeModalOpen, setIntakeModalOpen] = useState(false);
   const [pipelineInput, setPipelineInputState] = useState<NiifReportIntake | null>(null);
   const [pendingChatSeed, setPendingChatSeedState] = useState<string | null>(null);
+  const [pendingChatContext, setPendingChatContextState] = useState<string | null>(null);
   // Hidratar el reporte mas reciente desde localStorage al crear el state.
   // `listReports()` ya chequea `typeof window === 'undefined'` y retorna [] en SSR,
   // asi que es seguro usarlo como inicializador lazy en un 'use client' component.
@@ -261,6 +273,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setPendingChatSeedState(() => {
       if (seed == null) return null;
       const t = seed.trim();
+      return t ? t : null;
+    });
+  }, []);
+
+  const setPendingChatContext = useCallback((ctx: string | null) => {
+    setPendingChatContextState(() => {
+      if (ctx == null) return null;
+      const t = ctx.trim();
       return t ? t : null;
     });
   }, []);
@@ -385,6 +405,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         updateReportTurns,
         pendingChatSeed,
         setPendingChatSeed,
+        pendingChatContext,
+        setPendingChatContext,
       }}
     >
       {children}

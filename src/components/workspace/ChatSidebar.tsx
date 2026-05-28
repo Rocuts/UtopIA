@@ -718,6 +718,20 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
     });
   }, [pendingChatSeed, setPendingChatSeed]);
 
+  // ─── Context bus: consume `pendingChatContext` (Capa 5 — contexto fiscal) ──
+  // Cuando El Escudo calcula el FiscalSnapshot, inyecta un bloque de contexto
+  // fiscal. Si el input está vacío, lo colocamos ahí para que el usuario lo
+  // use como base de su consulta. Si ya tiene texto, no lo pisamos.
+  // Single-consumer — se limpia tras el primer consume.
+  const pendingChatContext = workspace.pendingChatContext;
+  const setPendingChatContext = workspace.setPendingChatContext;
+  useEffect(() => {
+    if (!pendingChatContext) return;
+    // Solo inyectar si el input está vacío (no pisamos texto del usuario).
+    setInput((prev) => (prev ? prev : pendingChatContext));
+    setPendingChatContext(null);
+  }, [pendingChatContext, setPendingChatContext]);
+
   // ─── Actions ───────────────────────────────────────────────────────────────
   const handleNewChat = useCallback(() => {
     // Cancel any in-flight stream
