@@ -68,7 +68,8 @@ type SubmoduleKey =
   | 'planeacionTributaria'
   | 'preciosTransferencia'
   | 'devoluciones'
-  | 'supervivencia';
+  | 'supervivencia'
+  | 'agenteFiscal';
 
 interface SubmoduleDef {
   key: SubmoduleKey;
@@ -107,6 +108,12 @@ const SUBMODULES: SubmoduleDef[] = [
     key: 'supervivencia',
     href: '/workspace/escudo/supervivencia',
     icon: Zap,
+    status: 'listo',
+  },
+  {
+    key: 'agenteFiscal',
+    href: '/workspace/escudo/agente-fiscal',
+    icon: Shield,
     status: 'listo',
   },
 ];
