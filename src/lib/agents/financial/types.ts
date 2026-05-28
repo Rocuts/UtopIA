@@ -7,6 +7,7 @@
 import type { NiifReportJson } from './contracts/niif-report';
 import type { StrategyReportJson } from './contracts/strategy-report';
 import type { GovernanceReportJson } from './contracts/governance-report';
+import type { FiscalAnchorBlock } from './escudo-survival/fiscal-anchor/types';
 
 // ---------------------------------------------------------------------------
 // Input
@@ -178,6 +179,45 @@ export interface ReportValidationResult {
 }
 
 // ---------------------------------------------------------------------------
+// Fiscal Snapshot — Capa El Escudo (auto-cableado NIIF → Escudo)
+// ---------------------------------------------------------------------------
+// Artefacto fiscal determinístico calculado en la fase NIIF (reutiliza
+// `buildFiscalAnchor` + `computeRiskScore`, cero LLM) y consumido por El Escudo
+// sin re-upload. Contrato congelado: docs/wave-notes/escudo-autowire-contract.md.
+// ---------------------------------------------------------------------------
+
+export type FiscalRiskNivel = 'bajo' | 'medio' | 'alto' | 'muy_alto' | 'critico';
+
+export interface FiscalRiskFactor {
+  /** p.ej. 'tet_baja' | 'margen_alto' | 'costo_bajo' | 'crecimiento_inusual' | 'saldo_favor_sin_solicitar' */
+  factor: string;
+  descripcion: string;
+  puntos: number;
+  detalle: string;
+}
+
+export interface FiscalRiskScore {
+  /** 0-100 (Math.min(100, Σ puntos)). */
+  score: number;
+  nivel: FiscalRiskNivel;
+  factores: FiscalRiskFactor[];
+}
+
+/**
+ * Snapshot fiscal F01-F10 + calendario DIAN + alertas (anchor) + Score de Riesgo
+ * DIAN. `computeRiskScore(...)` (RiskScorePrecomputedData) es estructuralmente
+ * asignable a `FiscalRiskScore`.
+ */
+export interface FiscalSnapshot {
+  anchor: FiscalAnchorBlock;
+  riskScore: FiscalRiskScore;
+  /** Periodo fiscal, ej. "2025". */
+  period: string;
+  /** ISO 8601 del cálculo. */
+  computedAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // Consolidated Output
 // ---------------------------------------------------------------------------
 
@@ -206,6 +246,11 @@ export interface FinancialReport {
    * campo está ausente por retrocompat), el reporte se sirve tal cual.
    */
   emittability?: ReportEmittabilityState;
+  /**
+   * Capa El Escudo — snapshot fiscal determinístico calculado en la fase NIIF.
+   * Leído por EscudoArea sin re-upload. Ver docs/wave-notes/escudo-autowire-contract.md.
+   */
+  fiscalSnapshot?: FiscalSnapshot;
 }
 
 export type ReportEmittabilityKind = 'emittable' | 'no-emitible';
