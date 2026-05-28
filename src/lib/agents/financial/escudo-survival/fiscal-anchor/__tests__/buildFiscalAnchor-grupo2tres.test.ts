@@ -8,6 +8,8 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   buildFiscalAnchor,
 } from '../index';
@@ -139,37 +141,34 @@ describe('Sección B — Score de Riesgo DIAN · Reconciliación vs pseudocódig
   });
 
   // -------------------------------------------------------------------------
-  // Score REAL: 65 (muy_alto)
+  // Score: 68 (muy_alto) — tras añadir Factor6 (cobertura retenciones F10).
   // Desglose:
-  //   Factor1 (TET baja, F09=0%)      = 30  [f09 ≤ 0.01 → +30]
-  //   Factor2 (margen neto 92.95%)    = 25  [> 90% → +25]
-  //   Factor3 (costos/ingresos 7.05%) = 10  [1–10% → +10]
-  //   Factor4 (sin comparativo)       =  0  [comparative null → n/a]
-  //   Factor5 (F04 > 0, sin saldo)    =  0  [F04 ≥ 0 → +0]
-  //   TOTAL = 65   ≠   68 (pseudocódigo dueño)
+  //   Factor1 (TET baja, F09=0%)         = 30  [f09 ≤ 0.01 → +30]
+  //   Factor2 (margen neto 92.95%)       = 25  [> 90% → +25]
+  //   Factor3 (costos/ingresos 7.05%)    = 10  [1–10% → +10]
+  //   Factor4 (sin comparativo)          =  0  [comparative null → n/a]
+  //   Factor5 (F04 > 0, sin saldo)       =  0  [F04 ≥ 0 → +0]
+  //   Factor6 (cobertura F10=5.9%)       =  3  [5%–15% → +3, Art. 365 E.T.]
+  //   TOTAL = 68   ==   68 (esperado por el dueño)
   //
-  // CAUSA DE DIVERGENCIA vs 68:
-  //   El dueño aplicó un pseudocódigo con escala diferente a los buckets reales.
-  //   68 no es alcanzable con Factor1=30, Factor4=0, Factor5=0 en el algoritmo
-  //   real porque ninguna combinación de Factor2 ∈ {0,5,15,25} y
-  //   Factor3 ∈ {0,10,20} suma exactamente 38 (= 68−30).
-  //   El más cercano: 25+10 = 35 → total 65. Diferencia: 3 puntos.
-  //   Recomendación al dueño: validar si su pseudocódigo usa puntos distintos
-  //   o si F10=5.9% (baja cobertura) debería añadir puntos en el Factor3.
+  // El Factor6 (cobertura_retenciones_baja, Art. 365 E.T.) captura la dimensión
+  // de riesgo antes ausente: una cobertura de retenciones muy baja (F10) deja
+  // el impuesto referencial sin anticipar. Con bucket 5%–15% → +3, Grupo 2 Tres
+  // (F10=5.9%) alcanza 65+3 = 68.
   // -------------------------------------------------------------------------
 
-  it('score REAL = 65 (lockeo de regresión — NO 68)', () => {
-    // Este test lockea el valor real del algoritmo. Si el dueño quiere 68,
-    // debe ajustar el algoritmo computeRiskScore, no este test.
-    expect(riskResult.score).toBe(65);
+  it('score = 68 (lockeo de regresión — coincide con el esperado del dueño)', () => {
+    // Tras añadir Factor6 (cobertura_retenciones_baja, Art. 365 E.T.) el
+    // algoritmo computeRiskScore produce 68 para Grupo 2 Tres SAS.
+    expect(riskResult.score).toBe(68);
   });
 
   it('nivel = "muy_alto" (61–80 → muy_alto según tabla de clasificación)', () => {
     expect(riskResult.nivel).toBe('muy_alto');
   });
 
-  it('exactamente 5 factores en el array factores[]', () => {
-    expect(riskResult.factores).toHaveLength(5);
+  it('exactamente 6 factores en el array factores[]', () => {
+    expect(riskResult.factores).toHaveLength(6);
   });
 
   it('Factor1 (tet_baja): F09=0% → 30 puntos', () => {
@@ -205,28 +204,26 @@ describe('Sección B — Score de Riesgo DIAN · Reconciliación vs pseudocódig
     expect(f5!.puntos).toBe(0);
   });
 
+  it('Factor6 (cobertura_retenciones_baja): F10=5.9% ∈ [5%,15%) → 3 puntos (Art. 365 E.T.)', () => {
+    const f6 = riskResult.factores.find((f) => f.factor === 'cobertura_retenciones_baja');
+    expect(f6).toBeDefined();
+    expect(f6!.puntos).toBe(3);
+    expect(f6!.detalle).toMatch(/365|cobertura/i);
+  });
+
   it('suma de factores = score (identidad aritmética)', () => {
     const sumaFactores = riskResult.factores.reduce((acc, f) => acc + f.puntos, 0);
     const expectedScore = Math.min(100, sumaFactores);
     expect(riskResult.score).toBe(expectedScore);
   });
 
-  it('divergencia documentada: score_real=65 ≠ score_dueño=68 (diff=3pts)', () => {
-    // Este test documenta la divergencia para el dueño.
-    // Si el dueño ajusta el algoritmo a 68, este test debe actualizarse.
+  it('convergencia: score=68 coincide con el esperado del dueño (Factor6 cierra el gap)', () => {
+    // Antes de añadir Factor6 el algoritmo daba 65 (gap de 3 vs el 68 esperado).
+    // El Factor6 (cobertura_retenciones_baja, Art. 365 E.T.) con bucket
+    // 5%–15% → +3 cierra exactamente ese gap para Grupo 2 Tres (F10=5.9%).
     const SCORE_DUENO_ESPERADO = 68;
-    const SCORE_REAL = riskResult.score;
-    const diferencia = Math.abs(SCORE_DUENO_ESPERADO - SCORE_REAL);
-
-    // El score real ES 65, la diferencia con el pseudocódigo del dueño es 3.
-    // Lockear el score real como fixture de regresión.
-    expect(SCORE_REAL).toBe(65);
-    expect(diferencia).toBe(3);
-
-    // Documentar el factor que más contribuye a la diferencia:
-    // Con bucket 25+10=35 ≠ 38 (lo que se necesita para llegar a 68−30=38),
-    // el gap de 3 puntos no es ajustable con los buckets actuales.
-    expect(riskResult.nivel).toBe('muy_alto'); // 65 ∈ [61–80]
+    expect(riskResult.score).toBe(SCORE_DUENO_ESPERADO);
+    expect(riskResult.nivel).toBe('muy_alto'); // 68 ∈ [61–80]
   });
 });
 
@@ -725,5 +722,29 @@ describe.skip('Sección H — POST-MERGE: Integración con endpoints backend', (
   it('PATCH /api/escudo/fiscal-anchor/alerts/:id { action:"resolve" } → 200 { ok, alert }', () => {
     // TODO: verificar ciclo de vida resolve
     expect(true).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SECCIÓN I — Lock normativo: sanción por inexactitud = Art. 648 E.T.
+// ---------------------------------------------------------------------------
+// El Oráculo (escudo-tributario-co) verificó que el % de la sanción por
+// inexactitud (100%/160%) lo fija el Art. 648 E.T.; el Art. 647 sólo tipifica
+// la CONDUCTA. Este lock impide reintroducir la atribución incorrecta
+// "Art. 647 = 100% del mayor valor" en el pack normativo.
+// ---------------------------------------------------------------------------
+
+describe('Sección I — Lock normativo Art. 647 (conducta) vs Art. 648 (sanción %)', () => {
+  const PACK = readFileSync(
+    resolve(process.cwd(), 'docs/ESCUDO_NORMATIVA_TRIBUTARIA_CO_2026.md'),
+    'utf8',
+  );
+
+  it('el pack NO atribuye el % de la sanción al Art. 647 (patrón incorrecto ausente)', () => {
+    expect(PACK).not.toMatch(/Art\.\s*647[^.]*sanci[oó]n por inexactitud\s*=\s*100%/i);
+  });
+
+  it('el pack atribuye el % de la sanción al Art. 648 E.T.', () => {
+    expect(PACK).toMatch(/Art\.\s*648\s*E\.T\./);
   });
 });

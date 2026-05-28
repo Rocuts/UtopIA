@@ -125,7 +125,7 @@ A partir del 4° año de implementación (2024+), se reconoce fiscalmente el **m
    ```
 5. **Recomendación**: pasar a transferencia / cheque / tarjeta antes del cierre fiscal.
 
-**Riesgo de omitir**: la DIAN puede rechazar la deducción y aplicar Art. 647 (sanción por inexactitud = 100% del mayor valor del impuesto) si detecta el patrón en información exógena.
+**Riesgo de omitir**: la DIAN puede rechazar la deducción; el **Art. 647 E.T.** tipifica la conducta de inexactitud y el **Art. 648 E.T.** fija la sanción (100% del mayor valor del impuesto; 160% en caso agravado) si detecta el patrón en información exógena.
 
 **Fuentes**:
 - [Art. 771-5 E.T. – estatuto.co](https://estatuto.co/771-5)

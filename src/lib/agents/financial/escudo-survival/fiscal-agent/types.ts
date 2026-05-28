@@ -181,7 +181,13 @@ export interface ConciliacionModuleResult {
 export type RiskNivel = 'bajo' | 'medio' | 'alto' | 'muy_alto' | 'critico';
 
 export interface RiskFactorBreakdown {
-  factor: 'tet_baja' | 'margen_alto' | 'costo_bajo' | 'crecimiento_inusual' | 'saldo_favor_sin_solicitar';
+  factor:
+    | 'tet_baja'
+    | 'margen_alto'
+    | 'costo_bajo'
+    | 'crecimiento_inusual'
+    | 'saldo_favor_sin_solicitar'
+    | 'cobertura_retenciones_baja';
   descripcion: string;
   puntos: number;
   detalle: string;

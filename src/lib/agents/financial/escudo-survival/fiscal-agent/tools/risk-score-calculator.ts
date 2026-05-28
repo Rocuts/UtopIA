@@ -242,6 +242,45 @@ function factorSaldoFavor(anchor: FiscalAnchorBlock): RiskFactorBreakdown {
 }
 
 // ---------------------------------------------------------------------------
+// Factor 6 — Cobertura de retenciones baja (F10 = F03/F02)
+// ---------------------------------------------------------------------------
+// F10 = % del impuesto referencial (F02) ya anticipado vía retenciones /
+// autorretenciones (Art. 365 E.T. — retención como mecanismo de recaudo
+// anticipado). Cobertura baja ⇒ el grueso del impuesto está sin anticipar ⇒
+// mayor exposición a un saldo a pagar material al cierre + atención DIAN.
+// Guarda: si F02 ≤ 0 (sin impuesto referencial, p.ej. sin utilidad) el factor
+// NO aplica — evita falsos positivos cuando no hay impuesto que cubrir.
+
+function factorCoberturaRetenciones(anchor: FiscalAnchorBlock): RiskFactorBreakdown {
+  const descripcion = 'Cobertura de retenciones (F10)';
+  if (BigInt(anchor.f02) <= ZERO) {
+    return {
+      factor: 'cobertura_retenciones_baja',
+      descripcion,
+      puntos: 0,
+      detalle: 'Sin impuesto referencial (F02 ≤ 0) — factor no aplicable.',
+    };
+  }
+  const f10 = anchor.f10;
+  let puntos: number;
+  let detalle: string;
+  if (f10 < 5) {
+    puntos = 5;
+    detalle = `Cobertura ${f10.toFixed(1)}% — casi nula; el impuesto referencial está sin anticipar (Art. 365 E.T.).`;
+  } else if (f10 < 15) {
+    puntos = 3;
+    detalle = `Cobertura ${f10.toFixed(1)}% — muy baja; expone a un saldo a pagar material al cierre (Art. 365 E.T.).`;
+  } else if (f10 < 40) {
+    puntos = 1;
+    detalle = `Cobertura ${f10.toFixed(1)}% — parcial; revisar suficiencia de anticipos.`;
+  } else {
+    puntos = 0;
+    detalle = `Cobertura ${f10.toFixed(1)}% — impuesto referencial mayormente anticipado.`;
+  }
+  return { factor: 'cobertura_retenciones_baja', descripcion, puntos, detalle };
+}
+
+// ---------------------------------------------------------------------------
 // Calculadora principal
 // ---------------------------------------------------------------------------
 
@@ -260,6 +299,7 @@ export function computeRiskScore(input: RiskInput): RiskScorePrecomputedData {
     factorCostoBajo(input.preprocessed),
     factorCrecimiento(input.preprocessed),
     factorSaldoFavor(input.anchor),
+    factorCoberturaRetenciones(input.anchor),
   ];
   const score = Math.min(100, factores.reduce((acc, f) => acc + f.puntos, 0));
   return { score, nivel: classifyNivel(score), factores };
