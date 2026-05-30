@@ -8,6 +8,7 @@ import type { NiifReportJson } from './contracts/niif-report';
 import type { StrategyReportJson } from './contracts/strategy-report';
 import type { GovernanceReportJson } from './contracts/governance-report';
 import type { FiscalAnchorBlock } from './escudo-survival/fiscal-anchor/types';
+import type { NiifAncora } from './ancora/types';
 
 // ---------------------------------------------------------------------------
 // Input
@@ -251,6 +252,14 @@ export interface FinancialReport {
    * Leído por EscudoArea sin re-upload. Ver docs/wave-notes/escudo-autowire-contract.md.
    */
   fiscalSnapshot?: FiscalSnapshot;
+  /**
+   * Bloque Âncora NIIF determinístico (A01..A19 / X01..X04 / F01..F10) calculado
+   * en la fase NIIF (`buildNiifAncora`, cero LLM). Capturado por el cliente desde
+   * el SSE `niif_ancora` / payload `niif_phase` y consumido por las 4 áreas del
+   * workspace (Escudo / Valor / Verdad / Futuro) vía `deriveAncoraView`. Opcional
+   * por retrocompat con reportes en localStorage previos a este cableado.
+   */
+  ancora?: NiifAncora;
 }
 
 export type ReportEmittabilityKind = 'emittable' | 'no-emitible';

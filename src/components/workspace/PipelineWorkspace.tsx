@@ -53,6 +53,7 @@ import type {
   GovernanceResult,
   FiscalSnapshot,
 } from '@/lib/agents/financial/types';
+import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import type {
   AuditReport as BackendAuditReport,
@@ -1504,6 +1505,11 @@ export function PipelineWorkspace() {
   // o campo fiscalSnapshot en niif_phase). Se asigna a report.fiscalSnapshot en
   // los 3 checkpoints setLastCompletedReport y se envía a El Escudo vía POST.
   const fiscalSnapshotRef = useRef<FiscalSnapshot | null>(null);
+  // Bloque Âncora NIIF (A01..A19/X01..X04/F01..F10) capturado durante Phase 1 SSE
+  // (evento `niif_ancora` o campo `ancora` en niif_phase). Se asigna a
+  // report.ancora en los checkpoints setLastCompletedReport y se envía a El
+  // Escudo vía POST. Consumido por las 4 áreas vía `useAncoraView`.
+  const ancoraRef = useRef<NiifAncora | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
@@ -1694,11 +1700,13 @@ export function PipelineWorkspace() {
 
         // Reiniciamos el snapshot de la fase anterior (si hay un retry).
         fiscalSnapshotRef.current = null;
+        ancoraRef.current = null;
 
         const niifPayload = await runSSEPhase<{
           niif: NiifAnalysisResult;
           context: { bindingTotals: string; preprocessed: unknown; company: CompanyInfo };
           fiscalSnapshot?: FiscalSnapshot;
+          ancora?: NiifAncora;
         }>(
           '/api/financial-report/niif',
           niifBody,
@@ -1707,13 +1715,16 @@ export function PipelineWorkspace() {
           'Analista NIIF',
           {
             onProgress: onSubPhaseProgress,
-            // Captura el evento sidecar fiscal_snapshot si el backend lo emite
-            // ANTES de niif_phase (contrato §4.2). Es el camino rápido: el evento
-            // llega antes del payload principal y ya lo tenemos en el ref.
+            // Captura los eventos sidecar que el backend emite ANTES de niif_phase
+            // (contrato §4.2). Camino rápido: llegan antes del payload principal.
             onExtra: {
               fiscal_snapshot: (raw) => {
                 const { fiscalSnapshot } = raw as { fiscalSnapshot?: FiscalSnapshot };
                 if (fiscalSnapshot) fiscalSnapshotRef.current = fiscalSnapshot;
+              },
+              niif_ancora: (raw) => {
+                const { ancora } = raw as { ancora?: NiifAncora };
+                if (ancora) ancoraRef.current = ancora;
               },
             },
           },
@@ -1725,6 +1736,10 @@ export function PipelineWorkspace() {
         // "añadir fiscalSnapshot al payload de niif_phase"), lo capturamos aquí.
         if (!fiscalSnapshotRef.current && niifPayload.fiscalSnapshot) {
           fiscalSnapshotRef.current = niifPayload.fiscalSnapshot;
+        }
+        // Fallback: Âncora embebido en niif_phase para callers legacy.
+        if (!ancoraRef.current && niifPayload.ancora) {
+          ancoraRef.current = niifPayload.ancora;
         }
         // Capturamos el `preprocessed` para que el handler "Generar HTML"
         // pueda calcular `summarizeCoverage` / `auxiliariesProcessed` /
@@ -1759,6 +1774,7 @@ export function PipelineWorkspace() {
         consolidatedReport: partialConsolidated,
         generatedAt: new Date().toISOString(),
         ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
+        ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
       };
       setBackendReport(partialReport);
       setRawData(pipelineInput.rawData);
@@ -1782,7 +1798,11 @@ export function PipelineWorkspace() {
             await fetch('/api/escudo/fiscal-anchor', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fiscalSnapshot: _snap, company: _company }),
+              body: JSON.stringify({
+                fiscalSnapshot: _snap,
+                company: _company,
+                ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
+              }),
             });
           } catch {
             // Silencioso: la capa DB es best-effort. El snapshot ya está en localStorage.
@@ -1935,6 +1955,7 @@ export function PipelineWorkspace() {
         consolidatedReport: fullConsolidated,
         generatedAt: new Date().toISOString(),
         ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
+        ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
       };
 
       // ─── CHECKPOINT 2: actualizar reporte completo en localStorage ──────

@@ -312,6 +312,14 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen font-sans">
+        {/* Tabler Icons stylesheet — SOLO para compatibilidad con el diagnóstico
+            de consola 1+1 (Test 6). lucide-react sigue siendo el set de íconos
+            PRIMARIO de la app; esto no lo reemplaza. Next 16 hoistea <link> a
+            <head> automáticamente. */}
+        <link
+          rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/tabler-icons.min.css"
+        />
         {/* Pre-hydration theme/density resolvers via next/script with
             `beforeInteractive` strategy: Next 16 + React 19 prohíben <script>
             inline en componentes (no ejecutan en client). `Script` con esa

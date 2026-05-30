@@ -15,6 +15,7 @@ import {
   type AlertView,
 } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
 import type { FiscalSnapshot } from '@/lib/agents/financial/types';
+import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 
 // ---------------------------------------------------------------------------
 // /api/escudo/fiscal-anchor — persistencia workspace-aware del FiscalSnapshot
@@ -31,6 +32,9 @@ import type { FiscalSnapshot } from '@/lib/agents/financial/types';
 export const runtime = 'nodejs';
 
 const ESCUDO_FISCAL_KIND = 'escudo_fiscal';
+// Bloque Âncora NIIF (A01..A19) — fila separada para no contaminar el blob
+// FiscalSnapshot que consumen otros lectores. Devuelto por GET junto al snapshot.
+const ESCUDO_NIIF_ANCORA_KIND = 'escudo_niif_ancora';
 const MAX_JSON_BODY = 1 * 1024 * 1024; // 1MB — el snapshot es ligero
 
 // Validación de forma mínima del body. El FiscalSnapshot es un tipo TS puro
@@ -148,6 +152,38 @@ export async function POST(req: Request) {
     }
   }
 
+  // --- Persistir el Bloque Âncora NIIF (A01..A19) si vino en el body.
+  // Fila separada (kind=escudo_niif_ancora) keyed por periodo; upsert idempotente.
+  const ancora = (body as { ancora?: unknown }).ancora;
+  if (ancora && typeof ancora === 'object') {
+    const ancoraTitle = `Âncora NIIF ${period}`;
+    const existingAncora = await db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(
+        and(
+          eq(reports.workspaceId, workspaceId),
+          eq(reports.kind, ESCUDO_NIIF_ANCORA_KIND),
+          eq(reports.title, ancoraTitle),
+        ),
+      )
+      .limit(1);
+    if (existingAncora.length > 0) {
+      await db
+        .update(reports)
+        .set({ data: ancora as Record<string, unknown> })
+        .where(eq(reports.id, existingAncora[0].id));
+    } else {
+      await db.insert(reports).values({
+        workspaceId,
+        kind: ESCUDO_NIIF_ANCORA_KIND,
+        title: ancoraTitle,
+        data: ancora as Record<string, unknown>,
+        controlTotals: null,
+      });
+    }
+  }
+
   return NextResponse.json({ ok: true, reportId, alertsUpserted });
 }
 
@@ -178,14 +214,32 @@ export async function GET(req: Request) {
   const fiscalSnapshot =
     rows.length > 0 ? (rows[0].data as unknown as FiscalSnapshot) : null;
 
+  // Bloque Âncora NIIF (A01..A19) — fila separada. Consumido por `useAncoraView`.
+  const ancoraConditions = [
+    eq(reports.workspaceId, workspaceId),
+    eq(reports.kind, ESCUDO_NIIF_ANCORA_KIND),
+  ];
+  if (period) {
+    ancoraConditions.push(eq(reports.title, `Âncora NIIF ${period}`));
+  }
+  const ancoraRows = await db
+    .select({ data: reports.data })
+    .from(reports)
+    .where(and(...ancoraConditions))
+    .orderBy(desc(reports.createdAt))
+    .limit(1);
+  const ancora =
+    ancoraRows.length > 0 ? (ancoraRows[0].data as unknown as NiifAncora) : null;
+
   const pending = await findPendingAlertsForWorkspace(db, workspaceId);
   const alertas: AlertView[] = pending
     .filter((row) => row.pillar === 'escudo')
     .map(alertRowToView);
 
   return NextResponse.json({
-    hasData: fiscalSnapshot !== null,
+    hasData: fiscalSnapshot !== null || ancora !== null,
     fiscalSnapshot,
+    ancora,
     alertas,
   });
 }

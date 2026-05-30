@@ -62,6 +62,7 @@ import { CommandPalette } from '@/components/workspace/CommandPalette';
 import { IntakeModal } from '@/components/workspace/intake/IntakeModal';
 import { ChatSidebar } from '@/components/workspace/ChatSidebar';
 import { EliteHeader } from '@/components/workspace/EliteHeader';
+import { WindowBridge } from '@/components/system/WindowBridge';
 import { exportConversationPDF } from '@/lib/export/pdf-export';
 import {
   inferTitle,
@@ -216,6 +217,10 @@ export default function WorkspaceLayoutRoot({
 }) {
   return (
     <WorkspaceProvider>
+      {/* Puente no destructivo: instala window.sendPrompt / window.storage y
+          espeja el âncora REAL en `ancora_completo_2025`. DEBE vivir dentro de
+          <WorkspaceProvider> (consume useWorkspace + useAncoraView). */}
+      <WindowBridge />
       <ToastProvider>
         <WorkspaceShell>{children}</WorkspaceShell>
       </ToastProvider>

@@ -42,6 +42,11 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { calculateExitValue, formatCop } from '@/lib/kpis/exit-value';
 import { mockExitValue } from '@/lib/kpis/mocks';
 import type { KpiResult } from '@/types/kpis';
+import { useAncoraView } from '@/hooks/useAncoraView';
+import { DataSourceLadder } from './shared/DataSourceLadder';
+import { CapabilityZones } from './shared/CapabilityZones';
+import { getSourceLabels } from './shared/source-labels';
+import { getValorSources, getValorZones } from './data/valor-capabilities';
 
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
@@ -420,6 +425,12 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
   const valor = t.elite.areas.valor;
   const reduced = useReducedMotion();
 
+  const { view } = useAncoraView();
+
+  const sources = useMemo(() => getValorSources(language), [language]);
+  const zones = useMemo(() => getValorZones(language), [language]);
+  const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
+
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const kpiData = useMemo<KpiResult>(() => kpi ?? mockExitValue, [kpi]);
@@ -439,6 +450,95 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
     return b?.formatted ?? formatCop(675_000_000);
   }, [kpiData]);
 
+  // ── Cableado a datos reales del Âncora NIIF (aditivo, con fallback) ────────
+  const v = view.derived.valoracion;
+
+  // Hero — valor ponderado real cuando existe; si no, mock visual.
+  const heroValue = useMemo(() => {
+    if (view.hasData && v.ponderado != null) return formatCop(v.ponderado);
+    return kpiData.formatted;
+  }, [view.hasData, v.ponderado, kpiData.formatted]);
+
+  // Sub-KPIs reales (honestos: '—' / 'Requiere…' cuando el dato falta).
+  const ebitOperacionalStr = useMemo(() => {
+    if (view.hasData && view.niif.ebitOperacional != null) {
+      return formatCop(view.niif.ebitOperacional);
+    }
+    return ebitdaAdjustedStr;
+  }, [view.hasData, view.niif.ebitOperacional, ebitdaAdjustedStr]);
+
+  const waccValue = useMemo(() => {
+    if (view.hasData && v.faltaWacc) {
+      return language === 'es' ? 'Requiere WACC' : 'Requires WACC';
+    }
+    return '13.5%';
+  }, [view.hasData, v.faltaWacc, language]);
+
+  const waccDelta = useMemo(() => {
+    if (view.hasData && v.faltaWacc) {
+      return language === 'es' ? 'Ingresar por DF' : 'Enter via CFO';
+    }
+    return language === 'es' ? 'CO 2026 — servicios' : 'CO 2026 — services';
+  }, [view.hasData, v.faltaWacc, language]);
+
+  const deRatioStr = useMemo(() => {
+    if (view.hasData && view.derived.deRatio != null) {
+      return `${view.derived.deRatio.toFixed(2)}x`;
+    }
+    return '0.58';
+  }, [view.hasData, view.derived.deRatio]);
+
+  const cashVariationStr = useMemo(() => {
+    if (view.hasData && view.niif.variacionCaja != null) {
+      return formatCop(view.niif.variacionCaja);
+    }
+    return formatCop(420_000_000);
+  }, [view.hasData, view.niif.variacionCaja]);
+
+  // ── 5 métodos de valoración (honestos) ─────────────────────────────────────
+  const requiereWacc = language === 'es' ? 'Requiere WACC' : 'Requires WACC';
+  const requiereBvc = language === 'es' ? 'Requiere BVC' : 'Requires BVC';
+  const valuationMethods = useMemo(
+    () => [
+      {
+        key: 'evEbit',
+        name: language === 'es' ? 'EV/EBIT operacional' : 'EV/Operating EBIT',
+        value: v.evEbit != null ? formatCop(v.evEbit) : '—',
+        note: null as string | null,
+        weight: '35%',
+      },
+      {
+        key: 'liquidacion',
+        name: language === 'es' ? 'Liquidación' : 'Liquidation',
+        value: v.liquidacion != null ? formatCop(v.liquidacion) : '—',
+        note: null as string | null,
+        weight: '25%',
+      },
+      {
+        key: 'dcf',
+        name: 'DCF',
+        value: '—',
+        note: requiereWacc,
+        weight: '20%',
+      },
+      {
+        key: 'gordon',
+        name: language === 'es' ? 'Gordon Growth' : 'Gordon Growth',
+        value: '—',
+        note: requiereWacc,
+        weight: '10%',
+      },
+      {
+        key: 'transacciones',
+        name: language === 'es' ? 'Transacciones' : 'Transactions',
+        value: '—',
+        note: requiereBvc,
+        weight: '10%',
+      },
+    ],
+    [language, v.evEbit, v.liquidacion, requiereWacc, requiereBvc],
+  );
+
   const fadeItem = (index: number) =>
     reduced
       ? {}
@@ -454,6 +554,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
 
   return (
     <div
+      data-modulo="valor"
       className={cn(
         'relative w-full',
         compact ? '' : 'min-h-full',
@@ -528,7 +629,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
             <div className="flex flex-col gap-2">
               <div className="flex items-baseline gap-4 flex-wrap">
                 <motion.span
-                  key={kpiData.formatted}
+                  key={heroValue}
                   initial={reduced ? false : { opacity: 0, y: 8 }}
                   animate={reduced ? {} : { opacity: 1, y: 0 }}
                   transition={reduced ? undefined : { duration: 0.5, ease: 'easeOut' }}
@@ -540,7 +641,7 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
                   )}
                   style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
                 >
-                  {kpiData.formatted}
+                  {heroValue}
                 </motion.span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[rgba(34,197,94,0.12)] border border-[rgba(34,197,94,0.3)]">
                   <TrendingUp className="h-3.5 w-3.5 text-success" strokeWidth={2.2} />
@@ -583,8 +684,8 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
         )}
       >
         <MiniKpi
-          label={language === 'es' ? 'EBITDA Ajustado' : 'Adjusted EBITDA'}
-          value={ebitdaAdjustedStr}
+          label={language === 'es' ? 'EBIT Operacional' : 'Operating EBIT'}
+          value={ebitOperacionalStr}
           icon={DollarSign}
           accent="gold"
           delta={language === 'es' ? '+12.8% YoY' : '+12.8% YoY'}
@@ -592,23 +693,23 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
         />
         <MiniKpi
           label={language === 'es' ? 'WACC Actual' : 'Current WACC'}
-          value="13.5%"
+          value={waccValue}
           icon={Percent}
           accent="neutral"
-          delta={language === 'es' ? 'CO 2026 — servicios' : 'CO 2026 — services'}
+          delta={waccDelta}
           deltaDir="flat"
         />
         <MiniKpi
           label={language === 'es' ? 'Ratio D/E' : 'D/E Ratio'}
-          value="0.58"
+          value={deRatioStr}
           icon={Scale}
           accent="neutral"
           delta={language === 'es' ? 'Saludable < 1.0' : 'Healthy < 1.0'}
           deltaDir="flat"
         />
         <MiniKpi
-          label={language === 'es' ? 'Free Cash Flow' : 'Free Cash Flow'}
-          value={formatCop(420_000_000)}
+          label={language === 'es' ? 'Variación de Caja' : 'Cash Variation'}
+          value={cashVariationStr}
           icon={Wallet}
           accent="gold"
           delta={language === 'es' ? '+18.5% vs LY' : '+18.5% vs LY'}
@@ -616,8 +717,60 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
         />
       </motion.div>
 
+      {/* Fuentes de datos conectadas — escalera de capacidades */}
+      <motion.div {...fadeItem(4)} className="mb-10">
+        <DataSourceLadder
+          title={
+            language === 'es'
+              ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
+              : 'Connected data sources — each level unlocks more capabilities'
+          }
+          sources={sources}
+        />
+      </motion.div>
+
+      {/* 5 métodos de valoración (honestos — '—' / 'Requiere…' cuando falta el dato) */}
+      <motion.div {...fadeItem(5)} className="mb-10">
+        <p className="uppercase tracking-eyebrow text-xs font-medium text-n-600 mb-3">
+          {language === 'es' ? '5 métodos de valoración' : '5 valuation methods'}
+        </p>
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+          {valuationMethods.map((m) => (
+            <div
+              key={m.key}
+              className="relative flex flex-col gap-2 p-4 rounded-lg glass-elite border border-[rgb(var(--color-gold-500-rgb)_/_0.2)]"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="uppercase tracking-label text-[11px] font-medium text-n-700 truncate">
+                  {m.name}
+                </span>
+                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold tabular-nums text-gold-600 bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]">
+                  {m.weight}
+                </span>
+              </div>
+              <div className="font-mono font-semibold text-n-1000 leading-tight text-lg md:text-xl num">
+                {m.value}
+              </div>
+              {m.note && (
+                <p className="text-[11px] font-medium text-warning leading-snug">
+                  {m.note}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {view.derived.valoracion.faltaWacc && (
+          <p className="mt-3 rounded-md px-3 py-2 text-xs leading-relaxed text-warning bg-warning/10 border border-warning/20">
+            {language === 'es'
+              ? 'Para DCF y ponderado completo, el director financiero debe ingresar el WACC.'
+              : 'For DCF and a complete weighted valuation, the CFO must enter the WACC.'}
+          </p>
+        )}
+      </motion.div>
+
       {/* Grid submódulos */}
-      <motion.div {...fadeItem(4)} className="grid gap-5 grid-cols-1 md:grid-cols-3">
+      <motion.div {...fadeItem(6)} className="grid gap-5 grid-cols-1 md:grid-cols-3 mb-10">
         {SUBMODULES.map((sub, i) => (
           <SubmoduleCard
             key={sub.key}
@@ -631,6 +784,19 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
             reduced={reduced}
           />
         ))}
+      </motion.div>
+
+      {/* Zonas de capacidades · estado según fuente conectada */}
+      <motion.div {...fadeItem(7)}>
+        <CapabilityZones
+          legendTitle={
+            language === 'es'
+              ? 'Capacidades de valoración · estado según fuente'
+              : 'Valuation capabilities · status by source'
+          }
+          zones={zones}
+          sourceLabels={sourceLabels}
+        />
       </motion.div>
     </div>
   );

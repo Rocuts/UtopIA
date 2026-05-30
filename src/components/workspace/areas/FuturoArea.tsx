@@ -37,9 +37,13 @@ import {
   Target,
   ArrowRight,
   Globe,
+  Landmark,
+  Coins,
+  ClipboardCheck,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
 import { EliteCard } from '@/components/ui/EliteCard';
 import { PremiumKpiCard } from '@/components/ui/PremiumKpiCard';
@@ -49,6 +53,10 @@ import {
   mockRoiProbabilistic,
 } from '@/lib/kpis';
 import type { KpiResult } from '@/types/kpis';
+import { DataSourceLadder } from './shared/DataSourceLadder';
+import { CapabilityZones } from './shared/CapabilityZones';
+import { getSourceLabels } from './shared/source-labels';
+import { getFuturoSources, getFuturoZones } from './data/futuro-capabilities';
 
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
@@ -412,6 +420,77 @@ export function FuturoArea({
   const reduced = useReducedMotion();
   const isEs = language === 'es';
 
+  const { view } = useAncoraView();
+
+  const sources = useMemo(() => getFuturoSources(language), [language]);
+  const zones = useMemo(() => getFuturoZones(language), [language]);
+  const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
+
+  // Crecimiento real de ingresos (derivado del balance). null = no defendible.
+  const crecimientoPct = view.hasData ? view.derived.crecimientoIngresosPct : null;
+
+  // Oportunidades activas — datos reales del Âncora cuando hay; demo coherente si no.
+  const oportunidades = useMemo(() => {
+    const real = view.hasData ? view.derived.oportunidades : null;
+    return [
+      {
+        key: 'capitalizacion',
+        icon: Landmark,
+        title: isEs
+          ? 'Capitalización utilidades · Art. 36-3'
+          : 'Earnings capitalization · Art. 36-3',
+        value:
+          real?.capitalizacion36_3 != null
+            ? formatCopShort(real.capitalizacion36_3)
+            : view.hasData
+              ? '—'
+              : formatCopShort(372_000_000),
+        note: isEs
+          ? 'Incrementa patrimonio sin carga tributaria'
+          : 'Grows equity with no tax burden',
+      },
+      {
+        key: 'caja',
+        icon: Coins,
+        title: isEs ? 'Optimización ciclo de caja' : 'Cash cycle optimization',
+        value:
+          real?.liberacionCartera != null
+            ? formatCopShort(real.liberacionCartera)
+            : view.hasData
+              ? '—'
+              : formatCopShort(214_000_000),
+        note: isEs
+          ? 'Caja liberable optimizando la rotación de cartera'
+          : 'Cash freed by optimizing receivables turnover',
+      },
+      {
+        key: 'expansion',
+        icon: TrendingUp,
+        title: isEs ? 'Expansión comercial' : 'Commercial expansion',
+        value:
+          real?.expansionIngresos != null
+            ? formatCopShort(real.expansionIngresos)
+            : view.hasData
+              ? '—'
+              : formatCopShort(5_280_000_000),
+        note: isEs
+          ? 'Ingresos proyectados manteniendo el crecimiento observado'
+          : 'Projected revenue holding observed growth',
+      },
+      {
+        key: 'conciliacion',
+        icon: ClipboardCheck,
+        title: isEs
+          ? 'Conciliación fiscal pre-cierre'
+          : 'Pre-close tax reconciliation',
+        value: '—',
+        note: isEs
+          ? 'Evaluar antes de diciembre'
+          : 'Review before December',
+      },
+    ];
+  }, [view, isEs]);
+
   const kpiData = useMemo<KpiResult>(() => kpi ?? buildMockRoi(), [kpi]);
   const macro = useMemo<MacroIndicator[]>(
     () => macroSnapshot ?? MOCK_MACRO_SNAPSHOT_ES,
@@ -454,6 +533,7 @@ export function FuturoArea({
 
   return (
     <div
+      data-modulo="futuro"
       className={cn('relative w-full', compact ? '' : 'min-h-full', className)}
     >
       {!compact && (
@@ -499,15 +579,19 @@ export function FuturoArea({
             label={futuro.kpiPrimary}
             value={kpiData.formatted}
             subvalue={
-              isEs
-                ? `Riesgo mercado CO 2026: ${
-                    kpiData.breakdown?.find((b) => b.label === 'Riesgo de mercado CO')
-                      ?.formatted ?? '24%'
-                  }`
-                : `CO 2026 market risk: ${
-                    kpiData.breakdown?.find((b) => b.label === 'Riesgo de mercado CO')
-                      ?.formatted ?? '24%'
-                  }`
+              crecimientoPct != null
+                ? isEs
+                  ? `Crecimiento ingresos ${crecimientoPct.toFixed(1)}%`
+                  : `Revenue growth ${crecimientoPct.toFixed(1)}%`
+                : isEs
+                  ? `Riesgo mercado CO 2026: ${
+                      kpiData.breakdown?.find((b) => b.label === 'Riesgo de mercado CO')
+                        ?.formatted ?? '24%'
+                    }`
+                  : `CO 2026 market risk: ${
+                      kpiData.breakdown?.find((b) => b.label === 'Riesgo de mercado CO')
+                        ?.formatted ?? '24%'
+                    }`
             }
             trend={
               kpiData.trend
@@ -547,10 +631,75 @@ export function FuturoArea({
         <MacroSnapshot macro={macro} isEs={isEs} />
       </motion.div>
 
+      {/* Oportunidades activas — datos reales del Âncora cuando hasData */}
+      <motion.div {...fadeItem(5)} className={compact ? 'mb-6' : 'mb-12'}>
+        <div className="flex items-center gap-3 mb-4">
+          <span
+            aria-hidden="true"
+            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
+          >
+            <Sparkles className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div>
+            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
+              {isEs ? 'Oportunidades activas' : 'Active opportunities'}
+            </div>
+            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
+              {isEs
+                ? 'Palancas de valor detectadas'
+                : 'Detected value levers'}
+            </div>
+          </div>
+        </div>
+
+        <ul
+          role="list"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+        >
+          {oportunidades.map((op) => {
+            const OpIcon = op.icon;
+            return (
+              <li
+                key={op.key}
+                className="relative flex flex-col gap-2.5 p-4 rounded-xl glass-elite-elevated border-elite-gold"
+              >
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
+                >
+                  <OpIcon className="h-4 w-4" strokeWidth={1.75} />
+                </span>
+                <span className="text-sm font-medium text-n-1000 leading-snug">
+                  {op.title}
+                </span>
+                <span className="font-mono font-semibold text-2xl leading-tight text-n-1000 num">
+                  {op.value}
+                </span>
+                <span className="text-xs leading-snug text-n-700">
+                  {op.note}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </motion.div>
+
+      {/* Fuentes de datos conectadas — escalera de capacidades */}
+      <motion.div {...fadeItem(6)} className={compact ? 'mb-6' : 'mb-10'}>
+        <DataSourceLadder
+          title={
+            isEs
+              ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
+              : 'Connected data sources — each level unlocks more capabilities'
+          }
+          sources={sources}
+        />
+      </motion.div>
+
       {/* Grid submódulos (3) */}
       <motion.div
-        {...fadeItem(5)}
-        className="grid gap-5 grid-cols-1 md:grid-cols-3"
+        {...fadeItem(7)}
+        className="grid gap-5 grid-cols-1 md:grid-cols-3 mb-10"
       >
         {SUBMODULES.map((sub, i) => (
           <SubmoduleCard
@@ -565,6 +714,19 @@ export function FuturoArea({
             reduced={reduced}
           />
         ))}
+      </motion.div>
+
+      {/* Zonas de capacidades predictivas · estado según fuente conectada */}
+      <motion.div {...fadeItem(8)}>
+        <CapabilityZones
+          legendTitle={
+            isEs
+              ? 'Capacidades predictivas · estado según fuente'
+              : 'Predictive capabilities · status by source'
+          }
+          zones={zones}
+          sourceLabels={sourceLabels}
+        />
       </motion.div>
     </div>
   );
@@ -614,6 +776,16 @@ function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardPro
         </span>
         <span className="text-sm text-n-700">
           {isEs ? 'escenarios simulados' : 'scenarios simulated'}
+        </span>
+      </div>
+
+      {/* Monte Carlo P50 — sin WACC no es defendible (Elite Protocol). */}
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-n-700">
+          {isEs ? 'Monte Carlo P50' : 'Monte Carlo P50'}
+        </span>
+        <span className="font-medium tabular-nums text-n-700">
+          {isEs ? 'Req. WACC' : 'Requires WACC'}
         </span>
       </div>
 

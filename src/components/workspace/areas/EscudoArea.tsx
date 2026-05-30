@@ -18,6 +18,7 @@
  */
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   Shield,
@@ -29,12 +30,16 @@ import {
   Clock,
   Sparkles,
   Zap,
+  FileText,
 } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
+import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
 import { EliteCard } from '@/components/ui/EliteCard';
+import { EliteButton } from '@/components/ui/EliteButton';
 import { PremiumKpiCard } from '@/components/ui/PremiumKpiCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { calculateTef } from '@/lib/kpis/tax-efficiency';
@@ -42,6 +47,10 @@ import type { KpiResult } from '@/types/kpis';
 import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
 import type { FiscalRiskScore } from '@/lib/agents/financial/types';
 import { FiscalAlertsPanel } from '@/components/workspace/escudo/FiscalAlertsPanel';
+import { DataSourceLadder } from './shared/DataSourceLadder';
+import { CapabilityZones } from './shared/CapabilityZones';
+import { getSourceLabels } from './shared/source-labels';
+import { getEscudoSources, getEscudoZones } from './data/escudo-capabilities';
 
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
@@ -55,21 +64,12 @@ export interface EscudoDeadline {
 
 /**
  * Vista-modelo de alerta fiscal — consumida por el UI (cruza por HTTP/JSON).
- * Definida LOCALMENTE como view-model del consumidor (contrato §5 UI).
- * No importar del backend; la forma viene de §4.3 del contrato.
+ * Re-exportada desde la fuente canónica (`alert-mapping`, contrato §4.3) para
+ * que el hook (`useAncoraView`) y el panel (`FiscalAlertsPanel`) compartan UN
+ * solo tipo sin ciclo de imports componente↔hook.
  */
-export interface AlertView {
-  id: string;
-  codigo: string;
-  severidad: 'error' | 'warning' | 'info';
-  titulo: string;
-  mensaje: string;
-  norma: string;
-  impacto?: string;
-  accion?: string;
-  status: 'pending' | 'snoozed' | 'resolved' | 'escalated';
-  createdAt: string;
-}
+import type { AlertView } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
+export type { AlertView };
 
 export interface EscudoAreaProps {
   kpi?: KpiResult;
@@ -216,22 +216,56 @@ function deadlinesFromAnchor(
 export function EscudoArea({
   kpi,
   upcomingDeadlines,
-  fiscalAnchor,
-  riskScore,
-  alertas,
+  fiscalAnchor: propFiscalAnchor,
+  riskScore: propRiskScore,
+  alertas: propAlertas,
   compact = false,
   className,
 }: EscudoAreaProps) {
   const { t, language } = useLanguage();
   const escudo = t.elite.areas.escudo;
   const reduced = useReducedMotion();
+  const router = useRouter();
+  const { setActiveCaseType, setActiveMode } = useWorkspace();
+
+  // Fuente por defecto: el hook (NIIF→Escudo auto-cableado). Las props son
+  // OVERRIDES opcionales (preview/embebido). Honestidad Elite: si no hay datos
+  // reales, El Escudo cae a su demo coherente — nunca inventa cifras.
+  const {
+    view,
+    fiscalAnchor: hookAnchor,
+    riskScore: hookRisk,
+    alertas: hookAlertas,
+    loading,
+  } = useAncoraView();
+
+  const fiscalAnchor = propFiscalAnchor ?? hookAnchor;
+  const riskScore = propRiskScore ?? hookRisk;
+  const alertas: AlertView[] =
+    propAlertas && propAlertas.length ? propAlertas : hookAlertas;
 
   const hasRealData = Boolean(fiscalAnchor);
 
+  // Estado vacío elegante: sin datos NIIF ni anchor (y no estamos cargando).
+  const showEmptyState = !compact && !view.hasData && !fiscalAnchor && !loading;
+
+  const handleGenerarNiif = () => {
+    setActiveCaseType('niif_report');
+    setActiveMode('pipeline');
+    router.push('/workspace');
+  };
+
+  const sources = useMemo(() => getEscudoSources(language), [language]);
+  const zones = useMemo(() => getEscudoZones(language), [language]);
+  const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
+
   const kpiData = useMemo<KpiResult>(() => {
     if (kpi) return kpi;
-    if (fiscalAnchor) {
-      const f10 = fiscalAnchor.f10;
+    // F10 real — preferimos el del anchor; si solo hay AncoraView, usamos view.fiscal.f10.
+    const f10 =
+      fiscalAnchor?.f10 ??
+      (view.hasData && view.fiscal.f10 != null ? view.fiscal.f10 : null);
+    if (f10 != null) {
       const mock = buildMockTef();
       return {
         ...mock,
@@ -240,7 +274,7 @@ export function EscudoArea({
       };
     }
     return buildMockTef();
-  }, [kpi, fiscalAnchor]);
+  }, [kpi, fiscalAnchor, view]);
 
   const deadlines = useMemo<EscudoDeadline[]>(() => {
     if (upcomingDeadlines) return upcomingDeadlines;
@@ -264,12 +298,58 @@ export function EscudoArea({
 
   return (
     <div
+      data-modulo="escudo"
       className={cn(
         'relative w-full',
         compact ? '' : 'min-h-full',
         className,
       )}
     >
+      {/* Estado vacío: sin reporte NIIF previo (banner superior, no reemplaza el dashboard demo) */}
+      {showEmptyState && (
+        <motion.div
+          {...(reduced
+            ? {}
+            : {
+                initial: { opacity: 0, y: 8 },
+                animate: { opacity: 1, y: 0 },
+                transition: { duration: 0.4 },
+              })}
+          className="mb-10 flex flex-col items-start gap-4 p-6 rounded-xl glass-elite-elevated border border-[rgb(168_56_56_/_0.3)]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(168_56_56_/_0.16)] text-area-escudo"
+            >
+              <FileText className="h-5 w-5" strokeWidth={1.75} />
+            </span>
+            <div>
+              <p className="font-serif-elite text-xl leading-tight text-n-1000 mb-1">
+                {language === 'es'
+                  ? 'Sin datos fiscales aún'
+                  : 'No fiscal data yet'}
+              </p>
+              <p className="text-sm text-n-700 leading-relaxed max-w-md">
+                {language === 'es'
+                  ? 'Genera un Informe NIIF para que El Escudo se pueble automáticamente con las cifras fiscales reales de tu empresa.'
+                  : 'Generate an IFRS Report so The Shield auto-populates with your company\'s real tax figures.'}
+              </p>
+            </div>
+          </div>
+          <EliteButton
+            variant="primary"
+            size="md"
+            rightIcon={<ArrowRight className="h-4 w-4" strokeWidth={2} />}
+            onClick={handleGenerarNiif}
+          >
+            {language === 'es' ? 'Generar Informe NIIF' : 'Generate IFRS Report'}
+          </EliteButton>
+        </motion.div>
+      )}
+
       {!compact && (
         <>
           {/* Hero */}
@@ -369,11 +449,14 @@ export function EscudoArea({
         </div>
       </motion.div>
 
-      {/* Capa 5 — Score DIAN + Alertas accionables */}
+      {/* Capa 5 — Score DIAN (gauge + factores) + Alertas accionables */}
       {(riskScore || (alertas && alertas.length > 0)) && (
         <motion.div {...fadeItem(3)} className="mb-10 flex flex-col gap-5">
           {riskScore && (
-            <RiskScoreKpiRow riskScore={riskScore} language={language} />
+            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-5 items-stretch">
+              <GaugeDIAN score={riskScore.score} language={language} />
+              <RiskScoreKpiRow riskScore={riskScore} language={language} />
+            </div>
           )}
           {alertas && alertas.length > 0 && (
             <FiscalAlertsPanel alertas={alertas} language={language} />
@@ -381,8 +464,20 @@ export function EscudoArea({
         </motion.div>
       )}
 
+      {/* Fuentes de datos conectadas — escalera de capacidades */}
+      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 4 : 3)} className="mb-10">
+        <DataSourceLadder
+          title={
+            language === 'es'
+              ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
+              : 'Connected data sources — each level unlocks more capabilities'
+          }
+          sources={sources}
+        />
+      </motion.div>
+
       {/* Grid submódulos */}
-      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 4 : 3)} className="grid gap-5 grid-cols-1 md:grid-cols-2">
+      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 5 : 4)} className="grid gap-5 grid-cols-1 md:grid-cols-2 mb-10">
         {SUBMODULES.map((sub, i) => (
           <SubmoduleCard
             key={sub.key}
@@ -398,6 +493,19 @@ export function EscudoArea({
             reduced={reduced}
           />
         ))}
+      </motion.div>
+
+      {/* Zonas de capacidades · estado según fuente conectada */}
+      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 6 : 5)}>
+        <CapabilityZones
+          legendTitle={
+            language === 'es'
+              ? '31 capacidades · estado según fuente conectada'
+              : '31 capabilities · status by connected source'
+          }
+          zones={zones}
+          sourceLabels={sourceLabels}
+        />
       </motion.div>
     </div>
   );
@@ -687,6 +795,72 @@ function RiskScoreKpiRow({ riskScore, language }: RiskScoreKpiRowProps) {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Gauge semicircular Score de Riesgo DIAN ─────────────────────────────────
+
+interface GaugeDIANProps {
+  score: number;
+  language: 'es' | 'en';
+}
+
+function GaugeDIAN({ score, language }: GaugeDIANProps) {
+  const safe = Math.max(0, Math.min(100, Math.round(score)));
+  // Color por nivel de riesgo (rol → token). currentColor pinta arco + número.
+  const colorClass =
+    safe > 60 ? 'text-danger' : safe > 40 ? 'text-warning' : 'text-success';
+  const nivel =
+    safe > 60
+      ? language === 'es'
+        ? 'Riesgo Alto'
+        : 'High risk'
+      : safe > 40
+        ? language === 'es'
+          ? 'Riesgo Medio'
+          : 'Medium risk'
+        : language === 'es'
+          ? 'Riesgo Bajo'
+          : 'Low risk';
+  // Longitud del arco semicircular ≈ 176 (path M14 72 A56 56 0 0 1 126 72).
+  const ARC = 176;
+  const dashOffset = Math.round(ARC * (1 - safe / 100));
+
+  return (
+    <div
+      role="img"
+      aria-label={`${language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score'} ${safe} / 100 — ${nivel}`}
+      className="relative flex flex-col items-center justify-center gap-1 p-6 rounded-xl glass-elite-elevated min-w-[200px]"
+      style={{ boxShadow: 'inset 0 0 0 1px rgb(168 56 56 / 0.32)' }}
+    >
+      <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 text-center">
+        {language === 'es' ? 'Score de Riesgo DIAN' : 'DIAN Risk Score'}
+      </span>
+      <svg viewBox="0 0 140 80" width="150" height="86" aria-hidden="true">
+        <path
+          d="M 14 72 A 56 56 0 0 1 126 72"
+          fill="none"
+          className="stroke-n-300"
+          strokeWidth="10"
+          strokeLinecap="round"
+        />
+        <path
+          d="M 14 72 A 56 56 0 0 1 126 72"
+          fill="none"
+          stroke="currentColor"
+          className={colorClass}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={ARC}
+          strokeDashoffset={dashOffset}
+        />
+      </svg>
+      <span className={cn('font-serif-elite text-4xl font-normal leading-none num -mt-2', colorClass)}>
+        {safe}
+      </span>
+      <span className={cn('text-sm font-medium', colorClass)}>{nivel}</span>
+      <span className="text-xs text-n-500">/100</span>
     </div>
   );
 }

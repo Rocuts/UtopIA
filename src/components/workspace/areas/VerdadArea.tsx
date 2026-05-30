@@ -30,15 +30,21 @@ import {
   AlertCircle,
   ClipboardCheck,
   ArrowRight,
+  Sigma,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
 import { EliteCard } from '@/components/ui/EliteCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { NiifEliteButton } from '@/components/workspace/NiifEliteButton';
 import { mockCompliance } from '@/lib/kpis/mocks';
 import type { KpiResult, LastAuditOpinion } from '@/types/kpis';
+import { DataSourceLadder } from './shared/DataSourceLadder';
+import { CapabilityZones } from './shared/CapabilityZones';
+import { getSourceLabels } from './shared/source-labels';
+import { getVerdadSources, getVerdadZones } from './data/verdad-capabilities';
 
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
@@ -320,6 +326,17 @@ export function VerdadArea({
 }: VerdadAreaProps) {
   const { t, language } = useLanguage();
   const verdad = t.elite.areas.verdad;
+  const { view } = useAncoraView();
+
+  const sources = useMemo(() => getVerdadSources(language), [language]);
+  const zones = useMemo(() => getVerdadZones(language), [language]);
+  const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
+
+  // Score real determinístico NIIF cuando hay datos; si no, KPI mock.
+  const gaugeScore = useMemo(() => {
+    if (view.hasData && view.derived.scoreNiif != null) return view.derived.scoreNiif;
+    return kpi.value;
+  }, [view, kpi.value]);
 
   const findings = useMemo<ActiveFinding[]>(() => {
     if (activeFindings && activeFindings.length > 0) return activeFindings;
@@ -332,13 +349,18 @@ export function VerdadArea({
     (kpi.breakdown ?? []).forEach((b) => {
       map[b.label] = { value: b.value, weight: b.weight };
     });
+    const niifBase = map['NIIF'] ?? { value: 98, weight: 0.3 };
     return {
-      niif: map['NIIF'] ?? { value: 98, weight: 0.3 },
+      // Score NIIF real (determinístico) cuando hay datos; preserva la ponderación.
+      niif:
+        view.hasData && view.derived.scoreNiif != null
+          ? { value: view.derived.scoreNiif, weight: niifBase.weight }
+          : niifBase,
       tax: map['Tributario'] ?? { value: 95, weight: 0.25 },
       audit: map['Auditoría (hallazgos)'] ?? { value: 92, weight: 0.25 },
       legal: map['Legal'] ?? { value: 96, weight: 0.2 },
     };
-  }, [kpi]);
+  }, [kpi, view]);
 
   const criticalCount = findings.filter((f) => f.severity === 'critical').length;
   const opinionLabel =
@@ -347,6 +369,7 @@ export function VerdadArea({
 
   return (
     <section
+      data-modulo="verdad"
       className={cn(
         'relative flex flex-col gap-8',
         'text-n-1000',
@@ -390,7 +413,7 @@ export function VerdadArea({
           {/* Score gauge */}
           <div className="flex flex-col items-center gap-4">
             <ScoreArc
-              score={kpi.value}
+              score={gaugeScore}
               size={220}
               stroke={14}
               label={verdad.kpiPrimary}
@@ -454,6 +477,61 @@ export function VerdadArea({
           </div>
         </div>
       </EliteCard>
+
+      {/* ── Altman Z — estado honesto (sin número inventado) ──────────────── */}
+      <EliteCard variant="glass" padding="md" className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <span
+              aria-hidden="true"
+              className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600"
+            >
+              <Sigma className="w-5 h-5" strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0 flex flex-col">
+              <span className="uppercase tracking-eyebrow text-xs text-n-500 font-medium">
+                Altman Z-Score
+              </span>
+              <span className="text-xs text-n-600 tracking-wide">
+                {language === 'es'
+                  ? 'Continuidad del negocio · going concern'
+                  : 'Going concern · business continuity'}
+              </span>
+            </div>
+          </div>
+
+          {!view.hasData ? (
+            <span className="font-serif-elite text-2xl text-n-700 tabular-nums">—</span>
+          ) : view.derived.altmanZ != null ? (
+            <span className="font-serif-elite text-2xl text-n-1000 tabular-nums">
+              {view.derived.altmanZ.toFixed(2)}
+            </span>
+          ) : (
+            <div className="flex flex-col items-start sm:items-end min-w-0">
+              <span className="text-sm font-medium text-n-800">
+                {language === 'es'
+                  ? 'Requiere utilidades retenidas'
+                  : 'Requires retained earnings'}
+              </span>
+              {view.derived.altmanRazon && (
+                <span className="text-xs text-n-600 tracking-wide max-w-[42ch] sm:text-right">
+                  {view.derived.altmanRazon}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </EliteCard>
+
+      {/* ── Fuentes de datos conectadas — escalera de capacidades ────────── */}
+      <DataSourceLadder
+        title={
+          language === 'es'
+            ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
+            : 'Connected data sources — each level unlocks more capabilities'
+        }
+        sources={sources}
+      />
 
       {/* ── Hallazgos activos + CTA NIIF Elite ───────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-6">
@@ -576,6 +654,17 @@ export function VerdadArea({
           })}
         </div>
       </div>
+
+      {/* ── Capacidades de aseguramiento · estado según fuente ────────────── */}
+      <CapabilityZones
+        legendTitle={
+          language === 'es'
+            ? 'Capacidades de aseguramiento · estado según fuente'
+            : 'Assurance capabilities · status by source'
+        }
+        zones={zones}
+        sourceLabels={sourceLabels}
+      />
 
       {/* ── Strip chat contextual (opcional informativo) ─────────────────── */}
       {!compact && (
