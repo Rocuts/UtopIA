@@ -86,9 +86,11 @@ export function BookWorkspace({ bookId }: { bookId: string }) {
 
   return (
     <div className="relative w-full px-6 md:px-10 py-8 max-w-6xl mx-auto">
-      {/* Back link */}
+      {/* Back link — al listado de libros real (PymeBooksClassic). Desde el
+          rediseño mobile-first, /workspace/pyme renderiza el cockpit, así que
+          el listado vive en /workspace/pyme/libros. */}
       <Link
-        href="/workspace/pyme"
+        href="/workspace/pyme/libros"
         className="inline-flex items-center gap-1.5 text-sm text-n-600 hover:text-n-1000 mb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-sm"
       >
         <ArrowLeft className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
