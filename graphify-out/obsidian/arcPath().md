@@ -1,12 +1,12 @@
 ---
 source_file: "components\ui\RiskGauge.tsx"
 type: "code"
-community: "Module Cluster 265"
+community: "RiskGauge.tsx / arcPath()"
 location: "L86"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_265
+  - community/RiskGauge.tsx_/_arcPath()
 ---
 
 # arcPath()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[RiskGauge.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_265
+#graphify/code #graphify/EXTRACTED #community/RiskGauge.tsx_/_arcPath()

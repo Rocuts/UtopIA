@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\queries.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L257"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # countMovementsForAccount()
@@ -16,4 +16,4 @@ tags:
 - [[queries.ts]] - `contains` [EXTRACTED]
 - [[updateAccount()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

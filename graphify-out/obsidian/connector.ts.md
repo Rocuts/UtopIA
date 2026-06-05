@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\connector.ts"
 type: "code"
-community: "Module Cluster 150"
+community: "connector.ts / fetchJSON()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_150
+  - community/connector.ts_/_fetchJSON()
 ---
 
 # connector.ts
@@ -16,4 +16,4 @@ tags:
 - [[trialBalanceToCSV()]] - `contains` [EXTRACTED]
 - [[trialBalanceToRawRows()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_150
+#graphify/code #graphify/EXTRACTED #community/connector.ts_/_fetchJSON()

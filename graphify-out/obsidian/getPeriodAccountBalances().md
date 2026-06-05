@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\provisions\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L87"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getPeriodAccountBalances()
@@ -15,4 +15,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

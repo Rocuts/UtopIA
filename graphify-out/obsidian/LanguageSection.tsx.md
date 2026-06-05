@@ -1,12 +1,12 @@
 ---
 source_file: "components\settings\sections\LanguageSection.tsx"
 type: "code"
-community: "Module Cluster 261"
+community: "LanguageSection.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_261
+  - community/LanguageSection.tsx_/_cn()
 ---
 
 # LanguageSection.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[cn()_10]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_261
+#graphify/code #graphify/EXTRACTED #community/LanguageSection.tsx_/_cn()

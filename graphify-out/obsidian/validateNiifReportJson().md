@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\validators\niif-json-validator.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L116"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - graphify/INFERRED
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # validateNiifReportJson()
@@ -21,4 +21,4 @@ tags:
 - [[runNiifPhase()]] - `calls` [INFERRED]
 - [[serializeMoneyCop()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

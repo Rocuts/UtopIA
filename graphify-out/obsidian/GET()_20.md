@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\export-preview\route.ts"
 type: "code"
-community: "Core API Routes"
+community: "fonts.ts / registerEditorialFonts()"
 location: "L22"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - community/fonts.ts_/_registerEditorialFonts()
 ---
 
 # GET()
@@ -15,4 +15,4 @@ tags:
 - [[renderEditorialReportToStream()]] - `calls` [INFERRED]
 - [[route.ts_55]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/EXTRACTED #community/fonts.ts_/_registerEditorialFonts()

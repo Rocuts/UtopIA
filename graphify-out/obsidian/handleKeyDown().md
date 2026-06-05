@@ -1,12 +1,12 @@
 ---
 source_file: "components\settings\SettingsNav.tsx"
 type: "code"
-community: "Module Cluster 262"
+community: "SettingsNav.tsx / handleKeyDown()"
 location: "L59"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_262
+  - community/SettingsNav.tsx_/_handleKeyDown()
 ---
 
 # handleKeyDown()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[SettingsNav.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_262
+#graphify/code #graphify/EXTRACTED #community/SettingsNav.tsx_/_handleKeyDown()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\KPIGridPage.tsx"
 type: "code"
-community: "Module Cluster 154"
+community: "KPIGridPage.tsx / badgeFill()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_154
+  - community/KPIGridPage.tsx_/_badgeFill()
 ---
 
 # KPIGridPage.tsx
@@ -16,4 +16,4 @@ tags:
 - [[deltaColor()_1]] - `contains` [EXTRACTED]
 - [[formatDelta()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_154
+#graphify/code #graphify/EXTRACTED #community/KPIGridPage.tsx_/_badgeFill()

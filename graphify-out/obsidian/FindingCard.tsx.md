@@ -1,14 +1,14 @@
 ---
 source_file: "design-system\components\FindingCard.tsx"
 type: "code"
-community: "Module Cluster 412"
+community: "FindingCard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_412
+  - community/FindingCard.tsx
 ---
 
 # FindingCard.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_412
+#graphify/code #graphify/EXTRACTED #community/FindingCard.tsx

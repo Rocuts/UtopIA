@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\provisions\calculator.ts"
 type: "code"
-community: "Module Cluster 104"
+community: "calculator.ts / calculateProvisions()"
 location: "L52"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_104
+  - community/calculator.ts_/_calculateProvisions()
 ---
 
 # fromCentavos()
@@ -15,4 +15,4 @@ tags:
 - [[calculateProvisions()]] - `calls` [EXTRACTED]
 - [[calculator.ts_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_104
+#graphify/code #graphify/EXTRACTED #community/calculator.ts_/_calculateProvisions()

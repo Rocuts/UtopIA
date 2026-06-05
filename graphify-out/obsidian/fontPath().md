@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\fonts.ts"
 type: "code"
-community: "Core API Routes"
+community: "fonts.ts / registerEditorialFonts()"
 location: "L13"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - community/fonts.ts_/_registerEditorialFonts()
 ---
 
 # fontPath()
@@ -16,4 +16,4 @@ tags:
 - [[frauncesPath()]] - `calls` [EXTRACTED]
 - [[registerEditorialFonts()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/EXTRACTED #community/fonts.ts_/_registerEditorialFonts()

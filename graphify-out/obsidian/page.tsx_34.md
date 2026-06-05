@@ -1,14 +1,14 @@
 ---
 source_file: "app\workspace\verdad\dictamenes\page.tsx"
 type: "code"
-community: "Module Cluster 355"
+community: "page.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_355
+  - community/page.tsx
 ---
 
 # page.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_355
+#graphify/code #graphify/EXTRACTED #community/page.tsx

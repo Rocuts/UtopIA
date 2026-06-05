@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-reconciliation\orchestrator.ts"
 type: "code"
-community: "Module Cluster 32"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L118"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_32
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # buildConsolidatedReport()
@@ -15,4 +15,4 @@ tags:
 - [[orchestrateTaxReconciliation()]] - `calls` [EXTRACTED]
 - [[orchestrator.ts_8]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_32
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

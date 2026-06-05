@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\validators\report-validator.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # report-validator.ts
@@ -22,4 +22,4 @@ tags:
 - [[parseCopAmount()]] - `contains` [EXTRACTED]
 - [[validateConsolidatedReport()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

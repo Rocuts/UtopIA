@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\NiifEliteButton.tsx"
 type: "code"
-community: "Module Cluster 285"
+community: "NiifEliteButton.tsx / handleClick()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_285
+  - community/NiifEliteButton.tsx_/_handleClick()
 ---
 
 # NiifEliteButton.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[handleClick()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_285
+#graphify/code #graphify/EXTRACTED #community/NiifEliteButton.tsx_/_handleClick()

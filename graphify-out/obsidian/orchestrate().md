@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\orchestrator.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L164"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # orchestrate()
@@ -19,4 +19,4 @@ tags:
 - [[orchestrator.ts_11]] - `contains` [EXTRACTED]
 - [[synthesizeResponses()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

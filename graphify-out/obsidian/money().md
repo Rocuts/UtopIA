@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-planning\agents\niif-impact-analyst.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L161"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # money()
@@ -18,4 +18,4 @@ tags:
 - [[renderDeferredTax()]] - `calls` [EXTRACTED]
 - [[renderEffects()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\pyme\cockpit\components\PymeAccessTile.tsx"
 type: "code"
-community: "Module Cluster 401"
+community: "PymeAccessTile.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_401
+  - community/PymeAccessTile.tsx
 ---
 
 # PymeAccessTile.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_401
+#graphify/code #graphify/EXTRACTED #community/PymeAccessTile.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\escudo-bars.ts"
 type: "code"
-community: "Module Cluster 42"
+community: "valor-bars.ts / escudo-bars.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_42
+  - community/valor-bars.ts_/_escudo-bars.ts
 ---
 
 # escudo-bars.ts
@@ -17,4 +17,4 @@ tags:
 - [[extractLiquidity()]] - `contains` [EXTRACTED]
 - [[labelFromPeriod()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_42
+#graphify/code #graphify/EXTRACTED #community/valor-bars.ts_/_escudo-bars.ts

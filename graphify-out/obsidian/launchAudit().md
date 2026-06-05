@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\verdad\revisoria-fiscal\page.tsx"
 type: "code"
-community: "Module Cluster 167"
+community: "page.tsx / launchAudit()"
 location: "L124"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_167
+  - community/page.tsx_/_launchAudit()
 ---
 
 # launchAudit()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[page.tsx_36]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_167
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_launchAudit()

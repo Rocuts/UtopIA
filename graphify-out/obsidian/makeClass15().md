@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\monte-carlo.test.ts"
 type: "code"
-community: "Module Cluster 118"
+community: "monte-carlo.test.ts / makeSnapshot()"
 location: "L75"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_118
+  - community/monte-carlo.test.ts_/_makeSnapshot()
 ---
 
 # makeClass15()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[monte-carlo.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_118
+#graphify/code #graphify/EXTRACTED #community/monte-carlo.test.ts_/_makeSnapshot()

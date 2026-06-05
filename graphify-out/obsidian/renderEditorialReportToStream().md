@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\render.ts"
 type: "code"
-community: "Core API Routes"
+community: "fonts.ts / registerEditorialFonts()"
 location: "L23"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/fonts.ts_/_registerEditorialFonts()
 ---
 
 # renderEditorialReportToStream()
@@ -17,4 +17,4 @@ tags:
 - [[registerEditorialFonts()]] - `calls` [INFERRED]
 - [[render.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/fonts.ts_/_registerEditorialFonts()

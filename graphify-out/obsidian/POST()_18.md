@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\opening-balance\route.ts"
 type: "code"
-community: "Module Cluster 49"
+community: "POST() / importOpeningBalance()"
 location: "L97"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_49
+  - community/POST()_/_importOpeningBalance()
 ---
 
 # POST()
@@ -22,4 +22,4 @@ tags:
 - [[parseOpeningBalanceFile()]] - `calls` [INFERRED]
 - [[route.ts_25]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_49
+#graphify/code #graphify/EXTRACTED #community/POST()_/_importOpeningBalance()

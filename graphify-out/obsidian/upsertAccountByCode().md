@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L91"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # upsertAccountByCode()
@@ -17,4 +17,4 @@ tags:
 - [[repository.ts_3]] - `contains` [EXTRACTED]
 - [[seedProvisionsForWorkspace()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

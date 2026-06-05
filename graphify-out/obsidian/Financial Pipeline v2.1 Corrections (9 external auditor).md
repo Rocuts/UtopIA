@@ -1,12 +1,12 @@
 ---
 source_file: "docs/spec/financial-pipeline-v2.1.md"
 type: "document"
-community: "Module Cluster 21"
+community: "PUC Colombiano Balance Reading (v2.0) / Smoke Test Runner (1+1 Élite)"
 location: "TABLA RESUMEN DE CORRECCIONES"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_21
+  - community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_Élite)
 ---
 
 # Financial Pipeline v2.1 Corrections (9 external auditor)
@@ -19,4 +19,4 @@ tags:
 - [[Parte V — Meta-Auditoría 12 Dimensiones]] - `conceptually_related_to` [EXTRACTED]
 - [[Wave 6 Spec v2.1 Code Changes (5 commits)]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_21
+#graphify/document #graphify/EXTRACTED #community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_Élite)

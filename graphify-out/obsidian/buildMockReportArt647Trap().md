@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\__fixtures__\run-validation.ts"
 type: "code"
-community: "Module Cluster 63"
+community: "run-validation.ts / goodDividendMarkdown()"
 location: "L510"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_63
+  - community/run-validation.ts_/_goodDividendMarkdown()
 ---
 
 # buildMockReportArt647Trap()
@@ -17,4 +17,4 @@ tags:
 - [[goodSynthesisMarkdown()]] - `calls` [EXTRACTED]
 - [[run-validation.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_63
+#graphify/code #graphify/EXTRACTED #community/run-validation.ts_/_goodDividendMarkdown()

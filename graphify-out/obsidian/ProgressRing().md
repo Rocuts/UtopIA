@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\ProgressRing.tsx"
 type: "code"
-community: "Module Cluster 298"
+community: "ProgressRing() / ProgressRing.tsx"
 location: "L14"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_298
+  - community/ProgressRing()_/_ProgressRing.tsx
 ---
 
 # ProgressRing()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ProgressRing.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_298
+#graphify/code #graphify/EXTRACTED #community/ProgressRing()_/_ProgressRing.tsx

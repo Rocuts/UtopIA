@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\activity-log.ts"
 type: "code"
-community: "Core API Routes"
+community: "repository.ts / erp-query.ts"
 location: "L119"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - graphify/INFERRED
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # logApiActivity()
@@ -17,4 +17,4 @@ tags:
 - [[activity-log.ts]] - `contains` [EXTRACTED]
 - [[logActivity()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/repository.ts_/_erp-query.ts

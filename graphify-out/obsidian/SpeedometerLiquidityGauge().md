@@ -1,12 +1,12 @@
 ---
 source_file: "components\charts\SpeedometerLiquidityGauge.tsx"
 type: "code"
-community: "Module Cluster 36"
+community: "getTokens() / useChartTheme()"
 location: "L42"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_36
+  - community/getTokens()_/_useChartTheme()
 ---
 
 # SpeedometerLiquidityGauge()
@@ -16,4 +16,4 @@ tags:
 - [[getTokens()]] - `calls` [INFERRED]
 - [[useChartTheme()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_36
+#graphify/code #graphify/INFERRED #community/getTokens()_/_useChartTheme()

@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\NotesPage.tsx"
 type: "code"
-community: "Module Cluster 505"
+community: "NotesPage.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_505
+  - community/NotesPage.tsx
 ---
 
 # NotesPage.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_505
+#graphify/code #graphify/EXTRACTED #community/NotesPage.tsx

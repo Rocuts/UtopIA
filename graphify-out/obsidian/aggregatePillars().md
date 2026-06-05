@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\service.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L49"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # aggregatePillars()
@@ -22,4 +22,4 @@ tags:
 - [[scoreToStatus()]] - `calls` [INFERRED]
 - [[service.ts_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Platform_Pillar_Config
+#graphify/code #graphify/INFERRED #community/escudo-cards.ts_/_verdad-cards.ts

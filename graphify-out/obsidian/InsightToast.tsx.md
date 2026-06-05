@@ -1,14 +1,14 @@
 ---
 source_file: "components\notifications\InsightToast.tsx"
 type: "code"
-community: "Module Cluster 361"
+community: "InsightToast.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_361
+  - community/InsightToast.tsx
 ---
 
 # InsightToast.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_361
+#graphify/code #graphify/EXTRACTED #community/InsightToast.tsx

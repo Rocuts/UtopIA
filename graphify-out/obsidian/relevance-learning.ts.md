@@ -1,12 +1,12 @@
 ---
 source_file: "lib\workflows\sentinel\relevance-learning.ts"
 type: "code"
-community: "Cron Jobs & ERP Webhooks"
+community: "preprocessed-balance.ts / getCachedPreprocessedBalance()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Cron_Jobs_&_ERP_Webhooks
+  - community/preprocessed-balance.ts_/_getCachedPreprocessedBalance()
 ---
 
 # relevance-learning.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[evaluateEscalation()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Cron_Jobs_&_ERP_Webhooks
+#graphify/code #graphify/EXTRACTED #community/preprocessed-balance.ts_/_getCachedPreprocessedBalance()

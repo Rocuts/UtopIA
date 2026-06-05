@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\valuation\agents\dcf-modeler.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L108"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - graphify/INFERRED
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # renderTerminalValue()
@@ -17,4 +17,4 @@ tags:
 - [[parseMoneyCop()]] - `calls` [INFERRED]
 - [[toDcfModelResult()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

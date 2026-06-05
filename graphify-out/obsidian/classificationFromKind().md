@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\tools\dian-letter-builder.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L90"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # classificationFromKind()
@@ -15,4 +15,4 @@ tags:
 - [[classifyDianRequirement()]] - `calls` [EXTRACTED]
 - [[dian-letter-builder.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/risk-score-calculator.ts_/_computeRiskScore()

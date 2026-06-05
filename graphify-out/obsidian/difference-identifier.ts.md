@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-reconciliation\agents\difference-identifier.ts"
 type: "code"
-community: "Module Cluster 32"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_32
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # difference-identifier.ts
@@ -20,4 +20,4 @@ tags:
 - [[runDifferenceIdentifier()]] - `contains` [EXTRACTED]
 - [[toLegacyShape()_11]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_32
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

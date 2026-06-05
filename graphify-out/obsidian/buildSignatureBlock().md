@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\compose.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L1144"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Opinion_&_Dictamen_Drafters
+  - graphify/INFERRED
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # buildSignatureBlock()
@@ -17,4 +17,4 @@ tags:
 - [[renderSignatureBlock()]] - `calls` [INFERRED]
 - [[signatoriesFromCompany()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/INFERRED #community/compose.ts_/_composeEditorialReport()

@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\admin\activity\route.ts"
 type: "code"
-community: "Module Cluster 61"
+community: "queryActivityFeed() / activity-feed.ts"
 location: "L35"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_61
+  - community/queryActivityFeed()_/_activity-feed.ts
 ---
 
 # csv()
@@ -15,4 +15,4 @@ tags:
 - [[GET()_9]] - `calls` [EXTRACTED]
 - [[route.ts_31]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_61
+#graphify/code #graphify/EXTRACTED #community/queryActivityFeed()_/_activity-feed.ts

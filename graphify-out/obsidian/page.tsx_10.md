@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\contabilidad\page.tsx"
 type: "code"
-community: "Module Cluster 235"
+community: "page.tsx / ContabilidadPage()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_235
+  - community/page.tsx_/_ContabilidadPage()
 ---
 
 # page.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ContabilidadPage()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_235
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_ContabilidadPage()

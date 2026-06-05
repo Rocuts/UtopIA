@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\futuro-bars.test.ts"
 type: "code"
-community: "Module Cluster 87"
+community: "futuro-bars.test.ts / makeSnapshot()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_87
+  - community/futuro-bars.test.ts_/_makeSnapshot()
 ---
 
 # futuro-bars.test.ts
@@ -18,4 +18,4 @@ tags:
 - [[makeSnapshot()_2]] - `contains` [EXTRACTED]
 - [[makeValidation()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_87
+#graphify/code #graphify/EXTRACTED #community/futuro-bars.test.ts_/_makeSnapshot()

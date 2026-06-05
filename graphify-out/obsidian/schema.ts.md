@@ -1,14 +1,14 @@
 ---
 source_file: "lib\db\schema.ts"
 type: "code"
-community: "Module Cluster 498"
+community: "schema.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_498
+  - community/schema.ts
 ---
 
 # schema.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_498
+#graphify/code #graphify/EXTRACTED #community/schema.ts

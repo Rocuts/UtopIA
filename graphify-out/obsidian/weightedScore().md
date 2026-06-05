@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\health-score.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L35"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # weightedScore()
@@ -19,4 +19,4 @@ tags:
 - [[computeVerdadPillar()]] - `calls` [INFERRED]
 - [[health-score.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Platform_Pillar_Config
+#graphify/code #graphify/INFERRED #community/escudo-cards.ts_/_verdad-cards.ts

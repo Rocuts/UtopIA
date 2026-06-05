@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\mutations.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L363"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # loadPucCatalog()
@@ -15,4 +15,4 @@ tags:
 - [[mutations.ts]] - `contains` [EXTRACTED]
 - [[seedPucForWorkspace()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

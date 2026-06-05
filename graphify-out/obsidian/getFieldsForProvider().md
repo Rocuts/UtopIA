@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ERPConnector.tsx"
 type: "code"
-community: "Module Cluster 58"
+community: "ERPConnector.tsx / loadConnections()"
 location: "L128"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_58
+  - community/ERPConnector.tsx_/_loadConnections()
 ---
 
 # getFieldsForProvider()
@@ -15,4 +15,4 @@ tags:
 - [[ConnectForm()]] - `calls` [EXTRACTED]
 - [[ERPConnector.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_58
+#graphify/code #graphify/EXTRACTED #community/ERPConnector.tsx_/_loadConnections()

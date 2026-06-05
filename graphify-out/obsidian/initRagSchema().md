@@ -1,12 +1,12 @@
 ---
 source_file: "lib\rag\init.ts"
 type: "code"
-community: "Module Cluster 24"
+community: "route.ts / vectorstore.ts"
 location: "L28"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_24
+  - community/route.ts_/_vectorstore.ts
 ---
 
 # initRagSchema()
@@ -18,4 +18,4 @@ tags:
 - [[init.ts]] - `contains` [EXTRACTED]
 - [[searchDocuments()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_24
+#graphify/code #graphify/INFERRED #community/route.ts_/_vectorstore.ts

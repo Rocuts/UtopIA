@@ -1,12 +1,12 @@
 ---
 source_file: "lib\workflows\monthly-close\__tests__\canonical.test.ts"
 type: "code"
-community: "Module Cluster 162"
+community: "canonical.test.ts / makeEntry()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_162
+  - community/canonical.test.ts_/_makeEntry()
 ---
 
 # canonical.test.ts
@@ -16,4 +16,4 @@ tags:
 - [[makeLine()]] - `contains` [EXTRACTED]
 - [[sha256()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_162
+#graphify/code #graphify/EXTRACTED #community/canonical.test.ts_/_makeEntry()

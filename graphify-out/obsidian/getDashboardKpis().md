@@ -1,12 +1,12 @@
 ---
 source_file: "lib\kpis\live.ts"
 type: "code"
-community: "Module Cluster 17"
+community: "conversation-history.ts / live.ts"
 location: "L427"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_17
+  - community/conversation-history.ts_/_live.ts
 ---
 
 # getDashboardKpis()
@@ -21,4 +21,4 @@ tags:
 - [[primeErpContext()]] - `calls` [EXTRACTED]
 - [[readLatestReport()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_17
+#graphify/code #graphify/EXTRACTED #community/conversation-history.ts_/_live.ts

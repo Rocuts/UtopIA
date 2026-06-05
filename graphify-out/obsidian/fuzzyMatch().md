@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\CommandPalette.tsx"
 type: "code"
-community: "Module Cluster 176"
+community: "CommandPalette.tsx / fuzzyMatch()"
 location: "L101"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_176
+  - community/CommandPalette.tsx_/_fuzzyMatch()
 ---
 
 # fuzzyMatch()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[CommandPalette.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_176
+#graphify/code #graphify/EXTRACTED #community/CommandPalette.tsx_/_fuzzyMatch()

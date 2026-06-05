@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\OpeningBalanceUploader.tsx"
 type: "code"
-community: "Module Cluster 171"
+community: "OpeningBalanceUploader.tsx / cn()"
 location: "L55"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_171
+  - community/OpeningBalanceUploader.tsx_/_cn()
 ---
 
 # periodLabel()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[OpeningBalanceUploader.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_171
+#graphify/code #graphify/EXTRACTED #community/OpeningBalanceUploader.tsx_/_cn()

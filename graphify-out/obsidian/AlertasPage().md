@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\alertas\page.tsx"
 type: "code"
-community: "Module Cluster 229"
+community: "AlertasPage() / page.tsx"
 location: "L18"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_229
+  - community/AlertasPage()_/_page.tsx
 ---
 
 # AlertasPage()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[page.tsx_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_229
+#graphify/code #graphify/EXTRACTED #community/AlertasPage()_/_page.tsx

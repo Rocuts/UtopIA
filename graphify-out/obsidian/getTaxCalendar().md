@@ -1,12 +1,12 @@
 ---
 source_file: "lib\tools\tax-calendar.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "executeTool() / getTaxCalendar()"
 location: "L134"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/executeTool()_/_getTaxCalendar()
 ---
 
 # getTaxCalendar()
@@ -22,4 +22,4 @@ tags:
 - [[searchWeb()]] - `calls` [INFERRED]
 - [[tax-calendar.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/INFERRED #community/executeTool()_/_getTaxCalendar()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\settings\SettingsLayout.tsx"
 type: "code"
-community: "Module Cluster 169"
+community: "SettingsLayout.tsx / parseHash()"
 location: "L26"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_169
+  - community/SettingsLayout.tsx_/_parseHash()
 ---
 
 # parseHash()
@@ -15,4 +15,4 @@ tags:
 - [[SettingsLayout.tsx]] - `contains` [EXTRACTED]
 - [[sync()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_169
+#graphify/code #graphify/EXTRACTED #community/SettingsLayout.tsx_/_parseHash()

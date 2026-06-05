@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\single-source-validator.ts"
 type: "code"
-community: "Module Cluster 89"
+community: "single-source-validator.ts / validateCrossPillarCoherence()"
 location: "L72"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_89
+  - community/single-source-validator.ts_/_validateCrossPillarCoherence()
 ---
 
 # validateCrossPillarCoherence()
@@ -18,4 +18,4 @@ tags:
 - [[formatCop()_6]] - `calls` [EXTRACTED]
 - [[single-source-validator.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_89
+#graphify/code #graphify/EXTRACTED #community/single-source-validator.ts_/_validateCrossPillarCoherence()

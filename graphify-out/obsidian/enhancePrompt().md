@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\prompt-enhancer.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L11"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_15
+  - graphify/INFERRED
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # enhancePrompt()
@@ -15,4 +15,4 @@ tags:
 - [[orchestrate()]] - `calls` [INFERRED]
 - [[prompt-enhancer.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\fiscal-audit-opinion\route.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L26"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # POST()
@@ -16,4 +16,4 @@ tags:
 - [[orchestrateFiscalOpinion()]] - `calls` [INFERRED]
 - [[route.ts_61]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

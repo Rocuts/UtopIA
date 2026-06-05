@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\repair\tools.ts"
 type: "code"
-community: "Module Cluster 22"
+community: "tools.ts / adjustments.ts"
 location: "L234"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_22
+  - community/tools.ts_/_adjustments.ts
 ---
 
 # executeRepairTool()
@@ -20,4 +20,4 @@ tags:
 - [[runRepairAgent()]] - `calls` [INFERRED]
 - [[tools.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_22
+#graphify/code #graphify/EXTRACTED #community/tools.ts_/_adjustments.ts

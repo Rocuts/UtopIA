@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\PageNumberBadge.tsx"
 type: "code"
-community: "Module Cluster 515"
+community: "PageNumberBadge.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_515
+  - community/PageNumberBadge.tsx
 ---
 
 # PageNumberBadge.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_515
+#graphify/code #graphify/EXTRACTED #community/PageNumberBadge.tsx

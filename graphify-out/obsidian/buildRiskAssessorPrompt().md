@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\feasibility\prompts\risk-assessor.prompt.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L11"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - graphify/INFERRED
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # buildRiskAssessorPrompt()
@@ -15,4 +15,4 @@ tags:
 - [[risk-assessor.prompt.ts]] - `contains` [EXTRACTED]
 - [[runRiskAssessor()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

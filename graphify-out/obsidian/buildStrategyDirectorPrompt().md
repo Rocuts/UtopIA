@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\strategy-director.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L27"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildStrategyDirectorPrompt()
@@ -18,4 +18,4 @@ tags:
 - [[runStrategyDirector()]] - `calls` [INFERRED]
 - [[strategy-director.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

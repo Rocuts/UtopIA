@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\promote\entry-builder.ts"
 type: "code"
-community: "Module Cluster 71"
+community: "promoteEntries() / entry-builder.ts"
 location: "L132"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_71
+  - community/promoteEntries()_/_entry-builder.ts
 ---
 
 # buildSimpleLines()
@@ -15,4 +15,4 @@ tags:
 - [[buildGroupEntry()]] - `calls` [EXTRACTED]
 - [[entry-builder.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_71
+#graphify/code #graphify/EXTRACTED #community/promoteEntries()_/_entry-builder.ts

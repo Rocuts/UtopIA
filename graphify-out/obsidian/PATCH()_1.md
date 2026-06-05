@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\pyme\entries\[entryId]\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L41"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # PATCH()
@@ -17,4 +17,4 @@ tags:
 - [[route.ts_70]] - `contains` [EXTRACTED]
 - [[serializeEntry()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

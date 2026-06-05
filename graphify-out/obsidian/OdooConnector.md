@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\odoo.ts"
 type: "code"
-community: "Module Cluster 50"
+community: "OdooConnector / .getTrialBalance()"
 location: "L100"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_50
+  - community/OdooConnector_/_.getTrialBalance()
 ---
 
 # OdooConnector
@@ -28,4 +28,4 @@ tags:
 - [[.testConnection()_5]] - `method` [EXTRACTED]
 - [[odoo.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_50
+#graphify/code #graphify/EXTRACTED #community/OdooConnector_/_.getTrialBalance()

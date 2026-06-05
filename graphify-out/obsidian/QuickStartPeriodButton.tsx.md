@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\QuickStartPeriodButton.tsx"
 type: "code"
-community: "Module Cluster 272"
+community: "handleClick() / QuickStartPeriodButton.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_272
+  - community/handleClick()_/_QuickStartPeriodButton.tsx
 ---
 
 # QuickStartPeriodButton.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[handleClick()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_272
+#graphify/code #graphify/EXTRACTED #community/handleClick()_/_QuickStartPeriodButton.tsx

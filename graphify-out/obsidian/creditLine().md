@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\double-entry\__tests__\validate.test.ts"
 type: "code"
-community: "Module Cluster 190"
+community: "validate.test.ts / creditLine()"
 location: "L15"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_190
+  - community/validate.test.ts_/_creditLine()
 ---
 
 # creditLine()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[validate.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_190
+#graphify/code #graphify/EXTRACTED #community/validate.test.ts_/_creditLine()

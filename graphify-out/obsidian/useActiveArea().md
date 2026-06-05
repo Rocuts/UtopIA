@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\AreaNav.tsx"
 type: "code"
-community: "Module Cluster 95"
+community: "AreaNav.tsx / cn()"
 location: "L55"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_95
+  - community/AreaNav.tsx_/_cn()
 ---
 
 # useActiveArea()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AreaNav.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_95
+#graphify/code #graphify/EXTRACTED #community/AreaNav.tsx_/_cn()

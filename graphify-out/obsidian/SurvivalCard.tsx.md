@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\cards\SurvivalCard.tsx"
 type: "code"
-community: "Module Cluster 133"
+community: "SurvivalCard.tsx / AlertIndicator()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_133
+  - community/SurvivalCard.tsx_/_AlertIndicator()
 ---
 
 # SurvivalCard.tsx
@@ -16,4 +16,4 @@ tags:
 - [[NormaCitation()]] - `contains` [EXTRACTED]
 - [[cn()_25]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_133
+#graphify/code #graphify/EXTRACTED #community/SurvivalCard.tsx_/_AlertIndicator()

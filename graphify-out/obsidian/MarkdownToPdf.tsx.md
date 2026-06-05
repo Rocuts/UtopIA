@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\MarkdownToPdf.tsx"
 type: "code"
-community: "Module Cluster 156"
+community: "MarkdownToPdf.tsx / parseBlocks()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_156
+  - community/MarkdownToPdf.tsx_/_parseBlocks()
 ---
 
 # MarkdownToPdf.tsx
@@ -16,4 +16,4 @@ tags:
 - [[parseInline()]] - `contains` [EXTRACTED]
 - [[parseTableCells()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_156
+#graphify/code #graphify/EXTRACTED #community/MarkdownToPdf.tsx_/_parseBlocks()

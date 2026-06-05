@@ -1,11 +1,11 @@
 ---
 source_file: "docs/ESCUDO_NORMATIVA_TRIBUTARIA_CO_2026.md"
 type: "document"
-community: "Module Cluster 30"
+community: "Escudo Normativa Tributaria Colombia 2026 / Escudo Survival Orchestrator (Promise.allSettled)"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_30
+  - community/Escudo_Normativa_Tributaria_Colombia_2026_/_Escudo_Survival_Orchestrator_(Promise.allSettled)
 ---
 
 # Escudo Normativa Tributaria Colombia 2026
@@ -22,4 +22,4 @@ tags:
 - [[TET — Tasa Efectiva de Tributación]] - `references` [EXTRACTED]
 - [[UVT 2026 ($52.374 COP) — Resolución DIAN 000238]] - `references` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_30
+#graphify/document #graphify/EXTRACTED #community/Escudo_Normativa_Tributaria_Colombia_2026_/_Escudo_Survival_Orchestrator_(Promise.allSettled)

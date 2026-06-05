@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\banking\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L113"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # bulkInsertTransactions()
@@ -16,4 +16,4 @@ tags:
 - [[importStatement()]] - `calls` [INFERRED]
 - [[repository.ts_4]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\canvas\HeroScene.tsx"
 type: "code"
-community: "Module Cluster 256"
+community: "ParticleField() / HeroScene.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_256
+  - community/ParticleField()_/_HeroScene.tsx
 ---
 
 # HeroScene.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ParticleField()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_256
+#graphify/code #graphify/EXTRACTED #community/ParticleField()_/_HeroScene.tsx

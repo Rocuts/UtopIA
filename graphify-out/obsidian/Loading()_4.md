@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\valor\loading.tsx"
 type: "code"
-community: "Module Cluster 251"
+community: "loading.tsx / Loading()"
 location: "L3"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_251
+  - community/loading.tsx_/_Loading()
 ---
 
 # Loading()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[loading.tsx_4]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_251
+#graphify/code #graphify/EXTRACTED #community/loading.tsx_/_Loading()

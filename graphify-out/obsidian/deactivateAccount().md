@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\mutations.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L300"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - graphify/INFERRED
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # deactivateAccount()
@@ -17,4 +17,4 @@ tags:
 - [[mutations.ts]] - `contains` [EXTRACTED]
 - [[updateAccount()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\orchestrator.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # orchestrator.ts
@@ -42,4 +42,4 @@ tags:
 - [[runNiifPhase()]] - `contains` [EXTRACTED]
 - [[runStrategyPhase()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

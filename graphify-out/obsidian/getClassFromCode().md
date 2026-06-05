@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\queries.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L303"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getClassFromCode()
@@ -15,4 +15,4 @@ tags:
 - [[getNatureFromCode()]] - `calls` [EXTRACTED]
 - [[queries.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\ClosePeriodConfirmDialog.tsx"
 type: "code"
-community: "Module Cluster 270"
+community: "handleClose() / ClosePeriodConfirmDialog.tsx"
 location: "L53"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_270
+  - community/handleClose()_/_ClosePeriodConfirmDialog.tsx
 ---
 
 # handleClose()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ClosePeriodConfirmDialog.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_270
+#graphify/code #graphify/EXTRACTED #community/handleClose()_/_ClosePeriodConfirmDialog.tsx

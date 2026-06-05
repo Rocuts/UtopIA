@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\tools\conciliacion-builder.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L59"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # buildConciliacionSkeleton()
@@ -18,4 +18,4 @@ tags:
 - [[runConciliacionAgent()]] - `calls` [INFERRED]
 - [[serializeMoneyCop()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

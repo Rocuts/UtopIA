@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\world-office.ts"
 type: "code"
-community: "Module Cluster 39"
+community: "WorldOfficeConnector / world-office.ts"
 location: "L88"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_39
+  - community/WorldOfficeConnector_/_world-office.ts
 ---
 
 # WorldOfficeConnector
@@ -27,4 +27,4 @@ tags:
 - [[.testConnection()_12]] - `method` [EXTRACTED]
 - [[world-office.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_39
+#graphify/code #graphify/EXTRACTED #community/WorldOfficeConnector_/_world-office.ts

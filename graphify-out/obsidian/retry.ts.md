@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\utils\retry.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # retry.ts
@@ -16,4 +16,4 @@ tags:
 - [[timeoutSignal()]] - `contains` [EXTRACTED]
 - [[withRetry()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_15
+#graphify/code #graphify/EXTRACTED #community/runHtmlEditor()_/_orchestrate()

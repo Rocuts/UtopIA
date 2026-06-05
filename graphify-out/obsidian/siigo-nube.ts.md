@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\siigo-nube.ts"
 type: "code"
-community: "Module Cluster 45"
+community: "SiigoNubeConnector / .fetchAllTrialBalanceRows()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_45
+  - community/SiigoNubeConnector_/_.fetchAllTrialBalanceRows()
 ---
 
 # siigo-nube.ts
@@ -18,4 +18,4 @@ tags:
 - [[inferTypeFromPUC()_2]] - `contains` [EXTRACTED]
 - [[jitter()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_45
+#graphify/code #graphify/EXTRACTED #community/SiigoNubeConnector_/_.fetchAllTrialBalanceRows()

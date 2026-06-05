@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\auditor-coherence.test.ts"
 type: "code"
-community: "Module Cluster 115"
+community: "auditor-coherence.test.ts / makeSnapshot()"
 location: "L80"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_115
+  - community/auditor-coherence.test.ts_/_makeSnapshot()
 ---
 
 # makeSnapshot()
@@ -15,4 +15,4 @@ tags:
 - [[auditor-coherence.test.ts]] - `contains` [EXTRACTED]
 - [[makeValidation()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_115
+#graphify/code #graphify/EXTRACTED #community/auditor-coherence.test.ts_/_makeSnapshot()

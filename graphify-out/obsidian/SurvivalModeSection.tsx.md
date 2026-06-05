@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\escudo\survival\SurvivalModeSection.tsx"
 type: "code"
-community: "Module Cluster 388"
+community: "SurvivalModeSection.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_388
+  - community/SurvivalModeSection.tsx
 ---
 
 # SurvivalModeSection.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_388
+#graphify/code #graphify/EXTRACTED #community/SurvivalModeSection.tsx

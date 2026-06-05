@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\intake\DianDefenseIntake.tsx"
 type: "code"
-community: "Module Cluster 96"
+community: "DianDefenseIntake.tsx / cn()"
 location: "L189"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_96
+  - community/DianDefenseIntake.tsx_/_cn()
 ---
 
 # formatCOPInput()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[DianDefenseIntake.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_96
+#graphify/code #graphify/EXTRACTED #community/DianDefenseIntake.tsx_/_cn()

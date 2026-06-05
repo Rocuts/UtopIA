@@ -1,11 +1,11 @@
 ---
 source_file: "docs/SECURITY_BOTID.md"
 type: "document"
-community: "AI SDK & Model Config"
+community: "D5.3 Forensic Audit Module (Continuous) / Financial Pipeline (1+1)"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/AI_SDK_&_Model_Config
+  - community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)
 ---
 
 # Vercel BotID Bot/Abuse Protection
@@ -15,4 +15,4 @@ tags:
 - [[Vercel WAF Rate Limiting (@vercelfirewall)]] - `conceptually_related_to` [INFERRED]
 - [[checkBotId() Server-Side Enforcement]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/AI_SDK_&_Model_Config
+#graphify/document #graphify/EXTRACTED #community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)

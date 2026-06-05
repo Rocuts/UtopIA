@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\queries.ts"
 type: "code"
-community: "Module Cluster 49"
+community: "POST() / importOpeningBalance()"
 location: "L66"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_49
+  - community/POST()_/_importOpeningBalance()
 ---
 
 # getAccount()
@@ -17,4 +17,4 @@ tags:
 - [[importOpeningBalance()]] - `calls` [INFERRED]
 - [[queries.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_49
+#graphify/code #graphify/INFERRED #community/POST()_/_importOpeningBalance()

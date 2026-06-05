@@ -1,14 +1,14 @@
 ---
 source_file: "lib\agents\pyme\types.ts"
 type: "code"
-community: "Module Cluster 485"
+community: "types.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_485
+  - community/types.ts
 ---
 
 # types.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_485
+#graphify/code #graphify/EXTRACTED #community/types.ts

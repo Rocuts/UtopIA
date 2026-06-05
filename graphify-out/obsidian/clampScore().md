@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\health-score.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L27"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Platform_Pillar_Config
+  - graphify/INFERRED
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # clampScore()
@@ -17,4 +17,4 @@ tags:
 - [[health-score.ts]] - `contains` [EXTRACTED]
 - [[weightedScore()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Platform_Pillar_Config
+#graphify/code #graphify/INFERRED #community/escudo-cards.ts_/_verdad-cards.ts

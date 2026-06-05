@@ -1,12 +1,12 @@
 ---
 source_file: "components\ui\Skeleton.tsx"
 type: "code"
-community: "Module Cluster 268"
+community: "Skeleton.tsx / Skeleton()"
 location: "L33"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_268
+  - community/Skeleton.tsx_/_Skeleton()
 ---
 
 # Skeleton()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[Skeleton.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_268
+#graphify/code #graphify/EXTRACTED #community/Skeleton.tsx_/_Skeleton()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\banking\services\reconciliation.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L47"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # runReconciliation()
@@ -23,4 +23,4 @@ tags:
 - [[reconciliation.ts]] - `contains` [EXTRACTED]
 - [[upsertReconciliation()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

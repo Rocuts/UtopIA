@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\adapter.ts"
 type: "code"
-community: "Module Cluster 26"
+community: "ERPService / ERPAdapter"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_26
+  - community/ERPService_/_ERPAdapter
 ---
 
 # adapter.ts
@@ -17,4 +17,4 @@ tags:
 - [[classifyError()_2]] - `contains` [EXTRACTED]
 - [[resolvePeriod()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_26
+#graphify/code #graphify/EXTRACTED #community/ERPService_/_ERPAdapter

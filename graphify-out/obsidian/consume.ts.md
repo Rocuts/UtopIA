@@ -1,12 +1,12 @@
 ---
 source_file: "lib\sse\consume.ts"
 type: "code"
-community: "Module Cluster 31"
+community: "PipelineWorkspace.tsx / runAuditInBackground()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_31
+  - community/PipelineWorkspace.tsx_/_runAuditInBackground()
 ---
 
 # consume.ts
@@ -15,4 +15,4 @@ tags:
 - [[consumeSSE()]] - `contains` [EXTRACTED]
 - [[fetchSSEWithRetry()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_31
+#graphify/code #graphify/EXTRACTED #community/PipelineWorkspace.tsx_/_runAuditInBackground()

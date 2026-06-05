@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\repair\useRepairChat.ts"
 type: "code"
-community: "Module Cluster 100"
+community: "RepairChat.tsx / RepairChat()"
 location: "L85"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_100
+  - graphify/INFERRED
+  - community/RepairChat.tsx_/_RepairChat()
 ---
 
 # useRepairChat()
@@ -15,4 +15,4 @@ tags:
 - [[RepairChat()]] - `calls` [INFERRED]
 - [[useRepairChat.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_100
+#graphify/code #graphify/INFERRED #community/RepairChat.tsx_/_RepairChat()

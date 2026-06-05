@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\specialists\base-agent.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L71"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # execute()
@@ -18,4 +18,4 @@ tags:
 - [[getToolsForAgent()]] - `calls` [INFERRED]
 - [[withRetry()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

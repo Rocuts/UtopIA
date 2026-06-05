@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L29"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getPeriod()
@@ -19,4 +19,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

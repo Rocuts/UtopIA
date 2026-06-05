@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\valuation\prompts\dcf-modeler.prompt.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L7"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - graphify/INFERRED
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # buildDcfModelerPrompt()
@@ -15,4 +15,4 @@ tags:
 - [[dcf-modeler.prompt.ts]] - `contains` [EXTRACTED]
 - [[runDcfModeler()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

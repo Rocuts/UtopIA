@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite.ts"
 type: "code"
-community: "Module Cluster 53"
+community: "pdf-elite.ts / setFill()"
 location: "L82"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_53
+  - community/pdf-elite.ts_/_setFill()
 ---
 
 # getAccountBalances()
@@ -16,4 +16,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[pdf-elite.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_53
+#graphify/code #graphify/EXTRACTED #community/pdf-elite.ts_/_setFill()

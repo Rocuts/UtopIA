@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\StepWizard.tsx"
 type: "code"
-community: "Module Cluster 301"
+community: "cn() / StepWizard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_301
+  - community/cn()_/_StepWizard.tsx
 ---
 
 # StepWizard.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[cn()_54]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_301
+#graphify/code #graphify/EXTRACTED #community/cn()_/_StepWizard.tsx

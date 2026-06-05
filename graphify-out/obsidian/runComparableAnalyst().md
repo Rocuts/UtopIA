@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\transfer-pricing\agents\comparable-analyst.ts"
 type: "code"
-community: "Module Cluster 23"
+community: "toComparableAnalysisResult() / toTPDocumentationResult()"
 location: "L29"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_23
+  - community/toComparableAnalysisResult()_/_toTPDocumentationResult()
 ---
 
 # runComparableAnalyst()
@@ -18,4 +18,4 @@ tags:
 - [[orchestrateTransferPricing()]] - `calls` [INFERRED]
 - [[toComparableAnalysisResult()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_23
+#graphify/code #graphify/INFERRED #community/toComparableAnalysisResult()_/_toTPDocumentationResult()

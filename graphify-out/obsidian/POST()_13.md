@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\close\start\route.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L29"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # POST()
@@ -18,4 +18,4 @@ tags:
 - [[route.ts_19]] - `contains` [EXTRACTED]
 - [[upsertCloseRun()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_16
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

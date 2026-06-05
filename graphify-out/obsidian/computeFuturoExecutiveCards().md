@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\futuro-cards.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L196"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # computeFuturoExecutiveCards()
@@ -21,4 +21,4 @@ tags:
 - [[puntoQuiebreStatus()]] - `calls` [EXTRACTED]
 - [[safeDelta()_1]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Platform_Pillar_Config
+#graphify/code #graphify/EXTRACTED #community/escudo-cards.ts_/_verdad-cards.ts

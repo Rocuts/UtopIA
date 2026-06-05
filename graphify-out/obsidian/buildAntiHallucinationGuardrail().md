@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\anti-hallucination.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L24"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildAntiHallucinationGuardrail()
@@ -29,4 +29,4 @@ tags:
 - [[buildTaxAuditorPrompt()]] - `calls` [INFERRED]
 - [[buildTaxOptimizerPrompt()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\futuro-cards.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L159"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # cagrStatus()
@@ -15,4 +15,4 @@ tags:
 - [[computeFuturoExecutiveCards()]] - `calls` [EXTRACTED]
 - [[futuro-cards.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Platform_Pillar_Config
+#graphify/code #graphify/EXTRACTED #community/escudo-cards.ts_/_verdad-cards.ts

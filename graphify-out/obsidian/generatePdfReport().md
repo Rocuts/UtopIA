@@ -1,12 +1,12 @@
 ---
 source_file: "lib\workflows\monthly-close\steps\generate-pdf.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L8"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # generatePdfReport()
@@ -18,4 +18,4 @@ tags:
 - [[generateElitePdf()]] - `calls` [INFERRED]
 - [[getPeriodById()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_16
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,12 +1,12 @@
 ---
 source_file: "docs/1PLUS1_ROADMAP.md"
 type: "document"
-community: "AI SDK & Model Config"
+community: "D5.3 Forensic Audit Module (Continuous) / Financial Pipeline (1+1)"
 location: "line 116"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/AI_SDK_&_Model_Config
+  - community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)
 ---
 
 # WS5 Monthly Close Workflow
@@ -17,4 +17,4 @@ tags:
 - [[WS4 NIIF Auto-Adjustments]] - `calls` [EXTRACTED]
 - [[WS6 Email Notifications + Pillar KPI Cache]] - `calls` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/AI_SDK_&_Model_Config
+#graphify/document #graphify/EXTRACTED #community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)

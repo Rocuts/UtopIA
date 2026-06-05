@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\orchestrator.ts"
 type: "code"
-community: "Core API Routes"
+community: "repository.ts / erp-query.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # orchestrator.ts
@@ -17,4 +17,4 @@ tags:
 - [[runOrSettle()]] - `contains` [EXTRACTED]
 - [[selectModules()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/EXTRACTED #community/repository.ts_/_erp-query.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\balance-curator.ts"
 type: "code"
-community: "Curator Rules Engine"
+community: "runCurator() / runR2()"
 location: "L67"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Curator_Rules_Engine
+  - community/runCurator()_/_runR2()
 ---
 
 # runCurator()
@@ -33,4 +33,4 @@ tags:
 - [[runR8()]] - `calls` [INFERRED]
 - [[runR9()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Curator_Rules_Engine
+#graphify/code #graphify/INFERRED #community/runCurator()_/_runR2()

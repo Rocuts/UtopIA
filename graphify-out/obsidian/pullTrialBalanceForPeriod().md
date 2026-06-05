@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\pipeline.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "repository.ts / erp-query.ts"
 location: "L69"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # pullTrialBalanceForPeriod()
@@ -16,4 +16,4 @@ tags:
 - [[prepareFinancialContext()]] - `calls` [INFERRED]
 - [[serializeTrialBalance()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/EXTRACTED #community/repository.ts_/_erp-query.ts

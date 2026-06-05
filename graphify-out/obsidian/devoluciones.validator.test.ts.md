@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\__tests__\devoluciones.validator.test.ts"
 type: "code"
-community: "Module Cluster 324"
+community: "devoluciones.validator.test.ts / findCheck()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_324
+  - community/devoluciones.validator.test.ts_/_findCheck()
 ---
 
 # devoluciones.validator.test.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[findCheck()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_324
+#graphify/code #graphify/EXTRACTED #community/devoluciones.validator.test.ts_/_findCheck()

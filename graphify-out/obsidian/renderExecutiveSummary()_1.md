@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\valuation\agents\valuation-synthesizer.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L136"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # renderExecutiveSummary()
@@ -15,4 +15,4 @@ tags:
 - [[toValuationSynthesisResult()]] - `calls` [EXTRACTED]
 - [[valuation-synthesizer.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

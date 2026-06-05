@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\colombia-2026-context.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L14"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildColombia2026Context()
@@ -29,4 +29,4 @@ tags:
 - [[buildTaxOptimizerPrompt()]] - `calls` [INFERRED]
 - [[colombia-2026-context.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

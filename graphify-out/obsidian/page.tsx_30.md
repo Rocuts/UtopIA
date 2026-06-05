@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\valor\inteligencia-financiera\page.tsx"
 type: "code"
-community: "Module Cluster 166"
+community: "page.tsx / toX()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_166
+  - community/page.tsx_/_toX()
 ---
 
 # page.tsx
@@ -15,4 +15,4 @@ tags:
 - [[toX()_1]] - `contains` [EXTRACTED]
 - [[toY()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_166
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_toX()

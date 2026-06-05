@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\opening-balance\parser.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L205"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # rowsToOpeningLines()
@@ -17,4 +17,4 @@ tags:
 - [[parser.ts]] - `contains` [EXTRACTED]
 - [[roundCop()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

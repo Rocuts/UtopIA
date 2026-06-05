@@ -1,12 +1,12 @@
 ---
 source_file: "components\ui\ParallaxWrapper.tsx"
 type: "code"
-community: "Module Cluster 92"
+community: "ParallaxWrapper.tsx / CountUp()"
 location: "L109"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_92
+  - community/ParallaxWrapper.tsx_/_CountUp()
 ---
 
 # CountUpNumber()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ParallaxWrapper.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_92
+#graphify/code #graphify/EXTRACTED #community/ParallaxWrapper.tsx_/_CountUp()

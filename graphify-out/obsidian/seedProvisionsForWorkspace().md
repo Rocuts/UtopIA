@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\seeds\provisions-config-co-2026.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L163"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # seedProvisionsForWorkspace()
@@ -17,4 +17,4 @@ tags:
 - [[provisions-config-co-2026.ts]] - `contains` [EXTRACTED]
 - [[upsertAccountByCode()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

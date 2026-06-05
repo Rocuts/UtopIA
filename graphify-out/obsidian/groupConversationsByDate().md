@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ChatSidebar.tsx"
 type: "code"
-community: "Module Cluster 65"
+community: "ChatSidebar.tsx / bucketForDate()"
 location: "L148"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_65
+  - community/ChatSidebar.tsx_/_bucketForDate()
 ---
 
 # groupConversationsByDate()
@@ -15,4 +15,4 @@ tags:
 - [[ChatSidebar.tsx]] - `contains` [EXTRACTED]
 - [[bucketForDate()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_65
+#graphify/code #graphify/EXTRACTED #community/ChatSidebar.tsx_/_bucketForDate()

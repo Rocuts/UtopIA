@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\utils\retry.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L51"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # withRetry()
@@ -19,4 +19,4 @@ tags:
 - [[runHtmlEditor()]] - `calls` [INFERRED]
 - [[synthesizeResponses()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

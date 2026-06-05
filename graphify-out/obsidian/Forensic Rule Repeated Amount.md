@@ -1,12 +1,12 @@
 ---
 source_file: "docs/D5_3_FORENSIC_AUDIT.md"
 type: "document"
-community: "AI SDK & Model Config"
+community: "D5.3 Forensic Audit Module (Continuous) / Financial Pipeline (1+1)"
 location: "line 53"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/AI_SDK_&_Model_Config
+  - community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)
 ---
 
 # Forensic Rule: Repeated Amount
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[D5.3 Forensic Audit Module (Continuous)]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/AI_SDK_&_Model_Config
+#graphify/document #graphify/EXTRACTED #community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)

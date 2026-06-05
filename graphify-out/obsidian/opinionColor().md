@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\AuditFindingsPage.tsx"
 type: "code"
-community: "Module Cluster 153"
+community: "AuditFindingsPage.tsx / opinionColor()"
 location: "L80"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_153
+  - community/AuditFindingsPage.tsx_/_opinionColor()
 ---
 
 # opinionColor()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AuditFindingsPage.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_153
+#graphify/code #graphify/EXTRACTED #community/AuditFindingsPage.tsx_/_opinionColor()

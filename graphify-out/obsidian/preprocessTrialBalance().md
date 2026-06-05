@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\trial-balance.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L939"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # preprocessTrialBalance()
@@ -38,4 +38,4 @@ tags:
 - [[sortPeriodsAscending()]] - `calls` [EXTRACTED]
 - [[trial-balance.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

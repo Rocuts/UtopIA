@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\AreaCard.tsx"
 type: "code"
-community: "Module Cluster 132"
+community: "AreaCard.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_132
+  - community/AreaCard.tsx_/_cn()
 ---
 
 # AreaCard.tsx
@@ -16,4 +16,4 @@ tags:
 - [[cn()_20]] - `contains` [EXTRACTED]
 - [[deterministicCurve()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_132
+#graphify/code #graphify/EXTRACTED #community/AreaCard.tsx_/_cn()

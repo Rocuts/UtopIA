@@ -1,12 +1,12 @@
 ---
 source_file: "lib\charts\use-theme.ts"
 type: "code"
-community: "Module Cluster 36"
+community: "getTokens() / useChartTheme()"
 location: "L26"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_36
+  - community/getTokens()_/_useChartTheme()
 ---
 
 # useChartTheme()
@@ -19,4 +19,4 @@ tags:
 - [[SpeedometerLiquidityGauge()]] - `calls` [INFERRED]
 - [[use-theme.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_36
+#graphify/code #graphify/INFERRED #community/getTokens()_/_useChartTheme()

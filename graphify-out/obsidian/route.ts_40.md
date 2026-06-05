@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\cron\monthly-close\route.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # route.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[GET()_16]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_16
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

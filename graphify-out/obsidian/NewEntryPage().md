@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\contabilidad\asientos\nuevo\page.tsx"
 type: "code"
-community: "Module Cluster 231"
+community: "page.tsx / NewEntryPage()"
 location: "L15"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_231
+  - community/page.tsx_/_NewEntryPage()
 ---
 
 # NewEntryPage()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[page.tsx_6]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_231
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_NewEntryPage()

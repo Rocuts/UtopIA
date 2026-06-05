@@ -1,12 +1,12 @@
 ---
 source_file: "lib\kpis\mocks.ts"
 type: "code"
-community: "Module Cluster 17"
+community: "conversation-history.ts / live.ts"
 location: "L108"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_17
+  - community/conversation-history.ts_/_live.ts
 ---
 
 # generateMockKpiSet()
@@ -19,4 +19,4 @@ tags:
 - [[freeze()]] - `calls` [EXTRACTED]
 - [[mocks.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_17
+#graphify/code #graphify/INFERRED #community/conversation-history.ts_/_live.ts

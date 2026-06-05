@@ -1,12 +1,12 @@
 ---
 source_file: "docs/wave-notes/escudo-autowire-contract.md"
 type: "document"
-community: "Module Cluster 28"
+community: "FiscalSnapshot Type (autowire contract) / NIIF Analyst Pass 1 (BalanceAndPnl)"
 location: "**AlertView (forma de salida congelada — UI la consume):**"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_28
+  - community/FiscalSnapshot_Type_(autowire_contract)_/_NIIF_Analyst_Pass_1_(BalanceAndPnl)
 ---
 
 # AlertView Interface (Escudo alerts)
@@ -16,4 +16,4 @@ tags:
 - [[POSTGET apiescudofiscal-anchor Endpoints]] - `implements` [EXTRACTED]
 - [[Wave 8 Alerta A5 (Impuesto sin provisionar) Ruling]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_28
+#graphify/document #graphify/EXTRACTED #community/FiscalSnapshot_Type_(autowire_contract)_/_NIIF_Analyst_Pass_1_(BalanceAndPnl)

@@ -1,12 +1,12 @@
 ---
 source_file: "components\sections\FAQ.tsx"
 type: "code"
-community: "Module Cluster 258"
+community: "FAQ.tsx / toggleFaq()"
 location: "L22"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_258
+  - community/FAQ.tsx_/_toggleFaq()
 ---
 
 # toggleFaq()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[FAQ.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_258
+#graphify/code #graphify/EXTRACTED #community/FAQ.tsx_/_toggleFaq()

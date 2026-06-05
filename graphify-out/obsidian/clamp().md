@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\charts\DialGauge.tsx"
 type: "code"
-community: "Module Cluster 113"
+community: "DialGauge.tsx / arcPath()"
 location: "L43"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_113
+  - community/DialGauge.tsx_/_arcPath()
 ---
 
 # clamp()
@@ -15,4 +15,4 @@ tags:
 - [[DialGauge.tsx]] - `contains` [EXTRACTED]
 - [[valueToAngle()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_113
+#graphify/code #graphify/EXTRACTED #community/DialGauge.tsx_/_arcPath()

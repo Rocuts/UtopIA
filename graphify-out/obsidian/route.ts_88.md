@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\upload\blob-token\route.ts"
 type: "code"
-community: "Module Cluster 222"
+community: "route.ts / POST()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_222
+  - community/route.ts_/_POST()
 ---
 
 # route.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[POST()_56]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_222
+#graphify/code #graphify/EXTRACTED #community/route.ts_/_POST()

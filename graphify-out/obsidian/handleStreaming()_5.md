@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\governance\route.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L95"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # handleStreaming()
@@ -15,4 +15,4 @@ tags:
 - [[POST()_35]] - `calls` [EXTRACTED]
 - [[route.ts_56]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

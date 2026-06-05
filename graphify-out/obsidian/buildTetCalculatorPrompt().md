@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\prompts\tet-calculator.prompt.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L13"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - graphify/INFERRED
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # buildTetCalculatorPrompt()
@@ -15,4 +15,4 @@ tags:
 - [[runTetCalculator()]] - `calls` [INFERRED]
 - [[tet-calculator.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

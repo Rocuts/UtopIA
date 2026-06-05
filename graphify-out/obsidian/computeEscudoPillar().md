@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\escudo.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L22"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # computeEscudoPillar()
@@ -18,4 +18,4 @@ tags:
 - [[statusToSeverity()]] - `calls` [INFERRED]
 - [[weightedScore()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Platform_Pillar_Config
+#graphify/code #graphify/INFERRED #community/escudo-cards.ts_/_verdad-cards.ts

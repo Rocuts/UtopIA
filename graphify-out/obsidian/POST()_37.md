@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\niif\route.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L71"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # POST()
@@ -20,4 +20,4 @@ tags:
 - [[route.ts_58]] - `contains` [EXTRACTED]
 - [[runNiifPhase()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

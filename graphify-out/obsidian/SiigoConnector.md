@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\siigo.ts"
 type: "code"
-community: "Module Cluster 46"
+community: "SiigoConnector / siigo.ts"
 location: "L100"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_46
+  - community/SiigoConnector_/_siigo.ts
 ---
 
 # SiigoConnector
@@ -25,4 +25,4 @@ tags:
 - [[.testConnection()_11]] - `method` [EXTRACTED]
 - [[siigo.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_46
+#graphify/code #graphify/EXTRACTED #community/SiigoConnector_/_siigo.ts

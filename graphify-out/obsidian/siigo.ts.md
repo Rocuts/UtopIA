@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\siigo.ts"
 type: "code"
-community: "Module Cluster 46"
+community: "SiigoConnector / siigo.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_46
+  - community/SiigoConnector_/_siigo.ts
 ---
 
 # siigo.ts
@@ -18,4 +18,4 @@ tags:
 - [[mapPUCType()_3]] - `contains` [EXTRACTED]
 - [[pucClassFromCode()_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_46
+#graphify/code #graphify/EXTRACTED #community/SiigoConnector_/_siigo.ts

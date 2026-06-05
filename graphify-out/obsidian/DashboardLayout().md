@@ -1,12 +1,12 @@
 ---
 source_file: "app\dashboard\layout.tsx"
 type: "code"
-community: "Module Cluster 223"
+community: "layout.tsx / DashboardLayout()"
 location: "L14"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_223
+  - community/layout.tsx_/_DashboardLayout()
 ---
 
 # DashboardLayout()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[layout.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_223
+#graphify/code #graphify/EXTRACTED #community/layout.tsx_/_DashboardLayout()

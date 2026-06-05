@@ -1,14 +1,14 @@
 ---
 source_file: "lib\notifications\index.ts"
 type: "code"
-community: "Module Cluster 524"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_524
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_524
+#graphify/code #graphify/EXTRACTED #community/index.ts

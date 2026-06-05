@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\monte-carlo.ts"
 type: "code"
-community: "Module Cluster 119"
+community: "monte-carlo.ts / runMonteCarlo()"
 location: "L104"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_119
+  - community/monte-carlo.ts_/_runMonteCarlo()
 ---
 
 # runMonteCarlo()
@@ -17,4 +17,4 @@ tags:
 - [[mulberry32()]] - `calls` [EXTRACTED]
 - [[normalRandom()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_119
+#graphify/code #graphify/EXTRACTED #community/monte-carlo.ts_/_runMonteCarlo()

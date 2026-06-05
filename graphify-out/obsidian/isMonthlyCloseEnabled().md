@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\closing\types.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L155"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # isMonthlyCloseEnabled()
@@ -16,4 +16,4 @@ tags:
 - [[POST()_13]] - `calls` [INFERRED]
 - [[types.ts_9]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_16
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

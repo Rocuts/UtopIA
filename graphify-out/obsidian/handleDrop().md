@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\contabilidad\ImportStatementDialog.tsx"
 type: "code"
-community: "Module Cluster 62"
+community: "ImportStatementDialog.tsx / handleSubmit()"
 location: "L139"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_62
+  - community/ImportStatementDialog.tsx_/_handleSubmit()
 ---
 
 # handleDrop()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ImportStatementDialog.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_62
+#graphify/code #graphify/EXTRACTED #community/ImportStatementDialog.tsx_/_handleSubmit()

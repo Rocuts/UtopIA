@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\__tests__\route-integration.test.ts"
 type: "code"
-community: "Module Cluster 207"
+community: "route-integration.test.ts / bodyStartsWithPdfMagic()"
 location: "L79"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_207
+  - community/route-integration.test.ts_/_bodyStartsWithPdfMagic()
 ---
 
 # bodyStartsWithPdfMagic()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[route-integration.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_207
+#graphify/code #graphify/EXTRACTED #community/route-integration.test.ts_/_bodyStartsWithPdfMagic()

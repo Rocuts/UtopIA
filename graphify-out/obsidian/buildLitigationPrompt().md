@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\prompts\litigation.prompt.ts"
 type: "code"
-community: "Module Cluster 108"
+community: "buildLitigationPrompt() / LitigationDefenseAgent"
 location: "L13"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_108
+  - community/buildLitigationPrompt()_/_LitigationDefenseAgent
 ---
 
 # buildLitigationPrompt()
@@ -15,4 +15,4 @@ tags:
 - [[.buildSystemPrompt()_2]] - `calls` [INFERRED]
 - [[litigation.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_108
+#graphify/code #graphify/EXTRACTED #community/buildLitigationPrompt()_/_LitigationDefenseAgent

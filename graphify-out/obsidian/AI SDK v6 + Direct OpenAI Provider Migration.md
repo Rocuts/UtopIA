@@ -1,11 +1,11 @@
 ---
 source_file: "docs/AI_SDK_MIGRATION.md"
 type: "document"
-community: "AI SDK & Model Config"
+community: "D5.3 Forensic Audit Module (Continuous) / Financial Pipeline (1+1)"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/AI_SDK_&_Model_Config
+  - community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)
 ---
 
 # AI SDK v6 + Direct OpenAI Provider Migration
@@ -17,4 +17,4 @@ tags:
 - [[UtopIA Architecture]] - `references` [INFERRED]
 - [[Zod Strict Mode Contract (2026)]] - `references` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/AI_SDK_&_Model_Config
+#graphify/document #graphify/EXTRACTED #community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)

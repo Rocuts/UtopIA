@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\tokens.ts"
 type: "code"
-community: "Module Cluster 64"
+community: "RecommendationsPage.tsx / badgeBg()"
 location: "L201"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_64
+  - community/RecommendationsPage.tsx_/_badgeBg()
 ---
 
 # lighten()
@@ -16,4 +16,4 @@ tags:
 - [[circleFill()]] - `calls` [INFERRED]
 - [[tokens.ts_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_64
+#graphify/code #graphify/INFERRED #community/RecommendationsPage.tsx_/_badgeBg()

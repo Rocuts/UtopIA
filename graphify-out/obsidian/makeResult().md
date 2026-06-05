@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\__tests__\consolidated-report-v21.test.ts"
 type: "code"
-community: "Module Cluster 194"
+community: "consolidated-report-v21.test.ts / makeFinding()"
 location: "L36"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_194
+  - community/consolidated-report-v21.test.ts_/_makeFinding()
 ---
 
 # makeResult()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[consolidated-report-v21.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_194
+#graphify/code #graphify/EXTRACTED #community/consolidated-report-v21.test.ts_/_makeFinding()

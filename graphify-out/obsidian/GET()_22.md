@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\notifications\log\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L13"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # GET()
@@ -16,4 +16,4 @@ tags:
 - [[getRecentLog()]] - `calls` [INFERRED]
 - [[route.ts_64]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

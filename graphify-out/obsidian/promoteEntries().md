@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\promote\index.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "promoteEntries() / entry-builder.ts"
 location: "L49"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/promoteEntries()_/_entry-builder.ts
 ---
 
 # promoteEntries()
@@ -24,4 +24,4 @@ tags:
 - [[mapCategoryToAccount()]] - `calls` [INFERRED]
 - [[resolveCajaAccount()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/promoteEntries()_/_entry-builder.ts

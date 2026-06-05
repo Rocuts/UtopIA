@@ -1,14 +1,14 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-anchor\types.ts"
 type: "code"
-community: "Module Cluster 455"
+community: "types.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_455
+  - community/types.ts
 ---
 
 # types.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_455
+#graphify/code #graphify/EXTRACTED #community/types.ts

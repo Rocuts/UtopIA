@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\verdad-cards.test.ts"
 type: "code"
-community: "Module Cluster 76"
+community: "verdad-cards.test.ts / makeSnapshot()"
 location: "L32"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_76
+  - community/verdad-cards.test.ts_/_makeSnapshot()
 ---
 
 # makeControlTotals()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[verdad-cards.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_76
+#graphify/code #graphify/EXTRACTED #community/verdad-cards.test.ts_/_makeSnapshot()

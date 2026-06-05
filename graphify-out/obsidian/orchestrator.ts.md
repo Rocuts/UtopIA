@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\orchestrator.ts"
 type: "code"
-community: "Module Cluster 25"
+community: "dispatch() / GET()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_25
+  - community/dispatch()_/_GET()
 ---
 
 # orchestrator.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[runForensicScan()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_25
+#graphify/code #graphify/EXTRACTED #community/dispatch()_/_GET()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\niif-analyst.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L314"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildSharedContext()
@@ -23,4 +23,4 @@ tags:
 - [[buildResilienceSection0()]] - `calls` [INFERRED]
 - [[niif-analyst.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

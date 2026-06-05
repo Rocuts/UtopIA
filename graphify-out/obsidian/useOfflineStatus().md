@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pyme\cockpit\hooks\useOfflineStatus.ts"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L23"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # useOfflineStatus()
@@ -15,4 +15,4 @@ tags:
 - [[PymeCockpitInner()]] - `calls` [INFERRED]
 - [[useOfflineStatus.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/EXTRACTED #community/useLanguage()_/_cop.ts

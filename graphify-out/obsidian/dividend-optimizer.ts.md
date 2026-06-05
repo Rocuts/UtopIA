@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\agents\dividend-optimizer.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # dividend-optimizer.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[runDividendOptimizer()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

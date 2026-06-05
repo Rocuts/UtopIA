@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\escudo\cards\RiskScoreCard.tsx"
 type: "code"
-community: "Module Cluster 281"
+community: "cn() / RiskScoreCard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_281
+  - community/cn()_/_RiskScoreCard.tsx
 ---
 
 # RiskScoreCard.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[cn()_36]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_281
+#graphify/code #graphify/EXTRACTED #community/cn()_/_RiskScoreCard.tsx

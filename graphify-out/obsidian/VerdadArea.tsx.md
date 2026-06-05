@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\areas\VerdadArea.tsx"
 type: "code"
-community: "Module Cluster 276"
+community: "scoreAccent() / VerdadArea.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_276
+  - community/scoreAccent()_/_VerdadArea.tsx
 ---
 
 # VerdadArea.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[scoreAccent()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_276
+#graphify/code #graphify/EXTRACTED #community/scoreAccent()_/_VerdadArea.tsx

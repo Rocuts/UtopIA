@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\banking\parsers\index.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L30"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # detectParser()
@@ -15,4 +15,4 @@ tags:
 - [[importStatement()]] - `calls` [INFERRED]
 - [[index.ts_7]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

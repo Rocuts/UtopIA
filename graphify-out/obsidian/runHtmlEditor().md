@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\agents\html-editor.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L68"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # runHtmlEditor()
@@ -19,4 +19,4 @@ tags:
 - [[lightweightChecklist()]] - `calls` [EXTRACTED]
 - [[withRetry()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

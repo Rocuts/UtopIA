@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\valuation\prompts\valuation-synthesizer.prompt.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L7"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - graphify/INFERRED
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # buildValuationSynthesizerPrompt()
@@ -15,4 +15,4 @@ tags:
 - [[runValuationSynthesizer()]] - `calls` [INFERRED]
 - [[valuation-synthesizer.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

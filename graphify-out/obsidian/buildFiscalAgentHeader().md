@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\prompts\fiscal-agent.prompt.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L35"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # buildFiscalAgentHeader()
@@ -23,4 +23,4 @@ tags:
 - [[buildSystem()]] - `calls` [INFERRED]
 - [[fiscal-agent.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/risk-score-calculator.ts_/_computeRiskScore()

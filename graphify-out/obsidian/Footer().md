@@ -1,12 +1,12 @@
 ---
 source_file: "components\layout\Footer.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L7"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # Footer()
@@ -15,4 +15,4 @@ tags:
 - [[Footer.tsx]] - `contains` [EXTRACTED]
 - [[useLanguage()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/EXTRACTED #community/useLanguage()_/_cop.ts

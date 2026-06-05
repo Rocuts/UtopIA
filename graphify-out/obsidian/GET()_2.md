@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\adjustments\deferred-assets\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L19"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # GET()
@@ -20,4 +20,4 @@ tags:
 - [[ok()_2]] - `calls` [INFERRED]
 - [[route.ts_5]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

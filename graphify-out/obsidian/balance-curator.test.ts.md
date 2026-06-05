@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\__tests__\balance-curator.test.ts"
 type: "code"
-community: "Module Cluster 120"
+community: "balance-curator.test.ts / makeSnapshot()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_120
+  - community/balance-curator.test.ts_/_makeSnapshot()
 ---
 
 # balance-curator.test.ts
@@ -17,4 +17,4 @@ tags:
 - [[makeSnapshot()_9]] - `contains` [EXTRACTED]
 - [[makeValidation()_9]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_120
+#graphify/code #graphify/EXTRACTED #community/balance-curator.test.ts_/_makeSnapshot()

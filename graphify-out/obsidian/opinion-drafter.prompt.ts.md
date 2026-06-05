@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\fiscal-opinion\prompts\opinion-drafter.prompt.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # opinion-drafter.prompt.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[buildOpinionDrafterPrompt()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/EXTRACTED #community/compose.ts_/_composeEditorialReport()

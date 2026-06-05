@@ -1,14 +1,14 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\normative\catalog\leyes-reformas.ts"
 type: "code"
-community: "Module Cluster 464"
+community: "leyes-reformas.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_464
+  - community/leyes-reformas.ts
 ---
 
 # leyes-reformas.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_464
+#graphify/code #graphify/EXTRACTED #community/leyes-reformas.ts

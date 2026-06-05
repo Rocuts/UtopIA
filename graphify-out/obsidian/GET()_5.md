@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\erp\status\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L4"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # GET()
@@ -19,4 +19,4 @@ tags:
 - [[route.ts_17]] - `contains` [EXTRACTED]
 - [[route.ts_44]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

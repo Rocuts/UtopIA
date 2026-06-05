@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\NumberedSectionHeader.tsx"
 type: "code"
-community: "Module Cluster 514"
+community: "NumberedSectionHeader.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_514
+  - community/NumberedSectionHeader.tsx
 ---
 
 # NumberedSectionHeader.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_514
+#graphify/code #graphify/EXTRACTED #community/NumberedSectionHeader.tsx

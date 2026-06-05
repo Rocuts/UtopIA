@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # ccv-calculator.ts
@@ -19,4 +19,4 @@ tags:
 - [[clasificarEficienciaFiscal()]] - `contains` [EXTRACTED]
 - [[precomputeCcv()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/risk-score-calculator.ts_/_computeRiskScore()

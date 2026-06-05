@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\Badge.tsx"
 type: "code"
-community: "Module Cluster 296"
+community: "DSBadge() / Badge.tsx"
 location: "L20"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_296
+  - community/DSBadge()_/_Badge.tsx
 ---
 
 # DSBadge()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[Badge.tsx_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_296
+#graphify/code #graphify/EXTRACTED #community/DSBadge()_/_Badge.tsx

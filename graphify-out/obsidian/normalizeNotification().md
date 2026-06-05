@@ -1,12 +1,12 @@
 ---
 source_file: "lib\observability\activity-feed.ts"
 type: "code"
-community: "Module Cluster 61"
+community: "queryActivityFeed() / activity-feed.ts"
 location: "L133"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_61
+  - community/queryActivityFeed()_/_activity-feed.ts
 ---
 
 # normalizeNotification()
@@ -15,4 +15,4 @@ tags:
 - [[activity-feed.ts]] - `contains` [EXTRACTED]
 - [[queryActivityFeed()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_61
+#graphify/code #graphify/EXTRACTED #community/queryActivityFeed()_/_activity-feed.ts

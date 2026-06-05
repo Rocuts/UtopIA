@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\depreciation\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # repository.ts
@@ -15,4 +15,4 @@ tags:
 - [[listActiveFixedAssets()]] - `contains` [EXTRACTED]
 - [[updateAfterDepreciation()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

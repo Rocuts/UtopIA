@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\base-pipeline.ts"
 type: "code"
-community: "Module Cluster 59"
+community: "BasePipeline / .emit()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_59
+  - community/BasePipeline_/_.emit()
 ---
 
 # base-pipeline.ts
@@ -17,4 +17,4 @@ tags:
 - [[errorMessage()]] - `contains` [EXTRACTED]
 - [[sleep()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_59
+#graphify/code #graphify/EXTRACTED #community/BasePipeline_/_.emit()

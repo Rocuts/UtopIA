@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\runtime.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L53"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # callFiscalAgent()
@@ -23,4 +23,4 @@ tags:
 - [[runSynthesizer()]] - `calls` [INFERRED]
 - [[runtime.ts_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/risk-score-calculator.ts_/_computeRiskScore()

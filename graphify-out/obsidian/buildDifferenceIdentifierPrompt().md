@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-reconciliation\prompts\difference-identifier.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L13"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildDifferenceIdentifierPrompt()
@@ -18,4 +18,4 @@ tags:
 - [[difference-identifier.prompt.ts]] - `contains` [EXTRACTED]
 - [[runDifferenceIdentifier()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

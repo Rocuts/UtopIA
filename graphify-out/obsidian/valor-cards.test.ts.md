@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\valor-cards.test.ts"
 type: "code"
-community: "Module Cluster 88"
+community: "valor-cards.test.ts / makeSnapshot()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_88
+  - community/valor-cards.test.ts_/_makeSnapshot()
 ---
 
 # valor-cards.test.ts
@@ -18,4 +18,4 @@ tags:
 - [[makeSnapshot()_7]] - `contains` [EXTRACTED]
 - [[makeValidation()_7]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_88
+#graphify/code #graphify/EXTRACTED #community/valor-cards.test.ts_/_makeSnapshot()

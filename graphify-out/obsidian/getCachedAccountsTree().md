@@ -1,12 +1,12 @@
 ---
 source_file: "lib\cache\accounting-cache.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L177"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - graphify/INFERRED
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getCachedAccountsTree()
@@ -15,4 +15,4 @@ tags:
 - [[accounting-cache.ts]] - `contains` [EXTRACTED]
 - [[buildTree()_1]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

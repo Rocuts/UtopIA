@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\areas\FuturoArea.tsx"
 type: "code"
-community: "Module Cluster 17"
+community: "conversation-history.ts / live.ts"
 location: "L271"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_17
+  - community/conversation-history.ts_/_live.ts
 ---
 
 # buildMockRoi()
@@ -15,4 +15,4 @@ tags:
 - [[FuturoArea.tsx]] - `contains` [EXTRACTED]
 - [[calculateRoiProbabilistic()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_17
+#graphify/code #graphify/EXTRACTED #community/conversation-history.ts_/_live.ts

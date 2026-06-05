@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-planning\prompts\compliance-validator.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L14"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildComplianceValidatorPrompt()
@@ -17,4 +17,4 @@ tags:
 - [[compliance-validator.prompt.ts]] - `contains` [EXTRACTED]
 - [[runComplianceValidator()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

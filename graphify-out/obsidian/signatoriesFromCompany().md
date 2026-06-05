@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\fiscal-opinion\signatories.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L224"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # signatoriesFromCompany()
@@ -17,4 +17,4 @@ tags:
 - [[buildSignatureBlock()]] - `calls` [INFERRED]
 - [[signatories.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/INFERRED #community/compose.ts_/_composeEditorialReport()

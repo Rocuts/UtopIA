@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\__tests__\primitives.test.tsx"
 type: "code"
-community: "Module Cluster 206"
+community: "primitives.test.tsx / expectValidPdf()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_206
+  - community/primitives.test.tsx_/_expectValidPdf()
 ---
 
 # primitives.test.tsx
@@ -15,4 +15,4 @@ tags:
 - [[expectValidPdf()]] - `contains` [EXTRACTED]
 - [[renderPrimitive()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_206
+#graphify/code #graphify/EXTRACTED #community/primitives.test.tsx_/_expectValidPdf()

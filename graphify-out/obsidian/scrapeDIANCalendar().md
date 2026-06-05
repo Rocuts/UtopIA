@@ -1,12 +1,12 @@
 ---
 source_file: "lib\scrapers\dian-scraper.ts"
 type: "code"
-community: "Module Cluster 35"
+community: "dian-scraper.ts / scrapeDIANCalendar()"
 location: "L440"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_35
+  - community/dian-scraper.ts_/_scrapeDIANCalendar()
 ---
 
 # scrapeDIANCalendar()
@@ -29,4 +29,4 @@ tags:
 - [[fetchCalendarPDF()]] - `calls` [EXTRACTED]
 - [[fetchComunicadoHTML()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_35
+#graphify/code #graphify/EXTRACTED #community/dian-scraper.ts_/_scrapeDIANCalendar()

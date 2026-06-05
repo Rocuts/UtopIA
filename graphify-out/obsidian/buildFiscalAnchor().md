@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-anchor\index.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "buildFiscalAnchor() / dian-calendar.ts"
 location: "L39"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Pyme_&_Workspace_Routes
+  - community/buildFiscalAnchor()_/_dian-calendar.ts
 ---
 
 # buildFiscalAnchor()
@@ -24,4 +24,4 @@ tags:
 - [[orchestrateEscudoSurvival()]] - `calls` [INFERRED]
 - [[orchestrateFiscalAgent()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/INFERRED #community/buildFiscalAnchor()_/_dian-calendar.ts

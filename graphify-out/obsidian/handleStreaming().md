@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\business-valuation\route.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L77"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # handleStreaming()
@@ -15,4 +15,4 @@ tags:
 - [[POST()_23]] - `calls` [EXTRACTED]
 - [[route.ts_33]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

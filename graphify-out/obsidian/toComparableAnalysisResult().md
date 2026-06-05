@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\transfer-pricing\agents\comparable-analyst.ts"
 type: "code"
-community: "Module Cluster 23"
+community: "toComparableAnalysisResult() / toTPDocumentationResult()"
 location: "L163"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_23
+  - community/toComparableAnalysisResult()_/_toTPDocumentationResult()
 ---
 
 # toComparableAnalysisResult()
@@ -21,4 +21,4 @@ tags:
 - [[renderSelectedComparables()]] - `calls` [EXTRACTED]
 - [[runComparableAnalyst()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_23
+#graphify/code #graphify/EXTRACTED #community/toComparableAnalysisResult()_/_toTPDocumentationResult()

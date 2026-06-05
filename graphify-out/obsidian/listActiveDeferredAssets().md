@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\amortization\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L15"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # listActiveDeferredAssets()
@@ -15,4 +15,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

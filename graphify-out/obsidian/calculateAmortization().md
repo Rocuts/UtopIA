@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\amortization\calculator.ts"
 type: "code"
-community: "Module Cluster 68"
+community: "calculator.ts / calculateAmortization()"
 location: "L108"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_68
+  - community/calculator.ts_/_calculateAmortization()
 ---
 
 # calculateAmortization()
@@ -20,4 +20,4 @@ tags:
 - [[minBigInt()]] - `calls` [EXTRACTED]
 - [[toCentavos()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_68
+#graphify/code #graphify/EXTRACTED #community/calculator.ts_/_calculateAmortization()

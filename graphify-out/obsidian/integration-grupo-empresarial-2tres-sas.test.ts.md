@@ -1,12 +1,12 @@
 ---
 source_file: "__tests__\integration-grupo-empresarial-2tres-sas.test.ts"
 type: "code"
-community: "Module Cluster 216"
+community: "loadFixtureAsCSV() / integration-grupo-empresarial-2tres-sas.test.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_216
+  - community/loadFixtureAsCSV()_/_integration-grupo-empresarial-2tres-sas.test.ts
 ---
 
 # integration-grupo-empresarial-2tres-sas.test.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[loadFixtureAsCSV()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_216
+#graphify/code #graphify/EXTRACTED #community/loadFixtureAsCSV()_/_integration-grupo-empresarial-2tres-sas.test.ts

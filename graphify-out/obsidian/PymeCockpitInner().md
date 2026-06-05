@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pyme\cockpit\PymeCockpit.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L65"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # PymeCockpitInner()
@@ -18,4 +18,4 @@ tags:
 - [[useLanguage()]] - `calls` [INFERRED]
 - [[useOfflineStatus()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_UI_Components
+#graphify/code #graphify/INFERRED #community/useLanguage()_/_cop.ts

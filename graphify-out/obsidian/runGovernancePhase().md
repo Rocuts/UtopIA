@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\orchestrator.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L1501"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - graphify/INFERRED
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # runGovernancePhase()
@@ -17,4 +17,4 @@ tags:
 - [[orchestrator.ts_6]] - `contains` [EXTRACTED]
 - [[runGovernanceSpecialist()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

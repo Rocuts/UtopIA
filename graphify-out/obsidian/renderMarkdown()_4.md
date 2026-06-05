@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\quality\agent.ts"
 type: "code"
-community: "Module Cluster 27"
+community: "v21-mapping.ts / agent.ts"
 location: "L185"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_27
+  - community/v21-mapping.ts_/_agent.ts
 ---
 
 # renderMarkdown()
@@ -21,4 +21,4 @@ tags:
 - [[statusMarker()]] - `calls` [INFERRED]
 - [[toLegacyQualityAssessment()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_27
+#graphify/code #graphify/EXTRACTED #community/v21-mapping.ts_/_agent.ts

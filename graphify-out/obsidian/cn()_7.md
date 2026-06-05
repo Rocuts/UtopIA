@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\verdad\conciliacion-fiscal\page.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L305"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # cn()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[page.tsx_33]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/EXTRACTED #community/useLanguage()_/_cop.ts

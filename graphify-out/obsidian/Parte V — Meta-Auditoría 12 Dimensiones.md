@@ -1,12 +1,12 @@
 ---
 source_file: "docs/spec/financial-pipeline-v2.1.md"
 type: "document"
-community: "Module Cluster 21"
+community: "PUC Colombiano Balance Reading (v2.0) / Smoke Test Runner (1+1 Élite)"
 location: "# PARTE V: META-AUDITORÍA DE CALIDAD"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_21
+  - community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_Élite)
 ---
 
 # Parte V — Meta-Auditoría 12 Dimensiones
@@ -19,4 +19,4 @@ tags:
 - [[Quality v2.1 Mapping (14→12 dimensions)]] - `implements` [EXTRACTED]
 - [[Sello de Calidad 1+1 (Score Global v2.1)]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_21
+#graphify/document #graphify/EXTRACTED #community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_Élite)

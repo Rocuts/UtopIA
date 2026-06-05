@@ -1,12 +1,12 @@
 ---
 source_file: "lib\workflows\monthly-close\steps\closing-entry.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # closing-entry.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[generateClosingEntry()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_16
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

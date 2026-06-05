@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\__tests__\conciliacion.validator.test.ts"
 type: "code"
-community: "Module Cluster 322"
+community: "conciliacion.validator.test.ts / findCheck()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_322
+  - community/conciliacion.validator.test.ts_/_findCheck()
 ---
 
 # conciliacion.validator.test.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[findCheck()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_322
+#graphify/code #graphify/EXTRACTED #community/conciliacion.validator.test.ts_/_findCheck()

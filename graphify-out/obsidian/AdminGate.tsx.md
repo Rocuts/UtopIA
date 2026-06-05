@@ -1,12 +1,12 @@
 ---
 source_file: "components\admin\AdminGate.tsx"
 type: "code"
-community: "Module Cluster 255"
+community: "handleSubmit() / AdminGate.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_255
+  - community/handleSubmit()_/_AdminGate.tsx
 ---
 
 # AdminGate.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[handleSubmit()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_255
+#graphify/code #graphify/EXTRACTED #community/handleSubmit()_/_AdminGate.tsx

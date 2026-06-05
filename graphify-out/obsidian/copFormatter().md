@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\DataTable.tsx"
 type: "code"
-community: "Module Cluster 186"
+community: "DataTable.tsx / copFormatter()"
 location: "L23"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_186
+  - community/DataTable.tsx_/_copFormatter()
 ---
 
 # copFormatter()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[DataTable.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_186
+#graphify/code #graphify/EXTRACTED #community/DataTable.tsx_/_copFormatter()

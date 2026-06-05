@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\alegra.ts"
 type: "code"
-community: "Module Cluster 43"
+community: "AlegraConnector / alegra.ts"
 location: "L359"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_43
+  - community/AlegraConnector_/_alegra.ts
 ---
 
 # accountLevel()
@@ -15,4 +15,4 @@ tags:
 - [[.mapAccount()]] - `calls` [EXTRACTED]
 - [[alegra.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_43
+#graphify/code #graphify/EXTRACTED #community/AlegraConnector_/_alegra.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\EditorialTitle.tsx"
 type: "code"
-community: "Module Cluster 210"
+community: "EditorialTitle.tsx / EditorialTitle()"
 location: "L48"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_210
+  - community/EditorialTitle.tsx_/_EditorialTitle()
 ---
 
 # sizeFor()
@@ -15,4 +15,4 @@ tags:
 - [[EditorialTitle()]] - `calls` [EXTRACTED]
 - [[EditorialTitle.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_210
+#graphify/code #graphify/EXTRACTED #community/EditorialTitle.tsx_/_EditorialTitle()

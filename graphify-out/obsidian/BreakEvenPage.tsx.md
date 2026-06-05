@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\BreakEvenPage.tsx"
 type: "code"
-community: "Module Cluster 503"
+community: "BreakEvenPage.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_503
+  - community/BreakEvenPage.tsx
 ---
 
 # BreakEvenPage.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_503
+#graphify/code #graphify/EXTRACTED #community/BreakEvenPage.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\synthesizer.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L21"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # synthesizeResponses()
@@ -17,4 +17,4 @@ tags:
 - [[synthesizer.ts]] - `contains` [EXTRACTED]
 - [[withRetry()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

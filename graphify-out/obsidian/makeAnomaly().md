@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\__tests__\orchestrator.test.ts"
 type: "code"
-community: "Module Cluster 317"
+community: "orchestrator.test.ts / makeAnomaly()"
 location: "L21"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_317
+  - community/orchestrator.test.ts_/_makeAnomaly()
 ---
 
 # makeAnomaly()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[orchestrator.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_317
+#graphify/code #graphify/EXTRACTED #community/orchestrator.test.ts_/_makeAnomaly()

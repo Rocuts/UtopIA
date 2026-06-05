@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\dynamics.ts"
 type: "code"
-community: "Module Cluster 41"
+community: "DynamicsConnector / .fetchAllPages()"
 location: "L91"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_41
+  - community/DynamicsConnector_/_.fetchAllPages()
 ---
 
 # RateLimiter
@@ -16,4 +16,4 @@ tags:
 - [[.waitForSlot()]] - `method` [EXTRACTED]
 - [[dynamics.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_41
+#graphify/code #graphify/EXTRACTED #community/DynamicsConnector_/_.fetchAllPages()

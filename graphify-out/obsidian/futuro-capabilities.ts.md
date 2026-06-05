@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\areas\data\futuro-capabilities.ts"
 type: "code"
-community: "Module Cluster 173"
+community: "futuro-capabilities.ts / getFuturoSources()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_173
+  - community/futuro-capabilities.ts_/_getFuturoSources()
 ---
 
 # futuro-capabilities.ts
@@ -15,4 +15,4 @@ tags:
 - [[getFuturoSources()]] - `contains` [EXTRACTED]
 - [[getFuturoZones()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_173
+#graphify/code #graphify/EXTRACTED #community/futuro-capabilities.ts_/_getFuturoSources()

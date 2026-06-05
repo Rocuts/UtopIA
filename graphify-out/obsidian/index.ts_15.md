@@ -1,14 +1,14 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\index.ts"
 type: "code"
-community: "Module Cluster 448"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_448
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_448
+#graphify/code #graphify/EXTRACTED #community/index.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\escudo-cards.test.ts"
 type: "code"
-community: "Module Cluster 116"
+community: "escudo-cards.test.ts / makeSnapshot()"
 location: "L52"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_116
+  - community/escudo-cards.test.ts_/_makeSnapshot()
 ---
 
 # makeClass()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[escudo-cards.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_116
+#graphify/code #graphify/EXTRACTED #community/escudo-cards.test.ts_/_makeSnapshot()

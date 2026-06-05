@@ -1,12 +1,12 @@
 ---
 source_file: "components\settings\sections\DensitySection.tsx"
 type: "code"
-community: "Module Cluster 260"
+community: "DensitySection.tsx / readDensity()"
 location: "L22"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_260
+  - community/DensitySection.tsx_/_readDensity()
 ---
 
 # readDensity()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[DensitySection.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_260
+#graphify/code #graphify/EXTRACTED #community/DensitySection.tsx_/_readDensity()

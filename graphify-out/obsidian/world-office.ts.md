@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\world-office.ts"
 type: "code"
-community: "Module Cluster 39"
+community: "WorldOfficeConnector / world-office.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_39
+  - community/WorldOfficeConnector_/_world-office.ts
 ---
 
 # world-office.ts
@@ -18,4 +18,4 @@ tags:
 - [[mapPUCType()_4]] - `contains` [EXTRACTED]
 - [[pucClassFromCode()_4]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_39
+#graphify/code #graphify/EXTRACTED #community/WorldOfficeConnector_/_world-office.ts

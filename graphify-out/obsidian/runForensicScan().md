@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\orchestrator.ts"
 type: "code"
-community: "Module Cluster 25"
+community: "dispatch() / GET()"
 location: "L18"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_25
+  - community/dispatch()_/_GET()
 ---
 
 # runForensicScan()
@@ -17,4 +17,4 @@ tags:
 - [[countBySeverity()]] - `calls` [INFERRED]
 - [[orchestrator.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_25
+#graphify/code #graphify/INFERRED #community/dispatch()_/_GET()

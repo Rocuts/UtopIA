@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\areas\ValorArea.tsx"
 type: "code"
-community: "Module Cluster 81"
+community: "ValorArea.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_81
+  - community/ValorArea.tsx_/_cn()
 ---
 
 # ValorArea.tsx
@@ -18,4 +18,4 @@ tags:
 - [[toX()_3]] - `contains` [EXTRACTED]
 - [[toY()_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_81
+#graphify/code #graphify/EXTRACTED #community/ValorArea.tsx_/_cn()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\orchestrator.ts"
 type: "code"
-community: "Module Cluster 18"
+community: "processUpload() / POST()"
 location: "L51"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_18
+  - community/processUpload()_/_POST()
 ---
 
 # processUpload()
@@ -20,4 +20,4 @@ tags:
 - [[orchestrator.ts_12]] - `contains` [EXTRACTED]
 - [[preprocessImage()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_18
+#graphify/code #graphify/INFERRED #community/processUpload()_/_POST()

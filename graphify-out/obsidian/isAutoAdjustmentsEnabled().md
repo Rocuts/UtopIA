@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\types.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L142"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # isAutoAdjustmentsEnabled()
@@ -28,4 +28,4 @@ tags:
 - [[POST()_9]] - `calls` [INFERRED]
 - [[types.ts_6]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

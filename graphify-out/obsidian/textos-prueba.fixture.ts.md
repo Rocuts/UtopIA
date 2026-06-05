@@ -1,14 +1,14 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\normative\__fixtures__\textos-prueba.fixture.ts"
 type: "code"
-community: "Module Cluster 456"
+community: "textos-prueba.fixture.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_456
+  - community/textos-prueba.fixture.ts
 ---
 
 # textos-prueba.fixture.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_456
+#graphify/code #graphify/EXTRACTED #community/textos-prueba.fixture.ts

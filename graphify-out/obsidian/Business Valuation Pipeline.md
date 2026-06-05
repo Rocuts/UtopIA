@@ -1,14 +1,14 @@
 ---
 source_file: "docs/ARCHITECTURE.md"
 type: "document"
-community: "Module Cluster 541"
+community: "Business Valuation Pipeline"
 location: "line 52"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_541
+  - community/Business_Valuation_Pipeline
 ---
 
 # Business Valuation Pipeline
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_541
+#graphify/document #graphify/EXTRACTED #community/Business_Valuation_Pipeline

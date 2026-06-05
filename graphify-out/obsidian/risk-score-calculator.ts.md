@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\tools\risk-score-calculator.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Pyme_&_Workspace_Routes
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # risk-score-calculator.ts
@@ -24,4 +24,4 @@ tags:
 - [[pctRatioCents()]] - `contains` [EXTRACTED]
 - [[saldoAFavorCents()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/EXTRACTED #community/risk-score-calculator.ts_/_computeRiskScore()

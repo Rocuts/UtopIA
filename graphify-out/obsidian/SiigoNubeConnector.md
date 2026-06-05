@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\siigo-nube.ts"
 type: "code"
-community: "Module Cluster 45"
+community: "SiigoNubeConnector / .fetchAllTrialBalanceRows()"
 location: "L103"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_45
+  - community/SiigoNubeConnector_/_.fetchAllTrialBalanceRows()
 ---
 
 # SiigoNubeConnector
@@ -25,4 +25,4 @@ tags:
 - [[.tokenCacheKey()_2]] - `method` [EXTRACTED]
 - [[siigo-nube.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_45
+#graphify/code #graphify/EXTRACTED #community/SiigoNubeConnector_/_.fetchAllTrialBalanceRows()

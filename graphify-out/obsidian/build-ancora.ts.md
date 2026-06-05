@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\ancora\build-ancora.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "build-ancora.ts / buildNiifAncora()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/build-ancora.ts_/_buildNiifAncora()
 ---
 
 # build-ancora.ts
@@ -23,4 +23,4 @@ tags:
 - [[toCentsString()]] - `contains` [EXTRACTED]
 - [[totalAbsClass()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/build-ancora.ts_/_buildNiifAncora()

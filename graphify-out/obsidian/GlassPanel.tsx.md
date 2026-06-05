@@ -1,14 +1,14 @@
 ---
 source_file: "components\ui\GlassPanel.tsx"
 type: "code"
-community: "Module Cluster 373"
+community: "GlassPanel.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_373
+  - community/GlassPanel.tsx
 ---
 
 # GlassPanel.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_373
+#graphify/code #graphify/EXTRACTED #community/GlassPanel.tsx

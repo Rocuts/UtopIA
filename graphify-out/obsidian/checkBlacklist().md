@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\normative\validators\blacklist.validator.ts"
 type: "code"
-community: "Escudo Survival Validators"
+community: "helpers.ts / fiscal-anchor-validators.ts"
 location: "L71"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Escudo_Survival_Validators
+  - community/helpers.ts_/_fiscal-anchor-validators.ts
 ---
 
 # checkBlacklist()
@@ -16,4 +16,4 @@ tags:
 - [[compilePatterns()]] - `calls` [EXTRACTED]
 - [[validateNormativeResponse()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Escudo_Survival_Validators
+#graphify/code #graphify/EXTRACTED #community/helpers.ts_/_fiscal-anchor-validators.ts

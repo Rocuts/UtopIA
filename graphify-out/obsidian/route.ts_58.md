@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\niif\route.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # route.ts
@@ -16,4 +16,4 @@ tags:
 - [[extractSerializableContext()]] - `contains` [EXTRACTED]
 - [[handleStreaming()_6]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

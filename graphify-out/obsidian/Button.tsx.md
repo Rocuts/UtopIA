@@ -1,14 +1,14 @@
 ---
 source_file: "components\ui\Button.tsx"
 type: "code"
-community: "Module Cluster 368"
+community: "Button.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_368
+  - community/Button.tsx
 ---
 
 # Button.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_368
+#graphify/code #graphify/EXTRACTED #community/Button.tsx

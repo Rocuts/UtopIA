@@ -1,12 +1,12 @@
 ---
 source_file: "lib\cache\accounting-cache.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L233"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getCachedJournalList()
@@ -15,4 +15,4 @@ tags:
 - [[accounting-cache.ts]] - `contains` [EXTRACTED]
 - [[getDb()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

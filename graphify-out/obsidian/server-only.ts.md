@@ -1,14 +1,14 @@
 ---
 source_file: "__mocks__\server-only.ts"
 type: "code"
-community: "Module Cluster 352"
+community: "server-only.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_352
+  - community/server-only.ts
 ---
 
 # server-only.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_352
+#graphify/code #graphify/EXTRACTED #community/server-only.ts

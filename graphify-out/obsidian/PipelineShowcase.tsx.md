@@ -1,14 +1,14 @@
 ---
 source_file: "components\sections\PipelineShowcase.tsx"
 type: "code"
-community: "Module Cluster 364"
+community: "PipelineShowcase.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_364
+  - community/PipelineShowcase.tsx
 ---
 
 # PipelineShowcase.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_364
+#graphify/code #graphify/EXTRACTED #community/PipelineShowcase.tsx

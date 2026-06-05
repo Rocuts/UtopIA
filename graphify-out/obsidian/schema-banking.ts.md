@@ -1,14 +1,14 @@
 ---
 source_file: "lib\db\schema-banking.ts"
 type: "code"
-community: "Module Cluster 494"
+community: "schema-banking.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_494
+  - community/schema-banking.ts
 ---
 
 # schema-banking.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_494
+#graphify/code #graphify/EXTRACTED #community/schema-banking.ts

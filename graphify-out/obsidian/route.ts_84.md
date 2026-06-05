@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\tax-reconciliation\route.ts"
 type: "code"
-community: "Module Cluster 32"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_32
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # route.ts
@@ -15,4 +15,4 @@ tags:
 - [[POST()_52]] - `contains` [EXTRACTED]
 - [[handleStreaming()_11]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_32
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

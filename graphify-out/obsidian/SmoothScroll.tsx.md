@@ -1,14 +1,14 @@
 ---
 source_file: "components\layout\SmoothScroll.tsx"
 type: "code"
-community: "Module Cluster 360"
+community: "SmoothScroll.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_360
+  - community/SmoothScroll.tsx
 ---
 
 # SmoothScroll.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_360
+#graphify/code #graphify/EXTRACTED #community/SmoothScroll.tsx

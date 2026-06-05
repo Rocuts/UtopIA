@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L78"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getJournalLinesForPeriod()
@@ -15,4 +15,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts_6]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

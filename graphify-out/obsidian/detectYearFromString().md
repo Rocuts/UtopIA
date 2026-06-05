@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\trial-balance.ts"
 type: "code"
-community: "Module Cluster 24"
+community: "route.ts / vectorstore.ts"
 location: "L623"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_24
+  - graphify/INFERRED
+  - community/route.ts_/_vectorstore.ts
 ---
 
 # detectYearFromString()
@@ -15,4 +15,4 @@ tags:
 - [[processDocument()]] - `calls` [INFERRED]
 - [[trial-balance.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_24
+#graphify/code #graphify/INFERRED #community/route.ts_/_vectorstore.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\contapyme.ts"
 type: "code"
-community: "Module Cluster 40"
+community: "ContaPymeConnector / .getAuthHeaders()"
 location: "L84"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_40
+  - community/ContaPymeConnector_/_.getAuthHeaders()
 ---
 
 # ContaPymeConnector
@@ -26,4 +26,4 @@ tags:
 - [[.testConnection()_2]] - `method` [EXTRACTED]
 - [[contapyme.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_40
+#graphify/code #graphify/EXTRACTED #community/ContaPymeConnector_/_.getAuthHeaders()

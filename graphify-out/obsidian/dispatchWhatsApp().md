@@ -1,12 +1,12 @@
 ---
 source_file: "lib\notifications\whatsapp.ts"
 type: "code"
-community: "Module Cluster 25"
+community: "dispatch() / GET()"
 location: "L10"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_25
+  - graphify/INFERRED
+  - community/dispatch()_/_GET()
 ---
 
 # dispatchWhatsApp()
@@ -15,4 +15,4 @@ tags:
 - [[dispatch()]] - `calls` [INFERRED]
 - [[whatsapp.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_25
+#graphify/code #graphify/INFERRED #community/dispatch()_/_GET()

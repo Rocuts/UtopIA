@@ -1,11 +1,11 @@
 ---
 source_file: "docs/RAG_PGVECTOR.md"
 type: "document"
-community: "AI SDK & Model Config"
+community: "D5.3 Forensic Audit Module (Continuous) / Financial Pipeline (1+1)"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/AI_SDK_&_Model_Config
+  - community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)
 ---
 
 # RAG on Neon pgvector (Hybrid BM25 + Cosine)
@@ -17,4 +17,4 @@ tags:
 - [[Reciprocal Rank Fusion (k=60) Hybrid Search]] - `implements` [EXTRACTED]
 - [[rag_chunks Table (pgvector + tsvector multi-tenant)]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/AI_SDK_&_Model_Config
+#graphify/document #graphify/EXTRACTED #community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)

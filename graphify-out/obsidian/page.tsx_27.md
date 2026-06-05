@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\pyme\page.tsx"
 type: "code"
-community: "Module Cluster 249"
+community: "page.tsx / PymePage()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_249
+  - community/page.tsx_/_PymePage()
 ---
 
 # page.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[PymePage()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_249
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_PymePage()

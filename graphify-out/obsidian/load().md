@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ExecutiveDashboard.tsx"
 type: "code"
-community: "Module Cluster 20"
+community: "conversation-history.ts / live.ts"
 location: "L295"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_20
+  - community/conversation-history.ts_/_live.ts
 ---
 
 # load()
@@ -16,4 +16,4 @@ tags:
 - [[getAlerts()]] - `calls` [INFERRED]
 - [[getDashboardKpis()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_20
+#graphify/code #graphify/INFERRED #community/conversation-history.ts_/_live.ts

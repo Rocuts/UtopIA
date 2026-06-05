@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\banking\_shared.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L9"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # disabledResponse()
@@ -15,4 +15,4 @@ tags:
 - [[_shared.ts_2]] - `contains` [EXTRACTED]
 - [[checkEnabled()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

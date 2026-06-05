@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\__tests__\compose.test.ts"
 type: "code"
-community: "Module Cluster 86"
+community: "compose.test.ts / stubSnapshot()"
 location: "L90"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_86
+  - community/compose.test.ts_/_stubSnapshot()
 ---
 
 # stubFinancialReport()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[compose.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_86
+#graphify/code #graphify/EXTRACTED #community/compose.test.ts_/_stubSnapshot()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\transfer-pricing\agents\tp-analyst.ts"
 type: "code"
-community: "Module Cluster 23"
+community: "toComparableAnalysisResult() / toTPDocumentationResult()"
 location: "L142"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_23
+  - community/toComparableAnalysisResult()_/_toTPDocumentationResult()
 ---
 
 # renderPreliminary()
@@ -15,4 +15,4 @@ tags:
 - [[toTPAnalysisResult()]] - `calls` [EXTRACTED]
 - [[tp-analyst.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_23
+#graphify/code #graphify/EXTRACTED #community/toComparableAnalysisResult()_/_toTPDocumentationResult()

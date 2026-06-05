@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\banking\matcher\heuristic.ts"
 type: "code"
-community: "Module Cluster 106"
+community: "heuristic.ts / descriptionScore()"
 location: "L60"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_106
+  - community/heuristic.ts_/_descriptionScore()
 ---
 
 # tokenize()
@@ -15,4 +15,4 @@ tags:
 - [[descriptionScore()]] - `calls` [EXTRACTED]
 - [[heuristic.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_106
+#graphify/code #graphify/EXTRACTED #community/heuristic.ts_/_descriptionScore()

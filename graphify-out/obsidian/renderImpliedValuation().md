@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\valuation\agents\market-comparables.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L116"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # renderImpliedValuation()
@@ -18,4 +18,4 @@ tags:
 - [[parseMoneyCop()]] - `calls` [INFERRED]
 - [[toMarketComparablesResult()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

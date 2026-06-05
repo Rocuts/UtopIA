@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\transfer-pricing\prompts\tp-analyst.prompt.ts"
 type: "code"
-community: "Module Cluster 23"
+community: "toComparableAnalysisResult() / toTPDocumentationResult()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_23
+  - community/toComparableAnalysisResult()_/_toTPDocumentationResult()
 ---
 
 # tp-analyst.prompt.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[buildTPAnalystPrompt()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_23
+#graphify/code #graphify/EXTRACTED #community/toComparableAnalysisResult()_/_toTPDocumentationResult()

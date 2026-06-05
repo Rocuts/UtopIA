@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\escudo\fiscal-anchor\alerts\[id]\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L28"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # PATCH()
@@ -35,4 +35,4 @@ tags:
 - [[updateAccount()]] - `calls` [INFERRED]
 - [[updateBankAccount()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

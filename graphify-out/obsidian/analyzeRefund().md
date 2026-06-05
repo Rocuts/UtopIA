@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\tools\refund-analyzer.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L47"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # analyzeRefund()
@@ -18,4 +18,4 @@ tags:
 - [[runDevolucionesAgent()]] - `calls` [INFERRED]
 - [[serializeMoneyCop()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

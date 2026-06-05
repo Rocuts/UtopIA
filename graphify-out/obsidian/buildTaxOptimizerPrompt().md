@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-planning\prompts\tax-optimizer.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L15"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildTaxOptimizerPrompt()
@@ -17,4 +17,4 @@ tags:
 - [[runTaxOptimizer()]] - `calls` [INFERRED]
 - [[tax-optimizer.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/INFERRED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

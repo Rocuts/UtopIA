@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\escudo\survival\TetCard.tsx"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L22"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # fmtCop()
@@ -15,4 +15,4 @@ tags:
 - [[TetCard.tsx_1]] - `contains` [EXTRACTED]
 - [[formatCopFromCents()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

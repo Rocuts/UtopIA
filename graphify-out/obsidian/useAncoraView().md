@@ -1,12 +1,12 @@
 ---
 source_file: "hooks\useAncoraView.ts"
 type: "code"
-community: "Module Cluster 142"
+community: "useAncoraView() / WindowBridge()"
 location: "L44"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_142
+  - graphify/INFERRED
+  - community/useAncoraView()_/_WindowBridge()
 ---
 
 # useAncoraView()
@@ -15,4 +15,4 @@ tags:
 - [[WindowBridge()]] - `calls` [INFERRED]
 - [[useAncoraView.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_142
+#graphify/code #graphify/INFERRED #community/useAncoraView()_/_WindowBridge()

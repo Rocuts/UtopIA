@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\transfer-pricing\agents\comparable-analyst.ts"
 type: "code"
-community: "Module Cluster 23"
+community: "toComparableAnalysisResult() / toTPDocumentationResult()"
 location: "L149"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_23
+  - graphify/INFERRED
+  - community/toComparableAnalysisResult()_/_toTPDocumentationResult()
 ---
 
 # renderArmLengthConclusion()
@@ -17,4 +17,4 @@ tags:
 - [[parseMoneyCop()]] - `calls` [INFERRED]
 - [[toComparableAnalysisResult()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_23
+#graphify/code #graphify/INFERRED #community/toComparableAnalysisResult()_/_toTPDocumentationResult()

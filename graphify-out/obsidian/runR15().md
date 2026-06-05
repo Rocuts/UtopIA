@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\curator-rules\r15-cost-classification.ts"
 type: "code"
-community: "Curator Rules Engine"
+community: "runCurator() / runR2()"
 location: "L29"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Curator_Rules_Engine
+  - community/runCurator()_/_runR2()
 ---
 
 # runR15()
@@ -16,4 +16,4 @@ tags:
 - [[r15-cost-classification.ts]] - `contains` [EXTRACTED]
 - [[runCurator()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Curator_Rules_Engine
+#graphify/code #graphify/EXTRACTED #community/runCurator()_/_runR2()

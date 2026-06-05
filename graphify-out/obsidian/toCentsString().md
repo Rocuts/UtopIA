@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\ancora\build-ancora.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "build-ancora.ts / buildNiifAncora()"
 location: "L28"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/build-ancora.ts_/_buildNiifAncora()
 ---
 
 # toCentsString()
@@ -17,4 +17,4 @@ tags:
 - [[buildCcvNiif()]] - `calls` [EXTRACTED]
 - [[buildComparativeAnchorsForValidator()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/build-ancora.ts_/_buildNiifAncora()

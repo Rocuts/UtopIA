@@ -1,12 +1,12 @@
 ---
 source_file: "lib\cache\ledger-queries.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L177"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getCachedRecentEntries()
@@ -15,4 +15,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[ledger-queries.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

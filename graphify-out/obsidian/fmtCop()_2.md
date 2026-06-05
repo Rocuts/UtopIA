@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\escudo\cards\DevolucionesCard.tsx"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L17"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # fmtCop()
@@ -16,4 +16,4 @@ tags:
 - [[cn()_34]] - `calls` [EXTRACTED]
 - [[formatCopFromCents()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\tax-engine\__tests__\rules-engine.test.ts"
 type: "code"
-community: "Module Cluster 192"
+community: "rules-engine.test.ts / makeProfile()"
 location: "L44"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_192
+  - community/rules-engine.test.ts_/_makeProfile()
 ---
 
 # makeRule()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[rules-engine.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_192
+#graphify/code #graphify/EXTRACTED #community/rules-engine.test.ts_/_makeProfile()

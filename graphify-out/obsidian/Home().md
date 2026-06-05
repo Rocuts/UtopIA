@@ -1,12 +1,12 @@
 ---
 source_file: "app\page.tsx"
 type: "code"
-community: "Module Cluster 226"
+community: "Home() / page.tsx"
 location: "L14"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_226
+  - community/Home()_/_page.tsx
 ---
 
 # Home()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[page.tsx_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_226
+#graphify/code #graphify/EXTRACTED #community/Home()_/_page.tsx

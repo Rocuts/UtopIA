@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\workspace.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L19"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getOrCreateWorkspace()
@@ -80,4 +80,4 @@ tags:
 - [[voidDraftEntryAction()]] - `calls` [INFERRED]
 - [[workspace.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,20 +1,20 @@
 ---
 source_file: "app\api\accounting\banking\_shared.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L16"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # checkEnabled()
 
 ## Connections
 - [[DELETE()]] - `calls` [INFERRED]
-- [[GET()_1]] - `calls` [INFERRED]
 - [[GET()]] - `calls` [INFERRED]
+- [[GET()_1]] - `calls` [INFERRED]
 - [[GET()_5]] - `calls` [INFERRED]
 - [[PATCH()]] - `calls` [INFERRED]
 - [[POST()]] - `calls` [INFERRED]
@@ -24,4 +24,4 @@ tags:
 - [[disabledResponse()]] - `calls` [EXTRACTED]
 - [[isBankReconEnabled()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

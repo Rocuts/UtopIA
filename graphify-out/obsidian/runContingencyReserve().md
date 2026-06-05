@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\agents\contingency-reserve.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L15"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # runContingencyReserve()
@@ -18,4 +18,4 @@ tags:
 - [[contingency-reserve.ts]] - `contains` [EXTRACTED]
 - [[extractSurvivalAnchors()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

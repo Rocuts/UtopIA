@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\close\resume\route.ts"
 type: "code"
-community: "Module Cluster 219"
+community: "route.ts / POST()"
 location: "L24"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_219
+  - community/route.ts_/_POST()
 ---
 
 # POST()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[route.ts_18]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_219
+#graphify/code #graphify/EXTRACTED #community/route.ts_/_POST()

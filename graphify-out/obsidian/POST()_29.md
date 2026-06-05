@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\escudo\fiscal-anchor\route.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "repository.ts / erp-query.ts"
 location: "L56"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Pyme_&_Workspace_Routes
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # POST()
@@ -19,4 +19,4 @@ tags:
 - [[route.ts_49]] - `contains` [EXTRACTED]
 - [[upsertAlert()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/INFERRED #community/repository.ts_/_erp-query.ts

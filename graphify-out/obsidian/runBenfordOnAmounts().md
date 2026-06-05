@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\rules\benford.ts"
 type: "code"
-community: "Module Cluster 148"
+community: "benford.ts / runBenfordOnAmounts()"
 location: "L47"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_148
+  - community/benford.ts_/_runBenfordOnAmounts()
 ---
 
 # runBenfordOnAmounts()
@@ -16,4 +16,4 @@ tags:
 - [[chiSquare()]] - `calls` [EXTRACTED]
 - [[firstSignificantDigit()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_148
+#graphify/code #graphify/EXTRACTED #community/benford.ts_/_runBenfordOnAmounts()

@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\export\route.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L194"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # handlePdfElite()
@@ -22,4 +22,4 @@ tags:
 - [[renderEditorialReportToStream()]] - `calls` [INFERRED]
 - [[route.ts_54]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

@@ -1,14 +1,14 @@
 ---
 source_file: "components\layout\ScrollGradient.tsx"
 type: "code"
-community: "Module Cluster 359"
+community: "ScrollGradient.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_359
+  - community/ScrollGradient.tsx
 ---
 
 # ScrollGradient.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_359
+#graphify/code #graphify/EXTRACTED #community/ScrollGradient.tsx

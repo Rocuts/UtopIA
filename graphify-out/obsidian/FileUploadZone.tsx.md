@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\FileUploadZone.tsx"
 type: "code"
-community: "Module Cluster 69"
+community: "FileUploadZone.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_69
+  - community/FileUploadZone.tsx_/_cn()
 ---
 
 # FileUploadZone.tsx
@@ -20,4 +20,4 @@ tags:
 - [[handleSelect()]] - `contains` [EXTRACTED]
 - [[removeFile()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_69
+#graphify/code #graphify/EXTRACTED #community/FileUploadZone.tsx_/_cn()

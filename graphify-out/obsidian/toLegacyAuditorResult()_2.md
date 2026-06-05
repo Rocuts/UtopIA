@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\agents\niif-auditor.ts"
 type: "code"
-community: "Module Cluster 19"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L50"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_19
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # toLegacyAuditorResult()
@@ -16,4 +16,4 @@ tags:
 - [[renderMarkdown()_2]] - `calls` [EXTRACTED]
 - [[runNiifAuditor()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_19
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

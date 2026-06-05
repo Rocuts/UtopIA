@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\pyme.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L104"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - graphify/INFERRED
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # updateUploadStatus()
@@ -15,4 +15,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[pyme.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

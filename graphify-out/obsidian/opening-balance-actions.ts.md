@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\actions\opening-balance-actions.ts"
 type: "code"
-community: "Module Cluster 49"
+community: "POST() / importOpeningBalance()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_49
+  - community/POST()_/_importOpeningBalance()
 ---
 
 # opening-balance-actions.ts
@@ -16,4 +16,4 @@ tags:
 - [[toSerializableError()_2]] - `contains` [EXTRACTED]
 - [[zodToActionError()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_49
+#graphify/code #graphify/EXTRACTED #community/POST()_/_importOpeningBalance()

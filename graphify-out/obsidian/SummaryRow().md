@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\intake\IntakePreview.tsx"
 type: "code"
-community: "Module Cluster 178"
+community: "IntakePreview.tsx / formatCOP()"
 location: "L96"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_178
+  - community/IntakePreview.tsx_/_formatCOP()
 ---
 
 # SummaryRow()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[IntakePreview.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_178
+#graphify/code #graphify/EXTRACTED #community/IntakePreview.tsx_/_formatCOP()

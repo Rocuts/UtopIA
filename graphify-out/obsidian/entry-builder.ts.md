@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\promote\entry-builder.ts"
 type: "code"
-community: "Module Cluster 71"
+community: "promoteEntries() / entry-builder.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_71
+  - community/promoteEntries()_/_entry-builder.ts
 ---
 
 # entry-builder.ts
@@ -20,4 +20,4 @@ tags:
 - [[parseToCentavos()]] - `contains` [EXTRACTED]
 - [[toDateKey()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_71
+#graphify/code #graphify/EXTRACTED #community/promoteEntries()_/_entry-builder.ts

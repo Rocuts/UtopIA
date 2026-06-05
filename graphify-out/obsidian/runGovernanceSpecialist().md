@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\agents\governance-specialist.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L60"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # runGovernanceSpecialist()
@@ -19,4 +19,4 @@ tags:
 - [[runGovernancePhase()]] - `calls` [INFERRED]
 - [[toGovernanceResult()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

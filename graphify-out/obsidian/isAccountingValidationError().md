@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\resilience-section0.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L91"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # isAccountingValidationError()
@@ -15,4 +15,4 @@ tags:
 - [[classifyError()_1]] - `calls` [EXTRACTED]
 - [[resilience-section0.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

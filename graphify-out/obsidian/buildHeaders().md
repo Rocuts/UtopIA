@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\compose-statements-from-json.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L54"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # buildHeaders()
@@ -16,4 +16,4 @@ tags:
 - [[niifJsonToBalanceTable()]] - `calls` [EXTRACTED]
 - [[niifJsonToIncomeTable()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/EXTRACTED #community/compose.ts_/_composeEditorialReport()

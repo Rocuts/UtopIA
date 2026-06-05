@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\pyme\promote\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "promoteEntries() / entry-builder.ts"
 location: "L34"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/promoteEntries()_/_entry-builder.ts
 ---
 
 # POST()
@@ -17,4 +17,4 @@ tags:
 - [[promoteEntries()]] - `calls` [INFERRED]
 - [[route.ts_72]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/promoteEntries()_/_entry-builder.ts

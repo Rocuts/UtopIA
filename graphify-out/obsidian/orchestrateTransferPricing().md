@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\transfer-pricing\orchestrator.ts"
 type: "code"
-community: "Module Cluster 23"
+community: "toComparableAnalysisResult() / toTPDocumentationResult()"
 location: "L29"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_23
+  - community/toComparableAnalysisResult()_/_toTPDocumentationResult()
 ---
 
 # orchestrateTransferPricing()
@@ -20,4 +20,4 @@ tags:
 - [[runTPAnalyst()]] - `calls` [INFERRED]
 - [[runTPDocumentationWriter()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_23
+#graphify/code #graphify/INFERRED #community/toComparableAnalysisResult()_/_toTPDocumentationResult()

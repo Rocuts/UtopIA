@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\promote\index.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "promoteEntries() / entry-builder.ts"
 location: "L36"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/promoteEntries()_/_entry-builder.ts
 ---
 
 # looksLikeInvoice()
@@ -15,4 +15,4 @@ tags:
 - [[index.ts_21]] - `contains` [EXTRACTED]
 - [[promoteEntries()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/promoteEntries()_/_entry-builder.ts

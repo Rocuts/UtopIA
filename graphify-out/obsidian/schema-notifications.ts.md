@@ -1,14 +1,14 @@
 ---
 source_file: "lib\db\schema-notifications.ts"
 type: "code"
-community: "Module Cluster 495"
+community: "schema-notifications.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_495
+  - community/schema-notifications.ts
 ---
 
 # schema-notifications.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_495
+#graphify/code #graphify/EXTRACTED #community/schema-notifications.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\contabilidad\periodos\page.tsx"
 type: "code"
-community: "Module Cluster 236"
+community: "page.tsx / PeriodosPage()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_236
+  - community/page.tsx_/_PeriodosPage()
 ---
 
 # page.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[PeriodosPage()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_236
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_PeriodosPage()

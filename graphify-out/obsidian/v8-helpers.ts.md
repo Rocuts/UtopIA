@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\v8-helpers.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "v8-helpers.ts / deriveReportMode()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/v8-helpers.ts_/_deriveReportMode()
 ---
 
 # v8-helpers.ts
@@ -23,4 +23,4 @@ tags:
 - [[summarizeCoverage()]] - `contains` [EXTRACTED]
 - [[toMoneyCopString()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/v8-helpers.ts_/_deriveReportMode()

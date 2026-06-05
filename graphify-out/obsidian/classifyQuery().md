@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\classifier.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L43"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # classifyQuery()
@@ -17,4 +17,4 @@ tags:
 - [[orchestrate()]] - `calls` [INFERRED]
 - [[withRetry()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_15
+#graphify/code #graphify/EXTRACTED #community/runHtmlEditor()_/_orchestrate()

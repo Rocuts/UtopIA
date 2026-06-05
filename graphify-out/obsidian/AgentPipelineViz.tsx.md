@@ -1,14 +1,14 @@
 ---
 source_file: "design-system\components\AgentPipelineViz.tsx"
 type: "code"
-community: "Module Cluster 411"
+community: "AgentPipelineViz.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_411
+  - community/AgentPipelineViz.tsx
 ---
 
 # AgentPipelineViz.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_411
+#graphify/code #graphify/EXTRACTED #community/AgentPipelineViz.tsx

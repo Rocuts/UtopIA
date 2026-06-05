@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\tools\registry.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "executeTool() / getTaxCalendar()"
 location: "L365"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/executeTool()_/_getTaxCalendar()
 ---
 
 # executeTool()
@@ -23,4 +23,4 @@ tags:
 - [[searchDocuments()]] - `calls` [INFERRED]
 - [[searchWeb()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/INFERRED #community/executeTool()_/_getTaxCalendar()

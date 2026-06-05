@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\opening-balance\import.ts"
 type: "code"
-community: "Module Cluster 49"
+community: "POST() / importOpeningBalance()"
 location: "L350"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_49
+  - community/POST()_/_importOpeningBalance()
 ---
 
 # numericStringToCents()
@@ -15,4 +15,4 @@ tags:
 - [[import.ts_1]] - `contains` [EXTRACTED]
 - [[importOpeningBalance()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_49
+#graphify/code #graphify/EXTRACTED #community/POST()_/_importOpeningBalance()

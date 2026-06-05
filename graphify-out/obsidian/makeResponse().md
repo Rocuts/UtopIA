@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\__tests__\oracle-fusion.test.ts"
 type: "code"
-community: "Module Cluster 202"
+community: "oracle-fusion.test.ts / makeBalance()"
 location: "L36"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_202
+  - community/oracle-fusion.test.ts_/_makeBalance()
 ---
 
 # makeResponse()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[oracle-fusion.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_202
+#graphify/code #graphify/EXTRACTED #community/oracle-fusion.test.ts_/_makeBalance()

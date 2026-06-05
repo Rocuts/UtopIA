@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\FuturoExecutiveCards.tsx"
 type: "code"
-community: "Module Cluster 288"
+community: "FuturoExecutiveCards.tsx / if()"
 location: "L230"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_288
+  - community/FuturoExecutiveCards.tsx_/_if()
 ---
 
 # if()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[FuturoExecutiveCards.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_288
+#graphify/code #graphify/EXTRACTED #community/FuturoExecutiveCards.tsx_/_if()

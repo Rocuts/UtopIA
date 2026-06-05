@@ -1,12 +1,12 @@
 ---
 source_file: "lib\workflows\monthly-close\steps\lock-period.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L12"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # lockPeriod()
@@ -17,4 +17,4 @@ tags:
 - [[getPeriodById()]] - `calls` [INFERRED]
 - [[lock-period.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_16
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

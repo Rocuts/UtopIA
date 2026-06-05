@@ -1,20 +1,20 @@
 ---
 source_file: "app\api\accounting\banking\_shared.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L21"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # bankingErrorResponse()
 
 ## Connections
 - [[DELETE()]] - `calls` [INFERRED]
-- [[GET()_1]] - `calls` [INFERRED]
 - [[GET()]] - `calls` [INFERRED]
+- [[GET()_1]] - `calls` [INFERRED]
 - [[GET()_5]] - `calls` [INFERRED]
 - [[PATCH()]] - `calls` [INFERRED]
 - [[POST()]] - `calls` [INFERRED]
@@ -22,4 +22,4 @@ tags:
 - [[POST()_11]] - `calls` [INFERRED]
 - [[_shared.ts_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

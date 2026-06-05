@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\intake\TaxRefundIntake.tsx"
 type: "code"
-community: "Module Cluster 98"
+community: "TaxRefundIntake.tsx / cn()"
 location: "L134"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_98
+  - community/TaxRefundIntake.tsx_/_cn()
 ---
 
 # formatCOPInput()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[TaxRefundIntake.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_98
+#graphify/code #graphify/EXTRACTED #community/TaxRefundIntake.tsx_/_cn()

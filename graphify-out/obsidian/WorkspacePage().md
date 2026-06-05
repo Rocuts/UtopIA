@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\page.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L19"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # WorkspacePage()
@@ -15,4 +15,4 @@ tags:
 - [[page.tsx_23]] - `contains` [EXTRACTED]
 - [[useLanguage()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/EXTRACTED #community/useLanguage()_/_cop.ts

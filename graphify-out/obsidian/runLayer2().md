@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\validators\survival-validators.ts"
 type: "code"
-community: "Module Cluster 60"
+community: "survival-validators.ts / validateSurvivalReport()"
 location: "L396"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_60
+  - community/survival-validators.ts_/_validateSurvivalReport()
 ---
 
 # runLayer2()
@@ -17,4 +17,4 @@ tags:
 - [[survival-validators.ts]] - `contains` [EXTRACTED]
 - [[validateSurvivalReport()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_60
+#graphify/code #graphify/EXTRACTED #community/survival-validators.ts_/_validateSurvivalReport()

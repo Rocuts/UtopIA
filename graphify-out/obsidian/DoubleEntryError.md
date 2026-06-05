@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\types.ts"
 type: "code"
-community: "Module Cluster 193"
+community: "DoubleEntryError / .constructor()"
 location: "L106"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_193
+  - community/DoubleEntryError_/_.constructor()
 ---
 
 # DoubleEntryError
@@ -15,4 +15,4 @@ tags:
 - [[.constructor()_10]] - `method` [EXTRACTED]
 - [[types.ts_12]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_193
+#graphify/code #graphify/EXTRACTED #community/DoubleEntryError_/_.constructor()

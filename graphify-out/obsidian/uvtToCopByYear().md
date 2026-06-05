@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\tax-engine\constants.ts"
 type: "code"
-community: "Module Cluster 37"
+community: "line-generator.ts / .evaluate()"
 location: "L20"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_37
+  - community/line-generator.ts_/_.evaluate()
 ---
 
 # uvtToCopByYear()
@@ -15,4 +15,4 @@ tags:
 - [[constants.ts]] - `contains` [EXTRACTED]
 - [[matchRules()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_37
+#graphify/code #graphify/EXTRACTED #community/line-generator.ts_/_.evaluate()

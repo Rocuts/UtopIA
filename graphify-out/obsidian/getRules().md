@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\tax-engine\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L30"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getRules()
@@ -17,4 +17,4 @@ tags:
 - [[repository.ts_5]] - `contains` [EXTRACTED]
 - [[validateLines()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

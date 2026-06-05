@@ -1,14 +1,14 @@
 ---
 source_file: "lib\accounting\actions\index.ts"
 type: "code"
-community: "Module Cluster 416"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_416
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_416
+#graphify/code #graphify/EXTRACTED #community/index.ts

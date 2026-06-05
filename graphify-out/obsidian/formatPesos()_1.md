@@ -1,12 +1,12 @@
 ---
 source_file: "lib\format\cop.ts"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L49"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - graphify/INFERRED
+  - community/useLanguage()_/_cop.ts
 ---
 
 # formatPesos()
@@ -15,4 +15,4 @@ tags:
 - [[cn()_17]] - `calls` [INFERRED]
 - [[cop.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/INFERRED #community/useLanguage()_/_cop.ts

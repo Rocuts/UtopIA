@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\ChartOfAccountsTree.tsx"
 type: "code"
-community: "Module Cluster 130"
+community: "ChartOfAccountsTree.tsx / buildTree()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_130
+  - community/ChartOfAccountsTree.tsx_/_buildTree()
 ---
 
 # ChartOfAccountsTree.tsx
@@ -16,4 +16,4 @@ tags:
 - [[cn()_14]] - `contains` [EXTRACTED]
 - [[collectAncestors()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_130
+#graphify/code #graphify/EXTRACTED #community/ChartOfAccountsTree.tsx_/_buildTree()

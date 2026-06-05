@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\ancora\build-ancora.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "build-ancora.ts / buildNiifAncora()"
 location: "L154"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Áncora_/_Context_Builders
+  - community/build-ancora.ts_/_buildNiifAncora()
 ---
 
 # buildCcvFiscal()
@@ -19,4 +19,4 @@ tags:
 - [[toCentsString()]] - `calls` [EXTRACTED]
 - [[totalAbsClass()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/EXTRACTED #community/build-ancora.ts_/_buildNiifAncora()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\layout\Header.tsx"
 type: "code"
-community: "Module Cluster 257"
+community: "Header.tsx / handleScroll()"
 location: "L18"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_257
+  - community/Header.tsx_/_handleScroll()
 ---
 
 # handleScroll()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[Header.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_257
+#graphify/code #graphify/EXTRACTED #community/Header.tsx_/_handleScroll()

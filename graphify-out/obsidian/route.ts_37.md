@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\cron\calendar-sync\route.ts"
 type: "code"
-community: "Module Cluster 35"
+community: "dian-scraper.ts / scrapeDIANCalendar()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_35
+  - community/dian-scraper.ts_/_scrapeDIANCalendar()
 ---
 
 # route.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[GET()_13]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_35
+#graphify/code #graphify/EXTRACTED #community/dian-scraper.ts_/_scrapeDIANCalendar()

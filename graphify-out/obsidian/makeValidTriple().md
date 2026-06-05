@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\__tests__\assemble-niif-report.test.ts"
 type: "code"
-community: "Module Cluster 107"
+community: "assemble-niif-report.test.ts / makeValidTriple()"
 location: "L130"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_107
+  - community/assemble-niif-report.test.ts_/_makeValidTriple()
 ---
 
 # makeValidTriple()
@@ -17,4 +17,4 @@ tags:
 - [[makePass2()]] - `calls` [EXTRACTED]
 - [[makePass3()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_107
+#graphify/code #graphify/EXTRACTED #community/assemble-niif-report.test.ts_/_makeValidTriple()

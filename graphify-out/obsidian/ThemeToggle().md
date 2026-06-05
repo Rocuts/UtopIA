@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ThemeToggle.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L33"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # ThemeToggle()
@@ -16,4 +16,4 @@ tags:
 - [[useLanguage()]] - `calls` [INFERRED]
 - [[useTheme()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_UI_Components
+#graphify/code #graphify/INFERRED #community/useLanguage()_/_cop.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\QualityMetaAuditPage.tsx"
 type: "code"
-community: "Module Cluster 209"
+community: "QualityMetaAuditPage.tsx / gradeColor()"
 location: "L59"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_209
+  - community/QualityMetaAuditPage.tsx_/_gradeColor()
 ---
 
 # gradeColor()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[QualityMetaAuditPage.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_209
+#graphify/code #graphify/EXTRACTED #community/QualityMetaAuditPage.tsx_/_gradeColor()

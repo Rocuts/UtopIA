@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\tax-engine\repository.ts"
 type: "code"
-community: "Module Cluster 37"
+community: "line-generator.ts / .evaluate()"
 location: "L96"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_37
+  - community/line-generator.ts_/_.evaluate()
 ---
 
 # getAccountByCode()
@@ -16,4 +16,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts_5]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_37
+#graphify/code #graphify/INFERRED #community/line-generator.ts_/_.evaluate()

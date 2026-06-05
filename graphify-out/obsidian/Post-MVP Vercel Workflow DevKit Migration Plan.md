@@ -1,11 +1,11 @@
 ---
 source_file: "docs/POST_MVP_WORKFLOW_MIGRATION.md"
 type: "document"
-community: "AI SDK & Model Config"
+community: "D5.3 Forensic Audit Module (Continuous) / Financial Pipeline (1+1)"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/AI_SDK_&_Model_Config
+  - community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)
 ---
 
 # Post-MVP Vercel Workflow DevKit Migration Plan
@@ -17,4 +17,4 @@ tags:
 - [[Vercel Fluid Compute (TCP pool warm)]] - `references` [EXTRACTED]
 - [[Vercel Workflow DevKit API (use workflow  use step)]] - `references` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/AI_SDK_&_Model_Config
+#graphify/document #graphify/EXTRACTED #community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)

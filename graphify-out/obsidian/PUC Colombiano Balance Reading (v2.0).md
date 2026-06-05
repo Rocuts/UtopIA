@@ -1,12 +1,12 @@
 ---
 source_file: "docs/spec/financial-pipeline-v2.md"
 type: "document"
-community: "Module Cluster 21"
+community: "PUC Colombiano Balance Reading (v2.0) / Smoke Test Runner (1+1 Élite)"
 location: "## PARTE 1 — LECTURA E INTERPRETACIÓN DEL BALANCE DE PRUEBA"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_21
+  - community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_Élite)
 ---
 
 # PUC Colombiano Balance Reading (v2.0)
@@ -20,4 +20,4 @@ tags:
 - [[KPI Financial Formulas (v2.0 Certified)]] - `implements` [EXTRACTED]
 - [[Zod Strict Mode 2026 Canonical Pattern]] - `conceptually_related_to` [INFERRED]
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_21
+#graphify/document #graphify/EXTRACTED #community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_Élite)

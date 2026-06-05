@@ -1,14 +1,14 @@
 ---
 source_file: "lib\accounting\double-entry\index.ts"
 type: "code"
-community: "Module Cluster 420"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_420
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_420
+#graphify/code #graphify/EXTRACTED #community/index.ts

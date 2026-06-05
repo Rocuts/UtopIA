@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\quality\v21-mapping.ts"
 type: "code"
-community: "Module Cluster 27"
+community: "v21-mapping.ts / agent.ts"
 location: "L364"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_27
+  - community/v21-mapping.ts_/_agent.ts
 ---
 
 # resolveSimple()
@@ -17,4 +17,4 @@ tags:
 - [[resolveV21Dim()]] - `calls` [EXTRACTED]
 - [[v21-mapping.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_27
+#graphify/code #graphify/EXTRACTED #community/v21-mapping.ts_/_agent.ts

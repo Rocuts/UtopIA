@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-reconciliation\orchestrator.ts"
 type: "code"
-community: "Module Cluster 32"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L27"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_32
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # orchestrateTaxReconciliation()
@@ -18,4 +18,4 @@ tags:
 - [[runDeferredTaxCalculator()]] - `calls` [INFERRED]
 - [[runDifferenceIdentifier()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_32
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

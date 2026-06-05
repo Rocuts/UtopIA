@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-anchor\dian-calendar.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "buildFiscalAnchor() / dian-calendar.ts"
 location: "L116"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Pyme_&_Workspace_Routes
+  - community/buildFiscalAnchor()_/_dian-calendar.ts
 ---
 
 # isoDate()
@@ -16,4 +16,4 @@ tags:
 - [[dian-calendar.ts]] - `contains` [EXTRACTED]
 - [[pickNextOrProject()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/EXTRACTED #community/buildFiscalAnchor()_/_dian-calendar.ts

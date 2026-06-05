@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pyme\PhotoUploader.tsx"
 type: "code"
-community: "Module Cluster 139"
+community: "PhotoUploader.tsx / cn()"
 location: "L236"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_139
+  - community/PhotoUploader.tsx_/_cn()
 ---
 
 # handleInputChange()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[PhotoUploader.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_139
+#graphify/code #graphify/EXTRACTED #community/PhotoUploader.tsx_/_cn()

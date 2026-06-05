@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\prompts\fiscal-reviewer.prompt.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L18"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # buildFiscalReviewerPrompt()
@@ -19,4 +19,4 @@ tags:
 - [[runFiscalReviewer()]] - `calls` [INFERRED]
 - [[signatoriesFromCompany()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/INFERRED #community/compose.ts_/_composeEditorialReport()

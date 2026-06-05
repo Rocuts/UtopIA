@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\erp\connect\route.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "repository.ts / erp-query.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # route.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[POST()_25]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/EXTRACTED #community/repository.ts_/_erp-query.ts

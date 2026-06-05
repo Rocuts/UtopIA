@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\__tests__\repeated-amounts.test.ts"
 type: "code"
-community: "Module Cluster 318"
+community: "repeated-amounts.test.ts / makeOccurrences()"
 location: "L13"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_318
+  - community/repeated-amounts.test.ts_/_makeOccurrences()
 ---
 
 # makeOccurrences()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[repeated-amounts.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_318
+#graphify/code #graphify/EXTRACTED #community/repeated-amounts.test.ts_/_makeOccurrences()

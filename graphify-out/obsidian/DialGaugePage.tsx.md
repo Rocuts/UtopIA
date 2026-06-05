@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\DialGaugePage.tsx"
 type: "code"
-community: "Module Cluster 504"
+community: "DialGaugePage.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_504
+  - community/DialGaugePage.tsx
 ---
 
 # DialGaugePage.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_504
+#graphify/code #graphify/EXTRACTED #community/DialGaugePage.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\governance-specialist.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L305"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # niifFrameworkLabel()
@@ -15,4 +15,4 @@ tags:
 - [[buildGovernancePrompt()]] - `calls` [EXTRACTED]
 - [[governance-specialist.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

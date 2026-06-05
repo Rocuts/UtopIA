@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\erp\sync\route.ts"
 type: "code"
-community: "Core API Routes"
-location: "L18"
+community: "repository.ts / erp-query.ts"
+location: "L20"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # POST()
@@ -14,6 +14,7 @@ tags:
 ## Connections
 - [[getConnector()]] - `calls` [INFERRED]
 - [[logApiActivity()]] - `calls` [INFERRED]
+- [[requireWorkspace()]] - `calls` [INFERRED]
 - [[route.ts_45]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/repository.ts_/_erp-query.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\rag\ingest.ts"
 type: "code"
-community: "Module Cluster 24"
+community: "route.ts / vectorstore.ts"
 location: "L140"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_24
+  - community/route.ts_/_vectorstore.ts
 ---
 
 # generateContextualPrefix()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ingest.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_24
+#graphify/code #graphify/EXTRACTED #community/route.ts_/_vectorstore.ts

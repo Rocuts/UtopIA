@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\GoldRule.tsx"
 type: "code"
-community: "Module Cluster 512"
+community: "GoldRule.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_512
+  - community/GoldRule.tsx
 ---
 
 # GoldRule.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_512
+#graphify/code #graphify/EXTRACTED #community/GoldRule.tsx

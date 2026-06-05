@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\PipelineWorkspace.tsx"
 type: "code"
-community: "Module Cluster 31"
+community: "PipelineWorkspace.tsx / runAuditInBackground()"
 location: "L428"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_31
+  - community/PipelineWorkspace.tsx_/_runAuditInBackground()
 ---
 
 # clientComputeReportHash()
@@ -15,4 +15,4 @@ tags:
 - [[PipelineWorkspace.tsx]] - `contains` [EXTRACTED]
 - [[stableStringifyClient()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_31
+#graphify/code #graphify/EXTRACTED #community/PipelineWorkspace.tsx_/_runAuditInBackground()

@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\futuro\page.tsx"
 type: "code"
-community: "Module Cluster 245"
+community: "page.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_245
+  - community/page.tsx_/_cn()
 ---
 
 # page.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[cn()_4]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_245
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_cn()

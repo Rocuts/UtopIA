@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\agents\legal-auditor.ts"
 type: "code"
-community: "Module Cluster 19"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_19
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # legal-auditor.ts
@@ -19,4 +19,4 @@ tags:
 - [[runLegalAuditor()]] - `contains` [EXTRACTED]
 - [[toLegacyAuditorResult()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_19
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

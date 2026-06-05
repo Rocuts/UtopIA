@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\orchestrator.ts"
 type: "code"
-community: "Áncora / Context Builders"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L1103"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Áncora_/_Context_Builders
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # prepareFinancialContext()
@@ -27,4 +27,4 @@ tags:
 - [[pullTrialBalanceForPeriod()]] - `calls` [INFERRED]
 - [[runNiifPhase()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Áncora_/_Context_Builders
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

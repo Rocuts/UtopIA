@@ -1,12 +1,12 @@
 ---
 source_file: "lib\notifications\types.ts"
 type: "code"
-community: "Module Cluster 78"
+community: "POST() / types.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_78
+  - community/POST()_/_types.ts
 ---
 
 # types.ts
@@ -15,4 +15,4 @@ tags:
 - [[NotificationError]] - `contains` [EXTRACTED]
 - [[isNotificationsEnabled()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_78
+#graphify/code #graphify/EXTRACTED #community/POST()_/_types.ts

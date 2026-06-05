@@ -1,14 +1,14 @@
 ---
 source_file: "docs/ARCHITECTURE.md"
 type: "document"
-community: "Module Cluster 545"
+community: "Quality Meta-Auditor (12 dimensions)"
 location: "line 40"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_545
+  - community/Quality_Meta-Auditor_(12_dimensions)
 ---
 
 # Quality Meta-Auditor (12 dimensions)
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_545
+#graphify/document #graphify/EXTRACTED #community/Quality_Meta-Auditor_(12_dimensions)

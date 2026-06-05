@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\seeds\puc-pyme-colombia.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L291"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # seedPucForWorkspace()
@@ -16,4 +16,4 @@ tags:
 - [[puc-pyme-colombia.ts]] - `contains` [EXTRACTED]
 - [[seedPucAction()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

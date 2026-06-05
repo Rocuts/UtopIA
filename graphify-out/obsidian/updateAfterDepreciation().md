@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\depreciation\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L107"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # updateAfterDepreciation()
@@ -16,4 +16,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

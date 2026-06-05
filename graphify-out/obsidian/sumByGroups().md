@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\curator-rules\r1-negative-assets.ts"
 type: "code"
-community: "Curator Rules Engine"
+community: "runCurator() / runR2()"
 location: "L299"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Curator_Rules_Engine
+  - community/runCurator()_/_runR2()
 ---
 
 # sumByGroups()
@@ -15,4 +15,4 @@ tags:
 - [[r1-negative-assets.ts]] - `contains` [EXTRACTED]
 - [[recomputeControlTotalsFromClasses()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Curator_Rules_Engine
+#graphify/code #graphify/EXTRACTED #community/runCurator()_/_runR2()

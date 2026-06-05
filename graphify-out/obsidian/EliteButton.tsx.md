@@ -1,14 +1,14 @@
 ---
 source_file: "components\ui\EliteButton.tsx"
 type: "code"
-community: "Module Cluster 370"
+community: "EliteButton.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_370
+  - community/EliteButton.tsx
 ---
 
 # EliteButton.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_370
+#graphify/code #graphify/EXTRACTED #community/EliteButton.tsx

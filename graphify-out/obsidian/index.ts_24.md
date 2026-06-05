@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\index.ts"
 type: "code"
-community: "Module Cluster 513"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_513
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_513
+#graphify/code #graphify/EXTRACTED #community/index.ts

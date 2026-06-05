@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\__tests__\elite-pulido-diamante-binding.test.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L42"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # loadPrimarySnapshot()
@@ -16,4 +16,4 @@ tags:
 - [[parseTrialBalanceCSV()]] - `calls` [INFERRED]
 - [[preprocessTrialBalance()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

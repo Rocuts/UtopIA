@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\sap-s4hana.ts"
 type: "code"
-community: "Module Cluster 38"
+community: "SAPS4HANAConnector / .getAccessToken()"
 location: "L105"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_38
+  - community/SAPS4HANAConnector_/_.getAccessToken()
 ---
 
 # SAPS4HANAConnector
@@ -27,4 +27,4 @@ tags:
 - [[.tokenEndpoint()_1]] - `method` [EXTRACTED]
 - [[sap-s4hana.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_38
+#graphify/code #graphify/EXTRACTED #community/SAPS4HANAConnector_/_.getAccessToken()

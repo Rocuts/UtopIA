@@ -1,12 +1,12 @@
 ---
 source_file: "components\sections\Methodology.tsx"
 type: "code"
-community: "Module Cluster 259"
+community: "Methodology.tsx / ProgressLine()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_259
+  - community/Methodology.tsx_/_ProgressLine()
 ---
 
 # Methodology.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ProgressLine()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_259
+#graphify/code #graphify/EXTRACTED #community/Methodology.tsx_/_ProgressLine()

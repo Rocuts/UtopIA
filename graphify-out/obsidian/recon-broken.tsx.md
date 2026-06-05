@@ -1,14 +1,14 @@
 ---
 source_file: "lib\notifications\email\templates\recon-broken.tsx"
 type: "code"
-community: "Module Cluster 523"
+community: "recon-broken.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_523
+  - community/recon-broken.tsx
 ---
 
 # recon-broken.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_523
+#graphify/code #graphify/EXTRACTED #community/recon-broken.tsx

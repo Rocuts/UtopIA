@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\route.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # route.ts
@@ -15,4 +15,4 @@ tags:
 - [[POST()_38]] - `contains` [EXTRACTED]
 - [[handleStreaming()_7]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

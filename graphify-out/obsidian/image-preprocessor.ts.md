@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\extraction\image-preprocessor.ts"
 type: "code"
-community: "Module Cluster 18"
+community: "processUpload() / POST()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_18
+  - community/processUpload()_/_POST()
 ---
 
 # image-preprocessor.ts
@@ -15,4 +15,4 @@ tags:
 - [[normalizedLevenshtein()]] - `contains` [EXTRACTED]
 - [[preprocessImage()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_18
+#graphify/code #graphify/EXTRACTED #community/processUpload()_/_POST()

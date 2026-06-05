@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\areas\ValorArea.tsx"
 type: "code"
-community: "Module Cluster 81"
+community: "ValorArea.tsx / cn()"
 location: "L105"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_81
+  - community/ValorArea.tsx_/_cn()
 ---
 
 # buildMockTrend()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ValorArea.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_81
+#graphify/code #graphify/EXTRACTED #community/ValorArea.tsx_/_cn()

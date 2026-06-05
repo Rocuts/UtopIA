@@ -1,12 +1,12 @@
 ---
 source_file: "lib\security\__tests__\vault.test.ts"
 type: "code"
-community: "Module Cluster 215"
+community: "vault.test.ts / freshKey()"
 location: "L19"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_215
+  - community/vault.test.ts_/_freshKey()
 ---
 
 # tamperSegment()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[vault.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_215
+#graphify/code #graphify/EXTRACTED #community/vault.test.ts_/_freshKey()

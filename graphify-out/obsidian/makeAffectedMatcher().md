@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ReportDiff.tsx"
 type: "code"
-community: "Module Cluster 141"
+community: "ReportDiff.tsx / cn()"
 location: "L90"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_141
+  - community/ReportDiff.tsx_/_cn()
 ---
 
 # makeAffectedMatcher()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ReportDiff.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_141
+#graphify/code #graphify/EXTRACTED #community/ReportDiff.tsx_/_cn()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\repair\AdjustmentCard.tsx"
 type: "code"
-community: "Module Cluster 140"
+community: "AdjustmentCard.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_140
+  - community/AdjustmentCard.tsx_/_cn()
 ---
 
 # AdjustmentCard.tsx
@@ -16,4 +16,4 @@ tags:
 - [[formatRelativeTime()]] - `contains` [EXTRACTED]
 - [[formatSignedPeso()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_140
+#graphify/code #graphify/EXTRACTED #community/AdjustmentCard.tsx_/_cn()

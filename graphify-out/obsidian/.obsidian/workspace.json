@@ -1,0 +1,208 @@
+{
+  "main": {
+    "id": "80cc60ea4ab3a4b4",
+    "type": "split",
+    "children": [
+      {
+        "id": "56e9b32df8dcba76",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "055cd748382fdf15",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Vista gráfica"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "87c1a93bc9d78416",
+    "type": "split",
+    "children": [
+      {
+        "id": "08bbf26025ee491b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1311d2ccfc73886a",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de archivos"
+            }
+          },
+          {
+            "id": "3a003aa816e28611",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Buscar"
+            }
+          },
+          {
+            "id": "0a83013e421016a9",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "2938798bba22812a",
+    "type": "split",
+    "children": [
+      {
+        "id": "4c9b38e4994f406f",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "42ba1c69c6dd927a",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Enlaces entrantes"
+            }
+          },
+          {
+            "id": "fe74d2e6eb1d6869",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Enlaces salientes"
+            }
+          },
+          {
+            "id": "9d9a88f78855f550",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etiquetas"
+            }
+          },
+          {
+            "id": "6cfd419a20f009dd",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Todas las propiedades"
+            }
+          },
+          {
+            "id": "ff6e302188d5a2e4",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Esquema"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir selector rápido": false,
+      "graph:Abrir vista gráfica": false,
+      "canvas:Crear nuevo lienzo": false,
+      "daily-notes:Abrir la nota de hoy": false,
+      "templates:Insertar plantilla": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Crear nueva base": false
+    }
+  },
+  "active": "055cd748382fdf15",
+  "lastOpenFiles": [
+    "_COMMUNITY_service.test.ts  makeCachedRow().md",
+    "_COMMUNITY_pillarKpisTag()  cache.ts.md",
+    "_COMMUNITY_MarkdownToPdf.tsx  parseBlocks().md",
+    "_COMMUNITY_StatementsPages.tsx  derivedTotal().md",
+    "_COMMUNITY_KPIGridPage.tsx  badgeFill().md",
+    "_COMMUNITY_AuditFindingsPage.tsx  opinionColor().md",
+    "_COMMUNITY_WaterfallPnL.tsx  formatCompact().md",
+    "_COMMUNITY_compose-statements-from-json.test.ts  makeBalancedJson().md",
+    "_COMMUNITY_connector.ts  fetchJSON().md",
+    "_COMMUNITY_fiscal-anchor-validators.test.ts  asBlock().md",
+    "_COMMUNITY_benford.ts  runBenfordOnAmounts().md",
+    "_COMMUNITY_render-ancora.ts  fmtCop().md",
+    "_COMMUNITY_spec-v2-integration.test.ts  buildClass().md",
+    "_COMMUNITY_niif-json-validator.test.ts  makeComparativeReport().md",
+    "_COMMUNITY_integrity-validator.test.ts  buildPurchaseLines().md",
+    "_COMMUNITY_calculator.test.ts  makeAsset().md",
+    "_COMMUNITY_ReportDiff.tsx  cn().md",
+    "_COMMUNITY_AdjustmentCard.tsx  cn().md",
+    "_COMMUNITY_PhotoUploader.tsx  cn().md",
+    "_COMMUNITY_mock-data.ts  buildCard().md",
+    "_COMMUNITY_FuturoTrendBars.tsx  cn().md",
+    "_COMMUNITY_NotificationLogList.tsx  formatChannel().md",
+    "_COMMUNITY_GenericPipelineIntake.tsx  ConfidenceDot().md",
+    "_COMMUNITY_DueDiligenceIntake.tsx  cn().md",
+    "_COMMUNITY_SurvivalCard.tsx  AlertIndicator().md",
+    "_COMMUNITY_AreaCard.tsx  cn().md"
+  ]
+}

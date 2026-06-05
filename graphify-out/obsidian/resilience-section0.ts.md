@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\resilience-section0.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # resilience-section0.ts
@@ -21,4 +21,4 @@ tags:
 - [[isTransientError()]] - `contains` [EXTRACTED]
 - [[shouldAutoMarkAsDraft()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

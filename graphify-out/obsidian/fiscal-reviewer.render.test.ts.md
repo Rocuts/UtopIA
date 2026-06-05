@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\__tests__\fiscal-reviewer.render.test.ts"
 type: "code"
-community: "Module Cluster 313"
+community: "fiscal-reviewer.render.test.ts / baseJson()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_313
+  - community/fiscal-reviewer.render.test.ts_/_baseJson()
 ---
 
 # fiscal-reviewer.render.test.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[baseJson()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_313
+#graphify/code #graphify/EXTRACTED #community/fiscal-reviewer.render.test.ts_/_baseJson()

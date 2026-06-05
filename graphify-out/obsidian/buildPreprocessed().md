@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\__tests__\wave2-f4-binding.test.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L19"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # buildPreprocessed()
@@ -16,4 +16,4 @@ tags:
 - [[preprocessTrialBalance()]] - `calls` [INFERRED]
 - [[wave2-f4-binding.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Core_API_Routes
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

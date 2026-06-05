@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\primitives\MixedWeightHeadline.tsx"
 type: "code"
-community: "Module Cluster 211"
+community: "MixedWeightHeadline.tsx / MixedWeightHeadline()"
 location: "L78"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_211
+  - community/MixedWeightHeadline.tsx_/_MixedWeightHeadline()
 ---
 
 # MixedWeightHeadline()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[MixedWeightHeadline.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_211
+#graphify/code #graphify/EXTRACTED #community/MixedWeightHeadline.tsx_/_MixedWeightHeadline()

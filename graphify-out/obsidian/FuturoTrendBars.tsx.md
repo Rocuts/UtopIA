@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\FuturoTrendBars.tsx"
 type: "code"
-community: "Module Cluster 137"
+community: "FuturoTrendBars.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_137
+  - community/FuturoTrendBars.tsx_/_cn()
 ---
 
 # FuturoTrendBars.tsx
@@ -16,4 +16,4 @@ tags:
 - [[formatCopM()]] - `contains` [EXTRACTED]
 - [[formatGrowthPct()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_137
+#graphify/code #graphify/EXTRACTED #community/FuturoTrendBars.tsx_/_cn()

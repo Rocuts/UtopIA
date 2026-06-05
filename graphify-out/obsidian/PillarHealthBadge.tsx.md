@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\PillarHealthBadge.tsx"
 type: "code"
-community: "Module Cluster 289"
+community: "PillarHealthBadge.tsx / PillarHealthBadge()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_289
+  - community/PillarHealthBadge.tsx_/_PillarHealthBadge()
 ---
 
 # PillarHealthBadge.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[PillarHealthBadge()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_289
+#graphify/code #graphify/EXTRACTED #community/PillarHealthBadge.tsx_/_PillarHealthBadge()

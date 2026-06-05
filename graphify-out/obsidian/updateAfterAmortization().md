@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\amortization\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L74"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # updateAfterAmortization()
@@ -16,4 +16,4 @@ tags:
 - [[getDb()]] - `calls` [INFERRED]
 - [[repository.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\repair\ValidationStatusStrip.tsx"
 type: "code"
-community: "Module Cluster 185"
+community: "ValidationStatusStrip.tsx / formatPct()"
 location: "L68"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_185
+  - community/ValidationStatusStrip.tsx_/_formatPct()
 ---
 
 # formatPct()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ValidationStatusStrip.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_185
+#graphify/code #graphify/EXTRACTED #community/ValidationStatusStrip.tsx_/_formatPct()

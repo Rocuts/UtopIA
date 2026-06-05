@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\VerdadExecutiveCards.tsx"
 type: "code"
-community: "Module Cluster 291"
+community: "VerdadExecutiveCards.tsx / VerdadExecutiveCards()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_291
+  - community/VerdadExecutiveCards.tsx_/_VerdadExecutiveCards()
 ---
 
 # VerdadExecutiveCards.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[VerdadExecutiveCards()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_291
+#graphify/code #graphify/EXTRACTED #community/VerdadExecutiveCards.tsx_/_VerdadExecutiveCards()

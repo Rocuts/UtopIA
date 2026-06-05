@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\orchestrator.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L87"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # handleT1()
@@ -16,4 +16,4 @@ tags:
 - [[orchestrate()]] - `calls` [EXTRACTED]
 - [[orchestrator.ts_11]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_15
+#graphify/code #graphify/EXTRACTED #community/runHtmlEditor()_/_orchestrate()

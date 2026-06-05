@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\banking\types.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L125"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # BankingError
@@ -15,4 +15,4 @@ tags:
 - [[.constructor()_3]] - `method` [EXTRACTED]
 - [[types.ts_7]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\compose-statements-from-json.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L137"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # buildEquationTrailer()
@@ -19,4 +19,4 @@ tags:
 - [[parseMoneyCop()]] - `calls` [INFERRED]
 - [[totalCells()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/EXTRACTED #community/compose.ts_/_composeEditorialReport()

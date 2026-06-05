@@ -1,12 +1,12 @@
 ---
 source_file: "lib\rag\vectorstore.ts"
 type: "code"
-community: "Module Cluster 24"
+community: "route.ts / vectorstore.ts"
 location: "L338"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_24
+  - community/route.ts_/_vectorstore.ts
 ---
 
 # addDocumentsToStore()
@@ -18,4 +18,4 @@ tags:
 - [[processDocument()]] - `calls` [INFERRED]
 - [[vectorstore.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_24
+#graphify/code #graphify/INFERRED #community/route.ts_/_vectorstore.ts

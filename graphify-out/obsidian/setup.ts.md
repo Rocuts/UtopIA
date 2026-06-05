@@ -1,14 +1,14 @@
 ---
 source_file: "lib\charts\setup.ts"
 type: "code"
-community: "Module Cluster 491"
+community: "setup.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_491
+  - community/setup.ts
 ---
 
 # setup.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_491
+#graphify/code #graphify/EXTRACTED #community/setup.ts

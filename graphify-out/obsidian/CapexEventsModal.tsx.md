@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\CapexEventsModal.tsx"
 type: "code"
-community: "Module Cluster 99"
+community: "CapexEventsModal.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_99
+  - community/CapexEventsModal.tsx_/_cn()
 ---
 
 # CapexEventsModal.tsx
@@ -17,4 +17,4 @@ tags:
 - [[formatCopShort()_3]] - `contains` [EXTRACTED]
 - [[parseCopInput()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_99
+#graphify/code #graphify/EXTRACTED #community/CapexEventsModal.tsx_/_cn()

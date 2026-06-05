@@ -1,12 +1,12 @@
 ---
 source_file: "lib\sse\consume.ts"
 type: "code"
-community: "Module Cluster 31"
+community: "PipelineWorkspace.tsx / runAuditInBackground()"
 location: "L39"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_31
+  - community/PipelineWorkspace.tsx_/_runAuditInBackground()
 ---
 
 # fetchSSEWithRetry()
@@ -16,4 +16,4 @@ tags:
 - [[runAuditInBackground()]] - `calls` [INFERRED]
 - [[runSSEPhase()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_31
+#graphify/code #graphify/INFERRED #community/PipelineWorkspace.tsx_/_runAuditInBackground()

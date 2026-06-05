@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-planning\orchestrator.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # orchestrator.ts
@@ -15,4 +15,4 @@ tags:
 - [[buildConsolidatedReport()_3]] - `contains` [EXTRACTED]
 - [[orchestrateTaxPlanning()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

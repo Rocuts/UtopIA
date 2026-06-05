@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\__tests__\health-score.test.ts"
 type: "code"
-community: "Module Cluster 160"
+community: "health-score.test.ts / makeSnapshot()"
 location: "L52"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_160
+  - community/health-score.test.ts_/_makeSnapshot()
 ---
 
 # makeSnapshot()
@@ -15,4 +15,4 @@ tags:
 - [[health-score.test.ts]] - `contains` [EXTRACTED]
 - [[makeValidation()_4]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_160
+#graphify/code #graphify/EXTRACTED #community/health-score.test.ts_/_makeSnapshot()

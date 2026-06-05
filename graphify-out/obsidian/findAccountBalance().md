@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\lib\extract-totals.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L75"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # findAccountBalance()
@@ -16,4 +16,4 @@ tags:
 - [[extractSurvivalAnchors()]] - `calls` [EXTRACTED]
 - [[sumPostablesUnderPrefix()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/EXTRACTED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

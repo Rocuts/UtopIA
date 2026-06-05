@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\actions\account-actions.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # account-actions.ts
@@ -19,4 +19,4 @@ tags:
 - [[updateAccountAction()]] - `contains` [EXTRACTED]
 - [[zodToActionError()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

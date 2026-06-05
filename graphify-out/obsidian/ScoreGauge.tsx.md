@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\ScoreGauge.tsx"
 type: "code"
-community: "Module Cluster 300"
+community: "ScoreGauge() / ScoreGauge.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_300
+  - community/ScoreGauge()_/_ScoreGauge.tsx
 ---
 
 # ScoreGauge.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ScoreGauge()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_300
+#graphify/code #graphify/EXTRACTED #community/ScoreGauge()_/_ScoreGauge.tsx

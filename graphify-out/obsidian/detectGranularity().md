@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\valor-bars.ts"
 type: "code"
-community: "Module Cluster 42"
+community: "valor-bars.ts / escudo-bars.ts"
 location: "L104"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_42
+  - graphify/INFERRED
+  - community/valor-bars.ts_/_escudo-bars.ts
 ---
 
 # detectGranularity()
@@ -17,4 +17,4 @@ tags:
 - [[buildVerdadBarSeries()]] - `calls` [INFERRED]
 - [[valor-bars.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_42
+#graphify/code #graphify/INFERRED #community/valor-bars.ts_/_escudo-bars.ts

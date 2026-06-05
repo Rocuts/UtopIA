@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\escudo\survival\AntiDianCard.tsx"
 type: "code"
-community: "Module Cluster 282"
+community: "AntiDianCard.tsx / AntiDianCard()"
 location: "L20"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_282
+  - community/AntiDianCard.tsx_/_AntiDianCard()
 ---
 
 # AntiDianCard()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AntiDianCard.tsx_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_282
+#graphify/code #graphify/EXTRACTED #community/AntiDianCard.tsx_/_AntiDianCard()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\niif-analyst.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L667"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # renderPass1AnchorsBlock()
@@ -17,4 +17,4 @@ tags:
 - [[fmt()]] - `calls` [INFERRED]
 - [[niif-analyst.prompt.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

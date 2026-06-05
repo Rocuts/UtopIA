@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\adjustments\depreciation\__tests__\calculator.test.ts"
 type: "code"
-community: "Module Cluster 143"
+community: "calculator.test.ts / makeAsset()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_143
+  - community/calculator.test.ts_/_makeAsset()
 ---
 
 # calculator.test.ts
@@ -16,4 +16,4 @@ tags:
 - [[makeInput()]] - `contains` [EXTRACTED]
 - [[makePeriod()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_143
+#graphify/code #graphify/EXTRACTED #community/calculator.test.ts_/_makeAsset()

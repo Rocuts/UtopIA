@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\JournalEntryForm.tsx"
 type: "code"
-community: "Module Cluster 93"
+community: "JournalEntryForm.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_93
+  - community/JournalEntryForm.tsx_/_cn()
 ---
 
 # JournalEntryForm.tsx
@@ -17,4 +17,4 @@ tags:
 - [[nowIso()]] - `contains` [EXTRACTED]
 - [[periodLabel()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_93
+#graphify/code #graphify/EXTRACTED #community/JournalEntryForm.tsx_/_cn()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\contracts\money.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L21"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # serializeMoneyCop()
@@ -23,4 +23,4 @@ tags:
 - [[sumMoneyCop()]] - `calls` [EXTRACTED]
 - [[validateNiifReportJson()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

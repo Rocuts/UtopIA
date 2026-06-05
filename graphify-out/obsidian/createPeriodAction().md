@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\actions\period-actions.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L157"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # createPeriodAction()
@@ -19,4 +19,4 @@ tags:
 - [[toSerializableError()_3]] - `calls` [EXTRACTED]
 - [[zodToActionError()_3]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

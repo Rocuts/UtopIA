@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\pillars\PillarsCommandCenter.tsx"
 type: "code"
-community: "Module Cluster 396"
+community: "PillarsCommandCenter.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_396
+  - community/PillarsCommandCenter.tsx
 ---
 
 # PillarsCommandCenter.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_396
+#graphify/code #graphify/EXTRACTED #community/PillarsCommandCenter.tsx

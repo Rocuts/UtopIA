@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\compose.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # compose.ts
@@ -53,4 +53,4 @@ tags:
 - [[splitTableRow()]] - `contains` [EXTRACTED]
 - [[stripMdEmphasis()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/EXTRACTED #community/compose.ts_/_composeEditorialReport()

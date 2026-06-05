@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-anchor\calculator.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "buildFiscalAnchor() / dian-calendar.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Pyme_&_Workspace_Routes
+  - community/buildFiscalAnchor()_/_dian-calendar.ts
 ---
 
 # calculator.ts
@@ -16,4 +16,4 @@ tags:
 - [[pctOfCents()]] - `contains` [EXTRACTED]
 - [[ratioPct1Decimal()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/EXTRACTED #community/buildFiscalAnchor()_/_dian-calendar.ts

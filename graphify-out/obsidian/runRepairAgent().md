@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\repair\agent.ts"
 type: "code"
-community: "Module Cluster 22"
+community: "tools.ts / adjustments.ts"
 location: "L52"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_22
+  - community/tools.ts_/_adjustments.ts
 ---
 
 # runRepairAgent()
@@ -19,4 +19,4 @@ tags:
 - [[parseTrialBalanceCSV()]] - `calls` [INFERRED]
 - [[preprocessTrialBalance()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_22
+#graphify/code #graphify/INFERRED #community/tools.ts_/_adjustments.ts

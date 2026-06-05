@@ -1,12 +1,12 @@
 ---
 source_file: "hooks\useCapexEvents.ts"
 type: "code"
-community: "Module Cluster 102"
+community: "useCapexEvents.ts / storageKey()"
 location: "L40"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_102
+  - community/useCapexEvents.ts_/_storageKey()
 ---
 
 # writeToStorage()
@@ -15,4 +15,4 @@ tags:
 - [[storageKey()]] - `calls` [EXTRACTED]
 - [[useCapexEvents.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_102
+#graphify/code #graphify/EXTRACTED #community/useCapexEvents.ts_/_storageKey()

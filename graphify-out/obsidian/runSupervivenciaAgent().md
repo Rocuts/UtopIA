@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\agents\supervivencia.agent.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L20"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # runSupervivenciaAgent()
@@ -19,4 +19,4 @@ tags:
 - [[precomputeCcv()]] - `calls` [INFERRED]
 - [[supervivencia.agent.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/risk-score-calculator.ts_/_computeRiskScore()

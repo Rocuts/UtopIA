@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\agents\tet-calculator.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L19"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # runTetCalculator()
@@ -18,4 +18,4 @@ tags:
 - [[extractSurvivalAnchors()]] - `calls` [INFERRED]
 - [[tet-calculator.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\agents\strategy-director.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L52"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # runStrategyDirector()
@@ -18,4 +18,4 @@ tags:
 - [[strategy-director.ts]] - `contains` [EXTRACTED]
 - [[toStrategicAnalysisResult()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/formatCopFromCents()_/_parseMoneyCop()

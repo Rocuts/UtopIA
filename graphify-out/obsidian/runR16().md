@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\curator-rules\r16-tax-anticipo-netting.ts"
 type: "code"
-community: "Curator Rules Engine"
+community: "runCurator() / runR2()"
 location: "L50"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Curator_Rules_Engine
+  - community/runCurator()_/_runR2()
 ---
 
 # runR16()
@@ -17,4 +17,4 @@ tags:
 - [[runCurator()]] - `calls` [INFERRED]
 - [[sumCents()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Curator_Rules_Engine
+#graphify/code #graphify/EXTRACTED #community/runCurator()_/_runR2()

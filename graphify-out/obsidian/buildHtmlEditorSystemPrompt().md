@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\html-editor.prompt.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L57"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_15
+  - graphify/INFERRED
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # buildHtmlEditorSystemPrompt()
@@ -17,4 +17,4 @@ tags:
 - [[loadSpecVerbatim()]] - `calls` [EXTRACTED]
 - [[runHtmlEditor()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_15
+#graphify/code #graphify/INFERRED #community/runHtmlEditor()_/_orchestrate()

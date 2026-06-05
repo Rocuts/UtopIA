@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\escudo\cards\PlaneacionCard.tsx"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # PlaneacionCard.tsx
@@ -15,4 +15,4 @@ tags:
 - [[cn()_35]] - `contains` [EXTRACTED]
 - [[fmtCop()_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

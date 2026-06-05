@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\ValorTrendBars.tsx"
 type: "code"
-community: "Module Cluster 181"
+community: "ValorTrendBars.tsx / getValue()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_181
+  - community/ValorTrendBars.tsx_/_getValue()
 ---
 
 # ValorTrendBars.tsx
@@ -15,4 +15,4 @@ tags:
 - [[getValue()_1]] - `contains` [EXTRACTED]
 - [[isFcfNull()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_181
+#graphify/code #graphify/EXTRACTED #community/ValorTrendBars.tsx_/_getValue()

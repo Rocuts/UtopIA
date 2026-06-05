@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\pyme.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # pyme.ts
@@ -31,4 +31,4 @@ tags:
 - [[updateEntryScoped()]] - `contains` [EXTRACTED]
 - [[updateUploadStatus()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

@@ -1,14 +1,14 @@
 ---
 source_file: "lib\agents\prompts\enhancer.prompt.ts"
 type: "code"
-community: "Module Cluster 481"
+community: "enhancer.prompt.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_481
+  - community/enhancer.prompt.ts
 ---
 
 # enhancer.prompt.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_481
+#graphify/code #graphify/EXTRACTED #community/enhancer.prompt.ts

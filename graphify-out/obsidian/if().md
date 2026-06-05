@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\EscudoExecutiveCards.tsx"
 type: "code"
-community: "Module Cluster 287"
+community: "EscudoExecutiveCards.tsx / if()"
 location: "L207"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_287
+  - community/EscudoExecutiveCards.tsx_/_if()
 ---
 
 # if()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[EscudoExecutiveCards.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_287
+#graphify/code #graphify/EXTRACTED #community/EscudoExecutiveCards.tsx_/_if()

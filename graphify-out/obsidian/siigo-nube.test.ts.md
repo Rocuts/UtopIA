@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\__tests__\siigo-nube.test.ts"
 type: "code"
-community: "Module Cluster 204"
+community: "siigo-nube.test.ts / makeResponse()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_204
+  - community/siigo-nube.test.ts_/_makeResponse()
 ---
 
 # siigo-nube.test.ts
@@ -15,4 +15,4 @@ tags:
 - [[makeResponse()_2]] - `contains` [EXTRACTED]
 - [[makeRow()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_204
+#graphify/code #graphify/EXTRACTED #community/siigo-nube.test.ts_/_makeResponse()

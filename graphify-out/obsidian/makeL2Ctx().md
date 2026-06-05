@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\__tests__\fiscal-anchor-validators.test.ts"
 type: "code"
-community: "Module Cluster 149"
+community: "fiscal-anchor-validators.test.ts / asBlock()"
 location: "L57"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_149
+  - community/fiscal-anchor-validators.test.ts_/_asBlock()
 ---
 
 # makeL2Ctx()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[fiscal-anchor-validators.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_149
+#graphify/code #graphify/EXTRACTED #community/fiscal-anchor-validators.test.ts_/_asBlock()

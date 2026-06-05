@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\PeriodsManagementView.tsx"
 type: "code"
-community: "Module Cluster 131"
+community: "PeriodsManagementView.tsx / cn()"
 location: "L61"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_131
+  - community/PeriodsManagementView.tsx_/_cn()
 ---
 
 # getMonthLabel()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[PeriodsManagementView.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_131
+#graphify/code #graphify/EXTRACTED #community/PeriodsManagementView.tsx_/_cn()

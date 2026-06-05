@@ -1,12 +1,12 @@
 ---
 source_file: "lib\upload\blob-client.ts"
 type: "code"
-community: "Module Cluster 52"
+community: "ChatWorkspace.tsx / handleSubmit()"
 location: "L39"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_52
+  - graphify/INFERRED
+  - community/ChatWorkspace.tsx_/_handleSubmit()
 ---
 
 # uploadDocument()
@@ -15,4 +15,4 @@ tags:
 - [[blob-client.ts]] - `contains` [EXTRACTED]
 - [[uploadFile()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_52
+#graphify/code #graphify/INFERRED #community/ChatWorkspace.tsx_/_handleSubmit()

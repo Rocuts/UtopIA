@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\agents\devoluciones.agent.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "risk-score-calculator.ts / computeRiskScore()"
 location: "L17"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/risk-score-calculator.ts_/_computeRiskScore()
 ---
 
 # runDevolucionesAgent()
@@ -18,4 +18,4 @@ tags:
 - [[devoluciones.agent.ts]] - `contains` [EXTRACTED]
 - [[formatCopFromCents()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/risk-score-calculator.ts_/_computeRiskScore()

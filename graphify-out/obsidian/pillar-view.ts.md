@@ -1,12 +1,12 @@
 ---
 source_file: "lib\kpis\pillar-view.ts"
 type: "code"
-community: "Module Cluster 72"
+community: "pillar-view.ts / queryPillarKpisRaw()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_72
+  - community/pillar-view.ts_/_queryPillarKpisRaw()
 ---
 
 # pillar-view.ts
@@ -20,4 +20,4 @@ tags:
 - [[rowToNumber()]] - `contains` [EXTRACTED]
 - [[rowToString()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_72
+#graphify/code #graphify/EXTRACTED #community/pillar-view.ts_/_queryPillarKpisRaw()

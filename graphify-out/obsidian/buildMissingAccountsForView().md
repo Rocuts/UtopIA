@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\trial-balance.ts"
 type: "code"
-community: "Core API Routes"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L2281"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Core_API_Routes
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # buildMissingAccountsForView()
@@ -16,4 +16,4 @@ tags:
 - [[formatCOP()_24]] - `calls` [EXTRACTED]
 - [[trial-balance.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Core_API_Routes
+#graphify/code #graphify/EXTRACTED #community/trial-balance.ts_/_orchestrator.ts

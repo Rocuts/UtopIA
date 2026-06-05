@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\specialists\litigation-defense.ts"
 type: "code"
-community: "Module Cluster 108"
+community: "buildLitigationPrompt() / LitigationDefenseAgent"
 location: "L14"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_108
+  - community/buildLitigationPrompt()_/_LitigationDefenseAgent
 ---
 
 # LitigationDefenseAgent
@@ -15,4 +15,4 @@ tags:
 - [[.buildSystemPrompt()_2]] - `method` [EXTRACTED]
 - [[litigation-defense.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_108
+#graphify/code #graphify/EXTRACTED #community/buildLitigationPrompt()_/_LitigationDefenseAgent

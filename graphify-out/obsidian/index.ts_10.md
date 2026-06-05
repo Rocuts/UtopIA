@@ -1,14 +1,14 @@
 ---
 source_file: "lib\accounting\opening-balance\index.ts"
 type: "code"
-community: "Module Cluster 421"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_421
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_421
+#graphify/code #graphify/EXTRACTED #community/index.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\MonteCarloHistogram.tsx"
 type: "code"
-community: "Module Cluster 74"
+community: "MonteCarloHistogram.tsx / buildBins()"
 location: "L72"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_74
+  - community/MonteCarloHistogram.tsx_/_buildBins()
 ---
 
 # pctStr()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[MonteCarloHistogram.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_74
+#graphify/code #graphify/EXTRACTED #community/MonteCarloHistogram.tsx_/_buildBins()

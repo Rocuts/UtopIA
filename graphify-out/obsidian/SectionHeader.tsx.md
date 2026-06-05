@@ -1,12 +1,12 @@
 ---
 source_file: "components\ui\SectionHeader.tsx"
 type: "code"
-community: "Module Cluster 266"
+community: "SectionHeader.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_266
+  - community/SectionHeader.tsx_/_cn()
 ---
 
 # SectionHeader.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[cn()_12]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_266
+#graphify/code #graphify/EXTRACTED #community/SectionHeader.tsx_/_cn()

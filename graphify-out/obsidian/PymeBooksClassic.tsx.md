@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pyme\PymeBooksClassic.tsx"
 type: "code"
-community: "Module Cluster 184"
+community: "PymeBooksClassic.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_184
+  - community/PymeBooksClassic.tsx_/_cn()
 ---
 
 # PymeBooksClassic.tsx
@@ -15,4 +15,4 @@ tags:
 - [[cn()_49]] - `contains` [EXTRACTED]
 - [[onKey()_3]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_184
+#graphify/code #graphify/EXTRACTED #community/PymeBooksClassic.tsx_/_cn()

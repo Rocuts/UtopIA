@@ -1,12 +1,12 @@
 ---
 source_file: "lib\macro\__tests__\service.test.ts"
 type: "code"
-community: "Module Cluster 158"
+community: "service.test.ts / makeCachedRow()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_158
+  - community/service.test.ts_/_makeCachedRow()
 ---
 
 # service.test.ts
@@ -16,4 +16,4 @@ tags:
 - [[mockDbEmpty()]] - `contains` [EXTRACTED]
 - [[mockDbWithRow()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_158
+#graphify/code #graphify/EXTRACTED #community/service.test.ts_/_makeCachedRow()

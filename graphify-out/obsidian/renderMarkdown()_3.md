@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\agents\tax-auditor.ts"
 type: "code"
-community: "Module Cluster 19"
+community: "tax-auditor.ts / renderMarkdown()"
 location: "L179"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_19
+  - community/tax-auditor.ts_/_renderMarkdown()
 ---
 
 # renderMarkdown()
@@ -25,4 +25,4 @@ tags:
 - [[tmtIcon()]] - `calls` [EXTRACTED]
 - [[toLegacyAuditorResult()_3]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_19
+#graphify/code #graphify/EXTRACTED #community/tax-auditor.ts_/_renderMarkdown()

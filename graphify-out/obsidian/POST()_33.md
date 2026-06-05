@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-quality\route.ts"
 type: "code"
-community: "Module Cluster 27"
+community: "v21-mapping.ts / agent.ts"
 location: "L24"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_27
+  - community/v21-mapping.ts_/_agent.ts
 ---
 
 # POST()
@@ -15,4 +15,4 @@ tags:
 - [[route.ts_53]] - `contains` [EXTRACTED]
 - [[runQualityAudit()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_27
+#graphify/code #graphify/EXTRACTED #community/v21-mapping.ts_/_agent.ts

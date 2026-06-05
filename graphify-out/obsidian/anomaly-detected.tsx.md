@@ -1,14 +1,14 @@
 ---
 source_file: "lib\notifications\email\templates\anomaly-detected.tsx"
 type: "code"
-community: "Module Cluster 521"
+community: "anomaly-detected.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_521
+  - community/anomaly-detected.tsx
 ---
 
 # anomaly-detected.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_521
+#graphify/code #graphify/EXTRACTED #community/anomaly-detected.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "components\ui\ShimmerLoader.tsx"
 type: "code"
-community: "Module Cluster 267"
+community: "ShimmerLoader.tsx / ShimmerLoader()"
 location: "L40"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_267
+  - community/ShimmerLoader.tsx_/_ShimmerLoader()
 ---
 
 # ShimmerLoader()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ShimmerLoader.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_267
+#graphify/code #graphify/EXTRACTED #community/ShimmerLoader.tsx_/_ShimmerLoader()

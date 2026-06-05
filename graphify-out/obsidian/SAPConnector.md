@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\sap.ts"
 type: "code"
-community: "Module Cluster 54"
+community: "SAPConnector / .login()"
 location: "L87"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_54
+  - community/SAPConnector_/_.login()
 ---
 
 # SAPConnector
@@ -26,4 +26,4 @@ tags:
 - [[.testConnection()_9]] - `method` [EXTRACTED]
 - [[sap.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_54
+#graphify/code #graphify/EXTRACTED #community/SAPConnector_/_.login()

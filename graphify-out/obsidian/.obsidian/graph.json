@@ -1,3853 +1,3860 @@
 {
   "colorGroups": [
     {
-      "query": "tag:#community/Accounting_Shared_Utilities",
+      "query": "tag:#community/getDb()_/_getOrCreateWorkspace()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Financial_Agent_Pipelines",
+      "query": "tag:#community/formatCopFromCents()_/_parseMoneyCop()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Audit_&_Compliance_Agents",
+      "query": "tag:#community/callFinancialAgent()_/_orchestrateFiscalOpinion()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Core_API_Routes",
+      "query": "tag:#community/trial-balance.ts_/_orchestrator.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Escudo_Survival_Validators",
+      "query": "tag:#community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Accounting_UI_Components",
+      "query": "tag:#community/conversation-history.ts_/_live.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/NIIF_Analyst_Pipeline",
+      "query": "tag:#community/helpers.ts_/_fiscal-anchor-validators.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/\u00c1ncora_/_Context_Builders",
+      "query": "tag:#community/repository.ts_/_erp-query.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/AI_SDK_&_Model_Config",
+      "query": "tag:#community/useLanguage()_/_cop.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Opinion_&_Dictamen_Drafters",
+      "query": "tag:#community/D5.3_Forensic_Audit_Module_(Continuous)_/_Financial_Pipeline_(1+1)",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Curator_Rules_Engine",
+      "query": "tag:#community/risk-score-calculator.ts_/_computeRiskScore()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Pyme_&_Workspace_Routes",
+      "query": "tag:#community/compose.ts_/_composeEditorialReport()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Cron_Jobs_&_ERP_Webhooks",
+      "query": "tag:#community/runCurator()_/_runR2()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Tax_Calendar_&_ERP_Connect",
+      "query": "tag:#community/preprocessed-balance.ts_/_getCachedPreprocessedBalance()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Platform_Pillar_Config",
+      "query": "tag:#community/escudo-cards.ts_/_verdad-cards.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_15",
+      "query": "tag:#community/executeTool()_/_getTaxCalendar()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_16",
+      "query": "tag:#community/PUC_Colombiano_Balance_Reading_(v2.0)_/_Smoke_Test_Runner_(1+1_\u00c9lite)",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_17",
+      "query": "tag:#community/processUpload()_/_POST()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_18",
+      "query": "tag:#community/tools.ts_/_adjustments.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_19",
+      "query": "tag:#community/toComparableAnalysisResult()_/_toTPDocumentationResult()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_20",
+      "query": "tag:#community/route.ts_/_vectorstore.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_21",
+      "query": "tag:#community/runHtmlEditor()_/_orchestrate()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_22",
+      "query": "tag:#community/dispatch()_/_GET()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_23",
+      "query": "tag:#community/ERPService_/_ERPAdapter",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_24",
+      "query": "tag:#community/buildFiscalAnchor()_/_dian-calendar.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_25",
+      "query": "tag:#community/v21-mapping.ts_/_agent.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_26",
+      "query": "tag:#community/tax-auditor.ts_/_renderMarkdown()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_27",
+      "query": "tag:#community/FiscalSnapshot_Type_(autowire_contract)_/_NIIF_Analyst_Pass_1_(BalanceAndPnl)",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_28",
+      "query": "tag:#community/promoteEntries()_/_entry-builder.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_29",
+      "query": "tag:#community/excel-export.ts_/_generateFinancialExcel()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_30",
+      "query": "tag:#community/PipelineWorkspace.tsx_/_runAuditInBackground()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_31",
+      "query": "tag:#community/Escudo_Normativa_Tributaria_Colombia_2026_/_Escudo_Survival_Orchestrator_(Promise.allSettled)",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_32",
+      "query": "tag:#community/sync-validator.ts_/_validateDashboardIntegrity()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_33",
+      "query": "tag:#community/OracleFusionConnector_/_.getAccessToken()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_34",
+      "query": "tag:#community/dian-scraper.ts_/_scrapeDIANCalendar()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_35",
+      "query": "tag:#community/getTokens()_/_useChartTheme()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_36",
+      "query": "tag:#community/line-generator.ts_/_.evaluate()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_37",
+      "query": "tag:#community/SAPS4HANAConnector_/_.getAccessToken()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_38",
+      "query": "tag:#community/WorldOfficeConnector_/_world-office.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_39",
+      "query": "tag:#community/ContaPymeConnector_/_.getAuthHeaders()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_40",
+      "query": "tag:#community/DynamicsConnector_/_.fetchAllPages()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_41",
+      "query": "tag:#community/valor-bars.ts_/_escudo-bars.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_42",
+      "query": "tag:#community/AlegraConnector_/_alegra.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_43",
+      "query": "tag:#community/HelisaConnector_/_.buildSignedUrl()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_44",
+      "query": "tag:#community/SiigoNubeConnector_/_.fetchAllTrialBalanceRows()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_45",
+      "query": "tag:#community/SiigoConnector_/_siigo.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_46",
+      "query": "tag:#community/XeroConnector_/_.authenticatedFetch()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_47",
+      "query": "tag:#community/Sprint_3_ERP_Credential_Vault_Architecture_/_ERP_Vault_AES-256-GCM_Node-side_Encryption",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_48",
+      "query": "tag:#community/POST()_/_importOpeningBalance()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_49",
+      "query": "tag:#community/OdooConnector_/_.getTrialBalance()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_50",
+      "query": "tag:#community/QuickBooksConnector_/_.authenticatedFetch()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_51",
+      "query": "tag:#community/ChatWorkspace.tsx_/_handleSubmit()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_52",
+      "query": "tag:#community/pdf-elite.ts_/_setFill()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_53",
+      "query": "tag:#community/SAPConnector_/_.login()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_54",
+      "query": "tag:#community/nacional-2026.ts_/_activosExterior()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_55",
+      "query": "tag:#community/fetchAndPersist()_/_getMacroFactors()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_56",
+      "query": "tag:#community/page.tsx_/_loadScenarios()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_57",
+      "query": "tag:#community/ERPConnector.tsx_/_loadConnections()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_58",
+      "query": "tag:#community/BasePipeline_/_.emit()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_59",
+      "query": "tag:#community/survival-validators.ts_/_validateSurvivalReport()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_60",
+      "query": "tag:#community/queryActivityFeed()_/_activity-feed.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_61",
+      "query": "tag:#community/ImportStatementDialog.tsx_/_handleSubmit()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_62",
+      "query": "tag:#community/build-ancora.ts_/_buildNiifAncora()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_63",
+      "query": "tag:#community/run-validation.ts_/_goodDividendMarkdown()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_64",
+      "query": "tag:#community/RecommendationsPage.tsx_/_badgeBg()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_65",
+      "query": "tag:#community/v8-helpers.ts_/_deriveReportMode()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_66",
+      "query": "tag:#community/ChatSidebar.tsx_/_bucketForDate()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_67",
+      "query": "tag:#community/auditReportEmittable()_/_audit-report-emittable.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_68",
+      "query": "tag:#community/page.tsx_/_clamp01()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_69",
+      "query": "tag:#community/FiscalAgentPanel.tsx_/_stageStatus()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_70",
+      "query": "tag:#community/calculator.ts_/_calculateAmortization()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_71",
+      "query": "tag:#community/fonts.ts_/_registerEditorialFonts()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_72",
+      "query": "tag:#community/FileUploadZone.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_73",
+      "query": "tag:#community/csv.ts_/_decodeContent()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_74",
+      "query": "tag:#community/pillar-view.ts_/_queryPillarKpisRaw()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_75",
+      "query": "tag:#community/Agente_Editor_Jefe_HTML_v10.1_(15_pages_A4)_/_Wave_4_Editor_Jefe_HTML_Agent",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_76",
+      "query": "tag:#community/MonteCarloHistogram.tsx_/_buildBins()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_77",
+      "query": "tag:#community/single-source-validator.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_78",
+      "query": "tag:#community/verdad-cards.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_79",
+      "query": "tag:#community/Pyme_Green_Identity_'area-pyme'_Token_(2026-06-05)_/_Pyme_Desktop_Redesign_Spec_(2026-06-03)",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_80",
+      "query": "tag:#community/_shared.ts_/_computePeriodBoundaries()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_81",
+      "query": "tag:#community/POST()_/_types.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_82",
+      "query": "tag:#community/ActivityLogViewer.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_83",
+      "query": "tag:#community/SurvivalModePanel.tsx_/_cardLoading()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_84",
+      "query": "tag:#community/ValorArea.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_85",
+      "query": "tag:#community/ReconciliationView.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_86",
+      "query": "tag:#community/ERPLogo.tsx_/_AlegraLogo()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_87",
+      "query": "tag:#community/calculateDepreciation()_/_calculator.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_88",
+      "query": "tag:#community/niif-analyst-chunked.integration.test.ts_/_makeBaseMeta()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_89",
+      "query": "tag:#community/compose.test.ts_/_stubSnapshot()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_90",
+      "query": "tag:#community/futuro-bars.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_91",
+      "query": "tag:#community/valor-cards.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_92",
+      "query": "tag:#community/single-source-validator.ts_/_validateCrossPillarCoherence()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_93",
+      "query": "tag:#community/proxy.ts_/_proxy()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_94",
+      "query": "tag:#community/AdminConsole.tsx_/_AdminConsole()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_95",
+      "query": "tag:#community/ParallaxWrapper.tsx_/_CountUp()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_96",
+      "query": "tag:#community/JournalEntryForm.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_97",
+      "query": "tag:#community/AlertDashboard.tsx_/_fetchLog()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_98",
+      "query": "tag:#community/AreaNav.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_99",
+      "query": "tag:#community/DianDefenseIntake.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_100",
+      "query": "tag:#community/NiifReportIntake.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_101",
+      "query": "tag:#community/TaxRefundIntake.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_102",
+      "query": "tag:#community/CapexEventsModal.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_103",
+      "query": "tag:#community/RepairChat.tsx_/_RepairChat()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_104",
+      "query": "tag:#community/ReportFollowUpChat.tsx_/_composeContext()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_105",
+      "query": "tag:#community/useCapexEvents.ts_/_storageKey()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_106",
+      "query": "tag:#community/useEscudoSurvival.ts_/_formatCOP()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_107",
+      "query": "tag:#community/calculator.ts_/_calculateProvisions()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_108",
+      "query": "tag:#community/income-tax.ts_/_computeIncomeTaxProvision()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_109",
+      "query": "tag:#community/heuristic.ts_/_descriptionScore()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_110",
+      "query": "tag:#community/assemble-niif-report.test.ts_/_makeValidTriple()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_111",
+      "query": "tag:#community/buildLitigationPrompt()_/_LitigationDefenseAgent",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_112",
+      "query": "tag:#community/buildStrategyPrompt()_/_StrategyAgent",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_113",
+      "query": "tag:#community/buildAccountingPrompt()_/_AccountingAgent",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_114",
+      "query": "tag:#community/buildDocumentPrompt()_/_DocumentAgent",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_115",
+      "query": "tag:#community/buildTaxPrompt()_/_TaxAgent",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_116",
+      "query": "tag:#community/DialGauge.tsx_/_arcPath()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_117",
+      "query": "tag:#community/TopoOrnament.tsx_/_buildConcentricRings()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_118",
+      "query": "tag:#community/auditor-coherence.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_119",
+      "query": "tag:#community/escudo-cards.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_120",
+      "query": "tag:#community/futuro-cards.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_121",
+      "query": "tag:#community/monte-carlo.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_122",
+      "query": "tag:#community/monte-carlo.ts_/_runMonteCarlo()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_123",
+      "query": "tag:#community/balance-curator.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_124",
+      "query": "tag:#community/r8-virtual-close.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_125",
+      "query": "tag:#community/encryption.ts_/_getKey()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_126",
+      "query": "tag:#community/governance.route.test.ts_/_makeNonStreamingRequest()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_127",
+      "query": "tag:#community/html.route.test.ts_/_collectSSEText()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_128",
+      "query": "tag:#community/niif.route.test.ts_/_collectSSE()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_129",
+      "query": "tag:#community/strategy.route.test.ts_/_makeNonStreamingRequest()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_130",
+      "query": "tag:#community/page.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_131",
+      "query": "tag:#community/InsightInbox.tsx_/_capitalize()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_132",
+      "query": "tag:#community/useAncoraView()_/_WindowBridge()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_133",
+      "query": "tag:#community/DocumentPreview.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_134",
+      "query": "tag:#community/ChartOfAccountsTree.tsx_/_buildTree()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_135",
+      "query": "tag:#community/PeriodsManagementView.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_136",
+      "query": "tag:#community/AreaCard.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_137",
+      "query": "tag:#community/SurvivalCard.tsx_/_AlertIndicator()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_138",
+      "query": "tag:#community/DueDiligenceIntake.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_139",
+      "query": "tag:#community/GenericPipelineIntake.tsx_/_ConfidenceDot()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_140",
+      "query": "tag:#community/NotificationLogList.tsx_/_formatChannel()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_141",
+      "query": "tag:#community/FuturoTrendBars.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_142",
+      "query": "tag:#community/mock-data.ts_/_buildCard()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_143",
+      "query": "tag:#community/PhotoUploader.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_144",
+      "query": "tag:#community/AdjustmentCard.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_145",
+      "query": "tag:#community/ReportDiff.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_146",
+      "query": "tag:#community/calculator.test.ts_/_makeAsset()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_147",
+      "query": "tag:#community/integrity-validator.test.ts_/_buildPurchaseLines()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_148",
+      "query": "tag:#community/niif-json-validator.test.ts_/_makeComparativeReport()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_149",
+      "query": "tag:#community/spec-v2-integration.test.ts_/_buildClass()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_150",
+      "query": "tag:#community/render-ancora.ts_/_fmtCop()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_151",
+      "query": "tag:#community/benford.ts_/_runBenfordOnAmounts()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_152",
+      "query": "tag:#community/fiscal-anchor-validators.test.ts_/_asBlock()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_153",
+      "query": "tag:#community/connector.ts_/_fetchJSON()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_154",
+      "query": "tag:#community/compose-statements-from-json.test.ts_/_makeBalancedJson()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_155",
+      "query": "tag:#community/WaterfallPnL.tsx_/_formatCompact()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_156",
+      "query": "tag:#community/AuditFindingsPage.tsx_/_opinionColor()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_157",
+      "query": "tag:#community/KPIGridPage.tsx_/_badgeFill()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_158",
+      "query": "tag:#community/StatementsPages.tsx_/_derivedTotal()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_159",
+      "query": "tag:#community/MarkdownToPdf.tsx_/_parseBlocks()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_160",
+      "query": "tag:#community/pillarKpisTag()_/_cache.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_161",
+      "query": "tag:#community/service.test.ts_/_makeCachedRow()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_162",
+      "query": "tag:#community/variants.ts_/_pickVariant()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_163",
+      "query": "tag:#community/health-score.test.ts_/_makeSnapshot()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_164",
+      "query": "tag:#community/futuro-bars.ts_/_buildFuturoBarSeries()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_165",
+      "query": "tag:#community/canonical.test.ts_/_makeEntry()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_166",
+      "query": "tag:#community/3_Telemetry_Entries_per_NIIF_Report_/_agent_telemetry_Postgres_Table",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_167",
+      "query": "tag:#community/route.test.ts_/_makeRequest()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_168",
+      "query": "tag:#community/page.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_169",
+      "query": "tag:#community/page.tsx_/_toX()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_170",
+      "query": "tag:#community/page.tsx_/_launchAudit()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_171",
+      "query": "tag:#community/DensityProvider.tsx_/_DensityProvider()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_172",
+      "query": "tag:#community/SettingsLayout.tsx_/_parseHash()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_173",
+      "query": "tag:#community/AccountAutocomplete.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_174",
+      "query": "tag:#community/OpeningBalanceUploader.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_175",
+      "query": "tag:#community/escudo-capabilities.ts_/_getEscudoSources()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_176",
+      "query": "tag:#community/futuro-capabilities.ts_/_getFuturoSources()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_177",
+      "query": "tag:#community/valor-capabilities.ts_/_getValorSources()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_178",
+      "query": "tag:#community/verdad-capabilities.ts_/_getVerdadSources()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_179",
+      "query": "tag:#community/CommandPalette.tsx_/_fuzzyMatch()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_180",
+      "query": "tag:#community/FinancialIntelIntake.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_181",
+      "query": "tag:#community/IntakePreview.tsx_/_formatCOP()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_182",
+      "query": "tag:#community/useDocumentExtraction.ts_/_extractCompanyFromText()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_183",
+      "query": "tag:#community/PresumedCostWarning.tsx_/_formatCOP()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_184",
+      "query": "tag:#community/ValorTrendBars.tsx_/_getValue()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_185",
+      "query": "tag:#community/Ledger.tsx_/_buildMonthOptions()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_186",
+      "query": "tag:#community/PromoteEntries.tsx_/_formatAmount()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_187",
+      "query": "tag:#community/PymeBooksClassic.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_188",
+      "query": "tag:#community/ValidationStatusStrip.tsx_/_formatPct()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_189",
+      "query": "tag:#community/DataTable.tsx_/_copFormatter()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_190",
+      "query": "tag:#community/Toast.tsx_/_ToastNotification()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_191",
+      "query": "tag:#community/useFiscalAgentSSE.ts_/_parseSseChunk()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_192",
+      "query": "tag:#community/fingerprintTransaction()_/_sha256Hex()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_193",
+      "query": "tag:#community/validate.test.ts_/_creditLine()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_194",
+      "query": "tag:#community/OpeningBalanceError_/_types.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_195",
+      "query": "tag:#community/rules-engine.test.ts_/_makeProfile()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_196",
+      "query": "tag:#community/DoubleEntryError_/_.constructor()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_197",
+      "query": "tag:#community/consolidated-report-v21.test.ts_/_makeFinding()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_198",
+      "query": "tag:#community/benford.test.ts_/_generateBenfordAmounts()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_199",
+      "query": "tag:#community/round-number-bias.ts_/_analyzeRoundBias()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_200",
+      "query": "tag:#community/weekend-postings.ts_/_isNonWorkday()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_201",
+      "query": "tag:#community/legal-strings.ts_/_a5SinProvisionBody()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_202",
+      "query": "tag:#community/render-v21.test.ts_/_countMatches()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_203",
+      "query": "tag:#community/ancora.fixture.ts_/_makeAncora()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_204",
+      "query": "tag:#community/credentials.test.ts_/_freshKey()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_205",
+      "query": "tag:#community/oracle-fusion.test.ts_/_makeBalance()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_206",
+      "query": "tag:#community/sap-s4hana.test.ts_/_makeResponse()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_207",
+      "query": "tag:#community/siigo-nube.test.ts_/_makeResponse()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_208",
+      "query": "tag:#community/pages-snapshot.test.tsx_/_expectValidPdfHeader()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_209",
+      "query": "tag:#community/primitives.test.tsx_/_expectValidPdf()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_210",
+      "query": "tag:#community/route-integration.test.ts_/_bodyStartsWithPdfMagic()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_211",
+      "query": "tag:#community/NormativeAppendix.tsx_/_formatCOP()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_212",
+      "query": "tag:#community/QualityMetaAuditPage.tsx_/_gradeColor()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_213",
+      "query": "tag:#community/EditorialTitle.tsx_/_EditorialTitle()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_214",
+      "query": "tag:#community/MixedWeightHeadline.tsx_/_MixedWeightHeadline()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_215",
+      "query": "tag:#community/period-locked.tsx_/_btn()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_216",
+      "query": "tag:#community/v8-helpers.test.ts_/_mkPp()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_217",
+      "query": "tag:#community/wave2-f4.test.ts_/_buildClass()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_218",
+      "query": "tag:#community/vault.test.ts_/_freshKey()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_219",
+      "query": "tag:#community/loadFixtureAsCSV()_/_integration-grupo-empresarial-2tres-sas.test.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_220",
+      "query": "tag:#community/row()_/_p8-elite-pipeline-smoke.test.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_221",
+      "query": "tag:#community/AdminPage()_/_page.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_222",
+      "query": "tag:#community/route.ts_/_POST()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_223",
+      "query": "tag:#community/route.ts_/_POST()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_224",
+      "query": "tag:#community/route.ts_/_POST()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_225",
+      "query": "tag:#community/layout.tsx_/_DashboardLayout()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_226",
+      "query": "tag:#community/page.tsx_/_Page()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_227",
+      "query": "tag:#community/RootLayout()_/_layout.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_228",
+      "query": "tag:#community/Home()_/_page.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_229",
+      "query": "tag:#community/robots()_/_robots.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_230",
+      "query": "tag:#community/sitemap()_/_sitemap.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_231",
+      "query": "tag:#community/AlertasPage()_/_page.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_232",
+      "query": "tag:#community/OpeningBalancePage()_/_page.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_233",
+      "query": "tag:#community/page.tsx_/_NewEntryPage()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_234",
+      "query": "tag:#community/page.tsx_/_ChartOfAccountsPage()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_235",
+      "query": "tag:#community/loading.tsx_/_Loading()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_236",
+      "query": "tag:#community/page.tsx_/_LedgerPage()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_237",
+      "query": "tag:#community/page.tsx_/_ContabilidadPage()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_238",
+      "query": "tag:#community/page.tsx_/_PeriodosPage()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_239",
+      "query": "tag:#community/fadeItem()_/_page.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_240",
+      "query": "tag:#community/page.tsx_/_fadeItem()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_241",
+      "query": "tag:#community/page.tsx_/_fadeItem()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_242",
+      "query": "tag:#community/loading.tsx_/_Loading()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_243",
+      "query": "tag:#community/page.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_244",
+      "query": "tag:#community/page.tsx_/_fadeItem()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_245",
+      "query": "tag:#community/page.tsx_/_fadeItem()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_246",
+      "query": "tag:#community/loading.tsx_/_Loading()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_247",
+      "query": "tag:#community/page.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_248",
+      "query": "tag:#community/loading.tsx_/_Loading()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_249",
+      "query": "tag:#community/page.tsx_/_PymeBookPage()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_250",
+      "query": "tag:#community/page.tsx_/_PymeBooksPage()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_251",
+      "query": "tag:#community/page.tsx_/_PymePage()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_252",
+      "query": "tag:#community/layout.tsx_/_SettingsLayout()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_253",
+      "query": "tag:#community/loading.tsx_/_Loading()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_254",
+      "query": "tag:#community/page.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_255",
+      "query": "tag:#community/loading.tsx_/_Loading()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_256",
+      "query": "tag:#community/handleSubmit()_/_AdminGate.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_257",
+      "query": "tag:#community/ParticleField()_/_HeroScene.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_258",
+      "query": "tag:#community/Header.tsx_/_handleScroll()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_259",
+      "query": "tag:#community/FAQ.tsx_/_toggleFaq()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_260",
+      "query": "tag:#community/Methodology.tsx_/_ProgressLine()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_261",
+      "query": "tag:#community/DensitySection.tsx_/_readDensity()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_262",
+      "query": "tag:#community/LanguageSection.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_263",
+      "query": "tag:#community/SettingsNav.tsx_/_handleKeyDown()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_264",
+      "query": "tag:#community/GradientBorder.tsx_/_GradientBorder()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_265",
+      "query": "tag:#community/PremiumKpiCard.tsx_/_formatDelta()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_266",
+      "query": "tag:#community/RiskGauge.tsx_/_arcPath()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_267",
+      "query": "tag:#community/SectionHeader.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_268",
+      "query": "tag:#community/ShimmerLoader.tsx_/_ShimmerLoader()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_269",
+      "query": "tag:#community/Skeleton.tsx_/_Skeleton()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_270",
+      "query": "tag:#community/SkeletonKpi.tsx_/_SkeletonKpi()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_271",
+      "query": "tag:#community/handleClose()_/_ClosePeriodConfirmDialog.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_272",
+      "query": "tag:#community/handleSubmit()_/_OpenPeriodModal.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_273",
+      "query": "tag:#community/handleClick()_/_QuickStartPeriodButton.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_274",
+      "query": "tag:#community/AnalysisPanel.tsx_/_handleKey()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_275",
+      "query": "tag:#community/CapabilityZones.tsx_/_CapabilityZones()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_276",
+      "query": "tag:#community/source-labels.ts_/_getSourceLabels()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_277",
+      "query": "tag:#community/scoreAccent()_/_VerdadArea.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_278",
+      "query": "tag:#community/cn()_/_SynthesisHeaderCard.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_279",
+      "query": "tag:#community/TetCard()_/_TetCard.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_280",
+      "query": "tag:#community/BankAccountForm.tsx_/_handleSubmit()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_281",
+      "query": "tag:#community/cn()_/_DefensaDianCard.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_282",
+      "query": "tag:#community/cn()_/_RiskScoreCard.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_283",
+      "query": "tag:#community/AntiDianCard.tsx_/_AntiDianCard()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_284",
+      "query": "tag:#community/OptimizacionDividendosCard.tsx_/_OptimizacionDividendosCard()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_285",
+      "query": "tag:#community/useIntakePersistence.ts_/_useIntakePersistence()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_286",
+      "query": "tag:#community/NiifEliteButton.tsx_/_handleClick()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_287",
+      "query": "tag:#community/SubscriptionForm.tsx_/_SubscriptionForm()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_288",
+      "query": "tag:#community/EscudoExecutiveCards.tsx_/_if()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_289",
+      "query": "tag:#community/FuturoExecutiveCards.tsx_/_if()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_290",
+      "query": "tag:#community/PillarHealthBadge.tsx_/_PillarHealthBadge()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_291",
+      "query": "tag:#community/ValorExecutiveCards.tsx_/_if()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_292",
+      "query": "tag:#community/VerdadExecutiveCards.tsx_/_VerdadExecutiveCards()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_293",
+      "query": "tag:#community/RegimeContext.tsx_/_RegimeProvider()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_294",
+      "query": "tag:#community/EntryReview.tsx_/_entryToEdit()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_295",
+      "query": "tag:#community/MonthlyReport.tsx_/_cn()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_296",
+      "query": "tag:#community/WorkspaceContext.tsx_/_WorkspaceProvider()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_297",
+      "query": "tag:#community/DSBadge()_/_Badge.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_298",
+      "query": "tag:#community/handleClick()_/_CitationBadge.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_299",
+      "query": "tag:#community/ProgressRing()_/_ProgressRing.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_300",
+      "query": "tag:#community/RiskMeter()_/_RiskMeter.tsx",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_301",
+      "query": "tag:#community/ScoreGauge()_/_ScoreGauge.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_302",
+      "query": "tag:#community/cn()_/_StepWizard.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_303",
+      "query": "tag:#community/StreamingText()_/_StreamingText.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_304",
+      "query": "tag:#community/useFocusTrap.ts_/_useFocusTrap()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_305",
+      "query": "tag:#community/useIsMac.ts_/_useIsMac()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_306",
+      "query": "tag:#community/useMacroFactors.ts_/_useMacroFactors()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_307",
+      "query": "tag:#community/useRealtimeAPI.ts_/_useRealtimeAPI()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_308",
+      "query": "tag:#community/csv-parser.test.ts_/_buildCsv()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_309",
+      "query": "tag:#community/fingerprint.test.ts_/_makeTx()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_310",
+      "query": "tag:#community/status.ts_/_getLedgerVsBankDifference()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_311",
+      "query": "tag:#community/getClassSummary()_/_types.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_312",
+      "query": "tag:#community/api-contract.test.ts_/_mockFetch()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_313",
+      "query": "tag:#community/html-editor-validator.test.ts_/_makeValidHtml()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_314",
+      "query": "tag:#community/fiscal-reviewer.render.test.ts_/_baseJson()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_315",
+      "query": "tag:#community/legal-auditor.render.test.ts_/_baseJson()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_316",
+      "query": "tag:#community/niif-auditor-dictamen.test.ts_/_buildV21Sample()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_317",
+      "query": "tag:#community/tax-auditor-dictamen.test.ts_/_buildV21Sample()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_318",
+      "query": "tag:#community/orchestrator.test.ts_/_makeAnomaly()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_319",
+      "query": "tag:#community/repeated-amounts.test.ts_/_makeOccurrences()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_320",
+      "query": "tag:#community/numeration-gaps.ts_/_detectGaps()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_321",
+      "query": "tag:#community/repeated-amounts.ts_/_detectRepeatedAmounts()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_322",
+      "query": "tag:#community/empty()_/_respuestas-prueba.fixture.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_323",
+      "query": "tag:#community/conciliacion.validator.test.ts_/_findCheck()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_324",
+      "query": "tag:#community/defensa-dian.validator.test.ts_/_findCheck()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_325",
+      "query": "tag:#community/devoluciones.validator.test.ts_/_findCheck()",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_326",
+      "query": "tag:#community/format.validator.test.ts_/_findCheck()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_327",
+      "query": "tag:#community/risk-score.validator.test.ts_/_findCheck()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_328",
+      "query": "tag:#community/buildSyntheticCatalogue()_/_catalog-sintetico.fixture.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_329",
+      "query": "tag:#community/v21-mapping.test.ts_/_makeJson()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_330",
+      "query": "tag:#community/createSseEncoder()_/_sse-encoder.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_331",
+      "query": "tag:#community/classifier.prompt.ts_/_buildClassifierPrompt()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_332",
+      "query": "tag:#community/gateway-errors.ts_/_toFriendlyError()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_333",
+      "query": "tag:#community/envModel()_/_models.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_334",
+      "query": "tag:#community/diffMarkdown()_/_markdown-diff.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_335",
+      "query": "tag:#community/areaHex()_/_OrbitalPillars.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_336",
+      "query": "tag:#community/EditorialReportDoc.tsx_/_EditorialReportDoc()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_337",
+      "query": "tag:#community/ClosingPage.tsx_/_buildSignatories()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_338",
+      "query": "tag:#community/CoverPage.tsx_/_companyInitials()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_339",
+      "query": "tag:#community/DirectorLetter.tsx_/_splitMarkdown()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_340",
+      "query": "tag:#community/TocPage.tsx_/_isSectionEntry()",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_341",
+      "query": "tag:#community/AvatarInitials.tsx_/_uid()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_342",
+      "query": "tag:#community/NormativePill.tsx_/_resolveStyle()",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_343",
+      "query": "tag:#community/WatermarkWord.tsx_/_WatermarkWord()",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_344",
+      "query": "tag:#community/transitions.ts_/_pickTransition()",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_345",
+      "query": "tag:#community/getResend()_/_resend-client.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_346",
+      "query": "tag:#community/r10-class-18-classification.test.ts_/_buildSnapshotForR10()",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_347",
+      "query": "tag:#community/r12-closing-detector.test.ts_/_buildSnapshotForR12()",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_348",
+      "query": "tag:#community/r14-r15-warnings.test.ts_/_buildSnapshot()",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_349",
+      "query": "tag:#community/r16-tax-anticipo-netting.test.ts_/_buildSnapshotForR16()",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_350",
+      "query": "tag:#community/cn()_/_utils.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_351",
+      "query": "tag:#community/triggers.test.ts_/_makeAlert()",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_352",
+      "query": "tag:#community/GET_/api/admin/telemetry_Endpoint_/_Telemetry_Alert_Thresholds_(P0/P1)",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_353",
+      "query": "tag:#community/server-only.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_354",
+      "query": "tag:#community/page.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_355",
+      "query": "tag:#community/page.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_356",
+      "query": "tag:#community/page.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_357",
+      "query": "tag:#community/format.test.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_358",
+      "query": "tag:#community/ChartContainer.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_359",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_360",
+      "query": "tag:#community/ScrollGradient.tsx",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_361",
+      "query": "tag:#community/SmoothScroll.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_362",
+      "query": "tag:#community/InsightToast.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_363",
+      "query": "tag:#community/CTA.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_364",
+      "query": "tag:#community/Hero.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_365",
+      "query": "tag:#community/PipelineShowcase.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_366",
+      "query": "tag:#community/WorkspaceTeaser.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_367",
+      "query": "tag:#community/ResetSection.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_368",
+      "query": "tag:#community/Badge.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_369",
+      "query": "tag:#community/Button.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_370",
+      "query": "tag:#community/Card.tsx",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_371",
+      "query": "tag:#community/EliteButton.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_372",
+      "query": "tag:#community/EliteCard.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_373",
+      "query": "tag:#community/GlassModal.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_374",
+      "query": "tag:#community/GlassPanel.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_375",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_376",
+      "query": "tag:#community/InteractiveOrb.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_377",
+      "query": "tag:#community/PageSkeleton.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_378",
+      "query": "tag:#community/SkeletonCard.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_379",
+      "query": "tag:#community/SkeletonText.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_380",
+      "query": "tag:#community/NewEntryWorkspace.tsx",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_381",
+      "query": "tag:#community/DataSourceLadder.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_382",
+      "query": "tag:#community/source-style.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_383",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_384",
+      "query": "tag:#community/AntiDianCard.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_385",
+      "query": "tag:#community/ContingencyReserveCard.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_386",
+      "query": "tag:#community/DividendOptimizerCard.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_387",
+      "query": "tag:#community/RetentionShieldCard.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_388",
+      "query": "tag:#community/FiscalAlertsPanel.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_389",
+      "query": "tag:#community/SurvivalModeSection.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_390",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_391",
+      "query": "tag:#community/HtmlReportViewer.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_392",
+      "query": "tag:#community/IntakeModal.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_393",
+      "query": "tag:#community/AreaShell.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_394",
+      "query": "tag:#community/_alerts-list.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_395",
+      "query": "tag:#community/EscudoMicroDashboard.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_396",
+      "query": "tag:#community/FuturoMicroDashboard.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_397",
+      "query": "tag:#community/PillarsCommandCenter.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_398",
+      "query": "tag:#community/ValorMicroDashboard.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_399",
+      "query": "tag:#community/VerdadMicroDashboard.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_400",
+      "query": "tag:#community/VerdadTrendBars.tsx",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_401",
+      "query": "tag:#community/BookWorkspace.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_402",
+      "query": "tag:#community/PymeAccessTile.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_403",
+      "query": "tag:#community/PymeDeadlinesCard.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_404",
+      "query": "tag:#community/mockData.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_405",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_406",
+      "query": "tag:#community/PymeLanding.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_407",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_408",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_409",
+      "query": "tag:#community/WorkspaceLayout.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_410",
+      "query": "tag:#community/municipal-2026.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_411",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_412",
+      "query": "tag:#community/AgentPipelineViz.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_413",
+      "query": "tag:#community/FindingCard.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_414",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_415",
+      "query": "tag:#community/tokens.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_416",
+      "query": "tag:#community/InsightAlertEmail.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_417",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_418",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_419",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_420",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_421",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_422",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_423",
+      "query": "tag:#community/constants.test.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_424",
+      "query": "tag:#community/bridge-cuadratura.test.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_425",
+      "query": "tag:#community/money.test.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_426",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_427",
+      "query": "tag:#community/numeration-gaps.test.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_428",
+      "query": "tag:#community/weekend-postings.test.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_429",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_430",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_431",
+      "query": "tag:#community/new-third-party.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_432",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_433",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_434",
+      "query": "tag:#community/audit-report.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_435",
+      "query": "tag:#community/base.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_436",
+      "query": "tag:#community/escudo-survival.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_437",
+      "query": "tag:#community/feasibility.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_438",
+      "query": "tag:#community/fiscal-opinion.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_439",
+      "query": "tag:#community/governance-report.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_440",
+      "query": "tag:#community/html-editor.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_441",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_442",
+      "query": "tag:#community/quality-report.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_443",
+      "query": "tag:#community/strategy-report.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_444",
+      "query": "tag:#community/tax-planning.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_445",
+      "query": "tag:#community/tax-reconciliation.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_446",
+      "query": "tag:#community/transfer-pricing.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_447",
+      "query": "tag:#community/valuation.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_448",
+      "query": "tag:#community/integration.test.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_449",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_450",
+      "query": "tag:#community/schemas.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_451",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_452",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_453",
+      "query": "tag:#community/buildFiscalAnchor-grupo2tres.test.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_454",
+      "query": "tag:#community/grupo-2tres-preprocessed.fixture.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_455",
+      "query": "tag:#community/internal-types.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_456",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_457",
+      "query": "tag:#community/textos-prueba.fixture.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_458",
+      "query": "tag:#community/blacklist.validator.test.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_459",
+      "query": "tag:#community/citation.validator.test.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_460",
+      "query": "tag:#community/normative.validator.test.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_461",
+      "query": "tag:#community/doctrina-dian.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_462",
+      "query": "tag:#community/estatuto-tributario.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_463",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_464",
+      "query": "tag:#community/jurisprudencia.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_465",
+      "query": "tag:#community/leyes-reformas.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_466",
+      "query": "tag:#community/niif-nia.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_467",
+      "query": "tag:#community/sanciones.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_468",
+      "query": "tag:#community/tarifas-retencion.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_469",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_470",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_471",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_472",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_473",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_474",
+      "query": "tag:#community/signatories.test.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_475",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_476",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_477",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_478",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_479",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_480",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_481",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_482",
+      "query": "tag:#community/enhancer.prompt.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_483",
+      "query": "tag:#community/schemas.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_484",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_485",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_486",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_487",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_488",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_489",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_490",
+      "query": "tag:#community/derive-ancora-view.test.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_491",
+      "query": "tag:#community/ancora-view.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_492",
+      "query": "tag:#community/setup.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_493",
+      "query": "tag:#community/schema-activity.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_494",
+      "query": "tag:#community/schema-adjustments.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_495",
+      "query": "tag:#community/schema-banking.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_496",
+      "query": "tag:#community/schema-notifications.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_497",
+      "query": "tag:#community/schema-sentinel.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_498",
+      "query": "tag:#community/schema-tax.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_499",
+      "query": "tag:#community/schema.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_500",
+      "query": "tag:#community/fixed-asset-categories-co-2026.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_501",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_502",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_503",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_504",
+      "query": "tag:#community/BreakEvenPage.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_505",
+      "query": "tag:#community/DialGaugePage.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_506",
+      "query": "tag:#community/NotesPage.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_507",
+      "query": "tag:#community/OrbitalPillarsPage.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_508",
+      "query": "tag:#community/ProjectedCashFlowPage.tsx",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_509",
+      "query": "tag:#community/ShareholderMinutesPage.tsx",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_510",
+      "query": "tag:#community/WaterfallPnLPage.tsx",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_511",
+      "query": "tag:#community/AuthorityChip.tsx",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_512",
+      "query": "tag:#community/CrescentMask.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_513",
+      "query": "tag:#community/GoldRule.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_514",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_515",
+      "query": "tag:#community/NumberedSectionHeader.tsx",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_516",
+      "query": "tag:#community/PageNumberBadge.tsx",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_517",
+      "query": "tag:#community/PaginationFooter.tsx",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_518",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_519",
+      "query": "tag:#community/dictionaries.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_520",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_521",
+      "query": "tag:#community/insight-templates.test.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_522",
+      "query": "tag:#community/anomaly-detected.tsx",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_523",
+      "query": "tag:#community/health-failed.tsx",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_524",
+      "query": "tag:#community/recon-broken.tsx",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_525",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_526",
+      "query": "tag:#community/insight-types.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_527",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_528",
+      "query": "tag:#community/extract-company-metadata.test.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_529",
+      "query": "tag:#community/r9-precision-cents.test.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_530",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_531",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_532",
+      "query": "tag:#community/nit-validator.test.ts",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_533",
+      "query": "tag:#community/accounting-schemas.ts",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_534",
+      "query": "tag:#community/pyme-schemas.ts",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_535",
+      "query": "tag:#community/schemas.ts",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_536",
+      "query": "tag:#community/index.ts",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_537",
+      "query": "tag:#community/types.ts",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_538",
+      "query": "tag:#community/kpis.ts",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_539",
+      "query": "tag:#community/platform.ts",
       "color": {
         "a": 1,
         "rgb": 12234924
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_540",
+      "query": "tag:#community/Tax_Planning_Pipeline",
       "color": {
         "a": 1,
         "rgb": 5142951
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_541",
+      "query": "tag:#community/Transfer_Pricing_Pipeline",
       "color": {
         "a": 1,
         "rgb": 15896107
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_542",
+      "query": "tag:#community/Business_Valuation_Pipeline",
       "color": {
         "a": 1,
         "rgb": 14767961
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_543",
+      "query": "tag:#community/Fiscal_Audit_Opinion_Pipeline",
       "color": {
         "a": 1,
         "rgb": 7780274
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_544",
+      "query": "tag:#community/Tax_Reconciliation_Pipeline",
       "color": {
         "a": 1,
         "rgb": 5873999
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_545",
+      "query": "tag:#community/Feasibility_Study_Pipeline",
       "color": {
         "a": 1,
         "rgb": 15583560
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_546",
+      "query": "tag:#community/Quality_Meta-Auditor_(12_dimensions)",
       "color": {
         "a": 1,
         "rgb": 11565729
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_547",
+      "query": "tag:#community/PUC_Cuentas_Cr\u00edticas_del_M\u00f3dulo_Escudo",
       "color": {
         "a": 1,
         "rgb": 16752039
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_548",
+      "query": "tag:#community/D2_OCR_Promote_\u2014_Explicit_Manual_(auto-promote_deferred)",
       "color": {
         "a": 1,
         "rgb": 10253663
       }
     },
     {
-      "query": "tag:#community/Module_Cluster_549",
+      "query": "tag:#community/D4_SHA-256_Hash_Seal_(PKCS#7_deferred)",
       "color": {
         "a": 1,
         "rgb": 12234924
+      }
+    },
+    {
+      "query": "tag:#community/D5_Monthly_Close_Health-Check_Blocking",
+      "color": {
+        "a": 1,
+        "rgb": 5142951
       }
     }
   ]

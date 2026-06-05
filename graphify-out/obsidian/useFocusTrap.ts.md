@@ -1,12 +1,12 @@
 ---
 source_file: "hooks\useFocusTrap.ts"
 type: "code"
-community: "Module Cluster 303"
+community: "useFocusTrap.ts / useFocusTrap()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_303
+  - community/useFocusTrap.ts_/_useFocusTrap()
 ---
 
 # useFocusTrap.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[useFocusTrap()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_303
+#graphify/code #graphify/EXTRACTED #community/useFocusTrap.ts_/_useFocusTrap()

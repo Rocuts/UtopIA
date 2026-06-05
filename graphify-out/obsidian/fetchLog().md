@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\AlertDashboard.tsx"
 type: "code"
-community: "Module Cluster 94"
+community: "AlertDashboard.tsx / fetchLog()"
 location: "L44"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_94
+  - community/AlertDashboard.tsx_/_fetchLog()
 ---
 
 # fetchLog()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AlertDashboard.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_94
+#graphify/code #graphify/EXTRACTED #community/AlertDashboard.tsx_/_fetchLog()

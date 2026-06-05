@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\actions\period-actions.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L105"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # toSerializableError()
@@ -18,4 +18,4 @@ tags:
 - [[period-actions.ts]] - `contains` [EXTRACTED]
 - [[reopenPeriodAction()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

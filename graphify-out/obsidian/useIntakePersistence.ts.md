@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\intake\useIntakePersistence.ts"
 type: "code"
-community: "Module Cluster 284"
+community: "useIntakePersistence.ts / useIntakePersistence()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_284
+  - community/useIntakePersistence.ts_/_useIntakePersistence()
 ---
 
 # useIntakePersistence.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[useIntakePersistence()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_284
+#graphify/code #graphify/EXTRACTED #community/useIntakePersistence.ts_/_useIntakePersistence()

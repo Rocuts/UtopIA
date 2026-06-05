@@ -1,14 +1,14 @@
 ---
 source_file: "components\ui\Card.tsx"
 type: "code"
-community: "Module Cluster 369"
+community: "Card.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_369
+  - community/Card.tsx
 ---
 
 # Card.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_369
+#graphify/code #graphify/EXTRACTED #community/Card.tsx

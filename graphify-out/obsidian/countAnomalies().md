@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\verdad-cards.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L94"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # countAnomalies()
@@ -16,4 +16,4 @@ tags:
 - [[isVirtualCuratorAccount()_3]] - `calls` [EXTRACTED]
 - [[verdad-cards.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Platform_Pillar_Config
+#graphify/code #graphify/EXTRACTED #community/escudo-cards.ts_/_verdad-cards.ts

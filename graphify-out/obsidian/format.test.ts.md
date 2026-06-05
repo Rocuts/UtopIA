@@ -1,14 +1,14 @@
 ---
 source_file: "components\charts\__tests__\format.test.ts"
 type: "code"
-community: "Module Cluster 356"
+community: "format.test.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_356
+  - community/format.test.ts
 ---
 
 # format.test.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_356
+#graphify/code #graphify/EXTRACTED #community/format.test.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\feasibility\orchestrator.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L30"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # orchestrateFeasibilityStudy()
@@ -19,4 +19,4 @@ tags:
 - [[runMarketAnalyst()]] - `calls` [INFERRED]
 - [[runRiskAssessor()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\PresumedCostWarning.tsx"
 type: "code"
-community: "Module Cluster 180"
+community: "PresumedCostWarning.tsx / formatCOP()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_180
+  - community/PresumedCostWarning.tsx_/_formatCOP()
 ---
 
 # PresumedCostWarning.tsx
@@ -15,4 +15,4 @@ tags:
 - [[formatCOP()_3]] - `contains` [EXTRACTED]
 - [[formatPct()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_180
+#graphify/code #graphify/EXTRACTED #community/PresumedCostWarning.tsx_/_formatCOP()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\utils\finish-reason-check.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L64"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Audit_&_Compliance_Agents
+  - graphify/INFERRED
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # assertFinishedCleanlyOrThrow()
@@ -15,4 +15,4 @@ tags:
 - [[callFinancialAgent()]] - `calls` [INFERRED]
 - [[finish-reason-check.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

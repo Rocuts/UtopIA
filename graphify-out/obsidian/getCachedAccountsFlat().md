@@ -1,12 +1,12 @@
 ---
 source_file: "lib\cache\ledger-queries.ts"
 type: "code"
-community: "Cron Jobs & ERP Webhooks"
+community: "preprocessed-balance.ts / getCachedPreprocessedBalance()"
 location: "L115"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Cron_Jobs_&_ERP_Webhooks
+  - community/preprocessed-balance.ts_/_getCachedPreprocessedBalance()
 ---
 
 # getCachedAccountsFlat()
@@ -16,4 +16,4 @@ tags:
 - [[ledger-queries.ts]] - `contains` [EXTRACTED]
 - [[loadTrialBalanceRows()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Cron_Jobs_&_ERP_Webhooks
+#graphify/code #graphify/INFERRED #community/preprocessed-balance.ts_/_getCachedPreprocessedBalance()

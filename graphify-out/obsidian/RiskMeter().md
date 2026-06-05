@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\RiskMeter.tsx"
 type: "code"
-community: "Module Cluster 299"
+community: "RiskMeter() / RiskMeter.tsx"
 location: "L36"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_299
+  - community/RiskMeter()_/_RiskMeter.tsx
 ---
 
 # RiskMeter()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[RiskMeter.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_299
+#graphify/code #graphify/EXTRACTED #community/RiskMeter()_/_RiskMeter.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\agents\summarizer.ts"
 type: "code"
-community: "Module Cluster 18"
+community: "processUpload() / POST()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_18
+  - community/processUpload()_/_POST()
 ---
 
 # summarizer.ts
@@ -16,4 +16,4 @@ tags:
 - [[formatPesos()]] - `contains` [EXTRACTED]
 - [[summarizeMonth()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_18
+#graphify/code #graphify/EXTRACTED #community/processUpload()_/_POST()

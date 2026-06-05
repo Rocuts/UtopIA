@@ -1,12 +1,12 @@
 ---
 source_file: "lib\ancora\derive-ancora-view.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Financial_Agent_Pipelines
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # derive-ancora-view.ts
@@ -18,4 +18,4 @@ tags:
 - [[pctToNumber()]] - `contains` [EXTRACTED]
 - [[round2()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

@@ -1,14 +1,14 @@
 ---
 source_file: "docs/ARCHITECTURE.md"
 type: "document"
-community: "Module Cluster 540"
+community: "Transfer Pricing Pipeline"
 location: "line 49"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_540
+  - community/Transfer_Pricing_Pipeline
 ---
 
 # Transfer Pricing Pipeline
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_540
+#graphify/document #graphify/EXTRACTED #community/Transfer_Pricing_Pipeline

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\cache\ledger-queries.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L62"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # getCachedLedgerByPeriod()
@@ -16,4 +16,4 @@ tags:
 - [[ledger-queries.ts]] - `contains` [EXTRACTED]
 - [[loadTrialBalanceRows()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

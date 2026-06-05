@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\xero.ts"
 type: "code"
-community: "Module Cluster 47"
+community: "XeroConnector / .authenticatedFetch()"
 location: "L130"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_47
+  - community/XeroConnector_/_.authenticatedFetch()
 ---
 
 # XeroConnector
@@ -26,4 +26,4 @@ tags:
 - [[.testConnection()_13]] - `method` [EXTRACTED]
 - [[xero.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_47
+#graphify/code #graphify/EXTRACTED #community/XeroConnector_/_.authenticatedFetch()

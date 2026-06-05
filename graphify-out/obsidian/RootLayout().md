@@ -1,12 +1,12 @@
 ---
 source_file: "app\layout.tsx"
 type: "code"
-community: "Module Cluster 225"
+community: "RootLayout() / layout.tsx"
 location: "L139"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_225
+  - community/RootLayout()_/_layout.tsx
 ---
 
 # RootLayout()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[layout.tsx_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_225
+#graphify/code #graphify/EXTRACTED #community/RootLayout()_/_layout.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\ClosingPage.tsx"
 type: "code"
-community: "Module Cluster 336"
+community: "ClosingPage.tsx / buildSignatories()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_336
+  - community/ClosingPage.tsx_/_buildSignatories()
 ---
 
 # ClosingPage.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[buildSignatories()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_336
+#graphify/code #graphify/EXTRACTED #community/ClosingPage.tsx_/_buildSignatories()

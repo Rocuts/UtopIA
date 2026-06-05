@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite.ts"
 type: "code"
-community: "Module Cluster 53"
+community: "pdf-elite.ts / setFill()"
 location: "L122"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_53
+  - community/pdf-elite.ts_/_setFill()
 ---
 
 # drawCoverPage()
@@ -19,4 +19,4 @@ tags:
 - [[setFill()]] - `calls` [EXTRACTED]
 - [[setTextColor()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_53
+#graphify/code #graphify/EXTRACTED #community/pdf-elite.ts_/_setFill()

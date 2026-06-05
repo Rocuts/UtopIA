@@ -1,12 +1,12 @@
 ---
 source_file: "lib\workflows\monthly-close\steps\closing-entry.ts"
 type: "code"
-community: "Module Cluster 16"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L23"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_16
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # generateClosingEntry()
@@ -20,4 +20,4 @@ tags:
 - [[getPeriodById()]] - `calls` [INFERRED]
 - [[getResultAccounts()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_16
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

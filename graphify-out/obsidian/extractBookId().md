@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\pyme\promote\repository.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "promoteEntries() / entry-builder.ts"
 location: "L74"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - graphify/INFERRED
+  - community/promoteEntries()_/_entry-builder.ts
 ---
 
 # extractBookId()
@@ -15,4 +15,4 @@ tags:
 - [[promoteEntries()]] - `calls` [INFERRED]
 - [[repository.ts_7]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/promoteEntries()_/_entry-builder.ts

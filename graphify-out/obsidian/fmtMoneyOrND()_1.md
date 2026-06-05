@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\agents\legal-auditor.ts"
 type: "code"
-community: "Module Cluster 19"
+community: "formatCopFromCents() / parseMoneyCop()"
 location: "L292"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_19
+  - community/formatCopFromCents()_/_parseMoneyCop()
 ---
 
 # fmtMoneyOrND()
@@ -17,4 +17,4 @@ tags:
 - [[parseMoneyCop()]] - `calls` [INFERRED]
 - [[renderMarkdown()_1]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_19
+#graphify/code #graphify/EXTRACTED #community/formatCopFromCents()_/_parseMoneyCop()

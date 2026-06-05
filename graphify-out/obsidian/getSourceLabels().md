@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\areas\shared\source-labels.ts"
 type: "code"
-community: "Module Cluster 275"
+community: "source-labels.ts / getSourceLabels()"
 location: "L7"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_275
+  - community/source-labels.ts_/_getSourceLabels()
 ---
 
 # getSourceLabels()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[source-labels.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_275
+#graphify/code #graphify/EXTRACTED #community/source-labels.ts_/_getSourceLabels()

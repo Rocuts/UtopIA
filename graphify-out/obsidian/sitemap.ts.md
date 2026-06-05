@@ -1,12 +1,12 @@
 ---
 source_file: "app\sitemap.ts"
 type: "code"
-community: "Module Cluster 228"
+community: "sitemap() / sitemap.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_228
+  - community/sitemap()_/_sitemap.ts
 ---
 
 # sitemap.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[sitemap()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_228
+#graphify/code #graphify/EXTRACTED #community/sitemap()_/_sitemap.ts

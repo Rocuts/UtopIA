@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ReportFollowUpChat.tsx"
 type: "code"
-community: "Module Cluster 101"
+community: "ReportFollowUpChat.tsx / composeContext()"
 location: "L149"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_101
+  - community/ReportFollowUpChat.tsx_/_composeContext()
 ---
 
 # parsePatch()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ReportFollowUpChat.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_101
+#graphify/code #graphify/EXTRACTED #community/ReportFollowUpChat.tsx_/_composeContext()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\charts\WaterfallPnL.tsx"
 type: "code"
-community: "Module Cluster 152"
+community: "WaterfallPnL.tsx / formatCompact()"
 location: "L66"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_152
+  - community/WaterfallPnL.tsx_/_formatCompact()
 ---
 
 # yToPx()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[WaterfallPnL.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_152
+#graphify/code #graphify/EXTRACTED #community/WaterfallPnL.tsx_/_formatCompact()

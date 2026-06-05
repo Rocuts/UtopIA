@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-anchor\alert-mapping.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "repository.ts / erp-query.ts"
 location: "L89"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Pyme_&_Workspace_Routes
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # impactoCentsForAlert()
@@ -16,4 +16,4 @@ tags:
 - [[fiscalAlertaToInsight()]] - `calls` [EXTRACTED]
 - [[saldoAFavorCents()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/EXTRACTED #community/repository.ts_/_erp-query.ts

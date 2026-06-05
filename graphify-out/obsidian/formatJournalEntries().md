@@ -1,12 +1,12 @@
 ---
 source_file: "lib\tools\erp-query.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "repository.ts / erp-query.ts"
 location: "L343"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # formatJournalEntries()
@@ -16,4 +16,4 @@ tags:
 - [[formatCOP()_25]] - `calls` [EXTRACTED]
 - [[queryERP()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/EXTRACTED #community/repository.ts_/_erp-query.ts

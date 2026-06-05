@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ChatWorkspace.tsx"
 type: "code"
-community: "Module Cluster 52"
+community: "ChatWorkspace.tsx / handleSubmit()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_52
+  - community/ChatWorkspace.tsx_/_handleSubmit()
 ---
 
 # ChatWorkspace.tsx
@@ -24,4 +24,4 @@ tags:
 - [[toggleVoice()]] - `contains` [EXTRACTED]
 - [[uploadFile()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_52
+#graphify/code #graphify/EXTRACTED #community/ChatWorkspace.tsx_/_handleSubmit()

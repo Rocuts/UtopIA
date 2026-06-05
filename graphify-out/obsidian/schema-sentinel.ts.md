@@ -1,14 +1,14 @@
 ---
 source_file: "lib\db\schema-sentinel.ts"
 type: "code"
-community: "Module Cluster 496"
+community: "schema-sentinel.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_496
+  - community/schema-sentinel.ts
 ---
 
 # schema-sentinel.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_496
+#graphify/code #graphify/EXTRACTED #community/schema-sentinel.ts

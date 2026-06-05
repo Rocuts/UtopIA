@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\registry.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "repository.ts / erp-query.ts"
 location: "L148"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # getConnector()
@@ -18,4 +18,4 @@ tags:
 - [[registry.ts_1]] - `contains` [EXTRACTED]
 - [[serializeTrialBalance()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/INFERRED #community/repository.ts_/_erp-query.ts

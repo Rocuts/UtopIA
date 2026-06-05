@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\contabilidad\mayor\page.tsx"
 type: "code"
-community: "Module Cluster 234"
+community: "page.tsx / LedgerPage()"
 location: "L11"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_234
+  - community/page.tsx_/_LedgerPage()
 ---
 
 # LedgerPage()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[page.tsx_9]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_234
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_LedgerPage()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\db\workspace.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "repository.ts / erp-query.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Pyme_&_Workspace_Routes
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # workspace.ts
@@ -14,5 +14,6 @@ tags:
 ## Connections
 - [[getCurrentWorkspaceId()]] - `contains` [EXTRACTED]
 - [[getOrCreateWorkspace()]] - `contains` [EXTRACTED]
+- [[requireWorkspace()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/EXTRACTED #community/repository.ts_/_erp-query.ts

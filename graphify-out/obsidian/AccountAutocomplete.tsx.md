@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\accounting\AccountAutocomplete.tsx"
 type: "code"
-community: "Module Cluster 170"
+community: "AccountAutocomplete.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_170
+  - community/AccountAutocomplete.tsx_/_cn()
 ---
 
 # AccountAutocomplete.tsx
@@ -15,4 +15,4 @@ tags:
 - [[cn()_13]] - `contains` [EXTRACTED]
 - [[onDoc()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_170
+#graphify/code #graphify/EXTRACTED #community/AccountAutocomplete.tsx_/_cn()

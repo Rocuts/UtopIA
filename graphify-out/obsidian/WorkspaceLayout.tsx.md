@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\WorkspaceLayout.tsx"
 type: "code"
-community: "Module Cluster 408"
+community: "WorkspaceLayout.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_408
+  - community/WorkspaceLayout.tsx
 ---
 
 # WorkspaceLayout.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_408
+#graphify/code #graphify/EXTRACTED #community/WorkspaceLayout.tsx

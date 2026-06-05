@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\escudo\survival\OptimizacionDividendosCard.tsx"
 type: "code"
-community: "Module Cluster 283"
+community: "OptimizacionDividendosCard.tsx / OptimizacionDividendosCard()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_283
+  - community/OptimizacionDividendosCard.tsx_/_OptimizacionDividendosCard()
 ---
 
 # OptimizacionDividendosCard.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[OptimizacionDividendosCard()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_283
+#graphify/code #graphify/EXTRACTED #community/OptimizacionDividendosCard.tsx_/_OptimizacionDividendosCard()

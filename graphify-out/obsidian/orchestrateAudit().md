@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\orchestrator.ts"
 type: "code"
-community: "Module Cluster 19"
+community: "tax-auditor.ts / renderMarkdown()"
 location: "L46"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_19
+  - community/tax-auditor.ts_/_renderMarkdown()
 ---
 
 # orchestrateAudit()
@@ -22,4 +22,4 @@ tags:
 - [[runNiifAuditor()]] - `calls` [INFERRED]
 - [[runTaxAuditor()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_19
+#graphify/code #graphify/INFERRED #community/tax-auditor.ts_/_renderMarkdown()

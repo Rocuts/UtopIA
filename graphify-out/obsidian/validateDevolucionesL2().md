@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\validators\devoluciones.validator.ts"
 type: "code"
-community: "Escudo Survival Validators"
+community: "helpers.ts / fiscal-anchor-validators.ts"
 location: "L136"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Escudo_Survival_Validators
+  - community/helpers.ts_/_fiscal-anchor-validators.ts
 ---
 
 # validateDevolucionesL2()
@@ -20,4 +20,4 @@ tags:
 - [[devoluciones.validator.ts]] - `contains` [EXTRACTED]
 - [[validateDevoluciones()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Escudo_Survival_Validators
+#graphify/code #graphify/INFERRED #community/helpers.ts_/_fiscal-anchor-validators.ts

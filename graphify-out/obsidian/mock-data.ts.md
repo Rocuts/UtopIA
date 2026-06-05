@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\mock-data.ts"
 type: "code"
-community: "Module Cluster 138"
+community: "mock-data.ts / buildCard()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_138
+  - community/mock-data.ts_/_buildCard()
 ---
 
 # mock-data.ts
@@ -16,4 +16,4 @@ tags:
 - [[mkKpi()]] - `contains` [EXTRACTED]
 - [[monthLabel()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_138
+#graphify/code #graphify/EXTRACTED #community/mock-data.ts_/_buildCard()

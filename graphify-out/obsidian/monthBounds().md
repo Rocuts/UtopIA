@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pyme\Ledger.tsx"
 type: "code"
-community: "Module Cluster 182"
+community: "Ledger.tsx / buildMonthOptions()"
 location: "L86"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_182
+  - community/Ledger.tsx_/_buildMonthOptions()
 ---
 
 # monthBounds()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[Ledger.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_182
+#graphify/code #graphify/EXTRACTED #community/Ledger.tsx_/_buildMonthOptions()

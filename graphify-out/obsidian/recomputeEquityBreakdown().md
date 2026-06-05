@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\repair\adjustments.ts"
 type: "code"
-community: "Module Cluster 22"
+community: "tools.ts / adjustments.ts"
 location: "L391"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_22
+  - community/tools.ts_/_adjustments.ts
 ---
 
 # recomputeEquityBreakdown()
@@ -16,4 +16,4 @@ tags:
 - [[normalizeCode()_1]] - `calls` [EXTRACTED]
 - [[recomputeSnapshotTotals()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_22
+#graphify/code #graphify/EXTRACTED #community/tools.ts_/_adjustments.ts

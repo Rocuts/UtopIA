@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\banking\accounts\route.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L34"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # POST()
@@ -24,4 +24,4 @@ tags:
 - [[route.ts_1]] - `contains` [EXTRACTED]
 - [[route.ts_14]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

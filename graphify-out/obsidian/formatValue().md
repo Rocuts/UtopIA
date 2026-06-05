@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pillars\_kpi-list.tsx"
 type: "code"
-community: "Module Cluster 33"
+community: "sync-validator.ts / validateDashboardIntegrity()"
 location: "L19"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_33
+  - community/sync-validator.ts_/_validateDashboardIntegrity()
 ---
 
 # formatValue()
@@ -18,4 +18,4 @@ tags:
 - [[formatMonths()]] - `calls` [INFERRED]
 - [[formatPct()_10]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_33
+#graphify/code #graphify/INFERRED #community/sync-validator.ts_/_validateDashboardIntegrity()

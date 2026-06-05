@@ -1,12 +1,12 @@
 ---
 source_file: "lib\macro\service.ts"
 type: "code"
-community: "Module Cluster 56"
+community: "fetchAndPersist() / getMacroFactors()"
 location: "L100"
 tags:
   - graphify/code
-  - graphify/EXTRACTED
-  - community/Module_Cluster_56
+  - graphify/INFERRED
+  - community/fetchAndPersist()_/_getMacroFactors()
 ---
 
 # getMacroFactors()
@@ -19,4 +19,4 @@ tags:
 - [[rowToMacroFactors()]] - `calls` [EXTRACTED]
 - [[service.ts_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_56
+#graphify/code #graphify/INFERRED #community/fetchAndPersist()_/_getMacroFactors()

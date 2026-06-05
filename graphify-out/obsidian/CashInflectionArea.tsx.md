@@ -1,12 +1,12 @@
 ---
 source_file: "components\charts\CashInflectionArea.tsx"
 type: "code"
-community: "Module Cluster 36"
+community: "getTokens() / useChartTheme()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_36
+  - community/getTokens()_/_useChartTheme()
 ---
 
 # CashInflectionArea.tsx
@@ -15,4 +15,4 @@ tags:
 - [[CashInflectionArea()]] - `contains` [EXTRACTED]
 - [[findInflection()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_36
+#graphify/code #graphify/EXTRACTED #community/getTokens()_/_useChartTheme()

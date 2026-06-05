@@ -1,12 +1,12 @@
 ---
 source_file: "lib\config\models.ts"
 type: "code"
-community: "Module Cluster 332"
+community: "envModel() / models.ts"
 location: "L41"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_332
+  - community/envModel()_/_models.ts
 ---
 
 # envModel()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[models.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_332
+#graphify/code #graphify/EXTRACTED #community/envModel()_/_models.ts

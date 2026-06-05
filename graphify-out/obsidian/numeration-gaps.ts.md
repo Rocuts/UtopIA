@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\audit\forensic\rules\numeration-gaps.ts"
 type: "code"
-community: "Module Cluster 319"
+community: "numeration-gaps.ts / detectGaps()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_319
+  - community/numeration-gaps.ts_/_detectGaps()
 ---
 
 # numeration-gaps.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[detectGaps()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_319
+#graphify/code #graphify/EXTRACTED #community/numeration-gaps.ts_/_detectGaps()

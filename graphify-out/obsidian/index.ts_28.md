@@ -1,14 +1,14 @@
 ---
 source_file: "lib\workflows\sentinel\index.ts"
 type: "code"
-community: "Module Cluster 535"
+community: "index.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_535
+  - community/index.ts
 ---
 
 # index.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_535
+#graphify/code #graphify/EXTRACTED #community/index.ts

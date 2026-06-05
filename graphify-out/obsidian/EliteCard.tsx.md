@@ -1,14 +1,14 @@
 ---
 source_file: "components\ui\EliteCard.tsx"
 type: "code"
-community: "Module Cluster 371"
+community: "EliteCard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_371
+  - community/EliteCard.tsx
 ---
 
 # EliteCard.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_371
+#graphify/code #graphify/EXTRACTED #community/EliteCard.tsx

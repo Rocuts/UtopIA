@@ -1,12 +1,12 @@
 ---
 source_file: "components\admin\AdminConsole.tsx"
 type: "code"
-community: "Module Cluster 91"
+community: "AdminConsole.tsx / AdminConsole()"
 location: "L55"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_91
+  - community/AdminConsole.tsx_/_AdminConsole()
 ---
 
 # AdminConsole()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AdminConsole.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_91
+#graphify/code #graphify/EXTRACTED #community/AdminConsole.tsx_/_AdminConsole()

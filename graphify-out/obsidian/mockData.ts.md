@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\pyme\cockpit\mockData.ts"
 type: "code"
-community: "Module Cluster 403"
+community: "mockData.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_403
+  - community/mockData.ts
 ---
 
 # mockData.ts
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_403
+#graphify/code #graphify/EXTRACTED #community/mockData.ts

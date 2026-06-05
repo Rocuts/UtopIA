@@ -1,12 +1,12 @@
 ---
 source_file: "lib\erp\providers\quickbooks.ts"
 type: "code"
-community: "Module Cluster 51"
+community: "QuickBooksConnector / .authenticatedFetch()"
 location: "L121"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_51
+  - community/QuickBooksConnector_/_.authenticatedFetch()
 ---
 
 # QuickBooksConnector
@@ -27,4 +27,4 @@ tags:
 - [[.testConnection()_7]] - `method` [EXTRACTED]
 - [[quickbooks.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_51
+#graphify/code #graphify/EXTRACTED #community/QuickBooksConnector_/_.authenticatedFetch()

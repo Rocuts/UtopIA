@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\prompts\niif-analyst.prompt.ts"
 type: "code"
-community: "NIIF Analyst Pipeline"
+community: "niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()"
 location: "L1154"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/NIIF_Analyst_Pipeline
+  - community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
 ---
 
 # buildNiifAnalystPass3Prompt()
@@ -28,4 +28,4 @@ tags:
 - [[renderSaldoAFavorBlock()]] - `calls` [EXTRACTED]
 - [[runNiifAnalyst()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/NIIF_Analyst_Pipeline
+#graphify/code #graphify/EXTRACTED #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()

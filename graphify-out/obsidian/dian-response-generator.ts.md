@@ -1,12 +1,12 @@
 ---
 source_file: "lib\tools\dian-response-generator.ts"
 type: "code"
-community: "Tax Calendar & ERP Connect"
+community: "executeTool() / getTaxCalendar()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Tax_Calendar_&_ERP_Connect
+  - community/executeTool()_/_getTaxCalendar()
 ---
 
 # dian-response-generator.ts
@@ -16,4 +16,4 @@ tags:
 - [[fallbackDraft()]] - `contains` [EXTRACTED]
 - [[generateDianResponse()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Tax_Calendar_&_ERP_Connect
+#graphify/code #graphify/EXTRACTED #community/executeTool()_/_getTaxCalendar()

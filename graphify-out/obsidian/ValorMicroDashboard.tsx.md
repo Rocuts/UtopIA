@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\pillars\ValorMicroDashboard.tsx"
 type: "code"
-community: "Module Cluster 397"
+community: "ValorMicroDashboard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_397
+  - community/ValorMicroDashboard.tsx
 ---
 
 # ValorMicroDashboard.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_397
+#graphify/code #graphify/EXTRACTED #community/ValorMicroDashboard.tsx

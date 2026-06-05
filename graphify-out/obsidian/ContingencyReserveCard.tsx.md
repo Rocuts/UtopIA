@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\cards\ContingencyReserveCard.tsx"
 type: "code"
-community: "Module Cluster 384"
+community: "ContingencyReserveCard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_384
+  - community/ContingencyReserveCard.tsx
 ---
 
 # ContingencyReserveCard.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_384
+#graphify/code #graphify/EXTRACTED #community/ContingencyReserveCard.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\__tests__\niif.route.test.ts"
 type: "code"
-community: "Module Cluster 125"
+community: "niif.route.test.ts / collectSSE()"
 location: "L113"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_125
+  - community/niif.route.test.ts_/_collectSSE()
 ---
 
 # makeNonStreamingRequest()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[niif.route.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_125
+#graphify/code #graphify/EXTRACTED #community/niif.route.test.ts_/_collectSSE()

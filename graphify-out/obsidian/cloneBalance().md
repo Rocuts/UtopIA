@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\repair\adjustments.ts"
 type: "code"
-community: "Module Cluster 22"
+community: "tools.ts / adjustments.ts"
 location: "L133"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_22
+  - community/tools.ts_/_adjustments.ts
 ---
 
 # cloneBalance()
@@ -15,4 +15,4 @@ tags:
 - [[adjustments.ts]] - `contains` [EXTRACTED]
 - [[applyAdjustments()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_22
+#graphify/code #graphify/EXTRACTED #community/tools.ts_/_adjustments.ts

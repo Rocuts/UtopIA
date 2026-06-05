@@ -1,12 +1,12 @@
 ---
 source_file: "lib\notifications\dispatch.ts"
 type: "code"
-community: "Module Cluster 25"
+community: "dispatch() / GET()"
 location: "L103"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_25
+  - community/dispatch()_/_GET()
 ---
 
 # dispatch()
@@ -21,4 +21,4 @@ tags:
 - [[maybeSendAnomalyNotification()]] - `calls` [INFERRED]
 - [[renderEmailHtml()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_25
+#graphify/code #graphify/INFERRED #community/dispatch()_/_GET()

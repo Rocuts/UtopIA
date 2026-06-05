@@ -1,12 +1,12 @@
 ---
 source_file: "lib\diff\markdown-diff.ts"
 type: "code"
-community: "Module Cluster 333"
+community: "diffMarkdown() / markdown-diff.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_333
+  - community/diffMarkdown()_/_markdown-diff.ts
 ---
 
 # markdown-diff.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[diffMarkdown()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_333
+#graphify/code #graphify/EXTRACTED #community/diffMarkdown()_/_markdown-diff.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\actions\journal-actions.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L256"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # postJournalEntryAction()
@@ -17,4 +17,4 @@ tags:
 - [[postEntry()]] - `calls` [INFERRED]
 - [[toSerializableError()_1]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

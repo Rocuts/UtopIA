@@ -1,12 +1,12 @@
 ---
 source_file: "__tests__\p8-elite-pipeline-smoke.test.ts"
 type: "code"
-community: "Module Cluster 217"
+community: "row() / p8-elite-pipeline-smoke.test.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_217
+  - community/row()_/_p8-elite-pipeline-smoke.test.ts
 ---
 
 # p8-elite-pipeline-smoke.test.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[row()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_217
+#graphify/code #graphify/EXTRACTED #community/row()_/_p8-elite-pipeline-smoke.test.ts

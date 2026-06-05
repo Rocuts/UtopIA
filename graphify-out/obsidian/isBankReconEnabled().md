@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\banking\types.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L149"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # isBankReconEnabled()
@@ -17,4 +17,4 @@ tags:
 - [[runReconciliation()]] - `calls` [INFERRED]
 - [[types.ts_7]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

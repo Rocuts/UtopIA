@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\rag-export.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # rag-export.ts
@@ -15,4 +15,4 @@ tags:
 - [[chunkTextFor()]] - `contains` [EXTRACTED]
 - [[exportPucToRagFormat()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/getDb()_/_getOrCreateWorkspace()

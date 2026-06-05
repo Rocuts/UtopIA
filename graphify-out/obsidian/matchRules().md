@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\tax-engine\rules-engine.ts"
 type: "code"
-community: "Module Cluster 37"
+community: "line-generator.ts / .evaluate()"
 location: "L39"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Module_Cluster_37
+  - community/line-generator.ts_/_.evaluate()
 ---
 
 # matchRules()
@@ -18,4 +18,4 @@ tags:
 - [[rules-engine.ts]] - `contains` [EXTRACTED]
 - [[uvtToCopByYear()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Module_Cluster_37
+#graphify/code #graphify/INFERRED #community/line-generator.ts_/_.evaluate()

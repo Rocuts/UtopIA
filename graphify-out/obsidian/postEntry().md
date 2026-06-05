@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\double-entry\service.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "getDb() / getOrCreateWorkspace()"
 location: "L350"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_Shared_Utilities
+  - community/getDb()_/_getOrCreateWorkspace()
 ---
 
 # postEntry()
@@ -18,4 +18,4 @@ tags:
 - [[retryOnSerialization()]] - `calls` [EXTRACTED]
 - [[service.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/INFERRED #community/getDb()_/_getOrCreateWorkspace()

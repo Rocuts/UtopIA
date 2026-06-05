@@ -1,12 +1,12 @@
 ---
 source_file: "lib\pillars\verdad-cards.ts"
 type: "code"
-community: "Platform Pillar Config"
+community: "escudo-cards.ts / verdad-cards.ts"
 location: "L240"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Platform_Pillar_Config
+  - community/escudo-cards.ts_/_verdad-cards.ts
 ---
 
 # computeVerdadExecutiveCards()
@@ -21,4 +21,4 @@ tags:
 - [[saludContableStatus()]] - `calls` [EXTRACTED]
 - [[verdad-cards.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Platform_Pillar_Config
+#graphify/code #graphify/EXTRACTED #community/escudo-cards.ts_/_verdad-cards.ts

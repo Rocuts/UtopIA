@@ -1,12 +1,12 @@
 ---
 source_file: "lib\security\encryption.ts"
 type: "code"
-community: "Module Cluster 122"
+community: "encryption.ts / getKey()"
 location: "L54"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_122
+  - community/encryption.ts_/_getKey()
 ---
 
 # getKey()
@@ -16,4 +16,4 @@ tags:
 - [[encryptColumn()]] - `calls` [EXTRACTED]
 - [[encryption.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_122
+#graphify/code #graphify/EXTRACTED #community/encryption.ts_/_getKey()

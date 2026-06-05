@@ -1,14 +1,14 @@
 ---
 source_file: "components\ui\GlassModal.tsx"
 type: "code"
-community: "Module Cluster 372"
+community: "GlassModal.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_372
+  - community/GlassModal.tsx
 ---
 
 # GlassModal.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_372
+#graphify/code #graphify/EXTRACTED #community/GlassModal.tsx

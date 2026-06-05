@@ -1,12 +1,12 @@
 ---
 source_file: "components\system\WindowBridge.tsx"
 type: "code"
-community: "Module Cluster 142"
+community: "useAncoraView() / WindowBridge()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_142
+  - community/useAncoraView()_/_WindowBridge()
 ---
 
 # WindowBridge.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[WindowBridge()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_142
+#graphify/code #graphify/EXTRACTED #community/useAncoraView()_/_WindowBridge()

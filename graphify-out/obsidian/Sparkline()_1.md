@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\AreaCard.tsx"
 type: "code"
-community: "Module Cluster 132"
+community: "AreaCard.tsx / cn()"
 location: "L231"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_132
+  - community/AreaCard.tsx_/_cn()
 ---
 
 # Sparkline()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AreaCard.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_132
+#graphify/code #graphify/EXTRACTED #community/AreaCard.tsx_/_cn()

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\validators\fiscal-anchor-validators.ts"
 type: "code"
-community: "Escudo Survival Validators"
+community: "helpers.ts / fiscal-anchor-validators.ts"
 location: "L129"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Escudo_Survival_Validators
+  - community/helpers.ts_/_fiscal-anchor-validators.ts
 ---
 
 # validateFiscalAnchorL1()
@@ -20,4 +20,4 @@ tags:
 - [[parseCents()_1]] - `calls` [EXTRACTED]
 - [[validateFiscalAnchorAll()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Escudo_Survival_Validators
+#graphify/code #graphify/EXTRACTED #community/helpers.ts_/_fiscal-anchor-validators.ts

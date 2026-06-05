@@ -1,12 +1,12 @@
 ---
 source_file: "lib\format\cop.ts"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # cop.ts
@@ -19,4 +19,4 @@ tags:
 - [[parseCOPToNumber()]] - `contains` [EXTRACTED]
 - [[sumCOPStrings()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/EXTRACTED #community/useLanguage()_/_cop.ts

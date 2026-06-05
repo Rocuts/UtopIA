@@ -1,12 +1,12 @@
 ---
 source_file: "app\admin\page.tsx"
 type: "code"
-community: "Module Cluster 218"
+community: "AdminPage() / page.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_218
+  - community/AdminPage()_/_page.tsx
 ---
 
 # page.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[AdminPage()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_218
+#graphify/code #graphify/EXTRACTED #community/AdminPage()_/_page.tsx

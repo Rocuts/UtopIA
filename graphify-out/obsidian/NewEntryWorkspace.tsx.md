@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\accounting\NewEntryWorkspace.tsx"
 type: "code"
-community: "Module Cluster 379"
+community: "NewEntryWorkspace.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_379
+  - community/NewEntryWorkspace.tsx
 ---
 
 # NewEntryWorkspace.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_379
+#graphify/code #graphify/EXTRACTED #community/NewEntryWorkspace.tsx

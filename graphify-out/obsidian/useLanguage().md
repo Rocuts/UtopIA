@@ -1,12 +1,12 @@
 ---
 source_file: "context\LanguageContext.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L48"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # useLanguage()
@@ -34,4 +34,4 @@ tags:
 - [[WorkspacePage()]] - `calls` [INFERRED]
 - [[WorkspaceShell()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Accounting_UI_Components
+#graphify/code #graphify/INFERRED #community/useLanguage()_/_cop.ts

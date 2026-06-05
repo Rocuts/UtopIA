@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\prompts\classifier.prompt.ts"
 type: "code"
-community: "Module Cluster 330"
+community: "classifier.prompt.ts / buildClassifierPrompt()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_330
+  - community/classifier.prompt.ts_/_buildClassifierPrompt()
 ---
 
 # classifier.prompt.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[buildClassifierPrompt()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_330
+#graphify/code #graphify/EXTRACTED #community/classifier.prompt.ts_/_buildClassifierPrompt()

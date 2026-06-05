@@ -1,14 +1,14 @@
 ---
 source_file: "components\workspace\pillars\VerdadMicroDashboard.tsx"
 type: "code"
-community: "Module Cluster 398"
+community: "VerdadMicroDashboard.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_398
+  - community/VerdadMicroDashboard.tsx
 ---
 
 # VerdadMicroDashboard.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_398
+#graphify/code #graphify/EXTRACTED #community/VerdadMicroDashboard.tsx

@@ -1,12 +1,12 @@
 ---
 source_file: "lib\kpis\roi-probabilistic.ts"
 type: "code"
-community: "Module Cluster 17"
+community: "conversation-history.ts / live.ts"
 location: "L63"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_17
+  - community/conversation-history.ts_/_live.ts
 ---
 
 # calculateRoiProbabilistic()
@@ -21,4 +21,4 @@ tags:
 - [[roi-probabilistic.ts]] - `contains` [EXTRACTED]
 - [[severityFor()_2]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_17
+#graphify/code #graphify/EXTRACTED #community/conversation-history.ts_/_live.ts

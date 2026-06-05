@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\__tests__\r16-tax-anticipo-netting.test.ts"
 type: "code"
-community: "Module Cluster 348"
+community: "r16-tax-anticipo-netting.test.ts / buildSnapshotForR16()"
 location: "L21"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_348
+  - community/r16-tax-anticipo-netting.test.ts_/_buildSnapshotForR16()
 ---
 
 # buildSnapshotForR16()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[r16-tax-anticipo-netting.test.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_348
+#graphify/code #graphify/EXTRACTED #community/r16-tax-anticipo-netting.test.ts_/_buildSnapshotForR16()

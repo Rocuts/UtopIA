@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\tools\risk-score-calculator.ts"
 type: "code"
-community: "Pyme & Workspace Routes"
+community: "repository.ts / erp-query.ts"
 location: "L312"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Pyme_&_Workspace_Routes
+  - community/repository.ts_/_erp-query.ts
 ---
 
 # saldoAFavorCents()
@@ -16,4 +16,4 @@ tags:
 - [[risk-score-calculator.ts]] - `contains` [EXTRACTED]
 - [[serializeMoneyCop()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/INFERRED #community/Pyme_&_Workspace_Routes
+#graphify/code #graphify/INFERRED #community/repository.ts_/_erp-query.ts

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\intake\NiifReportIntake.tsx"
 type: "code"
-community: "Module Cluster 97"
+community: "NiifReportIntake.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_97
+  - community/NiifReportIntake.tsx_/_cn()
 ---
 
 # NiifReportIntake.tsx
@@ -17,4 +17,4 @@ tags:
 - [[fillIfEmpty()]] - `contains` [EXTRACTED]
 - [[formatNIT()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_97
+#graphify/code #graphify/EXTRACTED #community/NiifReportIntake.tsx_/_cn()

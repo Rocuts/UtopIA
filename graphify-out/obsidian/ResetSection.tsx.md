@@ -1,14 +1,14 @@
 ---
 source_file: "components\settings\sections\ResetSection.tsx"
 type: "code"
-community: "Module Cluster 366"
+community: "ResetSection.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_366
+  - community/ResetSection.tsx
 ---
 
 # ResetSection.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_366
+#graphify/code #graphify/EXTRACTED #community/ResetSection.tsx

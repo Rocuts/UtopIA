@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\financial-report\route.ts"
 type: "code"
-community: "Financial Agent Pipelines"
+community: "trial-balance.ts / orchestrator.ts"
 location: "L71"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Financial_Agent_Pipelines
+  - community/trial-balance.ts_/_orchestrator.ts
 ---
 
 # POST()
@@ -19,4 +19,4 @@ tags:
 - [[preprocessTrialBalance()]] - `calls` [INFERRED]
 - [[route.ts_59]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Financial_Agent_Pipelines
+#graphify/code #graphify/INFERRED #community/trial-balance.ts_/_orchestrator.ts

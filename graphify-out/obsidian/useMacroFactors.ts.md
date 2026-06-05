@@ -1,12 +1,12 @@
 ---
 source_file: "hooks\useMacroFactors.ts"
 type: "code"
-community: "Module Cluster 305"
+community: "useMacroFactors.ts / useMacroFactors()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_305
+  - community/useMacroFactors.ts_/_useMacroFactors()
 ---
 
 # useMacroFactors.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[useMacroFactors()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_305
+#graphify/code #graphify/EXTRACTED #community/useMacroFactors.ts_/_useMacroFactors()

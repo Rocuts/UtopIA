@@ -1,12 +1,12 @@
 ---
 source_file: "app\workspace\contabilidad\cuentas\page.tsx"
 type: "code"
-community: "Module Cluster 232"
+community: "page.tsx / ChartOfAccountsPage()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_232
+  - community/page.tsx_/_ChartOfAccountsPage()
 ---
 
 # page.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[ChartOfAccountsPage()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_232
+#graphify/code #graphify/EXTRACTED #community/page.tsx_/_ChartOfAccountsPage()

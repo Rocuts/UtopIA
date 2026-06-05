@@ -1,14 +1,14 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\ProjectedCashFlowPage.tsx"
 type: "code"
-community: "Module Cluster 507"
+community: "ProjectedCashFlowPage.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_507
+  - community/ProjectedCashFlowPage.tsx
 ---
 
 # ProjectedCashFlowPage.tsx
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_507
+#graphify/code #graphify/EXTRACTED #community/ProjectedCashFlowPage.tsx

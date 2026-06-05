@@ -1,12 +1,12 @@
 ---
 source_file: "design-system\components\StreamingText.tsx"
 type: "code"
-community: "Module Cluster 302"
+community: "StreamingText() / StreamingText.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_302
+  - community/StreamingText()_/_StreamingText.tsx
 ---
 
 # StreamingText.tsx
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[StreamingText()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_302
+#graphify/code #graphify/EXTRACTED #community/StreamingText()_/_StreamingText.tsx

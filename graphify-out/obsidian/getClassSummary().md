@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\chart-of-accounts\types.ts"
 type: "code"
-community: "Module Cluster 310"
+community: "getClassSummary() / types.ts"
 location: "L102"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_310
+  - community/getClassSummary()_/_types.ts
 ---
 
 # getClassSummary()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[types.ts_8]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_310
+#graphify/code #graphify/EXTRACTED #community/getClassSummary()_/_types.ts

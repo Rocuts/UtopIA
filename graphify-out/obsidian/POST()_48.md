@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\rag\route.ts"
 type: "code"
-community: "Module Cluster 24"
+community: "route.ts / vectorstore.ts"
 location: "L5"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_24
+  - community/route.ts_/_vectorstore.ts
 ---
 
 # POST()
@@ -15,4 +15,4 @@ tags:
 - [[route.ts_77]] - `contains` [EXTRACTED]
 - [[searchDocuments()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_24
+#graphify/code #graphify/EXTRACTED #community/route.ts_/_vectorstore.ts

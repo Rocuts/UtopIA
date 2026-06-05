@@ -1,12 +1,12 @@
 ---
 source_file: "lib\accounting\tax-engine\line-generator.ts"
 type: "code"
-community: "Module Cluster 37"
+community: "line-generator.ts / .evaluate()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_37
+  - community/line-generator.ts_/_.evaluate()
 ---
 
 # line-generator.ts
@@ -19,4 +19,4 @@ tags:
 - [[generateLines()]] - `contains` [EXTRACTED]
 - [[parseCentavos()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_37
+#graphify/code #graphify/EXTRACTED #community/line-generator.ts_/_.evaluate()

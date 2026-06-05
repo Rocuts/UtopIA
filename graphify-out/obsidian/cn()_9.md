@@ -1,12 +1,12 @@
 ---
 source_file: "components\notifications\InsightInbox.tsx"
 type: "code"
-community: "Module Cluster 128"
+community: "InsightInbox.tsx / capitalize()"
 location: "L129"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_128
+  - community/InsightInbox.tsx_/_capitalize()
 ---
 
 # cn()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[InsightInbox.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_128
+#graphify/code #graphify/EXTRACTED #community/InsightInbox.tsx_/_capitalize()

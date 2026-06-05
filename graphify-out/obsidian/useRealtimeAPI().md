@@ -1,12 +1,12 @@
 ---
 source_file: "hooks\useRealtimeAPI.ts"
 type: "code"
-community: "Module Cluster 306"
+community: "useRealtimeAPI.ts / useRealtimeAPI()"
 location: "L23"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_306
+  - community/useRealtimeAPI.ts_/_useRealtimeAPI()
 ---
 
 # useRealtimeAPI()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[useRealtimeAPI.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_306
+#graphify/code #graphify/EXTRACTED #community/useRealtimeAPI.ts_/_useRealtimeAPI()

@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\intake\FinancialIntelIntake.tsx"
 type: "code"
-community: "Module Cluster 177"
+community: "FinancialIntelIntake.tsx / cn()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_177
+  - community/FinancialIntelIntake.tsx_/_cn()
 ---
 
 # FinancialIntelIntake.tsx
@@ -15,4 +15,4 @@ tags:
 - [[ConfidenceDot()_2]] - `contains` [EXTRACTED]
 - [[cn()_41]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_177
+#graphify/code #graphify/EXTRACTED #community/FinancialIntelIntake.tsx_/_cn()

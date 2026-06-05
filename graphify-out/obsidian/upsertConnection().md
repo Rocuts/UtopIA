@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\ERPConnector.tsx"
 type: "code"
-community: "Module Cluster 58"
+community: "ERPConnector.tsx / loadConnections()"
 location: "L65"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_58
+  - community/ERPConnector.tsx_/_loadConnections()
 ---
 
 # upsertConnection()
@@ -16,4 +16,4 @@ tags:
 - [[loadConnections()]] - `calls` [EXTRACTED]
 - [[saveConnections()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_58
+#graphify/code #graphify/EXTRACTED #community/ERPConnector.tsx_/_loadConnections()

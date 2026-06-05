@@ -1,12 +1,12 @@
 ---
 source_file: "docs/TELEMETRY.md"
 type: "document"
-community: "Module Cluster 351"
+community: "GET /api/admin/telemetry Endpoint / Telemetry Alert Thresholds (P0/P1)"
 location: "## Inspeccionar telemetría agregada"
 tags:
   - graphify/document
   - graphify/EXTRACTED
-  - community/Module_Cluster_351
+  - community/GET_/api/admin/telemetry_Endpoint_/_Telemetry_Alert_Thresholds_(P0/P1)
 ---
 
 # GET /api/admin/telemetry Endpoint
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[Telemetry Alert Thresholds (P0P1)]] - `implements` [EXTRACTED]
 
-#graphify/document #graphify/EXTRACTED #community/Module_Cluster_351
+#graphify/document #graphify/EXTRACTED #community/GET_/api/admin/telemetry_Endpoint_/_Telemetry_Alert_Thresholds_(P0/P1)

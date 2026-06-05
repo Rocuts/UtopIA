@@ -1,12 +1,12 @@
 ---
 source_file: "components\workspace\pyme\cockpit\PymeCockpit.tsx"
 type: "code"
-community: "Accounting UI Components"
+community: "useLanguage() / cop.ts"
 location: "L53"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_UI_Components
+  - community/useLanguage()_/_cop.ts
 ---
 
 # copCompact()
@@ -15,4 +15,4 @@ tags:
 - [[PymeCockpit.tsx]] - `contains` [EXTRACTED]
 - [[cop()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_UI_Components
+#graphify/code #graphify/EXTRACTED #community/useLanguage()_/_cop.ts

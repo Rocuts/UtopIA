@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\classifier.ts"
 type: "code"
-community: "Module Cluster 15"
+community: "runHtmlEditor() / orchestrate()"
 location: "L33"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_15
+  - community/runHtmlEditor()_/_orchestrate()
 ---
 
 # isObviousT1()
@@ -15,4 +15,4 @@ tags:
 - [[classifier.ts]] - `contains` [EXTRACTED]
 - [[classifyQuery()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_15
+#graphify/code #graphify/EXTRACTED #community/runHtmlEditor()_/_orchestrate()

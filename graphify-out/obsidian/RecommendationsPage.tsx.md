@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\pages\RecommendationsPage.tsx"
 type: "code"
-community: "Module Cluster 64"
+community: "RecommendationsPage.tsx / badgeBg()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_64
+  - community/RecommendationsPage.tsx_/_badgeBg()
 ---
 
 # RecommendationsPage.tsx
@@ -17,4 +17,4 @@ tags:
 - [[priorityBg()]] - `contains` [EXTRACTED]
 - [[priorityLabel()_1]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_64
+#graphify/code #graphify/EXTRACTED #community/RecommendationsPage.tsx_/_badgeBg()

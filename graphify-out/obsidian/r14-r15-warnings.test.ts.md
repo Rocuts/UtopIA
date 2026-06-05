@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\__tests__\r14-r15-warnings.test.ts"
 type: "code"
-community: "Module Cluster 347"
+community: "r14-r15-warnings.test.ts / buildSnapshot()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Module_Cluster_347
+  - community/r14-r15-warnings.test.ts_/_buildSnapshot()
 ---
 
 # r14-r15-warnings.test.ts
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[buildSnapshot()_2]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Module_Cluster_347
+#graphify/code #graphify/EXTRACTED #community/r14-r15-warnings.test.ts_/_buildSnapshot()

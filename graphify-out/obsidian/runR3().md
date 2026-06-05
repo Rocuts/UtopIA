@@ -1,12 +1,12 @@
 ---
 source_file: "lib\preprocessing\curator-rules\r3-balance-gap-attribution.ts"
 type: "code"
-community: "Curator Rules Engine"
+community: "runCurator() / runR2()"
 location: "L31"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Curator_Rules_Engine
+  - community/runCurator()_/_runR2()
 ---
 
 # runR3()
@@ -17,4 +17,4 @@ tags:
 - [[r3-balance-gap-attribution.ts]] - `contains` [EXTRACTED]
 - [[runCurator()]] - `calls` [INFERRED]
 
-#graphify/code #graphify/EXTRACTED #community/Curator_Rules_Engine
+#graphify/code #graphify/EXTRACTED #community/runCurator()_/_runR2()

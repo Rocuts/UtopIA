@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\tax-planning\agents\niif-impact-analyst.ts"
 type: "code"
-community: "Audit & Compliance Agents"
+community: "callFinancialAgent() / orchestrateFiscalOpinion()"
 location: "L28"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Audit_&_Compliance_Agents
+  - community/callFinancialAgent()_/_orchestrateFiscalOpinion()
 ---
 
 # runNiifImpactAnalyst()
@@ -18,4 +18,4 @@ tags:
 - [[orchestrateTaxPlanning()]] - `calls` [INFERRED]
 - [[toLegacyShape()_8]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Audit_&_Compliance_Agents
+#graphify/code #graphify/INFERRED #community/callFinancialAgent()_/_orchestrateFiscalOpinion()

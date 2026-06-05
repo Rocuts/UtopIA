@@ -1,12 +1,12 @@
 ---
 source_file: "app\api\accounting\_shared.ts"
 type: "code"
-community: "Accounting Shared Utilities"
+community: "_shared.ts / computePeriodBoundaries()"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Accounting_Shared_Utilities
+  - community/_shared.ts_/_computePeriodBoundaries()
 ---
 
 # _shared.ts
@@ -18,4 +18,4 @@ tags:
 - [[ok()]] - `contains` [EXTRACTED]
 - [[statusForCode()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities
+#graphify/code #graphify/EXTRACTED #community/_shared.ts_/_computePeriodBoundaries()

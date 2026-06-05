@@ -1,12 +1,12 @@
 ---
 source_file: "lib\export\pdf-elite-react\compose.ts"
 type: "code"
-community: "Opinion & Dictamen Drafters"
+community: "compose.ts / composeEditorialReport()"
 location: "L916"
 tags:
   - graphify/code
   - graphify/INFERRED
-  - community/Opinion_&_Dictamen_Drafters
+  - community/compose.ts_/_composeEditorialReport()
 ---
 
 # buildStatements()
@@ -20,4 +20,4 @@ tags:
 - [[niifJsonToIncomeTable()]] - `calls` [INFERRED]
 - [[parseStatementTable()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/INFERRED #community/Opinion_&_Dictamen_Drafters
+#graphify/code #graphify/INFERRED #community/compose.ts_/_composeEditorialReport()

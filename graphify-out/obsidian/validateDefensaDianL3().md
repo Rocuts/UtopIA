@@ -1,12 +1,12 @@
 ---
 source_file: "lib\agents\financial\escudo-survival\fiscal-agent\validators\defensa-dian.validator.ts"
 type: "code"
-community: "Escudo Survival Validators"
+community: "helpers.ts / fiscal-anchor-validators.ts"
 location: "L285"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/Escudo_Survival_Validators
+  - community/helpers.ts_/_fiscal-anchor-validators.ts
 ---
 
 # validateDefensaDianL3()
@@ -17,4 +17,4 @@ tags:
 - [[defensa-dian.validator.ts]] - `contains` [EXTRACTED]
 - [[validateDefensaDian()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/Escudo_Survival_Validators
+#graphify/code #graphify/EXTRACTED #community/helpers.ts_/_fiscal-anchor-validators.ts
