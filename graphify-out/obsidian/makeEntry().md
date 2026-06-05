@@ -1,0 +1,17 @@
+---
+source_file: "lib\workflows\monthly-close\__tests__\canonical.test.ts"
+type: "code"
+community: "Module Cluster 162"
+location: "L18"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Module_Cluster_162
+---
+
+# makeEntry()
+
+## Connections
+- [[canonical.test.ts]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Module_Cluster_162

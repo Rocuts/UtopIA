@@ -1,0 +1,17 @@
+---
+source_file: "components\workspace\escudo\FiscalAgentPanel.tsx"
+type: "code"
+community: "Module Cluster 67"
+location: "L187"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Module_Cluster_67
+---
+
+# fadeItem()
+
+## Connections
+- [[FiscalAgentPanel.tsx]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Module_Cluster_67

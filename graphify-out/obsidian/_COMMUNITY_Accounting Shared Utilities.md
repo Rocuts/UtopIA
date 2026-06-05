@@ -1,0 +1,350 @@
+---
+type: community
+cohesion: 0.01
+members: 306
+---
+
+# Accounting Shared Utilities
+
+**Cohesion:** 0.01 - loosely connected
+**Members:** 306 nodes
+
+## Members
+- [[.constructor()_2]] - code - lib\accounting\adjustments\types.ts
+- [[.constructor()_3]] - code - lib\accounting\banking\types.ts
+- [[.constructor()_5]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[.constructor()_6]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[.constructor()_4]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[.constructor()_9]] - code - lib\accounting\tax-engine\types.ts
+- [[AccountConflictError]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[AccountNotFoundError]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[AccountValidationError]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[AdjustmentsError]] - code - lib\accounting\adjustments\types.ts
+- [[BankingError]] - code - lib\accounting\banking\types.ts
+- [[DELETE()_1]] - code - app\api\pyme\entries\[entryId]\route.ts
+- [[DELETE()]] - code - app\api\notifications\subscriptions\[id]\route.ts
+- [[GET()]] - code - app\api\accounting\banking\accounts\route.ts
+- [[GET()_32]] - code - app\api\sentinel\alerts\route.ts
+- [[GET()_26]] - code - app\api\pyme\books\route.ts
+- [[GET()_2]] - code - app\api\accounting\adjustments\deferred-assets\route.ts
+- [[GET()_3]] - code - app\api\accounting\adjustments\fixed-assets\route.ts
+- [[GET()_1]] - code - app\api\accounting\banking\accounts\[id]\route.ts
+- [[GET()_7]] - code - app\api\accounting\journal\route.ts
+- [[GET()_22]] - code - app\api\notifications\log\route.ts
+- [[GET()_8]] - code - app\api\accounting\periods\route.ts
+- [[GET()_4]] - code - app\api\accounting\adjustments\provisions-config\route.ts
+- [[GET()_5]] - code - app\api\erp\status\route.ts
+- [[GET()_23]] - code - app\api\notifications\subscriptions\route.ts
+- [[GET()_10]] - code - app\api\admin\telemetry\route.ts
+- [[GET()_33]] - code - app\api\workspace\route.ts
+- [[PATCH()_2]] - code - app\api\sentinel\alerts\route.ts
+- [[PATCH()_1]] - code - app\api\pyme\entries\[entryId]\route.ts
+- [[PATCH()]] - code - app\api\escudo\fiscal-anchor\alerts\[id]\route.ts
+- [[PATCH()_3]] - code - app\api\workspace\route.ts
+- [[POST()]] - code - app\api\accounting\banking\accounts\route.ts
+- [[POST()_2]] - code - app\api\accounting\adjustments\amortization\route.ts
+- [[POST()_43]] - code - app\api\pyme\books\route.ts
+- [[POST()_19]] - code - app\api\accounting\periods\close\route.ts
+- [[POST()_3]] - code - app\api\accounting\adjustments\deferred-assets\route.ts
+- [[POST()_4]] - code - app\api\accounting\adjustments\depreciation\route.ts
+- [[POST()_5]] - code - app\api\accounting\adjustments\fixed-assets\route.ts
+- [[POST()_10]] - code - app\api\accounting\banking\imports\route.ts
+- [[POST()_16]] - code - app\api\accounting\journal\route.ts
+- [[POST()_20]] - code - app\api\accounting\periods\lock\route.ts
+- [[POST()_22]] - code - app\api\accounting\periods\route.ts
+- [[POST()_14]] - code - app\api\accounting\journal\post\route.ts
+- [[POST()_6]] - code - app\api\accounting\tax-engine\preview\route.ts
+- [[POST()_45]] - code - app\api\pyme\promote\route.ts
+- [[POST()_8]] - code - app\api\accounting\adjustments\provisions-config\route.ts
+- [[POST()_7]] - code - app\api\accounting\adjustments\provisions\route.ts
+- [[POST()_11]] - code - app\api\accounting\banking\reconcile\route.ts
+- [[POST()_21]] - code - app\api\accounting\periods\reopen\route.ts
+- [[POST()_15]] - code - app\api\accounting\journal\reverse\route.ts
+- [[POST()_1]] - code - app\api\accounting\accounts\seed\route.ts
+- [[POST()_9]] - code - app\api\accounting\adjustments\setup\route.ts
+- [[POST()_42]] - code - app\api\notifications\subscriptions\route.ts
+- [[POST()_17]] - code - app\api\accounting\journal\void\route.ts
+- [[TaxEngineError]] - code - lib\accounting\tax-engine\types.ts
+- [[_shared.ts_1]] - code - app\api\accounting\adjustments\_shared.ts
+- [[_shared.ts_2]] - code - app\api\accounting\banking\_shared.ts
+- [[_shared.ts]] - code - app\api\accounting\_shared.ts
+- [[_shared.ts_3]] - code - app\api\accounting\tax-engine\_shared.ts
+- [[absDiff()]] - code - lib\accounting\tax-engine\integrity-validator.ts
+- [[account-actions.ts]] - code - lib\accounting\actions\account-actions.ts
+- [[account-mapper.ts]] - code - lib\agents\pyme\promote\account-mapper.ts
+- [[accounting-cache.ts]] - code - lib\cache\accounting-cache.ts
+- [[asBool()]] - code - app\api\accounting\accounts\route.ts
+- [[assertCodeFormat()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[assertCodeMatchesType()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[assertParentPrefix()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[badRequestZod()]] - code - app\api\accounting\_shared.ts
+- [[badRequestZod()_1]] - code - app\api\accounting\adjustments\_shared.ts
+- [[badRequestZod()_2]] - code - app\api\accounting\banking\_shared.ts
+- [[bankingErrorResponse()]] - code - app\api\accounting\banking\_shared.ts
+- [[buildReversalLines()]] - code - lib\accounting\double-entry\validate.ts
+- [[buildTree()_1]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[bulkInsertTransactions()]] - code - lib\accounting\banking\repository.ts
+- [[calculateCostUsdMicros()]] - code - lib\db\telemetry-pricing.ts
+- [[centavosToString()]] - code - lib\accounting\double-entry\validate.ts
+- [[centavosToString()_1]] - code - lib\accounting\tax-engine\integrity-validator.ts
+- [[checkEnabled()]] - code - app\api\accounting\banking\_shared.ts
+- [[checkIdempotency()]] - code - lib\notifications\repository.ts
+- [[chunkTextFor()]] - code - lib\accounting\chart-of-accounts\rag-export.ts
+- [[claimUploadForProcessing()]] - code - lib\db\pyme.ts
+- [[client.ts]] - code - lib\db\client.ts
+- [[closePeriodAction()]] - code - lib\accounting\actions\period-actions.ts
+- [[computeBoundaries()]] - code - lib\accounting\actions\period-actions.ts
+- [[computePeriodBoundaries()]] - code - app\api\accounting\_shared.ts
+- [[countMovementsForAccount()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[countRecentUploads()]] - code - lib\db\pyme.ts
+- [[createAccount()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[createAccountAction()]] - code - lib\accounting\actions\account-actions.ts
+- [[createBankAccount()]] - code - lib\accounting\banking\repository.ts
+- [[createBook()]] - code - lib\db\pyme.ts
+- [[createEntry()]] - code - lib\accounting\double-entry\service.ts
+- [[createJournalEntryAction()]] - code - lib\accounting\actions\journal-actions.ts
+- [[createPeriodAction()]] - code - lib\accounting\actions\period-actions.ts
+- [[createStatementImport()]] - code - lib\accounting\banking\repository.ts
+- [[createSubscription()]] - code - lib\notifications\repository.ts
+- [[createUpload()]] - code - lib\db\pyme.ts
+- [[deactivateAccount()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[deactivateAccountAction()]] - code - lib\accounting\actions\account-actions.ts
+- [[deleteEntry()]] - code - lib\db\pyme.ts
+- [[deleteEntryScoped()]] - code - lib\db\pyme.ts
+- [[deleteSubscription()]] - code - lib\notifications\repository.ts
+- [[detectParser()]] - code - lib\accounting\banking\parsers\index.ts
+- [[disabled503()]] - code - app\api\accounting\adjustments\_shared.ts
+- [[disabledResponse()]] - code - app\api\accounting\banking\_shared.ts
+- [[errorResponse()]] - code - app\api\accounting\_shared.ts
+- [[errorResponse()_1]] - code - app\api\accounting\adjustments\_shared.ts
+- [[exportPucToRagFormat()]] - code - lib\accounting\chart-of-accounts\rag-export.ts
+- [[extractBookId()]] - code - lib\agents\pyme\promote\repository.ts
+- [[fetchLinesForEntries()]] - code - lib\cache\ledger-queries.ts
+- [[findAccountForKind()]] - code - lib\agents\pyme\promote\repository.ts
+- [[findSubscriptionById()]] - code - lib\notifications\repository.ts
+- [[fmtUsdFromMicros()]] - code - app\api\admin\telemetry\route.ts
+- [[getAccountByCode()]] - code - lib\accounting\adjustments\repository.ts
+- [[getAccountById()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[getAccountsByIds()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[getActiveSubscriptions()]] - code - lib\notifications\repository.ts
+- [[getAlreadyMatchedLineIds()]] - code - lib\accounting\banking\repository.ts
+- [[getBankAccount()]] - code - lib\accounting\banking\repository.ts
+- [[getBook()]] - code - lib\db\pyme.ts
+- [[getBookById()]] - code - lib\db\pyme.ts
+- [[getCachedAccountsTree()]] - code - lib\cache\accounting-cache.ts
+- [[getCachedJournalList()]] - code - lib\cache\accounting-cache.ts
+- [[getCachedLedger()]] - code - lib\cache\accounting-cache.ts
+- [[getCachedLedgerByPeriod()]] - code - lib\cache\ledger-queries.ts
+- [[getCachedPeriods()]] - code - lib\cache\accounting-cache.ts
+- [[getCachedPeriodsByYear()]] - code - lib\cache\ledger-queries.ts
+- [[getCachedRecentEntries()]] - code - lib\cache\ledger-queries.ts
+- [[getClassFromCode()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[getDb()]] - code - lib\db\client.ts
+- [[getDescendants()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[getEntryWithLines()]] - code - lib\accounting\double-entry\service.ts
+- [[getJournalLinesForPeriod()]] - code - lib\agents\financial\audit\forensic\repository.ts
+- [[getLatestReconciliations()]] - code - lib\accounting\banking\repository.ts
+- [[getLatestStatementImport()]] - code - lib\accounting\banking\repository.ts
+- [[getLedgerBalanceForAccount()]] - code - lib\accounting\banking\repository.ts
+- [[getMatchCounts()]] - code - lib\accounting\banking\repository.ts
+- [[getNatureFromCode()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[getNewThirdPartiesForPeriod()]] - code - lib\agents\financial\audit\forensic\repository.ts
+- [[getOrCreateWorkspace()]] - code - lib\db\workspace.ts
+- [[getPeriod()]] - code - lib\accounting\adjustments\repository.ts
+- [[getPeriodAccountBalances()]] - code - lib\accounting\adjustments\provisions\repository.ts
+- [[getPostedEntriesForPeriod()]] - code - lib\agents\financial\audit\forensic\repository.ts
+- [[getRecentLog()]] - code - lib\notifications\repository.ts
+- [[getRules()]] - code - lib\accounting\tax-engine\repository.ts
+- [[getTaxProfile()]] - code - lib\accounting\tax-engine\repository.ts
+- [[getUpload()]] - code - lib\db\pyme.ts
+- [[handleError()_1]] - code - app\api\accounting\accounts\route.ts
+- [[handleError()_2]] - code - app\api\pyme\books\route.ts
+- [[handleError()_3]] - code - app\api\pyme\entries\[entryId]\route.ts
+- [[handleError()]] - code - app\api\accounting\accounts\[id]\route.ts
+- [[import.ts]] - code - lib\accounting\banking\services\import.ts
+- [[importStatement()]] - code - lib\accounting\banking\services\import.ts
+- [[index.ts_7]] - code - lib\accounting\banking\parsers\index.ts
+- [[index.ts_21]] - code - lib\agents\pyme\promote\index.ts
+- [[insertEntries()]] - code - lib\db\pyme.ts
+- [[insertLog()]] - code - lib\notifications\repository.ts
+- [[insertLogs()]] - code - lib\notifications\repository.ts
+- [[integrity-validator.ts]] - code - lib\accounting\tax-engine\integrity-validator.ts
+- [[isAutoAdjustmentsEnabled()]] - code - lib\accounting\adjustments\types.ts
+- [[isBankReconEnabled()]] - code - lib\accounting\banking\types.ts
+- [[isLeafAccount()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[isOcrPromoteEnabled()]] - code - lib\agents\pyme\promote\index.ts
+- [[isReconciliationBlocking()]] - code - lib\accounting\banking\types.ts
+- [[isRetryableError()]] - code - lib\accounting\double-entry\service.ts
+- [[isTaxEngineEnabled()]] - code - lib\accounting\tax-engine\types.ts
+- [[journal-actions.ts]] - code - lib\accounting\actions\journal-actions.ts
+- [[ledger-queries.ts]] - code - lib\cache\ledger-queries.ts
+- [[listAccounts()]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[listActiveDeferredAssets()]] - code - lib\accounting\adjustments\amortization\repository.ts
+- [[listActiveFixedAssets()]] - code - lib\accounting\adjustments\depreciation\repository.ts
+- [[listActiveProvisionsConfig()]] - code - lib\accounting\adjustments\provisions\repository.ts
+- [[listBankAccounts()]] - code - lib\accounting\banking\repository.ts
+- [[listBookIds()]] - code - lib\db\pyme.ts
+- [[listBooks()]] - code - lib\db\pyme.ts
+- [[listEntries()_1]] - code - lib\db\pyme.ts
+- [[listEntries()]] - code - lib\accounting\double-entry\service.ts
+- [[listKnownCategories()]] - code - lib\db\pyme.ts
+- [[listStatementImports()]] - code - lib\accounting\banking\repository.ts
+- [[listSubscriptions()]] - code - lib\notifications\repository.ts
+- [[listTransactions()]] - code - lib\accounting\banking\repository.ts
+- [[listUnmatchedTransactions()]] - code - lib\accounting\banking\repository.ts
+- [[loadConfirmedEntries()]] - code - lib\agents\pyme\promote\repository.ts
+- [[loadPucCatalog()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[lockOpenPeriod()]] - code - lib\accounting\double-entry\service.ts
+- [[lockPeriodAction()]] - code - lib\accounting\actions\period-actions.ts
+- [[looksLikeInvoice()]] - code - lib\agents\pyme\promote\index.ts
+- [[mapCategoryToAccount()]] - code - lib\agents\pyme\promote\account-mapper.ts
+- [[matchTransaction()]] - code - lib\accounting\banking\repository.ts
+- [[monthlySummary()]] - code - lib\db\pyme.ts
+- [[mutations.ts]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[nextEntryNumber()]] - code - lib\accounting\double-entry\service.ts
+- [[ok()]] - code - app\api\accounting\_shared.ts
+- [[ok()_1]] - code - app\api\accounting\adjustments\_shared.ts
+- [[ok()_2]] - code - app\api\accounting\banking\_shared.ts
+- [[parseCentavos()]] - code - lib\accounting\double-entry\validate.ts
+- [[parseCentavos()_1]] - code - lib\accounting\tax-engine\integrity-validator.ts
+- [[period-actions.ts]] - code - lib\accounting\actions\period-actions.ts
+- [[persistAgentTelemetry()]] - code - lib\db\telemetry.ts
+- [[postEntry()]] - code - lib\accounting\double-entry\service.ts
+- [[postJournalEntryAction()]] - code - lib\accounting\actions\journal-actions.ts
+- [[promoteEntries()]] - code - lib\agents\pyme\promote\index.ts
+- [[provisions-config-co-2026.ts]] - code - lib\db\seeds\provisions-config-co-2026.ts
+- [[puc-pyme-colombia.ts]] - code - lib\db\seeds\puc-pyme-colombia.ts
+- [[pyme.ts]] - code - lib\db\pyme.ts
+- [[queries.ts]] - code - lib\accounting\chart-of-accounts\queries.ts
+- [[rag-export.ts]] - code - lib\accounting\chart-of-accounts\rag-export.ts
+- [[reconciliation.ts]] - code - lib\accounting\banking\services\reconciliation.ts
+- [[reopenPeriodAction()]] - code - lib\accounting\actions\period-actions.ts
+- [[repository.ts]] - code - lib\accounting\adjustments\amortization\repository.ts
+- [[repository.ts_1]] - code - lib\accounting\adjustments\depreciation\repository.ts
+- [[repository.ts_2]] - code - lib\accounting\adjustments\provisions\repository.ts
+- [[repository.ts_3]] - code - lib\accounting\adjustments\repository.ts
+- [[repository.ts_4]] - code - lib\accounting\banking\repository.ts
+- [[repository.ts_5]] - code - lib\accounting\tax-engine\repository.ts
+- [[repository.ts_6]] - code - lib\agents\financial\audit\forensic\repository.ts
+- [[repository.ts_7]] - code - lib\agents\pyme\promote\repository.ts
+- [[repository.ts_8]] - code - lib\notifications\repository.ts
+- [[resetPucForWorkspace()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[resolveCajaAccount()]] - code - lib\agents\pyme\promote\account-mapper.ts
+- [[retryOnSerialization()]] - code - lib\accounting\double-entry\service.ts
+- [[reverseEntry()]] - code - lib\accounting\double-entry\service.ts
+- [[reverseJournalEntryAction()]] - code - lib\accounting\actions\journal-actions.ts
+- [[route.ts]] - code - app\api\accounting\accounts\[id]\route.ts
+- [[route.ts_1]] - code - app\api\accounting\accounts\route.ts
+- [[route.ts_2]] - code - app\api\accounting\accounts\seed\route.ts
+- [[route.ts_3]] - code - app\api\accounting\adjustments\amortization\route.ts
+- [[route.ts_4]] - code - app\api\accounting\adjustments\deferred-assets\[id]\route.ts
+- [[route.ts_5]] - code - app\api\accounting\adjustments\deferred-assets\route.ts
+- [[route.ts_6]] - code - app\api\accounting\adjustments\depreciation\route.ts
+- [[route.ts_7]] - code - app\api\accounting\adjustments\fixed-assets\[id]\route.ts
+- [[route.ts_8]] - code - app\api\accounting\adjustments\fixed-assets\route.ts
+- [[route.ts_9]] - code - app\api\accounting\adjustments\preview\route.ts
+- [[route.ts_11]] - code - app\api\accounting\adjustments\provisions-config\route.ts
+- [[route.ts_10]] - code - app\api\accounting\adjustments\provisions\route.ts
+- [[route.ts_12]] - code - app\api\accounting\adjustments\setup\route.ts
+- [[route.ts_13]] - code - app\api\accounting\banking\accounts\[id]\route.ts
+- [[route.ts_14]] - code - app\api\accounting\banking\accounts\route.ts
+- [[route.ts_15]] - code - app\api\accounting\banking\imports\route.ts
+- [[route.ts_16]] - code - app\api\accounting\banking\reconcile\route.ts
+- [[route.ts_17]] - code - app\api\accounting\banking\status\route.ts
+- [[route.ts_21]] - code - app\api\accounting\journal\post\route.ts
+- [[route.ts_22]] - code - app\api\accounting\journal\reverse\route.ts
+- [[route.ts_23]] - code - app\api\accounting\journal\route.ts
+- [[route.ts_24]] - code - app\api\accounting\journal\void\route.ts
+- [[route.ts_26]] - code - app\api\accounting\periods\close\route.ts
+- [[route.ts_27]] - code - app\api\accounting\periods\lock\route.ts
+- [[route.ts_28]] - code - app\api\accounting\periods\reopen\route.ts
+- [[route.ts_29]] - code - app\api\accounting\periods\route.ts
+- [[route.ts_30]] - code - app\api\accounting\tax-engine\preview\route.ts
+- [[route.ts_32]] - code - app\api\admin\telemetry\route.ts
+- [[route.ts_44]] - code - app\api\erp\status\route.ts
+- [[route.ts_48]] - code - app\api\escudo\fiscal-anchor\alerts\[id]\route.ts
+- [[route.ts_64]] - code - app\api\notifications\log\route.ts
+- [[route.ts_65]] - code - app\api\notifications\subscriptions\[id]\route.ts
+- [[route.ts_66]] - code - app\api\notifications\subscriptions\route.ts
+- [[route.ts_69]] - code - app\api\pyme\books\route.ts
+- [[route.ts_70]] - code - app\api\pyme\entries\[entryId]\route.ts
+- [[route.ts_72]] - code - app\api\pyme\promote\route.ts
+- [[route.ts_81]] - code - app\api\sentinel\alerts\route.ts
+- [[route.ts_91]] - code - app\api\workspace\route.ts
+- [[runReconciliation()]] - code - lib\accounting\banking\services\reconciliation.ts
+- [[seedProvisionsForWorkspace()]] - code - lib\db\seeds\provisions-config-co-2026.ts
+- [[seedPucAction()]] - code - lib\accounting\actions\account-actions.ts
+- [[seedPucForWorkspace()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[seedPucForWorkspace()_1]] - code - lib\db\seeds\puc-pyme-colombia.ts
+- [[seedTaxRulesCo2026()]] - code - lib\db\seeds\tax-rules-co-2026.ts
+- [[serializeEntry()]] - code - app\api\pyme\entries\[entryId]\route.ts
+- [[service.ts]] - code - lib\accounting\double-entry\service.ts
+- [[softDeleteBankAccount()]] - code - lib\accounting\banking\repository.ts
+- [[statusForAdjErr()]] - code - app\api\accounting\adjustments\_shared.ts
+- [[statusForCode()]] - code - app\api\accounting\_shared.ts
+- [[tax-rules-co-2026.ts]] - code - lib\db\seeds\tax-rules-co-2026.ts
+- [[taxBadRequestZod()]] - code - app\api\accounting\tax-engine\_shared.ts
+- [[taxErrorResponse()]] - code - app\api\accounting\tax-engine\_shared.ts
+- [[taxOk()]] - code - app\api\accounting\tax-engine\_shared.ts
+- [[taxStatusForCode()]] - code - app\api\accounting\tax-engine\_shared.ts
+- [[telemetry-pricing.ts]] - code - lib\db\telemetry-pricing.ts
+- [[telemetry.ts]] - code - lib\db\telemetry.ts
+- [[toSerializableError()]] - code - lib\accounting\actions\account-actions.ts
+- [[toSerializableError()_1]] - code - lib\accounting\actions\journal-actions.ts
+- [[toSerializableError()_3]] - code - lib\accounting\actions\period-actions.ts
+- [[types.ts_6]] - code - lib\accounting\adjustments\types.ts
+- [[types.ts_7]] - code - lib\accounting\banking\types.ts
+- [[types.ts_11]] - code - lib\accounting\tax-engine\types.ts
+- [[updateAccount()]] - code - lib\accounting\chart-of-accounts\mutations.ts
+- [[updateAccountAction()]] - code - lib\accounting\actions\account-actions.ts
+- [[updateAfterAmortization()]] - code - lib\accounting\adjustments\amortization\repository.ts
+- [[updateAfterDepreciation()]] - code - lib\accounting\adjustments\depreciation\repository.ts
+- [[updateBankAccount()]] - code - lib\accounting\banking\repository.ts
+- [[updateEntry()]] - code - lib\db\pyme.ts
+- [[updateEntryScoped()]] - code - lib\db\pyme.ts
+- [[updateStatementImport()]] - code - lib\accounting\banking\repository.ts
+- [[updateSubscriptionActive()]] - code - lib\notifications\repository.ts
+- [[updateUploadStatus()]] - code - lib\db\pyme.ts
+- [[upsertAccountByCode()]] - code - lib\accounting\adjustments\repository.ts
+- [[upsertReconciliation()]] - code - lib\accounting\banking\repository.ts
+- [[validate.ts]] - code - lib\accounting\double-entry\validate.ts
+- [[validateAccounts()]] - code - lib\accounting\double-entry\service.ts
+- [[validateBalance()]] - code - lib\accounting\double-entry\validate.ts
+- [[validateLines()]] - code - lib\accounting\tax-engine\integrity-validator.ts
+- [[voidDraft()]] - code - lib\accounting\double-entry\service.ts
+- [[voidDraftEntryAction()]] - code - lib\accounting\actions\journal-actions.ts
+- [[zodToActionError()]] - code - lib\accounting\actions\account-actions.ts
+- [[zodToActionError()_1]] - code - lib\accounting\actions\journal-actions.ts
+- [[zodToActionError()_3]] - code - lib\accounting\actions\period-actions.ts
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/Accounting_Shared_Utilities
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 22 edges to [[_COMMUNITY_Module Cluster 16]]
+- 12 edges to [[_COMMUNITY_Cron Jobs & ERP Webhooks]]
+- 10 edges to [[_COMMUNITY_Module Cluster 18]]
+- 8 edges to [[_COMMUNITY_Pyme & Workspace Routes]]
+- 6 edges to [[_COMMUNITY_Module Cluster 49]]
+- 5 edges to [[_COMMUNITY_Module Cluster 37]]
+- 4 edges to [[_COMMUNITY_Module Cluster 24]]
+- 2 edges to [[_COMMUNITY_Module Cluster 71]]
+- 2 edges to [[_COMMUNITY_Module Cluster 56]]
+- 1 edge to [[_COMMUNITY_Module Cluster 25]]
+- 1 edge to [[_COMMUNITY_Module Cluster 35]]
+- 1 edge to [[_COMMUNITY_Opinion & Dictamen Drafters]]
+- 1 edge to [[_COMMUNITY_Tax Calendar & ERP Connect]]
+- 1 edge to [[_COMMUNITY_Core API Routes]]
+- 1 edge to [[_COMMUNITY_Module Cluster 53]]
+- 1 edge to [[_COMMUNITY_Module Cluster 61]]
+
+## Top bridge nodes
+- [[getDb()]] - degree 161, connects to 15 communities
+- [[getOrCreateWorkspace()]] - degree 67, connects to 5 communities
+- [[createEntry()]] - degree 13, connects to 2 communities
+- [[PATCH()]] - degree 22, connects to 1 community
+- [[promoteEntries()]] - degree 11, connects to 1 community

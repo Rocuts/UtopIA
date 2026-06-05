@@ -1,0 +1,21 @@
+---
+source_file: "lib\agents\financial\audit\agents\tax-auditor.ts"
+type: "code"
+community: "Module Cluster 19"
+location: "L28"
+tags:
+  - graphify/code
+  - graphify/INFERRED
+  - community/Module_Cluster_19
+---
+
+# runTaxAuditor()
+
+## Connections
+- [[buildTaxAuditorPrompt()]] - `calls` [INFERRED]
+- [[callFinancialAgent()]] - `calls` [INFERRED]
+- [[orchestrateAudit()]] - `calls` [INFERRED]
+- [[tax-auditor.ts]] - `contains` [EXTRACTED]
+- [[toLegacyAuditorResult()_3]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/INFERRED #community/Module_Cluster_19

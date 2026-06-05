@@ -1,0 +1,22 @@
+---
+source_file: "lib\export\pdf-elite-react\compose-statements-from-json.ts"
+type: "code"
+community: "Opinion & Dictamen Drafters"
+location: "L137"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Opinion_&_Dictamen_Drafters
+---
+
+# buildEquationTrailer()
+
+## Connections
+- [[compose-statements-from-json.ts]] - `contains` [EXTRACTED]
+- [[fmtCop()_14]] - `calls` [EXTRACTED]
+- [[formatCopFromCents()]] - `calls` [INFERRED]
+- [[niifJsonToBalanceTable()]] - `calls` [EXTRACTED]
+- [[parseMoneyCop()]] - `calls` [INFERRED]
+- [[totalCells()]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Opinion_&_Dictamen_Drafters

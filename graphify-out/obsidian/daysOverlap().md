@@ -1,0 +1,19 @@
+---
+source_file: "lib\accounting\adjustments\amortization\calculator.ts"
+type: "code"
+community: "Module Cluster 68"
+location: "L72"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Module_Cluster_68
+---
+
+# daysOverlap()
+
+## Connections
+- [[calculateAmortization()]] - `calls` [EXTRACTED]
+- [[calculator.ts]] - `contains` [EXTRACTED]
+- [[utcDay()]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Module_Cluster_68

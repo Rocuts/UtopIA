@@ -1,0 +1,17 @@
+---
+source_file: "app\api\accounting\periods\lock\route.ts"
+type: "code"
+community: "Accounting Shared Utilities"
+location: "L1"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Accounting_Shared_Utilities
+---
+
+# route.ts
+
+## Connections
+- [[POST()_20]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Accounting_Shared_Utilities

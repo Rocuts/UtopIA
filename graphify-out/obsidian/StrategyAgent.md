@@ -1,0 +1,18 @@
+---
+source_file: "lib\agents\specialists\strategy-agent.ts"
+type: "code"
+community: "Module Cluster 109"
+location: "L9"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Module_Cluster_109
+---
+
+# StrategyAgent
+
+## Connections
+- [[.buildSystemPrompt()_3]] - `method` [EXTRACTED]
+- [[strategy-agent.ts]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Module_Cluster_109

@@ -1,0 +1,227 @@
+---
+type: community
+cohesion: 0.02
+members: 189
+---
+
+# Financial Agent Pipelines
+
+**Cohesion:** 0.02 - loosely connected
+**Members:** 189 nodes
+
+## Members
+- [[CcvFiscalCard.tsx]] - code - components\workspace\escudo\cards\CcvFiscalCard.tsx
+- [[ConciliacionCard.tsx]] - code - components\workspace\escudo\cards\ConciliacionCard.tsx
+- [[DevolucionesCard.tsx]] - code - components\workspace\escudo\cards\DevolucionesCard.tsx
+- [[EscudoRetencionesCard.tsx]] - code - components\workspace\escudo\survival\EscudoRetencionesCard.tsx
+- [[POST()_23]] - code - app\api\business-valuation\route.ts
+- [[POST()_38]] - code - app\api\financial-report\route.ts
+- [[PlaneacionCard.tsx]] - code - components\workspace\escudo\cards\PlaneacionCard.tsx
+- [[ReservaContingenciaCard()]] - code - components\workspace\escudo\survival\ReservaContingenciaCard.tsx
+- [[ReservaContingenciaCard.tsx]] - code - components\workspace\escudo\survival\ReservaContingenciaCard.tsx
+- [[Shimmer()]] - code - components\workspace\escudo\cards\ConciliacionCard.tsx
+- [[SintetizadorCard.tsx]] - code - components\workspace\escudo\survival\SintetizadorCard.tsx
+- [[TetCard.tsx_1]] - code - components\workspace\escudo\survival\TetCard.tsx
+- [[_internals_pctOf()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\conciliacion-builder.ts
+- [[analyzeRefund()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\refund-analyzer.ts
+- [[applyCheck4ActaVsPL()]] - code - lib\agents\financial\orchestrator.ts
+- [[block-builder.ts]] - code - lib\agents\financial\escudo-survival\fiscal-anchor\block-builder.ts
+- [[brechaPpVsUmbral()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[buildAlertaTasaMinima()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[buildCcvFiscalPrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\ccv-fiscal.prompt.ts
+- [[buildConciliacionPrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\conciliacion.prompt.ts
+- [[buildConciliacionSkeleton()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\conciliacion-builder.ts
+- [[buildConsolidatedValuationReport()]] - code - lib\agents\financial\valuation\orchestrator.ts
+- [[buildDcfModelerPrompt()]] - code - lib\agents\financial\valuation\prompts\dcf-modeler.prompt.ts
+- [[buildDefensaDianPrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\defensa-dian.prompt.ts
+- [[buildDevolucionesPrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\devoluciones.prompt.ts
+- [[buildDianLetterSkeleton()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\dian-letter-builder.ts
+- [[buildFiscalAgentHeader()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\fiscal-agent.prompt.ts
+- [[buildFiscalAnchorBlockMarkdown()]] - code - lib\agents\financial\escudo-survival\fiscal-anchor\block-builder.ts
+- [[buildFiscalAnchorBlockShell()]] - code - lib\agents\financial\escudo-survival\fiscal-anchor\block-builder.ts
+- [[buildFiscalContextBlock()]] - code - components\workspace\PipelineWorkspace.tsx
+- [[buildLanguageLine()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\fiscal-agent.prompt.ts
+- [[buildMarkdownTable()]] - code - lib\agents\financial\agents\renderer.ts
+- [[buildMarketComparablesPrompt()]] - code - lib\agents\financial\valuation\prompts\market-comparables.prompt.ts
+- [[buildMotorNormativoPrompt()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[buildPlaneacionPrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\planeacion.prompt.ts
+- [[buildRiskScorePrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\risk-score.prompt.ts
+- [[buildSupervivenciaPrompt()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\supervivencia.prompt.ts
+- [[buildSystem()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\synthesizer.agent.ts
+- [[buildValuationSynthesizerPrompt()]] - code - lib\agents\financial\valuation\prompts\valuation-synthesizer.prompt.ts
+- [[calcularImpuestoAdicionalCents()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[callFiscalAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\runtime.ts
+- [[ccv-calculator.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[ccv-fiscal.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\ccv-fiscal.agent.ts
+- [[ccv-fiscal.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\ccv-fiscal.prompt.ts
+- [[centsToPesos()]] - code - lib\ancora\derive-ancora-view.ts
+- [[centsToPesosNumber()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[clasificarEficienciaFiscal()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[classificationFromKind()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\dian-letter-builder.ts
+- [[classifyDianRequirement()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\dian-letter-builder.ts
+- [[cn()_32]] - code - components\workspace\escudo\cards\CcvFiscalCard.tsx
+- [[cn()_34]] - code - components\workspace\escudo\cards\DevolucionesCard.tsx
+- [[cn()_35]] - code - components\workspace\escudo\cards\PlaneacionCard.tsx
+- [[cn()_38]] - code - components\workspace\escudo\survival\SintetizadorCard.tsx
+- [[conciliacion-builder.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\conciliacion-builder.ts
+- [[conciliacion.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\conciliacion.agent.ts
+- [[conciliacion.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\conciliacion.prompt.ts
+- [[dcf-modeler.prompt.ts]] - code - lib\agents\financial\valuation\prompts\dcf-modeler.prompt.ts
+- [[dcf-modeler.ts]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[defensa-dian.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\defensa-dian.agent.ts
+- [[defensa-dian.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\defensa-dian.prompt.ts
+- [[derive-ancora-view.ts]] - code - lib\ancora\derive-ancora-view.ts
+- [[deriveAncoraView()]] - code - lib\ancora\derive-ancora-view.ts
+- [[devoluciones.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\devoluciones.agent.ts
+- [[devoluciones.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\devoluciones.prompt.ts
+- [[dian-letter-builder.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\dian-letter-builder.ts
+- [[diffCents()]] - code - lib\agents\financial\validators\niif-json-validator.ts
+- [[emptyView()]] - code - lib\ancora\derive-ancora-view.ts
+- [[enforceOpinionCoherence()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[f09AlertLevel()]] - code - components\workspace\escudo\cards\CcvFiscalCard.tsx
+- [[f09Color()]] - code - components\workspace\escudo\cards\CcvFiscalCard.tsx
+- [[filterByUseCase()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[findEquityClosingRow()]] - code - lib\agents\financial\validators\niif-json-validator.ts
+- [[fiscal-agent.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\fiscal-agent.prompt.ts
+- [[fiscal-reviewer.ts]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[fmt()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[fmtCop()_11]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[fmtCop()]] - code - components\workspace\escudo\cards\CcvFiscalCard.tsx
+- [[fmtCop()_1]] - code - components\workspace\escudo\cards\ConciliacionCard.tsx
+- [[fmtCop()_2]] - code - components\workspace\escudo\cards\DevolucionesCard.tsx
+- [[fmtCop()_3]] - code - components\workspace\escudo\cards\PlaneacionCard.tsx
+- [[fmtCop()_4]] - code - components\workspace\escudo\survival\EscudoRetencionesCard.tsx
+- [[fmtCop()_5]] - code - components\workspace\escudo\survival\ReservaContingenciaCard.tsx
+- [[fmtCop()_6]] - code - components\workspace\escudo\survival\SintetizadorCard.tsx
+- [[fmtCop()_7]] - code - components\workspace\escudo\survival\TetCard.tsx
+- [[fmtCop()_10]] - code - lib\agents\financial\validators\niif-json-validator.ts
+- [[fmtMoneyOrND()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[fmtMultiple()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[fmtPct()]] - code - components\workspace\escudo\cards\CcvFiscalCard.tsx
+- [[fmtPct()_1]] - code - components\workspace\escudo\cards\ConciliacionCard.tsx
+- [[fmtPct()_4]] - code - lib\agents\financial\escudo-survival\fiscal-anchor\block-builder.ts
+- [[fmtPct()_2]] - code - components\workspace\escudo\survival\EscudoRetencionesCard.tsx
+- [[fmtPct()_3]] - code - components\workspace\escudo\survival\TetCard.tsx
+- [[formatCopAsMillions()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[formatCopFromCents()]] - code - lib\agents\financial\contracts\money.ts
+- [[handleStreaming()]] - code - app\api\business-valuation\route.ts
+- [[handleStreaming()_7]] - code - app\api\financial-report\route.ts
+- [[lineToTableRow()]] - code - lib\agents\financial\agents\renderer.ts
+- [[mapFinding()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[market-comparables.prompt.ts]] - code - lib\agents\financial\valuation\prompts\market-comparables.prompt.ts
+- [[market-comparables.ts]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[money.ts]] - code - lib\agents\financial\contracts\money.ts
+- [[moneyCopEquals()]] - code - lib\agents\financial\contracts\money.ts
+- [[motor-normativo.prompt.ts]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[niif-json-validator.ts]] - code - lib\agents\financial\validators\niif-json-validator.ts
+- [[orchestrateValuation()]] - code - lib\agents\financial\valuation\orchestrator.ts
+- [[orchestrator.ts_10]] - code - lib\agents\financial\valuation\orchestrator.ts
+- [[parseMoneyCop()]] - code - lib\agents\financial\contracts\money.ts
+- [[pctOf()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\conciliacion-builder.ts
+- [[pctToNumber()]] - code - lib\ancora\derive-ancora-view.ts
+- [[pesosFromCents()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\refund-analyzer.ts
+- [[planeacion.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\planeacion.agent.ts
+- [[planeacion.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\planeacion.prompt.ts
+- [[precomputeCcv()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\ccv-calculator.ts
+- [[reduccionesDisponibles()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\dian-letter-builder.ts
+- [[refund-analyzer.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\tools\refund-analyzer.ts
+- [[renderArticulosET()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[renderBalanceSheet()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderBlacklist()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[renderCashFlowStatement()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderColombianAdjustments()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[renderComparableSelection()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[renderDashboard()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderEquityChanges()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderExecutiveSummary()_1]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[renderFiscalReviewerMarkdown()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[renderImpliedValuation()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[renderIncomeStatement()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderKeyAssumptions()]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[renderKpis()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderLimitations()]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[renderMarkdown()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[renderMethodologyWeighting()]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[renderMultiplesAnalysis()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[renderNITCalendarHint()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[renderNormasAuditoria()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[renderNote()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderNotes()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderPreparerNotes()_1]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderPresumedCostWarning()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderProjection()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[renderProjections()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderRecommendations()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderSanciones()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[renderSensitivity()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[renderTarifasRetencion()]] - code - lib\agents\financial\escudo-survival\normative\prompts\motor-normativo.prompt.ts
+- [[renderTechnicalNotes()]] - code - lib\agents\financial\agents\renderer.ts
+- [[renderTerminalValue()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[renderTrendsAndBreakEven()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[renderValuation()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[renderValueRange()]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[renderWacc()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[renderer.ts]] - code - lib\agents\financial\agents\renderer.ts
+- [[retentionAlert()]] - code - components\workspace\escudo\survival\EscudoRetencionesCard.tsx
+- [[risk-score.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\risk-score.agent.ts
+- [[risk-score.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\risk-score.prompt.ts
+- [[round2()]] - code - lib\ancora\derive-ancora-view.ts
+- [[route.ts_33]] - code - app\api\business-valuation\route.ts
+- [[route.ts_59]] - code - app\api\financial-report\route.ts
+- [[runCcvFiscalAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\ccv-fiscal.agent.ts
+- [[runConciliacionAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\conciliacion.agent.ts
+- [[runDcfModeler()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[runDefensaDianAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\defensa-dian.agent.ts
+- [[runDevolucionesAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\devoluciones.agent.ts
+- [[runFiscalReviewer()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[runMarketComparables()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[runPlaneacionAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\planeacion.agent.ts
+- [[runRiskScoreAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\risk-score.agent.ts
+- [[runStrategyDirector()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[runSupervivenciaAgent()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\supervivencia.agent.ts
+- [[runSynthesizer()]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\synthesizer.agent.ts
+- [[runValuationSynthesizer()]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[runtime.ts_1]] - code - lib\agents\financial\escudo-survival\fiscal-agent\runtime.ts
+- [[serializeMoneyCop()]] - code - lib\agents\financial\contracts\money.ts
+- [[strategy-director.ts]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[subMoneyCop()]] - code - lib\agents\financial\contracts\money.ts
+- [[sumMoneyCop()]] - code - lib\agents\financial\contracts\money.ts
+- [[supervivencia.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\supervivencia.agent.ts
+- [[supervivencia.prompt.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\prompts\supervivencia.prompt.ts
+- [[synthesizer.agent.ts]] - code - lib\agents\financial\escudo-survival\fiscal-agent\agents\synthesizer.agent.ts
+- [[tetAlert()]] - code - components\workspace\escudo\survival\TetCard.tsx
+- [[toDcfModelResult()]] - code - lib\agents\financial\valuation\agents\dcf-modeler.ts
+- [[toLegacyAuditorResult()]] - code - lib\agents\financial\audit\agents\fiscal-reviewer.ts
+- [[toMarketComparablesResult()]] - code - lib\agents\financial\valuation\agents\market-comparables.ts
+- [[toNiifAnalysisResult()]] - code - lib\agents\financial\agents\renderer.ts
+- [[toStrategicAnalysisResult()]] - code - lib\agents\financial\agents\strategy-director.ts
+- [[toValuationSynthesisResult()]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+- [[validateNiifReportJson()]] - code - lib\agents\financial\validators\niif-json-validator.ts
+- [[valuation-synthesizer.prompt.ts]] - code - lib\agents\financial\valuation\prompts\valuation-synthesizer.prompt.ts
+- [[valuation-synthesizer.ts]] - code - lib\agents\financial\valuation\agents\valuation-synthesizer.ts
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/Financial_Agent_Pipelines
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 14 edges to [[_COMMUNITY_Audit & Compliance Agents]]
+- 8 edges to [[_COMMUNITY_Áncora  Context Builders]]
+- 6 edges to [[_COMMUNITY_Opinion & Dictamen Drafters]]
+- 5 edges to [[_COMMUNITY_Module Cluster 23]]
+- 5 edges to [[_COMMUNITY_Module Cluster 19]]
+- 4 edges to [[_COMMUNITY_NIIF Analyst Pipeline]]
+- 4 edges to [[_COMMUNITY_Module Cluster 32]]
+- 4 edges to [[_COMMUNITY_Pyme & Workspace Routes]]
+- 3 edges to [[_COMMUNITY_Core API Routes]]
+- 1 edge to [[_COMMUNITY_Module Cluster 31]]
+
+## Top bridge nodes
+- [[fmt()]] - degree 12, connects to 6 communities
+- [[formatCopFromCents()]] - degree 45, connects to 5 communities
+- [[parseMoneyCop()]] - degree 37, connects to 5 communities
+- [[runFiscalReviewer()]] - degree 5, connects to 3 communities
+- [[runStrategyDirector()]] - degree 5, connects to 3 communities
