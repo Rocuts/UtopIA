@@ -45,6 +45,7 @@ export function WaterfallPnL({ items, width = 500, height = 300 }: Props) {
   let running = 0;
   const bars = items.map((it) => {
     if (it.sign === 'total') {
+      // eslint-disable-next-line react-hooks/immutability
       running = it.amount;
       return { ...it, start: 0, end: it.amount };
     }

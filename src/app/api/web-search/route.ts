@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       searchedAt: searchResponse.searchedAt,
     });
   } catch (error) {
-    console.error('Web search error.');
+    console.error('[web-search] error:', error);
     return NextResponse.json(
       { error: 'Internal server error during web search.' },
       { status: 500 }

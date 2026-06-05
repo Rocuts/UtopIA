@@ -16,7 +16,8 @@
 
 import { VerdadArea } from '@/components/workspace/areas/VerdadArea';
 import { AreaShell } from '@/components/workspace/layouts/AreaShell';
-import { getCachedPillarKpis, type PillarKpis } from '@/lib/kpis/cache';
+import { getCachedPillarKpis } from '@/lib/kpis/cache';
+import type { PillarKpis } from '@/lib/kpis/pillar-view';
 import { requireWorkspace } from '@/lib/db/workspace';
 import { calculateComplianceScore } from '@/lib/kpis/compliance-score';
 import type { KpiResult } from '@/types/kpis';

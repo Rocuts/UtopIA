@@ -69,7 +69,7 @@ export function useRealtimeAPI(): RealtimeAPIResult {
 
   const calculateVolume = useCallback(() => {
     if (!analyserRef.current || !dataArrayRef.current) return;
-    analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
+    analyserRef.current.getByteFrequencyData(dataArrayRef.current as Uint8Array<ArrayBuffer>);
     const sum = dataArrayRef.current.reduce((a, b) => a + b, 0);
     const avg = sum / dataArrayRef.current.length;
     // Normalize volume 0-1
@@ -104,7 +104,7 @@ export function useRealtimeAPI(): RealtimeAPIResult {
           audioEl.srcObject = e.streams[0];
           // Set up volume analyzer for the orb
           if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioContextRef.current = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
           }
           const ctx = audioContextRef.current;
           const source = ctx.createMediaStreamSource(e.streams[0]);

@@ -39,7 +39,6 @@ import { cn } from '@/lib/utils';
 import { EliteCard } from '@/components/ui/EliteCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { NiifEliteButton } from '@/components/workspace/NiifEliteButton';
-import { mockCompliance } from '@/lib/kpis/mocks';
 import type { KpiResult, LastAuditOpinion } from '@/types/kpis';
 import { DataSourceLadder } from './shared/DataSourceLadder';
 import { CapabilityZones } from './shared/CapabilityZones';
@@ -58,7 +57,7 @@ export interface ActiveFinding {
 }
 
 export interface VerdadAreaProps {
-  /** KPI compuesto (Compliance Score). Si se omite se usa `mockCompliance`. */
+  /** KPI compuesto (Compliance Score). */
   kpi?: KpiResult;
   /** Hallazgos activos (opcional). Si se omite se muestra un set realista de ejemplo. */
   activeFindings?: ActiveFinding[];
@@ -318,7 +317,7 @@ function BreakdownBar({ label, value, weight, color }: BreakdownBarProps) {
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export function VerdadArea({
-  kpi = mockCompliance,
+  kpi,
   activeFindings,
   lastOpinion = 'favorable',
   compact = false,
@@ -335,8 +334,8 @@ export function VerdadArea({
   // Score real determinístico NIIF cuando hay datos; si no, KPI mock.
   const gaugeScore = useMemo(() => {
     if (view.hasData && view.derived.scoreNiif != null) return view.derived.scoreNiif;
-    return kpi.value;
-  }, [view, kpi.value]);
+    return kpi?.value ?? 0;
+  }, [view, kpi?.value]);
 
   const findings = useMemo<ActiveFinding[]>(() => {
     if (activeFindings && activeFindings.length > 0) return activeFindings;
@@ -346,7 +345,7 @@ export function VerdadArea({
   // Breakdown values pulled from the KPI result (engine output)
   const breakdown = useMemo(() => {
     const map: Record<string, { value: number; weight?: number }> = {};
-    (kpi.breakdown ?? []).forEach((b) => {
+    (kpi?.breakdown ?? []).forEach((b) => {
       map[b.label] = { value: b.value, weight: b.weight };
     });
     const niifBase = map['NIIF'] ?? { value: 98, weight: 0.3 };

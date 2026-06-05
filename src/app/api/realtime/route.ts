@@ -134,7 +134,7 @@ export async function GET() {
       client_secret: data.client_secret.value,
     });
   } catch (error) {
-    console.error('Realtime token generation error.');
+    console.error('[realtime] token generation error:', error);
     return NextResponse.json(
       { error: 'Failed to generate ephemeral token.' },
       { status: 500 }

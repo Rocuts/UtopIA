@@ -356,7 +356,7 @@ export function calculateSanction(params: SanctionCalculation): SanctionResult {
       return calcInteresesMoratorios(params);
     default:
       throw new Error(
-        `Tipo de sancion no reconocido: "${(params as any).type}". ` +
+        `Tipo de sancion no reconocido: "${(params as unknown as Record<string, unknown>).type}". ` +
         `Tipos validos: extemporaneidad, correccion, inexactitud, intereses_moratorios.`
       );
   }

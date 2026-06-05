@@ -672,7 +672,7 @@ export async function queryERP(
       default:
         return {
           content:
-            `Tipo de consulta no reconocido: "${(args as any).type}". ` +
+            `Tipo de consulta no reconocido: "${(args as unknown as Record<string, unknown>).type}". ` +
             'Tipos validos: trial_balance, invoices, journal_entries, contacts, chart_of_accounts.',
           provider,
           recordCount: 0,

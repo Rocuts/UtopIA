@@ -111,18 +111,18 @@ export async function assessRisk(caseDescription: string): Promise<RiskAssessmen
       level,
       score,
       factors: Array.isArray(parsed.factors)
-        ? parsed.factors.map((f: any) => ({
-            description: f.description || 'Factor no especificado',
-            severity: validLevels.includes(f.severity) ? f.severity : 'medio',
-            category: f.category || 'general',
+        ? parsed.factors.map((f: Record<string, unknown>) => ({
+            description: typeof f.description === 'string' ? f.description : 'Factor no especificado',
+            severity: (validLevels as readonly string[]).includes(f.severity as string) ? f.severity as string : 'medio',
+            category: typeof f.category === 'string' ? f.category : 'general',
           }))
         : [],
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
       timeline: Array.isArray(parsed.timeline)
-        ? parsed.timeline.map((t: any) => ({
-            date: t.date || 'Por determinar',
-            description: t.description || '',
-            urgency: ['normal', 'importante', 'urgente'].includes(t.urgency) ? t.urgency : 'normal',
+        ? parsed.timeline.map((t: Record<string, unknown>) => ({
+            date: typeof t.date === 'string' ? t.date : 'Por determinar',
+            description: typeof t.description === 'string' ? t.description : '',
+            urgency: ['normal', 'importante', 'urgente'].includes(t.urgency as string) ? t.urgency as string : 'normal',
           }))
         : undefined,
     };

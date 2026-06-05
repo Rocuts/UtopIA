@@ -56,7 +56,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const ws = await getOrCreateWorkspace();
     const db = getDb();
 
-    const set: Record<string, unknown> = { updatedAt: new Date() };
+    const set: Partial<typeof fixedAssets.$inferInsert> & { updatedAt: Date } = { updatedAt: new Date() };
     const d = parsed.data;
     if (d.code !== undefined) set.code = d.code;
     if (d.name !== undefined) set.name = d.name;
@@ -75,8 +75,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     const [updated] = await db
       .update(fixedAssets)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .set(set as any)
+      .set(set)
       .where(and(eq(fixedAssets.id, id), eq(fixedAssets.workspaceId, ws.id)))
       .returning();
 

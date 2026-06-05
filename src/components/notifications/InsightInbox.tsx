@@ -54,7 +54,6 @@ export function InsightInbox({ open, onClose }: Props) {
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      // TODO: una vez P6 publique /api/sentinel/alerts, este fetch funcionará.
       const res = await fetch('/api/sentinel/alerts?status=pending,snoozed,escalated', {
         cache: 'no-store',
       });

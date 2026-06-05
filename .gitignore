@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# graphify local machine config
+.graphify_python
+
 # vercel
 .vercel
 

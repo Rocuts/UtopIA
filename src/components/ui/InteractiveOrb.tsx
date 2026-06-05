@@ -15,6 +15,7 @@ export function InteractiveOrb({ volume, isConnected, isConnecting }: Interactiv
   const coreRef = useRef<THREE.Mesh>(null);
 
   // Generate a random seed for noise variance
+  // eslint-disable-next-line react-hooks/purity
   const seed = useMemo(() => Math.random(), []);
 
   useFrame((state) => {
@@ -23,7 +24,7 @@ export function InteractiveOrb({ volume, isConnected, isConnecting }: Interactiv
     const t = state.clock.getElapsedTime();
 
     // Base colors: Gold (idle), Amber (connecting), Purple/Pink (speaking)
-    let color = new THREE.Color("var(--gold-500)");
+    const color = new THREE.Color("var(--gold-500)");
     let scaleMultiplierTarget = 1.0;
 
     if (isConnecting) {
