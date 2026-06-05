@@ -23,7 +23,7 @@ import type { HTMLAttributes, ReactNode } from 'react';
  *  - H3 consumer variant: text-xl fixed
  */
 
-export type SectionHeaderAccent = 'gold' | 'wine';
+export type SectionHeaderAccent = 'gold' | 'wine' | 'pyme';
 export type SectionHeaderAlign = 'left' | 'center';
 
 export interface SectionHeaderProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
@@ -40,6 +40,7 @@ export interface SectionHeaderProps extends Omit<HTMLAttributes<HTMLElement>, 't
 const ACCENT_TEXT: Record<SectionHeaderAccent, string> = {
   gold: 'text-gold-600',
   wine: 'text-area-escudo',
+  pyme: 'text-area-pyme',
 };
 
 const DIVIDER_GRADIENT: Record<SectionHeaderAccent, string> = {
@@ -47,6 +48,8 @@ const DIVIDER_GRADIENT: Record<SectionHeaderAccent, string> = {
     'linear-gradient(90deg, rgb(184 147 74 / 0) 0%, rgb(184 147 74 / 0.6) 50%, rgb(184 147 74 / 0) 100%)',
   wine:
     'linear-gradient(90deg, rgb(168 56 56 / 0) 0%, rgb(168 56 56 / 0.6) 50%, rgb(168 56 56 / 0) 100%)',
+  pyme:
+    'linear-gradient(90deg, rgb(53 122 40 / 0) 0%, rgb(53 122 40 / 0.6) 50%, rgb(53 122 40 / 0) 100%)',
 };
 
 export function SectionHeader({

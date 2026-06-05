@@ -69,6 +69,7 @@
   --color-area-valor:  #B8934A;  /* champagne gold — área flagship */
   --color-area-futuro: #5A7F7A;  /* teal petróleo — foresight */
   --color-area-escudo: #A83838;  /* bordeaux — defensa DIAN */
+  --color-area-pyme:   #357A28;  /* verde tendero — Contabilidad Pyme (señalética de pertenencia, AA-safe como texto) */
 
   /* ---- Radius scale (confident but not extreme) ---- */
   --radius-xs:   4px;
@@ -90,6 +91,10 @@
   /* ---- Signature: gold glow (brand moment) ---- */
   --shadow-glow-gold:      0 0 40px rgb(184 147 74 / 0.28);
   --shadow-glow-gold-soft: 0 0 22px rgb(184 147 74 / 0.18);
+
+  /* ---- Pyme green glow (Contabilidad Pyme — "cuarto verde") ---- */
+  --shadow-glow-pyme:      0 0 40px rgb(53 122 40 / 0.26);
+  --shadow-glow-pyme-soft: 0 0 22px rgb(53 122 40 / 0.16);
 
   /* ---- Typography: families ---- */
   --font-sans:    var(--font-geist-sans), system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -189,6 +194,7 @@
   --area-valor-glow:  rgb(184 147 74 / 0.18);
   --area-futuro-glow: rgb(90 127 122 / 0.18);
   --area-escudo-glow: rgb(168 56 56 / 0.18);
+  --area-pyme-glow:   rgb(53 122 40 / 0.18);
 
   /* ---- Gold shimmer gradient (KPI hero, AI-thinking signature) ---- */
   --shimmer-gold: linear-gradient(
@@ -306,6 +312,7 @@
   --color-area-valor:  #D4B876;
   --color-area-futuro: #7AA09B;
   --color-area-escudo: #D66B6B;
+  --color-area-pyme:   #7BC95B;  /* verde luminoso para fondo oscuro */
 
   /* Elevation: simulate height via luminance + 1px inset, not heavy shadow */
   --shadow-e0: none;
@@ -318,6 +325,10 @@
   /* Gold glow adjusted to luminous gold */
   --shadow-glow-gold:      0 0 40px rgb(212 184 118 / 0.28);
   --shadow-glow-gold-soft: 0 0 22px rgb(212 184 118 / 0.22);
+
+  /* Pyme green glow adjusted to luminous green */
+  --shadow-glow-pyme:      0 0 40px rgb(123 201 91 / 0.30);
+  --shadow-glow-pyme-soft: 0 0 22px rgb(123 201 91 / 0.22);
 
   /* ---- Legacy aliases that don't auto-update via var() chain ---- */
   --accent-glow:       rgb(212 184 118 / 0.08);
@@ -332,6 +343,7 @@
   --area-valor-glow:  rgb(212 184 118 / 0.22);
   --area-futuro-glow: rgb(122 160 155 / 0.22);
   --area-escudo-glow: rgb(214 107 107 / 0.22);
+  --area-pyme-glow:   rgb(123 201 91 / 0.22);
 }
 
 /* ============================================================

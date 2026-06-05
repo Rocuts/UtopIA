@@ -34,7 +34,7 @@ import { forwardRef, type ReactNode } from 'react';
  */
 
 export type KpiSeverity = 'good' | 'neutral' | 'warn' | 'critical';
-export type KpiAccent = 'gold' | 'wine';
+export type KpiAccent = 'gold' | 'wine' | 'pyme';
 export type KpiTrendDirection = 'up' | 'down' | 'flat';
 export type KpiVariant = 'default' | 'hero';
 
@@ -133,13 +133,17 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
     const glowClass = glow
       ? isCritical || accent === 'wine'
         ? 'shadow-[0_0_28px_rgb(168_56_56_/_0.28)]'
-        : 'shadow-glow-gold-soft'
+        : accent === 'pyme'
+          ? 'shadow-glow-pyme-soft'
+          : 'shadow-glow-gold-soft'
       : '';
 
     const hoverGlow = glow
       ? isCritical || accent === 'wine'
         ? 'hover:shadow-[0_0_44px_rgb(168_56_56_/_0.42)]'
-        : 'hover:shadow-glow-gold'
+        : accent === 'pyme'
+          ? 'hover:shadow-glow-pyme'
+          : 'hover:shadow-glow-gold'
       : '';
 
     const TrendIcon = trend ? TREND_ICON[trend.direction] : null;
@@ -181,7 +185,9 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
                   ? 'bg-[rgb(168_56_56_/_0.18)] text-area-escudo'
                   : accent === 'wine'
                     ? 'bg-[rgb(168_56_56_/_0.16)] text-area-escudo'
-                    : 'bg-[rgb(184_147_74_/_0.14)] text-gold-600',
+                    : accent === 'pyme'
+                      ? 'bg-area-pyme/12 text-area-pyme'
+                      : 'bg-[rgb(184_147_74_/_0.14)] text-gold-600',
               )}
             >
               <Icon className="h-4 w-4" strokeWidth={1.75} />
@@ -192,7 +198,8 @@ const PremiumKpiCard = forwardRef<HTMLDivElement, PremiumKpiCardProps>(
         <div className={cn('flex flex-col', compact ? 'gap-1' : 'gap-1.5')}>
           <div
             className={cn(
-              'text-n-1000 leading-display num',
+              'leading-display num',
+              accent === 'pyme' && isHero ? 'text-area-pyme' : 'text-n-1000',
               isHero
                 ? cn(
                     'font-serif-elite font-medium tracking-tight',

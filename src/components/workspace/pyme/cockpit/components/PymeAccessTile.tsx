@@ -54,7 +54,7 @@ export function PymeAccessTile({ module }: { module: PymeModule }) {
           aria-hidden="true"
           className={cn(
             'inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg',
-            ready ? 'bg-gold-500/10 text-gold-600' : 'bg-n-100 text-n-500',
+            ready ? 'bg-area-pyme/10 text-area-pyme' : 'bg-n-100 text-n-500',
           )}
         >
           <Icon className="h-6 w-6" strokeWidth={1.6} />
@@ -87,7 +87,7 @@ export function PymeAccessTile({ module }: { module: PymeModule }) {
         </h3>
         {ready && (
           <ArrowRight
-            className="h-4 w-4 shrink-0 text-n-500 transition-transform group-hover:translate-x-0.5 group-hover:text-gold-500"
+            className="h-4 w-4 shrink-0 text-n-500 transition-transform group-hover:translate-x-0.5 group-hover:text-area-pyme"
             strokeWidth={1.75}
             aria-hidden="true"
           />
@@ -107,9 +107,9 @@ export function PymeAccessTile({ module }: { module: PymeModule }) {
       href={module.href}
       className={cn(
         base,
-        'border-gold-500/20 transition-all duration-200',
-        'hover:-translate-y-0.5 hover:border-gold-500/50 hover:shadow-e3',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
+        'border-area-pyme/20 transition-all duration-200',
+        'hover:-translate-y-0.5 hover:border-area-pyme/50 hover:shadow-e3',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-area-pyme focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
       )}
     >
       {inner}

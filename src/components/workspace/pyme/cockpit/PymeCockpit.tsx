@@ -86,7 +86,14 @@ function PymeCockpitInner() {
         };
 
   return (
-    <div className="@container mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+    <div className="@container relative isolate mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+      {/* Lavado verde ambiental — "cuarto verde": glow superior dark-safe (token
+          area-pyme con alpha sobre la superficie n-*), señaliza pertenencia del
+          tendero al entrar. Decorativo, detrás del contenido vía -z-10 (isolate). */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[480px] bg-gradient-to-b from-area-pyme/[0.09] via-area-pyme/[0.045] to-transparent"
+      />
       {/* Header. Las píldoras de estado van en su propia fila que SÍ envuelve
           en pantallas angostas — la fila `actions` de SectionHeader es
           shrink-0 y no envuelve, y no la tocamos (es compartida app-wide). */}
@@ -95,7 +102,7 @@ function PymeCockpitInner() {
           {/* Texto neutro n-700 (no gold): cumple AA en claro y oscuro sin
               depender del valor del token gold por modo; el acento gold queda
               en el borde + fondo tenue. */}
-          <span className="inline-flex items-center rounded-full border border-gold-500/25 bg-gold-500/5 px-2.5 py-1 font-mono text-xs-mono uppercase tracking-eyebrow font-medium text-n-700">
+          <span className="inline-flex items-center rounded-full border border-area-pyme/25 bg-area-pyme/5 px-2.5 py-1 font-mono text-xs-mono uppercase tracking-eyebrow font-medium text-n-700">
             {isRST ? c.regime_rst : c.regime_ordinario}
           </span>
           <span className="inline-flex items-center gap-1.5 font-mono text-xs-mono uppercase tracking-eyebrow font-medium text-n-700">
@@ -113,7 +120,7 @@ function PymeCockpitInner() {
           eyebrow={`${c.module_label} · ${mockUser.businessName}`}
           title={c.summary_title.replace('{month}', mockUser.month)}
           subtitle={`${greeting}, ${mockUser.displayName} · ${mockUser.city}`}
-          accent="gold"
+          accent="pyme"
           titleAs="h1"
           divider
         />
@@ -127,7 +134,7 @@ function PymeCockpitInner() {
         <PremiumKpiCard
           className="@2xl:col-span-2"
           variant="hero"
-          accent="gold"
+          accent="pyme"
           severity="good"
           glow
           icon={Wallet}
@@ -137,7 +144,7 @@ function PymeCockpitInner() {
           trend={{ ...trend(mockMetrics.profitTrendPct), label: c.trend_vs_prev }}
         />
         <PremiumKpiCard
-          accent="gold"
+          accent="pyme"
           icon={Coins}
           label={c.kpi_iva}
           value={copCompact(mockMetrics.accumulatedSales)}
@@ -151,27 +158,27 @@ function PymeCockpitInner() {
         className="mt-5 grid grid-cols-1 @md:grid-cols-2 @4xl:grid-cols-4 gap-4"
       >
         <PremiumKpiCard
-          accent="gold"
+          accent="pyme"
           icon={TrendingUp}
           label={c.kpi_sales}
           value={cop(mockMetrics.sold)}
           trend={trend(mockMetrics.salesTrendPct)}
         />
         <PremiumKpiCard
-          accent="gold"
+          accent="pyme"
           icon={ShoppingCart}
           label={c.kpi_purchases}
           value={cop(mockMetrics.bought)}
           trend={trend(mockMetrics.purchasesTrendPct)}
         />
         <PremiumKpiCard
-          accent="gold"
+          accent="pyme"
           icon={Receipt}
           label={c.kpi_margin}
           value={`${mockMetrics.marginPct}%`}
         />
         <PremiumKpiCard
-          accent="gold"
+          accent="pyme"
           icon={Users2}
           label={c.kpi_pila}
           value={`${mockMetrics.pilaProgress}%`}
@@ -199,11 +206,11 @@ function PymeCockpitInner() {
       {/* Consejo — h2 (sección hermana de Accesos/Vencimientos) */}
       <motion.div
         {...fade(5)}
-        className="mt-8 flex items-start gap-3 rounded-xl border border-gold-500/20 bg-gold-500/5 p-5"
+        className="mt-8 flex items-start gap-3 rounded-xl border border-area-pyme/20 bg-area-pyme/5 p-5"
       >
         <span
           aria-hidden="true"
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gold-500/10 text-gold-600"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-area-pyme/10 text-area-pyme"
         >
           <Lightbulb className="h-4 w-4" strokeWidth={1.75} />
         </span>
