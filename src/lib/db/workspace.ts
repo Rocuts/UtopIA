@@ -46,3 +46,29 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
   const jar = await cookies();
   return jar.get(COOKIE_NAME)?.value ?? null;
 }
+
+// UUID v4 format guard — prevents forged/malformed cookie values from hitting the DB.
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Returns the workspace for the current request's cookie, or null if:
+ *   - cookie is absent
+ *   - value is not a valid UUID v4
+ *   - UUID doesn't match any workspace row in the DB
+ *
+ * Unlike getOrCreateWorkspace(), this never creates a new workspace.
+ * Use this to gate sensitive endpoints (realtime, ERP sync, etc.) so that
+ * anonymous requests receive 401 instead of a new workspace being created.
+ */
+export async function requireWorkspace(): Promise<Workspace | null> {
+  const jar = await cookies();
+  const id = jar.get(COOKIE_NAME)?.value;
+  if (!id || !UUID_V4_RE.test(id)) return null;
+  const found = await getDb()
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, id))
+    .limit(1);
+  return found[0] ?? null;
+}

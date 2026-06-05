@@ -1092,16 +1092,18 @@ export function ChatWorkspace({
     userAbortedRef.current = false;
 
     try {
-      // Read ERP connections from localStorage (provider + credentials only)
-      let erpConnections: Array<{ provider: string; credentials: Record<string, string> }> = [];
+      // Read connected ERP provider names from localStorage (provider names only — no credentials).
+      // Credentials are resolved server-side from the encrypted erp_credentials table.
+      let erpProviders: string[] = [];
       try {
         const raw = localStorage.getItem('utopia_erp_connections');
         if (raw) {
           const decoded = JSON.parse(decodeURIComponent(atob(raw)));
-          erpConnections = decoded.map((c: { provider: string; credentials: Record<string, string> }) => ({
-            provider: c.provider,
-            credentials: c.credentials,
-          }));
+          if (Array.isArray(decoded)) {
+            erpProviders = decoded
+              .map((c: unknown) => (typeof c === 'string' ? c : (c as { provider?: string })?.provider))
+              .filter((p): p is string => typeof p === 'string' && p.length > 0);
+          }
         }
       } catch { /* ignore malformed data */ }
 
@@ -1111,7 +1113,7 @@ export function ChatWorkspace({
           .map(m => ({ id: m.id, role: m.role, content: m.content })),
         language, useCase,
         ...(documentContext ? { documentContext } : {}),
-        ...(erpConnections.length > 0 ? { erpConnections } : {}),
+        ...(erpProviders.length > 0 ? { erpProviders } : {}),
       };
 
       const response = await fetch('/api/chat', {

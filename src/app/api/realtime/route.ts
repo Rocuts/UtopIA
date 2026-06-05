@@ -1,7 +1,14 @@
+import 'server-only';
 import { NextResponse } from 'next/server';
 import { MODEL_IDS } from '@/lib/config/models';
+import { requireWorkspace } from '@/lib/db/workspace';
 
 export async function GET() {
+  const workspace = await requireWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
       method: 'POST',
