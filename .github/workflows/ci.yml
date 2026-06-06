@@ -57,6 +57,8 @@ jobs:
           OPENAI_API_KEY: sk-stub-for-build-only
           TAVILY_API_KEY: tvly-stub-for-build-only
           UTOPIA_AGENT_MODE: orchestrated
+          BETTER_AUTH_SECRET: ci-stub-secret-not-for-production
+          BETTER_AUTH_URL: http://localhost:3000
           # Feature flags OFF en CI: build no necesita ejercitarlas y queremos
           # que cualquier code-path detrás de un flag esté detrás de su gate.
           UTOPIA_ENABLE_TAX_ENGINE: 'false'
