@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit';
 import { generateText, stepCountIs, tool, type ModelMessage } from 'ai';
 import { z } from 'zod';
 import { MODELS } from '@/lib/config/models';
@@ -628,6 +629,14 @@ ${langInstruction}
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
+  const { allowed, limit } = await checkRateLimit(getClientIp(req), 'chat');
+  if (!allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'rate_limited', message: 'Demasiadas solicitudes. Intenta de nuevo en 1 minuto.' },
+      { status: 429, headers: { 'X-RateLimit-Limit': String(limit), 'X-RateLimit-Remaining': '0' } },
+    );
+  }
+
   try {
     const body = await req.json();
     const parsed = chatRequestSchema.safeParse(body);

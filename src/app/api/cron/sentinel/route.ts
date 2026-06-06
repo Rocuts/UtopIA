@@ -27,13 +27,9 @@ import {
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  // Vercel Cron envía un header firmado. Para MVP aceptamos también un
-  // bearer en el header `Authorization` (configurable vía env CRON_SECRET).
-  const cronHeader = req.headers.get('x-vercel-cron-id');
+  // Fail-closed: CRON_SECRET must be configured; bearer token must match.
   const auth = req.headers.get('authorization');
-  const expected = process.env.CRON_SECRET ? `Bearer ${process.env.CRON_SECRET}` : null;
-  const authorized = Boolean(cronHeader) || (expected && auth === expected);
-  if (!authorized) {
+  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json(
       { error: 'unauthorized' },
       { status: 401, headers: { 'Cache-Control': 'no-store' } },

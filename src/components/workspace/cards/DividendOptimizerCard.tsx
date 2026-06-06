@@ -84,7 +84,7 @@ export function DividendOptimizerCard({
                       : 'bg-n-100/30 dark:bg-n-800/20 ring-1 ring-n-200/40 dark:ring-n-700/30',
                   )}
                 >
-                  <span className={cn('text-n-700 dark:text-n-400', highlight && 'text-n-800 dark:text-n-200 font-medium')}>
+                  <span className={cn('text-n-700 dark:text-n-600', highlight && 'text-n-800 dark:text-n-700 font-medium')}>
                     {language === 'es' ? label.es : label.en}
                   </span>
                   <div className="flex items-center gap-3 shrink-0">

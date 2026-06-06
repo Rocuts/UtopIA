@@ -203,7 +203,7 @@ export function RiskScoreCard({ data, loading, error, t, language = 'es' }: Risk
           </div>
 
           {/* Interpretación */}
-          <p className="text-sm leading-relaxed text-n-700 dark:text-n-400">
+          <p className="text-sm leading-relaxed text-n-700 dark:text-n-600">
             {data.data.interpretacion}
           </p>
 
@@ -223,7 +223,7 @@ export function RiskScoreCard({ data, loading, error, t, language = 'es' }: Risk
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-n-800 dark:text-n-200">{f.descripcion}</span>
+                      <span className="text-n-800 dark:text-n-700">{f.descripcion}</span>
                       <span className="ml-1.5 text-area-escudo font-semibold tabular-nums">
                         +{f.puntos}pts
                       </span>
@@ -246,7 +246,7 @@ export function RiskScoreCard({ data, loading, error, t, language = 'es' }: Risk
               aria-live="polite"
             >
               <Zap className="h-3.5 w-3.5 text-danger shrink-0 mt-0.5" strokeWidth={2} aria-hidden="true" />
-              <span className="text-n-700 dark:text-n-400">
+              <span className="text-n-700 dark:text-n-600">
                 {t.survivalBanner}{' '}
                 <Link
                   href="/workspace/escudo/supervivencia"

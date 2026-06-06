@@ -45,6 +45,10 @@ export const workspaces = pgTable('workspaces', {
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // Auth link — null for anonymous (cookie-based) workspaces.
+  // Set on first login via claimAnonymousWorkspace() or auto-created on signup.
+  // References "user".id (BetterAuth table in schema-auth.ts).
+  userId: text('user_id'),
 });
 
 // Vault server-side de credenciales ERP.

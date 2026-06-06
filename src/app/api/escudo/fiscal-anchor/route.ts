@@ -9,11 +9,8 @@ import {
   upsertAlert,
   findPendingAlertsForWorkspace,
 } from '@/lib/workflows/sentinel/repository';
-import {
-  fiscalAlertaToInsight,
-  alertRowToView,
-  type AlertView,
-} from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
+import { fiscalAlertaToInsight } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
+import { alertRowToView, type AlertView } from '@/lib/sentinel/alert-view';
 import type { FiscalSnapshot } from '@/lib/agents/financial/types';
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 

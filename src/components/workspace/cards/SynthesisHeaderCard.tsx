@@ -110,7 +110,7 @@ export function SynthesisHeaderCard({ data, loading, t, language = 'es' }: Synth
                           {rec.orden}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <span className="font-medium text-n-800 dark:text-n-200">
+                          <span className="font-medium text-n-800 dark:text-n-700">
                             {rec.titulo}
                           </span>
                           {rec.impacto > 0 && (
@@ -171,7 +171,7 @@ export function SynthesisHeaderCard({ data, loading, t, language = 'es' }: Synth
         size="xl"
       >
         {data && (
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-serif-elite prose-headings:tracking-tight prose-a:text-area-escudo prose-strong:text-n-900 dark:prose-strong:text-n-100 pb-4">
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-serif-elite prose-headings:tracking-tight prose-a:text-area-escudo prose-strong:text-n-900 dark:prose-strong:text-n-800 pb-4">
             <ReactMarkdown>{data.markdown}</ReactMarkdown>
           </div>
         )}

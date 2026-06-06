@@ -78,6 +78,37 @@ export async function getBookById(bookId: string): Promise<PymeBook | null> {
 }
 
 /**
+ * Renombra un libro y/o cambia su moneda. Sólo muta si el libro pertenece
+ * al workspace — retorna null si no existe o pertenece a otro tenant.
+ */
+export async function updateBook(
+  bookId: string,
+  workspaceId: string,
+  patch: Partial<Pick<PymeBook, 'name' | 'currency'>>,
+): Promise<PymeBook | null> {
+  const db = getDb();
+  const [updated] = await db
+    .update(pymeBooks)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(pymeBooks.id, bookId), eq(pymeBooks.workspaceId, workspaceId)))
+    .returning();
+  return updated ?? null;
+}
+
+/**
+ * Elimina el libro y sus entries en cascada. Retorna true si se eliminó.
+ * La restricción FK `ON DELETE CASCADE` en schema.ts elimina uploads/entries.
+ */
+export async function deleteBook(bookId: string, workspaceId: string): Promise<boolean> {
+  const db = getDb();
+  const deleted = await db
+    .delete(pymeBooks)
+    .where(and(eq(pymeBooks.id, bookId), eq(pymeBooks.workspaceId, workspaceId)))
+    .returning({ id: pymeBooks.id });
+  return deleted.length > 0;
+}
+
+/**
  * Devuelve los `id`s de libros propiedad del workspace. Sirve como filtro
  * para mutaciones scoped (`updateEntryScoped`, `deleteEntryScoped`) que
  * deben verificar ownership en una sola query atomica (sin TOCTOU window).
@@ -321,6 +352,22 @@ export async function listKnownCategories(
   return rows
     .map((r) => r.category)
     .filter((c): c is string => typeof c === 'string' && c.length > 0);
+}
+
+/**
+ * Confirma todos los entries `draft` de un libro en una sola query atómica.
+ * Devuelve el número de entries actualizados.
+ * Pre-condición: el caller (route handler) ya verificó que el libro pertenece
+ * al workspace via `assertBookOwned`.
+ */
+export async function bulkConfirmEntries(bookId: string): Promise<number> {
+  const db = getDb();
+  const updated = await db
+    .update(pymeEntries)
+    .set({ status: 'confirmed', updatedAt: new Date() })
+    .where(and(eq(pymeEntries.bookId, bookId), eq(pymeEntries.status, 'draft')))
+    .returning({ id: pymeEntries.id });
+  return updated.length;
 }
 
 // ─── Monthly summary ────────────────────────────────────────────────────────

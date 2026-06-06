@@ -101,7 +101,7 @@ export function BankAccountForm({ initial, onSave, onCancel, loading }: Props) {
 
   const fieldClass =
     'w-full rounded-lg border border-n-200 bg-n-50 px-3 py-2 text-sm text-n-900 placeholder:text-n-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 dark:border-n-700 dark:bg-n-800 dark:text-n-100';
-  const labelClass = 'block text-xs font-medium text-n-600 dark:text-n-300 mb-1';
+  const labelClass = 'block text-xs font-medium text-n-600 dark:text-n-600 mb-1';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -214,7 +214,7 @@ export function BankAccountForm({ initial, onSave, onCancel, loading }: Props) {
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-n-200 px-4 py-2 text-sm text-n-600 hover:bg-n-100 transition-colors dark:border-n-700 dark:text-n-400 dark:hover:bg-n-800"
+          className="rounded-lg border border-n-200 px-4 py-2 text-sm text-n-600 hover:bg-n-100 transition-colors dark:border-n-700 dark:text-n-600 dark:hover:bg-n-800"
         >
           {es ? 'Cancelar' : 'Cancel'}
         </button>

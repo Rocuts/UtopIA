@@ -60,7 +60,7 @@ export function SurvivalModeSection({ data, loading, language = 'es', t }: Survi
             {t.activeBanner}
           </span>
           {t.activeSubtitle && (
-            <p className="text-xs text-n-700 dark:text-n-400 mt-0.5">{t.activeSubtitle}</p>
+            <p className="text-xs text-n-700 dark:text-n-600 mt-0.5">{t.activeSubtitle}</p>
           )}
         </div>
       </div>

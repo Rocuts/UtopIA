@@ -182,7 +182,7 @@ export function VerdadTrendBars({ series, language, density }: VerdadTrendBarsPr
           <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500">
             {isEs ? 'Tendencia · Pilar Verdad' : 'Trend · Truth Pillar'}
           </span>
-          <span className="text-xs text-n-600 dark:text-n-400">{goal}</span>
+          <span className="text-xs text-n-600 dark:text-n-600">{goal}</span>
           {hasInterpolated && (
             <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />

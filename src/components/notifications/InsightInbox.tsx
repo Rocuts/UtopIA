@@ -6,9 +6,7 @@
  * Modal con tabs por pilar + listado scrollable. Cada item muestra
  * pillar dot + subject + tiempo relativo + acciones [Resolver, Snooze 7d].
  *
- * Hace fetch a `/api/sentinel/alerts` (P6 está creando ese endpoint en
- * paralelo). Si el endpoint no existe aún, mostramos placeholder
- * (`alerts.length === 0` → empty state) y comentamos el wiring.
+ * Hace fetch a `/api/sentinel/alerts` — GET lista paginada + PATCH resolve/snooze.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';

@@ -350,8 +350,8 @@ export default function EscenariosPage() {
                 onClick={handleReset}
                 className={cn(
                   'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-xs font-medium',
-                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-300',
-                  'hover:border-gold-500 hover:text-n-800 dark:hover:text-n-100 transition-colors',
+                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-700',
+                  'hover:border-gold-500 hover:text-n-800 dark:hover:text-n-800 transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                 )}
               >

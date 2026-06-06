@@ -157,7 +157,7 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
               <p className="text-xs uppercase tracking-eyebrow text-n-500 font-medium mb-1.5">{t.reduccionesLabel}</p>
               <ul role="list" className="flex flex-col gap-1">
                 {data.data.reduccionesDisponibles.map((r, i) => (
-                  <li key={i} className="text-xs text-n-700 dark:text-n-400 flex items-start gap-1.5">
+                  <li key={i} className="text-xs text-n-700 dark:text-n-600 flex items-start gap-1.5">
                     <span aria-hidden="true" className="shrink-0 mt-1 h-1 w-1 rounded-full bg-success" />
                     {r}
                   </li>
@@ -175,7 +175,7 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
               aria-controls="carta-defensa-preview"
               className={cn(
                 'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm font-medium',
-                'bg-n-100/60 dark:bg-n-800/60 text-n-800 dark:text-n-200',
+                'bg-n-100/60 dark:bg-n-800/60 text-n-800 dark:text-n-700',
                 'hover:bg-n-200/60 dark:hover:bg-n-700/60 transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-area-escudo',
               )}
@@ -194,7 +194,7 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
                 )}
                 data-lenis-prevent
               >
-                <pre className="text-xs leading-relaxed text-n-800 dark:text-n-200 whitespace-pre-wrap font-[family-name:var(--font-geist-mono,monospace)]">
+                <pre className="text-xs leading-relaxed text-n-800 dark:text-n-700 whitespace-pre-wrap font-[family-name:var(--font-geist-mono,monospace)]">
                   {data.data.cartaCompleta}
                 </pre>
               </div>

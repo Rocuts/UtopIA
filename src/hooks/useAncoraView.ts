@@ -24,7 +24,7 @@ import type { AncoraView } from '@/lib/ancora/ancora-view';
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
 import type { FiscalSnapshot, FiscalRiskScore } from '@/lib/agents/financial/types';
 import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
-import type { AlertView } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
+import type { AlertView } from '@/lib/sentinel/alert-view';
 
 export interface AncoraViewBundle {
   view: AncoraView;

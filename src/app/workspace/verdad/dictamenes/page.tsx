@@ -155,11 +155,14 @@ export default function DictamenesPage() {
   const [selectedDictamen, setSelectedDictamen] = useState<DictamenType | null>(null);
   const [customMode, setCustomMode] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const openRequest = useCallback((d: DictamenType) => {
     setSelectedDictamen(d);
     setCustomMode(false);
     setSubmitted(false);
+    setSubmitError(null);
     setModalOpen(true);
   }, []);
 
@@ -167,6 +170,7 @@ export default function DictamenesPage() {
     setSelectedDictamen(null);
     setCustomMode(true);
     setSubmitted(false);
+    setSubmitError(null);
     setModalOpen(true);
   }, []);
 
@@ -176,12 +180,41 @@ export default function DictamenesPage() {
     // por accidente. Se resetea en el siguiente openRequest/openCustom.
   }, []);
 
-  const handleSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    // Este submit es placeholder — en producción integrar con un endpoint de
-    // solicitud / email. Por ahora mostramos confirmación inline.
-    setSubmitted(true);
-  }, []);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setSubmitting(true);
+      setSubmitError(null);
+
+      const data = Object.fromEntries(new FormData(e.currentTarget));
+      const body = {
+        razonSocial: data.razonSocial as string,
+        nit: data.nit as string,
+        email: data.email as string,
+        contexto: (data.contexto as string) || undefined,
+        dictamenId: selectedDictamen?.id,
+        tipo: customMode ? (data.tipo as string) : undefined,
+      };
+
+      try {
+        const res = await fetch('/api/verdad/dictamenes/solicitud', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const json = (await res.json()) as { error?: string };
+          throw new Error(json.error ?? 'Error al enviar la solicitud.');
+        }
+        setSubmitted(true);
+      } catch (err) {
+        setSubmitError(err instanceof Error ? err.message : 'Error desconocido.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [selectedDictamen, customMode],
+  );
 
   return (
     <div
@@ -394,6 +427,7 @@ export default function DictamenesPage() {
                 </label>
                 <input
                   required
+                  name="tipo"
                   type="text"
                   className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 placeholder:text-n-500 focus:outline-none focus:border-gold-500"
                   placeholder={
@@ -412,6 +446,7 @@ export default function DictamenesPage() {
                 </label>
                 <input
                   required
+                  name="razonSocial"
                   type="text"
                   className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 focus:outline-none focus:border-gold-500"
                 />
@@ -422,6 +457,7 @@ export default function DictamenesPage() {
                 </label>
                 <input
                   required
+                  name="nit"
                   type="text"
                   className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 focus:outline-none focus:border-gold-500"
                   placeholder="900.123.456-7"
@@ -435,6 +471,7 @@ export default function DictamenesPage() {
               </label>
               <input
                 required
+                name="email"
                 type="email"
                 className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 focus:outline-none focus:border-gold-500"
               />
@@ -446,6 +483,7 @@ export default function DictamenesPage() {
               </label>
               <textarea
                 rows={3}
+                name="contexto"
                 className="rounded-[8px] bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] px-3 py-2.5 text-base text-n-800 placeholder:text-n-500 focus:outline-none focus:border-gold-500 resize-none"
                 placeholder={
                   language === 'es'
@@ -455,8 +493,11 @@ export default function DictamenesPage() {
               />
             </div>
 
+            {submitError && (
+              <p className="text-sm text-red-500 dark:text-red-400">{submitError}</p>
+            )}
             <div className="flex items-center justify-end gap-2 pt-2">
-              <EliteButton variant="ghost" size="md" onClick={closeModal} type="button">
+              <EliteButton variant="ghost" size="md" onClick={closeModal} type="button" disabled={submitting}>
                 {language === 'es' ? 'Cancelar' : 'Cancel'}
               </EliteButton>
               <EliteButton
@@ -464,9 +505,12 @@ export default function DictamenesPage() {
                 size="md"
                 elevated
                 type="submit"
+                disabled={submitting}
                 rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
               >
-                {language === 'es' ? 'Enviar solicitud' : 'Submit request'}
+                {submitting
+                  ? (language === 'es' ? 'Enviando…' : 'Sending…')
+                  : (language === 'es' ? 'Enviar solicitud' : 'Submit request')}
               </EliteButton>
             </div>
           </form>

@@ -315,7 +315,7 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
           <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500">
             {isEs ? 'Tendencia · Pilar Futuro' : 'Trend · Future Pillar'}
           </span>
-          <span className="text-xs text-n-600 dark:text-n-400">
+          <span className="text-xs text-n-600 dark:text-n-600">
             {isEs
               ? 'Factores: Base ajustable · Conservador 0.85× · Agresivo 1.10×'
               : 'Factors: Adjustable base · Conservative 0.85× · Aggressive 1.10×'}
@@ -414,14 +414,14 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
                   !hasBalance ? 'cursor-not-allowed opacity-40' : '',
                 ].join(' ')}
               />
-              <span className="text-xs text-n-600 dark:text-n-400">%</span>
+              <span className="text-xs text-n-600 dark:text-n-600">%</span>
             </div>
           )}
         </div>
 
         {/* Etiqueta dinámica o mensaje "Sube un balance" */}
         {hasBalance ? (
-          <p className="text-xs text-n-600 dark:text-n-400">
+          <p className="text-xs text-n-600 dark:text-n-600">
             {isEs
               ? `Crecimiento esperado: ${formatGrowthPct(growthOverride)} (escenario base)`
               : `Expected growth: ${formatGrowthPct(growthOverride)} (base scenario)`}
