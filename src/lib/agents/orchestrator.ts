@@ -109,10 +109,11 @@ If the user asks what you can do, briefly describe your 5 specialist capabilitie
   // Inyectar el documento si existe, usando el mismo shape que BaseSpecialist.
   // El limite es useCase-aware (80k para financial-report, 30k default).
   const docMsg = buildDocInjectionMessage(documentContext, useCase);
+  const CONTEXT_WINDOW = 6; // recent turns kept for T1 direct responses
   const baseMessages = [
     { role: 'system' as const, content: systemPrompt },
     ...(docMsg ? [docMsg] : []),
-    ...messages.slice(-6),
+    ...messages.slice(-CONTEXT_WINDOW),
   ];
 
   if (onStreamToken) {
@@ -176,7 +177,9 @@ export async function orchestrate(
     abortSignal,
   } = options;
 
-  const lastMessage = messages[messages.length - 1].content;
+  const lastMsg = messages.at(-1);
+  if (!lastMsg) throw new Error('[orchestrator] messages array is empty');
+  const lastMessage = lastMsg.content;
   const conversationHistory = messages.slice(0, -1).map((m) => ({
     role: m.role,
     content: m.content,
@@ -232,7 +235,7 @@ export async function orchestrate(
     abortSignal,
   };
 
-  let finalContent: string;
+  let finalContent = '';
   let allWebSearchUsed = false;
   const allWebSources: string[] = [];
   let finalRisk: SpecialistResult['riskAssessment'] | undefined;

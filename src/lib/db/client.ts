@@ -42,6 +42,9 @@ export function getDb() {
     _pool = new Pool({
       connectionString: url,
       max: 5,
+      // Idle connections released after 30s so Fluid Compute evictions don't
+      // leave phantom connections open against Neon's connection limit.
+      idleTimeoutMillis: 30_000,
       // Server-side timeout: PG aborta la query y libera la conexion limpiamente.
       // Sin esto, una INSERT que tarda mas que el timeout JS deja la conexion
       // en estado "busy" y todas las queries siguientes fallan (vimos 195 leyes
