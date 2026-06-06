@@ -10,7 +10,13 @@ const authClient = createAuthClient();
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') ?? '/workspace';
+  // Reject external URLs — only allow same-origin relative paths like /workspace.
+  // Blocks open-redirect attacks via ?next=https://evil.com or ?next=//evil.com
+  const rawNext = searchParams.get('next') ?? '/workspace';
+  const next =
+    rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.startsWith('/\\')
+      ? rawNext
+      : '/workspace';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
