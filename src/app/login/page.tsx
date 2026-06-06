@@ -10,13 +10,18 @@ const authClient = createAuthClient();
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Reject external URLs — only allow same-origin relative paths like /workspace.
-  // Blocks open-redirect attacks via ?next=https://evil.com or ?next=//evil.com
-  const rawNext = searchParams.get('next') ?? '/workspace';
-  const next =
-    rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.startsWith('/\\')
-      ? rawNext
-      : '/workspace';
+  // Reject external URLs — parse with URL() so parser differentials can't bypass.
+  // Control characters (\t \n \r \0) stripped first since they confuse URL parsers.
+  const rawNext = (searchParams.get('next') ?? '/workspace').replace(/[\t\n\r\0]/g, '');
+  let next = '/workspace';
+  try {
+    const parsed = new URL(rawNext, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    if (parsed.origin === (typeof window !== 'undefined' ? window.location.origin : 'http://localhost')) {
+      next = parsed.pathname + parsed.search + parsed.hash;
+    }
+  } catch {
+    // malformed URL — keep default
+  }
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
