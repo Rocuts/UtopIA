@@ -12,7 +12,8 @@
  */
 export function parseMoneyCop(value: string): bigint {
   if (!/^-?\d+$/.test(value)) {
-    throw new Error(`parseMoneyCop: valor inválido "${value}" — debe ser entero serializado`);
+    // Don't include raw value in message — it may appear in logs.
+    throw new Error(`parseMoneyCop: valor inválido (len=${value.length}) — debe ser entero serializado`);
   }
   return BigInt(value);
 }
