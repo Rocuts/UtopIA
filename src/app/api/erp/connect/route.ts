@@ -6,6 +6,7 @@ import { serializeCredentials } from '@/lib/erp/credentials';
 import { getDb } from '@/lib/db/client';
 import { erpCredentials } from '@/lib/db/schema';
 import { requireWorkspace } from '@/lib/db/workspace';
+import { assertSafeBaseUrl } from '@/lib/erp/validate-base-url';
 
 const connectSchema = z.object({
   provider: z.string(),
@@ -54,6 +55,18 @@ export async function POST(req: Request) {
         { error: `Unknown provider: ${provider}` },
         { status: 400 },
       );
+    }
+
+    // SSRF guard — connectors fetch() this client-supplied URL server-side.
+    if (credentials.baseUrl) {
+      try {
+        assertSafeBaseUrl(credentials.baseUrl);
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'baseUrl inválida.' },
+          { status: 400 },
+        );
+      }
     }
 
     const connector = await getConnector(provider as ERPProvider);

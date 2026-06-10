@@ -5,6 +5,7 @@ import { getConnector, ERP_PROVIDERS } from '@/lib/erp/registry';
 import type { ERPProvider, ERPCredentials, ERPSyncResult } from '@/lib/erp/types';
 import { logApiActivity } from '@/lib/db/activity-log';
 import { requireWorkspace } from '@/lib/db/workspace';
+import { assertSafeBaseUrl } from '@/lib/erp/validate-base-url';
 
 export const maxDuration = 120;
 
@@ -39,6 +40,18 @@ export async function POST(req: Request) {
 
     if (!(provider in ERP_PROVIDERS)) {
       return NextResponse.json({ error: `Unknown provider: ${provider}` }, { status: 400 });
+    }
+
+    // SSRF guard — connectors fetch() this client-supplied URL server-side.
+    if (credentials.baseUrl) {
+      try {
+        assertSafeBaseUrl(credentials.baseUrl);
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'baseUrl inválida.' },
+          { status: 400 },
+        );
+      }
     }
 
     const connector = await getConnector(provider as ERPProvider);
