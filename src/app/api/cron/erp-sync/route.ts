@@ -4,9 +4,9 @@
  * Vercel Cron polling job for ERPs that do NOT support push webhooks.
  * Runs every 2 hours (schedule configured in vercel.ts).
  *
- * Auth: `Authorization: Bearer ${CRON_SECRET}` OR Vercel-signed header
- * `x-vercel-cron-id`. Both are checked so the route works both in production
- * (Vercel Cron) and locally (curl with CRON_SECRET).
+ * Auth: `Authorization: Bearer ${CRON_SECRET}` only. The `x-vercel-cron-id`
+ * header is NOT trusted — it's a plain request header any client can spoof.
+ * Without CRON_SECRET configured, only non-production environments pass.
  *
  * Flow per workspace+provider:
  *   1. Load erp_credentials row (provider + metadata with connection config).
@@ -36,9 +36,7 @@ export const maxDuration = 300;
 // ---------------------------------------------------------------------------
 
 function isAuthorized(req: Request): boolean {
-  const cronHeader = req.headers.get('x-vercel-cron-id');
-  if (cronHeader) return true;
-
+  // SECURITY: never trust `x-vercel-cron-id` — spoofable request header.
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     // No secret configured — allow in local dev, reject in production.
