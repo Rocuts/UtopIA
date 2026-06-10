@@ -5,6 +5,7 @@ import { orchestrateFiscalOpinion } from '@/lib/agents/financial/fiscal-opinion/
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { FiscalOpinionProgressEvent } from '@/lib/agents/financial/fiscal-opinion/types';
+import { createSafeSse } from '@/lib/api/sse-safe';
 
 // ---------------------------------------------------------------------------
 // POST /api/fiscal-audit-opinion
@@ -100,37 +101,31 @@ function handleStreaming(
   language: 'es' | 'en',
   instructions: string | undefined,
 ) {
-  const encoder = new TextEncoder();
-
-  const readableStream = new ReadableStream({
+  const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
 
       try {
         const fiscalOpinion = await orchestrateFiscalOpinion(
           { report, auditReport, language, instructions },
           {
             onProgress: (event: FiscalOpinionProgressEvent) => {
-              send('progress', event);
+              sse.send('progress', event);
             },
           },
         );
-        send('result', fiscalOpinion);
+        sse.send('result', fiscalOpinion);
       } catch (error) {
         console.error(
           '[fiscal-audit-opinion] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
-        send('error', {
+        sse.send('error', {
           error: 'Error during fiscal opinion generation.',
           detail: error instanceof Error ? error.message : 'Unknown error',
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

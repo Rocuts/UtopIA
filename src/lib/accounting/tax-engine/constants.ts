@@ -12,17 +12,37 @@ export const UVT_2026_COP = 52_374;
 export const UVT_2025_COP = 49_799;
 
 /**
- * Convierte un valor en UVT a COP para un año dado.
- * Tabla simple sin DB lookup — adecuado para el hot path de evaluación.
- * Para períodos anteriores a 2025, cae al valor 2025 como aproximación
- * conservadora (TODO: consultar tabla uvt_constants para períodos históricos).
+ * Histórico oficial de UVT por año (resoluciones DIAN de cada diciembre).
+ * Espejo estático de la tabla `uvt_constants` para mantener el hot path
+ * síncrono y sin round-trip a BD. Actualizar cada enero.
+ */
+const UVT_BY_YEAR: Record<number, number> = {
+  2026: UVT_2026_COP,
+  2025: UVT_2025_COP,
+  2024: 47_065,
+  2023: 42_412,
+  2022: 38_004,
+  2021: 36_308,
+  2020: 35_607,
+};
+
+const OLDEST_UVT_YEAR = Math.min(...Object.keys(UVT_BY_YEAR).map(Number));
+
+/**
+ * Convierte un valor en UVT a COP para un año dado usando el UVT oficial de
+ * ESE año (antes todo período < 2025 usaba el UVT 2025 — retenciones
+ * históricas incorrectas). Años posteriores al último conocido usan el más
+ * reciente; años anteriores a 2020 usan 2020 con warning (el módulo contable
+ * no procesa períodos tan antiguos).
  */
 export function uvtToCopByYear(uvtAmount: number, year: number): number {
-  if (year >= 2026) return Math.round(uvtAmount * UVT_2026_COP);
-  if (year >= 2025) return Math.round(uvtAmount * UVT_2025_COP);
-  // Para años anteriores a 2025 usar 2025 como fallback conservador.
-  // TODO (diferido D2): consultar uvt_constants en DB para precisión histórica.
-  return Math.round(uvtAmount * UVT_2025_COP);
+  const exact = UVT_BY_YEAR[year];
+  if (exact !== undefined) return Math.round(uvtAmount * exact);
+  if (year > 2026) return Math.round(uvtAmount * UVT_2026_COP);
+  console.warn(
+    `[tax-engine] UVT no tabulado para ${year}; usando UVT ${OLDEST_UVT_YEAR} como aproximación.`,
+  );
+  return Math.round(uvtAmount * UVT_BY_YEAR[OLDEST_UVT_YEAR]);
 }
 
 // ---------------------------------------------------------------------------

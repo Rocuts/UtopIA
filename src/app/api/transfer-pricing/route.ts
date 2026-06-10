@@ -3,6 +3,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 import { transferPricingRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTransferPricing } from '@/lib/agents/financial/transfer-pricing/orchestrator';
 import type { TPProgressEvent } from '@/lib/agents/financial/transfer-pricing/types';
+import { createSafeSse } from '@/lib/api/sse-safe';
 
 // ---------------------------------------------------------------------------
 // POST /api/transfer-pricing
@@ -87,37 +88,31 @@ function handleStreaming(
   language: 'es' | 'en',
   instructions: string | undefined,
 ) {
-  const encoder = new TextEncoder();
-
-  const readableStream = new ReadableStream({
+  const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
 
       try {
         const report = await orchestrateTransferPricing(
           { rawData, company, relatedParties, controlledTransactions, language, instructions },
           {
             onProgress: (event: TPProgressEvent) => {
-              send('progress', event);
+              sse.send('progress', event);
             },
           },
         );
-        send('result', report);
+        sse.send('result', report);
       } catch (error) {
         console.error(
           '[transfer-pricing] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
-        send('error', {
+        sse.send('error', {
           error: 'Error during transfer pricing analysis.',
           detail: error instanceof Error ? error.message : 'Unknown error',
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

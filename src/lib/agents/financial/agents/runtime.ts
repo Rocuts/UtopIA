@@ -264,8 +264,8 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
 
   assertFinishedCleanlyOrThrow(result, agentName);
 
-  const json = safeOutput(result) as z.infer<TSchema>;
-  if (json === undefined || json === null) {
+  const rawOutput = safeOutput(result);
+  if (rawOutput === undefined || rawOutput === null) {
     throw new Error(
       `callFinancialAgent[${agentName}]: experimental_output vacío ` +
         `(finishReason=${result.finishReason}, fallbackUsed=${fallbackUsed}). ` +
@@ -273,6 +273,22 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
         `o el modelo emitió JSON no parseable. Subir maxOutputTokens del slot o simplificar prompt.`,
     );
   }
+
+  // Validación explícita contra el schema Zod — defensa en profundidad sobre
+  // la validación del AI SDK. Un output que no cumpla el contrato debe fallar
+  // AQUÍ con issues accionables, nunca propagarse río abajo con un cast ciego.
+  const parsed = schema.safeParse(rawOutput);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .slice(0, 5)
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join(' | ');
+    throw new Error(
+      `callFinancialAgent[${agentName}]: output del LLM no cumple el schema Zod ` +
+        `(finishReason=${result.finishReason}, fallbackUsed=${fallbackUsed}). Issues: ${issues}`,
+    );
+  }
+  const json = parsed.data as z.infer<TSchema>;
 
   // Telemetría — los nombres exactos en `usage` dependen del provider;
   // accedemos con optional chaining sobre `unknown` para no acoplar a versiones.

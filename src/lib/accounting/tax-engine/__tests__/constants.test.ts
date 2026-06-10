@@ -50,9 +50,18 @@ describe('uvtToCopByYear', () => {
     expect(uvtToCopByYear(1, 2027)).toBe(52_374);
   });
 
-  it('año histórico < 2025 usa tarifa 2025 como fallback conservador', () => {
-    // Comportamiento documentado en constants.ts como TODO diferido
-    expect(uvtToCopByYear(1, 2020)).toBe(49_799);
+  it('años históricos usan el UVT oficial de SU año (resoluciones DIAN)', () => {
+    // Antes todo período < 2025 caía al UVT 2025 — retenciones históricas
+    // incorrectas. La tabla UVT_BY_YEAR resuelve cada año con su valor real.
+    expect(uvtToCopByYear(1, 2024)).toBe(47_065);
+    expect(uvtToCopByYear(1, 2023)).toBe(42_412);
+    expect(uvtToCopByYear(1, 2022)).toBe(38_004);
+    expect(uvtToCopByYear(1, 2021)).toBe(36_308);
+    expect(uvtToCopByYear(1, 2020)).toBe(35_607);
+  });
+
+  it('año anterior al histórico tabulado cae al más antiguo conocido (2020) con warning', () => {
+    expect(uvtToCopByYear(1, 2015)).toBe(35_607);
   });
 
   it('fracción de UVT se redondea correctamente (Math.round)', () => {
