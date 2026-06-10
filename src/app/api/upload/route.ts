@@ -3,7 +3,8 @@ import { revalidateTag } from 'next/cache';
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit';
 import { uploadContextSchema, blobUploadSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
-import { getCurrentWorkspaceId } from '@/lib/db/workspace';
+import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
   parseTrialBalanceCSV,
@@ -499,18 +500,27 @@ async function processDocument(
   // -----------------------------------------------------------------
   // Vectorization (RAG) — Neon pgvector. Hybrid BM25+cosine search.
   // Non-critical: si falla la insercion, el texto extraido sigue llegando
-  // a los agentes via documentContext. Los uploads se scopean al workspace
-  // del solicitante (cookie utopia_workspace_id): sin el scope, cualquier
-  // tenant podia recuperar balances/documentos de otro via search_docs.
-  // Sin cookie (caso borde) el chunk queda global, como antes.
+  // a los agentes via documentContext. Los uploads de usuario SIEMPRE se
+  // scopean a un workspace (getOrCreateWorkspace garantiza uno): un chunk
+  // con workspace_id NULL entra al pool global y seria recuperable por
+  // CUALQUIER tenant via search_docs (leak cross-tenant). Si no se puede
+  // resolver workspace, NO indexamos en el RAG global — el texto sigue
+  // disponible para el agente via documentContext (per-conversacion).
   // -----------------------------------------------------------------
-  const workspaceId = await getCurrentWorkspaceId().catch(() => null);
-  const chunksCount = await addDocumentsToStore([text], {
-    source: filename,
-    context: contextLabel,
-    docType: 'user_upload',
-    ...(workspaceId ? { workspaceId } : {}),
-  });
+  let workspaceId: string | undefined;
+  try {
+    workspaceId = (await getOrCreateWorkspace()).id;
+  } catch {
+    workspaceId = undefined;
+  }
+  const chunksCount = workspaceId
+    ? await addDocumentsToStore([text], {
+        source: filename,
+        context: contextLabel,
+        docType: 'user_upload',
+        workspaceId,
+      })
+    : 0;
   if (chunksCount > 0) {
     invalidateVectorStore();
   }
@@ -635,6 +645,11 @@ function deriveFilenameFromBlobUrl(blobUrl: string): string {
 }
 
 export async function POST(req: Request) {
+  // Validación REAL de sesión (fase 2): OCR con visión es facturable. Fase 1
+  // (sin BETTER_AUTH_SECRET) es no-op y preserva el flujo anónimo.
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const { allowed, remaining, limit } = await checkRateLimit(getClientIp(req), 'upload');
   if (!allowed) {
     return NextResponse.json(

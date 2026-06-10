@@ -19,6 +19,7 @@ import { loadCredentials } from '@/lib/erp/credentials';
 import { erpCredentials as erpCredsTable } from '@/lib/db/schema';
 import { getDb } from '@/lib/db/client';
 import { requireWorkspace, getCurrentWorkspaceId } from '@/lib/db/workspace';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { inArray, and, eq } from 'drizzle-orm';
 
 // Vercel Fluid Compute: 300s ceiling for T3 parallel specialists + SSE.
@@ -409,7 +410,9 @@ ${langInstruction}
         'Si necesitas un analisis estructurado mas profundo (cifras clave, riesgos, articulos relevantes), ' +
         'usa la herramienta analyze_document.\n\n' +
         '<documento_adjunto>\n' +
-        preview +
+        // Neutraliza el delimitador embebido para que el contenido no pueda
+        // cerrar el fence e inyectar instrucciones fuera de él.
+        preview.replace(/<\/?\s*documento_adjunto\s*>/gi, '[tag removido]') +
         '\n</documento_adjunto>' +
         (truncated
           ? '\n\n[... documento truncado por longitud. Para el analisis completo usa la herramienta analyze_document ...]'
@@ -638,6 +641,12 @@ ${langInstruction}
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
+  // Validación REAL de sesión (fase 2): el gate de presencia de cookie del
+  // proxy es falsificable; este es el gate autoritativo. Fase 1 (sin
+  // BETTER_AUTH_SECRET) es no-op y preserva el flujo anónimo.
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const { allowed, limit } = await checkRateLimit(getClientIp(req), 'chat');
   if (!allowed) {
     return NextResponse.json(
