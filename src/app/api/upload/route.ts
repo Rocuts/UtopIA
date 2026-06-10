@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit';
 import { uploadContextSchema, blobUploadSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
+import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
   parseTrialBalanceCSV,
@@ -723,7 +724,9 @@ export async function POST(req: Request) {
 
       try {
         const result = await processDocument(buffer, filename, contextLabel);
-        return NextResponse.json(result);
+        // toJsonSafe: `preprocessed.controlTotals.cents` es BigInt — sin la
+        // conversion, JSON.stringify lanza y todo balance real devolvia 500.
+        return NextResponse.json(toJsonSafe(result));
       } catch (err) {
         if (err instanceof UploadError) {
           return NextResponse.json({ error: err.message }, { status: err.status });
@@ -762,7 +765,7 @@ export async function POST(req: Request) {
 
     try {
       const result = await processDocument(buffer, file.name, contextLabel);
-      return NextResponse.json(result);
+      return NextResponse.json(toJsonSafe(result));
     } catch (err) {
       if (err instanceof UploadError) {
         return NextResponse.json({ error: err.message }, { status: err.status });

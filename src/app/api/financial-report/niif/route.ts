@@ -10,6 +10,11 @@ import {
   preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
+import {
+  revivePreprocessedBalance,
+  toJsonSafe,
+} from '@/lib/preprocessing/json-safe';
+import { createSafeSse } from '@/lib/api/sse-safe';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 import type {
   AdjustmentLedger,
@@ -119,10 +124,19 @@ export async function POST(req: Request) {
     // Reutiliza el `preprocessed` enviado por el cliente (idempotencia con
     // /api/upload). Sino, lo re-procesamos aqui — `runNiifPhase` tambien sabe
     // hacerlo internamente; lo precomputamos por consistencia con /route.ts.
-    const bodyPreprocessed = (body as { preprocessed?: PreprocessedBalance | null }).preprocessed;
+    // El payload del cliente se valida estructuralmente y se reviven los
+    // BigInt (cents) — un shape inválido es 400, nunca cast ciego.
+    const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
     let preprocessed: PreprocessedBalance | undefined;
-    if (bodyPreprocessed && typeof bodyPreprocessed === 'object') {
-      preprocessed = bodyPreprocessed;
+    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
+      const revived = revivePreprocessedBalance(bodyPreprocessed);
+      if (!revived) {
+        return NextResponse.json(
+          { error: 'Invalid preprocessed format.' },
+          { status: 400 },
+        );
+      }
+      preprocessed = revived;
     } else {
       const rows = parseTrialBalanceCSV(rawData);
       preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
@@ -161,12 +175,14 @@ export async function POST(req: Request) {
       metadata: { language, mode: 'sync' },
     });
 
-    return NextResponse.json({
-      niif: phase.niif,
-      ancora: phase.ancora,
-      fiscalSnapshot: phase.fiscalSnapshot ?? null,
-      context: extractSerializableContext(phase.context),
-    });
+    return NextResponse.json(
+      toJsonSafe({
+        niif: phase.niif,
+        ancora: phase.ancora,
+        fiscalSnapshot: phase.fiscalSnapshot ?? null,
+        context: extractSerializableContext(phase.context),
+      }),
+    );
   } catch (error) {
     if (error instanceof BalanceValidationError) {
       void logActivity({
@@ -209,18 +225,17 @@ export async function POST(req: Request) {
 
 // ---------------------------------------------------------------------------
 // Extrae los campos serializables del FinancialPipelineContext para pasarlos
-// por SSE/JSON. `bigint` (eliteSaldoAFavorImpuestoCents,
+// por SSE/JSON. `bigint` (controlTotals.cents.*,
 // reclasificacionesNoCompensacion[].saldo_invertido_centavos) no es JSON-safe
-// — los normalizamos a string para que el caller los re-deserialize si los
-// necesita. ppForAgents queda como `unknown` en el JSON; los endpoints
-// downstream lo reciben en su shape original.
+// — `toJsonSafe` los convierte a string decimal; /strategy y /governance los
+// reviven en intake con `revivePreprocessedBalance`.
 // ---------------------------------------------------------------------------
 function extractSerializableContext(
   ctx: Awaited<ReturnType<typeof runNiifPhase>>['context'],
 ): SerializableNiifContext {
   return {
     bindingTotals: ctx.bindingTotalsBlock,
-    preprocessed: ctx.ppForAgents,
+    preprocessed: toJsonSafe(ctx.ppForAgents),
     company: ctx.effectiveCompany,
   };
 }
@@ -255,15 +270,10 @@ function handleStreaming(args: {
     adjustmentLedger,
     startedAt,
   } = args;
-  const encoder = new TextEncoder();
-
   const readableStream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
+      const send = sse.send;
 
       try {
         const phase = await runNiifPhase(
@@ -360,7 +370,7 @@ function handleStreaming(args: {
           });
         }
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

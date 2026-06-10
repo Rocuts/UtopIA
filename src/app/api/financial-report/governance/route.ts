@@ -7,6 +7,8 @@ import type {
   StrategicAnalysisResult,
 } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
@@ -55,7 +57,19 @@ export async function POST(req: Request) {
 
     const typedNiif = niifResult as unknown as NiifAnalysisResult;
     const typedStrategy = strategyResult as unknown as StrategicAnalysisResult;
-    const typedPp = preprocessed as PreprocessedBalance | undefined;
+    // `preprocessed` viene del round-trip JSON de /niif: se valida
+    // estructuralmente y se reviven los BigInt (cents).
+    let typedPp: PreprocessedBalance | undefined;
+    if (preprocessed !== undefined && preprocessed !== null) {
+      const revived = revivePreprocessedBalance(preprocessed);
+      if (!revived) {
+        return NextResponse.json(
+          { error: 'Invalid preprocessed format.' },
+          { status: 400 },
+        );
+      }
+      typedPp = revived;
+    }
 
     if (stream) {
       return handleStreaming({
@@ -110,15 +124,11 @@ function handleStreaming(args: {
     language,
     instructions,
   } = args;
-  const encoder = new TextEncoder();
 
   const readableStream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
+      const send = sse.send;
 
       try {
         const governance = await runGovernancePhase(
@@ -159,7 +169,7 @@ function handleStreaming(args: {
           code: friendly.code,
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

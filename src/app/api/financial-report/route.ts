@@ -17,6 +17,8 @@ import type {
 } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { classifyError, formatErrorAsUserNote } from '@/lib/agents/financial/prompts/resilience-section0';
+import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
+import { createSafeSse } from '@/lib/api/sse-safe';
 
 // Schema inline para el flag `provisional` — opcional, no se reusa en otras
 // rutas. Si esta presente, ambos campos son obligatorios.
@@ -125,10 +127,19 @@ export async function POST(req: Request) {
     // lo reusamos. Asi evitamos re-parsear el CSV y garantizamos que los totales
     // vinculantes que vio el usuario en el upload son exactamente los que
     // alimentan al orchestrator. Fallback: re-preprocesamos on-the-fly.
-    const bodyPreprocessed = (body as { preprocessed?: PreprocessedBalance | null }).preprocessed;
+    // Validacion estructural + revival de BigInt (cents) — un shape invalido
+    // es 400, nunca cast ciego que termina en TypeError 500.
+    const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
     let preprocessed: PreprocessedBalance | undefined;
-    if (bodyPreprocessed && typeof bodyPreprocessed === 'object') {
-      preprocessed = bodyPreprocessed;
+    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
+      const revived = revivePreprocessedBalance(bodyPreprocessed);
+      if (!revived) {
+        return NextResponse.json(
+          { error: 'Invalid preprocessed format.' },
+          { status: 400 },
+        );
+      }
+      preprocessed = revived;
     } else {
       const rows = parseTrialBalanceCSV(rawData);
       preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
@@ -253,7 +264,7 @@ export async function POST(req: Request) {
       { preprocessed, provisional, adjustmentLedger },
     );
 
-    return NextResponse.json(report);
+    return NextResponse.json(toJsonSafe(report));
   } catch (error) {
     if (error instanceof BalanceValidationError) {
       // 422 Unprocessable Entity: el archivo es valido estructuralmente pero
@@ -292,15 +303,10 @@ function handleStreaming(
   provisional: ProvisionalFlag | undefined,
   adjustmentLedger: AdjustmentLedger | undefined,
 ) {
-  const encoder = new TextEncoder();
-
   const readableStream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
+      const send = sse.send;
 
       try {
         const report = await orchestrateFinancialReport(
@@ -330,7 +336,9 @@ function handleStreaming(
                     });
                   })
                   .join(' | ');
-                send('warning', { message });
+                // `raw` conserva el detalle diagnostico original (E1..E9 del
+                // validator) — la nota formateada sola lo perdia.
+                send('warning', { message, raw: event.warnings });
                 return;
               }
               send('progress', event);
@@ -381,7 +389,7 @@ function handleStreaming(
           });
         }
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

@@ -28,6 +28,7 @@ import { NextResponse } from 'next/server';
 import { HtmlEditorInputSchema } from '@/lib/agents/financial/contracts/html-editor';
 import { runHtmlEditor } from '@/lib/agents/financial/agents/html-editor';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
+import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 export const runtime = 'nodejs';
@@ -64,16 +65,12 @@ export async function POST(req: Request) {
 
     // Streaming SSE — emite progress events durante la generación y el
     // payload final como `event: html_phase`.
-    const encoder = new TextEncoder();
     const language = parsed.data.language;
 
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (event: string, data: unknown) => {
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-          );
-        };
+        const sse = createSafeSse(controller);
+        const send = sse.send;
 
         try {
           const onProgress = (event: FinancialProgressEvent) => {
@@ -103,7 +100,7 @@ export async function POST(req: Request) {
             code: friendly.code,
           });
         } finally {
-          controller.close();
+          sse.close();
         }
       },
     });
@@ -124,11 +121,9 @@ export async function POST(req: Request) {
       '[financial-report/html] API error:',
       err instanceof Error ? err.message : err,
     );
+    // Sin `detail` con err.message: puede filtrar internals (SQL, paths).
     return NextResponse.json(
-      {
-        error: 'Internal server error during HTML editor phase.',
-        detail: err instanceof Error ? err.message : String(err),
-      },
+      { error: 'Internal server error during HTML editor phase.' },
       { status: 500 },
     );
   }

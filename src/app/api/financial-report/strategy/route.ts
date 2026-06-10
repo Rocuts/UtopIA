@@ -6,6 +6,8 @@ import type {
   NiifAnalysisResult,
 } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
@@ -48,9 +50,20 @@ export async function POST(req: Request) {
 
     // Cast a tipos full: el schema valida solo lo critico (fullContent), el
     // resto del shape se preserva pasando el body. Misma estrategia que
-    // /api/financial-audit/route.ts.
+    // /api/financial-audit/route.ts. `preprocessed` viene del round-trip JSON
+    // de /niif: se valida estructuralmente y se reviven los BigInt (cents).
     const typedNiif = niifResult as unknown as NiifAnalysisResult;
-    const typedPp = preprocessed as PreprocessedBalance | undefined;
+    let typedPp: PreprocessedBalance | undefined;
+    if (preprocessed !== undefined && preprocessed !== null) {
+      const revived = revivePreprocessedBalance(preprocessed);
+      if (!revived) {
+        return NextResponse.json(
+          { error: 'Invalid preprocessed format.' },
+          { status: 400 },
+        );
+      }
+      typedPp = revived;
+    }
 
     if (stream) {
       return handleStreaming({
@@ -94,15 +107,11 @@ function handleStreaming(args: {
   instructions: string | undefined;
 }) {
   const { niifResult, bindingTotals, preprocessed, company, language, instructions } = args;
-  const encoder = new TextEncoder();
 
   const readableStream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
+      const send = sse.send;
 
       try {
         const strategy = await runStrategyPhase(
@@ -135,7 +144,7 @@ function handleStreaming(args: {
           code: friendly.code,
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });
