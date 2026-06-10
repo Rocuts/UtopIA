@@ -153,9 +153,11 @@ export async function GET(req: Request) {
       { status: 200 },
     );
   } catch (err) {
+    // Detail stays server-side only — err.message can carry PostgreSQL
+    // internals (table names, connection strings) that must not leak.
     console.error('[admin/telemetry] query failed:', err);
     return NextResponse.json(
-      { error: 'telemetry query failed', detail: err instanceof Error ? err.message : String(err) },
+      { error: 'telemetry query failed' },
       { status: 500 },
     );
   }
