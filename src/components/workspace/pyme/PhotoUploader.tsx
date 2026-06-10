@@ -37,12 +37,17 @@ interface InvoiceData {
   amount: string;
 }
 
-const MOCK_INVOICE: InvoiceData = {
-  supplier: 'Bavaria S.A.',
-  date: '07/06/2026',
-  category: 'Compra de mercancía',
-  amount: '$180.000',
+// Campos no leídos por el OCR se muestran como "—" (desconocido) — nunca se
+// inventan valores de demostración.
+const EMPTY_INVOICE: InvoiceData = {
+  supplier: '—',
+  date: '—',
+  category: '—',
+  amount: '—',
 };
+
+/** Ventana máxima de polling del OCR antes de declarar error honesto. */
+const POLL_DEADLINE_MS = 90_000;
 
 interface PhotoUploaderProps {
   bookId: string;
@@ -59,8 +64,7 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
   const { t } = useLanguage();
   const [stage, setStage] = useState<Stage>('capture');
   const [progress, setProgress] = useState(0);
-  const [invoice, setInvoice] = useState<InvoiceData>(MOCK_INVOICE);
-  const [attempts, setAttempts] = useState(0);
+  const [invoice, setInvoice] = useState<InvoiceData>(EMPTY_INVOICE);
   const [manualAmount, setManualAmount] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -96,8 +100,6 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
     if (!ALLOWED_MIME.test(file.type) && !file.type.startsWith('image/')) { goTo('err'); return; }
 
     goTo('reading');
-    const newAttempts = attempts + 1;
-    setAttempts(newAttempts);
 
     try {
       const fd = new FormData();
@@ -108,38 +110,35 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
       if (!res.ok || !json.ok || !json.uploadId) throw new Error(json.error ?? 'upload_failed');
       uploadIdRef.current = json.uploadId;
 
-      // Poll OCR status
+      // Poll OCR status — el resultado SIEMPRE refleja lo que dijo el backend.
+      // 'failed' es error en todos los intentos; si el OCR no responde dentro
+      // de la ventana, se declara error honesto (nunca éxito simulado).
+      const pollStartedAt = Date.now();
       timerRef.current = setInterval(async () => {
+        if (Date.now() - pollStartedAt > POLL_DEADLINE_MS) {
+          clearInterval(timerRef.current!);
+          goTo('err');
+          return;
+        }
         try {
           const pr = await fetch(`/api/pyme/uploads/${uploadIdRef.current}`);
           const pj = await pr.json() as { ok: boolean; upload?: { ocrStatus: string; extractedData?: Partial<InvoiceData> } };
           if (!pj.ok || !pj.upload) return;
           if (pj.upload.ocrStatus === 'done') {
             clearInterval(timerRef.current!);
-            if (pj.upload.extractedData) {
-              setInvoice({ ...MOCK_INVOICE, ...pj.upload.extractedData });
-            }
+            setInvoice({ ...EMPTY_INVOICE, ...pj.upload.extractedData });
             goTo('ok');
             onUploadsComplete?.();
           } else if (pj.upload.ocrStatus === 'failed') {
             clearInterval(timerRef.current!);
-            // First attempt shows error, subsequent show success (demo pattern from handoff)
-            goTo(newAttempts === 1 ? 'err' : 'ok');
+            goTo('err');
           }
         } catch { /* keep polling */ }
       }, POLL_INTERVAL_MS);
-
-      // Fallback: after 2s if still reading, simulate result
-      setTimeout(() => {
-        if (stage === 'reading') {
-          if (timerRef.current) clearInterval(timerRef.current);
-          goTo(newAttempts === 1 ? 'err' : 'ok');
-        }
-      }, 2_100);
     } catch {
       goTo('err');
     }
-  }, [bookId, attempts, goTo, onUploadsComplete, stage]);
+  }, [bookId, goTo, onUploadsComplete]);
 
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;

@@ -45,7 +45,7 @@ const PILLARS: {
     metric: '28,4%',
     label: 'Tasa Efectiva de Tributación',
     Icon: Shield,
-    href: '/workspace',
+    href: '/workspace/escudo',
   },
   {
     key: 'valor',
@@ -54,7 +54,7 @@ const PILLARS: {
     metric: '$4.820M',
     label: 'Valor de salida (DCF)',
     Icon: TrendingUp,
-    href: '/workspace',
+    href: '/workspace/valor',
   },
   {
     key: 'verdad',
@@ -63,7 +63,7 @@ const PILLARS: {
     metric: '94/100',
     label: 'Score de Cumplimiento',
     Icon: Scale,
-    href: '/workspace',
+    href: '/workspace/verdad',
   },
   {
     key: 'futuro',
@@ -72,7 +72,7 @@ const PILLARS: {
     metric: '28 meses',
     label: 'Runway · escenario base',
     Icon: Compass,
-    href: '/workspace',
+    href: '/workspace/futuro',
   },
 ];
 

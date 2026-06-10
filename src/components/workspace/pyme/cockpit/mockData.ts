@@ -45,12 +45,12 @@ export const mockAlerts: PymeAlert[] = [
 ];
 
 export const mockModules: PymeModule[] = [
-  { id: 'dashboard', badge: null, badgeTone: 'neutral', href: null },
-  { id: 'libro', badge: '12', badgeTone: 'neutral', href: '/workspace/pyme/libros' },
-  { id: 'obligaciones', badge: '$3.2M', badgeTone: 'danger', href: null },
-  { id: 'fechas', badge: '2 urgentes', badgeTone: 'warning', href: null },
-  { id: 'empleados', badge: null, badgeTone: 'neutral', href: null },
-  { id: 'banco', badge: null, badgeTone: 'neutral', href: null },
+  { id: 'dashboard', badge: null, badgeTone: 'neutral', href: '/workspace/pyme' },
+  { id: 'libro', badge: '12', badgeTone: 'neutral', href: '/workspace/pyme/libro' },
+  { id: 'obligaciones', badge: '$3.2M', badgeTone: 'danger', href: '/workspace/pyme/pagos' },
+  { id: 'fechas', badge: '2 urgentes', badgeTone: 'warning', href: '/workspace/pyme/fechas' },
+  { id: 'empleados', badge: null, badgeTone: 'neutral', href: '/workspace/pyme/empleados' },
+  { id: 'banco', badge: null, badgeTone: 'neutral', href: '/workspace/contabilidad/conciliacion' },
 ];
 
 export const mockTip =

@@ -12,6 +12,7 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowRight,
+  BookOpen,
   ChevronRight,
   Compass,
   Scale,
@@ -444,6 +445,37 @@ export function ExecutiveDashboard() {
             </div>
             <ArrowRight
               className="h-5 w-5 shrink-0 text-area-pyme transition-transform group-hover:translate-x-1"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </Link>
+          <Link
+            href="/workspace/contabilidad"
+            className="group relative flex items-center gap-[18px] rounded-xl px-[22px] py-5 transition-[transform,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 hover:-translate-y-0.5"
+            style={{
+              background: 'color-mix(in srgb, var(--color-gold-500) 5%, var(--color-n-0, white))',
+              border: '1px solid color-mix(in srgb, var(--color-gold-500) 24%, var(--color-n-200))',
+            }}
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg text-gold-600"
+              style={{ background: 'color-mix(in srgb, var(--color-gold-500) 14%, transparent)' }}
+            >
+              <BookOpen className="h-6 w-6" strokeWidth={1.6} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xl font-serif-elite font-medium text-n-1000 truncate">
+                {isEs ? 'Contabilidad' : 'Accounting'}
+              </h3>
+              <p className="text-sm text-n-600 truncate" style={{ marginTop: '2px' }}>
+                {isEs
+                  ? 'PUC, asientos, mayor, conciliación y cierres — el núcleo contable completo.'
+                  : 'Chart of accounts, journal, ledger, reconciliation and closings — the full accounting core.'}
+              </p>
+            </div>
+            <ArrowRight
+              className="h-5 w-5 shrink-0 text-gold-600 transition-transform group-hover:translate-x-1"
               strokeWidth={1.6}
               aria-hidden="true"
             />

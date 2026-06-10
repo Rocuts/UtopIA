@@ -278,7 +278,8 @@ export function MisPagosView() {
           </div>
 
           <p className="mt-3 text-center text-sm italic text-n-500">
-            Este cálculo usa sus ventas y pagos reales — se actualiza solo.
+            Cálculo estimado con tarifas de referencia — no sustituye la
+            liquidación oficial DIAN. Ajuste sus ventas con el deslizador.
           </p>
         </div>
       )}

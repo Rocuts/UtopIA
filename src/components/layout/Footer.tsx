@@ -6,9 +6,9 @@ const NAV = [
   {
     heading: 'Servicios',
     links: [
-      { label: 'Defensa DIAN', href: '/workspace' },
-      { label: 'Devoluciones', href: '/workspace' },
-      { label: 'Due diligence', href: '/workspace' },
+      { label: 'Defensa DIAN', href: '/workspace/escudo/defensa-dian' },
+      { label: 'Devoluciones', href: '/workspace/escudo/devoluciones' },
+      { label: 'Due diligence', href: '/workspace/valor/due-diligence' },
       { label: 'NIIF Elite', href: '/workspace' },
     ],
   },
@@ -16,9 +16,9 @@ const NAV = [
     heading: 'Producto',
     links: [
       { label: 'Centro de Comando', href: '/workspace' },
-      { label: 'Contabilidad Pyme', href: '/workspace' },
-      { label: 'Contabilidad', href: '/workspace' },
-      { label: 'Sistema de diseño', href: '#' },
+      { label: 'Contabilidad Pyme', href: '/workspace/pyme' },
+      { label: 'Contabilidad', href: '/workspace/contabilidad' },
+      { label: 'Abrir un caso', href: '/workspace/intake' },
     ],
   },
   {
