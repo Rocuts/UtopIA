@@ -23,6 +23,14 @@ export const createBookBodySchema = z.object({
     .default('COP'),
 });
 
+// ─── Summary ────────────────────────────────────────────────────────────────
+
+export const summaryQuerySchema = z.object({
+  bookId: z.string().uuid(),
+  year: z.coerce.number().int().min(2020).max(2035),
+  month: z.coerce.number().int().min(1).max(12),
+});
+
 // ─── Entries ────────────────────────────────────────────────────────────────
 
 export const listEntriesQuerySchema = z.object({

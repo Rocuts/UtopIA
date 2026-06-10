@@ -3,20 +3,20 @@
 /**
  * MiLibroView — /workspace/pyme/libro ("Mi Libro").
  *
- * Implementa el handoff "Pyme - Mi Libro.html":
- * - Hero verde con 3 métricas (Vendí / Gasté / Me quedó) + CTA de foto
- * - Filtros Todos / Ingresos / Gastos
- * - Lista de transacciones (badge "Factura leída" cuando vino de OCR)
- * - Banner de balance con exportación a Excel
+ * Diseño del handoff "Pyme - Mi Libro.html" cableado a datos REALES:
+ * - Hero verde: totales del mes desde GET /api/pyme/summary
+ * - Lista de movimientos desde GET /api/pyme/entries (badge "Factura leída"
+ *   cuando el entry nació del OCR — uploadId presente)
+ * - "Bajar a Excel" → endpoint real /api/pyme/books/{id}/export.xlsx
+ * - CTA de foto → flujo OCR real /workspace/pyme/{id}/subir
  *
- * Datos MOCK (mismo dataset del prototipo) — el wiring real a
- * /api/pyme/entries llega en una ola posterior, igual que PymeHub.
- * El CTA de foto navega al flujo real de OCR (/workspace/pyme/subir).
+ * Sin libro o sin movimientos → estado vacío honesto (nunca datos inventados).
  */
 
 import { useState } from 'react';
 import Link from 'next/link';
 import {
+  BookOpen,
   Camera,
   Download,
   Droplet,
@@ -29,50 +29,90 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatPesosInteger } from '@/lib/format/cop';
 import { PymeSubpageShell } from '@/components/workspace/pyme/PymeSubpageShell';
 import { PymeGreenHero } from '@/components/workspace/pyme/PymeGreenHero';
+import {
+  usePymeBook,
+  usePymeEntries,
+  usePymeSummary,
+  type PymeEntryLite,
+} from '@/components/workspace/pyme/usePymeData';
 
-// ─── Mock data (dataset del prototipo) ───────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-type TxType = 'in' | 'out';
-
-interface Tx {
-  icon: LucideIcon;
-  title: string;
-  meta: string;
-  type: TxType;
-  amount: string;
-  /** true → la anotó el OCR de foto de factura. */
-  read: boolean;
-}
-
-const TRANSACTIONS: Tx[] = [
-  { icon: ShoppingCart, title: 'Venta de mostrador', meta: 'Hoy 2:14 p.m. · efectivo', type: 'in', amount: '340.000', read: false },
-  { icon: Receipt, title: 'Compra a Bavaria', meta: 'Hoy 9:30 a.m.', type: 'out', amount: '180.000', read: true },
-  { icon: ShoppingCart, title: 'Venta del día', meta: 'Ayer · datáfono', type: 'in', amount: '520.000', read: false },
-  { icon: Zap, title: 'Pago de luz', meta: 'Ayer · servicios', type: 'out', amount: '95.000', read: false },
-  { icon: Truck, title: 'Compra a Postobón', meta: '2 días', type: 'out', amount: '210.000', read: true },
-  { icon: ShoppingCart, title: 'Venta de mostrador', meta: '3 días · efectivo', type: 'in', amount: '280.000', read: false },
-  { icon: Home, title: 'Pago arriendo del local', meta: '5 días · gasto fijo', type: 'out', amount: '800.000', read: false },
-  { icon: ShoppingCart, title: 'Ventas del fin de semana', meta: '6 días', type: 'in', amount: '610.000', read: false },
-  { icon: Truck, title: 'Compra a Colombina', meta: '1 semana', type: 'out', amount: '140.000', read: true },
-  { icon: Droplet, title: 'Pago de agua', meta: '1 semana · servicios', type: 'out', amount: '62.000', read: false },
-];
+const cop = (n: number) => `$${formatPesosInteger(n)}`;
 
 const FILTERS = [
   { id: 'all', label: 'Todos' },
-  { id: 'in', label: 'Ingresos' },
-  { id: 'out', label: 'Gastos' },
+  { id: 'ingreso', label: 'Ingresos' },
+  { id: 'egreso', label: 'Gastos' },
 ] as const;
 
 type FilterId = (typeof FILTERS)[number]['id'];
+
+/** Icono por tipo + heurística de categoría (visual, sin inventar datos). */
+function entryIcon(e: PymeEntryLite): LucideIcon {
+  if (e.kind === 'ingreso') return ShoppingCart;
+  const cat = `${e.category ?? ''} ${e.description}`.toLowerCase();
+  if (/(luz|energ)/.test(cat)) return Zap;
+  if (/agua/.test(cat)) return Droplet;
+  if (/(arriendo|alquiler|local)/.test(cat)) return Home;
+  if (/(proveedor|compra|mercanc|inventario)/.test(cat)) return Truck;
+  return Receipt;
+}
+
+function entryMeta(e: PymeEntryLite): string {
+  const d = new Date(e.entryDate);
+  const date = Number.isNaN(d.getTime())
+    ? ''
+    : new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(d);
+  return [date, e.category].filter(Boolean).join(' · ');
+}
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
 export function MiLibroView() {
   const [filter, setFilter] = useState<FilterId>('all');
 
-  const visible = TRANSACTIONS.filter((t) => filter === 'all' || t.type === filter);
+  const now = new Date();
+  const { book, loading: bookLoading } = usePymeBook();
+  const { summary } = usePymeSummary(
+    book?.id ?? null,
+    now.getFullYear(),
+    now.getMonth() + 1,
+  );
+  const { entries, loading: entriesLoading } = usePymeEntries(book?.id ?? null);
+
+  const visible = entries.filter((e) => filter === 'all' || e.kind === filter);
+  const totals = summary?.totals;
+  const loading = bookLoading || (Boolean(book) && entriesLoading);
+
+  // ── Sin libro: onboarding honesto ──────────────────────────────────────────
+  if (!bookLoading && !book) {
+    return (
+      <PymeSubpageShell>
+        <div className="mx-auto mt-10 max-w-md rounded-2xl border border-area-pyme/25 bg-n-0 px-8 py-10 text-center">
+          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-area-pyme/12 text-area-pyme">
+            <BookOpen className="h-7 w-7" strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <h1 className="font-serif-elite text-2xl font-medium text-n-1000">
+            Aún no tiene un libro
+          </h1>
+          <p className="mx-auto mt-2 max-w-[38ch] text-sm leading-relaxed text-n-600">
+            Su libro es donde anotamos todo lo que vende y gasta. Créelo en un
+            minuto y empiece con la primera foto de factura.
+          </p>
+          <Link
+            href="/workspace/pyme/libros"
+            className="mt-6 inline-flex h-11 items-center gap-2 rounded-md bg-area-pyme px-5 text-[15px] font-semibold text-white transition-all hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-area-pyme"
+          >
+            Crear mi libro
+          </Link>
+        </div>
+      </PymeSubpageShell>
+    );
+  }
 
   return (
     <PymeSubpageShell>
@@ -80,18 +120,24 @@ export function MiLibroView() {
         title="Mi Libro"
         subtitle="Todo lo que entró y salió este mes, ordenado por día."
         metrics={[
-          { value: '$1.240.000', label: 'Vendí' },
-          { value: '$805.000', label: 'Gasté' },
-          { value: '$435.000', label: 'Me quedó', tone: 'green' },
+          { value: totals ? cop(totals.ingresos) : '—', label: 'Vendí' },
+          { value: totals ? cop(totals.egresos) : '—', label: 'Gasté' },
+          {
+            value: totals ? cop(totals.margen) : '—',
+            label: 'Me quedó',
+            tone: 'green',
+          },
         ]}
       >
-        <Link
-          href="/workspace/pyme/subir"
-          className="mt-5 inline-flex h-12 items-center gap-2.5 rounded-md bg-[#7BC95B] px-5 text-[15px] font-bold text-[#0a1f06] shadow-[0_10px_24px_-10px_rgb(123_201_91_/_0.6)] transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-        >
-          <Camera className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
-          Agregar foto de factura
-        </Link>
+        {book && (
+          <Link
+            href={`/workspace/pyme/${book.id}/subir`}
+            className="mt-5 inline-flex h-12 items-center gap-2.5 rounded-md bg-[#7BC95B] px-5 text-[15px] font-bold text-[#0a1f06] shadow-[0_10px_24px_-10px_rgb(123_201_91_/_0.6)] transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            <Camera className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+            Agregar foto de factura
+          </Link>
+        )}
       </PymeGreenHero>
 
       {/* Filtros */}
@@ -115,60 +161,104 @@ export function MiLibroView() {
         ))}
       </div>
 
-      {/* Transacciones */}
-      <div className="flex flex-col gap-2.5">
-        {visible.map((tx, i) => {
-          const Icon = tx.icon;
-          return (
+      {/* Movimientos */}
+      {loading ? (
+        <div className="flex flex-col gap-2.5" aria-hidden="true">
+          {[0, 1, 2, 3].map((i) => (
             <div
-              key={`${tx.title}-${i}`}
-              className="flex items-center gap-3.5 rounded-xl border border-n-200 bg-n-0 px-4 py-3.5"
-            >
-              <span className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-md bg-area-pyme/10 text-[#2A5E1F] dark:text-area-pyme">
-                <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-n-1000">
-                  {tx.title}
-                  {tx.read && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-area-pyme/15 px-2 py-0.5 text-[10px] font-bold text-[#2A5E1F] dark:text-area-pyme">
-                      <Camera className="h-[11px] w-[11px]" strokeWidth={2} aria-hidden="true" />
-                      Factura leída
-                    </span>
-                  )}
-                </div>
-                <div className="mt-0.5 text-xs text-n-600">{tx.meta}</div>
-              </div>
-              <span
-                className={cn(
-                  'shrink-0 font-mono text-[15px] font-semibold tabular-nums',
-                  tx.type === 'in' ? 'text-[#2A5E1F] dark:text-area-pyme' : 'text-danger',
-                )}
+              key={i}
+              className="h-[76px] animate-pulse rounded-xl border border-n-200 bg-n-50"
+            />
+          ))}
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-area-pyme/30 bg-n-0 px-6 py-10 text-center">
+          <p className="text-[15px] font-semibold text-n-1000">
+            {entries.length === 0
+              ? 'Su libro está vacío todavía'
+              : 'Sin movimientos en este filtro'}
+          </p>
+          {entries.length === 0 && (
+            <p className="mx-auto mt-1.5 max-w-[42ch] text-sm text-n-600">
+              Tómele una foto a su primera factura y nosotros la anotamos por
+              usted.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {visible.map((e) => {
+            const Icon = entryIcon(e);
+            return (
+              <div
+                key={e.id}
+                className="flex items-center gap-3.5 rounded-xl border border-n-200 bg-n-0 px-4 py-3.5"
               >
-                {tx.type === 'in' ? '+' : '−'}{tx.amount}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+                <span className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-md bg-area-pyme/10 text-[#2A5E1F] dark:text-area-pyme">
+                  <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-n-1000">
+                    {e.description}
+                    {e.uploadId && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-area-pyme/15 px-2 py-0.5 text-[10px] font-bold text-[#2A5E1F] dark:text-area-pyme">
+                        <Camera className="h-[11px] w-[11px]" strokeWidth={2} aria-hidden="true" />
+                        Factura leída
+                      </span>
+                    )}
+                    {e.status === 'draft' && (
+                      <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+                        Por confirmar
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-xs text-n-600">{entryMeta(e)}</div>
+                </div>
+                <span
+                  className={cn(
+                    'shrink-0 font-mono text-[15px] font-semibold tabular-nums',
+                    e.kind === 'ingreso'
+                      ? 'text-[#2A5E1F] dark:text-area-pyme'
+                      : 'text-danger',
+                  )}
+                >
+                  {e.kind === 'ingreso' ? '+' : '−'}
+                  {formatPesosInteger(e.amount)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Balance */}
-      <div className="mt-5 flex flex-wrap items-center gap-3.5 rounded-xl border border-area-pyme/30 bg-area-pyme/10 px-5 py-4">
-        <Wallet className="h-[22px] w-[22px] shrink-0 text-[#2A5E1F] dark:text-area-pyme" strokeWidth={1.75} aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold text-[#2A5E1F] dark:text-area-pyme">Le quedó $435.000</div>
-          <div className="mt-0.5 text-sm text-n-700">
-            Cuatrocientos treinta y cinco mil pesos. Le fue mejor que el mes pasado.
+      {totals && entries.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center gap-3.5 rounded-xl border border-area-pyme/30 bg-area-pyme/10 px-5 py-4">
+          <Wallet className="h-[22px] w-[22px] shrink-0 text-[#2A5E1F] dark:text-area-pyme" strokeWidth={1.75} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-bold text-[#2A5E1F] dark:text-area-pyme">
+              Le quedó {cop(totals.margen)}
+            </div>
+            <div className="mt-0.5 text-sm text-n-700">
+              {summary?.previous
+                ? totals.margen >= summary.previous.margen
+                  ? 'Le fue mejor que el mes pasado.'
+                  : 'Le fue más duro que el mes pasado — revisemos los gastos.'
+                : 'Este es su primer mes con datos.'}
+            </div>
           </div>
+          {book && (
+            <a
+              href={`/api/pyme/books/${book.id}/export.xlsx`}
+              download
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-gold-500/40 px-4 text-sm font-medium text-gold-600 transition-colors hover:bg-gold-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+            >
+              <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              Bajar a Excel
+            </a>
+          )}
         </div>
-        <Link
-          href="/workspace/pyme/libros"
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-gold-500/40 px-4 text-sm font-medium text-gold-600 transition-colors hover:bg-gold-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
-        >
-          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          Bajar a Excel
-        </Link>
-      </div>
+      )}
     </PymeSubpageShell>
   );
 }
