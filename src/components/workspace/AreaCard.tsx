@@ -321,21 +321,27 @@ export function AreaCard({
         aria-label={typeof concept === 'string' ? `${concept} — ${href}` : undefined}
         className={cn(
           'group relative flex h-full min-h-[240px] flex-col',
-          'px-5 pt-5 pb-4',
-          'rounded-xl',
+          'px-5 pt-6 pb-4',
+          'rounded-xl overflow-hidden',
           'bg-n-50 border',
           palette.border,
           palette.borderHover,
           'shadow-e2 hover:shadow-e4',
           'transition-[transform,box-shadow,border-color] duration-200 ease-out',
-          'hover:-translate-y-0.5',
+          'hover:-translate-y-1',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
         )}
         style={{
-          // Subtle ambient tint toward the area color, keyed off the card bg.
           backgroundImage: `linear-gradient(135deg, ${palette.glow} 0%, transparent 55%)`,
         }}
       >
+        {/* ── Top accent bar ────────────────────────────────────────────── */}
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-0 right-0 h-[5px]"
+          style={{ background: `linear-gradient(90deg, ${palette.sparkStroke}, transparent)` }}
+        />
+
         {/* ── Row 1: eyebrow + accent icon ────────────────────────────── */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">

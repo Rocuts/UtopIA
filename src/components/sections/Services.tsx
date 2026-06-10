@@ -1,94 +1,87 @@
 'use client';
 
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Shield, RefreshCcw, TrendingUp, BarChart3 } from 'lucide-react';
-import { useLanguage } from '@/context/LanguageContext';
-import { Reveal } from '@/components/ui/ParallaxWrapper';
+import { Shield, Banknote, FileSearch, Sparkles, Check } from 'lucide-react';
+
+const SERVICES = [
+  {
+    Icon: Shield,
+    title: 'Defensa ante la DIAN',
+    desc: 'Requerimientos, pliegos de cargos y liquidaciones — con respuesta técnica y estrategia administrativa.',
+    outcome: 'Defensa fundamentada y completa.',
+  },
+  {
+    Icon: Banknote,
+    title: 'Devolución de saldos a favor',
+    desc: 'Recupere su caja con expedientes técnicos sólidos y acompañamiento ante la administración.',
+    outcome: 'Expediente listo para radicar.',
+  },
+  {
+    Icon: FileSearch,
+    title: 'Due diligence & valoración',
+    desc: 'Prepare su empresa para inversión, crédito o venta con modelación financiera y narrativa.',
+    outcome: 'Informe listo para inversionistas.',
+  },
+  {
+    Icon: Sparkles,
+    title: 'NIIF Elite',
+    desc: 'Reportes financieros bajo NIIF generados por IA, con estrategia y gobierno corporativo.',
+    outcome: 'Reporte ejecutivo navegable.',
+  },
+];
 
 export function Services() {
-  const { t } = useLanguage();
-
-  const servicesList = [
-    {
-      icon: <Shield className="w-6 h-6 text-n-900" />,
-      title: t.services.s1_title,
-      description: t.services.s1_desc,
-      outcome: t.services.s1_outcome,
-      bullets: t.services.s1_bullets,
-    },
-    {
-      icon: <RefreshCcw className="w-6 h-6 text-n-900" />,
-      title: t.services.s2_title,
-      description: t.services.s2_desc,
-      outcome: t.services.s2_outcome,
-      bullets: t.services.s2_bullets,
-    },
-    {
-      icon: <TrendingUp className="w-6 h-6 text-n-900" />,
-      title: t.services.s3_title,
-      description: t.services.s3_desc,
-      outcome: t.services.s3_outcome,
-      bullets: t.services.s3_bullets,
-    },
-    {
-      icon: <BarChart3 className="w-6 h-6 text-n-900" />,
-      title: t.services.s4_title,
-      description: t.services.s4_desc,
-      outcome: t.services.s4_outcome,
-      bullets: t.services.s4_bullets,
-    },
-  ];
-
   return (
-    <section id="services" className="py-20 md:py-28 relative w-full container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)]">
-      <Reveal>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 gap-8">
-          <div className="max-w-2xl">
-            <Badge variant="muted" className="mb-4">{t.services.badge}</Badge>
-            <h2 className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-4 text-n-900 leading-display"
-                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
-              {t.services.title}
-            </h2>
-            <p className="text-lg text-n-600 leading-relaxed">
-              {t.services.desc}
-            </p>
-          </div>
+    <section
+      id="services"
+      className="border-t border-n-200"
+      style={{ padding: '84px clamp(22px, 5vw, 56px)' }}
+    >
+      <div className="max-w-[1180px] mx-auto">
+        {/* Section header */}
+        <div className="text-center max-w-[60ch] mx-auto mb-12">
+          <span className="text-xs uppercase tracking-[0.16em] text-n-500 font-medium block mb-3.5">
+            Servicios
+          </span>
+          <h2
+            className="font-serif-elite font-medium text-n-1000"
+            style={{
+              fontSize: 'clamp(1.9rem, 3.4vw, 2.8rem)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.08,
+            }}
+          >
+            Soluciones de clase mundial para la normativa colombiana.
+          </h2>
         </div>
-      </Reveal>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-n-200 border border-n-200 rounded-sm overflow-hidden">
-        {servicesList.map((service, index) => (
-          <Reveal key={index} delay={index * 0.05} distance={16}>
-            <Card className="group flex flex-col justify-between h-full bg-n-0 rounded-none border-0" hoverEffect={false}>
-              <div>
-                <div className="mb-6 p-3 rounded-sm inline-flex bg-n-50 border border-n-200">
-                  {service.icon}
-                </div>
-                <h3 className="text-xl font-semibold mb-3 text-n-900 leading-tight tracking-tight">{service.title}</h3>
-                <p className="text-n-600 mb-6 leading-relaxed">
-                  {service.description}
-                </p>
-
-                <div className="bg-n-50 p-4 rounded-sm border border-n-200 mb-6">
-                  <span className="text-xs font-medium text-n-900 uppercase tracking-eyebrow block mb-1 font-mono">
-                    {t.services.outcome}
-                  </span>
-                  <span className="text-sm text-n-600">{service.outcome}</span>
-                </div>
+        {/* Service cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {SERVICES.map((s) => (
+            <div
+              key={s.title}
+              className="group border border-n-200 rounded-xl p-6 bg-n-0 transition-all duration-200 hover:-translate-y-1 hover:border-gold-500/40 hover:shadow-[0_20px_40px_-24px_rgb(184_147_74_/_0.45)]"
+            >
+              {/* Icon */}
+              <div className="w-11 h-11 rounded-lg grid place-items-center bg-gold-500/12 text-gold-600 mb-[18px]">
+                <s.Icon className="w-[22px] h-[22px]" aria-hidden="true" />
               </div>
 
-              <ul className="flex flex-col gap-2 border-t border-n-200 pt-6 mt-auto">
-                {service.bullets.map((bullet, i) => (
-                  <li key={i} className="flex items-center text-sm text-n-600">
-                    <span className="w-1 h-1 rounded-full bg-n-900 mr-3 shrink-0" />
-                    {bullet}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </Reveal>
-        ))}
+              <h3
+                className="font-serif-elite font-medium text-n-1000 leading-snug"
+                style={{ fontSize: '1.0625rem' }}
+              >
+                {s.title}
+              </h3>
+              <p className="text-[0.8125rem] text-n-600 mt-2 leading-snug">{s.desc}</p>
+
+              {/* Outcome */}
+              <div className="flex gap-1.5 mt-3.5 text-xs text-gold-700">
+                <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                {s.outcome}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );

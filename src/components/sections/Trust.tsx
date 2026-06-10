@@ -1,80 +1,54 @@
 'use client';
 
-import { useRef } from 'react';
-import { motion, useScroll, useTransform, useSpring } from 'motion/react';
-import { Badge } from "@/components/ui/Badge";
-import { GlassPanel } from "@/components/ui/GlassPanel";
-import { useLanguage } from '@/context/LanguageContext';
-import { Reveal } from '@/components/ui/ParallaxWrapper';
+import { BookMarked, Landmark, Scale, ShieldCheck } from 'lucide-react';
 
-const NOVA_SPRING = { stiffness: 400, damping: 25 };
-
-const sources = [
-  'Estatuto Tributario', 'Doctrina DIAN', 'Normas NIIF/NIC',
-  'Ley 1819 de 2016 (Reforma Tributaria)', 'Ley 2277 de 2022', 'Decreto 1625 de 2016 (DUR Tributario)',
-  'Resoluciones DIAN', 'Ley 1581 (Protección de Datos)'
+const CHIPS = [
+  { Icon: BookMarked, label: 'Estatuto Tributario' },
+  { Icon: Landmark, label: 'Doctrina DIAN' },
+  { Icon: Scale, label: 'Normas NIIF / NIC' },
+  { Icon: ShieldCheck, label: 'Ley 1581 de Protección de Datos' },
 ];
 
-function FloatingBadge({ children, index }: { children: React.ReactNode; index: number }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start end', 'end start'],
-  });
-
-  const speed = ((index % 3) - 1) * 6;
-  const rawY = useTransform(scrollYProgress, [0, 1], [speed, -speed]);
-  const y = useSpring(rawY, NOVA_SPRING);
-
-  return (
-    <motion.span
-      ref={ref}
-      style={{ y, willChange: 'transform' }}
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{
-        type: "spring",
-        ...NOVA_SPRING,
-        delay: index * 0.04,
-      }}
-      className="inline-flex py-2 px-4 bg-n-0 border border-n-200 rounded-sm text-sm text-n-600 tracking-tight hover:border-[#0a0a0a] hover:text-n-900 transition-colors"
-    >
-      {children}
-    </motion.span>
-  );
-}
-
 export function Trust() {
-  const { t } = useLanguage();
-
   return (
-    <section className="py-20 md:py-28 border-y border-n-200 bg-n-50">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)] flex flex-col md:flex-row gap-16 items-center">
+    <section
+      id="trust"
+      className="border-t border-n-200"
+      style={{ padding: '84px clamp(22px, 5vw, 56px)' }}
+    >
+      <div className="max-w-[1180px] mx-auto">
+        {/* Section header */}
+        <div className="text-center max-w-[60ch] mx-auto mb-12">
+          <span className="text-xs uppercase tracking-[0.16em] text-n-500 font-medium block mb-3.5">
+            Marco normativo
+          </span>
+          <h2
+            className="font-serif-elite font-medium text-n-1000"
+            style={{
+              fontSize: 'clamp(1.9rem, 3.4vw, 2.8rem)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.08,
+            }}
+          >
+            Fundamentado en normativa colombiana vigente.
+          </h2>
+          <p className="text-n-600 mt-3.5 leading-[1.65]" style={{ fontSize: '1.0625rem' }}>
+            Cada análisis se genera exclusivamente a partir de fuentes oficiales y regulación al día.
+          </p>
+        </div>
 
-        <Reveal direction="left" className="md:w-1/3">
-          <div>
-            <Badge variant="outline" className="mb-4">{t.trust.badge}</Badge>
-            <h3 className="font-serif-elite text-2xl md:text-3xl font-medium tracking-tight mb-4 text-n-900 leading-display"
-                style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
-              {t.trust.title} <br className="hidden md:block"/> {t.trust.titleBreak}
-            </h3>
-            <p className="text-n-600 text-sm leading-relaxed mb-6">
-              {t.trust.desc}
-            </p>
-          </div>
-        </Reveal>
-
-        <Reveal direction="right" className="md:w-2/3 flex w-full">
-          <GlassPanel className="w-full flex flex-wrap gap-2 p-6 sm:p-8 bg-n-0">
-            {sources.map((source, i) => (
-              <FloatingBadge key={i} index={i}>
-                {source}
-              </FloatingBadge>
-            ))}
-          </GlassPanel>
-        </Reveal>
-
+        {/* Chips */}
+        <div className="flex flex-wrap justify-center gap-3">
+          {CHIPS.map((chip) => (
+            <span
+              key={chip.label}
+              className="inline-flex items-center gap-2 py-2.5 px-4 rounded-full border border-n-200 bg-n-0 text-[0.8125rem] text-n-700 font-medium"
+            >
+              <chip.Icon className="w-[15px] h-[15px] text-gold-600 shrink-0" aria-hidden="true" />
+              {chip.label}
+            </span>
+          ))}
+        </div>
       </div>
     </section>
   );

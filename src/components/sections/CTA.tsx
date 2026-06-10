@@ -1,68 +1,44 @@
 'use client';
 
 import Link from 'next/link';
-import { motion } from 'motion/react';
-import { Button } from "@/components/ui/Button";
-import { useLanguage } from '@/context/LanguageContext';
-
-const NOVA_SPRING = { stiffness: 400, damping: 25 };
+import { ArrowRight } from 'lucide-react';
 
 export function CTA() {
-  const { t } = useLanguage();
-
   return (
-    <section className="py-20 md:py-28 relative border-t border-n-200">
-      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width-narrow)] text-center">
-        <motion.h2
-          className="font-serif-elite text-4xl md:text-5xl font-medium tracking-tight mb-6 text-n-900 leading-display"
-          style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
-          initial={{ opacity: 0, y: -16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ type: "spring", ...NOVA_SPRING }}
+    <section
+      className="border-t border-n-200 text-center"
+      style={{ padding: '84px clamp(22px, 5vw, 56px)' }}
+    >
+      <div className="max-w-[48rem] mx-auto">
+        <h2
+          className="font-serif-elite font-medium text-n-1000 mx-auto"
+          style={{
+            fontSize: 'clamp(2.2rem, 4.6vw, 3.6rem)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.05,
+            maxWidth: '18ch',
+          }}
         >
-          {t.cta.title1} <br className="hidden md:block" />
-          {t.cta.title2} {t.cta.titleHighlight}?
-        </motion.h2>
-
-        <motion.p
-          className="text-xl text-n-600 mb-10 max-w-2xl mx-auto"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.05 }}
-        >
-          {t.cta.desc}
-        </motion.p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
-          >
-            <Link href="/workspace">
-              <Button size="lg" className="w-full sm:w-auto text-base px-10">
-                {t.cta.btn1}
-              </Button>
-            </Link>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
-          >
-            <Button
-              size="lg"
-              variant="secondary"
-              className="w-full sm:w-auto text-base px-10"
-              onClick={() => document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })}
+          La claridad financiera empieza con una conversación.
+        </h2>
+        <p className="text-n-600 mt-4 mb-8 mx-auto" style={{ fontSize: '1.0625rem', maxWidth: '50ch' }}>
+          Acceda al workspace y deje que la inteligencia financiera trabaje por usted.
+        </p>
+        <div className="flex gap-3.5 justify-center flex-wrap">
+          <Link href="/workspace">
+            <button className="inline-flex items-center gap-2 h-12 px-7 rounded-lg text-[0.9375rem] font-semibold bg-gold-500 hover:bg-gold-600 text-n-0 border border-black/10 transition-all duration-200 hover:-translate-y-px hover:shadow-[0_0_22px_rgb(184_147_74_/_0.18)] active:scale-[0.98]">
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              Acceder al workspace
+            </button>
+          </Link>
+          <Link href="/login">
+            <button
+              className="inline-flex items-center h-12 px-7 rounded-lg text-[0.9375rem] font-medium bg-transparent text-gold-500 border transition-all duration-200 hover:text-gold-600 hover:bg-gold-500/10 hover:-translate-y-px active:scale-[0.98]"
+              style={{ borderColor: 'rgb(212 184 118 / .4)' }}
             >
-              {t.cta.btn2}
-            </Button>
-          </motion.div>
+              Crear cuenta
+            </button>
+          </Link>
         </div>
       </div>
     </section>

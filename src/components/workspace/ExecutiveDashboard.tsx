@@ -6,16 +6,17 @@ import { getDashboardKpis, type DashboardKPIs, type LiveKpiValue } from '@/lib/k
 import { getAlerts, summarizeAlerts } from '@/lib/alerts/feed';
 import type { Alert, ErpConnectionLite } from '@/lib/alerts/types';
 import { AreaCard, type AreaKey, type AreaKpi } from './AreaCard';
+import { WorkspaceFX } from './WorkspaceFX';
 import { ShimmerLoader } from '@/components/ui/ShimmerLoader';
 import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowRight,
-  BookOpen,
   ChevronRight,
   Compass,
   Scale,
   Shield,
+  Store,
   TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
@@ -144,10 +145,18 @@ function alertHref(alert: Alert): string {
 
 // ─── Alerts strip ───────────────────────────────────────────────────────────
 
+// Summary badge chip — more visible opacity
 const SEVERITY_CHIP: Record<Alert['severity'], string> = {
   critical: 'border-danger/30 bg-danger/10 text-danger',
   warn: 'border-warning/30 bg-warning/10 text-warning',
   info: 'border-n-200 bg-n-50 text-n-700',
+};
+
+// Individual alert rows — exact handoff opacities: bg 6%, border 18%
+const ALERT_ROW: Record<Alert['severity'], string> = {
+  critical: 'border-danger/[0.18] bg-danger/[0.06] hover:bg-danger/[0.10]',
+  warn: 'border-warning/[0.18] bg-warning/[0.06] hover:bg-warning/[0.10]',
+  info: 'border-n-200 bg-n-50 hover:bg-n-100',
 };
 
 const SEVERITY_DOT: Record<Alert['severity'], string> = {
@@ -206,7 +215,7 @@ function AlertsStrip({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <span
           className={[
             'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border',
@@ -223,26 +232,30 @@ function AlertsStrip({
       </div>
       <ul
         aria-label={isEs ? 'Alertas recientes' : 'Recent alerts'}
-        className="flex flex-col gap-1.5"
+        className="flex flex-col gap-2"
       >
         {top.map((alert) => (
           <li key={alert.id}>
             <Link
               href={alertHref(alert)}
               className={[
-                'flex items-start gap-2.5 px-3 py-2 rounded-md border cursor-pointer',
-                'transition-colors hover:bg-gold-500/5',
-                SEVERITY_CHIP[alert.severity],
+                'flex items-center gap-[14px] px-4 py-[14px] rounded-lg border cursor-pointer',
+                'transition-[background,transform] duration-150 hover:translate-x-[2px]',
+                ALERT_ROW[alert.severity],
               ].join(' ')}
             >
-              <span aria-hidden="true" className={`mt-1 inline-block h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[alert.severity]}`} />
+              <span
+                aria-hidden="true"
+                className={`shrink-0 inline-block w-[7px] h-[7px] rounded-full ${SEVERITY_DOT[alert.severity]}`}
+                style={alert.severity === 'critical' ? { boxShadow: '0 0 8px rgb(214 107 107 / 0.6)' } : undefined}
+              />
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-n-900 truncate">{alert.title}</div>
+                <div className="text-sm font-semibold text-n-900 truncate">{alert.title}</div>
                 {alert.description && (
-                  <div className="text-xs text-n-600 truncate font-light">{alert.description}</div>
+                  <div className="text-xs text-n-600 truncate mt-0.5">{alert.description}</div>
                 )}
               </div>
-              <ChevronRight className="h-3.5 w-3.5 ml-auto shrink-0 opacity-60 mt-0.5" aria-hidden="true" />
+              <ChevronRight className="h-4 w-4 ml-auto shrink-0 text-n-500" aria-hidden="true" />
             </Link>
           </li>
         ))}
@@ -313,23 +326,25 @@ export function ExecutiveDashboard() {
 
   return (
     <div className="h-full w-full overflow-y-auto styled-scrollbar">
+      {/* Constellation particles + cursor spotlight + blobs — workspace dashboard only */}
+      <WorkspaceFX />
       <div
         className={[
-          'max-w-7xl mx-auto',
-          'px-6 md:px-10 lg:px-12',
-          'pt-6 md:pt-8 lg:pt-10 pb-12',
-          'flex flex-col gap-8 md:gap-10',
+          'max-w-[1180px] mx-auto',
+          'px-[clamp(20px,3.5vw,44px)]',
+          'pt-8 pb-[60px]',
+          'flex flex-col gap-[26px]',
         ].join(' ')}
       >
-        <header className="flex flex-wrap items-end justify-between gap-4">
+        <header className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex flex-col gap-2 min-w-0">
             <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500 font-medium">
               {heroEyebrow}
             </span>
-            <h1 className="text-2xl md:text-3xl font-serif-elite font-normal leading-tight tracking-tight text-n-900">
+            <h1 className="text-4xl font-serif-elite font-normal tracking-tight text-n-1000" style={{ lineHeight: 1.05 }}>
               {isEs ? 'Centro de Comando' : 'Command Center'}
             </h1>
-            <p className="text-sm text-n-600 font-light max-w-[60ch]">
+            <p className="text-sm text-n-600 max-w-[60ch]">
               {isEs
                 ? '4 pilares. Telemetría en vivo. Una sola verdad.'
                 : '4 pillars. Live telemetry. One source of truth.'}
@@ -356,8 +371,8 @@ export function ExecutiveDashboard() {
         <section
           aria-label={isEs ? 'Pilares ejecutivos' : 'Executive pillars'}
           className={[
-            'grid gap-4 lg:gap-5',
-            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4',
+            'grid gap-[18px]',
+            'grid-cols-1 sm:grid-cols-2',
           ].join(' ')}
         >
           {loading || !kpis
@@ -403,71 +418,32 @@ export function ExecutiveDashboard() {
             {isEs ? 'Módulos' : 'Modules'}
           </span>
           <Link
-            href="/workspace/contabilidad"
-            className={[
-              'group relative flex items-center gap-4 rounded-xl border border-n-200 bg-n-50',
-              'p-5 transition-colors hover:border-gold-500/40 hover:bg-n-100',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
-            ].join(' ')}
-          >
-            <span
-              aria-hidden="true"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gold-500/10 text-gold-600"
-            >
-              <BookOpen className="h-6 w-6" strokeWidth={1.6} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-serif-elite font-normal text-n-1000 truncate">
-                  {isEs ? 'Contabilidad' : 'Accounting'}
-                </h3>
-                <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-gold-600 font-medium">
-                  {isEs ? 'Nuevo' : 'New'}
-                </span>
-              </div>
-              <p className="text-sm text-n-700 font-light truncate">
-                {isEs
-                  ? 'Núcleo contable de doble partida: asientos, PUC y saldos iniciales.'
-                  : 'Double-entry accounting core: entries, chart of accounts, opening balances.'}
-              </p>
-            </div>
-            <ArrowRight
-              className="h-5 w-5 shrink-0 text-n-500 transition-transform group-hover:translate-x-1 group-hover:text-gold-500"
-              strokeWidth={1.6}
-              aria-hidden="true"
-            />
-          </Link>
-          <Link
             href="/workspace/pyme"
-            className={[
-              'group relative flex items-center gap-4 rounded-xl border border-n-200 bg-n-50',
-              'p-5 transition-colors hover:border-area-pyme/40 hover:bg-n-100',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
-            ].join(' ')}
+            className="group relative flex items-center gap-[18px] rounded-xl px-[22px] py-5 transition-[transform,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 hover:-translate-y-0.5"
+            style={{
+              background: 'color-mix(in srgb, var(--color-area-pyme) 6%, var(--color-n-0, white))',
+              border: '1px solid color-mix(in srgb, var(--color-area-pyme) 26%, var(--color-n-200))',
+            }}
           >
             <span
               aria-hidden="true"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-area-pyme/10 text-area-pyme"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg text-area-pyme"
+              style={{ background: 'color-mix(in srgb, var(--color-area-pyme) 16%, transparent)' }}
             >
-              <BookOpen className="h-6 w-6" strokeWidth={1.6} />
+              <Store className="h-6 w-6" strokeWidth={1.6} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-serif-elite font-normal text-n-1000 truncate">
-                  {isEs ? 'Contabilidad Pyme' : 'Small Business Bookkeeping'}
-                </h3>
-                <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-area-pyme font-medium">
-                  {isEs ? 'Nuevo' : 'New'}
-                </span>
-              </div>
-              <p className="text-sm text-n-700 font-light truncate">
+              <h3 className="text-xl font-serif-elite font-medium text-n-1000 truncate">
+                {isEs ? 'Contabilidad Pyme' : 'Small Business Bookkeeping'}
+              </h3>
+              <p className="text-sm text-n-600 truncate" style={{ marginTop: '2px' }}>
                 {isEs
-                  ? 'Sube fotos de tu cuaderno y conviértelas en reportes mensuales.'
-                  : 'Upload notebook photos and turn them into monthly reports.'}
+                  ? 'El cockpit del dueño de tienda — en lenguaje de barrio, simple y claro.'
+                  : 'The shop owner\'s cockpit — in plain language, simple and clear.'}
               </p>
             </div>
             <ArrowRight
-              className="h-5 w-5 shrink-0 text-n-500 transition-transform group-hover:translate-x-1 group-hover:text-area-pyme"
+              className="h-5 w-5 shrink-0 text-area-pyme transition-transform group-hover:translate-x-1"
               strokeWidth={1.6}
               aria-hidden="true"
             />

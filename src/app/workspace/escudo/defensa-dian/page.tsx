@@ -1,14 +1,10 @@
 'use client';
 
 /**
- * /workspace/escudo/defensa-dian — Submódulo Defensa DIAN.
+ * /workspace/escudo/defensa-dian — Defensa DIAN sub-page.
  *
- * Portada de producto + CTA que abre el `IntakeModal` con `caseType='dian_defense'`.
- * Sidebar derecho con tips del experto y artículos destacados del E.T. 2026.
- *
- * Integra con el flujo existente via `openIntakeForType` del WorkspaceContext —
- * el modal renderiza `<DianDefenseIntake />` y al completar redirige al
- * ChatWorkspace con el contexto del caso.
+ * Displays a breadcrumb, stats row, vertical stepper pipeline, and cases list.
+ * Preserves `openIntakeForType('dian_defense')` CTA.
  */
 
 import { useCallback } from 'react';
@@ -16,375 +12,325 @@ import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   Shield,
-  ChevronLeft,
-  ShieldCheck,
-  ScrollText,
-  Scale,
-  AlertOctagon,
-  Search,
-  FileText,
+  ArrowLeft,
   Gavel,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { cn } from '@/lib/utils';
 import { EliteButton } from '@/components/ui/EliteButton';
-import { EliteCard } from '@/components/ui/EliteCard';
-import { SectionHeader } from '@/components/ui/SectionHeader';
+
+// ── Design token ────────────────────────────────────────────────────────────
+const AC = '#A83838'; // escudo wine-red accent
+
+// ── Types ────────────────────────────────────────────────────────────────────
+type StepState = 'done' | 'active' | 'pending';
+
+interface Step {
+  label: string;
+  description: string;
+  state: StepState;
+}
+
+interface CaseItem {
+  title: string;
+  meta: string;
+  status: 'warning' | 'success';
+  statusLabel: string;
+}
+
+// ── Data ─────────────────────────────────────────────────────────────────────
+const STEPS: Step[] = [
+  {
+    label: 'Recepción del requerimiento',
+    description: 'Notificación recibida el 12 de mayo de 2026.',
+    state: 'done',
+  },
+  {
+    label: 'Diagnóstico de riesgo',
+    description: 'Riesgo medio. Inconsistencia en información exógena.',
+    state: 'done',
+  },
+  {
+    label: 'Borrador de respuesta',
+    description: 'Redacción de respuesta técnica con soporte probatorio.',
+    state: 'active',
+  },
+  {
+    label: 'Radicación',
+    description: 'Envío formal dentro del término legal.',
+    state: 'pending',
+  },
+  {
+    label: 'Seguimiento',
+    description: 'Monitoreo de la respuesta de la administración.',
+    state: 'pending',
+  },
+];
+
+const CASES: CaseItem[] = [
+  {
+    title: 'Requerimiento ordinario renta',
+    meta: 'En curso · vence en 11 días',
+    status: 'warning',
+    statusLabel: 'En curso',
+  },
+  {
+    title: 'Pliego de cargos IVA 2024',
+    meta: 'Resuelto a favor',
+    status: 'success',
+    statusLabel: 'Ganado',
+  },
+];
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function StatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-n-200/60 bg-n-0/60 px-5 py-4 backdrop-blur-sm dark:border-n-800/60 dark:bg-n-900/40">
+      <span className="text-xs font-medium uppercase tracking-wider text-n-500">{label}</span>
+      <span
+        className="text-3xl font-semibold tabular-nums leading-none"
+        style={accent ? { color: AC } : undefined}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function StepIndicator({ state, index }: { state: StepState; index: number }) {
+  if (state === 'done') {
+    return (
+      <span
+        className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+        style={{ background: AC }}
+        aria-label="Completado"
+      >
+        <CheckCircle2 className="h-4 w-4 text-white" strokeWidth={2.5} />
+      </span>
+    );
+  }
+  if (state === 'active') {
+    return (
+      <span
+        className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 bg-n-0 text-sm font-bold dark:bg-n-950"
+        style={{ borderColor: AC, color: AC }}
+        aria-label="En progreso"
+      >
+        {index + 1}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-n-300 bg-n-0 text-sm text-n-400 dark:border-n-700 dark:bg-n-950"
+      aria-label="Pendiente"
+    >
+      <Circle className="h-3.5 w-3.5" strokeWidth={1.5} />
+    </span>
+  );
+}
+
+function VerticalStepper({ steps }: { steps: Step[] }) {
+  return (
+    <ol className="flex flex-col">
+      {steps.map((step, i) => {
+        const isLast = i === steps.length - 1;
+        const isDone = step.state === 'done';
+        const isActive = step.state === 'active';
+
+        return (
+          <li key={step.label} className="relative flex gap-4">
+            {/* connector line */}
+            {!isLast && (
+              <span
+                aria-hidden="true"
+                className="absolute left-4 top-8 h-[calc(100%-8px)] w-0.5 -translate-x-1/2"
+                style={{
+                  background: isDone ? AC : 'rgb(var(--color-n-200-rgb, 220 220 220))',
+                }}
+              />
+            )}
+
+            <StepIndicator state={step.state} index={i} />
+
+            <div className="pb-7 pt-0.5 min-w-0">
+              <p
+                className="text-sm leading-tight"
+                style={
+                  isActive
+                    ? { fontWeight: 700, color: AC }
+                    : isDone
+                    ? { fontWeight: 600 }
+                    : { color: 'var(--color-n-500, #888)' }
+                }
+              >
+                {step.label}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-n-500">{step.description}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function BadgePill({ status, label }: { status: 'warning' | 'success'; label: string }) {
+  const styles =
+    status === 'success'
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400';
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles}`}>
+      {label}
+    </span>
+  );
+}
+
+function CaseRow({ item }: { item: CaseItem }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-n-200/60 bg-n-0/60 px-4 py-3 backdrop-blur-sm dark:border-n-800/50 dark:bg-n-900/40">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+        style={{ background: 'rgba(168,56,56,0.12)', color: AC }}
+        aria-hidden="true"
+      >
+        <Gavel className="h-4.5 w-4.5" strokeWidth={1.75} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-n-900 dark:text-n-100">{item.title}</p>
+        <p className="mt-0.5 text-xs text-n-500">{item.meta}</p>
+      </div>
+      <BadgePill status={item.status} label={item.statusLabel} />
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DefensaDianPage() {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const reduced = useReducedMotion();
   const { openIntakeForType } = useWorkspace();
-
-  const copy = t.elite.areas.escudo.submodules.defensaDian;
 
   const handleStart = useCallback(() => {
     openIntakeForType('dian_defense');
   }, [openIntakeForType]);
 
-  const capabilities =
-    language === 'es'
-      ? [
-          {
-            icon: Search,
-            title: 'Detección automática de fallas',
-            body: 'Análisis inmediato del requerimiento: identificamos defectos de forma, caducidad, prescripción y errores de procedimiento que debilitan la posición de la DIAN.',
-          },
-          {
-            icon: FileText,
-            title: 'Armado técnico de respuesta',
-            body: 'Construcción estructurada de la respuesta con marco normativo (E.T. 2026), doctrina DIAN y jurisprudencia aplicable, optimizada para reducir sanciones.',
-          },
-          {
-            icon: Gavel,
-            title: 'Estrategia jurisprudencial',
-            body: 'Cruce automático con sentencias del Consejo de Estado y conceptos DIAN recientes. El sistema sugiere los precedentes más fuertes para cada alegato.',
-          },
-        ]
-      : [
-          {
-            icon: Search,
-            title: 'Automated weakness detection',
-            body: 'Instant analysis of the notice: we identify procedural defects, statute of limitations, and administrative errors that weaken DIANʼs position.',
-          },
-          {
-            icon: FileText,
-            title: 'Technical response drafting',
-            body: 'Structured response construction with regulatory framework (Tax Statute 2026), DIAN doctrine, and applicable case law, optimized to reduce penalties.',
-          },
-          {
-            icon: Gavel,
-            title: 'Case-law strategy',
-            body: 'Automatic cross-reference with Council of State rulings and recent DIAN concepts. The system surfaces the strongest precedents for each argument.',
-          },
-        ];
-
-  const articles =
-    language === 'es'
-      ? [
-          {
-            code: 'Art. 641 E.T.',
-            title: 'Extemporaneidad',
-            summary: 'Sanción por presentar declaración fuera de plazo. 5% mensual, tope 100%.',
-          },
-          {
-            code: 'Art. 647 E.T.',
-            title: 'Inexactitud',
-            summary: '100% de la diferencia entre el saldo a pagar correcto y el declarado.',
-          },
-          {
-            code: 'Art. 651 E.T.',
-            title: 'No enviar información',
-            summary: 'Hasta 15.000 UVT. Gradualidad por entrega tardía o incorrecta.',
-          },
-          {
-            code: 'Art. 744 E.T.',
-            title: 'Requerimiento ordinario',
-            summary: 'Plazo de respuesta: 15 días hábiles. Silencio = aceptación.',
-          },
-        ]
-      : [
-          {
-            code: 'Art. 641 T.S.',
-            title: 'Late filing',
-            summary: 'Penalty for filing a late return. 5% per month, capped at 100%.',
-          },
-          {
-            code: 'Art. 647 T.S.',
-            title: 'Inaccuracy',
-            summary: '100% of the difference between the correct tax payable and the declared one.',
-          },
-          {
-            code: 'Art. 651 T.S.',
-            title: 'Failure to report',
-            summary: 'Up to 15,000 UVT. Graduated penalty for late or incorrect submission.',
-          },
-          {
-            code: 'Art. 744 T.S.',
-            title: 'Ordinary notice',
-            summary: 'Response window: 15 business days. Silence implies acceptance.',
-          },
-        ];
-
-  const fadeItem = (i: number) =>
+  const fade = (i: number) =>
     reduced
       ? {}
       : {
-          initial: { opacity: 0, y: 12 },
+          initial: { opacity: 0, y: 10 },
           animate: { opacity: 1, y: 0 },
-          transition: {
-            duration: 0.45,
-            delay: 0.05 + i * 0.07,
-            ease: [0.16, 1, 0.3, 1] as const,
-          },
+          transition: { duration: 0.4, delay: 0.04 + i * 0.07, ease: [0.16, 1, 0.3, 1] as const },
         };
 
   return (
-    <div
-      className="relative w-full min-h-full overflow-y-auto"
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-      >
+    <div className="relative w-full min-h-full overflow-y-auto">
+      {/* ambient glow */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
-          className="absolute -top-[15%] left-[15%] w-[500px] h-[500px] rounded-full blur-[120px] opacity-25"
-          style={{
-            background: 'radial-gradient(circle, rgba(114,47,55,0.4) 0%, rgba(114,47,55,0) 70%)',
-          }}
+          className="absolute -top-[15%] left-[10%] h-[480px] w-[480px] rounded-full blur-[120px] opacity-20"
+          style={{ background: 'radial-gradient(circle, rgba(168,56,56,0.45) 0%, transparent 70%)' }}
         />
       </div>
 
-      <div className="relative z-[1] max-w-[1240px] mx-auto px-6 md:px-10 pt-6 pb-24">
-        {/* Breadcrumb */}
-        <motion.div {...fadeItem(0)} className="mb-6">
+      <div className="relative z-[1] max-w-[860px] mx-auto px-5 md:px-10 pt-6 pb-24 space-y-8">
+
+        {/* Back link */}
+        <motion.div {...fade(0)}>
           <Link
             href="/workspace/escudo"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-gold-500 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-n-800 transition-colors dark:hover:text-n-200"
           >
-            <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             {language === 'es' ? 'El Escudo' : 'The Shield'}
           </Link>
         </motion.div>
 
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">
-          {/* Columna principal */}
-          <div className="min-w-0">
-            {/* Hero */}
-            <motion.div {...fadeItem(1)} className="mb-10 flex items-start gap-5">
-              <div
-                aria-hidden="true"
-                className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[rgba(114,47,55,0.18)] text-area-escudo glow-wine"
-              >
-                <Shield className="h-7 w-7" strokeWidth={1.75} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <SectionHeader
-                  eyebrow={language === 'es' ? 'Defensa Contenciosa' : 'Litigation Defense'}
-                  title={copy.title}
-                  subtitle={copy.description}
-                  align="left"
-                  accent="wine"
-                />
-              </div>
-            </motion.div>
-
-            {/* Narrativa larga */}
-            <motion.div
-              {...fadeItem(2)}
-              className="prose max-w-none mb-10 space-y-5 text-md leading-relaxed text-n-700"
-            >
-              <p>
-                {language === 'es'
-                  ? 'Un requerimiento DIAN no es una sentencia. Es una oportunidad — si se responde con precisión técnica y en el plazo exacto. Nuestro motor de Defensa DIAN convierte cada acto administrativo en una batalla estructurada: analizamos el expediente, identificamos las vulnerabilidades procesales y construimos la respuesta más sólida posible.'
-                  : 'A DIAN notice is not a verdict. It is an opportunity — if it is answered with technical precision and within the exact deadline. Our DIAN Defense engine turns every administrative act into a structured battle: we analyze the file, identify procedural vulnerabilities, and build the strongest possible response.'}
-              </p>
-              <p>
-                {language === 'es'
-                  ? 'El sistema cruza automáticamente el Estatuto Tributario vigente, la doctrina DIAN aplicable y la jurisprudencia reciente del Consejo de Estado para detectar argumentos que normalmente pasan desapercibidos: caducidades no invocadas, cargas probatorias mal asignadas, interpretaciones jurisprudenciales favorables y precedentes que refuerzan la posición del contribuyente.'
-                  : 'The system automatically cross-references the current Tax Statute, applicable DIAN doctrine, and recent Council of State rulings to surface arguments that normally go unnoticed: unclaimed statutes of limitations, misallocated burdens of proof, favorable judicial interpretations, and precedents that strengthen the taxpayerʼs position.'}
-              </p>
-              <p>
-                {language === 'es'
-                  ? 'El resultado es un borrador técnico profesional: estructurado bajo los estándares de la jurisdicción contenciosa, con citas verificables, cálculo de sanciones, y una estrategia de defensa escalonada — administrativa primero, contenciosa si es necesaria. Usted revisa, ajusta y firma. El tiempo que antes tomaba semanas, ahora se resuelve en horas.'
-                  : 'The output is a professional technical draft: structured under contentious-jurisdiction standards, with verifiable citations, penalty calculations, and a layered defense strategy — administrative first, litigation if necessary. You review, adjust, and sign. What used to take weeks now resolves in hours.'}
-              </p>
-            </motion.div>
-
-            {/* Capabilities grid */}
-            <motion.div {...fadeItem(3)} className="grid gap-4 md:grid-cols-3 mb-10">
-              {capabilities.map((cap) => (
-                <EliteCard key={cap.title} variant="glass" padding="md" hover="none">
-                  <div className="flex flex-col gap-3">
-                    <span
-                      aria-hidden="true"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
-                    >
-                      <cap.icon className="h-5 w-5" strokeWidth={1.75} />
-                    </span>
-                    <h3 className="font-serif-elite text-lg leading-tight font-normal text-n-1000">
-                      {cap.title}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-n-700">{cap.body}</p>
-                  </div>
-                </EliteCard>
-              ))}
-            </motion.div>
-
-            {/* CTA */}
-            <motion.div
-              {...fadeItem(4)}
-              className={cn(
-                'relative overflow-hidden rounded-xl p-6 md:p-8',
-                'glass-elite-elevated border-elite-gold glow-gold-soft',
-              )}
-            >
-              <div
-                aria-hidden="true"
-                className="absolute -right-24 -top-24 w-[320px] h-[320px] rounded-full blur-[110px] opacity-40"
-                style={{
-                  background:
-                    'radial-gradient(circle, rgba(114,47,55,0.4) 0%, rgba(114,47,55,0) 70%)',
-                }}
-              />
-              <div className="relative z-[1] flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-                <div className="flex items-start gap-3 md:max-w-xl">
-                  <span
-                    aria-hidden="true"
-                    className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(114,47,55,0.2)] text-area-escudo"
-                  >
-                    <ShieldCheck className="h-5 w-5" strokeWidth={1.75} />
-                  </span>
-                  <div>
-                    <h3 className="font-serif-elite text-xl leading-tight text-n-1000 mb-1.5">
-                      {language === 'es'
-                        ? 'Inicie un caso de defensa DIAN'
-                        : 'Open a DIAN defense case'}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-n-700">
-                      {language === 'es'
-                        ? 'Cargue el requerimiento, indique el plazo y el tributo. El motor preparará el primer borrador en minutos.'
-                        : 'Upload the notice, indicate the deadline and tax type. The engine prepares the first draft in minutes.'}
-                    </p>
-                  </div>
-                </div>
-                <EliteButton
-                  variant="wine"
-                  size="lg"
-                  onClick={handleStart}
-                  rightIcon={<ShieldCheck className="h-4 w-4" strokeWidth={2} />}
-                  glow
-                >
-                  {language === 'es' ? 'Iniciar caso de defensa' : 'Start defense case'}
-                </EliteButton>
-              </div>
-            </motion.div>
+        {/* Sub-header */}
+        <motion.div {...fade(1)} className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider" style={{ color: AC }}>
+            <Shield className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+            <span>{language === 'es' ? 'El Escudo — Defensa DIAN' : 'The Shield — DIAN Defense'}</span>
           </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-n-1000">
+            {language === 'es' ? 'Defensa DIAN' : 'DIAN Defense'}
+          </h1>
+          <p className="max-w-xl text-base leading-relaxed text-n-700">
+            {language === 'es'
+              ? 'Estructuramos su defensa ante requerimientos, pliegos de cargos y liquidaciones oficiales — del diagnóstico a la radicación.'
+              : 'We structure your defense against notices, charges, and official assessments — from diagnosis to filing.'}
+          </p>
+        </motion.div>
 
-          {/* Sidebar derecho — tips del experto */}
-          <aside className="lg:sticky lg:top-6 self-start space-y-5">
-            <motion.div {...fadeItem(5)}>
-              <EliteCard variant="bordered" padding="md" hover="none">
-                <div className="flex items-center gap-2 mb-4">
-                  <Scale className="h-4 w-4 text-gold-500" strokeWidth={2} aria-hidden="true" />
-                  <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500">
-                    {language === 'es' ? 'Tips del experto' : 'Expert tips'}
-                  </span>
-                </div>
-                <ul role="list" className="space-y-3 text-sm leading-relaxed text-n-700">
-                  <li className="flex gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-gold-500"
-                    />
-                    <span>
-                      {language === 'es'
-                        ? 'Nunca responda sin verificar la caducidad del acto (Art. 714 E.T.).'
-                        : 'Never respond without checking the statute of limitations (Art. 714 T.S.).'}
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-gold-500"
-                    />
-                    <span>
-                      {language === 'es'
-                        ? 'Toda argumentación se refuerza con doctrina DIAN y precedente del C. de E.'
-                        : 'Every argument is stronger when backed by DIAN doctrine and Council of State precedent.'}
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="shrink-0 mt-1.5 h-1 w-1 rounded-full bg-gold-500"
-                    />
-                    <span>
-                      {language === 'es'
-                        ? 'Si el requerimiento omite la motivación, pídala por derecho de petición.'
-                        : 'If the notice lacks reasoning, request it via right of petition.'}
-                    </span>
-                  </li>
-                </ul>
-              </EliteCard>
-            </motion.div>
+        {/* Stats row */}
+        <motion.section {...fade(2)} aria-labelledby="stats-heading">
+          <h2 id="stats-heading" className="mb-3 text-sm font-semibold uppercase tracking-wider text-n-500">
+            {language === 'es' ? 'Resumen' : 'Summary'}
+          </h2>
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label={language === 'es' ? 'Casos activos' : 'Active cases'} value={2} />
+            <StatCard label={language === 'es' ? 'Ganados' : 'Won'} value={14} />
+            <StatCard label={language === 'es' ? 'Tasa de éxito' : 'Success rate'} value="92%" accent />
+          </div>
+        </motion.section>
 
-            <motion.div {...fadeItem(6)}>
-              <EliteCard variant="glass" padding="md" hover="none">
-                <div className="flex items-center gap-2 mb-4">
-                  <ScrollText
-                    className="h-4 w-4 text-area-escudo"
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                  <span className="uppercase tracking-eyebrow text-xs font-medium text-area-escudo">
-                    {language === 'es'
-                      ? 'Artículos destacados'
-                      : 'Key articles'}
-                  </span>
-                </div>
-                <ul role="list" className="space-y-3">
-                  {articles.map((a) => (
-                    <li key={a.code} className="flex flex-col gap-0.5">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-gold-600 tabular-nums">
-                          {a.code}
-                        </span>
-                        <span className="text-xs font-medium text-n-1000">
-                          {a.title}
-                        </span>
-                      </div>
-                      <p className="text-xs text-n-700 leading-snug">{a.summary}</p>
-                    </li>
-                  ))}
-                </ul>
-              </EliteCard>
-            </motion.div>
+        {/* Pipeline stepper */}
+        <motion.section {...fade(3)} aria-labelledby="pipeline-heading">
+          <div className="mb-4 flex flex-col gap-0.5">
+            <h2 id="pipeline-heading" className="text-sm font-semibold uppercase tracking-wider text-n-500">
+              {language === 'es' ? 'Proceso del caso actual' : 'Current case pipeline'}
+            </h2>
+            <p className="text-xs text-n-500">
+              {language === 'es'
+                ? 'Requerimiento ordinario — Grupo 2tres S.A.S.'
+                : 'Ordinary notice — Grupo 2tres S.A.S.'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-n-200/60 bg-n-0/60 px-6 py-6 backdrop-blur-sm dark:border-n-800/50 dark:bg-n-900/40">
+            <VerticalStepper steps={STEPS} />
+          </div>
+        </motion.section>
 
-            <motion.div {...fadeItem(7)}>
-              <EliteCard variant="glass" padding="md" hover="none">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertOctagon
-                    className="h-4 w-4 text-warning"
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                  <span className="uppercase tracking-eyebrow text-xs font-medium text-warning">
-                    {language === 'es' ? 'Plazos críticos' : 'Critical deadlines'}
-                  </span>
-                </div>
-                <p className="text-xs leading-relaxed text-n-700">
-                  {language === 'es'
-                    ? 'Requerimiento ordinario: 15 días hábiles. Especial: 3 meses. Liquidación oficial: recurso de reconsideración 2 meses.'
-                    : 'Ordinary notice: 15 business days. Special: 3 months. Official assessment: reconsideration appeal within 2 months.'}
-                </p>
-              </EliteCard>
-            </motion.div>
-          </aside>
-        </div>
+        {/* Cases list */}
+        <motion.section {...fade(4)} aria-labelledby="cases-heading">
+          <h2 id="cases-heading" className="mb-3 text-sm font-semibold uppercase tracking-wider text-n-500">
+            {language === 'es' ? 'Casos' : 'Cases'}
+          </h2>
+          <div className="flex flex-col gap-2.5">
+            {CASES.map((c) => (
+              <CaseRow key={c.title} item={c} />
+            ))}
+          </div>
+        </motion.section>
+
+        {/* CTA */}
+        <motion.div {...fade(5)}>
+          <EliteButton
+            variant="wine"
+            size="lg"
+            onClick={handleStart}
+            glow
+          >
+            {language === 'es' ? 'Iniciar caso de defensa' : 'Start defense case'}
+          </EliteButton>
+        </motion.div>
+
       </div>
     </div>
   );

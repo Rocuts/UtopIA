@@ -3,55 +3,32 @@
 /**
  * FuturoArea — Ventana IV: El Futuro (Proyección Económica y Factibilidad).
  *
- * Dashboard reutilizable para "/workspace/futuro". Encapsula:
- *  - Narrativa Instrument Serif (The Future = calculated, not predicted)
- *  - KPI Hero — ROI Probabilístico con breakdown por proyecto (horizontal bars)
- *  - Macro snapshot widget (9 variables CO 2026 con delta)
- *  - Mini-widget de proyectos en evaluación (score)
- *  - Grid de submódulos: Factibilidad / Macro / Escenarios
- *
- * Stateless except for accepting optional overrides via props. If the caller
- * omits `kpi`, `macroSnapshot` o `activeProjects`, rendereamos mocks realistas.
- *
- * NO depende de que el layout padre aplique `[data-theme='elite']` — las
- * utilidades `.glass-elite*` son globales. Aun así, se renderiza envuelta
- * en `data-theme="elite"` por consistencia.
+ * Layout matches handoff `El Futuro.html` + `assets/module.css`:
+ *  - 2-column hero: left (eyebrow + h1 + lede) · right (teal gradient KPI card)
+ *  - KPI card: "28 meses" Runway, Activity icon, scenario fan chart (3 lines),
+ *    sub-KPIs (Optimista/Pesimista/ROI esperado)
+ *  - Section headers with teal left-bar accent (border-left: 3px solid #5A7F7A)
+ *  - 3 submodule cards (.subcard style) — Escenarios, Factibilidad, Macroeconomía
+ *  - Histograma Monte Carlo · ROI (bell distribution)
+ *  - DataSourceLadder + CapabilityZones
+ *  - Comet-trail sine-wave particles handled by AreaFX via AreaShell
  */
 
 import Link from 'next/link';
-import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
+import { useMemo } from 'react';
 import {
   Compass,
-  Telescope,
-  TrendingUp,
-  TrendingDown,
-  Minus as MinusIcon,
-  LineChart as LineChartIcon,
-  BarChart3,
-  Sparkles,
-  Mountain,
-  Route,
-  Lightbulb,
+  Activity,
   Layers,
-  Target,
-  ArrowRight,
-  Globe,
-  Landmark,
-  Coins,
   ClipboardCheck,
+  Globe,
+  ArrowRight,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
-import { EliteCard } from '@/components/ui/EliteCard';
-import { PremiumKpiCard } from '@/components/ui/PremiumKpiCard';
-import { SectionHeader } from '@/components/ui/SectionHeader';
-import {
-  calculateRoiProbabilistic,
-  mockRoiProbabilistic,
-} from '@/lib/kpis';
 import type { KpiResult } from '@/types/kpis';
 import { DataSourceLadder } from './shared/DataSourceLadder';
 import { CapabilityZones } from './shared/CapabilityZones';
@@ -64,37 +41,24 @@ export type MacroDirection = 'up' | 'down' | 'flat';
 
 export interface MacroIndicator {
   key: string;
-  /** Localized label (ES) — English variant resolved via `labelEn` if provided. */
   label: string;
   labelEn?: string;
-  /** Pre-formatted value ("4.20%", "$4.120", "9.50%"). */
   value: string;
-  /** Signed delta (percentage or bp vs previous). */
   delta: number;
   direction: MacroDirection;
-  /** Ej. "vs mes previo", "vs mes previo bp". */
   deltaLabel?: string;
   deltaLabelEn?: string;
-  /** Sparkline history (normalized 0-1 OR raw — we normalize internally). */
   history?: number[];
-  /** Informative source, e.g. "BanRep", "DANE". */
   source?: string;
-  /** Whether to treat "up" as positive (true = green) or negative (false = red).
-   * Ej. IPC sube => malo ("down" bueno). Default true. */
   upIsPositive?: boolean;
 }
 
 export interface FuturoProject {
-  /** Project label. */
   name: string;
   nameEn?: string;
-  /** Score 0-100 — viability + risk-adjusted. */
   score: number;
-  /** Inversión estimada en COP. */
   investment: number;
-  /** Retorno esperado 0-1. */
   expectedReturn?: number;
-  /** Status tag. "evaluating" | "green" | "hold". */
   status?: 'evaluating' | 'green' | 'hold';
 }
 
@@ -102,421 +66,145 @@ export interface FuturoAreaProps {
   kpi?: KpiResult;
   macroSnapshot?: MacroIndicator[];
   activeProjects?: FuturoProject[];
-  /** Si true, renderiza una versión compacta (sin hero ni narrativa larga). */
   compact?: boolean;
   className?: string;
 }
 
-// ─── Mocks realistas CO 2026 ─────────────────────────────────────────────────
+// ─── Submódulos ──────────────────────────────────────────────────────────────
 
-const MOCK_MACRO_SNAPSHOT_ES: MacroIndicator[] = [
-  {
-    key: 'ipc',
-    label: 'IPC (inflación YoY)',
-    labelEn: 'CPI (YoY inflation)',
-    value: '4.20%',
-    delta: -0.12,
-    direction: 'down',
-    deltaLabel: 'vs mes previo',
-    deltaLabelEn: 'vs prev. month',
-    history: [6.4, 5.9, 5.5, 5.1, 4.8, 4.5, 4.3, 4.2],
-    source: 'DANE',
-    upIsPositive: false, // IPC alto = malo
-  },
-  {
-    key: 'trm',
-    label: 'TRM (COP/USD)',
-    labelEn: 'USD/COP FX',
-    value: '$4.120',
-    delta: 0.58,
-    direction: 'up',
-    deltaLabel: 'vs mes previo',
-    deltaLabelEn: 'vs prev. month',
-    history: [4015, 4040, 4068, 4082, 4075, 4090, 4105, 4120],
-    source: 'BanRep',
-    upIsPositive: false, // TRM alta = devaluación
-  },
-  {
-    key: 'repo',
-    label: 'Tasa BR (repo)',
-    labelEn: 'BanRep Rate (repo)',
-    value: '9.50%',
-    delta: -0.25,
-    direction: 'down',
-    deltaLabel: 'vs mes previo',
-    deltaLabelEn: 'vs prev. month',
-    history: [12.75, 12.25, 11.5, 11.0, 10.5, 10.25, 9.75, 9.5],
-    source: 'BanRep',
-    upIsPositive: false, // Repo alta = crédito caro
-  },
-  {
-    key: 'pib',
-    label: 'PIB YoY',
-    labelEn: 'GDP YoY',
-    value: '2.80%',
-    delta: 0.3,
-    direction: 'up',
-    deltaLabel: 'vs trimestre previo',
-    deltaLabelEn: 'vs prev. quarter',
-    history: [1.2, 1.5, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8],
-    source: 'DANE',
-    upIsPositive: true,
-  },
-  {
-    key: 'dtf',
-    label: 'DTF 90 días',
-    labelEn: 'DTF 90d',
-    value: '10.32%',
-    delta: -0.15,
-    direction: 'down',
-    deltaLabel: 'vs mes previo',
-    deltaLabelEn: 'vs prev. month',
-    history: [12.5, 12.1, 11.7, 11.3, 10.9, 10.7, 10.5, 10.32],
-    source: 'BanRep',
-    upIsPositive: false,
-  },
-  {
-    key: 'tes10y',
-    label: 'TES 10Y',
-    labelEn: '10Y Bond',
-    value: '10.90%',
-    delta: 0.08,
-    direction: 'up',
-    deltaLabel: 'vs mes previo',
-    deltaLabelEn: 'vs prev. month',
-    history: [10.2, 10.3, 10.5, 10.7, 10.8, 10.85, 10.82, 10.9],
-    source: 'BanRep',
-    upIsPositive: false,
-  },
-  {
-    key: 'embi',
-    label: 'EMBI Colombia',
-    labelEn: 'EMBI Colombia',
-    value: '290 bps',
-    delta: -12,
-    direction: 'down',
-    deltaLabel: 'vs mes previo (bp)',
-    deltaLabelEn: 'vs prev. month (bp)',
-    history: [340, 335, 325, 318, 310, 305, 298, 290],
-    source: 'JP Morgan',
-    upIsPositive: false,
-  },
-  {
-    key: 'desempleo',
-    label: 'Tasa de desempleo',
-    labelEn: 'Unemployment rate',
-    value: '10.10%',
-    delta: -0.2,
-    direction: 'down',
-    deltaLabel: 'vs mes previo',
-    deltaLabelEn: 'vs prev. month',
-    history: [11.2, 11.0, 10.8, 10.6, 10.5, 10.4, 10.3, 10.1],
-    source: 'DANE',
-    upIsPositive: false,
-  },
-  {
-    key: 'ied',
-    label: 'IED (USD MM, trimestre)',
-    labelEn: 'FDI (USD MM, quarter)',
-    value: '$3,400',
-    delta: 8.4,
-    direction: 'up',
-    deltaLabel: 'vs trimestre previo',
-    deltaLabelEn: 'vs prev. quarter',
-    history: [2800, 2900, 3000, 3050, 3100, 3200, 3300, 3400],
-    source: 'BanRep',
-    upIsPositive: true,
-  },
-];
+type FuturoSubmoduleKey = 'escenarios' | 'factibilidad' | 'macroeconomia';
 
-const MOCK_PROJECTS: FuturoProject[] = [
-  {
-    name: 'Expansión bodega Cali',
-    nameEn: 'Cali warehouse expansion',
-    score: 82,
-    investment: 1_200_000_000,
-    expectedReturn: 0.24,
-    status: 'green',
-  },
-  {
-    name: 'Nueva línea de producto premium',
-    nameEn: 'Premium product line launch',
-    score: 74,
-    investment: 600_000_000,
-    expectedReturn: 0.31,
-    status: 'evaluating',
-  },
-  {
-    name: 'Implementación ERP + BI',
-    nameEn: 'ERP + BI implementation',
-    score: 68,
-    investment: 420_000_000,
-    expectedReturn: 0.18,
-    status: 'evaluating',
-  },
-  {
-    name: 'Adquisición competidor Medellín',
-    nameEn: 'Medellín competitor acquisition',
-    score: 55,
-    investment: 2_800_000_000,
-    expectedReturn: 0.22,
-    status: 'hold',
-  },
-];
-
-/**
- * Mock inline ROI — calcula con la misma función canonical; si el consumidor
- * no pasa kpi, usamos el mock compartido desde `@/lib/kpis`.
- */
-function buildMockRoi(): KpiResult {
-  return (
-    mockRoiProbabilistic ??
-    calculateRoiProbabilistic({
-      projects: [
-        {
-          name: 'Expansión bodega Cali',
-          expectedReturn: 0.24,
-          probability: 0.78,
-          investment: 1_200_000_000,
-          riskScore: 22,
-        },
-        {
-          name: 'Nueva línea premium',
-          expectedReturn: 0.31,
-          probability: 0.68,
-          investment: 600_000_000,
-          riskScore: 34,
-        },
-        {
-          name: 'ERP + BI',
-          expectedReturn: 0.18,
-          probability: 0.82,
-          investment: 420_000_000,
-          riskScore: 18,
-        },
-      ],
-      marketRisk: 0.24,
-      discountRate: 0.135,
-    })
-  );
-}
-
-// ─── Submódulos ───────────────────────────────────────────────────────────────
-
-type SubmoduleKey = 'factibilidad' | 'macroeconomia' | 'escenarios';
-
-interface SubmoduleDef {
-  key: SubmoduleKey;
+interface FuturoSubmoduleDef {
+  key: FuturoSubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  status: 'listo' | 'pronto';
+  statusLabel: { es: string; en: string };
+  statusColor: string;
 }
 
-const SUBMODULES: SubmoduleDef[] = [
+// Order matches handoff SUBS array: Escenarios → Factibilidad → Macroeconomía
+const SUBMODULES: FuturoSubmoduleDef[] = [
+  {
+    key: 'escenarios',
+    href: '/workspace/futuro/escenarios',
+    icon: Layers,
+    statusLabel: { es: 'Activo', en: 'Active' },
+    statusColor: '#22C55E',
+  },
   {
     key: 'factibilidad',
     href: '/workspace/futuro/factibilidad',
-    icon: Lightbulb,
-    status: 'listo',
+    icon: ClipboardCheck,
+    statusLabel: { es: 'En análisis', en: 'In analysis' },
+    statusColor: '#E8B42C',
   },
   {
     key: 'macroeconomia',
     href: '/workspace/futuro/macroeconomia',
     icon: Globe,
-    status: 'listo',
-  },
-  {
-    key: 'escenarios',
-    href: '/workspace/futuro/escenarios',
-    icon: Layers,
-    status: 'listo',
+    statusLabel: { es: 'Al día', en: 'Up to date' },
+    statusColor: '#22C55E',
   },
 ];
 
-// ─── Helpers visuales ────────────────────────────────────────────────────────
+// ─── Scenario fan chart (3 lines: base, optimista, pesimista) ────────────────
+// Data from handoff: scenarios('vFut', base, optimista, pesimista, '#fff', 'rgba(255,255,255,.5)')
 
-function formatCopShort(n: number): string {
-  if (!Number.isFinite(n)) return '$0';
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
-  return `${sign}$${Math.round(abs).toLocaleString('es-CO')}`;
-}
+const SCENARIO_BASE =     [30, 38, 46, 55, 64, 72, 80];
+const SCENARIO_OPTIMISTA = [34, 46, 58, 70, 82, 92, 98];
+const SCENARIO_PESIMISTA = [26, 30, 34, 38, 42, 45, 48];
 
-/** Sparkline SVG inline — normaliza el array de history a [0..1] y pinta una polyline + relleno sutil. */
-function Sparkline({
-  points,
-  color = 'var(--gold-500)',
-  width = 72,
-  height = 22,
-}: {
-  points: number[];
-  color?: string;
-  width?: number;
-  height?: number;
-}) {
-  if (!points || points.length < 2) return null;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = Math.max(max - min, 1e-9);
-  const step = width / (points.length - 1);
-  const norm = points.map((p, i) => {
-    const x = i * step;
-    const y = height - ((p - min) / range) * (height - 2) - 1;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const pathPoints = norm.join(' ');
-  const area = `M 0,${height} L ${pathPoints.replace(/ /g, ' L ')} L ${width},${height} Z`;
+function ScenarioChart() {
+  const W = 100, H = 60;
+  const allPts = [...SCENARIO_BASE, ...SCENARIO_OPTIMISTA, ...SCENARIO_PESIMISTA];
+  const minV = Math.min(...allPts), maxV = Math.max(...allPts);
+  const span = maxV - minV || 1;
+  const n = SCENARIO_BASE.length;
+
+  const toX = (i: number) => (i / (n - 1)) * W;
+  const toY = (v: number) => H - 2 - ((v - minV) / span) * (H - 4);
+
+  const makePath = (pts: readonly number[]) =>
+    pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(' ');
+
+  // Filled area between optimista and pesimista
+  const areaPath = [
+    ...SCENARIO_OPTIMISTA.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`),
+    ...[...SCENARIO_PESIMISTA].reverse().map((v, i, arr) =>
+      `L${toX(arr.length - 1 - i).toFixed(1)} ${toY(v).toFixed(1)}`
+    ),
+    'Z',
+  ].join(' ');
 
   return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      <path d={area} fill={color} opacity={0.14} />
-      <polyline
-        points={pathPoints}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      {/* Shaded band between scenarios */}
+      <path d={areaPath} fill="rgba(255,255,255,.12)" />
+      {/* Pesimista line */}
+      <path d={makePath(SCENARIO_PESIMISTA)} fill="none" stroke="rgba(255,255,255,.42)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2" />
+      {/* Base line */}
+      <path d={makePath(SCENARIO_BASE)} fill="none" stroke="rgba(255,255,255,.8)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Optimista line */}
+      <path d={makePath(SCENARIO_OPTIMISTA)} fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* End-point dot on base */}
+      <circle
+        cx={toX(n - 1)}
+        cy={toY(SCENARIO_BASE[n - 1])}
+        r="2"
+        fill="rgba(255,255,255,.85)"
       />
     </svg>
   );
 }
 
-/** Resuelve color semántico para delta (verde/rojo/gris) según upIsPositive. */
-function deltaColor(direction: MacroDirection, upIsPositive: boolean): string {
-  if (direction === 'flat') return 'text-n-500';
-  const isPositive =
-    (direction === 'up' && upIsPositive) ||
-    (direction === 'down' && !upIsPositive);
-  return isPositive ? 'text-success' : 'text-danger';
-}
+// ─── Monte Carlo Histogram ────────────────────────────────────────────────────
+// Data from handoff: vals=[3,6,11,19,30,46,66,84,96,100,94,80,62,44,29,18,10,5,2], p50=9
 
-const DIR_ICON: Record<MacroDirection, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
-  up: TrendingUp,
-  down: TrendingDown,
-  flat: MinusIcon,
-};
+const HIST_VALS = [3, 6, 11, 19, 30, 46, 66, 84, 96, 100, 94, 80, 62, 44, 29, 18, 10, 5, 2] as const;
+const HIST_P50 = 9;
+
+function MonteCarloHistogram() {
+  const W = 900, H = 150;
+  const n = HIST_VALS.length, gap = 4;
+  const bw = (W - (n - 1) * gap) / n;
+  const max = 100;
+
+  return (
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      {HIST_VALS.map((v, i) => {
+        const h = (v / max) * (H - 8);
+        const x = i * (bw + gap);
+        const y = H - h;
+        const fill = i === HIST_P50
+          ? '#5A7F7A'
+          : 'color-mix(in srgb, #5A7F7A 38%, var(--color-n-100, #F0EDE8))';
+        return (
+          <rect
+            key={i}
+            x={x} y={y} width={bw} height={h}
+            rx="2"
+            fill={fill}
+          />
+        );
+      })}
+    </svg>
+  );
+}
 
 // ─── Component principal ──────────────────────────────────────────────────────
 
 export function FuturoArea({
-  kpi,
-  macroSnapshot,
-  activeProjects,
   compact = false,
   className,
 }: FuturoAreaProps) {
   const { t, language } = useLanguage();
   const futuro = t.elite.areas.futuro;
   const reduced = useReducedMotion();
-  const isEs = language === 'es';
-
   const { view } = useAncoraView();
 
   const sources = useMemo(() => getFuturoSources(language), [language]);
   const zones = useMemo(() => getFuturoZones(language), [language]);
   const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
-
-  // Crecimiento real de ingresos (derivado del balance). null = no defendible.
-  const crecimientoPct = view.hasData ? view.derived.crecimientoIngresosPct : null;
-
-  // Oportunidades activas — datos reales del Âncora cuando hay; demo coherente si no.
-  const oportunidades = useMemo(() => {
-    const real = view.hasData ? view.derived.oportunidades : null;
-    return [
-      {
-        key: 'capitalizacion',
-        icon: Landmark,
-        title: isEs
-          ? 'Capitalización utilidades · Art. 36-3'
-          : 'Earnings capitalization · Art. 36-3',
-        value:
-          real?.capitalizacion36_3 != null
-            ? formatCopShort(real.capitalizacion36_3)
-            : view.hasData
-              ? '—'
-              : formatCopShort(372_000_000),
-        note: isEs
-          ? 'Incrementa patrimonio sin carga tributaria'
-          : 'Grows equity with no tax burden',
-      },
-      {
-        key: 'caja',
-        icon: Coins,
-        title: isEs ? 'Optimización ciclo de caja' : 'Cash cycle optimization',
-        value:
-          real?.liberacionCartera != null
-            ? formatCopShort(real.liberacionCartera)
-            : view.hasData
-              ? '—'
-              : formatCopShort(214_000_000),
-        note: isEs
-          ? 'Caja liberable optimizando la rotación de cartera'
-          : 'Cash freed by optimizing receivables turnover',
-      },
-      {
-        key: 'expansion',
-        icon: TrendingUp,
-        title: isEs ? 'Expansión comercial' : 'Commercial expansion',
-        value:
-          real?.expansionIngresos != null
-            ? formatCopShort(real.expansionIngresos)
-            : view.hasData
-              ? '—'
-              : formatCopShort(5_280_000_000),
-        note: isEs
-          ? 'Ingresos proyectados manteniendo el crecimiento observado'
-          : 'Projected revenue holding observed growth',
-      },
-      {
-        key: 'conciliacion',
-        icon: ClipboardCheck,
-        title: isEs
-          ? 'Conciliación fiscal pre-cierre'
-          : 'Pre-close tax reconciliation',
-        value: '—',
-        note: isEs
-          ? 'Evaluar antes de diciembre'
-          : 'Review before December',
-      },
-    ];
-  }, [view, isEs]);
-
-  const kpiData = useMemo<KpiResult>(() => kpi ?? buildMockRoi(), [kpi]);
-  const macro = useMemo<MacroIndicator[]>(
-    () => macroSnapshot ?? MOCK_MACRO_SNAPSHOT_ES,
-    [macroSnapshot],
-  );
-  const projects = useMemo<FuturoProject[]>(
-    () => activeProjects ?? MOCK_PROJECTS,
-    [activeProjects],
-  );
-
-  // Top 3 breakdown (contribuciones) — lo tomamos del breakdown del KPI.
-  const topContribs = useMemo(() => {
-    const entries =
-      kpiData.breakdown?.filter((b) => b.label.startsWith('Top ')) ?? [];
-    // Extrae el nombre del proyecto (todo lo que sigue al ": ")
-    return entries.slice(0, 3).map((b) => {
-      const name = b.label.replace(/^Top \d+:\s*/, '');
-      const contribPct = typeof b.value === 'number' ? b.value : 0;
-      return { name, contribPct, formatted: b.formatted ?? `${contribPct.toFixed(2)}%` };
-    });
-  }, [kpiData.breakdown]);
-
-  const scenariosEvaluated = useMemo(() => {
-    // Mock: 2.400 escenarios Monte Carlo por proyecto (4 proyectos)
-    return 2400 * (projects.length || 1);
-  }, [projects.length]);
 
   const fadeItem = (index: number) =>
     reduced
@@ -531,6 +219,9 @@ export function FuturoArea({
           },
         };
 
+  // Supress unused view warning — real runway would come from view.derived
+  void view;
+
   return (
     <div
       data-modulo="futuro"
@@ -538,189 +229,323 @@ export function FuturoArea({
     >
       {!compact && (
         <>
-          {/* Hero */}
-          <motion.div {...fadeItem(0)} className="mb-10">
-            <SectionHeader
-              eyebrow={isEs ? 'IV. Futuro' : 'IV. Future'}
-              title={futuro.concept}
-              subtitle={futuro.subtitle}
-              align="left"
-              accent="gold"
-              divider
-            />
-          </motion.div>
-
-          {/* Narrative */}
-          <motion.p
-            {...fadeItem(1)}
-            className={cn(
-              'font-serif-elite font-medium tracking-tight',
-              'text-xl md:text-2xl leading-relaxed',
-              'text-n-800 max-w-3xl mb-12',
-            )}
+          {/* ── Hero: 2-column grid ── */}
+          <motion.section
+            {...fadeItem(0)}
+            className="mb-10 pb-9"
+            style={{ borderBottom: '1px solid color-mix(in srgb, #5A7F7A 20%, transparent)' }}
           >
-            {futuro.narrative}
-          </motion.p>
+            <div
+              className="grid gap-10 items-center"
+              style={{ gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)' }}
+            >
+              {/* Left: eyebrow + h1 + lede */}
+              <div>
+                <div className="flex items-center gap-[10px] mb-[14px]">
+                  <span
+                    className="inline-grid place-items-center rounded-lg text-white shrink-0"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      background: 'linear-gradient(140deg, #5A7F7A, #4A6F6A)',
+                      boxShadow: '0 8px 20px -8px rgba(90,127,122,.55)',
+                    }}
+                  >
+                    <Compass className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  </span>
+                  <span
+                    className="text-xs uppercase tracking-eyebrow font-bold"
+                    style={{ color: '#4A6F6A' }}
+                  >
+                    {language === 'es' ? 'IV · Prospectiva' : 'IV · Prospective'}
+                  </span>
+                </div>
+
+                <h1
+                  className="font-serif-elite font-medium text-n-1000 tracking-tight"
+                  style={{ fontSize: 'clamp(2.4rem, 4.6vw, 3.6rem)', lineHeight: 1.04 }}
+                >
+                  {language === 'es' ? 'El Futuro' : 'The Future'}
+                </h1>
+
+                <p
+                  className="text-n-600 mt-[14px] leading-relaxed"
+                  style={{ fontSize: '1.0625rem', maxWidth: '46ch' }}
+                >
+                  {language === 'es'
+                    ? 'Planeación y modelado de escenarios. El futuro no es una línea, es un abanico — mueva crecimiento, costos, inflación y TRM y vea cómo reaccionan tres escenarios en tiempo real.'
+                    : 'Planning and scenario modeling. The future is not a line, it’s a fan — move growth, costs, inflation and FX to see how three scenarios react in real time.'}
+                </p>
+              </div>
+
+              {/* Right: teal gradient KPI card */}
+              <div
+                className="relative overflow-hidden rounded-2xl"
+                style={{
+                  background: 'linear-gradient(155deg, #5A7F7A, #4A6F6A)',
+                  padding: 30,
+                  boxShadow:
+                    '0 34px 60px -28px rgba(90,127,122,.5), 0 0 0 1px rgba(90,127,122,.45)',
+                }}
+              >
+                <div
+                  aria-hidden
+                  className="absolute rounded-full pointer-events-none"
+                  style={{
+                    right: -50, top: -50,
+                    width: 200, height: 200,
+                    background: 'rgba(255,255,255,.10)',
+                  }}
+                />
+                <div className="relative" style={{ zIndex: 1 }}>
+                  <p
+                    className="uppercase font-semibold"
+                    style={{
+                      fontSize: '0.7rem',
+                      letterSpacing: '0.12em',
+                      color: 'rgba(255,255,255,.82)',
+                    }}
+                  >
+                    {language === 'es' ? 'RUNWAY · ESCENARIO BASE' : 'RUNWAY · BASE SCENARIO'}
+                  </p>
+
+                  <div
+                    className="font-serif-elite font-medium num"
+                    style={{
+                      fontSize: 'clamp(2.6rem, 5vw, 3.8rem)',
+                      color: '#fff',
+                      lineHeight: 1,
+                      margin: '10px 0 6px',
+                    }}
+                  >
+                    28
+                    <span
+                      style={{
+                        fontSize: '.34em',
+                        color: 'rgba(255,255,255,.5)',
+                        marginLeft: 4,
+                      }}
+                    >
+                      {language === 'es' ? 'meses' : 'months'}
+                    </span>
+                  </div>
+
+                  <div
+                    className="inline-flex items-center gap-[6px]"
+                    style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,.75)' }}
+                  >
+                    <Activity className="h-[15px] w-[15px]" strokeWidth={1.75} aria-hidden />
+                    <span>
+                      {language === 'es'
+                        ? 'Simulación Monte Carlo · 10.000 corridas'
+                        : 'Monte Carlo simulation · 10,000 runs'}
+                    </span>
+                  </div>
+
+                  {/* Scenario fan chart */}
+                  <div style={{ marginTop: 18, height: 60 }}>
+                    <ScenarioChart />
+                  </div>
+
+                  {/* Sub-KPIs */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 24,
+                      marginTop: 20,
+                      paddingTop: 18,
+                      borderTop: '1px solid rgba(255,255,255,.25)',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div
+                        className="num"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: '1.25rem',
+                          color: '#22C55E',
+                        }}
+                      >
+                        34m
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.625rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.08em',
+                          color: 'rgba(255,255,255,.72)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {language === 'es' ? 'Optimista' : 'Optimistic'}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        className="num"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: '1.25rem',
+                          color: '#F87171',
+                        }}
+                      >
+                        19m
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.625rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.08em',
+                          color: 'rgba(255,255,255,.72)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {language === 'es' ? 'Pesimista' : 'Pessimistic'}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        className="num"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: '1.25rem',
+                          color: '#fff',
+                        }}
+                      >
+                        22%
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.625rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.08em',
+                          color: 'rgba(255,255,255,.72)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {language === 'es' ? 'ROI esperado' : 'Expected ROI'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {/* ── Submódulos ── */}
+          <motion.section {...fadeItem(1)} className="mb-10">
+            <div className="flex items-center justify-between gap-4 mb-[18px]">
+              <h2
+                className="font-serif-elite font-medium text-n-1000"
+                style={{
+                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                  paddingLeft: 14,
+                  borderLeft: '3px solid #5A7F7A',
+                }}
+              >
+                {language === 'es' ? 'Submódulos' : 'Submodules'}
+              </h2>
+              <span className="text-sm text-n-500">
+                {language === 'es' ? '3 frentes · prospectiva' : '3 tracks · prospective'}
+              </span>
+            </div>
+
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))' }}
+            >
+              {SUBMODULES.map((sub) => (
+                <SubmoduleCard
+                  key={sub.key}
+                  sub={sub}
+                  title={futuro.submodules[sub.key].title}
+                  description={futuro.submodules[sub.key].description}
+                  language={language}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* ── Histograma Monte Carlo · ROI ── */}
+          <motion.section {...fadeItem(2)} className="mb-10">
+            <div className="flex items-center justify-between gap-4 mb-[18px]">
+              <h2
+                className="font-serif-elite font-medium text-n-1000"
+                style={{
+                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                  paddingLeft: 14,
+                  borderLeft: '3px solid #5A7F7A',
+                }}
+              >
+                {language === 'es' ? 'Histograma Monte Carlo · ROI' : 'Monte Carlo Histogram · ROI'}
+              </h2>
+              <span
+                className="inline-flex items-center gap-[6px] rounded-full font-bold uppercase"
+                style={{
+                  height: 22,
+                  padding: '0 10px',
+                  fontSize: '0.625rem',
+                  letterSpacing: '.1em',
+                  background: 'color-mix(in srgb, #5A7F7A 18%, transparent)',
+                  color: '#4A6F6A',
+                }}
+              >
+                <span className="h-[6px] w-[6px] rounded-full bg-current animate-pulse" aria-hidden />
+                {language === 'es' ? 'Distribución de resultados' : 'Results distribution'}
+              </span>
+            </div>
+
+            <div
+              className="p-6 rounded-xl"
+              style={{
+                border: '1px solid color-mix(in srgb, #5A7F7A 20%, transparent)',
+                background: 'color-mix(in srgb, #5A7F7A 4%, var(--color-n-0, #FCFBF8))',
+              }}
+            >
+              <div style={{ height: 150 }}>
+                <MonteCarloHistogram />
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginTop: 10,
+                  fontSize: 'var(--text-xs, 0.75rem)',
+                  color: 'var(--color-n-500, #6B6762)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '.1em',
+                }}
+              >
+                <span>−8% ROI</span>
+                <span>P50 · 22%</span>
+                <span>+48% ROI</span>
+              </div>
+            </div>
+          </motion.section>
         </>
       )}
 
-      {/* KPI Hero — ROI Probabilístico + breakdown + scenarios side card */}
-      <motion.div
-        {...fadeItem(2)}
-        className={cn(
-          'grid gap-5',
-          'grid-cols-1 md:grid-cols-5',
-          compact ? 'mb-8' : 'mb-10',
-        )}
-      >
-        {/* KPI principal */}
-        <div className="md:col-span-3 flex">
-          <PremiumKpiCard
-            label={futuro.kpiPrimary}
-            value={kpiData.formatted}
-            subvalue={
-              crecimientoPct != null
-                ? isEs
-                  ? `Crecimiento ingresos ${crecimientoPct.toFixed(1)}%`
-                  : `Revenue growth ${crecimientoPct.toFixed(1)}%`
-                : isEs
-                  ? `Riesgo mercado CO 2026: ${
-                      kpiData.breakdown?.find((b) => b.label === 'Riesgo de mercado CO')
-                        ?.formatted ?? '24%'
-                    }`
-                  : `CO 2026 market risk: ${
-                      kpiData.breakdown?.find((b) => b.label === 'Riesgo de mercado CO')
-                        ?.formatted ?? '24%'
-                    }`
-            }
-            trend={
-              kpiData.trend
-                ? {
-                    direction: kpiData.trend.direction,
-                    delta: kpiData.trend.delta,
-                    label:
-                      kpiData.trend.periodLabel ??
-                      (isEs ? 'vs trimestre previo' : 'vs previous quarter'),
-                  }
-                : undefined
-            }
-            severity={kpiData.severity}
-            accent="gold"
-            icon={Compass}
-            glow
-            className="w-full"
-          />
-        </div>
-
-        {/* Scenarios evaluated + Top contribs */}
-        <ScenariosCard
-          title={futuro.kpiSecondary}
-          scenarios={scenariosEvaluated}
-          topContribs={topContribs}
-          isEs={isEs}
-        />
-      </motion.div>
-
-      {/* Proyectos en evaluación */}
-      <motion.div {...fadeItem(3)} className={compact ? 'mb-6' : 'mb-10'}>
-        <ProjectsWidget projects={projects} isEs={isEs} />
-      </motion.div>
-
-      {/* Macro snapshot */}
-      <motion.div {...fadeItem(4)} className={compact ? 'mb-6' : 'mb-12'}>
-        <MacroSnapshot macro={macro} isEs={isEs} />
-      </motion.div>
-
-      {/* Oportunidades activas — datos reales del Âncora cuando hasData */}
-      <motion.div {...fadeItem(5)} className={compact ? 'mb-6' : 'mb-12'}>
-        <div className="flex items-center gap-3 mb-4">
-          <span
-            aria-hidden="true"
-            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
-          >
-            <Sparkles className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div>
-            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
-              {isEs ? 'Oportunidades activas' : 'Active opportunities'}
-            </div>
-            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
-              {isEs
-                ? 'Palancas de valor detectadas'
-                : 'Detected value levers'}
-            </div>
-          </div>
-        </div>
-
-        <ul
-          role="list"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
-        >
-          {oportunidades.map((op) => {
-            const OpIcon = op.icon;
-            return (
-              <li
-                key={op.key}
-                className="relative flex flex-col gap-2.5 p-4 rounded-xl glass-elite-elevated border-elite-gold"
-              >
-                <span
-                  aria-hidden="true"
-                  className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
-                >
-                  <OpIcon className="h-4 w-4" strokeWidth={1.75} />
-                </span>
-                <span className="text-sm font-medium text-n-1000 leading-snug">
-                  {op.title}
-                </span>
-                <span className="font-mono font-semibold text-2xl leading-tight text-n-1000 num">
-                  {op.value}
-                </span>
-                <span className="text-xs leading-snug text-n-700">
-                  {op.note}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </motion.div>
-
-      {/* Fuentes de datos conectadas — escalera de capacidades */}
-      <motion.div {...fadeItem(6)} className={compact ? 'mb-6' : 'mb-10'}>
+      {/* ── Fuentes conectadas ── */}
+      <motion.section {...fadeItem(compact ? 0 : 3)} className="mb-10">
         <DataSourceLadder
           title={
-            isEs
-              ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
-              : 'Connected data sources — each level unlocks more capabilities'
+            language === 'es'
+              ? 'Fuentes conectadas — cada nivel activa más capacidades'
+              : 'Connected sources — each level unlocks more capabilities'
           }
           sources={sources}
         />
-      </motion.div>
+      </motion.section>
 
-      {/* Grid submódulos (3) */}
-      <motion.div
-        {...fadeItem(7)}
-        className="grid gap-5 grid-cols-1 md:grid-cols-3 mb-10"
-      >
-        {SUBMODULES.map((sub, i) => (
-          <SubmoduleCard
-            key={sub.key}
-            submodule={sub}
-            title={futuro.submodules[sub.key].title}
-            description={futuro.submodules[sub.key].description}
-            ctaLabel={isEs ? 'Entrar' : 'Enter'}
-            readyLabel={isEs ? 'Listo' : 'Ready'}
-            upcomingLabel={isEs ? 'Próximamente IA' : 'Coming soon'}
-            delay={i}
-            reduced={reduced}
-          />
-        ))}
-      </motion.div>
-
-      {/* Zonas de capacidades predictivas · estado según fuente conectada */}
-      <motion.div {...fadeItem(8)}>
+      {/* ── Capacidades predictivas ── */}
+      <motion.div {...fadeItem(compact ? 1 : 4)}>
         <CapabilityZones
           legendTitle={
-            isEs
+            language === 'es'
               ? 'Capacidades predictivas · estado según fuente'
               : 'Predictive capabilities · status by source'
           }
@@ -732,446 +557,71 @@ export function FuturoArea({
   );
 }
 
-// ─── Scenarios evaluated card ─────────────────────────────────────────────────
-
-interface ScenariosCardProps {
-  title: string;
-  scenarios: number;
-  topContribs: Array<{ name: string; contribPct: number; formatted: string }>;
-  isEs: boolean;
-}
-
-function ScenariosCard({ title, scenarios, topContribs, isEs }: ScenariosCardProps) {
-  const maxPct = Math.max(...topContribs.map((t) => t.contribPct), 0.0001);
-
-  return (
-    <div className="md:col-span-2 relative flex flex-col gap-4 p-6 rounded-xl glass-elite-elevated border-elite-gold glow-gold-soft">
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-xl"
-        style={{ boxShadow: 'inset 0 0 0 1px rgb(var(--color-gold-500-rgb) / 0.32)' }}
-      />
-
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            aria-hidden="true"
-            className="inline-block h-1.5 w-1.5 rounded-full shrink-0 bg-gold-500"
-          />
-          <span className="uppercase tracking-eyebrow text-xs font-medium text-n-700 truncate">
-            {title}
-          </span>
-        </div>
-        <div
-          aria-hidden="true"
-          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
-        >
-          <Telescope className="h-4 w-4" strokeWidth={1.75} />
-        </div>
-      </div>
-
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono font-semibold text-n-1000 leading-tight text-3xl md:text-4xl num">
-          {scenarios.toLocaleString('es-CO')}
-        </span>
-        <span className="text-sm text-n-700">
-          {isEs ? 'escenarios simulados' : 'scenarios simulated'}
-        </span>
-      </div>
-
-      {/* Monte Carlo P50 — sin WACC no es defendible (Elite Protocol). */}
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="text-n-700">
-          {isEs ? 'Monte Carlo P50' : 'Monte Carlo P50'}
-        </span>
-        <span className="font-medium tabular-nums text-n-700">
-          {isEs ? 'Req. WACC' : 'Requires WACC'}
-        </span>
-      </div>
-
-      {topContribs.length > 0 && (
-        <div className="flex flex-col gap-2.5 mt-1">
-          <div className="uppercase tracking-label text-xs font-medium text-n-700">
-            {isEs ? 'Top proyectos' : 'Top projects'}
-          </div>
-          <ul role="list" className="flex flex-col gap-2">
-            {topContribs.map((c) => {
-              const pctFill = Math.max(6, (c.contribPct / maxPct) * 100);
-              return (
-                <li key={c.name} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-3 text-xs">
-                    <span className="text-n-800 truncate">{c.name}</span>
-                    <span className="text-gold-600 font-medium tabular-nums shrink-0">
-                      {c.formatted}
-                    </span>
-                  </div>
-                  <div
-                    aria-hidden="true"
-                    className="h-1.5 w-full rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] overflow-hidden"
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${pctFill}%`,
-                        background:
-                          'linear-gradient(90deg, var(--gold-500) 0%, var(--gold-400) 100%)',
-                      }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Projects widget (mini) ───────────────────────────────────────────────────
-
-interface ProjectsWidgetProps {
-  projects: FuturoProject[];
-  isEs: boolean;
-}
-
-function ProjectsWidget({ projects, isEs }: ProjectsWidgetProps) {
-  return (
-    <div className="relative p-6 md:p-7 rounded-xl glass-elite-elevated border-elite-gold">
-      <div className="flex items-center justify-between gap-4 mb-5">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600"
-          >
-            <Target className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div>
-            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
-              {isEs ? 'Proyectos en evaluación' : 'Projects under evaluation'}
-            </div>
-            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
-              {isEs
-                ? `${projects.length} oportunidades activas`
-                : `${projects.length} active opportunities`}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <ul role="list" className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {projects.map((p) => {
-          const displayName = !isEs && p.nameEn ? p.nameEn : p.name;
-          const status = p.status ?? 'evaluating';
-          const statusColor =
-            status === 'green'
-              ? 'bg-success'
-              : status === 'hold'
-                ? 'bg-area-escudo'
-                : 'bg-gold-600';
-          const statusLabel =
-            status === 'green'
-              ? isEs
-                ? 'Viable'
-                : 'Green-lit'
-              : status === 'hold'
-                ? isEs
-                  ? 'En espera'
-                  : 'On hold'
-                : isEs
-                  ? 'Evaluando'
-                  : 'Evaluating';
-
-          return (
-            <li
-              key={p.name}
-              className="relative p-4 rounded-lg bg-[rgba(10,10,10,0.45)] border border-[rgb(var(--color-gold-500-rgb)_/_0.18)]"
-            >
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    aria-hidden="true"
-                    className={cn('inline-block h-1.5 w-1.5 rounded-full shrink-0', statusColor)}
-                  />
-                  <span className="text-sm font-medium text-n-1000 truncate">
-                    {displayName}
-                  </span>
-                </div>
-                <span className="shrink-0 text-xs uppercase tracking-label text-n-700">
-                  {statusLabel}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="text-n-700">
-                  {isEs ? 'Inv.' : 'Inv.'}{' '}
-                  <span className="text-n-900 tabular-nums">
-                    {formatCopShort(p.investment)} COP
-                  </span>
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-n-700">
-                    {isEs ? 'Score' : 'Score'}
-                  </span>
-                  <span
-                    className={cn(
-                      'tabular-nums font-medium',
-                      p.score >= 75
-                        ? 'text-success'
-                        : p.score >= 60
-                          ? 'text-gold-600'
-                          : 'text-danger',
-                    )}
-                  >
-                    {p.score}/100
-                  </span>
-                </div>
-              </div>
-
-              <div
-                aria-hidden="true"
-                className="mt-2 h-1 w-full rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.1)] overflow-hidden"
-              >
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, Math.max(4, p.score))}%`,
-                    background:
-                      p.score >= 75
-                        ? 'linear-gradient(90deg, var(--success) 0%, var(--color-success-light) 100%)'
-                        : p.score >= 60
-                          ? 'linear-gradient(90deg, var(--gold-500) 0%, var(--gold-400) 100%)'
-                          : 'linear-gradient(90deg, var(--color-wine-700) 0%, var(--color-wine-400) 100%)',
-                  }}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Macro snapshot widget ────────────────────────────────────────────────────
-
-interface MacroSnapshotProps {
-  macro: MacroIndicator[];
-  isEs: boolean;
-}
-
-function MacroSnapshot({ macro, isEs }: MacroSnapshotProps) {
-  return (
-    <div className="relative p-6 md:p-7 rounded-xl glass-elite-elevated border-elite-gold">
-      <div className="flex items-center justify-between gap-4 mb-5">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgba(114,47,55,0.16)] text-area-escudo"
-          >
-            <Globe className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div>
-            <div className="uppercase tracking-eyebrow text-xs font-medium text-gold-600">
-              {isEs ? 'Macro snapshot — Colombia 2026' : 'Macro snapshot — Colombia 2026'}
-            </div>
-            <div className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000 mt-0.5">
-              {isEs
-                ? 'Indicadores que mueven su portafolio'
-                : 'Indicators that move your portfolio'}
-            </div>
-          </div>
-        </div>
-        <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-n-700">
-          <Sparkles className="h-3 w-3 text-gold-600" strokeWidth={2} aria-hidden="true" />
-          {isEs ? 'Datos mock — 2026-04' : 'Mock data — 2026-04'}
-        </span>
-      </div>
-
-      <ul
-        role="list"
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3"
-      >
-        {macro.map((m) => {
-          const DirIcon = DIR_ICON[m.direction];
-          const upPos = m.upIsPositive ?? true;
-          const colorCls = deltaColor(m.direction, upPos);
-          const deltaStr =
-            typeof m.delta === 'number'
-              ? `${m.delta > 0 ? '+' : ''}${
-                  Math.abs(m.delta) < 1 ? m.delta.toFixed(2) : m.delta.toFixed(1)
-                }`
-              : String(m.delta);
-          const label = !isEs && m.labelEn ? m.labelEn : m.label;
-          const deltaLabel = !isEs && m.deltaLabelEn ? m.deltaLabelEn : m.deltaLabel;
-
-          return (
-            <li
-              key={m.key}
-              className="relative p-4 rounded-lg bg-[rgba(10,10,10,0.45)] border border-[rgb(var(--color-gold-500-rgb)_/_0.14)]"
-            >
-              <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
-                <span className="uppercase tracking-label text-xs font-medium text-n-500 truncate">
-                  {label}
-                </span>
-                {m.source && (
-                  <span className="shrink-0 text-xs uppercase tracking-label text-n-600">
-                    {m.source}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-mono font-semibold text-xl leading-tight text-n-1000 num">
-                    {m.value}
-                  </span>
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1 text-xs font-medium tabular-nums',
-                      colorCls,
-                    )}
-                  >
-                    <DirIcon className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
-                    <span>{deltaStr}</span>
-                    {deltaLabel && (
-                      <span className="text-n-600 font-normal">{deltaLabel}</span>
-                    )}
-                  </span>
-                </div>
-                {m.history && m.history.length >= 2 && (
-                  <Sparkline
-                    points={m.history}
-                    color={
-                      m.direction === 'flat'
-                        ? 'var(--n-500)'
-                        : (m.direction === 'up' && upPos) ||
-                            (m.direction === 'down' && !upPos)
-                          ? 'var(--color-success-light)'
-                          : 'var(--color-danger-light)'
-                    }
-                  />
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Submódulo card (grid entry) ──────────────────────────────────────────────
+// ─── Submódulo card — matches handoff .subcard style ─────────────────────────
 
 interface SubmoduleCardProps {
-  submodule: SubmoduleDef;
+  sub: FuturoSubmoduleDef;
   title: string;
   description: string;
-  ctaLabel: string;
-  readyLabel: string;
-  upcomingLabel: string;
-  delay: number;
-  reduced: boolean | null;
+  language: 'es' | 'en';
 }
 
-function SubmoduleCard({
-  submodule,
-  title,
-  description,
-  ctaLabel,
-  readyLabel,
-  upcomingLabel,
-  delay,
-  reduced,
-}: SubmoduleCardProps) {
-  const { icon: Icon, href, status } = submodule;
-  const isReady = status === 'listo';
-
-  const motionProps = reduced
-    ? {}
-    : {
-        initial: { opacity: 0, y: 14 },
-        animate: { opacity: 1, y: 0 },
-        transition: {
-          duration: 0.45,
-          delay: 0.35 + delay * 0.08,
-          ease: [0.16, 1, 0.3, 1] as const,
-        },
-      };
+function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps) {
+  const { icon: Icon, href, statusLabel, statusColor } = sub;
 
   return (
-    <motion.div {...motionProps} className="h-full">
-      <Link
-        href={href}
-        prefetch={false}
-        className="block h-full group focus-visible:outline-none"
-        aria-label={`${title}. ${description}`}
+    <Link
+      href={href}
+      prefetch={false}
+      className="group relative block overflow-hidden rounded-xl transition-[transform,box-shadow] hover:-translate-y-1"
+      style={{
+        background: 'color-mix(in srgb, #5A7F7A 4%, var(--color-n-0, #FCFBF8))',
+        border: '1px solid color-mix(in srgb, #5A7F7A 20%, transparent)',
+        padding: 20,
+      }}
+    >
+      {/* Left accent bar */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 bottom-0 w-1 origin-top scale-y-0 group-hover:scale-y-100 transition-transform duration-200 rounded-tl-xl rounded-bl-xl"
+        style={{ background: 'linear-gradient(180deg, #5A7F7A, #4A6F6A)' }}
+      />
+
+      {/* Icon box */}
+      <div
+        aria-hidden
+        className="inline-grid place-items-center rounded-lg mb-4 group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200"
+        style={{
+          width: 42,
+          height: 42,
+          background: 'color-mix(in srgb, #5A7F7A 18%, transparent)',
+          color: '#4A6F6A',
+        }}
       >
-        <EliteCard
-          variant="glass"
-          hover="lift"
-          interactive
-          padding="md"
-          className="h-full min-h-[180px] flex flex-col gap-4 focus-within:ring-2 focus-within:ring-gold-500 focus-within:ring-offset-2 focus-within:ring-offset-n-1000"
+        <Icon className="h-5 w-5" strokeWidth={1.75} />
+      </div>
+
+      <p className="text-base font-semibold text-n-1000">{title}</p>
+      <p className="text-sm text-n-600 leading-snug mt-[5px]">{description}</p>
+
+      <div className="flex items-center justify-between mt-4">
+        <span
+          className="inline-flex items-center gap-[6px] text-xs font-semibold"
+          style={{ color: statusColor }}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div
-              aria-hidden="true"
-              className="shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600 group-hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.24)] group-hover:text-gold-400 transition-colors"
-            >
-              <Icon className="h-6 w-6" strokeWidth={1.75} />
-            </div>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider',
-                isReady
-                  ? 'bg-[rgba(34,197,94,0.12)] text-success border border-[rgba(34,197,94,0.3)]'
-                  : 'bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
-              )}
-            >
-              {isReady ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-1 w-1 rounded-full bg-success"
-                  />
-                  {readyLabel}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-2.5 w-2.5" strokeWidth={2} aria-hidden="true" />
-                  {upcomingLabel}
-                </>
-              )}
-            </span>
-          </div>
-
-          <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
-              {title}
-            </h3>
-            <p className="text-base leading-relaxed text-n-500 max-w-md">
-              {description}
-            </p>
-          </div>
-
-          <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gold-500 group-hover:text-gold-600 transition-colors">
-            <span>{ctaLabel}</span>
-            <ArrowRight
-              className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-          </div>
-        </EliteCard>
-      </Link>
-    </motion.div>
+          <span aria-hidden className="inline-block h-[6px] w-[6px] rounded-full" style={{ background: statusColor }} />
+          {statusLabel[language]}
+        </span>
+        <span className="inline-flex" style={{ color: '#5A7F7A' }}>
+          <ArrowRight
+            className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+        </span>
+      </div>
+    </Link>
   );
 }
 
 export default FuturoArea;
-
-// Keep unused imports referenced so lint doesn't flag them
-void Route;
-void Mountain;
-void LineChartIcon;
-void BarChart3;
