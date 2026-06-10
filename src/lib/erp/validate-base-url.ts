@@ -29,6 +29,7 @@ function isPrivateIPv4(host: string): boolean {
     (a === 172 && b >= 16 && b <= 31) || // private
     (a === 192 && b === 168) || // private
     (a === 169 && b === 254) || // link-local / cloud metadata
+    (a === 100 && b >= 64 && b <= 127) || // CGNAT 100.64.0.0/10 (RFC 6598)
     a === 0 // "this network"
   );
 }
@@ -38,9 +39,18 @@ function isPrivateIPv6(host: string): boolean {
   if (h === '::1' || h === '::') return true; // loopback / unspecified
   if (h.startsWith('fc') || h.startsWith('fd')) return true; // fc00::/7 (ULA)
   if (/^fe[89ab]/.test(h)) return true; // fe80::/10 (link-local)
-  // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) — validate the embedded IPv4.
-  const mapped = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (mapped) return isPrivateIPv4(mapped[1]);
+  // IPv4-mapped IPv6 — validate the embedded IPv4. `new URL()` normaliza el
+  // sufijo a hex comprimido (`::ffff:10.0.0.1` → `::ffff:a00:1`), así que
+  // cubrimos ambas formas: dotted-quad y dos grupos hex.
+  const mappedDotted = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mappedDotted) return isPrivateIPv4(mappedDotted[1]);
+  const mappedHex = h.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16);
+    const lo = parseInt(mappedHex[2], 16);
+    const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+    return isPrivateIPv4(dotted);
+  }
   return false;
 }
 
