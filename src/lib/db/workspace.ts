@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { getDb } from './client';
 import { workspaces, type Workspace } from './schema';
 
@@ -82,7 +82,6 @@ export async function getOrCreateWorkspace(): Promise<Workspace> {
 // Drizzle helper: workspaces with no user_id (anonymous).
 function isNullUserId() {
   // drizzle-orm SQL: `user_id IS NULL`
-  const { isNull } = require('drizzle-orm') as typeof import('drizzle-orm');
   return isNull(workspaces.userId);
 }
 
