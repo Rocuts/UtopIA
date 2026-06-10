@@ -27,6 +27,8 @@ import type {
   PeriodSnapshot,
   PUCClass,
   ValidatedAccount,
+  ControlTotalsCents,
+  ControlTotalsRaw,
 } from '@/lib/preprocessing/trial-balance';
 import type { Adjustment } from './types';
 
@@ -114,7 +116,13 @@ function cloneClass(cls: PUCClass): PUCClass {
 
 function cloneSnapshot(snap: PeriodSnapshot): PeriodSnapshot {
   return {
-    period: snap.period,
+    // Spread PRIMERO: preserva los campos que el preprocessor/curator
+    // enriquecen y que este modulo NO recalcula — `virtualCloseAdjustment`
+    // (sin el, el Bridge de Cuadratura del orchestrator se desactiva tras
+    // aplicar cualquier ajuste), `curator`, `findings`, `periodoTipo`,
+    // `cashFlowIndirecto`, audits R9-R15, etc. Las claves explicitas de
+    // abajo sobreescriben con copias profundas las estructuras mutables.
+    ...snap,
     classes: snap.classes.map(cloneClass),
     summary: { ...snap.summary },
     controlTotals: { ...snap.controlTotals },
@@ -141,15 +149,14 @@ function cloneBalance(pp: PreprocessedBalance): PreprocessedBalance {
   };
 
   return {
+    // Spread PRIMERO: preserva campos cross-period que no recalculamos aqui
+    // (p.ej. metadata extraida, flags futuros del preprocessor). Las claves
+    // explicitas sobreescriben con copias frescas las estructuras mutables.
+    ...pp,
     periods: clonedPeriods,
     primary: findClone(pp.primary) ?? clonedPeriods[0],
     comparative: findClone(pp.comparative),
     rawRows: pp.rawRows.map((r) => ({ ...r })),
-    auxiliaryCount: pp.auxiliaryCount,
-    cleanData: pp.cleanData,
-    validationReport: pp.validationReport,
-    comparativos_impracticables: pp.comparativos_impracticables,
-    actividadInferida: pp.actividadInferida,
     reclasificacionesNoCompensacion: pp.reclasificacionesNoCompensacion.map((r) => ({ ...r })),
   };
 }
@@ -362,7 +369,102 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     return total;
   };
 
+  // Suma de cuentas por prefijo de codigo dentro de una clase (mirror de
+  // `sumLeavesPrecise` + filtros por startsWith del preprocessor).
+  const sumByCodePrefix = (classDigit: number, prefix: string): number => {
+    const cls = snap.classes.find((c) => c.code === classDigit);
+    if (!cls) return 0;
+    let total = 0;
+    for (const acc of cls.accounts) {
+      if (normalizeCode(acc.code).startsWith(prefix)) {
+        total += Number(acc.balance) || 0;
+      }
+    }
+    return total;
+  };
+
+  const gastosTotales = totalExpenses + totalCosts + totalProduction;
+  const efectivoCuenta11 = sumByGroupPrefixes('1', new Set(['11']));
+
+  // -------------------------------------------------------------------------
+  // cents + raw — recomputados desde los saldos AJUSTADOS, replicando las
+  // mismas formulas de `buildSnapshotForPeriod` (trial-balance.ts §5.1).
+  // Sin esto, el bloque vinculante pierde UAI/impuesto y el gate
+  // `auditReportEmittable` compararia contra anclas pre-ajuste obsoletas.
+  // El preprocessor tambien deriva cents via toCents(floatTotal), asi que
+  // este mirror tiene exactamente la misma precision que el original.
+  // -------------------------------------------------------------------------
+  const impuestoCausado = sumByGroupPrefixes('5', new Set(['54']));
+  const utilidadAntesImpuestos = totalRevenue - (gastosTotales - impuestoCausado);
+
+  // Saldo a favor del impuesto de renta — mismo detector del preprocessor:
+  // 5404 acreedor (negativo en clase 5) > 1805 > 1355 > 0.
+  const saldo5404 = sumByCodePrefix(5, '5404');
+  const saldo1805 = sumByCodePrefix(1, '1805');
+  const saldo1355 = sumByCodePrefix(1, '1355');
+  let saldoAFavorImpuesto = 0;
+  if (saldo5404 < 0) {
+    saldoAFavorImpuesto = Math.abs(saldo5404);
+  } else if (saldo1805 > 0) {
+    saldoAFavorImpuesto = saldo1805;
+  } else if (saldo1355 > 0) {
+    saldoAFavorImpuesto = saldo1355;
+  }
+
+  // Devoluciones 4175 — acumuladas en cents como el preprocessor (Wave 2.F4).
+  const ZERO_BIG = BigInt(0);
+  let totalDevolucionesCents = ZERO_BIG;
+  const cls4 = snap.classes.find((c) => c.code === 4);
+  if (cls4) {
+    for (const acc of cls4.accounts) {
+      if (!normalizeCode(acc.code).startsWith('4175')) continue;
+      const c = toCents(Number(acc.balance) || 0);
+      totalDevolucionesCents += c < ZERO_BIG ? -c : c;
+    }
+  }
+  const totalDevoluciones = Number(totalDevolucionesCents) / 100;
+  const ingresosNetos = Math.abs(totalRevenue) - totalDevoluciones;
+
+  const cents: ControlTotalsCents = {
+    activo: toCents(totalAssets),
+    pasivo: toCents(totalLiabilities),
+    patrimonio: toCents(totalEquity),
+    ingresos: toCents(totalRevenue),
+    gastos: toCents(gastosTotales),
+    utilidadNeta: toCents(netIncome),
+    utilidadAntesImpuestos: toCents(utilidadAntesImpuestos),
+    impuestoCausado: toCents(impuestoCausado),
+    efectivoCuenta11: toCents(efectivoCuenta11),
+    saldoAFavorImpuesto: toCents(saldoAFavorImpuesto),
+    totalDevoluciones: totalDevolucionesCents,
+    ingresosNetos: toCents(ingresosNetos),
+  };
+
+  const raw: ControlTotalsRaw = {
+    activo: toRawString(totalAssets),
+    pasivo: toRawString(totalLiabilities),
+    patrimonio: toRawString(totalEquity),
+    ingresos: toRawString(totalRevenue),
+    gastos: toRawString(gastosTotales),
+    utilidadNeta: toRawString(netIncome),
+    utilidadAntesImpuestos: toRawString(utilidadAntesImpuestos),
+    impuestoCausado: toRawString(impuestoCausado),
+    efectivoCuenta11: toRawString(efectivoCuenta11),
+    saldoAFavorImpuesto: toRawString(saldoAFavorImpuesto),
+    totalDevoluciones: toRawString(totalDevoluciones),
+    ingresosNetos: toRawString(ingresosNetos),
+  };
+
+  const prevTotals = snap.controlTotals;
   snap.controlTotals = {
+    // Spread PRIMERO: preserva los campos derivados que este modulo NO
+    // recalcula (KPIs Wave 2.F4: ebit, ratios, promedios; impuestoRentaNeto
+    // R16; cashOpen del comparativo, ...). Mantienen su valor pre-ajuste —
+    // mejor contrato que perderlos (el bloque vinculante y los renderers los
+    // citan), aunque pueden quedar marginalmente desfasados si un ajuste
+    // toca sus cuentas base. Las claves explicitas de abajo SI se recalculan
+    // desde los saldos ajustados y sobreescriben al spread.
+    ...prevTotals,
     activo: totalAssets,
     activoCorriente: sumByGroupPrefixes('1', ACTIVO_CORRIENTE_GROUPS),
     activoNoCorriente: sumByGroupPrefixes('1', ACTIVO_NO_CORRIENTE_GROUPS),
@@ -371,17 +473,54 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     pasivoNoCorriente: sumByGroupPrefixes('2', PASIVO_NO_CORRIENTE_GROUPS),
     patrimonio: totalEquity,
     ingresos: totalRevenue,
-    gastos: totalExpenses + totalCosts + totalProduction,
+    gastos: gastosTotales,
     utilidadNeta: netIncome,
-    efectivoCuenta11: sumByGroupPrefixes('1', new Set(['11'])),
+    efectivoCuenta11,
     deudoresCuenta13: sumByGroupPrefixes('1', new Set(['13'])),
     cuentasPorPagar23: sumByGroupPrefixes('2', new Set(['23'])),
     impuestosCuenta24: sumByGroupPrefixes('2', new Set(['24'])),
     obligacionesLaborales25: sumByGroupPrefixes('2', new Set(['25'])),
+    totalDevoluciones,
+    ingresosNetos,
+    cents,
+    raw,
   };
+  // cashClose es alias semantico del saldo final de caja (= efectivoCuenta11).
+  // Solo lo refrescamos si el preprocessor lo habia populado (contrato R6).
+  if (typeof prevTotals.cashClose === 'number') {
+    snap.controlTotals.cashClose = efectivoCuenta11;
+  }
 
-  // equityBreakdown — recalculado desde las hojas Clase 3 resultantes
+  // equityBreakdown — recalculado desde las hojas Clase 3 resultantes.
+  // `convergenceAdjustment` (gap absorbido por R5) no es derivable de las
+  // hojas: lo preservamos del breakdown previo para no romper el contrato.
+  const prevConvergence = snap.equityBreakdown?.convergenceAdjustment;
   snap.equityBreakdown = recomputeEquityBreakdown(snap.classes);
+  if (typeof prevConvergence === 'number') {
+    snap.equityBreakdown.convergenceAdjustment = prevConvergence;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mirrors de precision del preprocessor (privados en trial-balance.ts —
+// duplicados intencionales, misma justificacion que PUC_CLASS_NAMES).
+// ---------------------------------------------------------------------------
+
+/** Mirror exacto de `toCents` del preprocessor. */
+function toCents(value: number): bigint {
+  if (!Number.isFinite(value)) return BigInt(0);
+  return BigInt(Math.round(value * 100));
+}
+
+/** Mirror exacto de `toRawString` del preprocessor. */
+function toRawString(value: number): string {
+  if (!Number.isFinite(value)) return '0.00';
+  const cents = Math.round(value * 100);
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  const integer = Math.floor(abs / 100);
+  const fraction = (abs % 100).toString().padStart(2, '0');
+  return `${sign}${integer}.${fraction}`;
 }
 
 // ---------------------------------------------------------------------------

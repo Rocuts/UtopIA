@@ -49,7 +49,7 @@ import type {
   AdjustmentLedger,
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
-import { applyAdjustments } from '@/lib/agents/repair/adjustments';
+import { applyAdjustments, revalidate } from '@/lib/agents/repair/adjustments';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
@@ -1173,10 +1173,45 @@ export async function prepareFinancialContext(
     }
   }
   if (balanceValidation.blocking) {
-    throw new BalanceValidationError(
-      balanceValidation.reasons,
-      balanceValidation.suggestedAccounts,
-    );
+    // ── Doctor de Datos: re-validacion post-ajustes ──────────────────────
+    // `applyAdjustments` clona la `validation` de cada snapshot SIN
+    // recalcularla (su contrato delega en `revalidate()`), asi que un
+    // blocking pre-ajuste queda ESTANCADO aunque los ajustes confirmados por
+    // el usuario hayan corregido el balance. Re-validamos sobre el balance
+    // ajustado y usamos el resultado fresco para decidir el gate 422.
+    const adjustedBalance = adjustmentsApplicationDetail?.balance ?? null;
+    if (adjustedBalance) {
+      const freshResults = adjustedBalance.periods.map((snap) =>
+        revalidate(adjustedBalance, snap),
+      );
+      const freshErrors = freshResults.flatMap((r) => r.errors);
+      if (freshErrors.length > 0) {
+        // Los ajustes no alcanzaron a corregir el balance: 422 con las
+        // cifras post-ajuste (mas precisas que las razones estancadas).
+        throw new BalanceValidationError(
+          freshErrors,
+          balanceValidation.suggestedAccounts,
+        );
+      }
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail:
+          'Doctor de Datos: re-validacion post-ajustes OK — el bloqueo pre-ajuste quedo obsoleto y fue levantado.',
+      });
+      for (const w of freshResults.flatMap((r) => r.warnings)) {
+        onProgress?.({
+          type: 'stage_progress',
+          stage: 1,
+          detail: `Re-validacion post-ajustes: ${w}`,
+        });
+      }
+    } else {
+      throw new BalanceValidationError(
+        balanceValidation.reasons,
+        balanceValidation.suggestedAccounts,
+      );
+    }
   }
 
   const bindingTotalsBlock = buildBindingTotalsBlock(preprocessed);
@@ -1839,8 +1874,13 @@ function classifyValidationErrors(errors: string[]): { hasD: boolean; hasNonB: b
 
 /**
  * Verifica que la utilidad del acta de asamblea coincida con la utilidad del
- * P&L (netIncomePrimary). Si difieren mas de 1 centavo, autocorrige el acta y
- * devuelve la nota tecnica para el footer. Segun Seccion 0.7 CHECK 4.
+ * P&L (netIncomePrimary). Si difieren mas de 1 centavo, devuelve una nota
+ * tecnica para el footer que DECLARA la divergencia citando ambas cifras y
+ * establece que prevalece la cifra vinculante del P&L. Segun Seccion 0.7
+ * CHECK 4.
+ *
+ * NOTA: este check NO muta el JSON del acta — la nota debe describir la
+ * divergencia detectada, nunca afirmar que el acta fue corregida.
  *
  * Devuelve `null` si faltan los JSON estructurados (feature no disponible) o
  * si ya coinciden dentro de la tolerancia.
@@ -1860,15 +1900,23 @@ function applyCheck4ActaVsPL(
 
   if (moneyCopEquals(plNetIncome, actaNetIncome, BigInt(1))) return null;
 
-  const formatted = formatCopFromCents(parseMoneyCop(plNetIncome));
+  const formattedPl = formatCopFromCents(parseMoneyCop(plNetIncome));
+  const formattedActa = formatCopFromCents(parseMoneyCop(actaNetIncome));
+  // Honestidad del reporte: este check NO reescribe el acta, asi que la nota
+  // declara la divergencia detectada y cual cifra prevalece — nunca afirma
+  // una correccion que no ocurrio.
   const note =
-    `Nota técnica: La utilidad del acta fue ajustada al valor del P&L (${formatted}) ` +
-    `para mantener coherencia interna del informe.`;
+    `Nota técnica: Se detectó divergencia entre la utilidad reportada en el acta ` +
+    `de asamblea (${formattedActa}) y la utilidad del Estado de Resultados ` +
+    `(${formattedPl}). Para efectos de este informe prevalece la cifra vinculante ` +
+    `del P&L (${formattedPl}); el texto del acta no fue modificado.`;
 
   const warningMsg = formatErrorAsUserNote({
     tier: 'B',
     step: 'verificacion CHECK 4 (utilidad acta vs P&L)',
-    fallbackUsed: `utilidad corregida a ${formatted} segun el Estado de Resultados`,
+    fallbackUsed:
+      `divergencia declarada en nota tecnica — acta reporta ${formattedActa}, ` +
+      `prevalece la utilidad del P&L (${formattedPl})`,
   });
   onProgress?.({ type: 'warning', warnings: [warningMsg] });
 
