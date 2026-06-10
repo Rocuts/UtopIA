@@ -67,6 +67,12 @@ export interface SpecialistContext {
   conversationHistory: { role: string; content: string }[];
   /** Connected ERP integrations for real-time accounting data */
   erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
+  /**
+   * Workspace del solicitante — scoping del RAG: las tools buscan en
+   * global ∪ workspace. Sin el, los documentos subidos por un tenant
+   * serian recuperables por cualquier otro via search_docs.
+   */
+  workspaceId?: string;
   /** Callback for streaming progress events */
   onProgress?: (event: ProgressEvent) => void;
   /** Callback for streaming partial content tokens (used on final reply only) */
@@ -104,6 +110,8 @@ export interface OrchestrateOptions {
   nitContext: NITContext | null;
   /** Connected ERP integrations for real-time accounting data */
   erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
+  /** Workspace del solicitante — scoping del RAG (ver SpecialistContext). */
+  workspaceId?: string;
   /** SSE progress callback */
   onProgress?: (event: ProgressEvent) => void;
   /** SSE content-delta callback — receives partial tokens from the final reply */

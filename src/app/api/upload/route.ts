@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache';
 import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit';
 import { uploadContextSchema, blobUploadSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
+import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
   parseTrialBalanceCSV,
@@ -498,14 +499,17 @@ async function processDocument(
   // -----------------------------------------------------------------
   // Vectorization (RAG) — Neon pgvector. Hybrid BM25+cosine search.
   // Non-critical: si falla la insercion, el texto extraido sigue llegando
-  // a los agentes via documentContext. (No tagueamos workspaceId aun
-  // porque la cookie utopia_workspace_id se introducira con Ola 0.A —
-  // mientras tanto los uploads quedan como global por defecto.)
+  // a los agentes via documentContext. Los uploads se scopean al workspace
+  // del solicitante (cookie utopia_workspace_id): sin el scope, cualquier
+  // tenant podia recuperar balances/documentos de otro via search_docs.
+  // Sin cookie (caso borde) el chunk queda global, como antes.
   // -----------------------------------------------------------------
+  const workspaceId = await getCurrentWorkspaceId().catch(() => null);
   const chunksCount = await addDocumentsToStore([text], {
     source: filename,
     context: contextLabel,
     docType: 'user_upload',
+    ...(workspaceId ? { workspaceId } : {}),
   });
   if (chunksCount > 0) {
     invalidateVectorStore();

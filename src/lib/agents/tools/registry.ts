@@ -37,6 +37,13 @@ import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 export interface ToolExecContext {
   documentContext?: string;
   erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>;
+  /**
+   * Workspace del solicitante. Si está presente, `search_docs` y
+   * `analyze_document` buscan en global ∪ workspace; sin él, solo global.
+   * Sin este scope los documentos subidos por un tenant eran recuperables
+   * por cualquier otro.
+   */
+  workspaceId?: string;
 }
 
 export interface ToolSideEffectSink {
@@ -369,7 +376,9 @@ export async function executeTool(
 ): Promise<ToolExecResult> {
   switch (toolName) {
     case 'search_docs': {
-      const content = await searchDocuments(args.query as string, 12);
+      const content = await searchDocuments(args.query as string, 12, {
+        workspaceId: ctx.workspaceId,
+      });
       return { content };
     }
 
@@ -396,7 +405,10 @@ export async function executeTool(
       if (ctx.documentContext) {
         docText = ctx.documentContext;
       } else {
-        docText = await searchDocuments(args.query as string, 8, { type: 'user_upload' });
+        docText = await searchDocuments(args.query as string, 8, {
+          type: 'user_upload',
+          workspaceId: ctx.workspaceId,
+        });
       }
       const analysis = await analyzeDocument(docText, args.filename as string | undefined);
       return { content: JSON.stringify(analysis, null, 2) };
