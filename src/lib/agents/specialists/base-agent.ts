@@ -93,7 +93,9 @@ export abstract class BaseSpecialist {
           'Usa esta informacion para responder cualquier pregunta sobre el documento. ' +
           'Para un analisis estructurado (cifras, riesgos, articulos), usa analyze_document.\n\n' +
           '<documento_adjunto>\n' +
-          preview +
+          // Neutraliza el delimitador embebido para que el contenido no pueda
+          // cerrar el fence e inyectar instrucciones fuera de él.
+          preview.replace(/<\/?\s*documento_adjunto\s*>/gi, '[tag removido]') +
           '\n</documento_adjunto>' +
           (truncated
             ? '\n\n[... documento truncado. Usa analyze_document para el analisis completo ...]'
