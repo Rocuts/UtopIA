@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { escudoSurvivalRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateEscudoSurvival } from '@/lib/agents/financial/escudo-survival/orchestrator';
 import type {
@@ -21,6 +22,9 @@ import type {
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = escudoSurvivalRequestSchema.safeParse(body);

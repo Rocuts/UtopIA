@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { taxReconciliationRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTaxReconciliation } from '@/lib/agents/financial/tax-reconciliation/orchestrator';
 import type { TaxReconciliationProgressEvent } from '@/lib/agents/financial/tax-reconciliation/types';
@@ -16,6 +17,9 @@ import type { TaxReconciliationProgressEvent } from '@/lib/agents/financial/tax-
 export const maxDuration = 300; // 5 minutes — tax reconciliation is compute-heavy
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = taxReconciliationRequestSchema.safeParse(body);

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { fiscalAuditOpinionRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateFiscalOpinion } from '@/lib/agents/financial/fiscal-opinion/orchestrator';
 import type { FinancialReport } from '@/lib/agents/financial/types';
@@ -24,6 +25,9 @@ import type { FiscalOpinionProgressEvent } from '@/lib/agents/financial/fiscal-o
 export const maxDuration = 300; // 5 minutes
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = fiscalAuditOpinionRequestSchema.safeParse(body);

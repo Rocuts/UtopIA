@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { businessValuationRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateValuation } from '@/lib/agents/financial/valuation/orchestrator';
 import type { ValuationProgressEvent } from '@/lib/agents/financial/valuation/types';
@@ -16,6 +17,9 @@ import type { ValuationProgressEvent } from '@/lib/agents/financial/valuation/ty
 export const maxDuration = 300; // 5 minutes — valuation agents are compute-heavy
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = businessValuationRequestSchema.safeParse(body);

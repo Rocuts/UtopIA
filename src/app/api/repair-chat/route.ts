@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { z } from 'zod';
 import { runRepairAgent } from '@/lib/agents/repair/agent';
 import type { RepairChatRequest } from '@/lib/agents/repair/types';
@@ -62,6 +63,9 @@ const requestSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let body: unknown;
   try {
     body = await req.json();

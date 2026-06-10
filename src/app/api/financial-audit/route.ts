@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { financialAuditRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
 import type { FinancialReport } from '@/lib/agents/financial/types';
@@ -21,6 +22,9 @@ import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = financialAuditRequestSchema.safeParse(body);

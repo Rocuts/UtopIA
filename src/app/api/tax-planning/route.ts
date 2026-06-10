@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { taxPlanningRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTaxPlanning } from '@/lib/agents/financial/tax-planning/orchestrator';
 import type { TaxPlanningProgressEvent } from '@/lib/agents/financial/tax-planning/types';
@@ -15,6 +16,9 @@ import type { TaxPlanningProgressEvent } from '@/lib/agents/financial/tax-planni
 export const maxDuration = 300; // 5 minutes — multi-agent pipeline is compute-heavy
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = taxPlanningRequestSchema.safeParse(body);

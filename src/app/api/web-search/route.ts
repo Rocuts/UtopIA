@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { searchWeb, formatSearchResultsForLLM } from '@/lib/search/web-search';
 import { webSearchRequestSchema } from '@/lib/validation/schemas';
 
@@ -8,6 +9,9 @@ import { webSearchRequestSchema } from '@/lib/validation/schemas';
  * search tool for when local RAG knowledge is insufficient.
  */
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = webSearchRequestSchema.safeParse(body);

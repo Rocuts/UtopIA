@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { transferPricingRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTransferPricing } from '@/lib/agents/financial/transfer-pricing/orchestrator';
 import type { TPProgressEvent } from '@/lib/agents/financial/transfer-pricing/types';
@@ -15,6 +16,9 @@ import type { TPProgressEvent } from '@/lib/agents/financial/transfer-pricing/ty
 export const maxDuration = 300; // 5 minutes — multi-agent pipeline is compute-heavy
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = transferPricingRequestSchema.safeParse(body);

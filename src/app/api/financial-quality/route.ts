@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { runQualityAudit } from '@/lib/agents/financial/quality/agent';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
@@ -22,6 +23,9 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
 

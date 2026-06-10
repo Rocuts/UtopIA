@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { feasibilityStudyRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateFeasibilityStudy } from '@/lib/agents/financial/feasibility/orchestrator';
 import type { FeasibilityProgressEvent } from '@/lib/agents/financial/feasibility/types';
@@ -16,6 +17,9 @@ import type { FeasibilityProgressEvent } from '@/lib/agents/financial/feasibilit
 export const maxDuration = 300; // 5 minutes — 3-agent sequential pipeline
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = feasibilityStudyRequestSchema.safeParse(body);

@@ -1,6 +1,8 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse } from 'next/server';
 import { ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
+import { requireAuthSession } from '@/lib/auth/require-session';
+import { requireWorkspace } from '@/lib/db/workspace';
 
 // La generacion del token es liviana — no toca el binario del archivo.
 // El cliente (`@vercel/blob/client` `upload()`) sube el archivo DIRECTO al
@@ -45,6 +47,14 @@ const ALLOWED_CONTENT_TYPES = [
  * `handleUpload` falla y se devuelve un 400 con mensaje claro en espanol.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
+  const workspace = await requireWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const body = (await request.json()) as HandleUploadBody;
 
   try {

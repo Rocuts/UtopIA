@@ -1,9 +1,13 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import { MODEL_IDS } from '@/lib/config/models';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { requireWorkspace } from '@/lib/db/workspace';
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const workspace = await requireWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

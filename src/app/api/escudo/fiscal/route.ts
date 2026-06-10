@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
+import { requireAuthSession } from '@/lib/auth/require-session';
 import { z } from 'zod';
 import {
   orchestrateFiscalAgent,
@@ -30,6 +31,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 800;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const startedAt = Date.now();
   try {
     const body = (await req.json()) as unknown;

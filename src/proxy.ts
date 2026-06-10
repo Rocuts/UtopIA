@@ -9,11 +9,49 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const AUTH_ACTIVE = Boolean(process.env.BETTER_AUTH_SECRET);
 const PROTECTED_PAGES = ['/workspace'];
-const PROTECTED_APIS = ['/api/chat', '/api/financial-report', '/api/sentinel'];
+// NOTE: this cookie-PRESENCE gate is only a cheap pre-filter (the cookie value
+// is NOT validated here — the Edge proxy can't reach the DB). The REAL session
+// validation lives in `requireAuthSession()` (src/lib/auth/require-session.ts),
+// wired at the top of each protected route handler.
+const PROTECTED_APIS = [
+  '/api/chat',
+  '/api/financial-report',
+  '/api/sentinel',
+  '/api/financial-audit',
+  '/api/fiscal-audit-opinion',
+  '/api/tax-planning',
+  '/api/transfer-pricing',
+  '/api/tax-reconciliation',
+  '/api/business-valuation',
+  '/api/feasibility-study',
+  '/api/financial-quality',
+  '/api/escudo',
+  '/api/escudo-survival',
+  '/api/repair-chat',
+  '/api/realtime',
+  '/api/upload',
+  '/api/erp',
+  '/api/accounting',
+  '/api/pyme',
+  '/api/rag',
+  '/api/web-search',
+];
+// Server-to-server endpoints exempt from the auth cookie gate — same pattern
+// as CSRF_ALLOWLIST below. Each authenticates with its own secret inside the
+// route handler:
+//   /api/erp/webhook/*          → X-Webhook-Token signature
+//   /api/cron/*                 → Bearer CRON_SECRET
+//   /api/notifications/dispatch → internal dispatch secret
+const AUTH_EXEMPT_APIS: readonly string[] = [
+  '/api/erp/webhook/',
+  '/api/cron/',
+  '/api/notifications/dispatch',
+];
 const PUBLIC_PREFIXES = ['/api/auth', '/login', '/signup', '/_next', '/favicon'];
 
 function routeAuthKind(pathname: string): 'page' | 'api' | false {
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return false;
+  if (AUTH_EXEMPT_APIS.some((p) => pathname.startsWith(p))) return false;
   if (PROTECTED_PAGES.some((p) => pathname.startsWith(p))) return 'page';
   if (PROTECTED_APIS.some((p) => pathname.startsWith(p))) return 'api';
   return false;
@@ -113,8 +151,13 @@ const RATE_LIMITS: Record<string, number> = {
   '/api/fiscal-audit-opinion': 10,
   '/api/tax-reconciliation': 10,
   '/api/feasibility-study': 10,
+  '/api/escudo-survival': 10,
+  '/api/escudo/fiscal': 10,
 
   // Document ingestion (OCR, parsing)
+  // NOTE: '/api/upload/blob-token' MUST precede '/api/upload' — prefix match
+  // is first-wins in insertion order (rateLimitId: api_api_upload_blob_token).
+  '/api/upload/blob-token': 20,
   '/api/upload': 20,
   '/api/pyme/uploads': 20,
   '/api/pyme/entries': 60,
@@ -281,7 +324,9 @@ export async function proxy(req: NextRequest) {
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||
     'unknown';
-  const rateKey = workspaceId ?? ip;
+  // Composite key: the IP is ALWAYS part of the key. A workspace-only key is
+  // rotatable by the client (clear the cookie → fresh bucket → limit bypass).
+  const rateKey = `${ip}:${workspaceId ?? 'anon'}`;
 
   const { limit, id: rateLimitId } = getRateLimitConfig(pathname);
 
