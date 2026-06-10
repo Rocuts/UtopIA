@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Pyme — Foto de Factura</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .ocrwrap{ max-width:560px; }
+  .stage{ display:none; } .stage.on{ display:block; animation:stgIn .35s var(--ease-enter); }
+  @keyframes stgIn{ from{ transform:translateY(10px);} to{ transform:none; } }
+
+  .cam{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:30px; text-align:center; }
+  .cam .frame{ aspect-ratio:4/3; border-radius:var(--r-lg); background:linear-gradient(160deg,#14120F,#2F2A20); position:relative; overflow:hidden; display:grid; place-items:center; margin-bottom:22px; }
+  .cam .frame .corner{ position:absolute; width:26px; height:26px; border:2px solid rgb(123 201 91 / .8); }
+  .cam .frame .c1{ top:16px; left:16px; border-right:none; border-bottom:none; }
+  .cam .frame .c2{ top:16px; right:16px; border-left:none; border-bottom:none; }
+  .cam .frame .c3{ bottom:16px; left:16px; border-right:none; border-top:none; }
+  .cam .frame .c4{ bottom:16px; right:16px; border-left:none; border-top:none; }
+  .cam .frame .hint{ color:rgb(255 255 255 / .6); font-size:var(--t-sm); display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .cam .frame .hint .pi{ width:38px; height:38px; color:rgb(123 201 91 / .9); }
+  .cam .frame .scanline{ position:absolute; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--ac),transparent); top:0; box-shadow:0 0 12px var(--ac); animation:scan 1.4s ease-in-out infinite; }
+  @keyframes scan{ 0%{ top:8%; } 50%{ top:92%; } 100%{ top:8%; } }
+  .cam .big{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:var(--n-1000); margin-bottom:6px; }
+  .cam .small{ font-size:var(--t-sm); color:var(--n-600); margin-bottom:22px; }
+  .cambtn{ width:74px; height:74px; border-radius:50%; border:none; background:var(--ac); color:#fff; display:grid; place-items:center; cursor:pointer; margin:0 auto; box-shadow:0 12px 30px -10px var(--ac-glow); transition:transform var(--d-base); }
+  .cambtn:hover{ transform:scale(1.06); }
+  .cambtn .pi{ width:30px; height:30px; }
+
+  .readbar{ height:8px; border-radius:var(--r-full); background:var(--n-100); overflow:hidden; margin-top:24px; }
+  .readbar .f{ height:100%; width:0; background:linear-gradient(90deg,var(--ac),var(--ac-deep)); transition:width .3s linear; }
+
+  .result{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:26px; }
+  .result .ok{ display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .result .ok .ic{ width:42px; height:42px; border-radius:50%; background:rgb(53 122 40 / .15); color:var(--ac-deep); display:grid; place-items:center; }
+  .result .ok .t{ font-weight:700; color:var(--n-1000); font-size:var(--t-lg); }
+  .result .ok .s{ font-size:var(--t-sm); color:var(--n-600); }
+  .frow{ display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-top:1px solid var(--n-100); }
+  .frow .fl{ font-size:var(--t-sm); color:var(--n-600); }
+  .frow .fv{ font-weight:600; color:var(--n-1000); }
+  .frow .fv.mono{ font-family:var(--font-mono); }
+  .editline{ font-size:var(--t-xs); color:var(--ac-deep); font-weight:600; cursor:pointer; }
+
+  .err .ic{ background:rgb(196 138 46 / .15); color:var(--warning); }
+  .opt3{ display:flex; flex-direction:column; gap:10px; margin-top:20px; }
+  .o3{ display:flex; align-items:center; gap:14px; padding:16px; border:1px solid var(--n-200); border-radius:var(--r-lg); background:var(--n-0); cursor:pointer; transition:border-color var(--d-base), background var(--d-base); text-align:left; width:100%; font-family:inherit; }
+  .o3:hover{ border-color:var(--ac); background:var(--ac-wash); }
+  .o3 .oi{ width:40px; height:40px; border-radius:var(--r-md); background:var(--ac-soft); color:var(--ac-deep); display:grid; place-items:center; flex-shrink:0; }
+  .o3 .oi .pi{ width:19px; height:19px; }
+  .o3 .on{ font-weight:600; color:var(--n-1000); } .o3 .od{ font-size:var(--t-xs); color:var(--n-600); margin-top:2px; }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:300px; margin:20px auto 0; }
+  .keypad button{ height:58px; border:1px solid var(--n-200); background:var(--n-0); border-radius:var(--r-md); font-family:var(--font-mono); font-size:var(--t-xl); font-weight:600; color:var(--n-900); cursor:pointer; }
+  .keypad button:hover{ background:var(--ac-wash); border-color:var(--ac-line); }
+  .amount-display{ font-family:var(--font-mono); font-size:var(--t-4xl); font-weight:600; color:var(--ac-deep); text-align:center; margin:10px 0; }
+  .mt22{ margin-top:22px; } .center{ text-align:center; }
+</style>
+</head>
+<body data-area="pyme">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad Pyme.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a mi negocio</a>
+    <div class="mwrap">
+      <div class="subhead">
+        <div class="crumb"><span class="ic"><i data-lucide="camera" class="pi"></i></span>Contabilidad Pyme — Foto de Factura</div>
+        <h1>Foto de Factura</h1>
+        <div class="lede">Tómele una foto a la factura y nosotros la anotamos por usted. Si no se ve bien, le ayudamos a arreglarlo.</div>
+      </div>
+
+      <div class="ocrwrap">
+        <!-- CAPTURE -->
+        <div class="stage on" id="s-capture">
+          <div class="cam">
+            <div class="frame">
+              <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+              <div class="hint"><i data-lucide="receipt" class="pi"></i>Centre la factura en el recuadro</div>
+            </div>
+            <div class="big">Tómele la foto</div>
+            <div class="small">Asegúrese de que se vean bien los números.</div>
+            <button class="cambtn" onclick="startRead()"><i data-lucide="camera" class="pi"></i></button>
+          </div>
+        </div>
+
+        <!-- READING -->
+        <div class="stage" id="s-reading">
+          <div class="cam">
+            <div class="frame">
+              <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+              <div class="scanline"></div>
+              <div class="hint"><i data-lucide="receipt" class="pi"></i>Leyendo el documento…</div>
+            </div>
+            <div class="big">Estoy leyendo su factura</div>
+            <div class="small" id="readMsg">Reconociendo proveedor, fecha y valor…</div>
+            <div class="readbar"><div class="f" id="readF"></div></div>
+          </div>
+        </div>
+
+        <!-- SUCCESS -->
+        <div class="stage" id="s-ok">
+          <div class="result">
+            <div class="ok"><div class="ic"><i data-lucide="check" style="width:22px;height:22px;"></i></div><div><div class="t">¡Listo! Leí su factura</div><div class="s">Revise que todo esté bien y guárdela.</div></div></div>
+            <div class="frow"><span class="fl">Proveedor</span><span class="fv">Bavaria S.A.</span></div>
+            <div class="frow"><span class="fl">Fecha</span><span class="fv mono">07/06/2026</span></div>
+            <div class="frow"><span class="fl">Categoría</span><span class="fv">Compra de mercancía</span></div>
+            <div class="frow"><span class="fl">Valor</span><span class="fv mono">$180.000</span></div>
+            <div class="frow"><span class="fl">¿Algo mal?</span><span class="editline" onclick="goManual()">Corregir a mano</span></div>
+            <div class="mt22" style="display:flex; gap:10px;">
+              <button class="btn btn-secondary" onclick="reset()">Otra foto</button>
+              <button class="btn btn-elite" style="flex:1;" onclick="saved()"><i data-lucide="check" class="ic"></i>Guardar en mi libro</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ERROR -->
+        <div class="stage" id="s-err">
+          <div class="result err">
+            <div class="ok"><div class="ic"><i data-lucide="image-off" style="width:22px;height:22px;"></i></div><div><div class="t">No pude leer bien esa foto</div><div class="s">No se preocupe — ¿qué hacemos?</div></div></div>
+            <div class="opt3">
+              <button class="o3" onclick="reset()"><div class="oi"><i data-lucide="camera" class="pi"></i></div><div><div class="on">Tomar otra foto</div><div class="od">Con mejor luz y de cerca.</div></div></button>
+              <button class="o3" onclick="goManual()"><div class="oi"><i data-lucide="keyboard" class="pi"></i></div><div><div class="on">Escribir el valor a mano</div><div class="od">Usted nos dice cuánto fue.</div></div></button>
+              <button class="o3" onclick="saved()"><div class="oi"><i data-lucide="skip-forward" class="pi"></i></div><div><div class="on">Saltar por ahora</div><div class="od">La anotamos después.</div></div></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANUAL -->
+        <div class="stage" id="s-manual">
+          <div class="result">
+            <div class="ok"><div class="ic" style="background:var(--ac-soft);color:var(--ac-deep);"><i data-lucide="keyboard" style="width:22px;height:22px;"></i></div><div><div class="t">Escriba el valor</div><div class="s">¿Cuánto fue esa compra o venta?</div></div></div>
+            <div class="amount-display" id="amt">$0</div>
+            <div class="keypad" id="keypad"></div>
+            <button class="btn btn-elite mt22" style="width:100%;" onclick="saved()"><i data-lucide="check" class="ic"></i>Guardar en mi libro</button>
+          </div>
+        </div>
+
+        <!-- SAVED -->
+        <div class="stage" id="s-saved">
+          <div class="result center">
+            <div style="width:64px;height:64px;border-radius:50%;background:rgb(53 122 40/.15);color:var(--ac-deep);display:grid;place-items:center;margin:8px auto 18px;"><i data-lucide="check" style="width:32px;height:32px;"></i></div>
+            <div class="big" style="font-family:var(--font-display);font-size:var(--t-2xl);color:var(--n-1000);">¡Guardado en su libro!</div>
+            <div class="small" style="color:var(--n-600);margin:8px 0 22px;">Ya quedó anotado. Su balance del mes se actualizó solo.</div>
+            <div style="display:flex;gap:10px;justify-content:center;">
+              <a href="Pyme - Mi Libro.html"><button class="btn btn-secondary">Ver mi libro</button></a>
+              <button class="btn btn-elite" onclick="reset()"><i data-lucide="camera" class="ic"></i>Otra factura</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  function show(id){ document.querySelectorAll('.stage').forEach(s=>s.classList.remove('on')); document.getElementById('s-'+id).classList.add('on'); if(window.lucide) lucide.createIcons(); }
+  let attempts=0;
+  function startRead(){
+    show('reading'); const f=document.getElementById('readF'); f.style.width='0';
+    requestAnimationFrame(()=>{ f.style.width='100%'; });
+    attempts++;
+    setTimeout(()=>{ show(attempts===1 ? 'err' : 'ok'); }, 1900); // first try fails (demo Gap B), then succeeds
+  }
+  // manual keypad
+  let amount='';
+  const keys=['1','2','3','4','5','6','7','8','9','000','0','⌫'];
+  document.getElementById('keypad').innerHTML = keys.map(k=>`<button onclick="press('${k}')">${k}</button>`).join('');
+  function press(k){ if(k==='⌫') amount=amount.slice(0,-1); else amount=(amount+k).slice(0,9); render(); }
+  function render(){ const n=parseInt(amount||'0',10); document.getElementById('amt').textContent='$'+n.toLocaleString('es-CO'); }
+  function goManual(){ amount=''; render(); show('manual'); }
+  function saved(){ show('saved'); }
+  function reset(){ show('capture'); }
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

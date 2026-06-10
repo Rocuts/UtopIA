@@ -1,511 +1,170 @@
 'use client';
 
-/**
- * Submódulo Conciliación Fiscal.
- *
- * El puente entre NIIF y Estatuto Tributario colombiano. Cobertura:
- *  - Art. 772-1 ET (conciliación fiscal obligatoria)
- *  - Formato 2516 DIAN (reporte de conciliación)
- *  - NIC 12 (Impuesto a las ganancias / tax deferred)
- *  - Decreto 2235/2017 (conciliación)
- *  - Tasa IR sociedades 2026 = 35%
- *
- * Incluye tabla de partidas conciliatorias con mock realista, totales y
- * CTA hacia `/api/tax-reconciliation` via IntakeModal.
- */
-
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'motion/react';
-import { useMemo } from 'react';
-import {
-  Scale,
-  ArrowLeft,
-  ArrowRight,
-  Sparkles,
-  FileText,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+import { ArrowLeft, Scale } from 'lucide-react';
 
-import { useLanguage } from '@/context/LanguageContext';
-import { useWorkspace } from '@/context/WorkspaceContext';
-import { EliteCard } from '@/components/ui/EliteCard';
-import { EliteButton } from '@/components/ui/EliteButton';
-import { SectionHeader } from '@/components/ui/SectionHeader';
-import { cn } from '@/lib/utils';
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
-// ─── Tipos ───────────────────────────────────────────────────────────────────
+const STATS = [
+  { label: 'Diferencias', value: '3', accent: false },
+  { label: 'Conciliado', value: '97%', accent: true },
+  { label: 'Partidas', value: '1.204', accent: false },
+];
 
-type DiferenciaTipo = 'permanente' | 'temporaria';
-type DiferenciaDireccion = 'positiva' | 'negativa';
-
-interface PartidaConciliatoria {
-  concepto: { es: string; en: string };
-  niif: number;
-  fiscal: number;
-  tipo: DiferenciaTipo;
-  direccion: DiferenciaDireccion;
-  impuestoDiferido?: number;
+interface Row {
+  cuenta: string;
+  contable: string;
+  fiscal: string;
+  diferencia: string;
+  negative: boolean;
 }
 
-// ─── Tasa 2026 ───────────────────────────────────────────────────────────────
-
-const TAX_RATE = 0.35;
-
-// ─── Mock partidas conciliatorias ────────────────────────────────────────────
-
-const PARTIDAS: PartidaConciliatoria[] = [
+const ROWS: Row[] = [
   {
-    concepto: { es: 'Ingresos no constitutivos de renta', en: 'Non-taxable income' },
-    niif: 150_000_000,
-    fiscal: 0,
-    tipo: 'permanente',
-    direccion: 'negativa',
+    cuenta: 'Gastos no deducibles',
+    contable: '$840.000.000',
+    fiscal: '$680.000.000',
+    diferencia: '$160.000.000',
+    negative: false,
   },
   {
-    concepto: { es: 'Gastos no deducibles (multas, sanciones)', en: 'Non-deductible expenses' },
-    niif: 45_000_000,
-    fiscal: 0,
-    tipo: 'permanente',
-    direccion: 'positiva',
+    cuenta: 'Depreciación diferida',
+    contable: '$1.240.000.000',
+    fiscal: '$1.380.000.000',
+    diferencia: '−$140.000.000',
+    negative: true,
   },
   {
-    concepto: { es: 'Deducción especial Art. 158-3 (I+D+i)', en: 'R&D deduction (Art. 158-3)' },
-    niif: 0,
-    fiscal: 80_000_000,
-    tipo: 'permanente',
-    direccion: 'negativa',
-  },
-  {
-    concepto: { es: 'Depreciación contable vs. fiscal', en: 'Accounting vs. tax depreciation' },
-    niif: 320_000_000,
-    fiscal: 240_000_000,
-    tipo: 'temporaria',
-    direccion: 'positiva',
-    impuestoDiferido: 28_000_000,
-  },
-  {
-    concepto: {
-      es: 'Provisión cartera — deterioro NIIF 9',
-      en: 'Allowance for ECL — IFRS 9',
-    },
-    niif: 65_000_000,
-    fiscal: 0,
-    tipo: 'temporaria',
-    direccion: 'positiva',
-    impuestoDiferido: 22_750_000,
-  },
-  {
-    concepto: {
-      es: 'Ajuste a valor razonable instrumentos',
-      en: 'Fair value adjustment — financial instruments',
-    },
-    niif: 40_000_000,
-    fiscal: 0,
-    tipo: 'temporaria',
-    direccion: 'positiva',
-    impuestoDiferido: 14_000_000,
-  },
-  {
-    concepto: { es: 'Ingresos diferidos (contratos)', en: 'Deferred revenue (contracts)' },
-    niif: 180_000_000,
-    fiscal: 220_000_000,
-    tipo: 'temporaria',
-    direccion: 'negativa',
-    impuestoDiferido: -14_000_000,
+    cuenta: 'Provisiones',
+    contable: '$420.000.000',
+    fiscal: '$380.000.000',
+    diferencia: '$40.000.000',
+    negative: false,
   },
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatCOP(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  return `${sign}$${abs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`;
-}
-
-function formatDiff(niif: number, fiscal: number): { value: number; formatted: string } {
-  const diff = fiscal - niif;
-  return {
-    value: diff,
-    formatted: (diff >= 0 ? '+' : '') + formatCOP(diff),
-  };
-}
-
-// ─── Componente ──────────────────────────────────────────────────────────────
+// ─── Accent colour ────────────────────────────────────────────────────────────
+// verdad teal: #3D6B7E
 
 export default function ConciliacionFiscalPage() {
-  const { language } = useLanguage();
-  const { openIntakeForType } = useWorkspace();
-  const shouldReduce = useReducedMotion();
-
-  const totals = useMemo(() => {
-    let permanente = 0;
-    let temporaria = 0;
-    let impuestoDiferidoTotal = 0;
-    for (const p of PARTIDAS) {
-      const diff = Math.abs(p.fiscal - p.niif);
-      const signed = p.direccion === 'positiva' ? diff : -diff;
-      if (p.tipo === 'permanente') permanente += signed;
-      else temporaria += signed;
-      if (typeof p.impuestoDiferido === 'number') {
-        impuestoDiferidoTotal += p.impuestoDiferido;
-      }
-    }
-    return {
-      permanente,
-      temporaria,
-      impuestoDiferido: impuestoDiferidoTotal,
-      total: permanente + temporaria,
-    };
-  }, []);
-
-  const launchReconciliation = () => {
-    openIntakeForType('tax_reconciliation');
-  };
-
   return (
     <div
       data-lenis-prevent
       className="min-h-full w-full overflow-y-auto"
     >
-      <div className="mx-auto w-full max-w-[1280px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
+      <div className="mx-auto w-full max-w-[960px] px-5 md:px-8 py-8 md:py-12 flex flex-col gap-8">
+
         {/* Back link */}
         <Link
           href="/workspace/verdad"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-n-500 hover:text-gold-600 transition-colors w-fit"
+          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-n-500 hover:text-n-800 transition-colors w-fit"
         >
           <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
-          {language === 'es' ? 'Volver a La Verdad' : 'Back to The Truth'}
+          Volver a La Verdad
         </Link>
 
-        {/* Hero */}
-        <SectionHeader
-          eyebrow={language === 'es' ? 'Art. 772-1 ET · Formato 2516' : 'Art. 772-1 · Form 2516'}
-          title={language === 'es' ? 'Conciliación Fiscal' : 'Tax Reconciliation'}
-          subtitle={
-            language === 'es'
-              ? 'El puente exacto entre NIIF y el Estatuto Tributario colombiano'
-              : 'The precise bridge between IFRS and the Colombian Tax Statute'
-          }
-          align="left"
-          accent="gold"
-          divider
-        />
+        {/* Sub-heading */}
+        <div className="flex flex-col gap-3">
+          <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em]" style={{ color: '#3D6B7E' }}>
+            <Scale className="w-4 h-4" aria-hidden="true" />
+            <span>La Verdad — Conciliación Fiscal</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-semibold text-n-1000 leading-tight">
+            Conciliación Fiscal
+          </h1>
+          <p className="text-n-700 text-base leading-relaxed max-w-[640px]">
+            Cruzamos su contabilidad con las declaraciones, partida por partida, para que sus cifras resistan cualquier revisión.
+          </p>
+        </div>
 
-        {/* Marco normativo */}
-        <EliteCard variant="glass" padding="lg">
-          <EliteCard.Body>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-              {[
-                {
-                  title: 'Art. 772-1 ET',
-                  desc:
-                    language === 'es'
-                      ? 'Conciliación fiscal obligatoria para contribuyentes obligados a llevar contabilidad.'
-                      : 'Mandatory tax reconciliation for taxpayers required to keep accounting.',
-                },
-                {
-                  title: 'Formato 2516',
-                  desc:
-                    language === 'es'
-                      ? 'Reporte DIAN de conciliación contable-fiscal.'
-                      : 'DIAN reconciliation report.',
-                },
-                {
-                  title: 'NIC 12',
-                  desc:
-                    language === 'es'
-                      ? 'Impuesto a las ganancias — activos y pasivos por impuesto diferido.'
-                      : 'Income taxes — deferred tax assets and liabilities.',
-                },
-                {
-                  title: 'Decreto 2235/2017',
-                  desc:
-                    language === 'es'
-                      ? 'Reglamenta la conciliación fiscal para efectos del ET.'
-                      : 'Regulates tax reconciliation under the Tax Statute.',
-                },
-              ].map((n) => (
-                <div key={n.title} className="flex flex-col gap-1.5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-gold-600 font-medium">
-                    {n.title}
-                  </p>
-                  <p className="text-[12.5px] text-n-800 leading-relaxed">{n.desc}</p>
-                </div>
-              ))}
-            </div>
-          </EliteCard.Body>
-        </EliteCard>
+        {/* Stats row */}
+        <section>
+          <p className="text-xs uppercase tracking-[0.2em] text-n-600 mb-3">Estado</p>
+          <div className="grid grid-cols-3 gap-4">
+            {STATS.map((s) => (
+              <div
+                key={s.label}
+                className="rounded-xl border border-n-200 bg-n-100/60 px-5 py-4 flex flex-col gap-2"
+              >
+                <span className="text-xs text-n-600 uppercase tracking-[0.16em]">{s.label}</span>
+                {s.accent ? (
+                  <div className="flex flex-col gap-1.5">
+                    <span
+                      className="text-2xl font-semibold tabular-nums leading-none"
+                      style={{ color: '#3D6B7E' }}
+                    >
+                      {s.value}
+                    </span>
+                    {/* Progress bar */}
+                    <div className="h-1.5 w-full rounded-full bg-n-200 overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: '97%', backgroundColor: '#3D6B7E' }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-2xl font-semibold tabular-nums leading-none text-n-1000">
+                    {s.value}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
 
-        {/* Tabla de partidas */}
-        <EliteCard variant="glass" padding="md">
-          <EliteCard.Header>
-            <span className="flex items-center gap-2">
-              <Scale
-                className="w-4 h-4 text-gold-600"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="font-serif-elite text-xl">
-                {language === 'es' ? 'Partidas conciliatorias' : 'Reconciliation items'}
-              </span>
-            </span>
-          </EliteCard.Header>
-          <EliteCard.Body>
-            <div className="overflow-x-auto -mx-2">
-              <table className="w-full min-w-[760px] text-[12.5px]">
+        {/* Differences table */}
+        <section>
+          <p className="text-xs uppercase tracking-[0.2em] text-n-600 mb-3">
+            Diferencias detectadas
+          </p>
+          <div className="rounded-xl border border-n-200 bg-n-100/60 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-[0.16em] text-n-500 border-b border-[rgb(var(--color-gold-500-rgb)_/_0.18)]">
-                    <th className="py-3 px-3 font-medium">
-                      {language === 'es' ? 'Concepto' : 'Concept'}
-                    </th>
-                    <th className="py-3 px-3 font-medium text-right">NIIF</th>
-                    <th className="py-3 px-3 font-medium text-right">
-                      {language === 'es' ? 'Fiscal' : 'Tax'}
-                    </th>
-                    <th className="py-3 px-3 font-medium text-right">
-                      {language === 'es' ? 'Diferencia' : 'Difference'}
-                    </th>
-                    <th className="py-3 px-3 font-medium text-center">
-                      {language === 'es' ? 'Tipo' : 'Type'}
-                    </th>
-                    <th className="py-3 px-3 font-medium text-right">
-                      {language === 'es' ? 'Imp. Diferido' : 'Deferred Tax'}
-                    </th>
+                  <tr className="border-b border-n-200 text-xs uppercase tracking-[0.14em] text-n-600">
+                    <th className="text-left px-5 py-3 font-medium">Cuenta</th>
+                    <th className="text-right px-5 py-3 font-medium">Saldo contable</th>
+                    <th className="text-right px-5 py-3 font-medium">Saldo fiscal</th>
+                    <th className="text-right px-5 py-3 font-medium">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {PARTIDAS.map((p, idx) => {
-                    const diff = formatDiff(p.niif, p.fiscal);
-                    const zebra = idx % 2 === 1;
-                    return (
-                      <motion.tr
-                        key={p.concepto.es}
-                        initial={shouldReduce ? undefined : { opacity: 0, y: 6 }}
-                        animate={shouldReduce ? undefined : { opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.04, duration: 0.3 }}
-                        className={cn(
-                          'border-b border-[rgb(var(--color-gold-500-rgb)_/_0.08)] text-n-1000',
-                          zebra ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.03)]' : '',
-                        )}
+                  {ROWS.map((row, idx) => (
+                    <tr
+                      key={row.cuenta}
+                      className={
+                        idx < ROWS.length - 1 ? 'border-b border-n-200' : ''
+                      }
+                    >
+                      <td className="px-5 py-3.5 font-medium text-n-1000">
+                        {row.cuenta}
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-mono text-n-800">
+                        {row.contable}
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-mono text-n-800">
+                        {row.fiscal}
+                      </td>
+                      <td
+                        className="px-5 py-3.5 text-right font-mono font-semibold"
+                        style={{ color: row.negative ? '#B45350' : '#3D6B7E' }}
                       >
-                        <td className="py-3 px-3 align-top">
-                          <span className="block leading-tight">
-                            {language === 'es' ? p.concepto.es : p.concepto.en}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-n-800">
-                          {formatCOP(p.niif)}
-                        </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-n-800">
-                          {formatCOP(p.fiscal)}
-                        </td>
-                        <td
-                          className={cn(
-                            'py-3 px-3 tabular-nums text-right font-medium',
-                            diff.value > 0 ? 'text-success-light' : 'text-danger-light',
-                          )}
-                        >
-                          {diff.formatted}
-                        </td>
-                        <td className="py-3 px-3 text-center">
-                          <span
-                            className={cn(
-                              'inline-block px-2 py-0.5 rounded-full text-2xs uppercase tracking-[0.12em] font-medium',
-                              p.tipo === 'permanente'
-                                ? 'bg-[rgba(114,47,55,0.18)] text-area-escudo'
-                                : 'bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600',
-                            )}
-                          >
-                            {p.tipo === 'permanente'
-                              ? language === 'es'
-                                ? 'Permanente'
-                                : 'Permanent'
-                              : language === 'es'
-                                ? 'Temporaria'
-                                : 'Temporary'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 tabular-nums text-right text-n-800">
-                          {typeof p.impuestoDiferido === 'number'
-                            ? formatCOP(p.impuestoDiferido)
-                            : '—'}
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                  <tr className="border-t-2 border-[rgb(var(--color-gold-500-rgb)_/_0.35)]">
-                    <td className="py-3 px-3 font-serif-elite text-base text-n-1000">
-                      {language === 'es' ? 'Totales' : 'Totals'}
-                    </td>
-                    <td className="py-3 px-3" colSpan={2}></td>
-                    <td
-                      className={cn(
-                        'py-3 px-3 tabular-nums text-right font-serif-elite text-md',
-                        totals.total >= 0 ? 'text-gold-600' : 'text-danger-light',
-                      )}
-                    >
-                      {(totals.total >= 0 ? '+' : '') + formatCOP(totals.total)}
-                    </td>
-                    <td className="py-3 px-3"></td>
-                    <td
-                      className={cn(
-                        'py-3 px-3 tabular-nums text-right font-serif-elite text-md',
-                        totals.impuestoDiferido >= 0 ? 'text-gold-600' : 'text-danger-light',
-                      )}
-                    >
-                      {(totals.impuestoDiferido >= 0 ? '+' : '') +
-                        formatCOP(totals.impuestoDiferido)}
-                    </td>
-                  </tr>
+                        {row.diferencia}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          </EliteCard.Body>
-        </EliteCard>
+          </div>
+        </section>
 
-        {/* Resumen + Formato 2516 + CTA */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr,1fr,auto] gap-6">
-          <EliteCard variant="glass" padding="lg">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp
-                className="w-4 h-4 text-area-escudo"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="text-xs uppercase tracking-[0.22em] text-area-escudo font-medium">
-                {language === 'es' ? 'Diferencias permanentes' : 'Permanent differences'}
-              </span>
-            </div>
-            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-1000">
-              {formatCOP(totals.permanente)}
-            </p>
-            <p className="text-xs text-n-700 mt-3 leading-relaxed">
-              {language === 'es'
-                ? 'No generan impuesto diferido — se absorben en el período.'
-                : 'Do not generate deferred tax — absorbed in the period.'}
-            </p>
-          </EliteCard>
+        {/* Note */}
+        <p className="text-xs text-n-600 leading-relaxed">
+          Validado según E.T. Arts. 107, 128 y 158-3. Cifras en COP millones.
+        </p>
 
-          <EliteCard variant="glass" padding="lg">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingDown
-                className="w-4 h-4 text-gold-600"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="text-xs uppercase tracking-[0.22em] text-gold-600 font-medium">
-                {language === 'es' ? 'Diferencias temporarias' : 'Temporary differences'}
-              </span>
-            </div>
-            <p className="font-serif-elite text-4xl leading-none tabular-nums text-n-1000">
-              {formatCOP(totals.temporaria)}
-            </p>
-            <p className="text-xs text-n-700 mt-3 leading-relaxed">
-              {language === 'es' ? (
-                <>
-                  Generan impuesto diferido al {(TAX_RATE * 100).toFixed(0)}% (NIC 12).
-                </>
-              ) : (
-                <>
-                  Generate deferred tax at {(TAX_RATE * 100).toFixed(0)}% (IAS 12).
-                </>
-              )}
-            </p>
-          </EliteCard>
-
-          <EliteCard
-            variant="glass"
-            padding="lg"
-            className="flex flex-col gap-3 justify-center min-w-[260px]"
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles
-                className="w-4 h-4 text-gold-600"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="uppercase tracking-[0.22em] text-xs text-gold-600 font-medium">
-                {language === 'es' ? 'Ejecutar' : 'Execute'}
-              </span>
-            </div>
-            <h4 className="font-serif-elite text-lg leading-tight text-n-1000">
-              {language === 'es'
-                ? 'Ejecutar conciliación AI'
-                : 'Run AI reconciliation'}
-            </h4>
-            <p className="text-[12.5px] text-n-700 leading-relaxed">
-              {language === 'es'
-                ? 'Dispara el pipeline: identificador de diferencias → calculador de impuesto diferido.'
-                : 'Triggers the pipeline: difference identifier → deferred tax calculator.'}
-            </p>
-            <EliteButton
-              variant="primary"
-              size="lg"
-              elevated
-              onClick={launchReconciliation}
-              rightIcon={<ArrowRight className="w-4 h-4" />}
-            >
-              {language === 'es' ? 'Ejecutar conciliación' : 'Run reconciliation'}
-            </EliteButton>
-          </EliteCard>
-        </div>
-
-        {/* Formato 2516 simulado */}
-        <EliteCard variant="glass" padding="lg">
-          <EliteCard.Header>
-            <span className="flex items-center gap-2">
-              <FileText
-                className="w-4 h-4 text-gold-600"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="font-serif-elite text-xl">
-                {language === 'es'
-                  ? 'Formato 2516 — resumen ejecutivo'
-                  : 'Form 2516 — executive summary'}
-              </span>
-            </span>
-          </EliteCard.Header>
-          <EliteCard.Body>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                {
-                  label: language === 'es' ? 'Utilidad contable (NIIF)' : 'Book income (IFRS)',
-                  value: '$1.250.000.000',
-                },
-                {
-                  label: language === 'es' ? 'Total conciliaciones' : 'Total reconciliations',
-                  value: formatCOP(totals.total),
-                },
-                {
-                  label: language === 'es' ? 'Renta líquida fiscal' : 'Taxable income',
-                  value: formatCOP(1_250_000_000 + totals.total),
-                },
-                {
-                  label:
-                    language === 'es'
-                      ? `Impuesto renta ${(TAX_RATE * 100).toFixed(0)}%`
-                      : `Income tax ${(TAX_RATE * 100).toFixed(0)}%`,
-                  value: formatCOP((1_250_000_000 + totals.total) * TAX_RATE),
-                },
-              ].map((f) => (
-                <div
-                  key={f.label}
-                  className="p-3 rounded-[8px] bg-[rgb(var(--color-gold-500-rgb)_/_0.04)] border border-[rgb(var(--color-gold-500-rgb)_/_0.12)]"
-                >
-                  <p className="text-xs uppercase tracking-[0.16em] text-n-700 mb-1.5">
-                    {f.label}
-                  </p>
-                  <p className="font-serif-elite text-lg leading-tight tabular-nums text-n-1000">
-                    {f.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </EliteCard.Body>
-        </EliteCard>
       </div>
     </div>
   );

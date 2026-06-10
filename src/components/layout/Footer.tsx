@@ -1,61 +1,112 @@
 'use client';
 
-import Link from "next/link";
-import { Badge } from "@/components/ui/Badge";
-import { useLanguage } from '@/context/LanguageContext';
+import Link from 'next/link';
+
+const NAV = [
+  {
+    heading: 'Servicios',
+    links: [
+      { label: 'Defensa DIAN', href: '/workspace' },
+      { label: 'Devoluciones', href: '/workspace' },
+      { label: 'Due diligence', href: '/workspace' },
+      { label: 'NIIF Elite', href: '/workspace' },
+    ],
+  },
+  {
+    heading: 'Producto',
+    links: [
+      { label: 'Centro de Comando', href: '/workspace' },
+      { label: 'Contabilidad Pyme', href: '/workspace' },
+      { label: 'Contabilidad', href: '/workspace' },
+      { label: 'Sistema de diseño', href: '#' },
+    ],
+  },
+  {
+    heading: 'Soporte',
+    links: [
+      { label: 'Preguntas frecuentes', href: '#faq' },
+      { label: 'Iniciar sesión', href: '/login' },
+      { label: 'Configuración', href: '/workspace/settings' },
+      { label: 'Admin', href: '/admin' },
+    ],
+  },
+];
 
 export function Footer() {
-  const currentYear = new Date().getFullYear();
-  const { t } = useLanguage();
-
   return (
-    <footer className="border-t border-n-200 bg-n-0 pt-16 pb-8">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)]">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
-
-          <div className="col-span-1 md:col-span-2">
-            <Link href="/" className="inline-block text-lg font-bold text-n-900 tracking-tight hover:opacity-70 transition-opacity">
-              1+1
+    <footer className="bg-n-50 border-t border-n-200">
+      <div
+        className="max-w-[1180px] mx-auto"
+        style={{ padding: '60px clamp(22px, 5vw, 56px) 40px' }}
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {/* Brand */}
+          <div>
+            <Link href="/" aria-label="1+1 inicio">
+              <span
+                className="font-serif-elite font-semibold inline-flex items-baseline"
+                style={{ fontSize: '28px', letterSpacing: '-0.01em' }}
+              >
+                1
+                <span
+                  style={{
+                    background: 'linear-gradient(135deg, var(--color-gold-500) 0%, var(--color-gold-400) 50%, var(--color-gold-500) 100%)',
+                    backgroundSize: '200% 100%',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                    animation: 'gold-shimmer 4.5s ease-in-out infinite alternate',
+                    padding: '0 0.04em',
+                  }}
+                >
+                  +
+                </span>
+                1
+              </span>
             </Link>
-            <p className="font-serif-elite italic text-sm text-gold-600 mt-1 mb-4">
-              {t.slogan}
+            <p
+              className="font-serif-elite italic text-n-600 mt-3 leading-snug"
+              style={{ fontSize: '0.8125rem', maxWidth: '30ch' }}
+            >
+              Tan sencillo como 1+1.
             </p>
-            <p className="text-n-600 max-w-sm mb-6 text-sm leading-relaxed">
-              {t.footer.tagline}
-            </p>
-            <Badge variant="outline">
-              {t.footer.badge}
-            </Badge>
           </div>
 
-          <div>
-            <h4 className="font-medium text-n-900 mb-4 text-sm">{t.footer.coverage}</h4>
-            <ul className="flex flex-col gap-3 text-sm text-n-600">
-              <li><Link href="#services" className="hover:text-n-900 transition-colors">{t.services.s1_title}</Link></li>
-              <li><Link href="#services" className="hover:text-n-900 transition-colors">{t.services.s2_title}</Link></li>
-              <li><Link href="#services" className="hover:text-n-900 transition-colors">{t.services.s3_title}</Link></li>
-              <li><Link href="#services" className="hover:text-n-900 transition-colors">{t.footer.compliance}</Link></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-medium text-n-900 mb-4 text-sm">{t.footer.support}</h4>
-            <ul className="flex flex-col gap-3 text-sm text-n-600">
-              <li><Link href="#methodology" className="hover:text-n-900 transition-colors">{t.nav.methodology}</Link></li>
-              <li><Link href="#faq" className="hover:text-n-900 transition-colors">{t.nav.faq}</Link></li>
-              <li><Link href="#" className="hover:text-n-900 transition-colors">{t.footer.contact}</Link></li>
-              <li><Link href="#" className="hover:text-n-900 transition-colors">{t.footer.dataPrivacy}</Link></li>
-            </ul>
-          </div>
-
+          {/* Link groups */}
+          {NAV.map((group) => (
+            <div key={group.heading}>
+              <h5
+                className="text-n-500 font-bold uppercase mb-3.5"
+                style={{ fontSize: '0.625rem', letterSpacing: '0.2em' }}
+              >
+                {group.heading}
+              </h5>
+              <ul className="space-y-0">
+                {group.links.map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="block text-n-600 hover:text-gold-600 transition-colors duration-200 py-[5px]"
+                      style={{ fontSize: '0.8125rem' }}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
+      </div>
 
-        <div className="border-t border-n-200 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-n-600">
-          <p>&copy; {currentYear} 1+1. {t.footer.rights}</p>
-          <div className="flex gap-4">
-            <Link href="#" className="hover:text-n-900 transition-colors">{t.footer.privacy}</Link>
-            <Link href="#" className="hover:text-n-900 transition-colors">{t.footer.terms}</Link>
-          </div>
+      {/* Footer bottom */}
+      <div className="border-t border-n-200">
+        <div
+          className="max-w-[1180px] mx-auto flex flex-wrap justify-between items-center gap-3 text-xs text-n-500"
+          style={{ padding: '20px clamp(22px, 5vw, 56px)' }}
+        >
+          <span>© 2026 UtopIA · 1+1 — Claridad financiera para el empresario colombiano.</span>
+          <span>Bogotá · Colombia</span>
         </div>
       </div>
     </footer>

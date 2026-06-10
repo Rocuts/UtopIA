@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Pyme — Mis Pagos</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .main{ padding-bottom:96px; }
+  /* RED debt hero */
+  .rhero{ background:linear-gradient(160deg,#4a1414,#2c0c0c); border-radius:var(--r-xl); padding:28px; color:#fff; margin-bottom:22px; position:relative; overflow:hidden; box-shadow:0 24px 48px -28px rgb(74 20 20 / .7); }
+  .rhero::after{ content:''; position:absolute; right:-40px; top:-40px; width:170px; height:170px; border-radius:50%; background:rgb(255 255 255 / .06); }
+  .rhero .dl{ font-size:var(--t-xs); text-transform:uppercase; letter-spacing:var(--tr-eyebrow); color:rgb(255 255 255 / .75); font-weight:700; position:relative; z-index:1; }
+  .rhero .dv{ font-family:var(--font-mono); font-weight:600; font-size:clamp(2.6rem,6vw,3.4rem); color:#fff; line-height:1; margin:10px 0 8px; font-variant-numeric:tabular-nums; position:relative; z-index:1; }
+  .rhero .ds{ display:flex; gap:10px; flex-wrap:wrap; position:relative; z-index:1; }
+  .rhero .chip{ font-size:var(--t-xs); font-weight:600; padding:5px 11px; border-radius:var(--r-full); background:rgb(255 255 255 / .12); color:#fff; }
+  .rhero .chip.warn{ background:rgb(252 165 165 / .2); color:#FCA5A5; }
+
+  .sec-t{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:var(--n-1000); margin-bottom:14px; }
+
+  .obli{ display:flex; align-items:center; gap:14px; background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:16px 18px; margin-bottom:10px; border-left:3px solid var(--sc); }
+  .obli .oic{ width:40px; height:40px; border-radius:var(--r-md); display:grid; place-items:center; background:color-mix(in srgb,var(--sc) 14%, transparent); color:var(--sc); flex-shrink:0; }
+  .obli .oic .pi{ width:19px; height:19px; }
+  .obli .ot{ font-weight:600; color:var(--n-1000); font-size:var(--t-md); } .obli .om{ font-size:var(--t-xs); color:var(--n-600); margin-top:3px; }
+  .obli .amt{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-md); margin-left:auto; white-space:nowrap; }
+
+  .toggle-q{ width:100%; display:flex; align-items:center; gap:12px; padding:16px 18px; border-radius:var(--r-lg); border:1px solid var(--ac-line); background:var(--ac-wash); cursor:pointer; font-family:inherit; margin:20px 0 14px; }
+  .toggle-q .qi{ width:38px; height:38px; border-radius:var(--r-md); background:var(--ac); color:#fff; display:grid; place-items:center; flex-shrink:0; }
+  .toggle-q .qi .pi{ width:18px; height:18px; }
+  .toggle-q .qt{ flex:1; text-align:left; font-weight:600; color:var(--n-1000); font-size:var(--t-md); }
+  .toggle-q .chev{ color:var(--ac-deep); transition:transform var(--d-base); }
+  .toggle-q.open .chev{ transform:rotate(180deg); }
+
+  .balzwrap{ display:none; }
+  .balzwrap.show{ display:block; animation:bIn .35s var(--ease-enter); }
+  @keyframes bIn{ from{ opacity:.4; transform:translateY(-6px);} to{ opacity:1; transform:none; } }
+  .balanza{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media(max-width:520px){ .balanza{ grid-template-columns:1fr; } }
+  .bz{ border:1px solid var(--n-200); border-radius:var(--r-lg); padding:18px 20px; background:var(--n-0); position:relative; }
+  .bz.win{ border-color:var(--ac); background:var(--ac-wash); }
+  .bz .bzt{ font-size:var(--t-sm); font-weight:700; color:var(--n-1000); }
+  .bz .bzv{ font-family:var(--font-mono); font-size:var(--t-2xl); font-weight:600; color:var(--n-1000); margin:8px 0 4px; }
+  .bz .bzd{ font-size:var(--t-xs); color:var(--n-600); }
+  .bz .winbadge{ position:absolute; top:14px; right:14px; font-size:10px; font-weight:700; color:#fff; background:var(--ac); padding:3px 9px; border-radius:var(--r-full); display:inline-flex; gap:4px; align-items:center; }
+  .savebanner{ display:flex; align-items:center; gap:14px; padding:18px 20px; border-radius:var(--r-lg); background:rgb(53 122 40 / .1); border:1px solid rgb(53 122 40 / .35); margin-top:14px; }
+  .savebanner .pi{ width:24px; height:24px; color:var(--ac-deep); flex-shrink:0; }
+  .savebanner .st{ font-weight:700; color:var(--ac-deep); font-size:var(--t-lg); } .savebanner .ss{ font-size:var(--t-sm); color:var(--n-700); margin-top:2px; }
+  .calcnote{ font-size:var(--t-sm); color:var(--n-500); text-align:center; margin-top:12px; font-style:italic; }
+  .calc{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-lg); padding:18px 20px; margin-bottom:14px; }
+  .calc .cl{ font-size:var(--t-sm); font-weight:600; color:var(--n-800); display:flex; justify-content:space-between; align-items:center; }
+  .calc .cv{ font-family:var(--font-mono); color:var(--ac-deep); font-size:var(--t-md); }
+  .calc input[type=range]{ width:100%; margin:14px 0 6px; accent-color:var(--ac); height:5px; }
+  .calc .annual{ font-size:var(--t-xs); color:var(--n-500); }
+  .sem{ margin-top:16px; }
+  .sem .track{ height:10px; border-radius:var(--r-full); background:var(--n-100); overflow:hidden; }
+  .sem .fill{ height:100%; border-radius:var(--r-full); width:0; transition:width .25s, background .25s; }
+  .sem .l1{ font-size:var(--t-sm); color:var(--n-700); margin-top:9px; font-weight:500; }
+  .sem .l2{ font-size:var(--t-xs); color:var(--n-500); margin-top:3px; }
+
+  .draft{ display:flex; align-items:center; gap:13px; padding:14px 16px; border-radius:var(--r-lg); border:1px solid var(--n-200); background:var(--n-0); margin-bottom:10px; }
+  .draft .di{ width:38px; height:38px; border-radius:var(--r-md); background:var(--ac-soft); color:var(--ac-deep); display:grid; place-items:center; flex-shrink:0; }
+  .draft .di .pi{ width:18px; height:18px; }
+  .draft .dn{ font-weight:600; color:var(--n-1000); font-size:var(--t-sm); } .draft .dd{ font-size:var(--t-xs); color:var(--n-600); margin-top:2px; }
+  .draft .dbtn{ margin-left:auto; display:inline-flex; gap:7px; align-items:center; color:var(--ac-deep); font-weight:700; font-size:var(--t-sm); cursor:pointer; white-space:nowrap; }
+  .draft .dbtn .pi{ width:16px; height:16px; }
+
+  .pnav{ position:absolute; left:0; right:0; bottom:0; display:grid; grid-template-columns:repeat(4,1fr); background:#1a2e0d; padding:9px 0 13px; z-index:30; box-shadow:0 -8px 24px -16px rgb(0 0 0 / .5); }
+  .pnav a{ display:flex; flex-direction:column; align-items:center; gap:4px; color:rgb(255 255 255 / .6); font-size:10px; font-weight:600; }
+  .pnav a:hover{ color:rgb(255 255 255 / .9); } .pnav a.on{ color:#7BC95B; }
+  .pnav a .pi{ width:22px; height:22px; }
+</style>
+</head>
+<body data-area="pyme">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad Pyme.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a mi negocio</a>
+    <div class="mwrap">
+
+      <!-- RED DEBT HERO -->
+      <div class="rhero">
+        <div class="dl">Lo que debe hoy</div>
+        <div class="dv">$1.478.000</div>
+        <div class="ds"><span class="chip warn">Más urgente en 9 días</span><span class="chip">Régimen Simple (RST)</span></div>
+      </div>
+
+      <div class="sec-t">Estado de sus pagos</div>
+      <div class="obli" style="--sc:#A83838"><div class="oic"><i data-lucide="alert-circle" class="pi"></i></div><div style="flex:1;min-width:0;"><div class="ot">Pago de empleados (PILA)</div><div class="om">Urgente · vence el 17 de junio · en 9 días</div></div><div class="amt">$1.180.000</div></div>
+      <div class="obli" style="--sc:#C48A2E"><div class="oic"><i data-lucide="clock" class="pi"></i></div><div style="flex:1;min-width:0;"><div class="ot">Anticipo bimestral RST</div><div class="om">Próxima · vence el 19 de julio · en 24 días</div></div><div class="amt">$298.000</div></div>
+      <div class="obli" style="--sc:#357A28"><div class="oic"><i data-lucide="check-circle" class="pi"></i></div><div style="flex:1;min-width:0;"><div class="ot">Industria y Comercio (ICA)</div><div class="om">Al día · pagado el mes pasado</div></div><div class="amt" style="color:var(--ac-deep)">Pagado</div></div>
+
+      <!-- BALANZA TOGGLE -->
+      <button class="toggle-q" id="balzBtn" onclick="toggleBalz()">
+        <span class="qi"><i data-lucide="scale" class="pi"></i></span>
+        <span class="qt">¿Estoy pagando el impuesto correcto?</span>
+        <span class="chev"><i data-lucide="chevron-down" style="width:20px;height:20px;"></i></span>
+      </button>
+
+      <div class="balzwrap" id="balzWrap">
+        <div class="calc">
+          <div class="cl"><span>Sus ventas al mes</span><span class="cv" id="cvMonthly">$8.166.000</span></div>
+          <input type="range" id="sales" min="1000000" max="20000000" step="1000" value="8166000">
+          <div class="annual">Al año: <span id="cvAnnual">$97.992.000</span></div>
+          <div class="sem">
+            <div class="track"><div class="fill" id="semFill"></div></div>
+            <div class="l1" id="semMsg"></div>
+            <div class="l2" id="semNums"></div>
+          </div>
+        </div>
+        <div class="balanza">
+          <div class="bz" id="rstCard"><span class="winbadge" id="rstBadge"><i data-lucide="check" style="width:11px;height:11px;"></i>Le conviene</span><div class="bzt">Régimen Simple (RST)</div><div class="bzv" id="rstVal">$1.84M</div><div class="bzd">Impuesto estimado en el año</div></div>
+          <div class="bz" id="ordCard"><span class="winbadge" id="ordBadge" style="display:none;"><i data-lucide="check" style="width:11px;height:11px;"></i>Le conviene</span><div class="bzt">Régimen Ordinario</div><div class="bzv" id="ordVal">$2.61M</div><div class="bzd">Impuesto estimado en el año</div></div>
+        </div>
+        <div class="savebanner"><i data-lucide="piggy-bank" class="pi"></i><div><div class="st" id="saveVal">Usted se ahorra $770.000 al año</div><div class="ss" id="saveSub">Quedándose en el Régimen Simple. Nosotros le avisamos si eso cambia.</div></div></div>
+        <div class="calcnote">Este cálculo usa sus ventas y pagos reales — se actualiza solo.</div>
+      </div>
+
+      <div class="sec-t" style="margin-top:26px;">Borradores listos</div>
+      <div style="font-size:var(--t-sm);color:var(--n-600);margin:-6px 0 14px;">Ya los llenamos con sus datos — solo revíselos.</div>
+      <div class="draft"><div class="di"><i data-lucide="file-text" class="pi"></i></div><div><div class="dn">Formulario 300 — IVA</div><div class="dd">Listo con sus datos del bimestre.</div></div><span class="dbtn">Descargar <i data-lucide="download" class="pi"></i></span></div>
+      <div class="draft"><div class="di"><i data-lucide="file-text" class="pi"></i></div><div><div class="dn">Formulario 350 — Retención en la fuente</div><div class="dd">Listo con sus datos del mes.</div></div><span class="dbtn">Descargar <i data-lucide="download" class="pi"></i></span></div>
+      <div class="draft"><div class="di"><i data-lucide="file-text" class="pi"></i></div><div><div class="dn">Formulario 260 — Régimen Simple</div><div class="dd">Listo con sus datos del año.</div></div><span class="dbtn">Descargar <i data-lucide="download" class="pi"></i></span></div>
+
+    </div>
+  </main>
+
+  <nav class="pnav">
+    <a href="Contabilidad Pyme.html"><i data-lucide="home" class="pi"></i>Inicio</a>
+    <a href="Pyme - Mis Fechas.html"><i data-lucide="calendar-clock" class="pi"></i>Fechas</a>
+    <a href="Pyme - Mi Libro.html"><i data-lucide="book-open" class="pi"></i>Mi Libro</a>
+    <a class="on" href="Pyme - Mis Pagos.html"><i data-lucide="scale" class="pi"></i>Pagos</a>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/taxCalculator.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  function toggleBalz(){ document.getElementById('balzBtn').classList.toggle('open'); document.getElementById('balzWrap').classList.toggle('show'); }
+  (function(){
+    var sl=document.getElementById('sales');
+    function pesos(v){ return '$'+Math.round(v).toLocaleString('es-CO'); }
+    function fmtM(v){ return '$'+(v/1e6).toFixed(2).replace('.',',')+'M'; }
+    function recalc(){
+      var monthly=+sl.value, annual=monthly*12;
+      document.getElementById('cvMonthly').textContent=pesos(monthly);
+      document.getElementById('cvAnnual').textContent=pesos(annual);
+      var r=TaxCalc.compare(annual,{group:'tiendas'});
+      document.getElementById('rstVal').textContent=fmtM(r.rst);
+      document.getElementById('ordVal').textContent=fmtM(r.ordinario);
+      var rstWin=r.recommended==='RST';
+      document.getElementById('rstCard').classList.toggle('win', rstWin);
+      document.getElementById('ordCard').classList.toggle('win', !rstWin);
+      document.getElementById('rstBadge').style.display=rstWin?'inline-flex':'none';
+      document.getElementById('ordBadge').style.display=rstWin?'none':'inline-flex';
+      var saveK=Math.round(r.savings/1000)*1000;
+      document.getElementById('saveVal').textContent='Usted se ahorra '+pesos(saveK)+' al año';
+      document.getElementById('saveSub').textContent='Quedándose en el Régimen '+(rstWin?'Simple':'Ordinario')+'. Nosotros le avisamos si eso cambia.';
+      var s=r.semaforo, fill=document.getElementById('semFill');
+      fill.style.width=Math.min(100,s.pct*100).toFixed(1)+'%';
+      fill.style.background = s.level==='verde' ? 'linear-gradient(90deg,#357A28,#7BC95B)' : (s.level==='amarillo' ? '#C48A2E' : '#A83838');
+      document.getElementById('semMsg').textContent=s.message;
+      document.getElementById('semNums').textContent='Sus ventas: '+pesos(annual)+' · Tope: '+pesos(s.tope);
+    }
+    sl.addEventListener('input',recalc); recalc();
+  })();
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

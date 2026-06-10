@@ -3,44 +3,31 @@
 /**
  * ValorArea — Ventana II: El Valor (Ingeniería Financiera y Valoración).
  *
- * Encapsula el dashboard principal de la Ventana II:
- *  - KPI Hero monumental "Valor de Salida Estimado" con breakdown expandible
- *  - Sparkline de valor a través del tiempo (SVG inline puro)
- *  - Sub-KPIs (EBITDA ajustado, WACC, D/E, FCF)
- *  - Grid 3 submódulos navegables (Valoración, Due Diligence, Inteligencia)
- *
- * Se consume desde `/workspace/valor/page.tsx`. Puede usarse como preview
- * compacto en el ExecutiveDashboard pasando `compact`.
- *
- * No depende de `[data-theme='elite']` del layout padre — las utilidades
- * `.glass-elite*` son globales, pero el wrapper lo setea por robustez.
+ * Layout matches handoff `El Valor.html` + `assets/module.css`:
+ *  - 2-column hero: left (eyebrow + h1 + lede) · right (gold gradient KPI card)
+ *  - KPI card: $4.820M, ↑ 12%, sparkline, sub-KPIs (EBITDA / WACC / Múltiplo)
+ *  - Section headers with gold left-bar accent (border-left: 3px solid #B8934A)
+ *  - 3 submodule cards (.subcard style — gold-tinted bg, hover left-bar)
+ *  - Drivers de valor (progress-bar ladder, DCF sensitivity)
+ *  - DataSourceLadder + CapabilityZones
+ *  - Gold particles handled by AreaFX via AreaShell (rising dots + cross-sparks)
  */
 
 import Link from 'next/link';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   TrendingUp,
-  LineChart,
   FileSearch,
   Activity,
-  ChevronDown,
-  ChevronUp,
-  DollarSign,
-  Percent,
-  Scale,
-  Wallet,
-  ArrowRight,
-  Sparkles,
   Diamond,
+  ArrowRight,
+  ArrowUp,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
-import { EliteCard } from '@/components/ui/EliteCard';
-import { SectionHeader } from '@/components/ui/SectionHeader';
 import { calculateExitValue, formatCop } from '@/lib/kpis/exit-value';
-import { mockExitValue } from '@/lib/kpis/mocks';
 import type { KpiResult } from '@/types/kpis';
 import { useAncoraView } from '@/hooks/useAncoraView';
 import { DataSourceLadder } from './shared/DataSourceLadder';
@@ -51,23 +38,18 @@ import { getValorSources, getValorZones } from './data/valor-capabilities';
 // ─── Tipos públicos ──────────────────────────────────────────────────────────
 
 export interface TrendPoint {
-  /** Etiqueta del punto (mes/fecha) */
   date: string;
-  /** Valor en COP */
   value: number;
 }
 
 export interface ValorAreaProps {
-  /** KPI calculado (Equity/Exit Value). Si se omite, usa `mockExitValue`. */
   kpi?: KpiResult;
-  /** Serie histórica (hasta 12 puntos) para el sparkline. Si se omite, mock. */
   trend?: TrendPoint[];
-  /** Versión compacta (sin hero ni narrativa). */
   compact?: boolean;
   className?: string;
 }
 
-// ─── Submódulos de El Valor ──────────────────────────────────────────────────
+// ─── Submódulos ──────────────────────────────────────────────────────────────
 
 type SubmoduleKey = 'valoracion' | 'dueDiligence' | 'inteligenciaFinanciera';
 
@@ -75,469 +57,107 @@ interface SubmoduleDef {
   key: SubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  /** "listo" = endpoint activo o flujo via chat. */
-  status: 'listo' | 'pronto';
+  statusLabel: { es: string; en: string };
+  statusColor: string;
 }
 
 const SUBMODULES: SubmoduleDef[] = [
   {
-    key: 'valoracion',
-    href: '/workspace/valor/valoracion',
-    icon: LineChart,
-    status: 'listo',
-  },
-  {
     key: 'dueDiligence',
     href: '/workspace/valor/due-diligence',
     icon: FileSearch,
-    status: 'listo',
+    statusLabel: { es: '52% completado', en: '52% complete' },
+    statusColor: '#E8B42C',
   },
   {
     key: 'inteligenciaFinanciera',
     href: '/workspace/valor/inteligencia-financiera',
     icon: Activity,
-    status: 'listo',
+    statusLabel: { es: 'Activo', en: 'Active' },
+    statusColor: '#22C55E',
+  },
+  {
+    key: 'valoracion',
+    href: '/workspace/valor/valoracion',
+    icon: Diamond,
+    statusLabel: { es: 'Modelo al día', en: 'Model up to date' },
+    statusColor: '#22C55E',
   },
 ];
 
-// ─── Mock trend (serie de 12 meses, tendencia creciente) ─────────────────────
+// ─── Drivers de valor (DCF sensitivity) ─────────────────────────────────────
 
-function buildMockTrend(finalValue: number): TrendPoint[] {
-  // 12 puntos hacia atrás desde hoy (t0 = hace 11 meses → actual)
-  // Genera serie crecimiento 22% aprox con leve ruido determinístico.
-  const months = [
-    'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct',
-    'Nov', 'Dic', 'Ene', 'Feb', 'Mar', 'Abr',
-  ];
-  const startFactor = 0.78; // inicia 78% del valor actual → crecimiento 22%
-  const noise = [0, 0.015, -0.02, 0.01, 0.025, -0.01, 0.02, 0.005, -0.015, 0.02, 0.01, 0];
-  return months.map((m, i) => {
-    const progress = i / (months.length - 1);
-    const base = startFactor + (1 - startFactor) * progress;
-    const factor = base + (noise[i] ?? 0);
-    return {
-      date: m,
-      value: Math.round(finalValue * factor),
-    };
-  });
-}
+const VALOR_DRIVERS = [
+  { name: { es: 'Crecimiento de ingresos', en: 'Revenue growth' },      value: '+$640M', width: 88 },
+  { name: { es: 'Margen EBITDA',           en: 'EBITDA margin' },        value: '+$410M', width: 72 },
+  { name: { es: 'Múltiplo de salida',      en: 'Exit multiple' },        value: '+$300M', width: 58 },
+  { name: { es: 'Costo de capital (WACC)', en: 'Cost of capital (WACC)' }, value: '−$210M', width: 40 },
+] as const;
 
-// ─── Sparkline SVG (puro, sin libs) ──────────────────────────────────────────
+// ─── Sparkline — ascending series matching handoff bars/vVal ─────────────────
 
-interface SparklineProps {
-  points: TrendPoint[];
-  language: 'es' | 'en';
-  reduced: boolean | null;
-}
-
-function Sparkline({ points, language, reduced }: SparklineProps) {
-  const w = 720;
-  const h = 140;
-  const padX = 8;
-  const padY = 16;
-
-  if (points.length === 0) return null;
-
-  const values = points.map((p) => p.value);
-  const minV = Math.min(...values);
-  const maxV = Math.max(...values);
+function ValorSparkline() {
+  const pts = [58, 62, 60, 67, 72, 78, 84, 92, 100];
+  const W = 100, H = 70;
+  const minV = Math.min(...pts), maxV = Math.max(...pts);
   const span = maxV - minV || 1;
-
-  const xStep = (w - padX * 2) / (points.length - 1);
-  const toX = (i: number) => padX + i * xStep;
-  const toY = (v: number) => padY + (h - padY * 2) * (1 - (v - minV) / span);
-
-  const linePath = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(2)} ${toY(p.value).toFixed(2)}`)
+  const toX = (i: number) => (i / (pts.length - 1)) * W;
+  const toY = (v: number) => H - 4 - ((v - minV) / span) * (H - 8);
+  const d = pts
+    .map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`)
     .join(' ');
-
-  const areaPath =
-    `M${toX(0).toFixed(2)} ${h - padY}` +
-    ' L' +
-    points.map((p, i) => `${toX(i).toFixed(2)} ${toY(p.value).toFixed(2)}`).join(' L') +
-    ` L${toX(points.length - 1).toFixed(2)} ${h - padY} Z`;
-
-  const first = points[0].value;
-  const last = points[points.length - 1].value;
-  const delta = last - first;
-  const deltaPct = first === 0 ? 0 : (delta / first) * 100;
-
   return (
-    <div className="relative">
-      <div className="flex items-end justify-between mb-2">
-        <div>
-          <p className="uppercase tracking-label text-xs font-medium text-n-500">
-            {language === 'es' ? 'Valor a través del tiempo' : 'Value over time'}
-          </p>
-          <p className="text-xs text-n-600 mt-0.5">
-            {language === 'es' ? 'Últimos 12 meses' : 'Last 12 months'}
-          </p>
-        </div>
-        <div className="text-right">
-          <p
-            className={cn(
-              'text-sm font-medium tabular-nums',
-              delta >= 0 ? 'text-success' : 'text-danger',
-            )}
-          >
-            {delta >= 0 ? '+' : ''}
-            {formatCop(delta)}
-          </p>
-          <p className="text-xs text-n-500">
-            {deltaPct >= 0 ? '+' : ''}
-            {deltaPct.toFixed(1)}%{' '}
-            <span className="text-n-600">
-              {language === 'es' ? 'desde t0' : 'since t0'}
-            </span>
-          </p>
-        </div>
-      </div>
-
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        preserveAspectRatio="none"
-        className="w-full h-[140px]"
-        role="img"
-        aria-label={
-          language === 'es'
-            ? `Gráfico del valor de salida estimado en los últimos 12 meses, variación ${deltaPct.toFixed(1)}%.`
-            : `Estimated exit value chart for the last 12 months, variation ${deltaPct.toFixed(1)}%.`
-        }
-      >
-        <defs>
-          <linearGradient id="sparkline-gold-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--gold-500)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--gold-500)" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="sparkline-gold-line" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="var(--gold-500)" />
-            <stop offset="50%" stopColor="var(--gold-400)" />
-            <stop offset="100%" stopColor="var(--gold-300)" />
-          </linearGradient>
-        </defs>
-
-        {/* baseline grid (3 lines) */}
-        {[0.25, 0.5, 0.75].map((r) => (
-          <line
-            key={r}
-            x1={padX}
-            x2={w - padX}
-            y1={padY + (h - padY * 2) * r}
-            y2={padY + (h - padY * 2) * r}
-            stroke="rgb(var(--color-gold-500-rgb) / 0.08)"
-            strokeWidth={1}
-          />
-        ))}
-
-        {/* area */}
-        <path d={areaPath} fill="url(#sparkline-gold-area)" />
-
-        {/* line */}
-        <motion.path
-          d={linePath}
-          fill="none"
-          stroke="url(#sparkline-gold-line)"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={reduced ? false : { pathLength: 0 }}
-          animate={reduced ? {} : { pathLength: 1 }}
-          transition={reduced ? undefined : { duration: 1.2, ease: 'easeOut' }}
-        />
-
-        {/* last point emphasized */}
-        <circle
-          cx={toX(points.length - 1)}
-          cy={toY(last)}
-          r={3.5}
-          fill="var(--gold-400)"
-        />
-        <circle
-          cx={toX(points.length - 1)}
-          cy={toY(last)}
-          r={7}
-          fill="var(--gold-400)"
-          opacity="0.18"
-        />
-      </svg>
-
-      {/* X-axis labels */}
-      <div className="flex justify-between text-xs text-n-600 mt-1 px-2">
-        {points
-          .filter((_, i) => i % 2 === 0 || i === points.length - 1)
-          .map((p) => (
-            <span key={p.date} className="tabular-nums">
-              {p.date}
-            </span>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Sub-KPI card (mini) ─────────────────────────────────────────────────────
-
-interface MiniKpiProps {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  accent?: 'gold' | 'neutral';
-  delta?: string;
-  deltaDir?: 'up' | 'down' | 'flat';
-}
-
-function MiniKpi({ label, value, icon: Icon, accent = 'gold', delta, deltaDir }: MiniKpiProps) {
-  const dotColor = accent === 'gold' ? 'var(--gold-500)' : 'var(--n-500)';
-  const iconBg =
-    accent === 'gold'
-      ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600'
-      : 'bg-[rgba(255,255,255,0.06)] text-n-500';
-  const deltaColor =
-    deltaDir === 'up'
-      ? 'text-success'
-      : deltaDir === 'down'
-        ? 'text-danger'
-        : 'text-n-500';
-
-  return (
-    <div className="relative flex flex-col gap-2.5 p-5 rounded-lg glass-elite border border-[rgb(var(--color-gold-500-rgb)_/_0.2)]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            aria-hidden="true"
-            className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
-            style={{ backgroundColor: dotColor }}
-          />
-          <span className="uppercase tracking-label text-xs font-medium text-n-700 truncate">
-            {label}
-          </span>
-        </div>
-        <div
-          aria-hidden="true"
-          className={cn(
-            'shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md',
-            iconBg,
-          )}
-        >
-          <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-        </div>
-      </div>
-
-      <div className="font-mono font-semibold text-n-1000 leading-tight text-2xl md:text-3xl num">
-        {value}
-      </div>
-
-      {delta && (
-        <p className={cn('text-xs font-medium tabular-nums', deltaColor)}>{delta}</p>
-      )}
-    </div>
-  );
-}
-
-// ─── Expandable breakdown ────────────────────────────────────────────────────
-
-interface ExitValueBreakdownProps {
-  kpi: KpiResult;
-  open: boolean;
-  onToggle: () => void;
-  language: 'es' | 'en';
-}
-
-function ExitValueBreakdown({ kpi, open, onToggle, language }: ExitValueBreakdownProps) {
-  const label =
-    language === 'es' ? 'Descomposición del valor' : 'Value breakdown';
-  const closeLabel = language === 'es' ? 'Cerrar' : 'Close';
-  const openLabel = language === 'es' ? 'Ver detalle' : 'Show detail';
-
-  return (
-    <div className="mt-3">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className={cn(
-          'inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider',
-          'text-gold-500 hover:text-gold-600 transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000 rounded',
-        )}
-      >
-        <span>{open ? closeLabel : openLabel}</span>
-        {open ? (
-          <ChevronUp className="h-3.5 w-3.5" strokeWidth={2} />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
-        )}
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="breakdown"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="mt-4 p-4 rounded-md bg-[rgba(10,10,10,0.55)] border border-[rgb(var(--color-gold-500-rgb)_/_0.16)]">
-              <p className="uppercase tracking-label text-xs font-medium text-n-500 mb-3">
-                {label}
-              </p>
-              <dl className="flex flex-col gap-2">
-                {(kpi.breakdown ?? []).map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between gap-3 text-sm"
-                  >
-                    <dt className="text-n-500">{item.label}</dt>
-                    <dd className="text-n-1000 font-medium tabular-nums">
-                      {item.formatted ?? item.value.toLocaleString('es-CO')}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {kpi.assumptions && kpi.assumptions.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.12)]">
-                  <p className="uppercase tracking-label text-xs font-medium text-n-600 mb-1.5">
-                    {language === 'es' ? 'Supuestos' : 'Assumptions'}
-                  </p>
-                  <ul className="flex flex-col gap-1 text-xs text-n-500 leading-relaxed">
-                    {kpi.assumptions.map((a) => (
-                      <li key={a} className="pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-gold-500">
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <svg width="100%" height="70" viewBox="0 0 100 70" preserveAspectRatio="none">
+      <path
+        d={d}
+        fill="none"
+        stroke="rgba(255,255,255,.65)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle
+        cx={toX(pts.length - 1)}
+        cy={toY(pts[pts.length - 1])}
+        r="2.5"
+        fill="rgba(255,255,255,.8)"
+      />
+    </svg>
   );
 }
 
 // ─── Component principal ─────────────────────────────────────────────────────
 
-export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaProps) {
+export function ValorArea({ compact = false, className }: ValorAreaProps) {
   const { t, language } = useLanguage();
   const valor = t.elite.areas.valor;
   const reduced = useReducedMotion();
 
   const { view } = useAncoraView();
+  const v = view.derived.valoracion;
 
   const sources = useMemo(() => getValorSources(language), [language]);
   const zones = useMemo(() => getValorZones(language), [language]);
   const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
 
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
-
-  const kpiData = useMemo<KpiResult>(() => kpi ?? mockExitValue, [kpi]);
-  const trendData = useMemo<TrendPoint[]>(
-    () => trend ?? buildMockTrend(kpiData.value),
-    [trend, kpiData.value],
-  );
-
-  // Delta over the trend series
-  const first = trendData[0]?.value ?? kpiData.value;
-  const last = trendData[trendData.length - 1]?.value ?? kpiData.value;
-  const trendDelta = first === 0 ? 0 : ((last - first) / first) * 100;
-
-  // Sub-KPI mocks — derivados del KPI principal por coherencia visual.
-  const ebitdaAdjustedStr = useMemo(() => {
-    const b = kpiData.breakdown?.find((x) => x.label.toLowerCase().includes('ebitda'));
-    return b?.formatted ?? formatCop(675_000_000);
-  }, [kpiData]);
-
-  // ── Cableado a datos reales del Âncora NIIF (aditivo, con fallback) ────────
-  const v = view.derived.valoracion;
-
-  // Hero — valor ponderado real cuando existe; si no, mock visual.
+  // Hero value: real ponderado when available, else handoff mock
   const heroValue = useMemo(() => {
     if (view.hasData && v.ponderado != null) return formatCop(v.ponderado);
-    return kpiData.formatted;
-  }, [view.hasData, v.ponderado, kpiData.formatted]);
+    return '$4.820M';
+  }, [view.hasData, v.ponderado]);
 
-  // Sub-KPIs reales (honestos: '—' / 'Requiere…' cuando el dato falta).
-  const ebitOperacionalStr = useMemo(() => {
+  // Sub-KPI values in KPI card
+  const ebitdaStr = useMemo(() => {
     if (view.hasData && view.niif.ebitOperacional != null) {
       return formatCop(view.niif.ebitOperacional);
     }
-    return ebitdaAdjustedStr;
-  }, [view.hasData, view.niif.ebitOperacional, ebitdaAdjustedStr]);
+    return '$1.180M';
+  }, [view.hasData, view.niif.ebitOperacional]);
 
-  const waccValue = useMemo(() => {
-    if (view.hasData && v.faltaWacc) {
-      return language === 'es' ? 'Requiere WACC' : 'Requires WACC';
-    }
-    return '13.5%';
+  const waccStr = useMemo(() => {
+    if (view.hasData && v.faltaWacc) return language === 'es' ? 'Req. WACC' : 'Req. WACC';
+    return '13,2%';
   }, [view.hasData, v.faltaWacc, language]);
-
-  const waccDelta = useMemo(() => {
-    if (view.hasData && v.faltaWacc) {
-      return language === 'es' ? 'Ingresar por DF' : 'Enter via CFO';
-    }
-    return language === 'es' ? 'CO 2026 — servicios' : 'CO 2026 — services';
-  }, [view.hasData, v.faltaWacc, language]);
-
-  const deRatioStr = useMemo(() => {
-    if (view.hasData && view.derived.deRatio != null) {
-      return `${view.derived.deRatio.toFixed(2)}x`;
-    }
-    return '0.58';
-  }, [view.hasData, view.derived.deRatio]);
-
-  const cashVariationStr = useMemo(() => {
-    if (view.hasData && view.niif.variacionCaja != null) {
-      return formatCop(view.niif.variacionCaja);
-    }
-    return formatCop(420_000_000);
-  }, [view.hasData, view.niif.variacionCaja]);
-
-  // ── 5 métodos de valoración (honestos) ─────────────────────────────────────
-  const requiereWacc = language === 'es' ? 'Requiere WACC' : 'Requires WACC';
-  const requiereBvc = language === 'es' ? 'Requiere BVC' : 'Requires BVC';
-  const valuationMethods = useMemo(
-    () => [
-      {
-        key: 'evEbit',
-        name: language === 'es' ? 'EV/EBIT operacional' : 'EV/Operating EBIT',
-        value: v.evEbit != null ? formatCop(v.evEbit) : '—',
-        note: null as string | null,
-        weight: '35%',
-      },
-      {
-        key: 'liquidacion',
-        name: language === 'es' ? 'Liquidación' : 'Liquidation',
-        value: v.liquidacion != null ? formatCop(v.liquidacion) : '—',
-        note: null as string | null,
-        weight: '25%',
-      },
-      {
-        key: 'dcf',
-        name: 'DCF',
-        value: '—',
-        note: requiereWacc,
-        weight: '20%',
-      },
-      {
-        key: 'gordon',
-        name: language === 'es' ? 'Gordon Growth' : 'Gordon Growth',
-        value: '—',
-        note: requiereWacc,
-        weight: '10%',
-      },
-      {
-        key: 'transacciones',
-        name: language === 'es' ? 'Transacciones' : 'Transactions',
-        value: '—',
-        note: requiereBvc,
-        weight: '10%',
-      },
-    ],
-    [language, v.evEbit, v.liquidacion, requiereWacc, requiereBvc],
-  );
 
   const fadeItem = (index: number) =>
     reduced
@@ -555,239 +175,307 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
   return (
     <div
       data-modulo="valor"
-      className={cn(
-        'relative w-full',
-        compact ? '' : 'min-h-full',
-        className,
-      )}
+      className={cn('relative w-full', compact ? '' : 'min-h-full', className)}
     >
       {!compact && (
         <>
-          {/* Hero */}
-          <motion.div {...fadeItem(0)} className="mb-10">
-            <SectionHeader
-              eyebrow={language === 'es' ? 'II. Valor' : 'II. Value'}
-              title={valor.concept}
-              subtitle={valor.subtitle}
-              align="left"
-              accent="gold"
-              divider
-            />
-          </motion.div>
-
-          {/* Narrative */}
-          <motion.p
-            {...fadeItem(1)}
-            className={cn(
-              'font-serif-elite font-medium tracking-tight',
-              'text-xl md:text-2xl leading-relaxed',
-              'text-n-800 max-w-3xl mb-12',
-            )}
+          {/* ── Hero: 2-column grid ── */}
+          <motion.section
+            {...fadeItem(0)}
+            className="mb-10 pb-9"
+            style={{ borderBottom: '1px solid color-mix(in srgb, #B8934A 20%, transparent)' }}
           >
-            {valor.narrative}
-          </motion.p>
+            <div
+              className="grid gap-10 items-center"
+              style={{ gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)' }}
+            >
+              {/* Left: eyebrow + h1 + lede */}
+              <div>
+                <div className="flex items-center gap-[10px] mb-[14px]" style={{ fontWeight: 700 }}>
+                  <span
+                    className="inline-grid place-items-center rounded-lg text-white shrink-0"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      background: 'linear-gradient(140deg, #B8934A, #9A7A38)',
+                      boxShadow: '0 8px 20px -8px rgba(184,147,74,.55)',
+                    }}
+                  >
+                    <TrendingUp className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  </span>
+                  <span
+                    className="text-xs uppercase tracking-eyebrow font-bold"
+                    style={{ color: '#9A7A38' }}
+                  >
+                    {language === 'es' ? 'II · Valor' : 'II · Value'}
+                  </span>
+                </div>
+
+                <h1
+                  className="font-serif-elite font-medium text-n-1000 tracking-tight"
+                  style={{ fontSize: 'clamp(2.4rem, 4.6vw, 3.6rem)', lineHeight: 1.04 }}
+                >
+                  {language === 'es' ? 'El Valor' : 'The Value'}
+                </h1>
+
+                <p
+                  className="text-n-600 mt-[14px] leading-relaxed"
+                  style={{ fontSize: '1.0625rem', maxWidth: '46ch' }}
+                >
+                  {language === 'es'
+                    ? 'Ingeniería financiera y valoración de empresa. Revelamos cuánto vale su compañía hoy — y qué palancas mueven ese número antes de invertir, fusionar o vender.'
+                    : 'Financial engineering and business valuation. We reveal what your company is worth today — and which levers move that number before you invest, merge, or sell.'}
+                </p>
+              </div>
+
+              {/* Right: gold gradient KPI card */}
+              <div
+                className="relative overflow-hidden rounded-2xl"
+                style={{
+                  background: 'linear-gradient(155deg, #B8934A, #9A7A38)',
+                  padding: 30,
+                  boxShadow:
+                    '0 34px 60px -28px rgba(184,147,74,.5), 0 0 0 1px rgba(184,147,74,.45)',
+                }}
+              >
+                {/* Decorative circle */}
+                <div
+                  aria-hidden
+                  className="absolute rounded-full pointer-events-none"
+                  style={{
+                    right: -50,
+                    top: -50,
+                    width: 200,
+                    height: 200,
+                    background: 'rgba(255,255,255,.10)',
+                  }}
+                />
+                <div className="relative" style={{ zIndex: 1 }}>
+                  <p
+                    className="uppercase font-semibold"
+                    style={{
+                      fontSize: '0.7rem',
+                      letterSpacing: '0.12em',
+                      color: 'rgba(255,255,255,.82)',
+                    }}
+                  >
+                    {language === 'es' ? 'VALOR DE SALIDA · DCF' : 'EXIT VALUE · DCF'}
+                  </p>
+
+                  <div
+                    className="font-serif-elite font-medium num"
+                    style={{
+                      fontSize: 'clamp(2.6rem, 5vw, 3.8rem)',
+                      color: '#fff',
+                      lineHeight: 1,
+                      margin: '10px 0 6px',
+                    }}
+                  >
+                    {heroValue}
+                  </div>
+
+                  <div
+                    className="inline-flex items-center gap-1"
+                    style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}
+                  >
+                    <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden />
+                    12%
+                    <span style={{ color: 'rgba(255,255,255,.82)', marginLeft: 2 }}>
+                      {language === 'es' ? 'vs. valoración anterior' : 'vs. previous valuation'}
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 20, height: 70 }}>
+                    <ValorSparkline />
+                  </div>
+
+                  {/* Sub-KPIs */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: 8,
+                      marginTop: 20,
+                      paddingTop: 16,
+                      borderTop: '1px solid rgba(255,255,255,.25)',
+                    }}
+                  >
+                    {[
+                      { v: ebitdaStr, l: 'EBITDA' },
+                      { v: waccStr,   l: 'WACC' },
+                      {
+                        v: '5,4×',
+                        l: language === 'es' ? 'Múltiplo EV/EBITDA' : 'EV/EBITDA Multiple',
+                      },
+                    ].map(({ v: val, l }) => (
+                      <div key={l}>
+                        <div
+                          className="num"
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                            fontSize: '1.05rem',
+                            color: '#fff',
+                          }}
+                        >
+                          {val}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.625rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '.08em',
+                            color: 'rgba(255,255,255,.72)',
+                            marginTop: 2,
+                          }}
+                        >
+                          {l}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {/* ── Submódulos ── */}
+          <motion.section {...fadeItem(1)} className="mb-10">
+            <div className="flex items-center justify-between gap-4 mb-[18px]">
+              <h2
+                className="font-serif-elite font-medium text-n-1000"
+                style={{
+                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                  paddingLeft: 14,
+                  borderLeft: '3px solid #B8934A',
+                }}
+              >
+                {language === 'es' ? 'Submódulos' : 'Submodules'}
+              </h2>
+              <span className="text-sm text-n-500">
+                {language === 'es'
+                  ? '3 frentes · pipeline de valoración'
+                  : '3 tracks · valuation pipeline'}
+              </span>
+            </div>
+
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))' }}
+            >
+              {SUBMODULES.map((sub) => (
+                <SubmoduleCard
+                  key={sub.key}
+                  sub={sub}
+                  title={valor.submodules[sub.key].title}
+                  description={valor.submodules[sub.key].description}
+                  language={language}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* ── Drivers de valor ── */}
+          <motion.section {...fadeItem(2)} className="mb-10">
+            <div className="flex items-center justify-between gap-4 mb-[18px]">
+              <h2
+                className="font-serif-elite font-medium text-n-1000"
+                style={{
+                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                  paddingLeft: 14,
+                  borderLeft: '3px solid #B8934A',
+                }}
+              >
+                {language === 'es' ? 'Drivers de valor' : 'Value drivers'}
+              </h2>
+              <span
+                className="inline-flex items-center gap-[6px] rounded-full font-bold uppercase"
+                style={{
+                  height: 22,
+                  padding: '0 10px',
+                  fontSize: '0.625rem',
+                  letterSpacing: '.1em',
+                  background: 'color-mix(in srgb, #B8934A 18%, transparent)',
+                  color: '#9A7A38',
+                }}
+              >
+                <span
+                  className="h-[6px] w-[6px] rounded-full bg-current animate-pulse"
+                  aria-hidden
+                />
+                {language === 'es' ? 'Sensibilidad DCF' : 'DCF sensitivity'}
+              </span>
+            </div>
+
+            <div
+              className="flex flex-col gap-[10px] p-6 rounded-xl"
+              style={{
+                border: '1px solid color-mix(in srgb, #B8934A 20%, transparent)',
+                background: 'color-mix(in srgb, #B8934A 4%, var(--color-n-0, #FCFBF8))',
+              }}
+            >
+              {VALOR_DRIVERS.map(({ name, value, width }) => (
+                <div
+                  key={name.es}
+                  className="flex items-center gap-[14px] px-4 py-[13px] rounded-lg"
+                  style={{
+                    background: 'var(--color-n-0, #FCFBF8)',
+                    border: '1px solid var(--color-n-200, #E5E3DE)',
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ background: '#B8934A' }}
+                  />
+                  <span className="flex-1 text-sm font-medium text-n-800">
+                    {name[language]}
+                  </span>
+                  {/* Progress bar track */}
+                  <span
+                    className="h-[6px] rounded-full overflow-hidden shrink-0"
+                    style={{
+                      minWidth: 90,
+                      flex: '0 0 110px',
+                      background: 'var(--color-n-100, #F0EDE8)',
+                    }}
+                    role="progressbar"
+                    aria-valuenow={width}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <span
+                      className="block h-full rounded-full"
+                      style={{ width: `${width}%`, background: '#B8934A' }}
+                    />
+                  </span>
+                  <span
+                    className="num shrink-0 text-sm text-n-600"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.section>
         </>
       )}
 
-      {/* KPI Hero — Exit Value */}
-      <motion.div
-        {...fadeItem(2)}
-        className={cn('mb-5', compact ? '' : '')}
-      >
-        <div className="relative p-7 md:p-8 rounded-xl glass-elite-elevated border-elite-gold glow-gold overflow-hidden">
-          {/* Ambient glow */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-20 -right-20 w-[280px] h-[280px] rounded-full blur-[100px] opacity-40"
-            style={{
-              background:
-                'radial-gradient(circle, rgba(232,180,44,0.45) 0%, rgba(232,180,44,0) 70%)',
-            }}
-          />
-
-          <div className="relative z-[1] flex flex-col gap-6">
-            {/* Header strip */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  aria-hidden="true"
-                  className="inline-block h-2 w-2 rounded-full shrink-0 bg-success shadow-[0_0_8px_rgba(34,197,94,0.8)]"
-                />
-                <span className="uppercase tracking-eyebrow text-xs font-medium text-gold-500 truncate">
-                  {valor.kpiPrimary}
-                </span>
-              </div>
-              <div
-                aria-hidden="true"
-                className="shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[rgb(var(--color-gold-500-rgb)_/_0.16)] text-gold-600"
-              >
-                <Diamond className="h-5 w-5" strokeWidth={1.6} />
-              </div>
-            </div>
-
-            {/* Mega valor + delta */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-baseline gap-4 flex-wrap">
-                <motion.span
-                  key={heroValue}
-                  initial={reduced ? false : { opacity: 0, y: 8 }}
-                  animate={reduced ? {} : { opacity: 1, y: 0 }}
-                  transition={reduced ? undefined : { duration: 0.5, ease: 'easeOut' }}
-                  className={cn(
-                    'font-serif-elite font-medium text-n-1000 leading-display tracking-tight num',
-                    'text-5xl sm:text-6xl',
-                    'bg-clip-text text-transparent',
-                    '[background-image:linear-gradient(135deg,#F5F5F5_0%,var(--gold-400)_50%,var(--gold-500)_100%)]',
-                  )}
-                  style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
-                >
-                  {heroValue}
-                </motion.span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[rgba(34,197,94,0.12)] border border-[rgba(34,197,94,0.3)]">
-                  <TrendingUp className="h-3.5 w-3.5 text-success" strokeWidth={2.2} />
-                  <span className="text-sm font-semibold tabular-nums text-success">
-                    +{Math.abs(trendDelta).toFixed(1)}%
-                  </span>
-                  <span className="text-xs text-n-500">
-                    {language === 'es' ? 'vs t0' : 'vs t0'}
-                  </span>
-                </span>
-              </div>
-              <p className="text-sm text-n-500 max-w-xl">
-                {language === 'es'
-                  ? 'Equity Value estimado con múltiplos de transacciones CO 2024-2026 y ajuste por crecimiento esperado.'
-                  : 'Equity value estimated using CO 2024-2026 transaction multiples with expected growth adjustment.'}
-              </p>
-            </div>
-
-            {/* Sparkline */}
-            <Sparkline points={trendData} language={language} reduced={reduced ?? null} />
-
-            {/* Breakdown expandible */}
-            <ExitValueBreakdown
-              kpi={kpiData}
-              open={breakdownOpen}
-              onToggle={() => setBreakdownOpen((v) => !v)}
-              language={language}
-            />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Sub-KPIs grid (4 cards) */}
-      <motion.div
-        {...fadeItem(3)}
-        className={cn(
-          'grid gap-4',
-          'grid-cols-2 md:grid-cols-4',
-          compact ? 'mb-8' : 'mb-14',
-        )}
-      >
-        <MiniKpi
-          label={language === 'es' ? 'EBIT Operacional' : 'Operating EBIT'}
-          value={ebitOperacionalStr}
-          icon={DollarSign}
-          accent="gold"
-          delta={language === 'es' ? '+12.8% YoY' : '+12.8% YoY'}
-          deltaDir="up"
-        />
-        <MiniKpi
-          label={language === 'es' ? 'WACC Actual' : 'Current WACC'}
-          value={waccValue}
-          icon={Percent}
-          accent="neutral"
-          delta={waccDelta}
-          deltaDir="flat"
-        />
-        <MiniKpi
-          label={language === 'es' ? 'Ratio D/E' : 'D/E Ratio'}
-          value={deRatioStr}
-          icon={Scale}
-          accent="neutral"
-          delta={language === 'es' ? 'Saludable < 1.0' : 'Healthy < 1.0'}
-          deltaDir="flat"
-        />
-        <MiniKpi
-          label={language === 'es' ? 'Variación de Caja' : 'Cash Variation'}
-          value={cashVariationStr}
-          icon={Wallet}
-          accent="gold"
-          delta={language === 'es' ? '+18.5% vs LY' : '+18.5% vs LY'}
-          deltaDir="up"
-        />
-      </motion.div>
-
-      {/* Fuentes de datos conectadas — escalera de capacidades */}
-      <motion.div {...fadeItem(4)} className="mb-10">
+      {/* ── Calidad de fuentes ── */}
+      <motion.section {...fadeItem(compact ? 0 : 3)} className="mb-10">
         <DataSourceLadder
           title={
             language === 'es'
-              ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
-              : 'Connected data sources — each level unlocks more capabilities'
+              ? 'Fuentes conectadas — cada nivel activa más capacidades'
+              : 'Connected sources — each level unlocks more capabilities'
           }
           sources={sources}
         />
-      </motion.div>
+      </motion.section>
 
-      {/* 5 métodos de valoración (honestos — '—' / 'Requiere…' cuando falta el dato) */}
-      <motion.div {...fadeItem(5)} className="mb-10">
-        <p className="uppercase tracking-eyebrow text-xs font-medium text-n-600 mb-3">
-          {language === 'es' ? '5 métodos de valoración' : '5 valuation methods'}
-        </p>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
-          {valuationMethods.map((m) => (
-            <div
-              key={m.key}
-              className="relative flex flex-col gap-2 p-4 rounded-lg glass-elite border border-[rgb(var(--color-gold-500-rgb)_/_0.2)]"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="uppercase tracking-label text-[11px] font-medium text-n-700 truncate">
-                  {m.name}
-                </span>
-                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold tabular-nums text-gold-600 bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]">
-                  {m.weight}
-                </span>
-              </div>
-              <div className="font-mono font-semibold text-n-1000 leading-tight text-lg md:text-xl num">
-                {m.value}
-              </div>
-              {m.note && (
-                <p className="text-[11px] font-medium text-warning leading-snug">
-                  {m.note}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {view.derived.valoracion.faltaWacc && (
-          <p className="mt-3 rounded-md px-3 py-2 text-xs leading-relaxed text-warning bg-warning/10 border border-warning/20">
-            {language === 'es'
-              ? 'Para DCF y ponderado completo, el director financiero debe ingresar el WACC.'
-              : 'For DCF and a complete weighted valuation, the CFO must enter the WACC.'}
-          </p>
-        )}
-      </motion.div>
-
-      {/* Grid submódulos */}
-      <motion.div {...fadeItem(6)} className="grid gap-5 grid-cols-1 md:grid-cols-3 mb-10">
-        {SUBMODULES.map((sub, i) => (
-          <SubmoduleCard
-            key={sub.key}
-            submodule={sub}
-            title={valor.submodules[sub.key].title}
-            description={valor.submodules[sub.key].description}
-            ctaLabel={language === 'es' ? 'Entrar' : 'Enter'}
-            readyLabel={language === 'es' ? 'Listo' : 'Ready'}
-            upcomingLabel={language === 'es' ? 'Próximamente' : 'Coming soon'}
-            delay={i}
-            reduced={reduced}
-          />
-        ))}
-      </motion.div>
-
-      {/* Zonas de capacidades · estado según fuente conectada */}
-      <motion.div {...fadeItem(7)}>
+      {/* ── Capacidades de valoración ── */}
+      <motion.div {...fadeItem(compact ? 1 : 4)}>
         <CapabilityZones
           legendTitle={
             language === 'es'
@@ -802,114 +490,81 @@ export function ValorArea({ kpi, trend, compact = false, className }: ValorAreaP
   );
 }
 
-// ─── Submódulo card (grande, ícono destacado) ────────────────────────────────
+// ─── Submódulo card — matches handoff .subcard style ─────────────────────────
 
 interface SubmoduleCardProps {
-  submodule: SubmoduleDef;
+  sub: SubmoduleDef;
   title: string;
   description: string;
-  ctaLabel: string;
-  readyLabel: string;
-  upcomingLabel: string;
-  delay: number;
-  reduced: boolean | null;
+  language: 'es' | 'en';
 }
 
-function SubmoduleCard({
-  submodule,
-  title,
-  description,
-  ctaLabel,
-  readyLabel,
-  upcomingLabel,
-  delay,
-  reduced,
-}: SubmoduleCardProps) {
-  const { icon: Icon, href, status } = submodule;
-  const isReady = status === 'listo';
-
-  const motionProps = reduced
-    ? {}
-    : {
-        initial: { opacity: 0, y: 14 },
-        animate: { opacity: 1, y: 0 },
-        transition: {
-          duration: 0.45,
-          delay: 0.3 + delay * 0.08,
-          ease: [0.16, 1, 0.3, 1] as const,
-        },
-      };
+function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps) {
+  const { icon: Icon, href, statusLabel, statusColor } = sub;
 
   return (
-    <motion.div {...motionProps} className="h-full">
-      <Link
-        href={href}
-        prefetch={false}
-        className="block h-full group focus-visible:outline-none"
-        aria-label={`${title}. ${description}`}
+    <Link
+      href={href}
+      prefetch={false}
+      className="group relative block overflow-hidden rounded-xl transition-[transform,box-shadow] hover:-translate-y-1"
+      style={{
+        background: 'color-mix(in srgb, #B8934A 4%, var(--color-n-0, #FCFBF8))',
+        border: '1px solid color-mix(in srgb, #B8934A 20%, transparent)',
+        padding: 20,
+      }}
+    >
+      {/* Left accent bar — scale-y-0 → scale-y-100 on hover */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 bottom-0 w-1 origin-top scale-y-0 group-hover:scale-y-100 transition-transform duration-200 rounded-tl-xl rounded-bl-xl"
+        style={{ background: 'linear-gradient(180deg, #B8934A, #9A7A38)' }}
+      />
+
+      {/* Icon box (42×42) */}
+      <div
+        aria-hidden
+        className="inline-grid place-items-center rounded-lg mb-4 group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200"
+        style={{
+          width: 42,
+          height: 42,
+          background: 'color-mix(in srgb, #B8934A 18%, transparent)',
+          color: '#9A7A38',
+        }}
       >
-        <EliteCard
-          variant="glass"
-          hover="lift"
-          interactive
-          padding="md"
-          className="h-full min-h-[220px] flex flex-col gap-5 focus-within:ring-2 focus-within:ring-gold-500 focus-within:ring-offset-2 focus-within:ring-offset-n-1000"
+        <Icon className="h-5 w-5" strokeWidth={1.75} />
+      </div>
+
+      {/* Name */}
+      <p className="text-base font-semibold text-n-1000">{title}</p>
+
+      {/* Description */}
+      <p className="text-sm text-n-600 leading-snug mt-[5px]">{description}</p>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-4">
+        <span
+          className="inline-flex items-center gap-[6px] text-xs font-semibold"
+          style={{ color: statusColor }}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div
-              aria-hidden="true"
-              className="shrink-0 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[rgb(var(--color-gold-500-rgb)_/_0.14)] text-gold-600 group-hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.22)] group-hover:text-gold-400 transition-colors"
-            >
-              <Icon className="h-7 w-7" strokeWidth={1.6} />
-            </div>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider',
-                isReady
-                  ? 'bg-[rgba(34,197,94,0.12)] text-success border border-[rgba(34,197,94,0.3)]'
-                  : 'bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
-              )}
-            >
-              {isReady ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-1 w-1 rounded-full bg-success"
-                  />
-                  {readyLabel}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-2.5 w-2.5" strokeWidth={2} aria-hidden="true" />
-                  {upcomingLabel}
-                </>
-              )}
-            </span>
-          </div>
-
-          <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
-              {title}
-            </h3>
-            <p className="text-base leading-relaxed text-n-500 max-w-md">
-              {description}
-            </p>
-          </div>
-
-          <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gold-500 group-hover:text-gold-600 transition-colors">
-            <span>{ctaLabel}</span>
-            <ArrowRight
-              className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-          </div>
-        </EliteCard>
-      </Link>
-    </motion.div>
+          <span
+            aria-hidden
+            className="inline-block h-[6px] w-[6px] rounded-full"
+            style={{ background: statusColor }}
+          />
+          {statusLabel[language]}
+        </span>
+        <span className="inline-flex" style={{ color: '#B8934A' }}>
+          <ArrowRight
+            className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+        </span>
+      </div>
+    </Link>
   );
 }
 
-// Re-export helpers to avoid unused imports and for consumer convenience
+// Re-export helpers for consumer convenience
 export { calculateExitValue, formatCop };
 export default ValorArea;

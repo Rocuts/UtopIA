@@ -1,135 +1,228 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Suspense, useRef } from 'react';
-import { motion, useScroll, useTransform, useSpring } from 'motion/react';
-import { Button } from '@/components/ui/Button';
-import { useLanguage } from '@/context/LanguageContext';
+import { ArrowRight } from 'lucide-react';
 
-const Canvas = dynamic(() => import('@react-three/fiber').then((mod) => mod.Canvas), {
-  ssr: false,
-});
-const HeroScene = dynamic(() => import('@/components/canvas/HeroScene'), { ssr: false });
-
-const NOVA_SPRING = { stiffness: 400, damping: 25 };
+interface Mote {
+  x: number; y: number; r: number;
+  vx: number; vy: number; a: number; ph: number;
+}
 
 export function Hero() {
-  const { t } = useLanguage();
-  const sectionRef = useRef<HTMLElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ['start start', 'end start'],
-  });
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
 
-  const bgY = useSpring(
-    useTransform(scrollYProgress, [0, 1], [0, 80]),
-    NOVA_SPRING
-  );
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let rafId: number;
+    let W = 0, H = 0, DPR = 1;
+    let t = 0;
+    let motes: Mote[] = [];
 
-  const contentY = useSpring(
-    useTransform(scrollYProgress, [0, 1], [0, -120]),
-    NOVA_SPRING
-  );
-  const contentOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
-  const contentScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.97]);
+    function resize() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      W = cv!.width = innerWidth * DPR;
+      H = cv!.height = innerHeight * DPR;
+      cv!.style.width = innerWidth + 'px';
+      cv!.style.height = innerHeight + 'px';
+      const n = Math.min(70, Math.floor(innerWidth / 22));
+      motes = Array.from({ length: n }, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        r: (Math.random() * 1.6 + 0.4) * DPR,
+        vx: (Math.random() - 0.5) * 0.12 * DPR,
+        vy: (Math.random() - 0.5) * 0.12 * DPR,
+        a: Math.random() * 0.5 + 0.15,
+        ph: Math.random() * Math.PI * 2,
+      }));
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
+
+    const cx0 = () => W * 0.68;
+    const cy0 = () => H * 0.22;
+
+    function frame() {
+      t += 0.004;
+      ctx!.clearRect(0, 0, W, H);
+
+      const arcs = [0.30, 0.46, 0.64, 0.86];
+      arcs.forEach((rf, i) => {
+        const R = Math.min(W, H) * rf;
+        ctx!.beginPath();
+        ctx!.arc(cx0(), cy0(), R, 0, Math.PI * 2);
+        ctx!.strokeStyle = `rgba(184,147,74,${0.10 - i * 0.012})`;
+        ctx!.lineWidth = 1 * DPR;
+        ctx!.stroke();
+        const ang = t * (0.6 - i * 0.1) + i * 1.7;
+        const nx = cx0() + Math.cos(ang) * R;
+        const ny = cy0() + Math.sin(ang) * R;
+        ctx!.beginPath();
+        ctx!.arc(nx, ny, 2.2 * DPR, 0, Math.PI * 2);
+        ctx!.fillStyle = `rgba(184,147,74,${0.6 - i * 0.1})`;
+        ctx!.fill();
+      });
+
+      for (const m of motes) {
+        m.x += m.vx; m.y += m.vy; m.ph += 0.02;
+        if (m.x < 0) m.x = W; if (m.x > W) m.x = 0;
+        if (m.y < 0) m.y = H; if (m.y > H) m.y = 0;
+        const tw = m.a * (0.6 + 0.4 * Math.sin(m.ph));
+        ctx!.beginPath();
+        ctx!.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+        ctx!.fillStyle = `rgba(154,122,56,${tw * 0.6})`;
+        ctx!.fill();
+      }
+
+      if (!reduce) rafId = requestAnimationFrame(frame);
+    }
+
+    frame();
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   return (
-    <section ref={sectionRef} className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden w-full pt-20 bg-n-0">
+    <section
+      className="relative min-h-screen flex flex-col overflow-hidden"
+      style={{
+        background: [
+          'radial-gradient(1100px 700px at 70% -10%, rgb(212 184 118 / .10), transparent 60%)',
+          'radial-gradient(800px 600px at 0% 90%, rgb(214 107 107 / .05), transparent 55%)',
+          'var(--n-0)',
+        ].join(', '),
+      }}
+    >
+      <canvas ref={canvasRef} className="absolute inset-0 z-0 pointer-events-none" />
 
-      {/* Background 3D Layer */}
-      <motion.div
-        className="absolute inset-0 z-[var(--z-canvas)]"
-        style={{ y: bgY, willChange: 'transform' }}
-      >
-        <Suspense fallback={<div className="w-full h-full bg-n-0" />}>
-          <Canvas
-            camera={{ position: [0, 0, 5], fov: 45 }}
-            dpr={[1, 2]}
-            gl={{ alpha: true, antialias: true }}
-            style={{ background: 'transparent' }}
-          >
-            <HeroScene />
-          </Canvas>
-        </Suspense>
-      </motion.div>
-
-      {/* Foreground Content */}
-      <motion.div
-        className="relative z-[var(--z-base)] container mx-auto px-4 sm:px-6 lg:px-8 max-w-[var(--content-width)] flex flex-col items-center text-center"
+      {/* Grain overlay */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 z-[1] pointer-events-none opacity-[0.45]"
         style={{
-          y: contentY,
-          opacity: contentOpacity,
-          scale: contentScale,
-          willChange: 'transform, opacity',
+          backgroundImage: 'radial-gradient(circle, rgb(184 147 74 / .16) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+          maskImage: 'radial-gradient(900px 600px at 60% 40%, #000 0%, transparent 75%)',
+          WebkitMaskImage: 'radial-gradient(900px 600px at 60% 40%, #000 0%, transparent 75%)',
         }}
-      >
+      />
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", ...NOVA_SPRING }}
-          className="mb-8"
-        >
-          <span className="inline-flex items-center gap-2 text-xs tracking-eyebrow uppercase text-n-500 font-medium">
-            <span className="h-px w-5 bg-n-300" aria-hidden="true" />
-            {t.hero.badge}
-            <span className="h-px w-5 bg-n-300" aria-hidden="true" />
+      {/* Hero body */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-5 pt-[72px]">
+        {/* Eyebrow */}
+        <div className="inline-flex items-center gap-3 mb-8">
+          <span className="h-px w-7" style={{ background: 'rgb(212 184 118 / .5)' }} aria-hidden="true" />
+          <span className="text-xs uppercase tracking-[0.16em] text-gold-500 font-medium">
+            Consultoría Contable &amp; Tributaria — Colombia
           </span>
-        </motion.div>
+          <span className="h-px w-7" style={{ background: 'rgb(212 184 118 / .5)' }} aria-hidden="true" />
+        </div>
 
-        <motion.h1
-          className="font-serif-elite text-balance font-medium tracking-tight mb-4 text-n-900 leading-display"
-          style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)', fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.05 }}
+        {/* Title */}
+        <h1
+          className="font-serif-elite font-medium text-n-1000 text-balance max-w-[15ch]"
+          style={{
+            fontSize: 'clamp(2.3rem, 5.2vw, 4.4rem)',
+            lineHeight: 1.1,
+            letterSpacing: '-0.025em',
+            fontVariationSettings: "'opsz' 144, 'wght' 500",
+          }}
         >
-          {t.hero.title}
-        </motion.h1>
+          La claridad financiera que su empresa{' '}
+          <em
+            className="text-gold-500"
+            style={{
+              fontStyle: 'italic',
+              fontVariationSettings: "'opsz' 144, 'wght' 420, 'SOFT' 60, 'WONK' 1",
+            }}
+          >
+            merece
+          </em>
+          .
+        </h1>
 
-        <motion.p
-          className="font-serif-elite italic text-balance text-base sm:text-lg text-gold-600 mb-3"
-          style={{ fontVariationSettings: '"opsz" 14, "SOFT" 100, "WONK" 1, "wght" 400' }}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.08 }}
+        {/* Slogan */}
+        <p
+          className="font-serif-elite italic text-gold-600 mt-10"
+          style={{
+            fontSize: 'clamp(1rem, 2vw, 1.3rem)',
+            fontVariationSettings: "'opsz' 20, 'wght' 400",
+          }}
         >
-          {t.slogan}
-        </motion.p>
+          Tan sencillo como 1+1.
+        </p>
 
-        <motion.p
-          className="text-balance mt-2 text-lg sm:text-xl text-n-600 max-w-2xl mx-auto mb-10 leading-relaxed"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.1 }}
+        {/* Subtitle */}
+        <p
+          className="text-n-600 max-w-[52ch] mx-auto mt-[18px] text-balance"
+          style={{ fontSize: 'clamp(1rem, 1.4vw, 1.2rem)', lineHeight: 1.65 }}
         >
-          {t.hero.subtitle}
-        </motion.p>
+          Defensa tributaria, devoluciones, due diligence y valoración — con la precisión de la IA y el criterio de una firma de asesoría elite.
+        </p>
 
-        <motion.div
-          className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full sm:w-auto"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", ...NOVA_SPRING, delay: 0.15 }}
-        >
-          <Link href="/workspace" className="w-full sm:w-auto">
-            <Button size="lg" className="w-full">
-              {t.hero.cta1}
-            </Button>
+        {/* CTAs */}
+        <div className="flex gap-3.5 mt-11 flex-wrap justify-center">
+          <Link href="/workspace">
+            <button className="inline-flex items-center gap-2 h-12 px-7 rounded-lg text-[0.9375rem] font-semibold bg-gold-500 hover:bg-gold-600 text-n-0 border border-black/10 transition-all duration-200 hover:-translate-y-px hover:shadow-[0_0_22px_rgb(184_147_74_/_0.18)] active:scale-[0.98]">
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              Acceder al workspace
+            </button>
           </Link>
-          <Button size="lg" variant="secondary" className="w-full sm:w-auto" onClick={() => {
-            document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' });
-          }}>
-            {t.hero.cta2}
-          </Button>
-        </motion.div>
+          <button
+            className="inline-flex items-center h-12 px-7 rounded-lg text-[0.9375rem] font-medium bg-transparent text-gold-500 border transition-all duration-200 hover:text-gold-600 hover:bg-gold-500/10 hover:-translate-y-px active:scale-[0.98]"
+            style={{ borderColor: 'rgb(212 184 118 / .4)' }}
+            onClick={() => document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })}
+          >
+            Ver servicios
+          </button>
+        </div>
+      </div>
 
-      </motion.div>
+      {/* Scroll cue */}
+      <div className="absolute bottom-[122px] left-1/2 -translate-x-1/2 z-10 hidden flex-col items-center gap-2 text-n-500 [@media(min-height:820px)_and_(min-width:861px)]:flex">
+        <div
+          className="relative w-[22px] h-[34px] border-[1.5px] rounded-[12px]"
+          style={{ borderColor: 'var(--n-400)' }}
+        >
+          <span
+            className="absolute left-1/2 top-[7px] -translate-x-1/2 w-[3px] h-[6px] rounded-sm bg-gold-500"
+            style={{ animation: 'scrolldot 1.6s ease infinite' }}
+            aria-hidden="true"
+          />
+        </div>
+        <span className="text-[10px] uppercase tracking-[0.16em]">Explorar</span>
+      </div>
 
-      {/* Bottom border line */}
-      <div className="absolute bottom-0 w-full h-px bg-n-200" />
+      {/* Trust strip */}
+      <div className="relative z-10 flex flex-wrap items-center justify-center border-t border-n-200 py-8 px-5"
+           style={{ gap: 'clamp(28px, 5vw, 72px)', paddingBottom: '40px' }}>
+        <div className="text-center">
+          <div className="font-mono font-semibold text-2xl text-n-1000">+500</div>
+          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Casos resueltos</div>
+        </div>
+        <div className="text-center">
+          <div className="font-mono font-semibold text-2xl text-n-1000">
+            <span className="text-gold-500">$2,4B</span>
+          </div>
+          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Ahorro fiscal generado</div>
+        </div>
+        <div className="text-center">
+          <div className="font-mono font-semibold text-2xl text-n-1000">98,7%</div>
+          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Precisión normativa</div>
+        </div>
+        <div className="text-center">
+          <div className="font-mono font-semibold text-2xl text-n-1000">&lt;24h</div>
+          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Respuesta inicial</div>
+        </div>
+      </div>
     </section>
   );
 }

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Configuración</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .pagehead{ padding:22px 0 8px; }
+  .pagehead h1{ font-family:var(--font-display); font-weight:500; font-size:clamp(2rem,3.6vw,2.6rem); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .pagehead .sub{ color:var(--n-600); font-size:var(--t-md); margin-top:6px; }
+
+  .set-grid{ display:grid; grid-template-columns:240px 1fr; gap:28px; padding-top:26px; align-items:start; }
+  @media(max-width:820px){ .set-grid{ grid-template-columns:1fr; } .set-nav{ display:flex; overflow-x:auto; position:static !important; } }
+  .set-nav{ position:sticky; top:84px; display:flex; flex-direction:column; gap:3px; }
+  .set-nav button{ display:flex; align-items:center; gap:11px; padding:11px 14px; border:none; background:transparent; border-radius:var(--r-md); color:var(--n-600); font-size:var(--t-md); font-weight:500; cursor:pointer; text-align:left; white-space:nowrap; transition:all var(--d-base); font-family:inherit; }
+  .set-nav button .pi{ width:17px; height:17px; }
+  .set-nav button:hover{ background:var(--n-100); color:var(--n-900); }
+  .set-nav button.on{ background:var(--ac-soft); color:var(--ac-deep); font-weight:600; }
+
+  .spanel{ display:none; animation:fadeP .35s var(--ease-enter); }
+  .spanel.on{ display:block; }
+  @keyframes fadeP{ from{ transform:translateY(10px); } to{ transform:none; } }
+  .pcard{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-xl); padding:26px; margin-bottom:18px; }
+  .pcard h2{ font-family:var(--font-display); font-weight:500; font-size:var(--t-xl); color:var(--n-1000); }
+  .pcard .pd{ font-size:var(--t-sm); color:var(--n-600); margin-top:5px; margin-bottom:20px; }
+
+  .seg{ display:inline-flex; padding:3px; border-radius:var(--r-md); background:var(--n-100); border:1px solid var(--n-200); gap:2px; flex-wrap:wrap; }
+  .seg button{ border:none; background:transparent; color:var(--n-600); font-size:var(--t-sm); font-weight:500; padding:9px 18px; border-radius:var(--r-sm); cursor:pointer; display:inline-flex; gap:7px; align-items:center; font-family:inherit; }
+  .seg button .pi{ width:15px; height:15px; }
+  .seg button.on{ background:var(--n-0); color:var(--ac-deep); box-shadow:var(--e2); }
+
+  .theme-prev{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px; }
+  .tp{ border:2px solid var(--n-200); border-radius:var(--r-lg); overflow:hidden; cursor:pointer; transition:border-color var(--d-base); }
+  .tp.on{ border-color:var(--ac); }
+  .tp .swatch{ height:64px; display:flex; }
+  .tp .lbl{ font-size:var(--t-sm); font-weight:600; color:var(--n-800); padding:9px 12px; text-align:center; }
+
+  .row-set{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 0; border-top:1px solid var(--n-100); }
+  .row-set:first-of-type{ border-top:none; }
+  .row-set .rn{ font-size:var(--t-md); font-weight:600; color:var(--n-900); }
+  .row-set .rd{ font-size:var(--t-sm); color:var(--n-600); margin-top:2px; }
+  .toggle{ width:42px; height:24px; border-radius:var(--r-full); background:var(--n-300); position:relative; cursor:pointer; flex-shrink:0; transition:background var(--d-base); border:none; }
+  .toggle::after{ content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left var(--d-base) var(--ease-spring); box-shadow:var(--e2); }
+  .toggle.on{ background:var(--ac); } .toggle.on::after{ left:20px; }
+
+  .integ{ display:flex; align-items:center; gap:14px; padding:15px 0; border-top:1px solid var(--n-100); }
+  .integ:first-child{ border-top:none; }
+  .integ .lg{ width:42px; height:42px; border-radius:var(--r-md); display:grid; place-items:center; font-family:var(--font-mono); font-weight:700; color:#fff; flex-shrink:0; font-size:var(--t-sm); }
+  .integ .in-n{ font-size:var(--t-md); font-weight:600; color:var(--n-900); }
+  .integ .in-d{ font-size:var(--t-xs); color:var(--n-500); margin-top:2px; }
+  .integ .st{ margin-left:auto; font-size:var(--t-xs); font-weight:600; }
+  .integ .connect{ height:34px; padding:0 14px; border-radius:var(--r-md); border:1px solid var(--n-300); background:var(--n-0); font-size:var(--t-sm); font-weight:600; color:var(--n-800); cursor:pointer; }
+  .integ .connect:hover{ border-color:var(--ac); color:var(--ac-deep); }
+
+  .field{ margin-bottom:16px; max-width:380px; }
+  .field label{ display:block; font-size:var(--t-xs); font-weight:600; color:var(--n-700); text-transform:uppercase; letter-spacing:.08em; margin-bottom:7px; }
+  .field input{ width:100%; height:44px; padding:0 14px; background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-md); font-family:inherit; font-size:var(--t-md); color:var(--n-900); }
+  .field input:focus{ outline:none; border-color:var(--gold-500); box-shadow:0 0 0 3px rgb(184 147 74 / .15); }
+  .session{ display:flex; align-items:center; gap:12px; padding:13px 0; border-top:1px solid var(--n-100); }
+  .session .pi{ width:20px; height:20px; color:var(--n-500); }
+  .danger-card{ border-color:rgb(168 56 56 / .3); background:rgb(168 56 56 / .04); }
+  .danger-card h2{ color:var(--danger); }
+  .btn-outline-wine{ height:42px; padding:0 18px; border-radius:var(--r-md); border:1px solid rgb(168 56 56 / .4); background:transparent; color:var(--danger); font-weight:600; font-size:var(--t-sm); cursor:pointer; font-family:inherit; }
+  .btn-outline-wine:hover{ background:rgb(168 56 56 / .08); }
+</style>
+</head>
+<body data-area="app" data-fx="grid">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+    <div class="mwrap">
+      <div class="pagehead">
+        <h1>Configuración</h1>
+        <div class="sub">Personalice su workspace — apariencia, idioma, integraciones y seguridad.</div>
+      </div>
+
+      <div class="set-grid">
+        <nav class="set-nav" id="setnav">
+          <button class="on" data-p="tema"><i data-lucide="palette" class="pi"></i>Tema</button>
+          <button data-p="densidad"><i data-lucide="rows-3" class="pi"></i>Densidad</button>
+          <button data-p="idioma"><i data-lucide="languages" class="pi"></i>Idioma</button>
+          <button data-p="integraciones"><i data-lucide="plug" class="pi"></i>Integraciones</button>
+          <button data-p="seguridad"><i data-lucide="shield" class="pi"></i>Seguridad</button>
+          <button data-p="reset"><i data-lucide="rotate-ccw" class="pi"></i>Restablecer</button>
+        </nav>
+
+        <div>
+          <!-- TEMA -->
+          <section class="spanel on" data-panel="tema">
+            <div class="pcard">
+              <h2>Tema</h2>
+              <div class="pd">Claro es el tema principal. El oscuro permanece como modo elite.</div>
+              <div class="theme-prev">
+                <div class="tp on"><div class="swatch" style="background:#FCFBF8;"><div style="flex:1"></div><div style="width:34%; background:#EFEBE2;"></div></div><div class="lbl">Claro</div></div>
+                <div class="tp"><div class="swatch" style="background:linear-gradient(90deg,#FCFBF8 50%,#141210 50%);"></div><div class="lbl">Sistema</div></div>
+                <div class="tp"><div class="swatch" style="background:#141210;"><div style="flex:1"></div><div style="width:34%; background:#27231D;"></div></div><div class="lbl">Oscuro · Elite</div></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- DENSIDAD -->
+          <section class="spanel" data-panel="densidad">
+            <div class="pcard">
+              <h2>Densidad</h2>
+              <div class="pd">Ajuste el espaciado de tablas y tarjetas.</div>
+              <div class="seg">
+                <button class="on">Confortable</button>
+                <button>Compacto</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- IDIOMA -->
+          <section class="spanel" data-panel="idioma">
+            <div class="pcard">
+              <h2>Idioma y formato</h2>
+              <div class="pd">Interfaz bilingüe. Montos y fechas en formato colombiano.</div>
+              <div class="seg">
+                <button class="on"><i data-lucide="check" class="pi"></i>Español</button>
+                <button>English</button>
+              </div>
+              <div class="row-set" style="margin-top:8px;"><div><div class="rn">Formato de moneda</div><div class="rd">COP · separador de miles con punto</div></div><span class="mono" style="color:var(--n-700);">$ 1.750.905</span></div>
+            </div>
+          </section>
+
+          <!-- INTEGRACIONES -->
+          <section class="spanel" data-panel="integraciones">
+            <div class="pcard">
+              <h2>Integraciones</h2>
+              <div class="pd">Conecte su ERP contable para sincronizar saldos y movimientos.</div>
+              <div id="integlist"></div>
+            </div>
+          </section>
+
+          <!-- SEGURIDAD -->
+          <section class="spanel" data-panel="seguridad">
+            <div class="pcard">
+              <h2>Seguridad</h2>
+              <div class="pd">Proteja el acceso a su información financiera.</div>
+              <div class="field"><label>Contraseña actual</label><input type="password" placeholder="••••••••"></div>
+              <div class="field"><label>Nueva contraseña</label><input type="password" placeholder="••••••••"></div>
+              <button class="btn btn-elite" style="height:42px;">Actualizar contraseña</button>
+              <div class="row-set" style="margin-top:22px;"><div><div class="rn">Autenticación en dos pasos</div><div class="rd">Código por SMS al iniciar sesión</div></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>
+            </div>
+            <div class="pcard">
+              <h2 style="font-size:var(--t-lg);">Sesiones activas</h2>
+              <div class="session"><i data-lucide="monitor" class="pi"></i><div style="flex:1;"><div class="rn" style="font-size:var(--t-sm);">MacBook Pro · Bogotá</div><div class="rd">Chrome · sesión actual</div></div><span class="badge badge-success"><span class="dot" style="background:var(--success);"></span>Activa</span></div>
+              <div class="session"><i data-lucide="smartphone" class="pi"></i><div style="flex:1;"><div class="rn" style="font-size:var(--t-sm);">iPhone · Medellín</div><div class="rd">App · hace 3 días</div></div><button class="connect" style="height:30px;">Cerrar</button></div>
+            </div>
+          </section>
+
+          <!-- RESET -->
+          <section class="spanel" data-panel="reset">
+            <div class="pcard danger-card">
+              <h2>Restablecer</h2>
+              <div class="pd">Acciones irreversibles. Proceda con cuidado.</div>
+              <div class="row-set" style="border:none;"><div><div class="rn">Limpiar datos de demostración</div><div class="rd">Elimina casos y cifras de ejemplo.</div></div><button class="btn-outline-wine">Limpiar datos</button></div>
+              <div class="row-set"><div><div class="rn">Restablecer workspace</div><div class="rd">Vuelve la configuración a valores de fábrica.</div></div><button class="btn-outline-wine">Restablecer</button></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const INTEG = [
+    ['Siigo','#0E7C5A','SG','Facturación y contabilidad',true],
+    ['Alegra','#2E6FE6','AL','Contabilidad en la nube',true],
+    ['Helisa','#B8934A','HE','ERP contable y nómina',false],
+    ['World Office','#A83838','WO','Gestión empresarial',false],
+    ['SAP Business One','#1A5276','SAP','ERP corporativo',false],
+  ];
+  document.getElementById('integlist') && (document.getElementById('integlist').innerHTML = INTEG.map(([n,c,lg,d,on])=>`
+    <div class="integ">
+      <div class="lg" style="background:${c}">${lg}</div>
+      <div><div class="in-n">${n}</div><div class="in-d">${d}</div></div>
+      ${on?'<span class="st" style="color:var(--success);">● Conectado</span>':'<button class="connect">Conectar</button>'}
+    </div>`).join(''));
+
+  // nav switching
+  document.querySelectorAll('.set-nav button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.set-nav button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    const p=b.getAttribute('data-p');
+    document.querySelectorAll('.spanel').forEach(s=>s.classList.toggle('on', s.getAttribute('data-panel')===p));
+  }));
+  document.querySelectorAll('.seg button, .tp').forEach(el=>el.addEventListener('click',()=>{
+    const sibs = el.parentElement.children;
+    [...sibs].forEach(s=>s.classList.remove('on')); el.classList.add('on');
+  }));
+
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

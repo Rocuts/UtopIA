@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Acceso</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<style>
+  html,body{ height:100%; }
+  body{ background:
+    radial-gradient(900px 600px at 80% 110%, rgb(184 147 74 / .08), transparent 60%),
+    var(--n-0); }
+  .auth{ min-height:100vh; display:grid; grid-template-columns:1.05fr .95fr; }
+  @media(max-width:860px){ .auth{ grid-template-columns:1fr; } .brandside{ display:none; } }
+
+  /* brand side */
+  .brandside{ position:relative; overflow:hidden; padding:56px clamp(36px,5vw,72px); display:flex; flex-direction:column; justify-content:space-between;
+    background:linear-gradient(160deg, #1A1611, #2F2A20); color:var(--n-0); }
+  .brandside::before{ content:''; position:absolute; width:60vmax; height:60vmax; border-radius:50%; top:-24vmax; right:-20vmax;
+    background:radial-gradient(circle, rgb(184 147 74 / .22), transparent 66%); filter:blur(30px); animation:bfloat 22s var(--ease-std) infinite alternate; }
+  @keyframes bfloat{ from{ transform:translate(0,0) scale(1);} to{ transform:translate(-6vmax,5vmax) scale(1.15);} }
+  @media(prefers-reduced-motion:reduce){ .brandside::before{ animation:none; } }
+  .brandside .bmk{ position:relative; z-index:1; font-family:var(--font-display); font-weight:600; font-size:34px; color:#FCFBF8; }  .brandside .bmk .plus{ background:var(--shimmer-gold); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:gold-shimmer 4.5s ease-in-out infinite alternate; }
+  .brandside .quote{ position:relative; z-index:1; max-width:18ch; }
+  .brandside .quote .eq{ font-size:11px; text-transform:uppercase; letter-spacing:.2em; color:rgb(212 184 118 / .9); font-weight:600; }
+  .brandside .quote h2{ font-family:var(--font-display); font-weight:400; font-size:clamp(2rem,3.4vw,3rem); color:#FCFBF8; line-height:1.12; letter-spacing:-.02em; margin-top:18px; }
+  .brandside .quote .sig{ font-family:var(--font-display); font-style:italic; color:rgb(230 209 154 / .92); margin-top:18px; font-size:var(--t-lg); }
+  .brandside .creds{ position:relative; z-index:1; display:flex; gap:22px; flex-wrap:wrap; color:rgb(196 187 165 / .8); }
+  .brandside .creds .c .v{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-xl); color:#FCFBF8; }
+  .brandside .creds .c .l{ font-size:var(--t-xs); }
+
+  /* form side */
+  .formside{ display:flex; align-items:center; justify-content:center; padding:48px 24px; }
+  .formcard{ width:100%; max-width:400px; }
+  .formcard .top{ display:flex; align-items:center; gap:12px; margin-bottom:30px; }
+  .formcard .top .mk{ font-family:var(--font-display); font-weight:600; font-size:24px; color:var(--n-1000); }
+  .formcard .top .mk .plus{ background:var(--shimmer-gold); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .seg{ display:flex; padding:3px; border-radius:var(--r-md); background:var(--n-100); border:1px solid var(--n-200); margin-bottom:28px; }
+  .seg button{ flex:1; border:none; background:transparent; color:var(--n-600); font-size:var(--t-sm); font-weight:600; padding:9px 0; border-radius:var(--r-sm); cursor:pointer; transition:all var(--d-base); }
+  .seg button.on{ background:var(--n-0); color:var(--n-1000); box-shadow:var(--e2); }
+  .formcard h1{ font-family:var(--font-display); font-weight:500; font-size:var(--t-3xl); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .formcard .sub{ color:var(--n-600); font-size:var(--t-sm); margin-top:6px; margin-bottom:26px; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:var(--t-xs); font-weight:600; color:var(--n-700); text-transform:uppercase; letter-spacing:.08em; margin-bottom:7px; }
+  .field .inp{ display:flex; align-items:center; gap:10px; height:46px; padding:0 14px; background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-md); transition:border-color var(--d-base), box-shadow var(--d-base); }
+  .field .inp:focus-within{ border-color:var(--gold-500); box-shadow:0 0 0 3px rgb(184 147 74 / .15); }
+  .field .inp .ic{ width:17px; height:17px; color:var(--n-500); }
+  .field .inp input{ flex:1; border:none; outline:none; background:none; font-family:inherit; font-size:var(--t-md); color:var(--n-900); }
+  .field .inp input::placeholder{ color:var(--n-500); }
+  .field .inp .eye{ background:none; border:none; color:var(--n-500); cursor:pointer; padding:0; display:grid; place-items:center; }
+  .row-between{ display:flex; align-items:center; justify-content:space-between; margin:4px 0 22px; }
+  .remember{ display:flex; align-items:center; gap:8px; font-size:var(--t-sm); color:var(--n-600); cursor:pointer; }
+  .remember input{ accent-color:var(--gold-500); width:15px; height:15px; }
+  .link{ font-size:var(--t-sm); color:var(--gold-600); font-weight:500; }
+  .link:hover{ color:var(--gold-700); }
+  .btn-full{ width:100%; height:48px; }
+  .divider{ display:flex; align-items:center; gap:14px; margin:24px 0; color:var(--n-500); font-size:var(--t-xs); }
+  .divider::before, .divider::after{ content:''; flex:1; height:1px; background:var(--n-200); }
+  .sso{ display:flex; gap:12px; }
+  .sso button{ flex:1; height:44px; border:1px solid var(--n-200); background:var(--n-0); border-radius:var(--r-md); display:flex; align-items:center; justify-content:center; gap:8px; font-size:var(--t-sm); font-weight:500; color:var(--n-800); cursor:pointer; transition:border-color var(--d-base), background var(--d-base); }
+  .sso button:hover{ border-color:var(--n-300); background:var(--n-50); }
+  .sso .ic{ width:16px; height:16px; }
+  .foot{ text-align:center; margin-top:26px; font-size:var(--t-sm); color:var(--n-600); }
+  .foot a{ color:var(--gold-600); font-weight:500; }
+  .legal{ font-size:var(--t-xs); color:var(--n-500); margin-top:18px; line-height:var(--lh-snug); }
+  .back-home{ position:absolute; top:24px; left:24px; z-index:2; display:inline-flex; align-items:center; gap:7px; font-size:var(--t-sm); color:rgb(196 187 165 / .85); }
+  .back-home:hover{ color:#FCFBF8; }
+  .back-home .ic{ width:15px; height:15px; }
+  .hidden{ display:none; }
+</style>
+</head>
+<body>
+<div class="auth">
+  <!-- BRAND SIDE -->
+  <aside class="brandside">
+    <a href="Landing Hero.html" class="back-home"><i data-lucide="arrow-left" class="ic"></i>Volver al inicio</a>
+    <div class="bmk" style="margin-top:24px;">1<span class="plus">+</span>1</div>
+    <div class="quote">
+      <div class="eq">UtopIA · Workspace Elite</div>
+      <h2>Claridad financiera para el empresario colombiano.</h2>
+      <div class="sig">Tan sencillo como 1+1.</div>
+    </div>
+    <div class="creds">
+      <div class="c"><div class="v num">+500</div><div class="l">Casos resueltos</div></div>
+      <div class="c"><div class="v num">$2,4B</div><div class="l">Ahorro generado</div></div>
+      <div class="c"><div class="v num">98,7%</div><div class="l">Precisión</div></div>
+    </div>
+  </aside>
+
+  <!-- FORM SIDE -->
+  <main class="formside">
+    <div class="formcard">
+      <div class="top">
+        <span class="mk">1<span class="plus">+</span>1</span>
+      </div>
+
+      <div class="seg">
+        <button id="tabLogin" class="on" onclick="setMode('login')">Iniciar sesión</button>
+        <button id="tabSignup" onclick="setMode('signup')">Crear cuenta</button>
+      </div>
+
+      <h1 id="title">Bienvenido de vuelta</h1>
+      <p class="sub" id="subtitle">Acceda a su workspace financiero.</p>
+
+      <form onsubmit="return false;">
+        <div class="field" id="nameField" style="display:none;">
+          <label>Nombre completo</label>
+          <div class="inp"><i data-lucide="user" class="ic"></i><input type="text" placeholder="Carlos Restrepo"></div>
+        </div>
+        <div class="field">
+          <label>Correo electrónico</label>
+          <div class="inp"><i data-lucide="mail" class="ic"></i><input type="email" placeholder="nombre@empresa.com"></div>
+        </div>
+        <div class="field">
+          <label>Contraseña</label>
+          <div class="inp"><i data-lucide="lock" class="ic"></i><input type="password" id="pwd" placeholder="••••••••"><button type="button" class="eye" onclick="togglePwd()"><i data-lucide="eye" class="ic" id="eyeIcon"></i></button></div>
+        </div>
+
+        <div class="row-between" id="loginRow">
+          <label class="remember"><input type="checkbox" checked>Recordarme</label>
+          <a class="link" href="#">¿Olvidó su contraseña?</a>
+        </div>
+
+        <a href="Workspace.html"><button class="btn btn-elite btn-full" id="submitBtn"><i data-lucide="arrow-right" class="ic"></i>Entrar al workspace</button></a>
+      </form>
+
+      <div class="divider">o continúe con</div>
+      <div class="sso">
+        <button><i data-lucide="building-2" class="ic"></i>SSO empresarial</button>
+        <button><i data-lucide="key-round" class="ic"></i>Llave de acceso</button>
+      </div>
+
+      <p class="foot" id="footText">¿No tiene cuenta? <a href="#" onclick="setMode('signup');return false;">Cree una</a></p>
+      <p class="legal" id="legal" style="display:none;">Al crear una cuenta acepta nuestros Términos y la Política de Tratamiento de Datos (Ley 1581 de 2012).</p>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+  function setMode(m){
+    const login = m==='login';
+    document.getElementById('tabLogin').classList.toggle('on', login);
+    document.getElementById('tabSignup').classList.toggle('on', !login);
+    document.getElementById('nameField').style.display = login ? 'none' : 'block';
+    document.getElementById('loginRow').style.display = login ? 'flex' : 'none';
+    document.getElementById('legal').style.display = login ? 'none' : 'block';
+    document.getElementById('title').textContent = login ? 'Bienvenido de vuelta' : 'Cree su cuenta';
+    document.getElementById('subtitle').textContent = login ? 'Acceda a su workspace financiero.' : 'Empiece su claridad financiera hoy.';
+    document.getElementById('submitBtn').lastChild.textContent = login ? 'Entrar al workspace' : 'Crear cuenta y entrar';
+    document.getElementById('footText').innerHTML = login
+      ? '¿No tiene cuenta? <a href="#" onclick="setMode(\'signup\');return false;">Cree una</a>'
+      : '¿Ya tiene cuenta? <a href="#" onclick="setMode(\'login\');return false;">Inicie sesión</a>';
+  }
+  function togglePwd(){
+    const p=document.getElementById('pwd'), e=document.getElementById('eyeIcon');
+    const show = p.type==='password'; p.type = show ? 'text' : 'password';
+    e.setAttribute('data-lucide', show ? 'eye-off' : 'eye'); lucide.createIcons();
+  }
+  lucide.createIcons();
+</script>
+<script src="assets/fx.js"></script>
+<script>
+  if(window.runFX) window.runFX({ target:'.brandside', fx:'constellation' });
+</script>
+</body>
+</html>

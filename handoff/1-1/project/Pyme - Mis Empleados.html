@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Pyme — Mis Empleados</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .main{ padding-bottom:96px; }
+  .ghero{ background:#1a2e0d; border-radius:var(--r-xl); padding:26px 28px 28px; color:#fff; margin-bottom:20px; position:relative; overflow:hidden; box-shadow:0 24px 48px -28px rgb(26 46 13 / .6); }
+  .ghero::after{ content:''; position:absolute; right:-40px; top:-40px; width:170px; height:170px; border-radius:50%; background:rgb(123 201 91 / .14); }
+  .ghero .gt{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); position:relative; z-index:1; }
+  .ghero .gsub{ font-size:var(--t-sm); color:rgb(255 255 255 / .7); margin-top:3px; position:relative; z-index:1; }
+  .ghero .gm{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; position:relative; z-index:1; }
+  .ghero .gm .gc{ border-left:2px solid rgb(255 255 255 / .15); padding-left:14px; }
+  .ghero .gm .gv{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-2xl); } .ghero .gm .gv.q{ color:#7BC95B; }
+  .ghero .gm .gl{ font-size:var(--t-xs); color:rgb(255 255 255 / .7); margin-top:3px; }
+
+  .pila{ display:flex; align-items:center; gap:16px; padding:18px 20px; border-radius:var(--r-lg); background:rgb(230 182 106 / .15); border:1px solid rgb(230 182 106 / .45); margin-bottom:22px; }
+  .pila .bic{ width:46px; height:46px; border-radius:var(--r-md); display:grid; place-items:center; background:#C48A2E; color:#fff; flex-shrink:0; }
+  .pila .bic .pi{ width:22px; height:22px; }
+  .pila .bt{ font-weight:700; color:var(--n-1000); font-size:var(--t-md); } .pila .bs{ font-size:var(--t-sm); color:var(--n-700); margin-top:2px; }
+  .pila .amt{ font-family:var(--font-mono); font-weight:600; }
+  .pila .pbtn{ margin-left:auto; }
+
+  .sec-t{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:var(--n-1000); margin-bottom:14px; }
+
+  .emp{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:16px 18px; margin-bottom:12px; transition:border-color var(--d-base); }
+  .emp.open{ border-color:var(--ac-line); }
+  .emp .row{ display:flex; align-items:center; gap:14px; }
+  .emp .av{ width:46px; height:46px; border-radius:50%; background:linear-gradient(135deg,var(--ac),var(--ac-deep)); color:#fff; display:grid; place-items:center; font-weight:700; flex-shrink:0; }
+  .emp .en{ font-weight:600; color:var(--n-1000); } .emp .ed{ font-size:var(--t-xs); color:var(--n-600); margin-top:2px; }
+  .emp .vbtn{ margin-left:auto; display:inline-flex; align-items:center; gap:6px; background:var(--ac-soft); color:var(--ac-deep); border:none; border-radius:var(--r-full); padding:8px 14px; font-size:var(--t-sm); font-weight:600; cursor:pointer; font-family:inherit; }
+  .emp .vbtn .pi{ width:15px; height:15px; transition:transform var(--d-base); }
+  .emp.open .vbtn .pi{ transform:rotate(180deg); }
+  .emp .detail{ display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--n-100); }
+  .emp.open .detail{ display:block; animation:dIn .3s var(--ease-enter); }
+  @keyframes dIn{ from{ opacity:.4; transform:translateY(-4px);} to{ opacity:1; transform:none; } }
+  .dgrid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .dchip{ background:var(--n-50); border:1px solid var(--n-200); border-radius:var(--r-md); padding:11px 13px; }
+  .dchip .dl{ font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--n-500); font-weight:600; }
+  .dchip .dv{ font-size:var(--t-sm); font-weight:600; color:var(--n-900); margin-top:3px; }
+  .dchip.total{ background:var(--ac-wash); border-color:var(--ac-line); grid-column:span 2; }
+  .dchip.total .dv{ font-family:var(--font-mono); font-size:var(--t-lg); color:var(--ac-deep); }
+
+  .alert-red{ display:flex; align-items:flex-start; gap:14px; padding:18px 20px; border-radius:var(--r-lg); background:rgb(168 56 56 / .06); border:1px solid rgb(168 56 56 / .32); margin-bottom:12px; }
+  .alert-red .ai{ width:42px; height:42px; border-radius:var(--r-md); display:grid; place-items:center; background:rgb(168 56 56 / .14); color:var(--danger); flex-shrink:0; }
+  .alert-red .ai .pi{ width:20px; height:20px; }
+  .alert-red .at{ font-weight:700; color:var(--danger); font-size:var(--t-md); } .alert-red .as{ font-size:var(--t-sm); color:var(--n-700); margin-top:3px; line-height:var(--lh-snug); }
+  .btn-wine{ background:var(--danger); color:#fff; }
+
+  .addbtn{ width:100%; height:50px; border:1.5px dashed var(--ac-line); background:var(--ac-wash); border-radius:var(--r-lg); color:var(--ac-deep); font-weight:600; font-size:var(--t-md); display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer; font-family:inherit; margin-top:6px; transition:background var(--d-base); }
+  .addbtn:hover{ background:color-mix(in srgb,var(--ac) 12%, transparent); }
+
+  .pnav{ position:absolute; left:0; right:0; bottom:0; display:grid; grid-template-columns:repeat(4,1fr); background:#1a2e0d; padding:9px 0 13px; z-index:30; box-shadow:0 -8px 24px -16px rgb(0 0 0 / .5); }
+  .pnav a{ display:flex; flex-direction:column; align-items:center; gap:4px; color:rgb(255 255 255 / .6); font-size:10px; font-weight:600; }
+  .pnav a:hover{ color:rgb(255 255 255 / .9); } .pnav a.on{ color:#7BC95B; }
+  .pnav a .pi{ width:22px; height:22px; }
+</style>
+</head>
+<body data-area="pyme">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad Pyme.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a mi negocio</a>
+    <div class="mwrap">
+
+      <div class="ghero">
+        <div class="gt">Mis Empleados</div>
+        <div class="gsub">Lo que le cuesta cada persona y cuándo pagar su salud y pensión.</div>
+        <div class="gm">
+          <div class="gc"><div class="gv">3</div><div class="gl">Personas</div></div>
+          <div class="gc"><div class="gv">$5.4M</div><div class="gl">Nómina al mes</div></div>
+          <div class="gc"><div class="gv q">52%</div><div class="gl">Carga prestacional</div></div>
+        </div>
+      </div>
+
+      <!-- BANNER PILA -->
+      <div class="pila">
+        <div class="bic"><i data-lucide="calendar-clock" class="pi"></i></div>
+        <div>
+          <div class="bt">Próximo pago de seguridad social (PILA)</div>
+          <div class="bs">Vence el 17 de junio · en 9 días · <span class="amt">$1.180.000</span></div>
+        </div>
+        <button class="btn btn-elite pbtn">Pagar <i data-lucide="arrow-right" class="ic"></i></button>
+      </div>
+
+      <div class="sec-t">Su equipo</div>
+
+      <!-- EMPLEADO 1 -->
+      <div class="emp">
+        <div class="row">
+          <div class="av">MG</div>
+          <div style="flex:1;min-width:0;"><div class="en">María Gómez</div><div class="ed">Vendedora · contrato a término fijo</div></div>
+          <button class="vbtn" onclick="toggleEmp(this)">Ver detalle <i data-lucide="chevron-down" class="pi"></i></button>
+        </div>
+        <div class="detail">
+          <div class="dgrid">
+            <div class="dchip"><div class="dl">Salario</div><div class="dv">$1.750.905</div></div>
+            <div class="dchip"><div class="dl">EPS</div><div class="dv">Sura</div></div>
+            <div class="dchip"><div class="dl">AFP (pensión)</div><div class="dv">Porvenir</div></div>
+            <div class="dchip"><div class="dl">ARL</div><div class="dv">Positiva · riesgo I</div></div>
+            <div class="dchip total"><div class="dl">Lo que le cuesta al mes (con prestaciones)</div><div class="dv">$2.640.000</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EMPLEADO 2 -->
+      <div class="emp">
+        <div class="row">
+          <div class="av">JR</div>
+          <div style="flex:1;min-width:0;"><div class="en">Jorge Ruiz</div><div class="ed">Bodega · contrato a término indefinido</div></div>
+          <button class="vbtn" onclick="toggleEmp(this)">Ver detalle <i data-lucide="chevron-down" class="pi"></i></button>
+        </div>
+        <div class="detail">
+          <div class="dgrid">
+            <div class="dchip"><div class="dl">Salario</div><div class="dv">$1.750.905</div></div>
+            <div class="dchip"><div class="dl">EPS</div><div class="dv">Nueva EPS</div></div>
+            <div class="dchip"><div class="dl">AFP (pensión)</div><div class="dv">Colfondos</div></div>
+            <div class="dchip"><div class="dl">ARL</div><div class="dv">Positiva · riesgo II</div></div>
+            <div class="dchip total"><div class="dl">Lo que le cuesta al mes (con prestaciones)</div><div class="dv">$2.640.000</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ALERTA INFORMAL -->
+      <div class="alert-red">
+        <div class="ai"><i data-lucide="shield-alert" class="pi"></i></div>
+        <div style="flex:1;">
+          <div class="at">Pedro tiene un ayudante sin afiliar</div>
+          <div class="as">Trabajar sin EPS, pensión ni ARL es un riesgo legal y económico grave para usted. Si se accidenta, le toca responder de su bolsillo. Le ayudamos a formalizarlo paso a paso.</div>
+          <button class="btn btn-wine" style="margin-top:14px;height:38px;"><i data-lucide="user-check" class="ic"></i>Formalizar ahora</button>
+        </div>
+      </div>
+
+      <div class="sec-t" style="margin-top:24px;">Usted como dueño</div>
+      <div class="emp open" style="cursor:default;">
+        <div class="row">
+          <div class="av">DC</div>
+          <div style="flex:1;min-width:0;"><div class="en">Don Carlos · dueño</div><div class="ed">Cotiza como independiente · base del 40% de su ingreso</div></div>
+          <div style="font-family:var(--font-mono);font-weight:600;color:var(--ac-deep);">$298.000</div>
+        </div>
+        <div class="detail" style="display:block;">
+          <div class="dgrid">
+            <div class="dchip"><div class="dl">Ingreso mensual estimado</div><div class="dv">$1.860.000</div></div>
+            <div class="dchip"><div class="dl">Base de cotización (40%)</div><div class="dv">$744.000</div></div>
+            <div class="dchip"><div class="dl">Salud</div><div class="dv">$94.000</div></div>
+            <div class="dchip"><div class="dl">Pensión</div><div class="dv">$120.000</div></div>
+            <div class="dchip total"><div class="dl">Su aporte mensual total</div><div class="dv">$298.000</div></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="addbtn"><i data-lucide="plus" style="width:18px;height:18px;"></i>Agregar empleado</button>
+
+    </div>
+  </main>
+
+  <nav class="pnav">
+    <a href="Contabilidad Pyme.html"><i data-lucide="home" class="pi"></i>Inicio</a>
+    <a href="Pyme - Mis Fechas.html"><i data-lucide="calendar-clock" class="pi"></i>Fechas</a>
+    <a href="Pyme - Mi Libro.html"><i data-lucide="book-open" class="pi"></i>Mi Libro</a>
+    <a href="Pyme - Mis Pagos.html"><i data-lucide="scale" class="pi"></i>Pagos</a>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  function toggleEmp(btn){ btn.closest('.emp').classList.toggle('open'); }
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

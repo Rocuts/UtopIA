@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Contabilidad — Plan de cuentas (PUC)</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .puc .node{ display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--n-100); font-size:var(--t-sm); font-family:var(--font-mono); }
+  .puc .node:first-child{ border-top:none; }
+  .puc .code{ color:var(--ac-deep); font-weight:600; min-width:54px; } .puc .nm{ color:var(--n-800); font-family:var(--font-sans); flex:1; } .puc .amt{ color:var(--n-600); }
+  .puc .lvl1{ font-weight:700; } .puc .lvl2{ padding-left:20px; } .puc .lvl3{ padding-left:42px; } .puc .lvl3 .nm{ color:var(--n-600); }
+  .de-grid{ display:grid; grid-template-columns:1fr 150px 150px; gap:10px; align-items:center; }
+  .de-head{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--n-500); font-weight:700; padding-bottom:4px; }
+  .de-grid input, .de-grid select{ height:44px; padding:0 12px; border:1px solid var(--n-200); border-radius:var(--r-md); font-family:inherit; font-size:var(--t-sm); background:var(--n-0); color:var(--n-900); width:100%; }
+  .de-grid .num{ font-family:var(--font-mono); text-align:right; }
+  .de-total{ display:grid; grid-template-columns:1fr 150px 150px; gap:10px; padding-top:14px; margin-top:8px; border-top:2px solid var(--n-200); font-family:var(--font-mono); font-weight:600; color:var(--n-1000); }
+  .de-total .num{ text-align:right; }
+  .balok{ display:inline-flex; gap:8px; align-items:center; color:var(--success); font-weight:600; font-size:var(--t-sm); margin-top:14px; }
+  .upz{ border:1.6px dashed var(--ac-line); border-radius:var(--r-lg); padding:42px 20px; text-align:center; background:var(--ac-wash); color:var(--n-600); }
+  .upz .pi{ width:36px; height:36px; color:var(--ac-deep); margin-bottom:10px; }
+  .upz .ff{ display:inline-flex; gap:8px; align-items:center; margin-top:14px; font-size:var(--t-sm); color:var(--n-800); background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-full); padding:6px 14px; }
+  .per{ display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:var(--r-lg); background:var(--n-0); border:1px solid var(--n-200); margin-bottom:8px; }
+  .per .pd{ width:9px; height:9px; border-radius:50%; flex-shrink:0; } .per .pn{ flex:1; font-weight:600; color:var(--n-1000); } .per .pm{ font-size:var(--t-xs); color:var(--n-600); }
+</style>
+</head>
+<body data-area="app">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a Contabilidad</a>
+    <div class="mwrap">
+      <div class="subhead">
+        <div class="crumb"><span class="ic"><i data-lucide="book" class="pi"></i></span>Contabilidad — Plan de cuentas (PUC)</div>
+        <h1>Plan de cuentas (PUC)</h1>
+        <div class="lede">Árbol del Plan Único de Cuentas colombiano con los saldos del período.</div>
+      </div>
+      <section class="sec"><div class="sec-h"><div class="t">Estructura PUC</div><span class="meta">Decreto 2650</span></div><div class="panel"><div class="puc"><div class="node lvl1"><span class="code">1</span><span class="nm">Activo</span><span class="amt">$48.260.000</span></div><div class="node lvl2"><span class="code">11</span><span class="nm">Disponible</span><span class="amt">$12.480.000</span></div><div class="node lvl3"><span class="code">1105</span><span class="nm">Caja</span><span class="amt">$1.240.000</span></div><div class="node lvl3"><span class="code">1110</span><span class="nm">Bancos</span><span class="amt">$11.240.000</span></div><div class="node lvl2"><span class="code">13</span><span class="nm">Deudores</span><span class="amt">$9.380.000</span></div><div class="node lvl3"><span class="code">1305</span><span class="nm">Clientes</span><span class="amt">$9.380.000</span></div><div class="node lvl2"><span class="code">14</span><span class="nm">Inventarios</span><span class="amt">$26.400.000</span></div><div class="node lvl1"><span class="code">2</span><span class="nm">Pasivo</span><span class="amt">$21.140.000</span></div><div class="node lvl2"><span class="code">22</span><span class="nm">Proveedores</span><span class="amt">$8.900.000</span></div><div class="node lvl2"><span class="code">24</span><span class="nm">Impuestos por pagar</span><span class="amt">$4.120.000</span></div><div class="node lvl3"><span class="code">2408</span><span class="nm">IVA por pagar</span><span class="amt">$1.840.000</span></div><div class="node lvl1"><span class="code">3</span><span class="nm">Patrimonio</span><span class="amt">$27.120.000</span></div><div class="node lvl2"><span class="code">31</span><span class="nm">Capital social</span><span class="amt">$27.120.000</span></div><div class="node lvl1"><span class="code">4</span><span class="nm">Ingresos</span><span class="amt">$14.900.000</span></div><div class="node lvl2"><span class="code">41</span><span class="nm">Operacionales</span><span class="amt">$14.900.000</span></div></div></div></section>
+    </div>
+  </main>
+</div>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+if(window.lucide) lucide.createIcons();</script>
+</body>
+</html>

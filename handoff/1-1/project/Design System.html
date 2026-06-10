@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Sistema de Diseño</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<style>
+  body { background:
+    radial-gradient(900px 600px at 85% -5%, rgb(212 184 118 / .06), transparent 60%),
+    radial-gradient(700px 500px at 5% 30%, rgb(214 107 107 / .04), transparent 55%),
+    var(--n-0);
+    min-height:100vh; }
+  .wrap { max-width:1180px; margin:0 auto; padding:72px 40px 120px; position:relative; z-index:1; }
+  .ds-head { margin-bottom:80px; }
+  .ds-section { margin-bottom:84px; }
+  .ds-section > .sec-title { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-num { font-family:var(--font-mono); font-size:var(--t-sm); color:var(--gold-500); letter-spacing:.1em; }
+  .sec-title h2 { font-family:var(--font-display); font-weight:500; font-size:var(--t-3xl); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .sec-desc { color:var(--n-600); font-size:var(--t-md); max-width:62ch; margin-bottom:36px; }
+  .hr { height:1px; background:linear-gradient(90deg, rgb(212 184 118 / .35), transparent); margin:0 0 36px; }
+
+  .grid { display:grid; gap:16px; }
+  .panel { background:var(--n-50); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:28px; }
+  .label { font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--n-500); font-weight:600; margin-bottom:18px; }
+
+  /* swatches */
+  .swatch-row { display:flex; flex-wrap:wrap; gap:10px; }
+  .swatch { border-radius:var(--r-md); overflow:hidden; border:1px solid var(--n-200); background:var(--n-100); width:108px; }
+  .swatch .chip { height:64px; }
+  .swatch .meta { padding:8px 10px; }
+  .swatch .nm { font-size:var(--t-xs); color:var(--n-800); font-weight:500; }
+  .swatch .hx { font-family:var(--font-mono); font-size:var(--t-2xs); color:var(--n-500); }
+
+  .ladder { display:grid; grid-template-columns:repeat(12,1fr); border-radius:var(--r-md); overflow:hidden; border:1px solid var(--n-200); }
+  .ladder .step { height:72px; display:flex; align-items:flex-end; padding:6px; }
+  .ladder .step span { font-family:var(--font-mono); font-size:9px; }
+
+  .area-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+  .area-tile { border-radius:var(--r-lg); padding:18px; border:1px solid var(--n-200); background:var(--n-50); position:relative; overflow:hidden; }
+  .area-tile .bar { position:absolute; left:0; top:0; bottom:0; width:4px; }
+  .area-tile .an { font-family:var(--font-display); font-size:var(--t-lg); color:var(--n-1000); font-weight:500; }
+  .area-tile .ad { font-size:var(--t-xs); color:var(--n-600); margin-top:2px; }
+  .area-tile .ah { font-family:var(--font-mono); font-size:var(--t-2xs); color:var(--n-500); margin-top:10px; }
+
+  /* type specimens */
+  .spec { padding:24px 0; border-bottom:1px solid var(--n-200); }
+  .spec:last-child { border-bottom:none; }
+  .spec .stag { display:flex; gap:16px; align-items:baseline; margin-bottom:10px; }
+  .spec .stag .nm { font-family:var(--font-mono); font-size:var(--t-xs); color:var(--gold-500); }
+  .spec .stag .px { font-family:var(--font-mono); font-size:var(--t-2xs); color:var(--n-500); }
+
+  .comp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+  .demo { background:var(--n-50); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:24px; }
+  .demo .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+  .demo .vlabel { font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--n-500); margin-bottom:14px; font-weight:600; }
+
+  /* KPI card demo */
+  .kpi { padding:26px; border-radius:var(--r-xl); position:relative; }
+  .kpi .top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:18px; }
+  .kpi .klabel { display:flex; align-items:center; gap:8px; font-size:var(--t-xs); text-transform:uppercase; letter-spacing:var(--tr-eyebrow); color:var(--n-700); font-weight:500; }
+  .kpi .klabel .pd { width:6px; height:6px; border-radius:50%; }
+  .kpi .kic { width:36px; height:36px; border-radius:var(--r-md); display:grid; place-items:center; background:rgb(212 184 118 / .14); color:var(--gold-600); }
+  .kpi .kval { font-family:var(--font-display); font-size:var(--t-5xl); font-weight:500; color:var(--n-1000); line-height:var(--lh-display); letter-spacing:var(--tr-tight); }
+  .kpi .ksub { display:flex; gap:12px; align-items:center; margin-top:8px; font-size:var(--t-sm); }
+  .kpi .ktrend { display:inline-flex; align-items:center; gap:4px; font-weight:600; }
+  .up { color:var(--success); } .down { color:var(--danger); }
+
+  /* progress ring + gauge */
+  .viz-row { display:flex; gap:36px; flex-wrap:wrap; align-items:center; }
+  .ring-wrap { position:relative; width:128px; height:128px; }
+  .ring-wrap .ctr { position:absolute; inset:0; display:grid; place-items:center; text-align:center; }
+  .ring-wrap .ctr .v { font-family:var(--font-mono); font-weight:600; font-size:var(--t-2xl); color:var(--n-1000); }
+  .ring-wrap .ctr .l { font-size:9px; text-transform:uppercase; letter-spacing:.16em; color:var(--n-500); }
+  .grade { font-family:var(--font-display); font-size:64px; font-weight:500; line-height:1; }
+
+  /* skeleton */
+  .sk { background:rgb(212 184 118 / .1); border-radius:var(--r-sm); animation:skeleton 1.8s var(--ease-std) infinite; }
+
+  /* toast / citation */
+  .toast { display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:var(--r-lg); background:var(--n-100); border:1px solid var(--n-200); box-shadow:var(--e4); max-width:340px; }
+  .toast .ti { width:32px; height:32px; border-radius:var(--r-md); display:grid; place-items:center; flex-shrink:0; }
+  .cite { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:var(--r-full); background:rgb(107 155 176 / .12); border:1px solid rgb(107 155 176 / .3); color:var(--info); font-family:var(--font-mono); font-size:var(--t-2xs); }
+
+  .seg { display:inline-flex; padding:3px; border-radius:var(--r-md); background:var(--n-100); border:1px solid var(--n-200); gap:2px; }
+  .seg button { border:none; background:transparent; color:var(--n-600); font-size:var(--t-xs); font-weight:500; padding:6px 12px; border-radius:var(--r-sm); display:inline-flex; gap:6px; align-items:center; }
+  .seg button.on { background:var(--n-0); color:var(--n-1000); box-shadow:var(--e2); }
+
+  .footnote { margin-top:80px; padding-top:28px; border-top:1px solid var(--n-200); color:var(--n-500); font-size:var(--t-sm); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  .pill-link { display:inline-flex; gap:8px; align-items:center; padding:8px 16px; border-radius:var(--r-full); border:1px solid rgb(212 184 118 / .3); color:var(--gold-500); font-size:var(--t-sm); font-weight:500; transition:background var(--d-base); }
+  .pill-link:hover { background:rgb(212 184 118 / .1); }
+  @media (max-width:680px){ .wrap{ padding:48px 22px 90px; } .kpi .kval{ font-size:var(--t-4xl);} }
+</style>
+</head>
+<body data-fx="dust">
+<div class="wrap">
+
+  <!-- HEAD -->
+  <header class="ds-head">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px;">
+      <div style="display:flex; align-items:center; gap:18px;">
+        <span class="brand" style="font-size:42px;">1<span class="plus">+</span>1</span>
+        <div style="width:1px; height:42px; background:var(--n-200);"></div>
+        <div>
+          <div class="eyebrow" style="color:var(--gold-500);">UtopIA</div>
+          <div style="font-family:var(--font-display); font-size:var(--t-xl); color:var(--n-1000); font-weight:500;">Sistema de Diseño</div>
+        </div>
+      </div>
+      <span class="badge badge-gold"><span class="dot" style="background:var(--gold-500);"></span>Tema Claro · primario</span>
+    </div>
+    <p style="margin-top:28px; font-family:var(--font-display); font-size:var(--t-2xl); color:var(--n-900); font-weight:400; max-width:24ch; line-height:var(--lh-tight); letter-spacing:var(--tr-tight);">
+      Claridad financiera para el empresario colombiano.
+    </p>
+    <p class="sec-desc" style="margin-top:14px;">Lujo discreto, sobriedad editorial. Superficies glass cálidas, serif Fraunces para titulares, y un único acento dorado champagne reservado para los momentos de marca. El tema claro es el principal; el oscuro permanece como modo elite.</p>
+  </header>
+
+  <!-- 01 COLOR -->
+  <section class="ds-section">
+    <div class="sec-title"><span class="sec-num">01</span><h2>Color</h2></div>
+    <p class="sec-desc">Neutrales cálidos de espresso (nunca negro puro) hacen el trabajo pesado. El dorado champagne es el único acento decorativo. Cada una de las cinco áreas tiene su propia identidad cromática.</p>
+    <div class="hr"></div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="label">Escala neutra · espresso cálido (n-0 → n-1000) · tema claro</div>
+      <div class="ladder" id="ladder"></div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
+      <div class="panel">
+        <div class="label">Dorado champagne — acento único</div>
+        <div class="swatch-row" id="golds"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Semánticos</div>
+        <div class="swatch-row" id="sems"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="label">Identidad por área — los 5 pilares</div>
+      <div class="area-grid" id="areas"></div>
+    </div>
+  </section>
+
+  <!-- 02 TYPE -->
+  <section class="ds-section">
+    <div class="sec-title"><span class="sec-num">02</span><h2>Tipografía</h2></div>
+    <p class="sec-desc">Fraunces (serif editorial variable) solo para titulares y marca. Geist Sans para toda la interfaz. Geist Mono con numerales tabulares para montos COP, KPIs y código.</p>
+    <div class="hr"></div>
+    <div class="panel">
+      <div class="spec">
+        <div class="stag"><span class="nm">Fraunces · Display</span><span class="px">56px / 500 / opsz 144</span></div>
+        <div class="display" style="font-size:var(--t-5xl); color:var(--n-1000); line-height:var(--lh-display); font-variation-settings:'opsz' 144,'wght' 500;">Due Diligence</div>
+      </div>
+      <div class="spec">
+        <div class="stag"><span class="nm">Fraunces · Itálica</span><span class="px">20px / 400 / WONK</span></div>
+        <div class="display" style="font-size:var(--t-xl); color:var(--gold-600); font-style:italic; font-variation-settings:'opsz' 14,'wght' 400;">Tan sencillo como 1+1</div>
+      </div>
+      <div class="spec">
+        <div class="stag"><span class="nm">Geist Sans · Body</span><span class="px">14px / 400</span></div>
+        <div style="font-size:var(--t-base); color:var(--n-700); max-width:64ch;">Un due diligence riguroso revela el valor oculto y los riesgos antes de que se conviertan en sorpresas costosas. Cruzamos la contabilidad con los contratos, los procesos judiciales y las declaraciones fiscales.</div>
+      </div>
+      <div class="spec">
+        <div class="stag"><span class="nm">Geist Mono · Numérico</span><span class="px">tabular-nums · COP</span></div>
+        <div class="mono num" style="font-size:var(--t-3xl); color:var(--n-1000); font-weight:600;">COP&nbsp;$4.820.000.000</div>
+      </div>
+      <div class="spec">
+        <div class="stag"><span class="nm">Eyebrow · Geist</span><span class="px">12px / uppercase / .16em</span></div>
+        <div class="eyebrow">II. Valor — Due Diligence</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 SURFACES -->
+  <section class="ds-section">
+    <div class="sec-title"><span class="sec-num">03</span><h2>Superficies & Elevación</h2></div>
+    <p class="sec-desc">La superficie default es glass-elite: translúcida, con desenfoque de fondo y un borde dorado sutil. Nunca fondos planos opacos en el workspace. La elevación se simula con luminancia e inset, no con sombras negras duras.</p>
+    <div class="hr"></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">
+      <div class="glass-elite" style="padding:28px; min-height:150px;">
+        <div class="label">glass-elite</div>
+        <p style="font-size:var(--t-sm); color:var(--n-600);">Superficie base del workspace. Blur 18px, borde dorado 22%.</p>
+      </div>
+      <div class="glass-elite-elevated" style="padding:28px; min-height:150px;">
+        <div class="label">glass-elite-elevated</div>
+        <p style="font-size:var(--t-sm); color:var(--n-600);">Modales y command palette. Blur 24px, glow tenue.</p>
+      </div>
+      <div class="glass-elite border-elite-gold" style="padding:28px; min-height:150px;">
+        <div class="label">border-elite-gold</div>
+        <p style="font-size:var(--t-sm); color:var(--n-600);">Gradiente dorado → wine → dorado en el borde.</p>
+      </div>
+      <div class="glass-elite glow-gold-soft" style="padding:28px; min-height:150px;">
+        <div class="label">glow-gold</div>
+        <p style="font-size:var(--t-sm); color:var(--n-600);">Resplandor dorado para elementos premium.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 COMPONENTS -->
+  <section class="ds-section">
+    <div class="sec-title"><span class="sec-num">04</span><h2>Componentes</h2></div>
+    <p class="sec-desc">Librería primitiva — botones, badges, KPI hero, gauges y estados. Construidos sobre los tokens; nada hardcodeado.</p>
+    <div class="hr"></div>
+
+    <div class="comp-grid">
+      <!-- buttons -->
+      <div class="demo">
+        <div class="vlabel">Button — variantes</div>
+        <div class="row" style="flex-direction:column; align-items:stretch;">
+          <div class="row"><button class="btn btn-elite"><i data-lucide="sparkles" class="ic"></i>Informe NIIF Elite</button></div>
+          <div class="row">
+            <button class="btn btn-secondary">Secondary</button>
+            <button class="btn btn-ghost">Ghost</button>
+          </div>
+          <div class="row">
+            <button class="btn btn-wine"><i data-lucide="shield" class="ic"></i>Defensa DIAN</button>
+            <button class="btn btn-primary btn-sm">Primary</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- badges -->
+      <div class="demo">
+        <div class="vlabel">Badge — estado</div>
+        <div class="row">
+          <span class="badge badge-success"><span class="dot" style="background:var(--success);"></span>Operativo</span>
+          <span class="badge badge-warning"><span class="dot" style="background:var(--warning);"></span>Atención</span>
+          <span class="badge badge-danger"><span class="dot" style="background:var(--danger);"></span>6 Críticas</span>
+          <span class="badge badge-info"><span class="dot" style="background:var(--info);"></span>Info</span>
+          <span class="badge badge-gold">Grado A</span>
+          <span class="badge badge-outline">Demo</span>
+          <span class="badge badge-muted">Borrador</span>
+        </div>
+        <div class="vlabel" style="margin-top:24px;">CitationBadge</div>
+        <div class="row">
+          <span class="cite"><i data-lucide="scale" style="width:11px;height:11px;"></i>Art. 591 E.T.</span>
+          <span class="cite"><i data-lucide="book-marked" style="width:11px;height:11px;"></i>Decreto 2229/2023</span>
+        </div>
+      </div>
+
+      <!-- segmented theme + density -->
+      <div class="demo">
+        <div class="vlabel">ThemeToggle · Densidad</div>
+        <div class="row" style="flex-direction:column; align-items:stretch; gap:16px;">
+          <div class="seg">
+            <button><i data-lucide="sun" style="width:14px;height:14px;"></i>Claro</button>
+            <button><i data-lucide="monitor" style="width:14px;height:14px;"></i>Sistema</button>
+            <button class="on"><i data-lucide="moon" style="width:14px;height:14px;"></i>Oscuro</button>
+          </div>
+          <div class="seg">
+            <button class="on">Confortable</button>
+            <button>Compacto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI hero -->
+    <div style="margin-top:16px;" class="grid">
+      <div class="vlabel" style="margin:0 0 2px;">PremiumKpiCard — variante hero</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+        <div class="kpi glass-elite-elevated border-elite-gold glow-gold-soft">
+          <div class="top">
+            <span class="klabel"><span class="pd" style="background:var(--gold-500);"></span>Valor de salida</span>
+            <span class="kic"><i data-lucide="trending-up" style="width:18px;height:18px;"></i></span>
+          </div>
+          <div class="kval num">$4.820M</div>
+          <div class="ksub">
+            <span class="ktrend up"><i data-lucide="arrow-up" style="width:14px;height:14px;"></i>+12.0%</span>
+            <span class="num" style="color:var(--n-600);">EBITDA · WACC · DCF</span>
+          </div>
+        </div>
+        <div class="kpi glass-elite-elevated border-elite-gold" style="--accent:var(--area-escudo);">
+          <div class="top">
+            <span class="klabel"><span class="pd" style="background:var(--danger);"></span>Tasa Efectiva Tributación</span>
+            <span class="kic" style="background:rgb(214 107 107 / .16); color:var(--area-escudo);"><i data-lucide="shield" style="width:18px;height:18px;"></i></span>
+          </div>
+          <div class="kval num">28,4%</div>
+          <div class="ksub">
+            <span class="ktrend down"><i data-lucide="arrow-down" style="width:14px;height:14px;"></i>-3,1 pts</span>
+            <span class="num" style="color:var(--n-600);">vs. trimestre anterior</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- viz -->
+    <div class="demo" style="margin-top:16px;">
+      <div class="vlabel">ProgressRing · ScoreGauge · RiskMeter</div>
+      <div class="viz-row">
+        <div style="text-align:center;">
+          <div class="ring-wrap">
+            <svg width="128" height="128" viewBox="0 0 128 128">
+              <circle cx="64" cy="64" r="54" fill="none" stroke="var(--n-200)" stroke-width="9"/>
+              <circle cx="64" cy="64" r="54" fill="none" stroke="var(--gold-500)" stroke-width="9" stroke-linecap="round"
+                stroke-dasharray="339.3" stroke-dashoffset="162.8" transform="rotate(-90 64 64)"/>
+            </svg>
+            <div class="ctr"><div><div class="v num">52%</div><div class="l">Completado</div></div></div>
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <div class="grade" style="color:var(--success);">A</div>
+          <div class="eyebrow" style="margin-top:6px;">Score 94/100</div>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div style="display:flex; justify-content:space-between; font-size:var(--t-xs); color:var(--n-600); margin-bottom:8px;"><span>Nivel de riesgo</span><span class="num" style="color:var(--warning);">Medio · 6.2</span></div>
+          <div style="height:8px; border-radius:var(--r-full); background:linear-gradient(90deg,var(--success),var(--warning) 55%,var(--danger)); position:relative;">
+            <div style="position:absolute; top:-4px; left:62%; width:4px; height:16px; border-radius:2px; background:var(--n-1000); box-shadow:0 0 0 3px var(--n-50);"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:9px; color:var(--n-500); margin-top:8px; text-transform:uppercase; letter-spacing:.12em;"><span>Bajo</span><span>Crítico</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- states -->
+    <div class="comp-grid" style="margin-top:16px;">
+      <div class="demo">
+        <div class="vlabel">Skeleton — carga</div>
+        <div class="sk" style="height:14px; width:40%; margin-bottom:12px;"></div>
+        <div class="sk" style="height:34px; width:70%; margin-bottom:16px;"></div>
+        <div class="sk" style="height:10px; width:100%; margin-bottom:8px;"></div>
+        <div class="sk" style="height:10px; width:85%;"></div>
+      </div>
+      <div class="demo">
+        <div class="vlabel">Toast — Sentinel IA</div>
+        <div class="toast">
+          <div class="ti" style="background:rgb(230 182 106 / .15); color:var(--warning);"><i data-lucide="bell-ring" style="width:16px;height:16px;"></i></div>
+          <div>
+            <div style="font-size:var(--t-sm); font-weight:600; color:var(--n-900);">Vencimiento en 6 días</div>
+            <div style="font-size:var(--t-xs); color:var(--n-600); margin-top:2px;">Renta Grandes Contribuyentes — Cuota 3. NIT dígito 7.</div>
+          </div>
+        </div>
+      </div>
+      <div class="demo">
+        <div class="vlabel">StreamingText — agente IA</div>
+        <div style="font-size:var(--t-sm); color:var(--n-700); line-height:var(--lh-relaxed);">Analizando el requerimiento ordinario de la DIAN<span id="cursor" style="display:inline-block; width:8px; height:16px; background:var(--gold-500); margin-left:2px; vertical-align:middle; animation:skeleton 1s infinite;"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footnote">
+    <span>1+1 · UtopIA — Sistema de diseño · Geist · Fraunces · COP</span>
+    <div style="display:flex; gap:12px;">
+      <a class="pill-link" href="Landing Hero.html">Landing Hero <i data-lucide="arrow-right" style="width:14px;height:14px;"></i></a>
+      <a class="pill-link" href="Workspace.html">Workspace <i data-lucide="arrow-right" style="width:14px;height:14px;"></i></a>
+    </div>
+  </footer>
+
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+  // ladder
+  const lad = document.getElementById('ladder');
+  const steps = [['0','#FCFBF8'],['50','#F7F5F0'],['100','#EFEBE2'],['200','#E3DDD0'],['300','#D1C9B8'],['400','#B3AA95'],['500','#8A8170'],['600','#6B6354'],['700','#4D4638'],['800','#2F2A20'],['900','#1A1611'],['1000','#0C0A06']];
+  lad.innerHTML = steps.map(([n,hex],i)=>`<div class="step" style="background:${hex}"><span style="color:${i<5?'#1A1611':'#FCFBF8'}">${n}</span></div>`).join('');
+
+  function sw(arr){ return arr.map(([nm,hex])=>`<div class="swatch"><div class="chip" style="background:${hex}"></div><div class="meta"><div class="nm">${nm}</div><div class="hx">${hex}</div></div></div>`).join(''); }
+  document.getElementById('golds').innerHTML = sw([['gold-700','#7A5F2C'],['gold-600','#9A7A38'],['gold-500','#B8934A'],['gold-400','#D4B876'],['gold-300','#E6D19A']]);
+  document.getElementById('sems').innerHTML = sw([['success','#4F7A4C'],['warning','#C48A2E'],['danger','#A83838'],['info','#3D6B7E']]);
+
+  const areas = [
+    ['El Escudo','Defensa tributaria & DIAN','#A83838'],
+    ['El Valor','Ingeniería financiera','#B8934A'],
+    ['La Verdad','Aseguramiento & opinión','#3D6B7E'],
+    ['El Futuro','Prospectiva & escenarios','#5A7F7A'],
+    ['Pyme','Contabilidad del tendero','#357A28'],
+  ];
+  document.getElementById('areas').innerHTML = areas.map(([n,d,c])=>`<div class="area-tile"><div class="bar" style="background:${c}"></div><div class="an">${n}</div><div class="ad">${d}</div><div class="ah" style="color:${c}">${c}</div></div>`).join('');
+
+  lucide.createIcons();
+</script>
+<script src="assets/fx.js"></script>
+</body>
+</html>

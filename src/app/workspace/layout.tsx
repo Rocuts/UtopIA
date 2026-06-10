@@ -52,6 +52,7 @@
  *      activeCaseType, activeMode, openIntakeForType, etc.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   WorkspaceProvider,
@@ -80,6 +81,7 @@ function IntakeModalLoader() {
 // ─── Shell ───────────────────────────────────────────────────────────────────
 
 function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const { language } = useLanguage();
   const {
     activeCase,
@@ -127,7 +129,9 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   const handleCommandAction = useCallback(
     (actionId: string) => {
-      if (actionId === 'new-consultation') {
+      if (actionId === 'open-intake') {
+        router.push('/workspace/intake');
+      } else if (actionId === 'new-consultation') {
         startNewConsultation();
       } else if (actionId === 'export-pdf') {
         handleExportPDF();
@@ -146,13 +150,17 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
         setActiveCase(conversationId);
       }
     },
-    [startNewConsultation, setActiveCase, handleExportPDF],
+    [startNewConsultation, setActiveCase, handleExportPDF, router],
   );
 
   return (
     <div
       data-lenis-prevent
-      className="h-screen w-full bg-n-0 text-n-900 flex flex-col relative overflow-hidden"
+      className="h-screen w-full text-n-900 flex flex-col relative overflow-hidden"
+      style={{
+        background:
+          'radial-gradient(1000px 600px at 78% -8%, rgb(212 184 118 / .055), transparent 60%), var(--color-n-0)',
+      }}
     >
       {/* Skip-to-content link — visible on focus, compliant with WCAG 2.1 */}
       <a
@@ -168,16 +176,6 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
       >
         {language === 'es' ? 'Saltar al contenido principal' : 'Skip to main content'}
       </a>
-
-      {/* Ambient gold glow — subtle, behind everything. Decorative. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0 opacity-50"
-        style={{
-          background:
-            'radial-gradient(ellipse 60% 40% at 50% 0%, rgb(184 147 74 / 0.08) 0%, transparent 60%), radial-gradient(ellipse 40% 30% at 100% 50%, rgb(168 56 56 / 0.06) 0%, transparent 60%)',
-        }}
-      />
 
       <EliteHeader />
 

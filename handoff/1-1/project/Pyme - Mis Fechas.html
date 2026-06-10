@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Pyme — Mis Fechas</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .main{ padding-bottom:96px; }
+  .ghero{ background:#1a2e0d; border-radius:var(--r-xl); padding:26px 28px 28px; color:#fff; margin-bottom:22px; position:relative; overflow:hidden; box-shadow:0 24px 48px -28px rgb(26 46 13 / .6); }
+  .ghero::after{ content:''; position:absolute; right:-40px; top:-40px; width:170px; height:170px; border-radius:50%; background:rgb(123 201 91 / .14); }
+  .ghero .gt{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:#fff; position:relative; z-index:1; }
+  .ghero .gsub{ font-size:var(--t-sm); color:rgb(255 255 255 / .7); margin-top:3px; position:relative; z-index:1; }
+  .ghero .gm{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; position:relative; z-index:1; }
+  .ghero .gm .gc{ border-left:2px solid rgb(255 255 255 / .15); padding-left:14px; }
+  .ghero .gm .gv{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-2xl); }
+  .ghero .gm .gl{ font-size:var(--t-xs); color:rgb(255 255 255 / .7); margin-top:3px; }
+  .mbar{ display:flex; gap:5px; margin-top:22px; position:relative; z-index:1; }
+  .mbar .mo{ flex:1; height:40px; border-radius:var(--r-sm); display:grid; place-items:center; font-size:11px; font-weight:700; }
+  .mleg{ display:flex; gap:18px; margin-top:11px; font-size:var(--t-xs); color:rgb(255 255 255 / .7); position:relative; z-index:1; }
+  .mleg b{ font-size:13px; }
+
+  .obli{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:18px 20px; margin-bottom:12px; border-left:3px solid var(--sc,var(--ac)); }
+  .obli .top{ display:flex; gap:14px; align-items:flex-start; }
+  .obli .oic{ width:42px; height:42px; border-radius:var(--r-md); display:grid; place-items:center; background:color-mix(in srgb,var(--sc,var(--ac)) 14%, transparent); color:var(--sc,var(--ac-deep)); flex-shrink:0; }
+  .obli .oic .pi{ width:20px; height:20px; }
+  .obli .ot{ font-weight:600; color:var(--n-1000); font-size:var(--t-md); }
+  .obli .om{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:5px; font-size:var(--t-xs); color:var(--n-600); }
+  .nit{ font-size:10px; font-weight:700; color:var(--ac-deep); background:var(--ac-soft); border-radius:var(--r-full); padding:2px 8px; }
+  .obli .amt{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-lg); color:var(--n-1000); margin-left:auto; white-space:nowrap; }
+  .obli .acts{ display:flex; gap:10px; margin-top:16px; }
+  .obli .acts .btn{ height:38px; font-size:var(--t-sm); }
+  .dnote{ background:var(--ac-wash); border:1px solid var(--ac-line); border-radius:var(--r-lg); padding:18px 20px; }
+  .dnote .h{ display:inline-flex; gap:8px; align-items:center; font-weight:700; color:var(--ac-deep); font-size:var(--t-xs); text-transform:uppercase; letter-spacing:var(--tr-eyebrow); margin-bottom:9px; }
+  .dnote .h .pi{ width:15px; height:15px; }
+  .dnote p{ color:var(--n-700); font-size:var(--t-md); line-height:var(--lh-relaxed); }
+
+  .pnav{ position:absolute; left:0; right:0; bottom:0; display:grid; grid-template-columns:repeat(4,1fr); background:#1a2e0d; padding:9px 0 13px; z-index:30; box-shadow:0 -8px 24px -16px rgb(0 0 0 / .5); }
+  .pnav a{ display:flex; flex-direction:column; align-items:center; gap:4px; color:rgb(255 255 255 / .6); font-size:10px; font-weight:600; }
+  .pnav a:hover{ color:rgb(255 255 255 / .9); } .pnav a.on{ color:#7BC95B; }
+  .pnav a .pi{ width:22px; height:22px; }
+</style>
+</head>
+<body data-area="pyme">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad Pyme.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a mi negocio</a>
+    <div class="mwrap">
+
+      <!-- GREEN HERO: contadores + barra 12 meses -->
+      <div class="ghero">
+        <div class="gt">Mis Fechas</div>
+        <div class="gsub">Cuándo le toca pagar y avisarle al estado. Le avisamos un día antes.</div>
+        <div class="gm">
+          <div class="gc"><div class="gv" style="color:#FCA5A5">1</div><div class="gl">Urgente</div></div>
+          <div class="gc"><div class="gv" style="color:#FDE68A">3</div><div class="gl">Próximas</div></div>
+          <div class="gc"><div class="gv" style="color:#7BC95B">8</div><div class="gl">Cumplidas</div></div>
+        </div>
+        <div class="mbar" id="mbar"></div>
+        <div class="mleg"><span><b style="color:#7BC95B">●</b> Cumplido</span><span><b style="color:#E6B66A">●</b> Este mes</span><span><b style="color:rgb(255 255 255 / .4)">●</b> Por venir</span></div>
+      </div>
+
+      <!-- OBLIGACIONES -->
+      <div class="sec-h" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="t" style="font-family:var(--font-display);font-weight:500;font-size:var(--t-2xl);color:var(--n-1000);">Lo que se viene</div><span class="meta" style="font-size:var(--t-sm);color:var(--n-500);">3 obligaciones</span></div>
+
+      <div class="obli" style="--sc:#A83838">
+        <div class="top">
+          <div class="oic"><i data-lucide="users" class="pi"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div class="ot">Pagarle a sus empleados (salud y pensión)</div>
+            <div class="om"><span>Vence el 17 de junio</span><span>·</span><span style="color:var(--danger);font-weight:600;">en 9 días</span><span class="nit">NIT …7</span></div>
+          </div>
+          <div class="amt">$1.180.000</div>
+        </div>
+        <div class="acts"><button class="btn btn-elite"><i data-lucide="credit-card" class="ic"></i>Pagar ahora</button><button class="btn btn-secondary"><i data-lucide="bell" class="ic"></i>Recordarme</button></div>
+      </div>
+
+      <div class="obli" style="--sc:#C48A2E">
+        <div class="top">
+          <div class="oic"><i data-lucide="landmark" class="pi"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div class="ot">Avisarle al estado lo que vendió</div>
+            <div class="om"><span>Vence el 19 de julio</span><span>·</span><span style="color:var(--warning);font-weight:600;">en 24 días</span><span class="nit">NIT …7</span></div>
+          </div>
+          <div class="amt">$0</div>
+        </div>
+        <div class="acts"><button class="btn btn-elite"><i data-lucide="file-text" class="ic"></i>Ver borrador</button><button class="btn btn-secondary"><i data-lucide="bell" class="ic"></i>Recordarme</button></div>
+      </div>
+
+      <div class="obli" style="--sc:#357A28">
+        <div class="top">
+          <div class="oic"><i data-lucide="user" class="pi"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div class="ot">Su pago como dueño (base 40%)</div>
+            <div class="om"><span>Vence el 17 de junio</span><span>·</span><span style="color:var(--danger);font-weight:600;">en 9 días</span><span class="nit">NIT …7</span></div>
+          </div>
+          <div class="amt">$298.000</div>
+        </div>
+        <div class="acts"><button class="btn btn-elite"><i data-lucide="credit-card" class="ic"></i>Pagar ahora</button><button class="btn btn-secondary"><i data-lucide="bell" class="ic"></i>Recordarme</button></div>
+      </div>
+
+      <!-- CONSEJO MULTAS -->
+      <div class="dnote" style="margin-top:18px;">
+        <div class="h"><i data-lucide="alert-triangle" class="pi"></i>Para no perder plata</div>
+        <p>Si paga tarde, le cobran un <b>5% de más por cada mes</b> de retraso, más intereses. Por ejemplo, $1.180.000 pagados un mes tarde le costarían unos $59.000 extra. Por eso le avisamos antes y le decimos cuánto separar.</p>
+      </div>
+
+    </div>
+  </main>
+
+  <nav class="pnav">
+    <a href="Contabilidad Pyme.html"><i data-lucide="home" class="pi"></i>Inicio</a>
+    <a class="on" href="Pyme - Mis Fechas.html"><i data-lucide="calendar-clock" class="pi"></i>Fechas</a>
+    <a href="Pyme - Mi Libro.html"><i data-lucide="book-open" class="pi"></i>Mi Libro</a>
+    <a href="Pyme - Mis Pagos.html"><i data-lucide="scale" class="pi"></i>Pagos</a>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const MESES=['E','F','M','A','M','J','J','A','S','O','N','D'];
+  document.getElementById('mbar').innerHTML = MESES.map((m,i)=>{
+    let bg,col;
+    if(i<5){ bg='#7BC95B'; col='#0a1f06'; }        // cumplido (verde)
+    else if(i===5){ bg='#E6B66A'; col='#3a2a08'; } // activo (amarillo)
+    else { bg='rgb(255 255 255 / .12)'; col='rgb(255 255 255 / .5)'; } // futuro (gris)
+    return `<div class="mo" style="background:${bg};color:${col}">${m}</div>`;
+  }).join('');
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

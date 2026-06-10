@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Pipeline NIIF Elite</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .pagehead{ padding:22px 0 22px; }
+  .pagehead .eyebrow{ color:var(--ac-deep); display:inline-flex; align-items:center; gap:9px; font-weight:700; margin-bottom:12px; }
+  .pagehead .eyebrow .ic{ width:30px; height:30px; border-radius:var(--r-sm); display:grid; place-items:center; background:var(--shimmer-gold); background-size:200% 100%; animation:gold-shimmer 4.5s infinite alternate; color:#231d12; }
+  .pagehead .eyebrow .ic .pi{ width:16px; height:16px; }
+  .pagehead h1{ font-family:var(--font-display); font-weight:500; font-size:clamp(2rem,3.6vw,2.7rem); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .pagehead .sub{ color:var(--n-600); font-size:var(--t-md); margin-top:8px; max-width:60ch; }
+
+  /* stage switching */
+  .stage{ display:none; }
+  .stage.on{ display:block; animation:stgIn .4s var(--ease-enter); }
+  @keyframes stgIn{ from{ transform:translateY(12px);} to{ transform:none; } }
+
+  /* intake wizard */
+  .wiz{ max-width:680px; }
+  .wsteps{ display:flex; gap:8px; margin-bottom:26px; }
+  .wstep{ flex:1; height:5px; border-radius:var(--r-full); background:var(--n-200); overflow:hidden; }
+  .wstep .f{ display:block; height:100%; width:0; background:linear-gradient(90deg,var(--ac),var(--ac-deep)); transition:width .4s var(--ease-enter); }
+  .wstep.done .f, .wstep.active .f{ width:100%; }
+  .wcard{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:30px; }
+  .wcard .ws-label{ font-size:var(--t-xs); text-transform:uppercase; letter-spacing:var(--tr-eyebrow); color:var(--ac-deep); font-weight:700; }
+  .wcard h2{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:var(--n-1000); margin:8px 0 6px; }
+  .wcard .wd{ color:var(--n-600); font-size:var(--t-sm); margin-bottom:22px; }
+  .opt-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media(max-width:560px){ .opt-grid{ grid-template-columns:1fr; } }
+  .opt{ display:flex; gap:12px; align-items:flex-start; padding:16px; border:1px solid var(--n-200); border-radius:var(--r-lg); cursor:pointer; background:var(--n-0); transition:border-color var(--d-base), background var(--d-base); }
+  .opt:hover{ border-color:var(--ac-line); }
+  .opt.sel{ border-color:var(--ac); background:var(--ac-wash); }
+  .opt .oic{ width:36px; height:36px; border-radius:var(--r-md); display:grid; place-items:center; background:var(--ac-soft); color:var(--ac-deep); flex-shrink:0; }
+  .opt .oic .pi{ width:18px; height:18px; }
+  .opt .on{ font-size:var(--t-sm); font-weight:600; color:var(--n-1000); }
+  .opt .od{ font-size:var(--t-xs); color:var(--n-600); margin-top:2px; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:var(--t-xs); font-weight:600; color:var(--n-700); text-transform:uppercase; letter-spacing:.07em; margin-bottom:7px; }
+  .field input, .field select{ width:100%; height:46px; padding:0 14px; background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-md); font-family:inherit; font-size:var(--t-md); color:var(--n-900); }
+  .field input:focus{ outline:none; border-color:var(--ac); box-shadow:0 0 0 3px var(--ac-soft); }
+  .drop{ border:1.5px dashed var(--ac-line); border-radius:var(--r-lg); padding:30px; text-align:center; color:var(--n-600); background:var(--ac-wash); }
+  .drop .pi{ width:30px; height:30px; color:var(--ac-deep); margin-bottom:10px; }
+  .drop .ff{ display:inline-flex; gap:8px; align-items:center; margin-top:12px; font-size:var(--t-sm); color:var(--n-800); background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-full); padding:6px 12px; }
+  .wnav{ display:flex; justify-content:space-between; margin-top:26px; gap:12px; }
+
+  /* pipeline run */
+  .phases{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+  @media(max-width:760px){ .phases{ grid-template-columns:1fr 1fr; } }
+  .phase{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:18px; position:relative; overflow:hidden; transition:border-color var(--d-base); }
+  .phase.active{ border-color:var(--ac); box-shadow:0 0 0 1px var(--ac), 0 14px 30px -18px var(--ac-glow); }
+  .phase.done{ border-color:color-mix(in srgb,var(--success) 40%, var(--n-200)); }
+  .phase .pbar{ position:absolute; left:0; bottom:0; height:3px; width:0; background:var(--ac); transition:width .3s linear; }
+  .phase.done .pbar{ width:100%!important; background:var(--success); }
+  .phase .pi-st{ width:30px; height:30px; border-radius:var(--r-full); display:grid; place-items:center; margin-bottom:12px; background:var(--n-100); color:var(--n-500); }
+  .phase.active .pi-st{ background:var(--ac-soft); color:var(--ac-deep); }
+  .phase.done .pi-st{ background:rgb(79 122 76 / .16); color:var(--success); }
+  .phase .pi-st .pi{ width:16px; height:16px; }
+  .phase h4{ font-size:var(--t-md); font-weight:600; color:var(--n-1000); }
+  .phase .pp{ font-size:var(--t-xs); color:var(--n-600); margin-top:4px; }
+  .phase .ag{ font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--ac-deep); font-weight:700; margin-top:10px; display:inline-flex; align-items:center; gap:5px; }
+  .phase .ag .pi{ width:12px; height:12px; }
+  .console{ background:var(--n-900); border-radius:var(--r-lg); padding:18px 20px; font-family:var(--font-mono); font-size:var(--t-sm); color:var(--n-300); min-height:160px; line-height:1.7; }
+  .console .ln{ opacity:0; animation:lnIn .3s forwards; }
+  @keyframes lnIn{ to{ opacity:1; } }
+  .console .tg{ color:var(--gold-500); }
+  .console .ok{ color:#7AA075; }
+  .console .cur{ display:inline-block; width:8px; height:14px; background:var(--gold-500); vertical-align:middle; animation:skeleton 1s infinite; }
+
+  /* report viewer */
+  .viewer{ display:grid; grid-template-columns:1fr 320px; gap:18px; align-items:start; }
+  @media(max-width:900px){ .viewer{ grid-template-columns:1fr; } }
+  .doc{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-xl); overflow:hidden; box-shadow:var(--e4); }
+  .doc .docbar{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--n-200); background:var(--n-50); }
+  .doc .dot3{ display:flex; gap:6px; } .doc .dot3 span{ width:10px; height:10px; border-radius:50%; background:var(--n-300); }
+  .doc .durl{ flex:1; font-family:var(--font-mono); font-size:var(--t-xs); color:var(--n-500); text-align:center; }
+  .doc .docbody{ padding:34px 40px; max-height:520px; overflow-y:auto; }
+  .doc h1{ font-family:var(--font-display); font-weight:500; font-size:var(--t-3xl); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .doc .deyebrow{ font-size:var(--t-xs); text-transform:uppercase; letter-spacing:var(--tr-eyebrow); color:var(--gold-600); font-weight:700; }
+  .doc h2{ font-family:var(--font-display); font-weight:500; font-size:var(--t-xl); color:var(--n-1000); margin:26px 0 10px; padding-top:18px; border-top:1px solid var(--n-200); }
+  .doc p{ color:var(--n-700); font-size:var(--t-sm); line-height:var(--lh-relaxed); margin-bottom:10px; }
+  .doc .dkpis{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:14px 0; }
+  .doc .dk{ border:1px solid var(--n-200); border-radius:var(--r-md); padding:14px; }
+  .doc .dk .v{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-xl); color:var(--gold-700); }
+  .doc .dk .l{ font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--n-500); margin-top:4px; }
+  .side .scard{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-lg); padding:18px; margin-bottom:14px; }
+  .side h3{ font-size:var(--t-sm); font-weight:700; color:var(--n-1000); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .side h3 .pi{ width:16px; height:16px; color:var(--ac-deep); }
+  .chatm{ font-size:var(--t-sm); color:var(--n-700); background:var(--ac-wash); border-radius:var(--r-md); padding:10px 12px; margin-bottom:8px; line-height:var(--lh-snug); }
+  .chatfield{ display:flex; gap:8px; align-items:center; background:var(--n-50); border:1px solid var(--n-200); border-radius:var(--r-md); padding:8px 10px; }
+  .chatfield input{ flex:1; border:none; background:none; outline:none; font-family:inherit; font-size:var(--t-sm); color:var(--n-800); }
+  .vbtn{ width:30px; height:30px; border-radius:8px; border:none; background:var(--ac); color:#fff; display:grid; place-items:center; cursor:pointer; }
+  .ver-row{ display:flex; align-items:center; justify-content:space-between; font-size:var(--t-sm); padding:8px 0; border-top:1px solid var(--n-100); }
+  .ver-row:first-child{ border-top:none; }
+  .ver-row .vt{ color:var(--n-800); } .ver-row .vtag{ font-size:10px; font-weight:700; color:var(--ac-deep); }
+</style>
+</head>
+<body data-area="valor" data-fx="constellation">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+    <div class="mwrap">
+      <div class="pagehead">
+        <div class="eyebrow"><span class="ic"><i data-lucide="sparkles" class="pi"></i></span>NIIF Elite · Pipeline de IA</div>
+        <h1 id="phTitle">Generar Informe NIIF Elite</h1>
+        <div class="sub" id="phSub">Del intake al reporte ejecutivo: cuatro fases orquestadas por agentes especializados.</div>
+      </div>
+
+      <!-- STAGE 1: INTAKE -->
+      <div class="stage on" id="stage-intake">
+        <div class="wiz">
+          <div class="wsteps">
+            <div class="wstep active" data-s="0"><span class="f"></span></div>
+            <div class="wstep" data-s="1"><span class="f"></span></div>
+            <div class="wstep" data-s="2"><span class="f"></span></div>
+          </div>
+
+          <div class="wcard" data-step="0">
+            <div class="ws-label">Paso 1 de 3</div>
+            <h2>¿Qué tipo de informe necesita?</h2>
+            <div class="wd">Elija el caso de uso. El pipeline se adapta a la materia.</div>
+            <div class="opt-grid">
+              <div class="opt sel"><div class="oic"><i data-lucide="file-bar-chart" class="pi"></i></div><div><div class="on">Reporte NIIF completo</div><div class="od">Estados financieros bajo NIIF plenas.</div></div></div>
+              <div class="opt"><div class="oic"><i data-lucide="search-check" class="pi"></i></div><div><div class="on">Due diligence</div><div class="od">Auditoría preventiva para transacción.</div></div></div>
+              <div class="opt"><div class="oic"><i data-lucide="gem" class="pi"></i></div><div><div class="on">Valoración de empresa</div><div class="od">DCF y múltiplos de mercado.</div></div></div>
+              <div class="opt"><div class="oic"><i data-lucide="shield" class="pi"></i></div><div><div class="on">Auditoría fiscal</div><div class="od">Diagnóstico tributario integral.</div></div></div>
+            </div>
+            <div class="wnav"><span></span><button class="btn btn-elite" onclick="wizGo(1)">Continuar <i data-lucide="arrow-right" class="ic"></i></button></div>
+          </div>
+
+          <div class="wcard" data-step="1" style="display:none;">
+            <div class="ws-label">Paso 2 de 3</div>
+            <h2>Datos de la empresa</h2>
+            <div class="wd">Confirme la identidad del contribuyente.</div>
+            <div class="field"><label>Razón social</label><input value="Grupo 2tres S.A.S." /></div>
+            <div class="field"><label>NIT</label><input value="901.234.567-7" /></div>
+            <div class="field"><label>Periodo a reportar</label><select><option>Año gravable 2025</option><option>Año gravable 2024</option></select></div>
+            <div class="wnav"><button class="btn btn-secondary" onclick="wizGo(0)">Atrás</button><button class="btn btn-elite" onclick="wizGo(2)">Continuar <i data-lucide="arrow-right" class="ic"></i></button></div>
+          </div>
+
+          <div class="wcard" data-step="2" style="display:none;">
+            <div class="ws-label">Paso 3 de 3</div>
+            <h2>Cargue sus documentos</h2>
+            <div class="wd">Balance, estado de resultados y exógena. El agente los normaliza.</div>
+            <div class="drop">
+              <i data-lucide="upload-cloud" class="pi"></i>
+              <div>Arrastre sus archivos aquí o haga clic para subir</div>
+              <div class="ff"><i data-lucide="file-spreadsheet" style="width:15px;height:15px;color:var(--ac-deep);"></i>Balance_2025.xlsx</div>
+              <div class="ff"><i data-lucide="file-text" style="width:15px;height:15px;color:var(--ac-deep);"></i>Exogena_2025.csv</div>
+            </div>
+            <div class="wnav"><button class="btn btn-secondary" onclick="wizGo(1)">Atrás</button><button class="btn btn-elite" onclick="startRun()"><i data-lucide="sparkles" class="ic"></i>Generar informe</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STAGE 2: RUN -->
+      <div class="stage" id="stage-run">
+        <div class="phases" id="phases"></div>
+        <div class="console" id="console"></div>
+      </div>
+
+      <!-- STAGE 3: REPORT -->
+      <div class="stage" id="stage-report">
+        <div class="viewer">
+          <div class="doc">
+            <div class="docbar"><div class="dot3"><span></span><span></span><span></span></div><div class="durl">informe-niif-elite/grupo-2tres-2025.html</div><i data-lucide="maximize-2" style="width:15px;height:15px;color:var(--n-500);"></i></div>
+            <div class="docbody scroll">
+              <div class="deyebrow">Informe NIIF Elite · Año gravable 2025</div>
+              <h1>Grupo 2tres S.A.S.</h1>
+              <p>Estados financieros preparados bajo NIIF plenas, con estrategia tributaria y gobierno corporativo. Generado y verificado por agentes 1+1.</p>
+              <div class="dkpis">
+                <div class="dk"><div class="v">$4.820M</div><div class="l">Valor de salida</div></div>
+                <div class="dk"><div class="v">23,4%</div><div class="l">Margen EBITDA</div></div>
+                <div class="dk"><div class="v">94/100</div><div class="l">Cumplimiento</div></div>
+              </div>
+              <h2>1. Resumen ejecutivo</h2>
+              <p>La compañía presenta una posición financiera sólida, con crecimiento de ingresos del 12% y una Tasa Efectiva de Tributación de 28,4%, optimizable a 24% mediante las estrategias del capítulo 4.</p>
+              <h2>2. Estado de situación financiera</h2>
+              <p>Activos por $48.260M, pasivos por $21.140M y patrimonio de $27.120M. La razón corriente de 1,8× evidencia liquidez adecuada para las obligaciones del periodo.</p>
+              <h2>3. Estado de resultados</h2>
+              <p>Ingresos operacionales de $14.900M con margen bruto del 41,2% y EBITDA de $1.180M, por encima de la mediana sectorial.</p>
+            </div>
+          </div>
+          <div class="side">
+            <div class="scard">
+              <h3><i data-lucide="git-compare" class="pi"></i>Versiones</h3>
+              <div class="ver-row"><span class="vt">v3 · actual</span><span class="vtag">HACE 1 MIN</span></div>
+              <div class="ver-row"><span class="vt">v2 · ajuste EBITDA</span><span class="vtag">VER DIFF</span></div>
+              <div class="ver-row"><span class="vt">v1 · borrador</span><span class="vtag">VER DIFF</span></div>
+            </div>
+            <div class="scard">
+              <h3><i data-lucide="message-square" class="pi"></i>Chat de seguimiento</h3>
+              <div class="chatm">El reporte está listo. ¿Desea que ajuste alguna nota o profundice un capítulo?</div>
+              <div class="chatfield"><input placeholder="Pídale un cambio al agente…" /><button class="vbtn"><i data-lucide="arrow-up" style="width:15px;height:15px;"></i></button></div>
+            </div>
+            <button class="btn btn-elite" style="width:100%;" onclick="resetPipe()"><i data-lucide="rotate-ccw" class="ic"></i>Nuevo informe</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  // intake selection
+  document.querySelectorAll('.opt').forEach(o=>o.addEventListener('click',()=>{
+    document.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel')); o.classList.add('sel');
+  }));
+  let step=0;
+  function wizGo(s){
+    step=s;
+    document.querySelectorAll('.wcard').forEach(c=>c.style.display = +c.dataset.step===s?'block':'none');
+    document.querySelectorAll('.wstep').forEach(w=>{ const i=+w.dataset.s; w.classList.toggle('done', i<s); w.classList.toggle('active', i<=s); });
+    if(window.lucide) lucide.createIcons();
+  }
+
+  function show(stage){ document.querySelectorAll('.stage').forEach(s=>s.classList.remove('on')); document.getElementById('stage-'+stage).classList.add('on'); }
+
+  const PHASES=[
+    ['file-check','NIIF','Lectura y normalización contable','Agente Contable'],
+    ['route','Strategy','Optimización tributaria y escenarios','Agente Fiscal'],
+    ['shield-check','Governance','Aseguramiento y dictamen','Agente Auditor'],
+    ['file-code','HTML','Reporte ejecutivo navegable','Agente Editor'],
+  ];
+  const LOGS=[
+    ['NIIF','Cargando Balance_2025.xlsx … 1.204 cuentas',true],
+    ['NIIF','Normalizando bajo NIIF plenas … reclasificando 38 partidas','ok'],
+    ['Strategy','Calculando TEF actual: 28,4% · objetivo 24,0%',true],
+    ['Strategy','Modelando 5 estrategias de optimización … ahorro $420M','ok'],
+    ['Governance','Verificando control interno y cumplimiento … score 94/100',true],
+    ['Governance','Emitiendo dictamen: opinión limpia','ok'],
+    ['HTML','Componiendo reporte ejecutivo … 3 versiones','true'],
+    ['HTML','Informe listo · verificado','ok'],
+  ];
+
+  function startRun(){
+    document.getElementById('phTitle').textContent='Generando informe…';
+    document.getElementById('phSub').textContent='Los agentes procesan su caso en tiempo real. No cierre esta ventana.';
+    show('run');
+    const ph=document.getElementById('phases');
+    ph.innerHTML=PHASES.map((p,i)=>`<div class="phase" data-p="${i}"><div class="pi-st"><i data-lucide="${i===0?'loader':'circle'}" class="pi"></i></div><h4>${p[1]}</h4><div class="pp">${p[2]}</div><div class="ag"><i data-lucide="bot" class="pi"></i>${p[3]}</div><div class="pbar"></div></div>`).join('');
+    if(window.lucide) lucide.createIcons();
+    const cons=document.getElementById('console'); cons.innerHTML='';
+    let li=0, phase=-1;
+    function advancePhase(p){
+      document.querySelectorAll('.phase').forEach((el,i)=>{
+        el.classList.toggle('active', i===p);
+        el.classList.toggle('done', i<p);
+        const bar=el.querySelector('.pbar'); if(i<p) bar.style.width='100%'; else if(i===p){ bar.style.width='0'; requestAnimationFrame(()=>bar.style.transition='width 1.6s linear'); requestAnimationFrame(()=>bar.style.width='100%'); }
+      });
+    }
+    function tick(){
+      if(li>=LOGS.length){
+        document.querySelectorAll('.phase').forEach(el=>{el.classList.remove('active'); el.classList.add('done');});
+        setTimeout(showReport, 700); return;
+      }
+      const [ph2,msg,kind]=LOGS[li];
+      const newPhase = PHASES.findIndex(p=>p[1]===ph2);
+      if(newPhase!==phase){ phase=newPhase; advancePhase(phase); }
+      const line=document.createElement('div'); line.className='ln';
+      line.innerHTML=`<span class="tg">[${ph2}]</span> ${msg} ${kind==='ok'?'<span class="ok">✓</span>':'<span class="cur"></span>'}`;
+      cons.appendChild(line); cons.scrollTop=cons.scrollHeight;
+      li++; setTimeout(tick, kind==='ok'?700:1100);
+    }
+    tick();
+  }
+  function showReport(){
+    document.getElementById('phTitle').textContent='Informe NIIF Elite';
+    document.getElementById('phSub').textContent='Reporte generado y verificado. Revise, compare versiones o pida ajustes al agente.';
+    show('report'); if(window.lucide) lucide.createIcons();
+  }
+  function resetPipe(){
+    document.getElementById('phTitle').textContent='Generar Informe NIIF Elite';
+    document.getElementById('phSub').textContent='Del intake al reporte ejecutivo: cuatro fases orquestadas por agentes especializados.';
+    wizGo(0); show('intake');
+  }
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

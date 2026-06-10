@@ -108,10 +108,10 @@ export function AreaNav({ className }: AreaNavProps) {
       className={cn('relative', className)}
       aria-label="Centro de Comando — Áreas"
     >
-      {/* Desktop: horizontal pills */}
+      {/* Desktop: horizontal pills — container matches handoff `.areanav` */}
       <ul
         role="list"
-        className="hidden md:flex items-center gap-1"
+        className="hidden md:flex items-center gap-0.5 p-0.5 bg-n-100 border border-n-200 rounded-full"
       >
         {AREAS.map(({ key, icon: Icon, href, accentClass }) => {
           const isActive = activeKey === key;
@@ -124,7 +124,7 @@ export function AreaNav({ className }: AreaNavProps) {
                 aria-current={isActive ? 'page' : undefined}
                 title={`${areaCopy.concept} — ${areaCopy.subtitle}`}
                 className={cn(
-                  'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-md',
+                  'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full z-[1]',
                   'font-mono text-xs-mono font-medium uppercase tracking-eyebrow',
                   'transition-colors duration-200',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
@@ -143,12 +143,13 @@ export function AreaNav({ className }: AreaNavProps) {
                   )}
                   strokeWidth={2}
                 />
-                <span className="whitespace-nowrap">{areaCopy.concept}</span>
+                {/* Sliding background indicator — animates between active pills */}
                 {isActive && (
                   <motion.span
-                    layoutId="area-nav-underline"
+                    layoutId="area-nav-pill-bg"
                     aria-hidden="true"
-                    className="absolute left-3 right-3 -bottom-0.5 h-[2px] rounded-full bg-gold-500"
+                    className="absolute inset-0 rounded-full bg-n-0 shadow-e1"
+                    style={{ zIndex: -1 }}
                     transition={
                       prefersReduced
                         ? { duration: 0 }
@@ -156,6 +157,7 @@ export function AreaNav({ className }: AreaNavProps) {
                     }
                   />
                 )}
+                <span className="whitespace-nowrap">{areaCopy.concept}</span>
               </Link>
             </li>
           );
