@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Contabilidad — Conciliación bancaria</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .puc .node{ display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--n-100); font-size:var(--t-sm); font-family:var(--font-mono); }
+  .puc .node:first-child{ border-top:none; }
+  .puc .code{ color:var(--ac-deep); font-weight:600; min-width:54px; } .puc .nm{ color:var(--n-800); font-family:var(--font-sans); flex:1; } .puc .amt{ color:var(--n-600); }
+  .puc .lvl1{ font-weight:700; } .puc .lvl2{ padding-left:20px; } .puc .lvl3{ padding-left:42px; } .puc .lvl3 .nm{ color:var(--n-600); }
+  .de-grid{ display:grid; grid-template-columns:1fr 150px 150px; gap:10px; align-items:center; }
+  .de-head{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--n-500); font-weight:700; padding-bottom:4px; }
+  .de-grid input, .de-grid select{ height:44px; padding:0 12px; border:1px solid var(--n-200); border-radius:var(--r-md); font-family:inherit; font-size:var(--t-sm); background:var(--n-0); color:var(--n-900); width:100%; }
+  .de-grid .num{ font-family:var(--font-mono); text-align:right; }
+  .de-total{ display:grid; grid-template-columns:1fr 150px 150px; gap:10px; padding-top:14px; margin-top:8px; border-top:2px solid var(--n-200); font-family:var(--font-mono); font-weight:600; color:var(--n-1000); }
+  .de-total .num{ text-align:right; }
+  .balok{ display:inline-flex; gap:8px; align-items:center; color:var(--success); font-weight:600; font-size:var(--t-sm); margin-top:14px; }
+  .upz{ border:1.6px dashed var(--ac-line); border-radius:var(--r-lg); padding:42px 20px; text-align:center; background:var(--ac-wash); color:var(--n-600); }
+  .upz .pi{ width:36px; height:36px; color:var(--ac-deep); margin-bottom:10px; }
+  .upz .ff{ display:inline-flex; gap:8px; align-items:center; margin-top:14px; font-size:var(--t-sm); color:var(--n-800); background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-full); padding:6px 14px; }
+  .per{ display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:var(--r-lg); background:var(--n-0); border:1px solid var(--n-200); margin-bottom:8px; }
+  .per .pd{ width:9px; height:9px; border-radius:50%; flex-shrink:0; } .per .pn{ flex:1; font-weight:600; color:var(--n-1000); } .per .pm{ font-size:var(--t-xs); color:var(--n-600); }
+</style>
+</head>
+<body data-area="app">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a Contabilidad</a>
+    <div class="mwrap">
+      <div class="subhead">
+        <div class="crumb"><span class="ic"><i data-lucide="book" class="pi"></i></span>Contabilidad — Conciliación bancaria</div>
+        <h1>Conciliación bancaria</h1>
+        <div class="lede">Cruzamos su extracto bancario con los movimientos del libro para detectar diferencias.</div>
+      </div>
+      <section class="sec"><div class="sec-h"><div class="t">Resumen</div></div><div class="statrow"><div class="statcard"><div class="l">Saldo extracto</div><div class="v " >$11.240.000</div></div><div class="statcard"><div class="l">Saldo libros</div><div class="v " >$11.085.000</div></div><div class="statcard"><div class="l">Diferencia</div><div class="v ac" >$155.000</div></div><div class="statcard"><div class="l">Conciliado</div><div class="v " >94%</div></div></div></section><section class="sec"><div class="sec-h"><div class="t">Partidas conciliatorias</div><span class="meta">3 pendientes</span></div><div class="panel" style="padding:8px 10px;"><table class="dtable"><thead><tr><th class="">Fecha</th><th class="">Concepto</th><th class="num">Movimiento</th><th class="">Estado</th></tr></thead><tbody><tr><td class=" strong">06/06</td><td class=" ">Consignación cliente 2tres</td><td class="num ">+$3.060.000</td><td class=" ">Conciliado</td></tr><tr><td class=" strong">05/06</td><td class=" ">Cheque 0451 no cobrado</td><td class="num ">−$120.000</td><td class=" ">Pendiente en banco</td></tr><tr><td class=" strong">04/06</td><td class=" ">Comisión bancaria no registrada</td><td class="num ">−$35.000</td><td class=" ">Falta en libros</td></tr></tbody></table></div></section><div class="dnote"><div class="h"><i data-lucide="wand-2" class="pi"></i>Acción sugerida</div><p>Registre la comisión bancaria ($35.000) en el libro para cerrar la conciliación. El cheque 0451 se concilia solo cuando el banco lo cobre.</p></div>
+    </div>
+  </main>
+</div>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+if(window.lucide) lucide.createIcons();</script>
+</body>
+</html>

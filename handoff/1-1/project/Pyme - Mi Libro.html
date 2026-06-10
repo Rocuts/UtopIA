@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Pyme — Mi Libro</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .main{ padding-bottom:96px; }
+  /* green hero #1a2e0d */
+  .ghero{ background:#1a2e0d; border-radius:var(--r-xl); padding:26px 28px 28px; color:#fff; margin-bottom:22px; position:relative; overflow:hidden; box-shadow:0 24px 48px -28px rgb(26 46 13 / .6); }
+  .ghero::after{ content:''; position:absolute; right:-40px; top:-40px; width:170px; height:170px; border-radius:50%; background:rgb(123 201 91 / .14); }
+  .ghero .gt{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:#fff; position:relative; z-index:1; }
+  .ghero .gsub{ font-size:var(--t-sm); color:rgb(255 255 255 / .7); margin-top:3px; position:relative; z-index:1; }
+  .ghero .gm{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; position:relative; z-index:1; }
+  @media(max-width:520px){ .ghero .gm{ grid-template-columns:1fr; gap:12px; } }
+  .ghero .gm .gc{ border-left:2px solid rgb(255 255 255 / .15); padding-left:14px; }
+  .ghero .gm .gv{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-2xl); color:#fff; font-variant-numeric:tabular-nums; }
+  .ghero .gm .gv.q{ color:#7BC95B; }
+  .ghero .gm .gl{ font-size:var(--t-xs); color:rgb(255 255 255 / .7); margin-top:3px; }
+  .fotobtn{ display:inline-flex; align-items:center; gap:10px; margin-top:22px; height:48px; padding:0 22px; border-radius:var(--r-md); border:none; cursor:pointer;
+    background:#7BC95B; color:#0a1f06; font-weight:700; font-size:var(--t-md); font-family:inherit; position:relative; z-index:1; box-shadow:0 10px 24px -10px rgb(123 201 91 / .6); transition:transform var(--d-base); }
+  .fotobtn:hover{ transform:translateY(-2px); }
+  .fotobtn .pi{ width:20px; height:20px; }
+
+  .filters{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .filters .fc{ padding:8px 16px; border-radius:var(--r-full); border:1px solid var(--n-200); background:var(--n-0); font-size:var(--t-sm); font-weight:600; color:var(--n-700); cursor:pointer; font-family:inherit; }
+  .filters .fc.on{ background:var(--ac); color:#fff; border-color:var(--ac); }
+
+  .tx{ display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:var(--r-lg); background:var(--n-0); border:1px solid var(--n-200); margin-bottom:10px; }
+  .tx .ph{ width:46px; height:46px; border-radius:var(--r-md); background:color-mix(in srgb,var(--ac) 10%, var(--n-50)); display:grid; place-items:center; color:var(--ac-deep); flex-shrink:0; }
+  .tx .ph .pi{ width:20px; height:20px; }
+  .tx .mid{ flex:1; min-width:0; }
+  .tx .tt{ font-weight:600; color:var(--n-1000); font-size:var(--t-md); display:flex; align-items:center; gap:8px; }
+  .tx .cam{ display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; color:var(--ac-deep); background:var(--ac-soft); border-radius:var(--r-full); padding:2px 7px; }
+  .tx .cam .pi{ width:11px; height:11px; }
+  .tx .mt{ font-size:var(--t-xs); color:var(--n-600); margin-top:3px; }
+  .tx .amt{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-md); white-space:nowrap; }
+  .tx .amt.in{ color:var(--ac-deep); } .tx .amt.out{ color:var(--danger); }
+
+  .savebanner{ display:flex; align-items:center; gap:14px; padding:18px 20px; border-radius:var(--r-lg); background:rgb(53 122 40 / .1); border:1px solid rgb(53 122 40 / .3); }
+  .savebanner .pi{ width:22px; height:22px; color:var(--ac-deep); flex-shrink:0; }
+  .savebanner .st{ font-weight:700; color:var(--ac-deep); font-size:var(--t-md); }
+  .savebanner .ss{ font-size:var(--t-sm); color:var(--n-700); margin-top:2px; }
+
+  /* OCR modal */
+  .ocrov{ position:fixed; inset:0; z-index:100; background:rgb(8 7 5 / .55); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center; padding:20px; }
+  .ocrov.show{ display:flex; }
+  .ocrcard{ width:min(460px,94vw); background:var(--n-0); border-radius:var(--r-xl); padding:26px; box-shadow:var(--e5); animation:pop .3s var(--ease-spring); }
+  @keyframes pop{ from{ transform:scale(.95); } to{ transform:none; } }
+  .ocrcard.reading{ text-align:center; }
+  .ocrhead{ display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+  .ocrhead .ic{ width:42px; height:42px; border-radius:50%; display:grid; place-items:center; background:rgb(196 138 46 / .15); color:var(--warning); flex-shrink:0; }
+  .ocrhead .t{ font-weight:700; color:var(--n-1000); font-size:var(--t-lg); }
+  .ocrhead .s{ font-size:var(--t-sm); color:var(--n-600); }
+  .o3{ display:flex; align-items:center; gap:14px; padding:15px; border:1px solid var(--n-200); border-radius:var(--r-lg); background:var(--n-0); cursor:pointer; transition:border-color var(--d-base), background var(--d-base); width:100%; font-family:inherit; text-align:left; margin-top:10px; }
+  .o3:hover{ border-color:var(--ac); background:var(--ac-wash); }
+  .o3 .oi{ width:38px; height:38px; border-radius:var(--r-md); background:var(--ac-soft); color:var(--ac-deep); display:grid; place-items:center; flex-shrink:0; }
+  .o3 .oi .pi{ width:18px; height:18px; }
+  .o3 .on{ font-weight:600; color:var(--n-1000); } .o3 .od{ font-size:var(--t-xs); color:var(--n-600); margin-top:2px; }
+  .scanframe{ aspect-ratio:4/3; border-radius:var(--r-lg); background:linear-gradient(160deg,#14120F,#2F2A20); position:relative; overflow:hidden; display:grid; place-items:center; margin-bottom:16px; }
+  .scanframe .scanline{ position:absolute; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,#7BC95B,transparent); box-shadow:0 0 12px #7BC95B; animation:scan 1.4s ease-in-out infinite; }
+  @keyframes scan{ 0%{top:8%;} 50%{top:90%;} 100%{top:8%;} }
+  .scanframe .pi{ width:34px; height:34px; color:rgb(123 201 91 / .9); }
+
+  /* bottom nav */
+  .pnav{ position:absolute; left:0; right:0; bottom:0; display:grid; grid-template-columns:repeat(4,1fr); background:#1a2e0d; padding:9px 0 13px; z-index:30; box-shadow:0 -8px 24px -16px rgb(0 0 0 / .5); }
+  .pnav a{ display:flex; flex-direction:column; align-items:center; gap:4px; color:rgb(255 255 255 / .6); font-size:10px; font-weight:600; }
+  .pnav a:hover{ color:rgb(255 255 255 / .9); }
+  .pnav a.on{ color:#7BC95B; }
+  .pnav a .pi{ width:22px; height:22px; }
+</style>
+</head>
+<body data-area="pyme">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Contabilidad Pyme.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver a mi negocio</a>
+    <div class="mwrap">
+
+      <!-- GREEN HERO + 3 MÉTRICAS -->
+      <div class="ghero">
+        <div class="gt">Mi Libro</div>
+        <div class="gsub">Todo lo que entró y salió este mes, ordenado por día.</div>
+        <div class="gm">
+          <div class="gc"><div class="gv num">$1.240.000</div><div class="gl">Vendí</div></div>
+          <div class="gc"><div class="gv num">$805.000</div><div class="gl">Gasté</div></div>
+          <div class="gc"><div class="gv q num">$435.000</div><div class="gl">Me quedó</div></div>
+        </div>
+        <button class="fotobtn" onclick="openOcr()"><i data-lucide="camera" class="pi"></i>Agregar foto de factura</button>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="filters" id="filters">
+        <button class="fc on" data-f="all">Todos</button>
+        <button class="fc" data-f="in">Ingresos</button>
+        <button class="fc" data-f="out">Gastos</button>
+      </div>
+
+      <!-- TRANSACCIONES -->
+      <div id="txlist"></div>
+
+      <!-- BALANCE -->
+      <div class="savebanner" style="margin-top:18px;">
+        <i data-lucide="wallet" class="pi"></i>
+        <div style="flex:1;">
+          <div class="st">Le quedó $435.000</div>
+          <div class="ss">Cuatrocientos treinta y cinco mil pesos. Le fue mejor que el mes pasado.</div>
+        </div>
+        <button class="btn btn-secondary"><i data-lucide="download" class="ic"></i>Bajar a Excel</button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="pnav">
+    <a href="Contabilidad Pyme.html"><i data-lucide="home" class="pi"></i>Inicio</a>
+    <a href="Pyme - Mis Fechas.html"><i data-lucide="calendar-clock" class="pi"></i>Fechas</a>
+    <a class="on" href="Pyme - Mi Libro.html"><i data-lucide="book-open" class="pi"></i>Mi Libro</a>
+    <a href="Pyme - Mis Pagos.html"><i data-lucide="scale" class="pi"></i>Pagos</a>
+  </nav>
+</div>
+
+<!-- OCR MODAL -->
+<div class="ocrov" id="ocrov">
+  <div class="ocrcard" id="ocrcard"></div>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  // ---- transactions (mock) ----
+  const TX = [
+    ['shopping-cart','Venta de mostrador','Hoy 2:14 p.m. · efectivo','in','340.000',false],
+    ['receipt','Compra a Bavaria','Hoy 9:30 a.m.','out','180.000',true],
+    ['shopping-cart','Venta del día','Ayer · datáfono','in','520.000',false],
+    ['zap','Pago de luz','Ayer · servicios','out','95.000',false],
+    ['truck','Compra a Postobón','2 días','out','210.000',true],
+    ['shopping-cart','Venta de mostrador','3 días · efectivo','in','280.000',false],
+    ['home','Pago arriendo del local','5 días · gasto fijo','out','800.000',false],
+    ['shopping-cart','Ventas del fin de semana','6 días','in','610.000',false],
+    ['truck','Compra a Colombina','1 semana','out','140.000',true],
+    ['droplet','Pago de agua','1 semana · servicios','out','62.000',false],
+  ];
+  function renderTx(filter){
+    document.getElementById('txlist').innerHTML = TX.filter(t=>filter==='all'||t[3]===filter).map(([ic,tt,mt,type,amt,read])=>`
+      <div class="tx" data-type="${type}">
+        <div class="ph"><i data-lucide="${ic}" class="pi"></i></div>
+        <div class="mid">
+          <div class="tt">${tt}${read?'<span class="cam"><i data-lucide="camera" class="pi"></i>Factura leída</span>':''}</div>
+          <div class="mt">${mt}</div>
+        </div>
+        <div class="amt ${type==='in'?'in':'out'}">${type==='in'?'+':'−'}${amt}</div>
+      </div>`).join('');
+    if(window.lucide) lucide.createIcons();
+  }
+  renderTx('all');
+  document.querySelectorAll('#filters .fc').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#filters .fc').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    renderTx(b.dataset.f);
+  }));
+
+  // ---- OCR modal ----
+  const ov=document.getElementById('ocrov'), card=document.getElementById('ocrcard');
+  function openOcr(){
+    ov.classList.add('show');
+    card.className='ocrcard reading';
+    card.innerHTML=`<div class="scanframe"><div class="scanline"></div><i data-lucide="receipt" class="pi"></i></div><div style="font-family:var(--font-display);font-size:var(--t-xl);color:var(--n-1000);">Leyendo el documento…</div><div style="font-size:var(--t-sm);color:var(--n-600);margin-top:4px;">Reconociendo proveedor, fecha y valor.</div>`;
+    if(window.lucide) lucide.createIcons();
+    setTimeout(showError, 1700);
+  }
+  function showError(){
+    card.className='ocrcard';
+    card.innerHTML=`
+      <div class="ocrhead"><div class="ic"><i data-lucide="image-off" style="width:22px;height:22px;"></i></div><div><div class="t">No pude leer bien esa foto</div><div class="s">No se preocupe — ¿qué hacemos?</div></div></div>
+      <button class="o3" onclick="closeOcr()"><div class="oi"><i data-lucide="camera" class="pi"></i></div><div><div class="on">Tomar otra foto</div><div class="od">Con mejor luz y de cerca.</div></div></button>
+      <button class="o3" onclick="closeOcr()"><div class="oi"><i data-lucide="keyboard" class="pi"></i></div><div><div class="on">Escribir el valor a mano</div><div class="od">Usted nos dice cuánto fue.</div></div></button>
+      <button class="o3" onclick="closeOcr()"><div class="oi"><i data-lucide="skip-forward" class="pi"></i></div><div><div class="on">Saltar por ahora</div><div class="od">La anotamos después.</div></div></button>`;
+    if(window.lucide) lucide.createIcons();
+  }
+  function closeOcr(){ ov.classList.remove('show'); }
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeOcr(); });
+
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

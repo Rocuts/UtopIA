@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · UtopIA — Claridad financiera</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<style>
+  html,body { height:100%; }
+  html { scroll-behavior:smooth; }
+  body { overflow-x:hidden; }
+  .hero { position:relative; min-height:100vh; display:flex; flex-direction:column; overflow:hidden;
+    background:
+      radial-gradient(1100px 700px at 70% -10%, rgb(212 184 118 / .10), transparent 60%),
+      radial-gradient(800px 600px at 0% 90%, rgb(214 107 107 / .05), transparent 55%),
+      var(--n-0); }
+  #bg { position:absolute; inset:0; z-index:0; }
+  .grain { position:absolute; inset:0; z-index:1; pointer-events:none;
+    background-image:radial-gradient(circle, rgb(184 147 74 / .16) 1px, transparent 1px);
+    background-size:40px 40px; mask-image:radial-gradient(900px 600px at 60% 40%, #000 0%, transparent 75%);
+    -webkit-mask-image:radial-gradient(900px 600px at 60% 40%, #000 0%, transparent 75%); opacity:.45; }
+
+  /* Header */
+  header.nav { position:relative; z-index:10; height:72px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 clamp(22px,4vw,56px); }
+  .nav-links { display:flex; gap:34px; }
+  .nav-links a { font-size:var(--t-sm); color:var(--n-600); transition:color var(--d-base); }
+  .nav-links a:hover { color:var(--n-1000); }
+  .nav-right { display:flex; align-items:center; gap:16px; }
+  .lang { display:inline-flex; border:1px solid var(--n-300); border-radius:var(--r-sm); padding:2px; }
+  .lang button { border:none; background:transparent; color:var(--n-600); font-size:var(--t-2xs); font-weight:600; padding:5px 10px; border-radius:4px; }
+  .lang button.on { background:var(--n-900); color:var(--n-0); }
+  @media (max-width:860px){ .nav-links{ display:none; } }
+
+  /* Hero content */
+  .hero-body { position:relative; z-index:10; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px 22px; gap:2px; }
+  .eyebrow-row { display:inline-flex; align-items:center; gap:12px; margin-bottom:30px; }
+  .eyebrow-row .ln { height:1px; width:28px; background:rgb(212 184 118 / .5); }
+  .eyebrow-row .tx { font-size:var(--t-xs); text-transform:uppercase; letter-spacing:var(--tr-eyebrow); color:var(--gold-500); font-weight:500; }
+  h1.hero-title { font-family:var(--font-display); font-weight:500; color:var(--n-1000); line-height:1.1; letter-spacing:-.025em;
+    font-size:clamp(2.3rem, 5.2vw, 4.4rem); font-variation-settings:'opsz' 144,'wght' 500; max-width:15ch; text-wrap:balance; }
+  h1 .em { font-style:italic; color:var(--gold-500); font-variation-settings:'opsz' 144,'wght' 420,'SOFT' 60,'WONK' 1; }
+  .slogan { font-family:var(--font-display); font-style:italic; color:var(--gold-600); font-size:clamp(1rem,2vw,1.3rem); margin-top:38px; font-variation-settings:'opsz' 20,'wght' 400; }
+  .subtitle { color:var(--n-600); font-size:clamp(1rem,1.4vw,1.2rem); max-width:52ch; margin:18px auto 0; line-height:var(--lh-relaxed); text-wrap:pretty; }
+  .cta-row { display:flex; gap:14px; margin-top:42px; flex-wrap:wrap; justify-content:center; }
+  .btn-lg { font-size:var(--t-md); }
+
+  /* trust strip */
+  .strip { position:relative; z-index:10; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:clamp(28px,5vw,72px);
+    padding:30px 22px 40px; border-top:1px solid var(--n-200); }
+  .stat { text-align:center; }
+  .stat .v { font-family:var(--font-mono); font-weight:600; font-size:var(--t-2xl); color:var(--n-1000); }
+  .stat .l { font-size:var(--t-xs); color:var(--n-500); text-transform:uppercase; letter-spacing:.1em; margin-top:4px; }
+  .stat .v .accent { color:var(--gold-500); }
+
+  .scroll-cue { position:absolute; bottom:122px; left:50%; transform:translateX(-50%); z-index:10; color:var(--n-500); display:none; flex-direction:column; align-items:center; gap:8px; }
+  .scroll-cue .mouse { width:22px; height:34px; border:1.5px solid var(--n-400); border-radius:12px; position:relative; }
+  .scroll-cue .mouse::after { content:''; position:absolute; left:50%; top:7px; transform:translateX(-50%); width:3px; height:6px; border-radius:2px; background:var(--gold-500); animation:scrolldot 1.6s var(--ease-std) infinite; }
+  @keyframes scrolldot { 0%{opacity:0; transform:translate(-50%,0);} 30%{opacity:1;} 70%{opacity:1; transform:translate(-50%,9px);} 100%{opacity:0; transform:translate(-50%,9px);} }
+  @media (min-height:820px) and (min-width:861px){ .scroll-cue{ display:flex; } }
+  @media (max-height:720px){ h1.hero-title{ font-size:clamp(2rem,4.6vw,3.4rem); } .hero-body{ gap:0; } .cta-row{ margin-top:30px; } }
+
+  .fade-up { transition:transform .6s var(--ease-enter); }
+  body.preload .fade-up { transform:translateY(16px); }
+  @media (prefers-reduced-motion: reduce){ body.preload .fade-up{ transform:none; } }
+
+  /* ===== Landing sections ===== */
+  .land{ position:relative; z-index:10; background:transparent; }
+  .lsec{ max-width:1180px; margin:0 auto; padding:84px clamp(22px,5vw,56px); border-top:1px solid var(--n-200); }
+  .lhead{ text-align:center; max-width:60ch; margin:0 auto 46px; }
+  .lhead .eyebrow{ display:inline-flex; align-items:center; gap:10px; color:var(--gold-600); margin-bottom:14px; justify-content:center; }
+  .lhead h2{ font-family:var(--font-display); font-weight:500; font-size:clamp(1.9rem,3.4vw,2.8rem); color:var(--n-1000); letter-spacing:var(--tr-tight); line-height:1.08; }
+  .lhead p{ color:var(--n-600); font-size:var(--t-lg); margin-top:14px; line-height:var(--lh-relaxed); }
+  .r{ transform:translateY(28px); transition:transform .7s var(--ease-enter); }
+  .r.in{ transform:none; }
+  @media (prefers-reduced-motion:reduce){ .r{ transform:none; transition:none; } }
+
+  /* teaser */
+  .teaser{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  @media(max-width:900px){ .teaser{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:520px){ .teaser{ grid-template-columns:1fr; } }
+  .tcard{ display:block; border:1px solid var(--n-200); border-radius:var(--r-lg); padding:20px; background:var(--n-0); position:relative; overflow:hidden;
+    transition:transform var(--d-base) var(--ease-std), box-shadow var(--d-base), border-color var(--d-base); }
+  .tcard::before{ content:''; position:absolute; left:0; top:0; right:0; height:4px; background:var(--c); }
+  .tcard:hover{ transform:translateY(-5px); border-color:var(--c); box-shadow:0 22px 40px -24px color-mix(in srgb,var(--c) 55%, transparent); }
+  .tcard .trow{ display:flex; align-items:center; justify-content:space-between; margin:6px 0 14px; }
+  .tcard .tic{ width:36px; height:36px; border-radius:var(--r-md); display:grid; place-items:center; background:var(--c); color:#fff; }
+  .tcard .tic .ic{ width:18px; height:18px; }
+  .tcard .troman{ font-size:var(--t-2xs); font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--c); }
+  .tcard h3{ font-family:var(--font-display); font-weight:500; font-size:var(--t-xl); color:var(--n-1000); }
+  .tcard .tkv{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-lg); color:var(--n-1000); margin-top:8px; }
+  .tcard .tl{ font-size:var(--t-xs); color:var(--n-500); }
+  .tcard svg{ margin-top:10px; display:block; }
+
+  /* pipeline */
+  .pipe{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; position:relative; }
+  @media(max-width:760px){ .pipe{ grid-template-columns:1fr 1fr; } }
+  .pphase{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:22px; position:relative; }
+  .pphase .pn{ width:34px; height:34px; border-radius:var(--r-full); display:grid; place-items:center; font-family:var(--font-mono); font-weight:600; font-size:var(--t-sm);
+    background:rgb(184 147 74 / .14); color:var(--gold-600); border:1px solid rgb(184 147 74 / .35); margin-bottom:14px; }
+  .pphase.active .pn{ background:var(--gold-500); color:var(--n-0); border-color:var(--gold-500); box-shadow:var(--glow-gold-soft); }
+  .pphase h4{ font-size:var(--t-md); font-weight:600; color:var(--n-1000); }
+  .pphase p{ font-size:var(--t-sm); color:var(--n-600); margin-top:5px; line-height:var(--lh-snug); }
+  .pphase .agent{ display:inline-flex; align-items:center; gap:6px; margin-top:12px; font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--gold-600); font-weight:600; }
+  .pphase .agent .ic{ width:13px; height:13px; }
+
+  /* services */
+  .sgrid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  @media(max-width:980px){ .sgrid{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:560px){ .sgrid{ grid-template-columns:1fr; } }
+  .scard{ border:1px solid var(--n-200); border-radius:var(--r-lg); padding:24px; background:var(--n-0); transition:transform var(--d-base) var(--ease-std), box-shadow var(--d-base), border-color var(--d-base); }
+  .scard:hover{ transform:translateY(-4px); border-color:rgb(184 147 74 / .4); box-shadow:0 20px 40px -24px rgb(184 147 74 / .45); }
+  .scard .sic{ width:44px; height:44px; border-radius:var(--r-md); display:grid; place-items:center; background:rgb(184 147 74 / .12); color:var(--gold-600); margin-bottom:18px; }
+  .scard .sic .ic{ width:22px; height:22px; }
+  .scard h3{ font-family:var(--font-display); font-weight:500; font-size:var(--t-lg); color:var(--n-1000); line-height:1.2; }
+  .scard p{ font-size:var(--t-sm); color:var(--n-600); margin-top:8px; line-height:var(--lh-snug); }
+  .scard .out{ font-size:var(--t-xs); color:var(--gold-700); margin-top:14px; display:flex; gap:7px; }
+  .scard .out .ic{ width:14px; height:14px; flex-shrink:0; margin-top:1px; }
+
+  /* methodology */
+  .steps{ display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
+  @media(max-width:860px){ .steps{ grid-template-columns:1fr 1fr; } }
+  @media(max-width:520px){ .steps{ grid-template-columns:1fr; } }
+  .step .sn{ font-family:var(--font-display); font-size:var(--t-4xl); font-weight:400; color:var(--gold-500); line-height:1; }
+  .step h4{ font-size:var(--t-md); font-weight:600; color:var(--n-1000); margin:12px 0 6px; }
+  .step p{ font-size:var(--t-sm); color:var(--n-600); line-height:var(--lh-snug); }
+  .step{ padding-top:14px; border-top:2px solid var(--n-200); }
+
+  /* metrics */
+  .mstrip{ display:grid; grid-template-columns:repeat(4,1fr); gap:24px; text-align:center; }
+  @media(max-width:640px){ .mstrip{ grid-template-columns:1fr 1fr; gap:36px 24px; } }
+  .mstat .mv{ font-family:var(--font-display); font-weight:500; font-size:clamp(2.4rem,4vw,3.2rem); color:var(--n-1000); line-height:1; }
+  .mstat .mv .g{ color:var(--gold-600); }
+  .mstat .ml{ font-size:var(--t-sm); color:var(--n-600); margin-top:8px; }
+
+  /* trust */
+  .chips-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
+  .tchip{ display:inline-flex; align-items:center; gap:8px; padding:10px 16px; border-radius:var(--r-full); border:1px solid var(--n-200); background:var(--n-0); font-size:var(--t-sm); color:var(--n-700); font-weight:500; }
+  .tchip .ic{ width:15px; height:15px; color:var(--gold-600); }
+
+  /* faq */
+  .faq{ max-width:760px; margin:0 auto; }
+  .faq details{ border-bottom:1px solid var(--n-200); }
+  .faq summary{ list-style:none; cursor:pointer; padding:20px 0; display:flex; align-items:center; justify-content:space-between; gap:16px; font-size:var(--t-lg); font-weight:500; color:var(--n-1000); }
+  .faq summary::-webkit-details-marker{ display:none; }
+  .faq summary .chev{ transition:transform var(--d-base); color:var(--gold-600); flex-shrink:0; }
+  .faq details[open] summary .chev{ transform:rotate(180deg); }
+  .faq .ans{ padding:0 0 20px; color:var(--n-600); font-size:var(--t-md); line-height:var(--lh-relaxed); max-width:64ch; }
+
+  /* CTA */
+  .lcta{ text-align:center; }
+  .lcta h2{ font-family:var(--font-display); font-weight:500; font-size:clamp(2.2rem,4.6vw,3.6rem); color:var(--n-1000); letter-spacing:var(--tr-tight); line-height:1.05; max-width:18ch; margin:0 auto; }
+  .lcta p{ color:var(--n-600); font-size:var(--t-lg); margin:16px auto 32px; max-width:50ch; }
+
+  /* footer */
+  .lfoot{ background:var(--n-50); border-top:1px solid var(--n-200); }
+  .lfoot-in{ max-width:1180px; margin:0 auto; padding:60px clamp(22px,5vw,56px) 40px; display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:32px; }
+  @media(max-width:760px){ .lfoot-in{ grid-template-columns:1fr 1fr; gap:32px 20px; } }
+  .lfoot .fbrand .brand{ font-size:28px; }
+  .lfoot .fslogan{ color:var(--n-600); font-size:var(--t-sm); margin-top:12px; max-width:30ch; font-family:var(--font-display); font-style:italic; }
+  .lfoot h5{ font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--n-500); font-weight:700; margin-bottom:14px; }
+  .lfoot a{ display:block; color:var(--n-600); font-size:var(--t-sm); padding:5px 0; transition:color var(--d-base); }
+  .lfoot a:hover{ color:var(--gold-600); }
+  .lfoot-bottom{ border-top:1px solid var(--n-200); }
+  .lfoot-bottom-in{ max-width:1180px; margin:0 auto; padding:20px clamp(22px,5vw,56px); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; color:var(--n-500); font-size:var(--t-xs); }
+</style>
+</head>
+<body class="preload" data-fx="dust">
+<section class="hero">
+  <canvas id="bg"></canvas>
+  <div class="grain"></div>
+
+  <!-- NAV -->
+  <header class="nav">
+    <span class="brand" style="font-size:24px;">1<span class="plus">+</span>1</span>
+    <nav class="nav-links">
+      <a href="#services">Servicios</a>
+      <a href="#methodology">Metodología</a>
+      <a href="#metrics">Resultados</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <div class="lang">
+        <button class="on">ES</button>
+        <button>EN</button>
+      </div>
+      <a href="Workspace.html"><button class="btn btn-secondary btn-sm">Acceder</button></a>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <div class="hero-body">
+    <div class="eyebrow-row fade-up" style="transition-delay:.05s">
+      <span class="ln"></span>
+      <span class="tx">Consultoría Contable & Tributaria — Colombia</span>
+      <span class="ln"></span>
+    </div>
+    <h1 class="hero-title fade-up" style="transition-delay:.12s">La claridad financiera que su empresa <span class="em">merece</span>.</h1>
+    <p class="slogan fade-up" style="transition-delay:.18s">Tan sencillo como 1+1.</p>
+    <p class="subtitle fade-up" style="transition-delay:.24s">Defensa tributaria, devoluciones, due diligence y valoración — con la precisión de la IA y el criterio de una firma de asesoría elite.</p>
+    <div class="cta-row fade-up" style="transition-delay:.32s">
+      <a href="Workspace.html"><button class="btn btn-elite btn-lg"><i data-lucide="arrow-right" class="ic"></i>Acceder al workspace</button></a>
+      <a href="#services"><button class="btn btn-secondary btn-lg">Ver servicios</button></a>
+    </div>
+  </div>
+
+  <div class="scroll-cue">
+    <div class="mouse"></div>
+    <span style="font-size:10px; text-transform:uppercase; letter-spacing:.16em;">Explorar</span>
+  </div>
+
+  <!-- TRUST STRIP -->
+  <div class="strip">
+    <div class="stat"><div class="v num">+500</div><div class="l">Casos resueltos</div></div>
+    <div class="stat"><div class="v num"><span class="accent">$2,4B</span></div><div class="l">Ahorro fiscal generado</div></div>
+    <div class="stat"><div class="v num">98,7%</div><div class="l">Precisión normativa</div></div>
+    <div class="stat"><div class="v num">&lt;24h</div><div class="l">Respuesta inicial</div></div>
+  </div>
+</section>
+
+<main class="land">
+
+  <!-- WORKSPACE TEASER -->
+  <section class="lsec r" id="workspace">
+    <div class="lhead">
+      <span class="eyebrow"><span style="width:18px;height:1px;background:currentColor;"></span>El workspace<span style="width:18px;height:1px;background:currentColor;"></span></span>
+      <h2>Cuatro áreas. Una sola verdad financiera.</h2>
+      <p>Inteligencia tributaria, valoración, aseguramiento y prospectiva — unificadas en un command center con telemetría en vivo.</p>
+    </div>
+    <div class="teaser">
+      <a class="tcard" style="--c:#A83838;" href="El Escudo.html">
+        <div class="trow"><span class="troman">I · Resiliencia</span><span class="tic"><i data-lucide="shield" class="ic"></i></span></div>
+        <h3>El Escudo</h3>
+        <div class="tkv">28,4%</div><div class="tl">Tasa Efectiva de Tributación</div>
+        <svg id="tEscudo" width="100%" height="40"></svg>
+      </a>
+      <a class="tcard" style="--c:#B8934A;" href="El Valor.html">
+        <div class="trow"><span class="troman">II · Valor</span><span class="tic"><i data-lucide="trending-up" class="ic"></i></span></div>
+        <h3>El Valor</h3>
+        <div class="tkv">$4.820M</div><div class="tl">Valor de salida (DCF)</div>
+        <svg id="tValor" width="100%" height="40"></svg>
+      </a>
+      <a class="tcard" style="--c:#3D6B7E;" href="La Verdad.html">
+        <div class="trow"><span class="troman">III · Rigor</span><span class="tic"><i data-lucide="scale" class="ic"></i></span></div>
+        <h3>La Verdad</h3>
+        <div class="tkv">94/100</div><div class="tl">Score de Cumplimiento</div>
+        <svg id="tVerdad" width="100%" height="40"></svg>
+      </a>
+      <a class="tcard" style="--c:#5A7F7A;" href="El Futuro.html">
+        <div class="trow"><span class="troman">IV · Prospectiva</span><span class="tic"><i data-lucide="compass" class="ic"></i></span></div>
+        <h3>El Futuro</h3>
+        <div class="tkv">28 meses</div><div class="tl">Runway · escenario base</div>
+        <svg id="tFuturo" width="100%" height="40"></svg>
+      </a>
+    </div>
+  </section>
+
+  <!-- PIPELINE SHOWCASE -->
+  <section class="lsec r" id="pipeline">
+    <div class="lhead">
+      <span class="eyebrow"><i data-lucide="sparkles" style="width:14px;height:14px;"></i> Pipeline NIIF Elite</span>
+      <h2>Informes generados por agentes de IA.</h2>
+      <p>Del intake al reporte: cuatro fases orquestadas por agentes especializados, con streaming en tiempo real y citas legales verificables.</p>
+    </div>
+    <div class="pipe">
+      <div class="pphase active"><div class="pn">1</div><h4>NIIF</h4><p>Lectura de estados financieros y normalización contable.</p><span class="agent"><i data-lucide="bot" class="ic"></i>Agente Contable</span></div>
+      <div class="pphase"><div class="pn">2</div><h4>Strategy</h4><p>Optimización tributaria y modelado de escenarios.</p><span class="agent"><i data-lucide="bot" class="ic"></i>Agente Fiscal</span></div>
+      <div class="pphase"><div class="pn">3</div><h4>Governance</h4><p>Aseguramiento, control interno y dictamen.</p><span class="agent"><i data-lucide="bot" class="ic"></i>Agente Auditor</span></div>
+      <div class="pphase"><div class="pn">4</div><h4>HTML</h4><p>Reporte ejecutivo navegable, con diff entre versiones.</p><span class="agent"><i data-lucide="bot" class="ic"></i>Agente Editor</span></div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+  <section class="lsec r" id="services">
+    <div class="lhead">
+      <span class="eyebrow">Servicios</span>
+      <h2>Soluciones de clase mundial para la normativa colombiana.</h2>
+    </div>
+    <div class="sgrid">
+      <div class="scard">
+        <div class="sic"><i data-lucide="shield" class="ic"></i></div>
+        <h3>Defensa ante la DIAN</h3>
+        <p>Requerimientos, pliegos de cargos y liquidaciones — con respuesta técnica y estrategia administrativa.</p>
+        <div class="out"><i data-lucide="check" class="ic"></i>Defensa fundamentada y completa.</div>
+      </div>
+      <div class="scard">
+        <div class="sic"><i data-lucide="banknote" class="ic"></i></div>
+        <h3>Devolución de saldos a favor</h3>
+        <p>Recupere su caja con expedientes técnicos sólidos y acompañamiento ante la administración.</p>
+        <div class="out"><i data-lucide="check" class="ic"></i>Expediente listo para radicar.</div>
+      </div>
+      <div class="scard">
+        <div class="sic"><i data-lucide="file-search" class="ic"></i></div>
+        <h3>Due diligence & valoración</h3>
+        <p>Prepare su empresa para inversión, crédito o venta con modelación financiera y narrativa.</p>
+        <div class="out"><i data-lucide="check" class="ic"></i>Informe listo para inversionistas.</div>
+      </div>
+      <div class="scard">
+        <div class="sic"><i data-lucide="sparkles" class="ic"></i></div>
+        <h3>NIIF Elite</h3>
+        <p>Reportes financieros bajo NIIF generados por IA, con estrategia y gobierno corporativo.</p>
+        <div class="out"><i data-lucide="check" class="ic"></i>Reporte ejecutivo navegable.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METHODOLOGY -->
+  <section class="lsec r" id="methodology">
+    <div class="lhead">
+      <span class="eyebrow">Metodología</span>
+      <h2>Un proceso riguroso, de principio a fin.</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="sn">01</div><h4>Diagnóstico</h4><p>Analizamos su situación contable, tributaria y financiera con IA.</p></div>
+      <div class="step"><div class="sn">02</div><h4>Análisis profundo</h4><p>Cruzamos normativa, doctrina DIAN y mejores prácticas.</p></div>
+      <div class="step"><div class="sn">03</div><h4>Estrategia</h4><p>Diseñamos la ruta óptima con alternativas y escenarios.</p></div>
+      <div class="step"><div class="sn">04</div><h4>Entregable</h4><p>Borrador técnico, soporte probatorio y plan de acción.</p></div>
+    </div>
+  </section>
+
+  <!-- METRICS -->
+  <section class="lsec r" id="metrics">
+    <div class="lhead">
+      <span class="eyebrow">Resultados</span>
+      <h2>Respaldados por datos, no por promesas.</h2>
+    </div>
+    <div class="mstrip">
+      <div class="mstat"><div class="mv num">+500</div><div class="ml">Casos resueltos</div></div>
+      <div class="mstat"><div class="mv num"><span class="g">$2,4B</span></div><div class="ml">Ahorro fiscal generado</div></div>
+      <div class="mstat"><div class="mv num">98,7%</div><div class="ml">Precisión normativa</div></div>
+      <div class="mstat"><div class="mv num">&lt;24h</div><div class="ml">Respuesta inicial</div></div>
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section class="lsec r" id="trust">
+    <div class="lhead">
+      <span class="eyebrow">Marco normativo</span>
+      <h2>Fundamentado en normativa colombiana vigente.</h2>
+      <p>Cada análisis se genera exclusivamente a partir de fuentes oficiales y regulación al día.</p>
+    </div>
+    <div class="chips-row">
+      <span class="tchip"><i data-lucide="book-marked" class="ic"></i>Estatuto Tributario</span>
+      <span class="tchip"><i data-lucide="landmark" class="ic"></i>Doctrina DIAN</span>
+      <span class="tchip"><i data-lucide="scale" class="ic"></i>Normas NIIF / NIC</span>
+      <span class="tchip"><i data-lucide="shield-check" class="ic"></i>Ley 1581 de Protección de Datos</span>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="lsec r" id="faq">
+    <div class="lhead">
+      <span class="eyebrow">Preguntas frecuentes</span>
+      <h2>Lo que suelen preguntarnos.</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>¿1+1 reemplaza a mi contador?<i data-lucide="chevron-down" class="chev"></i></summary>
+        <div class="ans">No. 1+1 potencia a su contador o firma con herramientas de IA para análisis más rápidos y fundamentados. El criterio profesional sigue siendo indispensable.</div>
+      </details>
+      <details>
+        <summary>¿Qué requerimientos de la DIAN analizan?<i data-lucide="chevron-down" class="chev"></i></summary>
+        <div class="ans">Requerimientos ordinarios y especiales, pliegos de cargos, liquidaciones oficiales y emplazamientos en IVA, renta, retenciones y facturación electrónica.</div>
+      </details>
+      <details>
+        <summary>¿Cómo manejan la confidencialidad?<i data-lucide="chevron-down" class="chev"></i></summary>
+        <div class="ans">Toda la información se procesa con cifrado de extremo a extremo. Cumplimos con la Ley 1581 de Protección de Datos.</div>
+      </details>
+      <details>
+        <summary>¿En qué se diferencia de un software contable?<i data-lucide="chevron-down" class="chev"></i></summary>
+        <div class="ans">Un software contable registra. 1+1 analiza, interpreta normativa, identifica riesgos y genera estrategias accionables — la diferencia entre tener datos y tener inteligencia.</div>
+      </details>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="lsec r lcta">
+    <h2>La claridad financiera empieza con una conversación.</h2>
+    <p>Acceda al workspace y deje que la inteligencia financiera trabaje por usted.</p>
+    <div style="display:flex; gap:14px; justify-content:center; flex-wrap:wrap;">
+      <a href="Workspace.html"><button class="btn btn-elite btn-lg"><i data-lucide="arrow-right" class="ic"></i>Acceder al workspace</button></a>
+      <a href="Auth.html"><button class="btn btn-secondary btn-lg">Crear cuenta</button></a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="lfoot">
+    <div class="lfoot-in">
+      <div class="fbrand">
+        <span class="brand" style="font-size:28px;">1<span class="plus">+</span>1</span>
+        <p class="fslogan">Tan sencillo como 1+1.</p>
+      </div>
+      <div>
+        <h5>Servicios</h5>
+        <a href="El Escudo.html">Defensa DIAN</a>
+        <a href="El Escudo.html">Devoluciones</a>
+        <a href="El Valor.html">Due diligence</a>
+        <a href="Workspace.html">NIIF Elite</a>
+      </div>
+      <div>
+        <h5>Producto</h5>
+        <a href="Workspace.html">Centro de Comando</a>
+        <a href="Contabilidad Pyme.html">Contabilidad Pyme</a>
+        <a href="Contabilidad.html">Contabilidad</a>
+        <a href="Design System.html">Sistema de diseño</a>
+      </div>
+      <div>
+        <h5>Soporte</h5>
+        <a href="#faq">Preguntas frecuentes</a>
+        <a href="Auth.html">Iniciar sesión</a>
+        <a href="Settings.html">Configuración</a>
+        <a href="Admin.html">Admin</a>
+      </div>
+    </div>
+    <div class="lfoot-bottom">
+      <div class="lfoot-bottom-in">
+        <span>© 2026 UtopIA · 1+1 — Claridad financiera para el empresario colombiano.</span>
+        <span>Bogotá · Colombia</span>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+  lucide.createIcons();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.remove('preload')));
+
+  // landing scroll-reveal
+  const rio = new IntersectionObserver((es)=>{ es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); rio.unobserve(e.target); } }); },{ threshold:.1, rootMargin:'0px 0px -8% 0px' });
+  document.querySelectorAll('.r').forEach(el=>rio.observe(el));
+
+  // teaser sparklines
+  function spark(id, vals, color){
+    const svg=document.getElementById(id); if(!svg) return;
+    const W=240,H=40,pad=3,max=Math.max(...vals),min=Math.min(...vals);
+    const pts=vals.map((v,i)=>[pad+i*(W-2*pad)/(vals.length-1),H-pad-((v-min)/((max-min)||1))*(H-2*pad)]);
+    const d=pts.map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio','none');
+    svg.innerHTML=`<path d="${d} L${W-pad} ${H} L${pad} ${H} Z" fill="${color}" opacity=".10"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  spark('tEscudo',[38,36,34,32,31,29,28.4],'#A83838');
+  spark('tValor',[60,64,68,75,82,92,100],'#B8934A');
+  spark('tVerdad',[80,83,86,89,91,93,94],'#3D6B7E');
+  spark('tFuturo',[40,48,55,62,70,76,80],'#5A7F7A');
+
+  // Subtle generative background: drifting motes + faint orbital arcs (gold), warm.
+  const cv = document.getElementById('bg');
+  const ctx = cv.getContext('2d');
+  let W, H, DPR, motes = [], t = 0;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = cv.width = innerWidth*DPR; H = cv.height = innerHeight*DPR;
+    cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
+    const n = Math.min(70, Math.floor(innerWidth/22));
+    motes = Array.from({length:n}, ()=>({
+      x:Math.random()*W, y:Math.random()*H,
+      r:(Math.random()*1.6+0.4)*DPR,
+      vx:(Math.random()-0.5)*0.12*DPR, vy:(Math.random()-0.5)*0.12*DPR,
+      a:Math.random()*0.5+0.15, ph:Math.random()*Math.PI*2
+    }));
+  }
+  resize(); addEventListener('resize', resize);
+
+  const cx0 = ()=>W*0.68, cy0 = ()=>H*0.22;
+
+  function frame(){
+    t += 0.004;
+    ctx.clearRect(0,0,W,H);
+
+    // faint orbital arcs around upper-right focal glow
+    const arcs = [0.30, 0.46, 0.64, 0.86];
+    arcs.forEach((rf, i)=>{
+      const R = Math.min(W,H)*rf;
+      ctx.beginPath();
+      ctx.arc(cx0(), cy0(), R, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(184,147,74,${0.10 - i*0.012})`;
+      ctx.lineWidth = 1*DPR;
+      ctx.stroke();
+      // a traveling node on each ring
+      const ang = t*(0.6 - i*0.1) + i*1.7;
+      const nx = cx0()+Math.cos(ang)*R, ny = cy0()+Math.sin(ang)*R;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 2.2*DPR, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(184,147,74,${0.6 - i*0.1})`;
+      ctx.fill();
+    });
+
+    // drifting motes
+    for(const m of motes){
+      m.x += m.vx; m.y += m.vy; m.ph += 0.02;
+      if(m.x<0) m.x=W; if(m.x>W) m.x=0; if(m.y<0) m.y=H; if(m.y>H) m.y=0;
+      const tw = m.a * (0.6 + 0.4*Math.sin(m.ph));
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(154,122,56,${tw*0.6})`;
+      ctx.fill();
+    }
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  frame();
+</script>
+<script src="assets/fx.js"></script>
+</body>
+</html>

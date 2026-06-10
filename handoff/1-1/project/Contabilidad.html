@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Contabilidad</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .pagehead{ padding:22px 0 20px; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+  .pagehead h1{ font-family:var(--font-display); font-weight:500; font-size:clamp(2rem,3.6vw,2.6rem); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .pagehead .sub{ color:var(--n-600); font-size:var(--t-md); margin-top:6px; }
+  .periodchip{ display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:var(--r-full); border:1px solid var(--ac-line); background:var(--n-0); font-size:var(--t-sm); font-weight:600; color:var(--n-800); }
+  .periodchip .d{ width:7px; height:7px; border-radius:50%; background:var(--success); }
+
+  .qa-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:8px; }
+  @media(max-width:980px){ .qa-grid{ grid-template-columns:repeat(3,1fr); } }
+  @media(max-width:560px){ .qa-grid{ grid-template-columns:repeat(2,1fr); } }
+  .qa{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:16px; text-align:center; cursor:pointer; transition:transform var(--d-base) var(--ease-std), border-color var(--d-base), box-shadow var(--d-base); }
+  .qa:hover{ transform:translateY(-3px); border-color:var(--ac); box-shadow:0 14px 28px -18px var(--ac-glow); }
+  .qa .ic{ width:40px; height:40px; border-radius:var(--r-md); display:grid; place-items:center; margin:0 auto 12px; background:var(--ac-soft); color:var(--ac-deep); }
+  .qa .ic .pi{ width:20px; height:20px; }
+  .qa .n{ font-size:var(--t-sm); font-weight:600; color:var(--n-900); }
+
+  .cols{ display:grid; grid-template-columns:1.7fr 1fr; gap:20px; align-items:start; }
+  @media(max-width:900px){ .cols{ grid-template-columns:1fr; } }
+
+  table{ width:100%; border-collapse:collapse; }
+  thead th{ text-align:left; font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--n-500); font-weight:700; padding:0 14px 12px; }
+  thead th.num, tbody td.num{ text-align:right; }
+  tbody td{ padding:13px 14px; border-top:1px solid var(--n-100); font-size:var(--t-sm); color:var(--n-800); }
+  tbody tr:hover{ background:var(--ac-wash); }
+  .td-mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  .td-strong{ color:var(--n-1000); font-weight:600; }
+  .st-pill{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:3px 8px; border-radius:var(--r-full); }
+  .st-ok{ background:rgb(79 122 76 / .14); color:var(--success); }
+  .st-pend{ background:rgb(196 138 46 / .16); color:var(--warning); }
+
+  .puc{ font-family:var(--font-mono); }
+  .puc .node{ display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--n-100); font-size:var(--t-sm); }
+  .puc .node:first-child{ border-top:none; }
+  .puc .code{ color:var(--ac-deep); font-weight:600; }
+  .puc .nm{ color:var(--n-800); font-family:var(--font-sans); flex:1; }
+  .puc .amt{ color:var(--n-600); }
+  .puc .lvl1{ font-weight:700; }
+  .puc .lvl2{ padding-left:18px; }
+  .puc .lvl3{ padding-left:36px; color:var(--n-600); }
+  .puc .lvl3 .nm{ color:var(--n-600); }
+</style>
+</head>
+<body data-area="app" data-fx="ledger">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+    <div class="mwrap">
+      <div class="pagehead">
+        <div>
+          <h1>Contabilidad</h1>
+          <div class="sub">Asientos, plan de cuentas PUC, conciliación y períodos — partida doble en orden.</div>
+        </div>
+        <span class="periodchip"><span class="d"></span>Período abierto · Junio 2026</span>
+      </div>
+
+      <section class="sec" style="padding-top:8px;">
+        <div class="sec-h"><div class="t">Acciones rápidas</div></div>
+        <div class="qa-grid">
+          <a class="qa" href="Contabilidad - Nuevo Asiento.html"><div class="ic"><i data-lucide="plus" class="pi"></i></div><div class="n">Nuevo asiento</div></a>
+          <a class="qa" href="Contabilidad - Apertura.html"><div class="ic"><i data-lucide="upload" class="pi"></i></div><div class="n">Cargar apertura</div></a>
+          <a class="qa" href="Contabilidad - Conciliacion.html"><div class="ic"><i data-lucide="arrow-left-right" class="pi"></i></div><div class="n">Conciliación</div></a>
+          <a class="qa" href="Contabilidad - Cuentas.html"><div class="ic"><i data-lucide="list-tree" class="pi"></i></div><div class="n">Plan de cuentas</div></a>
+          <a class="qa" href="Contabilidad - Mayor.html"><div class="ic"><i data-lucide="book" class="pi"></i></div><div class="n">Libro mayor</div></a>
+          <a class="qa" href="Contabilidad - Periodos.html"><div class="ic"><i data-lucide="calendar-range" class="pi"></i></div><div class="n">Períodos</div></a>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="cols">
+          <div>
+            <div class="sec-h"><div class="t">Asientos recientes</div><a href="Contabilidad - Asientos.html" class="meta" style="color:var(--ac-deep);font-weight:600;">Ver todos →</a></div>
+            <div class="panel" style="padding:8px 10px;">
+              <table>
+                <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Débito</th><th class="num">Crédito</th><th>Estado</th></tr></thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="sec-h"><div class="t">Plan de cuentas</div><span class="badge-ac">PUC</span></div>
+            <div class="panel"><div class="puc" id="puc"></div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const ROWS = [
+    ['07/06','Venta de mercancía — Factura 1042','$2.380.000','—','ok','Contabilizado'],
+    ['07/06','Pago proveedor — Distribuidora Andina','—','$1.150.000','ok','Contabilizado'],
+    ['06/06','Nómina quincena — empleados','$4.210.000','$4.210.000','pend','Por revisar'],
+    ['05/06','Recaudo cartera — Cliente 2tres S.A.S.','$3.060.000','—','ok','Contabilizado'],
+    ['04/06','Pago arriendo local','—','$2.800.000','ok','Contabilizado'],
+    ['03/06','Compra inventario — contado','$1.920.000','$1.920.000','pend','Por revisar'],
+  ];
+  document.getElementById('rows').innerHTML = ROWS.map(([f,c,db,cr,st,sl])=>`
+    <tr>
+      <td class="td-mono">${f}</td>
+      <td class="td-strong">${c}</td>
+      <td class="num td-mono">${db}</td>
+      <td class="num td-mono">${cr}</td>
+      <td><span class="st-pill ${st==='ok'?'st-ok':'st-pend'}">${sl}</span></td>
+    </tr>`).join('');
+
+  const PUC = [
+    ['1','Activo','$48.260.000','lvl1'],
+    ['11','Disponible','$12.480.000','lvl2'],
+    ['1105','Caja','$1.240.000','lvl3'],
+    ['1110','Bancos','$11.240.000','lvl3'],
+    ['13','Deudores','$9.380.000','lvl2'],
+    ['14','Inventarios','$26.400.000','lvl2'],
+    ['2','Pasivo','$21.140.000','lvl1'],
+    ['23','Cuentas por pagar','$8.900.000','lvl2'],
+    ['24','Impuestos por pagar','$4.120.000','lvl2'],
+    ['3','Patrimonio','$27.120.000','lvl1'],
+  ];
+  document.getElementById('puc').innerHTML = PUC.map(([code,nm,amt,lvl])=>`
+    <div class="node ${lvl}"><span class="code">${code}</span><span class="nm">${nm}</span><span class="amt">${amt}</span></div>`).join('');
+
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

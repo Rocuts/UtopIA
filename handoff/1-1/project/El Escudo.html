@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · El Escudo</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+</head>
+<body data-area="escudo">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+
+    <div class="mwrap">
+      <!-- HERO -->
+      <section class="ahero">
+        <div>
+          <div class="eyebrow">
+            <span class="ic"><i data-lucide="shield" class="pi"></i></span>
+            I · Resiliencia
+          </div>
+          <h1>El Escudo</h1>
+          <p class="lede">Estrategia tributaria y defensa legal. Blindamos su carga fiscal frente a la DIAN — requerimientos, devoluciones y planeación, con doctrina y jurisprudencia al día.</p>
+        </div>
+        <div class="hero-kpi">
+          <div class="kl">Tasa Efectiva de Tributación</div>
+          <div class="kv num">28,4%</div>
+          <div class="kt down"><i data-lucide="arrow-down" style="width:15px;height:15px;"></i>3,1 pts vs. trimestre anterior</div>
+          <div class="kchart"><svg id="vTef" width="100%" height="70"></svg></div>
+          <div class="subkpis">
+            <div class="s"><div class="v num">$1.240M</div><div class="l">Saldos a favor</div></div>
+            <div class="s"><div class="v num">7</div><div class="l">Casos abiertos</div></div>
+            <div class="s"><div class="v num" style="color:var(--warning);">Medio</div><div class="l">Riesgo DIAN</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SUBMODULES -->
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Submódulos</div>
+          <div class="meta">6 frentes de defensa · actualizado hoy</div>
+        </div>
+        <div class="subgrid" id="subs"></div>
+      </section>
+
+      <!-- DATA SOURCE LADDER -->
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Calidad de fuentes</div>
+          <span class="badge-ac"><span class="live-dot"></span>DataSourceLadder</span>
+        </div>
+        <div class="panel tinted">
+          <div class="ladder-list" id="ladder"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const SUBS = [
+    ['bot','Agente Fiscal','Vigila vencimientos y responde en tiempo real con streaming SSE.','Activo','var(--success)'],
+    ['gavel','Defensa DIAN','Intake y seguimiento de requerimientos, pliegos y liquidaciones.','2 en curso','var(--warning)'],
+    ['banknote','Devoluciones','Expedientes técnicos de saldos a favor en renta e IVA.','1 radicada','var(--success)'],
+    ['route','Planeación Tributaria','Escenarios de optimización lícita de la carga fiscal.','Al día','var(--success)'],
+    ['arrow-left-right','Precios de Transferencia','Documentación y análisis de operaciones vinculadas.','Revisión','var(--warning)'],
+    ['heart-pulse','Supervivencia','AntiDIAN · Retenciones · Dividendos · Reserva · TET.','Monitor','var(--ac)'],
+  ];
+  const HREF={'Agente Fiscal':'El Escudo - Agente Fiscal.html','Defensa DIAN':'El Escudo - Defensa DIAN.html','Devoluciones':'El Escudo - Devoluciones.html','Planeación Tributaria':'El Escudo - Planeaci-n Tributaria.html','Precios de Transferencia':'El Escudo - Precios de Transferencia.html','Supervivencia':'El Escudo - Modo Supervivencia.html'};
+  document.getElementById('subs').innerHTML = SUBS.map(([ic,nm,ds,st,c])=>`
+    <a class="subcard" href="${HREF[nm]||'#'}">
+      <div class="ic"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="nm">${nm}</div>
+      <div class="ds">${ds}</div>
+      <div class="ft">
+        <span class="st" style="color:${c}"><span class="d" style="background:${c}"></span>${st}</span>
+        <span class="go"><i data-lucide="arrow-right" class="pi"></i></span>
+      </div>
+    </a>`).join('');
+
+  const SRC = [
+    ['ERP Siigo — conciliado','#4F7A4C',96],
+    ['Facturación electrónica DIAN','#4F7A4C',92],
+    ['Extractos bancarios (3)','#C48A2E',74],
+    ['Soportes cargados manualmente','#A83838',48],
+  ];
+  document.getElementById('ladder').innerHTML = SRC.map(([n,c,v])=>`
+    <div class="ladder-item">
+      <span class="qd" style="background:${c}"></span>
+      <span class="qn">${n}</span>
+      <span class="bar-track"><span class="fill" style="width:${v}%; background:${c}"></span></span>
+      <span class="qv">${v}%</span>
+    </div>`).join('');
+
+  window.renderCharts = function(){
+    sparkline('vTef',[38,37.2,36,35.4,34,32.6,31.1,29.8,28.4],'#ffffff','rgba(255,255,255,.16)');
+    if(window.lucide) lucide.createIcons();
+  };
+</script>
+</body>
+</html>

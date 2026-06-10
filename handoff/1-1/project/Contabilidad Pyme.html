@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Contabilidad Pyme</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .gan-words{ font-size:var(--t-sm); color:rgb(255 255 255 / .78); margin-top:0; }
+  .hero-kpi .kv.pyme{ color:#fff; }
+
+  /* primary quick action */
+  .subcard.primary{ background:var(--ac); border-color:var(--ac); }
+  .subcard.primary::before{ display:none; }
+  .subcard.primary .ic{ background:rgb(255 255 255 / .18); color:#fff; }
+  .subcard.primary .nm{ color:#fff; }
+  .subcard.primary .ds{ color:rgb(255 255 255 / .82); }
+  .subcard.primary .go{ color:#fff; }
+  .subcard.primary:hover{ box-shadow:0 18px 36px -18px var(--ac-glow); }
+
+  /* tu día */
+  .dia-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:680px){ .dia-grid{ grid-template-columns:1fr; } }
+  .diacard{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:18px 20px; }
+  .diacard .ic{ width:36px; height:36px; border-radius:50%; display:grid; place-items:center; margin-bottom:14px; }
+  .diacard .ic .pi{ width:18px; height:18px; }
+  .diacard .v{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-2xl); color:var(--n-1000); }
+  .diacard .k{ font-size:var(--t-sm); color:var(--n-600); font-weight:500; margin-top:3px; }
+
+  /* semáforo */
+  .semaforo .row{ display:flex; align-items:center; gap:16px; }
+  .semaforo .lamp{ width:48px; height:48px; border-radius:50%; background:var(--ac); display:grid; place-items:center; box-shadow:0 0 22px -4px var(--ac); flex-shrink:0; }
+  .semaforo .lamp .pi{ width:24px; height:24px; color:#fff; }
+  .semaforo .t{ font-size:var(--t-lg); font-weight:600; color:var(--n-1000); }
+  .semaforo .s{ font-size:var(--t-sm); color:var(--n-600); margin-top:2px; }
+  .semaforo .track{ height:8px; border-radius:var(--r-full); background:var(--n-100); margin-top:18px; overflow:hidden; }
+  .semaforo .track .fill{ height:100%; width:54%; border-radius:var(--r-full); background:linear-gradient(90deg,var(--ac),#7AA53B); }
+  .semaforo .scale{ display:flex; justify-content:space-between; font-size:var(--t-xs); color:var(--n-500); margin-top:9px; }
+
+  /* pagos */
+  .pago{ display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:var(--r-lg); background:var(--n-0); border:1px solid var(--n-200); }
+  .pago + .pago{ margin-top:10px; }
+  .pago .pic{ width:42px; height:42px; border-radius:var(--r-md); display:grid; place-items:center; flex-shrink:0; }
+  .pago .pic .pi{ width:19px; height:19px; }
+  .pago .meta{ flex:1; min-width:0; }
+  .pago .nm{ font-size:var(--t-md); font-weight:600; color:var(--n-1000); }
+  .pago .sub{ font-size:var(--t-xs); color:var(--n-600); margin-top:3px; display:flex; gap:9px; align-items:center; flex-wrap:wrap; }
+  .nit{ font-size:10px; font-weight:700; color:var(--ac-deep); background:var(--ac-soft); border-radius:var(--r-full); padding:2px 8px; letter-spacing:.04em; white-space:nowrap; }
+  .pago .amt{ font-family:var(--font-mono); font-size:var(--t-md); font-weight:600; color:var(--n-1000); white-space:nowrap; }
+
+  .twocol{ display:grid; grid-template-columns:1.6fr 1fr; gap:18px; align-items:start; }
+  @media (max-width:880px){ .twocol{ grid-template-columns:1fr; } }
+  .tip{ background:var(--ac-wash); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:22px; }
+  .tip .h{ display:inline-flex; align-items:center; gap:8px; font-size:var(--t-xs); font-weight:700; letter-spacing:var(--tr-eyebrow); text-transform:uppercase; color:var(--ac-deep); margin-bottom:10px; }
+  .tip .h .pi{ width:15px; height:15px; }
+  .tip p{ font-size:var(--t-md); color:var(--n-700); line-height:var(--lh-relaxed); }
+</style>
+</head>
+<body data-area="pyme">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+
+    <div class="mwrap">
+      <!-- HERO -->
+      <section class="ahero">
+        <div>
+          <div class="eyebrow">
+            <span class="ic"><i data-lucide="store" class="pi"></i></span>
+            <span id="greet">Buenas tardes, Don Carlos</span>
+          </div>
+          <h1>Tienda La Esperanza</h1>
+          <p class="lede">Soacha, Cundinamarca. Aquí ve lo que vendió, lo que le queda y lo que se viene — en plata blanca, sin enredos ni palabras raras.</p>
+        </div>
+        <div class="hero-kpi">
+          <div class="kl">Lo que le quedó este mes</div>
+          <div class="kv pyme num">$435.000</div>
+          <div class="gan-words">Cuatrocientos treinta y cinco mil pesos</div>
+          <div class="kt up" style="margin-top:12px;"><i data-lucide="trending-up" style="width:15px;height:15px;"></i>Le fue mejor que el mes pasado</div>
+          <div class="subkpis">
+            <div class="s"><div class="v num">$1.240.000</div><div class="l">Vendió</div></div>
+            <div class="s"><div class="v num">$805.000</div><div class="l">Compró</div></div>
+            <div class="s"><div class="v num" style="color:var(--ac-deep);">$435.000</div><div class="l">Le quedó</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACCESOS RÁPIDOS -->
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Accesos rápidos</div>
+          <span class="badge-ac"><span class="live-dot"></span>Sincronizado</span>
+        </div>
+        <div class="subgrid" id="subs"></div>
+      </section>
+
+      <!-- SEMÁFORO -->
+      <section class="sec">
+        <div class="sec-h"><div class="t">¿Cómo voy con los impuestos?</div></div>
+        <div class="panel tinted semaforo">
+          <div class="row">
+            <div class="lamp"><i data-lucide="check" class="pi"></i></div>
+            <div>
+              <div class="t">Va bien — todo en verde</div>
+              <div class="s">Todavía no llega al tope donde le empiezan a cobrar más. Tranquilo, le avisamos antes.</div>
+            </div>
+          </div>
+          <div class="track"><div class="fill"></div></div>
+          <div class="scale"><span>Sus ventas: $98 millones</span><span>Tope: $183 millones</span></div>
+        </div>
+      </section>
+
+      <!-- LO QUE SE VIENE + CONSEJO -->
+      <section class="sec">
+        <div class="twocol">
+          <div>
+            <div class="sec-h"><div class="t">Lo que se viene</div><span class="meta">3 pagos próximos</span></div>
+            <div id="pagos"></div>
+          </div>
+          <div>
+            <div class="sec-h"><div class="t">Consejo del día</div></div>
+            <div class="tip">
+              <div class="h"><i data-lucide="lightbulb" class="pi"></i>Para no perder plata</div>
+              <p>Si paga tarde lo de sus empleados, le cobran un 5% de más cada mes. Mejor sepárelo apenas venda — y nosotros le avisamos un día antes de la fecha.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const SUBS = [
+    ['camera','Foto de factura','Tómele una foto y nosotros la anotamos por usted.','primary','Pyme - Foto de Factura.html'],
+    ['book-open','Mi Libro','Todo lo que vendió y gastó, ordenado por día.','','Pyme - Mi Libro.html'],
+    ['calendar-clock','Mis Fechas','Cuándo le toca pagarle al estado, sin sustos.','','Pyme - Mis Fechas.html'],
+    ['scale','Mis Pagos','Lo que debe y lo que le conviene más pagar.','','Pyme - Mis Pagos.html'],
+    ['users','Mis Empleados','Salud, pensión y lo que le cuesta cada uno.','','Pyme - Mis Empleados.html'],
+    ['lightbulb','Consejo del día','Un tip sencillo para cuidar su plata.','','Pyme - Mi Libro.html'],
+  ];
+  document.getElementById('subs').innerHTML = SUBS.map(([ic,nm,ds,cls,href])=>`
+    <a class="subcard ${cls}" href="${href}">
+      <div class="ic"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="nm">${nm}</div>
+      <div class="ds">${ds}</div>
+      <div class="ft">
+        <span></span>
+        <span class="go"><i data-lucide="arrow-right" class="pi"></i></span>
+      </div>
+    </a>`).join('');
+
+  const PAGOS = [
+    ['users','Pago de empleados (salud y pensión)','Vence el 17 · en 9 días','…7','$1.180.000','#C48A2E','rgb(196 138 46 / .14)'],
+    ['landmark','Avisarle al estado lo que vendió','Bimestre · en 24 días','…7','$0','#357A28','color-mix(in srgb,#357A28 14%, transparent)'],
+    ['file-text','Su pago como dueño (base 40%)','Vence el 17 · en 9 días','','$298.000','#6B6354','rgb(107 99 84 / .12)'],
+  ];
+  document.getElementById('pagos').innerHTML = PAGOS.map(([ic,nm,sub,nit,amt,c,bg])=>`
+    <div class="pago">
+      <div class="pic" style="background:${bg}; color:${c};"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="meta">
+        <div class="nm">${nm}</div>
+        <div class="sub"><span>${sub}</span>${nit?`<span class="nit">NIT ${nit}</span>`:''}</div>
+      </div>
+      <div class="amt">${amt}</div>
+    </div>`).join('');
+
+  // dynamic greeting (no emoji)
+  const h = new Date().getHours();
+  let g = 'Buenas noches';
+  if(h>=5 && h<12) g='Buenos días'; else if(h>=12 && h<19) g='Buenas tardes';
+  document.getElementById('greet').textContent = g + ', Don Carlos';
+
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>
