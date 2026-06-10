@@ -25,18 +25,20 @@ export async function enhancePrompt(
     nitHint = `NIT context: last digit ${nitContext.lastDigit}, type ${type}.`;
   }
 
-  const { text: raw } = await generateText({
-    model: MODELS.SYNTHESIZER,
-    messages: [
-      {
-        role: 'system',
-        content:
-          ENHANCER_PROMPT +
-          '\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences.',
-      },
-      {
-        role: 'user',
-        content: `Classification: tier=${classification.tier}, domains=${classification.domains.join(',')}, intent=${classification.intent}
+  let raw = '';
+  try {
+    const { text } = await generateText({
+      model: MODELS.SYNTHESIZER,
+      messages: [
+        {
+          role: 'system',
+          content:
+            ENHANCER_PROMPT +
+            '\n\nRespond ONLY with a valid JSON object. No prose, no markdown, no code fences.',
+        },
+        {
+          role: 'user',
+          content: `Classification: tier=${classification.tier}, domains=${classification.domains.join(',')}, intent=${classification.intent}
 ${nitHint}
 
 Recent conversation:
@@ -44,11 +46,18 @@ ${recentContext || '(new conversation)'}
 
 User message to enhance:
 ${userMessage}`,
-      },
-    ],
-    temperature: 0.2,
-    maxOutputTokens: 600,
-  });
+        },
+      ],
+      temperature: 0.2,
+      maxOutputTokens: 600,
+    });
+    raw = text;
+  } catch (err) {
+    // El enhancer es best-effort: si el LLM falla, la consulta T2/T3 sigue
+    // con el mensaje original en vez de morir aqui.
+    console.warn('[prompt-enhancer] generateText failed, using original message:', err instanceof Error ? err.message : err);
+    return { enhanced: userMessage, extractedEntities: {} };
+  }
 
   try {
     const parsed = JSON.parse(raw || '{}') as {

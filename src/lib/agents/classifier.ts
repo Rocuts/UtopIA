@@ -76,7 +76,9 @@ ${userMessage}`,
             },
           ],
           temperature: 0,
-          maxOutputTokens: 150,
+          // 400: gpt-5.4 descuenta reasoning tokens del mismo budget — con 150
+          // el JSON estructurado podia salir incompleto (NoObjectGeneratedError).
+          maxOutputTokens: 400,
           experimental_output: Output.object({ schema: classificationSchema }),
         }),
       { label: 'classifier', maxAttempts: 3 },

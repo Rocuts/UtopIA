@@ -2,6 +2,8 @@
 // Retry utility with exponential backoff for LLM and external API calls
 // ---------------------------------------------------------------------------
 
+import { NoObjectGeneratedError } from 'ai';
+
 /**
  * Configuration for the retry wrapper.
  */
@@ -20,6 +22,9 @@ export interface RetryOptions {
 
 /** Errors that are safe to retry — transient network/server issues. */
 function isRetryable(error: unknown): boolean {
+  // Structured output que no validó contra el schema (experimental_output /
+  // generateObject) — transitorio: el modelo suele acertar al reintentar.
+  if (NoObjectGeneratedError.isInstance(error)) return true;
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     // OpenAI rate limit (429)

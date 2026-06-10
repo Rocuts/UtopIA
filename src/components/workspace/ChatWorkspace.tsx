@@ -49,6 +49,17 @@ import { StarterChips } from './chat/StarterChips';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// El servidor (chatRequestSchema) rechaza documentContext > 500.000 chars —
+// capamos el join por debajo para no brickear la conversación.
+const DOC_CONTEXT_MAX_CHARS = 480_000;
+
+function joinDocContext(docs: UploadedDocument[]): string {
+  const joined = docs.filter(d => d.extractedText).map(d => d.extractedText).join('\n\n');
+  return joined.length > DOC_CONTEXT_MAX_CHARS
+    ? `${joined.slice(0, DOC_CONTEXT_MAX_CHARS)}\n[...documentos truncados...]`
+    : joined;
+}
+
 interface ChatWorkspaceProps {
   conversationId: string;
   useCase: string;
@@ -108,10 +119,7 @@ export function ChatWorkspace({
   });
   const [documentContext, setDocumentContext] = useState(() => {
     const stored = loadConversationDocs(externalConversationId);
-    return stored
-      .filter((d) => d.extractedText)
-      .map((d) => d.extractedText)
-      .join('\n\n');
+    return joinDocContext(stored as UploadedDocument[]);
   });
   const [progressStatus, setProgressStatus] = useState<string | undefined>(undefined);
   /** id of the message currently being streamed from the server (if any) */
@@ -174,6 +182,9 @@ export function ChatWorkspace({
   // Cancel any in-flight request when the component unmounts
   useEffect(() => {
     return () => {
+      // Marcar como abort de usuario: sin esto, classifyError lo trata como
+      // 'timeout' y dispara un toast global falso al navegar.
+      userAbortedRef.current = true;
       abortRef.current?.abort();
     };
   }, []);
@@ -245,10 +256,17 @@ export function ChatWorkspace({
         }
       } catch { /* ignore malformed data */ }
 
+      // El servidor (chatRequestSchema) rechaza >50 mensajes y mensajes
+      // >10.000 chars — recortamos defensivamente antes de enviar.
       const payload = {
         messages: allMessages
           .filter(m => m.meta !== 'upload-notice')
-          .map(m => ({ id: m.id, role: m.role, content: m.content })),
+          .slice(-40)
+          .map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content.length > 9_800 ? `${m.content.slice(0, 9_800)}…` : m.content,
+          })),
         language, useCase,
         ...(documentContext ? { documentContext } : {}),
         ...(erpProviders.length > 0 ? { erpProviders } : {}),
@@ -271,6 +289,9 @@ export function ChatWorkspace({
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        // Persiste entre chunks: `event:` y `data:` pueden llegar en lecturas
+        // TCP distintas — si se reinicia por chunk se pierden eventos.
+        let currentEvent = '';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -280,7 +301,6 @@ export function ChatWorkspace({
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
-          let currentEvent = '';
           for (const line of lines) {
             if (line.startsWith('event: ')) {
               currentEvent = line.slice(7).trim();
@@ -477,7 +497,15 @@ export function ChatWorkspace({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isTyping) return;
-    const userMsg: ChatMessage = { id: generateId(), role: 'user', content: input.trim(), timestamp: new Date().toISOString() };
+    let content = input.trim();
+    if (content.length > 9_800) {
+      // El servidor rechaza mensajes >10.000 chars — recortar e informar.
+      content = `${content.slice(0, 9_800)}…`;
+      toast('info', language === 'es'
+        ? 'Su mensaje superaba el límite de 10.000 caracteres y fue recortado.'
+        : 'Your message exceeded the 10,000-character limit and was trimmed.');
+    }
+    const userMsg: ChatMessage = { id: generateId(), role: 'user', content, timestamp: new Date().toISOString() };
     const updated = [...messages, userMsg];
     setMessages(updated);
     setInput('');
@@ -537,7 +565,7 @@ export function ChatWorkspace({
       const finishedDoc: UploadedDocument = { ...newDoc, chunks: data.chunks || 0, textPreview: fullText.slice(0, 2000), extractedText: fullText };
       setUploadedDocs(prev => {
         const updated = prev.map(d => d.filename === file.name && d.uploadedAt === newDoc.uploadedAt ? finishedDoc : d);
-        setDocumentContext(updated.filter(d => d.extractedText).map(d => d.extractedText).join('\n\n'));
+        setDocumentContext(joinDocContext(updated));
         // Persistir la lista final (con extractedText) para que sobreviva
         // a recargas y cambios de conversación.
         saveConversationDocs(conversationId, updated);
@@ -571,10 +599,12 @@ export function ChatWorkspace({
     }
   };
 
-  const removeDocument = (filename: string) => {
+  // Clave compuesta filename+uploadedAt (la misma que usa uploadFile) para no
+  // borrar duplicados del mismo archivo subido varias veces.
+  const removeDocument = (filename: string, uploadedAt: string) => {
     setUploadedDocs(prev => {
-      const remaining = prev.filter(d => d.filename !== filename);
-      setDocumentContext(remaining.filter(d => d.extractedText).map(d => d.extractedText).join('\n\n'));
+      const remaining = prev.filter(d => !(d.filename === filename && d.uploadedAt === uploadedAt));
+      setDocumentContext(joinDocContext(remaining));
       saveConversationDocs(conversationId, remaining);
       return remaining;
     });
@@ -700,7 +730,7 @@ export function ChatWorkspace({
                 <div key={`${doc.filename}-${i}`} className="flex items-center gap-1.5 bg-n-0 border border-n-200 rounded px-2 py-1 shrink-0">
                   <FileText className="w-3 h-3 text-n-600" />
                   <span className="text-xs text-n-900 max-w-[120px] truncate">{doc.filename}</span>
-                  <button type="button" onClick={() => removeDocument(doc.filename)} className="p-0.5 text-n-700 hover:text-danger transition-colors" aria-label={`Remover ${doc.filename}`}>
+                  <button type="button" onClick={() => removeDocument(doc.filename, doc.uploadedAt)} className="p-0.5 text-n-700 hover:text-danger transition-colors" aria-label={`Remover ${doc.filename}`}>
                     <X className="w-3 h-3" />
                   </button>
                 </div>
