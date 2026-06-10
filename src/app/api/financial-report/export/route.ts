@@ -35,7 +35,10 @@ import type { OutputOptionsToggle } from '@/lib/export/pdf-elite-react/types';
 // ---------------------------------------------------------------------------
 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
+// 800 (no 300): los exports full-pipeline ejecutan orchestrateFinancialReport
+// completo — con 300s Vercel mataba la function a mitad de run (504 sin
+// payload). Mismo techo que /niif /strategy /governance.
+export const maxDuration = 800;
 
 export async function POST(req: Request) {
   try {
@@ -55,10 +58,18 @@ export async function POST(req: Request) {
     // Mode 2 (Excel-only): pre-built report passthrough.
     // -----------------------------------------------------------------------
     if (body.report && body.report.consolidatedReport) {
+      // Guard de shape mínimo antes del cast: un `report` malformado debe ser
+      // 400, no TypeError 500 al leer `report.company.name`.
+      if (typeof body.report?.company?.name !== 'string') {
+        return NextResponse.json(
+          { error: 'Invalid report format: company.name is required.' },
+          { status: 400 },
+        );
+      }
       const report = body.report as FinancialReport;
       let preprocessed;
-      if (body.rawData) {
-        const rows = parseTrialBalanceCSV(body.rawData as string);
+      if (typeof body.rawData === 'string' && body.rawData.length > 0) {
+        const rows = parseTrialBalanceCSV(body.rawData);
         if (rows.length > 0) {
           preprocessed = preprocessTrialBalance(rows);
         }
@@ -213,6 +224,13 @@ async function handlePdfElite(body: unknown): Promise<Response> {
   // re-preprocess the trial balance so the editorial template can show full
   // statements + pillar aggregates without paying the 30-60s LLM cost again.
   if (b.report?.consolidatedReport) {
+    // Mismo guard de shape que Mode 2: 400 en vez de TypeError 500.
+    if (typeof b.report?.company?.name !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid report format: company.name is required.' },
+        { status: 400 },
+      );
+    }
     const report = b.report;
     const language: 'es' | 'en' = b.language ?? 'es';
 
