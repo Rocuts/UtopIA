@@ -20,6 +20,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     // Priority 1: user's explicit previous choice
     const saved = localStorage.getItem('language') as Language;
     if (saved && (saved === 'en' || saved === 'es')) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLanguageState(saved);
       return;
     }

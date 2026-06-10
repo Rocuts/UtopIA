@@ -23,6 +23,7 @@
  * to the function's max wall time (300s in vercel.ts for ERP webhook).
  */
 
+import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { after } from 'next/server';
@@ -217,6 +218,9 @@ export async function POST(
     );
   }
   const provider = rawProvider as ValidProvider;
+
+  // Auth: X-Webhook-Token validated below via timingSafeEqual — correct for M2M callbacks.
+  // DO NOT add requireWorkspace() here: external ERP servers have no browser cookie.
 
   // 2. Validate webhook token
   const token = req.headers.get('x-webhook-token');

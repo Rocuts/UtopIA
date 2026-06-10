@@ -64,11 +64,11 @@ export interface EscudoDeadline {
 
 /**
  * Vista-modelo de alerta fiscal — consumida por el UI (cruza por HTTP/JSON).
- * Re-exportada desde la fuente canónica (`alert-mapping`, contrato §4.3) para
+ * Re-exportada desde la fuente canónica (`@/lib/sentinel/alert-view`) para
  * que el hook (`useAncoraView`) y el panel (`FiscalAlertsPanel`) compartan UN
  * solo tipo sin ciclo de imports componente↔hook.
  */
-import type { AlertView } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
+import type { AlertView } from '@/lib/sentinel/alert-view';
 export type { AlertView };
 
 export interface EscudoAreaProps {

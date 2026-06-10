@@ -1,0 +1,4173 @@
+{
+  "nodes": [
+    {
+      "id": "app_api_chat_route_ts",
+      "label": "route.ts",
+      "file_type": "code",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "chat_route_isorchestrationmode",
+      "label": "isOrchestrationMode()",
+      "file_type": "code",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L39"
+    },
+    {
+      "id": "chat_route_handleorchestrated",
+      "label": "handleOrchestrated()",
+      "file_type": "code",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L45"
+    },
+    {
+      "id": "chat_route_handlelegacy",
+      "label": "handleLegacy()",
+      "file_type": "code",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L270"
+    },
+    {
+      "id": "chat_route_post",
+      "label": "POST()",
+      "file_type": "code",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L630"
+    },
+    {
+      "id": "app_api_erp_connect_route_ts",
+      "label": "route.ts",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "connect_route_post",
+      "label": "POST()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "app_api_erp_sync_route_ts",
+      "label": "route.ts",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "sync_route_post",
+      "label": "POST()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L20"
+    },
+    {
+      "id": "app_api_erp_webhook_provider_route_ts",
+      "label": "route.ts",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "provider_route_isvalidprovider",
+      "label": "isValidProvider()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L79"
+    },
+    {
+      "id": "provider_route_parsepayload",
+      "label": "parsePayload()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L83"
+    },
+    {
+      "id": "provider_route_findcredentialbytoken",
+      "label": "findCredentialByToken()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L106"
+    },
+    {
+      "id": "provider_route_synctrialbalance",
+      "label": "syncTrialBalance()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L150"
+    },
+    {
+      "id": "provider_route_post",
+      "label": "POST()",
+      "file_type": "code",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L207"
+    },
+    {
+      "id": "app_api_realtime_route_ts",
+      "label": "route.ts",
+      "file_type": "code",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "realtime_route_get",
+      "label": "GET()",
+      "file_type": "code",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "app_workspace_verdad_page_tsx",
+      "label": "page.tsx",
+      "file_type": "code",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "verdad_page_currentperiodid",
+      "label": "currentPeriodId()",
+      "file_type": "code",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L28"
+    },
+    {
+      "id": "verdad_page_buildkpifrompillar",
+      "label": "buildKpiFromPillar()",
+      "file_type": "code",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L60"
+    },
+    {
+      "id": "verdad_page_verdadoverviewpage",
+      "label": "VerdadOverviewPage()",
+      "file_type": "code",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L81"
+    },
+    {
+      "id": "components_workspace_chatsidebar_tsx",
+      "label": "ChatSidebar.tsx",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "workspace_chatsidebar_generateid",
+      "label": "generateId()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L98"
+    },
+    {
+      "id": "workspace_chatsidebar_toconvmessages",
+      "label": "toConvMessages()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L107"
+    },
+    {
+      "id": "workspace_chatsidebar_fromconvmessages",
+      "label": "fromConvMessages()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L111"
+    },
+    {
+      "id": "workspace_chatsidebar_bucketfordate",
+      "label": "bucketForDate()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L134"
+    },
+    {
+      "id": "workspace_chatsidebar_groupconversationsbydate",
+      "label": "groupConversationsByDate()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L148"
+    },
+    {
+      "id": "workspace_chatsidebar_initialwelcome",
+      "label": "initialWelcome()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L177"
+    },
+    {
+      "id": "workspace_chatsidebar_cn",
+      "label": "cn()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L241"
+    },
+    {
+      "id": "workspace_chatsidebar_handle",
+      "label": "handle()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L569"
+    },
+    {
+      "id": "workspace_chatsidebar_onkey",
+      "label": "onKey()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L586"
+    },
+    {
+      "id": "components_workspace_chatworkspace_tsx",
+      "label": "ChatWorkspace.tsx",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "workspace_chatworkspace_generateid",
+      "label": "generateId()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L149"
+    },
+    {
+      "id": "workspace_chatworkspace_formattime",
+      "label": "formatTime()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L158"
+    },
+    {
+      "id": "workspace_chatworkspace_extractlegalreferences",
+      "label": "extractLegalReferences()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L164"
+    },
+    {
+      "id": "workspace_chatworkspace_classifyerror",
+      "label": "classifyError()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L182"
+    },
+    {
+      "id": "workspace_chatworkspace_errormessagetext",
+      "label": "errorMessageText()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L195"
+    },
+    {
+      "id": "workspace_chatworkspace_handlesubmit",
+      "label": "handleSubmit()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1339"
+    },
+    {
+      "id": "workspace_chatworkspace_handlekeydown",
+      "label": "handleKeyDown()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1349"
+    },
+    {
+      "id": "workspace_chatworkspace_togglevoice",
+      "label": "toggleVoice()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1376"
+    },
+    {
+      "id": "workspace_chatworkspace_handlefileselect",
+      "label": "handleFileSelect()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1381"
+    },
+    {
+      "id": "workspace_chatworkspace_uploadfile",
+      "label": "uploadFile()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1387"
+    },
+    {
+      "id": "workspace_chatworkspace_removedocument",
+      "label": "removeDocument()",
+      "file_type": "code",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1436"
+    },
+    {
+      "id": "lib_db_workspace_ts",
+      "label": "workspace.ts",
+      "file_type": "code",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "db_workspace_getorcreateworkspace",
+      "label": "getOrCreateWorkspace()",
+      "file_type": "code",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "db_workspace_getcurrentworkspaceid",
+      "label": "getCurrentWorkspaceId()",
+      "file_type": "code",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L45"
+    },
+    {
+      "id": "db_workspace_requireworkspace",
+      "label": "requireWorkspace()",
+      "file_type": "code",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L64"
+    },
+    {
+      "id": "lib_validation_schemas_ts",
+      "label": "schemas.ts",
+      "file_type": "code",
+      "source_file": "lib\\validation\\schemas.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "audit_report_utopia",
+      "label": "UtopIA Audit Report 2026-06-05",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-05",
+      "author": "Claude Code + 3 subagentes especializados",
+      "contributor": null
+    },
+    {
+      "id": "backlog_utopia",
+      "label": "UtopIA Backlog \u00e2\u20ac\u201d Auditor\u00c3\u00ada 2026-06-05",
+      "file_type": "document",
+      "source_file": "BACKLOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-05",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "remediation_plan_utopia",
+      "label": "UtopIA Remediation Plan",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-05",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "plan_security_data_fixes",
+      "label": "Security & Data Fixes Plan \u00e2\u20ac\u201d Ola 1A",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-05",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_no_auth",
+      "label": "No Real User Authentication (Cookie-Only Tenant)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-03",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_erp_creds_client",
+      "label": "ERP Credentials Exposed in Client Payload",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2 + Fase 4, F-02",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_realtime_no_auth",
+      "label": "OpenAI Realtime Token Endpoint Without Auth",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-01",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_erp_sync_no_auth",
+      "label": "ERP Sync Endpoint Without Auth (SSRF Risk)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-04",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_npm_vulns",
+      "label": "41 npm Vulnerabilities (1 critical vitest, 14 high)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_tsc_missing",
+      "label": "TypeScript Compiler Not Available Locally",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_feature_flags_off",
+      "label": "6 Critical Feature Flags OFF in Production",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_migration_collision",
+      "label": "Migration Journal Collision (0006_ prefix duplicate)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_erp_persist_bug",
+      "label": "ERP Credentials Not Persisted to DB (TODO stub)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_god_node_getdb",
+      "label": "God Node getDb() \u00e2\u20ac\u201d 161 Dependents",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_god_node_workspace",
+      "label": "God Node getOrCreateWorkspace() \u00e2\u20ac\u201d 67 Dependents",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_sentinel_coupling",
+      "label": "Bidirectional Sentinel\u00e2\u2020\u201dEscudo Coupling",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_rag_inconsistent",
+      "label": "RAG Inconsistency \u00e2\u20ac\u201d HNSWLib vs pgvector",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_financial_report_no_auth",
+      "label": "Financial Report Endpoint Without Auth or Rate Limit",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_db_race_condition",
+      "label": "DB Pool Race Condition in Fluid Compute",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_final_content_uninit",
+      "label": "finalContent Uninitialized in orchestrator.ts",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_mock_dashboard",
+      "label": "Dashboard KPI Using Hardcoded Mocks",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_gpt_model_wrong",
+      "label": "gpt-5.4-mini Model Name Incorrect in README",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_prompt_injection",
+      "label": "documentContext Injected Without Sanitization",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-08",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_botid_not_impl",
+      "label": "BotID Declared but Not Implemented",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-09",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_incomplete_audit_trail",
+      "label": "Incomplete Audit Trail \u00e2\u20ac\u201d No userId in Logs",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-10",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_csp_unsafe_inline",
+      "label": "CSP with unsafe-inline in Production",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-11",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "finding_no_conversation_history",
+      "label": "No Persistent Conversation History (React State Only)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "graphify_graph",
+      "label": "UtopIA Dependency Graph (graphify-out)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ctrl_vault_aes",
+      "label": "AES-256-GCM Vault (src/lib/security/vault.ts)",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 \u00e2\u20ac\u201d Controles bien implementados",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ctrl_pii_filter",
+      "label": "PII Filter / Bidirectional Tokenization",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 \u00e2\u20ac\u201d Controles bien implementados",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ctrl_timing_safe",
+      "label": "timingSafeEqual in ERP Webhook",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 \u00e2\u20ac\u201d Controles bien implementados",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ctrl_csrf",
+      "label": "CSRF Fail-Closed for Mutating Methods",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 \u00e2\u20ac\u201d Controles bien implementados",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "flag_tax_engine",
+      "label": "UTOPIA_ENABLE_TAX_ENGINE (OFF)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "flag_ocr_promote",
+      "label": "UTOPIA_ENABLE_OCR_PROMOTE (OFF)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "flag_bank_recon",
+      "label": "UTOPIA_ENABLE_BANK_RECON (OFF)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "flag_auto_adjustments",
+      "label": "UTOPIA_ENABLE_AUTO_ADJUSTMENTS (OFF)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "flag_monthly_close",
+      "label": "UTOPIA_ENABLE_MONTHLY_CLOSE_WORKFLOW (OFF)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "flag_notifications",
+      "label": "UTOPIA_ENABLE_NOTIFICATIONS (OFF)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "stream_a_erp_creds",
+      "label": "Stream A \u00e2\u20ac\u201d ERP Credential Security (3 Steps)",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream A",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "stream_b_realtime_guard",
+      "label": "Stream B \u00e2\u20ac\u201d Realtime API Guard",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream B",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "stream_c_dashboard",
+      "label": "Stream C \u00e2\u20ac\u201d Dashboard Real Data",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream C",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "stream_d_workspace_guard",
+      "label": "Stream D \u00e2\u20ac\u201d requireWorkspace() Helper",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream D",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "step_a1_migration_fix",
+      "label": "Step A1 \u00e2\u20ac\u201d Fix Migration Journal Collision",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "step_a2_erp_persist",
+      "label": "Step A2 \u00e2\u20ac\u201d Persist ERP Credentials to Vault",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "step_a3_erp_chat",
+      "label": "Step A3 \u00e2\u20ac\u201d Replace localStorage ERP Creds with Server-Side Lookup",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "step_b1_realtime",
+      "label": "Step B1 \u00e2\u20ac\u201d Add Workspace Validation to /api/realtime",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step B1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "step_c1_dashboard",
+      "label": "Step C1 \u00e2\u20ac\u201d Replace mockCompliance with getCachedPillarKpis",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step C1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "step_d1_require_workspace",
+      "label": "Step D1 \u00e2\u20ac\u201d Add requireWorkspace() + UUID Guard to workspace.ts",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step D1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "require_workspace_fn",
+      "label": "requireWorkspace() Function",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step D1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "get_or_create_workspace_fn",
+      "label": "getOrCreateWorkspace() Function",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "get_db_fn",
+      "label": "getDb() Function",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "utopia_vault_key_env",
+      "label": "UTOPIA_VAULT_KEY Environment Variable",
+      "file_type": "document",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Environment Variables",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ola0_desbloqueo",
+      "label": "Ola 0 \u00e2\u20ac\u201d Desbloqueo (Unblocking Wave)",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ola1_estabilizacion",
+      "label": "Ola 1 \u00e2\u20ac\u201d Estabilizaci\u00c3\u00b3n (Stabilization Wave)",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ola2_completar",
+      "label": "Ola 2 \u00e2\u20ac\u201d Completar Features Parciales",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ola3_calidad",
+      "label": "Ola 3 \u00e2\u20ac\u201d Calidad (Tech Debt & Quality Wave)",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "community_c0_accounting",
+      "label": "C0 \u00e2\u20ac\u201d Accounting Shared Utilities (306 nodes)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "community_c1_financial_agents",
+      "label": "C1 \u00e2\u20ac\u201d Financial Agent Pipelines (189 nodes)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "community_c6_niif",
+      "label": "C6 \u00e2\u20ac\u201d NIIF Analyst Pipeline (85 nodes)",
+      "file_type": "document",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "betterauth_nextauth",
+      "label": "BetterAuth / NextAuth (Auth System to Implement)",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A \u00e2\u20ac\u201d 1.1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "upstash_redis_rate_limit",
+      "label": "Upstash Redis Rate Limiting",
+      "file_type": "document",
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A \u00e2\u20ac\u201d 1.4",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pgvector_rag",
+      "label": "pgvector RAG (Migrated from HNSWLib)",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "hnswlib_rag",
+      "label": "HNSWLib / MemoryVectorStore (Legacy RAG)",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "niif_pipeline",
+      "label": "NIIF Financial Pipeline (3 Endpoints)",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "call_financial_agent_fn",
+      "label": "callFinancialAgent() Runtime",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "money_cop_pattern",
+      "label": "MoneyCop Pattern (formatCopFromCents)",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "chat_workspace_component",
+      "label": "ChatWorkspace.tsx (1200+ lines)",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "orchestrator_ts",
+      "label": "orchestrator.ts \u00e2\u20ac\u201d T1/T2/T3 Classifier",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2 + Fase 3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "verdad_dashboard",
+      "label": "VerdadOverviewPage / Dashboard KPI",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "get_cached_pillar_kpis",
+      "label": "getCachedPillarKpis() Function",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step C1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "serialize_credentials_fn",
+      "label": "serializeCredentials() / deserializeCredentials()",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "erp_credentials_table",
+      "label": "erp_credentials DB Table",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "api_realtime_route",
+      "label": "src/app/api/realtime/route.ts",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-01 + F-06",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "api_erp_connect_route",
+      "label": "src/app/api/erp/connect/route.ts",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "api_erp_sync_route",
+      "label": "src/app/api/erp/sync/route.ts",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-04",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "api_chat_route",
+      "label": "src/app/api/chat/route.ts",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workspace_ts",
+      "label": "src/lib/db/workspace.ts",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "db_client_ts",
+      "label": "src/lib/db/client.ts",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "vectorstore_ts",
+      "label": "src/lib/rag/vectorstore.ts",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "migration_0006_banking",
+      "label": "Migration 0006_banking.sql",
+      "file_type": "code",
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "migration_0006b_darwin",
+      "label": "Migration 0006b_nasty_darwin.sql (renamed)",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "drizzle_journal",
+      "label": "Drizzle Kit Migration Journal (_journal.json)",
+      "file_type": "code",
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "server",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "ai",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_config_models",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_security_pii_filter",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_rag_vectorstore",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_search_web_search",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_tools_sanction_calculator",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_tools_document_analyzer",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_tools_dian_response_generator",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_tools_risk_assessor",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_validation_schemas",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_tools_tax_calendar",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_agents_orchestrator",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_agents_types",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_activity_log",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_credentials",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_schema",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_client",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_workspace",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "drizzle_orm",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "chat_route_isorchestrationmode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "chat_route_handleorchestrated",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "chat_route_handlelegacy",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L270",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_chat_route_ts",
+      "target": "chat_route_post",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L630",
+      "weight": 1.0
+    },
+    {
+      "source": "chat_route_post",
+      "target": "chat_route_isorchestrationmode",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L671",
+      "weight": 1.0
+    },
+    {
+      "source": "chat_route_post",
+      "target": "chat_route_handleorchestrated",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L678",
+      "weight": 1.0
+    },
+    {
+      "source": "chat_route_post",
+      "target": "chat_route_handlelegacy",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L681",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "server",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_registry",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_types",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_credentials",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_client",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_schema",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_workspace",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_connect_route_ts",
+      "target": "connect_route_post",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "server_only",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "server",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_registry",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_types",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_activity_log",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_workspace",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_sync_route_ts",
+      "target": "sync_route_post",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "server_only",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "node_crypto",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "server",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "server",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "cache",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "drizzle_orm",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_client",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_schema",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_adapter",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_types",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_erp_credentials",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_cache_preprocessed_balance",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "provider_route_isvalidprovider",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "provider_route_parsepayload",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L83",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "provider_route_findcredentialbytoken",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L106",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "provider_route_synctrialbalance",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L150",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_erp_webhook_provider_route_ts",
+      "target": "provider_route_post",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L207",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_route_post",
+      "target": "provider_route_isvalidprovider",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L214",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_route_post",
+      "target": "provider_route_findcredentialbytoken",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L231",
+      "weight": 1.0
+    },
+    {
+      "source": "provider_route_post",
+      "target": "provider_route_parsepayload",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\erp\\webhook\\[provider]\\route.ts",
+      "source_location": "L244",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_realtime_route_ts",
+      "target": "server_only",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_realtime_route_ts",
+      "target": "server",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_realtime_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_config_models",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_realtime_route_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_workspace",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "app_api_realtime_route_ts",
+      "target": "realtime_route_get",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "c_startup_1_1_utopia_src_components_workspace_areas_verdadarea",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "c_startup_1_1_utopia_src_components_workspace_layouts_areashell",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_kpis_cache",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_db_workspace",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_kpis_compliance_score",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "c_startup_1_1_utopia_src_types_kpis",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "verdad_page_currentperiodid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "verdad_page_buildkpifrompillar",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "app_workspace_verdad_page_tsx",
+      "target": "verdad_page_verdadoverviewpage",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L81",
+      "weight": 1.0
+    },
+    {
+      "source": "verdad_page_verdadoverviewpage",
+      "target": "verdad_page_currentperiodid",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L93",
+      "weight": 1.0
+    },
+    {
+      "source": "verdad_page_verdadoverviewpage",
+      "target": "verdad_page_buildkpifrompillar",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L94",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "navigation",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "react_markdown",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "remark_gfm",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "rehype_sanitize",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "lucide_react",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "link",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "c_startup_1_1_utopia_src_context_languagecontext",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L63",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "c_startup_1_1_utopia_src_context_workspacecontext",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_storage_conversation_history",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L65",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_utils",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_upload_blob_client",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "c_startup_1_1_utopia_src_components_ui_skeletontext",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L76",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_generateid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_toconvmessages",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L107",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_fromconvmessages",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L111",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_bucketfordate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L134",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_groupconversationsbydate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L148",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_initialwelcome",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L177",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_cn",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L241",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_handle",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L569",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_onkey",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L586",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatsidebar_tsx",
+      "target": "workspace_chatsidebar_cn",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L1332",
+      "weight": 1.0
+    },
+    {
+      "source": "workspace_chatsidebar_groupconversationsbydate",
+      "target": "workspace_chatsidebar_bucketfordate",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatSidebar.tsx",
+      "source_location": "L163",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "react_markdown",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "remark_gfm",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "rehype_sanitize",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "lucide_react",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_context_languagecontext",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_context_workspacecontext",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_hooks_userealtimeapi",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_design_system_components_agentpipelineviz",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_design_system_components_badge",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_design_system_components_citationbadge",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_design_system_components_riskmeter",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_design_system_components_streamingtext",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_design_system_components_toast",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_export_pdf_export",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_utils",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_upload_blob_client",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_lib_storage_conversation_history",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_components_workspace_types",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "c_startup_1_1_utopia_src_types_platform",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_generateid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L149",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_formattime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_extractlegalreferences",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L164",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_classifyerror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L182",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_errormessagetext",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L195",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_handlesubmit",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1339",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_handlekeydown",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1349",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_togglevoice",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1376",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_handlefileselect",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1381",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_uploadfile",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1387",
+      "weight": 1.0
+    },
+    {
+      "source": "components_workspace_chatworkspace_tsx",
+      "target": "workspace_chatworkspace_removedocument",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1436",
+      "weight": 1.0
+    },
+    {
+      "source": "workspace_chatworkspace_handlesubmit",
+      "target": "workspace_chatworkspace_generateid",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1342",
+      "weight": 1.0
+    },
+    {
+      "source": "workspace_chatworkspace_handlekeydown",
+      "target": "workspace_chatworkspace_handlesubmit",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1350",
+      "weight": 1.0
+    },
+    {
+      "source": "workspace_chatworkspace_handlefileselect",
+      "target": "workspace_chatworkspace_uploadfile",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components\\workspace\\ChatWorkspace.tsx",
+      "source_location": "L1383",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "server_only",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "headers",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "drizzle_orm",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_client",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "c_startup_1_1_utopia_src_lib_db_schema",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "db_workspace_getorcreateworkspace",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "db_workspace_getcurrentworkspaceid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_db_workspace_ts",
+      "target": "db_workspace_requireworkspace",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\db\\workspace.ts",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_validation_schemas_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib\\validation\\schemas.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "chat_route_handleorchestrated",
+      "target": "db_workspace_requireworkspace",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app\\api\\chat\\route.ts",
+      "source_location": "L59",
+      "weight": 1.0
+    },
+    {
+      "source": "connect_route_post",
+      "target": "db_workspace_requireworkspace",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app\\api\\erp\\connect\\route.ts",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "sync_route_post",
+      "target": "db_workspace_requireworkspace",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app\\api\\erp\\sync\\route.ts",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "realtime_route_get",
+      "target": "db_workspace_requireworkspace",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app\\api\\realtime\\route.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "verdad_page_verdadoverviewpage",
+      "target": "db_workspace_requireworkspace",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app\\workspace\\verdad\\page.tsx",
+      "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "backlog_utopia",
+      "target": "remediation_plan_utopia",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "BACKLOG.md",
+      "source_location": "line 3",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "audit_report_utopia",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "header",
+      "weight": 1.0
+    },
+    {
+      "source": "plan_security_data_fixes",
+      "target": "audit_report_utopia",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Goal section",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_no_auth",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Resumen Ejecutivo + Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_erp_creds_client",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2 + Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_realtime_no_auth",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-01",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_erp_sync_no_auth",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-04",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_npm_vulns",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Resumen Ejecutivo + Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_tsc_missing",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Resumen Ejecutivo",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_feature_flags_off",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Resumen Ejecutivo + Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_migration_collision",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_erp_persist_bug",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_god_node_getdb",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_god_node_workspace",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_sentinel_coupling",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_rag_inconsistent",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_financial_report_no_auth",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_db_race_condition",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_final_content_uninit",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_mock_dashboard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_gpt_model_wrong",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Resumen Ejecutivo",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_prompt_injection",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-08",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_botid_not_impl",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-09",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_incomplete_audit_trail",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-10",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_csp_unsafe_inline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-11",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "finding_no_conversation_history",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "graphify_graph",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Diagramas",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "ctrl_vault_aes",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 Controles bien implementados",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "ctrl_pii_filter",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 Controles bien implementados",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "ctrl_timing_safe",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 Controles bien implementados",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "ctrl_csrf",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4 Controles bien implementados",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "flag_tax_engine",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "flag_ocr_promote",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "flag_bank_recon",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "flag_auto_adjustments",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "flag_monthly_close",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "flag_notifications",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "community_c0_accounting",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "community_c1_financial_agents",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "community_c6_niif",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "get_db_fn",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "get_or_create_workspace_fn",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "call_financial_agent_fn",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "money_cop_pattern",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "chat_workspace_component",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "orchestrator_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2 + Fase 3",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "niif_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "vectorstore_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 3",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "db_client_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "workspace_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "api_realtime_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "api_erp_connect_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "api_erp_sync_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "api_chat_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-08",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "migration_0006_banking",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "verdad_dashboard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "pgvector_rag",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "audit_report_utopia",
+      "target": "hnswlib_rag",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "ola0_desbloqueo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 0",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "ola1_estabilizacion",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "ola2_completar",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "ola3_calidad",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 3",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "betterauth_nextauth",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A \u00e2\u20ac\u201d 1.1",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "upstash_redis_rate_limit",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A \u00e2\u20ac\u201d 1.4",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "flag_tax_engine",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "flag_bank_recon",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "flag_auto_adjustments",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "flag_ocr_promote",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "flag_monthly_close",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "remediation_plan_utopia",
+      "target": "flag_notifications",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "plan_security_data_fixes",
+      "target": "stream_a_erp_creds",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream A",
+      "weight": 1.0
+    },
+    {
+      "source": "plan_security_data_fixes",
+      "target": "stream_b_realtime_guard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream B",
+      "weight": 1.0
+    },
+    {
+      "source": "plan_security_data_fixes",
+      "target": "stream_c_dashboard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream C",
+      "weight": 1.0
+    },
+    {
+      "source": "plan_security_data_fixes",
+      "target": "stream_d_workspace_guard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream D",
+      "weight": 1.0
+    },
+    {
+      "source": "stream_a_erp_creds",
+      "target": "step_a1_migration_fix",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream A",
+      "weight": 1.0
+    },
+    {
+      "source": "stream_a_erp_creds",
+      "target": "step_a2_erp_persist",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream A",
+      "weight": 1.0
+    },
+    {
+      "source": "stream_a_erp_creds",
+      "target": "step_a3_erp_chat",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream A",
+      "weight": 1.0
+    },
+    {
+      "source": "stream_b_realtime_guard",
+      "target": "step_b1_realtime",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream B",
+      "weight": 1.0
+    },
+    {
+      "source": "stream_c_dashboard",
+      "target": "step_c1_dashboard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream C",
+      "weight": 1.0
+    },
+    {
+      "source": "stream_d_workspace_guard",
+      "target": "step_d1_require_workspace",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Stream D",
+      "weight": 1.0
+    },
+    {
+      "source": "step_d1_require_workspace",
+      "target": "require_workspace_fn",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step D1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_b1_realtime",
+      "target": "require_workspace_fn",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step B1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_b1_realtime",
+      "target": "api_realtime_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step B1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_b1_realtime",
+      "target": "api_erp_sync_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step B1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a1_migration_fix",
+      "target": "migration_0006_banking",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a1_migration_fix",
+      "target": "migration_0006b_darwin",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a1_migration_fix",
+      "target": "drizzle_journal",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a2_erp_persist",
+      "target": "serialize_credentials_fn",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a2_erp_persist",
+      "target": "erp_credentials_table",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a2_erp_persist",
+      "target": "api_erp_connect_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a2_erp_persist",
+      "target": "ctrl_vault_aes",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a3_erp_chat",
+      "target": "chat_workspace_component",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A3",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a3_erp_chat",
+      "target": "api_chat_route",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A3",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a3_erp_chat",
+      "target": "serialize_credentials_fn",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A3",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a3_erp_chat",
+      "target": "erp_credentials_table",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A3",
+      "weight": 1.0
+    },
+    {
+      "source": "step_c1_dashboard",
+      "target": "verdad_dashboard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step C1",
+      "weight": 1.0
+    },
+    {
+      "source": "step_c1_dashboard",
+      "target": "get_cached_pillar_kpis",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step C1",
+      "weight": 1.0
+    },
+    {
+      "source": "plan_security_data_fixes",
+      "target": "utopia_vault_key_env",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Environment Variables",
+      "weight": 1.0
+    },
+    {
+      "source": "require_workspace_fn",
+      "target": "workspace_ts",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step D1",
+      "weight": 1.0
+    },
+    {
+      "source": "get_or_create_workspace_fn",
+      "target": "workspace_ts",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 0.9
+    },
+    {
+      "source": "get_db_fn",
+      "target": "db_client_ts",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 0.9
+    },
+    {
+      "source": "finding_no_auth",
+      "target": "get_or_create_workspace_fn",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4, F-03",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_erp_creds_client",
+      "target": "chat_workspace_component",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_erp_creds_client",
+      "target": "ctrl_vault_aes",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_realtime_no_auth",
+      "target": "api_realtime_route",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_erp_sync_no_auth",
+      "target": "api_erp_sync_route",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_erp_persist_bug",
+      "target": "api_erp_connect_route",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_migration_collision",
+      "target": "migration_0006_banking",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_migration_collision",
+      "target": "migration_0006b_darwin",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_rag_inconsistent",
+      "target": "vectorstore_ts",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_rag_inconsistent",
+      "target": "pgvector_rag",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_rag_inconsistent",
+      "target": "hnswlib_rag",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_mock_dashboard",
+      "target": "verdad_dashboard",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_mock_dashboard",
+      "target": "get_cached_pillar_kpis",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 5",
+      "weight": 0.9
+    },
+    {
+      "source": "finding_db_race_condition",
+      "target": "db_client_ts",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_god_node_getdb",
+      "target": "get_db_fn",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_god_node_workspace",
+      "target": "get_or_create_workspace_fn",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 1.0
+    },
+    {
+      "source": "finding_prompt_injection",
+      "target": "api_chat_route",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "ola0_desbloqueo",
+      "target": "finding_migration_collision",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 0, item 0.2",
+      "weight": 0.85
+    },
+    {
+      "source": "ola0_desbloqueo",
+      "target": "finding_tsc_missing",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 0, item 0.3",
+      "weight": 0.85
+    },
+    {
+      "source": "ola1_estabilizacion",
+      "target": "finding_no_auth",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A",
+      "weight": 0.9
+    },
+    {
+      "source": "ola1_estabilizacion",
+      "target": "finding_npm_vulns",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A \u00e2\u20ac\u201d 1.3",
+      "weight": 0.85
+    },
+    {
+      "source": "ola1_estabilizacion",
+      "target": "finding_erp_creds_client",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1",
+      "weight": 0.8
+    },
+    {
+      "source": "ola1_estabilizacion",
+      "target": "betterauth_nextauth",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 1A \u00e2\u20ac\u201d 1.1",
+      "weight": 1.0
+    },
+    {
+      "source": "ola2_completar",
+      "target": "finding_feature_flags_off",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 2A",
+      "weight": 0.9
+    },
+    {
+      "source": "ola3_calidad",
+      "target": "finding_sentinel_coupling",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 3C \u00e2\u20ac\u201d 3.7",
+      "weight": 0.8
+    },
+    {
+      "source": "ola3_calidad",
+      "target": "chat_workspace_component",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 3C \u00e2\u20ac\u201d 3.8",
+      "weight": 0.8
+    },
+    {
+      "source": "ola3_calidad",
+      "target": "orchestrator_ts",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 3B \u00e2\u20ac\u201d 3.3",
+      "weight": 0.8
+    },
+    {
+      "source": "ola3_calidad",
+      "target": "vectorstore_ts",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "REMEDIATION_PLAN.md",
+      "source_location": "Ola 3B \u00e2\u20ac\u201d 3.4",
+      "weight": 0.8
+    },
+    {
+      "source": "stream_d_workspace_guard",
+      "target": "stream_b_realtime_guard",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Execution Strategy",
+      "weight": 1.0
+    },
+    {
+      "source": "step_a2_erp_persist",
+      "target": "step_a3_erp_chat",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Execution Strategy",
+      "weight": 1.0
+    },
+    {
+      "source": "require_workspace_fn",
+      "target": "get_or_create_workspace_fn",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step D1",
+      "weight": 0.75
+    },
+    {
+      "source": "pgvector_rag",
+      "target": "hnswlib_rag",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 0.7
+    },
+    {
+      "source": "finding_no_auth",
+      "target": "finding_realtime_no_auth",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 0.8
+    },
+    {
+      "source": "finding_no_auth",
+      "target": "finding_erp_sync_no_auth",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.82,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 0.82
+    },
+    {
+      "source": "finding_no_auth",
+      "target": "finding_financial_report_no_auth",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 2 + Fase 4",
+      "weight": 0.85
+    },
+    {
+      "source": "serialize_credentials_fn",
+      "target": "ctrl_vault_aes",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Step A2",
+      "weight": 0.85
+    },
+    {
+      "source": "utopia_vault_key_env",
+      "target": "ctrl_vault_aes",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md",
+      "source_location": "Environment Variables",
+      "weight": 0.9
+    },
+    {
+      "source": "backlog_utopia",
+      "target": "plan_security_data_fixes",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "BACKLOG.md",
+      "source_location": "Ola 1A",
+      "weight": 0.8
+    },
+    {
+      "source": "backlog_utopia",
+      "target": "ola1_estabilizacion",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "BACKLOG.md",
+      "source_location": "Ola 1A",
+      "weight": 1.0
+    },
+    {
+      "source": "backlog_utopia",
+      "target": "ola0_desbloqueo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "BACKLOG.md",
+      "source_location": "Ola 0",
+      "weight": 1.0
+    },
+    {
+      "source": "backlog_utopia",
+      "target": "ola2_completar",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "BACKLOG.md",
+      "source_location": "Ola 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "backlog_utopia",
+      "target": "ola3_calidad",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "BACKLOG.md",
+      "source_location": "Ola 3",
+      "weight": 1.0
+    },
+    {
+      "source": "community_c1_financial_agents",
+      "target": "niif_pipeline",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 0.8
+    },
+    {
+      "source": "community_c6_niif",
+      "target": "niif_pipeline",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1",
+      "weight": 0.85
+    },
+    {
+      "source": "niif_pipeline",
+      "target": "call_financial_agent_fn",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 1 + Fase 5",
+      "weight": 0.85
+    },
+    {
+      "source": "finding_incomplete_audit_trail",
+      "target": "finding_no_auth",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "AUDIT_REPORT.md",
+      "source_location": "Fase 4",
+      "weight": 0.65
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "security_critical_auth_gap",
+      "label": "Critical Authentication Gap \u00e2\u20ac\u201d Unauthenticated Endpoints + Cookie Tenant + Missing UserId",
+      "nodes": [
+        "finding_no_auth",
+        "finding_realtime_no_auth",
+        "finding_erp_sync_no_auth",
+        "finding_financial_report_no_auth",
+        "finding_incomplete_audit_trail"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "AUDIT_REPORT.md"
+    },
+    {
+      "id": "erp_credential_security_chain",
+      "label": "ERP Credential Security Chain \u00e2\u20ac\u201d Persist, Decrypt Server-Side, Remove from Client",
+      "nodes": [
+        "step_a2_erp_persist",
+        "step_a3_erp_chat",
+        "serialize_credentials_fn",
+        "ctrl_vault_aes",
+        "erp_credentials_table"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.92,
+      "source_file": "plans/2026-06-05/security-and-data-fixes/plan.md"
+    },
+    {
+      "id": "feature_flags_accounting_module",
+      "label": "6 Feature Flags Blocking Accounting Module in Production",
+      "nodes": [
+        "flag_tax_engine",
+        "flag_ocr_promote",
+        "flag_bank_recon",
+        "flag_auto_adjustments",
+        "flag_monthly_close",
+        "flag_notifications"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.98,
+      "source_file": "AUDIT_REPORT.md"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

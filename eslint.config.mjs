@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Node.js CJS utility scripts — not part of the Next.js build
+    "scripts/convert-pdfs.js",
   ]),
 ]);
 

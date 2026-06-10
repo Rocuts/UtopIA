@@ -766,6 +766,7 @@ export function ERPConnector() {
 
   // Load saved connections on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setConnections(loadConnections());
   }, []);
 

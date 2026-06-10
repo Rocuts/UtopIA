@@ -84,9 +84,9 @@ function StageIndicator({
       <span
         className={cn(
           'transition-colors',
-          status === 'completed' && 'text-n-700 dark:text-n-400',
-          status === 'started' && 'text-n-800 dark:text-n-200 font-medium',
-          status === 'pending' && 'text-n-400',
+          status === 'completed' && 'text-n-700 dark:text-n-600',
+          status === 'started' && 'text-n-800 dark:text-n-700 font-medium',
+          status === 'pending' && 'text-n-600',
           status === 'failed' && 'text-danger',
         )}
       >
@@ -184,7 +184,7 @@ export function SurvivalModePanel() {
       {isIdle && (
         <motion.section {...fadeItem(0)} aria-label={survival.actions.upload}>
           <div className={cn('rounded-xl p-6 md:p-8 glass-elite-elevated ring-1 ring-[rgb(168_56_56_/_0.3)]')}>
-            <p className="text-base text-n-700 dark:text-n-400 mb-6 leading-relaxed max-w-2xl">
+            <p className="text-base text-n-700 dark:text-n-600 mb-6 leading-relaxed max-w-2xl">
               {survival.intro}
             </p>
 
@@ -216,7 +216,7 @@ export function SurvivalModePanel() {
                     'h-10 px-3 rounded-md text-sm',
                     'bg-n-50 dark:bg-[rgba(10,10,10,0.5)]',
                     'border border-n-300/60 dark:border-n-700/60',
-                    'text-n-800 dark:text-n-200 placeholder:text-n-400',
+                    'text-n-800 dark:text-n-700 placeholder:text-n-400',
                     'focus:outline-none focus:border-area-escudo focus:ring-1 focus:ring-area-escudo',
                     'transition-[border-color,box-shadow]',
                   )}
@@ -239,7 +239,7 @@ export function SurvivalModePanel() {
                     'h-10 px-3 rounded-md text-sm',
                     'bg-n-50 dark:bg-[rgba(10,10,10,0.5)]',
                     'border border-n-300/60 dark:border-n-700/60',
-                    'text-n-800 dark:text-n-200 placeholder:text-n-400',
+                    'text-n-800 dark:text-n-700 placeholder:text-n-400',
                     'focus:outline-none focus:border-area-escudo focus:ring-1 focus:ring-area-escudo',
                     'transition-[border-color,box-shadow]',
                   )}
@@ -285,7 +285,7 @@ export function SurvivalModePanel() {
                   aria-hidden="true"
                   className="inline-block h-2 w-2 rounded-full bg-area-escudo animate-pulse"
                 />
-                <span className="text-sm font-medium text-n-800 dark:text-n-200">
+                <span className="text-sm font-medium text-n-800 dark:text-n-700">
                   {survival.statusLabels.running}
                 </span>
               </div>
@@ -294,7 +294,7 @@ export function SurvivalModePanel() {
                 onClick={cancel}
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium',
-                  'text-n-600 hover:text-n-800 dark:hover:text-n-200',
+                  'text-n-600 hover:text-n-800 dark:hover:text-n-700',
                   'bg-n-100/50 dark:bg-n-800/50 hover:bg-n-200/60 dark:hover:bg-n-700/60',
                   'transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-n-500',
                 )}
@@ -346,7 +346,7 @@ export function SurvivalModePanel() {
               <AlertTriangle className="h-5 w-5 text-danger shrink-0 mt-0.5" aria-hidden="true" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-danger mb-1">{survival.statusLabels.error}</p>
-                <p className="text-sm text-n-700 dark:text-n-400">
+                <p className="text-sm text-n-700 dark:text-n-600">
                   {state.status === 'error' ? state.error : ''}
                 </p>
               </div>

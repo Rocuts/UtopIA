@@ -26,15 +26,8 @@ import type { Adjustment, ProvisionalFlag } from '@/lib/agents/repair/types';
 // 2. DELETE de todos los adjustments del sessionId.
 // 3. INSERT del nuevo snapshot completo.
 //
-// La ventana entre 2 y 3 puede dejar el ledger temporalmente vacío. Como el
-// cliente serializa los autosaves (debounce 500 ms + un solo PUT en vuelo
-// gracias al `inFlightRef` del hook), no hay autosaves concurrentes desde
-// el mismo navegador. Si llegara un GET justo en esa ventana, devolvería
-// `adjustments: []` en lugar de la versión previa — tolerable porque el
-// cliente ya tiene el state local autoritativo en memoria.
-//
-// TODO(Ola 1): envolver pasos 2-3 en `db.transaction()` ahora que el driver
-// node-postgres lo soporta, eliminando la ventana inconsistente.
+// Pasos 2-3 (DELETE + INSERT) corren dentro de `db.transaction()` para
+// eliminar cualquier ventana de inconsistencia entre las dos operaciones.
 // ---------------------------------------------------------------------------
 
 export interface PersistedSession {
@@ -221,30 +214,34 @@ export async function upsertSession(
     }
   }
 
-  // 2. Borrar adjustments existentes del sessionId.
-  await db
-    .delete(repairAdjustments)
-    .where(eq(repairAdjustments.sessionId, sessionId));
+  // 2+3. Reemplazar adjustments atómicamente: borrar + reinsertar en una sola
+  // transacción. Con drizzle-orm/node-postgres (pg.Pool) ya tenemos soporte
+  // real de transacciones — eliminamos la ventana inconsistente entre DELETE
+  // e INSERT que existía antes de esta migración.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(repairAdjustments)
+      .where(eq(repairAdjustments.sessionId, sessionId));
 
-  // 3. Reinsertar el snapshot completo (si hay).
-  if (session.adjustments.length > 0) {
-    const rows: NewRepairAdjustment[] = session.adjustments.map((adj) => ({
-      sessionId,
-      adjustmentId: adj.id,
-      accountCode: adj.accountCode,
-      accountName: adj.accountName,
-      // numeric column acepta string o number; pasamos string para preservar
-      // precisión exacta sin conversión IEEE-754 intermedia.
-      amount: String(adj.amount),
-      rationale: adj.rationale,
-      status: adj.status,
-      // Multiperiodo (T1+T5): persistimos el periodo. null si el agente lo
-      // omitio (default = primary del balance al cargar).
-      period: adj.period ?? null,
-      proposedAt: new Date(adj.proposedAt),
-      appliedAt: adj.appliedAt ? new Date(adj.appliedAt) : null,
-      rejectedAt: adj.rejectedAt ? new Date(adj.rejectedAt) : null,
-    }));
-    await db.insert(repairAdjustments).values(rows);
-  }
+    if (session.adjustments.length > 0) {
+      const rows: NewRepairAdjustment[] = session.adjustments.map((adj) => ({
+        sessionId,
+        adjustmentId: adj.id,
+        accountCode: adj.accountCode,
+        accountName: adj.accountName,
+        // numeric column acepta string o number; pasamos string para preservar
+        // precisión exacta sin conversión IEEE-754 intermedia.
+        amount: String(adj.amount),
+        rationale: adj.rationale,
+        status: adj.status,
+        // Multiperiodo (T1+T5): persistimos el periodo. null si el agente lo
+        // omitio (default = primary del balance al cargar).
+        period: adj.period ?? null,
+        proposedAt: new Date(adj.proposedAt),
+        appliedAt: adj.appliedAt ? new Date(adj.appliedAt) : null,
+        rejectedAt: adj.rejectedAt ? new Date(adj.rejectedAt) : null,
+      }));
+      await tx.insert(repairAdjustments).values(rows);
+    }
+  });
 }

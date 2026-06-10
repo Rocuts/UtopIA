@@ -248,7 +248,7 @@ export function SurvivalCard({
 
           {/* Description */}
           {description && (
-            <p className="text-sm leading-relaxed text-n-700 dark:text-n-400 line-clamp-4">
+            <p className="text-sm leading-relaxed text-n-700 dark:text-n-600 line-clamp-4">
               {description}
             </p>
           )}

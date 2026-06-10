@@ -57,7 +57,7 @@ function loadKey(envName: string, required: boolean): Buffer | null {
 
 function encryptWithKey(key: Buffer, plaintext: string): string {
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_BYTES });
   cipher.setAutoPadding(false);
 
   const encrypted = Buffer.concat([

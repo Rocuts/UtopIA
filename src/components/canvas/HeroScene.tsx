@@ -13,11 +13,13 @@ function ParticleField() {
   
   const positions = useMemo(() => {
     const positions = new Float32Array(count * 3);
+    /* eslint-disable react-hooks/purity */
     for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 15;
       positions[i * 3 + 1] = (Math.random() - 0.5) * 15;
       positions[i * 3 + 2] = (Math.random() - 0.5) * 15;
     }
+    /* eslint-enable react-hooks/purity */
     return positions;
   }, [count]);
 

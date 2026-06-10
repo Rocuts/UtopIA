@@ -6,9 +6,7 @@
  * Modal con tabs por pilar + listado scrollable. Cada item muestra
  * pillar dot + subject + tiempo relativo + acciones [Resolver, Snooze 7d].
  *
- * Hace fetch a `/api/sentinel/alerts` (P6 está creando ese endpoint en
- * paralelo). Si el endpoint no existe aún, mostramos placeholder
- * (`alerts.length === 0` → empty state) y comentamos el wiring.
+ * Hace fetch a `/api/sentinel/alerts` — GET lista paginada + PATCH resolve/snooze.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -54,7 +52,6 @@ export function InsightInbox({ open, onClose }: Props) {
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      // TODO: una vez P6 publique /api/sentinel/alerts, este fetch funcionará.
       const res = await fetch('/api/sentinel/alerts?status=pending,snoozed,escalated', {
         cache: 'no-store',
       });

@@ -13,6 +13,7 @@ export function useIsMac(): boolean {
     const platform =
       nav.userAgentData?.platform ?? nav.platform ?? '';
     const ua = nav.userAgent ?? '';
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMac(/mac/i.test(platform) || /Mac|iP(hone|ad|od)/.test(ua));
   }, []);
 

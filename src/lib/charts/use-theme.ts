@@ -27,6 +27,7 @@ export function useChartTheme(): ChartTheme {
   const [theme, setTheme] = useState<ChartTheme>('utopia-light');
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(readTheme());
     const observer = new MutationObserver(() => setTheme(readTheme()));
     observer.observe(document.documentElement, {

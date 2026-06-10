@@ -70,6 +70,7 @@ export function GenericPipelineIntake({ caseType, useCase, title, subtitle, agen
     ) {
       hasAutoAdvancedRef.current = true;
       const ext = extractionState.extracted;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCompany(prev => ({
         ...prev,
         name: ext.company.name || prev.name,

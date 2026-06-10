@@ -86,7 +86,7 @@ export function AntiDianCard({ data, loading, error, t, language = 'es' }: AntiD
                     strokeWidth={2}
                     aria-hidden="true"
                   />
-                  <span className="text-n-700 dark:text-n-400 truncate">
+                  <span className="text-n-700 dark:text-n-600 truncate">
                     {v.beneficiarioNombre ?? v.beneficiarioNit ?? (language === 'es' ? 'Beneficiario' : 'Payee')}
                   </span>
                 </div>

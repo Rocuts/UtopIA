@@ -29,6 +29,7 @@ export function ScoreGauge({ grade, score, size = 'md', className }: ScoreGaugeP
   const gradeColor = tokens.color.grade[grade] ?? tokens.color.neutral[600];
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

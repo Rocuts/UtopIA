@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit';
 import { generateText, stepCountIs, tool, type ModelMessage } from 'ai';
 import { z } from 'zod';
 import { MODELS } from '@/lib/config/models';
@@ -14,6 +15,11 @@ import { getTaxCalendar } from '@/lib/tools/tax-calendar';
 import { orchestrate } from '@/lib/agents/orchestrator';
 import type { ProgressEvent } from '@/lib/agents/types';
 import { logApiActivity } from '@/lib/db/activity-log';
+import { loadCredentials } from '@/lib/erp/credentials';
+import { erpCredentials as erpCredsTable } from '@/lib/db/schema';
+import { getDb } from '@/lib/db/client';
+import { requireWorkspace } from '@/lib/db/workspace';
+import { inArray, and, eq } from 'drizzle-orm';
 
 // Vercel Fluid Compute: 300s ceiling for T3 parallel specialists + SSE.
 // `export const runtime = 'nodejs'` removido en Ola 2: incompatible con
@@ -45,8 +51,34 @@ async function handleOrchestrated(
   documentContext: string | undefined,
   nitContext: NITContext | null,
   stream: boolean,
-  erpConnections?: Array<{ provider: string; credentials: Record<string, string> }>,
+  erpProviders?: string[],
 ) {
+  // Resolve ERP credentials server-side — client only sends provider names.
+  let erpConnections: Array<{ provider: string; credentials: Record<string, string> }> = [];
+  if (erpProviders && erpProviders.length > 0) {
+    try {
+      const workspace = await requireWorkspace();
+      if (workspace) {
+        const rows = await getDb()
+          .select()
+          .from(erpCredsTable)
+          .where(
+            and(
+              eq(erpCredsTable.workspaceId, workspace.id),
+              inArray(erpCredsTable.provider, erpProviders),
+            ),
+          );
+        erpConnections = rows.map(r => ({
+          provider: r.provider,
+          credentials: loadCredentials(r) as unknown as Record<string, string>,
+        }));
+      }
+    } catch (err) {
+      // Non-fatal: log and continue without ERP data rather than failing the chat request.
+      console.error('[chat] ERP credential resolution failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
   if (stream) {
     const encoder = new TextEncoder();
     // Forward the request's abort signal (e.g. client disconnects or hits Stop)
@@ -597,6 +629,14 @@ ${langInstruction}
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
+  const { allowed, limit } = await checkRateLimit(getClientIp(req), 'chat');
+  if (!allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'rate_limited', message: 'Demasiadas solicitudes. Intenta de nuevo en 1 minuto.' },
+      { status: 429, headers: { 'X-RateLimit-Limit': String(limit), 'X-RateLimit-Remaining': '0' } },
+    );
+  }
+
   try {
     const body = await req.json();
     const parsed = chatRequestSchema.safeParse(body);
@@ -604,7 +644,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid request format.' }, { status: 400 });
     }
 
-    const { messages, language, useCase, documentContext, erpConnections } = parsed.data;
+    const { messages, language, useCase, documentContext, erpProviders } = parsed.data;
 
     // Extract NIT context BEFORE PII redaction
     let nitContext: NITContext | null = null;
@@ -644,7 +684,7 @@ export async function POST(req: Request) {
     });
 
     if (isOrchestrationMode()) {
-      return handleOrchestrated(req, messages, language, useCase, documentContext, nitContext, stream, erpConnections);
+      return handleOrchestrated(req, messages, language, useCase, documentContext, nitContext, stream, erpProviders);
     }
 
     return handleLegacy(messages, language, useCase, documentContext, nitContext);

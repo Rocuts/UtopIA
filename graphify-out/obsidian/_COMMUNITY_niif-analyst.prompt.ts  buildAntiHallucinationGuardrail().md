@@ -1,0 +1,140 @@
+---
+type: community
+cohesion: 0.04
+members: 104
+---
+
+# niif-analyst.prompt.ts / buildAntiHallucinationGuardrail()
+
+**Cohesion:** 0.04 - loosely connected
+**Members:** 104 nodes
+
+## Members
+- [[anti-hallucination.ts]] - code - lib\agents\financial\prompts\anti-hallucination.ts
+- [[assembleNiifReport()]] - code - lib\agents\financial\contracts\niif-report.ts
+- [[buildAbsoluteRulesAgente1()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[buildAntiHallucinationGuardrail()]] - code - lib\agents\financial\prompts\anti-hallucination.ts
+- [[buildAntiHallucinationGuardrailEn()]] - code - lib\agents\financial\prompts\anti-hallucination.ts
+- [[buildAntiHallucinationGuardrailEs()]] - code - lib\agents\financial\prompts\anti-hallucination.ts
+- [[buildColombia2026Context()]] - code - lib\agents\financial\prompts\colombia-2026-context.ts
+- [[buildColombia2026ContextEn()]] - code - lib\agents\financial\prompts\colombia-2026-context.ts
+- [[buildColombia2026ContextEs()]] - code - lib\agents\financial\prompts\colombia-2026-context.ts
+- [[buildComplianceValidatorPrompt()]] - code - lib\agents\financial\tax-planning\prompts\compliance-validator.prompt.ts
+- [[buildDeferredTaxCalculatorPrompt()]] - code - lib\agents\financial\tax-reconciliation\prompts\deferred-tax-calculator.prompt.ts
+- [[buildDifferenceIdentifierPrompt()]] - code - lib\agents\financial\tax-reconciliation\prompts\difference-identifier.prompt.ts
+- [[buildGovernancePrompt()]] - code - lib\agents\financial\prompts\governance-specialist.prompt.ts
+- [[buildLegalAuditorPrompt()]] - code - lib\agents\financial\audit\prompts\legal-auditor.prompt.ts
+- [[buildMisstatementReviewerPrompt()]] - code - lib\agents\financial\fiscal-opinion\prompts\misstatement-reviewer.prompt.ts
+- [[buildNiifAnalystPass1Prompt()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[buildNiifAnalystPass2Prompt()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[buildNiifAnalystPass3Prompt()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[buildNiifAnalystPrompt()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[buildNiifAuditorPrompt()]] - code - lib\agents\financial\audit\prompts\niif-auditor.prompt.ts
+- [[buildNiifDisclosureKnowledge()]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[buildNiifDisclosureKnowledgeEn()]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[buildNiifDisclosureKnowledgeEs()]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[buildNiifImpactPrompt()]] - code - lib\agents\financial\tax-planning\prompts\niif-impact.prompt.ts
+- [[buildNiifMeasurementKnowledge()]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[buildNiifMeasurementKnowledgeEn()]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[buildNiifMeasurementKnowledgeEs()]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[buildPresentationV3()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[buildPresentationV3Data()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[buildQualityAuditorPrompt()]] - code - lib\agents\financial\quality\prompt.ts
+- [[buildResilienceSection0()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[buildSharedContext()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[buildStrategyDirectorPrompt()]] - code - lib\agents\financial\prompts\strategy-director.prompt.ts
+- [[buildTaxAuditorPrompt()]] - code - lib\agents\financial\audit\prompts\tax-auditor.prompt.ts
+- [[buildTaxOptimizerPrompt()]] - code - lib\agents\financial\tax-planning\prompts\tax-optimizer.prompt.ts
+- [[chainSignals()]] - code - lib\agents\financial\agents\niif-analyst.ts
+- [[classifyError()_1]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[colombia-2026-context.ts]] - code - lib\agents\financial\prompts\colombia-2026-context.ts
+- [[compliance-validator.prompt.ts]] - code - lib\agents\financial\tax-planning\prompts\compliance-validator.prompt.ts
+- [[computeActiveEcpColumns()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[deferred-tax-calculator.prompt.ts]] - code - lib\agents\financial\tax-reconciliation\prompts\deferred-tax-calculator.prompt.ts
+- [[detectForbiddenPhrasesInJson()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[detectOriComponents()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[difference-identifier.prompt.ts]] - code - lib\agents\financial\tax-reconciliation\prompts\difference-identifier.prompt.ts
+- [[errMessage()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[extractPass1Anchors()]] - code - lib\agents\financial\agents\niif-analyst.ts
+- [[extractPass2Anchors()]] - code - lib\agents\financial\agents\niif-analyst.ts
+- [[formatErrorAsUserNote()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[governance-specialist.prompt.ts]] - code - lib\agents\financial\prompts\governance-specialist.prompt.ts
+- [[governance-specialist.ts]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[horizonLabel()]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[isAccountingValidationError()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[isCriticalDataError()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[isTransientError()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[legal-auditor.prompt.ts]] - code - lib\agents\financial\audit\prompts\legal-auditor.prompt.ts
+- [[mapFinding()_2]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[mergeDepreciation()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[misstatement-reviewer.prompt.ts]] - code - lib\agents\financial\fiscal-opinion\prompts\misstatement-reviewer.prompt.ts
+- [[niif-analyst.prompt.ts]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[niif-analyst.ts]] - code - lib\agents\financial\agents\niif-analyst.ts
+- [[niif-auditor.prompt.ts]] - code - lib\agents\financial\audit\prompts\niif-auditor.prompt.ts
+- [[niif-auditor.ts]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[niif-colombia-knowledge.ts]] - code - lib\agents\financial\prompts\niif-colombia-knowledge.ts
+- [[niif-impact.prompt.ts]] - code - lib\agents\financial\tax-planning\prompts\niif-impact.prompt.ts
+- [[niif-report.ts]] - code - lib\agents\financial\contracts\niif-report.ts
+- [[niifFrameworkLabel()]] - code - lib\agents\financial\prompts\governance-specialist.prompt.ts
+- [[niifGroupNumLabel()]] - code - lib\agents\financial\prompts\governance-specialist.prompt.ts
+- [[opinionLabel()]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[presentation-v3.ts]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[prompt.ts]] - code - lib\agents\financial\quality\prompt.ts
+- [[renderActividadInferidaBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderAnticipoRentaBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderCompanyBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderComparativeModeBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderComplianceChecklist()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[renderDisclaimers()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[renderEfeAuthoritativeBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderFinancialNotes()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[renderImpracticabilityBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderLegacyMarkdown()]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[renderMarkdown()_2]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[renderNiifDictamenMarkdown()]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[renderPass1AnchorsBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderPass2AnchorsBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderPreparerNotes()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[renderPresentationV3AnchorsBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderPucMappingBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderReclasifNoCompBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderReportModeBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderSaldoAFavorBlock()]] - code - lib\agents\financial\prompts\niif-analyst.prompt.ts
+- [[renderShareholderMinutes()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[resilience-section0.ts]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[runGovernanceSpecialist()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[runNiifAnalyst()]] - code - lib\agents\financial\agents\niif-analyst.ts
+- [[runNiifAuditor()]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[shouldAutoMarkAsDraft()]] - code - lib\agents\financial\prompts\resilience-section0.ts
+- [[statusIcon()]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+- [[strategy-director.prompt.ts]] - code - lib\agents\financial\prompts\strategy-director.prompt.ts
+- [[sumAbsoluteBalanceForCodes()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[sumBalanceForPrefix()]] - code - lib\agents\financial\prompts\presentation-v3.ts
+- [[tax-auditor.prompt.ts]] - code - lib\agents\financial\audit\prompts\tax-auditor.prompt.ts
+- [[tax-optimizer.prompt.ts]] - code - lib\agents\financial\tax-planning\prompts\tax-optimizer.prompt.ts
+- [[toGovernanceResult()]] - code - lib\agents\financial\agents\governance-specialist.ts
+- [[toLegacyAuditorResult()_2]] - code - lib\agents\financial\audit\agents\niif-auditor.ts
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/niif-analyst.prompt.ts_/_buildAntiHallucinationGuardrail()
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 9 edges to [[_COMMUNITY_callFinancialAgent()  orchestrateFiscalOpinion()]]
+- 7 edges to [[_COMMUNITY_formatCopFromCents()  parseMoneyCop()]]
+- 2 edges to [[_COMMUNITY_trial-balance.ts  orchestrator.ts]]
+- 2 edges to [[_COMMUNITY_tax-auditor.ts  renderMarkdown()]]
+- 2 edges to [[_COMMUNITY_compose.ts  composeEditorialReport()]]
+- 1 edge to [[_COMMUNITY_runHtmlEditor()  orchestrate()]]
+- 1 edge to [[_COMMUNITY_runCurator()  runR2()]]
+- 1 edge to [[_COMMUNITY_v21-mapping.ts  agent.ts]]
+
+## Top bridge nodes
+- [[runNiifAnalyst()]] - degree 11, connects to 3 communities
+- [[runGovernanceSpecialist()]] - degree 6, connects to 2 communities
+- [[runNiifAuditor()]] - degree 5, connects to 2 communities
+- [[buildAntiHallucinationGuardrail()]] - degree 16, connects to 1 community
+- [[buildColombia2026Context()]] - degree 16, connects to 1 community

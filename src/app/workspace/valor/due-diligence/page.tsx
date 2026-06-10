@@ -577,7 +577,7 @@ function StatPill({
       ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.3)] text-success-light'
       : tone === 'warn'
         ? 'bg-[rgba(234,179,8,0.1)] border-[rgba(234,179,8,0.3)] text-gold-500'
-        : 'bg-[rgba(255,255,255,0.04)] border-[rgb(var(--color-gold-500-rgb)_/_0.18)] text-n-300';
+        : 'bg-[rgba(255,255,255,0.04)] border-[rgb(var(--color-gold-500-rgb)_/_0.18)] text-n-600';
 
   return (
     <div

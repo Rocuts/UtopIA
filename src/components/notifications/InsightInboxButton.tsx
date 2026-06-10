@@ -42,6 +42,7 @@ export function InsightInboxButton({ className }: { className?: string }) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCounts();
     const interval = setInterval(fetchCounts, POLL_INTERVAL_MS);
     return () => clearInterval(interval);

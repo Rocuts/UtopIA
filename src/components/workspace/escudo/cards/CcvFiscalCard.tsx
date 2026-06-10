@@ -222,7 +222,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
               aria-live="polite"
             >
               <span className="font-semibold text-danger">{t.alertaTasaMinima} </span>
-              <span className="text-n-700 dark:text-n-400">
+              <span className="text-n-700 dark:text-n-600">
                 {language === 'es'
                   ? `F09 actual ${fmtPct(data.data.alertaTasaMinima.f09Actual / 100)} — brecha ${fmtPct(data.data.alertaTasaMinima.brechaPp / 100)} bajo el mínimo. Impuesto adicional estimado: ${fmtCop(data.data.alertaTasaMinima.impuestoAdicionalEstimado)}.`
                   : `Current F09 ${fmtPct(data.data.alertaTasaMinima.f09Actual / 100)} — ${fmtPct(data.data.alertaTasaMinima.brechaPp / 100)} below the minimum. Estimated additional tax: ${fmtCop(data.data.alertaTasaMinima.impuestoAdicionalEstimado)}.`}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
+import { checkRateLimit, getClientIp } from '@/lib/security/rate-limit';
 import { uploadContextSchema, blobUploadSchema, ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE } from '@/lib/validation/schemas';
 import { addDocumentsToStore, invalidateVectorStore, getStoragePath } from '@/lib/rag/vectorstore';
 import {
@@ -629,8 +630,17 @@ function deriveFilenameFromBlobUrl(blobUrl: string): string {
 }
 
 export async function POST(req: Request) {
+  const { allowed, remaining, limit } = await checkRateLimit(getClientIp(req), 'upload');
+  if (!allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'rate_limited', message: 'Demasiadas subidas. Intenta de nuevo en 1 minuto.' },
+      { status: 429, headers: { 'X-RateLimit-Limit': String(limit), 'X-RateLimit-Remaining': '0' } },
+    );
+  }
+
   try {
     const contentType = req.headers.get('content-type') ?? '';
+    void remaining; // disponible para logs si se necesita
 
     // -----------------------------------------------------------------
     // Camino JSON (NUEVO, principal) — el cliente ya subio el archivo a

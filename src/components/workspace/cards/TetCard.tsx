@@ -79,7 +79,7 @@ export function TetCard({ data, loading, error, t, language = 'es' }: TetCardPro
                     strokeWidth={2}
                     aria-hidden="true"
                   />
-                  <span className="flex-1 text-n-700 dark:text-n-400">
+                  <span className="flex-1 text-n-700 dark:text-n-600">
                     <span className="font-medium text-area-escudo">{sug.norma}</span>
                     {' — '}
                     {sug.factibilidad === 'alta'

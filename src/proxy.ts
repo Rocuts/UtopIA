@@ -1,5 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// ---------------------------------------------------------------------------
+// Auth protection (BetterAuth phased rollout — 2026-06-05)
+// Phase 1 (BETTER_AUTH_SECRET absent): no-op. Phase 2 (secret set): workspace
+// pages redirect to /login; protected API routes return 401. Checked here
+// because the proxy runs before any Node module that requires pg.Pool.
+// ---------------------------------------------------------------------------
+
+const AUTH_ACTIVE = Boolean(process.env.BETTER_AUTH_SECRET);
+const PROTECTED_PAGES = ['/workspace'];
+const PROTECTED_APIS = ['/api/chat', '/api/financial-report', '/api/sentinel'];
+const PUBLIC_PREFIXES = ['/api/auth', '/login', '/signup', '/_next', '/favicon'];
+
+function routeAuthKind(pathname: string): 'page' | 'api' | false {
+  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return false;
+  if (PROTECTED_PAGES.some((p) => pathname.startsWith(p))) return 'page';
+  if (PROTECTED_APIS.some((p) => pathname.startsWith(p))) return 'api';
+  return false;
+}
+
+function hasSessionCookie(req: NextRequest): boolean {
+  return Boolean(
+    req.cookies.get('better-auth.session_token') ??
+      req.cookies.get('__Secure-better-auth.session_token'),
+  );
+}
+
 /**
  * Next.js 16 Proxy (formerly middleware.ts).
  *
@@ -181,8 +207,22 @@ function isCsrfAllowlisted(pathname: string): boolean {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Defensive: matcher already restricts to /api/*, but this guards against
-  // accidental matcher edits.
+  // -------------------------------------------------------------------------
+  // 0. Auth check (phase-gated — only active when BETTER_AUTH_SECRET is set).
+  // -------------------------------------------------------------------------
+  if (AUTH_ACTIVE) {
+    const kind = routeAuthKind(pathname);
+    if (kind && !hasSessionCookie(req)) {
+      if (kind === 'api') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('next', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  // Restrict remaining checks (CSRF, rate limit, headers) to /api/* only.
   if (!pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
@@ -288,8 +328,14 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Restrict to /api/* only. Workflow DevKit internal paths live under
-  // .well-known/workflow/* which does NOT start with /api/, so they pass
-  // through untouched — no extra exclusion needed.
-  matcher: ['/api/:path*'],
+  // /api/* — rate limiting, CSRF, security headers.
+  // /workspace/* and /login /signup — auth redirect gate.
+  // Static assets (_next/static, _next/image, favicons) are excluded.
+  matcher: [
+    '/api/:path*',
+    '/workspace/:path*',
+    '/login',
+    '/signup',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)).*)',
+  ],
 };

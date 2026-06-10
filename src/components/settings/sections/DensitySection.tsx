@@ -31,6 +31,7 @@ export function DensitySection() {
   const [density, setDensity] = useState<Density>('comfortable');
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDensity(readDensity());
   }, []);
 

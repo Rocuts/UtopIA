@@ -48,6 +48,7 @@
 
   /* Semantic LIGHT variants — chips up/down, indicators sobre fondo oscuro */
   --color-success-light: #86EFAC;  /* green-300 — "up" / "ok" pill */
+  --color-warning-light: #FDE68A;  /* amber-200 — alert pill sobre fondo oscuro */
   --color-danger-light:  #FCA5A5;  /* red-300   — "down" / "alert" pill */
 
   /* ---- Wine (bordeaux family — dictámenes, acentos graves) ---- */

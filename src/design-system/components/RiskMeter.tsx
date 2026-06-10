@@ -40,6 +40,7 @@ export function RiskMeter({ score, level, animated = true, className }: RiskMete
 
   useEffect(() => {
     if (!animated || prefersReduced) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplayScore(score);
       return;
     }

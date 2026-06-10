@@ -46,7 +46,6 @@ export function AlertDashboard() {
     try {
       const res = await fetch('/api/notifications/log');
       if (!res.ok) {
-        // Route may not exist yet — fail silently with empty list.
         setLogItems([]);
         return;
       }

@@ -19,6 +19,7 @@ function AnimatedCounter({ value, duration = 1500 }: { value: string; duration?:
 
     const match = value.match(/^([^\d]*)([\d.]+)(.*)$/);
     if (!match) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplay(value);
       return;
     }

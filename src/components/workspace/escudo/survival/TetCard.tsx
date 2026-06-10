@@ -71,7 +71,7 @@ export function TetCard({ data, loading, error, t, language = 'es' }: TetCardPro
     >
       {data && data.brecha15Pct > 0 && (
         <div className={cn('flex items-center justify-between text-xs p-2 rounded-md', 'bg-[rgb(239_68_68_/_0.07)] ring-1 ring-[rgb(239_68_68_/_0.15)]')}>
-          <span className="text-n-700 dark:text-n-400">
+          <span className="text-n-700 dark:text-n-600">
             {language === 'es' ? 'Impuesto adicional estimado' : 'Est. additional tax'}
           </span>
           <span className="font-semibold text-danger tabular-nums">{fmtCop(data.impuestoAdicional)}</span>

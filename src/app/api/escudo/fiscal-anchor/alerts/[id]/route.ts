@@ -8,7 +8,7 @@ import {
   resolveAlert,
   snoozeAlert,
 } from '@/lib/workflows/sentinel/repository';
-import { alertRowToView } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/alert-mapping';
+import { alertRowToView } from '@/lib/sentinel/alert-view';
 
 // ---------------------------------------------------------------------------
 // PATCH /api/escudo/fiscal-anchor/alerts/[id] — ciclo de vida de la alerta

@@ -60,14 +60,14 @@ export function ContingencyReserveCard({
             <span className="text-n-500">
               {language === 'es' ? 'Utilidad neta base' : 'Net income base'}
             </span>
-            <span className="font-medium text-n-800 dark:text-n-200 num">
+            <span className="font-medium text-n-800 dark:text-n-700 num">
               {formatCOP(data.data.utilidadNeta)}
             </span>
           </div>
 
           {/* Suggested account */}
           <div className="text-xs text-n-500 leading-relaxed">
-            <span className="font-medium text-n-700 dark:text-n-300">
+            <span className="font-medium text-n-700 dark:text-n-600">
               {language === 'es' ? 'Cuenta sugerida: ' : 'Suggested account: '}
             </span>
             {data.data.cuentaSugerida}

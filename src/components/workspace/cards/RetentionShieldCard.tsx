@@ -96,7 +96,7 @@ export function RetentionShieldCard({ data, loading, error, t, language = 'es' }
                     aria-hidden="true"
                   />
                   <div className="min-w-0">
-                    <span className="block font-medium text-n-800 dark:text-n-200 truncate">
+                    <span className="block font-medium text-n-800 dark:text-n-700 truncate">
                       {language === 'es' ? label.es : label.en}
                     </span>
                     <span className="block text-[10px] text-n-500 font-[family-name:var(--font-geist-mono,monospace)] mt-0.5">

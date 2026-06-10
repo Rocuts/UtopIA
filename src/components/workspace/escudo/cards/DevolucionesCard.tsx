@@ -139,7 +139,7 @@ export function DevolucionesCard({ data, loading, error, t, language = 'es' }: D
               <p className="text-xs uppercase tracking-eyebrow text-n-500 font-medium mb-1.5">{t.documentosLabel}</p>
               <ul role="list" className="flex flex-col gap-1">
                 {data.data.documentosRequeridos.map((doc, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-xs text-n-700 dark:text-n-400">
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-n-700 dark:text-n-600">
                     <CheckSquare className="h-3 w-3 text-success shrink-0 mt-0.5" strokeWidth={2} aria-hidden="true" />
                     {doc}
                   </li>

@@ -538,7 +538,7 @@ export default function MacroeconomiaPage() {
               <span
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs',
-                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-300',
+                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-700',
                 )}
               >
                 {liveLoading ? (
@@ -627,7 +627,7 @@ export default function MacroeconomiaPage() {
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
                       active
                         ? 'bg-[rgb(var(--color-gold-500-rgb)_/_0.20)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.45)]'
-                        : 'bg-[rgba(10,10,10,0.55)] text-n-500 border border-[rgb(var(--color-gold-500-rgb)_/_0.14)] hover:text-n-100 hover:border-[rgb(var(--color-gold-500-rgb)_/_0.32)]',
+                        : 'bg-[rgba(10,10,10,0.55)] text-n-500 border border-[rgb(var(--color-gold-500-rgb)_/_0.14)] hover:text-n-100 dark:hover:text-n-900 hover:border-[rgb(var(--color-gold-500-rgb)_/_0.32)]',
                     )}
                   >
                     <SIcon className="h-3.5 w-3.5" strokeWidth={1.9} />

@@ -132,7 +132,7 @@ export function SintetizadorCard({ data, loading, t, language = 'es' }: Sintetiz
                             {a.prioridad}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <span className="font-medium text-n-800 dark:text-n-200">{a.accion}</span>
+                            <span className="font-medium text-n-800 dark:text-n-700">{a.accion}</span>
                             <span className="ml-1.5 text-success text-xs font-medium tabular-nums">
                               ({fmtCop(a.impactoEstimado)})
                             </span>

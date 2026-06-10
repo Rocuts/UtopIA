@@ -15,7 +15,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ context });
   } catch (error) {
-    console.error('RAG endpoint error.');
+    console.error('[rag] search error:', error);
     return NextResponse.json(
       { error: 'Internal server error searching documents.' },
       { status: 500 }

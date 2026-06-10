@@ -240,7 +240,7 @@ SMMLV 2026: $1,423,500 COP. Incentivos modelados: ZOMAC (tarifa progresiva 0%→
 | Capa | Tecnologia |
 |------|------------|
 | **Framework** | Next.js 16 (App Router, Turbopack), React 19, TypeScript strict |
-| **LLM** | OpenAI `gpt-4o-mini` (chat), `gpt-5.4-mini` (pipeline, 400K ctx), `gpt-4o` (OCR), `gpt-4o-realtime-preview` (voz) |
+| **LLM** | OpenAI `gpt-5.4-mini` (chat/pipeline, 400K ctx), `gpt-5.5` (financial pipelines premium), `gpt-5.4-nano` (classifier), `gpt-4o-realtime-preview` (voz) |
 | **Orquestacion** | Multi-agente propio: Orchestrator-Workers + Pipeline Secuencial + Auditoria Paralela + Meta-Auditor |
 | **Preprocesamiento** | Validador aritmetico determinista (PUC colombiano, clases 1-7, ecuacion patrimonial) |
 | **Exportacion** | ExcelJS (`.xlsx` profesional, 5 tabs), jsPDF (conversaciones) |
@@ -591,34 +591,105 @@ src/
 
 ---
 
-## Instalacion
+## Quickstart (5 pasos)
 
 ```bash
+# 1. Clonar e instalar
 git clone https://github.com/Rocuts/UtopIA.git
 cd UtopIA
 npm install
+
+# 2. Variables de entorno
+cp .env.local.example .env.local   # editar con tus claves reales
+# OPENAI_API_KEY=sk-...            # Requerido: todos los LLM calls
+# TAVILY_API_KEY=tvly-...          # Requerido: busqueda web
+# DATABASE_URL=postgresql://...    # Requerido: Neon Postgres
+# CRON_SECRET=...                  # Requerido: proteger /api/cron/*
+# UTOPIA_AGENT_MODE=orchestrated   # orchestrated | legacy
+
+# 3. Inicializar base de datos
+npm run db:push          # aplica migraciones Drizzle
+npm run db:seed-calendar # datos del calendario tributario
+
+# 4. Ingestar documentos normativos al vector store
+npm run db:ingest
+
+# 5. Levantar servidor de desarrollo
+npm run dev              # http://localhost:3000
 ```
 
-### Variables de Entorno
-
-Crear `.env.local`:
+### Validar cambios
 
 ```bash
-OPENAI_API_KEY=sk-...           # Requerido: todos los LLM calls
-TAVILY_API_KEY=tvly-...         # Requerido: busqueda web
-UTOPIA_AGENT_MODE=orchestrated  # orchestrated (multi-agente) | legacy (monolitico)
+npx tsc --noEmit         # tipos
+npm run lint             # ESLint
+npm run test             # vitest (pipeline financiero)
+npm run test:coverage    # vitest con informe de cobertura
+npm run build            # build de produccion
 ```
 
-### Comandos
+---
+
+## Neon pgvector — Setup y RAG
+
+La plataforma usa **PostgreSQL + pgvector** (Neon) para búsqueda híbrida sobre normativa colombiana. El backend de producción combina BM25 léxico (GIN `tsvector`) + coseno HNSW con Reciprocal Rank Fusion (k=60) y reranking Cohere opcional.
+
+### 1. Endpoint pooled (obligatorio)
+
+`DATABASE_URL` **debe** apuntar al endpoint **pooled** de Neon — el host contiene el sufijo `-pooler`:
+
+```
+postgres://user:pwd@ep-xxx-pooler.us-east-1.aws.neon.tech/dbname?sslmode=require
+```
+
+Si apuntas al endpoint directo cada instancia de Fluid Compute abre su propio pool y agotarás los slots de conexión de Neon en producción. Ver `docs/MIGRATION_DRIVER.md`.
+
+### 2. Inicializar el schema de RAG
 
 ```bash
-npm run dev          # Servidor de desarrollo (localhost:3000)
-npm run build        # Build de produccion (Turbopack)
-npm run lint         # ESLint
-npm run db:ingest    # Ingestar documentos al vector store
+# Aplica migraciones Drizzle (tablas principales)
+npm run db:push
+
+# El schema de RAG (tabla rag_chunks + 4 índices) se crea automáticamente
+# en el primer query RAG via initRagSchema() — idempotente, usa IF NOT EXISTS.
+# Para pre-crear manualmente en un ambiente nuevo:
+node -e "require('./src/lib/rag/init').initRagSchema().then(() => console.log('ok'))"
 ```
 
-Validar cambios: `npx tsc --noEmit` + `npm run build`. No hay test framework configurado.
+### 3. Ingestar corpus normativo
+
+```bash
+# Ingesta completa (~25 docs de src/data/tax_docs/ + calendarios)
+npm run db:ingest
+
+# Solo documentos nuevos o modificados
+npm run db:ingest:docs
+```
+
+Los chunks se almacenan con embeddings `text-embedding-3-small` (1536 dims), `tsvector` para BM25 y metadatos (`doc_type`, `entity`, `year`, `workspace_id`).
+
+### 4. Reranking con Cohere (opcional)
+
+Si `COHERE_API_KEY` está definida, el vectorstore usa `rerank-multilingual-v3.0` como paso final. Sin la key, el ranking se basa solo en RRF — suficiente para la mayoría de queries.
+
+```bash
+# .env.local
+COHERE_API_KEY=co-...
+```
+
+### 5. Verificar estado del backend
+
+```bash
+# El endpoint /api/rag devuelve { backend: 'pgvector' | 'pgvector_empty' | 'uninitialized' | 'error' }
+curl http://localhost:3000/api/rag?q=IVA
+```
+
+| Estado | Descripción |
+|--------|-------------|
+| `pgvector` | Operativo — hay chunks en la DB |
+| `pgvector_empty` | Schema OK pero sin datos — ejecutar `npm run db:ingest` |
+| `uninitialized` | `initRagSchema()` no ha corrido aún |
+| `error` | Error de conexión — verificar `DATABASE_URL` y pooled endpoint |
 
 ---
 

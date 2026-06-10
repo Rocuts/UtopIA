@@ -63,7 +63,7 @@ export default async function ComandoPage() {
         (balance.primary.classes.find((c) => c.code === 6)?.auxiliaryTotal ?? 0) +
         (balance.primary.classes.find((c) => c.code === 7)?.auxiliaryTotal ?? 0),
       gastosOperacionales: balance.primary.classes.find((c) => c.code === 5)?.auxiliaryTotal ?? 0,
-      gastosFinancieros: 0, // TODO: separar 5305 (financieros) si hay subgrupo
+      gastosFinancieros: ct.gastoFinanciero5305 ?? 0,
       impuestos: ct.impuestosCuenta24,
       utilidadNeta: ct.utilidadNeta,
     };
@@ -75,7 +75,10 @@ export default async function ComandoPage() {
       ct.gastos > 0 ? ct.efectivoCuenta11 / (ct.gastos / 365) : null;
     const liquidity = {
       razonCorriente,
-      pruebaAcida: razonCorriente, // TODO: refinar quitando inventarios cuando WS3 los exponga
+      pruebaAcida:
+        ct.pasivoCorriente > 0
+          ? (ct.activoCorriente - (ct.inventarios14 ?? 0)) / ct.pasivoCorriente
+          : null,
       diasAutonomia,
     };
 

@@ -80,6 +80,12 @@ export const monthlyReportBodySchema = z.object({
   language: z.enum(['es', 'en']).default('es'),
 });
 
+// ─── Bulk operations ────────────────────────────────────────────────────────
+
+export const bulkConfirmBodySchema = z.object({
+  bookId: z.string().uuid(),
+});
+
 // ─── Tipos derivados ────────────────────────────────────────────────────────
 
 export type CreateBookBody = z.infer<typeof createBookBodySchema>;
@@ -87,3 +93,4 @@ export type ListEntriesQuery = z.infer<typeof listEntriesQuerySchema>;
 export type CreateEntryBody = z.infer<typeof createEntryBodySchema>;
 export type PatchEntryBody = z.infer<typeof patchEntryBodySchema>;
 export type MonthlyReportBody = z.infer<typeof monthlyReportBodySchema>;
+export type BulkConfirmBody = z.infer<typeof bulkConfirmBodySchema>;

@@ -54,9 +54,8 @@ export function WindowBridge(): null {
       try {
         setPendingChatSeed(String(texto ?? ''));
         router.push('/workspace');
-      } catch (e) {
+      } catch {
         // Si por alguna razón el puente no puede enviar, no rompemos la página.
-        console.warn('[WindowBridge] sendPrompt fallback:', texto, e);
       }
     };
 
@@ -75,16 +74,12 @@ export function WindowBridge(): null {
         async set(key: string, value: string) {
           try {
             localStorage.setItem(key, value);
-          } catch (e) {
-            console.warn('[WindowBridge] storage.set falló:', key, e);
-          }
+          } catch { /* quota or SSR — best-effort */ }
         },
         async delete(key: string) {
           try {
             localStorage.removeItem(key);
-          } catch (e) {
-            console.warn('[WindowBridge] storage.delete falló:', key, e);
-          }
+          } catch { /* quota or SSR — best-effort */ }
         },
       };
     }
@@ -119,9 +114,8 @@ export function WindowBridge(): null {
         crecimientoIngresosPct: view.derived.crecimientoIngresosPct,
       };
       localStorage.setItem(ANCORA_MIRROR_KEY, JSON.stringify(mirror));
-    } catch (e) {
+    } catch {
       // SSR / quota / serialización: best-effort, nunca rompemos render.
-      console.warn('[WindowBridge] espejo ancora_completo_2025 falló:', e);
     }
   }, [view]);
 

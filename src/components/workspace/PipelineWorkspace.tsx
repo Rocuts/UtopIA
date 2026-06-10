@@ -794,9 +794,11 @@ function StageNode({ index, state, label, sublabel }: {
 }
 
 function PipelineMonitor({ state }: { state: PipelineState }) {
+  /* eslint-disable react-hooks/purity */
   const elapsed = state.startedAt
     ? Math.round((Date.now() - new Date(state.startedAt).getTime()) / 1000)
     : 0;
+  /* eslint-enable react-hooks/purity */
   const [elapsedDisplay, setElapsedDisplay] = useState(elapsed);
 
   useEffect(() => {

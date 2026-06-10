@@ -221,7 +221,7 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
           {data.warnings.length > 0 && (
             <ul role="list" className="flex flex-col gap-1.5">
               {data.warnings.map((w, i) => (
-                <li key={i} className="text-xs text-n-700 dark:text-n-400 flex items-start gap-1.5">
+                <li key={i} className="text-xs text-n-700 dark:text-n-600 flex items-start gap-1.5">
                   <span aria-hidden="true" className="shrink-0 mt-1 h-1 w-1 rounded-full bg-warning" />
                   {w}
                 </li>

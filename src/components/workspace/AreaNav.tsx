@@ -96,6 +96,7 @@ export function AreaNav({ className }: AreaNavProps) {
 
   // Close dropdown when route changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMenuOpen(false);
   }, [pathname]);
 
