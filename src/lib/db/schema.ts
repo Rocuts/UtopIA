@@ -319,6 +319,70 @@ export const pymeCategories = pgTable('pyme_categories', {
     .defaultNow(),
 });
 
+// Nómina simple del módulo Pyme (Ola 8). Una fila por persona del negocio:
+// empleados con contrato y el dueño cotizando como independiente. El costo
+// total con prestaciones NO se persiste — lo deriva src/lib/payroll en
+// runtime a partir de salario/ingreso + clase ARL (la ley cambia cada año;
+// persistir el cálculo congelaría tarifas viejas).
+export const pymeEmpleados = pgTable(
+  'pyme_empleados',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    nombre: text('nombre').notNull(),
+    /** 'empleado' (contrato laboral) | 'dueno' (independiente, base 40%). */
+    tipo: text('tipo').notNull().default('empleado'),
+    cargo: text('cargo'),
+    /** 'fijo' | 'indefinido' | 'obra_labor' — solo aplica a empleados. */
+    tipoContrato: text('tipo_contrato'),
+    /** Salario mensual (empleado) o ingreso mensual estimado (dueño), COP. */
+    salarioCop: numeric('salario_cop', { precision: 14, scale: 2 }).notNull(),
+    eps: text('eps'),
+    afp: text('afp'),
+    arl: text('arl'),
+    /** Clase de riesgo ARL I..V (Decreto 1772/1994). Solo empleados. */
+    arlClase: integer('arl_clase').default(1),
+    activo: boolean('activo').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    wsIdx: index('pe_ws_idx').on(t.workspaceId, t.activo),
+  }),
+);
+
+// Historial de comparativas RST vs Ordinario de la calculadora de Mis Pagos
+// (equivalente al `tax_calculations` del handoff Supabase). Se guarda bajo
+// demanda — el botón "Guardar cálculo" — no en cada movimiento del slider.
+export const pymeTaxCalculations = pgTable(
+  'pyme_tax_calculations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    annualSalesCop: numeric('annual_sales_cop', { precision: 20, scale: 2 }).notNull(),
+    rstGroup: text('rst_group').notNull(),
+    rstCop: numeric('rst_cop', { precision: 20, scale: 2 }).notNull(),
+    ordinarioCop: numeric('ordinario_cop', { precision: 20, scale: 2 }).notNull(),
+    recommended: text('recommended').notNull(), // 'RST' | 'Ordinario'
+    savingsCop: numeric('savings_cop', { precision: 20, scale: 2 }).notNull(),
+    semaforoLevel: text('semaforo_level').notNull(), // 'verde' | 'amarillo' | 'rojo'
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    wsIdx: index('ptc_ws_idx').on(t.workspaceId, t.createdAt),
+  }),
+);
+
 export type PymeBook = typeof pymeBooks.$inferSelect;
 export type NewPymeBook = typeof pymeBooks.$inferInsert;
 export type PymeUpload = typeof pymeUploads.$inferSelect;
@@ -327,6 +391,10 @@ export type PymeEntry = typeof pymeEntries.$inferSelect;
 export type NewPymeEntry = typeof pymeEntries.$inferInsert;
 export type PymeCategory = typeof pymeCategories.$inferSelect;
 export type NewPymeCategory = typeof pymeCategories.$inferInsert;
+export type PymeEmpleado = typeof pymeEmpleados.$inferSelect;
+export type NewPymeEmpleado = typeof pymeEmpleados.$inferInsert;
+export type PymeTaxCalculation = typeof pymeTaxCalculations.$inferSelect;
+export type NewPymeTaxCalculation = typeof pymeTaxCalculations.$inferInsert;
 
 // ─── Modulo RAG (Neon pgvector + hybrid search) ────────────────────────────
 //

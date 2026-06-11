@@ -162,6 +162,8 @@ const RATE_LIMITS: Record<string, number> = {
   '/api/pyme/uploads': 20,
   '/api/pyme/entries': 60,
   '/api/pyme/books': 60,
+  '/api/pyme/empleados': 60,
+  '/api/pyme/tax-calculations': 30,
   '/api/pyme/reports/monthly': 5,
 
   // ERP integrations (sensitive — credentials)

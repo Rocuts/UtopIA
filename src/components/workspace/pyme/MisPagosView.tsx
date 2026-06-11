@@ -14,7 +14,7 @@
  *   borradores con datos reales
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -23,6 +23,7 @@ import {
   Clock,
   FileText,
   PiggyBank,
+  Save,
   Scale,
   type LucideIcon,
 } from 'lucide-react';
@@ -108,6 +109,8 @@ function BalanzaCard({
 export function MisPagosView() {
   const [open, setOpen] = useState(false);
   const [monthly, setMonthly] = useState(8_166_000);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const annual = monthly * 12;
   const { rst, ordinario, recommended, savings, semaforo } = useTaxCalculator(annual, {
@@ -115,6 +118,56 @@ export function MisPagosView() {
   });
   const rstWin = recommended === 'RST';
   const savingsRounded = Math.round(savings / 1000) * 1000;
+
+  // Precarga el último cálculo guardado del workspace (Ola 8 — historial en
+  // pyme_tax_calculations). Si nunca guardó, el slider queda en el default.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/pyme/tax-calculations');
+        const json = (await res.json()) as {
+          ok: boolean;
+          latest?: { annualSalesCop: string; createdAt: string } | null;
+        };
+        if (cancelled || !json.ok || !json.latest) return;
+        const annualSaved = Number(json.latest.annualSalesCop);
+        if (Number.isFinite(annualSaved) && annualSaved > 0) {
+          setMonthly(Math.min(20_000_000, Math.max(1_000_000, Math.round(annualSaved / 12 / 1000) * 1000)));
+          setSavedAt(json.latest.createdAt);
+          setOpen(true);
+        }
+      } catch {
+        /* sin historial — estado por defecto */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveCalculation = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/pyme/tax-calculations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          annualSalesCop: annual,
+          rstGroup: 'tiendas',
+          rstCop: rst,
+          ordinarioCop: ordinario,
+          recommended,
+          savingsCop: savings,
+          semaforoLevel: semaforo.level,
+        }),
+      });
+      const json = (await res.json()) as { ok: boolean; saved?: { createdAt: string } };
+      if (res.ok && json.ok && json.saved) setSavedAt(json.saved.createdAt);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const year = new Date().getFullYear();
   const { upcoming, loading: deadlinesLoading } = usePymeDeadlines(year);
@@ -285,6 +338,30 @@ export function MisPagosView() {
                 avisamos si eso cambia.
               </div>
             </div>
+          </div>
+
+          {/* Guardar en el historial */}
+          <div className="mt-3.5 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={saveCalculation}
+              disabled={saving}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-area-pyme/40 px-4 text-sm font-semibold text-[#2A5E1F] transition-colors hover:bg-area-pyme/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-area-pyme focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-area-pyme"
+            >
+              <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {saving ? 'Guardando…' : 'Guardar cálculo'}
+            </button>
+            {savedAt && (
+              <span className="text-xs text-n-500">
+                Último guardado:{' '}
+                {new Intl.DateTimeFormat('es-CO', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                }).format(new Date(savedAt))}
+              </span>
+            )}
           </div>
 
           <p className="mt-3 text-center text-sm italic text-n-500">
