@@ -122,6 +122,13 @@
       "when": 1781136000000,
       "tag": "0014_pyme_empleados",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781201652919,
+      "tag": "0015_billing_stripe",
+      "breakpoints": true
     }
   ]
 }

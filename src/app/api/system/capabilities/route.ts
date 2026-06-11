@@ -15,6 +15,12 @@ export async function GET() {
   return NextResponse.json(
     {
       emailDelivery: Boolean(process.env.RESEND_API_KEY),
+      // Billing (@better-auth/stripe) — true solo cuando el plugin Stripe está
+      // montado (ambas claves presentes). La UI de /workspace/settings usa
+      // este booleano antes de ofrecer upgrade/cancel.
+      billing: Boolean(
+        process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET,
+      ),
     },
     { headers: { 'Cache-Control': 'no-store' } },
   );

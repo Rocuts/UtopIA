@@ -10,7 +10,7 @@
  * survives the global Lenis smooth-scroll hijack (see CLAUDE.md Layout Gotchas).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette,
@@ -21,13 +21,14 @@ import {
   RotateCcw,
   Check,
   Monitor,
+  CreditCard,
 } from 'lucide-react';
 import { authClient } from '@/lib/auth/client';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type Panel = 'tema' | 'densidad' | 'idioma' | 'integraciones' | 'seguridad' | 'reset';
+type Panel = 'tema' | 'densidad' | 'idioma' | 'integraciones' | 'plan' | 'seguridad' | 'reset';
 type Theme = 'claro' | 'sistema' | 'oscuro';
 type Density = 'confortable' | 'compacto';
 type Lang = 'es' | 'en';
@@ -40,6 +41,7 @@ const NAV_ITEMS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'densidad', label: 'Densidad', icon: <Rows3 className="w-4 h-4" /> },
   { id: 'idioma', label: 'Idioma', icon: <Languages className="w-4 h-4" /> },
   { id: 'integraciones', label: 'Integraciones', icon: <Plug className="w-4 h-4" /> },
+  { id: 'plan', label: 'Plan y facturación', icon: <CreditCard className="w-4 h-4" /> },
   { id: 'seguridad', label: 'Seguridad', icon: <Shield className="w-4 h-4" /> },
   { id: 'reset', label: 'Restablecer', icon: <RotateCcw className="w-4 h-4" /> },
 ];
@@ -350,6 +352,251 @@ function IntegracionesPanel() {
 }
 
 // ---------------------------------------------------------------------------
+// Panel: Plan y facturación (@better-auth/stripe)
+//
+// Tres estados honestos, sin teatro:
+//   1. Sesión anónima → invitar a iniciar sesión.
+//   2. Billing no configurado en el despliegue (capabilities.billing=false) →
+//      decirlo tal cual; todas las funciones siguen disponibles.
+//   3. Billing activo → plan actual desde authClient.subscription.list(),
+//      upgrade vía Stripe Checkout, cancelación vía portal de facturación.
+// ---------------------------------------------------------------------------
+
+type SubscriptionInfo = {
+  id: string;
+  plan: string;
+  status: string;
+  periodEnd?: string | Date | null;
+  cancelAtPeriodEnd?: boolean | null;
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  free: 'Gratis',
+  pro: 'Pro',
+  enterprise: 'Enterprise',
+};
+
+function PlanPanel() {
+  const { data: session, isPending } = authClient.useSession();
+  const [billingEnabled, setBillingEnabled] = useState<boolean | null>(null);
+  const [subs, setSubs] = useState<SubscriptionInfo[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/system/capabilities')
+      .then((r) => r.json())
+      .then((caps) => {
+        if (!cancelled) setBillingEnabled(Boolean(caps?.billing));
+      })
+      .catch(() => {
+        if (!cancelled) setBillingEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!billingEnabled || !session) return;
+    let cancelled = false;
+    authClient.subscription
+      .list()
+      .then(({ data }) => {
+        if (!cancelled) setSubs((data as SubscriptionInfo[] | null) ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSubs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [billingEnabled, session]);
+
+  const activeSub =
+    subs?.find((s) => s.status === 'active' || s.status === 'trialing') ?? null;
+  const currentPlan = activeSub?.plan ?? 'free';
+
+  const handleUpgrade = async (plan: 'pro' | 'enterprise') => {
+    setBusy(plan);
+    setMessage(null);
+    const { error } = await authClient.subscription.upgrade({
+      plan,
+      successUrl: '/workspace/settings?billing=success',
+      cancelUrl: '/workspace/settings',
+    });
+    // Sin error, el navegador redirige a Stripe Checkout — no llegamos aquí.
+    setBusy(null);
+    if (error) {
+      setMessage({
+        ok: false,
+        text: error.message ?? 'No se pudo iniciar el pago. Intente de nuevo.',
+      });
+    }
+  };
+
+  const handleCancel = async () => {
+    setBusy('cancel');
+    setMessage(null);
+    const { error } = await authClient.subscription.cancel({
+      returnUrl: '/workspace/settings',
+    });
+    setBusy(null);
+    if (error) {
+      setMessage({
+        ok: false,
+        text: error.message ?? 'No se pudo abrir el portal de facturación.',
+      });
+    }
+  };
+
+  // ── Cargando capacidades/sesión ──────────────────────────────────────────
+  if (isPending || billingEnabled === null) {
+    return (
+      <PanelCard>
+        <CardTitle>Plan y facturación</CardTitle>
+        <CardDesc>Cargando estado de la suscripción…</CardDesc>
+      </PanelCard>
+    );
+  }
+
+  // ── Sesión anónima ───────────────────────────────────────────────────────
+  if (!session) {
+    return (
+      <PanelCard>
+        <CardTitle>Plan y facturación</CardTitle>
+        <CardDesc>Gestione el plan de su workspace.</CardDesc>
+        <div className="flex items-start gap-3 rounded-lg border border-n-200 bg-n-0 px-4 py-4">
+          <CreditCard className="w-5 h-5 text-n-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-n-900">Sesión anónima</div>
+            <p className="text-xs text-n-600 mt-1 leading-relaxed">
+              Para suscribirse a un plan necesita una cuenta. Inicie sesión y
+              vuelva a este panel.
+            </p>
+            <a
+              href="/login"
+              className="mt-3 inline-flex h-9 items-center rounded-lg bg-gold-500 px-4 text-xs font-semibold text-white transition-colors hover:bg-gold-600"
+            >
+              Iniciar sesión
+            </a>
+          </div>
+        </div>
+      </PanelCard>
+    );
+  }
+
+  // ── Billing no configurado en este despliegue ────────────────────────────
+  if (!billingEnabled) {
+    return (
+      <PanelCard>
+        <CardTitle>Plan y facturación</CardTitle>
+        <CardDesc>Gestione el plan de su workspace.</CardDesc>
+        <div className="flex items-start gap-3 rounded-lg border border-n-200 bg-n-0 px-4 py-4">
+          <CreditCard className="w-5 h-5 text-n-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-n-900">
+              Facturación no disponible
+            </div>
+            <p className="text-xs text-n-600 mt-1 leading-relaxed">
+              Este despliegue no tiene la pasarela de pagos configurada. Todas
+              las funciones están disponibles sin restricción.
+            </p>
+          </div>
+        </div>
+      </PanelCard>
+    );
+  }
+
+  // ── Billing activo ───────────────────────────────────────────────────────
+  return (
+    <PanelCard>
+      <CardTitle>Plan y facturación</CardTitle>
+      <CardDesc>
+        Plan actual:{' '}
+        <span className="font-semibold text-n-900">
+          {PLAN_LABELS[currentPlan] ?? currentPlan}
+        </span>
+        {activeSub?.status === 'trialing' && ' (período de prueba)'}
+      </CardDesc>
+
+      {activeSub?.periodEnd && (
+        <p className="text-xs text-n-600 mb-4">
+          {activeSub.cancelAtPeriodEnd
+            ? 'La suscripción finaliza el '
+            : 'Próxima renovación: '}
+          {new Date(activeSub.periodEnd).toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </p>
+      )}
+
+      {message && (
+        <p
+          className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+            message.ok
+              ? 'border-success/30 bg-success/[0.06] text-success'
+              : 'border-danger/30 bg-danger/[0.06] text-danger'
+          }`}
+        >
+          {message.text}
+        </p>
+      )}
+
+      {currentPlan !== 'pro' && currentPlan !== 'enterprise' && (
+        <SettingRow
+          name="Pro"
+          desc="Pipelines financieros y asesoría sin límites de cortesía. El precio se muestra en el checkout seguro de Stripe."
+          first
+        >
+          <button
+            onClick={() => handleUpgrade('pro')}
+            disabled={busy !== null || subs === null}
+            className="h-[38px] px-4 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {busy === 'pro' ? 'Abriendo checkout…' : 'Mejorar a Pro'}
+          </button>
+        </SettingRow>
+      )}
+
+      {currentPlan !== 'enterprise' && (
+        <SettingRow
+          name="Enterprise"
+          desc="Para equipos contables y firmas. El precio se muestra en el checkout seguro de Stripe."
+          first={currentPlan === 'pro'}
+        >
+          <button
+            onClick={() => handleUpgrade('enterprise')}
+            disabled={busy !== null || subs === null}
+            className="h-[38px] px-4 rounded-lg border border-n-300 bg-n-0 text-sm font-semibold text-n-800 hover:border-gold-500 hover:text-gold-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {busy === 'enterprise' ? 'Abriendo checkout…' : 'Mejorar a Enterprise'}
+          </button>
+        </SettingRow>
+      )}
+
+      {activeSub && (
+        <SettingRow
+          name="Cancelar suscripción"
+          desc="Se gestiona en el portal seguro de Stripe. Mantiene acceso hasta el fin del período pagado."
+        >
+          <button
+            onClick={handleCancel}
+            disabled={busy !== null}
+            className="h-[38px] px-4 rounded-lg border border-red-700/40 bg-transparent text-red-500 font-semibold text-sm hover:bg-red-900/8 transition-colors disabled:opacity-60"
+          >
+            {busy === 'cancel' ? 'Abriendo portal…' : 'Cancelar'}
+          </button>
+        </SettingRow>
+      )}
+    </PanelCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Panel: Seguridad
 // ---------------------------------------------------------------------------
 function SeguridadPanel() {
@@ -591,6 +838,7 @@ export default function SettingsPage() {
                   <IdiomaPanel lang={lang} setLang={setLang} />
                 )}
                 {activePanel === 'integraciones' && <IntegracionesPanel />}
+                {activePanel === 'plan' && <PlanPanel />}
                 {activePanel === 'seguridad' && (
                   <SeguridadPanel />
                 )}
