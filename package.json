@@ -30,6 +30,7 @@
   "dependencies": {
     "@ai-sdk/cohere": "^3.0.33",
     "@ai-sdk/openai": "^3.0.55",
+    "@better-auth/stripe": "^1.6.16",
     "@langchain/community": "^1.1.22",
     "@langchain/core": "^1.1.31",
     "@langchain/openai": "^1.2.12",
@@ -76,6 +77,7 @@
     "remark-gfm": "^4.0.1",
     "resend": "^6.12.2",
     "sharp": "^0.34.5",
+    "stripe": "^22.2.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
     "three": "^0.183.2",

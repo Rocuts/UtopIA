@@ -612,11 +612,20 @@ Cobertura medida: NO (--coverage no corre en CI)
 
 ### ADR-06 — Billing: Stripe vs Paddle vs ausente
 
-> **PENDIENTE DE VALIDAR** — No hay billing en el código.
-> **Opción A**: Stripe — más configurable, mayor comunidad, webhooks robustos.
-> **Opción B**: Paddle — merchant of record, simplifica impuestos Colombia.
+> **RESUELTO (2026-06-11)** — Implementado con Stripe vía el plugin oficial `@better-auth/stripe`
+> (rama `feat/billing-stripe`). Phase-gated: sin `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`
+> el plugin no se monta y la app opera sin restricciones de plan. La tabla real es
+> `subscription` (schema del plugin — reemplaza el diseño `subscriptions` de §6) con
+> `reference_id` = BetterAuth user id. Webhook: `/api/auth/stripe/webhook` (firma HMAC
+> verificada por el plugin; eximido de CSRF en `src/proxy.ts`). Gating:
+> `src/lib/billing/plan.ts` (`requirePlan` → 402 `plan_required`).
+> **⚠️ Riesgo de negocio abierto**: Stripe no acepta merchants colombianos sin entidad en
+> EE.UU. — si no la hay, pivotar a Paddle (MoR) o Wompi conservando tabla + gating + UI.
+> Runbook completo: [docs/BILLING.md](BILLING.md).
+>
+> ~~**Opción A**: Stripe — más configurable, mayor comunidad, webhooks robustos.~~ ← **elegida**
+> **Opción B**: Paddle — merchant of record, simplifica impuestos Colombia (fallback de negocio).
 > **Opción C**: Diferir billing (plataforma gratuita / demo hasta Product-Market Fit).
-> **Recomendación técnica**: Stripe si hay equipo para gestionar; Paddle si no. Schema: tabla `subscriptions` ya diseñada en §6.
 
 ### ADR-07 — Entorno staging: Neon branch vs base de datos separada
 
