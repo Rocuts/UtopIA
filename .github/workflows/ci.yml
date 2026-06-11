@@ -1,10 +1,13 @@
 name: CI
 
-# CI mínimo de la Ola 1+1 Élite. Verifica los 3 quality gates definidos
-# en docs/MVP_DECISIONS_DEFERRED.md (D6):
-#   - npx tsc --noEmit  (type safety)
-#   - npm test          (vitest, 129 tests críticos)
-#   - npm run build     (Next.js production bundle)
+# Quality gates (docs/MVP_DECISIONS_DEFERRED.md D6 + TRD §13):
+#   - npx tsc --noEmit        (type safety)
+#   - npm run lint            (ESLint — 0 errores desde ola-0)
+#   - npm run lint:strict-mode (contrato Zod de schemas que viajan al LLM)
+#   - npm test                (vitest unit)
+#   - npm run build           (Next.js production bundle)
+#   + jobs paralelos: coverage (informacional) e integration (gated por
+#     el secret TEST_DATABASE_URL).
 #
 # El smoke (npm run smoke) NO corre aquí: necesita Neon + dev server, lo
 # cual requiere un workflow aparte con secretos y un branch de Neon staging.
@@ -44,7 +47,13 @@ jobs:
       - name: TypeScript noEmit
         run: npx tsc --noEmit
 
-      - name: Vitest unit tests (129 expected)
+      - name: ESLint (0 errores desde ola-0 — gate para que no regresen)
+        run: npm run lint
+
+      - name: Zod strict-mode contract (schemas que viajan al LLM)
+        run: npm run lint:strict-mode
+
+      - name: Vitest unit tests
         run: npm test
 
       - name: Next.js production build
@@ -68,3 +77,81 @@ jobs:
           UTOPIA_ENABLE_MONTHLY_CLOSE_WORKFLOW: 'false'
           UTOPIA_ENABLE_NOTIFICATIONS: 'false'
           UTOPIA_ENABLE_ANOMALY_DETECTION: 'false'
+
+  # ---------------------------------------------------------------------------
+  # Coverage — informacional (artifact + summary). El umbral duro del 70% en
+  # módulos críticos (TRD §13) se activará cuando exista una línea base medida;
+  # un gate ciego rompería CI sin diagnóstico.
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Vitest con cobertura
+        run: npm run test:coverage
+
+      - name: Publicar reporte como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Integration — corre vitest.integration.config.ts SOLO si el repo tiene el
+  # secret TEST_DATABASE_URL (branch de Neon de staging). Sin el secret el job
+  # se marca skipped-graceful, no rojo: así CI queda verde hoy y el job se
+  # activa solo cuando el operador provisione la DB de pruebas.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Integration tests (Neon staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+    steps:
+      - name: ¿Hay TEST_DATABASE_URL?
+        id: gate
+        run: |
+          if [ -n "$TEST_DATABASE_URL" ]; then
+            echo "has_db=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_db=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::TEST_DATABASE_URL no configurado — integration tests omitidos."
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.has_db == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24 LTS
+        if: steps.gate.outputs.has_db == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install (npm ci)
+        if: steps.gate.outputs.has_db == 'true'
+        run: npm ci
+
+      - name: Vitest integration
+        if: steps.gate.outputs.has_db == 'true'
+        run: npm run test:integration
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
