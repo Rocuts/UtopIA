@@ -23,6 +23,47 @@ export const createBookBodySchema = z.object({
     .default('COP'),
 });
 
+// ─── Empleados (nómina simple — Ola 8) ──────────────────────────────────────
+
+export const createEmpleadoBodySchema = z.object({
+  nombre: z.string().min(1).max(160),
+  tipo: z.enum(['empleado', 'dueno']).default('empleado'),
+  cargo: z.string().max(120).optional(),
+  tipoContrato: z.enum(['fijo', 'indefinido', 'obra_labor']).optional(),
+  /** Salario mensual (empleado) o ingreso mensual estimado (dueño), COP. */
+  salarioCop: z.number().positive().max(1_000_000_000),
+  eps: z.string().max(120).optional(),
+  afp: z.string().max(120).optional(),
+  arl: z.string().max(120).optional(),
+  arlClase: z.number().int().min(1).max(5).default(1),
+});
+
+// PATCH explícito sin defaults (mismo razonamiento que updateEntryBodySchema:
+// .partial() preservaría los .default() y sobre-escribiría campos no enviados).
+export const updateEmpleadoBodySchema = z.object({
+  nombre: z.string().min(1).max(160).optional(),
+  tipo: z.enum(['empleado', 'dueno']).optional(),
+  cargo: z.string().max(120).nullable().optional(),
+  tipoContrato: z.enum(['fijo', 'indefinido', 'obra_labor']).nullable().optional(),
+  salarioCop: z.number().positive().max(1_000_000_000).optional(),
+  eps: z.string().max(120).nullable().optional(),
+  afp: z.string().max(120).nullable().optional(),
+  arl: z.string().max(120).nullable().optional(),
+  arlClase: z.number().int().min(1).max(5).optional(),
+});
+
+// ─── Calculadora RST/Ordinario (historial — Ola 8) ──────────────────────────
+
+export const saveTaxCalculationBodySchema = z.object({
+  annualSalesCop: z.number().positive().max(1_000_000_000_000),
+  rstGroup: z.enum(['tiendas', 'servicios']),
+  rstCop: z.number().nonnegative(),
+  ordinarioCop: z.number().nonnegative(),
+  recommended: z.enum(['RST', 'Ordinario']),
+  savingsCop: z.number().nonnegative(),
+  semaforoLevel: z.enum(['verde', 'amarillo', 'rojo']),
+});
+
 // ─── Summary ────────────────────────────────────────────────────────────────
 
 export const summaryQuerySchema = z.object({
