@@ -3,9 +3,7 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createAuthClient } from 'better-auth/react';
-
-const authClient = createAuthClient();
+import { authClient } from '@/lib/auth/client';
 
 function LoginContent() {
   const router = useRouter();
@@ -23,7 +21,10 @@ function LoginContent() {
     // malformed URL — keep default
   }
 
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  // ?mode=signup abre directo en "Crear cuenta" (p. ej. desde /signup).
+  const [mode, setMode] = useState<'login' | 'signup'>(
+    searchParams.get('mode') === 'signup' ? 'signup' : 'login',
+  );
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -346,10 +347,7 @@ function LoginContent() {
               </div>
             </div>
 
-            {/* remember me — login only. El link "¿Olvidó su contraseña?" se
-                reintroduce cuando exista el flujo real de reset (Ola 4 del
-                plan app-funcional); un anchor muerto comunica una promesa
-                falsa al usuario. */}
+            {/* remember me + forgot password — login only */}
             {isLogin && (
               <div className="flex items-center justify-between mt-[-4px]">
                 <label className="flex items-center gap-2 text-sm text-n-600 cursor-pointer select-none">
@@ -361,6 +359,12 @@ function LoginContent() {
                   />
                   Recordarme
                 </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-gold-600 font-medium hover:text-gold-700 transition-colors"
+                >
+                  ¿Olvidó su contraseña?
+                </Link>
               </div>
             )}
 
