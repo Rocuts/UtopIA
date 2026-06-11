@@ -107,8 +107,41 @@ function parseBalanceField(value: string): number | undefined {
 // :61: línea de movimiento — grupos: fecha valor, fecha entrada (opcional),
 // marca D/C/RD/RC, código de moneda opcional (3.ª letra), monto, tipo+ref.
 // Sin flag `s` (target pre-es2018): el caller ya colapsa los saltos de línea
-// del valor antes de hacer match, así que `.` nunca necesita cruzar \n.
-const LINE_61 = /^(\d{6})(\d{4})?(R?[CD])([A-Z])?([\d,.]+)((?:N|F)[A-Z0-9]{3})?([\s\S]*)$/;
+// del valor antes de hacer match. El tail (tipo de transacción + referencias)
+// se parsea aparte en parseLine61Tail — un grupo regex opcional de 4 chars
+// para el tipo se comía "NONR" del placeholder estándar NONREF cuando el
+// banco omite el código de tipo, dejando "EF" como referencia fragmento.
+const LINE_61 = /^(\d{6})(\d{4})?(R?[CD])([A-Z])?([\d,.]+)([\s\S]*)$/;
+
+interface Line61Tail {
+  txType: string | null;
+  customerRef: string | undefined;
+  bankRef: string | undefined;
+}
+
+/**
+ * Separa el tail de :61: en tipo de transacción (N|F + 3 alfanum, mandatorio
+ * según SWIFT pero omitido por extractos abreviados), referencia de cliente
+ * y referencia de banco (tras `//`).
+ *
+ * Desambiguación: "NONREF" arranca con N + 3 alfanum, así que un consumo
+ * ciego de 4 chars lo partiría en "NONR" + "EF". Si el tail empieza
+ * exactamente con el placeholder NONREF, NO hay código de tipo.
+ */
+function parseLine61Tail(tail: string): Line61Tail {
+  let rest = tail.trim();
+  let txType: string | null = null;
+
+  if (!rest.startsWith('NONREF') && /^[NF][A-Z0-9]{3}/.test(rest)) {
+    txType = rest.slice(0, 4);
+    rest = rest.slice(4);
+  }
+
+  const [customerPart, bankPart] = rest.split('//');
+  const customerRef = customerPart?.trim() || undefined;
+  const bankRef = bankPart?.trim() || undefined;
+  return { txType, customerRef, bankRef };
+}
 
 // ── Parser ───────────────────────────────────────────────────────────────────
 
@@ -187,9 +220,7 @@ export const mt940Parser: BankStatementParser = {
             );
             if (!Number.isNaN(entry.getTime())) postedAt = entry;
           }
-          const refRaw = (m[7] ?? '').trim();
-          const bankRef = refRaw.split('//')[1]?.trim();
-          const customerRef = refRaw.split('//')[0]?.trim();
+          const { txType, customerRef, bankRef } = parseLine61Tail(m[6] ?? '');
           pendingTx = {
             postedAt,
             valueDate,
@@ -197,7 +228,7 @@ export const mt940Parser: BankStatementParser = {
             amountCop: signedAmount(m[3], amount).toFixed(2),
             reference: customerRef && customerRef !== 'NONREF' ? customerRef : bankRef,
             externalId: bankRef,
-            rawPayload: { mark: m[3], txType: m[6] ?? null },
+            rawPayload: { mark: m[3], txType },
           };
           if (!firstDate || postedAt < firstDate) firstDate = postedAt;
           if (!lastDate || postedAt > lastDate) lastDate = postedAt;

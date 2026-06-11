@@ -39,8 +39,12 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // set true once Resend is configured
     // Reset de contraseña: entrega vía Resend (mismo patrón lazy que
-    // sentinel-insight). Sin RESEND_API_KEY el request falla con un error
-    // claro que la UI muestra honestamente — nunca un "enviado" falso.
+    // sentinel-insight). OJO: better-auth 1.6.x envuelve este hook en
+    // runInBackgroundOrAwait, que CAPTURA y no re-lanza — el throw de abajo
+    // solo queda en el log del servidor y el endpoint responde status:true
+    // igual. La honestidad hacia el usuario se garantiza ANTES, en
+    // /forgot-password vía GET /api/system/capabilities (sin RESEND_API_KEY
+    // la página ni muestra el formulario).
     sendResetPassword: async ({ user, url }) => {
       const key = process.env.RESEND_API_KEY;
       if (!key) {

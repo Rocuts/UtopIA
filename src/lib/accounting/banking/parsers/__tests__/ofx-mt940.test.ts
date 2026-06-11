@@ -139,6 +139,37 @@ describe('mt940Parser', () => {
       mt940Parser.parse('vacio.sta', ':20:REF\n:25:123\n-'),
     ).rejects.toThrow(/:61:/);
   });
+
+  // Regresión (revisión adversarial): un grupo regex opcional de 4 chars para
+  // el tipo de transacción se comía "NONR" del placeholder NONREF cuando el
+  // banco omite el código de tipo → referencia fragmento "EF" y dedupe rota.
+  it('NONREF sin código de tipo NO se fragmenta: la referencia cae al //bankRef', async () => {
+    const msg = ':20:R\n:25:123\n:61:260315D1234,56NONREF//BB-99\n:86:PAGO\n-';
+    const st = await mt940Parser.parse('e.sta', msg);
+    expect(st.transactions).toHaveLength(1);
+    const tx = st.transactions[0];
+    expect(tx.reference).toBe('BB-99');
+    expect(tx.externalId).toBe('BB-99');
+    expect(tx.rawPayload?.txType).toBeNull();
+    expect(tx.amountCop).toBe('-1234.56');
+  });
+
+  it('NONREF sin código de tipo ni bankRef: sin referencia, nunca el fragmento "EF"', async () => {
+    const msg = ':20:R\n:25:123\n:61:260315D1234,56NONREF\n:86:PAGO\n-';
+    const st = await mt940Parser.parse('e.sta', msg);
+    const tx = st.transactions[0];
+    expect(tx.reference).toBeUndefined();
+    expect(tx.externalId).toBeUndefined();
+  });
+
+  it('código de tipo presente + NONREF sigue funcionando como antes', async () => {
+    const msg = ':20:R\n:25:123\n:61:260315D1234,56NTRFNONREF//BB-77\n:86:PAGO\n-';
+    const st = await mt940Parser.parse('e.sta', msg);
+    const tx = st.transactions[0];
+    expect(tx.rawPayload?.txType).toBe('NTRF');
+    expect(tx.reference).toBe('BB-77');
+    expect(tx.externalId).toBe('BB-77');
+  });
 });
 
 // ─── Registry ────────────────────────────────────────────────────────────────

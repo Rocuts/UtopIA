@@ -5,13 +5,18 @@
  *
  * Flujo BetterAuth: authClient.requestPasswordReset({ email, redirectTo })
  * → el servidor envía el enlace vía Resend (config.ts sendResetPassword).
- * Sin RESEND_API_KEY el servidor responde error y aquí se muestra honesto
- * (nunca un "correo enviado" falso).
+ *
+ * Honestidad: better-auth 1.6.x TRAGA los errores del hook sendResetPassword
+ * (runInBackgroundOrAwait hace catch sin re-throw) y responde status:true
+ * aunque el email nunca salga — el `if (err)` del cliente jamás se entera.
+ * Por eso la página consulta GET /api/system/capabilities ANTES de mostrar
+ * el formulario: sin entrega de email configurada se muestra el estado
+ * "no disponible" en vez de un "Revise su correo" falso.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, KeyRound, MailCheck } from 'lucide-react';
+import { ArrowLeft, KeyRound, MailCheck, MailX } from 'lucide-react';
 import { authClient } from '@/lib/auth/client';
 
 export default function ForgotPasswordPage() {
@@ -19,6 +24,25 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** null = consultando; true/false = capacidad real de entrega de email. */
+  const [emailDelivery, setEmailDelivery] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/system/capabilities');
+        const json = (await res.json()) as { emailDelivery?: boolean };
+        if (!cancelled) setEmailDelivery(Boolean(json.emailDelivery));
+      } catch {
+        // Si ni la consulta funciona, no prometemos nada.
+        if (!cancelled) setEmailDelivery(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +75,21 @@ export default function ForgotPasswordPage() {
           Volver a iniciar sesión
         </Link>
 
-        {sent ? (
+        {emailDelivery === false ? (
+          <div className="text-center">
+            <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-warning/12 text-warning">
+              <MailX className="h-7 w-7" strokeWidth={1.75} aria-hidden="true" />
+            </span>
+            <h1 className="font-serif-elite text-2xl font-medium text-n-1000">
+              Restablecimiento no disponible
+            </h1>
+            <p className="mx-auto mt-2 max-w-[42ch] text-sm leading-relaxed text-n-600">
+              Este ambiente no tiene configurado el envío de correos, así que
+              no podemos mandarle el enlace de restablecimiento. Contacte al
+              administrador de la plataforma.
+            </p>
+          </div>
+        ) : sent ? (
           <div className="text-center">
             <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gold-500/12 text-gold-600">
               <MailCheck className="h-7 w-7" strokeWidth={1.75} aria-hidden="true" />
@@ -104,10 +142,14 @@ export default function ForgotPasswordPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || emailDelivery !== true}
                 className="h-11 rounded-lg bg-gold-500 text-sm font-semibold text-white transition-colors hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? 'Enviando…' : 'Enviar enlace'}
+                {loading
+                  ? 'Enviando…'
+                  : emailDelivery === null
+                    ? 'Verificando…'
+                    : 'Enviar enlace'}
               </button>
             </form>
           </>
