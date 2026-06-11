@@ -2,6 +2,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { getRecentLog } from '@/lib/notifications/repository';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // GET /api/notifications/log
@@ -11,6 +12,9 @@ import { getRecentLog } from '@/lib/notifications/repository';
 // ---------------------------------------------------------------------------
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const workspace = await getOrCreateWorkspace();
     const items = await getRecentLog(workspace.id, 30);

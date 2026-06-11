@@ -21,8 +21,8 @@ import {
   RotateCcw,
   Check,
   Monitor,
-  Smartphone,
 } from 'lucide-react';
+import { authClient } from '@/lib/auth/client';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -352,63 +352,142 @@ function IntegracionesPanel() {
 // ---------------------------------------------------------------------------
 // Panel: Seguridad
 // ---------------------------------------------------------------------------
-function SeguridadPanel({ twoFA, setTwoFA }: { twoFA: boolean; setTwoFA: (v: boolean) => void }) {
+function SeguridadPanel() {
+  const { data: session, isPending } = authClient.useSession();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  // ── Fase 1 (auth no activada): estado honesto, sin teatro ────────────────
+  if (!isPending && !session) {
+    return (
+      <PanelCard>
+        <CardTitle>Seguridad</CardTitle>
+        <CardDesc>Proteja el acceso a su información financiera.</CardDesc>
+        <div className="flex items-start gap-3 rounded-lg border border-n-200 bg-n-0 px-4 py-4">
+          <Monitor className="w-5 h-5 text-n-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-n-900">Sesión anónima</div>
+            <p className="text-xs text-n-600 mt-1 leading-relaxed">
+              Está usando la app sin cuenta. Cuando inicie sesión, aquí podrá
+              cambiar su contraseña y administrar sus sesiones activas.
+            </p>
+            <a
+              href="/login"
+              className="mt-3 inline-flex h-9 items-center rounded-lg bg-gold-500 px-4 text-xs font-semibold text-white transition-colors hover:bg-gold-600"
+            >
+              Iniciar sesión
+            </a>
+          </div>
+        </div>
+      </PanelCard>
+    );
+  }
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwLoading(true);
+    setPwMessage(null);
+    const { error } = await authClient.changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: true,
+    });
+    setPwLoading(false);
+    if (error) {
+      setPwMessage({ ok: false, text: error.message ?? 'No se pudo actualizar la contraseña.' });
+      return;
+    }
+    setCurrentPassword('');
+    setNewPassword('');
+    setPwMessage({ ok: true, text: 'Contraseña actualizada. Las demás sesiones fueron cerradas.' });
+  };
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await authClient.signOut();
+    window.location.href = '/login';
+  };
+
   return (
     <>
       <PanelCard>
         <CardTitle>Seguridad</CardTitle>
-        <CardDesc>Proteja el acceso a su información financiera.</CardDesc>
-        <div className="mb-4 max-w-[380px]">
-          <label className="block text-xs font-semibold text-n-700 uppercase tracking-[.08em] mb-1.5">
-            Contraseña actual
-          </label>
-          <input
-            type="password"
-            placeholder="••••••••"
-            className="w-full h-11 px-3.5 bg-n-0 border border-n-200 rounded-lg text-sm text-n-900 placeholder:text-n-400 focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500/15"
-          />
-        </div>
-        <div className="mb-5 max-w-[380px]">
-          <label className="block text-xs font-semibold text-n-700 uppercase tracking-[.08em] mb-1.5">
-            Nueva contraseña
-          </label>
-          <input
-            type="password"
-            placeholder="••••••••"
-            className="w-full h-11 px-3.5 bg-n-0 border border-n-200 rounded-lg text-sm text-n-900 placeholder:text-n-400 focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500/15"
-          />
-        </div>
-        <button className="h-[42px] px-5 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-sm font-semibold transition-colors">
-          Actualizar contraseña
-        </button>
-        <SettingRow name="Autenticación en dos pasos" desc="Código por SMS al iniciar sesión">
-          <Toggle on={twoFA} onToggle={() => setTwoFA(!twoFA)} />
-        </SettingRow>
+        <CardDesc>
+          {session ? `Cuenta: ${session.user.email}` : 'Cargando sesión…'}
+        </CardDesc>
+        <form onSubmit={handleChangePassword}>
+          <div className="mb-4 max-w-[380px]">
+            <label className="block text-xs font-semibold text-n-700 uppercase tracking-[.08em] mb-1.5">
+              Contraseña actual
+            </label>
+            <input
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full h-11 px-3.5 bg-n-0 border border-n-200 rounded-lg text-sm text-n-900 placeholder:text-n-400 focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500/15"
+            />
+          </div>
+          <div className="mb-5 max-w-[380px]">
+            <label className="block text-xs font-semibold text-n-700 uppercase tracking-[.08em] mb-1.5">
+              Nueva contraseña
+            </label>
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full h-11 px-3.5 bg-n-0 border border-n-200 rounded-lg text-sm text-n-900 placeholder:text-n-400 focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500/15"
+            />
+          </div>
+          {pwMessage && (
+            <p
+              className={`mb-4 max-w-[380px] rounded-lg border px-3 py-2 text-sm ${
+                pwMessage.ok
+                  ? 'border-success/30 bg-success/[0.06] text-success'
+                  : 'border-danger/30 bg-danger/[0.06] text-danger'
+              }`}
+            >
+              {pwMessage.text}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={pwLoading || isPending}
+            className="h-[42px] px-5 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {pwLoading ? 'Actualizando…' : 'Actualizar contraseña'}
+          </button>
+        </form>
       </PanelCard>
 
       <PanelCard>
-        <h2 className="font-serif-elite text-lg font-medium text-n-1000 mb-1">Sesiones activas</h2>
-        {/* Session 1 */}
+        <h2 className="font-serif-elite text-lg font-medium text-n-1000 mb-1">Sesión actual</h2>
         <div className="flex items-center gap-3 py-3.5">
           <Monitor className="w-5 h-5 text-n-500 flex-shrink-0" />
           <div className="flex-1">
-            <div className="text-sm font-semibold text-n-900">MacBook Pro · Bogotá</div>
-            <div className="text-xs text-n-600 mt-0.5">Chrome · sesión actual</div>
+            <div className="text-sm font-semibold text-n-900">
+              {session?.user.email ?? '…'}
+            </div>
+            <div className="text-xs text-n-600 mt-0.5">
+              {session
+                ? `Expira: ${new Date(session.session.expiresAt).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                : ''}
+            </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600 bg-green-500/10 px-2 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            Activa
-          </span>
-        </div>
-        {/* Session 2 */}
-        <div className="flex items-center gap-3 py-3.5 border-t border-n-100">
-          <Smartphone className="w-5 h-5 text-n-500 flex-shrink-0" />
-          <div className="flex-1">
-            <div className="text-sm font-semibold text-n-900">iPhone · Medellín</div>
-            <div className="text-xs text-n-600 mt-0.5">App · hace 3 días</div>
-          </div>
-          <button className="h-[30px] px-3 rounded-lg border border-n-300 bg-n-0 text-xs font-semibold text-n-800 hover:border-red-400 hover:text-red-500 transition-colors">
-            Cerrar
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="h-[30px] px-3 rounded-lg border border-n-300 bg-n-0 text-xs font-semibold text-n-800 hover:border-red-400 hover:text-red-500 transition-colors disabled:opacity-60"
+          >
+            {signingOut ? 'Cerrando…' : 'Cerrar sesión'}
           </button>
         </div>
       </PanelCard>
@@ -446,7 +525,6 @@ export default function SettingsPage() {
   const [theme, setTheme] = useState<Theme>('claro');
   const [density, setDensity] = useState<Density>('confortable');
   const [lang, setLang] = useState<Lang>('es');
-  const [twoFA, setTwoFA] = useState(true);
 
   return (
     <div
@@ -514,7 +592,7 @@ export default function SettingsPage() {
                 )}
                 {activePanel === 'integraciones' && <IntegracionesPanel />}
                 {activePanel === 'seguridad' && (
-                  <SeguridadPanel twoFA={twoFA} setTwoFA={setTwoFA} />
+                  <SeguridadPanel />
                 )}
                 {activePanel === 'reset' && <ResetPanel />}
               </motion.div>

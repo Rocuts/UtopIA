@@ -215,6 +215,32 @@ export async function insertEntries(
   return db.insert(pymeEntries).values(entries).returning();
 }
 
+/**
+ * Persistencia atómica del resultado del OCR: inserta los entries Y marca el
+ * upload como `done` en una sola transacción. Evita el estado inconsistente
+ * "entries insertados pero upload colgado en processing" cuando la segunda
+ * query falla (antes eran dos queries secuenciales, mitigadas solo por el
+ * stuck-timeout de 5 min). Soportado porque el driver es pg.Pool
+ * (node-postgres) — ver src/lib/db/client.ts.
+ */
+export async function insertEntriesAndCompleteUpload(
+  uploadId: string,
+  entries: NewPymeEntry[],
+): Promise<PymeEntry[]> {
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    const inserted =
+      entries.length > 0
+        ? await tx.insert(pymeEntries).values(entries).returning()
+        : [];
+    await tx
+      .update(pymeUploads)
+      .set({ ocrStatus: 'done', errorMessage: null })
+      .where(eq(pymeUploads.id, uploadId));
+    return inserted;
+  });
+}
+
 export async function listEntries(args: {
   bookId: string;
   status?: 'draft' | 'confirmed';
@@ -527,4 +553,31 @@ export async function monthlySummary(
     previous,
     entryCount,
   };
+}
+
+// Ingresos confirmados acumulados del año (1 ene → 1 ene siguiente).
+// Alimenta el semáforo de tope IVA/RST del área Pyme (3.500 UVT).
+export async function annualIngresos(
+  bookId: string,
+  year: number,
+): Promise<number> {
+  const db = getDb();
+  const from = new Date(year, 0, 1);
+  const to = new Date(year + 1, 0, 1);
+
+  const [row] = await db
+    .select({
+      ingresos: sql<string>`COALESCE(SUM(CASE WHEN ${pymeEntries.kind} = 'ingreso' THEN ${pymeEntries.amount} ELSE 0 END), 0)`,
+    })
+    .from(pymeEntries)
+    .where(
+      and(
+        eq(pymeEntries.bookId, bookId),
+        eq(pymeEntries.status, 'confirmed'),
+        gte(pymeEntries.entryDate, from),
+        lt(pymeEntries.entryDate, to),
+      ),
+    );
+
+  return Number(row?.ingresos ?? 0);
 }

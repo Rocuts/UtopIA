@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/uploads/[uploadId] — GET status del OCR.
@@ -31,6 +32,9 @@ const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
 type RouteContext = { params: Promise<{ uploadId: string }> };
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const { uploadId } = await ctx.params;
 

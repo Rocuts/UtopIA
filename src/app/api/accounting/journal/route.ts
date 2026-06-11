@@ -26,6 +26,7 @@ import {
 } from '@/lib/validation/accounting-schemas';
 
 import { badRequestZod, errorResponse, ok } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // Mutating endpoints son dinamicas por defecto bajo Cache Components.
 // `export const dynamic = 'force-dynamic'` y `export const runtime = 'nodejs'`
@@ -35,6 +36,9 @@ import { badRequestZod, errorResponse, ok } from '../_shared';
 // ─── POST ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let raw: unknown;
   try {
     raw = await req.json();
@@ -81,6 +85,9 @@ export async function POST(req: Request) {
 // ─── GET ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const url = new URL(req.url);
   const id = url.searchParams.get('id');
 

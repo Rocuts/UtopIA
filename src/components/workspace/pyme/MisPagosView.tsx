@@ -3,16 +3,15 @@
 /**
  * MisPagosView — /workspace/pyme/pagos ("Mis Pagos").
  *
- * Implementa el handoff "Pyme - Mis Pagos.html":
- * - Hero rojo de deuda ("Lo que debe hoy") con chips de urgencia y régimen
- * - Estado de sus pagos: 3 obligaciones compactas con borde de severidad
- * - Balanza "¿Estoy pagando el impuesto correcto?": slider de ventas que
- *   recalcula RST vs Ordinario en vivo (useTaxCalculator), semáforo fiscal
- *   y banner de ahorro
- * - Borradores listos (formularios 300 / 350 / 260)
- *
- * Montos de obligaciones MOCK (dataset del prototipo); la balanza calcula
- * en vivo con src/lib/tax/taxCalculator (tarifas ilustrativas).
+ * Diseño del handoff "Pyme - Mis Pagos.html" en versión HONESTA:
+ * - Hero rojo: días hasta el próximo vencimiento DIAN real (no hay registro
+ *   de deudas/pagos todavía, así que NO se inventa un monto "debe hoy")
+ * - Estado de pagos: próximos vencimientos del calendario oficial verificado
+ *   (GET /api/calendar/verified) con rango por dígito de NIT
+ * - Balanza "¿Estoy pagando el impuesto correcto?": slider que recalcula
+ *   RST vs Ordinario en vivo (useTaxCalculator; tarifas de referencia)
+ * - Formularios 300/350/260: marcados "Próximamente" — aún no se generan
+ *   borradores con datos reales
  */
 
 import { useState } from 'react';
@@ -22,7 +21,6 @@ import {
   CheckCircle,
   ChevronDown,
   Clock,
-  Download,
   FileText,
   PiggyBank,
   Scale,
@@ -31,52 +29,39 @@ import {
 import { cn } from '@/lib/utils';
 import { useTaxCalculator } from '@/hooks/useTaxCalculator';
 import { PymeSubpageShell } from '@/components/workspace/pyme/PymeSubpageShell';
+import { usePymeDeadlines } from '@/components/workspace/pyme/usePymeData';
 
 // ─── Formato ─────────────────────────────────────────────────────────────────
 
 const pesos = (v: number) => `$${Math.round(v).toLocaleString('es-CO')}`;
 const fmtM = (v: number) => `$${(v / 1e6).toFixed(2).replace('.', ',')}M`;
 
-// ─── Mock data (dataset del prototipo) ───────────────────────────────────────
+// ─── Helpers de vencimientos reales ──────────────────────────────────────────
 
-interface Obligacion {
-  icon: LucideIcon;
-  color: string;
-  title: string;
-  meta: string;
-  amount: string;
-  paid?: boolean;
+function fmtDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long' }).format(d);
 }
 
-const OBLIGACIONES: Obligacion[] = [
-  {
-    icon: AlertCircle,
-    color: '#A83838',
-    title: 'Pago de empleados (PILA)',
-    meta: 'Urgente · vence el 17 de junio · en 9 días',
-    amount: '$1.180.000',
-  },
-  {
-    icon: Clock,
-    color: '#C48A2E',
-    title: 'Anticipo bimestral RST',
-    meta: 'Próxima · vence el 19 de julio · en 24 días',
-    amount: '$298.000',
-  },
-  {
-    icon: CheckCircle,
-    color: '#357A28',
-    title: 'Industria y Comercio (ICA)',
-    meta: 'Al día · pagado el mes pasado',
-    amount: 'Pagado',
-    paid: true,
-  },
-];
+function severityColor(daysUntil: number): string {
+  if (daysUntil <= 15) return '#A83838';
+  if (daysUntil <= 45) return '#C48A2E';
+  return '#357A28';
+}
 
+function severityIcon(daysUntil: number): LucideIcon {
+  if (daysUntil <= 15) return AlertCircle;
+  if (daysUntil <= 45) return Clock;
+  return CheckCircle;
+}
+
+// Formularios DIAN frecuentes — se generarán con datos reales en una ola
+// posterior; mientras tanto se declaran como "Próximamente".
 const BORRADORES = [
-  { title: 'Formulario 300 — IVA', desc: 'Listo con sus datos del bimestre.' },
-  { title: 'Formulario 350 — Retención en la fuente', desc: 'Listo con sus datos del mes.' },
-  { title: 'Formulario 260 — Régimen Simple', desc: 'Listo con sus datos del año.' },
+  { title: 'Formulario 300 — IVA', desc: 'Se llenará automático con sus datos del bimestre.' },
+  { title: 'Formulario 350 — Retención en la fuente', desc: 'Se llenará automático con sus datos del mes.' },
+  { title: 'Formulario 260 — Régimen Simple', desc: 'Se llenará automático con sus datos del año.' },
 ];
 
 const SEM_FILL: Record<'verde' | 'amarillo' | 'rojo', string> = {
@@ -131,9 +116,15 @@ export function MisPagosView() {
   const rstWin = recommended === 'RST';
   const savingsRounded = Math.round(savings / 1000) * 1000;
 
+  const year = new Date().getFullYear();
+  const { upcoming, loading: deadlinesLoading } = usePymeDeadlines(year);
+  const next = upcoming[0] ?? null;
+  const visibles = upcoming.slice(0, 3);
+
   return (
     <PymeSubpageShell>
-      {/* Hero rojo de deuda */}
+      {/* Hero rojo — próximo vencimiento real (sin montos inventados:
+          no existe registro de deudas/pagos del negocio todavía) */}
       <section className="relative mb-6 overflow-hidden rounded-2xl p-7 text-white shadow-[0_24px_48px_-28px_rgb(74_20_20_/_0.7)] [background:linear-gradient(160deg,#4a1414,#2c0c0c)]">
         <div
           aria-hidden="true"
@@ -141,55 +132,74 @@ export function MisPagosView() {
         />
         <div className="relative z-[1]">
           <div className="text-xs font-bold uppercase tracking-eyebrow text-white/75">
-            Lo que debe hoy
+            Su próximo vencimiento DIAN
           </div>
           <div className="mb-2 mt-2.5 font-mono text-[clamp(2.6rem,6vw,3.4rem)] font-semibold leading-none tabular-nums">
-            $1.478.000
+            {deadlinesLoading ? '…' : next ? `${Math.max(next.daysUntil, 0)} días` : '—'}
           </div>
           <div className="flex flex-wrap gap-2.5">
-            <span className="rounded-full bg-[#FCA5A5]/20 px-3 py-1 text-xs font-semibold text-[#FCA5A5]">
-              Más urgente en 9 días
-            </span>
+            {next ? (
+              <span className="rounded-full bg-[#FCA5A5]/20 px-3 py-1 text-xs font-semibold text-[#FCA5A5]">
+                {next.obligation} · {fmtDay(next.dueDateMin)}
+              </span>
+            ) : (
+              !deadlinesLoading && (
+                <span className="rounded-full bg-white/12 px-3 py-1 text-xs font-semibold">
+                  Calendario no disponible
+                </span>
+              )
+            )}
             <span className="rounded-full bg-white/12 px-3 py-1 text-xs font-semibold">
-              Régimen Simple (RST)
+              Calendario oficial DIAN
             </span>
           </div>
         </div>
       </section>
 
-      {/* Estado de sus pagos */}
+      {/* Próximos vencimientos */}
       <h2 className="mb-3.5 font-serif-elite text-2xl font-medium text-n-1000">
-        Estado de sus pagos
+        Próximos vencimientos
       </h2>
-      {OBLIGACIONES.map((o) => {
-        const Icon = o.icon;
-        return (
-          <div
-            key={o.title}
-            className="mb-2.5 flex items-center gap-3.5 rounded-xl border border-n-200 bg-n-0 px-4 py-4"
-            style={{ borderLeft: `3px solid ${o.color}` }}
-          >
-            <span
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md"
-              style={{ background: `color-mix(in srgb, ${o.color} 14%, transparent)`, color: o.color }}
+      {deadlinesLoading ? (
+        <div className="flex flex-col gap-2.5" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[72px] animate-pulse rounded-xl border border-n-200 bg-n-50" />
+          ))}
+        </div>
+      ) : visibles.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-area-pyme/30 bg-n-0 px-6 py-8 text-center text-sm text-n-600">
+          No pudimos cargar el calendario de vencimientos. Intente de nuevo.
+        </div>
+      ) : (
+        visibles.map((o) => {
+          const color = severityColor(o.daysUntil);
+          const Icon = severityIcon(o.daysUntil);
+          return (
+            <div
+              key={`${o.obligation}-${o.period}`}
+              className="mb-2.5 flex items-center gap-3.5 rounded-xl border border-n-200 bg-n-0 px-4 py-4"
+              style={{ borderLeft: `3px solid ${color}` }}
             >
-              <Icon className="h-[19px] w-[19px]" strokeWidth={1.75} aria-hidden="true" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-semibold text-n-1000">{o.title}</div>
-              <div className="mt-0.5 text-xs text-n-600">{o.meta}</div>
+              <span
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md"
+                style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
+              >
+                <Icon className="h-[19px] w-[19px]" strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-semibold text-n-1000">{o.obligation}</div>
+                <div className="mt-0.5 text-xs text-n-600">
+                  {o.period} · vence el {fmtDay(o.dueDateMin)}
+                  {o.dueDateMax !== o.dueDateMin ? ' (según su NIT)' : ''}
+                </div>
+              </div>
+              <span className="shrink-0 font-mono text-[13px] font-semibold tabular-nums text-n-700">
+                {o.daysUntil <= 0 ? 'hoy' : `en ${o.daysUntil} días`}
+              </span>
             </div>
-            <span
-              className={cn(
-                'shrink-0 font-mono text-[15px] font-semibold tabular-nums',
-                o.paid ? 'text-[#2A5E1F] dark:text-area-pyme' : 'text-n-1000',
-              )}
-            >
-              {o.amount}
-            </span>
-          </div>
-        );
-      })}
+          );
+        })
+      )}
 
       {/* Balanza toggle */}
       <button
@@ -278,17 +288,18 @@ export function MisPagosView() {
           </div>
 
           <p className="mt-3 text-center text-sm italic text-n-500">
-            Este cálculo usa sus ventas y pagos reales — se actualiza solo.
+            Cálculo estimado con tarifas de referencia — no sustituye la
+            liquidación oficial DIAN. Ajuste sus ventas con el deslizador.
           </p>
         </div>
       )}
 
       {/* Borradores listos */}
       <h2 className="mb-1 mt-7 font-serif-elite text-2xl font-medium text-n-1000">
-        Borradores listos
+        Sus formularios
       </h2>
       <p className="mb-3.5 text-sm text-n-600">
-        Ya los llenamos con sus datos — solo revíselos.
+        Los llenaremos automáticamente con sus datos — en construcción.
       </p>
       {BORRADORES.map((b) => (
         <div
@@ -302,13 +313,9 @@ export function MisPagosView() {
             <div className="text-sm font-semibold text-n-1000">{b.title}</div>
             <div className="mt-0.5 text-xs text-n-600">{b.desc}</div>
           </div>
-          <button
-            type="button"
-            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-bold text-[#2A5E1F] transition-colors hover:text-area-pyme dark:text-area-pyme focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-area-pyme rounded-sm"
-          >
-            Descargar
-            <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          </button>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-area-pyme/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#2A5E1F] dark:text-area-pyme">
+            Próximamente
+          </span>
         </div>
       ))}
     </PymeSubpageShell>

@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import { resumeHook } from 'workflow/api';
 import { z } from 'zod';
 import { closeApprovalHookToken } from '@/lib/accounting/closing/types';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const ResumeSchema = z.object({
   token: z.string().min(1),
@@ -22,6 +23,9 @@ const ResumeSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let body: unknown;
   try {
     body = await req.json();

@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { importStatement } from '@/lib/accounting/banking';
 import { checkEnabled, bankingErrorResponse, badRequestZod, ok } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const jsonSchema = z.object({
   bankAccountId: z.string().uuid(),
@@ -20,6 +21,9 @@ const jsonSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 

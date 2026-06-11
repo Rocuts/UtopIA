@@ -56,6 +56,11 @@
   --color-wine-500: #A04855;
   --color-wine-700: #722F37;
 
+  /* Alias semántico del spec Pyme ("acento-vino"). Apunta al bordeaux
+     ADAPTATIVO de área (claro #A83838 / oscuro #D66B6B) y no a wine-700
+     fijo, que en dark mode colapsaría el contraste como tinta legible. */
+  --color-acento-vino: var(--color-area-escudo);
+
   /* ---- RGB triplets (para rgba alpha via rgb(var(--x) / α)) ---- */
   --color-gold-500-rgb:   184 147  74;
   --color-wine-500-rgb:   160  72  85;

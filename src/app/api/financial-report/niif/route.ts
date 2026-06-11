@@ -22,6 +22,7 @@ import type {
 } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { logActivity } from '@/lib/db/activity-log';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/niif (Wave 3.F1)
@@ -74,6 +75,9 @@ const adjustmentLedgerSchema = z
   .optional();
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const startedAt = Date.now();
   try {
     const body = await req.json();

@@ -4,6 +4,7 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
 import { createBookBodySchema } from '@/lib/validation/pyme-schemas';
 import { HttpError } from '../_lib/ownership';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/books — coleccion de libros del workspace.
@@ -20,6 +21,9 @@ import { HttpError } from '../_lib/ownership';
 const MAX_JSON_BODY = 64 * 1024;
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {
@@ -46,6 +50,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const books = await repo.listBooks(ws.id);

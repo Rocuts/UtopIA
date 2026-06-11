@@ -15,11 +15,15 @@ import {
   renderEditorialReportToStream,
   type EditorialReport,
 } from '@/lib/export/pdf-elite-react';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   if (process.env.NODE_ENV === 'production') {
     return new Response('Not found', { status: 404 });
   }

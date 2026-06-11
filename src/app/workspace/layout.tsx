@@ -131,6 +131,8 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
     (actionId: string) => {
       if (actionId === 'open-intake') {
         router.push('/workspace/intake');
+      } else if (actionId === 'open-comando') {
+        router.push('/workspace/comando');
       } else if (actionId === 'new-consultation') {
         startNewConsultation();
       } else if (actionId === 'export-pdf') {

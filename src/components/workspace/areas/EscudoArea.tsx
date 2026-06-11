@@ -161,20 +161,6 @@ function buildMockTef(): KpiResult {
   };
 }
 
-// ─── Deadlines mock ──────────────────────────────────────────────────────────
-
-const MOCK_DEADLINES_ES: EscudoDeadline[] = [
-  { label: 'Retención en la Fuente — Abril', date: '13 May 2026', severity: 'high' },
-  { label: 'IVA 5.º bimestre (Sep–Oct)', date: '18 May 2026', severity: 'medium' },
-  { label: 'Renta PN — Calendario DIAN', date: '09 Ago 2026', severity: 'low' },
-];
-
-const MOCK_DEADLINES_EN: EscudoDeadline[] = [
-  { label: 'Withholding Tax — April', date: 'May 13, 2026', severity: 'high' },
-  { label: 'VAT 5th bi-month (Sep–Oct)', date: 'May 18, 2026', severity: 'medium' },
-  { label: 'Personal Income Tax — DIAN Calendar', date: 'Aug 9, 2026', severity: 'low' },
-];
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 // ─── Helpers para derivar datos reales del fiscalAnchor ──────────────────────
@@ -269,10 +255,11 @@ export function EscudoArea({
     return buildMockTef();
   }, [kpi, fiscalAnchor, view]);
 
+  // Sin anchor ni prop no hay vencimientos reales que contar — nunca inventarlos.
   const deadlines = useMemo<EscudoDeadline[]>(() => {
     if (upcomingDeadlines) return upcomingDeadlines;
     if (fiscalAnchor) return deadlinesFromAnchor(fiscalAnchor, language);
-    return language === 'es' ? MOCK_DEADLINES_ES : MOCK_DEADLINES_EN;
+    return [];
   }, [upcomingDeadlines, fiscalAnchor, language]);
 
   // Fade-in stagger helpers
@@ -410,7 +397,7 @@ export function EscudoArea({
                   </div>
                   <div>
                     <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>
-                      {hasRealData ? deadlines.length : 7}
+                      {hasRealData ? deadlines.length : '—'}
                     </div>
                     <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                       {language === 'es' ? 'Casos abiertos' : 'Open cases'}

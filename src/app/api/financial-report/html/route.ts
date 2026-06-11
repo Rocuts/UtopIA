@@ -30,11 +30,15 @@ import { runHtmlEditor } from '@/lib/agents/financial/agents/html-editor';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = HtmlEditorInputSchema.safeParse(body);

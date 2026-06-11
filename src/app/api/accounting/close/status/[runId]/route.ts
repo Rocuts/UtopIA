@@ -5,12 +5,16 @@
 import { NextResponse } from 'next/server';
 import { getRun } from 'workflow/api';
 import { getRunById } from '@/lib/workflows/monthly-close/repository';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 interface RouteContext {
   params: Promise<{ runId: string }>;
 }
 
 export async function GET(_req: Request, context: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const { runId } = await context.params;
 
   if (!runId || typeof runId !== 'string') {

@@ -7,6 +7,7 @@ import {
   MessageSquarePlus,
   FileDown,
   FolderPlus,
+  LayoutDashboard,
   Trash2,
   Mic,
   Shield,
@@ -57,6 +58,8 @@ const LABELS = {
     newConsultationSub: 'Iniciar una conversación nueva',
     openIntake: 'Abrir nuevo caso',
     openIntakeSub: 'Intake — todos los tipos de caso',
+    openComando: 'Centro de Comando (pilares)',
+    openComandoSub: 'Tablero ejecutivo de los 4 pilares',
     exportPdf: 'Exportar PDF',
     exportPdfSub: 'Descargar el análisis actual',
     clearChat: 'Limpiar chat',
@@ -82,6 +85,8 @@ const LABELS = {
     newConsultationSub: 'Start a new conversation',
     openIntake: 'Open new case',
     openIntakeSub: 'Intake — every case type',
+    openComando: 'Command Center (pillars)',
+    openComandoSub: 'Executive board of the 4 pillars',
     exportPdf: 'Export PDF',
     exportPdfSub: 'Download the current analysis',
     clearChat: 'Clear chat',
@@ -132,6 +137,7 @@ export function CommandPalette({ isOpen, onClose, language, onAction }: CommandP
   const staticItems = useMemo<CommandItem[]>(() => [
     // Quick Actions
     { id: 'open-intake',      icon: FolderPlus,        title: t.openIntake,      subtitle: t.openIntakeSub,      shortcut: 'I', section: 'actions' },
+    { id: 'open-comando',     icon: LayoutDashboard,   title: t.openComando,     subtitle: t.openComandoSub,     section: 'actions' },
     { id: 'new-consultation', icon: MessageSquarePlus, title: t.newConsultation, subtitle: t.newConsultationSub, shortcut: 'N', section: 'actions' },
     { id: 'export-pdf',       icon: FileDown,          title: t.exportPdf,       subtitle: t.exportPdfSub,       shortcut: 'E', section: 'actions' },
     { id: 'clear-chat',       icon: Trash2,            title: t.clearChat,       subtitle: t.clearChatSub,       shortcut: 'D', section: 'actions' },

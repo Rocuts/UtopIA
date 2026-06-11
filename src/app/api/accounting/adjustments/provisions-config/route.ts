@@ -15,8 +15,12 @@ import {
   badRequestZod,
   provisionsConfigCreateSchema,
 } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   if (!isAutoAdjustmentsEnabled()) return disabled503();
   try {
     const ws = await getOrCreateWorkspace();
@@ -33,6 +37,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   if (!isAutoAdjustmentsEnabled()) return disabled503();
 
   let raw: unknown;

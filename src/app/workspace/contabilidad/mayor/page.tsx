@@ -71,11 +71,13 @@ export default function LibroMayorPage() {
 
   // Running balance (debit positive convention)
   const rows = useMemo(() => {
+    const out: (LedgerEntry & { balance: number })[] = [];
     let running = 0;
-    return sorted.map((e) => {
+    for (const e of sorted) {
       running += e.debit - e.credit;
-      return { ...e, balance: running };
-    });
+      out.push({ ...e, balance: running });
+    }
+    return out;
   }, [sorted]);
 
   const totalDebit  = rows.reduce((s, r) => s + r.debit, 0);

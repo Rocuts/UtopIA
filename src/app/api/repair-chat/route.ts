@@ -108,6 +108,13 @@ export async function POST(req: Request) {
     async start(controller) {
       try {
         await runRepairAgent(validated, controller, abortController.signal);
+      } catch (err) {
+        // Cliente desconectado o fallo del agente: no dejar que el rechazo
+        // escape de start() (unhandled rejection bajo Fluid Compute).
+        console.error(
+          '[repair-chat] stream error:',
+          err instanceof Error ? err.message : err,
+        );
       } finally {
         try {
           controller.close();

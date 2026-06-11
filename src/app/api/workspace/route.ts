@@ -4,8 +4,12 @@ import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
 import { workspaces } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     return NextResponse.json({ workspace: ws });
@@ -30,6 +34,9 @@ const UpdateSchema = z.object({
 });
 
 export async function PATCH(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const json = await req.json().catch(() => null);

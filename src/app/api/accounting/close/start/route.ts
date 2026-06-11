@@ -19,6 +19,7 @@ import {
 } from '@/lib/accounting/closing/types';
 import { closeMonthWorkflow } from '@/lib/workflows/monthly-close';
 import { getRunByPeriodId, upsertCloseRun } from '@/lib/workflows/monthly-close/repository';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const StartCloseSchema = z.object({
   periodId: z.string().uuid('periodId debe ser un UUID válido'),
@@ -27,6 +28,9 @@ const StartCloseSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   if (!isMonthlyCloseEnabled()) {
     return NextResponse.json(
       { error: 'Workflow de cierre mensual no habilitado. Activar UTOPIA_ENABLE_MONTHLY_CLOSE_WORKFLOW=true.' },

@@ -22,10 +22,14 @@ import {
   errorResponse,
   ok,
 } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const url = new URL(req.url);
     const yearStr = url.searchParams.get('year');
@@ -58,6 +62,9 @@ export async function GET(req: Request) {
 // ─── POST ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let raw: unknown;
   try {
     raw = await req.json();

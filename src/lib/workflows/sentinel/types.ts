@@ -50,7 +50,14 @@ export interface SentinelEvaluation {
   generatedAt: string;
 }
 
-export interface SentinelRunReport extends SentinelEvaluation {
+export interface SentinelRunReport extends Omit<SentinelEvaluation, 'pillars'> {
+  /**
+   * Snapshot de pilares calculado en el run. `null` cuando el workspace no
+   * tiene balance preprocesado — "sin datos" NO es "critical": antes este
+   * caso devolvía los 4 pilares con healthScore 0 y status 'critical',
+   * presentando una severidad inventada al consumidor.
+   */
+  pillars: PillarsResult | null;
   /** dedupKeys de los alerts insertados/actualizados durante el run. */
   upsertedAlerts: string[];
   /** dedupKeys de alerts que fueron escalados. */

@@ -10,7 +10,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Clock, Inbox, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, CheckCircle, Clock, Inbox, Loader2 } from 'lucide-react';
 
 import { GlassModal } from '@/components/ui/GlassModal';
 import { useLanguage } from '@/context/LanguageContext';
@@ -186,6 +187,18 @@ export function InsightInbox({ open, onClose }: Props) {
           ))}
         </ul>
       )}
+
+      {/* Centro de Alertas completo — única entrada de navegación a la ruta */}
+      <div className="mt-4 flex justify-end border-t border-gold-500/15 pt-3">
+        <Link
+          href="/workspace/alertas"
+          onClick={onClose}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gold-600 hover:text-gold-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-sm"
+        >
+          {isEs ? 'Ver Centro de Alertas' : 'Open Alert Center'}
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
     </GlassModal>
   );
 }

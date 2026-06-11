@@ -600,16 +600,24 @@ cd UtopIA
 npm install
 
 # 2. Variables de entorno
-cp .env.local.example .env.local   # editar con tus claves reales
+cp .env.example .env.local         # editar con tus claves reales
 # OPENAI_API_KEY=sk-...            # Requerido: todos los LLM calls
 # TAVILY_API_KEY=tvly-...          # Requerido: busqueda web
-# DATABASE_URL=postgresql://...    # Requerido: Neon Postgres
+# DATABASE_URL=postgresql://...    # Requerido: Neon Postgres (endpoint -pooler)
 # CRON_SECRET=...                  # Requerido: proteger /api/cron/*
+# UTOPIA_VAULT_KEY=...             # Requerido para ERP (cifrado credenciales)
+# DB_HMAC_KEY=...                  # Requerido para busquedas cifradas por NIT
 # UTOPIA_AGENT_MODE=orchestrated   # orchestrated | legacy
+# (generadores one-liner para cada secret: ver comentarios en .env.example)
 
 # 3. Inicializar base de datos
-npm run db:push          # aplica migraciones Drizzle
-npm run db:seed-calendar # datos del calendario tributario
+# Dev (schema directo desde el codigo):
+npm run db:push          # sincroniza el schema Drizzle
+# CI / produccion (migraciones versionadas + seeds, EN ESTE ORDEN):
+npm run db:setup         # = db:migrate -> db:seed-calendar -> db:seed-tax-rules
+# ⚠️ NO usar `npm run db:generate` por ahora: meta/ solo tiene snapshots
+# 0000-0006, asi que drizzle-kit re-generaria como "nuevas" las alteraciones
+# ya migradas en 0007-0013. Regenerar snapshots contra una DB migrada primero.
 
 # 4. Ingestar documentos normativos al vector store
 npm run db:ingest

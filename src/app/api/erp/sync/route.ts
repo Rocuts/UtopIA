@@ -6,6 +6,7 @@ import type { ERPProvider, ERPCredentials, ERPSyncResult } from '@/lib/erp/types
 import { logApiActivity } from '@/lib/db/activity-log';
 import { requireWorkspace } from '@/lib/db/workspace';
 import { assertSafeBaseUrl } from '@/lib/erp/validate-base-url';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export const maxDuration = 120;
 
@@ -19,6 +20,9 @@ const syncSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const workspace = await requireWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

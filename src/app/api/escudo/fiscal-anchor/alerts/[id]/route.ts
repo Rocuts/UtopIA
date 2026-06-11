@@ -9,6 +9,7 @@ import {
   snoozeAlert,
 } from '@/lib/workflows/sentinel/repository';
 import { alertRowToView } from '@/lib/sentinel/alert-view';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // PATCH /api/escudo/fiscal-anchor/alerts/[id] — ciclo de vida de la alerta
@@ -29,6 +30,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
     return NextResponse.json({ error: 'no_workspace' }, { status: 401 });

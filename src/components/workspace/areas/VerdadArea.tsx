@@ -153,10 +153,13 @@ export function VerdadArea({
   const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
 
   // Score: real scoreNiif when available, else prop value, else handoff mock (94)
-  const gaugeScore = useMemo(() => {
-    if (view.hasData && view.derived.scoreNiif != null) return Math.round(view.derived.scoreNiif);
-    return kpi?.value != null ? Math.round(kpi.value) : 94;
-  }, [view, kpi?.value]);
+  const scoreNiif = view.hasData ? view.derived.scoreNiif : null;
+  const gaugeScore =
+    scoreNiif != null
+      ? Math.round(scoreNiif)
+      : kpi?.value != null
+        ? Math.round(kpi.value)
+        : 94;
 
   const dicts = language === 'es' ? DICTAMENES_ES : DICTAMENES_EN;
 

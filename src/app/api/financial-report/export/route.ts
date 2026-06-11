@@ -19,6 +19,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { OutputOptionsToggle } from '@/lib/export/pdf-elite-react/types';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/export
@@ -41,6 +42,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 800;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
 
@@ -178,9 +182,16 @@ export async function POST(req: Request) {
     });
 
     if (format === 'pdf') {
-      // @deprecated — use 'pdf-elite' instead. Legacy jsPDF path is preserved
-      // here only to not break existing callers; new integrations should opt
-      // into 'pdf-elite' for the editorial template.
+      // El path jsPDF legacy fue retirado; el formato PDF vigente es
+      // 'pdf-elite'. Antes esta rama estaba VACÍA y el caller que pedía PDF
+      // recibía un Excel en silencio — ahora el contrato es explícito.
+      return NextResponse.json(
+        {
+          error:
+            "format 'pdf' is no longer supported. Use format 'pdf-elite' (editorial template) or omit for Excel.",
+        },
+        { status: 400 },
+      );
     }
 
     const buffer = await generateFinancialExcel({ report, preprocessed });

@@ -7,6 +7,7 @@ import { getDb } from '@/lib/db/client';
 import { erpCredentials } from '@/lib/db/schema';
 import { requireWorkspace } from '@/lib/db/workspace';
 import { assertSafeBaseUrl } from '@/lib/erp/validate-base-url';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const connectSchema = z.object({
   provider: z.string(),
@@ -30,6 +31,9 @@ const connectSchema = z.object({
 // IMPLEMENTED (audit 2026-06-05): credentials persisted via AES-256-GCM vault.
 // (keyVersion column queda diferida hasta el rebase de baseline 0005-0010.)
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     // 1. Guard first — unauthenticated callers get 401 before any input is inspected.
     //    Prevents enumeration of valid ERP provider slugs by anonymous callers.

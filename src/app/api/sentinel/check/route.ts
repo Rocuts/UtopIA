@@ -16,10 +16,14 @@ import {
   getCachedPreprocessedBalance,
   getLatestOpenPeriod,
 } from '@/lib/cache/preprocessed-balance';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let body: { periodId?: string; recipient?: string; dryRun?: boolean } = {};
   try {
     body = await req.json();

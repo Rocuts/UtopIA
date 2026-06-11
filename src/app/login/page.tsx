@@ -3,9 +3,7 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createAuthClient } from 'better-auth/react';
-
-const authClient = createAuthClient();
+import { authClient } from '@/lib/auth/client';
 
 function LoginContent() {
   const router = useRouter();
@@ -23,7 +21,10 @@ function LoginContent() {
     // malformed URL — keep default
   }
 
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  // ?mode=signup abre directo en "Crear cuenta" (p. ej. desde /signup).
+  const [mode, setMode] = useState<'login' | 'signup'>(
+    searchParams.get('mode') === 'signup' ? 'signup' : 'login',
+  );
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -358,9 +359,12 @@ function LoginContent() {
                   />
                   Recordarme
                 </label>
-                <a href="#" className="text-sm text-gold-600 font-medium hover:text-gold-700 transition-colors">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-gold-600 font-medium hover:text-gold-700 transition-colors"
+                >
                   ¿Olvidó su contraseña?
-                </a>
+                </Link>
               </div>
             )}
 

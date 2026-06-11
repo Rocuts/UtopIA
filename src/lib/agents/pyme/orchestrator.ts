@@ -235,14 +235,11 @@ export async function processUpload(
       buildNewEntry(entry, categorized[idx], extraction, upload.id, upload.bookId, upload.imageUrl),
     );
 
-    const inserted = await repo.insertEntries(rows);
+    // Insert de entries + status 'done' en UNA transacción — sin estado
+    // intermedio "entries guardados pero upload en processing".
+    const inserted = await repo.insertEntriesAndCompleteUpload(uploadId, rows);
 
     emit({ type: 'stage_complete', stage: 'persist' });
-
-    // -----------------------------------------------------------------------
-    // 8. Done.
-    // -----------------------------------------------------------------------
-    await repo.updateUploadStatus(uploadId, 'done');
     emit({ type: 'done' });
 
     return { entryIds: inserted.map((r) => r.id) };

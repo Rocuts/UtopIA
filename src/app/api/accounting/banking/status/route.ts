@@ -8,8 +8,12 @@
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { bankReconciliationPort } from '@/lib/accounting/banking';
 import { checkEnabled, bankingErrorResponse, ok } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function GET(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 

@@ -38,6 +38,38 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // set true once Resend is configured
+    // Reset de contraseña: entrega vía Resend (mismo patrón lazy que
+    // sentinel-insight). OJO: better-auth 1.6.x envuelve este hook en
+    // runInBackgroundOrAwait, que CAPTURA y no re-lanza — el throw de abajo
+    // solo queda en el log del servidor y el endpoint responde status:true
+    // igual. La honestidad hacia el usuario se garantiza ANTES, en
+    // /forgot-password vía GET /api/system/capabilities (sin RESEND_API_KEY
+    // la página ni muestra el formulario).
+    sendResetPassword: async ({ user, url }) => {
+      const key = process.env.RESEND_API_KEY;
+      if (!key) {
+        throw new Error(
+          'email_delivery_unavailable: RESEND_API_KEY no configurada — el reset de contraseña requiere email transaccional.',
+        );
+      }
+      const { Resend } = await import('resend');
+      const { fromAddress } = await import('@/lib/notifications/email/from-address');
+      const resend = new Resend(key);
+      const from = fromAddress();
+      const { error } = await resend.emails.send({
+        from,
+        to: user.email,
+        subject: 'Restablecer su contraseña — 1+1',
+        text:
+          `Hola${user.name ? ` ${user.name}` : ''},\n\n` +
+          `Recibimos una solicitud para restablecer su contraseña. ` +
+          `Abra este enlace para crear una nueva (válido por tiempo limitado):\n\n${url}\n\n` +
+          `Si usted no lo solicitó, ignore este correo — su contraseña no cambia.`,
+      });
+      if (error) {
+        throw new Error(`email_delivery_failed: ${error.message ?? 'resend_error'}`);
+      }
+    },
   },
 
   // -------------------------------------------------------------------------

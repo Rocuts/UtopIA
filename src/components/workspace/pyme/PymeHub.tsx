@@ -3,18 +3,20 @@
 /**
  * PymeHub — hub page for /workspace/pyme (Contabilidad Pyme).
  *
- * Implements the "1+1 · Contabilidad Pyme" handoff design:
- * - Hero with green gradient, dynamic greeting, KPI north-star
- * - Quick-access grid (6 cards; "Foto de factura" is primary/green)
- * - Semáforo de impuestos (progress toward IVA threshold)
- * - Two-column: upcoming payments (3 items) + "Consejo del día" tip card
+ * Diseño "1+1 · Contabilidad Pyme" del handoff, cableado a datos REALES:
+ * - Hero verde: nombre del libro + totales del mes (GET /api/pyme/summary)
+ * - Semáforo de impuestos: ingresos acumulados del año vs tope RST/IVA
+ *   (3.500 UVT) calculado con src/lib/tax/taxCalculator
+ * - "Lo que se viene": próximos vencimientos DIAN verificados
+ *   (GET /api/calendar/verified) — sin montos inventados
+ * - Quick-access grid (6 cards) hacia las subpáginas reales del área
  *
- * Language: plain Spanish ("en plata blanca, sin enredos").
- * Design accent: #357A28 (area-pyme). Tailwind v4 token classes.
+ * Sin libro → onboarding honesto. Lenguaje: "en plata blanca, sin enredos".
  */
 
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -22,10 +24,10 @@ import {
   Camera,
   Check,
   CreditCard,
-  FileText,
   Landmark,
   Lightbulb,
   Store,
+  TrendingDown,
   TrendingUp,
   Users,
   type LucideIcon,
@@ -33,7 +35,13 @@ import {
 import { useSyncExternalStore } from 'react';
 import { cn } from '@/lib/utils';
 import { formatPesosInteger } from '@/lib/format/cop';
+import { topeRST } from '@/lib/tax/taxCalculator';
 import { AreaFX } from '@/components/workspace/AreaFX';
+import {
+  usePymeBook,
+  usePymeDeadlines,
+  usePymeSummary,
+} from '@/components/workspace/pyme/usePymeData';
 
 // ---------------------------------------------------------------------------
 // Greeting hook (hydration-safe — SSR snapshot = 'morning')
@@ -74,30 +82,14 @@ const copM = (n: number) =>
     ? `$${(n / 1_000_000).toLocaleString('es-CO', { maximumFractionDigits: 0 })} M`
     : cop(n);
 
-// ---------------------------------------------------------------------------
-// Data (MOCK — replace with /api/pyme/summary when available)
-// ---------------------------------------------------------------------------
-
-const USER = {
-  displayName: 'Don Carlos',
-  businessName: 'Tienda La Esperanza',
-  city: 'Soacha, Cundinamarca',
-};
-
-const METRICS = {
-  profit: 435_000,
-  profitText: 'Cuatrocientos treinta y cinco mil pesos',
-  sold: 1_240_000,
-  bought: 805_000,
-  accumulatedSales: 98_000_000,
-  ivaThreshold: 183_000_000,
-};
-
-/** Fraction of IVA threshold reached (0–1). */
-const IVA_FRACTION = Math.min(METRICS.accumulatedSales / METRICS.ivaThreshold, 1);
+function fmtDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(d);
+}
 
 // ---------------------------------------------------------------------------
-// Quick-access cards
+// Quick-access cards (navegación real del área)
 // ---------------------------------------------------------------------------
 
 interface QuickCard {
@@ -149,55 +141,30 @@ const QUICK_CARDS: QuickCard[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Upcoming payments
-// ---------------------------------------------------------------------------
-
-interface Payment {
-  icon: LucideIcon;
-  label: string;
-  sub: string;
-  nit?: string;
-  amount: string;
-  iconColor: string;
-  iconBg: string;
-}
-
-const PAYMENTS: Payment[] = [
-  {
-    icon: Users,
-    label: 'Pago de empleados (salud y pensión)',
-    sub: 'Vence el 17 · en 9 días',
-    nit: '…7',
-    amount: '$1.180.000',
-    iconColor: '#C48A2E',
-    iconBg: 'rgb(196 138 46 / 0.14)',
-  },
-  {
-    icon: Landmark,
-    label: 'Avisarle al estado lo que vendió',
-    sub: 'Bimestre · en 24 días',
-    nit: '…7',
-    amount: '$0',
-    iconColor: '#357A28',
-    iconBg: 'color-mix(in srgb, #357A28 14%, transparent)',
-  },
-  {
-    icon: FileText,
-    label: 'Su pago como dueño (base 40%)',
-    sub: 'Vence el 17 · en 9 días',
-    amount: '$298.000',
-    iconColor: '#6B6354',
-    iconBg: 'rgb(107 99 84 / 0.12)',
-  },
-];
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function PymeHub() {
   const greetingSlot = useGreetingSlot();
   const greeting = GREETING[greetingSlot];
+
+  const now = new Date();
+  const { book, loading: bookLoading } = usePymeBook();
+  const { summary, loading: summaryLoading } = usePymeSummary(
+    book?.id ?? null,
+    now.getFullYear(),
+    now.getMonth() + 1,
+  );
+  const { upcoming, loading: deadlinesLoading } = usePymeDeadlines(now.getFullYear());
+
+  const totals = summary?.totals ?? null;
+  const tope = topeRST();
+  const ivaFraction = summary ? Math.min(summary.yearIngresos / tope, 1) : 0;
+  const semaforoLevel: 'verde' | 'amarillo' | 'rojo' =
+    ivaFraction >= 1 ? 'rojo' : ivaFraction >= 0.8 ? 'amarillo' : 'verde';
+
+  const nextDeadlines = upcoming.slice(0, 3);
+  const dataReady = !summaryLoading && summary !== null;
 
   return (
     <div className="@container relative isolate mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-8 md:py-10">
@@ -236,23 +203,32 @@ export function PymeHub() {
         <div className="relative flex flex-col gap-6 @lg:flex-row @lg:items-start @lg:justify-between">
           {/* Left: identity */}
           <div className="min-w-0">
-            {/* Eyebrow */}
             <div className="mb-3 inline-flex items-center gap-2">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/15">
                 <Store className="h-3.5 w-3.5 text-white" strokeWidth={1.75} />
               </span>
               <span className="text-xs font-medium uppercase tracking-widest text-white/75">
-                {greeting}, {USER.displayName}
+                {greeting}
               </span>
             </div>
 
-            {/* Business name */}
             <h1 className="font-serif-elite text-3xl font-medium leading-tight tracking-tight text-white @lg:text-4xl">
-              {USER.businessName}
+              {bookLoading ? '…' : book ? book.name : 'Su negocio'}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-white/75 max-w-sm">
-              {USER.city}. Aquí ve lo que vendió, lo que le queda y lo que se viene — en plata blanca, sin enredos ni palabras raras.
+              Aquí ve lo que vendió, lo que le queda y lo que se viene — en
+              plata blanca, sin enredos ni palabras raras.
             </p>
+
+            {!bookLoading && !book && (
+              <Link
+                href="/workspace/pyme/libros"
+                className="mt-5 inline-flex h-11 items-center gap-2 rounded-md bg-[#7BC95B] px-5 text-[15px] font-bold text-[#0a1f06] shadow-[0_10px_24px_-10px_rgb(123_201_91_/_0.6)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                Crear mi libro para empezar
+                <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </Link>
+            )}
           </div>
 
           {/* Right: north-star KPI */}
@@ -261,26 +237,34 @@ export function PymeHub() {
               Lo que le quedó este mes
             </div>
             <div className="font-mono text-4xl font-bold text-white tabular-nums @lg:text-5xl">
-              {cop(METRICS.profit)}
-            </div>
-            <div className="mt-1 text-xs text-white/65 italic">
-              {METRICS.profitText}
+              {dataReady && totals ? cop(totals.margen) : '—'}
             </div>
 
-            {/* Trend badge */}
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-xs font-medium text-white/85">
-              <TrendingUp className="h-3.5 w-3.5" strokeWidth={2} />
-              Le fue mejor que el mes pasado
-            </div>
+            {/* Trend badge — solo con comparativo real */}
+            {dataReady && totals && summary?.previous && (
+              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-xs font-medium text-white/85">
+                {totals.margen >= summary.previous.margen ? (
+                  <>
+                    <TrendingUp className="h-3.5 w-3.5" strokeWidth={2} />
+                    Le fue mejor que el mes pasado
+                  </>
+                ) : (
+                  <>
+                    <TrendingDown className="h-3.5 w-3.5" strokeWidth={2} />
+                    Le fue más duro que el mes pasado
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Sub KPIs */}
             <div className="mt-4 flex gap-5 @lg:justify-end">
               {(
                 [
-                  { label: 'Vendió', value: METRICS.sold, highlight: false },
-                  { label: 'Compró', value: METRICS.bought, highlight: false },
-                  { label: 'Le quedó', value: METRICS.profit, highlight: true },
-                ] satisfies { label: string; value: number; highlight: boolean }[]
+                  { label: 'Vendió', value: totals?.ingresos ?? null, highlight: false },
+                  { label: 'Compró', value: totals?.egresos ?? null, highlight: false },
+                  { label: 'Le quedó', value: totals?.margen ?? null, highlight: true },
+                ] satisfies { label: string; value: number | null; highlight: boolean }[]
               ).map((k) => (
                 <div key={k.label} className="text-center @lg:text-right">
                   <div
@@ -289,7 +273,7 @@ export function PymeHub() {
                       k.highlight ? 'text-white' : 'text-white/80',
                     )}
                   >
-                    {cop(k.value)}
+                    {dataReady && k.value !== null ? cop(k.value) : '—'}
                   </div>
                   <div className="text-xs text-white/55">{k.label}</div>
                 </div>
@@ -310,9 +294,12 @@ export function PymeHub() {
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-area-pyme">
             <span
               aria-hidden="true"
-              className="inline-block h-1.5 w-1.5 rounded-full bg-area-pyme animate-pulse"
+              className={cn(
+                'inline-block h-1.5 w-1.5 rounded-full bg-area-pyme',
+                dataReady && 'animate-pulse',
+              )}
             />
-            Sincronizado
+            {dataReady ? 'Sincronizado' : bookLoading || summaryLoading ? 'Cargando…' : 'Sin datos'}
           </span>
         </div>
 
@@ -393,105 +380,157 @@ export function PymeHub() {
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      {/* SEMÁFORO — impuesto / IVA threshold                              */}
+      {/* SEMÁFORO — ingresos acumulados vs tope RST/IVA (3.500 UVT)       */}
       {/* ---------------------------------------------------------------- */}
       <section className="mb-8">
         <h2 className="mb-4 font-mono text-xs uppercase tracking-widest font-medium text-n-600">
           ¿Cómo voy con los impuestos?
         </h2>
         <div className="rounded-xl border border-area-pyme/20 bg-area-pyme/[0.04] p-6">
-          {/* Lamp + text */}
-          <div className="flex items-start gap-4">
-            <span
-              aria-hidden="true"
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-area-pyme shadow-[0_0_22px_-4px_rgb(53_122_40_/_0.55)]"
-            >
-              <Check className="h-6 w-6 text-white" strokeWidth={2.5} />
-            </span>
-            <div>
-              <div className="text-lg font-semibold text-n-1000">
-                Va bien — todo en verde
+          {dataReady ? (
+            <>
+              {/* Lamp + text */}
+              <div className="flex items-start gap-4">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+                    semaforoLevel === 'verde' &&
+                      'bg-area-pyme shadow-[0_0_22px_-4px_rgb(53_122_40_/_0.55)]',
+                    semaforoLevel === 'amarillo' && 'bg-warning',
+                    semaforoLevel === 'rojo' && 'bg-danger',
+                  )}
+                >
+                  {semaforoLevel === 'verde' ? (
+                    <Check className="h-6 w-6 text-white" strokeWidth={2.5} />
+                  ) : (
+                    <AlertTriangle className="h-6 w-6 text-white" strokeWidth={2.25} />
+                  )}
+                </span>
+                <div>
+                  <div className="text-lg font-semibold text-n-1000">
+                    {semaforoLevel === 'verde'
+                      ? 'Va bien — todo en verde'
+                      : semaforoLevel === 'amarillo'
+                        ? 'Ojo — está cerca del tope'
+                        : 'Pasó el tope — toca revisar su régimen'}
+                  </div>
+                  <div className="mt-1 text-sm text-n-600">
+                    {semaforoLevel === 'verde'
+                      ? 'Todavía no llega al tope donde le empiezan a cobrar más. Tranquilo, le avisamos antes.'
+                      : semaforoLevel === 'amarillo'
+                        ? 'Pronto podría cambiar de régimen. Hablemos antes de que la DIAN lo haga por usted.'
+                        : 'Sus ventas del año superan el tope del Régimen Simple. Revise su régimen con un asesor.'}
+                  </div>
+                </div>
               </div>
-              <div className="mt-1 text-sm text-n-600">
-                Todavía no llega al tope donde le empiezan a cobrar más. Tranquilo, le avisamos antes.
+
+              {/* Progress track */}
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-n-100">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.round(ivaFraction * 100)}%`,
+                    background:
+                      semaforoLevel === 'verde'
+                        ? 'linear-gradient(90deg, #357A28, #7AA53B)'
+                        : semaforoLevel === 'amarillo'
+                          ? '#C48A2E'
+                          : '#A83838',
+                  }}
+                />
               </div>
+
+              {/* Scale labels */}
+              <div className="mt-2 flex justify-between text-xs text-n-500">
+                <span>Sus ventas del año: {copM(summary!.yearIngresos)}</span>
+                <span>Tope: {copM(tope)} (3.500 UVT)</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-4 text-sm text-n-600">
+              <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-n-100 text-n-500">
+                <Check className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
+              </span>
+              {bookLoading || summaryLoading
+                ? 'Calculando con sus movimientos…'
+                : 'Cuando registre sus primeras ventas, aquí le mostramos qué tan cerca está del tope de impuestos.'}
             </div>
-          </div>
-
-          {/* Progress track */}
-          <div className="mt-5 h-2 overflow-hidden rounded-full bg-n-100">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${Math.round(IVA_FRACTION * 100)}%`,
-                background: 'linear-gradient(90deg, #357A28, #7AA53B)',
-              }}
-            />
-          </div>
-
-          {/* Scale labels */}
-          <div className="mt-2 flex justify-between text-xs text-n-500">
-            <span>Sus ventas: {copM(METRICS.accumulatedSales)}</span>
-            <span>Tope: {copM(METRICS.ivaThreshold)} (oblg. IVA)</span>
-          </div>
+          )}
         </div>
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      {/* TWO-COLUMN: payments + tip                                       */}
+      {/* TWO-COLUMN: vencimientos reales + tip                            */}
       {/* ---------------------------------------------------------------- */}
       <section className="grid grid-cols-1 gap-6 @xl:grid-cols-[1.6fr_1fr] items-start">
-        {/* Upcoming payments */}
+        {/* Próximos vencimientos DIAN */}
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-mono text-xs uppercase tracking-widest font-medium text-n-600">
               Lo que se viene
             </h2>
-            <span className="text-xs text-n-500">{PAYMENTS.length} pagos próximos</span>
+            <span className="text-xs text-n-500">
+              {deadlinesLoading ? '…' : `${nextDeadlines.length} vencimientos próximos`}
+            </span>
           </div>
 
-          <div className="flex flex-col gap-3">
-            {PAYMENTS.map((p) => {
-              const Icon = p.icon;
-              return (
-                <div
-                  key={p.label}
-                  className="flex items-center gap-4 rounded-xl border border-n-200 bg-n-0 px-4 py-3.5"
-                >
-                  {/* Icon */}
-                  <span
-                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
-                    style={{ background: p.iconBg, color: p.iconColor }}
+          {deadlinesLoading ? (
+            <div className="flex flex-col gap-3" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-[72px] animate-pulse rounded-xl border border-n-200 bg-n-50" />
+              ))}
+            </div>
+          ) : nextDeadlines.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-n-300 bg-n-0 px-5 py-8 text-center text-sm text-n-600">
+              No pudimos cargar el calendario DIAN. Intente de nuevo en unos
+              minutos.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {nextDeadlines.map((p) => {
+                const urgent = p.daysUntil <= 15;
+                return (
+                  <Link
+                    key={`${p.obligation}-${p.period}`}
+                    href="/workspace/pyme/fechas"
+                    className="flex items-center gap-4 rounded-xl border border-n-200 bg-n-0 px-4 py-3.5 transition-colors hover:border-area-pyme/40"
                   >
-                    <Icon className="h-5 w-5" strokeWidth={1.75} />
-                  </span>
-
-                  {/* Meta */}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-n-1000 leading-snug">
-                      {p.label}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-n-600">
-                      <span>{p.sub}</span>
-                      {p.nit && (
-                        <span className="rounded-full bg-area-pyme/8 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-area-pyme">
-                          NIT {p.nit}
-                        </span>
+                    <span
+                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+                      style={{
+                        background: urgent ? 'rgb(196 138 46 / 0.14)' : 'color-mix(in srgb, #357A28 14%, transparent)',
+                        color: urgent ? '#C48A2E' : '#357A28',
+                      }}
+                    >
+                      {/(pila|seguridad)/i.test(p.obligation) ? (
+                        <Users className="h-5 w-5" strokeWidth={1.75} />
+                      ) : (
+                        <Landmark className="h-5 w-5" strokeWidth={1.75} />
                       )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-n-1000 leading-snug">
+                        {p.obligation}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-n-600">
+                        <span>
+                          {p.period} · vence el {fmtDay(p.dueDateMin)}
+                          {p.dueDateMax !== p.dueDateMin ? ' (según su NIT)' : ''}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Amount */}
-                  <span className="shrink-0 font-mono text-sm font-semibold text-n-1000 tabular-nums">
-                    {p.amount}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                    <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-n-700">
+                      {p.daysUntil <= 0 ? 'hoy' : `en ${p.daysUntil} días`}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Tip card */}
+        {/* Tip card — consejo general (no es dato del negocio) */}
         <div id="consejo">
           <h2 className="mb-4 font-mono text-xs uppercase tracking-widest font-medium text-n-600">
             Consejo del día

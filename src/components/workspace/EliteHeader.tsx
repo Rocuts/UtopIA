@@ -44,6 +44,7 @@ import { AreaNav } from './AreaNav';
 import { NiifEliteButton } from './NiifEliteButton';
 import { ThemeToggle } from './ThemeToggle';
 import { InsightInboxButton } from '@/components/notifications/InsightInboxButton';
+import { authClient } from '@/lib/auth/client';
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
 
@@ -211,13 +212,33 @@ function UserMenu() {
     };
   }, [open]);
 
-  const initials = 'YO'; // Placeholder — no auth yet.
+  // Sesión real BetterAuth. En fase 1 (auth no activada) no hay sesión y el
+  // menú ofrece "Iniciar sesión" en vez de un logout muerto.
+  const { data: session } = authClient.useSession();
+  const sessionUser = session?.user ?? null;
+
+  const initials = sessionUser?.name
+    ? sessionUser.name
+        .split(/\s+/)
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : 'YO';
+
+  const handleSignOut = async () => {
+    setOpen(false);
+    await authClient.signOut();
+    router.push('/login');
+  };
 
   const labels = {
     profile: language === 'es' ? 'Perfil' : 'Profile',
     settings: language === 'es' ? 'Configuración' : 'Settings',
     reports: language === 'es' ? 'Reportes guardados' : 'Saved reports',
     signOut: language === 'es' ? 'Cerrar sesión' : 'Sign out',
+    signIn: language === 'es' ? 'Iniciar sesión' : 'Sign in',
+    anonymous: language === 'es' ? 'Sesión anónima' : 'Anonymous session',
     menu: language === 'es' ? 'Menú de usuario' : 'User menu',
     lastReport: language === 'es' ? 'Último reporte' : 'Last report',
   };
@@ -306,38 +327,48 @@ function UserMenu() {
               <Settings className="w-3.5 h-3.5 text-n-500" />
               <span>{labels.settings}</span>
             </Link>
-            <button
-              role="menuitem"
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
-                'text-n-400 cursor-not-allowed opacity-70',
-              )}
-              title={language === 'es' ? 'Próximamente' : 'Coming soon'}
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              <span>{labels.profile}</span>
-            </button>
             <div
               className="my-1 mx-2 h-px bg-gold-500/18"
               aria-hidden="true"
             />
-            <button
-              role="menuitem"
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
-                'text-n-400 cursor-not-allowed opacity-70',
-              )}
-              title={language === 'es' ? 'Próximamente' : 'Coming soon'}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>{labels.signOut}</span>
-            </button>
+            {sessionUser ? (
+              <>
+                <div className="px-3 py-2 text-2xs text-n-600 truncate" aria-hidden="true">
+                  {sessionUser.email}
+                </div>
+                <button
+                  role="menuitem"
+                  type="button"
+                  onClick={handleSignOut}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
+                    'text-n-800 hover:bg-gold-500/8 transition-colors',
+                  )}
+                >
+                  <LogOut className="w-3.5 h-3.5 text-n-500" />
+                  <span>{labels.signOut}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="px-3 py-2 text-2xs text-n-600" aria-hidden="true">
+                  {labels.anonymous}
+                </div>
+                <Link
+                  href="/login"
+                  prefetch={false}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 text-xs',
+                    'text-n-800 hover:bg-gold-500/8 transition-colors',
+                  )}
+                >
+                  <UserIcon className="w-3.5 h-3.5 text-n-500" />
+                  <span>{labels.signIn}</span>
+                </Link>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

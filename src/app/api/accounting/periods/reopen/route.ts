@@ -15,8 +15,12 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { periodActionBodySchema } from '@/lib/validation/accounting-schemas';
 
 import { badRequestZod, errorResponse, ok } from '../../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let raw: unknown;
   try {
     raw = await req.json();
