@@ -49,9 +49,9 @@ export const auth = betterAuth({
         );
       }
       const { Resend } = await import('resend');
+      const { fromAddress } = await import('@/lib/notifications/email/from-address');
       const resend = new Resend(key);
-      const from =
-        process.env.NOTIFICATIONS_FROM_ADDRESS ?? 'UtopIA · 1+1 <noreply@utopia.systems>';
+      const from = fromAddress();
       const { error } = await resend.emails.send({
         from,
         to: user.email,

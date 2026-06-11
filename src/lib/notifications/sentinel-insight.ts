@@ -14,8 +14,6 @@ import { render } from '@react-email/components';
 import { InsightAlertEmail } from '@/emails/InsightAlertEmail';
 import type { Insight, SendInsightOptions, SendInsightResult } from './insight-types';
 
-const FROM_DEFAULT = 'UtopIA · 1+1 <noreply@utopia.systems>';
-const FROM_ENV_KEY = 'NOTIFICATIONS_FROM_ADDRESS';
 
 let resendInstance: { emails: { send: (input: unknown) => Promise<{ data?: { id?: string }; error?: { message?: string } | null }> } } | null = null;
 let resendInitTried = false;
@@ -74,7 +72,11 @@ export async function sendInsightAlert(
       }),
     );
     const subject = insight.subject;
-    const from = process.env[FROM_ENV_KEY] ?? FROM_DEFAULT;
+    // Remitente unificado (NOTIFICATIONS_FROM — mismo helper que el resto de
+    // emails transaccionales; antes este módulo leía NOTIFICATIONS_FROM_ADDRESS,
+    // una variable que no estaba documentada en .env.example).
+    const { fromAddress } = await import('@/lib/notifications/email/from-address');
+    const from = fromAddress();
 
     const { data, error } = await resend.emails.send({
       from,
