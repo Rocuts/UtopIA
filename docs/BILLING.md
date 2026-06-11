@@ -63,12 +63,15 @@ Route handlers → requirePlan('pro') (src/lib/billing/plan.ts) → 402 {error:'
 2. **Stripe Dashboard** (modo test primero):
    - Products → crear `Pro` (precio mensual; opcional anual) y `Enterprise`.
    - Copiar los `price_...` → `STRIPE_PRICE_ID_PRO` (+ `_PRO_ANNUAL`, `_ENTERPRISE`).
-   - Developers → Webhooks → endpoint `https://<dominio>/api/auth/stripe/webhook`
+   - Developers → Webhooks → endpoint
+     `https://utopia-delta-bay.vercel.app/api/auth/stripe/webhook`
      con eventos: `checkout.session.completed`, `customer.subscription.created`,
      `customer.subscription.updated`, `customer.subscription.deleted`.
    - Copiar `whsec_...` → `STRIPE_WEBHOOK_SECRET`.
-3. **Env vars** en Vercel + `.env.local`: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-   `STRIPE_PRICE_ID_PRO` (mínimo). Redeploy.
+3. **Env vars en Vercel** (TODAS las variables corren en producción —
+   `https://utopia-delta-bay.vercel.app`; no hay `.env.local`): añadir
+   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO` (mínimo)
+   en Settings → Environment Variables (o `vercel env add`). Redeploy.
 4. **Smoke test** (modo test de Stripe): settings → "Plan y facturación" →
    "Mejorar a Pro" → tarjeta `4242 4242 4242 4242` → volver → el panel muestra
    plan `Pro` y la fila existe en la tabla `subscription`.
