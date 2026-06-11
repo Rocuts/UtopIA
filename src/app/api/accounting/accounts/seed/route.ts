@@ -52,8 +52,10 @@ export async function POST() {
       );
     }
     console.error('[accounting/accounts/seed][POST]', err);
+    // Mensaje genérico al cliente: `err.message` de drizzle/pg incluye la
+    // query SQL completa — el detalle queda solo en el log del servidor.
     return NextResponse.json(
-      { ok: false, error: msg },
+      { ok: false, error: 'internal_error' },
       { status: 500 },
     );
   }

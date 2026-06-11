@@ -102,7 +102,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(
       {
         ok: false,
-        error: err instanceof Error ? err.message : 'internal_error',
+        error: 'internal_error',
       },
       { status: 500 },
     );

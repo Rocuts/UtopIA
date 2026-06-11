@@ -139,7 +139,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     }
     console.error('[pyme/books/[bookId]/export.xlsx]', err);
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : 'internal_error' },
+      { ok: false, error: 'internal_error' },
       { status: 500 },
     );
   }

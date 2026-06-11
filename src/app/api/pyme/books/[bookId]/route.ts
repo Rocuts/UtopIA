@@ -27,7 +27,7 @@ function handleError(err: unknown, tag: string): NextResponse {
   }
   console.error(tag, err);
   return NextResponse.json(
-    { ok: false, error: err instanceof Error ? err.message : 'internal_error' },
+    { ok: false, error: 'internal_error' },
     { status: 500 },
   );
 }

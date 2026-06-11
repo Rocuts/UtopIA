@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest) {
     }
     console.error('[pyme/entries/bulk][PATCH]', err);
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? (err as Error).message : 'internal_error' },
+      { ok: false, error: 'internal_error' },
       { status: 500 },
     );
   }
