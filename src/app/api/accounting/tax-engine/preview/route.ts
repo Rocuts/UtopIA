@@ -26,6 +26,7 @@ import {
   TAX_ERR,
 } from '@/lib/accounting/tax-engine';
 import { taxErrorResponse, taxBadRequestZod, taxOk } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // Zod schema del body (sin workspaceId — se inyecta desde cookie)
@@ -65,6 +66,9 @@ const previewBodySchema = z.object({
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   // Feature flag check — primero, para no desperdiciar recursos
   if (!isTaxEngineEnabled()) {
     return taxErrorResponse(

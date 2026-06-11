@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
 import { assertBookOwned, HttpError } from '../../../_lib/ownership';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // GET /api/pyme/books/[bookId]/export.xlsx
@@ -20,6 +21,9 @@ type RouteContext = { params: Promise<{ bookId: string }> };
 const CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();

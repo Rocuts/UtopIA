@@ -2,6 +2,7 @@ import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/notifications/repository';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // DELETE /api/notifications/subscriptions/[id]
@@ -15,6 +16,9 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const { id } = await params;
 
   if (!id) {

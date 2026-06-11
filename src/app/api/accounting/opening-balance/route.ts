@@ -37,6 +37,7 @@ import {
   type OpeningBalanceImport,
   type OpeningBalanceLine,
 } from '@/lib/accounting/opening-balance';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // Vercel Fluid Compute: explicit Node.js runtime + 120s ceiling. Esto es
 // computacion pura (sin LLMs); el limite alto cubre archivos con miles de
@@ -95,6 +96,9 @@ const jsonBodySchema = z.object({
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const workspace = await getOrCreateWorkspace();
     const contentType = req.headers.get('content-type') || '';

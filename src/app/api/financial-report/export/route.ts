@@ -19,6 +19,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { OutputOptionsToggle } from '@/lib/export/pdf-elite-react/types';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/export
@@ -41,6 +42,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 800;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
 

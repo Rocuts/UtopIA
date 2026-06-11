@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { createBankAccount, listBankAccounts } from '@/lib/accounting/banking';
 import { checkEnabled, bankingErrorResponse, badRequestZod, ok } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const createSchema = z.object({
   accountId: z.string().uuid({ message: 'accountId debe ser un UUID válido (chart_of_accounts.id)' }),
@@ -19,6 +20,9 @@ const createSchema = z.object({
 });
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 
@@ -32,6 +36,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 

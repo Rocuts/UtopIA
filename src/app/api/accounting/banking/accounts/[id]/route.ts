@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { getBankAccount, updateBankAccount, softDeleteBankAccount } from '@/lib/accounting/banking';
 import { checkEnabled, bankingErrorResponse, badRequestZod, ok } from '../../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const patchSchema = z.object({
   bankName: z.string().min(1).max(100).optional(),
@@ -23,6 +24,9 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 
@@ -43,6 +47,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 
@@ -71,6 +78,9 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const guard = checkEnabled();
   if (guard) return guard;
 

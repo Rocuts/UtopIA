@@ -4,6 +4,7 @@ import {
   seedPucForWorkspace,
   AccountConflictError,
 } from '@/lib/accounting/chart-of-accounts';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // POST /api/accounting/accounts/seed
@@ -23,6 +24,9 @@ import {
 export const maxDuration = 60;
 
 export async function POST() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const result = await seedPucForWorkspace(ws.id);

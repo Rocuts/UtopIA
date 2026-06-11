@@ -9,6 +9,7 @@ import {
   AccountNotFoundError,
 } from '@/lib/accounting/chart-of-accounts';
 import { updateAccountBodySchema } from '@/lib/validation/accounting-schemas';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/accounting/accounts/[id] — PATCH y DELETE.
@@ -30,6 +31,9 @@ interface RouteContext {
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {
@@ -54,6 +58,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const { id } = await ctx.params;

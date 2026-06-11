@@ -4,6 +4,7 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
 import { summaryQuerySchema } from '@/lib/validation/pyme-schemas';
 import { assertBookOwned, HttpError } from '../_lib/ownership';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // GET /api/pyme/summary?bookId=&year=&month=
@@ -16,6 +17,9 @@ import { assertBookOwned, HttpError } from '../_lib/ownership';
 // ---------------------------------------------------------------------------
 
 export async function GET(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const url = new URL(req.url);

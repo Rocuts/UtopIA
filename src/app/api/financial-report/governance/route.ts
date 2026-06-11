@@ -10,6 +10,7 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/governance (Wave 3.F1)
@@ -29,6 +30,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 800;
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = governancePhaseRequestSchema.safeParse(body);
