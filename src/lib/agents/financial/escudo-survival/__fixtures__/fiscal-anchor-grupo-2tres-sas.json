@@ -1,5 +1,13 @@
 {
   "__testCase": "Golden record — Grupo Empresarial 2 Tres SAS · NIT 901714014-6 · período 2025. Valores exactos del spec sección 5. F02 = round(F01 × 35 / 100) con redondeo bancario half-up. F04 = F02 − F03. F10 = round(F03/F02 × 100, 1 decimal). Validator L1+L2+L3 debe producir CERO errores y CERO warnings cuando se invoca con clase54Cents > 0 y markdownBlock correcto.",
+  "__authorized": {
+    "nit": "901714014-6",
+    "razonSocial": "Grupo Empresarial 2 Tres SAS",
+    "basis": "NIT registrado públicamente en el RUES (Registro Único Empresarial y Social) de Colombia — dato de dominio público equivalente al registro mercantil. Los valores financieros (F01–F10) son cifras hipotéticas definidas por el equipo en docs/spec/financial-pipeline-v2.1.md sección 5 para uso exclusivo como caso de prueba del validator Elite Protocol; no corresponden a estados financieros reales de la empresa.",
+    "specRef": "docs/spec/financial-pipeline-v2.1.md §5 — caso golden record",
+    "authorizedBy": "equipo UtopIA",
+    "purpose": "regression fixture — validator L1+L2+L3 golden path"
+  },
 
   "f01": "222849678973",
   "f02": "77997387641",

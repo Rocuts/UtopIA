@@ -45,6 +45,9 @@ Validator: `validators/fiscal-anchor-validators.ts` (L1 + L2 + L3 Elite Protocol
 ### Invariantes por fixture
 
 **grupo-2tres-sas (golden record)**
+
+> **Datos autorizados:** NIT 901714014-6 es un dato público del RUES (Registro Único Empresarial y Social). Los valores F01-F10 son cifras hipotéticas definidas por el spec §5 exclusivamente para pruebas; no son estados financieros reales. Ver campo `__authorized` en el JSON.
+
 - F02 = round(222849678973 × 35 / 100) = 77997387641 ✓
 - F04 = 77997387641 − 4607340776 = 73390046865 ✓
 - F10 = round(4607340776 / 77997387641 × 1000) / 10 = 5.9 ✓
