@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette,
@@ -34,17 +35,23 @@ type Density = 'confortable' | 'compacto';
 type Lang = 'es' | 'en';
 
 // ---------------------------------------------------------------------------
-// Data
+// Data — built inside component via useNavItems() to pick up i18n
 // ---------------------------------------------------------------------------
-const NAV_ITEMS: { id: Panel; label: string; icon: React.ReactNode }[] = [
-  { id: 'tema', label: 'Tema', icon: <Palette className="w-4 h-4" /> },
-  { id: 'densidad', label: 'Densidad', icon: <Rows3 className="w-4 h-4" /> },
-  { id: 'idioma', label: 'Idioma', icon: <Languages className="w-4 h-4" /> },
-  { id: 'integraciones', label: 'Integraciones', icon: <Plug className="w-4 h-4" /> },
-  { id: 'plan', label: 'Plan y facturación', icon: <CreditCard className="w-4 h-4" /> },
-  { id: 'seguridad', label: 'Seguridad', icon: <Shield className="w-4 h-4" /> },
-  { id: 'reset', label: 'Restablecer', icon: <RotateCcw className="w-4 h-4" /> },
-];
+type NavItem = { id: Panel; label: string; icon: React.ReactNode };
+
+function useNavItems(): NavItem[] {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
+  return [
+    { id: 'tema', label: s.navTema, icon: <Palette className="w-4 h-4" /> },
+    { id: 'densidad', label: s.navDensidad, icon: <Rows3 className="w-4 h-4" /> },
+    { id: 'idioma', label: s.navIdioma, icon: <Languages className="w-4 h-4" /> },
+    { id: 'integraciones', label: s.navIntegraciones, icon: <Plug className="w-4 h-4" /> },
+    { id: 'plan', label: s.navPlan, icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'seguridad', label: s.navSeguridad, icon: <Shield className="w-4 h-4" /> },
+    { id: 'reset', label: s.navReset, icon: <RotateCcw className="w-4 h-4" /> },
+  ];
+}
 
 const INTEGRATIONS = [
   { name: 'Siigo', abbr: 'SG', color: '#0E7C5A', desc: 'Facturación y contabilidad', connected: true },
@@ -186,10 +193,12 @@ function TemaPanel({
   theme: Theme;
   setTheme: (t: Theme) => void;
 }) {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   const options: { id: Theme; label: string; swatch: React.ReactNode }[] = [
     {
       id: 'claro',
-      label: 'Claro',
+      label: s.temaClaro,
       swatch: (
         <div className="flex h-16">
           <div className="flex-1" style={{ background: '#FCFBF8' }} />
@@ -199,7 +208,7 @@ function TemaPanel({
     },
     {
       id: 'sistema',
-      label: 'Sistema',
+      label: s.temaSistema,
       swatch: (
         <div
           className="h-16"
@@ -209,7 +218,7 @@ function TemaPanel({
     },
     {
       id: 'oscuro',
-      label: 'Oscuro · Elite',
+      label: s.temaOscuro,
       swatch: (
         <div className="flex h-16">
           <div className="flex-1" style={{ background: '#141210' }} />
@@ -221,8 +230,8 @@ function TemaPanel({
 
   return (
     <PanelCard>
-      <CardTitle>Tema</CardTitle>
-      <CardDesc>Claro es el tema principal. El oscuro permanece como modo elite.</CardDesc>
+      <CardTitle>{s.temaTitle}</CardTitle>
+      <CardDesc>{s.temaDesc}</CardDesc>
       <div className="grid grid-cols-3 gap-3 mt-4">
         {options.map((opt) => (
           <button
@@ -254,14 +263,16 @@ function DensidadPanel({
   density: Density;
   setDensity: (d: Density) => void;
 }) {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   return (
     <PanelCard>
-      <CardTitle>Densidad</CardTitle>
-      <CardDesc>Ajuste el espaciado de tablas y tarjetas.</CardDesc>
+      <CardTitle>{s.densidadTitle}</CardTitle>
+      <CardDesc>{s.densidadDesc}</CardDesc>
       <SegControl
         options={[
-          { value: 'confortable' as Density, label: 'Confortable' },
-          { value: 'compacto' as Density, label: 'Compacto' },
+          { value: 'confortable' as Density, label: s.densidadConfortable },
+          { value: 'compacto' as Density, label: s.densidadCompacto },
         ]}
         value={density}
         onChange={setDensity}
@@ -274,10 +285,12 @@ function DensidadPanel({
 // Panel: Idioma
 // ---------------------------------------------------------------------------
 function IdiomaPanel({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   return (
     <PanelCard>
-      <CardTitle>Idioma y formato</CardTitle>
-      <CardDesc>Interfaz bilingüe. Montos y fechas en formato colombiano.</CardDesc>
+      <CardTitle>{s.idiomaTitle}</CardTitle>
+      <CardDesc>{s.idiomaDesc}</CardDesc>
       <SegControl
         options={[
           {
@@ -285,16 +298,16 @@ function IdiomaPanel({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void
             label: (
               <>
                 {lang === 'es' && <Check className="w-3.5 h-3.5" />}
-                Español
+                {s.idiomaEs}
               </>
             ),
           },
-          { value: 'en' as Lang, label: 'English' },
+          { value: 'en' as Lang, label: s.idiomaEn },
         ]}
         value={lang}
         onChange={setLang}
       />
-      <SettingRow name="Formato de moneda" desc="COP · separador de miles con punto" first>
+      <SettingRow name={s.idiomaCurrencyLabel} desc={s.idiomaCurrencyDesc} first>
         <span className="font-mono text-sm text-n-700">$ 1.750.905</span>
       </SettingRow>
     </PanelCard>
@@ -305,14 +318,16 @@ function IdiomaPanel({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void
 // Panel: Integraciones
 // ---------------------------------------------------------------------------
 function IntegracionesPanel() {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   const [connected, setConnected] = useState<Record<string, boolean>>(
     Object.fromEntries(INTEGRATIONS.map((i) => [i.name, i.connected]))
   );
 
   return (
     <PanelCard>
-      <CardTitle>Integraciones</CardTitle>
-      <CardDesc>Conecte su ERP contable para sincronizar saldos y movimientos.</CardDesc>
+      <CardTitle>{s.integTitle}</CardTitle>
+      <CardDesc>{s.integDesc}</CardDesc>
       <div>
         {INTEGRATIONS.map((integ, idx) => (
           <div
@@ -334,13 +349,13 @@ function IntegracionesPanel() {
             </div>
             <div className="ml-auto">
               {connected[integ.name] ? (
-                <span className="text-xs font-semibold text-green-600">● Conectado</span>
+                <span className="text-xs font-semibold text-green-600">{s.integConnected}</span>
               ) : (
                 <button
                   onClick={() => setConnected((prev) => ({ ...prev, [integ.name]: true }))}
                   className="h-[34px] px-3.5 rounded-lg border border-n-300 bg-n-0 text-sm font-semibold text-n-800 hover:border-gold-500 hover:text-gold-700 transition-colors"
                 >
-                  Conectar
+                  {s.integConnect}
                 </button>
               )}
             </div>
@@ -377,6 +392,8 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 function PlanPanel() {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   const { data: session, isPending } = authClient.useSession();
   const [billingEnabled, setBillingEnabled] = useState<boolean | null>(null);
   const [subs, setSubs] = useState<SubscriptionInfo[] | null>(null);
@@ -431,7 +448,7 @@ function PlanPanel() {
     if (error) {
       setMessage({
         ok: false,
-        text: error.message ?? 'No se pudo iniciar el pago. Intente de nuevo.',
+        text: error.message ?? s.planCheckoutOpening,
       });
     }
   };
@@ -446,7 +463,7 @@ function PlanPanel() {
     if (error) {
       setMessage({
         ok: false,
-        text: error.message ?? 'No se pudo abrir el portal de facturación.',
+        text: error.message ?? s.planPortalOpening,
       });
     }
   };
@@ -455,8 +472,8 @@ function PlanPanel() {
   if (isPending || billingEnabled === null) {
     return (
       <PanelCard>
-        <CardTitle>Plan y facturación</CardTitle>
-        <CardDesc>Cargando estado de la suscripción…</CardDesc>
+        <CardTitle>{s.planTitle}</CardTitle>
+        <CardDesc>{s.planLoading}</CardDesc>
       </PanelCard>
     );
   }
@@ -465,21 +482,18 @@ function PlanPanel() {
   if (!session) {
     return (
       <PanelCard>
-        <CardTitle>Plan y facturación</CardTitle>
-        <CardDesc>Gestione el plan de su workspace.</CardDesc>
+        <CardTitle>{s.planTitle}</CardTitle>
+        <CardDesc>{s.planDesc}</CardDesc>
         <div className="flex items-start gap-3 rounded-lg border border-n-200 bg-n-0 px-4 py-4">
           <CreditCard className="w-5 h-5 text-n-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <div className="text-sm font-semibold text-n-900">Sesión anónima</div>
-            <p className="text-xs text-n-600 mt-1 leading-relaxed">
-              Para suscribirse a un plan necesita una cuenta. Inicie sesión y
-              vuelva a este panel.
-            </p>
+            <div className="text-sm font-semibold text-n-900">{s.planAnonymousTitle}</div>
+            <p className="text-xs text-n-600 mt-1 leading-relaxed">{s.planAnonymousDesc}</p>
             <a
               href="/login"
               className="mt-3 inline-flex h-9 items-center rounded-lg bg-gold-500 px-4 text-xs font-semibold text-white transition-colors hover:bg-gold-600"
             >
-              Iniciar sesión
+              {s.planLogin}
             </a>
           </div>
         </div>
@@ -491,18 +505,13 @@ function PlanPanel() {
   if (!billingEnabled) {
     return (
       <PanelCard>
-        <CardTitle>Plan y facturación</CardTitle>
-        <CardDesc>Gestione el plan de su workspace.</CardDesc>
+        <CardTitle>{s.planTitle}</CardTitle>
+        <CardDesc>{s.planDesc}</CardDesc>
         <div className="flex items-start gap-3 rounded-lg border border-n-200 bg-n-0 px-4 py-4">
           <CreditCard className="w-5 h-5 text-n-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <div className="text-sm font-semibold text-n-900">
-              Facturación no disponible
-            </div>
-            <p className="text-xs text-n-600 mt-1 leading-relaxed">
-              Este despliegue no tiene la pasarela de pagos configurada. Todas
-              las funciones están disponibles sin restricción.
-            </p>
+            <div className="text-sm font-semibold text-n-900">{s.planNotConfiguredTitle}</div>
+            <p className="text-xs text-n-600 mt-1 leading-relaxed">{s.planNotConfiguredDesc}</p>
           </div>
         </div>
       </PanelCard>
@@ -512,20 +521,18 @@ function PlanPanel() {
   // ── Billing activo ───────────────────────────────────────────────────────
   return (
     <PanelCard>
-      <CardTitle>Plan y facturación</CardTitle>
+      <CardTitle>{s.planTitle}</CardTitle>
       <CardDesc>
-        Plan actual:{' '}
+        {s.planCurrentPrefix}{' '}
         <span className="font-semibold text-n-900">
           {PLAN_LABELS[currentPlan] ?? currentPlan}
         </span>
-        {activeSub?.status === 'trialing' && ' (período de prueba)'}
+        {activeSub?.status === 'trialing' && ` ${s.planTrial}`}
       </CardDesc>
 
       {activeSub?.periodEnd && (
         <p className="text-xs text-n-600 mb-4">
-          {activeSub.cancelAtPeriodEnd
-            ? 'La suscripción finaliza el '
-            : 'Próxima renovación: '}
+          {activeSub.cancelAtPeriodEnd ? s.planCancelDate : s.planRenews}
           {new Date(activeSub.periodEnd).toLocaleDateString('es-CO', {
             day: 'numeric',
             month: 'long',
@@ -547,17 +554,13 @@ function PlanPanel() {
       )}
 
       {currentPlan !== 'pro' && currentPlan !== 'enterprise' && (
-        <SettingRow
-          name="Pro"
-          desc="Pipelines financieros y asesoría sin límites de cortesía. El precio se muestra en el checkout seguro de Stripe."
-          first
-        >
+        <SettingRow name="Pro" desc={s.planUpgradeProDesc} first>
           <button
             onClick={() => handleUpgrade('pro')}
             disabled={busy !== null || subs === null}
             className="h-[38px] px-4 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {busy === 'pro' ? 'Abriendo checkout…' : 'Mejorar a Pro'}
+            {busy === 'pro' ? s.planCheckoutOpening : s.planUpgradePro}
           </button>
         </SettingRow>
       )}
@@ -565,7 +568,7 @@ function PlanPanel() {
       {currentPlan !== 'enterprise' && (
         <SettingRow
           name="Enterprise"
-          desc="Para equipos contables y firmas. El precio se muestra en el checkout seguro de Stripe."
+          desc={s.planUpgradeEnterpriseDesc}
           first={currentPlan === 'pro'}
         >
           <button
@@ -573,22 +576,19 @@ function PlanPanel() {
             disabled={busy !== null || subs === null}
             className="h-[38px] px-4 rounded-lg border border-n-300 bg-n-0 text-sm font-semibold text-n-800 hover:border-gold-500 hover:text-gold-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {busy === 'enterprise' ? 'Abriendo checkout…' : 'Mejorar a Enterprise'}
+            {busy === 'enterprise' ? s.planCheckoutOpening : s.planUpgradeEnterprise}
           </button>
         </SettingRow>
       )}
 
       {activeSub && (
-        <SettingRow
-          name="Cancelar suscripción"
-          desc="Se gestiona en el portal seguro de Stripe. Mantiene acceso hasta el fin del período pagado."
-        >
+        <SettingRow name={s.planCancelSub} desc={s.planCancelSubDesc}>
           <button
             onClick={handleCancel}
             disabled={busy !== null}
             className="h-[38px] px-4 rounded-lg border border-red-700/40 bg-transparent text-red-500 font-semibold text-sm hover:bg-red-900/8 transition-colors disabled:opacity-60"
           >
-            {busy === 'cancel' ? 'Abriendo portal…' : 'Cancelar'}
+            {busy === 'cancel' ? s.planPortalOpening : s.planCancelBtn}
           </button>
         </SettingRow>
       )}
@@ -600,6 +600,8 @@ function PlanPanel() {
 // Panel: Seguridad
 // ---------------------------------------------------------------------------
 function SeguridadPanel() {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   const { data: session, isPending } = authClient.useSession();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -611,21 +613,18 @@ function SeguridadPanel() {
   if (!isPending && !session) {
     return (
       <PanelCard>
-        <CardTitle>Seguridad</CardTitle>
-        <CardDesc>Proteja el acceso a su información financiera.</CardDesc>
+        <CardTitle>{s.seguridadTitle}</CardTitle>
+        <CardDesc>{s.seguridadDesc}</CardDesc>
         <div className="flex items-start gap-3 rounded-lg border border-n-200 bg-n-0 px-4 py-4">
           <Monitor className="w-5 h-5 text-n-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <div className="text-sm font-semibold text-n-900">Sesión anónima</div>
-            <p className="text-xs text-n-600 mt-1 leading-relaxed">
-              Está usando la app sin cuenta. Cuando inicie sesión, aquí podrá
-              cambiar su contraseña y administrar sus sesiones activas.
-            </p>
+            <div className="text-sm font-semibold text-n-900">{s.seguridadAnonymousTitle}</div>
+            <p className="text-xs text-n-600 mt-1 leading-relaxed">{s.seguridadAnonymousDesc}</p>
             <a
               href="/login"
               className="mt-3 inline-flex h-9 items-center rounded-lg bg-gold-500 px-4 text-xs font-semibold text-white transition-colors hover:bg-gold-600"
             >
-              Iniciar sesión
+              {s.planLogin}
             </a>
           </div>
         </div>
@@ -644,12 +643,12 @@ function SeguridadPanel() {
     });
     setPwLoading(false);
     if (error) {
-      setPwMessage({ ok: false, text: error.message ?? 'No se pudo actualizar la contraseña.' });
+      setPwMessage({ ok: false, text: error.message ?? s.seguridadPasswordError });
       return;
     }
     setCurrentPassword('');
     setNewPassword('');
-    setPwMessage({ ok: true, text: 'Contraseña actualizada. Las demás sesiones fueron cerradas.' });
+    setPwMessage({ ok: true, text: s.seguridadPasswordOk });
   };
 
   const handleSignOut = async () => {
@@ -661,14 +660,14 @@ function SeguridadPanel() {
   return (
     <>
       <PanelCard>
-        <CardTitle>Seguridad</CardTitle>
+        <CardTitle>{s.seguridadTitle}</CardTitle>
         <CardDesc>
-          {session ? `Cuenta: ${session.user.email}` : 'Cargando sesión…'}
+          {session ? `Cuenta: ${session.user.email}` : s.planLoading}
         </CardDesc>
         <form onSubmit={handleChangePassword}>
           <div className="mb-4 max-w-[380px]">
             <label className="block text-xs font-semibold text-n-700 uppercase tracking-[.08em] mb-1.5">
-              Contraseña actual
+              {s.seguridadPasswordCurrent}
             </label>
             <input
               type="password"
@@ -681,7 +680,7 @@ function SeguridadPanel() {
           </div>
           <div className="mb-5 max-w-[380px]">
             <label className="block text-xs font-semibold text-n-700 uppercase tracking-[.08em] mb-1.5">
-              Nueva contraseña
+              {s.seguridadPasswordNew}
             </label>
             <input
               type="password"
@@ -709,13 +708,13 @@ function SeguridadPanel() {
             disabled={pwLoading || isPending}
             className="h-[42px] px-5 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {pwLoading ? 'Actualizando…' : 'Actualizar contraseña'}
+            {pwLoading ? s.seguridadPasswordUpdating : s.seguridadPasswordUpdate}
           </button>
         </form>
       </PanelCard>
 
       <PanelCard>
-        <h2 className="font-serif-elite text-lg font-medium text-n-1000 mb-1">Sesión actual</h2>
+        <h2 className="font-serif-elite text-lg font-medium text-n-1000 mb-1">{s.seguridadSession}</h2>
         <div className="flex items-center gap-3 py-3.5">
           <Monitor className="w-5 h-5 text-n-500 flex-shrink-0" />
           <div className="flex-1">
@@ -734,7 +733,7 @@ function SeguridadPanel() {
             disabled={signingOut}
             className="h-[30px] px-3 rounded-lg border border-n-300 bg-n-0 text-xs font-semibold text-n-800 hover:border-red-400 hover:text-red-500 transition-colors disabled:opacity-60"
           >
-            {signingOut ? 'Cerrando…' : 'Cerrar sesión'}
+            {signingOut ? s.seguridadSigningOut : s.seguridadSignOut}
           </button>
         </div>
       </PanelCard>
@@ -746,18 +745,20 @@ function SeguridadPanel() {
 // Panel: Restablecer
 // ---------------------------------------------------------------------------
 function ResetPanel() {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
   return (
     <PanelCard danger>
-      <CardTitle danger>Restablecer</CardTitle>
-      <CardDesc>Acciones irreversibles. Proceda con cuidado.</CardDesc>
-      <SettingRow name="Limpiar datos de demostración" desc="Elimina casos y cifras de ejemplo." first>
+      <CardTitle danger>{s.resetTitle}</CardTitle>
+      <CardDesc>{s.resetDesc}</CardDesc>
+      <SettingRow name={s.resetClearData} desc={s.resetClearDataDesc} first>
         <button className="h-[42px] px-4 rounded-lg border border-red-700/40 bg-transparent text-red-500 font-semibold text-sm hover:bg-red-900/8 transition-colors">
-          Limpiar datos
+          {s.resetClearBtn}
         </button>
       </SettingRow>
-      <SettingRow name="Restablecer workspace" desc="Vuelve la configuración a valores de fábrica.">
+      <SettingRow name={s.resetWorkspace} desc={s.resetWorkspaceDesc}>
         <button className="h-[42px] px-4 rounded-lg border border-red-700/40 bg-transparent text-red-500 font-semibold text-sm hover:bg-red-900/8 transition-colors">
-          Restablecer
+          {s.resetWorkspaceBtn}
         </button>
       </SettingRow>
     </PanelCard>
@@ -768,6 +769,9 @@ function ResetPanel() {
 // Page
 // ---------------------------------------------------------------------------
 export default function SettingsPage() {
+  const { t } = useLanguage();
+  const s = t.workspace.settings;
+  const navItems = useNavItems();
   const [activePanel, setActivePanel] = useState<Panel>('tema');
   const [theme, setTheme] = useState<Theme>('claro');
   const [density, setDensity] = useState<Density>('confortable');
@@ -787,18 +791,16 @@ export default function SettingsPage() {
           className="pb-6"
         >
           <h1 className="font-serif-elite font-medium text-[clamp(2rem,3.6vw,2.6rem)] leading-tight tracking-tight text-n-1000">
-            Configuración
+            {s.title}
           </h1>
-          <p className="text-sm text-n-600 mt-1.5">
-            Personalice su workspace — apariencia, idioma, integraciones y seguridad.
-          </p>
+          <p className="text-sm text-n-600 mt-1.5">{s.subtitle}</p>
         </motion.div>
 
         {/* Two-column grid */}
         <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-7 items-start pt-2">
           {/* Left nav */}
           <nav className="md:sticky md:top-[84px] flex flex-row md:flex-col gap-1 overflow-x-auto pb-2 md:pb-0">
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const isActive = activePanel === item.id;
               return (
                 <button
