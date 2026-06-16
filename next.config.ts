@@ -39,6 +39,8 @@ const nextConfig: NextConfig = {
   },
 
   allowedDevOrigins: ['localhost', '192.168.40.67'],
+  // CSP is set per-request with nonces in src/middleware.ts (replaces 'unsafe-inline').
+  // Static security headers that don't require per-request values stay here.
   async headers() {
     return [
       {
@@ -50,41 +52,6 @@ const nextConfig: NextConfig = {
           {
             key: 'Permissions-Policy',
             value: 'camera=(), geolocation=(), microphone=(self)',
-          },
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              // default-src restricted to self only — no http:/https: wildcards
-              "default-src 'self'",
-              // 'unsafe-inline' kept ONLY for Next.js inline bootstrap scripts (no nonce yet);
-              // 'unsafe-eval' is required by some dev/HMR paths but should be removed in prod.
-              process.env.NODE_ENV === 'production'
-                ? "script-src 'self' 'unsafe-inline'"
-                : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              // style-src must keep 'unsafe-inline' — Next.js + Tailwind inject inline styles.
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
-              "font-src 'self' data:",
-              [
-                "connect-src 'self'",
-                'https://api.openai.com',
-                'wss://api.openai.com',
-                'https://api.tavily.com',
-                'https://api.cohere.com',
-                'https://*.neon.tech',
-                'wss://*.neon.tech',
-                'https://*.public.blob.vercel-storage.com',
-                process.env.NODE_ENV === 'production' ? '' : 'http://192.168.40.67:*',
-                process.env.NODE_ENV === 'production' ? '' : 'ws://192.168.40.67:*',
-              ].filter(Boolean).join(' '),
-              "media-src 'self' blob:",
-              "worker-src 'self' blob:",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "object-src 'none'",
-              "upgrade-insecure-requests",
-            ].join('; '),
           },
         ],
       },
