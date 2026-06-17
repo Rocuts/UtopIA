@@ -23,6 +23,7 @@ import {
   usePymeDeadlines,
   type PymeDeadlineItem,
 } from '@/components/workspace/pyme/usePymeData';
+import { PymeNotificationsBanner } from '@/components/workspace/pyme/PymeNotificationsBanner';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,11 @@ export function MisFechasView() {
           <span><b className="text-[13px] text-white/40">●</b> Por venir</span>
         </div>
       </PymeGreenHero>
+
+      {/* Notificaciones push opt-in */}
+      <div className="mb-4">
+        <PymeNotificationsBanner />
+      </div>
 
       {/* Obligaciones */}
       <div className="mb-4 flex items-center justify-between">

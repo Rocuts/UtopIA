@@ -30,9 +30,12 @@ import {
   TrendingDown,
   TrendingUp,
   Users,
+  Wifi,
+  WifiOff,
   type LucideIcon,
 } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
+import { useSyncStatus } from '@/hooks/pyme/useSyncStatus';
 import { cn } from '@/lib/utils';
 import { formatPesosInteger } from '@/lib/format/cop';
 import { topeRST } from '@/lib/tax/taxCalculator';
@@ -138,6 +141,12 @@ const QUICK_CARDS: QuickCard[] = [
     desc: 'Un tip sencillo para cuidar su plata.',
     href: '#consejo',
   },
+  {
+    icon: TrendingUp,
+    label: 'Histórico',
+    desc: 'Compare los últimos 6 meses de ventas y gastos.',
+    href: '/workspace/pyme/historico',
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -165,6 +174,7 @@ export function PymeHub() {
 
   const nextDeadlines = upcoming.slice(0, 3);
   const dataReady = !summaryLoading && summary !== null;
+  const { isOnline, pending, syncing, label: syncLabel } = useSyncStatus();
 
   return (
     <div className="@container relative isolate mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-8 md:py-10">
@@ -177,14 +187,28 @@ export function PymeHub() {
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] bg-gradient-to-b from-area-pyme/[0.09] via-area-pyme/[0.04] to-transparent"
       />
 
-      {/* Back link */}
-      <Link
-        href="/workspace"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-n-600 hover:text-n-1000 transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-        Volver al Comando
-      </Link>
+      {/* Back link + sync chip */}
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <Link
+          href="/workspace"
+          className="inline-flex items-center gap-1.5 text-sm text-n-600 hover:text-n-1000 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+          Volver al Comando
+        </Link>
+        <div
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+          style={{
+            background: isOnline ? 'rgba(53,122,40,.1)' : 'rgba(50,50,80,.1)',
+            color: isOnline && pending === 0 && !syncing ? '#2A5E1F' : pending > 0 ? '#C48A2E' : '#2A5E1F',
+          }}
+        >
+          {isOnline
+            ? <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden />
+            : <WifiOff className="h-3 w-3" strokeWidth={2} aria-hidden />}
+          {syncLabel()}
+        </div>
+      </div>
 
       {/* ---------------------------------------------------------------- */}
       {/* HERO                                                              */}

@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { enqueueEntry } from '@/lib/pyme/localDB';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Camera,
@@ -99,6 +100,9 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
     if (file.size > MAX_FILE_SIZE) { goTo('err'); return; }
     if (!ALLOWED_MIME.test(file.type) && !file.type.startsWith('image/')) { goTo('err'); return; }
 
+    // Offline: skip upload, go straight to manual entry
+    if (!navigator.onLine) { setManualAmount(''); goTo('manual'); return; }
+
     goTo('reading');
 
     try {
@@ -152,6 +156,26 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
   };
 
   const formattedManual = '$' + parseInt(manualAmount || '0', 10).toLocaleString('es-CO');
+
+  const handleManualSave = useCallback(async () => {
+    const amount = parseInt(manualAmount || '0', 10);
+    if (!navigator.onLine && amount > 0) {
+      try {
+        await enqueueEntry({
+          bookId,
+          description: 'Entrada manual (guardada sin conexión)',
+          kind: 'egreso',
+          amount,
+          category: null,
+          entryDate: new Date().toISOString().split('T')[0],
+        });
+      } catch {
+        // best-effort; still advance to saved
+      }
+    }
+    goTo('saved');
+    onUploadsComplete?.();
+  }, [manualAmount, bookId, goTo, onUploadsComplete]);
 
   const reset = () => {
     setManualAmount('');
@@ -313,7 +337,7 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
               <Keypad onKey={handleManualKey} />
               <button
                 type="button"
-                onClick={() => goTo('saved')}
+                onClick={() => { void handleManualSave(); }}
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white bg-area-pyme transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#357A28]"
               >
                 <Check className="h-4 w-4" aria-hidden />
@@ -472,7 +496,7 @@ function ResultCard({
   return (
     <div
       className={cn('rounded-2xl p-6', center && 'text-center')}
-      style={{ background: 'var(--color-n-0, #fff)', border: '1px solid rgba(53,122,40,.18)' }}
+      style={{ background: 'var(--color-n-0, #fff)', border: error ? '1px solid rgba(168,56,56,.3)' : '1px solid rgba(53,122,40,.18)' }}
     >
       {children}
     </div>
