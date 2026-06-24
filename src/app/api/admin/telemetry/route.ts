@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { agentTelemetry } from '@/lib/db/schema';
+import { checkAdminToken } from '@/lib/security/admin-auth';
 
 export const maxDuration = 30;
 
@@ -37,17 +38,8 @@ function fmtUsdFromMicros(micros: number | null): string {
 }
 
 export async function GET(req: Request) {
-  const adminToken = process.env.UTOPIA_ADMIN_TOKEN;
-  if (!adminToken) {
-    return NextResponse.json(
-      { error: 'admin endpoint disabled: UTOPIA_ADMIN_TOKEN not configured' },
-      { status: 503 },
-    );
-  }
-  const provided = req.headers.get('x-admin-token');
-  if (provided !== adminToken) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = checkAdminToken(req);
+  if (denied) return denied;
 
   const url = new URL(req.url);
   const hoursParam = url.searchParams.get('hours');
