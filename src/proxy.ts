@@ -256,11 +256,62 @@ function isCsrfAllowlisted(pathname: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Content-Security-Policy (folded in from the former src/middleware.ts —
+// 2026-06). Next 16 allows exactly ONE proxy/middleware file, so the per-
+// request CSP nonce that used to live in middleware.ts now rides along here.
+// The nonce is injected into the REQUEST headers as `x-nonce` so the root
+// layout (src/app/layout.tsx) can read it via headers() and attach
+// nonce={...} to its inline <script> tags.
+// ---------------------------------------------------------------------------
+
+function buildCsp(nonce: string): string {
+  const isProd = process.env.NODE_ENV === 'production';
+
+  const connectSrc = [
+    "'self'",
+    'https://api.openai.com',
+    'wss://api.openai.com',
+    'https://api.tavily.com',
+    'https://api.cohere.com',
+    'https://*.neon.tech',
+    'wss://*.neon.tech',
+    'https://*.public.blob.vercel-storage.com',
+    ...(isProd ? [] : ['http://192.168.40.67:*', 'ws://192.168.40.67:*']),
+  ].join(' ');
+
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'${isProd ? '' : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    `connect-src ${connectSrc}`,
+    "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    'upgrade-insecure-requests',
+  ].join('; ');
+}
+
+// ---------------------------------------------------------------------------
 // Proxy entrypoint
 // ---------------------------------------------------------------------------
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // -------------------------------------------------------------------------
+  // CSP nonce — generated per request and injected into the request headers
+  // so the document layout can read it (see buildCsp note above). Applied to
+  // every non-static response below.
+  // -------------------------------------------------------------------------
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const csp = buildCsp(nonce);
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-nonce', nonce);
 
   // -------------------------------------------------------------------------
   // 0. Auth check (phase-gated — only active when BETTER_AUTH_SECRET is set).
@@ -278,8 +329,12 @@ export async function proxy(req: NextRequest) {
   }
 
   // Restrict remaining checks (CSRF, rate limit, headers) to /api/* only.
+  // Page routes still get the CSP header + the x-nonce request header so the
+  // root layout can render nonce'd inline scripts.
   if (!pathname.startsWith('/api/')) {
-    return NextResponse.next();
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    response.headers.set('Content-Security-Policy', csp);
+    return response;
   }
 
   // -------------------------------------------------------------------------
@@ -377,9 +432,10 @@ export async function proxy(req: NextRequest) {
   // -------------------------------------------------------------------------
   // 3. Security headers on the API response.
   // -------------------------------------------------------------------------
-  const response = NextResponse.next();
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Request-Id', crypto.randomUUID());
+  response.headers.set('Content-Security-Policy', csp);
 
   return response;
 }
