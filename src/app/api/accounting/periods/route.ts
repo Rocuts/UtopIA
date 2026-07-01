@@ -15,6 +15,7 @@ import { getDb } from '@/lib/db/client';
 import { accountingPeriods } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { createPeriodBodySchema } from '@/lib/validation/accounting-schemas';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 import {
   badRequestZod,
@@ -26,6 +27,8 @@ import {
 // ─── GET ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const url = new URL(req.url);
     const yearStr = url.searchParams.get('year');
@@ -58,6 +61,8 @@ export async function GET(req: Request) {
 // ─── POST ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   let raw: unknown;
   try {
     raw = await req.json();

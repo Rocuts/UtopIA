@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/uploads/[uploadId] — GET status del OCR.
@@ -32,6 +33,9 @@ type RouteContext = { params: Promise<{ uploadId: string }> };
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
   try {
+    const gate = await requireAuthSession();
+    if (!gate.ok) return gate.response;
+
     const { uploadId } = await ctx.params;
 
     const workspaceId = await getCurrentWorkspaceId();

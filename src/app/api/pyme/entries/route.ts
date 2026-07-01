@@ -8,6 +8,7 @@ import {
 } from '@/lib/validation/pyme-schemas';
 import { assertBookOwned, HttpError } from '../_lib/ownership';
 import type { PymeEntry } from '@/lib/db/schema';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/entries — listado y creacion manual.
@@ -41,6 +42,8 @@ function serializeEntry(e: PymeEntry): SerializedEntry {
 }
 
 export async function GET(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const ws = await getOrCreateWorkspace();
     const url = new URL(req.url);
@@ -69,6 +72,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {

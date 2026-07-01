@@ -5,6 +5,7 @@ import * as repo from '@/lib/db/pyme';
 import { patchEntryBodySchema } from '@/lib/validation/pyme-schemas';
 import { HttpError } from '../../_lib/ownership';
 import type { PymeEntry } from '@/lib/db/schema';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/entries/[entryId] — recurso individual.
@@ -39,6 +40,8 @@ function serializeEntry(e: PymeEntry): SerializedEntry {
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {
@@ -82,6 +85,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const { entryId } = await ctx.params;
     const ws = await getOrCreateWorkspace();

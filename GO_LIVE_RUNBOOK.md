@@ -2,7 +2,7 @@
 
 > **Fecha**: 2026-06-17 · **Rama**: `main` (production-ready ya mergeado, HEAD `2a59e6d`)
 > **Alcance**: software/servicios que faltan **activar o provisionar** para dejar UtopIA listo para producción.
-> **Estado de auth elegido por el operador**: **Fase 1 (anónima)** — la activación de Fase 2 queda documentada pero diferida.
+> **Estado de auth elegido por el operador**: **Fase 1 (anónima)** activa en prod. **Actualización 2026-06-30**: los prerequisitos de **CÓDIGO** de Fase 2 (§5.2) ya están implementados y verificados (tsc 0 · lint 0 · build 0) en la rama `fix/prod-hardening`. Falta solo la parte de **DB + Preview + flip** (§5.3 pasos 2-6), que requiere aprobación explícita. Prod sigue en Fase 1 (secret desarmado a propósito).
 > **Método**: contraste `process.env` (código) ↔ `vercel env ls` (prod) + verificación adversarial read-only contra el código real (8 agentes, sin mutaciones a prod). Complementa a [PRODUCTION_READY_REPORT.md](PRODUCTION_READY_REPORT.md) (que certifica el **código**); este documento cubre la **infraestructura/operación**.
 
 > **Convención de seguridad en este runbook**
@@ -25,9 +25,9 @@ Verificado con `vercel env ls` (proyecto `johan-rocuts-projects/utopia`):
 | **Blob** | ✅ `BLOB_READ_WRITE_TOKEN` + `BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`. |
 | **Crons** | ✅ 6 jobs declarados en [vercel.ts](vercel.ts) — se registran solos en el deploy de **producción** (no en preview). Protegidos por `CRON_SECRET` (presente). |
 | **Flags** | ✅ Los 7 `UTOPIA_ENABLE_*` + `UTOPIA_AGENT_MODE=orchestrated` + `UTOPIA_INTERNAL_SECRET` + `NOTIFICATIONS_FROM`. |
-| **Auth** | ⚪ **Fase 1 anónima** — `BETTER_AUTH_SECRET`/`URL` ausentes en TODOS los entornos (confirmado). Enforcement inactivo por diseño. |
+| **Auth** | ⚪ **Fase 1 anónima** activa. `BETTER_AUTH_URL` **ya está en Production** (2026-06-30). `BETTER_AUTH_SECRET` se cargó y luego se **desarmó a propósito** (`vercel env rm`) para no medio-activar Fase 2 en el próximo deploy antes de tener los prerequisitos. Prereqs de código de §5.2 → ✅ hechos. |
 
-**Gaps que el código lee pero NO están en prod:** `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `DB_HMAC_KEY`, `UTOPIA_VAULT_KEY`, `UTOPIA_ADMIN_TOKEN`, `RESEND_API_KEY`, `UPSTASH_*`, `COHERE_API_KEY`, `NEXT_PUBLIC_APP_URL`/`NEXTAUTH_URL`.
+**Gaps que el código lee pero NO están en prod:** `BETTER_AUTH_SECRET`, `UTOPIA_AUTH_ALLOWLIST` (allowlist beta cerrada — FAIL-CLOSED, ver §5.2/§5.3), `DB_HMAC_KEY`, `UTOPIA_VAULT_KEY`, `UTOPIA_ADMIN_TOKEN`, `RESEND_API_KEY`, `UPSTASH_*`, `COHERE_API_KEY`, `NEXT_PUBLIC_APP_URL`/`NEXTAUTH_URL`. (`BETTER_AUTH_URL` ya está en Production.)
 
 ---
 
@@ -138,7 +138,7 @@ printf %s 'co_xxx' | vercel env add COHERE_API_KEY production   # 🔴
 
 ## 5. Activación Fase 2 de autenticación (DIFERIDA — ⚠️ NO es solo infra)
 
-> La verificación adversarial encontró **3 blockers + 4 riesgos altos**. Esto **NO** es "setear secret + migrar". Requiere **cambios de código** y validación en preview **antes** de tocar producción. Validar tu decisión de quedarte en Fase 1 por ahora fue correcto.
+> La verificación adversarial encontró **3 blockers + 4 riesgos altos**. Esto **NO** es "setear secret + migrar". **Actualización 2026-06-30**: los 4 riesgos altos de código de §5.2 ya están **resueltos e implementados** (rama `fix/prod-hardening`, tsc/lint/build limpios). Quedan pendientes los **blockers de DB/ops** (§5.1 B1-B2) y el flip validado en Preview (§5.3 pasos 2-6). Nada de esto toca prod sin aprobación explícita.
 
 ### 5.1 Blockers que hay que resolver ANTES (varios son CÓDIGO, no env vars)
 
@@ -148,22 +148,23 @@ printf %s 'co_xxx' | vercel env add COHERE_API_KEY production   # 🔴
 | B2 | **No hay seed de admin.** Al setear el secret, toda ruta protegida exige sesión contra una tabla `user` vacía → nadie entra salvo por `/signup`. | `require-session.ts:30-56`; único `db:seed` es calendar | Validar `/signup` end-to-end en preview, o crear script de seed (no existe). Paso bloqueante: "crear ≥1 usuario y verificar login". |
 | B3 | **Falta `BETTER_AUTH_URL`** (ausente en todo entorno; fallback `localhost:3000`). Cookies emitidas para el host equivocado → login roto aunque haya usuario+tablas. | [config.ts:35](src/lib/auth/config.ts#L35) | Setear `BETTER_AUTH_URL=https://<DOMINIO-PROD>` en el **mismo paso** que el secret. Confirmar el dominio canónico real (el comentario cita `utopia.sequal.com.co` — verificar). |
 
-### 5.2 Riesgos altos a reconciliar
+### 5.2 Riesgos altos — ✅ RESUELTOS EN CÓDIGO (2026-06-30, rama `fix/prod-hardening`)
 
-- **`claimAnonymousWorkspace` es código muerto** (definido, nunca llamado → [workspace.ts:141](src/lib/agents/workspace.ts)). Al activar Fase 2, los workspaces anónimos (con `user_id NULL`) quedan **huérfanos** y cada login crea uno **nuevo vacío** → pérdida efectiva de acceso a datos pre-auth. **Decidir e implementar** el claim post-login (mapeo email→workspace) o comunicar la discontinuidad.
-- **`db:push` ciego a auth.** `schema.ts` NO re-exporta `schema-auth.ts` → un `db:push` futuro **DROPearía** las tablas de auth como drift; además `workspaces.user_id` está sin FK en schema pero 0013 la añade → drift permanente. **Prohibir `db:push` para siempre en prod** + re-exportar `schema-auth.ts` (ver §6.3).
-- **`PROTECTED_APIS` es un superconjunto.** El proxy gatea cookie en `/api/financial-report`, `/api/sentinel`, `/api/erp`, `/api/accounting`, `/api/pyme` aunque sus handlers NO llamen `requireAuthSession` → al activar Fase 2 puede romper tráfico server-to-server no exento. Reconciliar `PROTECTED_APIS` ↔ `AUTH_EXEMPT_APIS` antes.
-- **`trustedOrigins` no seteado** → los previews `*.vercel.app` no funcionarán para auth. `requireEmailVerification:false` + `/signup` abierto sin rate-limit específico → registro masivo posible. Añadir límite a `/api/auth` y decidir verificación de email (con Resend ya configurado).
+- ✅ **`claimAnonymousWorkspace` cableado.** Se añadió `databaseHooks.user.create.after` en [config.ts](src/lib/auth/config.ts) que lee la cookie `utopia_workspace_id` y llama `claimAnonymousWorkspace(user.id, cookieId)` al crear la cuenta → el workspace anónimo se **vincula** en vez de quedar huérfano. Best-effort: nunca bloquea el signup. (Cubre signup; un login de usuario ya-existente en un browser anónimo nuevo no dispara claim, pero su workspace real ya está ligado a su `user_id`, así que no hay pérdida.)
+- ✅ **`db:push` ya no está ciego a auth.** `schema.ts` ahora hace `export * from './schema-auth'` y `workspaces.userId` declara el FK `.references(() => authUsers.id, { onDelete: 'set null' })` alineado con 0013 → drizzle-kit ve las tablas de auth y no las trata como drift. **Aun así: PROHIBIDO `db:push`/`db:generate` contra prod** (snapshots incompletos; usar solo `db:migrate`).
+- ✅ **Los 5 grupos ya tienen gate real en handler.** Se añadió `const gate = await requireAuthSession(); if (!gate.ok) return gate.response;` a los **55 handlers** de `financial-report`(7) · `sentinel`(2) · `erp`(4) · `accounting`(31) · `pyme`(11). **`erp/webhook/[provider]` queda exento** (server-to-server con `X-Webhook-Token`). El gate es no-op en Fase 1, así que es seguro deployar ya.
+- ✅ **`trustedOrigins` añadido** en [config.ts](src/lib/auth/config.ts): confía en el origin de `BETTER_AUTH_URL` + previews `utopia-*.vercel.app` → login funciona en Preview.
+- ✅ **Modelo de acceso = beta cerrada / allowlist.** `databaseHooks.user.create.before` rechaza (`APIError FORBIDDEN`) cualquier email fuera de `UTOPIA_AUTH_ALLOWLIST` (CSV, case-insensitive). **FAIL-CLOSED**: si el env está vacío, **nadie** se registra. Esto controla el blast-radius de costo LLM en vez de dejar `/signup` abierto. (Verificación de email vía Resend queda opcional; con allowlist no es imprescindible.)
 
-### 5.3 Orden seguro corregido (cuando se decida activar)
-1. (código) Re-exportar `schema-auth.ts`; añadir `trustedOrigins`; reconciliar `PROTECTED_APIS`; resolver `claimAnonymousWorkspace`; rate-limit `/api/auth`.
-2. 🔴 **Prohibir `db:push`**. Backup/snapshot del **branch exacto** de prod (`neonctl branches create ...` o `pg_dump`).
-3. 🟢 Verificar estado real de `__drizzle_migrations` (B1). Aplicar 0013 (a mano si db:migrate lo saltaría). Verificar `to_regclass` de `user`+`session`.
-4. 🔴 Setear `BETTER_AUTH_SECRET` + `BETTER_AUTH_URL` **solo en Preview**; crear admin y verificar login.
-5. 🔴 Recién entonces activar en **Production** con rollback de 1 paso listo: `vercel env rm BETTER_AUTH_SECRET production` + redeploy (vuelve a Fase 1).
-6. 🟢 Smoke: `curl -s -o /dev/null -w '%{http_code}' https://<DOMINIO-PROD>/api/chat` sin cookie → **401** = Fase 2 activa.
+### 5.3 Orden seguro corregido (estado 2026-06-30)
+1. ✅ **(código) HECHO** — re-exportar `schema-auth.ts` + FK; `trustedOrigins`; gate real en los 55 handlers de los 5 grupos; `claimAnonymousWorkspace` cableado; modelo de acceso = allowlist. Verificado tsc 0 · lint 0 · build 0. **Falta desplegar** (inerte hasta el deploy).
+2. 🔴 **Prohibir `db:push`/`db:generate` contra prod.** Backup/snapshot del **branch exacto** de prod (`neonctl branches create ...` o `pg_dump`) como seguro de rollback.
+3. 🟢→🔴 Verificar estado real de `__drizzle_migrations` (B1). Aplicar 0013 (a mano `psql -1 -f src/lib/db/migrations/0013_auth_tables.sql` si `db:migrate` lo saltaría). Verificar `to_regclass('public."user"')` + `session` no-null.
+4. 🔴 Setear `UTOPIA_AUTH_ALLOWLIST` (incluir el email admin), `BETTER_AUTH_SECRET` + `BETTER_AUTH_URL` **solo en Preview**; registrar el admin (debe estar en el allowlist) y verificar login end-to-end.
+5. 🔴 Recién entonces activar en **Production**: re-poner `BETTER_AUTH_SECRET` + `UTOPIA_AUTH_ALLOWLIST` en prod (la `BETTER_AUTH_URL` ya está) + **redeploy**. Rollback de 1 paso: `vercel env rm BETTER_AUTH_SECRET production` + redeploy (vuelve a Fase 1).
+6. 🟢 Smoke: `curl -s -o /dev/null -w '%{http_code}' https://utopia-delta-bay.vercel.app/api/chat` sin cookie → **401** = Fase 2 activa.
 
-> Generar el secret: `openssl rand -base64 32` (o el ya generado en el Apéndice). `BETTER_AUTH_SECRET` no valida longitud — cualquier string no vacío activa el gate ([proxy.ts:10](src/proxy.ts#L10), [require-session.ts:30](src/lib/auth/require-session.ts#L30)).
+> `BETTER_AUTH_URL` canónico verificado = `https://utopia-delta-bay.vercel.app` (alias de prod real; `utopia.sequal.com.co` NO está configurado). Generar el secret: `openssl rand -base64 32`. `BETTER_AUTH_SECRET` no valida longitud — cualquier string no vacío activa el gate ([proxy.ts:10](src/proxy.ts#L10), [require-session.ts:30](src/lib/auth/require-session.ts#L30)). ⚠️ **`UTOPIA_AUTH_ALLOWLIST` es FAIL-CLOSED**: si está vacío, nadie se registra — setéalo (con tu email) en el MISMO paso que el secret.
 
 ---
 
@@ -208,7 +209,7 @@ printf %s '<ADMIN_TOKEN>'     | vercel env add UTOPIA_ADMIN_TOKEN production # s
    - `encryptedLookupValue` (`DB_HMAC_KEY`): `.trim()` + valida `Buffer.from(k,'base64').length===32` y lanza si no. Seguro — la clave no está seteada, así que no existen `nit_lookup` previos escritos con otra forma.
    - `getKey` (`DB_ENCRYPTION_KEY`): **NO muta** el valor (mutar rompería el descifrado de datos ya cifrados); solo `console.warn` una vez si detecta whitespace o que no decodifica a 32 bytes. Cierra el fallo silencioso de §6.1 sin riesgo.
 2. ✅ **`timingSafeEqual` en endpoints admin** (nuevo [admin-auth.ts](src/lib/security/admin-auth.ts) + telemetry + activity): comparación de tiempo constante en vez de `!==`, conservando el fail-closed 503/401.
-3. ⏸️ **`schema.ts` → re-exportar `schema-auth.ts`** — RETENIDO. No es un one-liner seguro: `workspaces.user_id` está declarado sin FK pero la migración 0013 lo añade → re-exportar en aislamiento introduciría drift que un `db:push`/`generate` querría "corregir". Requiere además declarar el FK en `userId` + regenerar el snapshot de drizzle. Va con los prerequisitos de Fase 2 (§5.2).
+3. ✅ **`schema.ts` → re-exportar `schema-auth.ts`** — HECHO (2026-06-30). Se añadió `export * from './schema-auth'` y el FK `workspaces.userId.references(() => authUsers.id, { onDelete: 'set null' })` alineado con 0013, junto con el resto de prerequisitos de §5.2. Regla operativa permanente: **nunca `db:push`/`db:generate` contra prod** (los snapshots de drizzle están incompletos; solo `db:migrate`).
 
 ---
 

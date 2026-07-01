@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/uploads/[uploadId]/image — proxy con ownership check.
@@ -26,6 +27,8 @@ type RouteContext = { params: Promise<{ uploadId: string }> };
 const NOT_FOUND = new Response('Not Found', { status: 404 });
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const { uploadId } = await ctx.params;
 

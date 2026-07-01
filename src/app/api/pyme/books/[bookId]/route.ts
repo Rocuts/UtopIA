@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
 import { assertBookOwned, HttpError } from '../../_lib/ownership';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/books/[bookId] — recurso individual.
@@ -39,6 +40,8 @@ const patchBookSchema = z.object({
 });
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();
@@ -50,6 +53,8 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();
@@ -69,6 +74,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();

@@ -16,10 +16,13 @@ import {
   badRequestZod,
   fixedAssetUpdateSchema,
 } from '../../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   if (!isAutoAdjustmentsEnabled()) return disabled503();
   try {
     const { id } = await ctx.params;
@@ -39,6 +42,8 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   if (!isAutoAdjustmentsEnabled()) return disabled503();
 
   let raw: unknown;
@@ -88,6 +93,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   if (!isAutoAdjustmentsEnabled()) return disabled503();
   try {
     const { id } = await ctx.params;

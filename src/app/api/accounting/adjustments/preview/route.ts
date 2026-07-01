@@ -12,8 +12,12 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { adjustmentsPort, isAutoAdjustmentsEnabled } from '@/lib/accounting/adjustments';
 import { errorResponse, ok, disabled503, badRequestZod, previewBodySchema } from '../_shared';
 import { getPeriod } from '@/lib/accounting/adjustments';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   if (!isAutoAdjustmentsEnabled()) return disabled503();
 
   let raw: unknown;

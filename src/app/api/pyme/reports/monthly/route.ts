@@ -6,6 +6,7 @@ import { reports } from '@/lib/db/schema';
 import { generateMonthlyReport } from '@/lib/agents/pyme/orchestrator';
 import { monthlyReportBodySchema } from '@/lib/validation/pyme-schemas';
 import { assertBookOwned, HttpError } from '../../_lib/ownership';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/reports/monthly — POST genera y persiste el reporte del mes.
@@ -24,6 +25,8 @@ export const maxDuration = 300;
 const MAX_JSON_BODY = 64 * 1024;
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {

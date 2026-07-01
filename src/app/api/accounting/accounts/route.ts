@@ -14,6 +14,7 @@ import {
   createAccountBodySchema,
   listAccountsQuerySchema,
 } from '@/lib/validation/accounting-schemas';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/accounting/accounts — colección PUC del workspace.
@@ -40,6 +41,8 @@ function asBool(v: string | undefined): boolean {
 
 export async function GET(req: NextRequest) {
   try {
+    const gate = await requireAuthSession();
+    if (!gate.ok) return gate.response;
     const ws = await getOrCreateWorkspace();
     const url = new URL(req.url);
     const params = Object.fromEntries(url.searchParams.entries());
@@ -72,6 +75,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const gate = await requireAuthSession();
+    if (!gate.ok) return gate.response;
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {
       return NextResponse.json(

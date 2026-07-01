@@ -19,6 +19,7 @@ import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { classifyError, formatErrorAsUserNote } from '@/lib/agents/financial/prompts/resilience-section0';
 import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // Schema inline para el flag `provisional` — opcional, no se reusa en otras
 // rutas. Si esta presente, ambos campos son obligatorios.
@@ -71,6 +72,8 @@ const adjustmentLedgerSchema = z
 export const maxDuration = 800; // 800s para acomodar gpt-5.5 medium con outputs 30-50K tokens (latencia medida ~24min en pipeline secuencial NIIF→Strategy→Governance)
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     const body = await req.json();
     const parsed = financialReportRequestSchema.safeParse(body);

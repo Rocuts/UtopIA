@@ -4,6 +4,7 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/db/pyme';
 import { processUpload } from '@/lib/agents/pyme/orchestrator';
 import { assertBookOwned, HttpError } from '../_lib/ownership';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/pyme/uploads — POST: ingesta una foto de cuaderno y dispara OCR async.
@@ -62,6 +63,8 @@ function validMagicBytes(buf: Buffer, mime: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   try {
     // Body size guard ANTES de leer el FormData. content-length es informativo
     // pero la mayoria de clientes legitimos lo envian; rechazamos abuso temprano

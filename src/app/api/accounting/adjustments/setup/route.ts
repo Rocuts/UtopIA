@@ -8,8 +8,11 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { isAutoAdjustmentsEnabled } from '@/lib/accounting/adjustments';
 import { seedProvisionsForWorkspace } from '@/lib/db/seeds/provisions-config-co-2026';
 import { errorResponse, ok, disabled503 } from '../_shared';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function POST() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
   if (!isAutoAdjustmentsEnabled()) return disabled503();
   try {
     const ws = await getOrCreateWorkspace();

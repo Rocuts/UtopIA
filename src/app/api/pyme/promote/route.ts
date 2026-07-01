@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { promoteEntries, isOcrPromoteEnabled } from '@/lib/agents/pyme/promote';
 import { DoubleEntryError } from '@/lib/accounting/types';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // POST /api/pyme/promote
@@ -32,6 +33,9 @@ const promoteBodySchema = z.object({
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   // ── Feature flag ─────────────────────────────────────────────────────────
   if (!isOcrPromoteEnabled()) {
     return NextResponse.json(

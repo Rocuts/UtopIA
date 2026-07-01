@@ -18,6 +18,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type { ProvisionalFlag } from '@/lib/agents/repair/types';
+import { authUsers } from './schema-auth';
 
 // MVP — schema mínimo funcional, sin auth.
 // Identificación de tenant via cookie httpOnly `utopia_workspace_id`.
@@ -47,8 +48,12 @@ export const workspaces = pgTable('workspaces', {
     .defaultNow(),
   // Auth link — null for anonymous (cookie-based) workspaces.
   // Set on first login via claimAnonymousWorkspace() or auto-created on signup.
-  // References "user".id (BetterAuth table in schema-auth.ts).
-  userId: text('user_id'),
+  // References "user".id (BetterAuth table in schema-auth.ts). FK created by
+  // migration 0013_auth_tables.sql (ON DELETE SET NULL) — declared here so
+  // drizzle-kit is aware of it and never proposes dropping it as drift.
+  userId: text('user_id').references(() => authUsers.id, {
+    onDelete: 'set null',
+  }),
 });
 
 // Vault server-side de credenciales ERP.
@@ -727,6 +732,11 @@ export * from './schema-adjustments';
 export * from './schema-notifications';
 export * from './schema-sentinel';
 export * from './schema-activity';
+// BetterAuth tables (user/session/account/verification). Re-exported so
+// drizzle-kit sees them via drizzle.config `schema: './schema.ts'` and does
+// NOT treat them as undeclared drift (a db:push/generate would otherwise emit
+// DROP TABLE for them). Managed by migration 0013_auth_tables.sql.
+export * from './schema-auth';
 
 // ─── ERP Account Mapping ─────────────────────────────────────────────────────
 //
