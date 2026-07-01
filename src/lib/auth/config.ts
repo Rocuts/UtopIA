@@ -53,7 +53,14 @@ export const auth = betterAuth({
   }),
 
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+  // Prod: explicit BETTER_AUTH_URL (canonical origin). Preview/dev: fall back to
+  // the deployment's own VERCEL_URL so session cookies are issued for the host
+  // the tester actually visits (no per-preview env fiddling). Local: localhost.
+  baseURL:
+    process.env.BETTER_AUTH_URL ??
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'),
 
   // Origins allowed to initiate auth flows. BetterAuth always trusts the
   // baseURL origin; we ADD Vercel preview deployments (utopia-*.vercel.app) so
