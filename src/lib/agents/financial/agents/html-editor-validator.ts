@@ -89,12 +89,15 @@ export function validateHtmlChecklist(
   // La lista proviene de §3 tabla "Verbos PROHIBIDOS" para LINEA_BASE.
   // Severity: warn — la semántica fina requiere revisión editorial humana.
   if (metadata.reportMode === 'LINEA_BASE') {
+    // Espeja la tabla §3 verbatim ("evolucionó", no el sustantivo "evolución"
+    // — el sustantivo es legítimo en frases prospectivas como "evolución
+    // esperada del siguiente cierre").
     const prohibitedVerbsLinea = [
       /\bmejoró\b/i,
       /\bcreció\b/i,
       /\baumentó\b/i,
       /\bse redujo\b/i,
-      /\bevolución\b/i,
+      /\bevolucionó\b/i,
       /\bvarió respecto a\b/i,
     ];
     for (const pattern of prohibitedVerbsLinea) {
@@ -194,15 +197,37 @@ export function validateHtmlChecklist(
 
   // ── Check 6 · §1.2 Cero $0 huérfanos sin nota ────────────────────────────
   //
-  // Busca el patrón "$0" o "$0,00" no seguido de una nota referencial "[i]" o
-  // footnote. best-effort: regex simple; no detecta todos los casos de layout.
+  // Busca el patrón "$0" o "$0,00" sin nota referencial. best-effort: regex
+  // + contexto de fila; no detecta todos los casos de layout.
   // Severity: block — §1.2 es regla inviolable del spec.
+  //
+  // Why contexto de fila y no solo lookahead: la spec §5 (P07/P08) MANDA
+  // renderizar ceros materiales en `var(--muted)` / italic con marcador
+  // `<sup class="n">†</sup>` que suele preceder a la cifra en la misma fila
+  // (la plantilla canónica §13 lo hace 19 veces). El lookahead-solo-después
+  // marcaba como huérfano todo $0 correctamente anotado → falso BLOCK en
+  // reportes visualmente correctos.
   const orphanZeroPattern = /\$0(?:[,.]00)?\b(?!\s*(?:\[i\]|<sup|footnote|nota|note))/gi;
-  const orphanZeroMatches = html.match(orphanZeroPattern);
-  if (orphanZeroMatches && orphanZeroMatches.length > 0) {
+  let orphanZeroCount = 0;
+  let ozMatch: RegExpExecArray | null;
+  while ((ozMatch = orphanZeroPattern.exec(html)) !== null) {
+    // §1.2 aplica a líneas de DATOS (celdas de tabla). Un "$0" en prosa
+    // narrativa ES la nota explicativa ("El capital social de $0 requiere
+    // documentación formal…") — no un cero huérfano.
+    const lastTdOpen = html.lastIndexOf('<td', ozMatch.index);
+    const lastTdClose = html.lastIndexOf('</td>', ozMatch.index);
+    const insideCell = lastTdOpen !== -1 && lastTdOpen > lastTdClose;
+    if (!insideCell) continue;
+    // Contexto: desde el inicio de la fila contenedora hasta el match.
+    const rowStart = Math.max(html.lastIndexOf('<tr', ozMatch.index), lastTdOpen, 0);
+    const context = html.slice(rowStart, ozMatch.index + ozMatch[0].length);
+    const isNoted = /var\(--muted\)|<sup class="n">|font-style:\s*italic|†/i.test(context);
+    if (!isNoted) orphanZeroCount++;
+  }
+  if (orphanZeroCount > 0) {
     failures.push({
       rule: '§1.2 · Check 6 — $0 huérfanos sin nota',
-      detail: `${orphanZeroMatches.length} ocurrencia(s) de "$0" sin nota referencial detectadas`,
+      detail: `${orphanZeroCount} ocurrencia(s) de "$0" sin nota referencial detectadas`,
       severity: 'block',
     });
   }
@@ -390,19 +415,32 @@ export function validateHtmlChecklist(
   //   funciona si É va precedida de espacio. Se usa lookbehind/lookahead
   //   negativos Unicode para detectar inicio/fin de palabra con cobertura
   //   de tildes.
+  //
+  // Why "Único"/"Mejor" solo capitalizados: la spec §1.6 prohíbe adjetivos
+  // de MARKETING. En prosa técnica española "único"/"mejor" minúsculas son
+  // legítimos ("dato único defensible" — spec §5 P07; "mejor estimación" —
+  // NIIF Pymes Sec. 21). El case-insensitive bloqueaba reportes que siguen
+  // la plantilla canónica §13 al pie de la letra.
+  //
+  // Why se escanea sin <style>/<script>/comments: los comentarios CSS de la
+  // plantilla §13 ("azul prusia — acento único") no son texto visible.
+  const visibleHtml = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ');
   const forbiddenWords: Array<{ pattern: RegExp; label: string }> = [
     { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[EÉeé]lite(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Élite' },
     { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])excelencia(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Excelencia' },
     { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])premium(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Premium' },
     { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])excepcional(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Excepcional' },
-    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[UÚuú]nico(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Único' },
-    { pattern: /\bmejor\b/i, label: 'Mejor' },
+    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[UÚ]nico(?![a-zA-ZÀ-ÖØ-öø-ÿ])/, label: 'Único' },
+    { pattern: /\bMejor\b/, label: 'Mejor' },
     { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[SsÓóOo]lido(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Sólido' },
     { pattern: /\brobusto\b/i, label: 'Robusto' },
     { pattern: /\bextraordinario\b/i, label: 'Extraordinario' },
   ];
   for (const { pattern, label } of forbiddenWords) {
-    const match = html.match(pattern);
+    const match = visibleHtml.match(pattern);
     if (match) {
       failures.push({
         rule: '§1.6 · Check 15 — vocabulario prohibido',
@@ -546,8 +584,10 @@ export function validateHtmlChecklist(
   //
   // Severity: warn — la spec v10.1 §4 exige 15 páginas A4 (Portada + TOC +
   // 02..14 = 15 articles). Contamos <article class="page">.
+  // Umbral = 15 exacto (Portada + TOC + páginas 02..14). El `< 14` anterior
+  // dejaba pasar silenciosamente reportes con una página faltante.
   const articles = document.querySelectorAll('article.page');
-  if (articles.length < 14) {
+  if (articles.length < 15) {
     failures.push({
       rule: '§4 · Check 22 — 15 páginas A4 portrait',
       detail: `Encontradas ${articles.length} páginas <article class="page">. Spec v10.1 exige 15 (Portada + TOC + 02..14).`,

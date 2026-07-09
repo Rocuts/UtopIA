@@ -41,7 +41,7 @@ Optional model overrides live in `src/lib/config/models.ts` (`OPENAI_MODEL_CHAT`
 
 **`docs/spec/financial-pipeline-v2.1.md`** is authoritative for the 1+1 financial pipeline (NIIF → Strategy → Governance) **and** for Parte IV (4 dictámenes especializados) + Parte V (Meta-auditoría 12 dims + sello de calidad). When a prompt or rule conflicts with it, the spec wins. Cite by Part/Section in commits and PRs. Wave 7 runbook: [docs/wave-notes/wave-7-parte-iv-v.md](docs/wave-notes/wave-7-parte-iv-v.md).
 
-**`docs/spec/financial-report-v8.1.md`** is authoritative for the Editor Jefe HTML 12-slide output.
+**`docs/spec/financial-report-v10.1.md`** is authoritative for the Editor Jefe HTML output (15-page editorial A4 template). It supersedes `financial-report-v8.1.md` (12 slides — deprecated).
 
 Every financial agent calls `callFinancialAgent({ agentName, model, schema, system, userContent, ...MODELS_CONFIG[slot] })` from `src/lib/agents/financial/agents/runtime.ts`. Returns `{ json, meta }` (Zod-validated + reasoning/cache telemetry). When a file calls `generateText` directly it is **legacy / pending migration**.
 
@@ -114,7 +114,7 @@ Run the `utopia-contrast-auditor` agent on any "no se ve / fantasma / muy claro 
 | Need | File |
 |---|---|
 | Pipeline + tools + RAG + security + state architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Authoritative specs (financial pipeline v2.1, report v8.1, zod strict mode) | [docs/spec/](docs/spec/) |
+| Authoritative specs (financial pipeline v2.1, report v10.1, zod strict mode) | [docs/spec/](docs/spec/) |
 | Wave notes (historical context + per-wave runbooks) | [docs/wave-notes/](docs/wave-notes/) |
 | AI SDK v6 migration contract | [docs/AI_SDK_MIGRATION.md](docs/AI_SDK_MIGRATION.md) |
 | Telemetry & observability | [docs/TELEMETRY.md](docs/TELEMETRY.md) |

@@ -62,9 +62,13 @@ const nextConfig: NextConfig = {
                 ? "script-src 'self' 'unsafe-inline'"
                 : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               // style-src must keep 'unsafe-inline' — Next.js + Tailwind inject inline styles.
-              "style-src 'self' 'unsafe-inline'",
+              // fonts.googleapis.com/gstatic.com: el reporte HTML v10.1 (spec §10) carga
+              // Source Serif 4 + Inter + IBM Plex Mono desde Google Fonts; el iframe srcDoc
+              // de HtmlReportViewer hereda esta CSP — sin estos orígenes el preview in-app
+              // renderiza con Georgia/system-ui (inconsistencia visual vs HTML descargado).
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: blob: https:",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://fonts.gstatic.com",
               [
                 "connect-src 'self'",
                 'https://api.openai.com',

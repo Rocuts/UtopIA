@@ -85,7 +85,7 @@ export function HtmlReportViewer({
           type="button"
           onClick={handleDownload}
           aria-label={language === 'es' ? 'Descargar HTML' : 'Download HTML'}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-600 transition-colors"
         >
           <Download className="w-3.5 h-3.5" />
           {language === 'es' ? 'Descargar HTML' : 'Download HTML'}

@@ -185,25 +185,41 @@ function lightweightChecklist(
     }
   }
 
-  // §1.6 vocabulario prohibido — case-insensitive, palabra completa. La lista
-  // está en el spec verbatim, pero la espejamos aquí para que el linter sea
-  // self-contained y no requiera parsear el spec cada vez.
+  // §1.6 vocabulario prohibido — palabra completa. La lista está en el spec
+  // verbatim, pero la espejamos aquí para que el linter sea self-contained y
+  // no requiera parsear el spec cada vez.
   //
-  // Tildes: regex `é` y `É` se manejan con flag /i. "Único" se cubre con la
-  // alternancia `Ú|U` para tolerar entradas sin tilde.
+  // Why lookbehind/lookahead en lugar de \b para É/Ú/Ó: `\b` en JavaScript
+  // solo reconoce [a-zA-Z0-9_] como word chars — `\bÉlite\b` NO matchea
+  // "Élite" precedida de espacio. Mismo patrón que el validador profundo
+  // (`html-editor-validator.ts` Check 15) para que ambos linters coincidan.
+  //
+  // Why "Único"/"Mejor" solo capitalizados: la spec §1.6 prohíbe adjetivos de
+  // MARKETING. En prosa técnica española "único"/"mejor" minúsculas son
+  // legítimos y hasta obligatorios ("dato único defensible" — spec §5 P07;
+  // "mejor estimación" — NIIF Pymes Sec. 21). El case-insensitive bloqueaba
+  // reportes canónicamente correctos.
+  //
+  // Why se escanea sobre visibleHtml (sin <style>/<script>/comments): los
+  // comentarios CSS de la plantilla maestra §13 contienen "acento único" —
+  // texto no visible para el lector que disparaba falsos BLOCK.
+  const visibleHtml = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ');
   const forbiddenWords: Array<{ pattern: RegExp; label: string }> = [
-    { pattern: /\b[ÉéEe]lite\b/, label: 'Élite' },
+    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[EÉeé]lite(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Élite' },
     { pattern: /\bExcelencia\b/i, label: 'Excelencia' },
     { pattern: /\bPremium\b/i, label: 'Premium' },
     { pattern: /\bExcepcional\b/i, label: 'Excepcional' },
-    { pattern: /\b[ÚUúu]nico\b/, label: 'Único' },
-    { pattern: /\bMejor\b/i, label: 'Mejor' },
-    { pattern: /\b[SsÓóOo]lido\b/, label: 'Sólido' },
+    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[ÚU]nico(?![a-zA-ZÀ-ÖØ-öø-ÿ])/, label: 'Único' },
+    { pattern: /\bMejor\b/, label: 'Mejor' },
+    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[SsÓóOo]lido(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Sólido' },
     { pattern: /\bRobusto\b/i, label: 'Robusto' },
     { pattern: /\bExtraordinario\b/i, label: 'Extraordinario' },
   ];
   for (const { pattern, label } of forbiddenWords) {
-    const match = html.match(pattern);
+    const match = visibleHtml.match(pattern);
     if (match) {
       failures.push({
         rule: '§1.6 vocabulario prohibido',
@@ -213,12 +229,12 @@ function lightweightChecklist(
     }
   }
 
-  // §5 Slide 12 — hash declarado coincide con metadata.reportHashSha256. El
+  // §5 Página 14 — hash declarado coincide con metadata.reportHashSha256. El
   // hash es un SHA-256 hex de 64 chars; si el LLM lo trunca o inventa, no
   // coincidirá con el helper determinístico.
   if (!html.includes(metadata.reportHashSha256)) {
     failures.push({
-      rule: '§5 Slide 12 — hash verificación',
+      rule: '§5 Página 14 — hash verificación',
       detail: `Hash SHA-256 ${metadata.reportHashSha256} no encontrado en HTML output`,
       severity: 'block',
     });
@@ -233,7 +249,7 @@ function lightweightChecklist(
   // (REPORT_MODE, ENTITY, AGENT_VERSION, REPORT_HASH_SHA256) son metadata
   // legítima y obligatoria. Solo escaneamos el cuerpo del HTML después de
   // strippar los comments para evitar falsos positivos en `AGENT_VERSION:
-  // 1+1 v8.1` que es valor canónico §10.
+  // 1+1 v10.1` que es valor canónico §10.
   const htmlSinComments = html.replace(/<!--[\s\S]*?-->/g, '');
   for (const { pattern, label, rule } of FORBIDDEN_METADATA_PATTERNS) {
     const match = htmlSinComments.match(pattern);
@@ -320,7 +336,11 @@ const FORBIDDEN_METADATA_PATTERNS: Array<{
     rule: '§v2.1 corrección 8 — etapas internas pipeline',
   },
   {
-    pattern: /\banchors?\b/i,
+    // Lookbehind (?<![\w-]) en lugar de \b: el atributo SVG `text-anchor`
+    // (obligatorio en el waterfall de la Página 05, spec §5) contiene la
+    // subcadena "anchor" precedida de guion — con \b cada reporte
+    // spec-compliant disparaba un falso BLOCK.
+    pattern: /(?<![\w-])anchors?\b/i,
     label: 'anchors',
     rule: '§v2.1 corrección 8 — variables internas del orchestrator',
   },
