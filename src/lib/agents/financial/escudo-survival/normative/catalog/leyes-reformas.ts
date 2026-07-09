@@ -47,7 +47,7 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
     cita: 'Ley 2010 de 2019',
     titulo: 'Ley de crecimiento económico — reemplaza Ley 1943/2018',
     resumen:
-      'Reemplazó la Ley 1943/2018 declarada inexequible. Ratificó la eliminación del periodo IVA anual (solo bimestral y cuatrimestral); estableció descuento 100% IVA activos fijos (Art. 258-1); mantuvo tarifa 33% renta PJ hasta 2021.',
+      'Reemplazó la Ley 1943/2018 declarada inexequible. Ratificó la eliminación del periodo IVA anual (solo bimestral y cuatrimestral); estableció descuento 100% IVA activos fijos (Art. 258-1); fijó la tarifa de renta PJ en descenso: 32% (2020), 31% (2021) y 30% proyectado desde 2022 — este último nunca aplicó porque la Ley 2155/2021 la elevó al 35% a partir de 2022.',
     articulosClave: ['Art. 258-1 E.T.', 'Art. 600 E.T.'],
     estado: 'VIGENTE_2026',
     sentenciaCorte: null,

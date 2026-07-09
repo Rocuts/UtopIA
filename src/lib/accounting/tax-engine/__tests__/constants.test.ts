@@ -11,7 +11,7 @@ import {
 } from '../constants';
 
 describe('Constantes UVT', () => {
-  it('UVT_2026_COP === 52374 (Resolución DIAN 000187/2025)', () => {
+  it('UVT_2026_COP === 52374 (Resolución DIAN 000238/2025)', () => {
     expect(UVT_2026_COP).toBe(52_374);
   });
 
@@ -19,8 +19,8 @@ describe('Constantes UVT', () => {
     expect(UVT_2025_COP).toBe(49_799);
   });
 
-  it('RTF_THRESHOLD_UVT === 4 (Art. 401 ET)', () => {
-    expect(RTF_THRESHOLD_UVT).toBe(4);
+  it('RTF_THRESHOLD_UVT === 2 (servicios — DUR 1.2.4.4.1, Decreto 0572/2025 vigente desde 01-jul-2026)', () => {
+    expect(RTF_THRESHOLD_UVT).toBe(2);
   });
 
   it('RTF_HONORARIOS_THRESHOLD_UVT === 0 (Art. 392 ET — desde el primer peso)', () => {

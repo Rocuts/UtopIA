@@ -4,8 +4,9 @@
  * Implementa los cálculos del Estatuto Tributario colombiano:
  * - Sanción por extemporaneidad (Art. 641 E.T.)
  * - Sanción por corrección (Art. 644 E.T.)
- * - Sanción por inexactitud (Art. 647 E.T.) con reducciones Arts. 640 y 709 E.T.
- * - Intereses moratorios (Arts. 634 y 635 E.T.) — INTERÉS COMPUESTO DIARIO.
+ * - Sanción por inexactitud (Art. 647 E.T.) con reducciones Arts. 640, 709 y 713 E.T.
+ * - Intereses moratorios (Arts. 634 y 635 E.T.) — INTERÉS SIMPLE liquidado día a día
+ *   (Art. 635 E.T. mod. Art. 279 Ley 1819/2016; Concepto DIAN 013463 de 2023).
  *
  * UVT 2026 = $52.374 COP (Resolución DIAN 000238 del 15-dic-2025).
  *
@@ -30,10 +31,10 @@ const DEFAULT_ANNUAL_RATE_EA = 25.44;
 
 export type InexactitudReduction =
   | 'none'            // Liquidación oficial firme — sanción plena 100%
-  | 'art_709_half'    // Art. 709 E.T.: reducción a la mitad por aceptación tras requerimiento especial
-  | 'art_709_quarter' // Art. 709 E.T.: reducción a un cuarto por aceptación antes de ampliación
-  | 'art_640_50'      // Art. 640 E.T.: reducción 50% por gradualidad (sin antecedentes 4 años)
-  | 'art_640_75';     // Art. 640 E.T.: reducción 75% por gradualidad (sin antecedentes 2 años)
+  | 'art_713_half'    // Art. 713 E.T.: reducción a la mitad por aceptación frente a la liquidación de revisión
+  | 'art_709_quarter' // Art. 709 E.T.: reducción a la cuarta parte por aceptación en respuesta al requerimiento especial
+  | 'art_640_50'      // Art. 640 E.T.: sanción reducida AL 50% por gradualidad (sin antecedentes 4 años)
+  | 'art_640_75';     // Art. 640 E.T.: sanción reducida AL 75% por gradualidad (sin antecedentes 2 años)
 
 export interface SanctionCalculation {
   type: 'extemporaneidad' | 'correccion' | 'inexactitud' | 'intereses_moratorios';
@@ -213,11 +214,13 @@ function calcCorreccion(params: SanctionCalculation): SanctionResult {
  * Base: 100% del mayor valor a pagar o menor saldo a favor.
  *
  * Reducciones aplicables (se aplican sobre la base del 100%):
- *   - Art. 709 E.T. (corrección provocada): mitad si se acepta en respuesta al
- *     requerimiento especial; un cuarto si se acepta antes de la ampliación.
- *   - Art. 640 E.T. (gradualidad): 50% o 75% si el contribuyente no tiene
- *     antecedentes sancionatorios del mismo tipo en los últimos 2 o 4 años
- *     respectivamente, según el caso.
+ *   - Art. 709 E.T.: a la CUARTA PARTE (25%) si se aceptan los hechos en
+ *     respuesta al requerimiento especial o su ampliación.
+ *   - Art. 713 E.T.: a la MITAD (50%) si se aceptan los hechos dentro del
+ *     término para recurrir la liquidación oficial de revisión.
+ *   - Art. 640 E.T. (gradualidad): la sanción se reduce AL 50% (sin
+ *     antecedentes del mismo tipo en 4 años) o AL 75% (sin antecedentes
+ *     en 2 años) cuando la impone la DIAN.
  *
  * Sanción mínima: 10 UVT (Art. 639 E.T.).
  */
@@ -229,11 +232,11 @@ function calcInexactitud(params: SanctionCalculation): SanctionResult {
 
   // Factor de reducción sobre la base del 100%
   const reductionMap: Record<InexactitudReduction, { factor: number; label: string; article: string }> = {
-    none:           { factor: 1.00, label: '100% (plena)',          article: 'Art. 647 E.T.' },
-    art_709_half:   { factor: 0.50, label: '50% (reducida)',        article: 'Art. 709 E.T.' },
-    art_709_quarter:{ factor: 0.25, label: '25% (reducida)',        article: 'Art. 709 E.T.' },
-    art_640_50:     { factor: 0.50, label: '50% por gradualidad',   article: 'Art. 640 E.T.' },
-    art_640_75:     { factor: 0.25, label: '25% por gradualidad',   article: 'Art. 640 E.T.' },
+    none:           { factor: 1.00, label: '100% (plena)',                 article: 'Art. 647 E.T.' },
+    art_713_half:   { factor: 0.50, label: '50% (reducida a la mitad)',    article: 'Art. 713 E.T.' },
+    art_709_quarter:{ factor: 0.25, label: '25% (reducida a la cuarta parte)', article: 'Art. 709 E.T.' },
+    art_640_50:     { factor: 0.50, label: 'reducida al 50% por gradualidad', article: 'Art. 640 E.T.' },
+    art_640_75:     { factor: 0.75, label: 'reducida al 75% por gradualidad', article: 'Art. 640 E.T.' },
   };
   const { factor, label, article } = reductionMap[inexactitudReduction];
 
@@ -259,12 +262,13 @@ function calcInexactitud(params: SanctionCalculation): SanctionResult {
     formula: amount === MIN_SANCTION
       ? `${formula} -> Ajustado a sanción mínima: ${formatCOP(MIN_SANCTION)}`
       : formula,
-    article: 'Art. 647 E.T. (con reducciones Arts. 640 y 709 E.T. cuando apliquen)',
+    article: 'Art. 647 E.T. (con reducciones Arts. 640, 709 y 713 E.T. cuando apliquen)',
     explanation,
     recommendations: [
       'Verifique si la inexactitud se origina en diferencias de criterio interpretativo — el parágrafo del Art. 647 E.T. puede eliminar la sanción en ese caso.',
-      'Evalúe Art. 709 E.T.: aceptación total de los hechos del requerimiento especial reduce la sanción a la mitad o a un cuarto según el momento.',
-      'Evalúe Art. 640 E.T.: sin antecedentes en 2/4 años aplica reducción adicional del 75%/50%.',
+      'Evalúe Art. 709 E.T.: aceptación de los hechos en respuesta al requerimiento especial reduce la sanción a la cuarta parte (25%).',
+      'Evalúe Art. 713 E.T.: aceptación frente a la liquidación oficial de revisión reduce la sanción a la mitad (50%).',
+      'Evalúe Art. 640 E.T.: sin antecedentes en 4/2 años la sanción impuesta por la DIAN se reduce al 50%/75%.',
       'Documente exhaustivamente las pruebas que sustentan la cifra declarada originalmente.',
       'Considere conciliación contencioso-administrativa (Art. 101 Ley 2277/2022) si hay litigio en curso.',
     ],
@@ -278,12 +282,14 @@ function calcInexactitud(params: SanctionCalculation): SanctionResult {
 }
 
 /**
- * Intereses moratorios — Arts. 634 y 635 E.T. (modificado por Ley 1819/2016).
+ * Intereses moratorios — Arts. 634 y 635 E.T.
  *
- * Fórmula correcta: INTERÉS DIARIO COMPUESTO sobre la tasa de usura -2 pp
- * vigente en el mes de la mora.
+ * Desde la modificación del Art. 635 E.T. por el Art. 279 de la Ley 1819/2016,
+ * el interés de mora tributario es SIMPLE: se liquida como la sumatoria de los
+ * intereses diarios causados a la tasa de usura vigente menos 2 puntos
+ * porcentuales, sin capitalización (fórmula DIAN, Concepto DIAN 013463 de 2023):
  *
- *   Interés = Principal × [ (1 + iEA)^(d/365) − 1 ]
+ *   Interés = Principal × iEA × d / 365
  *
  * donde:
  *   iEA = (tasa de usura vigente − 2 pp) / 100, expresada como efectiva anual.
@@ -302,19 +308,19 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
   } = params;
 
   const iEA = annualRate / 100;
-  // Interés compuesto diario: (1 + iEA)^(d/365) - 1
-  const factor = Math.pow(1 + iEA, days / 365) - 1;
+  // Interés simple diario: iEA × d / 365 (sin capitalización — Art. 635 E.T.)
+  const factor = (iEA * days) / 365;
   const amount = Math.round(principal * factor);
-  const dailyEquivalent = (Math.pow(1 + iEA, 1 / 365) - 1) * 100;
+  const dailyRate = (iEA / 365) * 100;
 
   const formula =
-    `${formatCOP(principal)} × [ (1 + ${annualRate}%)^(${days}/365) − 1 ] = ${formatCOP(amount)}`;
+    `${formatCOP(principal)} × ${annualRate}% × ${days} / 365 = ${formatCOP(amount)}`;
 
   const explanation =
-    `Los intereses moratorios se calculan con INTERÉS DIARIO COMPUESTO (Art. 635 E.T.) ` +
-    `sobre un capital de ${formatCOP(principal)}, a una tasa efectiva anual del ${annualRate}% ` +
-    `(= tasa de usura vigente del período − 2 puntos porcentuales). Tasa diaria equivalente: ` +
-    `${dailyEquivalent.toFixed(6)}%. Por ${days} días de mora, el factor acumulado es ` +
+    `Los intereses moratorios se liquidan con INTERÉS SIMPLE diario (Art. 635 E.T. ` +
+    `mod. Ley 1819/2016) sobre un capital de ${formatCOP(principal)}, a una tasa efectiva ` +
+    `anual del ${annualRate}% (= tasa de usura vigente del período − 2 puntos porcentuales). ` +
+    `Tasa diaria: ${dailyRate.toFixed(6)}%. Por ${days} días de mora, el factor acumulado es ` +
     `${(factor * 100).toFixed(4)}%, resultando en ${formatCOP(amount)}.`;
 
   return {
@@ -322,10 +328,10 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
     amount,
     amountFormatted: formatCOP(amount),
     formula,
-    article: 'Arts. 634 y 635 E.T. (interés diario compuesto)',
+    article: 'Arts. 634 y 635 E.T. (interés simple diario, mod. Ley 1819/2016)',
     explanation,
     recommendations: [
-      'Los intereses moratorios se causan día a día de forma compuesta. Pague lo antes posible para minimizar.',
+      'Los intereses moratorios se causan día a día SIN capitalización (interés simple). Pague lo antes posible para minimizar.',
       'La tasa aplicable es la tasa de usura vigente del mes de mora MENOS 2 puntos porcentuales (Art. 635 E.T. mod. Ley 1819/2016). Consulte la certificación mensual de la Superfinanciera.',
       'Si la mora abarca varios meses, aplique la tasa vigente de cada mes por separado — esta función asume una única tasa.',
       'Considere facilidades de pago (Art. 814 E.T.) si el monto total es significativo.',
@@ -334,9 +340,9 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
     details: {
       principal,
       annualRate,
-      dailyEquivalentPct: Number(dailyEquivalent.toFixed(6)),
+      dailyRatePct: Number(dailyRate.toFixed(6)),
       days,
-      compoundFactorPct: Number((factor * 100).toFixed(4)),
+      simpleFactorPct: Number((factor * 100).toFixed(4)),
     },
   };
 }

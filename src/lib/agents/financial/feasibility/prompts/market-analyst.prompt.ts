@@ -26,7 +26,7 @@ ALWAYS clasifica el proyecto en CIIU Rev. 4 A.C. (DANE) — si no es claro, da l
 
   const context2026 = `Marco Colombia 2026:
 - Clasificacion MIPYME (Ley 590/2000, Ley 905/2004): Micro <= 500 SMMLV ($711.750.000), Pequena 501-5.000 SMMLV, Mediana 5.001-30.000 SMMLV.
-  SMMLV 2026 = $1.423.500 COP.
+  SMMLV 2026 = $1.750.905 COP.
 - Formalizacion: Camara de Comercio (Registro Mercantil), RUT (DIAN), VUE.
 - Ley 2069/2020 (Ley de Emprendimiento): simplificacion de tramites, SAS simplificada.
 - 5 Fuerzas de Porter como marco de competencia.

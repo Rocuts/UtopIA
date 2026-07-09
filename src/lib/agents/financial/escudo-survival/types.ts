@@ -19,7 +19,9 @@ export type Language = 'es' | 'en';
 export const UVT_2026 = 52374;
 export const TOPE_INDIVIDUAL_UVT = 100; // Art. 771-5 §2 — pago efectivo a un mismo NIT
 export const TOPE_GENERAL_UVT = 40000; // Art. 771-5 §1 — tope efectivo agregado
-export const TET_ALERTA_AMARILLA = 0.25;
+// Umbrales de alerta TET — alineados con tet-calculator.prompt.ts:
+// verde < 20%; amarillo 20-30%; rojo > 30%.
+export const TET_ALERTA_AMARILLA = 0.2;
 export const TET_ALERTA_ROJA = 0.3;
 
 // ---------------------------------------------------------------------------

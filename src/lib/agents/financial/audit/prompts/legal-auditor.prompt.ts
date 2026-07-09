@@ -36,7 +36,7 @@ export function buildLegalAuditorPrompt(company: CompanyInfo, language: 'es' | '
   // pasos procedurales). El modelo selecciona la regla aplicable al evaluar.
   const tipoSocietarioRules: string[] = [];
   if (isSAS) {
-    tipoSocietarioRules.push('- SAS: convocatoria segun estatutos o Art. 20 Ley 1258/2008. Quorum supletorio: pluralidad con mayoria absoluta (Art. 22 Ley 1258/2008). Reserva legal 10% bajo Art. 40 Ley 1258/2008 (remision Art. 452 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV.');
+    tipoSocietarioRules.push('- SAS: convocatoria segun estatutos o Art. 20 Ley 1258/2008. Quorum supletorio: pluralidad con mayoria absoluta (Art. 22 Ley 1258/2008). Reserva legal 10% por remision del Art. 45 Ley 1258/2008 al regimen de la S.A. (Art. 452 C.Co.). Revisor fiscal obligatorio si ingresos>3.000 SMMLV o activos>5.000 SMMLV.');
   }
   if (isSA) {
     tipoSocietarioRules.push('- S.A.: convocatoria con 15 dias habiles de antelacion (Art. 424 C.Co.). Quorum: mayoria de acciones suscritas (Art. 427 C.Co.). Reserva legal 10% bajo Art. 452 C.Co. Dividendos minimo 50% si reservas>=capital (Art. 155 C.Co. con mayoria 78%). Revisor fiscal SIEMPRE obligatorio (Art. 203 C.Co.).');
@@ -83,7 +83,7 @@ ${tipoSocietarioRules.join('\n')}
   10. obligation="Matricula mercantil" — reference="Art. 19 C.Co."
   11. obligation="Revisor Fiscal" — reference="Art. 203 C.Co. / Ley 43/1990 Art. 13"
   12. obligation="RL en Camara" — reference="Art. 442 C.Co."
-  13. obligation="Beneficiario Final UIAF" — reference="Resolucion 164/2021 UIAF"
+  13. obligation="Registro Unico de Beneficiarios Finales (RUB)" — reference="Resolucion DIAN 000164/2021 (Arts. 631-5 y 631-6 E.T., Ley 2155/2021)"
   14. obligation="RUT/CIIU" — reference="Art. 555-2 E.T. / Resolucion DIAN 000114/2020"
   status por entrada: 'cumplido' si la evidencia es suficiente; 'parcial' si hay evidencia parcial o ambigua; 'incumplido' si la evidencia confirma incumplimiento; 'no_aplica' si la obligacion no aplica al tipo societario (ej. SAS unipersonal sin asamblea).
 - patrimonyDistribution: calcula utilidadNetaCop a partir del reporte, montoReserva10pctCop = 10% sobre utilidadNetaCop si reservaLegalObligatoria=true (Art. 452 C.Co.), utilidadDisponibleCop = utilidadNetaCop - montoReserva10pctCop. Las cifras viajan en centavos COP como string (MoneyCop). impuestoDividendosComment SIEMPRE menciona Art. 242 E.T. (retencion 10% dividendos gravados).

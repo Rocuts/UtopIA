@@ -11,14 +11,14 @@ import type { SanctionEntry } from '../types';
 export const SANCIONES: readonly SanctionEntry[] = [
   {
     id: 'SANCION_EXTEMPORANEIDAD_ART641',
-    normaRef: 'Art. 641 E.T.',
+    normaRef: 'Art. 641 E.T. / Art. 642 E.T.',
     nombre: 'Sanción por extemporaneidad',
     supuesto:
       'Presentación de declaración tributaria fuera del plazo legal. Aplica por mes o fracción de mes de retardo.',
     tarifa:
-      '5% mensual del impuesto a cargo antes de emplazamiento; 10% mensual después de emplazamiento.',
+      '5% mensual del impuesto a cargo antes de emplazamiento (Art. 641); 10% mensual después de emplazamiento o auto de inspección tributaria (Art. 642).',
     tope:
-      '100% del impuesto a cargo. Sin impuesto a cargo: 0.5% sobre ingresos brutos (tope 5%) o 1% sobre patrimonio líquido (tope 2.500 UVT = $130.935.000 COP 2026).',
+      'Antes de emplazamiento: 100% del impuesto a cargo (Art. 641). Después de emplazamiento: 200% del impuesto o retención a cargo (Art. 642). Sin impuesto a cargo: 0.5% sobre ingresos brutos (tope 5%) o 1% sobre patrimonio líquido (tope 2.500 UVT = $130.935.000 COP 2026); post-emplazamiento estos porcentajes se duplican (1% mensual, topes 10% / 5.000 UVT).',
     reducciones: [
       {
         momento: 'Corrección voluntaria antes de emplazamiento',

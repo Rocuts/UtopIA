@@ -56,10 +56,10 @@ If hay ambigüedad normativa entonces explica las dos posiciones disponibles, id
 If un dato del balance no permite calcular un campo numérico entonces emite el campo como cadena "0" (en MoneyCop) y agrega un warning explicativo en lugar de inventar el valor.`;
 
   const constantes = `CONSTANTES OPERATIVAS 2026:
-UVT 2026 = $${new Intl.NumberFormat('es-CO').format(UVT_2026_COP)} COP (Resolución DIAN 000187/2025).
+UVT 2026 = $${new Intl.NumberFormat('es-CO').format(UVT_2026_COP)} COP (Resolución DIAN 000238 del 15-dic-2025).
 Tarifa general renta PJ = 35% (Art. 240 E.T.).
 TTD umbral mínimo = 15% (Art. 240 par. 6 E.T. — Ley 2277/2022 Art. 10).
-Sobretasa financiera (entidades financieras, aseguradoras, bolsa, reaseguros) = +5pp = 40% hasta 2027 (Art. 240 par. 2 E.T.).
+Sobretasa financiera (entidades financieras, aseguradoras, bolsa, reaseguros) = +5pp = 40% hasta 2027, SOLO si renta gravable >= 120.000 UVT (Art. 240 par. 2 E.T.).
 Sobretasa hidroeléctricas = +3pp = 38% hasta 2026 (Art. 240 par. 2 E.T.).
 Tope bancarización individual = 100 UVT por NIT = $5.237.400 COP (Art. 771-5 par. 2 E.T.).
 Tope bancarización general = 40.000 UVT = $2.094.960.000 COP (Art. 771-5 par. 1 E.T.).

@@ -21,9 +21,9 @@ export type FiscalAnchorBlock = {
   f04: string;
   /** F05 — Provisión IVA por Pagar (abs Cta. 2408) en centavos. */
   f05: string;
-  /** F06 — Provisión ICA por Pagar (abs Cta. 2365) en centavos. */
+  /** F06 — Retención en la Fuente por declarar (abs Cta. 2365) en centavos. */
   f06: string;
-  /** F07 — Provisión Predial / Vehículos (abs Cta. 2368) en centavos. */
+  /** F07 — ICA retenido / por pagar (abs Cta. 2368) en centavos. */
   f07: string;
   /** F08 — Total Pasivos Fiscales (abs Grupo 24 completo) en centavos. */
   f08: string;

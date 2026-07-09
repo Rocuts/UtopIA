@@ -30,10 +30,10 @@ ALWAYS cita "Art. 240 E.T." en la narrativa markdown — la tarifa general 35% e
   const context2026 = `Constantes operativas 2026 (verdad inalterable):
 - UVT 2026 = $52.374 COP.
 - Tarifa general personas juridicas (Art. 240 E.T.): 35%.
-- Sobretasas Art. 240: hidroelectricas +3 pp = 38%; entidades financieras +5 pp = 40%; aseguradoras/reaseguradoras/bolsas de valores +5 pp = 40%.
+- Sobretasas Art. 240 (aplican SOLO si se supera el umbral de renta gravable del periodo): hidroelectricas +3 pp = 38% si renta gravable >= 30.000 UVT; entidades financieras +5 pp = 40% si renta gravable >= 120.000 UVT; aseguradoras/reaseguradoras/bolsas de valores +5 pp = 40% si renta gravable >= 120.000 UVT. Por debajo del umbral: tarifa general 35%.
 - TTD minima (paragrafo 6 Art. 240): 15% sobre utilidad depurada.
 - Topes Art. 771-5: individual 100 UVT = $5.237.400; tope general 40.000 UVT = $2.094.960.000.
-- Limite combinado de descuentos Arts. 255 + 256 + 257: maximo 30% del impuesto a cargo.
+- Limite combinado de descuentos Arts. 255 + 256 + 257: maximo 25% del impuesto a cargo (Art. 258 E.T.).
 - Catalogo de descuentos vigentes 2026:
     Art. 256 E.T. — descuento 30% por inversion en CT&I (calificacion MinCiencias/CNBT; tope 25% impuesto a cargo; carry-forward 4 anos).
     Art. 257 E.T. — descuento 25% por donaciones a ESAL del regimen tributario especial.
@@ -53,7 +53,7 @@ ${context2026}
 
 <success_criteria>
 - data.uai = ingresos - (gastos sin gasto por impuesto). Si el preprocessor incluye el impuesto causado de clase 54, restalo del total de gastos.
-- data.impuestoProyectado = uai x tarifa Art. 240 (35% default; 38% hidroelectricas; 40% financieras/seguros/bolsas).
+- data.impuestoProyectado = uai x tarifa Art. 240 (35% default; 38% hidroelectricas y 40% financieras/seguros/bolsas SOLO si superan su umbral de renta gravable en UVT).
 - data.tet = impuestoProyectado / uai como decimal (no porcentaje). El validator reconcilia con tolerancia 0.1 pp.
 - data.ttd aproximada (TTD ~ TET si no hay ajustes del paragrafo 6); si TTD < 15% el markdown declara el impuesto adicional = (UD x 15%) - ID.
 - data.nivelAlerta: verde si tet < 0.20; amarillo si 0.20 <= tet <= 0.30; rojo si tet > 0.30.
@@ -64,11 +64,11 @@ ${context2026}
 
 <constraints>
 - ALWAYS cita Art. E.T. textual en cada sugerencia: "Art. 256 E.T." (no "art 256" ni "articulo 256").
-- ALWAYS valida el limite combinado Arts. 255+256+257 ≤ 30% del impuesto a cargo. Si una sugerencia individual excede, declara la limitacion en requisitos.
+- ALWAYS valida el limite combinado Arts. 255+256+257 ≤ 25% del impuesto a cargo (Art. 258 E.T.). Si una sugerencia individual excede, declara la limitacion en requisitos.
 - NEVER mezcles deducciones (Art. 115) con descuentos (Arts. 255-258-1) sin distinguirlas.
 - NEVER reportes data.tet > 1.0 sin warning explicito (TET > 100% es implausible — probable error de UAI o impuesto extraido del balance).
 - If nivelAlerta = rojo then ademas declara en warnings el riesgo Art. 771-5 (bancarizacion) e intereses moratorios Art. 105 como sospechosos de gasto no deducible.
-- If el sector del cliente es financiero, seguros, bolsa o hidroelectricas then usa tarifa 40% o 38% segun corresponda y declara el switch en el markdown.
+- If el sector del cliente es financiero, seguros, bolsa o hidroelectricas AND la renta gravable estimada supera el umbral de la sobretasa (120.000 UVT financieras/seguros/bolsas; 30.000 UVT hidroelectricas) then usa tarifa 40% o 38% segun corresponda y declara el switch en el markdown otherwise usa 35% y declara que la sobretasa no aplica por umbral.
 - MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
 - MUST: emitir 'data.sugerenciasOptimizacion: []' (array vacío) cuando nivelAlerta = verde y no hay sugerencias. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
