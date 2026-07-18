@@ -158,6 +158,21 @@ export async function getUpload(uploadId: string): Promise<PymeUpload | null> {
 }
 
 /**
+ * Entries producidos por un upload (OCR). El tenant-scoping lo hace el
+ * caller cruzando el libro del upload contra el workspace activo.
+ */
+export async function listEntriesByUpload(
+  uploadId: string,
+): Promise<PymeEntry[]> {
+  const db = getDb();
+  return db
+    .select()
+    .from(pymeEntries)
+    .where(eq(pymeEntries.uploadId, uploadId))
+    .orderBy(asc(pymeEntries.entryDate), asc(pymeEntries.createdAt));
+}
+
+/**
  * Atomic claim: marca un upload como `processing` SOLO si esta en `pending`.
  * Reemplaza el dúo no-atomico `getUpload + updateUploadStatus('processing')`
  * que abria una ventana de race entre dos `waitUntil` concurrentes (ambos
@@ -382,16 +397,26 @@ export async function listKnownCategories(
 
 /**
  * Confirma todos los entries `draft` de un libro en una sola query atómica.
+ * Con `uploadId` restringe la confirmación a los drafts de ese upload
+ * (flujo "Guardar en mi libro" de PhotoUploader — no arrastra drafts ajenos).
  * Devuelve el número de entries actualizados.
  * Pre-condición: el caller (route handler) ya verificó que el libro pertenece
  * al workspace via `assertBookOwned`.
  */
-export async function bulkConfirmEntries(bookId: string): Promise<number> {
+export async function bulkConfirmEntries(
+  bookId: string,
+  uploadId?: string,
+): Promise<number> {
   const db = getDb();
+  const filters = [
+    eq(pymeEntries.bookId, bookId),
+    eq(pymeEntries.status, 'draft'),
+  ];
+  if (uploadId) filters.push(eq(pymeEntries.uploadId, uploadId));
   const updated = await db
     .update(pymeEntries)
     .set({ status: 'confirmed', updatedAt: new Date() })
-    .where(and(eq(pymeEntries.bookId, bookId), eq(pymeEntries.status, 'draft')))
+    .where(and(...filters))
     .returning({ id: pymeEntries.id });
   return updated.length;
 }

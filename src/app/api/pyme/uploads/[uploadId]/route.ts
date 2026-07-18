@@ -36,9 +36,6 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
   if (!gate.ok) return gate.response;
 
   try {
-    const gate = await requireAuthSession();
-    if (!gate.ok) return gate.response;
-
     const { uploadId } = await ctx.params;
 
     const workspaceId = await getCurrentWorkspaceId();
@@ -87,6 +84,24 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
       ? null
       : upload.imageUrl;
 
+    // Con `done`, la UI (PhotoUploader) necesita mostrar QUÉ leyó el OCR.
+    // Los renglones extraídos viven en `pyme_entries` (no en el upload row),
+    // así que los adjuntamos aquí. `numeric` llega como string desde drizzle;
+    // lo convertimos a number para que la UI formatee sin coerción silenciosa.
+    const entries =
+      ocrStatus === 'done'
+        ? (await repo.listEntriesByUpload(uploadId)).map((e) => ({
+            id: e.id,
+            entryDate: e.entryDate,
+            description: e.description,
+            kind: e.kind,
+            amount: Number(e.amount),
+            category: e.category,
+            status: e.status,
+            confidence: e.confidence === null ? null : Number(e.confidence),
+          }))
+        : [];
+
     return NextResponse.json({
       ok: true,
       upload: {
@@ -99,6 +114,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
         pageCount: upload.pageCount,
         createdAt: upload.createdAt,
       },
+      entries,
     });
   } catch (err) {
     console.error('[pyme/uploads/[uploadId]][GET]', err);

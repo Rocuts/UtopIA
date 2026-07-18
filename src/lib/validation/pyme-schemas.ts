@@ -133,6 +133,9 @@ export const monthlyReportBodySchema = z.object({
 
 export const bulkConfirmBodySchema = z.object({
   bookId: z.string().uuid(),
+  // Restringe la confirmación a los drafts de UN upload (flujo PhotoUploader).
+  // Sin uploadId se confirman todos los drafts del libro (flujo EntryReview).
+  uploadId: z.string().uuid().optional(),
 });
 
 // ─── Tipos derivados ────────────────────────────────────────────────────────
