@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 export type FactKind = 'narrative' | 'donation' | 'leasing' | 'loss_carryforward';
 
-/** MoneyCop: entero serializado en centavos. Regex compartido con money.ts. */
+/** MoneyCop: entero serializado en centavos. Regex idéntico al de money.ts
+ *  (copia deliberada: mantiene este módulo puro sin importar del árbol financiero). */
 const moneyCop = z.string().regex(/^-?\d+$/, 'monto debe ser entero en centavos (MoneyCop)');
 
 /** Structured de una donación (piloto Art. 257 E.T.). */
@@ -28,7 +29,7 @@ export const registrarHechoInputSchema = z.object({
   title: z.string(),
   body: z.string(),
   structured: donationStructuredSchema.nullable(),
-  fiscalPeriod: z.string().nullable(),
+  fiscalPeriod: z.string().max(8).nullable(), // varchar(8) en DB: año 'YYYY'
 });
 export type RegistrarHechoInput = z.infer<typeof registrarHechoInputSchema>;
 

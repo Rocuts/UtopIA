@@ -36,9 +36,11 @@ export function factContentEquals(a: FactContent, b: FactContent): boolean {
 
 /**
  * Decide qué hacer con `candidate` frente a los hechos activos equivalentes.
- * Invariante mantenida por la reconciliación: ≤1 activo por kind+período. El
- * caso defensivo (>1 activo) supersede el ÚLTIMO del array (el más reciente,
- * por orden `createdAt desc` que garantiza el caller).
+ * Invariante (que refuerza el índice único parcial `uq_active_fact`): ≤1 activo
+ * por kind+período. En el caso defensivo (>1 activo, normalmente inalcanzable) se
+ * supersede el MÁS RECIENTE. CONTRATO DE ORDEN: el caller (`reconcileFact`) pasa
+ * los activos en orden ASCENDENTE por `createdAt`, así que `existingActive[length-1]`
+ * es el más reciente.
  */
 export function decideReconciliation(
   candidate: FactContent,

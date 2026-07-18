@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { getDb } from './client';
 import {
   factDecisionRecords,
@@ -76,7 +76,9 @@ export async function reconcileFact(input: {
         periodClause,
       ),
     )
-    .orderBy(desc(workspaceFacts.createdAt));
+    // Orden ASCENDENTE: contrato con decideReconciliation → el último elemento
+    // es el MÁS RECIENTE, que es el que se supersede en el caso defensivo >1.
+    .orderBy(asc(workspaceFacts.createdAt));
 
   const decision = decideReconciliation(
     input.content,

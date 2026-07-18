@@ -37,6 +37,8 @@ describe('decideReconciliation', () => {
   });
 
   it('SUPERSEDE contra el más reciente cuando (defensivo) hay más de un activo', () => {
+    // Array en orden ASCENDENTE por createdAt (older primero) — igual que el
+    // contrato del caller reconcileFact. El último (newer=f2) es el más reciente.
     const older = { id: 'f1', ...donation('5000000000') };
     const newer = { id: 'f2', ...donation('4800000000') };
     const d = decideReconciliation(donation('4500000000'), [older, newer]);
