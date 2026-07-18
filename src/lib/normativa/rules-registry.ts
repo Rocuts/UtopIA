@@ -1,0 +1,66 @@
+// Registro normativo versionado (Rules as Code) — FUENTE ÚNICA DE VERDAD
+// determinista para cálculos estructurados. Versionado por git: el propio
+// historial del repo ES el audit trail de definiciones.
+//
+// Actualización manual: ante una reforma se AGREGA una versión nueva con
+// `vigencia.desde` y se cierra la anterior con `vigencia.hasta`. NUNCA se
+// edita una versión en su lugar (rompería la reconstrucción histórica).
+//
+// El binding es uni-temporal (eje vigencia). El eje "tiempo de conocimiento"
+// lo aporta fact_decision_records (auditabilidad bitemporal sin store bitemporal).
+
+export interface NormativeRuleVersion {
+  vigencia: { desde: string; hasta: string | null }; // ISO date; hasta null = abierta
+  version: string;
+  params: Record<string, unknown>;
+  fuente: string;
+  revisadoPara: string; // año para el que se verificó vigencia por última vez
+}
+
+export const RULES_REGISTRY: Record<string, NormativeRuleVersion[]> = {
+  descuento_donaciones_257: [
+    {
+      vigencia: { desde: '2023-01-01', hasta: null },
+      version: '2023',
+      params: { articulo: '257 E.T.', limitePctImpuesto: 25, uvt2026: 52374 },
+      fuente: 'Estatuto Tributario Art. 257 (descuento por donaciones).',
+      revisadoPara: '2026',
+    },
+  ],
+};
+
+/**
+ * ¿El `fiscalPeriod` (año 'YYYY') cae dentro de la ventana RESOLUBLE de la
+ * versión? Esa ventana es la intersección de la vigencia legal (`desde`/`hasta`)
+ * con el horizonte revisado (`revisadoPara`): NUNCA se resuelve una regla para
+ * un período posterior al último año en que un humano verificó su vigencia,
+ * aunque `hasta` sea null (abierta). Ese techo es lo que dispara el FAIL-LOUD y
+ * evita la deriva normativa (proyectar hacia el futuro una regla no re-verificada).
+ */
+function periodEnVigencia(period: string, v: NormativeRuleVersion): boolean {
+  const year = Number.parseInt(period, 10);
+  const desdeYear = Number.parseInt(v.vigencia.desde.slice(0, 4), 10);
+  const hastaYear = v.vigencia.hasta ? Number.parseInt(v.vigencia.hasta.slice(0, 4), 10) : null;
+  const revisadoYear = Number.parseInt(v.revisadoPara, 10);
+  const techoYear = hastaYear === null ? revisadoYear : Math.min(hastaYear, revisadoYear);
+  return year >= desdeYear && year <= techoYear;
+}
+
+/**
+ * Resuelve la versión de regla vigente para un período fiscal. FAIL-LOUD: si
+ * la ruleKey no existe o no hay versión vigente para el período, LANZA — nunca
+ * cae silenciosamente a una regla vieja (esto es lo que impide la deriva).
+ */
+export function resolveRule(ruleKey: string, fiscalPeriod: string): NormativeRuleVersion {
+  const versions = RULES_REGISTRY[ruleKey];
+  if (!versions) {
+    throw new Error(`Regla normativa desconocida: "${ruleKey}".`);
+  }
+  const match = versions.find((v) => periodEnVigencia(fiscalPeriod, v));
+  if (!match) {
+    throw new Error(
+      `No hay regla vigente de "${ruleKey}" para el período ${fiscalPeriod} — actualiza el registro normativo (src/lib/normativa/rules-registry.ts).`,
+    );
+  }
+  return match;
+}
