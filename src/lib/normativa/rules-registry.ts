@@ -50,16 +50,25 @@ function periodEnVigencia(period: string, v: NormativeRuleVersion): boolean {
  * la ruleKey no existe o no hay versión vigente para el período, LANZA — nunca
  * cae silenciosamente a una regla vieja (esto es lo que impide la deriva).
  */
-export function resolveRule(ruleKey: string, fiscalPeriod: string): NormativeRuleVersion {
-  const versions = RULES_REGISTRY[ruleKey];
+export function resolveRule(
+  ruleKey: string,
+  fiscalPeriod: string,
+  registry: Record<string, NormativeRuleVersion[]> = RULES_REGISTRY,
+): NormativeRuleVersion {
+  const versions = registry[ruleKey];
   if (!versions) {
-    throw new Error(`Regla normativa desconocida: "${ruleKey}".`);
+    throw new Error(
+      `Regla normativa desconocida: "${ruleKey}" (ver src/lib/normativa/rules-registry.ts).`,
+    );
   }
-  const match = versions.find((v) => periodEnVigencia(fiscalPeriod, v));
-  if (!match) {
+  const matches = versions.filter((v) => periodEnVigencia(fiscalPeriod, v));
+  if (matches.length === 0) {
     throw new Error(
       `No hay regla vigente de "${ruleKey}" para el período ${fiscalPeriod} — actualiza el registro normativo (src/lib/normativa/rules-registry.ts).`,
     );
   }
-  return match;
+  // Newest-wins: ante solapamientos (un mantenedor agrega una versión más nueva
+  // sin cerrar el `hasta` de la anterior) gana la de mayor `desde`. Robusto al
+  // orden del array. Comparación lexicográfica de ISO 'YYYY-MM-DD' == cronológica.
+  return matches.reduce((a, b) => (b.vigencia.desde > a.vigencia.desde ? b : a));
 }

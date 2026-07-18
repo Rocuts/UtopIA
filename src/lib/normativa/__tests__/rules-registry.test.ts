@@ -1,6 +1,10 @@
 // src/lib/normativa/__tests__/rules-registry.test.ts
 import { describe, expect, it } from 'vitest';
-import { resolveRule } from '../rules-registry';
+import { resolveRule, type NormativeRuleVersion } from '../rules-registry';
+
+function version(desde: string, hasta: string | null, tag: string): NormativeRuleVersion {
+  return { vigencia: { desde, hasta }, version: tag, params: { tag }, fuente: 'fixture', revisadoPara: '2026' };
+}
 
 describe('resolveRule', () => {
   it('resuelve la versión vigente de Art. 257 para 2026', () => {
@@ -26,5 +30,19 @@ describe('resolveRule', () => {
     const r = resolveRule('descuento_donaciones_257', '2099');
     expect(r.params.limitePctImpuesto).toBe(25);
     expect(r.params.articulo).toBe('257 E.T.');
+  });
+
+  it('NEWEST-WINS: ante versiones solapadas gana la de mayor `desde` (indep. del orden)', () => {
+    const vieja = version('2023-01-01', null, 'vieja');
+    const nueva = version('2026-01-01', null, 'nueva');
+    // Ambas vigentes en 2027 (hasta null). Debe ganar la de `desde` mayor.
+    expect(resolveRule('k', '2027', { k: [vieja, nueva] }).params.tag).toBe('nueva');
+    expect(resolveRule('k', '2027', { k: [nueva, vieja] }).params.tag).toBe('nueva');
+  });
+
+  it('VENTANA CERRADA: resuelve dentro de [desde,hasta] y falla-fuerte después', () => {
+    const cerrada = version('2020-01-01', '2021-12-31', 'v2020');
+    expect(resolveRule('k', '2021', { k: [cerrada] }).version).toBe('v2020');
+    expect(() => resolveRule('k', '2022', { k: [cerrada] })).toThrow(/No hay regla vigente/);
   });
 });
