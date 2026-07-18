@@ -98,7 +98,12 @@ export async function reconcileFact(input: {
       await tx
         .update(workspaceFacts)
         .set({ status: 'revoked', revokedAt: new Date(), updatedAt: new Date() })
-        .where(eq(workspaceFacts.id, decision.existingId));
+        .where(
+          and(
+            eq(workspaceFacts.id, decision.existingId),
+            eq(workspaceFacts.workspaceId, input.workspaceId),
+          ),
+        );
     }
     const [created] = await tx
       .insert(workspaceFacts)
@@ -107,7 +112,7 @@ export async function reconcileFact(input: {
         kind: input.kind,
         title: input.content.title,
         body: input.content.body,
-        structured: input.content.structured ?? undefined,
+        structured: input.content.structured ?? null,
         fiscalPeriod: input.fiscalPeriod,
         source: input.source,
       })
@@ -117,7 +122,12 @@ export async function reconcileFact(input: {
       await tx
         .update(workspaceFacts)
         .set({ supersededById: created.id })
-        .where(eq(workspaceFacts.id, decision.existingId));
+        .where(
+          and(
+            eq(workspaceFacts.id, decision.existingId),
+            eq(workspaceFacts.workspaceId, input.workspaceId),
+          ),
+        );
     }
     return { decision, fact: created };
   });
@@ -129,10 +139,18 @@ export async function revokeFact(
   factId: string,
 ): Promise<WorkspaceFact | null> {
   const db = getDb();
+  // Guarda `status='active'`: un doble-revoke es no-op (devuelve null) y NO
+  // sobrescribe el `revokedAt` original — preserva el valor de auditoría.
   const [updated] = await db
     .update(workspaceFacts)
     .set({ status: 'revoked', revokedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(workspaceFacts.id, factId), eq(workspaceFacts.workspaceId, workspaceId)))
+    .where(
+      and(
+        eq(workspaceFacts.id, factId),
+        eq(workspaceFacts.workspaceId, workspaceId),
+        eq(workspaceFacts.status, 'active'),
+      ),
+    )
     .returning();
   return updated ?? null;
 }
