@@ -646,6 +646,16 @@ git commit -m "feat(facts): glue de acceso a datos + reconcileFact + decision re
 
 ## Task 5: Registro normativo versionado
 
+> **NOTA (decisión de producto + closeout — la fuente autoritativa es el código):**
+> La resolución quedó en **SUPERSESIÓN (vigencia abierta)**: una versión rige desde
+> `desde` indefinidamente hasta que un `hasta` explícito la cierre o una más nueva la
+> sustituya; `revisadoPara` es metadata asesora, NO un techo. Por eso el "Step 1"
+> abajo se corrigió: el fail-loud se prueba con un período **pre-vigencia** (`'2020'`,
+> no `'2099'` — un año futuro SÍ resuelve). El closeout añadió además **newest-wins**
+> (gana la versión de mayor `desde`) y un tercer parámetro opcional `registry` para
+> tests con fixtures. Ver `src/lib/normativa/rules-registry.ts` (implementación
+> autoritativa) y el ledger para el detalle.
+
 **Files:**
 - Create: `src/lib/normativa/rules-registry.ts`
 - Test: `src/lib/normativa/__tests__/rules-registry.test.ts`
