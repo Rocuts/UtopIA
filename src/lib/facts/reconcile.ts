@@ -10,7 +10,16 @@ export type ReconcileDecision =
   | { action: 'NOOP'; existingId: string }
   | { action: 'SUPERSEDE'; existingId: string };
 
-/** Serializa un objeto con claves ordenadas para comparación estable. */
+/**
+ * Serializa un objeto con claves ordenadas para comparación estable.
+ *
+ * SUPUESTO (piloto): sólo se normaliza el orden de las claves de PRIMER NIVEL.
+ * `structured` se asume PLANO para los kinds del piloto (`narrative` = null,
+ * `donation` = strings planos), de modo que los valores se comparan tal cual.
+ * Un kind con `structured` ANIDADO (objetos/arrays dentro) necesitaría un
+ * stable-stringify RECURSIVO antes de confiar en esta igualdad: el orden de
+ * claves de un objeto anidado no quedaría normalizado aquí.
+ */
 function stableStringify(value: Record<string, unknown> | null): string {
   if (value === null) return 'null';
   const keys = Object.keys(value).sort();
