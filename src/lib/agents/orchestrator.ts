@@ -16,6 +16,7 @@ import { litigationDefenseAgent } from './specialists/litigation-defense';
 import { MODELS } from '@/lib/config/models';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
+import { computeSuggestedRoute } from './navigation/suggested-route';
 import type {
   OrchestrateOptions,
   OrchestrateResult,
@@ -152,6 +153,7 @@ If the user asks what you can do, briefly describe your 5 specialist capabilitie
       tier: 'T1',
       agentsUsed: [],
       webSearchUsed: false,
+      suggestedRoute: null,
     };
   }
 
@@ -173,6 +175,7 @@ If the user asks what you can do, briefly describe your 5 specialist capabilitie
     tier: 'T1',
     agentsUsed: [],
     webSearchUsed: false,
+    suggestedRoute: null,
   };
 }
 
@@ -319,6 +322,11 @@ export async function orchestrate(
         role: 'assistant',
         content: finalContent,
         tier: classification.tier,
+        suggestedRoute: computeSuggestedRoute({
+          domains,
+          intent: classification.intent,
+          confidence: classification.confidence,
+        }),
         agentsUsed: [],
         webSearchUsed: false,
       };
@@ -356,6 +364,11 @@ export async function orchestrate(
     role: 'assistant',
     content: finalContent,
     tier: classification.tier,
+    suggestedRoute: computeSuggestedRoute({
+      domains,
+      intent: classification.intent,
+      confidence: classification.confidence,
+    }),
     agentsUsed: agentNames,
     enhancedQuery: enhanced.enhanced,
     webSearchUsed: allWebSearchUsed,

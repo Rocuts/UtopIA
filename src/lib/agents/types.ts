@@ -120,6 +120,12 @@ export interface OrchestrateOptions {
   abortSignal?: AbortSignal;
 }
 
+export interface SuggestedRoute {
+  label: string;
+  href: string;
+  moduleKey: string;
+}
+
 export interface OrchestrateResult {
   role: 'assistant';
   content: string;
@@ -130,6 +136,8 @@ export interface OrchestrateResult {
   webSources?: string[];
   riskAssessment?: SpecialistResult['riskAssessment'];
   sanctionCalculation?: SpecialistResult['sanctionCalculation'];
+  /** Chip de navegación contextual sugerido (Ola 1 Equipo B). null = sin sugerencia. */
+  suggestedRoute: SuggestedRoute | null;
 }
 
 // ---------------------------------------------------------------------------
