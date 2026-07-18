@@ -129,6 +129,13 @@
       "when": 1781201652919,
       "tag": "0015_billing_stripe",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784399055701,
+      "tag": "0018_eager_argent",
+      "breakpoints": true
     }
   ]
 }

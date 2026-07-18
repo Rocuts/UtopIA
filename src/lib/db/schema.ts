@@ -795,6 +795,7 @@ export type NewJournalLineRow = typeof journalLines.$inferInsert;
 // acceso top-level a las tablas core.
 
 export * from './schema-tax';
+export * from './schema-facts';
 export * from './schema-banking';
 export * from './schema-adjustments';
 export * from './schema-notifications';
