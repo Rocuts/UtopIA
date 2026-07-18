@@ -30,20 +30,19 @@ export const RULES_REGISTRY: Record<string, NormativeRuleVersion[]> = {
 };
 
 /**
- * ¿El `fiscalPeriod` (año 'YYYY') cae dentro de la ventana RESOLUBLE de la
- * versión? Esa ventana es la intersección de la vigencia legal (`desde`/`hasta`)
- * con el horizonte revisado (`revisadoPara`): NUNCA se resuelve una regla para
- * un período posterior al último año en que un humano verificó su vigencia,
- * aunque `hasta` sea null (abierta). Ese techo es lo que dispara el FAIL-LOUD y
- * evita la deriva normativa (proyectar hacia el futuro una regla no re-verificada).
+ * ¿El `fiscalPeriod` (año 'YYYY') está VIGENTE para esta versión? Resolución por
+ * SUPERSESSION (vigencia abierta): una versión rige desde `vigencia.desde` y sigue
+ * vigente indefinidamente hasta que un `vigencia.hasta` explícito la cierre o una
+ * versión más nueva la sustituya. Con `hasta: null` la regla aplica para cualquier
+ * año >= desde (incluye años futuros). `revisadoPara` es METADATA ASESORA (freshness
+ * para tooling/avisos futuros) — NO acota la resolución. El FAIL-LOUD lo dispara sólo
+ * un período ANTERIOR a todo `desde` o una ruleKey desconocida (ver resolveRule).
  */
 function periodEnVigencia(period: string, v: NormativeRuleVersion): boolean {
   const year = Number.parseInt(period, 10);
   const desdeYear = Number.parseInt(v.vigencia.desde.slice(0, 4), 10);
   const hastaYear = v.vigencia.hasta ? Number.parseInt(v.vigencia.hasta.slice(0, 4), 10) : null;
-  const revisadoYear = Number.parseInt(v.revisadoPara, 10);
-  const techoYear = hastaYear === null ? revisadoYear : Math.min(hastaYear, revisadoYear);
-  return year >= desdeYear && year <= techoYear;
+  return year >= desdeYear && (hastaYear === null || year <= hastaYear);
 }
 
 /**
