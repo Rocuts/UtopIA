@@ -662,6 +662,13 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
   const [input, setInput] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const userAbortedRef = useRef(false);
+  // Espejo del estado `messages` para leer la lista fresca dentro de callbacks
+  // async (sendMessage no lleva `messages` en sus deps). Permite computar el
+  // snapshot a persistir SIN meter efectos dentro del updater de setMessages.
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Scroll
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -863,25 +870,27 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
 
         if (!finalContent) throw new Error('No response data received');
 
-        setMessages((prev) => {
-          const updated = prev.map((m) =>
-            m.id === streamId ? { ...m, content: finalContent } : m,
-          );
-          // Persist to shared conversation store
-          try {
-            saveConversation({
-              id: conversationId,
-              title: inferTitle(updated.map((m) => ({ id: m.id, role: m.role, content: m.content }))),
-              useCase: resolvedUseCase,
-              messages: toConvMessages(updated),
-              createdAt: updated[0]?.timestamp || new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              riskLevel: 'bajo',
-            });
-            workspace.refreshConversationList();
-          } catch { /* ignore persist errors */ }
-          return updated;
-        });
+        const updated = messagesRef.current.map((m) =>
+          m.id === streamId ? { ...m, content: finalContent } : m,
+        );
+        setMessages(updated);
+        messagesRef.current = updated;
+        // Persist + refrescar la lista de conversaciones FUERA del updater de
+        // setMessages. Llamar workspace.refreshConversationList() (setState de
+        // otro componente) dentro del updater dispara "Cannot update a component
+        // while rendering a different component".
+        try {
+          saveConversation({
+            id: conversationId,
+            title: inferTitle(updated.map((m) => ({ id: m.id, role: m.role, content: m.content }))),
+            useCase: resolvedUseCase,
+            messages: toConvMessages(updated),
+            createdAt: updated[0]?.timestamp || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            riskLevel: 'bajo',
+          });
+          workspace.refreshConversationList();
+        } catch { /* ignore persist errors */ }
       } catch (err) {
         const aborted = userAbortedRef.current;
         if (aborted) {
