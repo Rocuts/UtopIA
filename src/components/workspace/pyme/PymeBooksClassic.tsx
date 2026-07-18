@@ -13,11 +13,8 @@
  * `/api/pyme/*`. La cookie `utopia_workspace_id` la inyecta el browser
  * automaticamente en el request, asi que no hay que pasar workspaceId.
  *
- * FIXME: token — el spec pedia `text-acento-vino` pero ese token no existe
- * en `globals.css`. Usamos `text-area-escudo` (bordeaux family — el mismo
- * que usan los modulos Verdad/Escudo) como aproximacion mas cercana sin
- * inventar hex. Si en el futuro se anade un token `--color-acento-vino-*`
- * cambiar globalmente las clases de este modulo.
+ * Token: usa `acento-vino` (alias adaptativo del bordeaux de área, definido
+ * en globals.css) — el nombre que pedía el spec del módulo.
  */
 
 import Link from 'next/link';
@@ -89,10 +86,10 @@ export function PymeBooksClassic() {
       {/* Header */}
       <div className="flex items-start justify-between gap-6 mb-10">
         <div className="min-w-0">
-          <span className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-eyebrow text-area-escudo mb-3">
+          <span className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-eyebrow text-acento-vino mb-3">
             <span
               aria-hidden="true"
-              className="inline-block h-1 w-6 rounded-full bg-area-escudo"
+              className="inline-block h-1 w-6 rounded-full bg-acento-vino"
             />
             {language === 'es' ? 'Modulo Pyme' : 'SMB Module'}
           </span>
@@ -107,7 +104,7 @@ export function PymeBooksClassic() {
           onClick={() => setShowCreate(true)}
           className={cn(
             'inline-flex items-center gap-2 px-5 py-2.5 rounded-md',
-            'bg-area-escudo text-n-0 font-medium text-sm',
+            'bg-acento-vino text-n-0 font-medium text-sm',
             'hover:opacity-90 transition-opacity',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
           )}
@@ -183,7 +180,7 @@ function BookCard({
       aria-label={`${openLabel}: ${book.name}`}
     >
       <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-n-100 text-area-escudo">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-n-100 text-acento-vino">
           <BookOpen className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
         </div>
         <span className="text-xs font-mono uppercase tracking-wide text-n-500">
@@ -201,7 +198,7 @@ function BookCard({
         </p>
       )}
 
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-eyebrow text-area-escudo group-hover:gap-2 transition-all">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-eyebrow text-acento-vino group-hover:gap-2 transition-all">
         <span>{openLabel}</span>
         <ArrowRight
           className="h-3 w-3 transition-transform group-hover:translate-x-0.5"
@@ -249,7 +246,7 @@ function EmptyState({
 }) {
   return (
     <div className="rounded-xl glass-elite p-10 text-center">
-      <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-n-100 text-area-escudo mb-4">
+      <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-n-100 text-acento-vino mb-4">
         <BookOpen className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
       </div>
       <p className="text-base text-n-800 max-w-md mx-auto mb-6">{message}</p>
@@ -258,7 +255,7 @@ function EmptyState({
         onClick={onCta}
         className={cn(
           'inline-flex items-center gap-2 px-5 py-2.5 rounded-md',
-          'bg-area-escudo text-n-0 font-medium text-sm',
+          'bg-acento-vino text-n-0 font-medium text-sm',
           'hover:opacity-90 transition-opacity',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2',
         )}
@@ -283,7 +280,7 @@ function ErrorState({
 }) {
   return (
     <div className="rounded-xl border border-n-200 bg-n-100 p-6 flex items-start gap-4">
-      <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-n-200 text-area-escudo shrink-0">
+      <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-n-200 text-acento-vino shrink-0">
         <AlertCircle className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
       </div>
       <div className="flex-1 min-w-0">
@@ -291,7 +288,7 @@ function ErrorState({
         <button
           type="button"
           onClick={onRetry}
-          className="text-sm font-medium text-area-escudo hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-sm"
+          className="text-sm font-medium text-acento-vino hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-sm"
         >
           {retryLabel}
         </button>
@@ -449,7 +446,7 @@ function CreateBookDialog({
           </div>
 
           {error && (
-            <p className="text-sm text-area-escudo" role="alert">
+            <p className="text-sm text-acento-vino" role="alert">
               {error}
             </p>
           )}
@@ -469,7 +466,7 @@ function CreateBookDialog({
             disabled={submitting || !name.trim()}
             className={cn(
               'px-5 py-2 rounded-md text-sm font-medium',
-              'bg-area-escudo text-n-0 hover:opacity-90 transition-opacity',
+              'bg-acento-vino text-n-0 hover:opacity-90 transition-opacity',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}

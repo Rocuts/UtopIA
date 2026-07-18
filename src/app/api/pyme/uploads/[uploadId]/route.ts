@@ -32,6 +32,9 @@ const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
 type RouteContext = { params: Promise<{ uploadId: string }> };
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const gate = await requireAuthSession();
     if (!gate.ok) return gate.response;
@@ -102,7 +105,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(
       {
         ok: false,
-        error: err instanceof Error ? err.message : 'internal_error',
+        error: 'internal_error',
       },
       { status: 500 },
     );

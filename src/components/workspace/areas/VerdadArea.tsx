@@ -3,42 +3,31 @@
 /**
  * VerdadArea — Ventana III: La Verdad (Aseguramiento y Dictamen).
  *
- * Dashboard reutilizable. Encapsula:
- *  - Narrativa Instrument Serif ("La confianza es la moneda más cara...")
- *  - KPI Hero: Compliance Score en gauge arc SVG (0-100) con color dinámico
- *  - Breakdown NIIF / Tax / Audit / Legal (barras horizontales ponderadas)
- *  - Lista de hallazgos críticos activos (border-left por severidad)
- *  - Grid 3x1 de submódulos navegables (Revisoría / Conciliación / Dictámenes)
- *  - CTA estrella: "Generar Informe NIIF Elite" — reusa `NiifEliteButton` del Agente B
- *
- * Se consume desde `/workspace/verdad/page.tsx` y puede reusarse compact en
- * cualquier otro lugar (Executive Dashboard, etc.).
- *
- * El componente es "use client" porque consume useLanguage + useWorkspace y
- * el `NiifEliteButton` también lo requiere. Es un componente de presentación
- * — cualquier cálculo se pasa via props (`kpi`, `activeFindings`, `lastOpinion`).
+ * Layout matches handoff `La Verdad.html` + `assets/module.css`:
+ *  - 2-column hero: left (eyebrow + h1 + lede) · right (teal gradient KPI card)
+ *  - KPI card: 94/100, ↑ Grado A, sparkline, sub-KPIs (Dictámenes / Hallazgos / Opinión)
+ *  - Section headers with teal left-bar accent (border-left: 3px solid #3D6B7E)
+ *  - 3 submodule cards (.subcard style — teal-tinted bg, hover left-bar)
+ *  - Dictámenes panel (progress-bar ladder)
+ *  - DataSourceLadder + CapabilityZones
+ *  - Constellation particles handled by AreaFX via AreaShell (dots connected by lines)
  */
 
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { useMemo } from 'react';
 import {
-  BadgeCheck,
   Scale,
-  FileCheck,
   ShieldCheck,
-  AlertCircle,
-  ClipboardCheck,
+  GitCompare,
+  Award,
   ArrowRight,
-  Sigma,
+  ArrowUp,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
-import { EliteCard } from '@/components/ui/EliteCard';
-import { SectionHeader } from '@/components/ui/SectionHeader';
-import { NiifEliteButton } from '@/components/workspace/NiifEliteButton';
 import type { KpiResult, LastAuditOpinion } from '@/types/kpis';
 import { DataSourceLadder } from './shared/DataSourceLadder';
 import { CapabilityZones } from './shared/CapabilityZones';
@@ -52,23 +41,18 @@ export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low';
 export interface ActiveFinding {
   severity: FindingSeverity;
   description: string;
-  /** Referencia normativa (e.g. "NIIF 9.5.5", "Art. 772-1 ET") */
   norm?: string;
 }
 
 export interface VerdadAreaProps {
-  /** KPI compuesto (Compliance Score). */
   kpi?: KpiResult;
-  /** Hallazgos activos (opcional). Si se omite se muestra un set realista de ejemplo. */
   activeFindings?: ActiveFinding[];
-  /** Última opinión del revisor fiscal (etiqueta textual). */
   lastOpinion?: LastAuditOpinion;
-  /** Render compacto (sin hero largo) para previews. */
   compact?: boolean;
   className?: string;
 }
 
-// ─── Submódulos de La Verdad ─────────────────────────────────────────────────
+// ─── Submódulos ──────────────────────────────────────────────────────────────
 
 type VerdadSubmoduleKey = 'revisoriaFiscal' | 'conciliacionFiscal' | 'dictamenes';
 
@@ -76,697 +60,554 @@ interface VerdadSubmoduleDef {
   key: VerdadSubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  statusLabel: { es: string; en: string };
+  statusColor: string;
 }
 
 const SUBMODULES: VerdadSubmoduleDef[] = [
-  { key: 'revisoriaFiscal', href: '/workspace/verdad/revisoria-fiscal', icon: ShieldCheck },
-  { key: 'conciliacionFiscal', href: '/workspace/verdad/conciliacion-fiscal', icon: Scale },
-  { key: 'dictamenes', href: '/workspace/verdad/dictamenes', icon: FileCheck },
-];
-
-// ─── Defaults ─────────────────────────────────────────────────────────────────
-
-const DEFAULT_FINDINGS_ES: ActiveFinding[] = [
   {
-    severity: 'critical',
-    description: 'Rec. cartera vencida > 180 días sin provisión',
-    norm: 'NIIF 9.5.5',
+    key: 'conciliacionFiscal',
+    href: '/workspace/verdad/conciliacion-fiscal',
+    icon: GitCompare,
+    statusLabel: { es: 'Conciliado', en: 'Reconciled' },
+    statusColor: '#22C55E',
   },
   {
-    severity: 'high',
-    description: 'Inventario sin ajuste a valor neto realizable',
-    norm: 'NIIF 2.9',
+    key: 'dictamenes',
+    href: '/workspace/verdad/dictamenes',
+    icon: Award,
+    statusLabel: { es: '4 vigentes', en: '4 active' },
+    statusColor: '#22C55E',
   },
   {
-    severity: 'medium',
-    description: 'Partida conciliatoria Ret. Fuente no identificada',
-    norm: 'Art. 772-1 ET',
-  },
-];
-
-const DEFAULT_FINDINGS_EN: ActiveFinding[] = [
-  {
-    severity: 'critical',
-    description: 'Accounts receivable > 180 days without allowance',
-    norm: 'IFRS 9.5.5',
-  },
-  {
-    severity: 'high',
-    description: 'Inventory not adjusted to net realizable value',
-    norm: 'IFRS 2.9',
-  },
-  {
-    severity: 'medium',
-    description: 'Unreconciled withholding tax item',
-    norm: 'Art. 772-1 ET',
+    key: 'revisoriaFiscal',
+    href: '/workspace/verdad/revisoria-fiscal',
+    icon: ShieldCheck,
+    statusLabel: { es: 'Activo', en: 'Active' },
+    statusColor: '#22C55E',
   },
 ];
 
-// ─── Paleta por severidad ────────────────────────────────────────────────────
+// ─── Dictámenes panel (matching handoff DICTS array) ─────────────────────────
 
-const SEVERITY_COLOR: Record<FindingSeverity, { border: string; dot: string; label: string }> = {
-  critical: {
-    border: 'border-l-danger',
-    dot: 'var(--danger)',
-    label: 'Crítico',
-  },
-  high: {
-    border: 'border-l-wine-400',
-    dot: 'var(--color-wine-400)',
-    label: 'Alto',
-  },
-  medium: {
-    border: 'border-l-gold-500',
-    dot: 'var(--gold-500)',
-    label: 'Medio',
-  },
-  low: {
-    border: 'border-l-success-light',
-    dot: 'var(--color-success-light)',
-    label: 'Bajo',
-  },
-};
+const DICTAMENES_ES = [
+  { name: 'Estados financieros 2025',       color: '#4F7A4C', value: 98 },
+  { name: 'Cumplimiento tributario',         color: '#4F7A4C', value: 94 },
+  { name: 'Control interno',                 color: '#C48A2E', value: 79 },
+  { name: 'Lavado de activos (SAGRLAFT)',    color: '#4F7A4C', value: 91 },
+] as const;
 
-// ─── Opinión del revisor ─────────────────────────────────────────────────────
+const DICTAMENES_EN = [
+  { name: 'Financial statements 2025',       color: '#4F7A4C', value: 98 },
+  { name: 'Tax compliance',                  color: '#4F7A4C', value: 94 },
+  { name: 'Internal control',               color: '#C48A2E', value: 79 },
+  { name: 'AML (SAGRLAFT)',                  color: '#4F7A4C', value: 91 },
+] as const;
 
-const OPINION_LABEL_ES: Record<LastAuditOpinion, string> = {
-  favorable: 'Favorable',
-  con_salvedades: 'Con salvedades',
-  desfavorable: 'Desfavorable',
-  abstension: 'Abstención',
-};
+// ─── Sparkline — ascending series matching handoff bars/vVer data ─────────────
 
-const OPINION_LABEL_EN: Record<LastAuditOpinion, string> = {
-  favorable: 'Unqualified',
-  con_salvedades: 'Qualified',
-  desfavorable: 'Adverse',
-  abstension: 'Disclaimer',
-};
-
-const OPINION_TONE: Record<LastAuditOpinion, { bg: string; text: string }> = {
-  favorable: { bg: 'rgba(34,197,94,0.14)', text: 'var(--color-success-light)' },
-  con_salvedades: { bg: 'rgba(234,179,8,0.14)', text: 'var(--gold-500)' },
-  desfavorable: { bg: 'rgba(239,68,68,0.14)', text: 'var(--color-danger-light)' },
-  abstension: { bg: 'rgba(114,47,55,0.18)', text: 'var(--color-wine-400)' },
-};
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function scoreAccent(score: number): { ring: string; text: string; glow: string } {
-  if (score >= 90) {
-    return {
-      ring: 'var(--success)',
-      text: 'var(--color-success-light)',
-      glow: '0 0 60px rgba(34,197,94,0.25)',
-    };
-  }
-  if (score >= 75) {
-    return {
-      ring: 'var(--gold-500)',
-      text: 'var(--gold-400)',
-      glow: '0 0 60px rgb(var(--color-gold-500-rgb) / 0.28)',
-    };
-  }
-  if (score >= 60) {
-    return {
-      ring: 'var(--gold-500)',
-      text: 'var(--gold-500)',
-      glow: '0 0 60px rgba(234,179,8,0.28)',
-    };
-  }
-  return {
-    ring: 'var(--color-wine-700)',
-    text: 'var(--color-wine-400)',
-    glow: '0 0 60px rgba(114,47,55,0.35)',
-  };
-}
-
-// ─── Sub-componente: Gauge circular SVG ──────────────────────────────────────
-
-interface ScoreArcProps {
-  score: number;
-  size?: number;
-  stroke?: number;
-  label?: string;
-  sublabel?: string;
-}
-
-function ScoreArc({ score, size = 200, stroke = 14, label, sublabel }: ScoreArcProps) {
-  const shouldReduce = useReducedMotion();
-  const safeScore = Math.max(0, Math.min(100, Math.round(score)));
-  const { ring, text, glow } = useMemo(() => scoreAccent(safeScore), [safeScore]);
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  // 3/4 arc (270deg) — gauge estilo speedometer
-  const arcLength = circumference * 0.75;
-  const fillLength = (safeScore / 100) * arcLength;
+function VerdadSparkline() {
+  const pts = [78, 80, 83, 85, 88, 90, 92, 93, 94];
+  const W = 100, H = 48;
+  const minV = Math.min(...pts), maxV = Math.max(...pts);
+  const span = maxV - minV || 1;
+  const barW = W / pts.length;
+  const gap = 1.2;
 
   return (
-    <div
-      className="relative inline-flex items-center justify-center"
-      style={{ width: size, height: size, filter: `drop-shadow(${glow})` }}
-      role="img"
-      aria-label={
-        typeof label === 'string'
-          ? `${label} ${safeScore} de 100`
-          : `Score ${safeScore} de 100`
-      }
-    >
-      <svg width={size} height={size} className="-rotate-[135deg]" aria-hidden="true">
-        {/* Track */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="rgb(var(--color-gold-500-rgb) / 0.10)"
-          strokeWidth={stroke}
-          strokeDasharray={`${arcLength} ${circumference}`}
-          strokeLinecap="round"
-        />
-        {/* Fill */}
-        <motion.circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={ring}
-          strokeWidth={stroke}
-          strokeDasharray={`${arcLength} ${circumference}`}
-          strokeLinecap="round"
-          initial={{ strokeDashoffset: arcLength }}
-          animate={{ strokeDashoffset: arcLength - fillLength }}
-          transition={shouldReduce ? { duration: 0 } : { duration: 1.1, ease: 'easeOut' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <span
-          className="font-serif-elite font-normal leading-none tabular-nums"
-          style={{ fontSize: size * 0.32, color: text }}
-        >
-          {safeScore}
-        </span>
-        <span className="text-xs uppercase tracking-eyebrow text-n-500">
-          {sublabel ?? '/ 100'}
-        </span>
-      </div>
-    </div>
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      {pts.map((v, i) => {
+        const barH = 4 + ((v - minV) / span) * (H - 6);
+        const x = i * barW + gap / 2;
+        const w = barW - gap;
+        const y = H - barH;
+        const isLast = i === pts.length - 1;
+        return (
+          <rect
+            key={i}
+            x={x} y={y} width={w} height={barH}
+            rx="1.5"
+            fill={isLast ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)'}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
-// ─── Sub-componente: Breakdown bars ──────────────────────────────────────────
-
-interface BreakdownBarProps {
-  label: string;
-  value: number;
-  weight?: number;
-  color: string;
-}
-
-function BreakdownBar({ label, value, weight, color }: BreakdownBarProps) {
-  const shouldReduce = useReducedMotion();
-  const pct = Math.max(0, Math.min(100, value));
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-n-800 font-medium tracking-wide">
-          {label}
-          {typeof weight === 'number' && (
-            <span className="text-n-500 ml-2 font-normal">
-              ({Math.round(weight * 100)}%)
-            </span>
-          )}
-        </span>
-        <span className="tabular-nums text-n-1000 font-medium">
-          {Math.round(pct)}/100
-        </span>
-      </div>
-      <div className="h-1.5 w-full rounded-full bg-[rgb(var(--color-gold-500-rgb)_/_0.08)] overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={shouldReduce ? { duration: 0 } : { duration: 0.9, ease: 'easeOut' }}
-          className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Componente principal ────────────────────────────────────────────────────
+// ─── Component principal ──────────────────────────────────────────────────────
 
 export function VerdadArea({
   kpi,
-  activeFindings,
   lastOpinion = 'favorable',
   compact = false,
   className,
 }: VerdadAreaProps) {
   const { t, language } = useLanguage();
   const verdad = t.elite.areas.verdad;
+  const reduced = useReducedMotion();
   const { view } = useAncoraView();
 
   const sources = useMemo(() => getVerdadSources(language), [language]);
   const zones = useMemo(() => getVerdadZones(language), [language]);
   const sourceLabels = useMemo(() => getSourceLabels(language), [language]);
 
-  // Score real determinístico NIIF cuando hay datos; si no, KPI mock.
-  const gaugeScore = useMemo(() => {
-    if (view.hasData && view.derived.scoreNiif != null) return view.derived.scoreNiif;
-    return kpi?.value ?? 0;
-  }, [view, kpi?.value]);
+  // Score: real scoreNiif when available, else prop value, else handoff mock (94)
+  const scoreNiif = view.hasData ? view.derived.scoreNiif : null;
+  const gaugeScore =
+    scoreNiif != null
+      ? Math.round(scoreNiif)
+      : kpi?.value != null
+        ? Math.round(kpi.value)
+        : 94;
 
-  const findings = useMemo<ActiveFinding[]>(() => {
-    if (activeFindings && activeFindings.length > 0) return activeFindings;
-    return language === 'es' ? DEFAULT_FINDINGS_ES : DEFAULT_FINDINGS_EN;
-  }, [activeFindings, language]);
+  const dicts = language === 'es' ? DICTAMENES_ES : DICTAMENES_EN;
 
-  // Breakdown values pulled from the KPI result (engine output)
-  const breakdown = useMemo(() => {
-    const map: Record<string, { value: number; weight?: number }> = {};
-    (kpi?.breakdown ?? []).forEach((b) => {
-      map[b.label] = { value: b.value, weight: b.weight };
-    });
-    const niifBase = map['NIIF'] ?? { value: 98, weight: 0.3 };
-    return {
-      // Score NIIF real (determinístico) cuando hay datos; preserva la ponderación.
-      niif:
-        view.hasData && view.derived.scoreNiif != null
-          ? { value: view.derived.scoreNiif, weight: niifBase.weight }
-          : niifBase,
-      tax: map['Tributario'] ?? { value: 95, weight: 0.25 },
-      audit: map['Auditoría (hallazgos)'] ?? { value: 92, weight: 0.25 },
-      legal: map['Legal'] ?? { value: 96, weight: 0.2 },
-    };
-  }, [kpi, view]);
-
-  const criticalCount = findings.filter((f) => f.severity === 'critical').length;
-  const opinionLabel =
-    language === 'es' ? OPINION_LABEL_ES[lastOpinion] : OPINION_LABEL_EN[lastOpinion];
-  const opinionTone = OPINION_TONE[lastOpinion];
+  const fadeItem = (index: number) =>
+    reduced
+      ? {}
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: { opacity: 1, y: 0 },
+          transition: {
+            duration: 0.45,
+            delay: 0.06 + index * 0.07,
+            ease: [0.16, 1, 0.3, 1] as const,
+          },
+        };
 
   return (
-    <section
+    <div
       data-modulo="verdad"
-      className={cn(
-        'relative flex flex-col gap-8',
-        'text-n-1000',
-        'animate-elite-fade',
-        className,
-      )}
+      className={cn('relative w-full', compact ? '' : 'min-h-full', className)}
     >
-      {/* ── Hero + narrativa ─────────────────────────────────────────────── */}
       {!compact && (
-        <div className="flex flex-col gap-6">
-          <SectionHeader
-            eyebrow={language === 'es' ? 'III. Integridad' : 'III. Integrity'}
-            title={verdad.concept}
-            subtitle={verdad.subtitle}
-            align="left"
-            accent="gold"
-            divider
-          />
-
-          <p
-            className={cn(
-              'font-serif-elite font-medium tracking-tight text-n-800',
-              'text-lg md:text-xl leading-relaxed',
-              'max-w-3xl',
-            )}
+        <>
+          {/* ── Hero: 2-column grid ── */}
+          <motion.section
+            {...fadeItem(0)}
+            className="mb-10 pb-9"
+            style={{ borderBottom: '1px solid color-mix(in srgb, #3D6B7E 20%, transparent)' }}
           >
-            {verdad.narrative}
-          </p>
+            <div
+              className="grid gap-10 items-center"
+              style={{ gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)' }}
+            >
+              {/* Left: eyebrow + h1 + lede */}
+              <div>
+                <div className="flex items-center gap-[10px] mb-[14px]" style={{ fontWeight: 700 }}>
+                  <span
+                    className="inline-grid place-items-center rounded-lg text-white shrink-0"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      background: 'linear-gradient(140deg, #3D6B7E, #315869)',
+                      boxShadow: '0 8px 20px -8px rgba(61,107,126,.55)',
+                    }}
+                  >
+                    <Scale className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  </span>
+                  <span
+                    className="text-xs uppercase tracking-eyebrow font-bold"
+                    style={{ color: '#315869' }}
+                  >
+                    {language === 'es' ? 'III · Rigor' : 'III · Rigor'}
+                  </span>
+                </div>
 
-          {verdad.tagline && (
-            <p className="text-sm text-n-500 tracking-wide max-w-2xl -mt-2">
-              {verdad.tagline}
-            </p>
-          )}
-        </div>
-      )}
+                <h1
+                  className="font-serif-elite font-medium text-n-1000 tracking-tight"
+                  style={{ fontSize: 'clamp(2.4rem, 4.6vw, 3.6rem)', lineHeight: 1.04 }}
+                >
+                  {language === 'es' ? 'La Verdad' : 'The Truth'}
+                </h1>
 
-      {/* ── KPI Hero: Score gauge + breakdown + opinion ──────────────────── */}
-      <EliteCard variant="glass" padding="lg" className="overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-8 lg:gap-10 items-center">
-          {/* Score gauge */}
-          <div className="flex flex-col items-center gap-4">
-            <ScoreArc
-              score={gaugeScore}
-              size={220}
-              stroke={14}
-              label={verdad.kpiPrimary}
-              sublabel={language === 'es' ? '/ 100' : '/ 100'}
-            />
-            <div className="text-center">
-              <p className="uppercase tracking-eyebrow text-xs text-n-500 font-medium">
-                {verdad.kpiPrimary}
-              </p>
+                <p
+                  className="text-n-600 mt-[14px] leading-relaxed"
+                  style={{ fontSize: '1.0625rem', maxWidth: '46ch' }}
+                >
+                  {language === 'es'
+                    ? 'Aseguramiento y opinión técnica. Damos fe de que sus cifras resisten cualquier escrutinio — revisoría fiscal, dictámenes y conciliación con criterio independiente.'
+                    : 'Assurance and technical opinion. We certify that your figures withstand any scrutiny — statutory audit, opinions, and reconciliation with independent judgment.'}
+                </p>
+              </div>
+
+              {/* Right: teal gradient KPI card */}
               <div
-                className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium tracking-wide"
-                style={{ backgroundColor: opinionTone.bg, color: opinionTone.text }}
+                className="relative overflow-hidden rounded-2xl"
+                style={{
+                  background: 'linear-gradient(155deg, #3D6B7E, #315869)',
+                  padding: 30,
+                  boxShadow:
+                    '0 34px 60px -28px rgba(61,107,126,.5), 0 0 0 1px rgba(61,107,126,.45)',
+                }}
               >
-                <BadgeCheck className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
-                {language === 'es' ? 'Dictamen' : 'Opinion'}: {opinionLabel}
+                <div
+                  aria-hidden
+                  className="absolute rounded-full pointer-events-none"
+                  style={{
+                    right: -50,
+                    top: -50,
+                    width: 200,
+                    height: 200,
+                    background: 'rgba(255,255,255,.10)',
+                  }}
+                />
+                <div className="relative" style={{ zIndex: 1 }}>
+                  <p
+                    className="uppercase font-semibold"
+                    style={{
+                      fontSize: '0.7rem',
+                      letterSpacing: '0.12em',
+                      color: 'rgba(255,255,255,.82)',
+                    }}
+                  >
+                    {language === 'es' ? 'SCORE DE CUMPLIMIENTO' : 'COMPLIANCE SCORE'}
+                  </p>
+
+                  <div
+                    className="font-serif-elite font-medium num"
+                    style={{
+                      fontSize: 'clamp(2.6rem, 5vw, 3.8rem)',
+                      color: '#fff',
+                      lineHeight: 1,
+                      margin: '10px 0 6px',
+                    }}
+                  >
+                    {gaugeScore}
+                    <span
+                      style={{
+                        fontSize: '.42em',
+                        color: 'rgba(255,255,255,.5)',
+                        marginLeft: 3,
+                      }}
+                    >
+                      /100
+                    </span>
+                  </div>
+
+                  <div
+                    className="inline-flex items-center gap-1"
+                    style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}
+                  >
+                    <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden />
+                    <span style={{ color: 'rgba(255,255,255,.82)' }}>
+                      {language === 'es'
+                        ? 'Grado A · +6 pts en el año'
+                        : 'Grade A · +6 pts this year'}
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 20, height: 48 }}>
+                    <VerdadSparkline />
+                  </div>
+
+                  {/* Sub-KPIs */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 24,
+                      marginTop: 22,
+                      paddingTop: 18,
+                      borderTop: '1px solid rgba(255,255,255,.25)',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div
+                        className="num"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          fontSize: '1.25rem',
+                          color: '#fff',
+                        }}
+                      >
+                        4
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.625rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.08em',
+                          color: 'rgba(255,255,255,.72)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {language === 'es' ? 'Dictámenes vigentes' : 'Active opinions'}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        className="num"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          fontSize: '1.25rem',
+                          color: '#E8B42C',
+                        }}
+                      >
+                        2
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.625rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.08em',
+                          color: 'rgba(255,255,255,.72)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {language === 'es' ? 'Hallazgos menores' : 'Minor findings'}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        className="num"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          fontSize: '1.25rem',
+                          color: '#22C55E',
+                        }}
+                      >
+                        {language === 'es' ? 'Limpia' : 'Clean'}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.625rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.08em',
+                          color: 'rgba(255,255,255,.72)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {language === 'es' ? 'Opinión' : 'Opinion'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </motion.section>
 
-          {/* Breakdown bars */}
-          <div className="flex flex-col gap-5">
-            <div>
-              <h3 className="font-serif-elite text-xl text-n-1000 mb-1.5 leading-tight tracking-tight font-medium">
-                {language === 'es'
-                  ? 'Desglose ponderado del score'
-                  : 'Weighted score breakdown'}
-              </h3>
-              <p className="text-sm text-n-500 font-light">
-                {language === 'es'
-                  ? 'Consolidación de cuatro dimensiones regulatorias. Ponderaciones alineadas con el Audit Pipeline.'
-                  : 'Four regulatory dimensions consolidated. Weights aligned with the Audit Pipeline.'}
-              </p>
+          {/* ── Submódulos ── */}
+          <motion.section {...fadeItem(1)} className="mb-10">
+            <div className="flex items-center justify-between gap-4 mb-[18px]">
+              <h2
+                className="font-serif-elite font-medium text-n-1000"
+                style={{
+                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                  paddingLeft: 14,
+                  borderLeft: '3px solid #3D6B7E',
+                }}
+              >
+                {language === 'es' ? 'Submódulos' : 'Submodules'}
+              </h2>
+              <span className="text-sm text-n-500">
+                {language === 'es' ? '3 frentes · aseguramiento' : '3 tracks · assurance'}
+              </span>
             </div>
 
-            <div className="flex flex-col gap-3.5">
-              <BreakdownBar
-                label="NIIF"
-                value={breakdown.niif.value}
-                weight={breakdown.niif.weight}
-                color="var(--gold-500)"
-              />
-              <BreakdownBar
-                label={language === 'es' ? 'Tributario' : 'Tax'}
-                value={breakdown.tax.value}
-                weight={breakdown.tax.weight}
-                color="var(--gold-400)"
-              />
-              <BreakdownBar
-                label={language === 'es' ? 'Auditoría' : 'Audit'}
-                value={breakdown.audit.value}
-                weight={breakdown.audit.weight}
-                color="var(--color-wine-400)"
-              />
-              <BreakdownBar
-                label="Legal"
-                value={breakdown.legal.value}
-                weight={breakdown.legal.weight}
-                color="#F5D079"
-              />
-            </div>
-          </div>
-        </div>
-      </EliteCard>
-
-      {/* ── Altman Z — estado honesto (sin número inventado) ──────────────── */}
-      <EliteCard variant="glass" padding="md" className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <span
-              aria-hidden="true"
-              className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600"
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))' }}
             >
-              <Sigma className="w-5 h-5" strokeWidth={1.75} />
-            </span>
-            <div className="min-w-0 flex flex-col">
-              <span className="uppercase tracking-eyebrow text-xs text-n-500 font-medium">
-                Altman Z-Score
-              </span>
-              <span className="text-xs text-n-600 tracking-wide">
-                {language === 'es'
-                  ? 'Continuidad del negocio · going concern'
-                  : 'Going concern · business continuity'}
+              {SUBMODULES.map((sub) => (
+                <SubmoduleCard
+                  key={sub.key}
+                  sub={sub}
+                  title={verdad.submodules[sub.key].title}
+                  description={verdad.submodules[sub.key].description}
+                  language={language}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* ── Dictámenes ── */}
+          <motion.section {...fadeItem(2)} className="mb-10">
+            <div className="flex items-center justify-between gap-4 mb-[18px]">
+              <h2
+                className="font-serif-elite font-medium text-n-1000"
+                style={{
+                  fontSize: 'clamp(1.25rem, 2vw, 1.5rem)',
+                  paddingLeft: 14,
+                  borderLeft: '3px solid #3D6B7E',
+                }}
+              >
+                {language === 'es' ? 'Dictámenes' : 'Opinions'}
+              </h2>
+              <span
+                className="inline-flex items-center gap-[6px] rounded-full font-bold uppercase"
+                style={{
+                  height: 22,
+                  padding: '0 10px',
+                  fontSize: '0.625rem',
+                  letterSpacing: '.1em',
+                  background: 'color-mix(in srgb, #3D6B7E 18%, transparent)',
+                  color: '#315869',
+                }}
+              >
+                <span
+                  className="h-[6px] w-[6px] rounded-full bg-current animate-pulse"
+                  aria-hidden
+                />
+                {language === 'es' ? 'Panel de opinión' : 'Opinion panel'}
               </span>
             </div>
-          </div>
 
-          {!view.hasData ? (
-            <span className="font-serif-elite text-2xl text-n-700 tabular-nums">—</span>
-          ) : view.derived.altmanZ != null ? (
-            <span className="font-serif-elite text-2xl text-n-1000 tabular-nums">
-              {view.derived.altmanZ.toFixed(2)}
-            </span>
-          ) : (
-            <div className="flex flex-col items-start sm:items-end min-w-0">
-              <span className="text-sm font-medium text-n-800">
-                {language === 'es'
-                  ? 'Requiere utilidades retenidas'
-                  : 'Requires retained earnings'}
-              </span>
-              {view.derived.altmanRazon && (
-                <span className="text-xs text-n-600 tracking-wide max-w-[42ch] sm:text-right">
-                  {view.derived.altmanRazon}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </EliteCard>
-
-      {/* ── Fuentes de datos conectadas — escalera de capacidades ────────── */}
-      <DataSourceLadder
-        title={
-          language === 'es'
-            ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
-            : 'Connected data sources — each level unlocks more capabilities'
-        }
-        sources={sources}
-      />
-
-      {/* ── Hallazgos activos + CTA NIIF Elite ───────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-6">
-        <EliteCard variant="glass" padding="md">
-          <EliteCard.Header className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <AlertCircle
-                className="w-4 h-4 text-area-escudo"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="font-serif-elite text-lg tracking-tight">
-                {language === 'es' ? 'Alertas activas' : 'Active alerts'}
-              </span>
-            </span>
-            <span
-              className="text-xs uppercase tracking-eyebrow font-medium px-2.5 py-1 rounded-full"
+            <div
+              className="flex flex-col gap-[10px] p-6 rounded-xl"
               style={{
-                backgroundColor:
-                  criticalCount > 0 ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.14)',
-                color: criticalCount > 0 ? 'var(--color-danger-light)' : 'var(--color-success-light)',
+                border: '1px solid color-mix(in srgb, #3D6B7E 20%, transparent)',
+                background: 'color-mix(in srgb, #3D6B7E 4%, var(--color-n-0, #FCFBF8))',
               }}
             >
-              {criticalCount}{' '}
-              {language === 'es'
-                ? criticalCount === 1
-                  ? 'hallazgo crítico'
-                  : 'hallazgos críticos'
-                : criticalCount === 1
-                  ? 'critical finding'
-                  : 'critical findings'}
-            </span>
-          </EliteCard.Header>
-
-          <EliteCard.Body>
-            <ul className="flex flex-col gap-2.5">
-              {findings.slice(0, 4).map((f, idx) => {
-                const tone = SEVERITY_COLOR[f.severity];
-                return (
-                  <li
-                    key={`${f.severity}-${idx}`}
-                    className={cn(
-                      'flex items-start gap-3 py-2 pl-3 pr-3 rounded-md',
-                      'border-l-2',
-                      tone.border,
-                      'bg-[rgba(255,255,255,0.015)]',
-                    )}
+              {dicts.map(({ name, color, value }) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-[14px] px-4 py-[13px] rounded-lg"
+                  style={{
+                    background: 'var(--color-n-0, #FCFBF8)',
+                    border: '1px solid var(--color-n-200, #E5E3DE)',
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ background: color }}
+                  />
+                  <span className="flex-1 text-sm font-medium text-n-800">{name}</span>
+                  <span
+                    className="h-[6px] rounded-full overflow-hidden shrink-0"
+                    style={{
+                      minWidth: 90,
+                      flex: '0 0 110px',
+                      background: 'var(--color-n-100, #F0EDE8)',
+                    }}
+                    role="progressbar"
+                    aria-valuenow={value}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
                   >
                     <span
-                      aria-hidden="true"
-                      className="shrink-0 mt-1 inline-block h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: tone.dot }}
+                      className="block h-full rounded-full"
+                      style={{ width: `${value}%`, background: color }}
                     />
-                    <div className="min-w-0 flex-1 flex flex-col">
-                      <p className="text-sm leading-relaxed text-n-1000">
-                        {f.description}
-                      </p>
-                      {f.norm && (
-                        <p className="text-xs mt-0.5 text-n-500 tracking-wide">
-                          {f.norm}
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </EliteCard.Body>
-        </EliteCard>
-
-        {/* CTA estrella: NIIF Elite */}
-        <EliteCard
-          variant="glass"
-          padding="lg"
-          className="flex flex-col justify-between gap-5 min-w-[280px]"
-        >
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <BadgeCheck
-                className="w-4 h-4 text-gold-600"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="uppercase tracking-eyebrow text-xs text-gold-500 font-medium">
-                {language === 'es' ? 'Producto estrella' : 'Flagship product'}
-              </span>
+                  </span>
+                  <span
+                    className="num shrink-0 text-sm text-n-600"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  >
+                    {value}/100
+                  </span>
+                </div>
+              ))}
             </div>
-            <h3 className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000">
-              {language === 'es'
-                ? 'Informe NIIF Elite completo'
-                : 'Complete IFRS Elite Report'}
-            </h3>
-            <p className="text-sm leading-relaxed text-n-500 font-light max-w-[32ch]">
-              {language === 'es'
-                ? 'Pipeline integral: Reporte NIIF + Auditoría regulatoria + Meta-auditor de calidad. El cierre definitivo de su verdad contable.'
-                : 'End-to-end pipeline: IFRS report + regulatory audit + quality meta-auditor. The definitive closing of your accounting truth.'}
-            </p>
-          </div>
-          <NiifEliteButton size="lg" className="w-full justify-center" />
-        </EliteCard>
-      </div>
-
-      {/* ── Grid de submódulos ───────────────────────────────────────────── */}
-      <div>
-        <h3 className="font-serif-elite text-2xl leading-tight tracking-tight text-n-1000 mb-4">
-          {language === 'es' ? 'Módulos de aseguramiento' : 'Assurance modules'}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {SUBMODULES.map((sm) => {
-            const meta = verdad.submodules[sm.key];
-            return (
-              <SubmoduleCard
-                key={sm.key}
-                href={sm.href}
-                icon={sm.icon}
-                title={meta.title}
-                description={meta.description}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Capacidades de aseguramiento · estado según fuente ────────────── */}
-      <CapabilityZones
-        legendTitle={
-          language === 'es'
-            ? 'Capacidades de aseguramiento · estado según fuente'
-            : 'Assurance capabilities · status by source'
-        }
-        zones={zones}
-        sourceLabels={sourceLabels}
-      />
-
-      {/* ── Strip chat contextual (opcional informativo) ─────────────────── */}
-      {!compact && (
-        <div
-          className={cn(
-            'rounded-lg px-5 py-4',
-            'bg-[rgb(var(--color-gold-500-rgb)_/_0.04)]',
-            'border border-[rgb(var(--color-gold-500-rgb)_/_0.14)]',
-            'flex flex-wrap items-center gap-x-5 gap-y-2',
-          )}
-        >
-          <ClipboardCheck
-            className="w-4 h-4 text-gold-500 shrink-0"
-            strokeWidth={1.75}
-            aria-hidden="true"
-          />
-          <p className="text-sm text-n-800 flex-1 min-w-[240px]">
-            {language === 'es' ? (
-              <>
-                <span className="text-n-1000 font-medium">Chat contextual.</span>{' '}
-                Pregunte al asistente sobre cualquier hallazgo, partida conciliatoria
-                o dictamen — el contexto se carga automáticamente.
-              </>
-            ) : (
-              <>
-                <span className="text-n-1000 font-medium">Contextual chat.</span>{' '}
-                Ask the assistant about any finding, reconciliation item, or opinion
-                — context loads automatically.
-              </>
-            )}
-          </p>
-          <Link
-            href="/workspace"
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium',
-              'text-gold-500 hover:text-gold-600',
-              'transition-colors',
-            )}
-          >
-            {language === 'es' ? 'Abrir chat' : 'Open chat'}
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-          </Link>
-        </div>
+          </motion.section>
+        </>
       )}
-    </section>
+
+      {/* ── Fuentes conectadas ── */}
+      <motion.section {...fadeItem(compact ? 0 : 3)} className="mb-10">
+        <DataSourceLadder
+          title={
+            language === 'es'
+              ? 'Fuentes conectadas — cada nivel activa más capacidades'
+              : 'Connected sources — each level unlocks more capabilities'
+          }
+          sources={sources}
+        />
+      </motion.section>
+
+      {/* ── Capacidades de aseguramiento ── */}
+      <motion.div {...fadeItem(compact ? 1 : 4)}>
+        <CapabilityZones
+          legendTitle={
+            language === 'es'
+              ? 'Capacidades de aseguramiento · estado según fuente'
+              : 'Assurance capabilities · status by source'
+          }
+          zones={zones}
+          sourceLabels={sourceLabels}
+        />
+      </motion.div>
+    </div>
   );
 }
 
-// ─── Submodule card (interna) ────────────────────────────────────────────────
+// ─── Submódulo card — matches handoff .subcard style ─────────────────────────
 
 interface SubmoduleCardProps {
-  href: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  sub: VerdadSubmoduleDef;
   title: string;
   description: string;
+  language: 'es' | 'en';
 }
 
-function SubmoduleCard({ href, icon: Icon, title, description }: SubmoduleCardProps) {
-  const shouldReduce = useReducedMotion();
+function SubmoduleCard({ sub, title, description, language }: SubmoduleCardProps) {
+  const { icon: Icon, href, statusLabel, statusColor } = sub;
+
   return (
-    <motion.div
-      whileHover={shouldReduce ? undefined : { y: -3 }}
-      transition={{ type: 'spring', stiffness: 280, damping: 26 }}
-      className="h-full"
+    <Link
+      href={href}
+      prefetch={false}
+      className="group relative block overflow-hidden rounded-xl transition-[transform,box-shadow] hover:-translate-y-1"
+      style={{
+        background: 'color-mix(in srgb, #3D6B7E 4%, var(--color-n-0, #FCFBF8))',
+        border: '1px solid color-mix(in srgb, #3D6B7E 20%, transparent)',
+        padding: 20,
+      }}
     >
-      <Link
-        href={href}
-        className={cn(
-          'group relative flex flex-col gap-4 h-full min-h-[200px]',
-          'p-5 rounded-lg',
-          'glass-elite-elevated border-elite-gold',
-          'transition-[box-shadow,border-color] duration-300 ease-out',
-          'hover:shadow-[0_0_40px_rgb(var(--color-gold-500-rgb) / 0.28)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
-        )}
+      {/* Left accent bar — scale-y-0 → scale-y-100 on hover */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 bottom-0 w-1 origin-top scale-y-0 group-hover:scale-y-100 transition-transform duration-200 rounded-tl-xl rounded-bl-xl"
+        style={{ background: 'linear-gradient(180deg, #3D6B7E, #315869)' }}
+      />
+
+      {/* Icon box (42×42) */}
+      <div
+        aria-hidden
+        className="inline-grid place-items-center rounded-lg mb-4 group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200"
+        style={{
+          width: 42,
+          height: 42,
+          background: 'color-mix(in srgb, #3D6B7E 18%, transparent)',
+          color: '#315869',
+        }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div
-            aria-hidden="true"
-            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] text-gold-600 transition-transform duration-300 group-hover:scale-105"
-          >
-            <Icon className="w-5 h-5" strokeWidth={1.75} />
-          </div>
+        <Icon className="h-5 w-5" strokeWidth={1.75} />
+      </div>
+
+      {/* Name */}
+      <p className="text-base font-semibold text-n-1000">{title}</p>
+
+      {/* Description */}
+      <p className="text-sm text-n-600 leading-snug mt-[5px]">{description}</p>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-4">
+        <span
+          className="inline-flex items-center gap-[6px] text-xs font-semibold"
+          style={{ color: statusColor }}
+        >
           <span
-            aria-hidden="true"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[rgb(var(--color-gold-500-rgb)_/_0.22)] text-n-500 transition-all duration-300 group-hover:text-gold-600 group-hover:border-[rgba(232,180,44,0.55)] group-hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.12)] group-hover:translate-x-0.5"
-          >
-            <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.75} />
-          </span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <h4 className="font-serif-elite text-xl leading-tight tracking-tight text-n-1000">
-            {title}
-          </h4>
-          <p className="text-sm leading-relaxed text-n-500 font-light">
-            {description}
-          </p>
-        </div>
-      </Link>
-    </motion.div>
+            aria-hidden
+            className="inline-block h-[6px] w-[6px] rounded-full"
+            style={{ background: statusColor }}
+          />
+          {statusLabel[language]}
+        </span>
+        <span className="inline-flex" style={{ color: '#3D6B7E' }}>
+          <ArrowRight
+            className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+        </span>
+      </div>
+    </Link>
   );
 }
-
-// ─── Helpers públicos para páginas hijas ─────────────────────────────────────
-
-export { ScoreArc, SEVERITY_COLOR };

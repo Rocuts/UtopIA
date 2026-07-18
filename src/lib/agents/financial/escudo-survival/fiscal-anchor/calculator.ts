@@ -54,10 +54,12 @@ function pctOfCents(amountCents: bigint, pct: bigint): bigint {
  */
 function ratioPct1Decimal(numeratorCents: bigint, denominatorCents: bigint): number {
   if (denominatorCents <= ZERO) return 0;
-  // Promovemos a número solo al final; multiplicamos por 1000 en BigInt para
-  // preservar el dígito decimal antes de redondear.
-  const scaled = (numeratorCents * BigInt(1000)) / denominatorCents;
-  return Math.round(Number(scaled)) / 10;
+  // Promovemos a número solo al final; escalamos ×10000 en BigInt para
+  // conservar DOS dígitos tras el decimal visible antes de redondear —
+  // con ×1000 la división entera truncaba el segundo decimal y violaba el
+  // contrato round-half-away del header (14,2857% salía 14,2 y no 14,3).
+  const scaled = (numeratorCents * BigInt(10_000)) / denominatorCents;
+  return Math.round(Number(scaled) / 10) / 10;
 }
 
 export function deriveFiscalAnchorMetrics(

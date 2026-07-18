@@ -33,6 +33,7 @@ interface RouteContext {
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const contentLength = req.headers.get('content-length');
     if (contentLength && Number(contentLength) > MAX_JSON_BODY) {
@@ -59,6 +60,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const { id } = await ctx.params;
@@ -103,7 +105,7 @@ function handleError(err: unknown, tag: string) {
   }
   console.error(tag, err);
   return NextResponse.json(
-    { ok: false, error: err instanceof Error ? err.message : 'internal_error' },
+    { ok: false, error: 'internal_error' },
     { status: 500 },
   );
 }

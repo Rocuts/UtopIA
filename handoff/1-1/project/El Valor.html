@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · El Valor</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+</head>
+<body data-area="valor">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+
+    <div class="mwrap">
+      <section class="ahero">
+        <div>
+          <div class="eyebrow">
+            <span class="ic"><i data-lucide="trending-up" class="pi"></i></span>
+            II · Valor
+          </div>
+          <h1>El Valor</h1>
+          <p class="lede">Ingeniería financiera y valoración de empresa. Revelamos cuánto vale su compañía hoy — y qué palancas mueven ese número antes de invertir, fusionar o vender.</p>
+        </div>
+        <div class="hero-kpi">
+          <div class="kl">Valor de salida · DCF</div>
+          <div class="kv num">$4.820M</div>
+          <div class="kt up"><i data-lucide="arrow-up" style="width:15px;height:15px;"></i>12% vs. valoración anterior</div>
+          <div class="kchart"><svg id="vVal" width="100%" height="70"></svg></div>
+          <div class="subkpis">
+            <div class="s"><div class="v num">$1.180M</div><div class="l">EBITDA</div></div>
+            <div class="s"><div class="v num">13,2%</div><div class="l">WACC</div></div>
+            <div class="s"><div class="v num">5,4×</div><div class="l">Múltiplo EV/EBITDA</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Submódulos</div>
+          <div class="meta">3 frentes · pipeline de valoración</div>
+        </div>
+        <div class="subgrid" id="subs"></div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Drivers de valor</div>
+          <span class="badge-ac"><span class="live-dot"></span>Sensibilidad DCF</span>
+        </div>
+        <div class="panel tinted">
+          <div class="ladder-list" id="drivers"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const SUBS = [
+    ['file-search','Due Diligence','Auditoría preventiva financiera, legal, operativa y tributaria.','52% completado','var(--warning)'],
+    ['line-chart','Inteligencia Financiera','Rentabilidad, costos, flujo de caja y escenarios de crecimiento.','Activo','var(--success)'],
+    ['gem','Valoración','Pipeline DCF, múltiplos y narrativa para inversionistas.','Modelo al día','var(--success)'],
+  ];
+  const HREF={'Due Diligence':'El Valor - Due Diligence.html','Inteligencia Financiera':'El Valor - Inteligencia Financiera.html','Valoración':'El Valor - Valoraci-n.html'};
+  document.getElementById('subs').innerHTML = SUBS.map(([ic,nm,ds,st,c])=>`
+    <a class="subcard" href="${HREF[nm]||'#'}">
+      <div class="ic"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="nm">${nm}</div>
+      <div class="ds">${ds}</div>
+      <div class="ft">
+        <span class="st" style="color:${c}"><span class="d" style="background:${c}"></span>${st}</span>
+        <span class="go"><i data-lucide="arrow-right" class="pi"></i></span>
+      </div>
+    </a>`).join('');
+
+  const DRV = [
+    ['Crecimiento de ingresos','+$640M',88],
+    ['Margen EBITDA','+$410M',72],
+    ['Múltiplo de salida','+$300M',58],
+    ['Costo de capital (WACC)','−$210M',40],
+  ];
+  document.getElementById('drivers').innerHTML = DRV.map(([n,v,w])=>`
+    <div class="ladder-item">
+      <span class="qd" style="background:var(--ac)"></span>
+      <span class="qn">${n}</span>
+      <span class="bar-track"><span class="fill" style="width:${w}%"></span></span>
+      <span class="qv">${v}</span>
+    </div>`).join('');
+
+  window.renderCharts = function(){
+    bars('vVal',[58,62,60,67,72,78,84,92,100],'#ffffff');
+    if(window.lucide) lucide.createIcons();
+  };
+</script>
+</body>
+</html>

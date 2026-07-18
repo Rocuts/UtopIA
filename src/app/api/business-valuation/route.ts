@@ -3,6 +3,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 import { businessValuationRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateValuation } from '@/lib/agents/financial/valuation/orchestrator';
 import type { ValuationProgressEvent } from '@/lib/agents/financial/valuation/types';
+import { createSafeSse } from '@/lib/api/sse-safe';
 
 // ---------------------------------------------------------------------------
 // POST /api/business-valuation
@@ -85,37 +86,31 @@ function handleStreaming(
   instructions: string | undefined,
   purpose: string | undefined,
 ) {
-  const encoder = new TextEncoder();
-
-  const readableStream = new ReadableStream({
+  const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
 
       try {
         const report = await orchestrateValuation(
           { financialData, company, language, instructions, purpose },
           {
             onProgress: (event: ValuationProgressEvent) => {
-              send('progress', event);
+              sse.send('progress', event);
             },
           },
         );
-        send('result', report);
+        sse.send('result', report);
       } catch (error) {
         console.error(
           '[business-valuation] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
-        send('error', {
+        sse.send('error', {
           error: 'Error during business valuation.',
           detail: error instanceof Error ? error.message : 'Unknown error',
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

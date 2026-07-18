@@ -33,6 +33,7 @@ const connectSchema = z.object({
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     // 1. Guard first — unauthenticated callers get 401 before any input is inspected.
     //    Prevents enumeration of valid ERP provider slugs by anonymous callers.

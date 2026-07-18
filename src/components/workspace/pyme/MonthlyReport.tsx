@@ -23,6 +23,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  Download,
   Info,
   LineChart,
   Receipt,
@@ -30,6 +31,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
+import { generateMonthlyReportPDF } from '@/lib/pyme/reportPDF';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -62,6 +64,7 @@ export function MonthlyReport({ bookId, currency = 'COP' }: MonthlyReportProps) 
   const [year, setYear] = useState<number>(now.getFullYear());
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [generating, setGenerating] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
   const [payload, setPayload] = useState<MonthlyReportPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,6 +104,21 @@ export function MonthlyReport({ bookId, currency = 'COP' }: MonthlyReportProps) 
       setGenerating(false);
     }
   }, [generating, bookId, year, month, language]);
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (!payload || exportingPDF) return;
+    setExportingPDF(true);
+    try {
+      const doc = generateMonthlyReportPDF(payload, { language });
+      const monthLabel = new Date(payload.year, payload.month - 1, 1).toLocaleDateString(
+        language === 'es' ? 'es-CO' : 'en-US',
+        { month: 'long', year: 'numeric' },
+      );
+      doc.save(`informe_${monthLabel.replace(/\s/g, '_')}.pdf`);
+    } finally {
+      setExportingPDF(false);
+    }
+  }, [payload, exportingPDF, language]);
 
   // Year options: last 5 years
   const yearOptions = useMemo(() => {
@@ -184,6 +202,23 @@ export function MonthlyReport({ bookId, currency = 'COP' }: MonthlyReportProps) 
         >
           <Sparkles className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           <span>{generating ? tt.generating : tt.generate}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDownloadPDF}
+          disabled={!payload || exportingPDF}
+          title={!payload ? tt.empty : undefined}
+          className={cn(
+            'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-opacity',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2',
+            payload && !exportingPDF
+              ? 'bg-n-0 border border-n-300 text-n-800 hover:bg-n-100'
+              : 'bg-n-100 text-n-500 cursor-not-allowed opacity-60',
+          )}
+        >
+          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          <span>{exportingPDF ? tt.exporting_pdf : tt.export_pdf}</span>
         </button>
 
         <button

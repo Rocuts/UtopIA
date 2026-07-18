@@ -26,6 +26,7 @@ export const maxDuration = 60;
 export async function POST() {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const result = await seedPucForWorkspace(ws.id);
@@ -51,8 +52,10 @@ export async function POST() {
       );
     }
     console.error('[accounting/accounts/seed][POST]', err);
+    // Mensaje genérico al cliente: `err.message` de drizzle/pg incluye la
+    // query SQL completa — el detalle queda solo en el log del servidor.
     return NextResponse.json(
-      { ok: false, error: msg },
+      { ok: false, error: 'internal_error' },
       { status: 500 },
     );
   }

@@ -162,6 +162,8 @@ const RATE_LIMITS: Record<string, number> = {
   '/api/pyme/uploads': 20,
   '/api/pyme/entries': 60,
   '/api/pyme/books': 60,
+  '/api/pyme/empleados': 60,
+  '/api/pyme/tax-calculations': 30,
   '/api/pyme/reports/monthly': 5,
 
   // ERP integrations (sensitive — credentials)
@@ -176,6 +178,12 @@ const RATE_LIMITS: Record<string, number> = {
 
   // Workspace bootstrap
   '/api/workspace': 60,
+
+  // Stripe webhook (server-to-server; authenticity = HMAC signature inside
+  // the handler). 60/min is generous for real subscription traffic but caps
+  // replay floods. NOTE: must precede any broader '/api/auth' entry if one is
+  // ever added — prefix match is first-wins in insertion order.
+  '/api/auth/stripe/webhook': 60,
 
   // Future Ola 1 (núcleo contable). Listed pre-emptively so when these
   // routes ship they ALREADY have explicit limits instead of inheriting
@@ -202,6 +210,10 @@ const CSRF_ALLOWLIST: readonly string[] = [
   // Token auth (X-Webhook-Token) is enforced inside the route handler itself.
   // Rate limiting is still applied by the proxy (see RATE_LIMITS below).
   '/api/erp/webhook/',
+  // Stripe webhook (@better-auth/stripe, mounted under the BetterAuth
+  // catch-all): Stripe servers POST without an Origin header. Authenticity is
+  // enforced inside the plugin via HMAC signature (STRIPE_WEBHOOK_SECRET).
+  '/api/auth/stripe/webhook',
 ];
 
 function getRateLimitConfig(pathname: string): { limit: number; id: string } {

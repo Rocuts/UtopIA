@@ -3,6 +3,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 import { taxPlanningRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTaxPlanning } from '@/lib/agents/financial/tax-planning/orchestrator';
 import type { TaxPlanningProgressEvent } from '@/lib/agents/financial/tax-planning/types';
+import { createSafeSse } from '@/lib/api/sse-safe';
 
 // ---------------------------------------------------------------------------
 // POST /api/tax-planning
@@ -102,37 +103,31 @@ function handleStreaming(
   language: 'es' | 'en',
   instructions: string | undefined,
 ) {
-  const encoder = new TextEncoder();
-
-  const readableStream = new ReadableStream({
+  const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      const sse = createSafeSse(controller);
 
       try {
         const report = await orchestrateTaxPlanning(
           { rawData, company, language, instructions },
           {
             onProgress: (event: TaxPlanningProgressEvent) => {
-              send('progress', event);
+              sse.send('progress', event);
             },
           },
         );
-        send('result', report);
+        sse.send('result', report);
       } catch (error) {
         console.error(
           '[tax-planning] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
-        send('error', {
+        sse.send('error', {
           error: 'Error during tax planning report generation.',
           detail: error instanceof Error ? error.message : 'Unknown error',
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

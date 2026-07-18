@@ -17,6 +17,7 @@ import {
   type PersistedSession,
 } from '@/lib/agents/repair/persistence';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 //
@@ -60,6 +61,9 @@ const putBodySchema = z.object({
 // ─── GET ────────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const url = new URL(req.url);
     const conversationId = url.searchParams.get('conversationId');
@@ -91,6 +95,9 @@ export async function GET(req: Request) {
 // ─── PUT ────────────────────────────────────────────────────────────────────
 
 export async function PUT(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let raw: unknown;
   try {
     raw = await req.json();

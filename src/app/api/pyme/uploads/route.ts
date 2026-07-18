@@ -65,6 +65,7 @@ function validMagicBytes(buf: Buffer, mime: string): boolean {
 export async function POST(req: NextRequest) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     // Body size guard ANTES de leer el FormData. content-length es informativo
     // pero la mayoria de clientes legitimos lo envian; rechazamos abuso temprano
@@ -205,7 +206,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: err instanceof Error ? err.message : 'internal_error',
+        error: 'internal_error',
       },
       { status: 500 },
     );

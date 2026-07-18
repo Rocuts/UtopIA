@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Alertas</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .pagehead{ padding:22px 0 24px; }
+  .pagehead .eyebrow{ color:var(--ac-deep); display:inline-flex; align-items:center; gap:8px; margin-bottom:12px; font-weight:700; }
+  .pagehead .eyebrow .ic{ width:30px; height:30px; border-radius:var(--r-md); display:grid; place-items:center; background:linear-gradient(140deg,var(--ac),var(--ac-deep)); color:#fff; }
+  .pagehead .eyebrow .ic .pi{ width:16px; height:16px; }
+  .pagehead h1{ font-family:var(--font-display); font-weight:500; font-size:clamp(2.2rem,4vw,3rem); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .pagehead .sub{ color:var(--n-600); font-size:var(--t-md); margin-top:8px; }
+  .filterbar{ display:flex; gap:8px; flex-wrap:wrap; margin-top:20px; }
+  .fchip{ display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:var(--r-full); border:1px solid var(--n-200); background:var(--n-0); font-size:var(--t-sm); font-weight:500; color:var(--n-700); cursor:pointer; transition:all var(--d-base); }
+  .fchip .d{ width:7px; height:7px; border-radius:50%; }
+  .fchip.on{ background:var(--n-900); color:var(--n-0); border-color:var(--n-900); }
+  .fchip:hover:not(.on){ border-color:var(--n-300); }
+
+  .cols{ display:grid; grid-template-columns:1.55fr 1fr; gap:20px; align-items:start; padding-top:8px; }
+  @media(max-width:900px){ .cols{ grid-template-columns:1fr; } }
+
+  .alert{ display:flex; gap:14px; padding:16px 18px; border-radius:var(--r-lg); background:var(--n-0); border:1px solid var(--n-200); border-left:3px solid var(--sc); margin-bottom:10px; transition:transform var(--d-base), box-shadow var(--d-base); cursor:pointer; }
+  .alert:hover{ transform:translateX(3px); box-shadow:var(--e3); }
+  .alert .ai{ width:38px; height:38px; border-radius:var(--r-md); display:grid; place-items:center; background:color-mix(in srgb,var(--sc) 14%, transparent); color:var(--sc); flex-shrink:0; }
+  .alert .ai .pi{ width:18px; height:18px; }
+  .alert .ab{ flex:1; min-width:0; }
+  .alert .at{ font-size:var(--t-md); font-weight:600; color:var(--n-1000); }
+  .alert .ad{ font-size:var(--t-sm); color:var(--n-600); margin-top:3px; line-height:var(--lh-snug); }
+  .alert .ameta{ display:flex; gap:10px; align-items:center; margin-top:8px; }
+  .achip{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:2px 8px; border-radius:var(--r-full); background:color-mix(in srgb,var(--sc) 12%, transparent); color:var(--sc); }
+  .atime{ font-size:var(--t-xs); color:var(--n-500); }
+
+  .subs{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:22px; position:sticky; top:84px; }
+  .subs h3{ font-family:var(--font-display); font-weight:500; font-size:var(--t-xl); color:var(--n-1000); margin-bottom:4px; }
+  .subs .sd{ font-size:var(--t-sm); color:var(--n-600); margin-bottom:18px; }
+  .sub-item{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-top:1px solid var(--n-100); }
+  .sub-item .si-n{ font-size:var(--t-sm); font-weight:600; color:var(--n-900); }
+  .sub-item .si-d{ font-size:var(--t-xs); color:var(--n-500); margin-top:2px; }
+  .toggle{ width:42px; height:24px; border-radius:var(--r-full); background:var(--n-300); position:relative; cursor:pointer; flex-shrink:0; transition:background var(--d-base); border:none; }
+  .toggle::after{ content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left var(--d-base) var(--ease-spring); box-shadow:var(--e2); }
+  .toggle.on{ background:var(--ac); }
+  .toggle.on::after{ left:20px; }
+</style>
+</head>
+<body data-area="app" data-fx="pulse">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+    <div class="mwrap">
+      <div class="pagehead">
+        <div class="eyebrow"><span class="ic"><i data-lucide="bell-ring" class="pi"></i></span>Sentinel · Inteligencia de alertas</div>
+        <h1>Centro de Alertas</h1>
+        <div class="sub">Vencimientos, hallazgos e insights detectados por la IA — filtrados por área y severidad.</div>
+        <div class="filterbar" id="filters">
+          <button class="fchip on">Todas <span class="num" style="color:var(--n-400);">12</span></button>
+          <button class="fchip"><span class="d" style="background:#A83838;"></span>Escudo</button>
+          <button class="fchip"><span class="d" style="background:#B8934A;"></span>Valor</button>
+          <button class="fchip"><span class="d" style="background:#3D6B7E;"></span>Verdad</button>
+          <button class="fchip"><span class="d" style="background:#5A7F7A;"></span>Futuro</button>
+        </div>
+      </div>
+
+      <div class="cols">
+        <section>
+          <div class="sec-h"><div class="t">Bandeja de insights</div><span class="badge-ac"><span class="live-dot"></span>6 críticas</span></div>
+          <div id="inbox"></div>
+        </section>
+
+        <aside class="subs">
+          <h3>Suscripciones</h3>
+          <div class="sd">Elija qué le avisa Sentinel y por qué canal.</div>
+          <div id="subList"></div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const ALERTS = [
+    ['triangle-alert','#A83838','Crítica','Renta Grandes Contribuyentes — Cuota 3','NIT dígito 7 · vence en 6 días. Base: Art. 591 E.T., Decreto 2229 de 2023.','Hace 2 h'],
+    ['triangle-alert','#A83838','Crítica','Retención en la Fuente — Mayo 2026','NIT dígito 7 · vence en 6 días. Plazo entre el 7º y 16º día hábil.','Hace 2 h'],
+    ['trending-down','#A83838','Riesgo','TEF por encima del sector','Su tasa efectiva (28,4%) supera la mediana del sector en 3,1 pts.','Hoy'],
+    ['file-warning','#B8934A','Oportunidad','Saldo a favor IVA sin radicar','Tiene $1.240M en saldos a favor listos para devolución.','Ayer'],
+    ['scale','#3D6B7E','Aviso','Dictamen de control interno','2 hallazgos menores pendientes de subsanar antes del cierre.','Ayer'],
+    ['compass','#5A7F7A','Insight','Runway sensible a la TRM','Un alza de TRM a $4.300 reduce el runway base de 28 a 24 meses.','2 días'],
+  ];
+  document.getElementById('inbox').innerHTML = ALERTS.map(([ic,c,tag,t,d,time])=>`
+    <div class="alert" style="--sc:${c}">
+      <div class="ai"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="ab">
+        <div class="at">${t}</div>
+        <div class="ad">${d}</div>
+        <div class="ameta"><span class="achip">${tag}</span><span class="atime">${time}</span></div>
+      </div>
+    </div>`).join('');
+
+  const SUBS = [
+    ['Vencimientos tributarios','Renta, IVA, retenciones, PILA',true],
+    ['Cambios normativos DIAN','Nueva doctrina y decretos',true],
+    ['Hallazgos de auditoría','Dictámenes y control interno',true],
+    ['Alertas de valor','Cambios en EBITDA, WACC, DCF',false],
+    ['Escenarios y macro','TRM, inflación, runway',true],
+    ['Resumen semanal','Digest cada lunes 7 a.m.',false],
+  ];
+  document.getElementById('subList').innerHTML = SUBS.map(([n,d,on])=>`
+    <div class="sub-item">
+      <div><div class="si-n">${n}</div><div class="si-d">${d}</div></div>
+      <button class="toggle ${on?'on':''}" onclick="this.classList.toggle('on')"></button>
+    </div>`).join('');
+
+  document.querySelectorAll('.fchip').forEach(c=>c.addEventListener('click',()=>{
+    document.querySelectorAll('.fchip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+  }));
+
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

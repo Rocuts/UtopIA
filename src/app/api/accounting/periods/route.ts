@@ -29,6 +29,7 @@ import {
 export async function GET(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const url = new URL(req.url);
     const yearStr = url.searchParams.get('year');
@@ -63,6 +64,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   let raw: unknown;
   try {
     raw = await req.json();

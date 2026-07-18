@@ -2,6 +2,8 @@ import 'server-only';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
+import { stripe as stripePlugin } from '@better-auth/stripe';
+import Stripe from 'stripe';
 import { getDb } from '@/lib/db/client';
 import * as authSchema from '@/lib/db/schema-auth';
 
@@ -37,9 +39,68 @@ function signupAllowlist(): Set<string> {
 //   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 //   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 //
+// Billing (@better-auth/stripe — phase-gated, same pattern as BETTER_AUTH_SECRET;
+// without these vars the plugin is NOT mounted and the app behaves as today):
+//   STRIPE_SECRET_KEY          — sk_live_... / sk_test_...
+//   STRIPE_WEBHOOK_SECRET      — whsec_... (webhook endpoint: /api/auth/stripe/webhook)
+//   STRIPE_PRICE_ID_PRO        — price_... (monthly Pro)
+//   STRIPE_PRICE_ID_PRO_ANNUAL — price_... (optional annual Pro)
+//   STRIPE_PRICE_ID_ENTERPRISE — price_... (optional Enterprise)
+// Runbook: docs/BILLING.md
+//
 // To activate a provider: uncomment the relevant block below and add the
 // env vars to Vercel. No code change needed beyond that.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Stripe billing — mounted only when fully configured (fail-closed on partial
+// config: secret without webhook secret would silently skip signature checks).
+// Webhook route (auto-mounted by the plugin under the BetterAuth catch-all):
+//   POST /api/auth/stripe/webhook — exempted from CSRF in src/proxy.ts because
+//   Stripe servers send no Origin header; authenticity = HMAC signature.
+// Subscriptions hang off the BetterAuth user id (referenceId). Workspace plan
+// resolves via workspaces.user_id → subscription.reference_id (1 user = 1
+// workspace today — ADR-05 Opción A). Plan helper: src/lib/billing/plan.ts
+// ---------------------------------------------------------------------------
+
+const BILLING_ACTIVE = Boolean(
+  process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET,
+);
+
+function buildStripePlans() {
+  const plans: { name: string; priceId: string; annualDiscountPriceId?: string }[] = [];
+  if (process.env.STRIPE_PRICE_ID_PRO) {
+    plans.push({
+      name: 'pro',
+      priceId: process.env.STRIPE_PRICE_ID_PRO,
+      ...(process.env.STRIPE_PRICE_ID_PRO_ANNUAL
+        ? { annualDiscountPriceId: process.env.STRIPE_PRICE_ID_PRO_ANNUAL }
+        : {}),
+    });
+  }
+  if (process.env.STRIPE_PRICE_ID_ENTERPRISE) {
+    plans.push({
+      name: 'enterprise',
+      priceId: process.env.STRIPE_PRICE_ID_ENTERPRISE,
+    });
+  }
+  return plans;
+}
+
+function buildBillingPlugins() {
+  if (!BILLING_ACTIVE) return [];
+  return [
+    stripePlugin({
+      stripeClient: new Stripe(process.env.STRIPE_SECRET_KEY as string),
+      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET as string,
+      createCustomerOnSignUp: true,
+      subscription: {
+        enabled: true,
+        plans: buildStripePlans(),
+      },
+    }),
+  ];
+}
 
 export const auth = betterAuth({
   database: drizzleAdapter(getDb(), {
@@ -49,8 +110,11 @@ export const auth = betterAuth({
       session: authSchema.authSessions,
       account: authSchema.authAccounts,
       verification: authSchema.authVerifications,
+      subscription: authSchema.authSubscriptions,
     },
   }),
+
+  plugins: buildBillingPlugins(),
 
   secret: process.env.BETTER_AUTH_SECRET,
   // Prod: explicit BETTER_AUTH_URL (canonical origin). Preview/dev: fall back to
@@ -134,6 +198,38 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // set true once Resend is configured
+    // Reset de contraseña: entrega vía Resend (mismo patrón lazy que
+    // sentinel-insight). OJO: better-auth 1.6.x envuelve este hook en
+    // runInBackgroundOrAwait, que CAPTURA y no re-lanza — el throw de abajo
+    // solo queda en el log del servidor y el endpoint responde status:true
+    // igual. La honestidad hacia el usuario se garantiza ANTES, en
+    // /forgot-password vía GET /api/system/capabilities (sin RESEND_API_KEY
+    // la página ni muestra el formulario).
+    sendResetPassword: async ({ user, url }) => {
+      const key = process.env.RESEND_API_KEY;
+      if (!key) {
+        throw new Error(
+          'email_delivery_unavailable: RESEND_API_KEY no configurada — el reset de contraseña requiere email transaccional.',
+        );
+      }
+      const { Resend } = await import('resend');
+      const { fromAddress } = await import('@/lib/notifications/email/from-address');
+      const resend = new Resend(key);
+      const from = fromAddress();
+      const { error } = await resend.emails.send({
+        from,
+        to: user.email,
+        subject: 'Restablecer su contraseña — 1+1',
+        text:
+          `Hola${user.name ? ` ${user.name}` : ''},\n\n` +
+          `Recibimos una solicitud para restablecer su contraseña. ` +
+          `Abra este enlace para crear una nueva (válido por tiempo limitado):\n\n${url}\n\n` +
+          `Si usted no lo solicitó, ignore este correo — su contraseña no cambia.`,
+      });
+      if (error) {
+        throw new Error(`email_delivery_failed: ${error.message ?? 'resend_error'}`);
+      }
+    },
   },
 
   // -------------------------------------------------------------------------

@@ -40,6 +40,9 @@ function asBool(v: string | undefined): boolean {
 }
 
 export async function GET(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const gate = await requireAuthSession();
     if (!gate.ok) return gate.response;
@@ -74,6 +77,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const gate = await requireAuthSession();
     if (!gate.ok) return gate.response;
@@ -138,7 +144,7 @@ function handleError(err: unknown, tag: string) {
   }
   console.error(tag, err);
   return NextResponse.json(
-    { ok: false, error: err instanceof Error ? err.message : 'internal_error' },
+    { ok: false, error: 'internal_error' },
     { status: 500 },
   );
 }

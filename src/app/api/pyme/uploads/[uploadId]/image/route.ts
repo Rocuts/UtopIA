@@ -29,6 +29,7 @@ const NOT_FOUND = new Response('Not Found', { status: 404 });
 export async function GET(_req: NextRequest, ctx: RouteContext) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const { uploadId } = await ctx.params;
 

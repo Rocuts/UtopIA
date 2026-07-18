@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Admin</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .pagehead{ padding:22px 0 18px; }
+  .pagehead h1{ font-family:var(--font-display); font-weight:500; font-size:clamp(2rem,3.6vw,2.6rem); color:var(--n-1000); letter-spacing:var(--tr-tight); display:flex; align-items:center; gap:12px; }
+  .pagehead h1 .lock{ width:30px; height:30px; border-radius:var(--r-md); display:grid; place-items:center; background:var(--ac-soft); color:var(--ac-deep); }
+  .pagehead h1 .lock .pi{ width:18px; height:18px; }
+  .pagehead .sub{ color:var(--n-600); font-size:var(--t-md); margin-top:6px; }
+
+  .tokenbar{ display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:var(--r-lg); background:rgb(79 122 76 / .08); border:1px solid rgb(79 122 76 / .3); margin-bottom:24px; }
+  .tokenbar .pi{ width:18px; height:18px; color:var(--success); }
+  .tokenbar .t{ font-size:var(--t-sm); color:var(--n-800); font-weight:600; }
+  .tokenbar .mono{ margin-left:auto; font-family:var(--font-mono); font-size:var(--t-xs); color:var(--n-600); background:var(--n-100); padding:4px 10px; border-radius:var(--r-sm); }
+
+  .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:8px; }
+  @media(max-width:880px){ .stats{ grid-template-columns:1fr 1fr; } }
+  .stat{ background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:20px; }
+  .stat .l{ font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--n-500); font-weight:600; }
+  .stat .v{ font-family:var(--font-mono); font-weight:600; font-size:var(--t-3xl); color:var(--n-1000); margin-top:8px; }
+  .stat .d{ font-size:var(--t-xs); margin-top:5px; }
+
+  .cols{ display:grid; grid-template-columns:1.7fr 1fr; gap:20px; align-items:start; }
+  @media(max-width:900px){ .cols{ grid-template-columns:1fr; } }
+
+  table{ width:100%; border-collapse:collapse; }
+  thead th{ text-align:left; font-size:var(--t-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--n-500); font-weight:700; padding:0 14px 12px; }
+  tbody td{ padding:12px 14px; border-top:1px solid var(--n-100); font-size:var(--t-sm); color:var(--n-800); font-family:var(--font-mono); }
+  tbody td.sans{ font-family:var(--font-sans); color:var(--n-900); font-weight:500; }
+  tbody tr:hover{ background:var(--ac-wash); }
+  .dot-ok{ color:var(--success); } .dot-warn{ color:var(--warning); } .dot-err{ color:var(--danger); }
+
+  .svc{ display:flex; align-items:center; gap:12px; padding:13px 0; border-top:1px solid var(--n-100); }
+  .svc:first-child{ border-top:none; }
+  .svc .d{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .svc .n{ flex:1; font-size:var(--t-sm); color:var(--n-900); font-weight:500; }
+  .svc .u{ font-family:var(--font-mono); font-size:var(--t-xs); color:var(--n-500); }
+</style>
+</head>
+<body data-area="app" data-fx="stream">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+    <div class="mwrap">
+      <div class="pagehead">
+        <h1><span class="lock"><i data-lucide="terminal" class="pi"></i></span>Consola de administración</h1>
+        <div class="sub">Telemetría, observabilidad y registro de actividad del orquestador 1+1.</div>
+      </div>
+
+      <div class="tokenbar">
+        <i data-lucide="shield-check" class="pi"></i>
+        <span class="t">Acceso autorizado · token de servicio válido</span>
+        <span class="mono">tok_1p1_live_•••••8f2a</span>
+      </div>
+
+      <section class="sec" style="padding-top:0;">
+        <div class="stats">
+          <div class="stat"><div class="l">Solicitudes · 24 h</div><div class="v num">18.420</div><div class="d up" style="color:var(--success);">▲ 6,2% vs. ayer</div></div>
+          <div class="stat"><div class="l">Latencia p95</div><div class="v num">842<span style="font-size:.5em; color:var(--n-500);"> ms</span></div><div class="d" style="color:var(--n-500);">Streaming SSE estable</div></div>
+          <div class="stat"><div class="l">Agentes activos</div><div class="v num">7</div><div class="d" style="color:var(--n-500);">Fiscal · Contable · Auditor…</div></div>
+          <div class="stat"><div class="l">Tasa de error</div><div class="v num">0,18<span style="font-size:.5em; color:var(--n-500);"> %</span></div><div class="d" style="color:var(--success);">Dentro de SLA</div></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="cols">
+          <div>
+            <div class="sec-h"><div class="t">Registro de actividad</div><span class="badge-ac"><span class="live-dot"></span>En vivo</span></div>
+            <div class="panel" style="padding:8px 10px;">
+              <table>
+                <thead><tr><th>Hora</th><th>Actor</th><th>Acción</th><th>Estado</th></tr></thead>
+                <tbody id="log"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="sec-h"><div class="t">Estado de servicios</div></div>
+            <div class="panel" id="svcs"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const LOG = [
+    ['14:32:08','agent.fiscal','Generó respuesta defensa DIAN','ok','200'],
+    ['14:31:54','user.YO','Abrió pipeline NIIF Elite','ok','200'],
+    ['14:30:12','agent.auditor','Dictamen control interno','ok','200'],
+    ['14:28:47','erp.siigo','Sync saldos · 1.204 movimientos','ok','200'],
+    ['14:25:03','agent.valor','Recalculó DCF — Grupo 2tres','warn','retry'],
+    ['14:22:19','sentinel','Disparó alerta vencimiento renta','ok','200'],
+    ['14:19:55','user.YO','Exportó libro mayor (XLSX)','ok','200'],
+    ['14:15:41','ocr.vision','Lectura factura fallida','err','422'],
+  ];
+  document.getElementById('log').innerHTML = LOG.map(([h,a,ac,st,code])=>`
+    <tr>
+      <td>${h}</td>
+      <td>${a}</td>
+      <td class="sans">${ac}</td>
+      <td class="dot-${st==='ok'?'ok':st==='warn'?'warn':'err'}">● ${code}</td>
+    </tr>`).join('');
+
+  const SVC = [
+    ['API Gateway','#4F7A4C','99,98%'],
+    ['Motor de agentes IA','#4F7A4C','99,95%'],
+    ['Supabase · Postgres','#4F7A4C','100%'],
+    ['Streaming SSE','#4F7A4C','99,9%'],
+    ['OCR · Google Vision','#C48A2E','98,2%'],
+    ['Conectores ERP','#4F7A4C','99,7%'],
+  ];
+  document.getElementById('svcs').innerHTML = SVC.map(([n,c,u])=>`
+    <div class="svc"><span class="d" style="background:${c}; box-shadow:0 0 8px ${c};"></span><span class="n">${n}</span><span class="u">${u}</span></div>`).join('');
+
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

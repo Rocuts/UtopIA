@@ -13,6 +13,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 export async function POST() {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   if (!isAutoAdjustmentsEnabled()) return disabled503();
   try {
     const ws = await getOrCreateWorkspace();

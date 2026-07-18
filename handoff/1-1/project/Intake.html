@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · Nuevo caso</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+<style>
+  .pagehead{ padding:22px 0 22px; }
+  .pagehead .eyebrow{ color:var(--ac-deep); display:inline-flex; align-items:center; gap:9px; font-weight:700; margin-bottom:12px; }
+  .pagehead .eyebrow .ic{ width:30px; height:30px; border-radius:var(--r-sm); display:grid; place-items:center; background:linear-gradient(140deg,var(--ac),var(--ac-deep)); color:#fff; }
+  .pagehead .eyebrow .ic .pi{ width:16px; height:16px; }
+  .pagehead h1{ font-family:var(--font-display); font-weight:500; font-size:clamp(2rem,3.6vw,2.6rem); color:var(--n-1000); letter-spacing:var(--tr-tight); }
+  .pagehead .sub{ color:var(--n-600); font-size:var(--t-md); margin-top:8px; max-width:62ch; }
+
+  .stage{ display:none; } .stage.on{ display:block; animation:stgIn .35s var(--ease-enter); }
+  @keyframes stgIn{ from{ transform:translateY(10px);} to{ transform:none; } }
+
+  /* case grid */
+  .cgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media(max-width:860px){ .cgrid{ grid-template-columns:1fr 1fr; } }
+  @media(max-width:560px){ .cgrid{ grid-template-columns:1fr; } }
+  .ccard{ text-align:left; background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-lg); padding:20px; cursor:pointer; position:relative; overflow:hidden; font-family:inherit; transition:transform var(--d-base) var(--ease-std), box-shadow var(--d-base), border-color var(--d-base); }
+  .ccard::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cc); transform:scaleY(0); transform-origin:top; transition:transform var(--d-base); }
+  .ccard:hover{ transform:translateY(-4px); border-color:var(--cc); box-shadow:0 20px 38px -22px color-mix(in srgb,var(--cc) 55%, transparent); }
+  .ccard:hover::before{ transform:scaleY(1); }
+  .ccard .ci{ width:42px; height:42px; border-radius:var(--r-md); display:grid; place-items:center; background:color-mix(in srgb,var(--cc) 14%, transparent); color:var(--cc); margin-bottom:14px; }
+  .ccard .ci .pi{ width:21px; height:21px; }
+  .ccard .ct{ font-size:var(--t-md); font-weight:600; color:var(--n-1000); }
+  .ccard .cd{ font-size:var(--t-sm); color:var(--n-600); margin-top:5px; line-height:var(--lh-snug); }
+  .ccard .carea{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--cc); margin-top:12px; display:inline-flex; align-items:center; gap:6px; }
+  .ccard .carea .d{ width:6px; height:6px; border-radius:50%; background:var(--cc); }
+
+  /* form */
+  .fwiz{ max-width:640px; }
+  .fhead{ display:flex; align-items:center; gap:14px; margin-bottom:24px; }
+  .fhead .fi{ width:46px; height:46px; border-radius:var(--r-md); display:grid; place-items:center; background:linear-gradient(140deg,var(--ac),var(--ac-deep)); color:#fff; flex-shrink:0; }
+  .fhead .fi .pi{ width:22px; height:22px; }
+  .fhead h2{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:var(--n-1000); }
+  .fhead .fs{ font-size:var(--t-sm); color:var(--n-600); }
+  .fcard{ background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:28px; }
+  .field{ margin-bottom:16px; }
+  .field.half{ display:inline-block; width:calc(50% - 7px); }
+  .field.half:nth-of-type(odd){ margin-right:14px; }
+  @media(max-width:520px){ .field.half{ width:100%; margin-right:0!important; } }
+  .field label{ display:block; font-size:var(--t-xs); font-weight:600; color:var(--n-700); text-transform:uppercase; letter-spacing:.06em; margin-bottom:7px; }
+  .field input, .field select, .field textarea{ width:100%; min-height:46px; padding:11px 14px; background:var(--n-0); border:1px solid var(--n-200); border-radius:var(--r-md); font-family:inherit; font-size:var(--t-md); color:var(--n-900); }
+  .field textarea{ min-height:84px; resize:vertical; }
+  .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--ac); box-shadow:0 0 0 3px var(--ac-soft); }
+  .field .drop{ border:1.5px dashed var(--ac-line); border-radius:var(--r-md); padding:18px; text-align:center; color:var(--n-600); font-size:var(--t-sm); background:var(--ac-wash); cursor:pointer; }
+  .field .drop .pi{ width:22px; height:22px; color:var(--ac-deep); margin-bottom:6px; }
+  .fnav{ display:flex; justify-content:space-between; gap:12px; margin-top:24px; }
+  .btn-ac{ background:var(--ac); color:#fff; }
+  .btn-ac:hover{ background:var(--ac-deep); }
+
+  /* success */
+  .succ{ max-width:560px; text-align:center; background:var(--n-0); border:1px solid var(--ac-line); border-radius:var(--r-xl); padding:40px 32px; margin:0 auto; }
+  .succ .sic{ width:68px; height:68px; border-radius:50%; background:color-mix(in srgb,var(--ac) 16%, transparent); color:var(--ac-deep); display:grid; place-items:center; margin:0 auto 20px; }
+  .succ .sic .pi{ width:32px; height:32px; }
+  .succ h2{ font-family:var(--font-display); font-weight:500; font-size:var(--t-2xl); color:var(--n-1000); }
+  .succ p{ color:var(--n-600); font-size:var(--t-md); margin:10px auto 26px; max-width:42ch; line-height:var(--lh-relaxed); }
+  .succ .acts{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .caseno{ font-family:var(--font-mono); font-size:var(--t-sm); color:var(--ac-deep); background:var(--ac-soft); border-radius:var(--r-full); padding:5px 14px; display:inline-block; margin-bottom:20px; }
+</style>
+</head>
+<body data-area="app">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+    <div class="mwrap">
+      <div class="pagehead">
+        <div class="eyebrow"><span class="ic"><i data-lucide="folder-plus" class="pi"></i></span>Intake · Nuevo caso</div>
+        <h1 id="phTitle">¿Qué caso necesita abrir?</h1>
+        <div class="sub" id="phSub">Elija el tipo de caso. Cada uno tiene su propio formulario y se enruta al área correspondiente.</div>
+      </div>
+
+      <!-- SELECT -->
+      <div class="stage on" id="s-select"><div class="cgrid" id="cgrid"></div></div>
+
+      <!-- FORM -->
+      <div class="stage" id="s-form">
+        <div class="fwiz">
+          <div class="fhead"><div class="fi" id="fIcon"><i data-lucide="folder" class="pi"></i></div><div><h2 id="fTitle">Caso</h2><div class="fs" id="fArea">Área</div></div></div>
+          <div class="fcard"><form id="fForm" onsubmit="return false;"></form>
+            <div class="fnav"><button class="btn btn-secondary" onclick="backToSelect()">Atrás</button><button class="btn btn-ac" onclick="submitCase()"><i data-lucide="check" class="ic"></i>Crear caso</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="stage" id="s-success">
+        <div class="succ">
+          <div class="sic"><i data-lucide="check" class="pi"></i></div>
+          <div class="caseno" id="caseNo">CASO-2026-0428</div>
+          <h2 id="succTitle">Caso creado</h2>
+          <p id="succMsg">Su caso fue creado y enrutado al área correspondiente. Un agente 1+1 ya está trabajando en él.</p>
+          <div class="acts">
+            <a id="succLink" href="Workspace.html"><button class="btn btn-ac"><i data-lucide="arrow-right" class="ic"></i>Ir al caso</button></a>
+            <button class="btn btn-secondary" onclick="backToSelect()">Crear otro</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const AREA = { escudo:['El Escudo','#A83838','#8A2E2E','El Escudo.html'], valor:['El Valor','#B8934A','#9A7A38','El Valor.html'], verdad:['La Verdad','#3D6B7E','#315869','La Verdad.html'], futuro:['El Futuro','#5A7F7A','#476661','El Futuro.html'] };
+  // field helpers
+  const T=(label,ph,half)=>({k:'text',label,ph,half});
+  const S=(label,opts,half)=>({k:'select',label,opts,half});
+  const M=(label,half)=>({k:'money',label,half});
+  const D=(label,half)=>({k:'date',label,half});
+  const F=(label,hint)=>({k:'file',label,hint});
+  const A=(label,ph)=>({k:'area',label,ph});
+
+  const CASES = [
+    {id:'defensa', t:'Defensa ante la DIAN', ic:'shield', area:'escudo', d:'Requerimientos, pliegos de cargos y liquidaciones oficiales.', f:[T('Razón social','Grupo 2tres S.A.S.',true),T('NIT','901.234.567-7',true),S('Tipo de acto',['Requerimiento ordinario','Requerimiento especial','Pliego de cargos','Liquidación oficial','Emplazamiento'],true),S('Impuesto',['Renta','IVA','Retención en la fuente','Facturación electrónica'],true),D('Fecha de notificación',true),M('Valor en discusión',true),F('Documento del requerimiento','PDF de la actuación de la DIAN')]},
+    {id:'devolucion', t:'Devolución de saldos', ic:'banknote', area:'escudo', d:'Recupere saldos a favor en renta o IVA.', f:[T('Razón social','',true),T('NIT','',true),S('Concepto',['Saldo a favor en renta','Saldo a favor en IVA','Retenciones en exceso'],true),T('Periodo','AG 2024',true),M('Monto del saldo a favor'),F('Soportes','Declaración y soportes contables')]},
+    {id:'due', t:'Due diligence', ic:'file-search', area:'valor', d:'Auditoría preventiva para inversión, fusión o venta.', f:[T('Empresa objetivo','',true),S('Objetivo',['Inversión','Fusión / adquisición','Venta'],true),T('Sector',true),S('Alcance',['Financiero','Legal','Tributario','Integral'],true),F('Información disponible','Estados financieros, contratos, actas')]},
+    {id:'inteligencia', t:'Inteligencia financiera', ic:'line-chart', area:'valor', d:'Rentabilidad, costos, flujo de caja y escenarios.', f:[T('Razón social','',true),T('Periodo','2025',true),S('Foco del análisis',['Rentabilidad','Estructura de costos','Flujo de caja','Escenarios de crecimiento']),F('Estados financieros','Balance y estado de resultados')]},
+    {id:'niif', t:'Reporte NIIF Elite', ic:'sparkles', area:'valor', d:'Estados financieros bajo NIIF generados por IA.', f:[T('Razón social','',true),S('Marco',['NIIF plenas','NIIF para Pymes'],true),S('Periodo',['Año gravable 2025','Año gravable 2024'],true),F('Balance','Balance de prueba (XLSX)'),F('Información exógena','Exógena (CSV)')]},
+    {id:'planeacion', t:'Planeación tributaria', ic:'route', area:'escudo', d:'Optimización lícita de su carga fiscal.', f:[T('Razón social','',true),T('Año objetivo','2026',true),T('TEF actual (%)','28,4',true),T('Meta de optimización (%)','24,0',true),T('Sector')]},
+    {id:'precios', t:'Precios de transferencia', ic:'arrow-left-right', area:'escudo', d:'Operaciones con vinculados del exterior.', f:[T('Vinculado','Matriz · México',true),T('País',true),S('Tipo de operación',['Compra de inventario','Servicios intragrupo','Regalías','Préstamos'],true),M('Monto anual',true),F('Documentación','Contratos y soportes')]},
+    {id:'valoracion', t:'Valoración de empresa', ic:'gem', area:'valor', d:'DCF y múltiplos de mercado.', f:[T('Razón social','',true),S('Método',['DCF','Múltiplos','Mixto'],true),M('EBITDA anual',true),T('Horizonte (años)','5',true),A('Propósito','Inversión, venta, sucesión…')]},
+    {id:'auditoria', t:'Auditoría fiscal', ic:'shield-check', area:'verdad', d:'Diagnóstico tributario integral.', f:[T('Razón social','',true),S('Periodo',['2025','2024','2023'],true),S('Alcance',['Integral','Solo renta','Solo IVA','Retenciones'],true),S('Riesgo percibido',['Bajo','Medio','Alto'],true)]},
+    {id:'conciliacion', t:'Conciliación fiscal', ic:'git-compare', area:'verdad', d:'Cruce entre contabilidad y declaraciones.', f:[T('Razón social','',true),T('Periodo','2025',true),T('Nº de partidas (aprox.)','1.200',true),F('Contabilidad','Balance y auxiliares')]},
+    {id:'factibilidad', t:'Estudio de factibilidad', ic:'clipboard-check', area:'futuro', d:'Viabilidad de un nuevo proyecto o inversión.', f:[T('Nombre del proyecto','Nueva línea de producción',true),M('Inversión estimada',true),T('Horizonte (años)','7',true),T('Sector',true),A('Descripción del proyecto')]},
+  ];
+
+  // render grid
+  document.getElementById('cgrid').innerHTML = CASES.map(c=>{
+    const a=AREA[c.area];
+    return `<button class="ccard" style="--cc:${a[1]}" onclick="openCase('${c.id}')"><div class="ci"><i data-lucide="${c.ic}" class="pi"></i></div><div class="ct">${c.t}</div><div class="cd">${c.d}</div><div class="carea"><span class="d"></span>${a[0]}</div></button>`;
+  }).join('');
+
+  function fieldHTML(f){
+    const half = f.half?' half':'';
+    if(f.k==='select') return `<div class="field${half}"><label>${f.label}</label><select>${f.opts.map(o=>`<option>${o}</option>`).join('')}</select></div>`;
+    if(f.k==='money') return `<div class="field${half}"><label>${f.label}</label><input inputmode="numeric" placeholder="$ 0"></div>`;
+    if(f.k==='date') return `<div class="field${half}"><label>${f.label}</label><input type="date"></div>`;
+    if(f.k==='area') return `<div class="field"><label>${f.label}</label><textarea placeholder="${f.ph||''}"></textarea></div>`;
+    if(f.k==='file') return `<div class="field"><label>${f.label}</label><div class="drop"><i data-lucide="upload-cloud" class="pi"></i><div>Arrastre o haga clic para subir</div><div style="font-size:11px;color:var(--n-500);margin-top:4px;">${f.hint||''}</div></div></div>`;
+    return `<div class="field${half}"><label>${f.label}</label><input placeholder="${f.ph||''}"></div>`;
+  }
+
+  let current=null;
+  function show(id){ document.querySelectorAll('.stage').forEach(s=>s.classList.remove('on')); document.getElementById('s-'+id).classList.add('on'); if(window.lucide) lucide.createIcons(); }
+  function openCase(id){
+    current=CASES.find(c=>c.id===id); const a=AREA[current.area];
+    // retint wizard with the case's area color
+    const root=document.querySelector('.mwrap'); root.style.setProperty('--ac',a[1]); root.style.setProperty('--ac-deep',a[2]);
+    root.style.setProperty('--ac-soft','color-mix(in srgb,'+a[1]+' 16%, transparent)');
+    root.style.setProperty('--ac-line','color-mix(in srgb,'+a[1]+' 34%, var(--n-200))');
+    root.style.setProperty('--ac-wash','color-mix(in srgb,'+a[1]+' 8%, var(--n-0))');
+    document.getElementById('fTitle').textContent=current.t;
+    document.getElementById('fArea').textContent='Se enruta a '+a[0];
+    document.getElementById('fIcon').innerHTML=`<i data-lucide="${current.ic}" class="pi"></i>`;
+    document.getElementById('fForm').innerHTML=current.f.map(fieldHTML).join('');
+    show('form'); window.scrollTo&&window.scrollTo(0,0);
+  }
+  function backToSelect(){
+    const root=document.querySelector('.mwrap');
+    ['--ac','--ac-deep','--ac-soft','--ac-line','--ac-wash'].forEach(p=>root.style.removeProperty(p));
+    show('select');
+  }
+  function submitCase(){
+    const a=AREA[current.area];
+    document.getElementById('succTitle').textContent='Caso creado: '+current.t;
+    document.getElementById('succMsg').textContent='Su caso fue enrutado a '+a[0]+'. Un agente 1+1 ya está trabajando en él y le avisaremos cada avance.';
+    document.getElementById('caseNo').textContent='CASO-2026-'+String(Math.floor(Math.random()*9000)+1000);
+    document.getElementById('succLink').setAttribute('href', current.id==='niif'?'Pipeline NIIF Elite.html':a[3]);
+    show('success');
+  }
+  if(window.lucide) lucide.createIcons();
+</script>
+</body>
+</html>

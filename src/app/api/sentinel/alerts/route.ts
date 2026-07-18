@@ -15,6 +15,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 export async function GET(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const url = new URL(req.url);
     const countOnly = url.searchParams.get('countOnly') === '1';
@@ -81,6 +82,7 @@ const patchBodySchema = z.object({
 export async function PATCH(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   let raw: unknown;
   try {
     raw = await req.json();

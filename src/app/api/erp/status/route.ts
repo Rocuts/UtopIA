@@ -5,6 +5,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 export async function GET() {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   // In a production app, this would check stored connections in a database.
   // For now, return available providers and their capabilities.
   return NextResponse.json({

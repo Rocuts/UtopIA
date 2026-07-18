@@ -22,14 +22,15 @@ import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   Shield,
-  Calculator,
-  Network,
-  PiggyBank,
-  AlertTriangle,
+  Gavel,
+  Banknote,
+  Route,
+  ArrowLeftRight,
+  HeartPulse,
+  Bot,
   ArrowRight,
-  Clock,
-  Sparkles,
-  Zap,
+  ArrowDown,
+  ArrowUp,
   FileText,
 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -38,11 +39,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useAncoraView } from '@/hooks/useAncoraView';
 import { cn } from '@/lib/utils';
-import { EliteCard } from '@/components/ui/EliteCard';
 import { EliteButton } from '@/components/ui/EliteButton';
-import { PremiumKpiCard } from '@/components/ui/PremiumKpiCard';
-import { SectionHeader } from '@/components/ui/SectionHeader';
-import { calculateTef } from '@/lib/kpis/tax-efficiency';
 import type { KpiResult } from '@/types/kpis';
 import type { FiscalAnchorBlock } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/types';
 import type { FiscalRiskScore } from '@/lib/agents/financial/types';
@@ -99,88 +96,70 @@ interface SubmoduleDef {
   key: SubmoduleKey;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  /** "listo" = endpoint activo / "pronto" = stub con redirect a chat. */
-  status: 'listo' | 'pronto';
+  statusLabel: { es: string; en: string };
+  statusColor: string;
 }
 
 const SUBMODULES: SubmoduleDef[] = [
   {
+    key: 'agenteFiscal',
+    href: '/workspace/escudo/agente-fiscal',
+    icon: Bot,
+    statusLabel: { es: 'Activo', en: 'Active' },
+    statusColor: '#22C55E',
+  },
+  {
     key: 'defensaDian',
     href: '/workspace/escudo/defensa-dian',
-    icon: Shield,
-    status: 'listo',
-  },
-  {
-    key: 'planeacionTributaria',
-    href: '/workspace/escudo/planeacion-tributaria',
-    icon: Calculator,
-    status: 'listo',
-  },
-  {
-    key: 'preciosTransferencia',
-    href: '/workspace/escudo/precios-transferencia',
-    icon: Network,
-    status: 'listo',
+    icon: Gavel,
+    statusLabel: { es: '2 en curso', en: '2 active' },
+    statusColor: '#E8B42C',
   },
   {
     key: 'devoluciones',
     href: '/workspace/escudo/devoluciones',
-    icon: PiggyBank,
-    status: 'pronto',
+    icon: Banknote,
+    statusLabel: { es: '1 radicada', en: '1 filed' },
+    statusColor: '#22C55E',
+  },
+  {
+    key: 'planeacionTributaria',
+    href: '/workspace/escudo/planeacion-tributaria',
+    icon: Route,
+    statusLabel: { es: 'Al día', en: 'Up to date' },
+    statusColor: '#22C55E',
+  },
+  {
+    key: 'preciosTransferencia',
+    href: '/workspace/escudo/precios-transferencia',
+    icon: ArrowLeftRight,
+    statusLabel: { es: 'Revisión', en: 'Review' },
+    statusColor: '#E8B42C',
   },
   {
     key: 'supervivencia',
     href: '/workspace/escudo/supervivencia',
-    icon: Zap,
-    status: 'listo',
-  },
-  {
-    key: 'agenteFiscal',
-    href: '/workspace/escudo/agente-fiscal',
-    icon: Shield,
-    status: 'listo',
+    icon: HeartPulse,
+    statusLabel: { es: 'Monitor', en: 'Monitor' },
+    statusColor: '#A83838',
   },
 ];
 
-// ─── Mock KPI input (fallback si no llega kpi prop) ──────────────────────────
+// ─── Mock KPI (fallback si no llega kpi prop) ────────────────────────────────
 
-/**
- * Mock inline de TEF — empresa mediana colombiana 2026.
- * revenue 4.800M, base gravable 1.200M baseline → 930M optimizado.
- * TEF ≈ (270*0.35) / (1200*0.35) = 22.5 %
- */
 function buildMockTef(): KpiResult {
-  return calculateTef({
-    revenue: 4_800_000_000,
-    taxableIncomeBaseline: 1_200_000_000,
-    taxableIncomeOptimized: 930_000_000,
-    taxRate: 0.35,
-    periodPrevious: {
-      taxableIncomeBaseline: 1_180_000_000,
-      taxableIncomeOptimized: 1_010_000_000,
-    },
-  });
+  return {
+    kind: 'tef',
+    value: 28.4,
+    formatted: '28,4%',
+    unit: '%',
+    label: 'Tasa Efectiva de Tributación',
+    severity: 'good',
+    trend: { direction: 'down', delta: -3.1, periodLabel: 'vs. trimestre anterior' },
+    calculatedAt: new Date().toISOString(),
+    confidence: 'medium',
+  };
 }
-
-// ─── Deadlines mock ──────────────────────────────────────────────────────────
-
-const MOCK_DEADLINES_ES: EscudoDeadline[] = [
-  { label: 'Retención en la Fuente — Abril', date: '13 May 2026', severity: 'high' },
-  { label: 'IVA 5.º bimestre (Sep–Oct)', date: '18 May 2026', severity: 'medium' },
-  { label: 'Renta PN — Calendario DIAN', date: '09 Ago 2026', severity: 'low' },
-];
-
-const MOCK_DEADLINES_EN: EscudoDeadline[] = [
-  { label: 'Withholding Tax — April', date: 'May 13, 2026', severity: 'high' },
-  { label: 'VAT 5th bi-month (Sep–Oct)', date: 'May 18, 2026', severity: 'medium' },
-  { label: 'Personal Income Tax — DIAN Calendar', date: 'Aug 9, 2026', severity: 'low' },
-];
-
-const SEVERITY_DOT: Record<DeadlineSeverity, string> = {
-  high: 'bg-danger',
-  medium: 'bg-warning',
-  low: 'bg-n-500',
-};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -276,10 +255,11 @@ export function EscudoArea({
     return buildMockTef();
   }, [kpi, fiscalAnchor, view]);
 
+  // Sin anchor ni prop no hay vencimientos reales que contar — nunca inventarlos.
   const deadlines = useMemo<EscudoDeadline[]>(() => {
     if (upcomingDeadlines) return upcomingDeadlines;
     if (fiscalAnchor) return deadlinesFromAnchor(fiscalAnchor, language);
-    return language === 'es' ? MOCK_DEADLINES_ES : MOCK_DEADLINES_EN;
+    return [];
   }, [upcomingDeadlines, fiscalAnchor, language]);
 
   // Fade-in stagger helpers
@@ -305,149 +285,160 @@ export function EscudoArea({
         className,
       )}
     >
-      {/* Estado vacío: sin reporte NIIF previo (banner superior, no reemplaza el dashboard demo) */}
+      {!compact && (
+        <motion.section
+          {...fadeItem(0)}
+          className="mb-10 pb-9"
+          style={{ borderBottom: '1px solid color-mix(in srgb, #A83838 20%, transparent)' }}
+        >
+          {/* 2-column hero — text + gradient KPI card */}
+          <div
+            className="grid gap-10 items-center"
+            style={{ gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)' }}
+          >
+            {/* ── Left: eyebrow + title + lede ── */}
+            <div>
+              <div className="flex items-center gap-[10px] mb-[14px]" style={{ fontWeight: 700 }}>
+                <span
+                  aria-hidden="true"
+                  className="inline-grid place-items-center rounded-lg text-white"
+                  style={{
+                    width: 36, height: 36,
+                    background: 'linear-gradient(140deg, #A83838, #8A2E2E)',
+                    boxShadow: '0 8px 20px -8px rgba(168,56,56,.55)',
+                  }}
+                >
+                  <Shield className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                </span>
+                <span className="text-xs uppercase tracking-eyebrow font-bold text-area-escudo">
+                  {language === 'es' ? 'I · Resiliencia' : 'I · Resilience'}
+                </span>
+              </div>
+
+              <h1
+                className="font-serif-elite font-medium text-n-1000 tracking-tight"
+                style={{ fontSize: 'clamp(2.4rem, 4.6vw, 3.6rem)', lineHeight: 1.04 }}
+              >
+                {language === 'es' ? 'El Escudo' : 'The Shield'}
+              </h1>
+
+              <p className="text-n-600 mt-[14px] leading-relaxed" style={{ fontSize: '1.0625rem', maxWidth: '46ch' }}>
+                {language === 'es'
+                  ? 'Estrategia tributaria y defensa legal. Blindamos su carga fiscal frente a la DIAN — requerimientos, devoluciones y planeación, con doctrina y jurisprudencia al día.'
+                  : 'Tax strategy and legal defense. We shield your tax burden from the DIAN — audits, refunds, and planning, backed by up-to-date doctrine and case law.'}
+              </p>
+            </div>
+
+            {/* ── Right: gradient KPI card ── */}
+            <div
+              className="relative overflow-hidden rounded-2xl"
+              style={{
+                background: 'linear-gradient(155deg, #A83838, #8A2E2E)',
+                padding: 30,
+              }}
+            >
+              {/* Decorative circle */}
+              <div
+                aria-hidden="true"
+                className="absolute rounded-full pointer-events-none"
+                style={{ right: -50, top: -50, width: 200, height: 200, background: 'rgba(255,255,255,.10)' }}
+              />
+
+              <div className="relative" style={{ zIndex: 1 }}>
+                <p
+                  className="uppercase font-semibold"
+                  style={{ fontSize: '0.7rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,.82)' }}
+                >
+                  {language === 'es' ? 'Tasa Efectiva de Tributación' : 'Effective Tax Rate'}
+                </p>
+
+                <div
+                  className="font-serif-elite font-medium num"
+                  style={{ fontSize: 'clamp(2.6rem, 5vw, 3.8rem)', color: '#fff', lineHeight: 1, margin: '10px 0 6px' }}
+                >
+                  {kpiData.formatted}
+                </div>
+
+                <div
+                  className="inline-flex items-center gap-1"
+                  style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}
+                >
+                  {kpiData.trend?.direction === 'up'
+                    ? <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2} />
+                    : <ArrowDown className="h-[15px] w-[15px]" strokeWidth={2} />}
+                  {kpiData.trend
+                    ? `${Math.abs(kpiData.trend.delta).toFixed(1).replace('.', language === 'es' ? ',' : '.')} pts.`
+                    : '3,1 pts.'}
+                  {' '}
+                  {kpiData.trend?.periodLabel ?? (language === 'es' ? 'vs. trimestre anterior' : 'vs. prior quarter')}
+                </div>
+
+                {/* Sparkline */}
+                <div style={{ marginTop: 20, height: 70 }}>
+                  <TefSparkline />
+                </div>
+
+                {/* Sub-KPIs */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: 8,
+                    marginTop: 20,
+                    paddingTop: 16,
+                    borderTop: '1px solid rgba(255,255,255,.18)',
+                  }}
+                >
+                  <div>
+                    <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>$1.240M</div>
+                    <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {language === 'es' ? 'Saldos a favor' : 'Tax credits'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-serif-elite num" style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 500 }}>
+                      {hasRealData ? deadlines.length : '—'}
+                    </div>
+                    <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {language === 'es' ? 'Casos abiertos' : 'Open cases'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-serif-elite num" style={{ color: '#E8B42C', fontSize: '1.1rem', fontWeight: 500 }}>
+                      {language === 'es' ? 'Medio' : 'Medium'}
+                    </div>
+                    <div style={{ color: 'rgba(255,255,255,.70)', fontSize: '0.68rem', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {language === 'es' ? 'Riesgo DIAN' : 'DIAN Risk'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      )}
+
+      {/* Aviso: sin datos NIIF reales — aparece debajo del hero para no bloquear la vista */}
       {showEmptyState && (
         <motion.div
-          {...(reduced
-            ? {}
-            : {
-                initial: { opacity: 0, y: 8 },
-                animate: { opacity: 1, y: 0 },
-                transition: { duration: 0.4 },
-              })}
-          className="mb-10 flex flex-col items-start gap-4 p-6 rounded-xl glass-elite-elevated border border-[rgb(168_56_56_/_0.3)]"
+          {...(reduced ? {} : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4 } })}
+          className="mb-8 flex items-center gap-4 p-4 rounded-xl border border-[rgb(168_56_56_/_0.28)] bg-[rgb(168_56_56_/_0.04)]"
           role="status"
           aria-live="polite"
         >
-          <div className="flex items-start gap-3">
-            <span
-              aria-hidden="true"
-              className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(168_56_56_/_0.16)] text-area-escudo"
-            >
-              <FileText className="h-5 w-5" strokeWidth={1.75} />
-            </span>
-            <div>
-              <p className="font-serif-elite text-xl leading-tight text-n-1000 mb-1">
-                {language === 'es'
-                  ? 'Sin datos fiscales aún'
-                  : 'No fiscal data yet'}
-              </p>
-              <p className="text-sm text-n-700 leading-relaxed max-w-md">
-                {language === 'es'
-                  ? 'Genera un Informe NIIF para que El Escudo se pueble automáticamente con las cifras fiscales reales de tu empresa.'
-                  : 'Generate an IFRS Report so The Shield auto-populates with your company\'s real tax figures.'}
-              </p>
-            </div>
+          <span aria-hidden="true" className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(168_56_56_/_0.12)] text-area-escudo">
+            <FileText className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-n-900">
+              {language === 'es' ? 'Datos demo — genera un Informe NIIF para cifras reales.' : 'Demo data — generate an IFRS Report for real figures.'}
+            </p>
           </div>
-          <EliteButton
-            variant="primary"
-            size="md"
-            rightIcon={<ArrowRight className="h-4 w-4" strokeWidth={2} />}
-            onClick={handleGenerarNiif}
-          >
-            {language === 'es' ? 'Generar Informe NIIF' : 'Generate IFRS Report'}
+          <EliteButton variant="primary" size="sm" rightIcon={<ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />} onClick={handleGenerarNiif}>
+            {language === 'es' ? 'Generar Informe' : 'Generate Report'}
           </EliteButton>
         </motion.div>
       )}
-
-      {!compact && (
-        <>
-          {/* Hero */}
-          <motion.div {...fadeItem(0)} className="mb-10">
-            <SectionHeader
-              eyebrow={language === 'es' ? 'I. Resiliencia' : 'I. Resilience'}
-              title={escudo.concept}
-              subtitle={escudo.subtitle}
-              align="left"
-              accent="wine"
-              divider
-            />
-          </motion.div>
-
-          {/* Narrative */}
-          <motion.p
-            {...fadeItem(1)}
-            className={cn(
-              'font-serif-elite font-medium tracking-tight',
-              'text-xl md:text-2xl leading-relaxed',
-              'text-n-800 max-w-3xl mb-12',
-            )}
-          >
-            {escudo.narrative}
-          </motion.p>
-        </>
-      )}
-
-      {/* KPI Hero dual */}
-      <motion.div
-        {...fadeItem(2)}
-        className={cn(
-          'flex flex-col gap-3',
-          compact ? 'mb-8' : 'mb-14',
-        )}
-      >
-        {/* NIT eyebrow */}
-        <p
-          aria-label={
-            hasRealData
-              ? escudo.fiscalAnchor.eyebrow.replace('{nit}', fiscalAnchor!.calendarioDian.nit)
-              : escudo.fiscalAnchor.eyebrowDemo
-          }
-          className="text-xs uppercase tracking-eyebrow text-n-500 font-medium"
-        >
-          {hasRealData
-            ? escudo.fiscalAnchor.eyebrow.replace('{nit}', fiscalAnchor!.calendarioDian.nit)
-            : escudo.fiscalAnchor.eyebrowDemo}
-        </p>
-
-        <div
-          className={cn(
-            'grid gap-5',
-            'grid-cols-1 md:grid-cols-5',
-          )}
-        >
-        {/* Primary KPI — TEF */}
-        <div className="md:col-span-3">
-          <PremiumKpiCard
-            label={
-              hasRealData
-                ? (language === 'es'
-                  ? 'Cobertura de Retenciones · Art. 240 E.T.'
-                  : 'Withholding Coverage · Art. 240 E.T.')
-                : escudo.kpiPrimary
-            }
-            value={kpiData.formatted}
-            subvalue={
-              kpiData.breakdown?.find((b) => b.label === 'Ahorro total')?.formatted ??
-              undefined
-            }
-            trend={
-              kpiData.trend
-                ? {
-                    direction: kpiData.trend.direction,
-                    delta: kpiData.trend.delta,
-                    label:
-                      kpiData.trend.periodLabel ??
-                      (language === 'es' ? 'vs periodo anterior' : 'vs previous period'),
-                  }
-                : undefined
-            }
-            severity={kpiData.severity}
-            accent="gold"
-            icon={Shield}
-            glow
-          />
-        </div>
-
-        {/* Secondary KPI — Vencimientos próximos */}
-        <DeadlinesCard
-          title={escudo.kpiSecondary}
-          count={deadlines.length}
-          deadlines={deadlines}
-          language={language}
-        />
-        </div>
-      </motion.div>
 
       {/* Capa 5 — Score DIAN (gauge + factores) + Alertas accionables */}
       {(riskScore || (alertas && alertas.length > 0)) && (
@@ -464,38 +455,56 @@ export function EscudoArea({
         </motion.div>
       )}
 
-      {/* Fuentes de datos conectadas — escalera de capacidades */}
-      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 4 : 3)} className="mb-10">
-        <DataSourceLadder
-          title={
-            language === 'es'
-              ? 'Fuentes de datos conectadas — cada nivel activa más capacidades'
-              : 'Connected data sources — each level unlocks more capabilities'
-          }
-          sources={sources}
-        />
-      </motion.div>
+      {/* Submódulos section — matches handoff order: directly after hero */}
+      <motion.section {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 4 : 3)} className="mb-10">
+        <div className="flex items-baseline justify-between mb-5">
+          <h2
+            className="font-serif-elite font-medium text-n-1000"
+            style={{ fontSize: 'clamp(1.25rem, 2vw, 1.5rem)', paddingLeft: 14, borderLeft: '3px solid #A83838' }}
+          >
+            {language === 'es' ? 'Submódulos' : 'Submodules'}
+          </h2>
+          <span className="text-sm text-n-500">
+            {language === 'es' ? '6 frentes de defensa · actualizado hoy' : '6 defense areas · updated today'}
+          </span>
+        </div>
 
-      {/* Grid submódulos */}
-      <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 5 : 4)} className="grid gap-5 grid-cols-1 md:grid-cols-2 mb-10">
-        {SUBMODULES.map((sub, i) => (
-          <SubmoduleCard
-            key={sub.key}
-            submodule={sub}
-            title={escudo.submodules[sub.key].title}
-            description={escudo.submodules[sub.key].description}
-            ctaLabel={language === 'es' ? 'Entrar' : 'Enter'}
-            readyLabel={language === 'es' ? 'Listo' : 'Ready'}
-            upcomingLabel={
-              language === 'es' ? 'Próximamente IA' : 'Coming soon'
-            }
-            delay={i}
-            reduced={reduced}
-          />
-        ))}
-      </motion.div>
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))' }}
+        >
+          {SUBMODULES.map((sub, i) => (
+            <SubmoduleCard
+              key={sub.key}
+              submodule={sub}
+              title={escudo.submodules[sub.key].title}
+              description={escudo.submodules[sub.key].description}
+              language={language}
+              delay={i}
+              reduced={reduced}
+            />
+          ))}
+        </div>
+      </motion.section>
 
-      {/* Zonas de capacidades · estado según fuente conectada */}
+      {/* Calidad de fuentes */}
+      <motion.section {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 5 : 4)} className="mb-10">
+        <div className="flex items-baseline gap-3 mb-5">
+          <h2
+            className="font-serif-elite font-medium text-n-1000"
+            style={{ fontSize: 'clamp(1.25rem, 2vw, 1.5rem)', paddingLeft: 14, borderLeft: '3px solid #A83838' }}
+          >
+            {language === 'es' ? 'Calidad de fuentes' : 'Source quality'}
+          </h2>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border border-[rgba(168,56,56,.35)] text-area-escudo bg-[rgba(168,56,56,.08)]">
+            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-area-escudo animate-pulse" />
+            DataSourceLadder
+          </span>
+        </div>
+        <DataSourceLadder title="" sources={sources} />
+      </motion.section>
+
+      {/* Zonas de capacidades */}
       <motion.div {...fadeItem(riskScore || (alertas && alertas.length > 0) ? 6 : 5)}>
         <CapabilityZones
           legendTitle={
@@ -511,186 +520,96 @@ export function EscudoArea({
   );
 }
 
-// ─── Vencimientos card ───────────────────────────────────────────────────────
+// ─── Sparkline for TEF trend ─────────────────────────────────────────────────
 
-interface DeadlinesCardProps {
-  title: string;
-  count: number;
-  deadlines: EscudoDeadline[];
-  language: 'es' | 'en';
-}
+function TefSparkline() {
+  const pts = [78, 74, 70, 66, 62, 58, 55, 52];
+  const W = 100, H = 70;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const rng = max - min || 1;
+  const xs = pts.map((_, i) => (i / (pts.length - 1)) * W);
+  const ys = pts.map(v => H - ((v - min) / rng) * H * 0.78 - H * 0.11);
+  const d = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${ys[i].toFixed(1)}`).join(' ');
 
-function DeadlinesCard({ title, count, deadlines, language }: DeadlinesCardProps) {
-  const hasHigh = deadlines.some((d) => d.severity === 'high');
   return (
-    <div className="md:col-span-2 relative flex flex-col gap-4 p-6 rounded-xl glass-elite-elevated border-elite-gold glow-wine">
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-xl"
-        style={{
-          boxShadow: hasHigh
-            ? 'inset 0 0 0 1px rgb(168 56 56 / 0.55)'
-            : 'inset 0 0 0 1px rgb(184 147 74 / 0.32)',
-        }}
-      />
-
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            aria-hidden="true"
-            className={cn(
-              'inline-block h-1.5 w-1.5 rounded-full shrink-0',
-              hasHigh ? 'bg-area-escudo' : 'bg-gold-500',
-            )}
-          />
-          <span className="uppercase tracking-eyebrow text-xs font-medium text-n-500 truncate">
-            {title}
-          </span>
-        </div>
-        <div
-          aria-hidden="true"
-          className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md bg-[rgb(168_56_56_/_0.16)] text-area-escudo"
-        >
-          <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
-        </div>
-      </div>
-
-      <div className="flex items-baseline gap-2">
-        <span className="font-serif-elite font-normal text-n-1000 leading-[1] text-4xl md:text-5xl num">
-          {count}
-        </span>
-        <span className="text-sm text-n-500">
-          {language === 'es' ? 'vencimientos' : 'deadlines'}
-        </span>
-      </div>
-
-      <ul role="list" className="flex flex-col gap-2.5 mt-1">
-        {deadlines.map((d) => (
-          <li
-            key={`${d.label}-${d.date}`}
-            className="flex items-start gap-2.5 text-sm leading-snug"
-          >
-            <span
-              aria-hidden="true"
-              className={cn('mt-1.5 h-1.5 w-1.5 rounded-full shrink-0', SEVERITY_DOT[d.severity])}
-            />
-            <span className="flex-1 min-w-0 flex items-center justify-between gap-3">
-              <span className="text-n-800 truncate">{d.label}</span>
-              <span className="text-n-500 shrink-0 inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
-                {d.date}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <svg width="100%" height="70" viewBox="0 0 100 70" preserveAspectRatio="none" aria-hidden="true">
+      <path d={d} fill="none" stroke="rgba(255,255,255,.65)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.5" fill="rgba(255,255,255,.8)" />
+    </svg>
   );
 }
 
-// ─── Submódulo card ──────────────────────────────────────────────────────────
+// ─── Submódulo card — matches handoff .subcard style ─────────────────────────
 
 interface SubmoduleCardProps {
   submodule: SubmoduleDef;
   title: string;
   description: string;
-  ctaLabel: string;
-  readyLabel: string;
-  upcomingLabel: string;
+  language: 'es' | 'en';
   delay: number;
   reduced: boolean | null;
 }
 
-function SubmoduleCard({
-  submodule,
-  title,
-  description,
-  ctaLabel,
-  readyLabel,
-  upcomingLabel,
-  delay,
-  reduced,
-}: SubmoduleCardProps) {
-  const { icon: Icon, href, status } = submodule;
-  const isReady = status === 'listo';
+function SubmoduleCard({ submodule, title, description, language, delay, reduced }: SubmoduleCardProps) {
+  const { icon: Icon, href, statusLabel, statusColor } = submodule;
 
   const motionProps = reduced
     ? {}
     : {
         initial: { opacity: 0, y: 14 },
         animate: { opacity: 1, y: 0 },
-        transition: {
-          duration: 0.45,
-          delay: 0.25 + delay * 0.08,
-          ease: [0.16, 1, 0.3, 1] as const,
-        },
+        transition: { duration: 0.45, delay: 0.18 + delay * 0.07, ease: [0.16, 1, 0.3, 1] as const },
       };
 
   return (
-    <motion.div {...motionProps} className="h-full">
+    <motion.div {...motionProps}>
       <Link
         href={href}
         prefetch={false}
-        className="block h-full group focus-visible:outline-none"
+        className="group relative block overflow-hidden rounded-xl transition-[transform,box-shadow] hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A83838] focus-visible:ring-offset-2"
+        style={{
+          background: 'color-mix(in srgb, #A83838 4%, var(--color-n-0, #FCFBF8))',
+          border: '1px solid color-mix(in srgb, #A83838 20%, transparent)',
+          padding: 20,
+        }}
         aria-label={`${title}. ${description}`}
       >
-        <EliteCard
-          variant="glass"
-          hover="lift"
-          interactive
-          padding="md"
-          className="h-full min-h-[180px] flex flex-col gap-4 focus-within:ring-2 focus-within:ring-gold-500 focus-within:ring-offset-2 focus-within:ring-offset-n-1000"
+        {/* Left accent bar — appears on hover via group-hover */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 bottom-0 w-1 origin-top scale-y-0 group-hover:scale-y-100 transition-transform duration-200 rounded-tl-xl rounded-bl-xl"
+          style={{ background: 'linear-gradient(180deg, #A83838, #8A2E2E)' }}
+        />
+
+        {/* Icon box */}
+        <div
+          aria-hidden="true"
+          className="inline-grid place-items-center rounded-lg mb-4 transition-transform duration-200 group-hover:scale-105 group-hover:-rotate-3"
+          style={{
+            width: 42, height: 42,
+            background: 'color-mix(in srgb, #A83838 12%, transparent)',
+            color: '#8A2E2E',
+          }}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div
-              aria-hidden="true"
-              className="shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[rgb(168_56_56_/_0.18)] text-area-escudo group-hover:bg-[rgb(168_56_56_/_0.28)] group-hover:text-[rgb(229_176_186)] transition-colors"
-            >
-              <Icon className="h-6 w-6" strokeWidth={1.75} />
-            </div>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-label',
-                isReady
-                  ? 'bg-[rgb(34_197_94_/_0.12)] text-success border border-[rgb(34_197_94_/_0.3)]'
-                  : 'bg-[rgb(184_147_74_/_0.12)] text-gold-600 border border-[rgb(184_147_74_/_0.3)]',
-              )}
-            >
-              {isReady ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-1 w-1 rounded-full bg-success"
-                  />
-                  {readyLabel}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-2.5 w-2.5" strokeWidth={2} aria-hidden="true" />
-                  {upcomingLabel}
-                </>
-              )}
-            </span>
-          </div>
+          <Icon className="h-5 w-5" strokeWidth={1.75} />
+        </div>
 
-          <div className="flex-1 flex flex-col gap-1.5">
-            <h3 className="font-serif-elite text-xl leading-tight font-medium tracking-tight text-n-1000">
-              {title}
-            </h3>
-            <p className="text-base leading-relaxed text-n-500 max-w-md">
-              {description}
-            </p>
-          </div>
+        {/* Name */}
+        <div className="text-base font-semibold text-n-1000 leading-snug">{title}</div>
 
-          <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-eyebrow text-gold-500 group-hover:text-gold-600 transition-colors">
-            <span>{ctaLabel}</span>
-            <ArrowRight
-              className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-          </div>
-        </EliteCard>
+        {/* Description */}
+        <div className="text-sm text-n-600 mt-1 leading-snug">{description}</div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-4">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: statusColor }}>
+            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
+            {statusLabel[language]}
+          </span>
+          <span aria-hidden="true" style={{ color: '#A83838' }}>
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.75} />
+          </span>
+        </div>
       </Link>
     </motion.div>
   );

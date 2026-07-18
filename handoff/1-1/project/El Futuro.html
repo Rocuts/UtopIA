@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · El Futuro</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+</head>
+<body data-area="futuro">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+
+    <div class="mwrap">
+      <section class="ahero">
+        <div>
+          <div class="eyebrow">
+            <span class="ic"><i data-lucide="compass" class="pi"></i></span>
+            IV · Prospectiva
+          </div>
+          <h1>El Futuro</h1>
+          <p class="lede">Planeación y modelado de escenarios. El futuro no es una línea, es un abanico — mueva crecimiento, costos, inflación y TRM y vea cómo reaccionan tres escenarios en tiempo real.</p>
+        </div>
+        <div class="hero-kpi">
+          <div class="kl">Runway · escenario base</div>
+          <div class="kv num">28<span style="font-size:.34em; color:var(--n-500);"> meses</span></div>
+          <div class="kt" style="color:var(--ac);"><i data-lucide="activity" style="width:15px;height:15px;"></i>Simulación Monte Carlo · 10.000 corridas</div>
+          <div class="kchart"><svg id="vFut" width="100%" height="70"></svg></div>
+          <div class="subkpis">
+            <div class="s"><div class="v num" style="color:var(--success);">34m</div><div class="l">Optimista</div></div>
+            <div class="s"><div class="v num" style="color:var(--danger);">19m</div><div class="l">Pesimista</div></div>
+            <div class="s"><div class="v num">22%</div><div class="l">ROI esperado</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Submódulos</div>
+          <div class="meta">3 frentes · prospectiva</div>
+        </div>
+        <div class="subgrid" id="subs"></div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Histograma Monte Carlo · ROI</div>
+          <span class="badge-ac"><span class="live-dot"></span>Distribución de resultados</span>
+        </div>
+        <div class="panel tinted">
+          <svg id="hist" width="100%" height="150" style="display:block;"></svg>
+          <div style="display:flex; justify-content:space-between; font-size:var(--t-xs); color:var(--n-500); margin-top:10px; text-transform:uppercase; letter-spacing:.1em;">
+            <span>−8% ROI</span><span>P50 · 22%</span><span>+48% ROI</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const SUBS = [
+    ['layers','Escenarios','Base, optimista y pesimista con sensibilidad multivariable.','Activo','var(--success)'],
+    ['clipboard-check','Factibilidad','Estudios para nuevos proyectos, líneas o inversiones.','En análisis','var(--warning)'],
+    ['globe','Macroeconomía','TRM, inflación, tasas y su impacto en su negocio.','Al día','var(--success)'],
+  ];
+  const HREF={'Escenarios':'El Futuro - Escenarios.html','Factibilidad':'El Futuro - Factibilidad.html','Macroeconomía':'El Futuro - Macroeconom-a.html'};
+  document.getElementById('subs').innerHTML = SUBS.map(([ic,nm,ds,st,c])=>`
+    <a class="subcard" href="${HREF[nm]||'#'}">
+      <div class="ic"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="nm">${nm}</div>
+      <div class="ds">${ds}</div>
+      <div class="ft">
+        <span class="st" style="color:${c}"><span class="d" style="background:${c}"></span>${st}</span>
+        <span class="go"><i data-lucide="arrow-right" class="pi"></i></span>
+      </div>
+    </a>`).join('');
+
+  window.renderCharts = function(){
+    scenarios('vFut',[30,38,46,55,64,72,80],[34,46,58,70,82,92,98],[26,30,34,38,42,45,48],'#ffffff','rgba(255,255,255,.5)');
+    // monte carlo histogram (bell-ish)
+    const svg = document.getElementById('hist');
+    const W=900,H=150,vals=[3,6,11,19,30,46,66,84,96,100,94,80,62,44,29,18,10,5,2];
+    const n=vals.length,gap=4,bw=(W-(n-1)*gap)/n,max=100;
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio','none');
+    const p50=9;
+    svg.innerHTML = vals.map((v,i)=>{const h=(v/max)*(H-8),x=i*(bw+gap),y=H-h;
+      const c = i===p50 ? '#5A7F7A' : 'color-mix(in srgb,#5A7F7A 38%, var(--n-100))';
+      return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="2" fill="${c}"/>`;}).join('');
+    if(window.lucide) lucide.createIcons();
+  };
+</script>
+</body>
+</html>

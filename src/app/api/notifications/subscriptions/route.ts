@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import * as repo from '@/lib/notifications/repository';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // GET  /api/notifications/subscriptions  — list subscriptions for workspace
@@ -36,6 +37,9 @@ const CreateSubscriptionSchema = z.object({
 });
 
 export async function GET() {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const workspace = await getOrCreateWorkspace();
     const items = await repo.listSubscriptions(workspace.id);
@@ -47,6 +51,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   let body: unknown;
   try {
     body = await req.json();

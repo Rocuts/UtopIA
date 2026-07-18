@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireWorkspace } from '@/lib/db/workspace';
 import { logApiActivity } from '@/lib/db/activity-log';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 const solicitudSchema = z.object({
   tipo: z.string().max(200).optional(),
@@ -14,6 +15,9 @@ const solicitudSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const workspace = await requireWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -38,6 +38,7 @@ export const maxDuration = 800;
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = HtmlEditorInputSchema.safeParse(body);

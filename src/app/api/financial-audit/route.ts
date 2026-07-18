@@ -5,6 +5,7 @@ import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditProgressEvent } from '@/lib/agents/financial/audit/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import { createSafeSse } from '@/lib/api/sse-safe';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-audit
@@ -75,40 +76,36 @@ function handleStreaming(
   language: 'es' | 'en',
   auditFocus: string | undefined,
 ) {
-  const encoder = new TextEncoder();
-
-  const readableStream = new ReadableStream({
+  const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+      // createSafeSse: serializa BigInt y absorbe enqueue/close sobre un
+      // controller cancelado (cliente desconectado bajo Fluid Compute).
+      const sse = createSafeSse(controller);
 
       try {
         const auditReport = await orchestrateAudit(
           { report, language, auditFocus },
           {
             onProgress: (event: AuditProgressEvent) => {
-              send('progress', event);
+              sse.send('progress', event);
             },
           },
         );
-        send('result', auditReport);
+        sse.send('result', auditReport);
       } catch (error) {
         console.error(
           '[financial-audit] Pipeline error:',
           error instanceof Error ? error.message : error,
         );
         const friendly = toFriendlyError(error, language);
-        send('error', {
+        sse.send('error', {
           error:
             language === 'en' ? 'Error during audit.' : 'Error durante la auditoria.',
           detail: friendly.message,
           code: friendly.code,
         });
       } finally {
-        controller.close();
+        sse.close();
       }
     },
   });

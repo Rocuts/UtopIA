@@ -27,7 +27,7 @@ function handleError(err: unknown, tag: string): NextResponse {
   }
   console.error(tag, err);
   return NextResponse.json(
-    { ok: false, error: err instanceof Error ? err.message : 'internal_error' },
+    { ok: false, error: 'internal_error' },
     { status: 500 },
   );
 }
@@ -42,6 +42,7 @@ const patchBookSchema = z.object({
 export async function GET(_req: NextRequest, ctx: RouteContext) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();
@@ -55,6 +56,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();
@@ -76,6 +78,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const { bookId } = await ctx.params;
     const ws = await getOrCreateWorkspace();

@@ -77,6 +77,7 @@ const adjustmentLedgerSchema = z
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   const startedAt = Date.now();
   try {
     const body = await req.json();

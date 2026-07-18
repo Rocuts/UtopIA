@@ -4,15 +4,14 @@
  * EliteHeader — Sticky top header of the Centro de Comando.
  *
  * Layout (64px):
- *   [Brand "1+1" serif]  [Search (Cmd+K)]  [AreaNav — hidden on home]
- *   [NiifEliteButton | Lang | User]
+ *   [Brand "1+1" serif]  [Search (Cmd+K)]  [AreaNav — always visible]
+ *   [NiifEliteButton | Lang ES/EN | ThemeToggle | User]
  *
  * - Brand in font-serif-elite, gold accent, click → /workspace (home dashboard)
  * - Cmd+K search trigger is ALWAYS visible from lg+ so the command palette is
  *   discoverable. Clicking it fires a synthesized keydown that the shell's
  *   global listener (src/app/workspace/layout.tsx) catches and toggles on.
- * - On `/workspace` (home) the AreaNav is hidden — the 4 AreaCards below are
- *   the canonical nav. Showing both doubles the visual weight for no benefit.
+ * - AreaNav is always visible (including on /workspace home) — matches handoff.
  *
  * Subcomponents:
  *   - BrandMark: wordmark 1+1 with gold-accented "+"
@@ -27,10 +26,9 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Globe,
   User as UserIcon,
   Settings,
   LogOut,
@@ -46,6 +44,7 @@ import { AreaNav } from './AreaNav';
 import { NiifEliteButton } from './NiifEliteButton';
 import { ThemeToggle } from './ThemeToggle';
 import { InsightInboxButton } from '@/components/notifications/InsightInboxButton';
+import { authClient } from '@/lib/auth/client';
 
 // ─── Brand ───────────────────────────────────────────────────────────────────
 
@@ -150,24 +149,38 @@ function SearchTrigger() {
 
 function LanguageToggle() {
   const { language, setLanguage } = useLanguage();
-  const next = language === 'es' ? 'en' : 'es';
   return (
-    <button
-      type="button"
-      onClick={() => setLanguage(next)}
+    <div
+      role="group"
+      aria-label="Idioma / Language"
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
-        'font-mono text-xs-mono font-medium uppercase',
-        'text-n-700 hover:text-n-1000 transition-colors',
-        'border border-transparent hover:border-gold-500/25',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
+        'inline-flex items-center p-0.5 rounded-sm',
+        'border border-n-200',
       )}
-      aria-label={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
-      title={next.toUpperCase()}
     >
-      <Globe className="w-3.5 h-3.5" aria-hidden="true" />
-      <span>{next}</span>
-    </button>
+      {(['es', 'en'] as const).map((lang) => {
+        const selected = language === lang;
+        return (
+          <button
+            key={lang}
+            type="button"
+            onClick={() => setLanguage(lang)}
+            aria-pressed={selected}
+            aria-label={lang === 'es' ? 'Español' : 'English'}
+            className={cn(
+              'px-2 py-1 rounded-xs font-mono text-xs-mono font-semibold uppercase',
+              'transition-colors',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
+              selected
+                ? 'bg-n-900 text-n-0'
+                : 'bg-transparent text-n-600 hover:text-n-900',
+            )}
+          >
+            {lang.toUpperCase()}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -199,13 +212,33 @@ function UserMenu() {
     };
   }, [open]);
 
-  const initials = 'YO'; // Placeholder — no auth yet.
+  // Sesión real BetterAuth. En fase 1 (auth no activada) no hay sesión y el
+  // menú ofrece "Iniciar sesión" en vez de un logout muerto.
+  const { data: session } = authClient.useSession();
+  const sessionUser = session?.user ?? null;
+
+  const initials = sessionUser?.name
+    ? sessionUser.name
+        .split(/\s+/)
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : 'YO';
+
+  const handleSignOut = async () => {
+    setOpen(false);
+    await authClient.signOut();
+    router.push('/login');
+  };
 
   const labels = {
     profile: language === 'es' ? 'Perfil' : 'Profile',
     settings: language === 'es' ? 'Configuración' : 'Settings',
     reports: language === 'es' ? 'Reportes guardados' : 'Saved reports',
     signOut: language === 'es' ? 'Cerrar sesión' : 'Sign out',
+    signIn: language === 'es' ? 'Iniciar sesión' : 'Sign in',
+    anonymous: language === 'es' ? 'Sesión anónima' : 'Anonymous session',
     menu: language === 'es' ? 'Menú de usuario' : 'User menu',
     lastReport: language === 'es' ? 'Último reporte' : 'Last report',
   };
@@ -294,38 +327,48 @@ function UserMenu() {
               <Settings className="w-3.5 h-3.5 text-n-500" />
               <span>{labels.settings}</span>
             </Link>
-            <button
-              role="menuitem"
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
-                'text-n-400 cursor-not-allowed opacity-70',
-              )}
-              title={language === 'es' ? 'Próximamente' : 'Coming soon'}
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              <span>{labels.profile}</span>
-            </button>
             <div
               className="my-1 mx-2 h-px bg-gold-500/18"
               aria-hidden="true"
             />
-            <button
-              role="menuitem"
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
-                'text-n-400 cursor-not-allowed opacity-70',
-              )}
-              title={language === 'es' ? 'Próximamente' : 'Coming soon'}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>{labels.signOut}</span>
-            </button>
+            {sessionUser ? (
+              <>
+                <div className="px-3 py-2 text-2xs text-n-600 truncate" aria-hidden="true">
+                  {sessionUser.email}
+                </div>
+                <button
+                  role="menuitem"
+                  type="button"
+                  onClick={handleSignOut}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-2 text-xs text-left',
+                    'text-n-800 hover:bg-gold-500/8 transition-colors',
+                  )}
+                >
+                  <LogOut className="w-3.5 h-3.5 text-n-500" />
+                  <span>{labels.signOut}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="px-3 py-2 text-2xs text-n-600" aria-hidden="true">
+                  {labels.anonymous}
+                </div>
+                <Link
+                  href="/login"
+                  prefetch={false}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 text-xs',
+                    'text-n-800 hover:bg-gold-500/8 transition-colors',
+                  )}
+                >
+                  <UserIcon className="w-3.5 h-3.5 text-n-500" />
+                  <span>{labels.signIn}</span>
+                </Link>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -340,15 +383,8 @@ export interface EliteHeaderProps {
 }
 
 export function EliteHeader({ className }: EliteHeaderProps) {
-  const pathname = usePathname() ?? '';
   const prefersReduced = useReducedMotion();
-  // Reserved for future: some surfaces may want a compact header.
   const compact = false;
-
-  // On workspace home the dashboard itself presents the 4-area grid. Rendering
-  // AreaNav there duplicates navigation weight for zero signal gain — we hide
-  // it entirely instead of dimming it.
-  const isHome = pathname === '/workspace' || pathname === '/workspace/';
 
   return (
     <motion.header
@@ -375,20 +411,12 @@ export function EliteHeader({ className }: EliteHeaderProps) {
         <SearchTrigger />
       </div>
 
-      {/* AreaNav — center; hidden on home */}
-      <div
-        className={cn(
-          'flex-1 flex items-center justify-center min-w-0',
-          isHome ? 'hidden' : '',
-        )}
-      >
+      {/* AreaNav — center; always visible (matches handoff) */}
+      <div className="flex-1 flex items-center justify-center min-w-0">
         <div className="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <AreaNav />
         </div>
       </div>
-
-      {/* Flex spacer when nav is hidden, so right cluster stays right */}
-      {isHome && <div className="flex-1" />}
 
       {/* Actions cluster — right */}
       <div className="flex items-center gap-2 md:gap-3 shrink-0">

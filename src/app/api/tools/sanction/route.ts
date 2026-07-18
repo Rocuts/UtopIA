@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { calculateSanction } from '@/lib/tools/sanction-calculator';
 import { sanctionRequestSchema } from '@/lib/validation/schemas';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = sanctionRequestSchema.safeParse(body);

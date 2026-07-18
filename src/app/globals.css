@@ -56,6 +56,11 @@
   --color-wine-500: #A04855;
   --color-wine-700: #722F37;
 
+  /* Alias semántico del spec Pyme ("acento-vino"). Apunta al bordeaux
+     ADAPTATIVO de área (claro #A83838 / oscuro #D66B6B) y no a wine-700
+     fijo, que en dark mode colapsaría el contraste como tinta legible. */
+  --color-acento-vino: var(--color-area-escudo);
+
   /* ---- RGB triplets (para rgba alpha via rgb(var(--x) / α)) ---- */
   --color-gold-500-rgb:   184 147  74;
   --color-wine-500-rgb:   160  72  85;
@@ -363,6 +368,29 @@
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.6; }
+}
+
+@keyframes scrolldot {
+  0%   { opacity: 0; transform: translate(-50%, 0); }
+  30%  { opacity: 1; }
+  70%  { opacity: 1; transform: translate(-50%, 9px); }
+  100% { opacity: 0; transform: translate(-50%, 9px); }
+}
+
+/* Ambient background blobs — workspace */
+@keyframes blobA {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-9vmax, 7vmax) scale(1.18); }
+}
+@keyframes blobB {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(8vmax, -6vmax) scale(1.12); }
+}
+
+@keyframes pymeScan {
+  0%   { top: 8%; }
+  50%  { top: 92%; }
+  100% { top: 8%; }
 }
 
 /* ============================================================

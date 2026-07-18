@@ -17,6 +17,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 export async function PATCH(req: NextRequest) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const ws = await getOrCreateWorkspace();
     const json = await req.json();
@@ -42,7 +43,7 @@ export async function PATCH(req: NextRequest) {
     }
     console.error('[pyme/entries/bulk][PATCH]', err);
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? (err as Error).message : 'internal_error' },
+      { ok: false, error: 'internal_error' },
       { status: 500 },
     );
   }

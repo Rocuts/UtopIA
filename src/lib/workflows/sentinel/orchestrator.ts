@@ -239,15 +239,9 @@ export async function runSentinelCheck(
         T3: { fired: false },
         T4: { fired: false },
       },
-      pillars: {
-        escudo: { pillarId: 'escudo', healthScore: 0, status: 'critical', kpis: [], alerts: [], generatedAt: new Date().toISOString() },
-        valor: { pillarId: 'valor', healthScore: 0, status: 'critical', kpis: [], alerts: [], generatedAt: new Date().toISOString() },
-        verdad: { pillarId: 'verdad', healthScore: 0, status: 'critical', kpis: [], alerts: [], generatedAt: new Date().toISOString() },
-        futuro: { pillarId: 'futuro', healthScore: 0, status: 'critical', kpis: [], alerts: [], generatedAt: new Date().toISOString() },
-        overallScore: 0,
-        overallStatus: 'critical',
-        generatedAt: new Date().toISOString(),
-      },
+      // Sin balance preprocesado no hay evaluación que reportar: pillars=null
+      // ("sin datos"). Nunca inventar status 'critical' con score 0.
+      pillars: null,
       generatedAt: new Date().toISOString(),
       upsertedAlerts: [],
       reemittedAlerts: [],

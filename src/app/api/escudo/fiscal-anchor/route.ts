@@ -13,6 +13,7 @@ import { fiscalAlertaToInsight } from '@/lib/agents/financial/escudo-survival/fi
 import { alertRowToView, type AlertView } from '@/lib/sentinel/alert-view';
 import type { FiscalSnapshot } from '@/lib/agents/financial/types';
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ---------------------------------------------------------------------------
 // /api/escudo/fiscal-anchor — persistencia workspace-aware del FiscalSnapshot
@@ -51,6 +52,9 @@ const postBodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
     return NextResponse.json({ error: 'no_workspace' }, { status: 401 });
@@ -185,6 +189,9 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const gate = await requireAuthSession();
+  if (!gate.ok) return gate.response;
+
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
     return NextResponse.json({ error: 'no_workspace' }, { status: 401 });

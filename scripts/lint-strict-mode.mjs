@@ -121,7 +121,10 @@ const files = collectTsFiles(CONTRACTS_DIR);
 const violations = [];
 
 for (const filePath of files) {
-  const basename = filePath.split('/').pop();
+  // Separador cross-platform: en Windows los paths llegan con '\' y un
+  // split('/') dejaba el path completo como "basename" — el allowlist nunca
+  // matcheaba y el guard fallaba solo en local.
+  const basename = filePath.split(/[\\/]/).pop();
 
   // Skip allowlisted files.
   if (ALLOWLIST_BASENAMES.has(basename)) continue;

@@ -1,187 +1,106 @@
 'use client';
 
-import { useRef } from 'react';
-import { motion, useInView, useReducedMotion } from 'motion/react';
-import {
-  FileSpreadsheet,
-  CheckCircle,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react';
-import { useLanguage } from '@/context/LanguageContext';
+import { Bot, Sparkles } from 'lucide-react';
 
-const SPRING = { stiffness: 400, damping: 25 };
-
-const AGENTS = [
-  { label: 'Analista NIIF', sub: 'Estados Financieros' },
-  { label: 'Director Estrategia', sub: 'KPIs & Proyecciones' },
-  { label: 'Gobierno Corp.', sub: 'Acta & Cumplimiento' },
-];
-
-const AUDITORS = [
-  'Auditor NIIF',
-  'Auditor Tributario',
-  'Auditor Legal',
-  'Revisoría Fiscal',
-];
-
-const OUTPUTS = [
-  '4 Estados Financieros NIIF',
-  'Dashboard 4 KPIs Estrategicos',
-  'Flujo de Caja Proyectado (3 trim)',
-  'Punto de Equilibrio Operativo',
-  '13 Notas (NIC 1 \u00A7112-138)',
-  'Acta de Asamblea (lista para firma)',
-  'Opinion Formal tipo NIA 700',
-  'Grade A+ a F (IASB + ISO 25012)',
-  'Excel Profesional 5 pestanas',
-  'Preparado para IFRS 18 (2027)',
+const PHASES = [
+  {
+    n: '1',
+    title: 'NIIF',
+    desc: 'Lectura de estados financieros y normalización contable.',
+    agent: 'Agente Contable',
+    active: true,
+  },
+  {
+    n: '2',
+    title: 'Strategy',
+    desc: 'Optimización tributaria y modelado de escenarios.',
+    agent: 'Agente Fiscal',
+    active: false,
+  },
+  {
+    n: '3',
+    title: 'Governance',
+    desc: 'Aseguramiento, control interno y dictamen.',
+    agent: 'Agente Auditor',
+    active: false,
+  },
+  {
+    n: '4',
+    title: 'HTML',
+    desc: 'Reporte ejecutivo navegable, con diff entre versiones.',
+    agent: 'Agente Editor',
+    active: false,
+  },
 ];
 
 export function PipelineShowcase() {
-  const { language } = useLanguage();
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-100px' });
-  const prefersReduced = useReducedMotion();
-
   return (
     <section
-      ref={ref}
-      className="py-20 md:py-28 px-6 border-t border-n-200 bg-gradient-to-b from-gold-300/10 to-n-0"
+      id="pipeline"
+      className="border-t border-n-200"
+      style={{ padding: '84px clamp(22px, 5vw, 56px)' }}
     >
-      <div className="max-w-[var(--content-width)] mx-auto">
-        {/* Header */}
-        <motion.div
-          initial={prefersReduced ? {} : { opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ type: 'spring', ...SPRING }}
-          className="text-center mb-12"
-        >
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold-500/10 text-gold-500 text-xs font-semibold mb-4">
-            <Sparkles className="w-3.5 h-3.5" />
-            {language === 'es' ? 'EXCLUSIVO EN COLOMBIA' : 'EXCLUSIVE IN COLOMBIA'}
-          </div>
-          <h2 className="font-serif-elite text-3xl md:text-4xl font-medium tracking-tight text-n-900 mb-3 leading-display"
-              style={{ fontVariationSettings: '"opsz" 144, "SOFT" 0, "WONK" 0, "wght" 500' }}>
-            {language === 'es'
-              ? 'Reporte Financiero de Nivel Corporativo'
-              : 'Corporate-Grade Financial Report'}
+      <div className="max-w-[1180px] mx-auto">
+        {/* Section header */}
+        <div className="text-center max-w-[60ch] mx-auto mb-12">
+          <span className="inline-flex items-center gap-2 text-gold-600 mb-3.5 justify-center">
+            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="text-xs uppercase tracking-[0.16em] font-medium">Pipeline NIIF Elite</span>
+          </span>
+          <h2
+            className="font-serif-elite font-medium text-n-1000"
+            style={{
+              fontSize: 'clamp(1.9rem, 3.4vw, 2.8rem)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.08,
+            }}
+          >
+            Informes generados por agentes de IA.
           </h2>
-          <p className="text-sm text-n-500 max-w-2xl mx-auto">
-            {language === 'es'
-              ? 'El unico sistema en Colombia que combina 3 agentes NIIF + 4 auditores especializados + meta-auditoria IFRS 18 en un solo pipeline.'
-              : 'The only system in Colombia that combines 3 NIIF agents + 4 specialized auditors + IFRS 18 meta-audit in a single pipeline.'}
+          <p className="text-n-600 mt-3.5 leading-[1.65]" style={{ fontSize: '1.0625rem' }}>
+            Del intake al reporte: cuatro fases orquestadas por agentes especializados, con streaming en tiempo real y citas legales verificables.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Pipeline Visualization */}
-        <motion.div
-          initial={prefersReduced ? {} : { opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ type: 'spring', ...SPRING, delay: prefersReduced ? 0 : 0.1 }}
-          className="bg-n-0 border border-n-200 rounded-xl p-6 md:p-8 mb-8"
-        >
-          {/* Phase 1: Agents */}
-          <div className="mb-6">
-            <span className="text-xs font-bold text-n-700 uppercase tracking-eyebrow font-mono">
-              Fase 1 · Generacion Secuencial
-            </span>
-            <div className="flex items-center gap-2 mt-3 overflow-x-auto styled-scrollbar pb-2">
-              {AGENTS.map((agent, i) => (
-                <div key={i} className="flex items-center">
-                  <motion.div
-                    initial={prefersReduced ? {} : { opacity: 0, scale: 0.9 }}
-                    animate={isInView ? { opacity: 1, scale: 1 } : {}}
-                    transition={{ delay: prefersReduced ? 0 : 0.2 + i * 0.1 }}
-                    className="rounded-lg border-2 border-gold-500/30 bg-gold-300/10 px-4 py-3 min-w-[140px] text-center"
-                  >
-                    <p className="text-xs font-bold text-gold-500 font-mono mb-0.5">
-                      Agente {i + 1}
-                    </p>
-                    <p className="text-xs font-semibold text-gold-700">{agent.label}</p>
-                    <p className="text-xs text-n-600">{agent.sub}</p>
-                  </motion.div>
-                  {i < AGENTS.length - 1 && (
-                    <ArrowRight className="w-4 h-4 text-n-500 mx-1 shrink-0" aria-hidden="true" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Phase 2: Auditors */}
-          <div className="mb-6">
-            <span className="text-xs font-bold text-n-700 uppercase tracking-eyebrow font-mono">
-              Fase 2 · 4 Auditores en Paralelo
-            </span>
-            <div className="flex items-center gap-2 mt-3 flex-wrap">
-              {AUDITORS.map((auditor, i) => (
-                <motion.div
-                  key={i}
-                  initial={prefersReduced ? {} : { opacity: 0, y: 8 }}
-                  animate={isInView ? { opacity: 1, y: 0 } : {}}
-                  transition={{ delay: prefersReduced ? 0 : 0.5 + i * 0.05 }}
-                  className="rounded-lg border border-n-200 bg-n-50 px-3 py-2 text-xs font-medium text-n-600"
-                >
-                  {auditor}
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
-          {/* Phase 3: Meta-Auditor */}
-          <div>
-            <span className="text-xs font-bold text-n-700 uppercase tracking-eyebrow font-mono">
-              Fase 3 · Meta-Auditoria de Calidad
-            </span>
-            <motion.div
-              initial={prefersReduced ? {} : { opacity: 0, y: 8 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: prefersReduced ? 0 : 0.7 }}
-              className="mt-3 rounded-lg border-2 border-success/30 bg-success/10 px-4 py-3 inline-flex items-center gap-2"
+        {/* Phase cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+          {PHASES.map((phase) => (
+            <div
+              key={phase.n}
+              className="bg-n-0 border border-n-200 rounded-xl p-5 relative"
             >
-              <CheckCircle className="w-4 h-4 text-success" />
-              <span className="text-xs font-semibold text-success">
-                IASB \u00B7 IFRS 18 \u00B7 ISO 25012 \u00B7 ISO 42001 \u00B7 CTCP
-              </span>
-              <span className="text-sm font-bold text-success font-mono">
-                Grade A+
-              </span>
-            </motion.div>
-          </div>
-        </motion.div>
+              {/* Phase number circle */}
+              <div
+                className="w-[34px] h-[34px] rounded-full grid place-items-center font-mono font-semibold mb-3.5"
+                style={{
+                  fontSize: '0.8125rem',
+                  ...(phase.active
+                    ? {
+                        background: 'var(--color-gold-500)',
+                        color: 'var(--color-n-0)',
+                        boxShadow: '0 0 22px rgb(184 147 74 / 0.18)',
+                      }
+                    : {
+                        background: 'rgb(184 147 74 / .14)',
+                        color: 'var(--color-gold-600)',
+                        border: '1px solid rgb(184 147 74 / .35)',
+                      }),
+                }}
+              >
+                {phase.n}
+              </div>
 
-        {/* Output Grid */}
-        <motion.div
-          initial={prefersReduced ? {} : { opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ type: 'spring', ...SPRING, delay: prefersReduced ? 0 : 0.3 }}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 mb-10"
-        >
-          {OUTPUTS.map((output, i) => (
-            <div key={i} className="flex items-center gap-2 py-1.5">
-              <CheckCircle className="w-3.5 h-3.5 text-gold-500 shrink-0" />
-              <span className="text-sm text-n-600">{output}</span>
+              <h4 className="text-[0.9375rem] font-semibold text-n-1000">{phase.title}</h4>
+              <p className="text-[0.8125rem] text-n-600 mt-1 leading-snug">{phase.desc}</p>
+
+              {/* Agent badge */}
+              <div className="inline-flex items-center gap-1.5 mt-3 text-[0.625rem] uppercase tracking-[0.1em] text-gold-600 font-semibold">
+                <Bot className="w-[13px] h-[13px]" aria-hidden="true" />
+                {phase.agent}
+              </div>
             </div>
           ))}
-        </motion.div>
-
-        {/* CTA */}
-        <motion.div
-          initial={prefersReduced ? {} : { opacity: 0, y: 12 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ delay: prefersReduced ? 0 : 0.5 }}
-          className="text-center"
-        >
-          <a
-            href="/workspace"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gold-500 hover:bg-gold-700 text-n-0 text-sm font-semibold transition-colors"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            {language === 'es' ? 'Generar mi primer reporte' : 'Generate my first report'}
-            <ArrowRight className="w-4 h-4" />
-          </a>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

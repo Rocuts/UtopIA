@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1+1 · La Verdad</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/module.css">
+</head>
+<body data-area="verdad">
+<div class="app">
+  <header class="ehead" id="ehead"></header>
+
+  <main class="main scroll">
+    <a href="Workspace.html" class="back"><i data-lucide="arrow-left" class="pi"></i>Volver al Comando</a>
+
+    <div class="mwrap">
+      <section class="ahero">
+        <div>
+          <div class="eyebrow">
+            <span class="ic"><i data-lucide="scale" class="pi"></i></span>
+            III · Rigor
+          </div>
+          <h1>La Verdad</h1>
+          <p class="lede">Aseguramiento y opinión técnica. Damos fe de que sus cifras resisten cualquier escrutinio — revisoría fiscal, dictámenes y conciliación con criterio independiente.</p>
+        </div>
+        <div class="hero-kpi">
+          <div class="kl">Score de Cumplimiento</div>
+          <div class="kv num">94<span style="font-size:.42em; color:var(--n-500);">/100</span></div>
+          <div class="kt up"><i data-lucide="arrow-up" style="width:15px;height:15px;"></i>Grado A · +6 pts en el año</div>
+          <div class="kchart"><svg id="vVer" width="100%" height="70"></svg></div>
+          <div class="subkpis">
+            <div class="s"><div class="v num">4</div><div class="l">Dictámenes vigentes</div></div>
+            <div class="s"><div class="v num" style="color:var(--warning);">2</div><div class="l">Hallazgos menores</div></div>
+            <div class="s"><div class="v num" style="color:var(--success);">Limpia</div><div class="l">Opinión</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Submódulos</div>
+          <div class="meta">3 frentes · aseguramiento</div>
+        </div>
+        <div class="subgrid" id="subs"></div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h">
+          <div class="t">Dictámenes</div>
+          <span class="badge-ac"><span class="live-dot"></span>Panel de opinión</span>
+        </div>
+        <div class="panel tinted">
+          <div class="ladder-list" id="dicts"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="assets/module-shell.js"></script>
+<script>
+  const SUBS = [
+    ['git-compare','Conciliación Fiscal','Cruce entre contabilidad y declaraciones, partida por partida.','Conciliado','var(--success)'],
+    ['stamp','Dictámenes','Opinión técnica especializada por materia y riesgo.','4 vigentes','var(--success)'],
+    ['shield-check','Revisoría Fiscal','Vigilancia permanente del cumplimiento legal y estatutario.','Activo','var(--success)'],
+  ];
+  const HREF={'Conciliación Fiscal':'La Verdad - Conciliaci-n Fiscal.html','Dictámenes':'La Verdad - Dict-menes.html','Revisoría Fiscal':'La Verdad - Revisor-a Fiscal.html'};
+  document.getElementById('subs').innerHTML = SUBS.map(([ic,nm,ds,st,c])=>`
+    <a class="subcard" href="${HREF[nm]||'#'}">
+      <div class="ic"><i data-lucide="${ic}" class="pi"></i></div>
+      <div class="nm">${nm}</div>
+      <div class="ds">${ds}</div>
+      <div class="ft">
+        <span class="st" style="color:${c}"><span class="d" style="background:${c}"></span>${st}</span>
+        <span class="go"><i data-lucide="arrow-right" class="pi"></i></span>
+      </div>
+    </a>`).join('');
+
+  const DICTS = [
+    ['Estados financieros 2025','#4F7A4C',98],
+    ['Cumplimiento tributario','#4F7A4C',94],
+    ['Control interno','#C48A2E',79],
+    ['Lavado de activos (SAGRLAFT)','#4F7A4C',91],
+  ];
+  document.getElementById('dicts').innerHTML = DICTS.map(([n,c,v])=>`
+    <div class="ladder-item">
+      <span class="qd" style="background:${c}"></span>
+      <span class="qn">${n}</span>
+      <span class="bar-track"><span class="fill" style="width:${v}%; background:${c}"></span></span>
+      <span class="qv">${v}/100</span>
+    </div>`).join('');
+
+  window.renderCharts = function(){
+    bars('vVer',[78,80,83,85,88,90,92,93,94],'#ffffff');
+    if(window.lucide) lucide.createIcons();
+  };
+</script>
+</body>
+</html>

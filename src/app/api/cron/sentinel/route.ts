@@ -4,10 +4,10 @@
 // Vercel Cron lo invoca con header `x-vercel-cron-id`. Itera todos los
 // workspaces con periodos abiertos y dispara `runSentinelCheck` por cada uno.
 //
-// Por ahora pasa `preprocessed=null` — el orquestador detecta el caso y
-// emite findings vacíos. Una iteración posterior cargará el último TB
-// preprocesado por workspace desde una tabla `preprocessed_balance_snapshots`
-// (TODO Ola Élite +1).
+// Carga el último TB preprocesado del workspace vía el cache de balances
+// (getCachedPreprocessedBalance). Si no hay periodo abierto o la carga falla,
+// pasa `preprocessed=null` y el orquestador devuelve `pillars: null`
+// ("sin datos" — nunca un 'critical' inventado).
 //
 // Respuesta: { ok: true, processed: number, errors: Record<string, string> }
 // ---------------------------------------------------------------------------

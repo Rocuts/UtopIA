@@ -74,6 +74,7 @@ export const maxDuration = 800; // 800s para acomodar gpt-5.5 medium con outputs
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
+
   try {
     const body = await req.json();
     const parsed = financialReportRequestSchema.safeParse(body);
