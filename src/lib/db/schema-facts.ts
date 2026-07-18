@@ -17,9 +17,11 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { workspaces } from './schema';
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -79,6 +81,17 @@ export const workspaceFacts = pgTable(
       t.fiscalPeriod,
       t.status,
     ),
+    // Garantía DB de ≤1 hecho ACTIVO por (workspace, kind, fiscal_period). La
+    // reconciliación asume este invariante; el índice hace que un doble-ADD
+    // concurrente falle-fuerte (23505) en vez de duplicar en silencio (riesgo
+    // de doble conteo fiscal, Art. 647). NOTA: filas con fiscal_period NULL son
+    // DISTINTAS bajo un índice único parcial estándar → dos activos sin período
+    // del mismo kind aún se permiten. Residual aceptable: los kinds fiscalmente
+    // materiales (donation/leasing/loss_carryforward) siempre llevan período
+    // no-nulo; los sin período son narrativos (no mueven cifras).
+    uniqueIndex('uq_active_fact')
+      .on(t.workspaceId, t.kind, t.fiscalPeriod)
+      .where(sql`${t.status} = 'active'`),
   ],
 );
 

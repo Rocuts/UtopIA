@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_active_fact" ON "workspace_facts" USING btree ("workspace_id","kind","fiscal_period") WHERE "workspace_facts"."status" = 'active';
