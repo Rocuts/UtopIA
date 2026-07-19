@@ -23,6 +23,8 @@ import { analyzeDocument } from '@/lib/tools/document-analyzer';
 import { generateDianResponse, type DianResponseRequest } from '@/lib/tools/dian-response-generator';
 import { assessRisk, type RiskAssessment } from '@/lib/tools/risk-assessor';
 import { getTaxCalendar } from '@/lib/tools/tax-calendar';
+import { registrarHechoInputSchema } from '@/lib/facts/contracts';
+import { assertFactInputValid } from '@/lib/facts/tool-guards';
 
 // ---------------------------------------------------------------------------
 // Side-effect bus carried via experimental_context
@@ -282,6 +284,25 @@ const QUERY_ERP = tool({
   },
 });
 
+const REGISTRAR_HECHO = tool({
+  description:
+    'Registra un HECHO DURADERO del negocio del usuario (ej. una donación) para que ' +
+    'PERSISTA y alimente sus reportes futuros. ' +
+    'LLAMA esta tool SOLO cuando el usuario ya CONFIRMÓ explícitamente en el turno anterior ' +
+    'el hecho exacto que le reformulaste. NUNCA la llames para hipótesis, preguntas, ejemplos, ' +
+    'o ideas tuyas — solo para afirmaciones reales y duraderas que el usuario confirmó. ' +
+    'Ante la duda, NO la llames. ' +
+    'kind="narrative" para contexto de negocio (structured=null, fiscalPeriod opcional). ' +
+    'kind="donation" para una donación con descuento Art. 257 E.T. (REQUIERE fiscalPeriod=año y ' +
+    'structured). IMPORTANTE: montoCentavos va en CENTAVOS como string — 50 millones de pesos = "5000000000".',
+  inputSchema: registrarHechoInputSchema,
+  execute: async (args, options) => {
+    const bag = readBag(options);
+    const result = await executeTool('registrar_hecho_negocio', args, bag.ctx);
+    return result.content;
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Agent -> Tool mapping
 // ---------------------------------------------------------------------------
@@ -295,6 +316,7 @@ const AGENT_TOOLS = {
     assess_risk: ASSESS_RISK,
     get_tax_calendar: GET_TAX_CALENDAR,
     query_erp: QUERY_ERP,
+    registrar_hecho_negocio: REGISTRAR_HECHO,
   },
   accounting: {
     search_docs: SEARCH_DOCS,
@@ -302,6 +324,7 @@ const AGENT_TOOLS = {
     analyze_document: ANALYZE_DOCUMENT,
     assess_risk: ASSESS_RISK,
     query_erp: QUERY_ERP,
+    registrar_hecho_negocio: REGISTRAR_HECHO,
   },
   documents: {
     search_docs: SEARCH_DOCS,
@@ -318,6 +341,7 @@ const AGENT_TOOLS = {
     assess_risk: ASSESS_RISK,
     get_tax_calendar: GET_TAX_CALENDAR,
     query_erp: QUERY_ERP,
+    registrar_hecho_negocio: REGISTRAR_HECHO,
   },
   litigation: {
     search_docs: SEARCH_DOCS,
@@ -449,6 +473,37 @@ export async function executeTool(
         content: result.content,
         meta: { erpProvider: result.provider, erpRecordCount: result.recordCount },
       };
+    }
+
+    case 'registrar_hecho_negocio': {
+      if (!ctx.workspaceId) {
+        return { content: 'ERROR: no hay workspace activo — no se puede registrar el hecho. No reintentes.' };
+      }
+      const parsed = registrarHechoInputSchema.safeParse(args);
+      if (!parsed.success) {
+        return { content: `ERROR de validación del hecho: ${parsed.error.message}. Corrige y reintenta.` };
+      }
+      const input = parsed.data;
+      const guardErr = assertFactInputValid(input);
+      if (guardErr) {
+        return { content: `NO_REGISTRADO: ${guardErr}` };
+      }
+      const { reconcileFact } = await import('@/lib/db/facts');
+      const { decision, fact } = await reconcileFact({
+        workspaceId: ctx.workspaceId,
+        kind: input.kind,
+        content: { title: input.title, body: input.body, structured: input.structured },
+        fiscalPeriod: input.fiscalPeriod,
+        source: 'chat',
+      });
+      const periodTxt = input.fiscalPeriod ? ` (período ${input.fiscalPeriod})` : '';
+      const msg =
+        decision.action === 'NOOP'
+          ? `YA_REGISTRADO: "${input.title}"${periodTxt} ya estaba registrado idéntico. Dile al usuario que ya lo tenías.`
+          : decision.action === 'SUPERSEDE'
+            ? `ACTUALIZADO: "${input.title}"${periodTxt} reemplazó una versión previa (id ${fact?.id}). Dile al usuario que lo actualizaste y que puede verlo/editarlo en "Contexto de la empresa".`
+            : `REGISTRADO: "${input.title}"${periodTxt} (id ${fact?.id}). Dile al usuario que lo tendrás en cuenta en su próximo reporte y que puede verlo/editarlo en "Contexto de la empresa".`;
+      return { content: msg };
     }
 
     default:
