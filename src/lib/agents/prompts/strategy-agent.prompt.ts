@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { NITContext } from '@/lib/security/pii-filter';
+import { factsCaptureGuardrail } from './fragments/facts-capture.fragment';
 
 export function buildStrategyPrompt(
   language: 'es' | 'en',
@@ -193,6 +194,7 @@ Si el usuario tiene un ERP conectado (Siigo, Alegra, Helisa, World Office, etc.)
 
 ${useCaseContext}
 ${taxpayerBlock}
+${factsCaptureGuardrail(language)}
 ${langInstruction}
 
 IMPORTANTE: Eres un asistente de IA, no un abogado tributarista certificado. Siempre recomienda validacion profesional para decisiones legales finales.`;
