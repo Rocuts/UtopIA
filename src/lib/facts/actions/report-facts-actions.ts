@@ -17,6 +17,14 @@ export async function getActiveNarrativesForReportAction(
   const workspaceId = await getCurrentWorkspaceId().catch(() => null);
   if (!workspaceId) return [];
   const year = fiscalPeriod?.match(/\d{4}/)?.[0] ?? null;
-  const facts = await getActiveFacts(workspaceId, year);
-  return facts.filter((f) => f.kind === 'narrative').map(toFactDTO);
+  try {
+    const facts = await getActiveFacts(workspaceId, year);
+    return facts.filter((f) => f.kind === 'narrative').map(toFactDTO);
+  } catch (err) {
+    console.error(
+      '[hechos-empresa] read action fallo (degrada a []):',
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }

@@ -1,5 +1,5 @@
-// src/lib/facts/report-facts.ts
 import 'server-only';
+// src/lib/facts/report-facts.ts
 import { getActiveFacts } from '@/lib/db/facts';
 import { selectNarrativeContents, renderHechosEmpresaBlock } from './hechos-empresa';
 
