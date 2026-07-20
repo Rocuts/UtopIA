@@ -58,13 +58,62 @@ export async function reconcileFact(input: {
   content: FactContent;
   fiscalPeriod: string | null;
   source: 'chat' | 'manual';
+  /** Edición explícita (panel): supersede EXACTAMENTE este hecho por id. */
+  supersedesId?: string | null;
 }): Promise<{ decision: ReconcileDecision; fact: WorkspaceFact | null }> {
   const db = getDb();
-  // Activos del mismo kind+período exacto (la reconciliación es por período).
+
+  // Narrativos son ATEMPORALES: se normaliza el período a null (contexto que
+  // alimenta TODOS los reportes). Los NULL son distintos en `uq_active_fact`,
+  // así múltiples narrativos activos coexisten sin colisión.
+  const fiscalPeriod = input.kind === 'narrative' ? null : input.fiscalPeriod;
+  const supersedesId = input.supersedesId ?? null;
+
+  const insertValues = {
+    workspaceId: input.workspaceId,
+    kind: input.kind,
+    title: input.content.title,
+    body: input.content.body,
+    structured: input.content.structured ?? null,
+    fiscalPeriod,
+    source: input.source,
+  };
+
+  // Edición explícita por id: revoca ese hecho exacto (si sigue activo) e inserta
+  // la versión nueva enlazada. No reconcilia por período — el usuario editó ESE hecho.
+  if (supersedesId) {
+    return db.transaction(async (tx) => {
+      const [revoked] = await tx
+        .update(workspaceFacts)
+        .set({ status: 'revoked', revokedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(workspaceFacts.id, supersedesId),
+            eq(workspaceFacts.workspaceId, input.workspaceId),
+            eq(workspaceFacts.status, 'active'),
+          ),
+        )
+        .returning();
+      const [created] = await tx.insert(workspaceFacts).values(insertValues).returning();
+      if (revoked) {
+        await tx
+          .update(workspaceFacts)
+          .set({ supersededById: created.id })
+          .where(
+            and(eq(workspaceFacts.id, supersedesId), eq(workspaceFacts.workspaceId, input.workspaceId)),
+          );
+        return { decision: { action: 'SUPERSEDE', existingId: supersedesId }, fact: created };
+      }
+      // El objetivo ya no estaba activo (revocado en otra pestaña): degradar a ADD.
+      return { decision: { action: 'ADD' }, fact: created };
+    });
+  }
+
+  // Reconciliación por (kind, período) — captura por chat o registro nuevo del panel.
   const periodClause =
-    input.fiscalPeriod === null
+    fiscalPeriod === null
       ? isNull(workspaceFacts.fiscalPeriod)
-      : eq(workspaceFacts.fiscalPeriod, input.fiscalPeriod);
+      : eq(workspaceFacts.fiscalPeriod, fiscalPeriod);
   const existing = await db
     .select()
     .from(workspaceFacts)
@@ -76,18 +125,13 @@ export async function reconcileFact(input: {
         periodClause,
       ),
     )
-    // Orden ASCENDENTE: contrato con decideReconciliation → el último elemento
-    // es el MÁS RECIENTE, que es el que se supersede en el caso defensivo >1.
+    // Orden ASCENDENTE: contrato con decideReconciliation → el último es el más reciente.
     .orderBy(asc(workspaceFacts.createdAt));
 
   const decision = decideReconciliation(
     input.content,
-    existing.map((e) => ({
-      id: e.id,
-      title: e.title,
-      body: e.body,
-      structured: e.structured ?? null,
-    })),
+    existing.map((e) => ({ id: e.id, title: e.title, body: e.body, structured: e.structured ?? null })),
+    input.kind,
   );
 
   if (decision.action === 'NOOP') {
@@ -107,19 +151,7 @@ export async function reconcileFact(input: {
           ),
         );
     }
-    const [created] = await tx
-      .insert(workspaceFacts)
-      .values({
-        workspaceId: input.workspaceId,
-        kind: input.kind,
-        title: input.content.title,
-        body: input.content.body,
-        structured: input.content.structured ?? null,
-        fiscalPeriod: input.fiscalPeriod,
-        source: input.source,
-      })
-      .returning();
-    // Cierre de la cadena de versiones: el viejo apunta al nuevo.
+    const [created] = await tx.insert(workspaceFacts).values(insertValues).returning();
     if (decision.action === 'SUPERSEDE') {
       await tx
         .update(workspaceFacts)
