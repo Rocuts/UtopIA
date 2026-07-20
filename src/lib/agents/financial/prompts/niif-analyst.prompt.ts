@@ -59,6 +59,8 @@ export interface NiifAnalystEliteContext {
     netoAPagar: number;
     applicable: boolean;
   };
+  /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
+  hechosEmpresa?: string | null;
 }
 
 /**
@@ -309,6 +311,7 @@ interface SharedPromptContext {
   company: CompanyInfo;
   presentationV3: string;
   presentationV3Data: PresentationV3Data | undefined;
+  hechosEmpresa: string;
 }
 
 function buildSharedContext(
@@ -421,6 +424,8 @@ function buildSharedContext(
   const presentationV3Data: PresentationV3Data | undefined =
     preprocessed?.primary?.curator?.presentationV3;
 
+  const hechosEmpresa = elite?.hechosEmpresa ?? '';
+
   const fmtCop = (cents: bigint | number): string => {
     const n = typeof cents === 'bigint' ? Number(cents) / 100 : cents;
     return n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -456,6 +461,7 @@ function buildSharedContext(
     company,
     presentationV3,
     presentationV3Data,
+    hechosEmpresa,
   };
 }
 
@@ -914,6 +920,8 @@ ${renderActividadInferidaBlock(ctx)}
 
 ${renderPresentationV3AnchorsBlock(ctx)}
 
+${ctx.hechosEmpresa}
+
 ${ctx.langInstruction}
 </context>`;
 }
@@ -1128,6 +1136,8 @@ ${renderEfeAuthoritativeBlock(ctx)}
 
 ${renderPresentationV3AnchorsBlock(ctx)}
 
+${ctx.hechosEmpresa}
+
 ${ctx.langInstruction}
 </context>`;
 }
@@ -1314,6 +1324,8 @@ ${renderSaldoAFavorBlock(ctx)}
 ${renderActividadInferidaBlock(ctx)}
 
 ${renderPresentationV3AnchorsBlock(ctx)}
+
+${ctx.hechosEmpresa}
 
 ${ctx.langInstruction}
 </context>`;

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { financialReportRequestSchema } from '@/lib/validation/schemas';
+import { financialReportRequestSchema, excludedFactIdsSchema } from '@/lib/validation/schemas';
+import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import {
   runNiifPhase,
   BalanceValidationError,
@@ -125,6 +126,12 @@ export async function POST(req: Request) {
     }
     const adjustmentLedger = adjustmentLedgerParsed.data as AdjustmentLedger | undefined;
 
+    // Ola 2 — tenancy SOLO desde la cookie (nunca del body) + IDs a excluir en
+    // esta corrida (confirmación pre-reporte; no muta la DB).
+    const workspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+    const excludedFactIds =
+      excludedFactIdsSchema.safeParse((body as { excludedFactIds?: unknown }).excludedFactIds).data ?? null;
+
     // Reutiliza el `preprocessed` enviado por el cliente (idempotencia con
     // /api/upload). Sino, lo re-procesamos aqui — `runNiifPhase` tambien sabe
     // hacerlo internamente; lo precomputamos por consistencia con /route.ts.
@@ -159,6 +166,8 @@ export async function POST(req: Request) {
         preprocessed,
         provisional,
         adjustmentLedger,
+        workspaceId,
+        excludedFactIds,
         startedAt,
       });
     }
@@ -166,7 +175,7 @@ export async function POST(req: Request) {
     // Non-streaming
     const phase = await runNiifPhase(
       { rawData, company, language, instructions },
-      { preprocessed, provisional, adjustmentLedger },
+      { preprocessed, provisional, adjustmentLedger, workspaceId, excludedFactIds },
     );
 
     void logActivity({
@@ -262,6 +271,8 @@ function handleStreaming(args: {
   preprocessed: PreprocessedBalance | undefined;
   provisional: ProvisionalFlag | undefined;
   adjustmentLedger: AdjustmentLedger | undefined;
+  workspaceId: string | undefined;
+  excludedFactIds: string[] | null;
   startedAt: number;
 }) {
   const {
@@ -272,6 +283,8 @@ function handleStreaming(args: {
     preprocessed,
     provisional,
     adjustmentLedger,
+    workspaceId,
+    excludedFactIds,
     startedAt,
   } = args;
   const readableStream = new ReadableStream({
@@ -293,6 +306,8 @@ function handleStreaming(args: {
             preprocessed,
             provisional,
             adjustmentLedger,
+            workspaceId,
+            excludedFactIds,
           },
         );
 
