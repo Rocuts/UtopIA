@@ -104,6 +104,7 @@ function toLegacyShape(json: TaxOptimizationReportJson): TaxOptimizerResult {
     projectedSavings,
     implementationRoadmap,
     fullContent,
+    impuestoACargoCents: json.currentDiagnosis.dualCalculation.impuestoACargoCents,
   };
 }
 

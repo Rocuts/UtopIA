@@ -43,6 +43,9 @@ export interface TaxOptimizerResult {
   implementationRoadmap: string;
   /** Raw content as a single Markdown block for downstream agents */
   fullContent: string;
+  /** Impuesto a cargo del período (MAX ordinaria/TMT), en centavos MoneyCop.
+   *  Base determinista para el neteo del descuento por donaciones (Art. 257). */
+  impuestoACargoCents: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,6 +86,19 @@ export interface ComplianceValidatorResult {
 // Consolidated Output
 // ---------------------------------------------------------------------------
 
+export interface DonationDiscountBlock {
+  fiscalPeriod: string;
+  ruleKey: string;
+  ruleVersion: string;
+  montoDonadoCents: string;
+  creditoCents: string;
+  limiteCents: string;
+  descuentoCents: string;
+  impuestoACargoCents: string;
+  /** TOTAL VINCULANTE: impuesto a cargo − descuento aplicado. */
+  impuestoNetoCents: string;
+}
+
 export interface TaxPlanningReport {
   /** Company info echo */
   company: CompanyInfo;
@@ -94,6 +110,9 @@ export interface TaxPlanningReport {
   complianceValidation: ComplianceValidatorResult;
   /** Final consolidated Markdown report */
   consolidatedReport: string;
+  /** Neteo determinista del descuento por donaciones (Art. 257). null si el
+   *  workspace no tiene una donación activa para el período. */
+  donationDiscount: DonationDiscountBlock | null;
   /** Timestamp */
   generatedAt: string;
 }
