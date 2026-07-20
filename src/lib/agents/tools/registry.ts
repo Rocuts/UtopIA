@@ -496,7 +496,10 @@ export async function executeTool(
         fiscalPeriod: input.fiscalPeriod,
         source: 'chat',
       });
-      const periodTxt = input.fiscalPeriod ? ` (período ${input.fiscalPeriod})` : '';
+      // Narrativos son atemporales: reconcileFact normaliza su período a null, así
+      // que el mensaje no debe citar un período para ellos (coherencia con lo persistido).
+      const periodTxt =
+        input.kind !== 'narrative' && input.fiscalPeriod ? ` (período ${input.fiscalPeriod})` : '';
       const msg =
         decision.action === 'NOOP'
           ? `YA_REGISTRADO: "${input.title}"${periodTxt} ya estaba registrado idéntico. Dile al usuario que ya lo tenías.`

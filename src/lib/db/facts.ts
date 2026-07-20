@@ -95,6 +95,11 @@ export async function reconcileFact(input: {
         )
         .returning();
       const [created] = await tx.insert(workspaceFacts).values(insertValues).returning();
+      // NOTA: si el objetivo ya estaba revocado (edición concurrente) y para un kind
+      // ESTRUCTURADO existe otro activo del mismo (kind, período), este insert degradado
+      // a ADD viola uq_active_fact (23505) → rollback + throw. Es fail-hard intencional
+      // (preferimos el error a un doble conteo silencioso, Art. 647). Los narrativos
+      // nunca colisionan (período null es distinto en el índice).
       if (revoked) {
         await tx
           .update(workspaceFacts)
