@@ -284,7 +284,10 @@ function renderDonationDiscountBlock(b: DonationDiscountBlock, language: 'es' | 
   const t = (es: string, en: string) => (language === 'es' ? es : en);
   return [
     `## ${t('DESCUENTO POR DONACIONES (Art. 257 E.T.) — TOTAL VINCULANTE', 'DONATION DISCOUNT (Art. 257) — BINDING TOTAL')}`,
-    `> ${t('Cálculo DETERMINISTA (no estimado por IA). Regla', 'DETERMINISTIC calc (not AI-estimated). Rule')} ${b.ruleKey} v${b.ruleVersion}.`,
+    `> ${t(
+      `Descuento calculado de forma DETERMINISTA (regla ${b.ruleKey} v${b.ruleVersion}). El impuesto a cargo base proviene del diagnóstico del Optimizador Tributario.`,
+      `Discount computed DETERMINISTICALLY (rule ${b.ruleKey} v${b.ruleVersion}). The base tax-on-charge comes from the Tax Optimizer's diagnosis.`,
+    )}`,
     '',
     '| Concepto | Valor |',
     '|---|---|',
