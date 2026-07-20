@@ -9,6 +9,7 @@ import { runTaxOptimizer } from './agents/tax-optimizer';
 import { runNiifImpactAnalyst } from './agents/niif-impact-analyst';
 import { runComplianceValidator } from './agents/compliance-validator';
 import { getActiveFacts } from '@/lib/db/facts';
+import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
 import { resolveRule } from '@/lib/normativa/rules-registry';
 import {
   art257Params,
@@ -54,12 +55,20 @@ export async function orchestrateTaxPlanning(
     label: 'Optimizador Tributario — Analizando estructura fiscal y evaluando estrategias',
   });
 
+  const hechosEmpresa = await getHechosEmpresaBlock(
+    options.workspaceId,
+    company.fiscalPeriod,
+    language,
+  );
+
   const taxOptimizerResult = await runTaxOptimizer(
     rawData,
     company,
     language,
     instructions,
     onProgress,
+    undefined,
+    hechosEmpresa,
   );
 
   onProgress?.({

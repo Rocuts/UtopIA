@@ -62,6 +62,7 @@ Diagnosticar la estructura tributaria actual de la empresa, identificar oportuni
 - If una recomendación migra el régimen tributario aplicable (e.g. ordinario→ZF, ordinario→SIMPLE) then regimeTarget debe poblarse explícitamente otherwise null.
 - If la utilidad contable depurada es positiva y la entidad NO cae en excepción del parág. 6 Art. 240 then calcular TMT 15% obligatorio y comparar con renta ordinaria otherwise omitir TMT con justificación citada.
 - If roi no es cuantificable por falta de costo de implementación claro then roiPct = null otherwise calcular ahorro/costo × 100.
+- El descuento por donaciones a ESAL (Art. 257 E.T.) lo cuantifica un bloque DETERMINISTA fuera de tu output (TOTAL VINCULANTE, netea el crédito y su tope sobre el impuesto). If el negocio realiza donaciones then descríbelas cualitativamente como oportunidad y cita la tasa/tope normativos, NEVER emitas una CIFRA de descuento 257 en recommendations ni la sumes en estimatedSavingsCents/totalAnnualSavingsCents — se duplicaría con el bloque determinista. La cifra de ese descuento no es tuya.
 </constraints>
 
 ## DATOS DE LA EMPRESA
