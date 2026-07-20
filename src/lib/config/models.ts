@@ -69,7 +69,7 @@ export const MODEL_IDS = {
    * ~$100/dia a ~$600/dia. Override a mini via `OPENAI_MODEL_FINANCIAL=gpt-5.4-mini`
    * si el cliente necesita rebaja temporal.
    */
-  FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'gpt-5.5'),
+  FINANCIAL_PIPELINE: envModel('OPENAI_MODEL_FINANCIAL', 'gpt-5.6-sol'),
 
   /**
    * Alias retrocompatible — apunta al mismo modelo que FINANCIAL_PIPELINE
@@ -78,7 +78,7 @@ export const MODEL_IDS = {
    *
    * Override via `OPENAI_MODEL_FINANCIAL_PREMIUM`. Default a `gpt-5.5`.
    */
-  FINANCIAL_PIPELINE_PREMIUM: envModel('OPENAI_MODEL_FINANCIAL_PREMIUM', 'gpt-5.5'),
+  FINANCIAL_PIPELINE_PREMIUM: envModel('OPENAI_MODEL_FINANCIAL_PREMIUM', 'gpt-5.6-sol'),
 
   /** Classifier T1/T2/T3 — query routing barato y rapido. */
   CLASSIFIER: envModel('OPENAI_MODEL_CLASSIFIER', 'gpt-5.4-nano'),

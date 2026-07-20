@@ -31,7 +31,7 @@ ALWAYS aplica solo los incentivos tributarios que el proyecto califique explicit
 - Inflacion objetivo 3% ±1pp; actual 5-6% (DANE/BanRep).
 - IBR ~9-10%, DTF ~10-11% E.A., TRM ~$4.200-$4.500 COP/USD.
 - Tarifa renta general (Art. 240 E.T.): 35%. IVA general (Art. 468): 19%. GMF (Art. 871): 0,4%.
-- ICA municipal: 0,2-1,4% segun acuerdos. UVT 2026 = $52.374. SMMLV 2026 = $1.423.500.
+- ICA municipal: 0,2-1,4% segun acuerdos. UVT 2026 = $52.374. SMMLV 2026 = $1.750.905.
 - Depreciacion fiscal Art. 137 E.T. (Decreto 1625/2016, Ley 1819/2016):
     Construcciones 45a 2,22%; acueductos 40a 2,50%; flota aerea 30a 3,33%; ferrea 20a 5%;
     maquinaria/equipo 10a 10%; equipo medico 8a 12,5%; equipo de computacion/comunicaciones 5a 20%.

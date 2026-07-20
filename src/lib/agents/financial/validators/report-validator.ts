@@ -44,6 +44,7 @@ export interface ControlTotalsInput {
  * Ejemplos:
  *   "$1.234.567,89"   -> 1234567.89
  *   "1,234,567.89"    -> 1234567.89
+ *   "$1.234,5"        -> 1234.5    (1-2 dígitos tras el último separador = decimal)
  *   "1234567"         -> 1234567
  *   "(1.234)"         -> -1234     (parentheses = negativo en contabilidad colombiana)
  *   "-$1.000"         -> -1000
@@ -72,19 +73,20 @@ export function parseCopAmount(input: string): number | null {
 
   const lastComma = s.lastIndexOf(',');
   const lastDot = s.lastIndexOf('.');
+  const lastSep = Math.max(lastComma, lastDot);
+  const digitsAfter = lastSep === -1 ? -1 : s.length - lastSep - 1;
 
   let normalized: string;
-  if (lastComma > lastDot && lastComma === s.length - 3) {
-    // Formato colombiano: 1.234.567,89
-    normalized = s.replace(/\./g, '').replace(',', '.');
-  } else if (lastDot > lastComma && lastDot === s.length - 3) {
-    // Formato US: 1,234,567.89
-    normalized = s.replace(/,/g, '');
-  } else if (lastComma === -1 && lastDot === -1) {
+  if (lastSep === -1) {
     // Solo digitos
     normalized = s;
+  } else if (digitsAfter === 1 || digitsAfter === 2) {
+    // 1-2 dígitos tras el ÚLTIMO separador = separador decimal, en cualquier
+    // convención: "1.234.567,89", "1,234,567.89", "1.234,5", "12.34".
+    // (Un grupo de miles siempre tiene 3 dígitos.)
+    normalized = s.slice(0, lastSep).replace(/[.,]/g, '') + '.' + s.slice(lastSep + 1);
   } else {
-    // Sin decimales o ambiguo — asumimos separadores de miles
+    // 3+ dígitos tras el último separador — separadores de miles sin decimales
     normalized = s.replace(/[.,]/g, '');
   }
 

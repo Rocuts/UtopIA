@@ -314,7 +314,9 @@ export type TmtStatusJson = z.infer<typeof TmtStatusEnum>;
 
 /**
  * Analisis 5 — Tasa Minima de Tributacion (Ley 2277/2022).
- * Aplica cuando activos o patrimonio liquido > 30.000 UVT.
+ * Aplica a TODO contribuyente de renta de los Arts. 240 / 240-1 E.T. sin
+ * umbral de activos o patrimonio; 'no_aplica' se reserva para las excepciones
+ * legales del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, etc.).
  */
 export const TmtAnalysisSchema = z.object({
   tasaMinimaExigidaPct: z

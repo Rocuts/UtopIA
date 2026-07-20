@@ -50,6 +50,30 @@ import { sql } from 'drizzle-orm';
 import type { SQL, AnyColumn } from 'drizzle-orm';
 
 const ENCRYPTION_KEY_ENV = 'DB_ENCRYPTION_KEY';
+const HMAC_KEY_ENV = 'DB_HMAC_KEY';
+
+// pgcrypto consumes the raw env STRING as the passphrase/key (not decoded
+// bytes). So a stray newline / surrounding whitespace (very common when pasting
+// into a dashboard) or a base64-vs-base64url form mismatch silently changes the
+// digest and breaks decryption / deterministic lookups with NO error. We warn
+// loudly but do NOT mutate DB_ENCRYPTION_KEY: trimming a value that existing
+// rows were already encrypted with would itself break their decryption. See
+// GO_LIVE_RUNBOOK.md §6.1.
+let warnedKeyShape = false;
+function warnOnSuspiciousKeyShape(envName: string, raw: string): void {
+  if (warnedKeyShape) return;
+  const hasWhitespace = raw.trim() !== raw;
+  const decodedBytes = Buffer.from(raw.trim(), 'base64').length;
+  if (hasWhitespace || decodedBytes !== 32) {
+    warnedKeyShape = true;
+    console.warn(
+      `[encryption] ${envName} has a suspicious shape ` +
+        `(${hasWhitespace ? 'surrounding whitespace; ' : ''}decodes to ${decodedBytes} bytes, expected 32). ` +
+        `pgcrypto uses the raw string as passphrase — a stray newline silently breaks decryption/lookups. ` +
+        `Re-provision with \`printf %s\` (no trailing newline). See GO_LIVE_RUNBOOK.md §6.1.`,
+    );
+  }
+}
 
 function getKey(): string {
   const key = process.env[ENCRYPTION_KEY_ENV];
@@ -68,6 +92,7 @@ function getKey(): string {
         `Expected base64-encoded 32 bytes (~44 chars).`,
     );
   }
+  warnOnSuspiciousKeyShape(ENCRYPTION_KEY_ENV, key);
   return key;
 }
 
@@ -117,10 +142,22 @@ export function decryptColumn(
  * Set `DB_HMAC_KEY` to a different 32-byte secret (rotated independently).
  */
 export function encryptedLookupValue(value: string): SQL {
-  const hmacKey = process.env.DB_HMAC_KEY;
-  if (!hmacKey) {
+  const raw = process.env[HMAC_KEY_ENV];
+  if (!raw) {
     throw new Error(
-      `[encryption] DB_HMAC_KEY is not set. Required for deterministic lookups on encrypted columns.`,
+      `[encryption] ${HMAC_KEY_ENV} is not set. Required for deterministic lookups on encrypted columns.`,
+    );
+  }
+  // Trim is safe here: DB_HMAC_KEY gates this function, so the throw above
+  // prevents any nit_lookup row from being written with an un-trimmed key.
+  // Validating the decoded length fails loud instead of silently producing
+  // mismatched HMAC digests (lookups returning 0 rows). See GO_LIVE_RUNBOOK.md §6.
+  const hmacKey = raw.trim();
+  const decodedBytes = Buffer.from(hmacKey, 'base64').length;
+  if (decodedBytes !== 32) {
+    throw new Error(
+      `[encryption] ${HMAC_KEY_ENV} must decode to 32 bytes (got ${decodedBytes}). ` +
+        `Generate: node -e "console.log(crypto.randomBytes(32).toString('base64'))".`,
     );
   }
   return sql`hmac(${value}, ${hmacKey}, 'sha256')`;

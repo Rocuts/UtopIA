@@ -1,10 +1,31 @@
 import 'server-only';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { APIError } from 'better-auth/api';
 import { stripe as stripePlugin } from '@better-auth/stripe';
 import Stripe from 'stripe';
 import { getDb } from '@/lib/db/client';
 import * as authSchema from '@/lib/db/schema-auth';
+
+// ---------------------------------------------------------------------------
+// Closed-beta signup allowlist.
+//
+//   UTOPIA_AUTH_ALLOWLIST — comma-separated list of emails permitted to
+//   register (case-insensitive). Sign-IN of already-registered users is NOT
+//   gated by this — only account creation.
+//
+// FAIL-CLOSED: if the env var is unset/empty, NO ONE can register. This is the
+// intended closed-beta default — set the allowlist (including the admin email)
+// before onboarding. Remove/relax this hook to open registration.
+// ---------------------------------------------------------------------------
+function signupAllowlist(): Set<string> {
+  return new Set(
+    (process.env.UTOPIA_AUTH_ALLOWLIST ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // BetterAuth — configuration
@@ -96,7 +117,82 @@ export const auth = betterAuth({
   plugins: buildBillingPlugins(),
 
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+  // Prod: explicit BETTER_AUTH_URL (canonical origin). Preview/dev: fall back to
+  // the deployment's own VERCEL_URL so session cookies are issued for the host
+  // the tester actually visits (no per-preview env fiddling). Local: localhost.
+  baseURL:
+    process.env.BETTER_AUTH_URL ??
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'),
+
+  // Origins allowed to initiate auth flows. BetterAuth always trusts the
+  // baseURL origin; we ADD Vercel preview deployments (utopia-*.vercel.app) so
+  // login works on preview URLs without hardcoding each ephemeral host.
+  trustedOrigins: (request) => {
+    const origins: string[] = [];
+    const base = process.env.BETTER_AUTH_URL;
+    if (base) {
+      try {
+        origins.push(new URL(base).origin);
+      } catch {
+        /* malformed BETTER_AUTH_URL — baseURL fallback handles it */
+      }
+    }
+    const reqOrigin = request?.headers.get('origin');
+    if (reqOrigin) {
+      try {
+        const host = new URL(reqOrigin).host;
+        if (host.endsWith('.vercel.app') && host.includes('utopia')) {
+          origins.push(new URL(reqOrigin).origin);
+        }
+      } catch {
+        /* ignore malformed Origin header */
+      }
+    }
+    return origins;
+  },
+
+  // Lifecycle hooks — closed-beta gate + anonymous-workspace claiming.
+  databaseHooks: {
+    user: {
+      create: {
+        // Reject registration for emails outside the closed-beta allowlist.
+        before: async (user) => {
+          const allow = signupAllowlist();
+          const email = (user.email ?? '').trim().toLowerCase();
+          if (!allow.has(email)) {
+            throw new APIError('FORBIDDEN', {
+              message:
+                'El registro está restringido a la beta cerrada. Solicite acceso al administrador.',
+            });
+          }
+          return { data: user };
+        },
+        // Link the caller's anonymous (cookie) workspace to the new account so
+        // pre-signup data isn't orphaned. Best-effort — never blocks signup.
+        after: async (user) => {
+          try {
+            const { cookies } = await import('next/headers');
+            const cookieWorkspaceId = (await cookies()).get(
+              'utopia_workspace_id',
+            )?.value;
+            if (cookieWorkspaceId) {
+              const { claimAnonymousWorkspace } = await import(
+                '@/lib/db/workspace'
+              );
+              await claimAnonymousWorkspace(user.id, cookieWorkspaceId);
+            }
+          } catch (err) {
+            console.error(
+              '[auth] claimAnonymousWorkspace failed:',
+              err instanceof Error ? err.message : 'unknown',
+            );
+          }
+        },
+      },
+    },
+  },
 
   // Email + password sign-in (always enabled).
   emailAndPassword: {

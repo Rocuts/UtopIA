@@ -564,15 +564,15 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
   {
     id: 'ART_401_ET',
     cita: 'Art. 401 E.T.',
-    titulo: 'Retención sobre otros pagos — umbral 4 UVT',
+    titulo: 'Retención sobre otros ingresos — umbral 10 UVT',
     resumen:
-      'Regula retención sobre otros pagos gravables. Umbral mínimo 4 UVT (RTF_THRESHOLD_UVT en constants.ts) = $209.496 COP 2026. La tarifa específica la fija el Decreto 1625/2016.',
+      'Regula retención sobre otros pagos gravables ("otros ingresos tributarios"). Cuantía mínima 10 UVT = $523.740 COP 2026 (DUR 1625/2016 Arts. 1.2.4.6.9 / 1.2.4.9.1, mod. Decreto 0572/2025, restablecido por CE 30229/2026 desde 01-jul-2026; entre 08-may y 30-jun-2026 rigió la base anterior de 27 UVT). La tarifa específica la fija el Decreto 1625/2016.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
     urlOficial:
       'https://estatuto.co/?articulo=401',
-    tags: ['retencion', 'umbral', '4_UVT'],
+    tags: ['retencion', 'umbral', '10_UVT', 'decreto_0572_2025'],
   },
   {
     id: 'ART_437_1_ET',

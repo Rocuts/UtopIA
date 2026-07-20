@@ -100,6 +100,8 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
 
   try {
+    const gate = await requireAuthSession();
+    if (!gate.ok) return gate.response;
     const workspace = await getOrCreateWorkspace();
     const contentType = req.headers.get('content-type') || '';
 

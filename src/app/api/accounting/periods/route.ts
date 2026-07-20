@@ -15,6 +15,7 @@ import { getDb } from '@/lib/db/client';
 import { accountingPeriods } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import { createPeriodBodySchema } from '@/lib/validation/accounting-schemas';
+import { requireAuthSession } from '@/lib/auth/require-session';
 
 import {
   badRequestZod,
@@ -22,7 +23,6 @@ import {
   errorResponse,
   ok,
 } from '../_shared';
-import { requireAuthSession } from '@/lib/auth/require-session';
 
 // ─── GET ───────────────────────────────────────────────────────────────────
 

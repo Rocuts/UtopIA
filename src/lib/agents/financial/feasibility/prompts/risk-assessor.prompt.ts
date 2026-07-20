@@ -40,7 +40,7 @@ Escalas:
 
 Proyecto: "${project.projectName}" — ${project.sector}.${project.estimatedInvestment ? ` Inversion: $${project.estimatedInvestment.toLocaleString('es-CO')} COP.` : ''} Horizonte: ${horizon} anos.${project.city ? ` Ciudad: ${project.city}.` : ''}
 ${project.isZomac ? 'Aplica regimen ZOMAC.' : ''}${project.isZonaFranca ? ' Aplica regimen Zona Franca (riesgo cumplimiento Plan Maestro).' : ''}
-UVT 2026 = $52.374 COP. SMMLV 2026 = $1.423.500 COP.`;
+UVT 2026 = $52.374 COP. SMMLV 2026 = $1.750.905 COP.`;
 
   return `${guardrail}
 

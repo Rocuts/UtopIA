@@ -53,6 +53,11 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), geolocation=(), microphone=(self)',
           },
+          // NOTE (merge fix/prod-hardening ← main): CSP is now emitted per-request
+          // with nonces from src/middleware.ts (origin/main approach, replaces the
+          // static 'unsafe-inline' CSP that used to live here). The Google Fonts +
+          // connect-src origins the v10.1 HTML report needs are carried into the
+          // middleware CSP instead — see src/middleware.ts.
         ],
       },
     ];

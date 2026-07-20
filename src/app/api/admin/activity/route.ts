@@ -26,6 +26,7 @@ import {
   type ActivitySource,
 } from '@/lib/observability/activity-feed';
 import type { ActivityLevel } from '@/lib/db/activity-log';
+import { checkAdminToken } from '@/lib/security/admin-auth';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -41,16 +42,8 @@ function csv(value: string | null): string[] {
 }
 
 export async function GET(req: Request) {
-  const adminToken = process.env.UTOPIA_ADMIN_TOKEN;
-  if (!adminToken) {
-    return NextResponse.json(
-      { error: 'admin endpoint disabled: UTOPIA_ADMIN_TOKEN not configured' },
-      { status: 503 },
-    );
-  }
-  if (req.headers.get('x-admin-token') !== adminToken) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = checkAdminToken(req);
+  if (denied) return denied;
 
   const url = new URL(req.url);
   const hours = Math.min(

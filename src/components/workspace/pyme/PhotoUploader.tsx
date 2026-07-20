@@ -31,8 +31,20 @@ import { cn } from '@/lib/utils';
 
 type Stage = 'capture' | 'reading' | 'ok' | 'err' | 'manual' | 'saved';
 
+/** Renglón extraído por el OCR, tal como lo devuelve GET /api/pyme/uploads/[id]. */
+interface PolledEntry {
+  id: string;
+  entryDate: string;
+  description: string;
+  kind: 'ingreso' | 'egreso';
+  amount: number;
+  category: string | null;
+  status: 'draft' | 'confirmed';
+  confidence: number | null;
+}
+
 interface InvoiceData {
-  supplier: string;
+  lines: string;
   date: string;
   category: string;
   amount: string;
@@ -41,11 +53,44 @@ interface InvoiceData {
 // Campos no leídos por el OCR se muestran como "—" (desconocido) — nunca se
 // inventan valores de demostración.
 const EMPTY_INVOICE: InvoiceData = {
-  supplier: '—',
+  lines: '—',
   date: '—',
   category: '—',
   amount: '—',
 };
+
+/** Resume los renglones extraídos en los 4 campos de la tarjeta de resultado. */
+function summarizeEntries(entries: PolledEntry[]): InvoiceData {
+  const first = entries[0];
+  const categories = [
+    ...new Set(entries.map((e) => e.category).filter((c): c is string => !!c)),
+  ];
+  const total = entries.reduce(
+    (sum, e) => sum + (Number.isFinite(e.amount) ? e.amount : 0),
+    0,
+  );
+  const date = first
+    ? new Date(first.entryDate).toLocaleDateString('es-CO', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '—';
+  return {
+    lines:
+      entries.length === 1
+        ? first.description.slice(0, 60)
+        : `${entries.length} renglones (${first?.description.slice(0, 40) ?? ''}…)`,
+    date,
+    category:
+      categories.length === 0
+        ? '—'
+        : categories.length <= 2
+          ? categories.join(', ')
+          : `${categories.slice(0, 2).join(', ')} +${categories.length - 2}`,
+    amount: '$' + Math.round(total).toLocaleString('es-CO'),
+  };
+}
 
 /** Ventana máxima de polling del OCR antes de declarar error honesto. */
 const POLL_DEADLINE_MS = 90_000;
@@ -67,6 +112,8 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
   const [progress, setProgress] = useState(0);
   const [invoice, setInvoice] = useState<InvoiceData>(EMPTY_INVOICE);
   const [manualAmount, setManualAmount] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uploadIdRef = useRef<string | null>(null);
@@ -126,11 +173,23 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
         }
         try {
           const pr = await fetch(`/api/pyme/uploads/${uploadIdRef.current}`);
-          const pj = await pr.json() as { ok: boolean; upload?: { ocrStatus: string; extractedData?: Partial<InvoiceData> } };
+          const pj = await pr.json() as {
+            ok: boolean;
+            upload?: { ocrStatus: string };
+            entries?: PolledEntry[];
+          };
           if (!pj.ok || !pj.upload) return;
           if (pj.upload.ocrStatus === 'done') {
             clearInterval(timerRef.current!);
-            setInvoice({ ...EMPTY_INVOICE, ...pj.upload.extractedData });
+            const entries = pj.entries ?? [];
+            if (entries.length === 0) {
+              // OCR terminó pero no leyó ningún renglón (foto borrosa,
+              // no era un cuaderno/factura). Error honesto — nunca una
+              // tarjeta de éxito vacía.
+              goTo('err');
+              return;
+            }
+            setInvoice(summarizeEntries(entries));
             goTo('ok');
             onUploadsComplete?.();
           } else if (pj.upload.ocrStatus === 'failed') {
@@ -146,9 +205,34 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
 
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
+    setSaveError(null);
     void startUpload(files[0]);
     if (inputRef.current) inputRef.current.value = '';
   }, [startUpload]);
+
+  // Confirma los drafts de ESTE upload (status draft -> confirmed). Sin esto
+  // los renglones extraídos nunca entran a los reportes (solo cuentan los
+  // 'confirmed').
+  const confirmUpload = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch('/api/pyme/entries/bulk', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId, uploadId: uploadIdRef.current ?? undefined }),
+      });
+      const json = await res.json() as { ok: boolean };
+      if (!res.ok || !json.ok) throw new Error('confirm_failed');
+      goTo('saved');
+      onUploadsComplete?.();
+    } catch {
+      setSaveError('No pude guardar. Revise su conexión e intente de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  }, [bookId, goTo, onUploadsComplete, saving]);
 
   const handleManualKey = (key: string) => {
     if (key === '⌫') setManualAmount(p => p.slice(0, -1));
@@ -159,18 +243,52 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
 
   const handleManualSave = useCallback(async () => {
     const amount = parseInt(manualAmount || '0', 10);
-    if (!navigator.onLine && amount > 0) {
-      try {
-        await enqueueEntry({
-          bookId,
-          description: 'Entrada manual (guardada sin conexión)',
-          kind: 'egreso',
-          amount,
-          category: null,
-          entryDate: new Date().toISOString().split('T')[0],
-        });
-      } catch {
-        // best-effort; still advance to saved
+    const entryDate = new Date().toISOString().split('T')[0];
+    if (amount > 0) {
+      if (navigator.onLine) {
+        // Online: persiste directo como entry confirmado. Si el POST falla,
+        // cae a la cola offline (sync posterior) — nunca se pierde el dato.
+        try {
+          const res = await fetch('/api/pyme/entries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bookId,
+              entryDate,
+              description: 'Entrada manual',
+              kind: 'egreso',
+              amount,
+              status: 'confirmed',
+            }),
+          });
+          if (!res.ok) throw new Error('manual_save_failed');
+        } catch {
+          try {
+            await enqueueEntry({
+              bookId,
+              description: 'Entrada manual (pendiente de sincronizar)',
+              kind: 'egreso',
+              amount,
+              category: null,
+              entryDate,
+            });
+          } catch {
+            // best-effort; still advance to saved
+          }
+        }
+      } else {
+        try {
+          await enqueueEntry({
+            bookId,
+            description: 'Entrada manual (guardada sin conexión)',
+            kind: 'egreso',
+            amount,
+            category: null,
+            entryDate,
+          });
+        } catch {
+          // best-effort; still advance to saved
+        }
       }
     }
     goTo('saved');
@@ -179,6 +297,7 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
 
   const reset = () => {
     setManualAmount('');
+    setSaveError(null);
     goTo('capture');
   };
 
@@ -252,10 +371,10 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
                 title="¡Listo! Leí su factura"
                 subtitle="Revise que todo esté bien y guárdela."
               />
-              <FieldRow label="Proveedor" value={invoice.supplier} />
+              <FieldRow label="Renglones" value={invoice.lines} />
               <FieldRow label="Fecha" value={invoice.date} mono />
               <FieldRow label="Categoría" value={invoice.category} />
-              <FieldRow label="Valor" value={invoice.amount} mono />
+              <FieldRow label="Valor total" value={invoice.amount} mono />
               <FieldRow
                 label="¿Algo mal?"
                 value={
@@ -278,13 +397,19 @@ export function PhotoUploader({ bookId, onUploadsComplete }: PhotoUploaderProps)
                 </button>
                 <button
                   type="button"
-                  onClick={() => goTo('saved')}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#357A28] bg-area-pyme"
+                  onClick={() => { void confirmUpload(); }}
+                  disabled={saving}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#357A28] bg-area-pyme"
                 >
                   <Check className="h-4 w-4" aria-hidden />
-                  Guardar en mi libro
+                  {saving ? 'Guardando…' : 'Guardar en mi libro'}
                 </button>
               </div>
+              {saveError && (
+                <p role="alert" className="mt-3 text-sm text-[#A83838] text-center">
+                  {saveError}
+                </p>
+              )}
             </ResultCard>
           </StageWrap>
         )}

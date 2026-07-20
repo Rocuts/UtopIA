@@ -28,10 +28,13 @@ import { fileURLToPath } from 'node:url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 
-const CONTRACTS_DIR = join(
-  REPO_ROOT,
-  'src/lib/agents/financial/contracts'
-);
+// Directorios escaneados. Cualquier .ts (fuera de __tests__/__fixtures__) cuyo
+// schema Zod pueda viajar al LLM debe cumplir strict-mode.
+const SCAN_DIRS = [
+  join(REPO_ROOT, 'src/lib/agents/financial/contracts'),
+  // Hechos del negocio: `registrarHechoInputSchema` es input de tool → va al LLM.
+  join(REPO_ROOT, 'src/lib/facts'),
+];
 
 const FORBIDDEN = [
   { regex: /\.optional\(\)/, label: '.optional()' },
@@ -117,7 +120,7 @@ function isInsideBlockComment(line, inBlockRef) {
 // Main scan
 // ---------------------------------------------------------------------------
 
-const files = collectTsFiles(CONTRACTS_DIR);
+const files = SCAN_DIRS.flatMap((d) => collectTsFiles(d));
 const violations = [];
 
 for (const filePath of files) {

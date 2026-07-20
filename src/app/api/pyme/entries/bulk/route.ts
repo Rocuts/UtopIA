@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest) {
 
     await assertBookOwned(body.bookId, ws.id);
 
-    const confirmed = await repo.bulkConfirmEntries(body.bookId);
+    const confirmed = await repo.bulkConfirmEntries(body.bookId, body.uploadId);
 
     return NextResponse.json({ ok: true, confirmed });
   } catch (err) {

@@ -84,7 +84,8 @@ const BUILT_IN_RULES = [
   {
     // ReteFuente servicios: aplica cuando proveedor es régimen común (responsable IVA)
     // y NO es gran contribuyente NI autorretenedor.
-    // Umbral: 4 UVT = $209.496 COP 2026 (Art. 401 ET).
+    // Umbral: 2 UVT = $104.748 COP 2026 (DUR 1.2.4.4.1, mod. Decreto 0572/2025,
+    // restablecido por CE 30229/2026 con vigencia desde 01-jul-2026).
     code: 'RTF_SVC_4',
     taxType: 'RETEFUENTE',
     description: 'ReteFuente servicios generales 4% (Art. 392 ET)',
@@ -92,7 +93,7 @@ const BUILT_IN_RULES = [
     taxAccountCode: '236525',
     accountSide: 'credit',
     isDeductible: false,
-    applyThresholdUvt: '4.0000',
+    applyThresholdUvt: '2.0000',
     applicableTriggers: {
       transactionTypes: ['service_purchase'],
       // Aplica cuando el proveedor es régimen común (responsable IVA)

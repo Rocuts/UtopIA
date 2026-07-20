@@ -263,6 +263,49 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // -------------------------------------------------------------------------
+  // CSP with per-request nonce (replaces 'unsafe-inline' for scripts).
+  //
+  // Folded into proxy.ts from the short-lived src/middleware.ts that origin/main
+  // introduced — Next 16 forbids having BOTH a middleware and a proxy file, and
+  // proxy.ts IS the Next 16 replacement for middleware. The x-nonce request
+  // header is how the App Router reads the nonce during render to stamp its
+  // inline bootstrap scripts. Applied to page responses (and, harmlessly, API
+  // responses) below.
+  // -------------------------------------------------------------------------
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const isProd = process.env.NODE_ENV === 'production';
+  const cspConnectSrc = [
+    "'self'",
+    'https://api.openai.com',
+    'wss://api.openai.com',
+    'https://api.tavily.com',
+    'https://api.cohere.com',
+    'https://*.neon.tech',
+    'wss://*.neon.tech',
+    'https://*.public.blob.vercel-storage.com',
+    ...(isProd ? [] : ['http://192.168.40.67:*', 'ws://192.168.40.67:*']),
+  ].join(' ');
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'${isProd ? '' : " 'unsafe-eval'"}`,
+    // fonts.googleapis.com/gstatic.com: el reporte HTML v10.1 (spec §10) carga
+    // Source Serif 4 + Inter + IBM Plex Mono desde Google Fonts; el iframe srcDoc
+    // de HtmlReportViewer hereda esta CSP — sin estos orígenes el preview in-app
+    // renderiza con Georgia/system-ui (inconsistencia visual vs HTML descargado).
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    `connect-src ${cspConnectSrc}`,
+    "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join('; ');
+
+  // -------------------------------------------------------------------------
   // 0. Auth check (phase-gated — only active when BETTER_AUTH_SECRET is set).
   // -------------------------------------------------------------------------
   if (AUTH_ACTIVE) {
@@ -277,9 +320,18 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  // Restrict remaining checks (CSRF, rate limit, headers) to /api/* only.
+  // Restrict remaining checks (CSRF, rate limit) to /api/* only. Page requests
+  // still get the CSP + nonce applied here (the x-nonce request header lets the
+  // App Router nonce its inline scripts during render).
   if (!pathname.startsWith('/api/')) {
-    return NextResponse.next();
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set('x-nonce', nonce);
+    const pageResponse = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    pageResponse.headers.set('Content-Security-Policy', csp);
+    pageResponse.headers.set('X-Content-Type-Options', 'nosniff');
+    return pageResponse;
   }
 
   // -------------------------------------------------------------------------
@@ -380,6 +432,7 @@ export async function proxy(req: NextRequest) {
   const response = NextResponse.next();
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Request-Id', crypto.randomUUID());
+  response.headers.set('Content-Security-Policy', csp);
 
   return response;
 }

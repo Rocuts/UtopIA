@@ -136,7 +136,7 @@ ${JSON.stringify(input.governanceReport, null, 2)}
 - Variación resultadoEjercicio en ECP == netIncomePrimary del P&L (tolerancia 0.5%).
 - EFE: efectivo inicial = saldo PUC 11 real (NO total activos); NUNCA Cta.3605 como comodín (§5 Página 07).
 - ROE consistente: KPIs, executiveDashboard, dupontAnalysis, trends, recommendations usan TODOS la fórmula única de controlTotals.roe.
-- Tablas Markdown reales (no inline pipe-separated) en estados financieros.
+- Tablas HTML reales (<table class="ft"> según §6/§13) en estados financieros — NUNCA sintaxis Markdown ni texto pipe-separated dentro del HTML.
 - Devoluciones Cta.4175 en LÍNEA SEPARADA del P&L (NIIF 15 §47).
 - Defensa Art.647 E.T. en UNA SOLA nota consolidada al final de Notas Parte 2.
 - Numeración de notas secuencial 1..N sin saltos.

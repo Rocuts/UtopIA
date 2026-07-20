@@ -5,8 +5,8 @@
 // archivo evita un round-trip a BD por evaluación.
 //
 // Actualizar cada enero cuando la DIAN publique el decreto de UVT.
-// Referencia 2026: Resolución DIAN 000187 / 2025-12-19.
-// Referencia 2025: Resolución DIAN 000187 / 2024-12-19.
+// Referencia 2026: Resolución DIAN 000238 / 2025-12-15.
+// Referencia 2025: Resolución DIAN 000193 / 2024-12-04.
 
 export const UVT_2026_COP = 52_374;
 export const UVT_2025_COP = 49_799;
@@ -46,15 +46,27 @@ export function uvtToCopByYear(uvtAmount: number, year: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Umbrales mínimos de retención en la fuente (Art. 401 ET 2026)
+// Umbrales mínimos de retención en la fuente (DUR 1625/2016, mod. Decreto
+// 0572/2025 — bases reducidas restablecidas por el Consejo de Estado,
+// providencia CE 30229 del 02-jun-2026, con vigencia desde el 01-jul-2026.
+// Entre el 08-may y el 30-jun-2026 rigieron las bases anteriores (4 / 27 UVT).
+// El decreto sigue en litigio de fondo: revisar al cierre del proceso.
 // ---------------------------------------------------------------------------
 
 /**
- * Art. 401 ET: no aplica retención si el pago es inferior a 4 UVT.
- * Aplica para: servicios generales, compras de bienes, etc.
- * RTF_SVC_4 usa este umbral (4 UVT = $209.496 COP 2026).
+ * Servicios generales: no aplica retención si el pago es inferior a 2 UVT
+ * (DUR 1625/2016 Art. 1.2.4.4.1, mod. Decreto 0572/2025).
+ * RTF_SVC_4 usa este umbral (2 UVT = $104.748 COP 2026).
  */
-export const RTF_THRESHOLD_UVT = 4;
+export const RTF_THRESHOLD_UVT = 2;
+
+/**
+ * Compras de bienes y demás "otros ingresos tributarios" (Art. 401 ET,
+ * DUR 1625/2016 Arts. 1.2.4.6.9 / 1.2.4.9.1, mod. Decreto 0572/2025):
+ * cuantía mínima 10 UVT = $523.740 COP 2026. Incluye arrendamiento de
+ * bienes inmuebles (3,5%).
+ */
+export const RTF_OTROS_INGRESOS_THRESHOLD_UVT = 10;
 
 /**
  * ReteFuente honorarios y comisiones NO tiene umbral mínimo por UVT —
