@@ -89,21 +89,23 @@ export function FactForm({
         />
       </div>
 
-      <div>
-        <label className={labelCls}>
-          {t('Período fiscal (año)', 'Fiscal period (year)')}
-          {isDonation && <span className="text-danger"> *</span>}
-        </label>
-        <input
-          className={inputCls}
-          value={form.fiscalPeriod}
-          onChange={(e) => set('fiscalPeriod', e.target.value)}
-          disabled={isEdit}
-          maxLength={8}
-          inputMode="numeric"
-          placeholder="2026"
-        />
-      </div>
+      {isDonation && (
+        <div>
+          <label className={labelCls}>
+            {t('Período fiscal (año)', 'Fiscal period (year)')}
+            <span className="text-danger"> *</span>
+          </label>
+          <input
+            className={inputCls}
+            value={form.fiscalPeriod}
+            onChange={(e) => set('fiscalPeriod', e.target.value)}
+            disabled={isEdit}
+            maxLength={8}
+            inputMode="numeric"
+            placeholder="2026"
+          />
+        </div>
+      )}
 
       {isDonation && (
         <div className="grid grid-cols-2 gap-3">

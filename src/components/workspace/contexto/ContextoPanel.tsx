@@ -83,7 +83,10 @@ export function ContextoPanel({ facts }: { facts: FactDTO[] }) {
         return;
       }
       startTransition(async () => {
-        const res = await registerManualFactAction(buildRegistrarInput(form));
+        const res = await registerManualFactAction(
+          buildRegistrarInput(form),
+          editKey === 'new' ? null : editKey,
+        );
         if (res.ok) {
           setFormOpen(false);
           router.refresh();
@@ -92,7 +95,7 @@ export function ContextoPanel({ facts }: { facts: FactDTO[] }) {
         }
       });
     },
-    [router, language],
+    [router, language, editKey],
   );
 
   const revoke = useCallback(

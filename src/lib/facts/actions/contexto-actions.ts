@@ -34,7 +34,10 @@ export type RegisterFactResult =
 
 export type RevokeFactResult = { ok: true; revoked: boolean } | FactActionError;
 
-export async function registerManualFactAction(rawInput: unknown): Promise<RegisterFactResult> {
+export async function registerManualFactAction(
+  rawInput: unknown,
+  supersedesId?: string | null,
+): Promise<RegisterFactResult> {
   const gate = await requireAuthSession();
   if (!gate.ok) return { ok: false, code: 'UNAUTHENTICATED', message: 'Sesión requerida.' };
 
@@ -59,6 +62,7 @@ export async function registerManualFactAction(rawInput: unknown): Promise<Regis
       content: { title: input.title, body: input.body, structured: input.structured },
       fiscalPeriod: input.fiscalPeriod,
       source: 'manual',
+      supersedesId: supersedesId ?? null,
     });
     revalidatePath(ROUTE);
     return { ok: true, action: decision.action, factId: fact?.id ?? null };
