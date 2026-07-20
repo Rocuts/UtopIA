@@ -42,15 +42,10 @@ export function HechosEmpresaConfirm({
     };
   }, [fiscalPeriod]);
 
-  if (state.status === 'loading') {
-    return (
-      <p className="text-sm text-n-600">
-        {t('Cargando hechos del negocio…', 'Loading business facts…')}
-      </p>
-    );
-  }
-  if (state.status === 'error' || state.facts.length === 0) {
-    // Silencioso: sin hechos (o error de lectura) → no se muestra la sección.
+  if (state.status !== 'ready' || state.facts.length === 0) {
+    // Silencioso: mientras carga, en error, o sin hechos → no se muestra nada
+    // (evita el flash de "Cargando…" en Fase-1-anónima, donde el read action
+    // habitualmente resuelve en []).
     return null;
   }
 
