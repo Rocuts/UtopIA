@@ -146,6 +146,14 @@ export const financialReportRequestSchema = z.object({
   detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
 });
 
+/**
+ * IDs de hechos del negocio a EXCLUIR de una corrida de reporte (confirmación
+ * pre-reporte, exclusión efímera — no muta la DB). Viaja en el body junto a
+ * rawData/company, como provisional/adjustmentLedger. NO viaja al LLM →
+ * strict-mode-2026 no aplica.
+ */
+export const excludedFactIdsSchema = z.array(z.string()).max(200);
+
 // ---- Financial report split endpoints (Wave 3.F1) ----
 // `/api/financial-report/strategy` and `/api/financial-report/governance` son
 // stateless por diseño: el caller envia el output del agente anterior + los
