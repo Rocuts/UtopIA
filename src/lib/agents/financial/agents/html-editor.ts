@@ -69,6 +69,7 @@ export async function runHtmlEditor(
   input: HtmlEditorInput,
   onProgress?: (event: FinancialProgressEvent) => void,
   signal?: AbortSignal,
+  hechosEmpresa?: string,
 ): Promise<HtmlEditorOutput> {
   // Why validamos aquí aunque el endpoint también lo haga: este agente debe
   // ser invocable directamente por orchestrators internos (futuro Wave 4.F8
@@ -83,7 +84,7 @@ export async function runHtmlEditor(
   }
 
   const system = buildHtmlEditorSystemPrompt();
-  const userContent = buildHtmlEditorUserContent(parsed.data);
+  const userContent = buildHtmlEditorUserContent(parsed.data, hechosEmpresa);
 
   onProgress?.({
     type: 'stage_progress',
