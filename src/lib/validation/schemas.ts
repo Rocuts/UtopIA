@@ -152,7 +152,7 @@ export const financialReportRequestSchema = z.object({
  * rawData/company, como provisional/adjustmentLedger. NO viaja al LLM →
  * strict-mode-2026 no aplica.
  */
-export const excludedFactIdsSchema = z.array(z.string()).max(200);
+export const excludedFactIdsSchema = z.array(z.string().max(64)).max(200);
 
 // ---- Financial report split endpoints (Wave 3.F1) ----
 // `/api/financial-report/strategy` and `/api/financial-report/governance` son

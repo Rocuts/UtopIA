@@ -45,7 +45,8 @@ export function renderHechosEmpresaBlock(
     language === 'es'
       ? 'Hechos duraderos del negocio confirmados por el usuario. Son CONTEXTO para la redacción (notas, análisis, narrativa); NUNCA una fuente de cifras. Todo número vinculante proviene de los TOTALES VINCULANTES / bloques deterministas, jamás de estos hechos.'
       : 'Durable business facts confirmed by the user. They are CONTEXT for the narrative (notes, analysis, prose); NEVER a source of figures. Every binding number comes from the BINDING TOTALS / deterministic blocks, never from these facts.';
-  const items = narratives.map((n) => `- ${n.title}: ${n.body}`).join('\n');
+  const sanitize = (s: string) => s.replace(/<\/?hechos_empresa>/gi, ' ');
+  const items = narratives.map((n) => `- ${sanitize(n.title)}: ${sanitize(n.body)}`).join('\n');
   return `<hechos_empresa>
 ${header}
 ${items}

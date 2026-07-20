@@ -59,7 +59,7 @@ export function HechosEmpresaConfirm({
           `${includedCount} business fact(s) will be included in this report`,
         )}
       </h4>
-      <p className="mt-1 text-xs text-n-600">
+      <p className="mt-1 text-xs text-n-700">
         {t(
           'Contexto para la redacción del reporte. Desmarca un hecho para excluirlo sólo en esta corrida (no se elimina).',
           'Context for the report narrative. Uncheck a fact to exclude it for this run only (it is not deleted).',
