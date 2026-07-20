@@ -64,3 +64,21 @@ export function moneyCopEquals(a: string, b: string, toleranceCents: bigint = Bi
   const abs = diff < ZERO ? -diff : diff;
   return abs <= toleranceCents;
 }
+
+/**
+ * Porcentaje entero de un MoneyCop, TRUNCADO hacia abajo (floor para valores
+ * positivos: BigInt divide truncando hacia cero). Floor-bias deliberado para
+ * defensa Art. 647 (un descuento nunca sobreestimado). `pct` es entero (ej. 25).
+ * Pensado para montos NO negativos (donación, impuesto).
+ */
+export function pctFloorMoneyCop(value: string, pct: number): string {
+  if (!Number.isInteger(pct) || pct < 0) {
+    throw new Error(`pctFloorMoneyCop: pct debe ser entero >= 0 (recibido ${pct}).`);
+  }
+  return serializeMoneyCop((parseMoneyCop(value) * BigInt(pct)) / BigInt(100));
+}
+
+/** Menor de dos MoneyCop (comparación en centavos). Empate → devuelve `a`. */
+export function minMoneyCop(a: string, b: string): string {
+  return parseMoneyCop(a) <= parseMoneyCop(b) ? a : b;
+}
