@@ -43,10 +43,10 @@ ${docSignal}
 
 ## Domains (5 specialist agents)
 
-- **tax**: Estatuto Tributario articles, impuestos (renta, IVA, retencion, ICA), tarifas, deducciones, exenciones, facturacion electronica, calendario tributario, UVT, reformas tributarias
-- **accounting**: NIIF/IFRS, NIC, CTCP, estados financieros, indicadores financieros, ratios, presupuestos, costos, depreciacion, provisiones, consolidacion, revisoria fiscal
+- **tax**: Estatuto Tributario articles, impuestos (renta, IVA, retencion, ICA), tarifas, deducciones, exenciones, facturacion electronica, calendario tributario, UVT, reformas tributarias, precios de transferencia
+- **accounting**: NIIF/IFRS, NIC, CTCP, estados financieros, indicadores financieros, ratios, presupuestos, costos, depreciacion, provisiones, consolidacion, revisoria fiscal, dictamenes, conciliacion fiscal
 - **documents**: El usuario ha SUBIDO un archivo y pide analisis, extraccion de datos, identificacion del tipo de documento, resumen del contenido, cifras clave. Activa este dominio cuando: el usuario menciona "el documento", "el archivo", "lo que subi", "analiza esto", o cuando hay documentContext en la conversacion
-- **strategy**: Planeacion tributaria PREVENTIVA, gestion de riesgo, plazos procesales, estrategia de devolucion de saldos, due diligence compliance, cumplimiento tributario, plan de accion cuando AUN NO hay acto administrativo DIAN emitido
+- **strategy**: Planeacion tributaria PREVENTIVA, gestion de riesgo, plazos procesales, estrategia de devolucion de saldos, due diligence compliance, valoracion de empresa, estudios de factibilidad, analisis de escenarios y proyecciones, cumplimiento tributario, plan de accion cuando AUN NO hay acto administrativo DIAN emitido
 - **litigation**: Defensa LITIGIOSA ACTIVA cuando la DIAN YA emitio un acto administrativo concreto (requerimiento ordinario/especial, pliego de cargos, emplazamiento, liquidacion oficial de revision/aforo, resolucion sancion, acto de determinacion). Redaccion de recursos de reconsideracion, respuesta a requerimientos con tono litigante agresivo, invocacion Art. 647 E.T. (diferencia de criterio), nulidades procesales, jurisprudencia del Consejo de Estado. Activa cuando el usuario dice: "me notificaron", "recibi un requerimiento/pliego/liquidacion", "la DIAN me esta cobrando", "necesito responder a la DIAN", "recurso de reconsideracion", "descargos", "impugnar la liquidacion"
 
 ## Routing Rules
@@ -67,10 +67,10 @@ ${docSignal}
 
 ## Intent Labels (examples)
 - greeting, thanks, meta_question
-- sanction_calculation, tax_calendar, retention_query, iva_treatment, income_tax
-- niif_recognition, financial_ratios, depreciation, cost_analysis, budget_projection
+- sanction_calculation, tax_calendar, retention_query, iva_treatment, income_tax, transfer_pricing, precios_transferencia
+- niif_recognition, financial_ratios, depreciation, cost_analysis, budget_projection, revisoria_fiscal, dictamen_review, conciliacion_fiscal
 - document_analysis, document_extraction, document_summary
-- risk_assessment, action_plan, refund_strategy, compliance_review, tax_planning
+- risk_assessment, action_plan, refund_strategy, compliance_review, tax_planning, company_valuation, due_diligence, feasibility_study, scenario_analysis
 - dian_response_drafting, requerimiento_response, pliego_defense, liquidacion_appeal, recurso_reconsideracion, procedural_nullity, diferencia_criterio_647
 - erp_balance_query, erp_invoice_query, erp_journal_query, erp_contacts_query, erp_chart_query
 

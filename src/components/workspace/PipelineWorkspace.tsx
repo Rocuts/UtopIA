@@ -1634,6 +1634,11 @@ export function PipelineWorkspace() {
       };
       const provisional = intakeWithExtras.provisional;
       const adjustmentLedger = intakeWithExtras.adjustmentLedger;
+      // Ola 2 — hechos del negocio excluidos en la confirmación del intake
+      // (Task 8). Se propaga a las 4 rutas del pipeline SOLO cuando hay
+      // exclusiones, para que cada ruta netee la misma lista que confirmó el
+      // usuario. Las rutas (Tasks 3–6) side-parsean `excludedFactIds` del body.
+      const excludedFactIds = pipelineInput.excludedFactIds ?? [];
 
       // ITEM 5 ORDEN DE CIERRE — propagar T.P. + C.C. al backend si están
       // presentes en el intake. `companyExt` lookup defensivo: el shape del
@@ -1698,6 +1703,9 @@ export function PipelineWorkspace() {
         };
         if (adjustmentLedger?.adjustments?.length) {
           niifBody.adjustmentLedger = adjustmentLedger;
+        }
+        if (excludedFactIds.length) {
+          niifBody.excludedFactIds = excludedFactIds;
         }
 
         // Reiniciamos el snapshot de la fase anterior (si hay un retry).
@@ -1883,6 +1891,7 @@ export function PipelineWorkspace() {
           company: niifContext.company,
           language,
           instructions: pipelineInput.specialInstructions,
+          ...(excludedFactIds.length ? { excludedFactIds } : {}),
         };
 
         const strategyPayload = await runSSEPhase<{ strategy: StrategicAnalysisResult }>(
@@ -1917,6 +1926,7 @@ export function PipelineWorkspace() {
           company: niifContext.company,
           language,
           instructions: pipelineInput.specialInstructions,
+          ...(excludedFactIds.length ? { excludedFactIds } : {}),
         };
 
         const governancePayload = await runSSEPhase<{ governance: GovernanceResult }>(
@@ -2319,6 +2329,10 @@ export function PipelineWorkspace() {
         reportHashSha256: hash,
       };
 
+      // Ola 2 — misma lista de hechos excluidos que confirmó el intake
+      // (Task 8). `pipelineInput` es opcional en este callback, de ahí el
+      // acceso defensivo. Solo se envía cuando hay exclusiones.
+      const excludedFactIds = pipelineInput?.excludedFactIds ?? [];
       const body = {
         niifReport: niifJson,
         strategyReport: strategyJson,
@@ -2326,6 +2340,7 @@ export function PipelineWorkspace() {
         company: backendReport.company,
         metadata,
         language,
+        ...(excludedFactIds.length ? { excludedFactIds } : {}),
       };
 
       const controller = new AbortController();

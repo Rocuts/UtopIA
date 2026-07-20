@@ -31,6 +31,9 @@ import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import { getCurrentWorkspaceId } from '@/lib/db/workspace';
+import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
+import { excludedFactIdsSchema } from '@/lib/validation/schemas';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -53,6 +56,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // Hechos del negocio (Ola 2) — resueltos SERVER-SIDE, nunca desde el body
+    // del cliente (tenancy). El bloque <hechos_empresa> viaja al <context> del
+    // user-content del Editor Jefe vía el param dedicado de `runHtmlEditor`.
+    const workspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+    const excludedFactIds =
+      excludedFactIdsSchema.safeParse((body as { excludedFactIds?: unknown }).excludedFactIds).data ?? null;
+    const hechosEmpresa = await getHechosEmpresaBlock(
+      workspaceId,
+      parsed.data.company.fiscalPeriod,
+      parsed.data.language,
+      { excludedFactIds },
+    );
+
     // El header X-Stream o el query param ?stream=1 activan SSE. Espejado de
     // los otros endpoints financieros (niif/strategy/governance) para
     // consistencia con el cliente.
@@ -63,7 +79,7 @@ export async function POST(req: Request) {
     if (!wantsStream) {
       // Non-streaming: ejecuta y devuelve el output completo en una sola
       // respuesta JSON. Útil para invocaciones server-to-server o tests.
-      const result = await runHtmlEditor(parsed.data);
+      const result = await runHtmlEditor(parsed.data, undefined, undefined, hechosEmpresa);
       return NextResponse.json(result);
     }
 
@@ -85,7 +101,7 @@ export async function POST(req: Request) {
             send('progress', event);
           };
 
-          const result = await runHtmlEditor(parsed.data, onProgress, req.signal);
+          const result = await runHtmlEditor(parsed.data, onProgress, req.signal, hechosEmpresa);
 
           send('html_phase', result);
           send('done', { stage: 'html' });

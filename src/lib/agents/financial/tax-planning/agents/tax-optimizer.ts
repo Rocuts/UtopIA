@@ -29,6 +29,7 @@ export async function runTaxOptimizer(
   instructions?: string,
   onProgress?: (event: TaxPlanningProgressEvent) => void,
   signal?: AbortSignal,
+  hechosEmpresa?: string,
 ): Promise<TaxOptimizerResult> {
   const system = buildTaxOptimizerPrompt(company, language);
 
@@ -38,6 +39,7 @@ export async function runTaxOptimizer(
     '',
     rawData,
     instructions ? `\nINSTRUCCIONES ADICIONALES DEL USUARIO:\n${instructions}` : '',
+    hechosEmpresa ? `\n${hechosEmpresa}` : '',
     '</context>',
   ]
     .filter(Boolean)
@@ -104,6 +106,7 @@ function toLegacyShape(json: TaxOptimizationReportJson): TaxOptimizerResult {
     projectedSavings,
     implementationRoadmap,
     fullContent,
+    impuestoACargoCents: json.currentDiagnosis.dualCalculation.impuestoACargoCents,
   };
 }
 

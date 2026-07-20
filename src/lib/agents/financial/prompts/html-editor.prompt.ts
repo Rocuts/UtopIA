@@ -74,7 +74,7 @@ export function buildHtmlEditorSystemPrompt(): string {
  * verificables, no procedimiento procedural ("Paso 1 / Paso 2 / Paso 3" está
  * prohibido por la regla GPT-5.4 §1).
  */
-export function buildHtmlEditorUserContent(input: HtmlEditorInput): string {
+export function buildHtmlEditorUserContent(input: HtmlEditorInput, hechosEmpresa?: string): string {
   return `<task>Genera el HTML autocontenido v10.1 de 15 páginas A4 portrait según la plantilla maestra del system prompt (§13). Reemplaza los placeholders {{...}} con los valores del payload JSON. Estética: Berkshire Hathaway / Financial Times / Bloomberg Markets — austeridad como señal de autoridad.</task>
 
 <context>
@@ -95,6 +95,8 @@ ${JSON.stringify(input.governanceReport, null, 2)}
 </governance_report>
 
 <language>${input.language}</language>
+
+${hechosEmpresa ?? ''}
 </context>
 
 <constraints>

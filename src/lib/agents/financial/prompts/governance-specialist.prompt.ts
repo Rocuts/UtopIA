@@ -27,6 +27,8 @@ import { buildResilienceSection0 } from './resilience-section0';
 export interface GovernanceEliteContext {
   comparativosImpracticables?: boolean;
   actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+  /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
+  hechosEmpresa?: string | null;
 }
 
 export function buildGovernancePrompt(
@@ -297,6 +299,8 @@ ${isSAS && !estatutosRequierenReservaLegal ? '- Doctrina vinculante: Supersocied
 
 ## Marco normativo de los EEFF
 ${niifFrameworkLabel(company.niifGroup)}
+
+${elite?.hechosEmpresa ?? ''}
 
 ${langInstruction}
 </context>`;

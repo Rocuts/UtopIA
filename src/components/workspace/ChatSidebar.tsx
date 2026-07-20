@@ -35,7 +35,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AnimatePresence,
   motion,
@@ -45,6 +45,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import {
+  ArrowRight,
   BookOpen,
   Bot,
   ChevronLeft,
@@ -72,6 +73,7 @@ import {
   type ConversationMessage,
 } from '@/lib/storage/conversation-history';
 import { cn } from '@/lib/utils';
+import type { SuggestedRoute } from '@/lib/agents/types';
 import { uploadDocument } from '@/lib/upload/blob-client';
 import { SkeletonText } from '@/components/ui/SkeletonText';
 
@@ -91,6 +93,8 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   error?: boolean;
+  /** Chip de navegación sugerido (Ola 1B). Efímero — no se persiste. */
+  suggestedRoute?: SuggestedRoute | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -406,9 +410,23 @@ function TypingDots({ language }: { language: 'es' | 'en' }) {
   );
 }
 
-function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | 'en' }) {
+function MessageBubble({
+  msg,
+  language,
+  currentPath,
+  onNavigate,
+}: {
+  msg: ChatMessage;
+  language: 'es' | 'en';
+  currentPath: string;
+  onNavigate: (href: string) => void;
+}) {
   const isUser = msg.role === 'user';
   const hasContent = msg.content.trim().length > 0;
+  // Chip solo en respuestas del asistente, cuando hay sugerencia y NO es la
+  // ruta que ya se está viendo (anti-ruido). Un chip por respuesta.
+  const route = !isUser ? msg.suggestedRoute ?? null : null;
+  const showChip = route !== null && route.href !== currentPath;
   return (
     <div
       className={cn(
@@ -515,6 +533,23 @@ function MessageBubble({ msg, language }: { msg: ChatMessage; language: 'es' | '
           </div>
         ) : null}
       </div>
+      {showChip && route !== null && (
+        <button
+          type="button"
+          onClick={() => onNavigate(route.href)}
+          className={cn(
+            'mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full',
+            'text-2xs font-medium uppercase tracking-wider',
+            'bg-gold-500/10 border border-gold-500/25 text-n-900',
+            'hover:bg-gold-500/15 hover:text-n-1000 transition-colors',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+          )}
+          aria-label={`${language === 'es' ? 'Ir a' : 'Go to'} ${route.label}`}
+        >
+          {language === 'es' ? 'Ir a' : 'Go to'} {route.label}
+          <ArrowRight className="w-3 h-3 text-gold-500" />
+        </button>
+      )}
     </div>
   );
 }
@@ -530,6 +565,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
   const workspace = useWorkspace();
   const prefersReduced = useReducedMotion();
   const pathname = usePathname();
+  const router = useRouter();
 
   const resolvedUseCase = useMemo(() => {
     if (pathname?.startsWith('/workspace/escudo')) return 'dian-defense' as const;
@@ -817,7 +853,7 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const contentType = response.headers.get('Content-Type') || '';
-        let finalData: { content?: string } | null = null;
+        let finalData: { content?: string; suggestedRoute?: SuggestedRoute | null } | null = null;
 
         if (contentType.includes('text/event-stream') && response.body) {
           const reader = response.body.getReader();
@@ -870,8 +906,9 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
 
         if (!finalContent) throw new Error('No response data received');
 
+        const routeSuggestion = finalData?.suggestedRoute ?? null;
         const updated = messagesRef.current.map((m) =>
-          m.id === streamId ? { ...m, content: finalContent } : m,
+          m.id === streamId ? { ...m, content: finalContent, suggestedRoute: routeSuggestion } : m,
         );
         setMessages(updated);
         messagesRef.current = updated;
@@ -1247,7 +1284,13 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
                   aria-relevant="additions"
                 >
                   {messages.map((m) => (
-                    <MessageBubble key={m.id} msg={m} language={language} />
+                    <MessageBubble
+                      key={m.id}
+                      msg={m}
+                      language={language}
+                      currentPath={pathname ?? ''}
+                      onNavigate={(href) => router.push(href)}
+                    />
                   ))}
                   <AnimatePresence>
                     {isStreaming && streamingId && messages.find((m) => m.id === streamingId)?.content.length === 0 && (

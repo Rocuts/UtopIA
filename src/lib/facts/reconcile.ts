@@ -3,7 +3,7 @@
 // como SUPERSEDE. El caller (db/facts.ts) pasa los hechos ACTIVOS del mismo
 // kind+fiscalPeriod (ya filtrados por query) y aplica la decisión.
 
-import type { FactContent } from './contracts';
+import type { FactContent, FactKind } from './contracts';
 
 export type ReconcileDecision =
   | { action: 'ADD' }
@@ -36,18 +36,25 @@ export function factContentEquals(a: FactContent, b: FactContent): boolean {
 
 /**
  * Decide qué hacer con `candidate` frente a los hechos activos equivalentes.
- * Invariante (que refuerza el índice único parcial `uq_active_fact`): ≤1 activo
- * por kind+período. En el caso defensivo (>1 activo, normalmente inalcanzable) se
- * supersede el MÁS RECIENTE. CONTRATO DE ORDEN: el caller (`reconcileFact`) pasa
- * los activos en orden ASCENDENTE por `createdAt`, así que `existingActive[length-1]`
- * es el más reciente.
+ *
+ * ESTRUCTURADOS (donation/leasing/loss): invariante ≤1 activo por kind+período
+ * (índice `uq_active_fact`). Un contenido distinto en el mismo período es una
+ * CORRECCIÓN → SUPERSEDE el MÁS RECIENTE. CONTRATO DE ORDEN: el caller pasa los
+ * activos ASCENDENTE por `createdAt`, así `existingActive[length-1]` es el más reciente.
+ *
+ * NARRATIVOS: son memoria de contexto ACUMULATIVA — dos narrativos distintos
+ * COEXISTEN (nunca supersede por período). Sólo un contenido idéntico hace NOOP
+ * (idempotencia). Combinado con la normalización de su período a null en
+ * `reconcileFact`, múltiples narrativos activos conviven sin chocar con el índice.
  */
 export function decideReconciliation(
   candidate: FactContent,
   existingActive: Array<FactContent & { id: string }>,
+  kind: FactKind,
 ): ReconcileDecision {
   if (existingActive.length === 0) return { action: 'ADD' };
   const match = existingActive.find((e) => factContentEquals(candidate, e));
   if (match) return { action: 'NOOP', existingId: match.id };
+  if (kind === 'narrative') return { action: 'ADD' };
   return { action: 'SUPERSEDE', existingId: existingActive[existingActive.length - 1].id };
 }

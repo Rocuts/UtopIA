@@ -50,6 +50,7 @@ import type {
   ProvisionalFlag,
 } from '@/lib/agents/repair/types';
 import { applyAdjustments, revalidate } from '@/lib/agents/repair/adjustments';
+import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
 
 export interface OrchestrateFinancialOptions {
   onProgress?: (event: FinancialProgressEvent) => void;
@@ -87,6 +88,10 @@ export interface OrchestrateFinancialOptions {
    * el chat.
    */
   adjustmentLedger?: AdjustmentLedger;
+  /** Workspace del solicitante (cookie, resuelto en la route) — para leer hechos narrativos (Ola 2). */
+  workspaceId?: string;
+  /** IDs de hechos a excluir SÓLO en esta corrida (confirmación pre-reporte). No muta la DB. */
+  excludedFactIds?: string[] | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1375,6 +1380,14 @@ export async function runNiifPhase(
 
   const context = await prepareFinancialContext(request, options);
 
+  // Ola 2 — hechos narrativos del negocio como PROSA en <context> (no mueve números).
+  const hechosEmpresa = await getHechosEmpresaBlock(
+    options.workspaceId,
+    context.effectiveCompany.fiscalPeriod,
+    language,
+    { excludedFactIds: options.excludedFactIds },
+  );
+
   const stageLabel = 'Analista Contable NIIF — Procesando datos y construyendo estados financieros';
   const completeLabel = 'Estados financieros NIIF generados';
 
@@ -1388,7 +1401,7 @@ export async function runNiifPhase(
     context.bindingTotalsBlock,
     context.ppForAgents,
     onProgress,
-    context.eliteForNiif,
+    { ...context.eliteForNiif, hechosEmpresa },
     undefined,
     context.reportMode,
   );
@@ -1478,6 +1491,8 @@ export interface PhaseHandoffInput {
   elite?: {
     comparativosImpracticables?: boolean;
     actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+    /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
+    hechosEmpresa?: string | null;
   };
   /**
    * Modo del reporte v8.1 §2 — pre-derivado en `prepareFinancialContext`.

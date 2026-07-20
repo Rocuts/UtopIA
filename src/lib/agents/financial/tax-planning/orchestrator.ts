@@ -8,14 +8,26 @@
 import { runTaxOptimizer } from './agents/tax-optimizer';
 import { runNiifImpactAnalyst } from './agents/niif-impact-analyst';
 import { runComplianceValidator } from './agents/compliance-validator';
+import { getActiveFacts } from '@/lib/db/facts';
+import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
+import { resolveRule } from '@/lib/normativa/rules-registry';
+import {
+  art257Params,
+  computeCredito257,
+  computeDescuentoAplicado257,
+} from '@/lib/normativa/descuento-donaciones-257';
+import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import type {
   TaxPlanningRequest,
   TaxPlanningReport,
   TaxPlanningProgressEvent,
+  DonationDiscountBlock,
 } from './types';
 
 export interface OrchestrateTaxPlanningOptions {
   onProgress?: (event: TaxPlanningProgressEvent) => void;
+  /** Workspace del solicitante (cookie, resuelto en la route) — para leer hechos. */
+  workspaceId?: string;
 }
 
 /**
@@ -43,12 +55,20 @@ export async function orchestrateTaxPlanning(
     label: 'Optimizador Tributario — Analizando estructura fiscal y evaluando estrategias',
   });
 
+  const hechosEmpresa = await getHechosEmpresaBlock(
+    options.workspaceId,
+    company.fiscalPeriod,
+    language,
+  );
+
   const taxOptimizerResult = await runTaxOptimizer(
     rawData,
     company,
     language,
     instructions,
     onProgress,
+    undefined,
+    hechosEmpresa,
   );
 
   onProgress?.({
@@ -56,6 +76,17 @@ export async function orchestrateTaxPlanning(
     stage: 1,
     label: 'Estrategias de optimizacion tributaria generadas',
   });
+
+  // ---------------------------------------------------------------------------
+  // Neteo determinista: descuento por donaciones (Art. 257) → TOTAL VINCULANTE.
+  // Números de cálculo determinista (no LLM): lee la donación activa del período,
+  // recomputa el crédito y aplica el tope contra el impuesto a cargo del optimizador.
+  // ---------------------------------------------------------------------------
+  const donationDiscount = await computeDonationDiscount(
+    options.workspaceId,
+    company.fiscalPeriod,
+    taxOptimizerResult.impuestoACargoCents,
+  );
 
   // ---------------------------------------------------------------------------
   // Stage 2: NIIF Impact Analyst
@@ -117,6 +148,7 @@ export async function orchestrateTaxPlanning(
     niifImpactResult.fullContent,
     complianceResult.fullContent,
     language,
+    donationDiscount,
   );
 
   const report: TaxPlanningReport = {
@@ -125,6 +157,7 @@ export async function orchestrateTaxPlanning(
     niifImpact: niifImpactResult,
     complianceValidation: complianceResult,
     consolidatedReport,
+    donationDiscount,
     generatedAt: new Date().toISOString(),
   };
 
@@ -149,7 +182,12 @@ function buildConsolidatedReport(
   niifImpactContent: string,
   complianceContent: string,
   language: 'es' | 'en',
+  donationDiscount: DonationDiscountBlock | null,
 ): string {
+  const donationSection =
+    donationDiscount !== null
+      ? `${renderDonationDiscountBlock(donationDiscount, language)}\n\n---\n\n`
+      : '';
   const title =
     language === 'en'
       ? 'TAX PLANNING REPORT'
@@ -182,7 +220,7 @@ function buildConsolidatedReport(
 
 ---
 
-# PARTE I: DIAGNOSTICO Y ESTRATEGIAS DE OPTIMIZACION TRIBUTARIA
+${donationSection}# PARTE I: DIAGNOSTICO Y ESTRATEGIAS DE OPTIMIZACION TRIBUTARIA
 *Preparado por: Agente Optimizador Tributario*
 
 ${taxOptimizerContent}
@@ -205,4 +243,73 @@ ${complianceContent}
 
 > **Nota Legal:** Este reporte fue generado por 1+1, un sistema de inteligencia artificial. Las estrategias de planeacion tributaria propuestas deben ser validadas por un abogado tributarista y un contador publico certificado antes de su implementacion. 1+1 no reemplaza la asesoria profesional. La planeacion tributaria (elusion legal) es un derecho del contribuyente; sin embargo, la evasion fiscal es un delito. Toda estrategia debe cumplir con la clausula anti-abuso del Art. 869 del Estatuto Tributario.
 `;
+}
+
+// ---------------------------------------------------------------------------
+// Neteo determinista del descuento por donaciones (Art. 257) — server-side
+// ---------------------------------------------------------------------------
+// Degrada a `null` (sin bloque) si no hay workspace o no hay donación activa
+// del período. Fail-loud SÓLO vía `resolveRule` si existe la donación pero no
+// hay regla vigente — nunca cae silenciosamente a una regla vieja.
+
+async function computeDonationDiscount(
+  workspaceId: string | undefined,
+  fiscalPeriod: string,
+  impuestoACargoCents: string,
+): Promise<DonationDiscountBlock | null> {
+  if (!workspaceId) return null;
+  // El período de un hecho donation se guarda como 'YYYY'; el company.fiscalPeriod
+  // del reporte es texto libre (max 20). Se extrae el año de 4 dígitos para casar
+  // ambos lados sin depender del formato exacto del request.
+  const yearMatch = fiscalPeriod.match(/\d{4}/);
+  const period = yearMatch ? yearMatch[0] : fiscalPeriod;
+  const facts = await getActiveFacts(workspaceId, period);
+  const donation = facts.find(
+    (f) => f.kind === 'donation' && f.fiscalPeriod === period,
+  );
+  if (!donation) return null;
+  const montoDonadoCents =
+    typeof (donation.structured as { montoCentavos?: unknown } | null)?.montoCentavos === 'string'
+      ? (donation.structured as { montoCentavos: string }).montoCentavos
+      : '0';
+  const rule = resolveRule('descuento_donaciones_257', period); // fail-loud
+  const { tasaDescuentoPct, limitePctImpuesto } = art257Params(rule);
+  const creditoCents = computeCredito257(montoDonadoCents, tasaDescuentoPct);
+  const { limiteCents, descuentoCents, impuestoNetoCents } = computeDescuentoAplicado257({
+    creditoCents,
+    impuestoBaseCents: impuestoACargoCents,
+    limitePctImpuesto,
+  });
+  return {
+    fiscalPeriod: period,
+    ruleKey: 'descuento_donaciones_257',
+    ruleVersion: rule.version,
+    montoDonadoCents,
+    creditoCents,
+    limiteCents,
+    descuentoCents,
+    impuestoACargoCents,
+    impuestoNetoCents,
+  };
+}
+
+function renderDonationDiscountBlock(b: DonationDiscountBlock, language: 'es' | 'en'): string {
+  const money = (c: string) => formatCopFromCents(parseMoneyCop(c), false);
+  const t = (es: string, en: string) => (language === 'es' ? es : en);
+  return [
+    `## ${t('DESCUENTO POR DONACIONES (Art. 257 E.T.) — TOTAL VINCULANTE', 'DONATION DISCOUNT (Art. 257) — BINDING TOTAL')}`,
+    `> ${t(
+      `Descuento calculado de forma DETERMINISTA (regla ${b.ruleKey} v${b.ruleVersion}). El impuesto a cargo base proviene del diagnóstico del Optimizador Tributario.`,
+      `Discount computed DETERMINISTICALLY (rule ${b.ruleKey} v${b.ruleVersion}). The base tax-on-charge comes from the Tax Optimizer's diagnosis.`,
+    )}`,
+    '',
+    '| Concepto | Valor |',
+    '|---|---|',
+    `| ${t('Valor donado', 'Donation value')} | ${money(b.montoDonadoCents)} |`,
+    `| ${t('Crédito Art. 257 (25%)', 'Art. 257 credit (25%)')} | ${money(b.creditoCents)} |`,
+    `| ${t('Tope (25% del impuesto)', 'Cap (25% of tax)')} | ${money(b.limiteCents)} |`,
+    `| ${t('Descuento aplicado', 'Applied discount')} | ${money(b.descuentoCents)} |`,
+    `| ${t('Impuesto a cargo', 'Tax before discount')} | ${money(b.impuestoACargoCents)} |`,
+    `| **${t('Impuesto neto (TOTAL VINCULANTE)', 'Net tax (BINDING TOTAL)')}** | **${money(b.impuestoNetoCents)}** |`,
+  ].join('\n');
 }

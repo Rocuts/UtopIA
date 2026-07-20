@@ -4,6 +4,7 @@ import { taxPlanningRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTaxPlanning } from '@/lib/agents/financial/tax-planning/orchestrator';
 import type { TaxPlanningProgressEvent } from '@/lib/agents/financial/tax-planning/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 
 // ---------------------------------------------------------------------------
 // POST /api/tax-planning
@@ -63,22 +64,30 @@ export async function POST(req: Request) {
       enhancedInstructions += `\nNUMERO DE EMPLEADOS: ${employeeCount}`;
     }
 
+    // Resolve the requesting workspace (cookie/auth) — feeds the deterministic
+    // Art. 257 netting from stored business facts. Degrades to undefined (no
+    // block) if unresolved; never fails the report on this.
+    const workspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+
     // Check for streaming request
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(rawData, company, language, enhancedInstructions);
+      return handleStreaming(rawData, company, language, enhancedInstructions, workspaceId);
     }
 
     // Non-streaming: run the full pipeline and return JSON
-    const report = await orchestrateTaxPlanning({
-      rawData,
-      company,
-      language,
-      instructions: enhancedInstructions,
-    });
+    const report = await orchestrateTaxPlanning(
+      {
+        rawData,
+        company,
+        language,
+        instructions: enhancedInstructions,
+      },
+      { workspaceId },
+    );
 
     return NextResponse.json(report);
   } catch (error) {
@@ -102,6 +111,7 @@ function handleStreaming(
   company: Parameters<typeof orchestrateTaxPlanning>[0]['company'],
   language: 'es' | 'en',
   instructions: string | undefined,
+  workspaceId: string | undefined,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -114,6 +124,7 @@ function handleStreaming(
             onProgress: (event: TaxPlanningProgressEvent) => {
               sse.send('progress', event);
             },
+            workspaceId,
           },
         );
         sse.send('result', report);
