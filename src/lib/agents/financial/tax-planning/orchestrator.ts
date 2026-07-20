@@ -249,16 +249,21 @@ async function computeDonationDiscount(
   impuestoACargoCents: string,
 ): Promise<DonationDiscountBlock | null> {
   if (!workspaceId) return null;
-  const facts = await getActiveFacts(workspaceId, fiscalPeriod);
+  // El período de un hecho donation se guarda como 'YYYY'; el company.fiscalPeriod
+  // del reporte es texto libre (max 20). Se extrae el año de 4 dígitos para casar
+  // ambos lados sin depender del formato exacto del request.
+  const yearMatch = fiscalPeriod.match(/\d{4}/);
+  const period = yearMatch ? yearMatch[0] : fiscalPeriod;
+  const facts = await getActiveFacts(workspaceId, period);
   const donation = facts.find(
-    (f) => f.kind === 'donation' && f.fiscalPeriod === fiscalPeriod,
+    (f) => f.kind === 'donation' && f.fiscalPeriod === period,
   );
   if (!donation) return null;
   const montoDonadoCents =
     typeof (donation.structured as { montoCentavos?: unknown } | null)?.montoCentavos === 'string'
       ? (donation.structured as { montoCentavos: string }).montoCentavos
       : '0';
-  const rule = resolveRule('descuento_donaciones_257', fiscalPeriod); // fail-loud
+  const rule = resolveRule('descuento_donaciones_257', period); // fail-loud
   const { tasaDescuentoPct, limitePctImpuesto } = art257Params(rule);
   const creditoCents = computeCredito257(montoDonadoCents, tasaDescuentoPct);
   const { limiteCents, descuentoCents, impuestoNetoCents } = computeDescuentoAplicado257({
@@ -267,7 +272,7 @@ async function computeDonationDiscount(
     limitePctImpuesto,
   });
   return {
-    fiscalPeriod,
+    fiscalPeriod: period,
     ruleKey: 'descuento_donaciones_257',
     ruleVersion: rule.version,
     montoDonadoCents,
