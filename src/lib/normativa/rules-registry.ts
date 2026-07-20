@@ -22,7 +22,7 @@ export const RULES_REGISTRY: Record<string, NormativeRuleVersion[]> = {
     {
       vigencia: { desde: '2023-01-01', hasta: null },
       version: '2023',
-      params: { articulo: '257 E.T.', limitePctImpuesto: 25, uvt2026: 52374 },
+      params: { articulo: '257 E.T.', tasaDescuentoPct: 25, limitePctImpuesto: 25, uvt2026: 52374 },
       fuente: 'Estatuto Tributario Art. 257 (descuento por donaciones).',
       revisadoPara: '2026',
     },
