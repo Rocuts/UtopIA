@@ -143,6 +143,8 @@ export interface NiifReportIntake {
   preprocessingReport?: PreprocessingReport
   outputOptions: NiifOutputOptions
   specialInstructions?: string
+  /** Hechos del negocio a EXCLUIR de esta corrida (confirmación pre-reporte). Efímero. */
+  excludedFactIds?: string[]
 }
 
 export interface CompanyMetadata {

@@ -22,10 +22,12 @@ import type {
   NiifOutputOptions,
 } from '@/types/platform';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { useIntakePersistence } from './useIntakePersistence';
 import { useDocumentExtraction } from './useDocumentExtraction';
 import type { FieldConfidence } from './useDocumentExtraction';
 import { IntakePreview } from './IntakePreview';
+import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -348,10 +350,13 @@ export function NiifReportIntake() {
     setPipelineInput,
     setPipelineState,
   } = useWorkspace();
+  const { language } = useLanguage();
   const [step, setStep] = useState(0);
   const [values, setValues] = useIntakePersistence('niif_report', DEFAULT_VALUES);
   const [sectorOpen, setSectorOpen] = useState(false);
   const [skippedUpload, setSkippedUpload] = useState(false);
+  // Hechos del negocio EXCLUIDOS de esta corrida (confirmación pre-reporte). Efímero.
+  const [excludedFactIds, setExcludedFactIds] = useState<string[]>([]);
   const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
 
   // Derive confidence map: when extraction is done, use it; otherwise all 'none'
@@ -486,6 +491,7 @@ export function NiifReportIntake() {
     const finalIntake: NiifReportIntakeType = {
       ...values,
       rawData: resolvedRawData,
+      excludedFactIds,
     };
 
     startNewConsultation('financial-report');
@@ -505,6 +511,7 @@ export function NiifReportIntake() {
     setIntakeModalOpen(false);
   }, [
     values,
+    excludedFactIds,
     extractionState,
     startNewConsultation,
     setPipelineInput,
@@ -1055,12 +1062,24 @@ export function NiifReportIntake() {
   // ─── Step 4: Preview ───────────────────────────────────────────────────────
 
   const step4Preview = (
-    <IntakePreview
-      caseType="niif_report"
-      data={values}
-      onBack={() => setStep(2)}
-      onSubmit={handleSubmit}
-    />
+    <div className="space-y-4">
+      <HechosEmpresaConfirm
+        fiscalPeriod={values.fiscalPeriod}
+        excludedIds={excludedFactIds}
+        onToggle={(id) =>
+          setExcludedFactIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+          )
+        }
+        language={language}
+      />
+      <IntakePreview
+        caseType="niif_report"
+        data={values}
+        onBack={() => setStep(2)}
+        onSubmit={handleSubmit}
+      />
+    </div>
   );
 
   // ─── Wizard Steps ──────────────────────────────────────────────────────────
