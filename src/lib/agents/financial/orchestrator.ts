@@ -1491,6 +1491,8 @@ export interface PhaseHandoffInput {
   elite?: {
     comparativosImpracticables?: boolean;
     actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+    /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
+    hechosEmpresa?: string | null;
   };
   /**
    * Modo del reporte v8.1 §2 — pre-derivado en `prepareFinancialContext`.

@@ -22,6 +22,8 @@ import { buildResilienceSection0 } from './resilience-section0';
 export interface StrategyDirectorEliteContext {
   comparativosImpracticables?: boolean;
   actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
+  /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
+  hechosEmpresa?: string | null;
 }
 
 export function buildStrategyDirectorPrompt(
@@ -255,6 +257,8 @@ El Agente 1 declaró impracticabilidad del comparativo (NIIF for SMEs §3.14, §
 - Año +1: ${projectionYears[0]}
 - Año +2: ${projectionYears[1]}
 - Año +3: ${projectionYears[2]}
+
+${elite?.hechosEmpresa ?? ''}
 
 ${langInstruction}
 </context>`;

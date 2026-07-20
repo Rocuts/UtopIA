@@ -10,6 +10,9 @@ import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import { getCurrentWorkspaceId } from '@/lib/db/workspace';
+import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
+import { excludedFactIdsSchema } from '@/lib/validation/schemas';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/strategy (Wave 3.F1)
@@ -48,6 +51,19 @@ export async function POST(req: Request) {
     const { niifResult, bindingTotals, preprocessed, company, language, instructions } =
       parsed.data;
 
+    // Ola 2 — Hechos del negocio: bloque narrativo <hechos_empresa> para el
+    // <context> del Director de Estrategia. Tenancy: workspaceId SOLO del
+    // servidor (nunca del body). Degrada SEGURO a '' ante cualquier fallo.
+    const workspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+    const excludedFactIds =
+      excludedFactIdsSchema.safeParse((body as { excludedFactIds?: unknown }).excludedFactIds).data ?? null;
+    const hechosEmpresa = await getHechosEmpresaBlock(
+      workspaceId,
+      company.fiscalPeriod,
+      language,
+      { excludedFactIds },
+    );
+
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
@@ -77,6 +93,7 @@ export async function POST(req: Request) {
         company,
         language,
         instructions,
+        hechosEmpresa,
       });
     }
 
@@ -87,6 +104,7 @@ export async function POST(req: Request) {
       company,
       language,
       instructions,
+      elite: hechosEmpresa ? { hechosEmpresa } : undefined,
     });
 
     return NextResponse.json({ strategy });
@@ -109,8 +127,10 @@ function handleStreaming(args: {
   company: Parameters<typeof runStrategyPhase>[0]['company'];
   language: 'es' | 'en';
   instructions: string | undefined;
+  hechosEmpresa: string;
 }) {
-  const { niifResult, bindingTotals, preprocessed, company, language, instructions } = args;
+  const { niifResult, bindingTotals, preprocessed, company, language, instructions, hechosEmpresa } =
+    args;
 
   const readableStream = new ReadableStream({
     async start(controller) {
@@ -119,7 +139,15 @@ function handleStreaming(args: {
 
       try {
         const strategy = await runStrategyPhase(
-          { niifResult, bindingTotals, preprocessed, company, language, instructions },
+          {
+            niifResult,
+            bindingTotals,
+            preprocessed,
+            company,
+            language,
+            instructions,
+            elite: hechosEmpresa ? { hechosEmpresa } : undefined,
+          },
           {
             onProgress: (event: FinancialProgressEvent) => {
               if (event.type === 'warning') {
