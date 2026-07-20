@@ -2,20 +2,20 @@
 // ---------------------------------------------------------------------------
 // Server Actions — Panel "Contexto de la empresa" (Hechos del negocio, Ola 1D)
 // ---------------------------------------------------------------------------
-// Comparten el MISMO handler de mutaciones (reconcileFact/revokeFact) que la
-// captura por chat, así panel y chat nunca divergen. Cada acción:
+// Comparten el MISMO handler de mutaciones (confirmFactWithDecision/revokeFact)
+// que la captura por chat, así panel y chat nunca divergen. Cada acción:
 //   1. Gate de sesión (requireAuthSession — fase 1 = no-op).
 //   2. Deriva workspaceId del cookie (NUNCA del input).
 //   3. Valida input (Zod registrarHechoInputSchema) + guard duro
 //      (assertFactInputValid — kinds materiales exigen período + structured).
-//   4. Llama reconcileFact({source:'manual'}) / revokeFact.
+//   4. Llama confirmFactWithDecision({source:'manual'}) / revokeFact.
 //   5. revalidatePath('/workspace/contexto') para refrescar el server component.
 // ---------------------------------------------------------------------------
 
 import { revalidatePath } from 'next/cache';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
-import { reconcileFact, revokeFact } from '@/lib/db/facts';
+import { confirmFactWithDecision, revokeFact } from '@/lib/db/facts';
 import { registrarHechoInputSchema } from '@/lib/facts/contracts';
 import { assertFactInputValid } from '@/lib/facts/tool-guards';
 
@@ -56,7 +56,7 @@ export async function registerManualFactAction(
 
   try {
     const ws = await getOrCreateWorkspace();
-    const { decision, fact } = await reconcileFact({
+    const { decision, fact } = await confirmFactWithDecision({
       workspaceId: ws.id,
       kind: input.kind,
       content: { title: input.title, body: input.body, structured: input.structured },

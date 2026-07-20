@@ -488,14 +488,26 @@ export async function executeTool(
       if (guardErr) {
         return { content: `NO_REGISTRADO: ${guardErr}` };
       }
-      const { reconcileFact } = await import('@/lib/db/facts');
-      const { decision, fact } = await reconcileFact({
-        workspaceId: ctx.workspaceId,
-        kind: input.kind,
-        content: { title: input.title, body: input.body, structured: input.structured },
-        fiscalPeriod: input.fiscalPeriod,
-        source: 'chat',
-      });
+      let decision;
+      let fact;
+      try {
+        const { confirmFactWithDecision } = await import('@/lib/db/facts');
+        const res = await confirmFactWithDecision({
+          workspaceId: ctx.workspaceId,
+          kind: input.kind,
+          content: { title: input.title, body: input.body, structured: input.structured },
+          fiscalPeriod: input.fiscalPeriod,
+          source: 'chat',
+        });
+        decision = res.decision;
+        fact = res.fact;
+      } catch (err) {
+        // Fail-loud del registro normativo (p.ej. sin regla vigente para el período):
+        // la txn hizo rollback, el hecho NO se guardó. No reintentar sin corregir.
+        return {
+          content: `NO_REGISTRADO: no se pudo calcular el descuento normativo (${err instanceof Error ? err.message : 'error'}). Avísale al usuario y no reintentes sin corregir el período.`,
+        };
+      }
       // Narrativos son atemporales: reconcileFact normaliza su período a null, así
       // que el mensaje no debe citar un período para ellos (coherencia con lo persistido).
       const periodTxt =
