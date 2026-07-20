@@ -17,5 +17,16 @@ export function assertFactInputValid(input: RegistrarHechoInput): string | null 
   if (isMaterial && input.structured === null) {
     return `Un hecho de tipo "${input.kind}" requiere el objeto "structured" con los datos (ej. montoCentavos). Reintenta con structured.`;
   }
+  // Donación: el monto debe ser > 0. Un hecho material de $0 (o negativo) sería
+  // basura que en un reporte no aportaría / restaría, y elude tanto a la LLM como
+  // al usuario. El schema (moneyCop `^-?\d+$`) admite 0 y negativos; se rechazan
+  // aquí. BigInt(0) (no `0n`) por el target ES2017.
+  if (
+    input.kind === 'donation' &&
+    input.structured !== null &&
+    BigInt(input.structured.montoCentavos) <= BigInt(0)
+  ) {
+    return `Una donación requiere un monto mayor a cero (montoCentavos en centavos). Pregunta al usuario el monto donado y reintenta.`;
+  }
   return null;
 }

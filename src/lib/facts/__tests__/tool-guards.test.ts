@@ -36,4 +36,24 @@ describe('assertFactInputValid', () => {
     const bad = { ...donation('2026'), structured: null } as RegistrarHechoInput;
     expect(assertFactInputValid(bad)).toMatch(/structured/);
   });
+
+  it('RECHAZA donation con monto cero', () => {
+    const bad: RegistrarHechoInput = {
+      ...donation('2026'),
+      structured: { montoCentavos: '0', articulo: '257', fiscalYear: '2026' },
+    };
+    expect(assertFactInputValid(bad)).toMatch(/monto/);
+  });
+
+  it('RECHAZA donation con monto negativo', () => {
+    const bad: RegistrarHechoInput = {
+      ...donation('2026'),
+      structured: { montoCentavos: '-100', articulo: '257', fiscalYear: '2026' },
+    };
+    expect(assertFactInputValid(bad)).toMatch(/monto/);
+  });
+
+  it('acepta donation con monto positivo', () => {
+    expect(assertFactInputValid(donation('2026'))).toBeNull(); // '5000000000' > 0
+  });
 });
