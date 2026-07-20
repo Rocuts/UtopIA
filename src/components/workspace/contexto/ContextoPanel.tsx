@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
 import type { FactDTO } from '@/lib/facts/dto';
 import type { FactFormState } from '@/lib/facts/panel-helpers';
-import { buildRegistrarInput, factToFormState, versionHistoryFor } from '@/lib/facts/panel-helpers';
+import { buildRegistrarInput, factToFormState, pesosToCentavos, versionHistoryFor } from '@/lib/facts/panel-helpers';
 import {
   registerManualFactAction,
   revokeFactAction,
@@ -74,6 +74,14 @@ export function ContextoPanel({ facts }: { facts: FactDTO[] }) {
   const submit = useCallback(
     (form: FactFormState) => {
       setFormError(null);
+      if (form.kind === 'donation' && pesosToCentavos(form.montoPesos) === '0') {
+        setFormError(
+          language === 'es'
+            ? 'El monto de la donación debe ser mayor a cero.'
+            : 'Donation amount must be greater than zero.',
+        );
+        return;
+      }
       startTransition(async () => {
         const res = await registerManualFactAction(buildRegistrarInput(form));
         if (res.ok) {
@@ -84,7 +92,7 @@ export function ContextoPanel({ facts }: { facts: FactDTO[] }) {
         }
       });
     },
-    [router],
+    [router, language],
   );
 
   const revoke = useCallback(
@@ -178,6 +186,7 @@ export function ContextoPanel({ facts }: { facts: FactDTO[] }) {
             submitting={pending}
             error={formError}
             language={language}
+            isEdit={editKey !== 'new'}
             onSubmit={submit}
             onCancel={() => setFormOpen(false)}
           />

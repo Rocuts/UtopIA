@@ -24,6 +24,7 @@ describe('dinero MoneyCop', () => {
     expect(pesosToCentavos('50000000')).toBe('5000000000');
     expect(pesosToCentavos('0')).toBe('0');
     expect(pesosToCentavos(' 1.234.567 ')).toBe('123456700'); // tolera separadores/espacios
+    expect(pesosToCentavos('100000000000')).toBe('10000000000000'); // > 2^53, prueba el path BigInt (no Number)
   });
   it('centavos → pesos (parte entera)', () => {
     expect(centavosToPesos('5000000000')).toBe('50000000');

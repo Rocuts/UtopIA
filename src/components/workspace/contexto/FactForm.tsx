@@ -8,6 +8,7 @@ const inputCls = cn(
   'w-full h-10 px-3 rounded-lg border bg-n-0 border-n-200',
   'text-sm text-n-1000 placeholder:text-n-500',
   'focus:outline-none focus:border-gold-500/60 focus-visible:ring-2 focus-visible:ring-gold-500/40 transition-colors',
+  'disabled:bg-n-50 disabled:text-n-800 disabled:cursor-not-allowed',
 );
 const labelCls = 'block text-xs font-medium text-n-800 mb-1';
 
@@ -16,6 +17,7 @@ export function FactForm({
   submitting,
   error,
   language,
+  isEdit,
   onSubmit,
   onCancel,
 }: {
@@ -23,6 +25,7 @@ export function FactForm({
   submitting: boolean;
   error: string | null;
   language: 'es' | 'en';
+  isEdit: boolean;
   onSubmit: (form: FactFormState) => void;
   onCancel: () => void;
 }) {
@@ -47,11 +50,20 @@ export function FactForm({
           value={form.kind}
           onChange={(e) => set('kind', e.target.value as FactFormState['kind'])}
           className={inputCls}
+          disabled={isEdit}
           aria-label={t('Tipo de hecho', 'Fact type')}
         >
           <option value="narrative">{t('Narrativo (contexto)', 'Narrative (context)')}</option>
           <option value="donation">{t('Donación (Art. 257 E.T.)', 'Donation (Art. 257)')}</option>
         </select>
+        {isEdit && (
+          <p className="text-[11px] text-n-600">
+            {t(
+              'El tipo y el período no cambian al editar — se crea una versión nueva del mismo hecho.',
+              'Kind and period are fixed when editing — a new version of the same fact is created.',
+            )}
+          </p>
+        )}
       </div>
 
       <div>
@@ -86,6 +98,7 @@ export function FactForm({
           className={inputCls}
           value={form.fiscalPeriod}
           onChange={(e) => set('fiscalPeriod', e.target.value)}
+          disabled={isEdit}
           maxLength={8}
           inputMode="numeric"
           placeholder="2026"
@@ -102,6 +115,7 @@ export function FactForm({
               className={inputCls}
               value={form.montoPesos}
               onChange={(e) => set('montoPesos', e.target.value)}
+              required
               inputMode="numeric"
               placeholder="50000000"
             />
