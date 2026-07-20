@@ -80,7 +80,7 @@ const ROUTE_RULES: readonly RouteRule[] = [
     label: 'Futuro',
     match: (d, i) =>
       d.has('strategy') &&
-      /factibilidad|feasibility|escenario|scenario|macro|proyeccion|projection|budget_projection/.test(i),
+      /factibilidad|feasibility|escenario|scenario|macro|proyeccion|projection/.test(i),
   },
 ];
 
