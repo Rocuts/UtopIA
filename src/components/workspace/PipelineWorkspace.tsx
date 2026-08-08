@@ -203,6 +203,18 @@ async function fetchJSONWithRetry<T>(
 interface SubPhaseHandlers {
   /** Callback para FinancialProgressEvent (stage_start, stage_progress, stage_complete). */
   onProgress?: (evt: FinancialProgressEvent) => void;
+  /**
+   * Advertencias de validación emitidas por el backend como `event: warning`.
+   *
+   * Auditoría 2026-08 (P0 `sse-warnings-descartados-cliente`): el backend
+   * emitía por este canal los errores del validador de identidades contables
+   * (ecuación patrimonial rota, EFE que no cierra, ECP que no cuadra contra el
+   * patrimonio del balance, totales que no coinciden con el preprocesador) y
+   * el cliente NO registraba handler, así que `consumeSSE` los descartaba en
+   * silencio. El sistema detectaba que las cifras estaban mal y el usuario
+   * recibía un reporte de apariencia impecable.
+   */
+  onWarning?: (warnings: string[]) => void;
   /** Manejadores adicionales para eventos sidecar (ej. fiscal_snapshot). */
   onExtra?: Record<string, (raw: unknown) => void>;
 }
@@ -236,6 +248,12 @@ async function runSSEPhase<T>(
   await consumeSSE(res, signal, {
     progress: (raw) => {
       handlers.onProgress?.(raw as FinancialProgressEvent);
+    },
+    warning: (raw) => {
+      const { warnings } = (raw ?? {}) as { warnings?: unknown };
+      if (!Array.isArray(warnings)) return;
+      const texts = warnings.filter((w): w is string => typeof w === 'string');
+      if (texts.length > 0) handlers.onWarning?.(texts);
     },
     [eventName]: (raw) => {
       box.value = raw as T;
@@ -1513,6 +1531,21 @@ export function PipelineWorkspace() {
   // Escudo vía POST. Consumido por las 4 áreas vía `useAncoraView`.
   const ancoraRef = useRef<NiifAncora | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // ─── Advertencias de validación contable ──────────────────────────────────
+  // Auditoría 2026-08: el backend emitía por `event: warning` los errores del
+  // validador de identidades (ecuación patrimonial, EFE contra PUC 11, ECP
+  // contra patrimonio, totales contra el preprocesador) y aquí no había ni
+  // handler ni estado, así que se descartaban en silencio. El reporte salía
+  // con apariencia impecable y el descuadre no se le comunicaba a nadie.
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const collectWarnings = useCallback((incoming: string[]) => {
+    setValidationWarnings((prev) => {
+      // Deduplicamos: las tres fases pueden reportar el mismo invariante roto.
+      const seen = new Set(prev);
+      const fresh = incoming.filter((w) => !seen.has(w));
+      return fresh.length > 0 ? [...prev, ...fresh] : prev;
+    });
+  }, []);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
   // ─── Phase 3 (hook 3): diff visual antes/despues ──────────────────────────
@@ -1725,6 +1758,7 @@ export function PipelineWorkspace() {
           'Analista NIIF',
           {
             onProgress: onSubPhaseProgress,
+            onWarning: collectWarnings,
             // Captura los eventos sidecar que el backend emite ANTES de niif_phase
             // (contrato §4.2). Camino rápido: llegan antes del payload principal.
             onExtra: {
@@ -1900,7 +1934,7 @@ export function PipelineWorkspace() {
           'strategy_phase',
           controller.signal,
           'Director de Estrategia',
-          { onProgress: onSubPhaseProgress },
+          { onProgress: onSubPhaseProgress, onWarning: collectWarnings },
         );
 
         strategyResult = strategyPayload.strategy;
@@ -1935,7 +1969,7 @@ export function PipelineWorkspace() {
           'governance_phase',
           controller.signal,
           'Gobierno Corporativo',
-          { onProgress: onSubPhaseProgress },
+          { onProgress: onSubPhaseProgress, onWarning: collectWarnings },
         );
 
         governanceResult = governancePayload.governance;
@@ -2566,6 +2600,65 @@ export function PipelineWorkspace() {
               />
             </div>
           )}
+        </div>
+      )}
+
+      {/*
+        Advertencias de validación contable. Auditoría 2026-08: hasta esta
+        versión el backend las emitía y el cliente las descartaba, de modo que
+        un reporte con la ecuación patrimonial rota se entregaba con apariencia
+        impecable. Aparecen aunque el pipeline haya terminado "bien", porque
+        precisamente ése es el caso peligroso.
+      */}
+      {validationWarnings.length > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mx-6 my-4 rounded-lg border border-gold-500 bg-gold-500/10 px-4 py-3"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-gold-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-n-1000">
+                {language === 'es'
+                  ? `Validación contable: ${validationWarnings.length} ${
+                      validationWarnings.length === 1 ? 'salvedad' : 'salvedades'
+                    }`
+                  : `Accounting validation: ${validationWarnings.length} ${
+                      validationWarnings.length === 1 ? 'exception' : 'exceptions'
+                    }`}
+              </div>
+              <p className="mt-1 text-xs text-n-700">
+                {language === 'es'
+                  ? 'El validador determinista encontró diferencias entre el reporte y el balance de origen. Revíselas antes de firmar los estados financieros.'
+                  : 'The deterministic validator found differences between the report and the source trial balance. Review them before signing the financial statements.'}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {validationWarnings.map((w, i) => (
+                  <li
+                    key={`${i}-${w.slice(0, 40)}`}
+                    className="text-xs text-n-800 whitespace-pre-wrap break-words"
+                  >
+                    • {w}
+                  </li>
+                ))}
+              </ul>
+              {pipelineInput && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleToggleRepair}
+                    aria-expanded={showRepair}
+                    aria-controls="repair-chat-panel"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+                  >
+                    <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
+                    {language === 'es' ? 'Revisar con el Doctor de Datos' : 'Review with Data Doctor'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

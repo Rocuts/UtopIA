@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { getRun } from 'workflow/api';
 import { getRunById } from '@/lib/workflows/monthly-close/repository';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import { requireWorkspace } from '@/lib/db/workspace';
 
 interface RouteContext {
   params: Promise<{ runId: string }>;
@@ -21,9 +22,27 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({ error: 'runId requerido' }, { status: 400 });
   }
 
+  // ---------------------------------------------------------------------------
+  // Frontera de tenant. `requireAuthSession` sólo dice que HAY sesión; no dice
+  // de quién es el `runId`. Sin este control la ruta era un IDOR: cualquier
+  // usuario autenticado podía enumerar runIds y leer el estado del cierre
+  // mensual de otra empresa — incluidos los ids de los asientos contables y,
+  // en la propia respuesta, el `workspaceId` ajeno, que es la llave para
+  // pivotar a los demás recursos de ese tenant.
+  // Auditoría 2026-08 — `idor-close-status-runid`.
+  // ---------------------------------------------------------------------------
+  const workspace = await requireWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: 'Workspace no resuelto' }, { status: 401 });
+  }
+
   // Estado en DB
   const dbRun = await getRunById(runId);
-  if (!dbRun) {
+
+  // Un run de otro workspace se responde EXACTAMENTE igual que uno inexistente:
+  // distinguirlos convertiría este endpoint en un oráculo de existencia de
+  // runIds ajenos.
+  if (!dbRun || dbRun.workspaceId !== workspace.id) {
     return NextResponse.json({ error: 'Run no encontrado' }, { status: 404 });
   }
 
@@ -41,7 +60,6 @@ export async function GET(_req: Request, context: RouteContext) {
 
   return NextResponse.json({
     id: dbRun.id,
-    workspaceId: dbRun.workspaceId,
     periodId: dbRun.periodId,
     workflowRunId: dbRun.workflowRunId,
     status: dbRun.status,
