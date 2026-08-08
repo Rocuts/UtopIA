@@ -1146,8 +1146,21 @@ function ReportViewer({
   // ─── Descargar Excel ─────────────────────────────────────────────────────
   // POST /api/financial-report/export con { report, rawData } — el endpoint
   // responde con un .xlsx binario (Content-Disposition: attachment).
+  /**
+   * Salvedades del reconciliador determinista de anclas (2026-08).
+   *
+   * Cuando la reconciliación no cierra, el informe lleva el sello "REPORTE CON
+   * SALVEDADES" en el cuerpo y NO se ofrece como descargable. El motivo de que
+   * el bloqueo viva aquí y no en un banner: la auditoría integral verificó que
+   * los eventos SSE `warning` mueren en el navegador sin handler, así que la
+   * única señal que el usuario no puede pasar por alto es que el botón no esté.
+   */
+  const reportQualifications = report?.niifAnalysis?.reconciliation;
+  const reportHasQualifications =
+    reportQualifications !== undefined && reportQualifications.clean === false;
+
   const handleDownloadExcel = useCallback(async () => {
-    if (!report || isExportingExcel) return;
+    if (!report || isExportingExcel || reportHasQualifications) return;
     setIsExportingExcel(true);
     setExportError(null);
     try {
@@ -1185,7 +1198,7 @@ function ReportViewer({
     } finally {
       setIsExportingExcel(false);
     }
-  }, [report, rawData, isExportingExcel, language]);
+  }, [report, rawData, isExportingExcel, language, reportHasQualifications]);
 
   // ─── Exportar PDF ────────────────────────────────────────────────────────
   // POST /api/financial-report/export con { report, rawData, company,
@@ -1376,12 +1389,29 @@ function ReportViewer({
           <button
             type="button"
             onClick={handleDownloadExcel}
-            disabled={isExportingExcel || !report}
-            aria-label={language === 'es' ? 'Descargar Excel' : 'Download Excel'}
+            disabled={isExportingExcel || !report || reportHasQualifications}
+            aria-label={
+              reportHasQualifications
+                ? language === 'es'
+                  ? 'Descarga bloqueada: el informe tiene salvedades de reconciliación'
+                  : 'Download blocked: the report has reconciliation qualifications'
+                : language === 'es'
+                  ? 'Descargar Excel'
+                  : 'Download Excel'
+            }
+            title={
+              reportHasQualifications
+                ? language === 'es'
+                  ? 'La reconciliación contra el balance preprocesado no cerró. El informe no es firmable tal como está; revise las salvedades de la portada.'
+                  : 'Reconciliation against the preprocessed trial balance did not close. This report is not signable as issued; see the qualifications on the cover.'
+                : undefined
+            }
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
-              isExportingExcel || !report
-                ? 'bg-n-100 text-n-400 cursor-not-allowed'
+              // `text-n-600` es el mínimo WCAG AA para estado deshabilitado
+              // (3:1). `text-n-400` colapsa por debajo de 2:1 en modo claro.
+              isExportingExcel || !report || reportHasQualifications
+                ? 'bg-n-100 text-n-600 cursor-not-allowed'
                 : 'bg-gold-500 text-n-0 hover:bg-gold-700',
             )}
           >
