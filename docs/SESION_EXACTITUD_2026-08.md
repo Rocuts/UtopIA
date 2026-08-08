@@ -101,6 +101,42 @@ fixtures anteriores no exponían.
 
 ---
 
+## Re-medición con el reconciliador activo (2026-08-08)
+
+Honestidad sobre lo que el bucle de reparación consigue y lo que no.
+
+El bucle **dispara**: en la corrida 1 detectó 1 discrepancia y reinvocó Pass-1 con la brecha exacta
+inyectada; en la corrida 2, dos. El coste está dentro del presupuesto (458s frente a 323–348s sin
+reparación, contra un techo de 800s en el route).
+
+Pero **la reparación no reparó**. El informe final de la corrida 1 seguía con el desglose del Activo
+en dos renglones por $46.073.407,76 bajo un total de $4.185.978.841,16. Dicho de otro modo: darle al
+modelo la brecha en pesos y pedirle que añada los renglones que faltan **no basta**.
+
+Lo que sí cambió es el artefacto: la reconciliación queda `clean: false`, el informe sale sellado
+como **REPORTE CON SALVEDADES** y la descarga está bloqueada. El cliente ya no recibe un informe
+incorrecto — recibe uno que declara que no es firmable. Es una mejora real en confiabilidad, y **no**
+una mejora en capacidad.
+
+Y la re-medición encontró un defecto en lo que se acababa de construir: el Pasivo salió con los dos
+encabezados de sección y **ningún renglón**, y ni E15 ni el reconciliador dijeron nada, porque ambos
+hacían `if (count === 0) continue`. Esa exención venía de que todos los fixtures del validador traían
+`liabilities: []` — el fixture convertía la peor forma del defecto en la forma neutra por defecto.
+Corregido: un total material sin un solo renglón se reporta ahora como brecha del 100%.
+
+### La conclusión estructural
+
+Los renglones de los estados financieros **no deberían autorarlos el modelo**. El preprocesador ya
+tiene el corte por clase y grupo en centavos exactos; el desglose del Balance no es un juicio
+contable, es una proyección determinista del balance. Lo que sí aporta el modelo es la clasificación
+(corriente / no corriente), la etiqueta NIIF y la narrativa.
+
+Mientras el modelo siga autorando las filas, el techo del sistema es "detecta el descuadre y se
+niega a entregar", no "entrega bien". Ése es el siguiente movimiento y es de arquitectura, no de
+prompt.
+
+---
+
 ## Auth: por qué NO se activó BetterAuth
 
 Investigación con verificación contra la base de producción (consultas de solo lectura):
