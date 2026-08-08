@@ -42,6 +42,11 @@
 import { ANCHOR_LABELS, type AnchorKey, type ReportAnchors } from '../contracts/anchors';
 import { parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import { sumStatementDetail } from '../contracts/statement-lines';
+import {
+  buildDeterministicBreakdown,
+  type BreakdownSection,
+} from '../contracts/deterministic-breakdown';
+import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import type { NiifReportJson } from '../contracts/niif-report';
 
 /**
@@ -435,4 +440,75 @@ export function buildQualificationSeal(
       : '> No se intentó reparación.',
     '',
   ].join('\n');
+}
+
+
+// ---------------------------------------------------------------------------
+// Completar el desglose desde el preprocesador
+// ---------------------------------------------------------------------------
+
+const SECTION_BY_STATEMENT: Record<LineGap['statement'], BreakdownSection> = {
+  Activo: 'assets',
+  Pasivo: 'liabilities',
+  Patrimonio: 'equity',
+};
+
+/**
+ * Reemplaza el desglose de los estados que no cuadran por el desglose
+ * determinista del preprocesador, agregado por grupo PUC.
+ *
+ * Por qué reemplazar y no completar: no hay forma fiable de saber qué renglón
+ * del modelo corresponde a qué grupo cuando el modelo mezcla niveles de
+ * agregación —una corrida listó la cuenta 1355 y otra el grupo 13 entero—, y un
+ * merge por código produciría doble conteo. El desglose por grupo es completo
+ * por construcción y suma el total exacto.
+ *
+ * Se CONSERVA la etiqueta que escribió el modelo cuando su código coincide con
+ * el grupo: la redacción NIIF es suyo, la aritmética no.
+ *
+ * Sólo toca los estados con brecha. Un desglose que ya cuadra se respeta tal
+ * cual, incluida su granularidad, que suele ser mejor que la agregación por
+ * grupo.
+ */
+export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
+  json: T,
+  gaps: LineGap[],
+  snapshot: PeriodSnapshot | undefined,
+): { json: T; completed: LineGap['statement'][] } {
+  if (!snapshot || gaps.length === 0) return { json, completed: [] };
+
+  const balanceSheet = { ...json.balanceSheet };
+  const completed: LineGap['statement'][] = [];
+
+  for (const gap of gaps) {
+    const section = SECTION_BY_STATEMENT[gap.statement];
+    const rows = buildDeterministicBreakdown(snapshot, section);
+    if (rows.length === 0) continue;
+
+    const previous = balanceSheet[section] as ReadonlyArray<{
+      account: string | null;
+      label: string;
+      amountComparative: string | null;
+      level: number;
+      isAbsolute: boolean;
+    }>;
+    const labelByAccount = new Map(
+      previous.filter((l) => l.account).map((l) => [l.account as string, l.label]),
+    );
+
+    balanceSheet[section] = rows.map((row) => ({
+      account: row.account,
+      label: labelByAccount.get(row.account) ?? row.label,
+      amountPrimary: serializeMoneyCop(row.cents),
+      amountComparative: null,
+      level: 2,
+      // Se emite CON signo: una correctora agregada dentro de su grupo ya viene
+      // neta, y forzar valor absoluto convertiría una reducción en un aumento.
+      isAbsolute: false,
+    })) as T['balanceSheet'][typeof section];
+    completed.push(gap.statement);
+  }
+
+  if (completed.length === 0) return { json, completed: [] };
+  return { json: { ...json, balanceSheet }, completed };
 }

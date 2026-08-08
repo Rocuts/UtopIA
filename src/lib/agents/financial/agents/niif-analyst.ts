@@ -35,6 +35,7 @@ import { callFinancialAgent } from './runtime';
 import { toNiifAnalysisResult } from './renderer';
 import {
   reconcileAnchors,
+  completeBreakdownFromSnapshot,
   buildQualificationSeal,
   type ReconciliationOutcome,
 } from './reconcile-anchors';
@@ -247,6 +248,35 @@ export async function runNiifAnalyst(
   let reconciled = reconcileAnchors(pass1, anchors);
   let repairAttempted = false;
 
+  // -- Completar el desglose con el preprocesador ANTES de pedir nada al modelo
+  //
+  // Medido (2026-08-08): reinvocar el pase con la brecha exacta en pesos
+  // inyectada en el prompt NO repara el desglose — el bucle dispara, cuesta
+  // ~110s, y el Balance sigue incompleto. El desglose por grupo PUC no es un
+  // juicio contable sino una proyección del balance, así que lo construye el
+  // código y suma el total exacto por construcción. Al modelo le queda la
+  // clasificación corriente/no corriente, la etiqueta NIIF y la narrativa.
+  if (reconciled.lineGaps.length > 0 && preprocessed?.primary) {
+    const { json: completedJson, completed } = completeBreakdownFromSnapshot(
+      reconciled.json,
+      reconciled.lineGaps,
+      preprocessed.primary,
+    );
+    if (completed.length > 0) {
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail:
+          `Desglose completado desde el balance preprocesado: ${completed.join(', ')}. ` +
+          `El analista había dejado renglones sin listar.`,
+      });
+      reconciled = reconcileAnchors(completedJson, anchors);
+    }
+  }
+
+  // Lo que queda tras el completado determinista son desviaciones que el código
+  // NO puede corregir sin autorar contabilidad (utilidad neta, efectivo de
+  // cierre). Para eso —y sólo para eso— se gasta el reintento.
   if (reconciled.repairInstructions.length > 0) {
     repairAttempted = true;
     onProgress?.({
@@ -277,7 +307,14 @@ export async function runNiifAnalyst(
       // Nos quedamos con el intento que deje MENOS descuadre. Un reintento peor
       // que el original es posible y no tiene sentido premiarlo.
       if (retryReconciled.repairInstructions.length < reconciled.repairInstructions.length) {
-        reconciled = retryReconciled;
+        // El reintento puede traer su propio desglose incompleto: se completa
+        // igual que el primero antes de aceptarlo.
+        const { json: fixedJson, completed } = completeBreakdownFromSnapshot(
+          retryReconciled.json,
+          retryReconciled.lineGaps,
+          preprocessed?.primary,
+        );
+        reconciled = completed.length > 0 ? reconcileAnchors(fixedJson, anchors) : retryReconciled;
       }
     } catch (err) {
       // La reparación es best-effort: si falla, seguimos con el intento
