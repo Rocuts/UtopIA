@@ -18,7 +18,7 @@ preprocesador. Lo consumen:
 
 | Regla | Disparador en el fixture | Resultado esperado |
 |-------|--------------------------|---------------------|
-| **R1** — Saldos negativos en activos (muta) | `120505` (-$50M en 2025) e `159205` (-$130M en 2025) — ambos materiales sobre `max(0.0001 × |Activo|, $50K)` | 2 reclasificaciones aplicadas con `applied: true`; cuentas virtuales `2810ZZ-120505` ($50M) y `2810ZZ-159205` ($130M) inyectadas en Clase 2 |
+| **R1** — Saldos negativos en activos (muta) | `120505` (-$50M en 2025) e `159205` (-$130M en 2025), ambos materiales sobre `max(0.0001 × \|Activo\|, $50K)` — pero `159205` es CORRECTORA de activo (depreciación acumulada), y su saldo crédito ES su naturaleza | **1** reclasificación aplicada: cuenta virtual `2895VC-120505` ($50M) en Clase 2. La `159205` se queda en Clase 1 con signo negativo: NIC 16.73 / NIIF PYMES 17.31 exigen presentar el importe en libros NETO, y NIC 1.32 no aplica porque no hay compensación activo↔pasivo |
 | **R5** — Anclaje patrimonial Balance↔ECP (muta) | `379505` (-$1.572B en 2025) crea brecha entre patrimonio crudo y ECP_sum | `convergenceAdjustment.gapCop = $1,572,000,000` exacto; `controlTotals.patrimonio` anclado a $2.390B (= ECP_sum) |
 | **R6** — Cierre EFE↔Caja PUC 11 (muta) | EFE indirecto sobre las variaciones T-1→T no cuadra contra Δ saldo PUC 11 — gap pequeño (~$27.5M) absorbido por `varCuentasPorCobrar` ($130M de magnitud) **dentro del guardrail de plausibilidad al 50%** introducido por Ola D | `cashFlowClosureAdjustment` poblado; post-R6 `EFE.netChangeInCash == observedChangeInCash == $150M` al centavo; `controlTotals.cashClose / cashOpen` poblados |
 | **R7** — Costo presunto (no muta) | Margen bruto $85M ingresos vs $12.5M COGS = 85.29% (>85%) Y inventario $1.67B > 50% × $85M ingresos | `presumedCostWarning` con severidad alta y mensaje listo para el callout |
@@ -31,12 +31,20 @@ pequeño** como para ser absorbido dentro del guardrail de plausibilidad al
 50% que Ola D introdujo en `r6-cashflow-closure.ts`:
 
 ```
-Activo_post_R1   = $3,400,000,000   (suma Class 1 sin negativos materiales)
-Pasivo_post_R1   = $1,010,000,000   (Pasivo crudo $830M + virtuales 2810ZZ-* por $180M)
+Activo_post_R1   = $3,270,000,000   (suma Class 1 sin los negativos materiales que NO son correctoras)
+Pasivo_post_R1   = $880,000,000     (Pasivo crudo $830M + virtual 2895VC-120505 por $50M)
 Patrimonio_post_R5 = $2,390,000,000 (ECP_sum: capital + reserva + utilidad + utilidades acumuladas)
                                     = $1,865M + $100M + $145M + $280M
-Activo - (Pasivo + Patrimonio) = 3,400M - 1,010M - 2,390M = $0
+Activo - (Pasivo + Patrimonio) = 3,270M - 880M - 2,390M = $0
 ```
+
+> **Corregido 2026-08.** Estas cifras decían $3.400M / $1.010M, que era el resultado del defecto
+> `r1-reclasifica-cuentas-correctoras`: R1 trataba la 1592 (depreciación acumulada) como anomalía y
+> la movía a Clase 2, inflando Activo y Pasivo en $130M cada uno y presentando PPE bruto. La
+> ecuación seguía cerrando, así que ninguna cuadratura lo atrapaba — y este README documentaba el
+> resultado defectuoso como ESPERADO, de modo que corregir el bug ponía el test en rojo. Con
+> `isContraAsset` en `r1-negative-assets.ts` sólo se reclasifica la 120505 (inversión con saldo
+> crédito, $50M), que sí es una anomalía real.
 
 ### Re-calibración Ola D (2026-05-08)
 
