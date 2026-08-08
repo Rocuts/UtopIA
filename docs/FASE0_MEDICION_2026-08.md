@@ -186,4 +186,9 @@ Consecuencias para el diseño del reconciliador:
    distribución de la deriva. Hacen falta 3-4 exports de ERP distintos — idealmente de ERPs
    distintos, porque la convención de signos varía entre ellos y es justo lo que rompió aquí.
 2. **Deriva del Editor Jefe HTML.** El segundo salto de unidades (JSON → HTML, ~200 cifras
-   re-tecleadas por un LLM) no está instrumentado en esta medición. Necesita su propio harness.
+   re-tecleadas por un LLM) no está instrumentado en esta medición. Sí tiene protección en
+   producción —`validateHtmlChecklist` y `reconcileBindingFigures` quedaron cableados en
+   [`html-editor.ts:269`](../src/lib/agents/financial/agents/html-editor.ts#L269) durante la
+   auditoría anterior—, pero nadie ha medido con LLM real cuántas de esas ~200 cifras se desvían ni
+   cuántas atrapa el checklist. Necesita su propio harness, del mismo tipo que
+   `scripts/fase0-anchor-drift.ts`.
