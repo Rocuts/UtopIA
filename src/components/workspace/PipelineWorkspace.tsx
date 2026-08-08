@@ -1630,6 +1630,10 @@ export function PipelineWorkspace() {
   // `htmlChecklistFailures` se popula con el linter §11 del agente y se muestra
   // como banner dentro de `<HtmlReportViewer>` si el agente detectó issues.
   const [htmlReport, setHtmlReport] = useState<string | null>(null);
+  // `false` cuando el gate del Editor Jefe encontró un fallo bloqueante: el
+  // HTML se entrega estampado como BORRADOR y el visor no debe ofrecerlo como
+  // informe firmable. Auditoría 2026-08.
+  const [htmlEmittable, setHtmlEmittable] = useState(true);
   const [htmlChecklistFailures, setHtmlChecklistFailures] = useState<
     Array<{ rule: string; detail: string; severity: 'block' | 'warn' }>
   >([]);
@@ -2508,6 +2512,7 @@ export function PipelineWorkspace() {
     setDiffAffectedAccounts([]);
     // Wave 4.F8 — limpieza del 4° entregable opcional.
     setHtmlReport(null);
+    setHtmlEmittable(true);
     setHtmlChecklistFailures([]);
     setHtmlError(null);
     setShowHtmlViewer(false);
@@ -2792,6 +2797,14 @@ export function PipelineWorkspace() {
         html: string;
         metadata: typeof metadata;
         checklistFailures: Array<{ rule: string; detail: string; severity: 'block' | 'warn' }>;
+        /**
+         * `false` cuando algún check BLOQUEANTE del linter §11 o de la
+         * reconciliación HTML↔JSON no pasó — típicamente una cifra vinculante
+         * que no aparece literal en el HTML, o un desliz de escala ×100. El
+         * HTML ya viene estampado como BORRADOR, pero el visor necesita el
+         * flag para no ofrecer la descarga como si fuera un informe firmable.
+         */
+        emittable?: boolean;
       }>(
         '/api/financial-report/html',
         body,
@@ -2802,6 +2815,9 @@ export function PipelineWorkspace() {
 
       setHtmlReport(result.html);
       setHtmlChecklistFailures(result.checklistFailures ?? []);
+      // `!== false` y no `!result.emittable`: un payload legacy sin el campo se
+      // trata como emitible, para no romper reportes ya persistidos.
+      setHtmlEmittable(result.emittable !== false);
       setShowHtmlViewer(true);
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return;
@@ -2865,6 +2881,7 @@ export function PipelineWorkspace() {
               backendReport?.company.fiscalPeriod ?? pipelineInput?.fiscalPeriod ?? ''
             }
             checklistFailures={htmlChecklistFailures}
+            emittable={htmlEmittable}
             language={language}
             onClose={() => setShowHtmlViewer(false)}
           />
