@@ -1,5 +1,12 @@
 # FASE 0 — Medición antes de construir (2026-08-07)
 
+> **Estado del documento.** Es el registro de la medición tal como salió, *antes* de las
+> correcciones que la propia medición motivó. Los Hallazgos 1 y 2 ya están corregidos —el balance
+> real atraviesa el gate y produce anclas correctas desde el commit de la convención de signos—;
+> se conservan aquí porque son la evidencia de qué estaba roto y de cómo se midió. El Hallazgo 3
+> sigue describiendo el comportamiento vigente del modelo. Ver
+> [SESION_EXACTITUD_2026-08.md](SESION_EXACTITUD_2026-08.md) para lo que entró.
+
 Antes de diseñar el reconciliador determinista había que saber **cuánto desobedece el LLM hoy**.
 La medición devolvió algo distinto de lo esperado: en los dos balances disponibles el pipeline
 **nunca llega al LLM**. El gate lo rechaza antes, y en el único archivo de cliente real lo rechaza
