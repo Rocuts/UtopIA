@@ -157,8 +157,14 @@ aritmética, que es donde falla.
 ## Medición de cierre (2026-08-08, LLM real, balance de cliente real)
 
 ```
-FINAL run 1 | anclas desviadas: 0/9 | warnings: 0 | errores: 0
+FINAL run 1 | anclas desviadas: 0/9 | warnings: 0 | errores: 0 | 296s
+FINAL run 2 | anclas desviadas: 0/9 | warnings: 0 | errores: 0 | 303s
 ```
+
+Consistente entre corridas, que es justo lo que no era antes: sobre este mismo balance el desglose
+del Activo variaba entre el 0,10% y el 99,9% de brecha según la corrida. Y **más rápido** que con el
+bucle de reparación por prompt (296–303s frente a 458s), porque completar el desglose desde el
+preprocesador sustituye una llamada al modelo por aritmética.
 
 Estado de Situación Financiera producido, con las tres secciones cuadrando al centavo:
 
