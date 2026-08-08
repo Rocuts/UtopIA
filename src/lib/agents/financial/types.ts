@@ -130,6 +130,17 @@ export interface NiifAnalysisResult {
    * Markdown si está ausente.
    */
   json?: NiifReportJson;
+  /**
+   * Veredicto del reconciliador determinista de anclas (2026-08). Presente
+   * siempre que el analista corra por `runNiifAnalyst`.
+   *
+   * Cuando `clean === false` el informe NO se entrega como limpio: la portada
+   * lleva el sello "REPORTE CON SALVEDADES" y la descarga queda bloqueada. Es
+   * deliberado que esto viaje en el RESULTADO y no como un evento SSE: la
+   * auditoría integral verificó que el cliente no registra handler para
+   * `warning`, así que toda señal enviada por ese canal muere en el navegador.
+   */
+  reconciliation?: import('./agents/reconcile-anchors').ReconciliationOutcome;
 }
 
 // ---------------------------------------------------------------------------

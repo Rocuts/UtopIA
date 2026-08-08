@@ -41,7 +41,7 @@
 // orchestrator pueda sumar errores/warnings sin discriminar el origen.
 // ---------------------------------------------------------------------------
 
-import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
+import { sumStatementDetail } from '../contracts/statement-lines';
 import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
@@ -673,23 +673,19 @@ export function validateNiifReportJson(
     ['Pasivo', bs.liabilities, bs.totalLiabilitiesPrimary],
     ['Patrimonio', bs.equity, bs.totalEquityPrimary],
   ] as const) {
-    const detalle = lineas.filter((l) => l.level === 2);
-    if (detalle.length === 0) continue; // sin desglose no hay nada que cuadrar
-
-    let suma = ZERO;
-    for (const l of detalle) {
-      const monto = parseMoneyCop(l.amountPrimary);
-      const esCorrectora = isContraAsset(l.account ?? '');
-      // Una correctora presentada en absoluto resta; una presentada con signo
-      // ya viene negativa y se suma tal cual.
-      suma += esCorrectora && l.isAbsolute ? -abs(monto) : monto;
-    }
+    // La identificacion del detalle vive en `contracts/statement-lines.ts`,
+    // compartida con el reconciliador de anclas. NO se filtra por `level`: la
+    // medicion de FASE 0 mostro que el modelo emite el mismo encabezado con
+    // level 3, 1 y 0 en tres corridas del mismo balance, asi que un filtro por
+    // nivel acierta por casualidad y falla en silencio.
+    const { sum: suma, count: detalleCount } = sumStatementDetail(lineas);
+    if (detalleCount === 0) continue; // sin desglose no hay nada que cuadrar
 
     const total = parseMoneyCop(totalDeclarado);
     if (suma !== total) {
       const gap = suma - total;
       warnings.push(
-        `E15. En ${nombre}, la suma de los ${detalle.length} renglones de detalle ` +
+        `E15. En ${nombre}, la suma de los ${detalleCount} renglones de detalle ` +
           `(${fmtCop(suma)}) ≠ el total declarado (${fmtCop(total)}). Brecha: ${fmtCop(gap)}. ` +
           `El lector que sume la columna no obtendrá el total impreso. ` +
           `${

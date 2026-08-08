@@ -738,8 +738,38 @@ export function buildNiifAnalystPass1Prompt(
   reportMode: ReportMode,
   preprocessed?: PreprocessedBalance,
   elite?: NiifAnalystEliteContext,
+  /**
+   * Discrepancias exactas del intento anterior, redactadas por
+   * `reconcileAnchors`. Sólo viaja en la RE-invocación del bucle de reparación
+   * (máximo un reintento). Se emite al FINAL del prompt a propósito: el prefijo
+   * estable de arriba conserva el prompt cache entre el intento y su reparación.
+   */
+  repairInstructions?: string[],
 ): string {
   const ctx = buildSharedContext(company, language, reportMode, preprocessed, elite);
+
+  // Bloque de reparación (2026-08). La medición de FASE 0 mostró que el modelo
+  // copia bien los totales y en cambio omite renglones del desglose de forma
+  // inestable: sobre el MISMO balance, el detalle del Activo se quedó corto un
+  // 0,1%, un 41,2% y un 99,9% en tres corridas. Repetir la instrucción genérica
+  // no sirve; lo que se le devuelve es la brecha exacta en pesos.
+  const repairBlock =
+    repairInstructions && repairInstructions.length > 0
+      ? `
+
+<correccion_obligatoria>
+Tu intento anterior sobre ESTE MISMO balance quedó descuadrado. Cada punto trae la cifra
+vinculante literal. Corrígelos TODOS en esta respuesta:
+
+${repairInstructions.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+Cómo se corrige:
+- Si falta desglose, AÑADE los renglones que faltan tomándolos del balance preprocesado que ya
+  está en tu contexto. NUNCA inventes una cuenta de ajuste ni un renglón "otros" para cuadrar.
+- Si sobra, hay doble conteo: elimina el renglón repetido. NUNCA reduzcas un saldo real.
+- Los totales NO se tocan: son los del preprocesador y ya están correctos.
+</correccion_obligatoria>`
+      : '';
 
   // Why: el modeBanner canónico se inyecta dentro del prompt como instrucción
   // literal (no como string interpolable a posteriori). El LLM lo copia tal
@@ -924,7 +954,7 @@ ${renderPresentationV3AnchorsBlock(ctx)}
 ${ctx.hechosEmpresa}
 
 ${ctx.langInstruction}
-</context>`;
+</context>${repairBlock}`;
 }
 
 // ===========================================================================

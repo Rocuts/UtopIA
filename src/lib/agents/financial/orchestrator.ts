@@ -22,6 +22,7 @@ import {
 import { deriveReportMode, type ReportMode } from '@/lib/preprocessing/v8-helpers';
 import {
   auditReportEmittable,
+  type AuditReportEmittableResult,
   type AuditCompanyContext,
 } from '@/lib/pillars/audit-report-emittable';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
@@ -1170,6 +1171,20 @@ export interface FinancialPipelineContext {
    * aborta. Ver docs/wave-notes/escudo-autowire-contract.md §4.1.
    */
   fiscalSnapshot?: FiscalSnapshot;
+  /**
+   * Pre-vuelo del gate de emitibilidad (V1..V15 sin los checks que dependen del
+   * texto del informe, que aún no existe en Stage 0).
+   *
+   * Se calcula AQUÍ a propósito. `prepareFinancialContext` es la única función
+   * que atraviesan tanto el camino legacy (`orchestrateFinancialReport`) como
+   * el partido (los cuatro endpoints), así que es el único punto donde el gate
+   * cubre a los dos. Hasta la auditoría 2026-08 el gate sólo vivía dentro del
+   * `@deprecated orchestrateFinancialReport`, es decir: no corría para ningún
+   * usuario real.
+   *
+   * `undefined` cuando no hubo snapshot primario que evaluar.
+   */
+  preflight?: AuditReportEmittableResult;
 }
 
 /**
@@ -1415,6 +1430,57 @@ export async function prepareFinancialContext(
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Pre-vuelo del gate de emitibilidad.
+  // ---------------------------------------------------------------------------
+  // No lanza: el objetivo es que la señal EXISTA y viaje, no romper pipelines
+  // en curso. Quien decide el artefacto es el consumidor (la UI bloquea la
+  // descarga; el informe se sella). Lo que ya no puede pasar es que el gate
+  // esté escrito, testeado y sin correr para nadie.
+  let preflight: AuditReportEmittableResult | undefined;
+  const preflightSnapshot = getPrimarySnapshot(preprocessed);
+  if (preflightSnapshot) {
+    try {
+      const extractedMetaPreflight =
+        getExtractedMetadataFromPreprocessed(preprocessed) ??
+        extractCompanyMetadata(effectiveRawData ?? '');
+      preflight = auditReportEmittable(
+        { consolidatedReport: '' } as unknown as FinancialReport,
+        preflightSnapshot,
+        {
+          razonSocialFromFile: extractedMetaPreflight?.razonSocialFromFile ?? null,
+          nitFromFile: extractedMetaPreflight?.nitFromFile ?? null,
+          nit: effectiveCompany.nit ?? null,
+          niifGroup: effectiveCompany.niifGroup ?? 2,
+          tipoSocietario: normalizeTipoSocietario(effectiveCompany.entityType),
+          estatutosRequierenReservaLegal: getEstatutosFlag(effectiveCompany),
+        },
+        {
+          comparativos_impracticables: ppForAgents?.comparativos_impracticables,
+          actividadInferida: ppForAgents?.actividadInferida,
+          reclasificacionesNoCompensacion: ppForAgents?.reclasificacionesNoCompensacion,
+        },
+        { skipReportTextChecks: true },
+      );
+      if (!preflight.emittable) {
+        onProgress?.({
+          type: 'stage_progress',
+          stage: 1,
+          detail:
+            `Pre-vuelo de emitibilidad: ${preflight.blockers.length} bloqueante(s) — ` +
+            preflight.blockers.map((b) => b.code).join(', ') +
+            '. El informe se marcará CON SALVEDADES.',
+        });
+      }
+    } catch (err) {
+      // El pre-vuelo nunca puede tumbar el pipeline: es una señal, no un paso.
+      console.warn(
+        '[financial-orchestrator] pre-vuelo de emitibilidad falló:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return {
     effectiveRawData,
     effectiveCompany,
@@ -1429,6 +1495,7 @@ export async function prepareFinancialContext(
     appliedAdjustments,
     ancora,
     fiscalSnapshot,
+    preflight,
   };
 }
 
@@ -1548,6 +1615,39 @@ export async function runNiifPhase(
           (w) => `[NIIF JSON validator soft-check] ${w}`,
         ),
       });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Los bloqueantes del pre-vuelo entran al MISMO veredicto que la
+  // reconciliación, para que el artefacto tenga una sola verdad.
+  // ---------------------------------------------------------------------------
+  // Un balance con libros no cerrados (V12) o sin causación de impuesto (V11)
+  // produce estados financieros que cuadran y aun así no son firmables. Antes
+  // esa señal moría en el gate del camino legacy; ahora sella el entregable por
+  // el mismo canal que el descuadre de renglones.
+  if (context.preflight && !context.preflight.emittable) {
+    const previous = niif.reconciliation;
+    niif.reconciliation = {
+      deviations: previous?.deviations ?? [],
+      lineGaps: previous?.lineGaps ?? [],
+      repairAttempted: previous?.repairAttempted ?? false,
+      clean: false,
+    };
+    const blockerSeal = [
+      language === 'es'
+        ? '> ## REPORTE CON SALVEDADES — GATE DE EMISIÓN'
+        : '> ## REPORT WITH QUALIFICATIONS — ISSUANCE GATE',
+      '>',
+      ...context.preflight.blockers.map((b) => `> - ${b.message}`),
+      '',
+    ].join('\n');
+    // Sólo si el analista no puso ya su propio sello, para no duplicar portada.
+    if (!niif.fullContent.startsWith('> ## REPORT')) {
+      niif.fullContent = `${blockerSeal}\n${niif.fullContent}`;
+      niif.balanceSheet = `${blockerSeal}\n${niif.balanceSheet}`;
+    } else {
+      niif.fullContent = `${blockerSeal}\n${niif.fullContent}`;
     }
   }
 

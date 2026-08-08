@@ -34,6 +34,12 @@ import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { callFinancialAgent } from './runtime';
 import { toNiifAnalysisResult } from './renderer';
 import {
+  reconcileAnchors,
+  buildQualificationSeal,
+  type ReconciliationOutcome,
+} from './reconcile-anchors';
+import { buildReportAnchors } from '../contracts/anchors';
+import {
   BalanceAndPnlSubSchema,
   CashFlowAndEquitySubSchema,
   TechnicalNotesSubSchema,
@@ -214,6 +220,73 @@ export async function runNiifAnalyst(
     );
   }
 
+  // -- Reconciliación determinista + bucle de reparación ACOTADO -----------
+  //
+  // Aquí está la frontera entre cálculo y redacción. `reconcileAnchors`
+  // sobrescribe con la cifra del preprocesador las anclas que puede sobrescribir
+  // sin fabricar una incoherencia interna, y devuelve todo lo que quedó
+  // desalineado. Si algo quedó, se reinvoca SÓLO Pass-1 —el pase que produce el
+  // Balance y el P&L— con las discrepancias exactas inyectadas. Un reintento y
+  // no más: si el modelo no corrige con la brecha en pesos delante, no va a
+  // corregir con un tercer intento, y cada pase cuesta ~100s del presupuesto de
+  // 800s del route.
+  //
+  // Por qué aquí y no después del reensamblaje: el desglose que no cuadra nace
+  // en Pass-1. Repararlo al final obligaría a repetir los tres pases.
+  const anchors = preprocessed
+    ? buildReportAnchors(preprocessed.primary, preprocessed.comparative ?? undefined)
+    : { primary: null, comparative: null };
+
+  let reconciled = reconcileAnchors(pass1, anchors);
+  let repairAttempted = false;
+
+  if (reconciled.repairInstructions.length > 0) {
+    repairAttempted = true;
+    onProgress?.({
+      type: 'stage_progress',
+      stage: 1,
+      detail:
+        `Reconciliación: ${reconciled.repairInstructions.length} discrepancia(s) contra el ` +
+        `balance preprocesado. Reintentando el Balance y el P&L con las cifras exactas...`,
+    });
+    try {
+      const retry = await callFinancialAgent({
+        agentName: 'niif-analyst-pass1-repair',
+        model: MODELS.FINANCIAL_PIPELINE,
+        schema: BalanceAndPnlSubSchema,
+        system: buildNiifAnalystPass1Prompt(
+          company,
+          language,
+          reportMode,
+          preprocessed,
+          elite,
+          reconciled.repairInstructions,
+        ),
+        userContent,
+        ...MODELS_CONFIG.niifAnalystPass1,
+        signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass1)),
+      });
+      const retryReconciled = reconcileAnchors(retry.json, anchors);
+      // Nos quedamos con el intento que deje MENOS descuadre. Un reintento peor
+      // que el original es posible y no tiene sentido premiarlo.
+      if (retryReconciled.repairInstructions.length < reconciled.repairInstructions.length) {
+        reconciled = retryReconciled;
+      }
+    } catch (err) {
+      // La reparación es best-effort: si falla, seguimos con el intento
+      // original ya reconciliado. Lo que NO puede pasar es que el descuadre
+      // desaparezca de la vista — de eso se encarga `reconciliation` abajo.
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail: `Reintento de reconciliación fallido (${
+          err instanceof Error ? err.message : String(err)
+        }). Se continúa con el informe marcado.`,
+      });
+    }
+  }
+
+  pass1 = reconciled.json;
   const pass1Anchors = extractPass1Anchors(pass1);
 
   // -- Pass 2: Derivados (EFE + ECP) --------------------------------------
@@ -291,5 +364,32 @@ export async function runNiifAnalyst(
     );
   }
 
-  return toNiifAnalysisResult(parsed.data);
+  // Segunda pasada del reconciliador, ahora sobre el reporte completo: Pass-2
+  // aporta `cashFlow.cashClosing`, que no existía cuando corrió la primera.
+  const finalReconciled = reconcileAnchors(parsed.data, anchors);
+
+  const reconciliation: ReconciliationOutcome = {
+    deviations: [...reconciled.deviations, ...finalReconciled.deviations],
+    lineGaps: finalReconciled.lineGaps,
+    repairAttempted,
+    // Lo que decide el artefacto: si al final quedan discrepancias, el informe
+    // NO se entrega como limpio. El sello y el bloqueo de descarga cuelgan de
+    // este booleano.
+    clean:
+      finalReconciled.repairInstructions.length === 0 &&
+      finalReconciled.deviations.length === 0,
+  };
+
+  const rendered = toNiifAnalysisResult(finalReconciled.json);
+
+  // El sello viaja DENTRO del entregable, no como evento SSE: así llega al
+  // informe consolidado, al HTML y al PDF sin que cada superficie tenga que
+  // acordarse de consultar un flag.
+  const seal = buildQualificationSeal(reconciliation, language);
+  if (seal) {
+    rendered.balanceSheet = `${seal}\n${rendered.balanceSheet}`;
+    rendered.fullContent = `${seal}\n${rendered.fullContent}`;
+  }
+
+  return { ...rendered, reconciliation };
 }

@@ -135,11 +135,48 @@ hasta el 1%" — defendible como política, pero no es lo que el nombre ni el me
 
 ---
 
-## Hallazgo 3 — Deriva del LLM
+## Hallazgo 3 — El LLM obedece las anclas. Lo que no cuadra son los renglones.
 
-Medición sobre el balance real con signos normalizados, que es el único que atraviesa el gate.
-Ver la tabla *Obediencia por campo ancla* en [`.fase0/REPORT.md`](../.fase0/REPORT.md), regenerable
-con el comando de arriba.
+Tres corridas del pipeline completo sobre el balance real con signos normalizados —el único que
+atraviesa el gate— contra `buildReportAnchors` con tolerancia $0:
+
+| Corrida | Anclas cruzadas | Exactas | Desviadas | Errores E | Warnings E |
+|---|---|---|---|---|---|
+| 1 | 9 | **9** | 0 | 0 | 2 |
+| 2 | 9 | **9** | 0 | 0 | 2 |
+| 3 | 9 | **9** | 0 | 0 | 2 |
+
+**Deriva medida en los campos ancla: cero.** El modelo copia literalmente los tokens
+`[MoneyCop: N]` del bloque TOTALES VINCULANTES. La corrección de la auditoría anterior
+(`anclas-en-pesos-schema-en-centavos`) funcionó: el anclaje ya no exige aritmética del modelo.
+
+Pero las cuatro salvedades que sí aparecen son todas E15 — *los renglones impresos no suman el
+total impreso*:
+
+| Corrida | Estado | Renglones | Suma del detalle | Total declarado | Brecha | % |
+|---|---|---|---|---|---|---|
+| 1 | Activo | 7 | $4.181.617.611,40 | $4.185.978.841,16 | −$4.361.229,76 | 0,10% |
+| 1 | Pasivo | 5 | $1.939.834.910,91 | $1.962.538.849,62 | −$22.703.938,71 | 1,16% |
+| 2 | Activo | **3** | $2.459.751.296,40 | $4.185.978.841,16 | **−$1.726.227.544,76** | **41,2%** |
+| 2 | Pasivo | **2** | $2.184.714,88 | $1.962.538.849,62 | **−$1.960.354.134,74** | **99,9%** |
+
+Ésa es la respuesta a "los números del NIIF salen mal". **No son los totales: son los estados.**
+El total del Activo es correcto al centavo en las tres corridas, pero el desglose que el cliente
+lee y suma con la calculadora se queda entre el 0,1% y el 41% corto, y varía de corrida en corrida
+sobre el MISMO balance. En la corrida 2 el Estado de Situación Financiera lista tres renglones de
+activo por $2.459M bajo un total de $4.186M.
+
+Consecuencias para el diseño del reconciliador:
+
+1. **Sobrescribir los totales ancla aporta poco por sí solo** — ya coinciden. Sigue valiendo la
+   pena como garantía estructural y como telemetría de obediencia real, pero no es donde está el
+   riesgo.
+2. **El disparador del bucle de reparación tiene que incluir E15**, no sólo E1/E2/E4/E14. Hoy E15
+   es un `warning`, y la auditoría integral ya estableció que el cliente SSE no registra handler
+   para `warning`: la señal muere en el navegador.
+3. La variación entre corridas es del orden de magnitud del propio balance. Un desglose que el
+   código puede derivar de forma determinista (el preprocesador ya tiene el corte por clase y
+   grupo) no debería estar autorándolo el modelo.
 
 ---
 

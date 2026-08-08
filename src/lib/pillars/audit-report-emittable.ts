@@ -93,11 +93,27 @@ const CENTS_TOLERANCE_ZERO = BigInt(0);
 // API pública
 // ---------------------------------------------------------------------------
 
+/** Opciones del gate. */
+export interface AuditReportEmittableOptions {
+  /**
+   * Omite los checks que dependen del TEXTO del informe consolidado (V8, V9,
+   * V10). Se usa en el modo PRE-VUELO, que corre en `prepareFinancialContext`
+   * —Stage 0, antes de que exista informe alguno— para bloquear de entrada los
+   * balances que nunca van a producir un informe emitible.
+   *
+   * Sin esta opción el pre-vuelo dispararía V10 siempre (la TMT la calcula el
+   * Strategy Director, que aún no ha corrido) y el gate perdería toda
+   * credibilidad justo donde más falta hace.
+   */
+  skipReportTextChecks?: boolean;
+}
+
 export function auditReportEmittable(
   report: FinancialReport,
   snapshot: PeriodSnapshot,
   company: AuditCompanyContext,
   elite?: EmittableEliteContext,
+  options: AuditReportEmittableOptions = {},
 ): AuditReportEmittableResult {
   const blockers: AuditBlocker[] = [];
   const suggestedAdjustments: string[] = [];
@@ -242,7 +258,11 @@ export function auditReportEmittable(
   // -------------------------------------------------------------------------
   // V8 — IFRS 18 mencionada en informe de Grupo 2 o 3.
   // -------------------------------------------------------------------------
-  if (company.niifGroup !== 1 && reportMencionaIFRS18(reportText)) {
+  if (
+    !options.skipReportTextChecks &&
+    company.niifGroup !== 1 &&
+    reportMencionaIFRS18(reportText)
+  ) {
     blockers.push({
       code: 'V8',
       message:
@@ -255,6 +275,7 @@ export function auditReportEmittable(
   // V9 — reserva legal SAS sin habilitación estatutaria.
   // -------------------------------------------------------------------------
   if (
+    !options.skipReportTextChecks &&
     company.tipoSocietario === 'SAS' &&
     company.estatutosRequierenReservaLegal !== true &&
     reportConstituyeReservaLegal(reportText)
@@ -272,7 +293,7 @@ export function auditReportEmittable(
   // V10 — TMT 15% calculada en el informe del Strategy Director.
   // Sólo aplica al régimen ordinario (no SIMPLE / no Zona Franca).
   // -------------------------------------------------------------------------
-  if (!reportIncluyeTMTCalculada(reportText)) {
+  if (!options.skipReportTextChecks && !reportIncluyeTMTCalculada(reportText)) {
     blockers.push({
       code: 'V10',
       message:
