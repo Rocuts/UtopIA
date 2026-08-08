@@ -35,6 +35,80 @@ interface PatternDef {
   regex: RegExp;
   /** Legacy one-way replacement label. */
   legacyReplacement: string;
+  /**
+   * Guardia contextual opcional. Recibe la coincidencia y el texto completo con
+   * su posición, y decide si REALMENTE es PII. Devolver `false` deja el texto
+   * intacto.
+   *
+   * Existe por un defecto concreto (auditoría 2026-08): en un producto contable
+   * las cifras en pesos SIN separadores colisionan con los formatos de teléfono
+   * y de tarjeta. `3500000000` ($3.500 millones) es exactamente un móvil
+   * colombiano —diez dígitos que empiezan en 3— y se redactaba antes de que el
+   * LLM lo viera, de modo que el agente terminaba calculando sobre
+   * "[TELÉFONO REDACTADO]". El usuario preguntaba por sus ventas y recibía una
+   * respuesta construida sobre un dato destruido.
+   */
+  guard?: (match: string, fullText: string, index: number) => boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Desambiguación cifra vs. identificador
+// ---------------------------------------------------------------------------
+
+// La ventana permite conectores intermedios ("mi celular ES ...", "llámame AL
+// ..."), que es como la gente escribe de verdad. Un `\W{0,12}` sólo cubría el
+// caso pegado y dejaba pasar el 90% de los teléfonos reales.
+/** Palabras que indican que el número SÍ es un dato de contacto. */
+const TEL_CONTEXT_RE =
+  /(tel[eé]fono|tel\.|celular|cel\.|m[oó]vil|whats\s*app|whatsapp|contacto|cont[aá]ctame|ll[aá]mame|llamar|marcar|l[ií]nea|fijo)\b[\s\S]{0,24}$/i;
+
+/** Palabras que indican que el número SÍ es una tarjeta. */
+const CARD_CONTEXT_RE =
+  /(tarjeta|t\.?\s?c\.?|visa|mastercard|master\s*card|amex|american\s*express|cr[eé]dito|d[eé]bito|franquicia)\b[\s\S]{0,24}$/i;
+
+/** Marcadores de que el número es una CIFRA monetaria, no un identificador. */
+const MONEY_BEFORE_RE = /(\$|COP|USD|valor|monto|total|suma|saldo|ingresos?|ventas?|costos?|gastos?|utilidad|precio|pag(?:o|ué|ue|amos)|factur\w*|por)\W{0,6}$/i;
+const MONEY_AFTER_RE = /^\s*(?:pesos|COP|d[oó]lares|USD|millones|mil(?:lones)?)\b/i;
+
+/** Ventana de contexto a cada lado. Suficiente para "mi celular es 3..." */
+const CONTEXT_WINDOW = 40;
+
+function before(fullText: string, index: number): string {
+  return fullText.slice(Math.max(0, index - CONTEXT_WINDOW), index);
+}
+
+function after(fullText: string, index: number, match: string): string {
+  const end = index + match.length;
+  return fullText.slice(end, end + CONTEXT_WINDOW);
+}
+
+/**
+ * Un número ambiguo se redacta sólo si el contexto lo señala como dato de
+ * contacto (o trae prefijo internacional). Si el contexto lo señala como
+ * cifra, no se toca.
+ *
+ * El sesgo es deliberado: en este producto, destruir una cifra produce una
+ * respuesta financiera incorrecta —que es el daño que el usuario ve—, mientras
+ * que un teléfono suelto sin ninguna palabra de contacto alrededor es raro.
+ * Los formatos INEQUÍVOCOS de teléfono (prefijo +57) se siguen redactando
+ * siempre, y todos los identificadores con etiqueta (NIT:, CC:, cuenta …)
+ * quedan intactos porque su patrón ya exige la etiqueta.
+ */
+function looksLikeContact(match: string, fullText: string, index: number): boolean {
+  if (/^\+?57/.test(match.trim())) return true;
+  const pre = before(fullText, index);
+  if (MONEY_BEFORE_RE.test(pre)) return false;
+  if (MONEY_AFTER_RE.test(after(fullText, index, match))) return false;
+  return TEL_CONTEXT_RE.test(pre);
+}
+
+function looksLikeCard(match: string, fullText: string, index: number): boolean {
+  // Con separadores (1234-5678-9012-3456) el formato ya es inequívoco.
+  if (/[\s-]/.test(match)) return true;
+  const pre = before(fullText, index);
+  if (MONEY_BEFORE_RE.test(pre)) return false;
+  if (MONEY_AFTER_RE.test(after(fullText, index, match))) return false;
+  return CARD_CONTEXT_RE.test(pre);
 }
 
 // Order matters: longer / more specific patterns first.
@@ -56,7 +130,12 @@ const PATTERNS: PatternDef[] = [
   { kind: 'PASSPORT', regex: /\b(?:PA|PP|pasaporte)[:\s]+[A-Z0-9]{6,9}\b/gi, legacyReplacement: '[PASAPORTE REDACTADO]' },
 
   // Credit / debit card numbers (13-19 digits with optional separators)
-  { kind: 'CARD', regex: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g, legacyReplacement: '[TARJETA REDACTADA]' },
+  {
+    kind: 'CARD',
+    regex: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g,
+    legacyReplacement: '[TARJETA REDACTADA]',
+    guard: looksLikeCard,
+  },
 
   // IBAN (international, sometimes used by Colombian fintechs / cross-border accounts)
   // CC + 2 digits + up to 30 alphanumeric (4-char groups separated by space allowed).
@@ -79,10 +158,27 @@ const PATTERNS: PatternDef[] = [
   // Email addresses
   { kind: 'EMAIL', regex: /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g, legacyReplacement: '[EMAIL REDACTADO]' },
 
-  // Colombian mobile (+57 / 57 / 10 digits starting with 3)
-  { kind: 'TEL', regex: /(?:\+?57[-.\s]?)?(?:\(?\d{1,3}\)?[-.\s]?)?\b3\d{9}\b/g, legacyReplacement: '[TELÉFONO REDACTADO]' },
-  // Landlines
-  { kind: 'TEL', regex: /\b(?:60[1-8]|0[1-8])[-.\s]?\d{7}\b/g, legacyReplacement: '[TELÉFONO REDACTADO]' },
+  // Móvil colombiano: 3XX XXX XXXX, con prefijo +57/57 opcional y separadores.
+  //
+  // El patrón anterior era `(?:\+?57...)?(?:\(?\d{1,3}\)?...)?\b3\d{9}\b` y
+  // NUNCA llegaba a redactar los formatos con indicativo: en "+573001234567"
+  // no existe frontera de palabra entre el 7 y el 3, así que `\b3` no casaba
+  // y el número salía intacto hacia el proveedor del LLM. Tampoco casaban los
+  // formatos con espacios ("+57 300 123 4567"). Se reemplaza por un patrón
+  // con lookarounds de dígito, que cubre las cuatro formas.
+  {
+    kind: 'TEL',
+    regex: /(?<!\d)(?:\+?57[-.\s]?)?3\d{2}[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)/g,
+    legacyReplacement: '[TELÉFONO REDACTADO]',
+    guard: looksLikeContact,
+  },
+  // Fijo colombiano (indicativo 601-608 tras la migración a 10 dígitos).
+  {
+    kind: 'TEL',
+    regex: /(?<!\d)(?:\+?57[-.\s]?)?(?:60[1-8]|0[1-8])[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)/g,
+    legacyReplacement: '[TELÉFONO REDACTADO]',
+    guard: looksLikeContact,
+  },
 
   // Generic ID context catch-all
   {
@@ -135,9 +231,14 @@ export function createPIIContext(): PIIContext {
     map,
     tokenize(text: string): string {
       let out = text;
-      for (const { kind, regex } of PATTERNS) {
+      for (const { kind, regex, guard } of PATTERNS) {
         // Reset lastIndex between iterations (regexes are global).
-        out = out.replace(regex, (match) => mintToken(kind, match));
+        out = out.replace(regex, (match, ...rest) => {
+          const index = rest[rest.length - 2] as number;
+          const source = rest[rest.length - 1] as string;
+          if (guard && !guard(match, source, index)) return match;
+          return mintToken(kind, match);
+        });
       }
       return out;
     },
@@ -166,8 +267,13 @@ export function createPIIContext(): PIIContext {
  */
 export function redactPII(text: string): string {
   let sanitized = text;
-  for (const { regex, legacyReplacement } of PATTERNS) {
-    sanitized = sanitized.replace(regex, legacyReplacement);
+  for (const { regex, legacyReplacement, guard } of PATTERNS) {
+    sanitized = sanitized.replace(regex, (match, ...rest) => {
+      const index = rest[rest.length - 2] as number;
+      const source = rest[rest.length - 1] as string;
+      if (guard && !guard(match, source, index)) return match;
+      return legacyReplacement;
+    });
   }
   return sanitized;
 }
