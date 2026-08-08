@@ -19,6 +19,7 @@
 //   comparamos como enteros con Math.round() donde aplica.
 // ---------------------------------------------------------------------------
 
+import { extractCalendarDigit } from '../fiscal-anchor/dian-calendar';
 import type { FiscalAnchorBlock, FiscalAlerta, VencimientoDian } from '../fiscal-anchor/types';
 
 // Re-usamos el tipo ya definido en survival-validators.ts para no duplicar
@@ -89,16 +90,22 @@ function calcF10(f03Cents: number, f02Cents: number): number {
  * Retorna null si el NIT no tiene un dígito reconocible.
  */
 function extractUltimoDigitoNit(nit: string): number | null {
-  const clean = nit.replace(/\s/g, '');
-  // Formato con dígito de verificación: 123456789-6 o 1234567896
-  const match = clean.match(/^(\d{9,10})-?(\d)$/);
-  if (match) return parseInt(match[2], 10);
-  // Solo dígitos sin separador: tomar el último
-  const soloDigitos = clean.replace(/\D/g, '');
-  if (soloDigitos.length >= 1) {
-    return parseInt(soloDigitos[soloDigitos.length - 1], 10);
-  }
-  return null;
+  // Auditoría normativa 2026-08. Este archivo tenía su PROPIA copia del
+  // extractor, y esa copia devolvía el DÍGITO DE VERIFICACIÓN: para
+  // "901714014-6" retornaba 6 cuando el dígito de calendario es 4.
+  //
+  // El Decreto 2229/2023 (art. 1.6.1.13.2.1 del DUR 1625/2016) es explícito:
+  // los plazos se determinan "teniendo en cuenta el último o los dos últimos
+  // dígitos del Número de Identificación Tributaria (NIT) del contribuyente,
+  // SIN TENER EN CUENTA EL DÍGITO DE VERIFICACIÓN".
+  // https://normograma.dian.gov.co/dian/compilacion/docs/decreto_2229_2023.htm
+  //
+  // Con dos implementaciones distintas de la misma regla, el validador daba
+  // por bueno un calendario correcto sólo cuando ambos se equivocaban igual.
+  // Se delega en el extractor canónico; aquí no se reimplementa nada.
+  const { digito, ambiguo } = extractCalendarDigit(nit);
+  if (digito < 0 || ambiguo) return null;
+  return digito;
 }
 
 /**

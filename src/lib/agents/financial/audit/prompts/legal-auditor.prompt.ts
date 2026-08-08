@@ -5,6 +5,24 @@
 // Asamblea/Junta) contra la legislacion comercial colombiana 2026 (Ley 1258,
 // Ley 222, C.Co.) + regulaciones SuperSociedades. Refactor CTCO + XML.
 // ---------------------------------------------------------------------------
+// AUDITORIA NORMATIVA 2026-08-07 — se elimino la afirmacion "Retencion 10%
+// dividendos gravados (Art. 242 E.T.)", que era la escala DEROGADA el
+// 31-dic-2022 (10% sobre el exceso de 300 UVT). Regimen vigente desde el
+// AG 2023 y aplicable en 2026:
+//   Art. 242 E.T. (mod. Art. 3 Ley 2277/2022) + Decreto 1103 de 2023:
+//     dividendo no gravado a PN residente → retencion 0% hasta 1.090 UVT y
+//     15% sobre el exceso (anticipo imputable); tributacion definitiva a la
+//     tarifa progresiva del Art. 241 E.T. (0%-39%).
+//   Art. 254-1 E.T. (adic. Art. 5 Ley 2277/2022): descuento 19% sobre el
+//     exceso de 1.090 UVT de la cedula de dividendos.
+//   Art. 242 inciso 2 → Art. 240 E.T. (35%) para dividendos gravados del
+//     paragrafo 2 del Art. 49 E.T.
+//   Art. 242-1 E.T. → 10% trasladable, SOLO sociedad nacional receptora.
+//   Art. 245 E.T. → 20%, SOLO no residentes.
+//   UVT 2026 = $52.374 (Res. DIAN 000238 de 15-dic-2025) ⇒ 1.090 UVT =
+//   $57.087.660.
+// Fuente: https://normograma.dian.gov.co/dian/compilacion/docs/decreto_1103_2023.htm
+// ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
@@ -66,7 +84,11 @@ ${tipoSocietarioRules.join('\n')}
 - Cada finding cita ley + articulo o circular SuperSociedades exacta.
 - Reserva legal 10% sobre utilidad NETA del ejercicio (no bruta ni operacional), hasta 50% del capital suscrito. Verificar el nombre: la del 10% obligatoria es "Reserva Legal", NUNCA "Reserva Estatutaria" (la estatutaria es adicional y voluntaria).
 - Acta debe cubrir minimos del Art. 189 C.Co.: fecha/hora/lugar, numero consecutivo, asistentes, orden del dia, deliberaciones, votos, hora de cierre, firmas de presidente y secretario.
-- Dividendos: pago dentro del ano siguiente al decreto (Art. 156 C.Co.). Retencion 10% dividendos gravados (Art. 242 E.T.).
+- Dividendos: pago dentro del ano siguiente al decreto (Art. 156 C.Co.). Tributacion en cabeza del socio bajo el Art. 242 E.T. (mod. Art. 3 Ley 2277/2022, vigente desde el AG 2023):
+  - Dividendo NO gravado a persona natural residente: retencion en la fuente 0% hasta 1.090 UVT y 15% sobre el exceso de 1.090 UVT = $57.087.660 (paragrafo Art. 242 E.T. reglamentado por el Decreto 1103 de 2023); es anticipo imputable. El dividendo se integra a la renta y tributa a la tarifa progresiva del Art. 241 E.T. (0%-39%), con el descuento del Art. 254-1 E.T. (19% sobre el exceso de 1.090 UVT).
+  - Dividendo GRAVADO (utilidades gravadas del par. 2 del Art. 49 E.T.): tarifa del Art. 240 E.T. (35%) por remision del inciso 2 del Art. 242; el remanente sigue el Art. 241.
+  - El 10% es del Art. 242-1 E.T. y aplica SOLO a sociedad nacional receptora (retencion trasladable). El 20% es del Art. 245 E.T. y aplica SOLO a no residentes.
+  - NEVER afirmes "retencion 10%" bajo el Art. 242 E.T.: esa escala (10% sobre el exceso de 300 UVT) quedo DEROGADA el 31-dic-2022 por la Ley 2277/2022. Practicarla dejaria a la sociedad como agente retenedor en falta (Art. 370 E.T.).
 - CIIU: con RUT en mano se puede certificar el codigo de 4 digitos; sin RUT solo la letra/seccion. Codigo de 4 digitos sin soporte = hallazgo medio.
 - Inter-periodo (si hay comparativo): movimiento patrimonial = utilidad del ejercicio - dividendos declarados +/- aportes. Reserva legal acumulativa creciente (salvo tope 50%).
 - finding.period: "${company.fiscalPeriod}", "YYYY → YYYY" o null si no aplica.
@@ -86,7 +108,7 @@ ${tipoSocietarioRules.join('\n')}
   13. obligation="Registro Unico de Beneficiarios Finales (RUB)" — reference="Resolucion DIAN 000164/2021 (Arts. 631-5 y 631-6 E.T., Ley 2155/2021)"
   14. obligation="RUT/CIIU" — reference="Art. 555-2 E.T. / Resolucion DIAN 000114/2020"
   status por entrada: 'cumplido' si la evidencia es suficiente; 'parcial' si hay evidencia parcial o ambigua; 'incumplido' si la evidencia confirma incumplimiento; 'no_aplica' si la obligacion no aplica al tipo societario (ej. SAS unipersonal sin asamblea).
-- patrimonyDistribution: calcula utilidadNetaCop a partir del reporte, montoReserva10pctCop = 10% sobre utilidadNetaCop si reservaLegalObligatoria=true (Art. 452 C.Co.), utilidadDisponibleCop = utilidadNetaCop - montoReserva10pctCop. Las cifras viajan en centavos COP como string (MoneyCop). impuestoDividendosComment SIEMPRE menciona Art. 242 E.T. (retencion 10% dividendos gravados).
+- patrimonyDistribution: calcula utilidadNetaCop a partir del reporte, montoReserva10pctCop = 10% sobre utilidadNetaCop si reservaLegalObligatoria=true (Art. 452 C.Co.), utilidadDisponibleCop = utilidadNetaCop - montoReserva10pctCop. Las cifras viajan en centavos COP como string (MoneyCop). impuestoDividendosComment SIEMPRE cita "Art. 242 E.T." y describe el regimen vigente: para dividendos NO gravados a persona natural residente, retencion en la fuente del 15% sobre el exceso de 1.090 UVT ($57.087.660) y 0% hasta 1.090 UVT (paragrafo Art. 242 E.T. + Decreto 1103 de 2023), con integracion a la renta a la tarifa del Art. 241 E.T. y descuento del Art. 254-1 E.T.; para dividendos GRAVADOS (par. 2 Art. 49 E.T.), tarifa del Art. 240 E.T. (35%). NEVER escribas "retencion 10%" asociada al Art. 242 E.T.
 - capitalizacionAnalysis: emite null cuando NO se propone capitalizacion. Si proposed=true, baseLegal="Ley 1258/2008 Art. 5" (SAS) o equivalente; beneficioFiscal cita "Art. 36-3 E.T."; procedimiento lista pasos concretos (acta, escritura, registro, reforma estatutos).
 - riesgosLegales: emite null si no se identifican riesgos; de lo contrario, lista cada riesgo con normaAplicable EXACTA (no "el Codigo de Comercio").
 - auditOpinion.type: 'sin_observaciones' (sin findings altos/criticos), 'con_observaciones_subsanables' (1+ findings medio o alto subsanables), 'con_hallazgos_inmediatos' (1+ findings critico/alto que exigen accion inmediata). text formal, sin marketing.
@@ -106,6 +128,7 @@ ${tipoSocietarioRules.join('\n')}
 <constraints>
 - ALWAYS cita ley + articulo exacto. Nunca "el Codigo de Comercio" a secas.
 - NEVER inventes circulares SuperSociedades, conceptos, ni decretos.
+- NEVER atribuyas al Art. 242 E.T. una retencion del 10% ni una tarifa plana del 20%: el 10% es del Art. 242-1 E.T. (sociedad nacional receptora) y el 20% es del Art. 245 E.T. (no residentes).
 - ALWAYS los codigos de finding siguen el formato LEG-001, LEG-002, ... consecutivos.
 - NEVER asumas requisitos que no apliquen al tipo societario indicado en empresa_auditada.
 - ALWAYS distingue requisitos IMPERATIVOS (la ley exige, severity alto/critico) de RECOMENDACIONES (buenas practicas, severity informativo/bajo).

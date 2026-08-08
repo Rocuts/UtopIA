@@ -113,9 +113,14 @@ export function MisPagosView() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const annual = monthly * 12;
-  const { rst, ordinario, recommended, savings, semaforo } = useTaxCalculator(annual, {
-    group: 'tiendas',
-  });
+  const { rst, ordinario, recommended, comparable, savings, semaforo } = useTaxCalculator(
+    annual,
+    { group: 'tiendas' },
+  );
+  // `recommended` es null cuando falta un insumo territorial verificado —la
+  // tarifa de ICA la fija cada concejo municipal (Ley 14 de 1983, arts. 32-33)—.
+  // Optar por el SIMPLE es IRREVOCABLE durante el año gravable (Art. 909 E.T.),
+  // así que en ese caso la pantalla NO señala ganador ni promete ahorro.
   const rstWin = recommended === 'RST';
   const savingsRounded = Math.round(savings / 1000) * 1000;
 
@@ -322,23 +327,48 @@ export function MisPagosView() {
 
           {/* Balanza RST vs Ordinario */}
           <div className="grid grid-cols-1 gap-3.5 min-[521px]:grid-cols-2">
-            <BalanzaCard title="Régimen Simple (RST)" value={fmtM(rst)} win={rstWin} />
-            <BalanzaCard title="Régimen Ordinario" value={fmtM(ordinario)} win={!rstWin} />
+            <BalanzaCard
+              title="Régimen Simple (RST)"
+              value={fmtM(rst)}
+              win={comparable && rstWin}
+            />
+            <BalanzaCard
+              title="Régimen Ordinario"
+              value={fmtM(ordinario)}
+              win={comparable && !rstWin}
+            />
           </div>
 
-          {/* Banner de ahorro */}
-          <div className="mt-3.5 flex items-center gap-3.5 rounded-xl border border-area-pyme/35 bg-area-pyme/10 px-5 py-4">
-            <PiggyBank className="h-6 w-6 shrink-0 text-[#2A5E1F] dark:text-area-pyme" strokeWidth={1.75} aria-hidden="true" />
-            <div>
-              <div className="text-[17px] font-bold text-[#2A5E1F] dark:text-area-pyme">
-                Usted se ahorra {pesos(savingsRounded)} al año
-              </div>
-              <div className="mt-0.5 text-sm text-n-700">
-                Quedándose en el Régimen {rstWin ? 'Simple' : 'Ordinario'}. Nosotros le
-                avisamos si eso cambia.
+          {/* Banner de resultado */}
+          {comparable ? (
+            <div className="mt-3.5 flex items-center gap-3.5 rounded-xl border border-area-pyme/35 bg-area-pyme/10 px-5 py-4">
+              <PiggyBank className="h-6 w-6 shrink-0 text-[#2A5E1F] dark:text-area-pyme" strokeWidth={1.75} aria-hidden="true" />
+              <div>
+                <div className="text-[17px] font-bold text-[#2A5E1F] dark:text-area-pyme">
+                  Usted se ahorra {pesos(savingsRounded)} al año
+                </div>
+                <div className="mt-0.5 text-sm text-n-700">
+                  Quedándose en el Régimen {rstWin ? 'Simple' : 'Ordinario'}. Nosotros le
+                  avisamos si eso cambia.
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-3.5 flex items-center gap-3.5 rounded-xl border border-n-300 bg-n-100 px-5 py-4">
+              <PiggyBank className="h-6 w-6 shrink-0 text-n-600" strokeWidth={1.75} aria-hidden="true" />
+              <div>
+                <div className="text-[17px] font-bold text-n-1000">
+                  Comparación de referencia, no una recomendación
+                </div>
+                <div className="mt-0.5 text-sm text-n-700">
+                  Falta su tarifa de ICA municipal, que fija cada concejo (Ley 14 de 1983,
+                  arts. 32-33). Como optar por el Régimen Simple es irrevocable durante todo
+                  el año gravable (Art. 909 E.T.), no le señalamos un ganador sin ese dato.
+                  Consúltelo con su contador.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Guardar en el historial */}
           <div className="mt-3.5 flex flex-wrap items-center justify-center gap-3">

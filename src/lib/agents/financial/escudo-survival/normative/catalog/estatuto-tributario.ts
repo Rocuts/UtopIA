@@ -175,38 +175,135 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 E.T.',
     titulo: 'Tarifa general del impuesto sobre la renta — personas jurídicas',
     resumen:
-      'Tarifa general PJ: 35%. Zonas francas: régimen híbrido Ley 2277/2022 (20% sobre renta de exportación + 35% otras). Hoteles 9% (par. 5 del mismo artículo). Editoriales 0% (Ley 98/1993). Sobretasas vigentes: hidroeléctricas +3pp = 38% hasta 2026; financieras/seguros/bolsa/reaseguros +5pp = 40% hasta 2027 (par. 2 del Art. 240).',
+      'Tarifa general PJ: 35%. Zonas francas: régimen híbrido Ley 2277/2022 (20% sobre renta de exportación + 35% otras). Par. 1: empresas industriales y comerciales del Estado con participación estatal >90% en monopolios de suerte y azar y de licores: 9%. Par. 5: servicios hoteleros, parques temáticos de ecoturismo y agroturismo en municipios ≤200.000 habitantes o PDET: 15% por 10 años (NO 9%). Par. 7: empresas editoriales cuya actividad económica y objeto social sea EXCLUSIVAMENTE la edición de libros en los términos de la Ley 98/1993: 15% (NO 0%). Sobretasas — cada una con umbral propio de renta gravable: par. 2 sector financiero/asegurador/bursátil +5pp = 40% (AG 2023-2027, solo si renta gravable ≥ 120.000 UVT); par. 3 extracción de petróleo crudo (CIIU 0610) y de carbón (CIIU 0510/0520) +0/5/10/15pp según percentil de precios (solo si renta gravable ≥ 50.000 UVT); par. 4 generación de energía eléctrica con recursos hídricos +3pp = 38% (AG 2023-2026, solo si renta gravable ≥ 30.000 UVT y plantas >1.000 kW). Los acueductos NO están sujetos a sobretasa.',
     textoLiteral: null,
     estado: 'MODIFICADO',
     modificaciones: [
       {
-        norma: 'Ley 2277 de 2022',
+        norma: 'Ley 2277 de 2022, Art. 10',
         fecha: '2022-12-13',
-        cambio: 'Mantuvo 35% tarifa general; introdujo régimen híbrido zona franca; estableció sobretasas en par. 2.',
+        cambio:
+          'Mantuvo 35% tarifa general; introdujo régimen híbrido zona franca; estableció las sobretasas de los par. 2, 3 y 4 con umbrales de renta gravable; subió hoteles de 9% a 15% (par. 5); subió editoriales de 9% a 15% (par. 7); introdujo la tasa mínima de tributación (par. 6).',
       },
     ],
     urlOficial:
       'https://estatuto.co/?articulo=240',
-    tags: ['renta', 'tarifa', 'PJ', 'zona_franca', 'sobretasa', 'financiero', 'hidro'],
+    tags: ['renta', 'tarifa', 'PJ', 'zona_franca', 'sobretasa', 'financiero', 'hidro', 'hidrocarburos', 'carbon', 'hoteles', 'editoriales'],
   },
   {
     id: 'ART_240_PAR2_ET',
     cita: 'Art. 240 par. 2 E.T.',
-    titulo: 'Sobretasas sectoriales — financiero e hidroeléctricas',
+    titulo: 'Sobretasa del sector financiero, asegurador y bursátil — 5 puntos con umbral de 120.000 UVT',
     resumen:
-      'Par. 2 Art. 240: sobretasa entidades financieras, aseguradoras, bolsa de valores y reaseguradoras +5pp = 40% hasta 2027. Sobretasa hidroeléctricas y acueductos +3pp = 38% hasta 2026.',
+      'Par. 2 Art. 240: las instituciones financieras, entidades aseguradoras y reaseguradoras, sociedades comisionistas de bolsa de valores, comisionistas agropecuarios, bolsas de bienes y productos agropecuarios y agroindustriales y proveedores de infraestructura del mercado de valores liquidan 5 puntos adicionales (tarifa total 40%) durante los años gravables 2023 a 2027. Condición de aplicación: SOLO a las personas jurídicas que en el año gravable correspondiente tengan una renta gravable igual o superior a 120.000 UVT (2026: 120.000 × $52.374 = $6.284.880.000). Si la renta gravable es inferior al umbral, la tarifa es la general del 35%. La sobretasa está sujeta a un anticipo del 100% de su valor, calculado sobre la base gravable del año gravable inmediatamente anterior y pagadero en dos cuotas anuales iguales. Tres de los cinco puntos se destinan a la Red Vial Terciaria.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [
       {
         norma: 'Ley 2277 de 2022, Art. 10',
         fecha: '2022-12-13',
-        cambio: 'Estableció las sobretasas sectoriales en el parágrafo 2.',
+        cambio: 'Estableció la sobretasa financiera del parágrafo 2 para los AG 2023-2027 con umbral de 120.000 UVT y anticipo del 100% en dos cuotas.',
       },
     ],
     urlOficial:
       'https://estatuto.co/?articulo=240',
-    tags: ['renta', 'tarifa', 'sobretasa', 'financiero', 'hidro', 'PJ'],
+    // Corrección normativa 2026-08: la versión anterior de esta entrada (a) omitía el umbral
+    // de 120.000 UVT de renta gravable y el anticipo del 100%, y (b) atribuía al par. 2 la
+    // sobretasa hidroeléctrica, que vive en el par. 4 y NO cobija acueductos.
+    // Umbral en pesos calculado con la UVT del año gravable (Res. DIAN 000238 de 2025 → UVT 2026 $52.374).
+    tags: ['renta', 'tarifa', 'sobretasa', 'financiero', 'asegurador', 'bursatil', 'umbral', '120000_UVT', 'PJ'],
+  },
+  {
+    id: 'ART_240_PAR3_ET',
+    cita: 'Art. 240 par. 3 E.T.',
+    titulo: 'Sobretasa a la extracción de petróleo crudo y de carbón — puntos variables por percentil de precios',
+    resumen:
+      'Par. 3 Art. 240: las personas jurídicas cuya actividad económica sea la extracción de hulla y carbón lignito (CIIU 0510 y 0520) o la extracción de petróleo crudo (CIIU 0610) liquidan puntos adicionales VARIABLES, determinados comparando el precio promedio del respectivo año gravable contra percentiles del precio promedio mensual de los últimos 120 meses. Escalonamiento del carbón: 0 puntos si el precio está por debajo del percentil 65; 5 puntos entre percentil 65 y 75; 10 puntos por encima del percentil 75 (tarifa total hasta 45%). Escalonamiento del petróleo crudo: 0 puntos por debajo del percentil 30; 5 puntos entre percentil 30 y 45; 10 puntos entre percentil 45 y 60; 15 puntos por encima del percentil 60 (tarifa total hasta 50%). Condición de aplicación: SOLO a contribuyentes con renta gravable igual o superior a 50.000 UVT (2026: 50.000 × $52.374 = $2.618.700.000). El precio promedio y los percentiles del año NO son un valor fijo: los certifican anualmente la UPME (carbón) y la ANH (petróleo) mediante resolución publicada a más tardar el 31 de enero, recogida en decreto reglamentario (antecedentes: Decreto 261 de 2023 y Decreto 242 de 2024). NO codificar el número de puntos del año gravable 2026 sin leer la resolución/decreto de ese año — el valor no está verificado en este catálogo y no debe alimentar una liquidación.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022, Art. 10',
+        fecha: '2022-12-13',
+        cambio: 'Adicionó el parágrafo 3 con la sobretasa escalonada por percentiles de precio para carbón e hidrocarburos, vigente desde el AG 2023.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=240',
+    // Corrección normativa 2026-08: el catálogo presentaba la lista de sobretasas como cerrada
+    // (solo par. 2 y par. 4), lo que impedía al agente detectar esta sobretasa. Un contribuyente
+    // de extracción liquidado al 35% puede estar subdeclarando hasta 15 puntos.
+    tags: ['renta', 'tarifa', 'sobretasa', 'hidrocarburos', 'petroleo', 'carbon', 'CIIU_0610', 'CIIU_0510', 'umbral', '50000_UVT', 'PJ'],
+  },
+  {
+    id: 'ART_240_PAR4_ET',
+    cita: 'Art. 240 par. 4 E.T.',
+    titulo: 'Sobretasa a la generación de energía eléctrica con recursos hídricos — 3 puntos con umbral de 30.000 UVT',
+    resumen:
+      'Par. 4 Art. 240: las personas jurídicas cuya actividad económica PRINCIPAL sea la generación de energía eléctrica A TRAVÉS DE RECURSOS HÍDRICOS liquidan 3 puntos adicionales (tarifa total 38%) durante los años gravables 2023, 2024, 2025 y 2026 — 2026 es el último año. Condiciones de aplicación: (a) SOLO si en el año gravable correspondiente la renta gravable es igual o superior a 30.000 UVT (2026: 30.000 × $52.374 = $1.571.220.000); (b) NO aplica a centrales cuya capacidad instalada sea igual o inferior a 1.000 kW; (c) la sobretasa no puede trasladarse al usuario final. Alcance subjetivo: la sobretasa NO cobija a las empresas de acueducto y alcantarillado. Alcance objetivo: por la exequibilidad condicionada de la Sentencia C-389 de 2023, los 3 puntos gravan ÚNICAMENTE la renta de la actividad de generación hídrica, no las demás actividades del contribuyente. El umbral de 30.000 UVT fue declarado exequible por la Sentencia C-050 de 2026.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022, Art. 10',
+        fecha: '2022-12-13',
+        cambio: 'Adicionó el parágrafo 4 con la sobretasa de 3 puntos a la generación hídrica para los AG 2023-2026.',
+      },
+      {
+        norma: 'Sentencia C-389 de 2023 (Corte Constitucional)',
+        fecha: '2023-10-04',
+        cambio: 'Exequibilidad CONDICIONADA: la sobretasa solo puede aplicarse a la renta de la actividad de generación de energía eléctrica con recursos hídricos, no a otras actividades del contribuyente.',
+      },
+    ],
+    urlOficial:
+      'https://www.corteconstitucional.gov.co/relatoria/2023/c-389-23.htm',
+    // Corrección normativa 2026-08: el catálogo (a) ubicaba esta sobretasa en el par. 2,
+    // (b) extendía el sujeto pasivo a "acueductos" (la norma no los menciona), y (c) omitía
+    // el umbral de 30.000 UVT, la exclusión de plantas ≤1.000 kW y el condicionamiento C-389/23.
+    tags: ['renta', 'tarifa', 'sobretasa', 'hidro', 'generacion_electrica', 'umbral', '30000_UVT', 'C-389_2023', 'PJ'],
+  },
+  {
+    id: 'ART_240_PAR5_ET',
+    cita: 'Art. 240 par. 5 E.T.',
+    titulo: 'Tarifa del 15% para servicios hoteleros, parques temáticos de ecoturismo y agroturismo',
+    resumen:
+      'Par. 5 Art. 240: las rentas provenientes de servicios prestados en nuevos hoteles, en hoteles remodelados y/o ampliados, y en nuevos parques temáticos de ecoturismo y/o agroturismo, se gravan a la tarifa del 15% por un término de 10 años contados desde el inicio de las operaciones. Requisitos: municipio de hasta 200.000 habitantes (censo DANE 2022) o municipio PDET; construcción/remodelación dentro de los 5 años siguientes a la Ley 2277/2022; inscripción en el Registro Nacional de Turismo; no puede pactarse rendimiento garantizado. Excluye moteles y residencias. La tarifa del 9% NO es la tarifa vigente del sector: solo subsiste como derecho adquirido para quienes consolidaron el beneficio bajo el régimen anterior (Ley 1943/2018 – Ley 2010/2019), condición que debe acreditarse caso por caso.',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022, Art. 10',
+        fecha: '2022-12-13',
+        cambio: 'Elevó de 9% a 15% la tarifa del par. 5 y restringió el beneficio a municipios ≤200.000 habitantes o PDET. Vigente desde el AG 2023.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=240',
+    // Corrección normativa 2026-08: el catálogo declaraba "Hoteles 9%". Subestimaba el impuesto
+    // de un hotel nuevo en 6 puntos de la renta líquida gravable.
+    tags: ['renta', 'tarifa', 'hoteles', 'ecoturismo', 'agroturismo', 'PDET', '15%', 'PJ'],
+  },
+  {
+    id: 'ART_240_PAR7_ET',
+    cita: 'Art. 240 par. 7 E.T.',
+    titulo: 'Tarifa del 15% para empresas editoriales (Ley 98 de 1993)',
+    resumen:
+      'Par. 7 Art. 240: la tarifa del impuesto sobre la renta aplicable a las empresas editoriales constituidas en Colombia como personas jurídicas, cuya actividad económica Y objeto social sea EXCLUSIVAMENTE la edición de libros en los términos de la Ley 98 de 1993, es del 15%. El requisito de exclusividad es constitutivo: una editorial con actividades mixtas NO califica y tributa a la tarifa general del 35%. La tarifa del 0% no está vigente para ningún año gravable reciente; la tarifa anterior a la Ley 2277/2022 era 9% (antiguo par. 4), no 0%.',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022, Art. 10',
+        fecha: '2022-12-13',
+        cambio: 'Elevó de 9% a 15% la tarifa de las empresas editoriales y acotó el beneficio a las dedicadas exclusivamente a la edición de libros. Vigente desde el AG 2023.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=240',
+    // Corrección normativa 2026-08: el catálogo declaraba "Editoriales 0% (Ley 98/1993)".
+    // Un dictamen con 0% produce impuesto cero frente a un 15% real → inexactitud del 100%
+    // del impuesto a cargo (Art. 648 E.T.) más intereses.
+    tags: ['renta', 'tarifa', 'editoriales', 'libros', 'Ley_98_1993', '15%', 'PJ'],
   },
   {
     id: 'ART_240_1_ET',
@@ -480,7 +577,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 6 E.T.',
     titulo: 'Tasa de Tributación Depurada (TTD) — tasa mínima del 15%',
     resumen:
-      'Parágrafo 6 Art. 240 (introducido por Art. 10 Ley 2277/2022): TTD = ID/UD ≥ 15%. ID = Impuesto Depurado. UD = Utilidad Depurada (UAI − INCRGNO − rentas exentas − diferencias permanentes + gastos no deducibles). Si TTD < 15% → impuesto adicional = (15% − TTD) × UD. Vigente desde año gravable 2023. Declarada EXEQUIBLE por Sentencia C-219/2024.',
+      'Parágrafo 6 Art. 240 (introducido por Art. 10 Ley 2277/2022): TTD = ID / UD, y no puede ser inferior al 15%. UTILIDAD DEPURADA: UD = UC + DPARL − INCRNGO − VIMPP − VNGO − RE − C, donde UC = utilidad contable o financiera antes de impuestos; DPARL = diferencias permanentes consagradas en la ley que AUMENTAN la renta líquida (se SUMAN, no se restan); INCRNGO = ingresos no constitutivos de renta ni ganancia ocasional que afectan la UC; VIMPP = valor del ingreso por método de participación patrimonial del año; VNGO = valor neto de los ingresos por ganancia ocasional que afectan la UC; RE = SOLO las rentas exentas por tratados para evitar la doble imposición (CAN/CDI), las del régimen de Compañías Holding Colombianas (CHC) y las de los literales a) y b) del numeral 4 y del numeral 7 del Art. 235-2 E.T. — NO todas las rentas exentas; C = compensación de pérdidas fiscales o de excesos de renta presuntiva tomados en el año que no afectaron la utilidad contable. IMPUESTO DEPURADO: ID = INR + DTC − IRP, donde INR = impuesto neto de renta; DTC = descuentos tributarios o créditos por tratados de doble imposición y el Art. 254 E.T.; IRP = impuesto sobre rentas pasivas de entidades controladas del exterior (ECE). IMPUESTO A ADICIONAR: si TTD < 15%, IA = (UD × 15%) − ID. NO aplica el parágrafo 6 a: sociedades ZESE mientras su tarifa de renta sea 0%; usuarios de zona franca del Art. 240-1 mientras su tarifa sea 0% y los de sus par. 1 y 2; sociedades beneficiarias del incentivo ZOMAC; contribuyentes del par. 1 del Art. 240 (empresas industriales y comerciales del Estado en monopolios); contribuyentes del par. 5 (hoteles y parques temáticos) y del par. 7 (empresas editoriales); personas jurídicas extranjeras sin residencia en el país; y contribuyentes cuya UD sea igual o menor a cero (o, si sus estados financieros se consolidan, cuya suma de UD del grupo sea igual o menor a cero). Tampoco alcanza a quienes no son sujetos de los Arts. 240 / 240-1: personas naturales, entidades del Régimen Tributario Especial (Art. 19) y contribuyentes del régimen SIMPLE. Vigente desde el año gravable 2023. Art. 10 de la Ley 2277/2022 declarado EXEQUIBLE por Sentencia C-219 de 2024. Metodología: Concepto Unificado DIAN 202(006038) de 2024.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [
@@ -492,7 +589,13 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     ],
     urlOficial:
       'https://estatuto.co/?articulo=240',
-    tags: ['renta', 'TTD', 'tasa_minima', 'PJ', 'Ley_2277'],
+    // Corrección normativa 2026-08: la fórmula anterior ("UD = UAI − INCRGNO − rentas exentas
+    // − diferencias permanentes + gastos no deducibles") invertía el signo de las diferencias
+    // permanentes (DPARL SUMA), restaba TODAS las rentas exentas (la ley solo permite un
+    // subconjunto taxativo), y omitía VIMPP, VNGO y C. También faltaba por completo la lista
+    // de exclusiones subjetivas, que hacía liquidable impuesto adicional a hoteles del par. 5,
+    // editoriales del par. 7 y sociedades ZESE/ZOMAC expresamente excluidas.
+    tags: ['renta', 'TTD', 'tasa_minima', 'PJ', 'Ley_2277', 'exclusiones', 'UD', 'ID'],
   },
 
   // ─── RETENCIÓN EN LA FUENTE ────────────────────────────────────────────────
@@ -514,13 +617,18 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 368-2 E.T.',
     titulo: 'Umbral personas naturales comerciantes como agentes de retención',
     resumen:
-      'Personas naturales comerciantes son agentes de retención si en el año inmediatamente anterior tuvieron un patrimonio bruto o ingresos brutos superiores a 30.000 UVT (2026: $1.571.220.000). Corrección: spec original citaba "Arts. 365-401 genérico" y umbral 3.500 UVT incorrecto.',
+      'Personas naturales comerciantes son agentes de retención si en el año inmediatamente ANTERIOR tuvieron un patrimonio bruto o ingresos brutos superiores a 30.000 UVT. La conversión a pesos se hace con la UVT del año que se evalúa (el anterior), no con la del año en que se practica la retención (Art. 868 E.T.). Para determinar la calidad de retenedor DURANTE 2026 el test se corre sobre el año 2025 con la UVT 2025: 30.000 × $49.799 = $1.493.970.000. Las 30.000 UVT convertidas con la UVT 2026 ($52.374 → $1.571.220.000) son el umbral del año 2026, es decir el que definirá la calidad de retenedor en 2027. Corrección: spec original citaba "Arts. 365-401 genérico" y umbral 3.500 UVT incorrecto.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
     urlOficial:
       'https://estatuto.co/?articulo=368-2',
-    tags: ['retencion', 'agentes', 'PN', 'umbral', '30000_UVT'],
+    // Corrección normativa 2026-08: el catálogo convertía las 30.000 UVT con la UVT del año en
+    // curso. Una PN comerciante con patrimonio o ingresos brutos 2025 entre $1.493.970.000 y
+    // $1.571.220.000 quedaba clasificada como NO agente de retención siendo que sí lo es
+    // → responsabilidad solidaria por el impuesto no retenido (Art. 370 E.T.) durante todo 2026.
+    // UVT 2025 = $49.799 (Res. DIAN 000193 de 2024). UVT 2026 = $52.374 (Res. DIAN 000238 de 2025).
+    tags: ['retencion', 'agentes', 'PN', 'umbral', '30000_UVT', 'UVT_año_anterior'],
   },
   {
     id: 'ART_376_ET',
@@ -579,26 +687,44 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 437-1 E.T.',
     titulo: 'ReteIVA — retención del IVA',
     resumen:
-      'ReteIVA tarifa general: 15% del IVA generado. Arts. 437-4 y 437-5: ReteIVA 100% en casos especiales (compras o ventas con no declarantes y otros supuestos previstos en el DUR). Corrección crítica: el spec original citaba Art. 381 para ReteIVA — error.',
+      'ReteIVA tarifa general: 15% del IVA generado. Supuestos de retención del 100%: (a) Art. 437-4 — venta de chatarra a siderúrgicas; (b) Art. 437-5 — venta de tabaco en rama o sin elaborar a la industria tabacalera; (c) par. 1 del propio Art. 437-1 — servicios gravados prestados DESDE EL EXTERIOR por prestadores sin residencia ni domicilio en el país. Ninguno de estos supuestos es "compra a no responsables del IVA": un no responsable no factura IVA y por tanto no hay impuesto que retener. Corrección crítica: el spec original citaba Art. 381 para ReteIVA — error.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
     urlOficial:
       'https://estatuto.co/?articulo=437-1',
-    tags: ['IVA', 'reteIVA', 'retencion'],
+    tags: ['IVA', 'reteIVA', 'retencion', 'servicios_exterior'],
   },
   {
     id: 'ART_437_4_ET',
     cita: 'Art. 437-4 E.T.',
-    titulo: 'ReteIVA 100% — casos especiales',
+    titulo: 'ReteIVA 100% — venta de chatarra a siderúrgicas',
     resumen:
-      'ReteIVA del 100% del impuesto generado en casos especiales: bienes o servicios adquiridos a no responsables del IVA que por cuantía deben retener, entre otros.',
+      'El IVA causado en la venta de CHATARRA identificada con las nomenclaturas arancelarias andinas 72.04 (fundición, hierro y acero), 74.04 (cobre) y 76.02 (aluminio) se genera cuando esta sea vendida a las SIDERÚRGICAS, y es retenido en el 100% por la siderúrgica. Se entiende por siderúrgica la empresa cuya actividad económica principal esté registrada en el RUT bajo el código 241 de la Resolución DIAN 139 de 2012 o la que la sustituya. El impuesto generado da derecho a impuestos descontables en los términos del Art. 485 E.T. Reglas especiales: la importación de estos bienes y las ventas entre siderúrgicas o a terceros se rigen por las reglas generales del Libro III. Par. 4: el Gobierno Nacional puede extender el mecanismo a otros bienes reutilizables que sean materia prima para la industria manufacturera — por esa vía se incorporaron el papel o cartón para reciclar (partida 47.07) y los desperdicios y desechos de plomo (partida 78.02); antes de aplicar esas dos partidas verificar el decreto reglamentario vigente. Este artículo NO regula compras a no responsables del IVA.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
     urlOficial:
       'https://estatuto.co/?articulo=437-4',
-    tags: ['IVA', 'reteIVA', 'retencion', 'especial'],
+    // Corrección normativa 2026-08: la entrada anterior describía el Art. 437-4 como "ReteIVA
+    // 100% en compras a no responsables del IVA", supuesto que no existe en la norma. El error
+    // inducía a retener donde no hay IVA y a omitir la retención obligatoria de la siderúrgica.
+    tags: ['IVA', 'reteIVA', 'retencion', 'chatarra', 'siderurgicas', 'CIIU_241'],
+  },
+  {
+    id: 'ART_437_5_ET',
+    cita: 'Art. 437-5 E.T.',
+    titulo: 'ReteIVA 100% — venta de tabaco en rama a la industria tabacalera',
+    resumen:
+      'El IVA causado en la venta de tabaco en rama o sin elaborar y de desperdicios de tabaco identificados con la nomenclatura arancelaria andina 24.01 se genera cuando estos sean vendidos a la industria tabacalera por productores pertenecientes al régimen común (hoy: responsables del IVA), y es retenido en el 100% por la empresa tabacalera. Se entiende por empresa tabacalera la que tenga registrada en el RUT como actividad económica principal el código 120 de la Resolución DIAN 139 de 2012. El impuesto generado da derecho a impuestos descontables en los términos del Art. 485 E.T. La importación de estos bienes y las ventas entre tabacaleras o a terceros se rigen por las reglas generales del Libro III.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=437-5',
+    // Añadido 2026-08: el catálogo citaba el Art. 437-5 en el resumen del Art. 437-1 sin tener
+    // entrada propia, de modo que el citation.validator lo marcaba como NO_VERIFICADO.
+    tags: ['IVA', 'reteIVA', 'retencion', 'tabaco', 'tabacalera', 'CIIU_120'],
   },
 
   // ─── IVA ──────────────────────────────────────────────────────────────────
@@ -607,13 +733,25 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 420 E.T.',
     titulo: 'Hecho generador del IVA',
     resumen:
-      'El IVA se genera en la venta de bienes muebles corporales no excluidos, prestación de servicios en territorio nacional, importación de bienes, y circulación, venta u operación de juegos de suerte y azar.',
-    textoLiteral: null,
+      'El IVA recae sobre: lit. a) la venta de bienes corporales muebles E INMUEBLES, con excepción de los expresamente excluidos; lit. b) la venta o cesión de derechos sobre activos intangibles, únicamente los asociados con la propiedad industrial; lit. c) la prestación de servicios en el territorio nacional O DESDE EL EXTERIOR, con excepción de los expresamente excluidos; lit. d) la importación de bienes corporales no excluidos expresamente; lit. e) la circulación, venta u operación de juegos de suerte y azar, CON EXCEPCIÓN DE LAS LOTERÍAS Y DE LOS JUEGOS DE SUERTE Y AZAR OPERADOS EXCLUSIVAMENTE POR INTERNET. Consecuencias operativas: (1) los juegos operados exclusivamente por internet NO se gravan con IVA — en 2026 tributan Impuesto Nacional al Consumo del 16% (Decreto 240 de 2026); (2) el lit. c) "desde el exterior" es la base del IVA de servicios digitales prestados por no residentes y de la ReteIVA del 100% del par. 1 del Art. 437-1.',
+    textoLiteral:
+      'La circulación, venta u operación de juegos de suerte y azar, con excepción de las loterías y de los juegos de suerte y azar operados exclusivamente por internet.',
     estado: 'VIGENTE_2026',
-    modificaciones: [],
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Redactó los literales a) a e) en su forma vigente, incluida la exclusión de las loterías y de los juegos operados exclusivamente por internet.',
+      },
+    ],
     urlOficial:
       'https://estatuto.co/?articulo=420',
-    tags: ['IVA', 'hecho_generador'],
+    // Corrección normativa 2026-08: el resumen anterior omitía la exclusión del lit. e) (juegos
+    // por internet) y el "desde el exterior" del lit. c). El Decreto Legislativo 175 de 2025 y
+    // el Decreto 1474 de 2025 gravaron temporalmente con IVA esos juegos; el 1474 fue declarado
+    // INEXEQUIBLE (Sentencia C-079 de 2026, abril de 2026, con orden de devolución). Desde 2026
+    // la exclusión del lit. e) opera plenamente.
+    tags: ['IVA', 'hecho_generador', 'juegos_suerte_azar', 'internet', 'servicios_exterior', 'inmuebles'],
   },
   {
     id: 'ART_424_ET',
@@ -701,7 +839,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 600 E.T.',
     titulo: 'Periodicidad del IVA — bimestral y cuatrimestral',
     resumen:
-      'Periodos gravables IVA 2026: bimestral para contribuyentes con ingresos ≥ 92.000 UVT al 31-dic del año anterior; cuatrimestral para los demás. El período ANUAL fue ELIMINADO por Ley 1943/2018 (ratificado por Ley 2010/2019).',
+      'Periodos gravables IVA 2026. Numeral 1 — declaración y pago BIMESTRAL para: (a) los grandes contribuyentes; (b) las personas jurídicas y naturales cuyos ingresos brutos a 31-dic del año gravable anterior sean iguales o superiores a 92.000 UVT; y (c) los responsables de que tratan los Arts. 477 (bienes exentos) y 481 (bienes y servicios exentos con derecho a devolución bimestral, incl. exportadores) de este Estatuto, SIN IMPORTAR EL MONTO DE SUS INGRESOS. Numeral 2 — declaración y pago CUATRIMESTRAL solo para los demás responsables, personas jurídicas y naturales, cuyos ingresos brutos a 31-dic del año anterior sean inferiores a 92.000 UVT. El período ANUAL fue ELIMINADO por Ley 1943/2018 (ratificado por Ley 2010/2019).',
     textoLiteral: null,
     estado: 'MODIFICADO',
     modificaciones: [
@@ -719,7 +857,129 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     urlOficial:
       'https://estatuto.co/?articulo=600',
     // Corrección crítica: spec mencionaba "anual <15.000 UVT" — INCORRECTO.
-    tags: ['IVA', 'periodicidad', 'bimestral', 'cuatrimestral'],
+    // Corrección normativa 2026-08: faltaban los responsables de los Arts. 477 y 481, que
+    // declaran SIEMPRE bimestralmente sin importar sus ingresos. Clasificar a un exportador o
+    // a un productor de bienes exentos como cuatrimestral produce declaraciones extemporáneas
+    // (Art. 641 E.T.) y le hace perder la devolución bimestral del Art. 481 E.T.
+    tags: ['IVA', 'periodicidad', 'bimestral', 'cuatrimestral', 'Art_477', 'Art_481', 'exportadores'],
+  },
+
+  // ─── IMPUESTO NACIONAL AL CONSUMO (INC) ───────────────────────────────────
+  // Impuesto INDEPENDIENTE del IVA (Libro Tercero, Arts. 512-1 a 512-22 E.T.).
+  // El catálogo no lo contenía pese a que el motor lo declara como tipo de impuesto
+  // (schema-tax.ts y el enum del tax-engine incluyen 'INC'). Sin estas entradas el
+  // Motor Normativo no puede citarlo y ningún restaurante, bar, operador de telefonía
+  // móvil o vendedor de vehículos recibía alerta de la obligación bimestral (Form. 310).
+  {
+    id: 'ART_512_1_ET',
+    cita: 'Art. 512-1 E.T.',
+    titulo: 'Impuesto Nacional al Consumo — hecho generador',
+    resumen:
+      'El INC tiene como hecho generador la prestación o la venta al consumidor final (o la importación por el usuario final) de: num. 1) el servicio de telefonía móvil, datos, internet y navegación móvil (Art. 512-2); num. 2) las ventas de algunos bienes corporales muebles de producción doméstica o importados — vehículos, motocicletas, yates, aerodinos (Arts. 512-3, 512-4 y 512-5); num. 3) el servicio de expendio de comidas y bebidas preparadas en restaurantes, cafeterías, autoservicios, heladerías, fruterías, pastelerías y panaderías, los servicios de alimentación bajo contrato (incluido catering), y el servicio de expendio de comidas y bebidas alcohólicas para consumo dentro de bares, tabernas y discotecas (Arts. 512-8 a 512-13). El INC no genera impuestos descontables en IVA y constituye para el comprador un mayor valor del costo del bien o servicio adquirido. Es un impuesto INDEPENDIENTE del IVA: un mismo hecho no se grava con ambos.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1607 de 2012',
+        fecha: '2012-12-26',
+        cambio: 'Creó el Impuesto Nacional al Consumo (Arts. 512-1 y siguientes E.T.).',
+      },
+      {
+        norma: 'Ley 2010 de 2019',
+        fecha: '2019-12-27',
+        cambio: 'Ajustó el régimen de responsables y no responsables del INC de restaurantes y bares (Art. 512-13).',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-1',
+    tags: ['INC', 'consumo', 'hecho_generador', 'restaurantes', 'bares', 'telefonia', 'vehiculos'],
+  },
+  {
+    id: 'ART_512_2_ET',
+    cita: 'Art. 512-2 E.T.',
+    titulo: 'INC — servicios de telefonía móvil, internet, navegación móvil y datos',
+    resumen:
+      'Tarifa del 4% sobre la totalidad del servicio de telefonía móvil, datos y/o voz, sin incluir el IVA. Los servicios de datos, internet y navegación móvil se gravan solo respecto de los ingresos por encima de 1,5 UVT mensuales (2026: 1,5 × $52.374 = $78.561). El impuesto se causa en el momento del pago correspondiente hecho por el usuario.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-2',
+    tags: ['INC', 'consumo', 'telefonia_movil', 'internet', 'datos', '4%'],
+  },
+  {
+    id: 'ART_512_3_ET',
+    cita: 'Art. 512-3 E.T.',
+    titulo: 'INC — bienes gravados a la tarifa del 8%',
+    resumen:
+      'Se gravan al 8%: vehículos automóviles de tipo familiar y camperos cuyo valor FOB (o su equivalente) sea INFERIOR a USD 30.000, con sus accesorios; pick-ups cuyo valor FOB sea inferior a USD 30.000; motocicletas con motor de émbolo alternativo de cilindrada SUPERIOR a 200 c.c.; yates y demás barcos y embarcaciones de recreo o deporte, barcas de remo y canoas. No están gravadas las motocicletas de hasta 200 c.c. ni los vehículos de transporte público de pasajeros o de carga.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-3',
+    // Nota de verificación 2026-08: el informe de auditoría afirmaba que las motocicletas de
+    // más de 200 c.c. tributan al 19%. NO se aplicó: las fuentes consultadas (agosto 2026)
+    // las ubican en el 8% del Art. 512-3, y no hay reforma vigente que las mueva.
+    tags: ['INC', 'consumo', 'vehiculos', 'motocicletas', 'yates', '8%'],
+  },
+  {
+    id: 'ART_512_4_ET',
+    cita: 'Art. 512-4 E.T.',
+    titulo: 'INC — bienes gravados a la tarifa del 16%',
+    resumen:
+      'Se gravan al 16%: vehículos automóviles de tipo familiar, camperos y pick-ups cuyo valor FOB (o su equivalente) sea IGUAL O SUPERIOR a USD 30.000, con sus accesorios; globos y dirigibles, planeadores, alas planeadoras y demás aeronaves sin motor; helicópteros y aviones de uso privado; barcos de recreo y de deporte de valor FOB igual o superior a USD 30.000.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-4',
+    tags: ['INC', 'consumo', 'vehiculos', 'aerodinos', '16%'],
+  },
+  {
+    id: 'ART_512_9_ET',
+    cita: 'Art. 512-9 E.T.',
+    titulo: 'INC — base gravable y tarifa en el servicio de restaurantes',
+    resumen:
+      'La base gravable del servicio de restaurantes es el precio total de consumo, incluidas las bebidas acompañantes y demás valores adicionales. NO forma parte de la base la propina (voluntaria) ni los alimentos excluidos del IVA que se vendan sin transformaciones o preparaciones adicionales. Tarifa: 8% sobre todo consumo. El impuesto debe discriminarse en la cuenta de cobro, tiquete de registradora, factura o documento equivalente, y ser cobrado al cliente por el responsable.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-9',
+    tags: ['INC', 'consumo', 'restaurantes', '8%'],
+  },
+  {
+    id: 'ART_512_11_ET',
+    cita: 'Art. 512-11 E.T.',
+    titulo: 'INC — base gravable y tarifa en los servicios de bares, tabernas y discotecas',
+    resumen:
+      'La base gravable en los servicios prestados por establecimientos que operan como bar, taberna o discoteca es el valor total del consumo, incluidas comidas, precio de entrada y demás valores adicionales. La propina no hace parte de la base por ser voluntaria. Tarifa: 8% sobre todo consumo, que debe discriminarse en la cuenta de cobro o documento equivalente y ser cobrado al cliente por el responsable.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-11',
+    tags: ['INC', 'consumo', 'bares', 'tabernas', 'discotecas', '8%'],
+  },
+  {
+    id: 'ART_512_13_ET',
+    cita: 'Art. 512-13 E.T.',
+    titulo: 'INC — no responsables del impuesto de restaurantes y bares',
+    resumen:
+      'No son responsables del INC de restaurantes y bares las personas naturales que cumplan la TOTALIDAD de las condiciones: (a) haber obtenido en el año anterior ingresos brutos totales, provenientes de la actividad, inferiores a 3.500 UVT (2026: 3.500 × $52.374 = $183.309.000); y (b) tener máximo un establecimiento de comercio, sede, local o negocio donde ejercen su actividad. Si durante el año se abre un segundo establecimiento o se supera el tope, el contribuyente pasa a ser responsable a partir de ese momento. La responsabilidad se identifica en el RUT con el código 33. Los responsables del INC declaran BIMESTRALMENTE en el Formulario 310.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 2010 de 2019',
+        fecha: '2019-12-27',
+        cambio: 'Redefinió las condiciones de los no responsables del INC de restaurantes y bares (umbral 3.500 UVT y un solo establecimiento).',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=512-13',
+    tags: ['INC', 'consumo', 'no_responsables', '3500_UVT', 'restaurantes', 'bares', 'formulario_310'],
   },
 
   // ─── RÉGIMEN SANCIONATORIO ────────────────────────────────────────────────
@@ -739,29 +999,58 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
   {
     id: 'ART_640_ET',
     cita: 'Art. 640 E.T.',
-    titulo: 'Aplicación de principios y reducción de sanciones',
+    titulo: 'Aplicación de los principios de lesividad, proporcionalidad, gradualidad y favorabilidad',
     resumen:
-      'Principios de gradualidad, proporcionalidad y favorabilidad para sanciones. Reducción del 50% si se acepta cargo sin pliego de cargos; 75% si subsana antes del pliego. Corrección: spec atribuía estas reducciones a Art. 649.',
+      'La reducción NO depende de "aceptar" o de "subsanar antes del pliego": depende del historial de reincidencia y del momento procesal, y siempre reduce la sanción AL 50% o AL 75% de su monto legal (no un descuento adicional sobre otra reducción). Cuando la sanción la LIQUIDA EL CONTRIBUYENTE, agente retenedor, responsable o declarante: num. 1 — se reduce AL 50% si (a) dentro de los 2 años anteriores a la comisión de la conducta no se cometió la misma conducta sancionada mediante acto administrativo en firme, y (b) la DIAN no ha proferido pliego de cargos, requerimiento especial ni emplazamiento previo por no declarar; num. 2 — se reduce AL 75% con las mismas condiciones pero con período limpio de 1 año. Cuando la sanción la PROPONE O DETERMINA LA DIAN: num. 3 — se reduce AL 50% si (a) dentro de los 4 años anteriores no se cometió la misma conducta sancionada mediante acto en firme, y (b) la sanción es aceptada y la infracción subsanada; num. 4 — AL 75% con período limpio de 2 años y las mismas condiciones. Par. 2: hay reincidencia cuando la conducta se comete dentro de los 2 años siguientes a la firmeza del acto sancionatorio, y la sanción se aumenta en un 100%. Par. 3: la proporcionalidad y la gradualidad NO APLICAN a las sanciones de los numerales 1, 2 y 3 del inciso 3º del Art. 648 (200% por activos omitidos/pasivos inexistentes, 160% por proveedores ficticios o abuso, y 20% en ingresos y patrimonio), ni a los Arts. 640-1, 652-1, numerales 1 a 3 del 657, 658-1, 658-2, numeral 4 del 658-3, 669, inciso 6º del 670, 671, 672 y 673. Par. 4: tampoco aplican a los intereses moratorios ni a los Arts. 674, 675, 676 y 676-1. Corrección: spec atribuía estas reducciones a Art. 649.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
-    modificaciones: [],
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016, Art. 282',
+        fecha: '2016-12-29',
+        cambio: 'Modificó el Art. 640 fijando la gradualidad por historial de reincidencia y momento procesal, y excluyendo expresamente (par. 3) las sanciones agravadas del inciso 3º del Art. 648.',
+      },
+    ],
     urlOficial:
       'https://estatuto.co/?articulo=640',
-    tags: ['sancion', 'reduccion', 'principios', 'gradualidad'],
+    // Corrección normativa 2026-08: la redacción anterior ("50% si se acepta cargo sin pliego
+    // de cargos; 75% si subsana antes del pliego") invertía el criterio legal y omitía el
+    // parágrafo 3, permitiendo que el agente ofreciera gradualidad sobre el 200% por activos
+    // omitidos, que está expresamente excluido.
+    tags: ['sancion', 'reduccion', 'principios', 'gradualidad', 'reincidencia', 'par_3_exclusiones'],
   },
   {
     id: 'ART_641_ET',
     cita: 'Art. 641 E.T.',
-    titulo: 'Sanción por extemporaneidad en la presentación de declaraciones',
+    titulo: 'Sanción por extemporaneidad — presentación ANTES de emplazamiento',
     resumen:
-      'Extemporaneidad: 5% mensual antes de emplazamiento, 10% mensual después de emplazamiento, tope 100% del impuesto a cargo. Sin impuesto a cargo: 0.5% sobre ingresos brutos (tope 5%) o 1% sobre patrimonio líquido (tope 2.500 UVT).',
+      'Aplica a la declaración presentada de forma extemporánea ANTES del emplazamiento para declarar o del auto que ordena inspección tributaria: 5% del total del impuesto a cargo o retención objeto de la declaración por cada mes o fracción de mes de retardo, sin exceder el 100% del impuesto o retención. Si no hay impuesto a cargo: 0,5% mensual de los ingresos brutos del período, sin exceder el menor entre el 5% de tales ingresos, el doble del saldo a favor si lo hubiere, o 2.500 UVT ($130.935.000 con UVT 2026 de $52.374). Si tampoco hay ingresos: 1% mensual del patrimonio líquido del año anterior, sin exceder el menor entre el 10% de ese patrimonio, el doble del saldo a favor si lo hubiere, o 2.500 UVT. El supuesto post-emplazamiento (10% mensual, tope 200%) NO es de este artículo: está en el Art. 642 E.T.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
     urlOficial:
       'https://estatuto.co/?articulo=641',
-    // Corrección crítica: spec decía tope 200% del impuesto — INCORRECTO. Tope es 100%.
-    tags: ['sancion', 'extemporaneidad', '5%', '10%'],
+    // Corrección normativa 2026-08: la entrada describía el supuesto del Art. 642 (10% mensual)
+    // aplicándole el tope del Art. 641 (100%), truncando a la mitad la sanción post-emplazamiento.
+    // Se elimina también el comentario de la auditoría de julio 2026 que declaraba "el tope del
+    // 200% es INCORRECTO": el 200% sí es el tope legal, pero del Art. 642, no del 641.
+    tags: ['sancion', 'extemporaneidad', '5%', 'tope_100%', 'antes_emplazamiento'],
+  },
+  {
+    id: 'ART_642_ET',
+    cita: 'Art. 642 E.T.',
+    titulo: 'Sanción por extemporaneidad — presentación DESPUÉS de emplazamiento',
+    resumen:
+      'Aplica cuando la declaración se presenta con posterioridad al emplazamiento o al auto que ordena inspección tributaria: 10% del total del impuesto a cargo o retención objeto de la declaración por cada mes o fracción de mes de retardo, sin exceder el 200% del impuesto o retención. Si no hay impuesto a cargo: 1% mensual de los ingresos brutos del período, sin exceder el menor entre el 10% de tales ingresos, 4 veces el saldo a favor si lo hubiere, o 5.000 UVT ($261.870.000 con UVT 2026 de $52.374). Si tampoco hay ingresos: 2% mensual del patrimonio líquido del año anterior, sin exceder el menor entre el 20% de ese patrimonio, 4 veces el saldo a favor si lo hubiere, o 5.000 UVT. Es decir: todos los porcentajes y topes del Art. 641 se duplican.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=642',
+    // Añadido 2026-08: el catálogo no tenía entrada para el Art. 642 pese a que el agente
+    // debe distinguir los dos topes (100% vs 200%). Sin ella el citation.validator marcaba
+    // "Art. 642 E.T." como NO_VERIFICADO y bloqueaba una cita correcta.
+    tags: ['sancion', 'extemporaneidad', '10%', 'tope_200%', 'post_emplazamiento'],
   },
   {
     id: 'ART_644_ET',
@@ -781,13 +1070,15 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 647 E.T.',
     titulo: 'Sanción por inexactitud en declaraciones tributarias',
     resumen:
-      'Sanción por omisión de ingresos, deducciones improcedentes o datos falsos en declaraciones. Tarifa: 100% del mayor valor del impuesto (Art. 648 consolida la tarifa). El parágrafo establece la defensa de diferencia de criterio.',
+      'Tipifica las conductas constitutivas de inexactitud: omisión de ingresos o impuestos generados, inclusión de costos, deducciones, descuentos, exenciones, pasivos, impuestos descontables, retenciones o anticipos inexistentes o inexactos; omisión de activos o inclusión de pasivos inexistentes (num. 4); utilización en las declaraciones de datos o factores falsos, desfigurados, alterados, simulados o modificados artificialmente; compras o gastos a PROVEEDORES FICTICIOS o insolventes (num. 5). Las CUANTÍAS de la sanción no están en este artículo: están en el Art. 648 E.T., que es escalonado (100% general, 15% en ingresos y patrimonio, y las agravaciones de 200%, 160%, 20% y 50%). El parágrafo del Art. 647 establece la defensa de diferencia de criterio.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
     urlOficial:
       'https://estatuto.co/?articulo=647',
-    tags: ['sancion', 'inexactitud', '100%', 'defensa'],
+    // Corrección normativa 2026-08: el resumen afirmaba que "Art. 648 consolida la tarifa"
+    // en 100%. El Art. 648 NO consolidó nada: conserva un régimen escalonado.
+    tags: ['sancion', 'inexactitud', 'conductas', 'proveedores_ficticios', 'defensa'],
   },
   {
     id: 'ART_647_PAR_ET',
@@ -806,22 +1097,32 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
   {
     id: 'ART_648_ET',
     cita: 'Art. 648 E.T.',
-    titulo: 'Sanción por inexactitud — tarifa consolidada',
+    titulo: 'Sanción por inexactitud — cuantías escalonadas',
     resumen:
-      'Consolida la tarifa escalonada de la sanción por inexactitud en el 100% del mayor valor del impuesto que se generó o del menor saldo a favor declarado.',
+      'Régimen ESCALONADO, no una tarifa única. Inciso 1º: 100% de la diferencia entre el saldo a pagar o saldo a favor determinado en la liquidación oficial y el declarado por el contribuyente, agente retenedor o responsable; o 15% de los valores inexactos en el caso de las declaraciones de ingresos y patrimonio. Inciso 2º: la sanción no se aplica sobre el mayor valor del anticipo que se genere al modificar el impuesto declarado. Inciso 3º — cuantías agravadas: num. 1) 200% del mayor valor del impuesto a cargo determinado cuando se OMITAN ACTIVOS o se INCLUYAN PASIVOS INEXISTENTES; num. 2) 160% de la diferencia cuando la inexactitud se origine en las conductas del numeral 5 del Art. 647 (compras o gastos a proveedores ficticios o insolventes) o en la conducta de abuso en materia tributaria del Art. 869; num. 3) 20% de los valores inexactos en las declaraciones de ingresos y patrimonio cuando la inexactitud se origine en esas mismas conductas; num. 4) 50% de la diferencia entre el saldo a pagar determinado y el declarado, en las declaraciones del monotributo. Par. 1: la sanción del inciso 1º se reduce en todos los casos si se cumplen los supuestos de los Arts. 709 y 713. Par. 2: la sanción del numeral 1 del inciso 3º (200%) aplica a partir del año gravable 2018. Advertencia operativa: por el par. 3 del Art. 640, la proporcionalidad y la gradualidad NO aplican a los numerales 1, 2 y 3 del inciso 3º — no puede ofrecerse reducción del 50%/75% sobre el 200%, el 160% ni el 20%.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
-    modificaciones: [],
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016, Art. 288',
+        fecha: '2016-12-29',
+        cambio: 'Reescribió el Art. 648 fijando la sanción base en 100% (15% en ingresos y patrimonio) y las cuantías agravadas de 200%, 160%, 20% y 50% del inciso 3º.',
+      },
+    ],
     urlOficial:
       'https://estatuto.co/?articulo=648',
-    tags: ['sancion', 'inexactitud', '100%'],
+    // Corrección normativa 2026-08: la entrada declaraba que el Art. 648 "consolida la tarifa
+    // escalonada en el 100%". El caso más auditado por la DIAN (omisión de activos y pasivos
+    // inexistentes) se dictaminaba así al 100% cuando la norma impone 200% — el cliente
+    // subestimaba su exposición exactamente a la mitad.
+    tags: ['sancion', 'inexactitud', '100%', '200%', '160%', '20%', '50%', 'activos_omitidos', 'escalonada'],
   },
   {
     id: 'ART_709_ET',
     cita: 'Art. 709 E.T.',
-    titulo: 'Reducción de sanción por aceptación de pliego de cargos — 25%',
+    titulo: 'Corrección provocada por el requerimiento especial — sanción por inexactitud al 25%',
     resumen:
-      'Si el contribuyente acepta los hechos del pliego de cargos, la sanción se reduce al 25% del valor inicial.',
+      'Si con ocasión de la respuesta al requerimiento especial o a su ampliación el contribuyente acepta total o parcialmente los hechos planteados, la sanción por inexactitud se reduce a la cuarta parte (25%) de la planteada por la Administración, en relación con los hechos aceptados. Requisitos: corregir la declaración privada incluyendo los mayores valores aceptados y la sanción reducida, y adjuntar a la respuesta copia de la corrección y prueba del pago o acuerdo de pago.',
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
