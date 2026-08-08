@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plug,
@@ -18,8 +18,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ERPProvider } from '@/lib/erp/types';
 import { ERPLogo } from './ERPLogo';
+
+// POR QUÉ los 3 diálogos de este archivo usan useFocusTrap: declaran
+// role="dialog" aria-modal="true", pero sin trampa de foco esa promesa es falsa
+// — el lector de pantalla anuncia "modal" mientras el fondo sigue tabulable, y
+// sin Escape el usuario queda encerrado en un formulario donde escribe
+// CREDENCIALES del vault ERP. El hook también restaura el foco al cerrar.
 
 // ─── Storage helpers ─────────────────────────────────────────────────────────
 
@@ -225,6 +232,9 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const fieldIdPrefix = useId();
+  useFocusTrap(dialogRef, true, onClose);
 
   const fieldDefs = getFieldsForProvider(provider.id);
 
@@ -296,6 +306,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="connect-form-title"
@@ -334,19 +345,30 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
                 Autenticación: <span className="text-n-700 font-medium">{provider.authType}</span>
               </p>
 
-              {fieldDefs.map(field => (
-                <div key={field.key}>
-                  <label className="block text-xs font-medium text-n-600 mb-1">{field.label}</label>
-                  <input
-                    type={field.secret ? 'password' : 'text'}
-                    value={fields[field.key] || ''}
-                    onChange={e => setFields(f => ({ ...f, [field.key]: e.target.value }))}
-                    className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors"
-                    placeholder={field.placeholder}
-                  />
-                  {field.hint && <p className="text-2xs text-n-600 mt-0.5">{field.hint}</p>}
-                </div>
-              ))}
+              {fieldDefs.map(field => {
+                const inputId = `${fieldIdPrefix}-${field.key}`;
+                const hintId = field.hint ? `${inputId}-hint` : undefined;
+                return (
+                  <div key={field.key}>
+                    <label htmlFor={inputId} className="block text-xs font-medium text-n-600 mb-1">
+                      {field.label}
+                    </label>
+                    <input
+                      id={inputId}
+                      type={field.secret ? 'password' : 'text'}
+                      value={fields[field.key] || ''}
+                      onChange={e => setFields(f => ({ ...f, [field.key]: e.target.value }))}
+                      required={field.required}
+                      aria-describedby={hintId}
+                      className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none focus:ring-1 focus:ring-n-900 transition-colors"
+                      placeholder={field.placeholder}
+                    />
+                    {field.hint && (
+                      <p id={hintId} className="text-2xs text-n-600 mt-0.5">{field.hint}</p>
+                    )}
+                  </div>
+                );
+              })}
 
               {status === 'error' && (
                 <div className="flex items-center gap-2 text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
@@ -403,6 +425,9 @@ interface DisconnectModalProps {
 }
 
 function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true, onCancel);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -412,6 +437,7 @@ function DisconnectModal({ providerName, onConfirm, onCancel }: DisconnectModalP
       onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <motion.div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="disconnect-modal-title"
@@ -469,6 +495,9 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<{ success: boolean; recordCount: number } | null>(null);
   const [error, setError] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const yearSelectId = useId();
+  useFocusTrap(dialogRef, true, onClose);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -519,6 +548,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sync-modal-title"
@@ -589,11 +619,14 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
 
               {/* Year selector */}
               <div>
-                <label className="block text-xs font-medium text-n-600 mb-1">Periodo (año)</label>
+                <label htmlFor={yearSelectId} className="block text-xs font-medium text-n-600 mb-1">
+                  Periodo (año)
+                </label>
                 <select
+                  id={yearSelectId}
                   value={year}
                   onChange={e => setYear(Number(e.target.value))}
-                  className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none transition-colors bg-n-0"
+                  className="w-full border border-n-200 rounded-lg px-3 py-2 text-sm text-n-900 focus:border-n-900 focus:outline-none focus:ring-1 focus:ring-n-900 transition-colors bg-n-0"
                 >
                   {[2026, 2025, 2024, 2023].map(y => (
                     <option key={y} value={y}>{y}</option>
@@ -735,9 +768,10 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
               type="button"
               onClick={onDisconnect}
               className="p-1.5 rounded-lg text-n-600 hover:text-danger hover:bg-danger/10 transition-colors"
-              title="Desconectar"
+              title={`Desconectar ${provider.name}`}
+              aria-label={`Desconectar ${provider.name}`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         ) : (
@@ -803,6 +837,13 @@ export function ERPConnector() {
     void recordCount; // used by SyncModal internally
   }, []);
 
+  // Identidades estables: useFocusTrap depende de onEscape. Con una arrow
+  // inline el efecto se re-montaría en cada render del padre y devolvería el
+  // foco al primer campo del modal a mitad de escritura.
+  const closeConnect = useCallback(() => setSelectedProvider(null), []);
+  const closeSync = useCallback(() => setSyncProvider(null), []);
+  const cancelDisconnect = useCallback(() => setDisconnectTarget(null), []);
+
   const connectedCount = connections.length;
 
   return (
@@ -863,7 +904,7 @@ export function ERPConnector() {
         {selectedProvider && (
           <ConnectForm
             provider={selectedProvider}
-            onClose={() => setSelectedProvider(null)}
+            onClose={closeConnect}
             onConnected={(credentials) => handleConnected(selectedProvider, credentials)}
           />
         )}
@@ -874,7 +915,7 @@ export function ERPConnector() {
         {syncProvider && (
           <SyncModal
             provider={syncProvider}
-            onClose={() => setSyncProvider(null)}
+            onClose={closeSync}
             onSyncComplete={(count) => handleSyncComplete(syncProvider, count)}
           />
         )}
@@ -886,7 +927,7 @@ export function ERPConnector() {
           <DisconnectModal
             providerName={disconnectTarget.name}
             onConfirm={() => handleDisconnect(disconnectTarget)}
-            onCancel={() => setDisconnectTarget(null)}
+            onCancel={cancelDisconnect}
           />
         )}
       </AnimatePresence>

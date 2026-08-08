@@ -10,6 +10,22 @@
 //   - 3 escenarios (conservador, base, agresivo) anclados a macro Colombia 2026.
 //   - Callout R7 (advertencia interna de costos sub-registrados) — opcional.
 //   - Defensa Art. 647 E.T. en las recomendaciones que invocan ajustes.
+//
+// AUDITORIA NORMATIVA 2026-08-07 — macro-supuesto de dividendos corregido.
+// Antes decia "Dividendos: 20% (Art. 242 E.T.)": tarifa inexistente. El
+// regimen vigente (desde el AG 2023, aplicable en 2026) es:
+//   Art. 242 E.T. (mod. Art. 3 Ley 2277/2022) → PN residente, dividendo no
+//   gravado: tarifa progresiva del Art. 241 E.T. (0%-39%); retencion del
+//   paragrafo reglamentada por el Decreto 1103 de 2023 → 0 a 1.090 UVT: 0%;
+//   sobre el exceso de 1.090 UVT: 15% (anticipo imputable).
+//   Art. 254-1 E.T. (adic. Art. 5 Ley 2277/2022) → descuento 0% hasta
+//   1.090 UVT y 19% sobre el exceso.
+//   Art. 240 E.T. (35%) → dividendo gravado del par. 2 del Art. 49 E.T.
+//   Art. 242-1 E.T. (10% trasladable) → sociedad nacional receptora.
+//   Art. 245 E.T. (20%) → no residentes. Ese es el unico 20% del regimen.
+//   UVT 2026 = $52.374 (Res. DIAN 000238 de 15-dic-2025) ⇒ 1.090 UVT =
+//   $57.087.660.
+// Fuente: https://normograma.dian.gov.co/dian/compilacion/docs/decreto_1103_2023.htm
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
@@ -192,7 +208,14 @@ Macro-supuestos Colombia 2026 (referenciales):
 - UVT 2026: $52.374 COP (DIAN).
 - Tarifa renta PJ: 35% (Art. 240 E.T., Ley 2277/2022).
 - Tarifa Mínima de Tributación (TMT): 15% (Art. 240 parágrafo 6 E.T.).
-- Dividendos: 20% (Art. 242 E.T.).
+- Dividendos — NO existe tarifa plana del 20% para persona natural residente (regimen post-Ley 2277/2022, vigente desde el AG 2023 y aplicable en 2026):
+  - PN residente, dividendo NO gravado: se integra a la renta liquida y tributa a la tarifa progresiva marginal del Art. 241 E.T. (0% a 39%), por remision del inciso 1 del Art. 242 E.T. La retencion en la fuente del paragrafo del Art. 242 (Decreto 1103 de 2023) es 0% hasta 1.090 UVT y 15% sobre el exceso de 1.090 UVT = $57.087.660 (UVT 2026 $52.374), y es un ANTICIPO IMPUTABLE, no el impuesto definitivo.
+  - Descuento Art. 254-1 E.T. (adicionado por el Art. 5 Ley 2277/2022): 0% hasta 1.090 UVT y 19% sobre el exceso, restado del impuesto a cargo del socio.
+  - PN residente, dividendo GRAVADO (par. 2 Art. 49 E.T.): tarifa del Art. 240 E.T. (35%) por remision del inciso 2 del Art. 242; el remanente vuelve al Art. 241.
+  - Sociedad nacional receptora: 10% de retencion trasladable e imputable (Art. 242-1 E.T.).
+  - No residente: 20% (Art. 245 E.T.). Ese 20% NO es del Art. 242 — NEVER lo cites como tarifa de residentes.
+  - NEVER uses la escala derogada del Art. 242 (10% sobre el exceso de 300 UVT), muerta el 31-dic-2022.
+  If un escenario proyecta reparto de utilidades a socio persona natural residente then modela la carga con la tarifa marginal del Art. 241 que declares como supuesto y trata el 15% como retencion imputable otherwise no cifres impuesto al dividendo y limita la recomendacion a la politica de reparto.
 
 Estructura de los 3 escenarios obligatorios cuando no haya gate de liquidez:
 - Conservative: ingresos −15% YoY, costos indexados a inflación máxima (5%), TMT 15% activa.

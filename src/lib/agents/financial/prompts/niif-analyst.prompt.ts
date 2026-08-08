@@ -789,6 +789,7 @@ ${ctx.isComparative ? `- Balance y P&L presentan amountPrimary (${ctx.primaryPer
 
 <constraints>
 - MUST: anclar TODA cifra global (totalAssetsPrimary, totalLiabilitiesPrimary, totalEquityPrimary, netIncomePrimary) al bloque TOTALES VINCULANTES. NO re-calcular desde el balance crudo.
+- MUST: cada ancla de TOTALES VINCULANTES trae DOS representaciones del mismo importe: la legible en pesos (\`$4.196.558.242,90 COP\`) y el token \`[MoneyCop: 419655824290]\`. Al schema va el CONTENIDO LITERAL del token — se copia dígito por dígito. NEVER derivar el valor del schema a partir del formato legible: no se quitan puntos ni comas, no se multiplica por cien, no se convierte nada.
 - MUST: cuando una cuenta auxiliar tenga saldo pero no aparezca en el resumen de Clase, integrarla de oficio y registrar la discrepancia en balanceSheet.notes o incomeStatement.notes (Defensa Art. 647 E.T.).
 - MUST: PRESENTACIÓN VISUAL ABSOLUTA en Balance y P&L — todas las líneas con \`isAbsolute=true\`. Excepción única: pérdida del ejercicio o resultados acumulados negativos (\`isAbsolute=false\`, valor con signo).
 - MUST: MoneyCop serializado en CENTAVOS como string entero (ej. "150000000" = $1.500.000,00). Sin separadores, sin decimales, sin signo de pesos.

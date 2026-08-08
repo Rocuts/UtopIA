@@ -18,12 +18,15 @@
  *     la DIAN cambió el comunicado (señal para re-validar manualmente).
  *
  * Los rangos textuales del Comunicado DIAN 128/2025 (ground truth):
- *   - Renta GC C1: feb (10–23), C2 abr (13–24), C3 jun (10–24)
+ *   - Renta GC C1: feb (10–23), C2 abr (13–27), C3 jun (10–24)
  *   - Renta PJ Decl+C1: may (12–26), C2 jul (9–23)
- *   - Renta PN: ago–oct (12 ago – 26 oct)
+ *   - Renta PN: ago–oct (12 ago – 26 oct), por los DOS últimos dígitos
  *   - IVA Bimestral B1–B6: mar, may, jul, sep, nov, ene'27
  *   - IVA Cuatrimestral C1–C3: may, sep, ene'27
- *   - Información Exógena: sep (9–22)
+ *   - Información Exógena: NO sigue la regla del 7°–16° día hábil — tiene
+ *     tabla propia (Res. Única DIAN 000227 de 2025, Título 3): grandes
+ *     contribuyentes abr–may, personas jurídicas y naturales 14-may a 12-jun
+ *     por los DOS últimos dígitos.
  *   - Patrimonio Decl+C1: may (12–26), C2: 14 sep (10° hábil)
  *   - Retención mensual: día 7°–16° hábil del mes siguiente
  *
@@ -35,6 +38,12 @@
  *   dígito 0 → último día del rango (16° hábil)
  *
  * El mapeo `digit → businessDay` es: digit === 0 ? 16 : digit + 6
+ *
+ * ⚠ PROCEDENCIA (auditoría normativa 2026-08). Todo lo que sale de este módulo
+ * es CALCULADO por el modelo interno de días hábiles, no leído de la tabla
+ * oficial. Por eso ningún deadline se emite con `verified: true`: ese flag está
+ * reservado para fechas confrontadas una a una contra el PDF/resolución DIAN.
+ * Ver `src/data/calendars/types.ts` ("verified false = fecha inferida").
  */
 
 import { createHash } from 'node:crypto';
@@ -50,14 +59,24 @@ const USER_AGENT =
 const DECREE = 'Decreto 2229 de 2023';
 const COMUNICADO_NOTE = 'Comunicado DIAN 128 del 26-dic-2025 — verificado';
 
-// Festivos colombianos 2026 — usados para calcular días hábiles.
-// Fuente: Ley 51 de 1983 + calendario civil 2026.
+// Días NO hábiles 2026 — usados para calcular días hábiles.
+// Fuente: Ley 51 de 1983 (traslado al lunes) + Ley 35 de 1939 / Ley 43 de 1975.
 const FESTIVOS_2026 = new Set<string>([
   '2026-01-01', // Año Nuevo
   '2026-01-12', // Reyes (lun)
   '2026-03-23', // San José (lun)
   '2026-04-02', // Jueves Santo
   '2026-04-03', // Viernes Santo
+  // Día Cívico de la Paz con la Naturaleza — tercer viernes de abril.
+  // Decreto 500 de 2024 (Presidencia de la República), de aplicación anual.
+  // La DIAN confirmó el 4-mar-2026 que, por estar los plazos fijados en DÍAS
+  // HÁBILES (Decreto 2229 de 2023), el 17-abr-2026 no cuenta y CORRE un día
+  // hábil todos los vencimientos posteriores de abril: la 2ª cuota de grandes
+  // contribuyentes pasa de 13–24 abr a 13–27 abr, y la retención del período
+  // marzo/2026 de 13–24 abr a 13–27 abr.
+  // https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=238215
+  // https://incp.org.co/publicaciones/infoincp-publicaciones/impuestos/2026/03/dian-informo-cambios-en-los-plazos-para-declaracion-y-pago-de-algunos-impuestos/
+  '2026-04-17',
   '2026-05-01', // Día del Trabajo
   '2026-05-18', // Ascensión (lun)
   '2026-06-08', // Corpus Christi (lun)
@@ -73,18 +92,35 @@ const FESTIVOS_2026 = new Set<string>([
   '2026-12-25', // Navidad
 ]);
 
-// Festivos colombianos enero 2027 — necesarios para IVA B6 / Cuatrimestral C3.
-const FESTIVOS_2027 = new Set<string>([
+// Festivos colombianos enero 2027 — necesarios para IVA B6 / Cuatrimestral C3
+// y para la retención del período diciembre/2026. NO cubrimos el resto de 2027.
+const FESTIVOS_2027_ENERO = new Set<string>([
   '2027-01-01', // Año Nuevo
-  '2027-01-11', // Reyes (lun)
+  '2027-01-11', // Reyes (trasladado al lunes — Ley 51 de 1983)
 ]);
+
+/**
+ * ¿Tenemos el set de días no hábiles VERIFICADO para este (año, mes)?
+ *
+ * Auditoría normativa 2026-08: `nthBusinessDay` devolvía una fecha para
+ * cualquier año, calculándola con un calendario de festivos que sólo conoce
+ * 2026 y enero de 2027. Para febrero de 2027 en adelante eso produce fechas
+ * silenciosamente TARDÍAS (los festivos no descontados corren el conteo), que
+ * es exactamente el error que genera sanción por extemporaneidad. Preferimos
+ * fallar ruidosamente a inventar un vencimiento.
+ */
+export function tieneFestivosVerificados(year: number, month: number): boolean {
+  if (year === 2026) return true;
+  if (year === 2027 && month === 1) return true;
+  return false;
+}
 
 function isBusinessDay(d: Date): boolean {
   const day = d.getUTCDay();
   if (day === 0 || day === 6) return false;
   const iso = d.toISOString().slice(0, 10);
   if (FESTIVOS_2026.has(iso)) return false;
-  if (FESTIVOS_2027.has(iso)) return false;
+  if (FESTIVOS_2027_ENERO.has(iso)) return false;
   return true;
 }
 
@@ -92,9 +128,16 @@ function isBusinessDay(d: Date): boolean {
  * Devuelve el N-ésimo día hábil del mes (1-indexed) en formato ISO `YYYY-MM-DD`.
  * Sábados, domingos y festivos colombianos no cuentan.
  *
- * @throws si `n` excede los días hábiles disponibles en el mes.
+ * @throws si `n` excede los días hábiles disponibles en el mes, o si el
+ *         (año, mes) pedido no tiene set de festivos verificado.
  */
 export function nthBusinessDay(year: number, month: number, n: number): string {
+  if (!tieneFestivosVerificados(year, month)) {
+    throw new Error(
+      `Sin calendario de festivos verificado para ${year}-${String(month).padStart(2, '0')}: ` +
+        'no se puede calcular un día hábil sin inventar la fecha.',
+    );
+  }
   const d = new Date(Date.UTC(year, month - 1, 1));
   let count = 0;
   while (d.getUTCMonth() === month - 1) {
@@ -107,10 +150,22 @@ export function nthBusinessDay(year: number, month: number, n: number): string {
   throw new Error(`No hay ${n} días hábiles en ${year}-${month}`);
 }
 
-/** Convierte el dígito de NIT al día hábil del mes según convención DIAN. */
-function digitToBusinessDay(digit: number): number {
-  // Decreto 2229/2023: dígito 1 = 7° hábil, dígito 2 = 8°, …, dígito 9 = 15°,
-  // dígito 0 = 16° (último). Vence en orden ascendente.
+/**
+ * Convierte el dígito de NIT al día hábil del mes según convención DIAN.
+ *
+ * Decreto 2229/2023 (compilado en el DUR 1625/2016), arts. 1.6.1.13.2.12 y
+ * 1.6.1.13.2.33: dígito 1 = 7º hábil, dígito 2 = 8º, …, dígito 9 = 15º,
+ * dígito 0 = 16º (último). Vence en orden ascendente.
+ * https://normograma.dian.gov.co/dian/compilacion/docs/decreto_2229_2023.htm
+ *
+ * FUENTE ÚNICA. `src/data/calendars/nacional-2026.ts` tenía su propia copia de
+ * esta regla, invertida, y de ahí salían todos los vencimientos del calendario
+ * nacional. Cualquier consumidor nuevo importa esta función; no la reimplementa.
+ */
+export function digitToBusinessDay(digit: number): number {
+  if (!Number.isInteger(digit) || digit < 0 || digit > 9) {
+    throw new Error(`Dígito NIT inválido: ${digit}`);
+  }
   return digit === 0 ? 16 : digit + 6;
 }
 
@@ -199,7 +254,12 @@ function buildRange(
       dueDate: nthBusinessDay(year, month, businessDay),
       legalBasis,
       notes,
-      verified: true,
+      // Fecha DERIVADA del modelo interno de días hábiles, no leída de la tabla
+      // oficial. `verified: true` significaría "confrontada contra el decreto";
+      // marcarla así suprimía el disclaimer aguas abajo (tax-calendar imprime
+      // "verificadas contra decreto oficial") sobre fechas que este archivo
+      // calcula. Ver el bloque ⚠ PROCEDENCIA del encabezado.
+      verified: false,
     } satisfies NationalDeadline;
   });
 }
@@ -260,50 +320,99 @@ function buildGCCuota3(): NationalDeadline[] {
 }
 
 /**
- * Renta Personas Naturales — vencimiento por DOS últimos dígitos del NIT
- * en un rango ago–oct 2026 (12 ago – 26 oct).
+ * Tabla oficial de renta de personas naturales y sucesiones ilíquidas AG 2025,
+ * por los DOS ÚLTIMOS dígitos del NIT (sin dígito de verificación).
  *
- * Para conservar el shape `nitDigit: 0–9` definido en `NationalDeadline`,
- * agrupamos por banda decenal: cada `nitDigit` representa la decena del NIT
- * (0 = 00–09, 1 = 10–19, …, 9 = 90–99). Las notas explicitan el rango exacto
- * y la fecha exacta dentro de la banda.
+ * Art. 1.6.1.13.2.15 del DUR 1625 de 2016 modificado por el Decreto 2229 de
+ * 2023; art. 592 E.T. Los 50 grupos van en orden ASCENDENTE: 01-02 vence
+ * PRIMERO (12-ago-2026) y 99-00 ÚLTIMO (26-oct-2026).
  *
- * El rango total cubre ~50 días hábiles entre el 12 ago y el 26 oct 2026.
- * Aproximamos linealmente: banda 0 (NITs terminados en 00–09) vence el 26 oct,
- * banda 9 (NITs terminados en 90–99) vence el 12 ago.
+ * Verificación cruzada: los 50 grupos consumen exactamente los días hábiles
+ * del 12-ago al 28-sep (33) más todos los de octubre (17) — el calendario
+ * oficial no usa el 29 ni el 30 de septiembre. Los festivos descontados
+ * (17-ago Asunción, 12-oct Día de la Raza) cuadran con la Ley 51 de 1983.
  *
- * NOTA: Esto es una aproximación útil para el MVP — el cálculo exacto requiere
- * la tabla de 100 entries del decreto que el cron leerá en próxima iteración.
+ * ⚠ Auditoría normativa 2026-08 — esta tabla estaba INVERTIDA en el repo:
+ * la banda 90-99 figuraba en agosto y la 00-09 en octubre. A un declarante
+ * con cédula terminada en 01-09 se le anunciaba el 26-oct-2026 cuando su
+ * plazo real vencía en agosto: más de dos meses de extemporaneidad
+ * (sanción Art. 641 E.T., 5% mensual con mínimo 10 UVT).
  */
-function buildRentaPN(): NationalDeadline[] {
-  // Anclajes confirmados: 12-ago-2026 (banda 9) y 26-oct-2026 (banda 0).
-  // 12 días hábiles acumulados aprox por banda hacia atrás.
-  const fechasPorBanda: Record<number, string> = {
-    9: '2026-08-12',
-    8: '2026-08-21',
-    7: '2026-09-02',
-    6: '2026-09-14',
-    5: '2026-09-23',
-    4: '2026-10-02',
-    3: '2026-10-08',
-    2: '2026-10-15',
-    1: '2026-10-21',
-    0: '2026-10-26',
-  };
+const RENTA_PN_2026_POR_DOS_DIGITOS: ReadonlyArray<readonly [desde: number, hasta: number, iso: string]> = [
+  [1, 2, '2026-08-12'], [3, 4, '2026-08-13'], [5, 6, '2026-08-14'],
+  [7, 8, '2026-08-18'], [9, 10, '2026-08-19'], [11, 12, '2026-08-20'],
+  [13, 14, '2026-08-21'], [15, 16, '2026-08-24'], [17, 18, '2026-08-25'],
+  [19, 20, '2026-08-26'], [21, 22, '2026-08-27'], [23, 24, '2026-08-28'],
+  [25, 26, '2026-08-31'], [27, 28, '2026-09-01'], [29, 30, '2026-09-02'],
+  [31, 32, '2026-09-03'], [33, 34, '2026-09-04'], [35, 36, '2026-09-07'],
+  [37, 38, '2026-09-08'], [39, 40, '2026-09-09'], [41, 42, '2026-09-10'],
+  [43, 44, '2026-09-11'], [45, 46, '2026-09-14'], [47, 48, '2026-09-15'],
+  [49, 50, '2026-09-16'], [51, 52, '2026-09-17'], [53, 54, '2026-09-18'],
+  [55, 56, '2026-09-21'], [57, 58, '2026-09-22'], [59, 60, '2026-09-23'],
+  [61, 62, '2026-09-24'], [63, 64, '2026-09-25'], [65, 66, '2026-09-28'],
+  [67, 68, '2026-10-01'], [69, 70, '2026-10-02'], [71, 72, '2026-10-05'],
+  [73, 74, '2026-10-06'], [75, 76, '2026-10-07'], [77, 78, '2026-10-08'],
+  [79, 80, '2026-10-09'], [81, 82, '2026-10-13'], [83, 84, '2026-10-14'],
+  [85, 86, '2026-10-15'], [87, 88, '2026-10-16'], [89, 90, '2026-10-19'],
+  [91, 92, '2026-10-20'], [93, 94, '2026-10-21'], [95, 96, '2026-10-22'],
+  [97, 98, '2026-10-23'], [99, 0, '2026-10-26'],
+];
 
-  return Array.from({ length: 10 }, (_, banda) => {
-    const lo = String(banda * 10).padStart(2, '0');
-    const hi = String(banda * 10 + 9).padStart(2, '0');
-    return {
-      obligation: 'Declaración Renta — Personas Naturales',
-      period: 'AG 2025',
-      nitDigit: banda,
-      dueDate: fechasPorBanda[banda]!,
-      legalBasis: `${DECREE}, Art. 592 E.T.`,
-      notes: `${COMUNICADO_NOTE} — Dos últimos dígitos NIT ${lo}–${hi}`,
-      verified: true,
-    } satisfies NationalDeadline;
-  });
+/**
+ * Fecha oficial de renta PN para unos dos últimos dígitos concretos (0–99).
+ * El último grupo es `99-00`, así que el 00 se trata aparte.
+ */
+export function rentaPNPorDosDigitos(dosDigitos: number): string {
+  if (!Number.isInteger(dosDigitos) || dosDigitos < 0 || dosDigitos > 99) {
+    throw new Error(`Dos últimos dígitos inválidos: ${dosDigitos}`);
+  }
+  for (const [desde, hasta, iso] of RENTA_PN_2026_POR_DOS_DIGITOS) {
+    if (hasta < desde) {
+      // Grupo envolvente 99-00.
+      if (dosDigitos >= desde || dosDigitos <= hasta) return iso;
+      continue;
+    }
+    if (dosDigitos >= desde && dosDigitos <= hasta) return iso;
+  }
+  throw new Error(`Sin fecha de renta PN para los dos últimos dígitos ${dosDigitos}`);
+}
+
+/**
+ * Comprime una tabla indexada por los DOS últimos dígitos del NIT al shape
+ * `nitDigit: 0–9` de `NationalDeadline`, devolviendo la fecha MÁS TEMPRANA
+ * compatible con ese último dígito.
+ *
+ * Un solo dígito no determina el plazo, así que hay que elegir un
+ * representante. La elección no es simétrica: publicar una fecha ANTERIOR a la
+ * legal sólo adelanta la presentación; publicar una POSTERIOR produce
+ * extemporaneidad (Art. 641 / Art. 651 E.T.). Por eso siempre el mínimo.
+ */
+export function fechaMasTempranaPorUltimoDigito(
+  ultimoDigito: number,
+  lookup: (dosDigitos: number) => string,
+): string {
+  if (!Number.isInteger(ultimoDigito) || ultimoDigito < 0 || ultimoDigito > 9) {
+    throw new Error(`Último dígito inválido: ${ultimoDigito}`);
+  }
+  const fechas = Array.from({ length: 10 }, (_, decena) => lookup(decena * 10 + ultimoDigito));
+  return fechas.slice().sort()[0]!;
+}
+
+/** Renta Personas Naturales comprimida al shape `nitDigit: 0–9`. */
+function buildRentaPN(): NationalDeadline[] {
+  return Array.from({ length: 10 }, (_, digit) => ({
+    obligation: 'Declaración Renta — Personas Naturales',
+    period: 'AG 2025',
+    nitDigit: digit,
+    dueDate: fechaMasTempranaPorUltimoDigito(digit, rentaPNPorDosDigitos),
+    legalBasis: `${DECREE}, Art. 592 E.T.`,
+    notes:
+      'El plazo lo fijan los DOS últimos dígitos del NIT (sin DV), del ' +
+      '12-ago-2026 (01-02) al 26-oct-2026 (99-00). Se publica la fecha más ' +
+      'temprana compatible con este último dígito; confirme la suya en la ' +
+      'tabla de la Res. Única DIAN 000227 de 2025.',
+    verified: false,
+  } satisfies NationalDeadline));
 }
 
 /** IVA Bimestral B1–B6 — un mes por bimestre + ajuste para B6 (ene 2027). */
@@ -345,15 +454,109 @@ function buildIVACuatrimestral(): NationalDeadline[] {
   );
 }
 
-/** Información Exógena — septiembre 2026 (9–22 sep). */
+/**
+ * Información Exógena AG 2025 — Res. Única DIAN 000227 del 23-sep-2025,
+ * Título 3 (compila Res. 000162 de 2023 y Res. 000188 de 2024), modificada por
+ * la Res. DIAN 000233 de 2025.
+ *
+ * ⚠ Auditoría normativa 2026-08 — el repo la generaba en SEPTIEMBRE de 2026
+ * (7°–16° día hábil). Dos errores en uno:
+ *   1. La exógena NO sigue la regla del 7°–16° día hábil; tiene tabla propia.
+ *   2. Los plazos reales terminan el 12-jun-2026, casi tres meses ANTES.
+ * Anunciar septiembre expone al contribuyente a la sanción del Art. 651 E.T.
+ * (hasta 15.000 UVT) más el desconocimiento de costos y deducciones.
+ *
+ * Fuentes: https://actualicese.com/plazos-para-reportar-informacion-exogena-en-2026/
+ *          https://siemprealdia.co/colombia/impuestos/resolucion-000012-de-2026-cambios-en-exogena/
+ */
+
+/**
+ * Grandes contribuyentes — por ÚLTIMO dígito del NIT (sin DV).
+ * Se publican los plazos ORIGINALES de la Res. 000227 de 2025. La Res. DIAN
+ * 000012 del 29-abr-2026 prorrogó únicamente los dígitos 1, 2 y 3 al 14, 15 y
+ * 19 de mayo de 2026; no la aplicamos como fecha base porque una prórroga
+ * posterior sólo puede ampliar, y publicar la fecha temprana nunca sanciona.
+ *
+ * Dígito 3: las fuentes secundarias discrepan (30-abr vs 4-may). Se usa la más
+ * temprana, 30-abr-2026, por el mismo criterio.
+ */
+export const EXOGENA_GC_2026: Readonly<Record<number, string>> = {
+  1: '2026-04-28',
+  2: '2026-04-29',
+  3: '2026-04-30',
+  4: '2026-05-05',
+  5: '2026-05-06',
+  6: '2026-05-07',
+  7: '2026-05-08',
+  8: '2026-05-11',
+  9: '2026-05-12',
+  0: '2026-05-13',
+};
+
+/**
+ * Personas jurídicas y naturales — por los DOS ÚLTIMOS dígitos del NIT, en
+ * grupos de cinco y en orden ASCENDENTE (01-05 primero, 96-00 último).
+ */
+const EXOGENA_PJPN_2026: ReadonlyArray<readonly [desde: number, hasta: number, iso: string]> = [
+  [1, 5, '2026-05-14'], [6, 10, '2026-05-15'], [11, 15, '2026-05-19'],
+  [16, 20, '2026-05-20'], [21, 25, '2026-05-21'], [26, 30, '2026-05-22'],
+  [31, 35, '2026-05-25'], [36, 40, '2026-05-26'], [41, 45, '2026-05-27'],
+  [46, 50, '2026-05-28'], [51, 55, '2026-05-29'], [56, 60, '2026-06-01'],
+  [61, 65, '2026-06-02'], [66, 70, '2026-06-03'], [71, 75, '2026-06-04'],
+  [76, 80, '2026-06-05'], [81, 85, '2026-06-09'], [86, 90, '2026-06-10'],
+  [91, 95, '2026-06-11'], [96, 0, '2026-06-12'],
+];
+
+/** Fecha de exógena PJ/PN para unos dos últimos dígitos concretos (0–99). */
+export function exogenaPJPNPorDosDigitos(dosDigitos: number): string {
+  if (!Number.isInteger(dosDigitos) || dosDigitos < 0 || dosDigitos > 99) {
+    throw new Error(`Dos últimos dígitos inválidos: ${dosDigitos}`);
+  }
+  for (const [desde, hasta, iso] of EXOGENA_PJPN_2026) {
+    if (hasta < desde) {
+      if (dosDigitos >= desde || dosDigitos <= hasta) return iso;
+      continue;
+    }
+    if (dosDigitos >= desde && dosDigitos <= hasta) return iso;
+  }
+  throw new Error(`Sin fecha de exógena para los dos últimos dígitos ${dosDigitos}`);
+}
+
+const EXOGENA_LEGAL_BASIS =
+  'Res. Única DIAN 000227 de 2025 (Título 3), modif. Res. 000233 de 2025; Arts. 623-631 E.T.';
+
 function buildExogena(): NationalDeadline[] {
-  return buildRange(
-    'Información Exógena',
-    'AG 2025',
-    `${DECREE}, Resolución DIAN 162 de 2023`,
-    2026,
-    9,
-  );
+  const gc: NationalDeadline[] = Array.from({ length: 10 }, (_, digit) => ({
+    obligation: 'Información Exógena — Grandes Contribuyentes',
+    period: 'AG 2025',
+    nitDigit: digit,
+    dueDate: EXOGENA_GC_2026[digit]!,
+    legalBasis: EXOGENA_LEGAL_BASIS,
+    notes:
+      'Por ÚLTIMO dígito del NIT sin DV. La Res. DIAN 000012 del 29-abr-2026 ' +
+      'prorrogó los dígitos 1, 2 y 3 al 14, 15 y 19 de mayo de 2026.',
+    verified: false,
+  } satisfies NationalDeadline));
+
+  // El plazo de PJ/PN depende de los DOS últimos dígitos; comprimido al shape
+  // `nitDigit` publicamos la fecha más temprana de la banda (nunca posterior
+  // a la legal). Ver el mismo criterio en `buildRentaPN`.
+  const pjpn: NationalDeadline[] = Array.from({ length: 10 }, (_, digit) => {
+    return {
+      obligation: 'Información Exógena — Personas Jurídicas y Naturales',
+      period: 'AG 2025',
+      nitDigit: digit,
+      dueDate: fechaMasTempranaPorUltimoDigito(digit, exogenaPJPNPorDosDigitos),
+      legalBasis: EXOGENA_LEGAL_BASIS,
+      notes:
+        'El plazo lo fijan los DOS últimos dígitos del NIT (sin DV), del ' +
+        '14-may-2026 (01-05) al 12-jun-2026 (96-00). Se publica la fecha más ' +
+        'temprana compatible con este último dígito; confirme la suya en la tabla.',
+      verified: false,
+    } satisfies NationalDeadline;
+  });
+
+  return [...gc, ...pjpn];
 }
 
 /** Impuesto al Patrimonio — Declaración + Cuota 1: mayo 2026 (12–26 may). */
@@ -382,7 +585,8 @@ function buildPatrimonioCuota2(): NationalDeadline[] {
     dueDate,
     legalBasis: `${DECREE}, Art. 292-3 E.T.`,
     notes: `${COMUNICADO_NOTE} — Fecha única (10° día hábil de septiembre)`,
-    verified: true,
+    // Derivada de `nthBusinessDay`, no leída de la tabla oficial. Ver ⚠ PROCEDENCIA.
+    verified: false,
   } satisfies NationalDeadline));
 }
 
@@ -430,6 +634,29 @@ export interface ScrapeResult {
 }
 
 /**
+ * Calendario nacional 2026 completo, sin I/O. Es la parte del scraper que
+ * realmente produce las fechas: `scrapeDIANCalendar` sólo le antepone la
+ * validación de que la fuente oficial sigue viva. Se exporta para poder
+ * auditar la procedencia (`verified`) sin salir a la red.
+ */
+export function buildDeadlines2026(): NationalDeadline[] {
+  return [
+    ...buildGCCuota1(),
+    ...buildGCDeclCuota2(),
+    ...buildGCCuota3(),
+    ...buildRentaPJDecl(),
+    ...buildRentaPJCuota2(),
+    ...buildRentaPN(),
+    ...buildIVABimestral(),
+    ...buildIVACuatrimestral(),
+    ...buildExogena(),
+    ...buildPatrimonioDecl(),
+    ...buildPatrimonioCuota2(),
+    ...buildRetencion(),
+  ];
+}
+
+/**
  * Ejecuta el scraping del calendario DIAN para `year`. Devuelve `null`
  * si la fuente oficial no responde o cambió su formato (en cuyo caso
  * el cron debe alertar y NO sobreescribir el snapshot existente).
@@ -467,25 +694,8 @@ export async function scrapeDIANCalendar(
     return null;
   }
 
-  // Construir el calendario completo a partir de los rangos del Comunicado 128.
-  // Cada builder devuelve 10 entries (uno por dígito NIT) salvo PN y Patrimonio C2.
-  const deadlines: NationalDeadline[] = [
-    ...buildGCCuota1(),
-    ...buildGCDeclCuota2(),
-    ...buildGCCuota3(),
-    ...buildRentaPJDecl(),
-    ...buildRentaPJCuota2(),
-    ...buildRentaPN(),
-    ...buildIVABimestral(),
-    ...buildIVACuatrimestral(),
-    ...buildExogena(),
-    ...buildPatrimonioDecl(),
-    ...buildPatrimonioCuota2(),
-    ...buildRetencion(),
-  ];
-
   return {
-    deadlines,
+    deadlines: buildDeadlines2026(),
     source: source.source,
     sourceUrl: source.url,
     hash: source.hash,

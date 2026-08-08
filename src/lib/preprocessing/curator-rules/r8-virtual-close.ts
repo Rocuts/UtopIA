@@ -29,6 +29,7 @@ import type {
   ValidatedAccount,
 } from '../trial-balance';
 
+import { syncControlTotals } from './sync-control-totals';
 import type { CuratorFinding, VirtualCloseAdjustment } from './types';
 
 const VIRTUAL_CURRENT_CODE = '3605VC';
@@ -436,6 +437,12 @@ function recomputeControlTotalsFromClasses(
   totals.activoNoCorriente = sumByGroups(claseActivo, ACTIVO_NO_CORRIENTE_GROUPS);
   totals.pasivoCorriente = sumByGroups(clasePasivo, PASIVO_CORRIENTE_GROUPS);
   totals.pasivoNoCorriente = sumByGroups(clasePasivo, PASIVO_NO_CORRIENTE_GROUPS);
+
+  // R8 mueve el resultado del ejercicio a patrimonio: es la mutación que más
+  // desplaza los totales. Sin esta sincronización, `cents` y `raw` conservaban
+  // los valores PRE-cierre y el gate comparaba el reporte contra un patrimonio
+  // que ya no existía.
+  syncControlTotals(totals, classes);
 }
 
 function sumByGroups(cl: PUCClass | undefined, groups: Set<string>): number {

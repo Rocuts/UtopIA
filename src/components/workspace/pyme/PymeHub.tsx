@@ -5,8 +5,12 @@
  *
  * Diseño "1+1 · Contabilidad Pyme" del handoff, cableado a datos REALES:
  * - Hero verde: nombre del libro + totales del mes (GET /api/pyme/summary)
- * - Semáforo de impuestos: ingresos acumulados del año vs tope RST/IVA
- *   (3.500 UVT) calculado con src/lib/tax/taxCalculator
+ * - Semáforo de impuestos: ingresos acumulados del año vs el umbral de NO
+ *   responsable de IVA / INC (3.500 UVT — Art. 437 par. 3 E.T. y Art. 908
+ *   par. 4 E.T.), calculado con src/lib/tax/taxCalculator.
+ *   OJO: ese umbral NO es el tope del Régimen Simple (100.000 UVT,
+ *   Art. 905 num. 2 E.T.); son responsabilidades distintas y esta tarjeta
+ *   solo habla de la primera.
  * - "Lo que se viene": próximos vencimientos DIAN verificados
  *   (GET /api/calendar/verified) — sin montos inventados
  * - Quick-access grid (6 cards) hacia las subpáginas reales del área
@@ -38,7 +42,7 @@ import { useSyncExternalStore } from 'react';
 import { useSyncStatus } from '@/hooks/pyme/useSyncStatus';
 import { cn } from '@/lib/utils';
 import { formatPesosInteger } from '@/lib/format/cop';
-import { topeRST } from '@/lib/tax/taxCalculator';
+import { umbralNoResponsableIvaInc } from '@/lib/tax/taxCalculator';
 import { AreaFX } from '@/components/workspace/AreaFX';
 import {
   usePymeBook,
@@ -167,8 +171,11 @@ export function PymeHub() {
   const { upcoming, loading: deadlinesLoading } = usePymeDeadlines(now.getFullYear());
 
   const totals = summary?.totals ?? null;
-  const tope = topeRST();
-  const ivaFraction = summary ? Math.min(summary.yearIngresos / tope, 1) : 0;
+  // Umbral de NO responsable de IVA / INC (3.500 UVT). No es el tope del
+  // Régimen Simple: superarlo obliga a inscribirse como responsable de IVA,
+  // no a cambiar de régimen.
+  const umbralIva = umbralNoResponsableIvaInc();
+  const ivaFraction = summary ? Math.min(summary.yearIngresos / umbralIva, 1) : 0;
   const semaforoLevel: 'verde' | 'amarillo' | 'rojo' =
     ivaFraction >= 1 ? 'rojo' : ivaFraction >= 0.8 ? 'amarillo' : 'verde';
 
@@ -404,7 +411,8 @@ export function PymeHub() {
       </section>
 
       {/* ---------------------------------------------------------------- */}
-      {/* SEMÁFORO — ingresos acumulados vs tope RST/IVA (3.500 UVT)       */}
+      {/* SEMÁFORO — ingresos del año vs umbral de responsable de IVA/INC  */}
+      {/* 3.500 UVT · Art. 437 par. 3 E.T. y Art. 908 par. 4 E.T.          */}
       {/* ---------------------------------------------------------------- */}
       <section className="mb-8">
         <h2 className="mb-4 font-mono text-xs uppercase tracking-widest font-medium text-n-600">
@@ -436,15 +444,15 @@ export function PymeHub() {
                     {semaforoLevel === 'verde'
                       ? 'Va bien — todo en verde'
                       : semaforoLevel === 'amarillo'
-                        ? 'Ojo — está cerca del tope'
-                        : 'Pasó el tope — toca revisar su régimen'}
+                        ? 'Ojo — está cerca de tener que cobrar IVA'
+                        : 'Le toca cobrar IVA'}
                   </div>
                   <div className="mt-1 text-sm text-n-600">
                     {semaforoLevel === 'verde'
-                      ? 'Todavía no llega al tope donde le empiezan a cobrar más. Tranquilo, le avisamos antes.'
+                      ? 'Todavía no llega a las 3.500 UVT desde donde le tocaría cobrar IVA. Tranquilo, le avisamos antes.'
                       : semaforoLevel === 'amarillo'
-                        ? 'Pronto podría cambiar de régimen. Hablemos antes de que la DIAN lo haga por usted.'
-                        : 'Sus ventas del año superan el tope del Régimen Simple. Revise su régimen con un asesor.'}
+                        ? 'Está cerca de las 3.500 UVT desde donde le toca inscribirse como responsable de IVA. Hablemos antes de que la DIAN lo haga por usted.'
+                        : 'Sus ventas del año pasan las 3.500 UVT: le toca inscribirse como responsable de IVA (Art. 437 par. 3 E.T.). Esto NO lo saca del Régimen Simple — su tope es 100.000 UVT.'}
                   </div>
                 </div>
               </div>
@@ -468,7 +476,7 @@ export function PymeHub() {
               {/* Scale labels */}
               <div className="mt-2 flex justify-between text-xs text-n-500">
                 <span>Sus ventas del año: {copM(summary!.yearIngresos)}</span>
-                <span>Tope: {copM(tope)} (3.500 UVT)</span>
+                <span>Cobrar IVA desde: {copM(umbralIva)} (3.500 UVT)</span>
               </div>
             </>
           ) : (
@@ -478,7 +486,7 @@ export function PymeHub() {
               </span>
               {bookLoading || summaryLoading
                 ? 'Calculando con sus movimientos…'
-                : 'Cuando registre sus primeras ventas, aquí le mostramos qué tan cerca está del tope de impuestos.'}
+                : 'Cuando registre sus primeras ventas, aquí le mostramos qué tan cerca está de tener que cobrar IVA.'}
             </div>
           )}
         </div>

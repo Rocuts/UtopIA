@@ -7,11 +7,18 @@
 // Aritmética en BigInt-centavos para evitar pérdida de precisión IEEE-754.
 // Patrón tomado de src/lib/accounting/double-entry/validate.ts.
 //
-// NOTA IMPORTANTE — IVA_0_EXEMPT:
-//   Cuando la regla tiene rate=0 (operación excluida/exenta), NO se emite
-//   ninguna JournalLineInput. La regla aparece en TaxLineProposal con
-//   taxAmountCop="0.00" para que la UI muestre "Exento/Excluido" pero no
-//   contamina el asiento contable.
+// NOTA IMPORTANTE — reglas de tarifa 0 (IVA_EXENTO / IVA_EXCLUIDO):
+//   Cuando la regla tiene rate=0, NO se emite ninguna JournalLineInput. La
+//   regla aparece en TaxLineProposal con taxAmountCop="0.00" para que la UI
+//   muestre "Exento (Art. 477 E.T.)" o "Excluido (Arts. 424/476 E.T.)" pero
+//   no contamina el asiento contable.
+//
+// NOTA IMPORTANTE — reglas `ambiguous`:
+//   Cuando dos reglas del mismo grupo de exclusión mutua empatan en
+//   especificidad, `matchRules` las devuelve marcadas y aquí se emiten como
+//   propuestas con confianza 0 SIN línea contable y SIN afectar el total a
+//   pagar. Preferimos un asiento incompleto y visible a uno completo con la
+//   tarifa equivocada: el dictamen lo firma el cliente ante la DIAN.
 
 import type { JournalLineInput } from '@/lib/accounting/types';
 import type {
@@ -84,7 +91,7 @@ export async function generateLines(
   // ReteFuente/ICA (resta, porque el comprador retiene antes de pagar).
   let totalPayableCentavos = subtotalCentavos;
 
-  for (const { rule, warnings: ruleWarnings } of matched) {
+  for (const { rule, warnings: ruleWarnings, ambiguous } of matched) {
     warnings.push(...ruleWarnings);
     matchedRuleIds.push(rule.id);
 
@@ -124,9 +131,19 @@ export async function generateLines(
       proposal.confidence = 0.7;
     }
 
+    // Regla en conflicto sin resolver dentro de su grupo de exclusión mutua:
+    // se muestra al usuario para que decida, pero NO se contabiliza ni afecta
+    // el total a pagar. Ver resolveExclusionGroups() en rules-engine.ts.
+    if (ambiguous) {
+      proposal.confidence = 0;
+      proposals.push(proposal);
+      continue;
+    }
+
     proposals.push(proposal);
 
-    // Si rate=0 (IVA_0_EXEMPT) — NO emitir línea contable
+    // Si rate=0 (operación exenta Art. 477 E.T. o excluida Arts. 424/476 E.T.)
+    // — NO emitir línea contable
     if (taxCentavos === BigInt(0)) {
       // Marcamos para la UI pero no contabilizamos
       continue;

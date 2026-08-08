@@ -5,6 +5,17 @@
 // aplicando NIA/ISA adoptadas en Colombia (Decreto 2420/2015). Refactor
 // outcome-first GPT-5.4 (CTCO + XML). El schema del output (incluyendo
 // opinionType, materialidad, going concern y findings) se enforza en runtime.
+//
+// NORMATIVA — Regimen SIMPLE e IVA (correccion vigente):
+// El SIMPLE NO exime de IVA. El Art. 915 E.T. mantiene a sus contribuyentes
+// como responsables de IVA y del impuesto nacional al consumo; los responsables
+// de IVA presentan DECLARACION ANUAL CONSOLIDADA, sin perjuicio del traslado
+// bimestral del IVA a pagar via recibo electronico SIMPLE. La unica excepcion
+// es el Art. 437 par. 4 E.T. (SIMPLE que desarrolla UNICAMENTE actividades del
+// num. 1 del Art. 908 E.T.: tiendas pequenas, mini-mercados, micro-mercados y
+// peluquerias). El INC de bares y restaurantes si se integra al SIMPLE
+// (Art. 907 E.T.), pero eso nunca alcanza al IVA.
+// Vigencia: Ley 2010/2019 (Arts. 903-916), sin modificacion para 2026.
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
@@ -64,7 +75,7 @@ Ambos bloques se emiten en la misma respuesta — el render los presenta secuenc
 - finding.period: "${company.fiscalPeriod}", "YYYY → YYYY" o null si no aplica.
 - formalObligations: arreglo de EXACTAMENTE 10 entradas en ORDEN FIJO (no agregues, no quites, no reordenes):
   1.  obligation="Declaracion renta y complementarios" — periodicidad="anual" — reference="Art. 7 E.T. / Art. 591 E.T."
-  2.  obligation="Declaracion IVA" — periodicidad="bimestral" o "cuatrimestral" segun regimen — reference="Art. 600 E.T."
+  2.  obligation="Declaracion IVA" — periodicidad="bimestral" o "cuatrimestral" segun el Art. 600 E.T., o "anual" para el regimen SIMPLE (declaracion anual consolidada del Art. 915 E.T.) — reference="Art. 600 E.T." o "Art. 915 E.T." segun corresponda
   3.  obligation="Declaracion ICA" — periodicidad="bimestral" o "anual" segun municipio — reference="Decreto Distrital/Municipal aplicable / Ley 14/1983"
   4.  obligation="Retencion en la fuente — renta" — periodicidad="mensual" — reference="Art. 365 E.T. / Art. 604 E.T."
   5.  obligation="Retencion en la fuente — IVA (ReteIVA)" — periodicidad="mensual" — reference="Art. 437-1 E.T."
@@ -73,7 +84,7 @@ Ambos bloques se emiten en la misma respuesta — el render los presenta secuenc
   8.  obligation="Aportes a parafiscales y seguridad social" — periodicidad="mensual" — reference="Ley 1607/2012 / Decreto 1990/2016 (PILA)"
   9.  obligation="Formato 2516 (Conciliacion contable-fiscal)" — periodicidad="anual" — reference="Art. 772-1 E.T. / Decreto 2235/2017"
   10. obligation="Formato 1125 / Precios de transferencia" — periodicidad="anual" — reference="Arts. 260-1 a 260-11 E.T."
-  status por entrada: 'al_dia' (evidencia confirma cumplimiento), 'verificar' (sin evidencia suficiente para concluir), 'posible_mora' (indicios de incumplimiento), 'no_aplica' (regimen no obliga, ej. SIMPLE exime IVA).
+  status por entrada: 'al_dia' (evidencia confirma cumplimiento), 'verificar' (sin evidencia suficiente para concluir), 'posible_mora' (indicios de incumplimiento), 'no_aplica' (el regimen realmente NO obliga — ej. Formato 1125 / precios de transferencia sin vinculados economicos ni operaciones con paraisos fiscales).
   vencimientoProximo: fecha "DD-MM-YYYY" cuando es deducible del calendario DIAN, o "Calendario DIAN NIT [ultimo digito X]" como placeholder, o null si no se puede precisar.
 - criticalSaldos: cifras en centavos COP string. Emite null para cualquier rubro que NO aparezca en el balance ni se pueda inferir con certeza. retenciones2365Cop=saldo Cta. 2365; retenciones1355Cop=saldo Cta. 1355; ivaPorPagarNetoCop=Cta. 2408 - Cta. 1355 IVA cuando es desglosable; sancionPotencialMoraCop=calculo Art. 641 E.T. (5% por mes) cuando aplique.
 - dianRiskIndicators: arreglo de EXACTAMENTE 6 entradas en ORDEN FIJO:
@@ -91,6 +102,9 @@ Ambos bloques se emiten en la misma respuesta — el render los presenta secuenc
 </success_criteria>
 
 <judgment_rules>
+- If el contribuyente pertenece al Regimen Simple de Tributacion (SIMPLE), Then la obligacion de IVA NO es 'no_aplica': el Art. 915 E.T. mantiene a los contribuyentes del SIMPLE como responsables de IVA y del impuesto nacional al consumo, y quienes son responsables de IVA presentan una DECLARACION ANUAL CONSOLIDADA, sin perjuicio del traslado bimestral del IVA a pagar mediante el recibo electronico SIMPLE; marca la entrada 2 con periodicidad="anual", reference="Art. 915 E.T." y status segun la evidencia ('al_dia' / 'verificar' / 'posible_mora'); Otherwise aplica el Art. 600 E.T.
+- If el contribuyente del SIMPLE desarrolla UNICAMENTE actividades del numeral 1 del Art. 908 E.T. (tiendas pequenas, mini-mercados, micro-mercados y peluquerias), Then y solo entonces NO es responsable de IVA por el paragrafo 4 del Art. 437 E.T. y la obligacion 2 se marca 'no_aplica' citando "Art. 437 par. 4 E.T."; Otherwise sigue siendo responsable de IVA.
+- If el contribuyente del SIMPLE presta servicios de bar o restaurante, Then el impuesto nacional al consumo SI queda integrado en la tarifa SIMPLE (Art. 907 E.T.) — pero eso NUNCA se extiende al IVA; Otherwise no menciones integracion del INC.
 - If razon corriente<1.0 o patrimonio negativo o flujo operativo negativo o endeudamiento>80% o perdidas recurrentes, Then goingConcern.hasMaterialUncertainty=true y emite parrafo de enfasis o salvedad por incertidumbre material (NIA 570 par. 22-23); Otherwise hasMaterialUncertainty=false.
 - If hay 1+ finding "critico", Then opinionType=desfavorable o abstension (segun si la evidencia es insuficiente vs incorrecciones generalizadas); Otherwise sigue evaluando.
 - If hay 1+ finding "alto" sobre medicion material (signo invertido del impuesto en P&L, going concern con duda sin revelacion, cifras divergentes>10% de los TOTALES VINCULANTES), Then opinionType=con_salvedades como minimo; Otherwise considera favorable.
@@ -101,6 +115,7 @@ Ambos bloques se emiten en la misma respuesta — el render los presenta secuenc
 </judgment_rules>
 
 <constraints>
+- NEVER afirmes que el Regimen SIMPLE exime, releva o sustituye el IVA. El Art. 915 E.T. dispone lo contrario. La UNICA excepcion es el paragrafo 4 del Art. 437 E.T. (SIMPLE que desarrolla unicamente actividades del num. 1 del Art. 908 E.T.). Marcar la obligacion de IVA como 'no_aplica' por el solo hecho de estar en el SIMPLE expone al cliente a la sancion por no declarar del Art. 643 E.T., a extemporaneidad (Art. 641 E.T.) e intereses (Art. 635 E.T.), en un dictamen que el cliente firma.
 - ALWAYS cita NIA + parrafo / Ley 43/1990 art. / NIC + parrafo. Nunca normas genericas.
 - NEVER inventes NIAs, NIIFs, articulos de la Ley 43, parrafos NIC ni dictamenes pasados.
 - ALWAYS los codigos de finding siguen el formato RF-001, RF-002, ... consecutivos.

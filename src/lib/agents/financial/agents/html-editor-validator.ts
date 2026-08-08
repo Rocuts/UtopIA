@@ -30,7 +30,15 @@
 // ---------------------------------------------------------------------------
 
 import { parseHTML } from 'linkedom';
-import type { HtmlEditorMetadata } from '../contracts/html-editor';
+import {
+  collectBindingFigures,
+  type BindingFigure,
+  type HtmlEditorMetadata,
+} from '../contracts/html-editor';
+import type { NiifReportJson } from '../contracts/niif-report';
+import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
+
+type ParsedDocument = ReturnType<typeof parseHTML>['document'];
 
 export interface ChecklistFailure {
   rule: string;
@@ -234,43 +242,10 @@ export function validateHtmlChecklist(
 
   // ── Check 7 · §1.1 Toda suma cuadra aritméticamente ──────────────────────
   //
-  // best-effort: busca tables con clase 'ft' (v10.1) y verifica que el
-  // último td de la fila tfoot.total coincida con la suma de las celdas
-  // tr.grp anteriores. Severity: block — spec §1.1 exige cuadre.
-  const tables = document.querySelectorAll('table');
-  for (const table of tables) {
-    const rows = table.querySelectorAll('tr');
-    for (const row of rows) {
-      const cells = row.querySelectorAll('td');
-      if (cells.length < 3) continue;
-      const lastCell = cells[cells.length - 1];
-      const isTotal =
-        (lastCell.getAttribute('class') ?? '').includes('total') ||
-        (row.querySelector('th, td:first-child')?.textContent ?? '').toLowerCase().includes('total');
-      if (!isTotal) continue;
-      const parseCOP = (text: string): number | null => {
-        const cleaned = (text ?? '').replace(/\./g, '').replace(',', '.').replace(/[^0-9.\-]/g, '');
-        const n = parseFloat(cleaned);
-        return isNaN(n) ? null : n;
-      };
-      const cellValues = Array.from(cells)
-        .slice(0, -1)
-        .map((c) => parseCOP(c.textContent ?? ''))
-        .filter((v): v is number => v !== null);
-      const reportedTotal = parseCOP(lastCell.textContent ?? '');
-      if (cellValues.length > 1 && reportedTotal !== null) {
-        const computedSum = cellValues.reduce((a, b) => a + b, 0);
-        if (Math.abs(computedSum - reportedTotal) > 1) {
-          failures.push({
-            rule: '§1.1 · Check 7 — aritmética de totales',
-            detail: `Fila de total: suma computada ${computedSum.toFixed(2)} ≠ reportada ${reportedTotal.toFixed(2)}`,
-            severity: 'block',
-          });
-          break;
-        }
-      }
-    }
-  }
+  // Suma VERTICAL por columna. Ver `checkColumnArithmetic` para el porqué del
+  // cambio respecto a la versión horizontal (que era un no-op en el layout
+  // real de los estados financieros).
+  failures.push(...checkColumnArithmetic(document));
 
   // ── Check 8 · §1.3 Ratios fuera de banda con △ ──────────────────────────
   //
@@ -586,11 +561,341 @@ export function validateHtmlChecklist(
   // 02..14 = 15 articles). Contamos <article class="page">.
   // Umbral = 15 exacto (Portada + TOC + páginas 02..14). El `< 14` anterior
   // dejaba pasar silenciosamente reportes con una página faltante.
+  // Severity: block (antes 'warn'). Un HTML truncado por presupuesto de
+  // tokens degrada monótonamente en este contador y en ningún otro check —
+  // todos los demás miran la portada o el <head>, que se emiten primero. Con
+  // 'warn' un informe cortado a mitad de la Página 09 llegaba al cliente sin
+  // una sola señal. Ver `runHtmlEditor`: un fallo block estampa BORRADOR.
   const articles = document.querySelectorAll('article.page');
   if (articles.length < 15) {
     failures.push({
       rule: '§4 · Check 22 — 15 páginas A4 portrait',
       detail: `Encontradas ${articles.length} páginas <article class="page">. Spec v10.1 exige 15 (Portada + TOC + 02..14).`,
+      severity: 'block',
+    });
+  }
+
+  return failures;
+}
+
+// ---------------------------------------------------------------------------
+// Check 7 — aritmética de totales POR COLUMNA
+// ---------------------------------------------------------------------------
+//
+// La versión anterior sumaba las celdas de la MISMA fila y las comparaba
+// contra la última. En un estado financiero real —`| Rubro | 2025 | 2024 |`—
+// eso o no dispara nunca (queda un solo valor tras descartar la etiqueta) o
+// compara el saldo de 2025 contra el de 2024. Es decir: el único check
+// aritmético del pipeline no podía detectar un total mal sumado.
+//
+// Los totales de un EEFF se acumulan VERTICALMENTE: la fila TOTAL de cada
+// columna es la suma de las filas de detalle de esa misma columna.
+//
+// Tres interpretaciones admitidas para una fila de total, porque una tabla
+// canónica encadena subtotales y total general en el mismo <table>:
+//
+//   (a) suma de las filas de detalle DESDE EL ÚLTIMO TOTAL  → subtotal de sección
+//   (b) suma de TODAS las filas de detalle de la tabla      → total general
+//   (c) suma de las filas de TOTAL anteriores               → total de totales
+//
+// Sólo se reporta fallo cuando NINGUNA de las tres cuadra: un total correcto
+// jamás cae fuera de las tres, y un total inventado difícilmente cae dentro.
+//
+// Sólo se consideran celdas que contienen `$`. Es lo que la spec §1.9 exige
+// para toda cifra monetaria y lo que separa las columnas de dinero de las de
+// ratios (`2,13×`), porcentajes y conteos, que no son sumables.
+
+const ARITHMETIC_TOLERANCE_COP = 1;
+
+/**
+ * Parsea una celda con formato COP (`$1.234.567,89`, `($1.234,56)`, `-$1.234`).
+ * Devuelve `null` si la celda no es una cifra monetaria sumable.
+ */
+export function parseCopCell(raw: string): number | null {
+  const text = (raw ?? '').replace(/ /g, ' ').trim();
+  if (!text.includes('$')) return null;
+  // Un porcentaje no es sumable aunque venga acompañado de `$` en la misma
+  // celda (celdas "Δ $ / Δ %" combinadas).
+  if (text.includes('%')) return null;
+  // Convención contable NIIF: negativo entre paréntesis. Sin esto, un EEFF
+  // con costos entre paréntesis producía un BLOCK falso en cada tabla.
+  const isNegative = /\(\s*-?\s*\$/.test(text) || /^-/.test(text) || /\$\s*-/.test(text);
+  const digits = text.replace(/[^0-9.,]/g, '');
+  if (!/\d/.test(digits)) return null;
+  const normalized = digits.replace(/\./g, '').replace(',', '.');
+  const n = Number.parseFloat(normalized);
+  if (!Number.isFinite(n)) return null;
+  return isNegative ? -Math.abs(n) : Math.abs(n);
+}
+
+/** ¿La fila es una fila de total/subtotal? (clase, etiqueta o <tfoot>) */
+function isTotalRow(row: Element): boolean {
+  const rowClass = (row.getAttribute('class') ?? '').toLowerCase();
+  if (rowClass.includes('total')) return true;
+  if (row.parentElement?.tagName?.toLowerCase() === 'tfoot') return true;
+  const cells = Array.from(row.querySelectorAll('th, td'));
+  if (cells.some((c) => (c.getAttribute('class') ?? '').toLowerCase().includes('total'))) {
+    return true;
+  }
+  const label = (cells[0]?.textContent ?? '').trim().toLowerCase();
+  return /^(sub)?total\b/.test(label) || label.startsWith('total ');
+}
+
+function checkColumnArithmetic(document: ParsedDocument): ChecklistFailure[] {
+  const failures: ChecklistFailure[] = [];
+
+  for (const table of Array.from(document.querySelectorAll('table'))) {
+    // Acumuladores por índice de columna.
+    const local = new Map<number, { sum: number; count: number }>();
+    const global = new Map<number, { sum: number; count: number }>();
+    const subtotals = new Map<number, { sum: number; count: number }>();
+    let reported = false;
+
+    const add = (
+      acc: Map<number, { sum: number; count: number }>,
+      idx: number,
+      value: number,
+    ) => {
+      const cur = acc.get(idx) ?? { sum: 0, count: 0 };
+      acc.set(idx, { sum: cur.sum + value, count: cur.count + 1 });
+    };
+
+    for (const row of Array.from(table.querySelectorAll('tr'))) {
+      const cells = Array.from(row.querySelectorAll('th, td'));
+      const values = cells.map((c) => parseCopCell(c.textContent ?? ''));
+      const totalRow = isTotalRow(row);
+
+      if (!totalRow) {
+        values.forEach((v, idx) => {
+          if (v === null) return;
+          add(local, idx, v);
+          add(global, idx, v);
+        });
+        continue;
+      }
+
+      // Fila de total: contrasta cada columna contra las tres lecturas.
+      values.forEach((v, idx) => {
+        if (v === null || reported) return;
+        const candidates: number[] = [];
+        const l = local.get(idx);
+        const g = global.get(idx);
+        const s = subtotals.get(idx);
+        if (l && l.count >= 2) candidates.push(l.sum);
+        if (g && g.count >= 2) candidates.push(g.sum);
+        if (s && s.count >= 2) candidates.push(s.sum);
+        if (candidates.length === 0) return;
+        const cuadra = candidates.some(
+          (c) => Math.abs(c - v) <= ARITHMETIC_TOLERANCE_COP,
+        );
+        if (cuadra) return;
+        const label = (cells[0]?.textContent ?? '').trim().slice(0, 60);
+        failures.push({
+          rule: '§1.1 · Check 7 — aritmética de totales',
+          detail:
+            `Fila "${label}" columna ${idx + 1}: total declarado ${v.toFixed(2)} ` +
+            `no coincide con ninguna suma de la columna (${candidates
+              .map((c) => c.toFixed(2))
+              .join(' | ')}).`,
+          severity: 'block',
+        });
+        // Un solo fallo por tabla: un descuadre suele arrastrar a todas las
+        // columnas y el banner se volvería ilegible.
+        reported = true;
+      });
+
+      values.forEach((v, idx) => {
+        if (v !== null) add(subtotals, idx, v);
+      });
+      local.clear();
+    }
+  }
+
+  return failures;
+}
+
+// ---------------------------------------------------------------------------
+// Reconciliación HTML ↔ JSON — la pieza que faltaba
+// ---------------------------------------------------------------------------
+//
+// Ningún check anterior comparaba el HTML contra el JSON de origen: el Check 7
+// suma dentro del propio HTML, así que un juego de cifras internamente
+// coherente pero equivocado (el clásico desliz de escala centavos→pesos)
+// pasaba entero.
+//
+// Dirección del check — importa:
+//
+//   R1 (block) PRESENCIA: toda cifra vinculante del JSON debe aparecer
+//       literalmente en el HTML. Alta precisión: si el Activo Total del JSON
+//       no está impreso en ninguna parte, el documento es otro documento.
+//
+//   R2 (warn) AUSENCIA DE CIFRAS AJENAS: toda cifra monetaria dentro de una
+//       celda debería poder rastrearse a algún monto del payload. Es 'warn' y
+//       no 'block' a propósito: el informe contiene legítimamente cifras
+//       derivadas (variaciones, subtotales por rubro) y la spec §1.9/L38
+//       autoriza el abreviado `$X.XXX M`. Como bloqueo sería un generador de
+//       falsos positivos masivos; como aviso, es la red que caza la cifra
+//       inventada.
+
+/** Renderizaciones COP aceptables para un monto en centavos (valor absoluto). */
+function acceptableRenderings(cents: bigint): string[] {
+  const HUNDRED = BigInt(100);
+  const abs = cents < BigInt(0) ? -cents : cents;
+  const exact = formatCopFromCents(abs, true);
+  // Presentación en pesos enteros: la plantilla puede omitir los centavos.
+  // Se admiten truncado y redondeado para no bloquear por el último centavo.
+  const truncated = formatCopFromCents(abs - (abs % HUNDRED), true).replace(/,\d{2}$/, '');
+  const rounded = formatCopFromCents(
+    abs + (HUNDRED - BigInt(1)) - ((abs + (HUNDRED - BigInt(1))) % HUNDRED),
+    true,
+  ).replace(/,\d{2}$/, '');
+  return Array.from(new Set([exact, truncated, rounded]));
+}
+
+/**
+ * Texto plano normalizado del HTML para búsqueda de cifras: sin etiquetas, sin
+ * `&nbsp;` y sin el espacio que algunas plantillas dejan entre `$` y el número.
+ */
+function normalizedText(html: string, document: ParsedDocument): string {
+  const raw = document.body?.textContent ?? html.replace(/<[^>]+>/g, ' ');
+  return raw.replace(/ /g, ' ').replace(/\$\s+/g, '$');
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * ¿Aparece `candidate` como cifra completa? El lookahead evita que
+ * `$1.234.567` valide por estar contenido en `$1.234.567.890`.
+ */
+function containsFigure(text: string, candidate: string): boolean {
+  return new RegExp(`${escapeRegExp(candidate)}(?![.,]?\\d)`).test(text);
+}
+
+/** Recolecta todo monto del payload como conjunto de renderizaciones válidas. */
+function collectPayloadRenderings(payload: unknown): Set<string> {
+  const out = new Set<string>();
+  const seen = new Set<unknown>();
+  const HUNDRED = BigInt(100);
+
+  const addCents = (cents: bigint) => {
+    for (const r of acceptableRenderings(cents)) out.add(r);
+  };
+
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 12 || node === null || node === undefined) return;
+    if (typeof node === 'string') {
+      // MoneyCop: entero serializado. ≥4 dígitos ⇒ ≥ $10,00; por debajo son
+      // códigos PUC y años, no montos.
+      if (/^-?\d{4,}$/.test(node)) {
+        try {
+          addCents(parseMoneyCop(node));
+        } catch {
+          /* no es MoneyCop — se ignora */
+        }
+      }
+      return;
+    }
+    if (typeof node === 'number') {
+      if (!Number.isFinite(node) || Math.abs(node) < 1000) return;
+      // Los reportes de strategy/governance manejan pesos como `number`. Se
+      // admiten ambas lecturas (pesos y centavos) porque este conjunto sólo
+      // se usa para PERMITIR cifras: sobre-incluir nunca genera un falso aviso.
+      addCents(BigInt(Math.round(node)) * HUNDRED);
+      addCents(BigInt(Math.round(node)));
+      return;
+    }
+    if (typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      walk(value, depth + 1);
+    }
+  };
+
+  walk(payload, 0);
+  return out;
+}
+
+/** Payload mínimo que necesita el reconciliador. */
+export interface ReconciliationInput {
+  niifReport: NiifReportJson;
+  strategyReport?: unknown;
+  governanceReport?: unknown;
+}
+
+/**
+ * Reconcilia el HTML emitido contra el JSON de origen.
+ *
+ * @param html  - HTML completo emitido por el Editor Jefe.
+ * @param input - JSONs vinculantes (niif + strategy + governance).
+ */
+export function reconcileBindingFigures(
+  html: string,
+  input: ReconciliationInput,
+): ChecklistFailure[] {
+  const failures: ChecklistFailure[] = [];
+  const { document } = parseHTML(html);
+  const text = normalizedText(html, document);
+  const figures: BindingFigure[] = collectBindingFigures(input.niifReport);
+
+  // ── R1 · presencia literal de cada cifra vinculante ──────────────────────
+  const HUNDRED = BigInt(100);
+  for (const fig of figures) {
+    const cents = parseMoneyCop(fig.cents);
+    const abs = cents < BigInt(0) ? -cents : cents;
+    if (acceptableRenderings(abs).some((r) => containsFigure(text, r))) continue;
+
+    // Diagnóstico del error más frecuente al reformatear: el factor 100.
+    const slipUp = acceptableRenderings(abs * HUNDRED).some((r) => containsFigure(text, r));
+    const slipDown = acceptableRenderings(abs / HUNDRED).some((r) => containsFigure(text, r));
+    const diagnostico = slipUp
+      ? ' Se detectó la misma cifra multiplicada por 100 — desliz de escala centavos→pesos.'
+      : slipDown
+        ? ' Se detectó la misma cifra dividida entre 100 — desliz de escala pesos→centavos.'
+        : '';
+
+    failures.push({
+      rule: '§1.1 · Reconciliación JSON↔HTML — cifra vinculante ausente',
+      detail:
+        `${fig.label} vale ${fig.formatted} en el reporte NIIF, pero esa cifra no ` +
+        `aparece en el HTML emitido.${diagnostico}`,
+      severity: 'block',
+    });
+  }
+
+  // ── R2 · cifras del HTML que no se rastrean al payload ───────────────────
+  const allowed = collectPayloadRenderings(input);
+  const figurePattern = /\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?/g;
+  const untraceable: string[] = [];
+  const seenUntraceable = new Set<string>();
+
+  for (const cell of Array.from(document.querySelectorAll('td'))) {
+    const cellText = (cell.textContent ?? '').replace(/ /g, ' ').replace(/\$\s+/g, '$');
+    // Abreviado autorizado por §1.9/L38 — `$4.196 M` no es la cifra exacta.
+    if (/\$[\d.,]+\s*(?:M{1,2}\b|mil(?:es)?\b|millones\b)/i.test(cellText)) continue;
+    for (const match of cellText.match(figurePattern) ?? []) {
+      if (seenUntraceable.has(match)) continue;
+      if (allowed.has(match)) continue;
+      // Cifras chicas (< $1.000.000) suelen ser desgloses de nota o unidades;
+      // el ruido no compensa. El error de escala vive en las magnitudes altas.
+      const pesos = Number.parseFloat(
+        match.replace(/[^0-9.,]/g, '').replace(/\./g, '').replace(',', '.'),
+      );
+      if (!Number.isFinite(pesos) || pesos < 1_000_000) continue;
+      seenUntraceable.add(match);
+      untraceable.push(match);
+    }
+  }
+
+  if (untraceable.length > 0) {
+    failures.push({
+      rule: '§1.1 · Reconciliación JSON↔HTML — cifra no rastreable',
+      detail:
+        `${untraceable.length} cifra(s) en celdas de tabla no corresponden a ningún ` +
+        `monto del payload: ${untraceable.slice(0, 5).join(', ')}` +
+        `${untraceable.length > 5 ? ' …' : ''}. Pueden ser variaciones derivadas legítimas o cifras inventadas.`,
       severity: 'warn',
     });
   }

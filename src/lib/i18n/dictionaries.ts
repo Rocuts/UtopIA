@@ -46,14 +46,14 @@ export const dict = {
       m4: 'Satisfacción',
       headline: 'Resultados que transforman',
       headlineHighlight: 'su práctica contable.',
-      headlineDesc: 'Más de 500 casos resueltos con un enfoque que combina inteligencia artificial, normativa tributaria actualizada y criterio profesional. Resultados medibles para su firma.',
+      headlineDesc: 'Un enfoque que combina inteligencia artificial, normativa tributaria actualizada y criterio profesional. Resultados medibles para su firma.',
       quote: '"Toda firma contable en Colombia merece acceso a herramientas de análisis de clase mundial para competir al más alto nivel."',
-      waitTime: 'Casos Resueltos',
-      waitTimeDesc: 'Más de 500 casos de defensa tributaria y consultoría.',
-      legalBriefsDesc: '$2.4B COP en ahorro fiscal generado para nuestros clientes.',
-      voiceDesc: 'Respuesta inicial en menos de 24 horas.',
+      waitTime: 'Defensa Tributaria',
+      waitTimeDesc: 'Casos de defensa tributaria y consultoría respaldados por normativa vigente.',
+      legalBriefsDesc: 'Ahorro fiscal generado a partir de estrategias tributarias fundamentadas.',
+      voiceDesc: 'Respuesta ágil desde el primer contacto.',
       privacy: 'Precisión Normativa',
-      privacyDesc: '98.7% de precisión en análisis de normativa tributaria colombiana.',
+      privacyDesc: 'Análisis fundamentado en normativa tributaria colombiana vigente.',
     },
     methodology: {
       title: 'Nuestra Metodología',
@@ -1005,6 +1005,21 @@ export const dict = {
       successDraft: 'Asiento guardado como borrador',
       successPosted: 'Asiento posteado correctamente',
     },
+    /**
+     * Intake del reporte NIIF. Solo cubre la captura manual del balance:
+     * es el único bloqueante duro del wizard (el backend rechaza rawData vacío)
+     * y por eso su copy no puede quedar hardcodeado en el componente.
+     */
+    niifIntake: {
+      rawDataTitle: 'Balance de prueba',
+      rawDataHint:
+        'Pegue aquí su balance de prueba (cuenta PUC, nombre, débito, crédito o saldo). Puede copiarlo directamente desde Excel o su ERP.',
+      rawDataPlaceholder:
+        '1105  CAJA GENERAL            12.500.000\n1110  BANCOS                 148.300.000\n2205  PROVEEDORES NACIONALES  -62.700.000',
+      rawDataMissing:
+        'Debe cargar un archivo o pegar su balance de prueba para generar el reporte.',
+      rawDataFromFile: 'Datos contables tomados del archivo cargado.',
+    },
   },
   en: {
     slogan: 'As simple as 1+1',
@@ -1053,14 +1068,14 @@ export const dict = {
       m4: 'User Satisfaction',
       headline: 'Results that transform',
       headlineHighlight: 'your accounting practice.',
-      headlineDesc: 'Over 500 cases resolved with an approach that combines artificial intelligence, up-to-date tax regulations, and professional judgment. Measurable results for your firm.',
+      headlineDesc: 'An approach that combines artificial intelligence, up-to-date tax regulations, and professional judgment. Measurable results for your firm.',
       quote: '"Every accounting firm in Colombia deserves access to world-class analysis tools to compete at the highest level."',
-      waitTime: 'Cases Resolved',
-      waitTimeDesc: 'Over 500 tax defense and consulting cases.',
-      legalBriefsDesc: '$2.4B COP in tax savings generated for our clients.',
-      voiceDesc: 'Initial response in less than 24 hours.',
+      waitTime: 'Tax Defense',
+      waitTimeDesc: 'Tax defense and consulting cases backed by current regulations.',
+      legalBriefsDesc: 'Tax savings generated through well-founded tax strategies.',
+      voiceDesc: 'Prompt response from the first contact.',
       privacy: 'Regulatory Accuracy',
-      privacyDesc: '98.7% accuracy in Colombian tax regulation analysis.',
+      privacyDesc: 'Analysis grounded in current Colombian tax regulations.',
     },
     methodology: {
       title: 'Our Methodology',
@@ -2010,6 +2025,16 @@ export const dict = {
       validationDescriptionRequired: 'Enter a description for the entry',
       successDraft: 'Entry saved as draft',
       successPosted: 'Entry posted successfully',
+    },
+    niifIntake: {
+      rawDataTitle: 'Trial balance',
+      rawDataHint:
+        'Paste your trial balance here (PUC account, name, debit, credit or balance). You can copy it straight from Excel or your ERP.',
+      rawDataPlaceholder:
+        '1105  CAJA GENERAL            12.500.000\n1110  BANCOS                 148.300.000\n2205  PROVEEDORES NACIONALES  -62.700.000',
+      rawDataMissing:
+        'You must upload a file or paste your trial balance to generate the report.',
+      rawDataFromFile: 'Accounting data taken from the uploaded file.',
     },
   },
 };

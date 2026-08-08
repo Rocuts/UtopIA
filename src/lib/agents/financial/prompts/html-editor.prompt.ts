@@ -24,7 +24,11 @@
 //   - CLAUDE.md §"Prompt patterns GPT-5.4 (outcome-first)" — cache layout
 // ---------------------------------------------------------------------------
 
-import type { HtmlEditorInput } from '../contracts/html-editor';
+import {
+  collectBindingFigures,
+  type BindingFigure,
+  type HtmlEditorInput,
+} from '../contracts/html-editor';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildResilienceSection0 } from './resilience-section0';
@@ -74,13 +78,49 @@ export function buildHtmlEditorSystemPrompt(): string {
  * verificables, no procedimiento procedural ("Paso 1 / Paso 2 / Paso 3" está
  * prohibido por la regla GPT-5.4 §1).
  */
+/**
+ * Bloque de cifras ya convertidas a pesos.
+ *
+ * Why existe: el payload lleva cada monto como MoneyCop en CENTAVOS
+ * (`"241367788864"`) y la constraint de presentación exige `$1.234.567,89`.
+ * Eso obligaba al modelo a dividir entre 100 y a insertar separadores para
+ * ~200 cifras del documento que el cliente firma ante la DIAN — y un solo
+ * desliz de escala produce un informe impecable con el Activo inflado 100×.
+ *
+ * La conversión la hace ahora `collectBindingFigures` en TypeScript, una vez.
+ * El modelo COPIA. Y `reconcileBindingFigures` exige después que estas mismas
+ * cadenas aparezcan literalmente en el HTML, así que prompt y validador no
+ * pueden divergir: comparten la función.
+ *
+ * Se emite el valor ABSOLUTO: el signo es una decisión de presentación NIIF
+ * (paréntesis para negativos) que la spec §13 ya gobierna.
+ */
+function buildBindingFiguresBlock(figures: BindingFigure[]): string {
+  if (figures.length === 0) return '';
+  const rows = figures
+    .map(
+      (f) =>
+        `${f.label}: ${f.formatted}${f.isNegative ? '  (valor negativo — preséntalo entre paréntesis)' : ''}  ← ${f.path}`,
+    )
+    .join('\n');
+  return `<cifras_vinculantes>
+Estas cifras YA están convertidas a pesos y formateadas en convención COP. Se copian carácter por carácter en el HTML; NO se reconvierten desde los centavos del JSON, NO se redondean y NO se abrevian en los estados financieros.
+
+${rows}
+</cifras_vinculantes>`;
+}
+
 export function buildHtmlEditorUserContent(input: HtmlEditorInput, hechosEmpresa?: string): string {
+  const bindingFigures = buildBindingFiguresBlock(collectBindingFigures(input.niifReport));
+
   return `<task>Genera el HTML autocontenido v10.1 de 15 páginas A4 portrait según la plantilla maestra del system prompt (§13). Reemplaza los placeholders {{...}} con los valores del payload JSON. Estética: Berkshire Hathaway / Financial Times / Bloomberg Markets — austeridad como señal de autoridad.</task>
 
 <context>
 <metadata>
 ${JSON.stringify(input.metadata, null, 2)}
 </metadata>
+
+${bindingFigures}
 
 <niif_report>
 ${JSON.stringify(input.niifReport, null, 2)}
@@ -122,6 +162,8 @@ ${hechosEmpresa ?? ''}
   - Encabezados del preparador: "NOTAS INTERNAS DEL PREPARADOR", "NO incluir en EEFF firmables", "Advertencia interna de Valoración", "Notas del Preparador".
   - Cifras en formato técnico: enteros de 9+ dígitos sin separadores ("241367788864"), notación científica ($2.23E9), "X centavos" donde X es un entero crudo de 9+ dígitos.
   Si una nota técnica contiene cualquiera de los patrones anteriores, reescribirla en términos contables del cliente o omitirla. Toda cifra se renderiza en formato $1.234.567,89.
+- ALWAYS: las cifras del bloque <cifras_vinculantes> se COPIAN literalmente en los estados financieros. Ya vienen en pesos: no se convierten desde los centavos del JSON, no se redondean, no se abrevian.
+- If una cifra del JSON no está en <cifras_vinculantes>, entonces conviértela dividiendo los centavos entre 100 y formatea $1.234.567,89; si además es una magnitud de contexto narrativo (no una línea de estado financiero), puedes abreviarla como $X.XXX M según §1.9/L38.
 - NEVER: invent values not present in the JSON payloads; only cite numbers from niif_report / strategy_report / governance_report / metadata.
 - NEVER: usar Plus Jakarta Sans, Geist, Helvetica, ni ninguna otra familia tipográfica fuera de Source Serif 4 / Inter / IBM Plex Mono.
 - If unsure about a presentation decision not covered by the spec, default to §12 principio de incertidumbre y omite el dato con marca <!-- DECISION_REQUIRED -->.
@@ -129,6 +171,7 @@ ${hechosEmpresa ?? ''}
 
 <success_criteria>
 - §11 checklist completo: 30 viñetas verificables al emitir.
+- Cada cifra de <cifras_vinculantes> aparece LITERAL en el HTML (verificación determinística post-emisión: si falta una, el informe se estampa como BORRADOR).
 - Hash declarado en portada + Página 14 coincide literal con metadata.reportHashSha256 (64 chars hex).
 - reportMode declarado en HTML comments coincide con metadata.reportMode.
 - Source Serif 4 + Inter + IBM Plex Mono cargados desde Google Fonts CDN único.

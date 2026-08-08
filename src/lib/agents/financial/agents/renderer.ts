@@ -113,6 +113,31 @@ function buildMarkdownTable(spec: MarkdownTableSpec): string {
 // Conversión de StatementLine → MarkdownTableRow
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Formateo de TOTALES canónicos
+// ---------------------------------------------------------------------------
+//
+// Auditoría 2026-08 (P0 `perdida-y-patrimonio-negativo-se-imprimen-positivos`):
+// los totales del Balance y del Estado de Resultados se formateaban con
+// `absolute = true` hardcodeado. Consecuencia: una PÉRDIDA neta del ejercicio
+// se imprimía idéntica a una utilidad de la misma magnitud, y un patrimonio
+// negativo (causal de disolución del Art. 457 num. 2 C.Co. y bandera de empresa
+// en marcha bajo NIA 570) aparecía como positivo.
+//
+// Los totales van SIEMPRE con signo. La convención NIIF encierra los negativos
+// entre paréntesis, que es lo que `formatCopFromCents(cents, false)` produce.
+//
+// El valor absoluto se reserva para magnitudes que por definición no llevan
+// signo — las brechas de descuadre, que son distancias.
+//
+// Las LÍNEAS de detalle siguen usando `line.isAbsolute` del contrato: ahí sí
+// hay rubros que NIIF presenta en magnitud positiva (pasivos, por ejemplo).
+const fmtTotal = (value: string): string =>
+  formatCopFromCents(parseMoneyCop(value), false);
+
+/** Magnitud sin signo — sólo para brechas y distancias. */
+const fmtMagnitude = (cents: bigint): string => formatCopFromCents(cents, true);
+
 /**
  * Convierte una línea de estado financiero en una row de tabla Markdown.
  *
@@ -196,12 +221,12 @@ export function renderBalanceSheet(json: NiifReportJson): string {
     label: 'TOTAL ACTIVOS',
     values: hasComparative
       ? [
-          formatCopFromCents(parseMoneyCop(b.totalAssetsPrimary), true),
+          fmtTotal(b.totalAssetsPrimary),
           b.totalAssetsComparative !== null
-            ? formatCopFromCents(parseMoneyCop(b.totalAssetsComparative), true)
+            ? fmtTotal(b.totalAssetsComparative)
             : '',
         ]
-      : [formatCopFromCents(parseMoneyCop(b.totalAssetsPrimary), true)],
+      : [fmtTotal(b.totalAssetsPrimary)],
     bold: true,
   });
 
@@ -214,12 +239,12 @@ export function renderBalanceSheet(json: NiifReportJson): string {
     label: 'TOTAL PASIVOS',
     values: hasComparative
       ? [
-          formatCopFromCents(parseMoneyCop(b.totalLiabilitiesPrimary), true),
+          fmtTotal(b.totalLiabilitiesPrimary),
           b.totalLiabilitiesComparative !== null
-            ? formatCopFromCents(parseMoneyCop(b.totalLiabilitiesComparative), true)
+            ? fmtTotal(b.totalLiabilitiesComparative)
             : '',
         ]
-      : [formatCopFromCents(parseMoneyCop(b.totalLiabilitiesPrimary), true)],
+      : [fmtTotal(b.totalLiabilitiesPrimary)],
     bold: true,
   });
 
@@ -232,12 +257,12 @@ export function renderBalanceSheet(json: NiifReportJson): string {
     label: 'Total patrimonio',
     values: hasComparative
       ? [
-          formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true),
+          fmtTotal(b.totalEquityPrimary),
           b.totalEquityComparative !== null
-            ? formatCopFromCents(parseMoneyCop(b.totalEquityComparative), true)
+            ? fmtTotal(b.totalEquityComparative)
             : '',
         ]
-      : [formatCopFromCents(parseMoneyCop(b.totalEquityPrimary), true)],
+      : [fmtTotal(b.totalEquityPrimary)],
     bold: true,
   });
 
@@ -262,7 +287,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
       const liabComp = parseMoneyCop(b.totalLiabilitiesComparative);
       const eqComp = parseMoneyCop(b.totalEquityComparative);
       const sumComp = liabComp + eqComp;
-      const sumCompStr = formatCopFromCents(sumComp, true);
+      const sumCompStr = fmtMagnitude(sumComp);
       if (b.totalAssetsComparative !== null) {
         const assetsComp = parseMoneyCop(b.totalAssetsComparative);
         const diffComp = sumComp - assetsComp;
@@ -270,17 +295,17 @@ export function renderBalanceSheet(json: NiifReportJson): string {
         cuadraComparative = absDiffComp <= TOLERANCE_CENTS;
         comparativeCell = cuadraComparative
           ? sumCompStr
-          : `${sumCompStr} (DESCUADRE: ${formatCopFromCents(absDiffComp, true)})`;
+          : `${sumCompStr} (DESCUADRE: ${fmtMagnitude(absDiffComp)})`;
       } else {
         comparativeCell = sumCompStr;
       }
     }
   }
 
-  const sumPrimaryStr = formatCopFromCents(sumPrimary, true);
+  const sumPrimaryStr = fmtMagnitude(sumPrimary);
   const primaryCell = cuadraPrimary
     ? sumPrimaryStr
-    : `${sumPrimaryStr} (DESCUADRE: ${formatCopFromCents(absDiffPrimary, true)})`;
+    : `${sumPrimaryStr} (DESCUADRE: ${fmtMagnitude(absDiffPrimary)})`;
   const cuadraAmbos = cuadraPrimary && cuadraComparative;
   const closingLabel = cuadraAmbos
     ? '✅ TOTAL PASIVO + PATRIMONIO'
@@ -307,7 +332,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
   const descuadreNote = !cuadraAmbos
     ? `\n> ⚠ **El balance presenta un descuadre.** ${
         !cuadraPrimary
-          ? `Período ${periodLabel}: diferencia de ${formatCopFromCents(absDiffPrimary, true)} entre TOTAL ACTIVO y TOTAL PASIVO + PATRIMONIO. `
+          ? `Período ${periodLabel}: diferencia de ${fmtMagnitude(absDiffPrimary)} entre TOTAL ACTIVO y TOTAL PASIVO + PATRIMONIO. `
           : ''
       }Revisar saldos antes de publicar.`
     : '';
@@ -362,12 +387,12 @@ export function renderIncomeStatement(json: NiifReportJson): string {
       label: t.label,
       values: hasComparative
         ? [
-            formatCopFromCents(parseMoneyCop(t.primary), true),
+            fmtTotal(t.primary),
             t.comparative !== null
-              ? formatCopFromCents(parseMoneyCop(t.comparative), true)
+              ? fmtTotal(t.comparative)
               : '',
           ]
-        : [formatCopFromCents(parseMoneyCop(t.primary), true)],
+        : [fmtTotal(t.primary)],
       bold: true,
     });
   }
@@ -426,11 +451,11 @@ export function renderCashFlowStatement(json: NiifReportJson): string {
   });
   rows.push({
     label: 'Efectivo al inicio del período',
-    values: [formatCopFromCents(parseMoneyCop(cf.cashOpening), true)],
+    values: [fmtTotal(cf.cashOpening)],
   });
   rows.push({
     label: 'EFECTIVO AL FINAL DEL PERÍODO',
-    values: [formatCopFromCents(parseMoneyCop(cf.cashClosing), true)],
+    values: [fmtTotal(cf.cashClosing)],
     bold: true,
   });
 

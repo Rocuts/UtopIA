@@ -430,6 +430,17 @@ describe('Test adicional — Clase 54 presente (F09 > 0)', () => {
 // ---------------------------------------------------------------------------
 // Test adicional — L1.7 calendario NIT: digito erroneo falla
 // ---------------------------------------------------------------------------
+// PREMISA CORREGIDA (auditoría normativa 2026-08). Estos tests daban por
+// correcto `ultimoDigito = 6` para el NIT "901714014-6", es decir el DÍGITO DE
+// VERIFICACIÓN. El Decreto 2229/2023 (art. 1.6.1.13.2.1 del DUR 1625/2016)
+// determina los plazos "teniendo en cuenta el último o los dos últimos dígitos
+// del Número de Identificación Tributaria (NIT) del contribuyente, SIN TENER EN
+// CUENTA EL DÍGITO DE VERIFICACIÓN". Para 901714014-6 el dígito es 4.
+// https://normograma.dian.gov.co/dian/compilacion/docs/decreto_2229_2023.htm
+//
+// El check pasaba porque el validador tenía su propia copia del extractor con
+// el mismo defecto: sólo aprobaba el calendario cuando ambas implementaciones
+// se equivocaban en el mismo sentido. Ahora delega en `extractCalendarDigit`.
 describe('Test adicional — L1.7 NIT digito erroneo', () => {
   it('L1.7: ultimoDigito declarado != extraido del NIT -> error', () => {
     const block: FiscalAnchorBlock = {
@@ -437,19 +448,36 @@ describe('Test adicional — L1.7 NIT digito erroneo', () => {
       calendarioDian: {
         ...asBlock(goldenRecord).calendarioDian,
         nit: '901714014-6',
-        ultimoDigito: 3, // incorrecto — el NIT termina en 6
+        ultimoDigito: 3, // incorrecto — el dígito de calendario es 4
       },
     };
     const checks = validateFiscalAnchorL1(block);
     const check = checks.find((c) => c.name === 'L1.7_calendario_digito_nit');
     expect(check).toBeDefined();
     expect(check!.passed).toBe(false);
-    expect(check!.detail).toContain('6');
+    expect(check!.detail).toContain('4');
     expect(check!.detail).toContain('3');
   });
 
-  it('L1.7: NIT correcto "901714014-6" con ultimoDigito=6 pasa', () => {
+  it('L1.7: tomar el dígito de VERIFICACIÓN también falla', () => {
+    // Es el defecto concreto que se corrigió: sin esta aserción, volver a la
+    // implementación vieja dejaría la suite en verde.
+    const block: FiscalAnchorBlock = {
+      ...asBlock(goldenRecord),
+      calendarioDian: {
+        ...asBlock(goldenRecord).calendarioDian,
+        nit: '901714014-6',
+        ultimoDigito: 6, // el DV, no el último dígito del NIT
+      },
+    };
+    const checks = validateFiscalAnchorL1(block);
+    const check = checks.find((c) => c.name === 'L1.7_calendario_digito_nit');
+    expect(check!.passed).toBe(false);
+  });
+
+  it('L1.7: NIT "901714014-6" con ultimoDigito=4 (sin el DV) pasa', () => {
     const block = asBlock(goldenRecord);
+    expect(block.calendarioDian.ultimoDigito).toBe(4);
     const checks = validateFiscalAnchorL1(block);
     const check = checks.find((c) => c.name === 'L1.7_calendario_digito_nit');
     expect(check).toBeDefined();

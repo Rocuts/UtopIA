@@ -21,6 +21,7 @@
 
 import type { PeriodSnapshot } from '../trial-balance';
 
+import { syncControlTotals } from './sync-control-totals';
 import type { ConvergenceAdjustment, CuratorFinding } from './types';
 
 const VIRTUAL_EQUITY_CODE = '3710ZZ';
@@ -91,6 +92,12 @@ export function runR5(
   snapshot.equityBreakdown.convergenceAdjustment = gap;
   snapshot.controlTotals.patrimonio = ecpClosingBalance;
   snapshot.equityAnchorAdjustment = gap;
+
+  // El patrimonio anclado NO proviene de sumar las cuentas del balance, así
+  // que `cents` y `raw` deben rederivarse del valor recién escrito. Sin esto,
+  // el gate `auditReportEmittable` (que compara en cents con tolerancia 0n)
+  // seguía viendo el patrimonio PRE-anclaje.
+  syncControlTotals(snapshot.controlTotals, snapshot.classes, ['patrimonio']);
 
   const adjustment: ConvergenceAdjustment = {
     gapCop: gap,

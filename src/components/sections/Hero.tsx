@@ -200,29 +200,6 @@ export function Hero() {
         </div>
         <span className="text-[10px] uppercase tracking-[0.16em]">Explorar</span>
       </div>
-
-      {/* Trust strip */}
-      <div className="relative z-10 flex flex-wrap items-center justify-center border-t border-n-200 py-8 px-5"
-           style={{ gap: 'clamp(28px, 5vw, 72px)', paddingBottom: '40px' }}>
-        <div className="text-center">
-          <div className="font-mono font-semibold text-2xl text-n-1000">+500</div>
-          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Casos resueltos</div>
-        </div>
-        <div className="text-center">
-          <div className="font-mono font-semibold text-2xl text-n-1000">
-            <span className="text-gold-500">$2,4B</span>
-          </div>
-          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Ahorro fiscal generado</div>
-        </div>
-        <div className="text-center">
-          <div className="font-mono font-semibold text-2xl text-n-1000">98,7%</div>
-          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Precisión normativa</div>
-        </div>
-        <div className="text-center">
-          <div className="font-mono font-semibold text-2xl text-n-1000">&lt;24h</div>
-          <div className="text-xs text-n-500 uppercase tracking-[0.1em] mt-1">Respuesta inicial</div>
-        </div>
-      </div>
     </section>
   );
 }

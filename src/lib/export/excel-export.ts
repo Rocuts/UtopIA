@@ -18,7 +18,11 @@
 
 import ExcelJS from 'exceljs';
 import type { FinancialReport } from '@/lib/agents/financial/types';
+import { formatCopFromCents, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
+import type { StatementLineJson } from '@/lib/agents/financial/contracts/base';
 import type {
+  ControlTotals,
   PreprocessedBalance,
   PUCClass,
   Discrepancy,
@@ -54,9 +58,44 @@ const FONT_MAIN = 'Calibri';
 // The [$-es-CO] LCID prefix forces Excel to render with Colombian locale rules:
 //   thousands separator = "."  |  decimal separator = ","
 // producing: $1.234.567,89  (regardless of the viewer's OS regional settings).
-const NUM_FMT_COP = '[$-es-CO]"$"#,##0.00';
-const NUM_FMT_COP_INT = '[$-es-CO]"$"#,##0';
+//
+// La sección negativa usa PARÉNTESIS — misma convención NIIF que
+// `formatCopFromCents` (contracts/money.ts) y que los estados financieros del
+// PDF Élite. Antes el workbook heredaba el formato por defecto (`-$1.234,56`)
+// y el cliente veía dos tipografías del mismo signo entre entregables.
+// Que el negativo sea legible es lo que permite dejar de aplicar `Math.abs`
+// sobre pasivo y patrimonio: un patrimonio negativo es causal de disolución
+// (Art. 457 num. 2 C.Co.) y debe verse como tal.
+const NUM_FMT_COP = '[$-es-CO]"$"#,##0.00;[$-es-CO]("$"#,##0.00)';
+const NUM_FMT_COP_INT = '[$-es-CO]"$"#,##0;[$-es-CO]("$"#,##0)';
 const NUM_FMT_PCT = '0.00%;-0.00%;"—"';
+
+/**
+ * MoneyCop (string de centavos) → pesos como `number` para la celda de Excel.
+ *
+ * Excel necesita un número nativo para poder aplicar `numFmt` y permitir que el
+ * cliente opere sobre la celda; los centavos exactos se convierten aquí, en el
+ * único punto de frontera. `Number(bigint)` es exacto hasta 2^53 centavos
+ * (≈ $90 billones COP), muy por encima del segmento.
+ */
+function centsToPesos(value: string): number {
+  return Number(parseMoneyCop(value)) / 100;
+}
+
+/**
+ * Pesos (number) → texto COP, delegando en el helper canónico
+ * `formatCopFromCents`. Se usa SÓLO donde la cifra viaja embebida en una frase
+ * (notas al pie, verificaciones) y no puede llevar `numFmt` propio; las celdas
+ * numéricas siempre se escriben como número + `NUM_FMT_COP`.
+ *
+ * Why: había tres formatters de dinero conviviendo con convenciones de negativo
+ * distintas (`-$X`, `($X)`, `toLocaleString` a secas). Toda cifra de este
+ * workbook sale ahora de la misma aritmética exacta en centavos.
+ */
+function fmtCopPesos(pesos: number): string {
+  if (!Number.isFinite(pesos)) return 'N/D';
+  return formatCopFromCents(Math.round(pesos * 100), false);
+}
 
 // ---------------------------------------------------------------------------
 // Multiperiodo helpers
@@ -79,6 +118,14 @@ interface PeriodView {
   };
   discrepancies: Discrepancy[];
   missingExpectedAccounts: string[];
+  /**
+   * Totales de control del periodo — contrato numérico vinculante y fuente
+   * única de los ratios (Wave 2.F4). La pestaña de KPIs los consume en lugar de
+   * recalcular con fórmulas propias: recalcular ROE sobre patrimonio de cierre
+   * hacía que el .xlsx imprimiera un ROE distinto al del HTML/PDF, que usan
+   * `controlTotals.roe` (patrimonio promedio).
+   */
+  controlTotals?: ControlTotals;
 }
 
 interface PeriodLayout {
@@ -112,6 +159,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
     summary: p.summary,
     discrepancies: p.discrepancies,
     missingExpectedAccounts: p.missingExpectedAccounts,
+    controlTotals: p.controlTotals,
   }));
 
   const primary: PeriodLayout['primary'] = {
@@ -120,6 +168,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
     summary: prep.primary.summary,
     discrepancies: prep.primary.discrepancies,
     missingExpectedAccounts: prep.primary.missingExpectedAccounts,
+    controlTotals: prep.primary.controlTotals,
     reclassifications: prep.primary.reclassifications ?? prep.primary.curator?.reclassifications,
     equityAnchorAdjustment: prep.primary.equityAnchorAdjustment ?? undefined,
     cashFlowClosureAdjustment:
@@ -141,6 +190,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
         summary: prep.comparative.summary,
         discrepancies: prep.comparative.discrepancies,
         missingExpectedAccounts: prep.comparative.missingExpectedAccounts,
+        controlTotals: prep.comparative.controlTotals,
       }
     : null;
 
@@ -275,7 +325,21 @@ function addBalanceSheet(
 
   let row = 6;
 
-  if (layout) {
+  const json = report.niifAnalysis.json;
+
+  if (json) {
+    // ── Fuente canónica: JSON-strict validado del NIIF Analyst ──────────────
+    // Es el MISMO objeto que alimentan el PDF Élite (compose-statements-from-
+    // json.ts) y el HTML del Editor Jefe. Antes esta rama sólo corría cuando
+    // faltaba el preprocesado, de modo que en el caso normal el .xlsx mostraba
+    // agregados de la balanza CRUDA (pre-analista) mientras PDF y HTML
+    // mostraban los estados ya ajustados —reclasificaciones, convergencia
+    // patrimonial, cierre virtual—. Ante cualquier ajuste del analista los tres
+    // entregables del mismo informe decían cifras distintas para el mismo
+    // rubro. El preprocesado sigue alimentando las pestañas de trazabilidad
+    // (Validacion, Pulido Diamante) y los ratios de la pestaña KPIs.
+    row = addBalanceSheetFromJson(ws, row, json);
+  } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
     // Column header row depends on multiperiodo
@@ -296,23 +360,30 @@ function addBalanceSheet(
     row++;
 
     // PASIVO
+    // Sin Math.abs: el saldo contrario de una cuenta de pasivo (p. ej. un
+    // impuesto sobrepagado) es información, no ruido, y el total firmado es el
+    // que cuadra contra 'TOTAL PASIVO + PATRIMONIO'. El formato contable con
+    // paréntesis (NUM_FMT_COP) preserva la convención NIIF de presentación.
     row = addSectionHeader(ws, row, 'PASIVO', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 2, { absValues: true });
+    row = addClassRows(ws, row, primary, comparative, 2);
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL PASIVO',
-      Math.abs(primary.summary.totalLiabilities),
-      comparative?.summary.totalLiabilities !== undefined
-        ? Math.abs(comparative.summary.totalLiabilities)
-        : undefined,
+      primary.summary.totalLiabilities,
+      comparative?.summary.totalLiabilities,
       isMultiPeriod,
     );
     row++;
 
     // PATRIMONIO
+    // Mismo criterio: un patrimonio (o una cuenta patrimonial) negativo es
+    // causal de disolución (Art. 457 num. 2 C.Co.) y bandera de empresa en
+    // marcha (NIA 570). Imprimirlo en valor absoluto lo convertía en su
+    // contrario justo en el renglón que el socio mira primero, y además hacía
+    // que las líneas no sumaran el total firmado de más abajo.
     row = addSectionHeader(ws, row, 'PATRIMONIO', isMultiPeriod);
-    row = addClassRows(ws, row, primary, comparative, 3, { absValues: true });
+    row = addClassRows(ws, row, primary, comparative, 3);
 
     // Línea de convergencia patrimonial R5 (si aplica)
     const convAdj = primary.curatorConvergenceAdjustment ?? primary.equityBreakdown?.convergenceAdjustment;
@@ -349,14 +420,17 @@ function addBalanceSheet(
       row++;
     }
 
+    // El patrimonio conserva su signo. Un patrimonio NEGATIVO es una causal de
+    // disolución (Art. 457 num. 2 C.Co.) y una bandera de empresa en marcha
+    // (NIA 570): imprimirlo en valor absoluto lo convertía en su contrario
+    // justo en el renglón que el socio mira primero.
+    // Auditoría 2026-08 — mismo defecto que en `agents/renderer.ts`.
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL PATRIMONIO',
-      Math.abs(primary.summary.totalEquity),
-      comparative?.summary.totalEquity !== undefined
-        ? Math.abs(comparative.summary.totalEquity)
-        : undefined,
+      primary.summary.totalEquity,
+      comparative?.summary.totalEquity,
       isMultiPeriod,
     );
     row++;
@@ -366,13 +440,13 @@ function addBalanceSheet(
     if (vca) {
       const noteRow = ws.getRow(row);
       noteRow.getCell(2).value =
-        `R8 Cierre Virtual: utilidad transitoria de $${vca.dynamicNetIncome.toLocaleString('es-CO')} ` +
+        `R8 Cierre Virtual: utilidad transitoria de ${fmtCopPesos(vca.dynamicNetIncome)} ` +
         `trasladada a Patrimonio (cuenta virtual ${vca.virtualCurrentCode})` +
         (vca.reclassifiedFrom3605
-          ? ` · saldo histórico 3605 ($${vca.csvUtilidadEjercicio.toLocaleString('es-CO')}) reclasificado a ${vca.virtualRetainedCode}`
+          ? ` · saldo histórico 3605 (${fmtCopPesos(vca.csvUtilidadEjercicio)}) reclasificado a ${vca.virtualRetainedCode}`
           : '') +
         (vca.centsAdjustment !== 0 && !vca.reclassifiedFrom3605
-          ? ` · ajuste de centavos $${vca.centsAdjustment.toLocaleString('es-CO')} en ${vca.virtualRetainedCode}`
+          ? ` · ajuste de centavos ${fmtCopPesos(vca.centsAdjustment)} en ${vca.virtualRetainedCode}`
           : '') +
         '.';
       noteRow.getCell(2).font = {
@@ -399,7 +473,7 @@ function addBalanceSheet(
     const diff = primary.summary.equationBalance;
     const verRow = ws.getRow(row);
     verRow.getCell(2).value = `VERIFICACION (${primary.period})`;
-    verRow.getCell(3).value = primary.summary.equationBalanced ? 'CUADRA' : `DIFERENCIA: $${diff.toFixed(2)}`;
+    verRow.getCell(3).value = primary.summary.equationBalanced ? 'CUADRA' : `DIFERENCIA: ${fmtCopPesos(diff)}`;
     verRow.getCell(2).font = { name: FONT_MAIN, bold: true, size: 10 };
     verRow.getCell(3).font = {
       name: FONT_MAIN, bold: true, size: 10,
@@ -410,68 +484,13 @@ function addBalanceSheet(
       const verRow2 = ws.getRow(row);
       const diff2 = comparative.summary.equationBalance;
       verRow2.getCell(2).value = `VERIFICACION (${comparative.period})`;
-      verRow2.getCell(3).value = comparative.summary.equationBalanced ? 'CUADRA' : `DIFERENCIA: $${diff2.toFixed(2)}`;
+      verRow2.getCell(3).value = comparative.summary.equationBalanced ? 'CUADRA' : `DIFERENCIA: ${fmtCopPesos(diff2)}`;
       verRow2.getCell(2).font = { name: FONT_MAIN, bold: true, size: 10 };
       verRow2.getCell(3).font = {
         name: FONT_MAIN, bold: true, size: 10,
         color: { argb: comparative.summary.equationBalanced ? COLORS.green : COLORS.red },
       };
     }
-  } else if (report.niifAnalysis.json) {
-    // Fase 3.2 — fallback estructurado desde JSON-strict del NIIF Analyst
-    // cuando el preprocessed no está disponible (caso raro). Mucho más limpio
-    // que pegar markdown crudo y preserva las cifras exactas en centavos.
-    const json = report.niifAnalysis.json;
-    const fmt = (cents: string, abs = true) => {
-      const big = BigInt(cents);
-      const ZERO = BigInt(0);
-      const neg = big < ZERO;
-      const a = neg ? -big : big;
-      const s = a.toString().padStart(3, '0');
-      const whole = (s.slice(0, -2) || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-      const dec = s.slice(-2);
-      const out = `$${whole},${dec}`;
-      if (abs) return out;
-      return neg ? `(${out})` : out;
-    };
-    ws.getRow(row).getCell(1).value = 'Datos NIIF (preprocesador no disponible — render desde JSON-strict):';
-    ws.getRow(row).getCell(1).font = { name: FONT_MAIN, italic: true, size: 10 };
-    row++;
-    const hasComparativeXls = json.company.comparativePeriod !== null;
-    const writeLine = (account: string, primary: string, comp: string | null) => {
-      const r = ws.getRow(row++);
-      r.getCell(2).value = account;
-      r.getCell(3).value = fmt(primary);
-      // Wave 5 — 2026-05-14: cuando el reporte declara comparativo
-      // (company.comparativePeriod ≠ null) pero el total comparativo no llegó,
-      // escribir "n/c" hace visible el hueco en vez de dejar la celda en
-      // blanco (lo que enmascaraba la falla de Pass-1).
-      if (hasComparativeXls) {
-        r.getCell(4).value = comp !== null ? fmt(comp) : 'n/c';
-      }
-    };
-    writeLine('TOTAL ACTIVOS', json.balanceSheet.totalAssetsPrimary, json.balanceSheet.totalAssetsComparative);
-    writeLine('TOTAL PASIVOS', json.balanceSheet.totalLiabilitiesPrimary, json.balanceSheet.totalLiabilitiesComparative);
-    writeLine('TOTAL PATRIMONIO', json.balanceSheet.totalEquityPrimary, json.balanceSheet.totalEquityComparative);
-    // Fila de cierre A = P + C (corrección v2.3) — visible incluso en fallback
-    // JSON-strict cuando el preprocesador no estuvo disponible.
-    const addBig = (a: string, b: string): string => {
-      const toBig = (v: string) => BigInt(v);
-      return (toBig(a) + toBig(b)).toString(10);
-    };
-    const sumPrimaryFallback = addBig(
-      json.balanceSheet.totalLiabilitiesPrimary,
-      json.balanceSheet.totalEquityPrimary,
-    );
-    const sumComparativeFallback =
-      json.balanceSheet.totalLiabilitiesComparative !== null &&
-      json.balanceSheet.totalEquityComparative !== null
-        ? addBig(
-            json.balanceSheet.totalLiabilitiesComparative,
-            json.balanceSheet.totalEquityComparative,
-          )
-        : null;
-    writeLine('TOTAL PASIVO + PATRIMONIO', sumPrimaryFallback, sumComparativeFallback);
   } else {
     // Último fallback: markdown crudo (compat con reportes pre-Fase-2).
     ws.getRow(row).getCell(1).value = 'Datos del reporte NIIF (ver pestaña Resumen para el contenido completo):';
@@ -498,6 +517,228 @@ function addBalanceSheet(
 }
 
 // ---------------------------------------------------------------------------
+// Render desde el JSON-strict validado del NIIF Analyst (fuente canónica)
+// ---------------------------------------------------------------------------
+// Estas funciones son el equivalente Excel de `compose-statements-from-json.ts`
+// (PDF Élite): misma entrada, mismas líneas, mismos totales. Es lo que hace que
+// las tres superficies —HTML, PDF y .xlsx— emitan la misma cifra para el mismo
+// concepto.
+//
+// Layout de columnas idéntico al de la rama del preprocesado:
+//   col 1: Código PUC | col 2: Concepto | col 3: comparativo | col 4: primario
+//   col 5: Variación $ | col 6: Variación %
+// En periodo único sólo se usa col 3 para el saldo primario.
+
+/** Escribe una línea de estado financiero proveniente del JSON validado. */
+function addJsonStatementRow(
+  ws: ExcelJS.Worksheet,
+  row: number,
+  account: string | null,
+  label: string,
+  amountPrimary: string,
+  amountComparative: string | null,
+  hasComparative: boolean,
+  emphasis: 'plain' | 'subtotal' | 'total',
+): number {
+  const r = ws.getRow(row);
+  const bold = emphasis !== 'plain';
+  const size = emphasis === 'total' ? 10 : 9;
+
+  r.getCell(1).value = account ?? '';
+  r.getCell(1).font = { name: FONT_MAIN, size: 9, color: { argb: COLORS.textMuted } };
+  r.getCell(2).value = label;
+  r.getCell(2).font = {
+    name: FONT_MAIN, size, bold,
+    color: { argb: emphasis === 'total' ? COLORS.darkNavy : COLORS.textDark },
+  };
+
+  const primary = centsToPesos(amountPrimary);
+  // `n/c` (no comparativo) hace visible el hueco cuando el informe DECLARA
+  // comparativo pero la línea no lo trae — misma convención que el PDF.
+  const comparative = amountComparative !== null ? centsToPesos(amountComparative) : null;
+
+  if (hasComparative) {
+    r.getCell(3).value = comparative ?? 'n/c';
+    if (comparative !== null) r.getCell(3).numFmt = NUM_FMT_COP;
+    r.getCell(3).font = { name: FONT_MAIN, size, bold, color: { argb: COLORS.textMuted } };
+    r.getCell(4).value = primary;
+    r.getCell(4).numFmt = NUM_FMT_COP;
+    r.getCell(4).font = { name: FONT_MAIN, size, bold };
+    if (comparative !== null) {
+      const delta = primary - comparative;
+      r.getCell(5).value = delta;
+      r.getCell(5).numFmt = NUM_FMT_COP;
+      r.getCell(5).font = {
+        name: FONT_MAIN, size, bold,
+        color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
+      };
+      r.getCell(6).value = comparative !== 0 ? delta / Math.abs(comparative) : 0;
+      r.getCell(6).numFmt = NUM_FMT_PCT;
+      r.getCell(6).font = {
+        name: FONT_MAIN, size, bold,
+        color: { argb: delta >= 0 ? COLORS.green : COLORS.red },
+      };
+    }
+  } else {
+    r.getCell(3).value = primary;
+    r.getCell(3).numFmt = NUM_FMT_COP;
+    r.getCell(3).font = { name: FONT_MAIN, size, bold };
+  }
+
+  if (emphasis === 'total') {
+    const lastCol = hasComparative ? 6 : 3;
+    for (let i = 2; i <= lastCol; i++) {
+      r.getCell(i).border = { top: { style: 'thin', color: { argb: COLORS.darkNavy } } };
+    }
+  }
+  return row + 1;
+}
+
+/** `level` del contrato: 0=sección 1=subgrupo 2=detalle 3=subtotal 4=total. */
+function emphasisForLevel(level: number): 'plain' | 'subtotal' | 'total' {
+  if (level === 4) return 'total';
+  if (level === 3) return 'subtotal';
+  return 'plain';
+}
+
+function addJsonLines(
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  lines: StatementLineJson[],
+  hasComparative: boolean,
+): number {
+  let row = startRow;
+  for (const line of lines) {
+    row = addJsonStatementRow(
+      ws, row, line.account, line.label,
+      line.amountPrimary, line.amountComparative,
+      hasComparative, emphasisForLevel(line.level),
+    );
+  }
+  return row;
+}
+
+function addBalanceSheetFromJson(
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  json: NiifReportJson,
+): number {
+  const b = json.balanceSheet;
+  const hasComparative = json.company.comparativePeriod !== null;
+  let row = startRow;
+
+  row = addStatementColumnHeader(
+    ws, row, json.company.fiscalPeriod, json.company.comparativePeriod,
+  );
+
+  row = addSectionHeader(ws, row, 'ACTIVO', hasComparative);
+  row = addJsonLines(ws, row, b.assets, hasComparative);
+  row = addJsonStatementRow(
+    ws, row, null, 'TOTAL ACTIVO',
+    b.totalAssetsPrimary, b.totalAssetsComparative, hasComparative, 'total',
+  );
+  row++;
+
+  row = addSectionHeader(ws, row, 'PASIVO', hasComparative);
+  row = addJsonLines(ws, row, b.liabilities, hasComparative);
+  row = addJsonStatementRow(
+    ws, row, null, 'TOTAL PASIVO',
+    b.totalLiabilitiesPrimary, b.totalLiabilitiesComparative, hasComparative, 'total',
+  );
+  row++;
+
+  row = addSectionHeader(ws, row, 'PATRIMONIO', hasComparative);
+  row = addJsonLines(ws, row, b.equity, hasComparative);
+  row = addJsonStatementRow(
+    ws, row, null, 'TOTAL PATRIMONIO',
+    b.totalEquityPrimary, b.totalEquityComparative, hasComparative, 'total',
+  );
+  row++;
+
+  // Cierre A = P + C, con la diferencia FIRMADA para que un descuadre sea
+  // visible en la celda en vez de quedar implícito. Aritmética en centavos
+  // (BigInt) — sin float — igual que el trailer del PDF.
+  const sumPrimary = (
+    parseMoneyCop(b.totalLiabilitiesPrimary) + parseMoneyCop(b.totalEquityPrimary)
+  ).toString(10);
+  const sumComparative =
+    b.totalLiabilitiesComparative !== null && b.totalEquityComparative !== null
+      ? (
+          parseMoneyCop(b.totalLiabilitiesComparative) +
+          parseMoneyCop(b.totalEquityComparative)
+        ).toString(10)
+      : null;
+  row = addJsonStatementRow(
+    ws, row, null, 'TOTAL PASIVO + PATRIMONIO',
+    sumPrimary, sumComparative, hasComparative, 'total',
+  );
+
+  const diffPrimary = parseMoneyCop(b.totalAssetsPrimary) - parseMoneyCop(sumPrimary);
+  const diffComparative =
+    b.totalAssetsComparative !== null && sumComparative !== null
+      ? (parseMoneyCop(b.totalAssetsComparative) - parseMoneyCop(sumComparative)).toString(10)
+      : null;
+  row = addJsonStatementRow(
+    ws, row, null, 'DIFERENCIA (debe ser $0,00)',
+    diffPrimary.toString(10), diffComparative, hasComparative, 'subtotal',
+  );
+  const verRow = ws.getRow(row - 1);
+  verRow.getCell(2).font = {
+    name: FONT_MAIN, size: 9, bold: true,
+    color: { argb: diffPrimary === BigInt(0) ? COLORS.green : COLORS.red },
+  };
+
+  if (b.modeBanner) {
+    row++;
+    const banner = ws.getRow(row);
+    banner.getCell(2).value = b.modeBanner;
+    banner.getCell(2).font = {
+      name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.textMuted },
+    };
+    row++;
+  }
+  return row;
+}
+
+function addIncomeStatementFromJson(
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  json: NiifReportJson,
+): number {
+  const p = json.incomeStatement;
+  const hasComparative = json.company.comparativePeriod !== null;
+  let row = startRow;
+
+  row = addStatementColumnHeader(
+    ws, row, json.company.fiscalPeriod, json.company.comparativePeriod,
+  );
+  row = addJsonLines(ws, row, p.lines, hasComparative);
+
+  // Totales vinculantes del contrato. Se anexan sólo si el analista no los
+  // emitió ya como línea — misma regla que `niifJsonToIncomeTable` en el PDF,
+  // para que ambos entregables listen exactamente las mismas filas.
+  const emitted = new Set(p.lines.map((l) => l.label.trim().toUpperCase()));
+  const pushTotal = (label: string, primary: string, comp: string | null) => {
+    if (emitted.has(label.toUpperCase())) return;
+    row = addJsonStatementRow(ws, row, null, label, primary, comp, hasComparative, 'total');
+  };
+  pushTotal('UTILIDAD BRUTA', p.grossProfitPrimary, p.grossProfitComparative);
+  pushTotal('UTILIDAD OPERATIVA (EBIT)', p.operatingProfitPrimary, p.operatingProfitComparative);
+  pushTotal('UTILIDAD NETA DEL PERÍODO', p.netIncomePrimary, p.netIncomeComparative);
+
+  if (p.modeBanner) {
+    row++;
+    const banner = ws.getRow(row);
+    banner.getCell(2).value = p.modeBanner;
+    banner.getCell(2).font = {
+      name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.textMuted },
+    };
+    row++;
+  }
+  return row;
+}
+
+// ---------------------------------------------------------------------------
 // Tab 2: P&L / Estado de Resultados
 // ---------------------------------------------------------------------------
 
@@ -513,30 +754,40 @@ function addIncomeStatement(
 
   let row = 6;
 
-  if (layout) {
-    const { primary, comparative, isMultiPeriod } = layout;
+  const json = report.niifAnalysis.json;
 
-    // Banner de Advertencia R7 (costo presunto) — si existe, aparece antes de los datos
-    if (primary.presumedCostWarning) {
-      const warn = primary.presumedCostWarning;
-      const bannerTitle = ws.getRow(row);
-      bannerTitle.getCell(1).value = `⚠ ${warn.calloutTitle}`;
-      bannerTitle.getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.darkNavy } };
-      for (let i = 1; i <= 6; i++) {
-        bannerTitle.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.orange } };
-      }
-      ws.mergeCells(`A${row}:F${row}`);
-      row++;
-
-      const bannerBody = ws.getRow(row);
-      bannerBody.getCell(1).value = warn.calloutBody;
-      bannerBody.getCell(1).font = { name: FONT_MAIN, size: 9, italic: true };
-      for (let i = 1; i <= 6; i++) {
-        bannerBody.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
-      }
-      ws.mergeCells(`A${row}:F${row}`);
-      row += 2;
+  // Banner de Advertencia R7 (costo presunto) — vive en el preprocesado y es
+  // independiente de la fuente de las cifras, así que se pinta en ambas ramas.
+  if (layout?.primary.presumedCostWarning) {
+    const warn = layout.primary.presumedCostWarning;
+    const bannerTitle = ws.getRow(row);
+    bannerTitle.getCell(1).value = `⚠ ${warn.calloutTitle}`;
+    bannerTitle.getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.darkNavy } };
+    for (let i = 1; i <= 6; i++) {
+      bannerTitle.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.orange } };
     }
+    ws.mergeCells(`A${row}:F${row}`);
+    row++;
+
+    const bannerBody = ws.getRow(row);
+    bannerBody.getCell(1).value = warn.calloutBody;
+    bannerBody.getCell(1).font = { name: FONT_MAIN, size: 9, italic: true };
+    for (let i = 1; i <= 6; i++) {
+      bannerBody.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+    }
+    ws.mergeCells(`A${row}:F${row}`);
+    row += 2;
+  }
+
+  if (json) {
+    // Misma fuente canónica que el Balance y que PDF/HTML: el P&L validado del
+    // NIIF Analyst. Recalcular la UTILIDAD BRUTA localmente
+    // (`totalRevenue − totalCosts`) omitía el costo de producción (clase 7) y
+    // las devoluciones en ventas (4175), de modo que el .xlsx podía imprimir
+    // una utilidad bruta distinta de la del HTML para el mismo informe.
+    row = addIncomeStatementFromJson(ws, row, json);
+  } else if (layout) {
+    const { primary, comparative, isMultiPeriod } = layout;
 
     row = addStatementColumnHeader(ws, row, primary.period, comparative?.period ?? null);
 
@@ -566,12 +817,19 @@ function addIncomeStatement(
     );
     row++;
 
-    // UTILIDAD BRUTA
-    const grossPrim = primary.summary.totalRevenue - primary.summary.totalCosts;
-    const grossComp = comparative
-      ? comparative.summary.totalRevenue - comparative.summary.totalCosts
-      : undefined;
-    row = addStatementTotalRow(ws, row, 'UTILIDAD BRUTA', grossPrim, grossComp, isMultiPeriod);
+    // UTILIDAD BRUTA — ingresos menos costo de ventas (clase 6) Y costo de
+    // producción (clase 7). Omitir la clase 7 sobreestimaba la utilidad bruta
+    // de cualquier empresa manufacturera respecto del HTML/PDF.
+    const grossOf = (s: PeriodView['summary']) =>
+      s.totalRevenue - s.totalCosts - s.totalProduction;
+    row = addStatementTotalRow(
+      ws,
+      row,
+      'UTILIDAD BRUTA',
+      grossOf(primary.summary),
+      comparative ? grossOf(comparative.summary) : undefined,
+      isMultiPeriod,
+    );
     row++;
 
     // GASTOS
@@ -782,6 +1040,28 @@ interface KPIRow {
   isMoney: boolean;
 }
 
+/**
+ * Ratio de un periodo, con la MISMA precedencia que usan el PDF y el HTML:
+ * primero el campo pre-calculado de `controlTotals` (Wave 2.F4, fuente única),
+ * y sólo si viene null/ausente —balances cacheados pre-F4— el cálculo local.
+ *
+ * `controlTotals` guarda los porcentajes en escala 0-100; las celdas de Excel
+ * llevan `NUM_FMT_PCT`, que espera una fracción, de ahí el /100.
+ */
+function ratioFromControlTotals(
+  view: PeriodView | null,
+  pick: (ct: ControlTotals) => number | null | undefined,
+  fallback: () => number,
+  isPercentScale: boolean,
+): number {
+  const ct = view?.controlTotals;
+  const pre = ct ? pick(ct) : null;
+  if (typeof pre === 'number' && Number.isFinite(pre)) {
+    return isPercentScale ? pre / 100 : pre;
+  }
+  return fallback();
+}
+
 function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRow[] {
   const kpiOf = (label: string, currVal: number, prevVal: number, opts: { isPct?: boolean; isMoney?: boolean }): KPIRow => {
     const delta = currVal - prevVal;
@@ -796,17 +1076,44 @@ function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRo
     equationBalance: 0, equationBalanced: true,
   };
 
-  const margenNetoP = p.totalRevenue !== 0 ? p.netIncome / p.totalRevenue : 0;
-  const margenNetoC = c.totalRevenue !== 0 ? c.netIncome / c.totalRevenue : 0;
+  const margenNetoP = ratioFromControlTotals(
+    primary, (ct) => ct.margenNeto,
+    () => (p.totalRevenue !== 0 ? p.netIncome / p.totalRevenue : 0), true,
+  );
+  const margenNetoC = ratioFromControlTotals(
+    comparative, (ct) => ct.margenNeto,
+    () => (c.totalRevenue !== 0 ? c.netIncome / c.totalRevenue : 0), true,
+  );
 
-  const endeudamientoP = p.totalAssets !== 0 ? p.totalLiabilities / p.totalAssets : 0;
-  const endeudamientoC = c.totalAssets !== 0 ? c.totalLiabilities / c.totalAssets : 0;
+  const endeudamientoP = ratioFromControlTotals(
+    primary, (ct) => ct.endeudamientoTotal,
+    () => (p.totalAssets !== 0 ? p.totalLiabilities / p.totalAssets : 0), true,
+  );
+  const endeudamientoC = ratioFromControlTotals(
+    comparative, (ct) => ct.endeudamientoTotal,
+    () => (c.totalAssets !== 0 ? c.totalLiabilities / c.totalAssets : 0), true,
+  );
 
-  const roaP = p.totalAssets !== 0 ? p.netIncome / p.totalAssets : 0;
-  const roaC = c.totalAssets !== 0 ? c.netIncome / c.totalAssets : 0;
+  const roaP = ratioFromControlTotals(
+    primary, (ct) => ct.roa,
+    () => (p.totalAssets !== 0 ? p.netIncome / p.totalAssets : 0), true,
+  );
+  const roaC = ratioFromControlTotals(
+    comparative, (ct) => ct.roa,
+    () => (c.totalAssets !== 0 ? c.netIncome / c.totalAssets : 0), true,
+  );
 
-  const roeP = p.totalEquity !== 0 ? p.netIncome / p.totalEquity : 0;
-  const roeC = c.totalEquity !== 0 ? c.netIncome / c.totalEquity : 0;
+  // ROE: `controlTotals.roe` usa patrimonio PROMEDIO. Recalcularlo aquí sobre
+  // el patrimonio de cierre imprimía en el .xlsx un ROE distinto al del HTML y
+  // al del PDF para el mismo informe.
+  const roeP = ratioFromControlTotals(
+    primary, (ct) => ct.roe,
+    () => (p.totalEquity !== 0 ? p.netIncome / p.totalEquity : 0), true,
+  );
+  const roeC = ratioFromControlTotals(
+    comparative, (ct) => ct.roe,
+    () => (c.totalEquity !== 0 ? c.netIncome / c.totalEquity : 0), true,
+  );
 
   return [
     kpiOf('Total Activo', p.totalAssets, c.totalAssets, { isMoney: true }),
@@ -1094,9 +1401,12 @@ function addSectionHeader(
  * Anade filas de cuentas de una clase, uniendo cuentas entre primary y comparative
  * cuando hay multiperiodo.
  *
- * @param opts.absValues — si true, los valores monetarios se muestran con Math.abs
- *   (para Clase 2 Pasivo y Clase 3 Patrimonio). La cuenta 3710ZZ (convergencia) queda
- *   exenta; esa fila la maneja el llamador directamente.
+ * Todos los saldos se escriben FIRMADOS. La opción `absValues` que aplicaba
+ * Math.abs a las clases 2 y 3 se eliminó: convertía saldos contrarios (pérdidas
+ * acumuladas, pasivos sobrepagados) en su opuesto y hacía que las líneas no
+ * sumaran el total firmado. La convención NIIF de negativos entre paréntesis la
+ * aporta ahora `NUM_FMT_COP`.
+ *
  * @param opts.reclassifications — lista de reclasificaciones para mostrar notas en col 7.
  */
 function addClassRows(
@@ -1105,10 +1415,10 @@ function addClassRows(
   primary: PeriodView,
   comparative: PeriodView | null,
   classCode: number,
-  opts: { absValues?: boolean; reclassifications?: Reclassification[] } = {},
+  opts: { reclassifications?: Reclassification[] } = {},
 ): number {
   let row = startRow;
-  const { absValues = false, reclassifications } = opts;
+  const { reclassifications } = opts;
   const primaryCl = findClass(primary.classes, classCode);
   const comparativeCl = comparative ? findClass(comparative.classes, classCode) : undefined;
 
@@ -1125,34 +1435,16 @@ function addClassRows(
   if (comparative) {
     const merged = unionAccounts(primaryCl, comparativeCl);
     for (const meta of merged) {
-      let currBal = primaryCl ? findAccountBalance([primaryCl], meta.code) ?? 0 : 0;
-      let prevBal = comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
-      // Apply abs for liability/equity classes EXCEPT virtual accounts that
-      // must preserve their sign:
-      //   - 3710ZZ: convergence adjustment (R5)
-      //   - 3605VC: utilidad/pérdida del ejercicio (R8) — pérdidas son negativas
-      //   - 3710VC: ajuste de cierre virtual (R8) — puede ser negativo
-      if (absValues && !isSignPreservingVirtual(meta.code)) {
-        currBal = Math.abs(currBal);
-        prevBal = Math.abs(prevBal);
-      }
+      const currBal = primaryCl ? findAccountBalance([primaryCl], meta.code) ?? 0 : 0;
+      const prevBal = comparativeCl ? findAccountBalance([comparativeCl], meta.code) ?? 0 : 0;
       row = addAccountRowMulti(ws, row, meta.code, meta.name, prevBal, currBal, footnoteMap.get(meta.code));
     }
   } else if (primaryCl) {
     for (const acc of primaryCl.accounts) {
-      let bal = acc.balance;
-      if (absValues && !isSignPreservingVirtual(acc.code)) {
-        bal = Math.abs(bal);
-      }
-      row = addAccountRowSingle(ws, row, acc.code, acc.name, bal, undefined, footnoteMap.get(acc.code));
+      row = addAccountRowSingle(ws, row, acc.code, acc.name, acc.balance, undefined, footnoteMap.get(acc.code));
     }
   }
   return row;
-}
-
-/** Cuentas virtuales del Curator cuyo signo debe preservarse al renderizar. */
-function isSignPreservingVirtual(code: string): boolean {
-  return code === '3710ZZ' || code === '3605VC' || code === '3710VC';
 }
 
 function addAccountRowSingle(

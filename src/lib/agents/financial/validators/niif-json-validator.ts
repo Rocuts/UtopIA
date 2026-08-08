@@ -41,6 +41,7 @@
 // orchestrator pueda sumar errores/warnings sin discriminar el origen.
 // ---------------------------------------------------------------------------
 
+import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
@@ -98,6 +99,25 @@ export interface NiifJsonValidatorOptions {
     operatingProfit?: string;
     netIncome?: string;
   };
+  /**
+   * E14 — anclas del periodo PRIMARIO (el año que el cliente firma).
+   *
+   * Auditoría 2026-08 (P0 `totales-primarios-nunca-cruzados-contra-preprocesador`):
+   * hasta esta versión sólo se cruzaba el periodo COMPARATIVO. Del periodo
+   * actual el único control era E1 —`totalAssets = totalLiabilities +
+   * totalEquity`—, que es coherencia INTERNA: el LLM podía emitir un balance
+   * entero inventado y, mientras cuadrara consigo mismo, el validador daba OK.
+   * En modo LINEA_BASE (sin comparativo) eso significaba que NINGUNA cifra del
+   * informe se contrastaba contra la fuente determinista.
+   */
+  bindingPrimaryTotalsCents?: {
+    totalAssets?: string;
+    totalLiabilities?: string;
+    totalEquity?: string;
+    netIncome?: string;
+    utilidadAntesImpuestos?: string;
+    impuestoCausado?: string;
+  };
   presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
 }
 
@@ -120,8 +140,40 @@ export function validateNiifReportJson(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // -- E1. Ecuación patrimonial -----------------------------------------------
+  // -- E14. Anclaje del periodo PRIMARIO al preprocesador ---------------------
+  //
+  // Va PRIMERO a propósito. E1 sólo comprueba que el balance cuadre consigo
+  // mismo, y un balance completamente inventado cuadra consigo mismo sin
+  // esfuerzo. E14 es lo que ata el reporte a la realidad del archivo que
+  // subió el cliente. Tolerancia $0: las cifras del preprocesador son exactas
+  // en centavos y el LLM sólo tiene que copiarlas.
   const bs = json.balanceSheet;
+  const bpt = options.bindingPrimaryTotalsCents;
+  if (bpt) {
+    const anchorCheck = (
+      label: string,
+      emitted: string | null | undefined,
+      expected: string | undefined,
+    ) => {
+      if (emitted === null || emitted === undefined || expected === undefined) return;
+      if (!moneyCopEquals(emitted, expected)) {
+        const gap = diffCents(emitted, expected);
+        errors.push(
+          `E14. ${label} del periodo ${json.company.fiscalPeriod} emitido por el analista ` +
+            `(${fmtCop(parseMoneyCop(emitted))}) ≠ preprocesador ` +
+            `(${fmtCop(parseMoneyCop(expected))}). Brecha: ${fmtCop(gap)}. ` +
+            `La cifra vinculante es la del preprocesador; el analista debe copiarla literalmente ` +
+            `desde el token [MoneyCop: N] del bloque TOTALES VINCULANTES.`,
+        );
+      }
+    };
+    anchorCheck('TotalAssets', bs.totalAssetsPrimary, bpt.totalAssets);
+    anchorCheck('TotalLiabilities', bs.totalLiabilitiesPrimary, bpt.totalLiabilities);
+    anchorCheck('TotalEquity', bs.totalEquityPrimary, bpt.totalEquity);
+    anchorCheck('NetIncome', json.incomeStatement.netIncomePrimary, bpt.netIncome);
+  }
+
+  // -- E1. Ecuación patrimonial -----------------------------------------------
   const sumLiabEq = serializeMoneyCop(
     parseMoneyCop(bs.totalLiabilitiesPrimary) + parseMoneyCop(bs.totalEquityPrimary),
   );
@@ -597,9 +649,66 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E15. Los renglones impresos suman el total impreso ---------------------
+  //
+  // Auditoría 2026-08 (`sin-invariante-lineas-vs-total`). Ningún invariante
+  // exigía que la suma de las líneas de un estado fuera igual al total que ese
+  // mismo estado declara, y todos los fixtures usaban arrays de líneas VACÍOS,
+  // así que la brecha nunca se notó. Es el síntoma más visible para el lector:
+  // suma la columna con la calculadora y no le da.
+  //
+  // Sutileza que hace no trivial el chequeo: por regla del NIIF Analyst las
+  // líneas del Balance viajan con `isAbsolute = true`, es decir la depreciación
+  // acumulada aparece como un positivo aunque RESTE. Sumar a ciegas daría un
+  // exceso sistemático de 2× la correctora en toda empresa con PPE depreciado.
+  // Por eso las correctoras se identifican por su código PUC (Decreto
+  // 2650/1993, ver `preprocessing/curator-rules/contra-asset-registry.ts`) y se
+  // restan.
+  //
+  // Se emite como WARNING, no como error: la clasificación de una línea puede
+  // ser legítimamente discutible y bloquear un informe correcto es peor que
+  // señalarlo. El anclaje duro contra el preprocesador ya lo hace E14.
+  for (const [nombre, lineas, totalDeclarado] of [
+    ['Activo', bs.assets, bs.totalAssetsPrimary],
+    ['Pasivo', bs.liabilities, bs.totalLiabilitiesPrimary],
+    ['Patrimonio', bs.equity, bs.totalEquityPrimary],
+  ] as const) {
+    const detalle = lineas.filter((l) => l.level === 2);
+    if (detalle.length === 0) continue; // sin desglose no hay nada que cuadrar
+
+    let suma = ZERO;
+    for (const l of detalle) {
+      const monto = parseMoneyCop(l.amountPrimary);
+      const esCorrectora = isContraAsset(l.account ?? '');
+      // Una correctora presentada en absoluto resta; una presentada con signo
+      // ya viene negativa y se suma tal cual.
+      suma += esCorrectora && l.isAbsolute ? -abs(monto) : monto;
+    }
+
+    const total = parseMoneyCop(totalDeclarado);
+    if (suma !== total) {
+      const gap = suma - total;
+      warnings.push(
+        `E15. En ${nombre}, la suma de los ${detalle.length} renglones de detalle ` +
+          `(${fmtCop(suma)}) ≠ el total declarado (${fmtCop(total)}). Brecha: ${fmtCop(gap)}. ` +
+          `El lector que sume la columna no obtendrá el total impreso. ` +
+          `${
+            gap < ZERO
+              ? 'La suma es MENOR: probablemente falta desglosar algún rubro.'
+              : 'La suma es MAYOR: revisar doble conteo o una cuenta correctora presentada en valor absoluto sin identificar.'
+          }`,
+      );
+    }
+  }
+
   return {
     ok: errors.length === 0,
     errors,
     warnings,
   };
+}
+
+/** Valor absoluto en BigInt. */
+function abs(v: bigint): bigint {
+  return v < ZERO ? -v : v;
 }

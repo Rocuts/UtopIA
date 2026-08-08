@@ -63,6 +63,15 @@ import type {
 import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { ReportIterationTurn } from './types';
 import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
+import {
+  CLIENT_REPORT_MODEL_ID,
+  detectMissingPhases,
+  mergeWarnings,
+  saveNiifCheckpoint,
+  loadNiifCheckpoint,
+  clearNiifCheckpoint,
+  type PipelinePhaseId,
+} from './pipeline-resilience';
 
 // ─── Capa 5 — Helpers contexto fiscal ────────────────────────────────────────
 
@@ -115,18 +124,73 @@ function buildFiscalContextBlock(
 
 const SPRING = { stiffness: 400, damping: 25 };
 
-const STAGE_LABELS = [
-  { label: 'Analista NIIF', sublabel: 'Estados financieros y notas' },
-  { label: 'Director de Estrategia', sublabel: 'KPIs y proyecciones' },
-  { label: 'Gobierno Corporativo', sublabel: 'Acta y cumplimiento' },
-];
+// ─── i18n de la superficie del pipeline ─────────────────────────────────────
+// El monitor del pipeline y los mensajes de fase estaban hardcodeados en
+// español mientras el resto del producto respetaba el toggle ES/EN. Un usuario
+// en inglés veía el flujo estrella a medio traducir.
+const STAGE_LABELS_BY_LANG = {
+  es: [
+    { label: 'Analista NIIF', sublabel: 'Estados financieros y notas' },
+    { label: 'Director de Estrategia', sublabel: 'KPIs y proyecciones' },
+    { label: 'Gobierno Corporativo', sublabel: 'Acta y cumplimiento' },
+  ],
+  en: [
+    { label: 'IFRS Analyst', sublabel: 'Financial statements and notes' },
+    { label: 'Strategy Director', sublabel: 'KPIs and projections' },
+    { label: 'Corporate Governance', sublabel: 'Minutes and compliance' },
+  ],
+} as const;
 
-const AUDITOR_LABELS: Record<string, string> = {
-  niif: 'NIIF/Contable',
-  tributario: 'Tributario',
-  legal: 'Legal/Societario',
-  revisoria: 'Rev. Fiscal',
+/** Etiqueta de sub-fase usada en los mensajes de error de `runSSEPhase`. */
+const PHASE_LABELS: Record<'niif' | 'strategy' | 'governance', { es: string; en: string }> = {
+  niif: { es: 'Analista NIIF', en: 'IFRS Analyst' },
+  strategy: { es: 'Director de Estrategia', en: 'Strategy Director' },
+  governance: { es: 'Gobierno Corporativo', en: 'Corporate Governance' },
 };
+
+const AUDITOR_LABELS_BY_LANG = {
+  es: {
+    niif: 'NIIF/Contable',
+    tributario: 'Tributario',
+    legal: 'Legal/Societario',
+    revisoria: 'Rev. Fiscal',
+  },
+  en: {
+    niif: 'IFRS/Accounting',
+    tributario: 'Tax',
+    legal: 'Legal/Corporate',
+    revisoria: 'Statutory Audit',
+  },
+} as const;
+
+// ─── Registro de la corrida a nivel de MÓDULO ───────────────────────────────
+// Auditoría 2026-08. La corrida vivía atada al ciclo de vida del componente:
+// el cleanup del efecto hacía `controller.abort()`, así que cambiar el idioma,
+// navegar a otra área o cualquier re-render que tocara las dependencias mataba
+// un trabajo de 3-5 minutos ya pagado — a veces sin siquiera mostrar un error
+// (el `AbortError` se traga y el spinner giraba para siempre).
+//
+// Al mover el registro al módulo:
+//   · el desmontaje del componente YA NO aborta el fetch. Los checkpoints se
+//     escriben vía `setLastCompletedReport`, que vive en WorkspaceContext (en
+//     el layout, no se desmonta), así que la corrida termina y persiste aunque
+//     el usuario se vaya a otra pantalla.
+//   · un remount no re-dispara la misma corrida (`dispatchedInput` compara
+//     identidad del intake), que sería cobrar dos veces el mismo reporte.
+// Sigue siendo una mitigación: la arquitectura definitiva es el `runId`
+// server-side del POST-MVP NOTE de arriba.
+const runtimeRun: {
+  /** Identidad del intake ya despachado. Evita re-disparos en remount. */
+  dispatchedInput: unknown;
+  /**
+   * Intake de la corrida anterior. Distingue "primera corrida" de
+   * "regeneración" (ajustes del Doctor, provisional, reintento), que exige
+   * limpiar auditoría y calidad de la corrida previa.
+   */
+  startedInput: unknown;
+  controller: AbortController | null;
+  inFlight: boolean;
+} = { dispatchedInput: null, startedInput: null, controller: null, inFlight: false };
 
 // ─── POST-MVP NOTE ──────────────────────────────────────────────────────────
 // La orquestacion del pipeline de 3 fases esta en el cliente (este useEffect).
@@ -203,6 +267,18 @@ async function fetchJSONWithRetry<T>(
 interface SubPhaseHandlers {
   /** Callback para FinancialProgressEvent (stage_start, stage_progress, stage_complete). */
   onProgress?: (evt: FinancialProgressEvent) => void;
+  /**
+   * Advertencias de validación emitidas por el backend como `event: warning`.
+   *
+   * Auditoría 2026-08 (P0 `sse-warnings-descartados-cliente`): el backend
+   * emitía por este canal los errores del validador de identidades contables
+   * (ecuación patrimonial rota, EFE que no cierra, ECP que no cuadra contra el
+   * patrimonio del balance, totales que no coinciden con el preprocesador) y
+   * el cliente NO registraba handler, así que `consumeSSE` los descartaba en
+   * silencio. El sistema detectaba que las cifras estaban mal y el usuario
+   * recibía un reporte de apariencia impecable.
+   */
+  onWarning?: (warnings: string[]) => void;
   /** Manejadores adicionales para eventos sidecar (ej. fiscal_snapshot). */
   onExtra?: Record<string, (raw: unknown) => void>;
 }
@@ -236,6 +312,12 @@ async function runSSEPhase<T>(
   await consumeSSE(res, signal, {
     progress: (raw) => {
       handlers.onProgress?.(raw as FinancialProgressEvent);
+    },
+    warning: (raw) => {
+      const { warnings } = (raw ?? {}) as { warnings?: unknown };
+      if (!Array.isArray(warnings)) return;
+      const texts = warnings.filter((w): w is string => typeof w === 'string');
+      if (texts.length > 0) handlers.onWarning?.(texts);
     },
     [eventName]: (raw) => {
       box.value = raw as T;
@@ -741,11 +823,12 @@ function splitReportIntoSections(markdown: string): ReportSection[] {
   return sections.filter((s) => s.content.length > 0);
 }
 
-function StageNode({ index, state, label, sublabel }: {
+function StageNode({ index, state, label, sublabel, language }: {
   index: number;
   state: PipelineState;
   label: string;
   sublabel: string;
+  language: 'es' | 'en';
 }) {
   const prefersReduced = useReducedMotion();
   const stageNum = (index + 1) as 1 | 2 | 3;
@@ -777,7 +860,7 @@ function StageNode({ index, state, label, sublabel }: {
           isActive && 'text-gold-500',
           isPending && 'text-n-600',
         )}>
-          Agente {stageNum}
+          {language === 'es' ? `Agente ${stageNum}` : `Agent ${stageNum}`}
         </span>
       </div>
       <p className={cn(
@@ -793,7 +876,7 @@ function StageNode({ index, state, label, sublabel }: {
   );
 }
 
-function PipelineMonitor({ state }: { state: PipelineState }) {
+function PipelineMonitor({ state, language }: { state: PipelineState; language: 'es' | 'en' }) {
   /* eslint-disable react-hooks/purity */
   const elapsed = state.startedAt
     ? Math.round((Date.now() - new Date(state.startedAt).getTime()) / 1000)
@@ -822,18 +905,48 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
     return Math.min(stageProgress + auditProgress + qualityProgress, 100);
   })();
 
+  const stages = STAGE_LABELS_BY_LANG[language];
+  const auditorLabels = AUDITOR_LABELS_BY_LANG[language];
+  // Texto que anuncia el avance a lectores de pantalla. El pipeline tarda
+  // minutos; sin esto la corrida entera transcurre en silencio para quien no
+  // ve la pantalla (auditoría 2026-08 `pipeline-errors-not-announced`).
+  const activeStageLabel = stages[Math.max(0, state.currentStage - 1)]?.label ?? '';
+  const liveStatus =
+    state.mode === 'complete'
+      ? language === 'es'
+        ? 'Reporte completo.'
+        : 'Report complete.'
+      : language === 'es'
+        ? `Fase ${state.currentStage} de 3 en curso: ${activeStageLabel}. Tiempo transcurrido ${timeStr}.`
+        : `Phase ${state.currentStage} of 3 in progress: ${activeStageLabel}. Elapsed ${timeStr}.`;
+
   return (
     <div className="w-full">
+      {/*
+        Región viva: `aria-live="polite"` anuncia los cambios de fase sin
+        interrumpir al usuario. Se mantiene fuera del árbol visual (sr-only)
+        porque los nodos de fase ya comunican lo mismo visualmente.
+      */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {liveStatus}
+      </p>
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-n-200">
         <div>
           <h2 className="text-sm font-bold text-n-900 flex items-center gap-2">
-            <Loader2 className={cn('w-4 h-4', state.mode !== 'complete' && 'animate-spin')} />
-            {state.mode === 'complete' ? 'REPORTE COMPLETO' : 'GENERANDO REPORTE NIIF ELITE'}
+            <Loader2
+              className={cn('w-4 h-4', state.mode !== 'complete' && 'animate-spin')}
+              aria-hidden="true"
+            />
+            {state.mode === 'complete'
+              ? language === 'es' ? 'REPORTE COMPLETO' : 'REPORT COMPLETE'
+              : language === 'es' ? 'GENERANDO REPORTE NIIF ELITE' : 'GENERATING ELITE IFRS REPORT'}
           </h2>
           <p className="text-xs text-n-600 mt-0.5 font-mono">
-            <Clock className="w-3 h-3 inline mr-1" />
-            {timeStr} · Tiempo estimado: 3-5 min
+            <Clock className="w-3 h-3 inline mr-1" aria-hidden="true" />
+            {timeStr}
+            {language === 'es' ? ' · Tiempo estimado: 3-5 min' : ' · Estimated time: 3-5 min'}
           </p>
         </div>
         <ProgressRing progress={overallProgress} size={48} strokeWidth={4} />
@@ -842,13 +955,19 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
       {/* Phase 1: Agents */}
       <div className="px-6 py-4">
         <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-3 font-mono">
-          Fase 1 — Generacion de Reporte
+          {language === 'es' ? 'Fase 1 — Generacion de Reporte' : 'Phase 1 — Report Generation'}
         </h3>
         <div className="flex items-center gap-2 overflow-x-auto styled-scrollbar pb-2">
-          {STAGE_LABELS.map((s, i) => (
+          {stages.map((s, i) => (
             <div key={i} className="flex items-center">
-              <StageNode index={i} state={state} label={s.label} sublabel={s.sublabel} />
-              {i < STAGE_LABELS.length - 1 && (
+              <StageNode
+                index={i}
+                state={state}
+                label={s.label}
+                sublabel={s.sublabel}
+                language={language}
+              />
+              {i < stages.length - 1 && (
                 <ChevronRight className="w-5 h-5 text-n-500 mx-1 shrink-0" aria-hidden="true" />
               )}
             </div>
@@ -859,10 +978,12 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
       {/* Phase 2: Auditors */}
       <div className="px-6 py-4 border-t border-n-100">
         <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-3 font-mono">
-          Fase 2 — Auditoria (4 en paralelo)
+          {language === 'es'
+            ? 'Fase 2 — Auditoria (4 en paralelo)'
+            : 'Phase 2 — Audit (4 in parallel)'}
         </h3>
         <div className="flex items-center gap-3 flex-wrap">
-          {Object.entries(AUDITOR_LABELS).map(([key, label]) => {
+          {Object.entries(auditorLabels).map(([key, label]) => {
             const started = state.auditorsStarted.includes(key);
             const complete = state.auditorsComplete.includes(key);
             const findingCount = state.auditFindings[key];
@@ -892,7 +1013,9 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
       {/* Phase 3: Quality */}
       <div className="px-6 py-4 border-t border-n-100">
         <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-2 font-mono">
-          Fase 3 — Meta-Auditoria de Calidad
+          {language === 'es'
+            ? 'Fase 3 — Meta-Auditoria de Calidad'
+            : 'Phase 3 — Quality Meta-Audit'}
         </h3>
         {state.qualityGrade ? (
           <div className="flex items-center gap-2">
@@ -903,8 +1026,10 @@ function PipelineMonitor({ state }: { state: PipelineState }) {
           </div>
         ) : (
           <div className="flex items-center gap-1.5 text-xs text-n-600">
-            <div className="w-3 h-3 rounded-full border border-n-400" />
-            {state.mode === 'quality' ? 'Evaluando calidad...' : 'Esperando auditoria completa'}
+            <div className="w-3 h-3 rounded-full border border-n-400" aria-hidden="true" />
+            {state.mode === 'quality'
+              ? language === 'es' ? 'Evaluando calidad...' : 'Assessing quality...'
+              : language === 'es' ? 'Esperando auditoria completa' : 'Waiting for audit to finish'}
           </div>
         )}
       </div>
@@ -1457,6 +1582,9 @@ export function PipelineWorkspace() {
     setPipelineState,
     pipelineInput,
     setPipelineInput,
+    pendingRun,
+    resumePendingRun,
+    clearPendingRun,
     lastCompletedReport,
     setLastCompletedReport,
     updateReportTurns,
@@ -1484,8 +1612,17 @@ export function PipelineWorkspace() {
   // las fases 2 y 3 si el usuario los activó. Antes solo guardábamos resumen
   // (findingCounts, grade, score), perdiendo el detalle que el PDF editorial
   // necesita para AuditFindingsPage + QualityMetaAuditPage.
-  const [auditReport, setAuditReport] = useState<BackendAuditReport | null>(null);
-  const [qualityReport, setQualityReport] = useState<BackendQualityAssessment | null>(null);
+  // Se hidratan del reporte persistido: antes vivían solo en memoria y tras un
+  // refresh el PDF exportado omitía sus páginas sin avisar.
+  const [auditReport, setAuditReport] = useState<BackendAuditReport | null>(
+    lastCompletedReport?.auditReport ?? null,
+  );
+  const [qualityReport, setQualityReport] = useState<BackendQualityAssessment | null>(
+    lastCompletedReport?.qualityReport ?? null,
+  );
+  // Espejo en ref para leer el valor vigente desde la corrida asíncrona sin
+  // recrear el closure (evita re-disparar el efecto de arranque).
+  const auditReportRef = useRef<BackendAuditReport | null>(auditReport);
   // ─── Wave 4.F8 — HTML Editor Jefe (cap-stone visual) ─────────────────────
   // Estado del 4° entregable opcional. Se llena cuando el usuario clic
   // "Generar HTML" post-Phase 3. NO se persiste en localStorage para mantener
@@ -1493,6 +1630,10 @@ export function PipelineWorkspace() {
   // `htmlChecklistFailures` se popula con el linter §11 del agente y se muestra
   // como banner dentro de `<HtmlReportViewer>` si el agente detectó issues.
   const [htmlReport, setHtmlReport] = useState<string | null>(null);
+  // `false` cuando el gate del Editor Jefe encontró un fallo bloqueante: el
+  // HTML se entrega estampado como BORRADOR y el visor no debe ofrecerlo como
+  // informe firmable. Auditoría 2026-08.
+  const [htmlEmittable, setHtmlEmittable] = useState(true);
   const [htmlChecklistFailures, setHtmlChecklistFailures] = useState<
     Array<{ rule: string; detail: string; severity: 'block' | 'warn' }>
   >([]);
@@ -1513,6 +1654,18 @@ export function PipelineWorkspace() {
   // Escudo vía POST. Consumido por las 4 áreas vía `useAncoraView`.
   const ancoraRef = useRef<NiifAncora | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // ─── Advertencias de validación contable ──────────────────────────────────
+  // Auditoría 2026-08: el backend emitía por `event: warning` los errores del
+  // validador de identidades (ecuación patrimonial, EFE contra PUC 11, ECP
+  // contra patrimonio, totales contra el preprocesador) y aquí no había ni
+  // handler ni estado, así que se descartaban en silencio. El reporte salía
+  // con apariencia impecable y el descuadre no se le comunicaba a nadie.
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const collectWarnings = useCallback((incoming: string[]) => {
+    // `mergeWarnings` vive en `pipeline-resilience.ts` para poder testear la
+    // deduplicación sin montar el componente.
+    setValidationWarnings((prev) => mergeWarnings(prev, incoming));
+  }, []);
   const [showRepair, setShowRepair] = useState(false);
   const [repairSeed, setRepairSeed] = useState<string | null>(null);
   // ─── Phase 3 (hook 3): diff visual antes/despues ──────────────────────────
@@ -1528,7 +1681,46 @@ export function PipelineWorkspace() {
   // surfaces so server-side telemetry can group attempts by error occurrence.
   const [repairConvId, setRepairConvId] = useState<string>('');
   const { language } = useLanguage();
-  const lastProcessedInputRef = useRef<typeof pipelineInput>(null);
+  /**
+   * Idioma vigente leído por la corrida asíncrona.
+   *
+   * POR QUÉ un ref y no la variable del render: `language` estaba en las
+   * dependencias del efecto que orquestaba el pipeline. Cambiar el idioma a
+   * mitad de una corrida disparaba el cleanup (`controller.abort()`), el
+   * re-run del efecto se cortaba por el guard de "mismo input" y el AbortError
+   * se tragaba sin `setError` — el usuario se quedaba mirando el spinner para
+   * siempre. Cada corrida fija el idioma con el que arrancó.
+   */
+  const languageRef = useRef(language);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  /**
+   * Partes del reporte vigente que son stubs vacíos. Se calcula al rehidratar
+   * desde localStorage y tras cada corrida; alimenta el banner de "reporte
+   * incompleto" y el CTA de reanudación por sub-fase.
+   */
+  const [missingPhases, setMissingPhases] = useState<PipelinePhaseId[]>([]);
+
+  /**
+   * Checkpoint de la sub-fase NIIF (la cara). Permite reintentar SOLO
+   * Estrategia/Gobierno sin volver a pagar el Analista NIIF y sin arriesgar
+   * que el LLM devuelva cifras distintas a las que el usuario ya vio.
+   */
+  interface NiifRunCheckpoint {
+    niifResult: NiifAnalysisResult;
+    bindingTotals: string;
+    preprocessed: unknown;
+    company: CompanyInfo;
+    rawData: string;
+    conversationId: string;
+    strategyResult: StrategicAnalysisResult | null;
+  }
+  const checkpointRef = useRef<NiifRunCheckpoint | null>(null);
+  // Espejo en estado del ref anterior: la UI necesita saber si hay checkpoint
+  // reanudable, y leer un ref durante el render no dispara re-render.
+  const [hasCheckpoint, setHasCheckpoint] = useState(false);
 
   // Repair chat lifecycle: tied to the presence of an error in the UI.
   // - new error  -> mint conv id, ensure chat starts collapsed
@@ -1544,30 +1736,94 @@ export function PipelineWorkspace() {
     }
   }, [error]);
 
-  // Si al montar existe un reporte completado pero el pipelineState no marca
-  // 'complete' (p.ej. primera carga tras hidratar desde storage), lo forzamos.
+  // Al montar rehidratamos el reporte persistido.
+  //
+  // Auditoría 2026-08 (`checkpoint-parcial-se-muestra-completo`): antes esto
+  // hacía `mode: 'complete'` incondicional. Un checkpoint escrito tras el NIIF
+  // (con Estrategia y Gobierno como stubs vacíos) se rehidrataba como reporte
+  // TERMINADO: el cliente veía "PARTE II: ANALISIS ESTRATEGICO" seguida de
+  // nada, con el botón de exportar a PDF habilitado y sin una sola advertencia.
+  // Es el peor de los casos posibles — creer que se tiene un informe.
   const hydratedPipelineRef = useRef(false);
   useEffect(() => {
     if (hydratedPipelineRef.current) return;
     hydratedPipelineRef.current = true;
+    // Si la corrida sigue viva (el componente se desmontó al navegar y volvió),
+    // no la pisamos: `pipelineState` vive en el contexto y sigue avanzando.
+    if (runtimeRun.inFlight) return;
     if (lastCompletedReport && !report) {
       const consolidated = lastCompletedReport.report.consolidatedReport;
+      const missing = detectMissingPhases(lastCompletedReport.report);
       setReport({
         content: consolidated,
         sections: splitReportIntoSections(consolidated),
       });
-      setPipelineState((prev) => ({ ...prev, mode: 'complete' }));
+      setMissingPhases(missing);
+      setPipelineState((prev) => ({
+        ...prev,
+        mode: 'complete',
+        completedStages: missing.length === 0 ? [1, 2, 3] : [1],
+      }));
+      // Reconstruimos el checkpoint NIIF para poder reanudar la sub-fase
+      // faltante. `bindingTotals` es obligatorio en /strategy y /governance y
+      // es lo único que persistimos aparte del reporte (`preprocessed` es
+      // opcional en ambos schemas y pesa demasiado para localStorage).
+      const stored = loadNiifCheckpoint(lastCompletedReport.conversationId);
+      if (missing.length > 0 && stored) {
+        checkpointRef.current = {
+          niifResult: lastCompletedReport.report.niifAnalysis,
+          bindingTotals: stored.bindingTotals,
+          preprocessed: null,
+          company: lastCompletedReport.company,
+          rawData: lastCompletedReport.rawData,
+          conversationId: lastCompletedReport.conversationId,
+          strategyResult: missing.includes('strategy')
+            ? null
+            : lastCompletedReport.report.strategicAnalysis,
+        };
+        setHasCheckpoint(true);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!pipelineInput || lastProcessedInputRef.current === pipelineInput) return;
-    const isRerun = lastProcessedInputRef.current !== null;
-    lastProcessedInputRef.current = pipelineInput;
+  /**
+   * Orquesta la corrida. `start` indica desde qué sub-fase arranca:
+   *
+   *  - `'niif'`: corrida completa (requiere intake).
+   *  - `'strategy'` / `'governance'`: reanudación con el checkpoint NIIF ya
+   *    pagado. Auditoría 2026-08 (`sin-reanudacion-por-fase`): un transient en
+   *    la fase 2 o 3 obligaba a re-ejecutar TODO desde el Analista NIIF, lo que
+   *    además puede devolver cifras distintas a las que el usuario ya vio.
+   *
+   * Vive fuera del `useEffect` para que el mismo camino de código sirva al
+   * arranque y al reintento — dos rutas separadas divergirían.
+   */
+  const runPipeline = useCallback(
+    async (start: 'niif' | 'strategy' | 'governance' = 'niif') => {
+    const intake = pipelineInput ?? pendingRun?.input ?? null;
+    const resumeCheckpoint = checkpointRef.current;
+    if (start === 'niif' && !intake) return;
+    if (start !== 'niif' && !resumeCheckpoint) return;
+    // Idioma congelado al arrancar: cambiarlo a mitad de corrida ya no la mata,
+    // y tampoco produce un reporte mitad español mitad inglés.
+    const runLanguage = languageRef.current;
+
+    // Una corrida nueva cancela la anterior (reintento manual, regeneración con
+    // ajustes). El DESMONTAJE del componente ya no aborta nada.
+    runtimeRun.controller?.abort();
+    const controller = new AbortController();
+    runtimeRun.controller = controller;
+    runtimeRun.inFlight = true;
+
+    const isRerun = start === 'niif' && runtimeRun.startedInput !== null;
+    if (start === 'niif') runtimeRun.startedInput = pipelineInput;
     setError(null);
-    setReport(null);
-    setStreamedContent('');
+    setMissingPhases([]);
+    if (start === 'niif') {
+      setReport(null);
+      setStreamedContent('');
+    }
     // ITEM 4 ORDEN DE CIERRE — Reparación Fase 3 reconnection.
     // En re-runs (regenerateWithAdjustments / markProvisional / reintento), las
     // Fases 2 y 3 vuelven a correr — pero las fases anteriores dejaban estado
@@ -1578,6 +1834,7 @@ export function PipelineWorkspace() {
     // re-run para que la UI refleje el progreso correctamente.
     if (isRerun) {
       setAuditReport(null);
+      auditReportRef.current = null;
       setQualityReport(null);
       setPipelineState((prev) => ({
         ...prev,
@@ -1592,10 +1849,23 @@ export function PipelineWorkspace() {
         phase2Error: undefined,
         phase3Error: undefined,
       }));
+    } else {
+      // Arranque normal o reanudación: dejamos el monitor en marcha desde ya.
+      // En la reanudación el NIIF ya está pagado, así que la fase 1 se muestra
+      // completa y el indicador salta directo a la sub-fase que falta.
+      setPipelineState((prev) => ({
+        ...prev,
+        mode: 'running',
+        currentStage: start === 'governance' ? 3 : start === 'strategy' ? 2 : 1,
+        completedStages:
+          start === 'governance' ? [1, 2] : start === 'strategy' ? [1] : prev.completedStages,
+        startedAt: prev.startedAt ?? new Date(),
+        phase2Error: undefined,
+        phase3Error: undefined,
+      }));
     }
-    const controller = new AbortController();
 
-    (async () => {
+    try {
       // ─── Phase 1: Financial Report (CRÍTICA, ahora 3 sub-fases) ───────
       // Wave 3.F2: en lugar de UNA llamada monolítica a /api/financial-report
       // (que acumulaba 5-15 min y disparaba "network error" mid-stream en
@@ -1618,8 +1888,13 @@ export function PipelineWorkspace() {
         company: CompanyInfo;
       } | null = null;
       // Conv id estable para todo el ciclo: minted antes de la primera sub-fase
-      // para que el checkpoint progresivo no rote ids entre updates.
-      const nextConvId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // para que el checkpoint progresivo no rote ids entre updates. En una
+      // reanudación se conserva el id del checkpoint para no duplicar el
+      // registro persistido ni huerfanar el chat de seguimiento.
+      const nextConvId =
+        start === 'niif'
+          ? `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          : (resumeCheckpoint as NiifRunCheckpoint).conversationId;
 
       // The provisional flag may have been attached locally by the repair chat
       // (handleMarkProvisional) — it is not on the NiifReportIntake type yet
@@ -1628,42 +1903,49 @@ export function PipelineWorkspace() {
       // Phase 2: same pattern for `adjustmentLedger`, attached locally by
       // handleRegenerateWithAdjustments. Backend route accepts it as
       // optional and applies adjustments post-preprocessing.
-      const intakeWithExtras = pipelineInput as NiifReportIntake & {
-        provisional?: ProvisionalFlag;
-        adjustmentLedger?: AdjustmentLedger;
-      };
-      const provisional = intakeWithExtras.provisional;
-      const adjustmentLedger = intakeWithExtras.adjustmentLedger;
+      const intakeWithExtras = (intake ?? null) as
+        | (NiifReportIntake & {
+            provisional?: ProvisionalFlag;
+            adjustmentLedger?: AdjustmentLedger;
+          })
+        | null;
+      const provisional = intakeWithExtras?.provisional;
+      const adjustmentLedger = intakeWithExtras?.adjustmentLedger;
       // Ola 2 — hechos del negocio excluidos en la confirmación del intake
       // (Task 8). Se propaga a las 4 rutas del pipeline SOLO cuando hay
       // exclusiones, para que cada ruta netee la misma lista que confirmó el
       // usuario. Las rutas (Tasks 3–6) side-parsean `excludedFactIds` del body.
-      const excludedFactIds = pipelineInput.excludedFactIds ?? [];
+      const excludedFactIds = intake?.excludedFactIds ?? [];
+      const instructions = intake?.specialInstructions;
 
       // ITEM 5 ORDEN DE CIERRE — propagar T.P. + C.C. al backend si están
       // presentes en el intake. `companyExt` lookup defensivo: el shape del
       // intake del workspace todavía puede no declararlos (campos nuevos).
-      const companyExt = pipelineInput.company as typeof pipelineInput.company & {
-        legalRepresentativeId?: string;
-        fiscalAuditorTp?: string;
-        accountantTp?: string;
-      };
-      const companyBody = {
-        name: pipelineInput.company.name,
-        nit: pipelineInput.company.nit,
-        entityType: pipelineInput.company.entityType,
-        sector: pipelineInput.company.sector,
-        city: pipelineInput.company.city,
-        legalRepresentative: pipelineInput.company.legalRepresentative,
-        legalRepresentativeId: companyExt.legalRepresentativeId,
-        fiscalAuditor: pipelineInput.company.fiscalAuditor,
-        fiscalAuditorTp: companyExt.fiscalAuditorTp,
-        accountant: pipelineInput.company.accountant,
-        accountantTp: companyExt.accountantTp,
-        niifGroup: pipelineInput.niifGroup,
-        fiscalPeriod: pipelineInput.fiscalPeriod,
-        comparativePeriod: pipelineInput.comparativePeriod,
-      };
+      const companyExt = intake?.company as
+        | (NiifReportIntake['company'] & {
+            legalRepresentativeId?: string;
+            fiscalAuditorTp?: string;
+            accountantTp?: string;
+          })
+        | undefined;
+      const companyBody = intake
+        ? {
+            name: intake.company.name,
+            nit: intake.company.nit,
+            entityType: intake.company.entityType,
+            sector: intake.company.sector,
+            city: intake.company.city,
+            legalRepresentative: intake.company.legalRepresentative,
+            legalRepresentativeId: companyExt?.legalRepresentativeId,
+            fiscalAuditor: intake.company.fiscalAuditor,
+            fiscalAuditorTp: companyExt?.fiscalAuditorTp,
+            accountant: intake.company.accountant,
+            accountantTp: companyExt?.accountantTp,
+            niifGroup: intake.niifGroup,
+            fiscalPeriod: intake.fiscalPeriod,
+            comparativePeriod: intake.comparativePeriod,
+          }
+        : null;
 
       // Handler común de progress events para las 3 sub-fases — mantiene la
       // misma semántica que el legacy: stage_start/complete actualizan el
@@ -1693,12 +1975,27 @@ export function PipelineWorkspace() {
       // Si esta falla, no hay reporte que mostrar — abortamos y mostramos
       // error fatal. Las sub-fases 1.2/1.3 son recuperables vía checkpoint;
       // 1.1 no.
+      //
+      // En una reanudación NO se re-ejecuta: es la fase más cara y volver a
+      // correrla podría devolver cifras distintas a las que el usuario ya vio.
+      if (start !== 'niif') {
+        const cp = resumeCheckpoint as NiifRunCheckpoint;
+        niifResult = cp.niifResult;
+        niifContext = {
+          bindingTotals: cp.bindingTotals,
+          preprocessed: cp.preprocessed,
+          company: cp.company,
+        };
+        strategyResult = cp.strategyResult;
+      } else
+      // Corrida completa: aquí sí se ejecuta el Analista NIIF. El `else` cuelga
+      // de este `try/catch` — no hay más ramas.
       try {
         const niifBody: Record<string, unknown> = {
-          rawData: pipelineInput.rawData,
+          rawData: intake!.rawData,
           company: companyBody,
-          language,
-          instructions: pipelineInput.specialInstructions,
+          language: runLanguage,
+          instructions,
           ...(provisional ? { provisional } : {}),
         };
         if (adjustmentLedger?.adjustments?.length) {
@@ -1722,9 +2019,10 @@ export function PipelineWorkspace() {
           niifBody,
           'niif_phase',
           controller.signal,
-          'Analista NIIF',
+          PHASE_LABELS.niif[runLanguage],
           {
             onProgress: onSubPhaseProgress,
+            onWarning: collectWarnings,
             // Captura los eventos sidecar que el backend emite ANTES de niif_phase
             // (contrato §4.2). Camino rápido: llegan antes del payload principal.
             onExtra: {
@@ -1767,37 +2065,64 @@ export function PipelineWorkspace() {
       // A partir de aquí, aunque la red se caiga y el usuario recargue, el
       // reporte NIIF vive en localStorage. Los stubs vacíos para
       // strategicAnalysis/governance permiten que el contrato BackendFinancialReport
-      // se mantenga sin opcional-explosion; la UI muestra el reporte parcial
-      // con un banner "Strategy/Governance pendiente — reintenta".
-      const partialConsolidated = buildClientConsolidatedReport(
-        niifContext.company,
-        niifResult.fullContent,
-        '',
-        '',
-        language,
-      );
-      const partialReport: BackendFinancialReport = {
+      // se mantenga sin opcional-explosion; `detectMissingPhases` los reconoce
+      // al rehidratar y la UI muestra el reporte como INCOMPLETO en vez de
+      // presentarlo como terminado.
+      const runRawData = intake?.rawData ?? (resumeCheckpoint as NiifRunCheckpoint | null)?.rawData ?? '';
+      // Guardamos el checkpoint reanudable ANTES de tocar Estrategia: si
+      // /strategy revienta, el usuario puede reintentar SOLO esa sub-fase sin
+      // volver a pagar el Analista NIIF.
+      checkpointRef.current = {
+        niifResult,
+        bindingTotals: niifContext.bindingTotals,
+        preprocessed: niifContext.preprocessed,
         company: niifContext.company,
-        niifAnalysis: niifResult,
-        strategicAnalysis: emptyStrategy(),
-        governance: emptyGovernance(),
-        consolidatedReport: partialConsolidated,
-        generatedAt: new Date().toISOString(),
-        ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
-        ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
-      };
-      setBackendReport(partialReport);
-      setRawData(pipelineInput.rawData);
-      setCompanyInfo(niifContext.company);
-      setConversationId(nextConvId);
-      setInitialTurns([]);
-      setLastCompletedReport({
-        report: partialReport,
-        rawData: pipelineInput.rawData,
-        company: niifContext.company,
+        rawData: runRawData,
         conversationId: nextConvId,
-        turns: [],
-      });
+        strategyResult,
+      };
+      setHasCheckpoint(true);
+      if (start === 'niif') {
+        saveNiifCheckpoint({
+          conversationId: nextConvId,
+          bindingTotals: niifContext.bindingTotals,
+          savedAt: new Date().toISOString(),
+        });
+      }
+
+      if (start === 'niif') {
+        const partialConsolidated = buildClientConsolidatedReport(
+          niifContext.company,
+          niifResult.fullContent,
+          '',
+          '',
+          runLanguage,
+        );
+        const partialReport: BackendFinancialReport = {
+          company: niifContext.company,
+          niifAnalysis: niifResult,
+          strategicAnalysis: emptyStrategy(),
+          governance: emptyGovernance(),
+          consolidatedReport: partialConsolidated,
+          generatedAt: new Date().toISOString(),
+          ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
+          ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
+        };
+        setBackendReport(partialReport);
+        setRawData(runRawData);
+        setCompanyInfo(niifContext.company);
+        setConversationId(nextConvId);
+        setInitialTurns([]);
+        setLastCompletedReport({
+          report: partialReport,
+          rawData: runRawData,
+          company: niifContext.company,
+          conversationId: nextConvId,
+          turns: [],
+          auditReport: null,
+          qualityReport: null,
+        });
+      }
       // Capa 5 — Persistencia DB del snapshot fiscal (best-effort, no bloquea UI).
       // El backend creará/actualizará la fila en reports + upsertará alertas.
       if (fiscalSnapshotRef.current) {
@@ -1819,7 +2144,7 @@ export function PipelineWorkspace() {
           }
         })();
         // Inyectar contexto fiscal al asistente (best-effort — canal pendingChatContext).
-        setPendingChatContext(buildFiscalContextBlock(_snap, _company, language));
+        setPendingChatContext(buildFiscalContextBlock(_snap, _company, runLanguage));
       }
 
       // ─── Audit en paralelo (DISPARADO ahora, AWAITEADO tras Governance) ─
@@ -1832,7 +2157,11 @@ export function PipelineWorkspace() {
       // legales/governance tendrán menos material. Si la calidad no alcanza
       // se puede mover este disparo a post-Strategy (mediano), o post-Governance
       // (status quo).
-      const auditEnabled = pipelineInput.outputOptions.auditPipeline;
+      // En una reanudación sólo re-corremos la auditoría si el intake la pedía
+      // y no tenemos ya un resultado: repetirla gratis quemaría LLM de más.
+      const auditEnabled =
+        (intake?.outputOptions.auditPipeline ?? false) &&
+        (start === 'niif' || auditReportRef.current === null);
       let auditPromise: Promise<ParallelAuditOutcome> = Promise.resolve({
         ok: true,
         value: null,
@@ -1842,7 +2171,7 @@ export function PipelineWorkspace() {
         auditPromise = runAuditInBackground({
           niifResult,
           company: niifContext.company,
-          language,
+          language: runLanguage,
           signal: controller.signal,
           callbacks: {
             onAuditorStarted: (domain) => {
@@ -1883,37 +2212,41 @@ export function PipelineWorkspace() {
       // Si esta falla, persiste el checkpoint NIIF y el pipeline continúa
       // hasta que el usuario decida reintentar. Marcamos `phase2Error` con
       // el mensaje específico de la sub-fase para que el banner lo muestre.
-      try {
-        const strategyBody = {
-          niifResult,
-          bindingTotals: niifContext.bindingTotals,
-          preprocessed: niifContext.preprocessed,
-          company: niifContext.company,
-          language,
-          instructions: pipelineInput.specialInstructions,
-          ...(excludedFactIds.length ? { excludedFactIds } : {}),
-        };
+      if (start !== 'governance' || strategyResult === null) {
+        try {
+          const strategyBody = {
+            niifResult,
+            bindingTotals: niifContext.bindingTotals,
+            preprocessed: niifContext.preprocessed,
+            company: niifContext.company,
+            language: runLanguage,
+            instructions,
+            ...(excludedFactIds.length ? { excludedFactIds } : {}),
+          };
 
-        const strategyPayload = await runSSEPhase<{ strategy: StrategicAnalysisResult }>(
-          '/api/financial-report/strategy',
-          strategyBody,
-          'strategy_phase',
-          controller.signal,
-          'Director de Estrategia',
-          { onProgress: onSubPhaseProgress },
-        );
+          const strategyPayload = await runSSEPhase<{ strategy: StrategicAnalysisResult }>(
+            '/api/financial-report/strategy',
+            strategyBody,
+            'strategy_phase',
+            controller.signal,
+            PHASE_LABELS.strategy[runLanguage],
+            { onProgress: onSubPhaseProgress, onWarning: collectWarnings },
+          );
 
-        strategyResult = strategyPayload.strategy;
-      } catch (err) {
-        if ((err as Error)?.name === 'AbortError') return;
-        const msg = err instanceof Error ? err.message : 'Error desconocido';
-        // Sub-fase 1.2 falló — el NIIF parcial sigue persistido. Mostramos el
-        // error como fatal de Fase 1 (no quedó reporte completo) pero NO
-        // borramos el checkpoint NIIF: el usuario verá el reporte parcial al
-        // recargar y podrá reintentar.
-        setError(msg);
-        setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
-        return;
+          strategyResult = strategyPayload.strategy;
+          checkpointRef.current = { ...checkpointRef.current!, strategyResult };
+        } catch (err) {
+          if ((err as Error)?.name === 'AbortError') return;
+          const msg = err instanceof Error ? err.message : 'Error desconocido';
+          // Sub-fase 1.2 falló — el NIIF parcial sigue persistido y el
+          // checkpoint reanudable vive en `checkpointRef`. `missingPhases`
+          // habilita el CTA "Reintentar Estrategia", que NO vuelve a pagar el
+          // Analista NIIF.
+          setError(msg);
+          setMissingPhases(['strategy', 'governance']);
+          setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
+          return;
+        }
       }
 
       // ─── Sub-fase 1.3: Gobierno Corporativo ────────────────────────────
@@ -1924,8 +2257,8 @@ export function PipelineWorkspace() {
           bindingTotals: niifContext.bindingTotals,
           preprocessed: niifContext.preprocessed,
           company: niifContext.company,
-          language,
-          instructions: pipelineInput.specialInstructions,
+          language: runLanguage,
+          instructions,
           ...(excludedFactIds.length ? { excludedFactIds } : {}),
         };
 
@@ -1934,8 +2267,8 @@ export function PipelineWorkspace() {
           governanceBody,
           'governance_phase',
           controller.signal,
-          'Gobierno Corporativo',
-          { onProgress: onSubPhaseProgress },
+          PHASE_LABELS.governance[runLanguage],
+          { onProgress: onSubPhaseProgress, onWarning: collectWarnings },
         );
 
         governanceResult = governancePayload.governance;
@@ -1943,6 +2276,8 @@ export function PipelineWorkspace() {
         if ((err as Error)?.name === 'AbortError') return;
         const msg = err instanceof Error ? err.message : 'Error desconocido';
         setError(msg);
+        // Estrategia ya está pagada: el reintento arranca en Gobierno.
+        setMissingPhases(['governance']);
         setPipelineState((prev) => ({ ...prev, mode: 'idle' }));
         return;
       }
@@ -1957,7 +2292,7 @@ export function PipelineWorkspace() {
         niifResult.fullContent,
         strategyResult.fullContent,
         governanceResult.fullContent,
-        language,
+        runLanguage,
       );
       phase1Report = {
         company: niifContext.company,
@@ -1972,12 +2307,21 @@ export function PipelineWorkspace() {
 
       // ─── CHECKPOINT 2: actualizar reporte completo en localStorage ──────
       setBackendReport(phase1Report);
+      setRawData(runRawData);
+      setCompanyInfo(phase1Report.company);
+      setConversationId(nextConvId);
+      setMissingPhases([]);
       setLastCompletedReport({
         report: phase1Report,
-        rawData: pipelineInput.rawData,
+        rawData: runRawData,
         company: phase1Report.company,
         conversationId: nextConvId,
         turns: [],
+        // Se re-escriben abajo con el resultado real de las fases 2/3; aquí
+        // preservamos lo que ya teníamos para no borrar una auditoría previa
+        // durante una reanudación.
+        auditReport: auditReportRef.current,
+        qualityReport: null,
       });
 
       setPipelineState((prev) => ({
@@ -2001,6 +2345,7 @@ export function PipelineWorkspace() {
             // Conservar el reporte completo para que el botón Exportar PDF
             // pueda incluir AuditFindingsPage con los 4 auditores + hallazgos.
             setAuditReport(phase2Report);
+            auditReportRef.current = phase2Report;
           }
         } else {
           setPipelineState((prev) => ({ ...prev, phase2Error: outcome.error }));
@@ -2012,7 +2357,8 @@ export function PipelineWorkspace() {
       // `await .json()` que puede tardar 60-180s. Es la que disparo el bug
       // original `net::ERR_NETWORK_CHANGED`. Mitigacion: retry con backoff
       // ante errores de red + aislamiento del catch.
-      if (pipelineInput.outputOptions.metaAudit) {
+      let phase3Report: BackendQualityAssessment | null = null;
+      if (intake?.outputOptions.metaAudit) {
         setPipelineState((prev) => ({ ...prev, mode: 'quality' }));
         try {
           // Tipamos como QualityAssessment completo — antes solo extraíamos
@@ -2026,7 +2372,7 @@ export function PipelineWorkspace() {
               body: JSON.stringify({
                 report: phase1Report,
                 auditReport: phase2Report,
-                language,
+                language: runLanguage,
               }),
               signal: controller.signal,
             },
@@ -2038,12 +2384,30 @@ export function PipelineWorkspace() {
             qualityScore: quality.overallScore,
           }));
           setQualityReport(quality);
+          phase3Report = quality;
         } catch (err) {
           if ((err as Error)?.name === 'AbortError') return;
           const msg = err instanceof Error ? err.message : 'Error desconocido';
           setPipelineState((prev) => ({ ...prev, phase3Error: msg }));
         }
       }
+
+      // ─── CHECKPOINT 3: reporte completo + auditorías persistidas ────────
+      // Auditoría 2026-08 (`audit-quality-no-persisten`): `auditReport` y
+      // `qualityReport` solo vivían en memoria, así que tras un refresh el PDF
+      // salía sin las páginas de auditoría y meta-auditoría, sin avisar.
+      setLastCompletedReport({
+        report: phase1Report,
+        rawData: runRawData,
+        company: phase1Report.company,
+        conversationId: nextConvId,
+        turns: [],
+        auditReport: phase2Report ?? auditReportRef.current,
+        qualityReport: phase3Report,
+      });
+      // La corrida terminó: ya no hay nada que reanudar.
+      clearPendingRun();
+      clearNiifCheckpoint();
 
       // ─── Finalize ────────────────────────────────────────────────────
       // Independientemente de si Fase 2/3 fallaron, el reporte NIIF se
@@ -2059,12 +2423,60 @@ export function PipelineWorkspace() {
         mode: 'complete',
         completedAt: new Date(),
       }));
-    })();
+    } finally {
+      // Solo la corrida vigente puede liberar el registro: una corrida vieja
+      // que termina tarde (abortada por un reintento) no debe marcar como
+      // "libre" al pipeline que acaba de arrancar.
+      if (runtimeRun.controller === controller) {
+        runtimeRun.inFlight = false;
+        runtimeRun.controller = null;
+      }
+    }
+    },
+    // OJO: `language` NO va aquí (se congela por corrida vía `languageRef`).
+    // Ponerlo re-creaba el callback y el efecto de arranque, y el cleanup
+    // abortaba la corrida en curso al cambiar de idioma.
+    [
+      pipelineInput,
+      pendingRun,
+      collectWarnings,
+      clearPendingRun,
+      setPipelineState,
+      setLastCompletedReport,
+      setPendingChatContext,
+    ],
+  );
 
-    return () => {
-      controller.abort();
+  // Arranque: un intake nuevo (identidad distinta) dispara la corrida.
+  // El guard vive en el registro de MÓDULO, no en un ref del componente: si el
+  // usuario navega y vuelve, el remount no debe cobrar el reporte dos veces.
+  useEffect(() => {
+    if (!pipelineInput) return;
+    if (runtimeRun.dispatchedInput === pipelineInput) return;
+    runtimeRun.dispatchedInput = pipelineInput;
+    void runPipeline('niif');
+    // Sin cleanup que aborte: desmontar el componente ya no cancela una corrida
+    // de 3-5 minutos ya pagada. Los checkpoints se escriben en el contexto
+    // (que no se desmonta) y el usuario reencuentra el reporte al volver.
+  }, [pipelineInput, runPipeline]);
+
+  // Aviso del navegador si el usuario refresca o cierra el tab durante la
+  // corrida. Es la única barrera posible a nivel de documento: una recarga sí
+  // mata el fetch (a diferencia de navegar dentro de la SPA).
+  useEffect(() => {
+    const running =
+      pipelineState.mode === 'running' ||
+      pipelineState.mode === 'auditing' ||
+      pipelineState.mode === 'quality';
+    if (!running) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Los navegadores modernos ignoran el texto y muestran su propio copy.
+      e.returnValue = '';
     };
-  }, [pipelineInput, language, setPipelineState, setLastCompletedReport, setPendingChatContext]);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [pipelineState.mode]);
 
   const isRunning = pipelineState.mode !== 'idle' && pipelineState.mode !== 'complete';
   const isComplete = pipelineState.mode === 'complete';
@@ -2072,6 +2484,20 @@ export function PipelineWorkspace() {
   // ─── Handlers para acciones del ReportViewer ────────────────────────────
   // "Nuevo Reporte": limpia el reporte en memoria y reabre el form.
   const handleReset = useCallback(() => {
+    // "Nuevo Reporte" es la ÚNICA acción del usuario que cancela explícitamente
+    // una corrida viva. El desmontaje ya no lo hace.
+    runtimeRun.controller?.abort();
+    runtimeRun.controller = null;
+    runtimeRun.inFlight = false;
+    runtimeRun.dispatchedInput = null;
+    checkpointRef.current = null;
+    setHasCheckpoint(false);
+    clearNiifCheckpoint();
+    setMissingPhases([]);
+    setAuditReport(null);
+    auditReportRef.current = null;
+    setQualityReport(null);
+    setValidationWarnings([]);
     setReport(null);
     setBackendReport(null);
     setRawData('');
@@ -2086,12 +2512,13 @@ export function PipelineWorkspace() {
     setDiffAffectedAccounts([]);
     // Wave 4.F8 — limpieza del 4° entregable opcional.
     setHtmlReport(null);
+    setHtmlEmittable(true);
     setHtmlChecklistFailures([]);
     setHtmlError(null);
     setShowHtmlViewer(false);
     setIsGeneratingHtml(false);
     setCachedPreprocessed(null);
-    lastProcessedInputRef.current = null;
+    runtimeRun.startedInput = null;
     setPipelineInput(null);
     setPipelineState((prev) => ({
       ...prev,
@@ -2109,6 +2536,21 @@ export function PipelineWorkspace() {
       phase3Error: undefined,
     }));
   }, [setPipelineInput, setPipelineState]);
+
+  /**
+   * Reintento por sub-fase. Reutiliza `runPipeline` (mismo camino de código que
+   * el arranque) para no tener dos ensamblajes del reporte que puedan divergir.
+   */
+  const handleResumePhase = useCallback(
+    (phase: PipelinePhaseId) => {
+      if (!checkpointRef.current) return;
+      void runPipeline(phase);
+    },
+    [runPipeline],
+  );
+
+  /** ¿Se puede reanudar sin volver a pagar el Analista NIIF? */
+  const canResumePhase = missingPhases.length > 0 && hasCheckpoint;
 
   // "Aplicar al reporte": muta consolidatedReport + re-splits sections + persiste.
   const handlePatchReport = useCallback(
@@ -2319,7 +2761,14 @@ export function PipelineWorkspace() {
         generatedAt,
         extractedAt,
         issuedAtHuman,
-        modelId: 'gpt-5.5',
+        // La ficha técnica del reporte declaraba `gpt-5.5` hardcodeado mientras
+        // el pipeline corría otro modelo: un dato de trazabilidad FALSO impreso
+        // junto al hash SHA-256 de integridad, en un documento que el cliente
+        // firma. `CLIENT_REPORT_MODEL_ID` es el espejo del default de
+        // `MODEL_IDS.FINANCIAL_PIPELINE` (hay test de deriva). El cierre
+        // definitivo es que /api/financial-report/html lo sobrescriba
+        // server-side con el id ya resuelto — fuera de esta frontera.
+        modelId: CLIENT_REPORT_MODEL_ID,
         agentVersion: '1+1 v10.1' as const,
         globalConfidence,
         alertsCounts,
@@ -2348,6 +2797,14 @@ export function PipelineWorkspace() {
         html: string;
         metadata: typeof metadata;
         checklistFailures: Array<{ rule: string; detail: string; severity: 'block' | 'warn' }>;
+        /**
+         * `false` cuando algún check BLOQUEANTE del linter §11 o de la
+         * reconciliación HTML↔JSON no pasó — típicamente una cifra vinculante
+         * que no aparece literal en el HTML, o un desliz de escala ×100. El
+         * HTML ya viene estampado como BORRADOR, pero el visor necesita el
+         * flag para no ofrecer la descarga como si fuera un informe firmable.
+         */
+        emittable?: boolean;
       }>(
         '/api/financial-report/html',
         body,
@@ -2358,6 +2815,9 @@ export function PipelineWorkspace() {
 
       setHtmlReport(result.html);
       setHtmlChecklistFailures(result.checklistFailures ?? []);
+      // `!== false` y no `!result.emittable`: un payload legacy sin el campo se
+      // trata como emitible, para no romper reportes ya persistidos.
+      setHtmlEmittable(result.emittable !== false);
       setShowHtmlViewer(true);
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return;
@@ -2399,6 +2859,11 @@ export function PipelineWorkspace() {
     });
   }, []);
 
+  // Tras un refresh `pipelineInput` es null; caemos al intake persistido para
+  // no exportar un PDF con páginas que el usuario había destildado.
+  const effectiveOutputOptions =
+    pipelineInput?.outputOptions ?? pendingRun?.input.outputOptions ?? null;
+
   if (isComplete && report) {
     const hasWarnings = Boolean(pipelineState.phase2Error || pipelineState.phase3Error);
     // Wave 4.F8 — el HtmlReportViewer toma el área completa cuando el usuario
@@ -2416,6 +2881,7 @@ export function PipelineWorkspace() {
               backendReport?.company.fiscalPeriod ?? pipelineInput?.fiscalPeriod ?? ''
             }
             checklistFailures={htmlChecklistFailures}
+            emittable={htmlEmittable}
             language={language}
             onClose={() => setShowHtmlViewer(false)}
           />
@@ -2424,23 +2890,126 @@ export function PipelineWorkspace() {
     }
     return (
       <div className="h-full flex flex-col">
+        {/*
+          Reporte INCOMPLETO. Auditoría 2026-08: este es el caso peligroso —
+          Partes II/III vacías presentadas como documento terminado y
+          exportable. El banner es de nivel error (no "advertencia") porque el
+          entregable no está en condiciones de firmarse.
+        */}
+        {missingPhases.length > 0 && (
+          <div
+            role="alert"
+            className="shrink-0 border-b border-danger/40 bg-danger/10 px-6 py-3 flex items-start gap-2"
+          >
+            <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1 min-w-0 text-xs">
+              <div className="font-medium mb-0.5 text-danger">
+                {language === 'es'
+                  ? 'Reporte INCOMPLETO — no apto para firma'
+                  : 'INCOMPLETE report — not fit for signature'}
+              </div>
+              <p className="text-n-800">
+                {language === 'es'
+                  ? `Faltan por generar: ${missingPhases
+                      .map((p) =>
+                        p === 'strategy'
+                          ? 'Parte II (Análisis Estratégico)'
+                          : 'Parte III (Gobierno Corporativo)',
+                      )
+                      .join(' y ')}. El contenido de esas secciones aparece vacío.`
+                  : `Still missing: ${missingPhases
+                      .map((p) =>
+                        p === 'strategy'
+                          ? 'Part II (Strategic Analysis)'
+                          : 'Part III (Corporate Governance)',
+                      )
+                      .join(' and ')}. Those sections render empty.`}
+              </p>
+              {canResumePhase && (
+                <button
+                  type="button"
+                  onClick={() => handleResumePhase(missingPhases[0])}
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                  {language === 'es'
+                    ? missingPhases[0] === 'strategy'
+                      ? 'Completar reporte (reintentar Estrategia)'
+                      : 'Completar reporte (reintentar Gobierno)'
+                    : missingPhases[0] === 'strategy'
+                      ? 'Complete report (retry Strategy)'
+                      : 'Complete report (retry Governance)'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {hasWarnings && (
-          <div className="shrink-0 border-b border-warning/30 bg-warning/10 px-6 py-3 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+          <div
+            role="status"
+            aria-live="polite"
+            className="shrink-0 border-b border-warning/30 bg-warning/10 px-6 py-3 flex items-start gap-2"
+          >
+            <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" aria-hidden="true" />
             <div className="flex-1 min-w-0 text-xs text-warning">
               <div className="font-medium mb-0.5">
-                Reporte generado con advertencias
+                {language === 'es'
+                  ? 'Reporte generado con advertencias'
+                  : 'Report generated with warnings'}
               </div>
               {pipelineState.phase2Error && (
                 <p className="whitespace-pre-wrap break-words">
-                  Auditoría regulatoria no disponible: {pipelineState.phase2Error}
+                  {language === 'es'
+                    ? 'Auditoría regulatoria no disponible: '
+                    : 'Regulatory audit unavailable: '}
+                  {pipelineState.phase2Error}
                 </p>
               )}
               {pipelineState.phase3Error && (
                 <p className="whitespace-pre-wrap break-words">
-                  Meta-auditoría de calidad no disponible: {pipelineState.phase3Error}
+                  {language === 'es'
+                    ? 'Meta-auditoría de calidad no disponible: '
+                    : 'Quality meta-audit unavailable: '}
+                  {pipelineState.phase3Error}
                 </p>
               )}
+            </div>
+          </div>
+        )}
+        {/*
+          Salvedades del validador contable. También deben verse en la vista de
+          reporte terminado: el caso peligroso es precisamente el reporte que
+          "salió bien" con la ecuación patrimonial rota.
+        */}
+        {validationWarnings.length > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="shrink-0 border-b border-gold-500/40 bg-gold-500/10 px-6 py-3"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-gold-700 shrink-0 mt-0.5" aria-hidden="true" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-n-1000">
+                  {language === 'es'
+                    ? `Validación contable: ${validationWarnings.length} ${
+                        validationWarnings.length === 1 ? 'salvedad' : 'salvedades'
+                      }`
+                    : `Accounting validation: ${validationWarnings.length} ${
+                        validationWarnings.length === 1 ? 'exception' : 'exceptions'
+                      }`}
+                </div>
+                <ul className="mt-1 space-y-1">
+                  {validationWarnings.map((w, i) => (
+                    <li
+                      key={`${i}-${w.slice(0, 40)}`}
+                      className="text-xs text-n-800 whitespace-pre-wrap break-words"
+                    >
+                      • {w}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
         )}
@@ -2456,7 +3025,7 @@ export function PipelineWorkspace() {
             initialTurns={initialTurns}
             auditReport={auditReport}
             qualityReport={qualityReport}
-            outputOptions={pipelineInput?.outputOptions ?? null}
+            outputOptions={effectiveOutputOptions}
             onReset={handleReset}
             onPatchReport={handlePatchReport}
             onTurnsChange={handleTurnsChange}
@@ -2495,12 +3064,17 @@ export function PipelineWorkspace() {
         </div>
       )}
 
-      <PipelineMonitor state={pipelineState} />
+      <PipelineMonitor state={pipelineState} language={language} />
 
       {error && (
-        <div className="mx-6 my-4 rounded-lg border border-danger bg-danger/10 px-4 py-3">
+        // `role="alert"` — el pipeline tarda minutos; sin esto un usuario de
+        // lector de pantalla nunca se entera de que la corrida murió.
+        <div
+          role="alert"
+          className="mx-6 my-4 rounded-lg border border-danger bg-danger/10 px-4 py-3"
+        >
           <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" aria-hidden="true" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-danger">
                 {language === 'es' ? 'Error en el pipeline' : 'Pipeline error'}
@@ -2509,6 +3083,27 @@ export function PipelineWorkspace() {
 
               {/* Action footer — repair chat toggle + continue-anyway shortcut. */}
               <div className="mt-3 flex flex-wrap items-center gap-2">
+                {/*
+                  Reintento por sub-fase: si el NIIF ya está pagado, reintentar
+                  SOLO la sub-fase que falló evita re-ejecutar la fase cara y
+                  evita que el LLM devuelva cifras distintas a las ya vistas.
+                */}
+                {canResumePhase && (
+                  <button
+                    type="button"
+                    onClick={() => handleResumePhase(missingPhases[0])}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                    {language === 'es'
+                      ? missingPhases[0] === 'strategy'
+                        ? 'Reintentar Estrategia'
+                        : 'Reintentar Gobierno'
+                      : missingPhases[0] === 'strategy'
+                        ? 'Retry Strategy'
+                        : 'Retry Governance'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleToggleRepair}
@@ -2569,9 +3164,110 @@ export function PipelineWorkspace() {
         </div>
       )}
 
+      {/*
+        Advertencias de validación contable. Auditoría 2026-08: hasta esta
+        versión el backend las emitía y el cliente las descartaba, de modo que
+        un reporte con la ecuación patrimonial rota se entregaba con apariencia
+        impecable. Aparecen aunque el pipeline haya terminado "bien", porque
+        precisamente ése es el caso peligroso.
+      */}
+      {validationWarnings.length > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mx-6 my-4 rounded-lg border border-gold-500 bg-gold-500/10 px-4 py-3"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-gold-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-n-1000">
+                {language === 'es'
+                  ? `Validación contable: ${validationWarnings.length} ${
+                      validationWarnings.length === 1 ? 'salvedad' : 'salvedades'
+                    }`
+                  : `Accounting validation: ${validationWarnings.length} ${
+                      validationWarnings.length === 1 ? 'exception' : 'exceptions'
+                    }`}
+              </div>
+              <p className="mt-1 text-xs text-n-700">
+                {language === 'es'
+                  ? 'El validador determinista encontró diferencias entre el reporte y el balance de origen. Revíselas antes de firmar los estados financieros.'
+                  : 'The deterministic validator found differences between the report and the source trial balance. Review them before signing the financial statements.'}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {validationWarnings.map((w, i) => (
+                  <li
+                    key={`${i}-${w.slice(0, 40)}`}
+                    className="text-xs text-n-800 whitespace-pre-wrap break-words"
+                  >
+                    • {w}
+                  </li>
+                ))}
+              </ul>
+              {pipelineInput && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleToggleRepair}
+                    aria-expanded={showRepair}
+                    aria-controls="repair-chat-panel"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+                  >
+                    <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
+                    {language === 'es' ? 'Revisar con el Doctor de Datos' : 'Review with Data Doctor'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {!pipelineInput && !isRunning && (
-        <div className="flex-1 flex items-center justify-center text-sm text-n-600 px-6 text-center">
-          No hay pipeline activo. Inicie un nuevo reporte desde &quot;Nueva Consulta&quot;.
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          {/*
+            Reanudación tras F5 / cierre del tab. El intake ya confirmado se
+            persiste al arrancar la corrida; sin esto el usuario tenía que
+            rehacer el wizard entero y volver a subir el balance.
+            NO se relanza sola: la corrida cuesta minutos y dinero, así que
+            exige un click explícito.
+          */}
+          {pendingRun && (
+            <div className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-4 py-3 max-w-md">
+              <p className="text-sm font-medium text-n-1000">
+                {language === 'es'
+                  ? `Hay un reporte sin terminar de ${pendingRun.input.company.name}`
+                  : `There is an unfinished report for ${pendingRun.input.company.name}`}
+              </p>
+              <p className="mt-1 text-xs text-n-700">
+                {language === 'es'
+                  ? 'La corrida se interrumpió (recarga de página o cierre del navegador). Puede relanzarla con los mismos datos ya cargados.'
+                  : 'The run was interrupted (page reload or browser close). You can relaunch it with the same data already loaded.'}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={resumePendingRun}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-gold-500 text-n-0 hover:bg-gold-700 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                  {language === 'es' ? 'Reanudar reporte' : 'Resume report'}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearPendingRun}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-n-200 text-n-700 text-xs font-medium hover:bg-n-50 hover:text-n-1000 transition-colors"
+                >
+                  {language === 'es' ? 'Descartar' : 'Discard'}
+                </button>
+              </div>
+            </div>
+          )}
+          <p className="text-sm text-n-600">
+            {language === 'es'
+              ? 'No hay pipeline activo. Inicie un nuevo reporte desde "Nueva Consulta".'
+              : 'No active pipeline. Start a new report from "New Consultation".'}
+          </p>
         </div>
       )}
 
@@ -2579,7 +3275,7 @@ export function PipelineWorkspace() {
       {streamedContent && (
         <div className="flex-1 border-t border-n-200 px-8 py-6 overflow-y-auto styled-scrollbar">
           <h3 className="text-2xs font-bold text-n-700 uppercase tracking-wider mb-3 font-mono">
-            Vista previa en tiempo real
+            {language === 'es' ? 'Vista previa en tiempo real' : 'Live preview'}
           </h3>
           <StreamingText isStreaming={isRunning}>
             <div className="prose prose-sm max-w-none text-n-900">
@@ -2597,7 +3293,9 @@ export function PipelineWorkspace() {
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
-            Esperando respuesta de los agentes...
+            {language === 'es'
+              ? 'Esperando respuesta de los agentes...'
+              : 'Waiting for the agents to respond...'}
           </motion.div>
         </div>
       )}

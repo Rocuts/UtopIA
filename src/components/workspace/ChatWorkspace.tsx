@@ -37,6 +37,8 @@ import {
   classifyError,
   errorMessageText,
   extractLegalReferences,
+  resolveAgentPresentation,
+  resolveFinalAnswer,
   type ChatErrorKind,
 } from './chat/utils';
 import type { PipelineVizState } from './chat/types';
@@ -334,12 +336,13 @@ export function ChatWorkspace({
                     }));
                   } else if (eventData.type === 'routing') {
                     const tier = (eventData.agents?.length ?? 0) > 1 ? 'T3' : 'T2';
-                    const agentNodes: AgentNode[] = (eventData.agents ?? []).map((a: string) => ({
-                      id: a,
-                      label: a === 'tax' ? 'Ag. Tributario' : a === 'accounting' ? 'Ag. Contable' : a === 'documents' ? 'Ag. Documentos' : 'Ag. Estrategia',
-                      status: 'pending' as const,
-                      branch: a as AgentNode['branch'],
-                    }));
+                    // `id` DEBE seguir siendo el string crudo del servidor: el
+                    // evento `agent_working` referencia al agente por displayName.
+                    // Solo la etiqueta y la rama se derivan del mapa.
+                    const agentNodes: AgentNode[] = (eventData.agents ?? []).map((a: string) => {
+                      const { label, branch } = resolveAgentPresentation(a);
+                      return { id: a, label, status: 'pending' as const, branch };
+                    });
                     setVizState(prev => ({
                       ...prev,
                       tier: tier as AgentTier,
@@ -381,23 +384,26 @@ export function ChatWorkspace({
         data = await response.json();
       }
 
-      if (!data) {
-        // No result event arrived. If we streamed content, treat the streamed text as the final answer.
-        if (streamedContent) {
-          data = { content: streamedContent };
-        } else {
-          throw new Error('No response data received');
-        }
-      }
+      // Un stream cerrado sin evento `result` significa que `orchestrate` nunca
+      // termino: `resolveFinalAnswer` marca esa respuesta como amputada en vez
+      // de aceptarla como definitiva (logica compartida con ChatSidebar).
+      const resolved = resolveFinalAnswer({ result: data, streamed: streamedContent, language });
+      if (!resolved) throw new Error('No response data received');
+      const truncated = resolved.truncated;
+      if (!data) data = { content: resolved.content };
 
-      // Mark all nodes complete
       setVizState(prev => ({
         ...prev,
         collapsed: true,
-        nodes: prev.nodes.map(n => ({ ...n, status: 'complete' as const })),
+        // Un stream cortado NO completa el pipeline: los nodos que seguian
+        // activos/pendientes quedan en error, no en "complete".
+        nodes: prev.nodes.map(n => ({
+          ...n,
+          status: truncated && n.status !== 'complete' ? ('error' as const) : ('complete' as const),
+        })),
       }));
 
-      const finalContent = data.content || streamedContent;
+      const finalContent = resolved.content;
 
       // Finalize the streaming message with full metadata.
       setMessages(prev => {
@@ -427,6 +433,25 @@ export function ChatWorkspace({
         return updated;
       });
 
+      // Stream cortado: ademas de la marca embebida, ofrecer reintento explicito.
+      if (truncated) {
+        const retryTruncated = () => {
+          setMessages(allMessages);
+          sendMessage(allMessages);
+        };
+        setMessages(prev => [
+          ...prev,
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: errorMessageText('timeout', language),
+            timestamp: new Date().toISOString(),
+            errorKind: 'timeout' as ChatErrorKind,
+            onRetry: retryTruncated,
+          },
+        ]);
+      }
+
       // Update intelligence panel
       if (data.riskAssessment) {
         onRiskAssessment?.(data.riskAssessment);
@@ -437,11 +462,15 @@ export function ChatWorkspace({
         }));
       }
 
+      // El `source` sale de lo que el texto DECLARA (extractLegalReferences ya
+      // lo resuelve). Forzar 'Estatuto Tributario' convertia cualquier "Art. N"
+      // —incluido uno de la Ley 2277, de un contrato o alucinado— en una cita
+      // del E.T. aparentemente verificada dentro del panel de Fuentes.
       const legalRefs = extractLegalReferences(finalContent);
       if (legalRefs.length > 0) {
         setIntelligencePanelData(prev => ({
           ...prev,
-          citations: legalRefs.map(r => ({ article: r.article, source: 'Estatuto Tributario' })),
+          citations: legalRefs.map(r => ({ article: r.article, source: r.source })),
         }));
       }
     } catch (err) {

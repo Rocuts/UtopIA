@@ -93,8 +93,18 @@ describe('Sección A — F-values exactos · Grupo Empresarial 2 Tres SAS 2025',
     expect(anchor.calendarioDian.nit).toBe('901714014-6');
   });
 
-  it('calendarioDian.ultimoDigito = 6 (último dígito del NIT)', () => {
-    expect(anchor.calendarioDian.ultimoDigito).toBe(6);
+  // PREMISA CORREGIDA (auditoría normativa 2026-08). Este test afirmaba
+  // `ultimoDigito = 6`, tomando el DÍGITO DE VERIFICACIÓN de "901714014-6".
+  // El Decreto 2229/2023 (art. 1.6.1.13.2.1 del DUR 1625/2016) determina los
+  // plazos "teniendo en cuenta el último o los dos últimos dígitos del Número
+  // de Identificación Tributaria (NIT) del contribuyente, SIN TENER EN CUENTA
+  // EL DÍGITO DE VERIFICACIÓN". Para 901714014-6 el dígito de calendario es 4.
+  // https://normograma.dian.gov.co/dian/compilacion/docs/decreto_2229_2023.htm
+  //
+  // El DV coincide con el último dígito del cuerpo sólo ~10% de las veces, así
+  // que el defecto desplazaba los vencimientos de nueve de cada diez empresas.
+  it('calendarioDian.ultimoDigito = 4 (último dígito del NIT, sin el de verificación)', () => {
+    expect(anchor.calendarioDian.ultimoDigito).toBe(4);
   });
 
   it('calendarioDian.periodo = "2025"', () => {
@@ -292,10 +302,16 @@ describe('Sección C — Capa 1 Aritmética · Grupo 2 Tres SAS', () => {
     expect(check!.passed).toBe(true);
   });
 
-  it('L1.7: NIT "901714014-6" → ultimoDigito=6 — coincide', () => {
+  // El validador tenía su PROPIA copia del extractor, que también devolvía el
+  // dígito de verificación. Con las dos implementaciones equivocadas igual,
+  // este check pasaba: sólo daba por bueno el calendario cuando ambas erraban
+  // en el mismo sentido. Ahora el validador delega en `extractCalendarDigit`,
+  // así que comprueba de verdad.
+  it('L1.7: NIT "901714014-6" → dígito de calendario 4 (sin el DV) — coincide', () => {
     const checks = validateFiscalAnchorL1(anchor);
     const check = checks.find((c) => c.name === 'L1.7_calendario_digito_nit');
     expect(check).toBeDefined();
+    expect(anchor.calendarioDian.ultimoDigito).toBe(4);
     expect(check!.passed).toBe(true);
   });
 });

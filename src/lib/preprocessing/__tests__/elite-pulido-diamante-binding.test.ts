@@ -60,13 +60,16 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
   //     sección "## Anclaje patrimonial aplicado (Curator R5)" NO aparece en
   //     el bloque vinculante. En su lugar aparece la sección R8.
   //
-  // (b) R6 (Cierre EFE): la brecha del EFE indirecto vs la variación observada
-  //     en PUC 11 es ≈ $312,5M — superior al 50 % de cualquier bucket
-  //     operativo disponible. El guardrail Pulido Diamante R6 rechaza el
-  //     cierre automático y NO popula `snap.cashFlowClosureAdjustment`, por
-  //     lo que la sección R6 tampoco aparece.
+  // (b) R6 (Cierre EFE): PREMISA CORREGIDA en la auditoría 2026-08. Este
+  //     comentario afirmaba que la brecha era ≈ $312,5M y que el guardrail
+  //     rechazaba el cierre. Esa brecha era un artefacto del defecto de R1 que
+  //     reclasificaba la depreciación acumulada (159205) a pasivo y dejaba a R2
+  //     sin el ajuste no-cash de D&A. Con las correctoras preservadas
+  //     (NIC 1 párr. 33), la brecha real es de $80M —absorbible— y R6 SÍ
+  //     aplica el cierre, por lo que la sección R6 aparece en el bloque, tal
+  //     como anticipaba la cabecera de este archivo.
   // -------------------------------------------------------------------------
-  it('renderSnapshotLines emite R1 + R8 + R7 (R5/R6 inactivos por la nueva arquitectura)', () => {
+  it('renderSnapshotLines emite R1 + R6 + R8 + R7 (R5 inactivo por la nueva arquitectura)', () => {
     const snap = loadPrimarySnapshot();
     const lines = renderSnapshotLines(snap);
     const text = lines.join('\n');
@@ -98,15 +101,16 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
         text,
     ).not.toContain('## Anclaje patrimonial aplicado (Curator R5)');
 
-    // Sub-string 4: R6 (cierre EFE) — NO debe aparecer: el guardrail de
-    // plausibilidad rechazó el cierre automático (brecha ≈ $312,5M > 50 %
-    // de todos los buckets). El renderer omite esta sección correctamente.
+    // Sub-string 4: R6 (cierre EFE) — DEBE aparecer. Si el curator ajustó el
+    // EFE para cuadrarlo contra PUC 11 y el LLM no ve ese ajuste, redacta el
+    // estado de flujos como si cerrara solo: el ajuste queda sin revelar y el
+    // informe pierde su defensa ante el Art. 647 E.T.
     expect(
       text,
-      'La seccion R6 NO deberia emitirse cuando el guardrail rechaza el cierre. ' +
+      'Falta seccion R6 — el LLM no veria el ajuste de cierre del EFE y no lo revelaria. ' +
         'Output recibido:\n' +
         text,
-    ).not.toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+    ).toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
 
     // Sub-string 5: R7 (costo presunto) — DEBE aparecer
     expect(

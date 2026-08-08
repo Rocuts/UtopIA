@@ -28,6 +28,12 @@ import type {
 } from '../trial-balance';
 
 import type { CuratorFinding, Reclassification } from './types';
+import {
+  isAmbiguousNatureAccount,
+  isContraAsset,
+  looksLikeContraAssetByName,
+} from './contra-asset-registry';
+import { syncControlTotals as syncControlTotalsHelper } from './sync-control-totals';
 
 const VIRTUAL_LIABILITY_PREFIX = '2810ZZ';
 const VIRTUAL_LIABILITY_NAME = 'Otros pasivos transitorios (reclasificación curator)';
@@ -88,12 +94,59 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
 
   // Filtrar cuentas con saldo negativo > tolerancia trivial. Excluir cuentas
   // virtuales que pudieran existir si R1 corrió antes (idempotencia).
-  const negativos = claseActivo.accounts.filter(
+  const candidatos = claseActivo.accounts.filter(
     (a: ValidatedAccount) =>
       a.balance < -NEGATIVE_TOLERANCE_COP &&
       !a.code.startsWith(VIRTUAL_LIABILITY_PREFIX) &&
       !a.code.startsWith(VIRTUAL_LIABILITY_PREFIX_INVERSIONES),
   );
+
+  // -------------------------------------------------------------------------
+  // Cuentas CORRECTORAS (contra-activo): su saldo crédito es su naturaleza,
+  // no una anomalía. NIC 1 párr. 33 dice expresamente que medir por el neto
+  // los activos sujetos a correcciones valorativas NO es compensación, y
+  // NIC 16 párr. 73(d) OBLIGA a revelar bruto y depreciación acumulada por
+  // separado. Reclasificarlas a pasivo infla Activo y Pasivo en el mismo
+  // importe y destruye el dato de depreciación que consumen R14, el EFE
+  // (ajuste no-cash de D&A) y la presentación bruto/neto.
+  // Detalle normativo y códigos verificados: ./contra-asset-registry.ts
+  // -------------------------------------------------------------------------
+  const correctoras = candidatos.filter((a) => isContraAsset(a.code));
+  const ambiguas = candidatos.filter((a) => isAmbiguousNatureAccount(a.code));
+
+  // Catálogos propios (Ley 1314/2009; CTCP 2024-0061): una cuenta fuera de la
+  // whitelist cuyo NOMBRE sugiere correctora. El nombre no es evidencia
+  // suficiente para afirmar la naturaleza, pero SÍ lo es para no mutar: ante
+  // la duda se preserva el saldo original y se pide revisión humana, porque
+  // reclasificar de más infla ambos lados del balance.
+  const correctorasPresuntas = candidatos.filter(
+    (a) =>
+      !isContraAsset(a.code) &&
+      !isAmbiguousNatureAccount(a.code) &&
+      looksLikeContraAssetByName(a.name),
+  );
+
+  const negativos = candidatos.filter(
+    (a) =>
+      !isContraAsset(a.code) &&
+      !isAmbiguousNatureAccount(a.code) &&
+      !looksLikeContraAssetByName(a.name),
+  );
+
+  // Correctoras con saldo DÉBITO — la anomalía inversa. No se reclasifica
+  // nada; se avisa, porque indica reversión excesiva, baja de activo sin dar
+  // de baja la correctora, o error de signo en el cargue.
+  const correctorasEnDebito = claseActivo.accounts.filter(
+    (a: ValidatedAccount) => isContraAsset(a.code) && a.balance > NEGATIVE_TOLERANCE_COP,
+  );
+
+  emitContraAssetFindings(out, snapshot, {
+    correctoras,
+    ambiguas,
+    correctorasEnDebito,
+    correctorasPresuntas,
+  });
+
   if (negativos.length === 0) return out;
 
   // Localizar Clase 2 (Pasivo) — la creamos vacía si no existe (caso límite).
@@ -250,6 +303,125 @@ export function runR1(snapshot: PeriodSnapshot): R1Result {
 // Helpers
 // ---------------------------------------------------------------------------
 
+interface ContraAssetBuckets {
+  /** Correctoras reconocidas, con su saldo crédito natural. Se preservan. */
+  correctoras: ValidatedAccount[];
+  /** Cuenta 1596 sin desglosar: naturaleza indecidible. Se preserva. */
+  ambiguas: ValidatedAccount[];
+  /** Correctoras con saldo débito: anomalía inversa. */
+  correctorasEnDebito: ValidatedAccount[];
+  /** Sospechosas por denominación, fuera del catálogo. Se preservan. */
+  correctorasPresuntas: ValidatedAccount[];
+}
+
+/**
+ * Emite la traza de lo que R1 decidió NO tocar. Sin estos findings, la
+ * ausencia de reclasificación es indistinguible de "no había nada que hacer",
+ * y el analista pierde la señal de que hubo correctoras en juego.
+ */
+function emitContraAssetFindings(
+  out: R1Result,
+  snapshot: PeriodSnapshot,
+  buckets: ContraAssetBuckets,
+): void {
+  const { correctoras, ambiguas, correctorasEnDebito, correctorasPresuntas } = buckets;
+
+  if (correctoras.length > 0) {
+    const total = correctoras.reduce((s, a) => s + Math.abs(a.balance), 0);
+    const list = correctoras
+      .map((a) => `${a.code} (${a.name}) $${formatCOP(Math.abs(a.balance))}`)
+      .join('; ');
+    out.findings.push({
+      code: 'CUR-R1-CA',
+      severity: 'informativo',
+      title: `Cuentas correctoras preservadas en el activo (${correctoras.length})`,
+      description:
+        `Se detectaron ${correctoras.length} cuenta(s) de Clase 1 con saldo crédito que son ` +
+        `correctoras de activo por naturaleza (depreciación acumulada, agotamiento, ` +
+        `amortización acumulada, deterioros o provisiones): ${list}. Total $${formatCOP(total)}. ` +
+        `NO se reclasificaron a pasivo: NIC 1 párr. 33 establece expresamente que medir por el ` +
+        `neto los activos sujetos a correcciones valorativas no constituye compensación.`,
+      normReference: 'NIC 1 párr. 33; NIC 16 párr. 73(d); NIIF para las PYMES párr. 2.52(a) y 17.31(d)',
+      recommendation:
+        'Presentar cada clase de activo en tres renglones —importe bruto, (−) correctora ' +
+        'acumulada e importe neto en libros— conforme a NIC 16 párr. 73(d).',
+      impact:
+        'Reclasificar estas cuentas a pasivo inflaría Activo y Pasivo en el mismo importe y ' +
+        'distorsionaría endeudamiento, ROA y capital de trabajo.',
+      period: snapshot.period,
+    });
+  }
+
+  if (correctorasEnDebito.length > 0) {
+    const list = correctorasEnDebito
+      .map((a) => `${a.code} (${a.name}) $${formatCOP(a.balance)}`)
+      .join('; ');
+    out.findings.push({
+      code: 'CUR-R1-B',
+      severity: 'medio',
+      title: `Cuenta(s) correctora(s) con saldo DÉBITO (${correctorasEnDebito.length})`,
+      description:
+        `Las siguientes cuentas correctoras presentan saldo deudor, contrario a su naturaleza ` +
+        `acreedora: ${list}. Indica reversión excesiva de la corrección valorativa, baja de un ` +
+        `activo sin dar de baja su correctora, o error de signo en el cargue del balance.`,
+      normReference: 'Decreto 2650/1993 — naturaleza acreedora de las cuentas de valuación',
+      recommendation:
+        'Conciliar el movimiento de la correctora contra las bajas y el gasto del periodo antes ' +
+        'de emitir los estados financieros.',
+      impact:
+        'Un saldo deudor en la correctora sobrestima el activo neto y subestima el gasto ' +
+        'acumulado por depreciación o deterioro.',
+      period: snapshot.period,
+    });
+  }
+
+  if (ambiguas.length > 0) {
+    const list = ambiguas.map((a) => `${a.code} (${a.name})`).join('; ');
+    out.findings.push({
+      code: 'CUR-R1-MX',
+      severity: 'informativo',
+      title: `Cuenta 1596 (Depreciación diferida) sin desglosar`,
+      description:
+        `${list}. La cuenta 1596 es de naturaleza mixta: 159605 (Exceso fiscal sobre la ` +
+        `contable) es deudora y 159610 (Defecto fiscal sobre la contable) es acreedora. Sin el ` +
+        `desglose a seis dígitos no se puede decidir su naturaleza, por lo que el saldo se ` +
+        `preservó sin reclasificar.`,
+      normReference: 'Decreto 2650/1993, cuenta 1596',
+      recommendation:
+        'Cargar el balance con las subcuentas a seis dígitos. Bajo NIIF, el efecto de las ' +
+        'diferencias temporarias se reconoce como impuesto diferido, no en 1596.',
+      impact: 'Sin desglose no se puede afirmar si el saldo suma o resta al activo.',
+      period: snapshot.period,
+    });
+  }
+
+  if (correctorasPresuntas.length > 0) {
+    const list = correctorasPresuntas
+      .map((a) => `${a.code} (${a.name}) $${formatCOP(Math.abs(a.balance))}`)
+      .join('; ');
+    out.findings.push({
+      code: 'CUR-R1-CP',
+      severity: 'medio',
+      title: `Posibles correctoras fuera del catálogo PUC (${correctorasPresuntas.length})`,
+      description:
+        `Las siguientes cuentas de Clase 1 tienen saldo crédito y su denominación sugiere que ` +
+        `son correctoras de activo, pero su código no pertenece al catálogo del Decreto ` +
+        `2650/1993: ${list}. El saldo se preservó sin reclasificar — la denominación no es ` +
+        `evidencia suficiente de la naturaleza de la cuenta, y reclasificar de más inflaría ` +
+        `ambos lados del balance.`,
+      normReference:
+        'Ley 1314/2009 art. 11; CTCP Concepto 2024-0061 (cada entidad puede definir su catálogo)',
+      recommendation:
+        'Confirmar con el contador si estas cuentas son correctoras de activo. Si lo son, ' +
+        'mapearlas al catálogo para que la presentación bruto/neto las tome correctamente.',
+      impact:
+        'Si son correctoras y se tratan como anomalía, el activo y el pasivo se inflan; si son ' +
+        'saldos acreedores anómalos y no se reclasifican, se incumple NIC 1 párr. 32.',
+      period: snapshot.period,
+    });
+  }
+}
+
 function recomputeControlTotalsFromClasses(
   totals: ControlTotals,
   classes: PUCClass[],
@@ -273,27 +445,12 @@ function recomputeControlTotalsFromClasses(
   totals.pasivoCorriente = sumByGroups(clasePasivo, PASIVO_CORRIENTE_GROUPS);
   totals.pasivoNoCorriente = sumByGroups(clasePasivo, PASIVO_NO_CORRIENTE_GROUPS);
 
-  // Sincronizar cents y raw para activo/pasivo si el parser los populó.
-  // El gate `auditReportEmittable` lee cents — si quedan obsoletos tras la
-  // mutación de R1, las V1/V2 fallan con falso negativo.
-  if (totals.cents) {
-    totals.cents.activo = BigInt(Math.round(totals.activo * 100));
-    totals.cents.pasivo = BigInt(Math.round(totals.pasivo * 100));
-  }
-  if (totals.raw) {
-    totals.raw.activo = formatCanonical(totals.activo);
-    totals.raw.pasivo = formatCanonical(totals.pasivo);
-  }
-}
-
-function formatCanonical(value: number): string {
-  if (!Number.isFinite(value)) return '0.00';
-  const cents = Math.round(value * 100);
-  const sign = cents < 0 ? '-' : '';
-  const abs = Math.abs(cents);
-  const integer = Math.floor(abs / 100);
-  const fraction = (abs % 100).toString().padStart(2, '0');
-  return `${sign}${integer}.${fraction}`;
+  // Sincronizar cents y raw. El gate `auditReportEmittable` compara SIEMPRE en
+  // cents con tolerancia 0n — si quedan obsoletos tras la mutación de R1, las
+  // validaciones V1/V2 fallan con falso negativo. Se sincroniza también
+  // `patrimonio`: aunque R1 no lo mute, dejarlo fuera hacía que la ecuación
+  // A = P + K evaluada en cents mezclara valores de dos momentos distintos.
+  syncControlTotalsHelper(totals, classes);
 }
 
 function sumByGroups(cl: PUCClass | undefined, groups: Set<string>): number {

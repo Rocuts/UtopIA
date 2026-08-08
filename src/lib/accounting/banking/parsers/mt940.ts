@@ -46,8 +46,22 @@ function parseSwiftDate(yymmdd: string): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-/** Monto SWIFT con coma decimal ("1234,56") → number positivo. */
+/**
+ * Monto SWIFT con coma decimal ("1234,56") → number positivo.
+ *
+ * NO usa el parser compartido `./number.ts` a propósito: en MT940 la coma es
+ * SIEMPRE el decimal y el estándar prohíbe separador de miles, así que "1,234"
+ * vale 1,234 y no 1.234 — la heurística de "3 dígitos ⇒ miles" del CSV sería
+ * incorrecta aquí. Los puntos que algunos emisores agregan como miles se
+ * eliminan.
+ *
+ * Guarda contra cadenas sin dígitos ("," o "."): `Number('')` es 0, y un 0
+ * "válido" convierte una línea :61: corrupta en un movimiento de $0 en vez de
+ * en un warning.
+ */
 function parseSwiftAmount(raw: string): number | undefined {
+  if (!/\d/.test(raw)) return undefined;
+  if ((raw.match(/,/g) ?? []).length > 1) return undefined; // dos decimales → ilegible
   const n = Number(raw.replace(/\./g, '').replace(',', '.'));
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }

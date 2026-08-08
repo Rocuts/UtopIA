@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // R14 — PPE sin depreciación sincronizada (Sección 17 NIIF para PYMES)
 // ---------------------------------------------------------------------------
-// Detecta entidades con PPE bruto material (cuentas 15xx excepto 1592) que NO
-// han registrado:
+// Detecta entidades con PPE bruto material (cuentas 15xx excepto sus cuentas
+// correctoras 1592/1596/1597/1598/1599) que NO han registrado:
 //   1. Depreciación acumulada en cuenta 1592, ni
 //   2. Gasto de depreciación del periodo en cuenta 5160 (Depreciaciones).
 //
@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PUCClass, PeriodSnapshot } from '../trial-balance';
+import { isPpeGrossAccount } from './contra-asset-registry';
 import type { CuratorFinding, PpeDepreciationAudit } from './types';
 
 /** Umbral mínimo de PPE bruto para disparar la advertencia. */
@@ -36,12 +37,17 @@ export function runR14(snapshot: PeriodSnapshot): R14Result {
   const class5 = snapshot.classes.find((c: PUCClass) => c.code === 5);
 
   // -------------------------------------------------------------------------
-  // 1. PPE bruto = clase 1, accounts.code que comienzan con '15' EXCEPTO '1592'.
-  //    1592 es la depreciación acumulada (contra-activo).
+  // 1. PPE bruto = clase 1, grupo 15, EXCLUYENDO todas sus correctoras.
+  //    El grupo 15 no tiene una sola contra-cuenta sino cinco: 1592
+  //    (depreciación acumulada), 1596 (depreciación diferida, naturaleza
+  //    mixta), 1597 (amortización acumulada), 1598 (agotamiento acumulado) y
+  //    1599 (provisiones). Excluir sólo 1592 dejaba el "bruto" neto de
+  //    agotamiento y provisiones, subestimando la materialidad del PPE y
+  //    suprimiendo el dictamen de depreciación en entidades extractivas.
+  //    Códigos verificados contra el Decreto 2650/1993 — ver
+  //    ./contra-asset-registry.ts
   // -------------------------------------------------------------------------
-  const ppeAccounts = (class1?.accounts ?? []).filter(
-    (a) => a.code.startsWith('15') && !a.code.startsWith('1592'),
-  );
+  const ppeAccounts = (class1?.accounts ?? []).filter((a) => isPpeGrossAccount(a.code));
   const ppeBruto = ppeAccounts.reduce((s, a) => s + a.balance, 0);
 
   // -------------------------------------------------------------------------

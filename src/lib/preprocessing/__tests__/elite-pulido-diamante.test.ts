@@ -172,49 +172,33 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
   });
 
   // -------------------------------------------------------------------------
-  // ASERCIÓN 3 — R6: comportamiento del guardrail de plausibilidad.
+  // ASERCIÓN 3 — R6: cierre del EFE contra la caja PUC 11.
   // -------------------------------------------------------------------------
-  // Con el fixture actual la brecha entre el EFE indirecto y la variación
-  // observada en PUC 11 es ≈ $312,5M — muy superior al 50 % de cualquier
-  // bucket operativo disponible (varCuentasPorCobrar $130M, varInventarios
-  // $170M, varProveedores $70M, varCuentasPorPagar $20M). El guardrail Pulido
-  // Diamante R6 rechaza el cierre automático cuando ningún bucket puede
-  // absorber la brecha sin superar ese tope, y emite un finding CRITICO para
-  // investigación manual en lugar de distorsionar el EFE.
+  // PREMISA CORREGIDA (auditoría 2026-08). Este test afirmaba antes que R6
+  // rechazaba el cierre porque la brecha era ≈ $312,5M, superior al 50 % de
+  // todos los buckets operativos. Esa brecha era un ARTEFACTO de un defecto de
+  // R1: la regla reclasificaba la depreciación acumulada (159205, −$130M) a
+  // pasivo, con lo cual (a) inflaba Activo y Pasivo en $130M cada uno y
+  // (b) anulaba la cuenta 1592 en Clase 1, dejando a R2 sin el ajuste no-cash
+  // de D&A del método indirecto. El EFE quedaba descuadrado por construcción.
   //
-  // Por tanto, con este fixture R6 NO popula `cashFlowClosureAdjustment`. El
-  // test verifica ese comportamiento y garantiza que las anclas de caja básicas
-  // (cashOpen / cashClose) sí quedan asentadas por R6 independientemente del
-  // resultado del cierre.
+  // Con las cuentas correctoras preservadas en el activo (NIC 1 párr. 33), R2
+  // recupera la D&A del periodo (Δ 1592 = $30M) y la brecha real cae a $80M
+  // —absorbible por varInventarios ($170M) sin superar el tope del 50 %—, por
+  // lo que el guardrail SÍ autoriza el cierre y el EFE queda reconciliado
+  // contra PUC 11 al centavo, que es el contrato de R6 (NIC 7 párr. 45).
+  //
+  // El caso "guardrail rechaza el cierre" sigue siendo comportamiento válido de
+  // R6, pero necesita un fixture cuya brecha sea genuinamente inabsorbible.
   // -------------------------------------------------------------------------
-  it('Cuadratura 3 — R6: guardrail rechaza cierre automático y emite finding crítico cuando brecha > 50 % de todos los buckets', () => {
+  it('Cuadratura 3 — R6 cierra el EFE contra PUC 11 cuando la brecha es absorbible por un bucket operativo', () => {
     const result = loadSnapshot();
     const snap = result.primary;
 
-    // El guardrail rechazó el cierre: cashFlowClosureAdjustment NO debe existir.
-    const closure = snap.curator!.cashFlowClosureAdjustment;
-    expect(
-      closure,
-      'R6 NO debería producir cashFlowClosureAdjustment cuando el guardrail ' +
-        'rechaza el cierre (brecha ≈ $312,5M excede el 50 % de todos los buckets).',
-    ).toBeUndefined();
-
-    // R6 debe haber emitido un finding de severidad CRITICO.
-    const findings = snap.curator!.findings;
-    const r6Critical = findings.find(
-      (f) => f.code === 'CUR-R6' && f.severity === 'critico',
-    );
-    expect(
-      r6Critical,
-      'R6 debería emitir un finding "critico" cuando el guardrail rechaza el cierre. ' +
-        `Findings encontrados: ${JSON.stringify(findings.map((f) => ({ code: f.code, severity: f.severity })))}`,
-    ).toBeDefined();
-
-    // R6 sí debe haber anclado cashOpen y cashClose en controlTotals (R6 siempre
-    // ejecuta esa parte antes de decidir si aplica el cierre o no).
     const efe = snap.cashFlowIndirecto;
     expect(efe, 'cashFlowIndirecto (EFE por R2) ausente — R6 no pudo correr').toBeDefined();
 
+    // R6 ancla cashOpen / cashClose SIEMPRE, decida o no aplicar el cierre.
     expect(snap.controlTotals.cashClose).toBeDefined();
     expect(snap.controlTotals.cashOpen).toBeDefined();
     expect(snap.controlTotals.cashClose).toBe(snap.controlTotals.efectivoCuenta11);
@@ -222,9 +206,82 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
       result.comparative?.controlTotals.efectivoCuenta11 ?? 0,
     );
 
-    // Invariante: cuando R6 NO cierra, el EFE queda sin reconciliar
-    // (reconciled = false / reconciliationGap ≠ 0).
-    expect(efe!.reconciled).toBe(false);
+    // La brecha es absorbible ⇒ el cierre se aplica y queda documentado.
+    const closure = snap.curator!.cashFlowClosureAdjustment;
+    expect(
+      closure,
+      'R6 debería aplicar el cierre: con las correctoras preservadas la brecha ' +
+        'es de $80M, por debajo del 50 % de varInventarios ($170M).',
+    ).toBeDefined();
+
+    // El efectivo final reconciliado DEBE ser el saldo PUC 11 al cierre — es el
+    // ancla dura de todo el EFE.
+    expect(closure!.reconciledClosingCash).toBe(snap.controlTotals.efectivoCuenta11);
+    expect(closure!.openingCash).toBe(
+      result.comparative?.controlTotals.efectivoCuenta11 ?? 0,
+    );
+
+    // La brecha cerrada es exactamente la diferencia entre la variación
+    // observada en caja y la que arrojaba el EFE indirecto antes del ajuste.
+    expect(closure!.gapCop).toBe(
+      closure!.efeNetChangeBefore - closure!.observedChangeInCash,
+    );
+
+    // El ajuste va con etiqueta LITERAL y justificación normativa: un plug
+    // silencioso sería indefendible ante la DIAN (Art. 647 E.T.).
+    expect(closure!.adjustmentLineLabel).toBe(
+      'Variaciones en Capital de Trabajo (ajuste de cierre)',
+    );
+    expect(closure!.justification).toContain('NIC 7');
+
+    // Consecuencia del cierre: el EFE queda reconciliado.
+    expect(efe!.reconciled).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // ASERCIÓN 3-bis — R1 preserva las cuentas correctoras (regresión P0).
+  // -------------------------------------------------------------------------
+  // Auditoría 2026-08: R1 trataba la depreciación acumulada como "saldo
+  // acreedor anómalo" y la movía a Clase 2. NIC 1 párr. 33 dice expresamente
+  // que medir por el neto los activos sujetos a correcciones valorativas NO es
+  // compensación, y NIC 16 párr. 73(d) obliga a revelar bruto y depreciación
+  // acumulada por separado. Ver `curator-rules/contra-asset-registry.ts`.
+  // -------------------------------------------------------------------------
+  it('R1 preserva la depreciación acumulada en el activo y sigue reclasificando el saldo acreedor anómalo', () => {
+    const result = loadSnapshot();
+    const snap = result.primary;
+
+    const claseActivo = snap.classes.find((c) => c.code === 1);
+    const dep = (claseActivo?.accounts ?? []).find((a) => a.code.startsWith('1592'));
+
+    expect(dep, 'La cuenta 159205 desapareció de Clase 1 — R1 la reclasificó').toBeDefined();
+    expect(
+      dep!.balance,
+      'La depreciación acumulada debe conservar su saldo crédito dentro del activo.',
+    ).toBe(-130_000_000);
+
+    // Ninguna reclasificación puede apuntar a una cuenta correctora.
+    const reclasificadas = (snap.reclassifications ?? []).map((r) => r.accountCode);
+    expect(reclasificadas).not.toContain('159205');
+
+    // Pero la regla conserva su trabajo real: 120505 (Inversiones con saldo
+    // crédito) sí es una anomalía y sí se reclasifica.
+    expect(reclasificadas).toContain('120505');
+
+    // El dato que R14 y el EFE consumen queda disponible.
+    expect(snap.ppeDepreciationAudit?.depreciacionAcumuladaCop).toBe(130_000_000);
+    expect(snap.ppeDepreciationAudit?.ppeWithoutDepreciation).toBe(false);
+
+    // Y la traza queda registrada para el analista.
+    const trazas = snap.curator!.findings.filter((f) => f.code === 'CUR-R1-CA');
+    expect(trazas.length).toBe(1);
+    expect(trazas[0].normReference).toContain('NIC 1 párr. 33');
+
+    // Invariante de fondo: preservar la correctora NO rompe la ecuación.
+    expect(
+      snap.controlTotals.activo -
+        (snap.controlTotals.pasivo + snap.controlTotals.patrimonio),
+    ).toBe(0);
   });
 
   // -------------------------------------------------------------------------
