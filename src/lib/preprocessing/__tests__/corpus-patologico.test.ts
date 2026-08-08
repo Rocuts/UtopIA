@@ -166,3 +166,51 @@ describe('Patológico — cuentas de orden fuera del PUC 1..7', () => {
     expect(a.cents.patrimonio!).toBe(BigInt(120_000_000_00));
   });
 });
+
+describe('Patológico — CSV del conector ERP (Siigo / Odoo)', () => {
+  // `src/lib/erp/pipeline.ts:47-54` emite el header
+  // `codigo,cuenta,debitos,creditos,saldo`, y los conectores calculan
+  // `balance = debit - credit` para TODA clase (siigo.ts:238, odoo.ts:385), es
+  // decir convención ALGEBRAICA. La columna `saldo` hace que
+  // `isBalanceHeader` acierte, y con ello la rama de normalización por
+  // naturaleza PUC del parser queda inalcanzable. Es el camino de mayor volumen
+  // en producción y llegaba con Pasivo e Ingresos negativos.
+  const ERP_CSV = [
+    'codigo,cuenta,debitos,creditos,saldo',
+    '110505,Caja general,18000000,0,18000000',
+    '111005,Bancos,142000000,0,142000000',
+    '130505,Clientes nacionales,260000000,0,260000000',
+    '143505,Mercancias,380000000,0,380000000',
+    '220505,Proveedores nacionales,0,310000000,-310000000',
+    '240805,IVA por pagar,0,44000000,-44000000',
+    '240405,Impuesto de renta,0,63000000,-63000000',
+    '310505,Capital suscrito y pagado,0,150000000,-150000000',
+    '330505,Reserva legal,0,26000000,-26000000',
+    '370505,Resultados de ejercicios anteriores,0,20000000,-20000000',
+    '413550,Comercio al por mayor,0,1240000000,-1240000000',
+    '613550,Costo de venta de mercancias,760000000,0,760000000',
+    '510506,Sueldos de personal administrativo,158000000,0,158000000',
+    '529505,Gastos de venta comisiones,72000000,0,72000000',
+    '540505,Impuesto de renta y complementarios,63000000,0,63000000',
+  ].join('\n');
+
+  it('detecta la convención algebraica del conector', () => {
+    expect(
+      detectSignConvention(parseTrialBalanceCSV(ERP_CSV, { normalizeSignConvention: false }))
+        .convention,
+    ).toBe('algebraica');
+  });
+
+  it('el Pasivo y los Ingresos llegan como magnitudes, no en negativo', () => {
+    const antes = preprocessTrialBalance(
+      parseTrialBalanceCSV(ERP_CSV, { normalizeSignConvention: false }),
+    ).primary.controlTotals;
+    expect(antes.pasivo).toBeLessThan(0); // el defecto
+    expect(antes.ingresos).toBeLessThan(0);
+
+    const ct = preprocessTrialBalance(parseTrialBalanceCSV(ERP_CSV)).primary.controlTotals;
+    expect(ct.pasivo).toBeCloseTo(417_000_000, 2);
+    expect(ct.ingresos).toBeCloseTo(1_240_000_000, 2);
+    expect(ct.activo).toBeCloseTo(800_000_000, 2);
+  });
+});
