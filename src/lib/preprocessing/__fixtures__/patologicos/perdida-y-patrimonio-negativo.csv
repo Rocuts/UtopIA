@@ -1,0 +1,20 @@
+codigo,nombre,nivel,transaccional,Saldo 2024,Saldo 2025
+110505,Caja general,Auxiliar,1,12000000,4000000
+111005,Bancos cuenta corriente,Auxiliar,1,95000000,21000000
+130505,Clientes nacionales,Auxiliar,1,240000000,180000000
+143505,Mercancias no fabricadas por la empresa,Auxiliar,1,310000000,155000000
+152405,Maquinaria y equipo,Auxiliar,1,400000000,400000000
+159205,Depreciacion acumulada maquinaria y equipo,Auxiliar,1,-120000000,-160000000
+210505,Bancos nacionales obligaciones financieras,Auxiliar,1,380000000,520000000
+220505,Proveedores nacionales,Auxiliar,1,290000000,410000000
+233595,Costos y gastos por pagar a terceros,Auxiliar,1,45000000,88000000
+236540,Retencion en la fuente honorarios,Auxiliar,1,6000000,2000000
+310505,Capital suscrito y pagado,Auxiliar,1,200000000,200000000
+360505,Utilidad o perdida del ejercicio,Auxiliar,1,-32000000,-460000000
+370505,Resultados de ejercicios anteriores,Auxiliar,1,48000000,-160000000
+413550,Comercio al por mayor y al por menor,Auxiliar,1,980000000,610000000
+613550,Costo de venta de mercancias,Auxiliar,1,720000000,590000000
+510506,Sueldos de personal administrativo,Auxiliar,1,180000000,240000000
+519530,Depreciacion de propiedades planta y equipo,Auxiliar,1,40000000,40000000
+529505,Gastos de venta comisiones,Auxiliar,1,72000000,150000000
+530520,Gastos financieros intereses,Auxiliar,1,0,50000000

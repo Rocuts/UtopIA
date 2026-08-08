@@ -43,6 +43,22 @@ import type { RawAccountRow } from './trial-balance';
 const CREDIT_NATURE_CLASSES = ['2', '3', '4'] as const;
 
 /**
+ * Grupo PUC 36 — "Resultados del Ejercicio" (3605 utilidad, 3610 pérdida).
+ *
+ * Se EXCLUYE de la suma del detector, no de la normalización. Motivo: el
+ * balance de prueba colombiano típico publica a la vez el resultado del periodo
+ * en 3605 Y los movimientos de las clases 4/5/6/7 que lo producen. Bajo
+ * convención algebraica esas dos representaciones del mismo resultado se suman,
+ * y la identidad "todo suma cero" se rompe por exactamente el monto de la
+ * utilidad.
+ *
+ * Medido sobre el corpus patológico: con el grupo 36 dentro, la suma da
+ * −$187.000.000 sobre un activo de $800.000.000 (23,4%) y el archivo se
+ * clasifica como natural siendo algebraico. Excluyéndolo, da $0,00 exacto.
+ */
+const PERIOD_RESULT_GROUP = '36';
+
+/**
  * Umbral del detector. En convención algebraica `|Σ saldos| / |Σ clase 1|` vale
  * ~0 por partida doble; en natural vale `(A+P+K+I+G+C)/A`, del orden de 1,5–2.
  * Medido sobre los fixtures del repo: 0,0012–0,0024 (algebraica) frente a
@@ -107,8 +123,8 @@ export function detectSignConvention(rows: RawAccountRow[]): SignConventionDetec
     for (const row of leaves) {
       const balance = row.balancesByPeriod[period];
       if (!Number.isFinite(balance)) continue;
-      sumAll += balance;
       const cls = row.code[0];
+      if (!row.code.startsWith(PERIOD_RESULT_GROUP)) sumAll += balance;
       if (cls === '1') sumAssets += balance;
       if ((CREDIT_NATURE_CLASSES as readonly string[]).includes(cls)) {
         sumCreditClasses += balance;
