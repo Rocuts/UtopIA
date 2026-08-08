@@ -80,6 +80,13 @@ const NIIF_PASS_TIMEOUT_MS = {
   pass1: 200_000, // Balance + P&L: schema 24K + anti-dup G53 + cascada impuesto + 8 anomalías
   pass2: 160_000, // EFE + ECP: schema 16K + ECP matricial v2.5 + ajuste Cta.3605 v2.4
   pass3: 140_000, // Notas técnicas: schema 16K + 6 disclaimers condicionales + Going Concern
+  // Reintento de reparación de Pass-1. Deliberadamente MÁS CORTO que el pase
+  // original: el peor caso del pipeline pasa de 500s (200+160+140) a 650s
+  // (200+150+160+140), y el techo del route es 800s. Con los 200s del pase
+  // completo se iría a 700s y no quedaría holgura para Stage 0 ni para la red.
+  // La reparación tiene además menos trabajo que hacer: el modelo ya construyó
+  // el estado y sólo tiene que completar los renglones que faltan.
+  pass1Repair: 150_000,
 } as const;
 
 /**
@@ -264,7 +271,7 @@ export async function runNiifAnalyst(
         ),
         userContent,
         ...MODELS_CONFIG.niifAnalystPass1,
-        signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass1)),
+        signal: chainSignals(signal, AbortSignal.timeout(NIIF_PASS_TIMEOUT_MS.pass1Repair)),
       });
       const retryReconciled = reconcileAnchors(retry.json, anchors);
       // Nos quedamos con el intento que deje MENOS descuadre. Un reintento peor
