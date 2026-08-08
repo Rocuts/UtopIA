@@ -679,9 +679,10 @@ export function validateNiifReportJson(
     // level 3, 1 y 0 en tres corridas del mismo balance, asi que un filtro por
     // nivel acierta por casualidad y falla en silencio.
     const { sum: suma, count: detalleCount } = sumStatementDetail(lineas);
-    if (detalleCount === 0) continue; // sin desglose no hay nada que cuadrar
-
     const total = parseMoneyCop(totalDeclarado);
+    // Un estado con total material y CERO renglones es la forma más severa del
+    // descuadre, no un caso exento. Ver la nota de `reconcile-anchors.ts`.
+    if (detalleCount === 0 && total === ZERO) continue;
     if (suma !== total) {
       const gap = suma - total;
       warnings.push(

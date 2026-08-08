@@ -322,8 +322,16 @@ export function reconcileAnchors<T extends ReconcilableReport>(
 
   for (const [statement, lines, declaredTotal] of statements) {
     const { sum, count } = sumStatementDetail(lines);
-    if (count === 0) continue; // sin desglose no hay nada que cuadrar
     const total = parseMoneyCop(declaredTotal);
+    // Un estado con total material y CERO renglones no es un caso exento: es la
+    // forma más severa del defecto. Medido en producción sobre el balance real
+    // (2026-08-08): el Pasivo salió con los dos encabezados de sección y ningún
+    // renglón, declarando $1.962.538.849,62 sin una sola cuenta debajo, y la
+    // regla anterior —`if (count === 0) continue`— lo dejaba pasar en silencio.
+    // Esa exención existía porque TODOS los fixtures del validador traían
+    // `assets: []`, que es justamente lo que la auditoría integral señaló como
+    // "la superficie que el usuario lee es la que tiene cero cobertura".
+    if (count === 0 && total === ZERO) continue;
     if (sum === total) continue;
     lineGaps.push({
       statement,

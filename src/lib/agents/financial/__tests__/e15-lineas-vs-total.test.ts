@@ -61,8 +61,12 @@ function makeReport(over: {
     },
     balanceSheet: {
       assets: over.assets ?? [],
-      liabilities: [],
-      equity: [],
+      // Pasivo y Patrimonio se pueblan con un renglón que cuadra su total. Antes
+      // iban vacíos, y esa forma —total material sin un solo renglón debajo— es
+      // justamente el descuadre más severo que E15 detecta desde 2026-08. Un
+      // fixture que la usa como "neutra" impide probar cualquier otra cosa.
+      liabilities: [linea({ account: '22', label: 'Proveedores', amount: over.totalLiabilities ?? '40000000', level: 2 })],
+      equity: [linea({ account: '31', label: 'Capital', amount: over.totalEquity ?? '60000000', level: 2 })],
       totalAssetsPrimary: over.totalAssets ?? '100000000',
       totalAssetsComparative: null,
       totalLiabilitiesPrimary: over.totalLiabilities ?? '40000000',
@@ -195,10 +199,16 @@ describe('E15 — suma de renglones vs total declarado', () => {
     expect(e15(validateNiifReportJson(json, {}))).toHaveLength(0);
   });
 
-  it('no se pronuncia cuando el estado viene sin desglose', () => {
-    // Es el caso de todos los fixtures viejos: arrays vacíos. Sin renglones no
-    // hay nada que cuadrar, y por eso el defecto pasó inadvertido tanto tiempo.
-    expect(e15(validateNiifReportJson(makeReport({}), {}))).toHaveLength(0);
+  it('un total material SIN un solo renglón es el descuadre más severo, no una exención', () => {
+    // Este test afirmaba lo contrario: "sin renglones no hay nada que cuadrar".
+    // Era el caso de todos los fixtures viejos —arrays vacíos— y por eso el
+    // defecto pasó inadvertido tanto tiempo. Medido en producción el 2026-08-08
+    // sobre el balance real: el Pasivo del informe salió con los dos
+    // encabezados de sección y NINGÚN renglón, declarando $1.962.538.849,62 sin
+    // una sola cuenta debajo, y E15 lo dejó pasar en silencio.
+    const w = e15(validateNiifReportJson(makeReport({ assets: [] }), {}));
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain('los 0 renglones de detalle');
   });
 
   it('un exceso se reporta como tal, con la pista de doble conteo', () => {

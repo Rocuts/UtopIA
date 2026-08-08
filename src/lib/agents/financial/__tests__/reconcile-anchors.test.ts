@@ -56,8 +56,11 @@ function makeReport(over: Partial<{
     },
     balanceSheet: {
       assets: over.assets ?? [],
-      liabilities: over.liabilities ?? [],
-      equity: over.equity ?? [],
+      // Por defecto Pasivo y Patrimonio traen un renglón que cuadra su total:
+      // un estado con total material y CERO renglones es el descuadre más
+      // severo que el reconciliador detecta, no una forma neutra de fixture.
+      liabilities: over.liabilities ?? [linea('22', over.totalLiabilities ?? '40000000')],
+      equity: over.equity ?? [linea('31', over.totalEquity ?? '60000000')],
       totalAssetsPrimary: over.totalAssets ?? '100000000',
       totalAssetsComparative: null,
       totalLiabilitiesPrimary: over.totalLiabilities ?? '40000000',
@@ -246,8 +249,24 @@ describe('reconcileAnchors — descuadre del desglose (el fallo medido en FASE 0
     expect(lineGaps.find((g) => g.statement === 'Activo')?.gapCents).toBe('-30000000');
   });
 
-  it('ignora los estados sin desglose — no hay nada que cuadrar', () => {
-    expect(reconcileAnchors(makeReport(), anchors()).lineGaps).toHaveLength(0);
+  it('un estado con total material y CERO renglones es el descuadre más severo', () => {
+    // Medido en producción (2026-08-08): el Pasivo del informe salió con los dos
+    // encabezados de sección y ningún renglón, declarando $1.962.538.849,62 sin
+    // una sola cuenta debajo. La regla anterior lo dejaba pasar en silencio.
+    const json = makeReport({ assets: [], totalAssets: '100000000' });
+    const gap = reconcileAnchors(json, anchors()).lineGaps.find((g) => g.statement === 'Activo');
+    expect(gap).toBeDefined();
+    expect(gap?.lineCount).toBe(0);
+    expect(gap?.sumCents).toBe('0');
+    expect(gap?.gapCents).toBe('-100000000');
+  });
+
+  it('un estado en cero sin renglones sí es legítimo', () => {
+    const json = makeReport({ assets: [], totalAssets: '0', totalLiabilities: '0', totalEquity: '0', liabilities: [], equity: [] });
+    expect(reconcileAnchors(json, {
+      primary: { period: '2025', cents: {} },
+      comparative: null,
+    }).lineGaps).toHaveLength(0);
   });
 });
 
