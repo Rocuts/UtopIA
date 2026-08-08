@@ -124,16 +124,33 @@ hacían `if (count === 0) continue`. Esa exención venía de que todos los fixtu
 `liabilities: []` — el fixture convertía la peor forma del defecto en la forma neutra por defecto.
 Corregido: un total material sin un solo renglón se reporta ahora como brecha del 100%.
 
-### La conclusión estructural
+### La conclusión estructural, y lo que se hizo con ella
 
 Los renglones de los estados financieros **no deberían autorarlos el modelo**. El preprocesador ya
 tiene el corte por clase y grupo en centavos exactos; el desglose del Balance no es un juicio
-contable, es una proyección determinista del balance. Lo que sí aporta el modelo es la clasificación
-(corriente / no corriente), la etiqueta NIIF y la narrativa.
+contable, es una proyección determinista del balance. Mientras el modelo autore las filas, el techo
+del sistema es "detecta el descuadre y se niega a entregar", no "entrega bien".
 
-Mientras el modelo siga autorando las filas, el techo del sistema es "detecta el descuadre y se
-niega a entregar", no "entrega bien". Ése es el siguiente movimiento y es de arquitectura, no de
-prompt.
+Así que se movió la frontera. `contracts/deterministic-breakdown.ts` agrupa las cuentas auxiliares
+por grupo PUC de dos dígitos con etiquetas NIIF, y **la suma de sus renglones es el total de la clase
+por construcción**. Las correctoras reducen su grupo en vez de aparecer como renglón negativo suelto,
+que es el importe en libros neto que exigen NIC 16.73 y NIIF PYMES 17.31.
+
+El orden de remedios en `runNiifAnalyst` queda:
+
+1. **Completar el desglose desde el preprocesador.** Determinista, gratis, cierto.
+2. **Gastar el reintento del modelo sólo en lo que el código no puede corregir** sin autorar
+   contabilidad: la utilidad neta y el efectivo de cierre, que cuelgan de la cascada del P&L y del
+   EFE.
+3. **Sellar y bloquear** lo que sobreviva a los dos.
+
+Se conserva la etiqueta que escribió el modelo cuando su código coincide con el grupo —la redacción
+NIIF es suya, la aritmética no— y un desglose que ya cuadra no se toca, porque su granularidad suele
+ser mejor que la agregación por grupo.
+
+Qué le queda al modelo: la clasificación corriente / no corriente donde el plazo no se deduce del
+código PUC, la etiqueta de cada rubro y toda la narrativa. No se le quitó criterio; se le quitó la
+aritmética, que es donde falla.
 
 ---
 
