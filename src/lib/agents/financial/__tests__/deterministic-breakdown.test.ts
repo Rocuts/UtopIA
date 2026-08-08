@@ -29,6 +29,7 @@ import {
   completeBreakdownFromSnapshot,
 } from '../agents/reconcile-anchors';
 import { buildReportAnchors } from '../contracts/anchors';
+import { NiifReportSchema } from '../contracts/niif-report';
 import type { NiifReportJson } from '../contracts/niif-report';
 
 const FIXTURES = path.resolve(process.cwd(), 'src/lib/preprocessing/__fixtures__');
@@ -189,6 +190,26 @@ describe('completeBreakdownFromSnapshot', () => {
 
     const { completed } = completeBreakdownFromSnapshot(r.json, r.lineGaps, snap);
     expect(completed).not.toContain('Activo');
+  });
+
+  it('los renglones generados SOBREVIVEN a NiifReportSchema', () => {
+    // Regresión de un fallo que ningún test unitario detectó y que sí tumbó una
+    // corrida real: los renglones generados omitían `confidence` y
+    // `anomalyFlag`, obligatorios en StatementLineV8Schema, y
+    // `NiifReportSchema.safeParse` rechazaba el reensamblaje entero — con lo
+    // que `runNiifAnalyst` lanzaba y se perdía el informe completo.
+    //
+    // Los fixtures de estos tests usan `as unknown as NiifReportJson`, así que
+    // nunca vuelven a pasar por Zod. Este caso valida la SHAPE de los renglones
+    // contra el schema de verdad, que es la única red que había fallado.
+    const roto = reportWithBrokenAssets();
+    const r = reconcileAnchors(roto, anchors);
+    const { json } = completeBreakdownFromSnapshot(r.json, r.lineGaps, snap);
+
+    const parsed = NiifReportSchema.shape.balanceSheet.shape.assets.safeParse(
+      json.balanceSheet.assets,
+    );
+    expect(parsed.success, JSON.stringify(parsed.error?.issues?.slice(0, 3))).toBe(true);
   });
 
   it('es inocuo sin snapshot — no inventa renglones', () => {

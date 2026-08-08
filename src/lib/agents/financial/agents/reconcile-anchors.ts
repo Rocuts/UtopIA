@@ -505,6 +505,18 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
       // Se emite CON signo: una correctora agregada dentro de su grupo ya viene
       // neta, y forzar valor absoluto convertiría una reducción en un aumento.
       isAbsolute: false,
+      // `confidence` y `anomalyFlag` son obligatorios en StatementLineV8Schema
+      // (aceptan null, pero la clave tiene que existir — el contrato de Zod
+      // strict mode del repo prohíbe `.optional()`). Sin ellos
+      // `NiifReportSchema.safeParse` rechaza el reensamblaje entero y
+      // `runNiifAnalyst` lanza, tumbando el informe completo. Medido en una
+      // corrida real antes de que ningún test unitario lo notara, porque los
+      // fixtures de test usan `as unknown as NiifReportJson` y nunca vuelven a
+      // pasar por el schema.
+      confidence: 'high',
+      // Una cifra derivada del preprocesador no puede tener anomalía sectorial:
+      // no la derivó el modelo.
+      anomalyFlag: null,
     })) as T['balanceSheet'][typeof section];
     completed.push(gap.statement);
   }
