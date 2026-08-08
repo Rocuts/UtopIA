@@ -154,6 +154,47 @@ aritmética, que es donde falla.
 
 ---
 
+## Medición de cierre (2026-08-08, LLM real, balance de cliente real)
+
+```
+FINAL run 1 | anclas desviadas: 0/9 | warnings: 0 | errores: 0
+```
+
+Estado de Situación Financiera producido, con las tres secciones cuadrando al centavo:
+
+| | Renglones | Suma del detalle | Total declarado |
+|---|---|---|---|
+| Activo | 5 | $4.185.978.841,16 | $4.185.978.841,16 |
+| Pasivo | 4 | $1.962.538.849,62 | $1.962.538.849,62 |
+| Patrimonio | 2 | $2.223.439.991,54 | $2.223.439.991,54 |
+
+```
+ACTIVO
+  11   $2.413.677.888,64   Efectivo y equivalentes de efectivo
+  13      $98.179.258,95   Deudores comerciales y otras cuentas por cobrar
+  14   $1.670.215.769,29   Inventarios
+  15          $66.386,28   Propiedades, planta y equipo
+  18       $3.839.538,00   Otros activos
+PASIVO
+  22   $1.801.518.288,12   Proveedores
+  23      $30.594.083,50   Cuentas por pagar
+  24     $105.537.824,41   Impuestos, gravámenes y tasas
+  28      $24.888.653,59   Anticipos recibidos y otros pasivos no financieros
+PATRIMONIO
+  36   $2.228.496.789,73   Resultados del ejercicio
+  37      -$5.056.798,19   Resultados de ejercicios anteriores
+```
+
+Dos detalles que confirman que la frontera quedó donde se quería:
+
+- La etiqueta del grupo 28 dice *"Anticipos recibidos y otros pasivos no financieros"*, que es
+  redacción del modelo, no el `"Otros pasivos"` por defecto del código. La conservación de etiqueta
+  funciona: la redacción NIIF sigue siendo suya.
+- El patrimonio muestra $2.228.496.789,73 de utilidad. Al empezar la sesión, este mismo balance
+  producía un informe que declaraba una **pérdida de $2.630M** — y ni siquiera atravesaba el gate.
+
+---
+
 ## Auth: por qué NO se activó BetterAuth
 
 Investigación con verificación contra la base de producción (consultas de solo lectura):
