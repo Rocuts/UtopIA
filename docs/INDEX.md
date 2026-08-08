@@ -27,6 +27,21 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 | [PYME_MODULE_SPEC.md](PYME_MODULE_SPEC.md) | Módulo Contabilidad Pyme — libros, entries, OCR-promote |
 | [D5_3_FORENSIC_AUDIT.md](D5_3_FORENSIC_AUDIT.md) | Dictamen D5.3 Auditoría Forense — spec funcional |
 
+## Auditorías (2026-08)
+
+> Estado medido del producto. Todas midieron **ejecutando**, no leyendo, y sus hallazgos pasaron por
+> escépticos adversariales con la consigna de refutarlos.
+
+| Documento | Qué encontrarás |
+|-----------|----------------|
+| [AUDITORIA_CALCULOS_2026-08.md](AUDITORIA_CALCULOS_2026-08.md) | **Empieza aquí.** ¿Los cálculos dan los números reales? Veredicto por superficie, nota 3/10 global, lista priorizada |
+| [AUDITORIA_CALCULOS_2026-08_ANEXO.md](AUDITORIA_CALCULOS_2026-08_ANEXO.md) | Inventario cifra por cifra (DETERMINISTA / ANCLADA / LIBRE) y los 91 hallazgos con su escenario numérico |
+| [INSUMOS_REQUERIDOS_2026-08.md](INSUMOS_REQUERIDOS_2026-08.md) | Qué hace falta de fuera del repo: balances reales, 3 decisiones de negocio, 3 de infraestructura |
+| [SESION_EXACTITUD_2026-08.md](SESION_EXACTITUD_2026-08.md) | La ola que hizo determinista el Balance primario: convención de signos, reconciliador, desglose, sello |
+| [FASE0_MEDICION_2026-08.md](FASE0_MEDICION_2026-08.md) | La medición con LLM real que reordenó las prioridades. Registro pre-corrección |
+| [AUDITORIA_INTEGRAL_2026-08.md](AUDITORIA_INTEGRAL_2026-08.md) | Auditoría de producto: 117 hallazgos, causas raíz, olas de remediación |
+| [AUDITORIA_NORMATIVA_2026-08.md](AUDITORIA_NORMATIVA_2026-08.md) | Verificación de constantes fiscales contra fuente oficial |
+
 ## Seguridad
 
 | Documento | Qué encontrarás |

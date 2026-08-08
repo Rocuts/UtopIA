@@ -43,6 +43,16 @@ Optional model overrides live in `src/lib/config/models.ts` (`OPENAI_MODEL_CHAT`
 
 **`docs/spec/financial-report-v10.1.md`** is authoritative for the Editor Jefe HTML output (15-page editorial A4 template). It supersedes `financial-report-v8.1.md` (12 slides — deprecated).
 
+**Estado medido de la exactitud (2026-08-08).** Sólo el **Balance del periodo primario** tiene
+garantía estructural: anclas en centavos + desglose determinista (`contracts/deterministic-breakdown.ts`,
+clases 1/2/3 únicamente) + reconciliador + sello CON SALVEDADES + bloqueo de descarga. El P&G, el EFE,
+el ECP, la columna comparativa, el impuesto de renta y el acta **no tienen invariante**: sus cifras
+las autora el LLM y ningún validador las cruza. Medido: inflar `grossProfitPrimary` en $500M, vaciar
+`incomeStatement.lines`, o inventar un impuesto de $700M producen **0 errores y 0 warnings**.
+Antes de anclar Utilidad Bruta o EBIT hay que corregir la doble resta de la 4175
+(`trial-balance.ts:1461-1473`), o se cementa la cifra equivocada. Detalle y lista priorizada:
+[docs/AUDITORIA_CALCULOS_2026-08.md](docs/AUDITORIA_CALCULOS_2026-08.md).
+
 Every financial agent calls `callFinancialAgent({ agentName, model, schema, system, userContent, ...MODELS_CONFIG[slot] })` from `src/lib/agents/financial/agents/runtime.ts`. Returns `{ json, meta }` (Zod-validated + reasoning/cache telemetry). When a file calls `generateText` directly it is **legacy / pending migration**.
 
 The pipeline is split across endpoints (`/api/financial-report/{niif,strategy,governance,html}`) with `maxDuration: 800s` each — see [docs/wave-notes/wave-3-split-endpoints.md](docs/wave-notes/wave-3-split-endpoints.md).
@@ -114,6 +124,8 @@ Run the `utopia-contrast-auditor` agent on any "no se ve / fantasma / muy claro 
 | Need | File |
 |---|---|
 | Pipeline + tools + RAG + security + state architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| **Qué cifras son deterministas y cuáles las autora el LLM** | [docs/AUDITORIA_CALCULOS_2026-08.md](docs/AUDITORIA_CALCULOS_2026-08.md) |
+| Insumos pendientes (balances reales, decisiones de negocio) | [docs/INSUMOS_REQUERIDOS_2026-08.md](docs/INSUMOS_REQUERIDOS_2026-08.md) |
 | Authoritative specs (financial pipeline v2.1, report v10.1, zod strict mode) | [docs/spec/](docs/spec/) |
 | Wave notes (historical context + per-wave runbooks) | [docs/wave-notes/](docs/wave-notes/) |
 | AI SDK v6 migration contract | [docs/AI_SDK_MIGRATION.md](docs/AI_SDK_MIGRATION.md) |
