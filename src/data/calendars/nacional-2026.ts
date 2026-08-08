@@ -10,16 +10,29 @@
  * REGLA UNIVERSAL DE PLAZOS POR DÍGITO NIT (excepto patrimonio cuota 2)
  * --------------------------------------------------------------------
  * Para una obligación cuyo plazo va del 7º al 16º día hábil de un mes M:
- *   - dígito NIT 0  → 16º día hábil del mes M (última fecha)
- *   - dígito NIT 1  → 15º día hábil
- *   - dígito NIT 2  → 14º día hábil
+ *   - dígito NIT 1  → 7º día hábil del mes M (PRIMERA fecha)
+ *   - dígito NIT 2  → 8º día hábil
  *   - …
- *   - dígito NIT 9  → 7º día hábil del mes M (primera fecha)
+ *   - dígito NIT 9  → 15º día hábil
+ *   - dígito NIT 0  → 16º día hábil del mes M (ÚLTIMA fecha)
  *
- * Es decir: `nthBusinessDay(2026, M, d === 0 ? 16 : 16 - d)`.
- * El helper `nthBusinessDay` lo expone `src/lib/scrapers/dian-scraper.ts`
- * (creado en paralelo por otro agente del sprint) y maneja festivos
- * colombianos 2026 + fines de semana.
+ * Es decir: `nthBusinessDay(2026, M, d === 0 ? 16 : d + 6)`.
+ *
+ * ⚠ Auditoría normativa 2026-08 — este mapeo estaba INVERTIDO.
+ * El código anterior (`d === 0 ? 16 : 16 - d`) asignaba al dígito 1 el 15º día
+ * hábil y al dígito 9 el 7º, con lo que TODOS los vencimientos del calendario
+ * salían corridos hasta ocho días hábiles. A un contribuyente con NIT
+ * terminado en 1 se le anunciaba su vencimiento ocho días hábiles DESPUÉS del
+ * real: sanción de extemporaneidad garantizada (Art. 641 E.T.).
+ *
+ * Verificado contra el texto compilado del Decreto 2229 de 2023 en el
+ * normograma DIAN, arts. 1.6.1.13.2.33 (retención en la fuente) y
+ * 1.6.1.13.2.12 (renta personas jurídicas): "si el último dígito es 1 …
+ * séptimo día hábil"; dígito 9 → décimo quinto; dígito 0 → décimo sexto.
+ * https://normograma.dian.gov.co/dian/compilacion/docs/decreto_2229_2023.htm
+ *
+ * El helper `nthBusinessDay` lo expone `src/lib/scrapers/dian-scraper.ts` y
+ * maneja festivos colombianos 2026 + fines de semana.
  *
  * VERIFICACIÓN
  * ------------
@@ -30,19 +43,15 @@
  * primera vez que su hash hace match con la fuente DIAN.
  */
 
-import { nthBusinessDay } from '@/lib/scrapers/dian-scraper';
+import { digitToBusinessDay, nthBusinessDay } from '@/lib/scrapers/dian-scraper';
 import type { NationalDeadline } from './types';
 
 /**
- * Día hábil correspondiente al último dígito NIT bajo la regla universal
- * (digit 0 = último, digit 9 = primero, ventana de 7 a 16).
+ * Día hábil correspondiente al último dígito NIT. Se reexporta el helper
+ * canónico en vez de reimplementarlo: la copia local de esta regla estaba
+ * invertida y produjo todo el calendario corrido.
  */
-function businessDayForDigit(digit: number): number {
-  if (digit < 0 || digit > 9) {
-    throw new Error(`Dígito NIT inválido: ${digit}`);
-  }
-  return digit === 0 ? 16 : 16 - digit;
-}
+const businessDayForDigit = digitToBusinessDay;
 
 /**
  * Genera las 10 entries (digit 0..9) para una obligación cuyo plazo va del

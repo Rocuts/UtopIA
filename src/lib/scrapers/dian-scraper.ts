@@ -107,10 +107,22 @@ export function nthBusinessDay(year: number, month: number, n: number): string {
   throw new Error(`No hay ${n} días hábiles en ${year}-${month}`);
 }
 
-/** Convierte el dígito de NIT al día hábil del mes según convención DIAN. */
-function digitToBusinessDay(digit: number): number {
-  // Decreto 2229/2023: dígito 1 = 7° hábil, dígito 2 = 8°, …, dígito 9 = 15°,
-  // dígito 0 = 16° (último). Vence en orden ascendente.
+/**
+ * Convierte el dígito de NIT al día hábil del mes según convención DIAN.
+ *
+ * Decreto 2229/2023 (compilado en el DUR 1625/2016), arts. 1.6.1.13.2.12 y
+ * 1.6.1.13.2.33: dígito 1 = 7º hábil, dígito 2 = 8º, …, dígito 9 = 15º,
+ * dígito 0 = 16º (último). Vence en orden ascendente.
+ * https://normograma.dian.gov.co/dian/compilacion/docs/decreto_2229_2023.htm
+ *
+ * FUENTE ÚNICA. `src/data/calendars/nacional-2026.ts` tenía su propia copia de
+ * esta regla, invertida, y de ahí salían todos los vencimientos del calendario
+ * nacional. Cualquier consumidor nuevo importa esta función; no la reimplementa.
+ */
+export function digitToBusinessDay(digit: number): number {
+  if (!Number.isInteger(digit) || digit < 0 || digit > 9) {
+    throw new Error(`Dígito NIT inválido: ${digit}`);
+  }
   return digit === 0 ? 16 : digit + 6;
 }
 
