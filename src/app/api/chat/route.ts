@@ -281,6 +281,18 @@ async function handleLegacy(
   useCase: string,
   documentContext: string | undefined,
   nitContext: NITContext | null,
+  /**
+   * Workspace del request. OBLIGATORIO para la tool `analyze_document`.
+   *
+   * Sin él, `searchDocuments(..., { type: 'user_upload' })` deja `tenantClause`
+   * en `workspace_id IS NULL` (vectorstore.ts:214-216), y el conjunto resultante
+   * es EXACTAMENTE el pool de uploads huérfanos: los balances y requerimientos
+   * de OTROS clientes. No era una fuga teórica, era una ruta de lectura
+   * dedicada. El camino orquestado ya lo pasaba correctamente
+   * (`tools/registry.ts:432`); este handler no, que es el patrón de duplicación
+   * sin sincronizar que la auditoría integral señaló como causa raíz.
+   */
+  workspaceId: string | undefined,
 ) {
   const rawUserMessage = messages[messages.length - 1].content;
 
@@ -523,7 +535,11 @@ ${langInstruction}
         filename: z.string().optional().describe('Optional: the name of the uploaded file to analyze.'),
       }),
       execute: async ({ query, filename }) => {
-        const docText = documentContext || (await searchDocuments(query, 8, { type: 'user_upload' }));
+        // `workspaceId` acota la búsqueda al tenant: sin él se leería el pool
+        // huérfano con los documentos de otros clientes.
+        const docText =
+          documentContext ||
+          (await searchDocuments(query, 8, { type: 'user_upload', workspaceId }));
         const analysis = await analyzeDocument(docText, filename);
         return JSON.stringify(analysis, null, 2);
       },
@@ -705,7 +721,19 @@ export async function POST(req: Request) {
       return handleOrchestrated(req, messages, language, useCase, documentContext, nitContext, stream, erpProviders);
     }
 
-    return handleLegacy(messages, language, useCase, documentContext, nitContext);
+    // Mismo scoping de tenant que el camino orquestado: sin él, la tool
+    // `analyze_document` leería el pool de uploads huérfanos (documentos de
+    // otros clientes). Best-effort igual que en `handleOrchestrated`: sin
+    // cookie el chat sigue funcionando, pero sin acceso a documentos ajenos.
+    const legacyWorkspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+    return handleLegacy(
+      messages,
+      language,
+      useCase,
+      documentContext,
+      nitContext,
+      legacyWorkspaceId,
+    );
   } catch (error) {
     console.error('[chat] API error:', error instanceof Error ? error.message : error);
     void logApiActivity(req, {
