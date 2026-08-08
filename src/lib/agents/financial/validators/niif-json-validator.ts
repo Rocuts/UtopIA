@@ -98,6 +98,25 @@ export interface NiifJsonValidatorOptions {
     operatingProfit?: string;
     netIncome?: string;
   };
+  /**
+   * E14 — anclas del periodo PRIMARIO (el año que el cliente firma).
+   *
+   * Auditoría 2026-08 (P0 `totales-primarios-nunca-cruzados-contra-preprocesador`):
+   * hasta esta versión sólo se cruzaba el periodo COMPARATIVO. Del periodo
+   * actual el único control era E1 —`totalAssets = totalLiabilities +
+   * totalEquity`—, que es coherencia INTERNA: el LLM podía emitir un balance
+   * entero inventado y, mientras cuadrara consigo mismo, el validador daba OK.
+   * En modo LINEA_BASE (sin comparativo) eso significaba que NINGUNA cifra del
+   * informe se contrastaba contra la fuente determinista.
+   */
+  bindingPrimaryTotalsCents?: {
+    totalAssets?: string;
+    totalLiabilities?: string;
+    totalEquity?: string;
+    netIncome?: string;
+    utilidadAntesImpuestos?: string;
+    impuestoCausado?: string;
+  };
   presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
 }
 
@@ -120,8 +139,40 @@ export function validateNiifReportJson(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // -- E1. Ecuación patrimonial -----------------------------------------------
+  // -- E14. Anclaje del periodo PRIMARIO al preprocesador ---------------------
+  //
+  // Va PRIMERO a propósito. E1 sólo comprueba que el balance cuadre consigo
+  // mismo, y un balance completamente inventado cuadra consigo mismo sin
+  // esfuerzo. E14 es lo que ata el reporte a la realidad del archivo que
+  // subió el cliente. Tolerancia $0: las cifras del preprocesador son exactas
+  // en centavos y el LLM sólo tiene que copiarlas.
   const bs = json.balanceSheet;
+  const bpt = options.bindingPrimaryTotalsCents;
+  if (bpt) {
+    const anchorCheck = (
+      label: string,
+      emitted: string | null | undefined,
+      expected: string | undefined,
+    ) => {
+      if (emitted === null || emitted === undefined || expected === undefined) return;
+      if (!moneyCopEquals(emitted, expected)) {
+        const gap = diffCents(emitted, expected);
+        errors.push(
+          `E14. ${label} del periodo ${json.company.fiscalPeriod} emitido por el analista ` +
+            `(${fmtCop(parseMoneyCop(emitted))}) ≠ preprocesador ` +
+            `(${fmtCop(parseMoneyCop(expected))}). Brecha: ${fmtCop(gap)}. ` +
+            `La cifra vinculante es la del preprocesador; el analista debe copiarla literalmente ` +
+            `desde el token [MoneyCop: N] del bloque TOTALES VINCULANTES.`,
+        );
+      }
+    };
+    anchorCheck('TotalAssets', bs.totalAssetsPrimary, bpt.totalAssets);
+    anchorCheck('TotalLiabilities', bs.totalLiabilitiesPrimary, bpt.totalLiabilities);
+    anchorCheck('TotalEquity', bs.totalEquityPrimary, bpt.totalEquity);
+    anchorCheck('NetIncome', json.incomeStatement.netIncomePrimary, bpt.netIncome);
+  }
+
+  // -- E1. Ecuación patrimonial -----------------------------------------------
   const sumLiabEq = serializeMoneyCop(
     parseMoneyCop(bs.totalLiabilitiesPrimary) + parseMoneyCop(bs.totalEquityPrimary),
   );

@@ -27,6 +27,12 @@ import {
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
 import { validateNiifReportJson } from './validators/niif-json-validator';
 import { serializeMoneyCop, moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
+import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
+
+/** Serializa centavos a MoneyCop, o `undefined` si el ancla no existe. */
+function centsOrUndefined(cents: bigint | undefined): string | undefined {
+  return typeof cents === 'bigint' ? cents.toString(10) : undefined;
+}
 import {
   classifyError,
   isAccountingValidationError,
@@ -346,6 +352,59 @@ function fmtCop(n: number | undefined): string {
   return (n < 0 ? '-$' : '$') + formatted;
 }
 
+// ---------------------------------------------------------------------------
+// Anclas vinculantes — presentación legible + token copiable
+// ---------------------------------------------------------------------------
+// Auditoría 2026-08 (P0 `anclas-en-pesos-schema-en-centavos`). El bloque
+// TOTALES VINCULANTES emitía las cifras SÓLO en pesos con separadores es-CO
+// (`$4.196.558.242,90`), mientras el contrato `MoneyCop` del schema exige
+// centavos enteros como string (`419655824290`). El modelo tenía que
+// des-formatear y multiplicar por cien CADA ancla — es decir, el prompt le
+// ordenaba "NO recalcular" precisamente aquello que sólo podía obtener
+// recalculando.
+//
+// Ahora cada ancla sale con las dos representaciones. La legible es para que
+// el modelo entienda la magnitud y redacte sobre ella; el token `[MoneyCop: N]`
+// es el que debe copiar carácter por carácter al schema.
+// ---------------------------------------------------------------------------
+
+/**
+ * Construye la línea de un ancla con su token copiable.
+ *
+ * @param label  Etiqueta legible del ancla.
+ * @param pesos  Valor en pesos (para la presentación).
+ * @param cents  Centavos exactos. Si no se conoce, se derivan de `pesos`.
+ * @param extra  Texto adicional que va DESPUÉS del token (notas, normas).
+ */
+function anchorLine(
+  label: string,
+  pesos: number | undefined,
+  cents: bigint | undefined,
+  extra = '',
+): string {
+  const legible = fmtCop(pesos);
+  if (legible === 'N/D') return `- ${label}: N/D${extra}`;
+  const exact =
+    typeof cents === 'bigint'
+      ? cents
+      : pesosToCentsForAnchor(pesos as number);
+  return `- ${label}: ${legible} COP ${moneyCopToken(exact)}${extra}`;
+}
+
+/** Redondeo al centavo antes de BigInt — mismo contrato que el preprocesador. */
+function pesosToCentsForAnchor(value: number): bigint {
+  return BigInt(Math.round(value * 100));
+}
+
+/** Sub-línea indentada con token copiable (mismos criterios que `anchorLine`). */
+function anchorSubLine(
+  label: string,
+  pesos: number | undefined,
+  cents?: bigint,
+): string {
+  return '  ' + anchorLine(label, pesos, cents);
+}
+
 /**
  * Renderiza un PeriodSnapshot a lineas Markdown. Helper usado por
  * `buildBindingTotalsBlock` en single-period y multi-period.
@@ -371,25 +430,26 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   if (snap.periodoTipo) {
     lines.push(`- Tipo de período: ${snap.periodoTipo}`);
   }
-  lines.push(`- Total Activo: ${fmtCop(totals.activo)} COP`);
+  const cts = (totals as ControlTotalsInput & { cents?: Record<string, bigint> }).cents;
+  lines.push(anchorLine('Total Activo', totals.activo, cts?.activo));
   if (typeof totals.activoCorriente === 'number') {
-    lines.push(`  - Activo Corriente: ${fmtCop(totals.activoCorriente)} COP`);
+    lines.push(anchorSubLine('Activo Corriente', totals.activoCorriente));
   }
   if (typeof totals.activoNoCorriente === 'number') {
-    lines.push(`  - Activo No Corriente: ${fmtCop(totals.activoNoCorriente)} COP`);
+    lines.push(anchorSubLine('Activo No Corriente', totals.activoNoCorriente));
   }
-  lines.push(`- Total Pasivo: ${fmtCop(totals.pasivo)} COP`);
+  lines.push(anchorLine('Total Pasivo', totals.pasivo, cts?.pasivo));
   if (typeof totals.pasivoCorriente === 'number') {
-    lines.push(`  - Pasivo Corriente: ${fmtCop(totals.pasivoCorriente)} COP`);
+    lines.push(anchorSubLine('Pasivo Corriente', totals.pasivoCorriente));
   }
   if (typeof totals.pasivoNoCorriente === 'number') {
-    lines.push(`  - Pasivo No Corriente: ${fmtCop(totals.pasivoNoCorriente)} COP`);
+    lines.push(anchorSubLine('Pasivo No Corriente', totals.pasivoNoCorriente));
   }
-  lines.push(`- Total Patrimonio: ${fmtCop(totals.patrimonio)} COP`);
+  lines.push(anchorLine('Total Patrimonio', totals.patrimonio, cts?.patrimonio));
   // Wave 2.F4 — Parte 1.3 spec v2.0: emitir Ingresos BRUTO y NETO de
   // devoluciones 4175 con etiquetas inequívocas para que el LLM NUNCA confunda
   // qué cifra usar en el P&L. NIIF 15 §47 obliga presentación neta.
-  lines.push(`- Total Ingresos (bruto Clase 4): ${fmtCop(totals.ingresos)} COP`);
+  lines.push(anchorLine('Total Ingresos (bruto Clase 4)', totals.ingresos, cts?.ingresos));
   const totalsForRev = totals as ControlTotalsInput & {
     ingresosNetos?: number;
     totalDevoluciones?: number;
@@ -400,11 +460,15 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
   ) {
     const devs = totalsForRev.totalDevoluciones ?? 0;
     lines.push(
-      `- Total Ingresos Netos (neto de devoluciones 4175): ${fmtCop(totalsForRev.ingresosNetos)} COP ` +
-        `(devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)`,
+      anchorLine(
+        'Total Ingresos Netos (neto de devoluciones 4175)',
+        totalsForRev.ingresosNetos,
+        cts?.ingresosNetos,
+        ` (devoluciones 4175 detectadas: ${fmtCop(devs)} COP; NIIF 15 §47)`,
+      ),
     );
   }
-  lines.push(`- Total Gastos: ${fmtCop(totals.gastos)} COP`);
+  lines.push(anchorLine('Total Gastos', totals.gastos, cts?.gastos));
   // Bloque de impuesto vinculante (Bug 2 fix): UAI + impuesto + utilidad neta
   // SIEMPRE explícitos para que el Agente 1 NO confunda el signo del impuesto.
   // Lee desde `controlTotals.cents` (BigInt centavos) si está disponible — es
@@ -437,16 +501,26 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     impuestoNumber = totalsExt.impuestoCausado;
   }
   if (typeof uaiNumber === 'number' && Number.isFinite(uaiNumber)) {
-    lines.push(`- Utilidad Antes de Impuestos (UAI): ${fmtCop(uaiNumber)} COP`);
+    lines.push(
+      anchorLine(
+        'Utilidad Antes de Impuestos (UAI)',
+        uaiNumber,
+        totalsExt.cents?.utilidadAntesImpuestos,
+      ),
+    );
   }
   if (typeof impuestoNumber === 'number' && Number.isFinite(impuestoNumber)) {
     lines.push(
-      `- Impuesto de Renta causado del periodo (clase 54): ${fmtCop(impuestoNumber)} COP ` +
-        `[presentar en P&L precedido de "(-)"; SIEMPRE RESTA de UAI]`,
+      anchorLine(
+        'Impuesto de Renta causado del periodo (clase 54)',
+        impuestoNumber,
+        totalsExt.cents?.impuestoCausado,
+        ' [presentar en P&L precedido de "(-)"; SIEMPRE RESTA de UAI]',
+      ),
     );
   }
   lines.push(
-    `- Utilidad Neta (P&L) [= UAI − Impuesto]: ${fmtCop(totals.utilidadNeta)} COP`,
+    anchorLine('Utilidad Neta (P&L) [= UAI − Impuesto]', totals.utilidadNeta, cts?.utilidadNeta),
   );
 
   // ITEM 2 ORDEN DE CIERRE — Impuesto Renta Neto a Pagar (Curator R16).
@@ -1434,8 +1508,29 @@ export async function runNiifPhase(
           )
         : undefined;
     void cashAnchorCents; // PUC 11 del primary ya se cruza en validateConsolidatedReport
+
+    // E14 — anclas del periodo PRIMARIO. Hasta la auditoría 2026-08 sólo se
+    // cruzaba el comparativo: del año que el cliente firma, el único control
+    // era E1 (coherencia interna del balance consigo mismo). Con las anclas
+    // primarias, un total inventado deja de pasar aunque cuadre.
+    const primarySnap = getPrimarySnapshot(context.preprocessed);
+    const primaryAnchors = buildPeriodAnchors(primarySnap ?? undefined);
+    const bindingPrimaryTotalsCents = primaryAnchors
+      ? {
+          totalAssets: centsOrUndefined(primaryAnchors.cents.activo),
+          totalLiabilities: centsOrUndefined(primaryAnchors.cents.pasivo),
+          totalEquity: centsOrUndefined(primaryAnchors.cents.patrimonio),
+          netIncome: centsOrUndefined(primaryAnchors.cents.utilidadNeta),
+          utilidadAntesImpuestos: centsOrUndefined(
+            primaryAnchors.cents.utilidadAntesImpuestos,
+          ),
+          impuestoCausado: centsOrUndefined(primaryAnchors.cents.impuestoCausado),
+        }
+      : undefined;
+
     const jsonValidation = validateNiifReportJson(niif.json, {
       bindingComparativeTotalsCents,
+      bindingPrimaryTotalsCents,
       presentationV3: context.ppForAgents?.primary?.curator?.presentationV3,
     });
     if (!jsonValidation.ok && jsonValidation.errors.length > 0) {
