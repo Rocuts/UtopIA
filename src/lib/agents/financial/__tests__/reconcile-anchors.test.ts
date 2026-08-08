@@ -12,7 +12,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { reconcileAnchors } from '../agents/reconcile-anchors';
+import {
+  reconcileAnchors,
+  buildQualificationSeal,
+  describeQualifications,
+  type ReconciliationOutcome,
+} from '../agents/reconcile-anchors';
 import type { ReportAnchors } from '../contracts/anchors';
 import type { NiifReportJson } from '../contracts/niif-report';
 
@@ -270,5 +275,88 @@ describe('reconcileAnchors — resumen para el bucle de reparación', () => {
       assets: [linea('11', '100000000')],
     });
     expect(reconcileAnchors(json, anchors()).repairInstructions).toHaveLength(0);
+  });
+});
+
+describe('buildQualificationSeal — el sello que cambia el artefacto', () => {
+  const conGap: ReconciliationOutcome = {
+    deviations: [],
+    lineGaps: [
+      {
+        statement: 'Activo',
+        lineCount: 3,
+        sumCents: '245975129640',
+        totalCents: '418597884116',
+        gapCents: '-172622754476',
+      },
+    ],
+    repairAttempted: true,
+    clean: false,
+  };
+
+  it('no sella nada cuando la reconciliación quedó limpia', () => {
+    const limpio: ReconciliationOutcome = {
+      deviations: [],
+      lineGaps: [],
+      repairAttempted: false,
+      clean: true,
+    };
+    expect(buildQualificationSeal(limpio)).toBe('');
+    expect(describeQualifications(limpio)).toEqual([]);
+  });
+
+  it('sella la portada con el encabezado y la cifra exacta de la brecha', () => {
+    const seal = buildQualificationSeal(conGap);
+    expect(seal).toContain('REPORTE CON SALVEDADES');
+    expect(seal).toContain('NO es firmable');
+    // La brecha medida en FASE 0 corrida 2: $1.726.227.544,76 sin desglosar.
+    expect(seal).toContain('$1.726.227.544,76');
+    expect(seal).toContain('Se intentó una reparación acotada');
+  });
+
+  it('el sello es un blockquote Markdown, para que sobreviva a la composición', () => {
+    // Viaja dentro del cuerpo del informe: si no fuera Markdown válido, se
+    // rompería al concatenarse con los estados financieros.
+    for (const line of buildQualificationSeal(conGap).split('\n')) {
+      if (line.trim() === '') continue;
+      expect(line.startsWith('>')).toBe(true);
+    }
+  });
+
+  it('distingue la desviación corregida de la que no se pudo corregir', () => {
+    const outcome: ReconciliationOutcome = {
+      deviations: [
+        {
+          period: 'primary',
+          field: 'balanceSheet.totalAssetsPrimary',
+          label: 'Total Activo',
+          key: 'activo',
+          emitted: '100',
+          expected: '200',
+          gapCents: '-100',
+          overwritten: true,
+        },
+        {
+          period: 'primary',
+          field: 'incomeStatement.netIncomePrimary',
+          label: 'Utilidad Neta',
+          key: 'utilidadNeta',
+          emitted: '300',
+          expected: '400',
+          gapCents: '-100',
+          overwritten: false,
+        },
+      ],
+      lineGaps: [],
+      repairAttempted: false,
+      clean: false,
+    };
+    const textos = describeQualifications(outcome);
+    expect(textos[0]).toContain('corregido automáticamente');
+    expect(textos[1]).toContain('NO corregido');
+  });
+
+  it('respeta el idioma del informe', () => {
+    expect(buildQualificationSeal(conGap, 'en')).toContain('REPORT WITH QUALIFICATIONS');
   });
 });
