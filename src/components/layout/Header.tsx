@@ -64,9 +64,6 @@ export function Header() {
           <Link href="#methodology" className="text-[0.8125rem] text-n-600 hover:text-n-1000 transition-colors duration-200">
             Metodología
           </Link>
-          <Link href="#metrics" className="text-[0.8125rem] text-n-600 hover:text-n-1000 transition-colors duration-200">
-            Resultados
-          </Link>
           <Link href="#faq" className="text-[0.8125rem] text-n-600 hover:text-n-1000 transition-colors duration-200">
             FAQ
           </Link>

@@ -196,21 +196,6 @@ function LoginContent() {
           </div>
         </div>
 
-        {/* credential stats */}
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 22, flexWrap: 'wrap', color: 'rgba(196,187,165,0.8)' }}>
-          {[
-            { value: '+500', label: 'Casos resueltos' },
-            { value: '$2,4B', label: 'Ahorro generado' },
-            { value: '98,7%', label: 'Precisión' },
-          ].map((stat) => (
-            <div key={stat.label}>
-              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, fontSize: 'var(--text-xl, 1.25rem)', color: '#FCFBF8' }}>
-                {stat.value}
-              </div>
-              <div style={{ fontSize: 'var(--text-xs, 0.75rem)' }}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
       </aside>
 
       {/* ── FORM SIDE ── */}
