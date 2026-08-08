@@ -102,7 +102,7 @@ export default function MacroeconomiaPage() {
             {STATS.map((s) => (
               <div
                 key={s.label}
-                className="rounded-xl border border-n-200 bg-n-50 dark:bg-n-950 dark:border-n-800 px-4 py-4"
+                className="rounded-xl border border-n-200 bg-n-50 px-4 py-4"
               >
                 <div className="text-xs text-n-600 mb-1">{s.label}</div>
                 <div
@@ -121,10 +121,10 @@ export default function MacroeconomiaPage() {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-n-600 mb-4">
             Proyección 2026
           </h2>
-          <div className="rounded-xl border border-n-200 dark:border-n-800 overflow-hidden">
+          <div className="rounded-xl border border-n-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-n-100 dark:bg-n-900 border-b border-n-200 dark:border-n-800">
+                <tr className="bg-n-100 border-b border-n-200">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-n-700">Indicador</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-n-700">Actual</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-n-700">
@@ -139,7 +139,7 @@ export default function MacroeconomiaPage() {
                     key={row.indicator}
                     className={
                       i < PROJECTIONS.length - 1
-                        ? 'border-b border-n-200 dark:border-n-800'
+                        ? 'border-b border-n-200'
                         : ''
                     }
                   >

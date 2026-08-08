@@ -10,6 +10,8 @@
 // payload de form data y no soportan streaming binario eficiente.
 //
 // Esta accion:
+//   0. Gate de sesion (`denyIfNoSession`) — no-op en fase 1, rechaza con
+//      code 'UNAUTHENTICATED' en fase 2. Ver `_auth-gate.ts`.
 //   1. Deriva `workspaceId` del cookie.
 //   2. Valida el payload (lineas + periodo + fecha + lista de saldos) con Zod.
 //   3. Llama a `importOpeningBalance` (que internamente llama a `createEntry`
@@ -35,6 +37,7 @@ import {
   type OpeningBalanceLine,
 } from '@/lib/accounting/opening-balance/types';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { denyIfNoSession } from './_auth-gate';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -82,7 +85,12 @@ const importOpeningBalanceSchema = z.object({
 
 export type OpeningBalanceActionError = {
   ok: false;
-  code: OpeningBalanceErrorCode | 'INVALID_INPUT' | 'INTERNAL';
+  code:
+    | OpeningBalanceErrorCode
+    | 'INVALID_INPUT'
+    | 'INTERNAL'
+    // Denegación del gate de sesión (fase 2). Ver `_auth-gate.ts`.
+    | 'UNAUTHENTICATED';
   message: string;
   issues?: Array<{ path: string; message: string }>;
 };
@@ -144,6 +152,11 @@ function toSerializableError(err: unknown): OpeningBalanceActionError {
 export async function importOpeningBalanceAction(
   rawInput: unknown,
 ): Promise<ImportOpeningBalanceResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = importOpeningBalanceSchema.safeParse(rawInput);
   if (!parsed.success) return zodToActionError(parsed.error);
 

@@ -6,6 +6,8 @@
 // uso desde Client Components (formularios del Catalogo de Cuentas, wizard
 // de inicializacion, ABM de auxiliares). Cada accion:
 //
+//   0. Gate de sesion (`denyIfNoSession`) — no-op en fase 1, rechaza con
+//      code 'UNAUTHENTICATED' en fase 2. Ver `_auth-gate.ts`.
 //   1. Deriva `workspaceId` del cookie (NUNCA del input).
 //   2. Valida el input con Zod.
 //   3. Llama al servicio puro (createAccount / updateAccount / deactivate
@@ -35,6 +37,7 @@ import {
 } from '@/lib/accounting/chart-of-accounts/mutations';
 import type { ChartOfAccountsRow } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { denyIfNoSession } from './_auth-gate';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -86,7 +89,14 @@ const uuidSchema = z.string().uuid();
 
 export type AccountActionError = {
   ok: false;
-  code: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' | 'INVALID_INPUT' | 'INTERNAL';
+  code:
+    | 'VALIDATION'
+    | 'CONFLICT'
+    | 'NOT_FOUND'
+    | 'INVALID_INPUT'
+    | 'INTERNAL'
+    // Denegación del gate de sesión (fase 2). Ver `_auth-gate.ts`.
+    | 'UNAUTHENTICATED';
   message: string;
   /** Campo del input que fallo (cuando viene de AccountValidationError). */
   field?: string;
@@ -166,6 +176,11 @@ function toSerializableError(err: unknown): AccountActionError {
 export async function createAccountAction(
   rawInput: unknown,
 ): Promise<CreateAccountResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = createAccountSchema.safeParse(rawInput);
   if (!parsed.success) return zodToActionError(parsed.error);
 
@@ -203,6 +218,11 @@ export async function updateAccountAction(
   id: string,
   rawPatch: unknown,
 ): Promise<UpdateAccountResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const idResult = uuidSchema.safeParse(id);
   if (!idResult.success) {
     return {
@@ -234,6 +254,11 @@ export async function updateAccountAction(
 export async function deactivateAccountAction(
   id: string,
 ): Promise<DeactivateAccountResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const idResult = uuidSchema.safeParse(id);
   if (!idResult.success) {
     return {
@@ -265,6 +290,11 @@ export async function deactivateAccountAction(
 // ---------------------------------------------------------------------------
 
 export async function seedPucAction(): Promise<SeedPucActionResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   try {
     const ws = await getOrCreateWorkspace();
     const result = await seedPucForWorkspace(ws.id);

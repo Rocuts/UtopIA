@@ -58,7 +58,7 @@ export function OptimizacionDividendosCard({ data, loading, error, t, language =
             'bg-[rgb(34_197_94_/_0.07)] ring-1 ring-[rgb(34_197_94_/_0.2)]',
           )}
         >
-          <span className="text-n-700 dark:text-n-600 flex-1">
+          <span className="text-n-700 flex-1">
             {language === 'es' ? 'Recomendación: ' : 'Recommendation: '}
           </span>
           <span className="font-semibold text-success">{rec?.[language]}</span>

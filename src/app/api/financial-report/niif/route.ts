@@ -24,6 +24,12 @@ import type {
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { logActivity } from '@/lib/db/activity-log';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import {
+  runWithTelemetryContext,
+  asTelemetryUuid,
+  resolveOwnedReportId,
+  type TelemetryContext,
+} from '@/lib/db/telemetry';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/niif (Wave 3.F1)
@@ -132,6 +138,37 @@ export async function POST(req: Request) {
     const excludedFactIds =
       excludedFactIdsSchema.safeParse((body as { excludedFactIds?: unknown }).excludedFactIds).data ?? null;
 
+    // Telemetría — contexto del tenant para TODO el pipeline.
+    //
+    // Por qué aquí y no dentro del pipeline: `persistAgentTelemetry` (que dispara
+    // `callFinancialAgent` ~40 veces por corrida) resolvía el tenant leyendo
+    // `cookies()`. Esa lectura ocurre dentro del callback de la ReadableStream
+    // SSE / bajo `waitUntil`, donde ya no hay scope de request: lanzaba y la
+    // fila se descartaba ("sin workspaceId para niif-analyst-pass1", medido en
+    // runtime 2026-08). Aquí sí estamos en el scope del request, así que el
+    // workspaceId ya resuelto arriba se fija en un AsyncLocalStorage que viaja
+    // con las continuaciones async del pipeline.
+    //
+    // El contexto se abre incluso con `workspaceId` nulo: así `reportId` viaja
+    // igual y la fila sin tenant se registra degradada en vez de perderse.
+    // El contexto lleva el valor CRUDO, no el filtrado: quien clasifica el modo
+    // de fallo es `persistAgentTelemetry` (`workspace-no-uuid` vs
+    // `sin-workspace`), y esa distincion es justo el diagnostico que el
+    // operador necesita. Si filtraramos aqui, una cookie `utopia_workspace_id`
+    // corrupta llegaria al contexto como `null`, la persistencia caeria al
+    // fallback de `cookies()` — que dentro del stream SSE lanza — y la medicion
+    // quedaria registrada como `sin-workspace`: el operador buscaria un route
+    // handler sin cablear en vez de la cookie corrupta, que es el bug real.
+    // El filtro de uuid sigue existiendo aguas abajo, antes del INSERT.
+    const telemetryWorkspaceId = asTelemetryUuid(workspaceId);
+    const telemetryCtx: TelemetryContext = {
+      workspaceId: workspaceId ?? null,
+      reportId: await resolveOwnedReportId(
+        (body as { reportId?: unknown }).reportId,
+        telemetryWorkspaceId,
+      ),
+    };
+
     // Reutiliza el `preprocessed` enviado por el cliente (idempotencia con
     // /api/upload). Sino, lo re-procesamos aqui — `runNiifPhase` tambien sabe
     // hacerlo internamente; lo precomputamos por consistencia con /route.ts.
@@ -158,24 +195,31 @@ export async function POST(req: Request) {
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming({
-        rawData,
-        company,
-        language,
-        instructions,
-        preprocessed,
-        provisional,
-        adjustmentLedger,
-        workspaceId,
-        excludedFactIds,
-        startedAt,
-      });
+      // `handleStreaming` construye la ReadableStream de forma síncrona y el
+      // callback `start` se invoca dentro de esa construcción — por eso abrir
+      // el contexto AQUÍ alcanza para que el pipeline entero corra dentro de él.
+      return runWithTelemetryContext(telemetryCtx, () =>
+        handleStreaming({
+          rawData,
+          company,
+          language,
+          instructions,
+          preprocessed,
+          provisional,
+          adjustmentLedger,
+          workspaceId,
+          excludedFactIds,
+          startedAt,
+        }),
+      );
     }
 
     // Non-streaming
-    const phase = await runNiifPhase(
-      { rawData, company, language, instructions },
-      { preprocessed, provisional, adjustmentLedger, workspaceId, excludedFactIds },
+    const phase = await runWithTelemetryContext(telemetryCtx, () =>
+      runNiifPhase(
+        { rawData, company, language, instructions },
+        { preprocessed, provisional, adjustmentLedger, workspaceId, excludedFactIds },
+      ),
     );
 
     void logActivity({

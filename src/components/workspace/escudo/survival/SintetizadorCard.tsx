@@ -28,7 +28,7 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('block rounded animate-pulse bg-n-300/30 dark:bg-n-700/30', className)}
+      className={cn('block rounded animate-pulse bg-n-300/30', className)}
     />
   );
 }
@@ -132,7 +132,7 @@ export function SintetizadorCard({ data, loading, t, language = 'es' }: Sintetiz
                             {a.prioridad}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <span className="font-medium text-n-800 dark:text-n-700">{a.accion}</span>
+                            <span className="font-medium text-n-800">{a.accion}</span>
                             <span className="ml-1.5 text-success text-xs font-medium tabular-nums">
                               ({fmtCop(a.impactoEstimado)})
                             </span>
@@ -191,7 +191,15 @@ export function SintetizadorCard({ data, loading, t, language = 'es' }: Sintetiz
         size="xl"
       >
         {data && (
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-serif-elite prose-headings:tracking-tight prose-a:text-area-escudo prose-strong:text-n-900 dark:prose-strong:text-n-100 pb-4">
+          /*
+           * `dark:prose-strong:text-n-100` era el peor caso de la doble inversión:
+           * en oscuro n-100 = #1C1915 y la superficie de GlassModal
+           * (.glass-elite-elevated, globals.css:619) es rgb(28 25 21) = #1C1915.
+           * MISMO hex → 1.00:1: las negritas del dictamen — o sea justo las cifras
+           * y conclusiones que el markdown resalta — se borraban del panel.
+           * n-1000 es la tinta primaria y ya se adapta sola: 19.11:1 / 16.07:1.
+           */
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-serif-elite prose-headings:tracking-tight prose-a:text-area-escudo prose-strong:text-n-1000 pb-4">
             <ReactMarkdown>{data.markdown}</ReactMarkdown>
           </div>
         )}

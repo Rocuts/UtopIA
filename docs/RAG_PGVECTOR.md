@@ -75,16 +75,104 @@ Algoritmo:
 
 1. `embedMany(value=[query])` ⇒ vector 1536d.
 2. CTE en SQL:
-   - `vector_hits` = top 30 por `embedding <=> $vec` ASC.
+   - `vector_hits` = top 30 por `embedding <=> $vec` ASC, **filtrado a
+     `cosine >= MIN_COSINE_SIMILARITY` (0.48)**.
    - `lex_hits`    = top 30 por `ts_rank(tsv, plainto_tsquery('spanish', $q))` DESC.
    - `fused`       = `SUM(1 / (60 + rank_i))` por id, ordenado DESC.
-3. Top 30 al rerank Cohere (si `COHERE_API_KEY`) ⇒ top K final. Sin
+   - SELECT final con **`DISTINCT ON (md5(content))`** (ver "Duplicacion").
+3. **Gate de corroboracion semantica** (corre siempre, ver abajo).
+4. Top 30 al rerank Cohere (si `COHERE_API_KEY`) ⇒ top K final. Sin
    Cohere se devuelve top K del RRF.
+
+### Gate de relevancia — por que hay dos
+
+Sin un umbral, `ORDER BY embedding <=> q LIMIT 30` devuelve SIEMPRE los 30
+vecinos mas cercanos exista o no algo relevante, y `NO_RESULTS` — el unico
+disparador del rail anti-alucinacion de los especialistas — es inalcanzable con
+corpus no vacio. El agente entonces redacta con aplomo sobre chunks rotulados
+`Fuente:` que no responden la pregunta.
+
+Hay dos gates porque las dos rutas de entrada son distintas:
+
+| Gate | Se aplica a | Valor | Calibrado |
+|---|---|---|---|
+| `MIN_COSINE_SIMILARITY` | canal vectorial | **0.48** | si, 2026-08 (abajo) |
+| corroboracion semantica | hits SOLO-lexicos | — | si, mismo ejercicio |
+| `MIN_RERANK_SCORE` | salida de Cohere | 0.05 | **no** — `COHERE_API_KEY` no existe en ningun entorno, esa rama nunca corre |
+
+El gate de **corroboracion semantica** existe porque `maybeRerank()` sale con
+`rows.slice(0, topN)` antes de evaluar `MIN_RERANK_SCORE` cuando no hay
+`COHERE_API_KEY`: en la practica ese filtro es codigo muerto. Sin el, un chunk
+que entra solo por coincidencia de lexemas (`cosine_sim = null`) llegaba al
+especialista sin ninguna prueba semantica. La regla es de corroboracion, no de
+puntaje: **si el canal vectorial no aporto ni un chunk sobre el umbral, una
+coincidencia de palabras no es una fuente**. Si aporto, los hits lexicos se
+conservan enteros — su coseno p05 es 0.447, por debajo de cualquier umbral
+defendible, y filtrarlos costaria los match exactos de cita (`articulo 771-5`).
+
+### Calibracion del umbral (2026-08)
+
+`scripts/rag-calibrate-threshold.ts`, contra la base de produccion: 20 consultas
+normativas colombianas reales (incluidas citas cortas estilo tool-call) vs. 16
+consultas-ruido de control, seis adversariales (tramites y salud en Colombia —
+el corpus incluye Codigo Penal, Codigo de Minas y resoluciones de MinSalud).
+
+| Poblacion | Medida | Valor |
+|---|---|---|
+| ruido | top1 max | **0.447** (`"instrucciones para armar un mueble de melamina"`) |
+| normativa | top1 min | 0.545 (`"Art. 240 E.T. tarifa"`) |
+| normativa | rank-30 min | **0.508** |
+| ruido | hits lexicos | **0 en 16/16 consultas** (`plainto_tsquery` es AND) |
+
+Separacion limpia. La banda que conserva el 100% del recall con 0% de fuga es
+`[0.448, 0.508]`; **0.48 es su punto medio** (+0.033 sobre el ruido, −0.028 bajo
+la normativa peor rankeada).
+
+El 0.30 anterior (nunca calibrado) dejaba pasar el **69% de las consultas-ruido**
+con 12,3 chunks de promedio: la consulta de control `"receta de arepas de choclo
+con queso"` (top1 = 0.355) entregaba sus 30 candidatos como `Fuente:`.
+
+Recalibrar tras cualquier cambio de modelo de embeddings o ampliacion grande del
+corpus:
+
+```bash
+npx dotenv -e .env.local -- npx tsx --tsconfig tsconfig.scripts.json \
+  scripts/rag-calibrate-threshold.ts
+```
+
+## Duplicacion del corpus
+
+Medido 2026-08 con `scripts/rag-corpus-dedup-report.ts`: **71.273 chunks pero
+34.648 contenidos distintos (51,4% redundante)**. La forma importa — 35.240
+copias sobrantes estan **dentro del mismo `source`** (el ingest no es idempotente
+y corrio dos veces: `decreto_1625_2016.md` tiene 9.800 chunks y 4.892 distintos)
+y solo 1.385 son texto compartido entre normas distintas.
+
+Coste real, no teorico: el especialista recibia **4,7 de 8 contenidos distintos —
+el 41% de su ventana era el mismo parrafo repetido**, gastando tokens y
+reforzando artificialmente lo duplicado frente a lo unico.
+
+- **Aplicado**: `DISTINCT ON (md5(content))` en el SELECT final de
+  `hybridSearch`, conservando la copia de mayor `rrf_score` y, entre empates, la
+  que trae distancia vectorial. Medido despues: **8,0/8 distintos**. No borra
+  una sola fila.
+- **Pendiente (fuera de la frontera del RAG)**: indice unico
+  `(source, md5(content))` o UPSERT en el ingest. Es la causa. Sin el, borrar
+  filas a mano no sirve: el siguiente `npm run db:ingest` las repone.
 
 ### `addDocumentsToStore(texts, metadata)`
 
 Chunkea (~1000 chars, overlap 250), embed con `embedMany` (parallel = 5)
-e inserta. `metadata.workspaceId` opcional; sin el, queda como global.
+e inserta.
+
+**LANZA si `docType === 'user_upload'` y no viene `metadata.workspaceId`.**
+`workspace_id NULL` significa "corpus global" y toda query de todo tenant
+incluye esa condicion, asi que un documento de cliente sin tenant queda
+recuperable por cualquier otro cliente. Lanza en vez de devolver 0 porque un 0
+es indistinguible de "el embedding fallo": el caller lo trata como no-critico y
+el bug vuelve a pasar desapercibido — que es exactamente como se acumularon los
+1.892 chunks huerfanos (ver abajo). Los `docType` de corpus normativo si pueden
+ir sin `workspaceId`.
 
 ### `invalidateVectorStore()`
 
@@ -97,7 +185,9 @@ compatibilidad con el upload route.
 |--------------------------|----------------------------|---------------------------------------------------------------|
 | `OPENAI_API_KEY`         | requerido                  | Ya provisionada — embeddings + LLMs.                         |
 | `DATABASE_URL`           | requerido (pooled)         | Endpoint `*-pooler.<region>.aws.neon.tech` de Neon.         |
-| `COHERE_API_KEY`         | opcional                   | Activa rerank Cohere. Sin ella se usa RRF puro.              |
+| `COHERE_API_KEY`         | opcional                   | Activa rerank Cohere. Sin ella se usa RRF puro (y `MIN_RERANK_SCORE` no corre). |
+| `RAG_MIN_COSINE_SIMILARITY` | `0.48`                  | Umbral del canal vectorial. Calibrado — ver "Calibracion".    |
+| `RAG_MIN_RERANK_SCORE`   | `0.05`                     | Piso del rerank Cohere. Sin calibrar (esa rama no corre hoy). |
 | `OPENAI_MODEL_EMBEDDINGS`| `text-embedding-3-small`   | Override solo si cambias el modelo (recordar cambiar dims).  |
 | `CONTEXTUAL_RETRIEVAL`   | `0`                        | `1` activa generacion de prefix LLM (Anthropic style) en ingest. |
 | `PURGE_BEFORE_INGEST`    | `0`                        | `1` borra rows globales antes de re-ingestar el corpus.      |
@@ -129,13 +219,39 @@ CONTEXTUAL_RETRIEVAL=1 npm run db:ingest
 - **Aislamiento**: nunca buscamos `workspace_id = $A` desde el tenant
   `$B`. La clausula es siempre `(workspace_id IS NULL OR workspace_id = $self)`.
 
+### Uploads huerfanos en el corpus global (residuo historico)
+
+La auditoria 2026-08 encontro **1.892 chunks con `doc_type='user_upload'` y
+`workspace_id NULL`** en produccion: cuatro documentos de clientes reales (tres
+balances de prueba y un requerimiento de IVA de la DIAN), fechados entre
+2026-05-05 y 2026-05-28.
+
+No es un bug vivo: `/api/upload` dejo de indexar sin workspace el 2026-06-10
+(commit `8ff6c0ab`) y desde 2026-08 la libreria lo rechaza duro. Son residuos de
+antes del fix, pero **siguen siendo recuperables hoy por cualquier tenant**.
+
+Inventario y purga con `scripts/rag-purge-orphan-uploads.ts` — dry-run por
+defecto, y el borrado exige `--borrar --confirmar <N>` con el conteo exacto que
+reporto el inventario (ancla el DELETE a lo que se reviso; si el conteo cambio,
+aborta):
+
+```bash
+# inventario, no escribe nada
+npx dotenv -e .env.local -- npx tsx --tsconfig tsconfig.scripts.json \
+  scripts/rag-purge-orphan-uploads.ts
+
+# borrado real
+... scripts/rag-purge-orphan-uploads.ts --borrar --confirmar 1892
+```
+
+Es una decision del dueno del dato, no del pipeline: los documentos deberian
+re-subirse por su dueno para quedar indexados con `workspace_id`.
+
 ## Migration plan (proximas olas)
 
-- **Ola 1 — upload route con workspaceId**: cuando la cookie
-  `utopia_workspace_id` se vuelva el-pivote-canonico para uploads, el
-  upload route pasara `workspaceId` a `addDocumentsToStore`. Hoy los
-  uploads quedan como `global` (visible para todos los tenants) hasta
-  que esa cookie sea garantia.
+- ~~**Ola 1 — upload route con workspaceId**~~: HECHO (`8ff6c0ab`, 2026-06-10).
+  El upload route resuelve el workspace y no indexa si no puede; la libreria
+  ademas lanza. Queda pendiente purgar el residuo historico (ver arriba).
 - **Ola 2 — limpiar deps legacy**: remover `hnswlib-node`,
   `@langchain/community/vectorstores/*`, y eventualmente
   `@langchain/openai` cuando ningun consumer lo importe.

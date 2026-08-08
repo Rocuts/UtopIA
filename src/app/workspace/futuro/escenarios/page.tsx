@@ -350,9 +350,13 @@ export default function EscenariosPage() {
                 onClick={handleReset}
                 className={cn(
                   'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-xs font-medium',
-                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800 dark:text-n-700',
-                  'hover:border-gold-500 hover:text-n-800 dark:hover:text-n-800 transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+                  'bg-n-100 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)] text-n-800',
+                  'hover:border-gold-500 hover:text-n-800 transition-colors',
+                  // El ring-offset sigue a la SUPERFICIE, no al modo (CLAUDE.md regla 4).
+                  // `ring-offset-n-1000` es el extremo de TINTA: pintaba un marco casi negro
+                  // alrededor del botón al enfocarlo con Tab sobre página crema. n-0 es el
+                  // papel de cada tema, así que la banda desaparece en ambos.
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
                 )}
               >
                 <MinusIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />

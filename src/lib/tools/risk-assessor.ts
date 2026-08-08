@@ -3,10 +3,52 @@
  *
  * Evaluates a tax case/situation and returns a structured risk assessment
  * that can be displayed in the frontend RiskGauge component.
+ *
+ * Auditoria 2026-08: la llamada pasa por `callStructuredTool` (finishReason
+ * auditado + validacion Zod + telemetria). Antes se hacia
+ * `JSON.parse(result.text)` y se "saneaba" a mano coaccionando cualquier valor
+ * desconocido a 'medio' / 50. Esa coaccion silenciosa es peor que fallar: un
+ * output truncado por `length` se presentaba en el RiskGauge como una
+ * evaluacion de riesgo medio legitima, sin decirle a nadie que estaba
+ * incompleta.
  */
 
-import { generateText } from 'ai';
+import { z } from 'zod';
 import { MODELS } from '@/lib/config/models';
+import { callStructuredTool } from './structured-tool-call';
+
+// ---------------------------------------------------------------------------
+// Contrato de salida (strict mode 2026 — ver docs/spec/zod-strict-mode-2026.md)
+// ---------------------------------------------------------------------------
+// `timeline` es `.nullable()`, NUNCA `.optional()`: con `strict: true` OpenAI
+// exige que todas las claves esten en `required`; la ausencia se expresa con
+// null, no omitiendo el campo.
+
+const RiskLevelEnum = z.enum(['bajo', 'medio', 'alto', 'critico']);
+const UrgencyEnum = z.enum(['normal', 'importante', 'urgente']);
+
+const RiskFactorSchema = z.object({
+  description: z.string().min(1).describe('Factor de riesgo concreto'),
+  severity: RiskLevelEnum,
+  category: z.string().min(1).describe('Ej: procesal, sustancial, documental, temporal'),
+});
+
+const TimelineItemSchema = z.object({
+  date: z.string().min(1).describe('Fecha o plazo relevante'),
+  description: z.string().min(1).describe('Que vence o que debe hacerse'),
+  urgency: UrgencyEnum,
+});
+
+export const RiskAssessmentSchema = z.object({
+  level: RiskLevelEnum,
+  score: z.number().int().min(0).max(100).describe('Score de riesgo 0-100 coherente con `level`'),
+  factors: z.array(RiskFactorSchema),
+  recommendations: z.array(z.string().min(1)),
+  timeline: z
+    .array(TimelineItemSchema)
+    .nullable()
+    .describe('Vencimientos relevantes; null si el caso no tiene plazos identificables'),
+});
 
 export interface RiskAssessment {
   level: 'bajo' | 'medio' | 'alto' | 'critico';
@@ -28,103 +70,44 @@ export interface TimelineItem {
   urgency: 'normal' | 'importante' | 'urgente';
 }
 
+// El schema NO va en prosa — lo enforza `Output.object({ schema })`.
 const RISK_SYSTEM_PROMPT = `Eres un experto evaluador de riesgos tributarios colombianos.
-Tu tarea es evaluar el riesgo de un caso o situacion tributaria y devolver una evaluacion estructurada.
 
-DEBES responder UNICAMENTE con un objeto JSON valido (sin markdown, sin backticks) con esta estructura:
+<task>Evaluar el riesgo de un caso o situacion tributaria y devolver la evaluacion estructurada.</task>
 
-{
-  "level": "uno de: bajo, medio, alto, critico",
-  "score": numero de 0 a 100,
-  "factors": [
-    {
-      "description": "descripcion del factor de riesgo",
-      "severity": "uno de: bajo, medio, alto, critico",
-      "category": "categoria del riesgo (ej: procesal, sustancial, documental, temporal)"
-    }
-  ],
-  "recommendations": [
-    "recomendacion especifica y accionable"
-  ],
-  "timeline": [
-    {
-      "date": "fecha o plazo relevante",
-      "description": "que vence o que debe hacerse",
-      "urgency": "uno de: normal, importante, urgente"
-    }
-  ]
-}
+<constraints>
+  - NEVER inventes plazos, cifras ni actuaciones de la DIAN que no consten en el caso descrito.
+  - Bandas de score: bajo 0-25 (cumplimiento adecuado); medio 26-50 (aspectos que requieren atencion, no urgentes); alto 51-75 (accion inmediata para evitar sanciones); critico 76-100 (sanciones graves, perdida de plazos o exposicion fiscal importante).
+  - Factores a ponderar: cumplimiento de plazos legales y procesales, magnitud economica de la contingencia, solidez de la posicion juridica, disponibilidad de pruebas y soportes, antecedentes con la DIAN, acumulacion de sanciones, riesgo de liquidacion oficial, firmeza de declaraciones y prescripcion de la accion de cobro.
+  - If el caso menciona vencimientos o terminos then registralos en timeline, otherwise devuelve timeline en null.
+  - Cada recomendacion debe ser especifica y accionable.
+  - Responde siempre en espanol.
+</constraints>
 
-CRITERIOS DE EVALUACION:
-- BAJO (0-25): Riesgo minimo. Cumplimiento adecuado, situacion controlada.
-- MEDIO (26-50): Riesgo moderado. Hay aspectos que requieren atencion pero no son urgentes.
-- ALTO (51-75): Riesgo significativo. Requiere accion inmediata para evitar sanciones o perjuicios.
-- CRITICO (76-100): Riesgo critico. Posibles sanciones graves, perdida de plazos, o exposicion fiscal importante.
-
-FACTORES A CONSIDERAR:
-- Cumplimiento de plazos legales y procesales
-- Magnitud economica de la contingencia
-- Solidez de la posicion juridica
-- Disponibilidad de pruebas y soportes documentales
-- Antecedentes del contribuyente con la DIAN
-- Posibilidad de sanciones acumuladas
-- Riesgo de liquidacion oficial
-- Firmeza de declaraciones
-- Prescripcion de la accion de cobro
-
-SIEMPRE responde en espanol.`;
+<success_criteria>El score cae dentro de la banda que corresponde al level reportado.</success_criteria>`;
 
 /**
  * Assess the risk of a tax case based on the conversation context.
  */
 export async function assessRisk(caseDescription: string): Promise<RiskAssessment> {
   try {
-    const result = await generateText({
+    const json = await callStructuredTool({
+      toolName: 'risk-assessor',
       model: MODELS.CHAT,
-      messages: [
-        { role: 'system', content: RISK_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `Evalua el riesgo tributario del siguiente caso:\n\n${caseDescription}`,
-        },
-      ],
-      temperature: 0.1,
+      schema: RiskAssessmentSchema,
+      system: RISK_SYSTEM_PROMPT,
+      userContent: `Evalua el riesgo tributario del siguiente caso:\n\n${caseDescription}`,
       maxOutputTokens: 1500,
     });
 
-    const content = result.text?.trim();
-    if (!content) {
-      return fallbackRiskAssessment('No se obtuvo respuesta del modelo de evaluacion de riesgo.');
-    }
-
-    const cleaned = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-    const parsed = JSON.parse(cleaned);
-
-    // Validate and sanitize
-    const validLevels = ['bajo', 'medio', 'alto', 'critico'] as const;
-    const level = validLevels.includes(parsed.level) ? parsed.level : 'medio';
-    const score = typeof parsed.score === 'number'
-      ? Math.max(0, Math.min(100, Math.round(parsed.score)))
-      : 50;
-
     return {
-      level,
-      score,
-      factors: Array.isArray(parsed.factors)
-        ? parsed.factors.map((f: Record<string, unknown>) => ({
-            description: typeof f.description === 'string' ? f.description : 'Factor no especificado',
-            severity: (validLevels as readonly string[]).includes(f.severity as string) ? f.severity as string : 'medio',
-            category: typeof f.category === 'string' ? f.category : 'general',
-          }))
-        : [],
-      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
-      timeline: Array.isArray(parsed.timeline)
-        ? parsed.timeline.map((t: Record<string, unknown>) => ({
-            date: typeof t.date === 'string' ? t.date : 'Por determinar',
-            description: typeof t.description === 'string' ? t.description : '',
-            urgency: ['normal', 'importante', 'urgente'].includes(t.urgency as string) ? t.urgency as string : 'normal',
-          }))
-        : undefined,
+      level: json.level,
+      score: json.score,
+      factors: json.factors,
+      recommendations: json.recommendations,
+      // El contrato JSON usa null (strict mode); la interfaz publica de la tool
+      // usa `undefined` para no romper a los consumidores existentes.
+      timeline: json.timeline ?? undefined,
     };
   } catch (error) {
     console.error('Risk assessment failed:', error);

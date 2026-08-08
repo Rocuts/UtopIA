@@ -3,10 +3,19 @@
  *
  * Generates professional response drafts for DIAN requirements in official format.
  * Follows Colombian tax procedure conventions and DIAN format requirements.
+ *
+ * Auditoria 2026-08: esta es la superficie donde un output truncado hace mas
+ * dano. El borrador se descarga y se radica ante la DIAN; un corte por `length`
+ * despues de la seccion `body` producia un escrito sin fundamento legal ni
+ * bloque de firma que `JSON.parse` aceptaba sin chistar, porque el modelo
+ * cerraba el objeto. Ahora la llamada pasa por `callStructuredTool`
+ * (finishReason auditado + validacion Zod + telemetria) y cualquier corte cae
+ * al `fallbackDraft`, que SI le dice al usuario que el borrador es de respaldo.
  */
 
-import { generateText } from 'ai';
+import { z } from 'zod';
 import { MODELS } from '@/lib/config/models';
+import { callStructuredTool } from './structured-tool-call';
 
 export interface DianResponseRequest {
   requirementType: string;
@@ -35,42 +44,51 @@ export interface DianResponseDraft {
   warnings: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Contrato de salida (strict mode 2026 — ver docs/spec/zod-strict-mode-2026.md)
+// ---------------------------------------------------------------------------
+// Las 6 secciones son obligatorias y no vacias. Esa es justamente la garantia
+// que faltaba: `legalBasis` y `closing` son las ultimas que emite el modelo y
+// por tanto las primeras que desaparecen cuando el output se corta. Un escrito
+// sin fundamento legal ni bloque de firma NO puede salir presentado como
+// completo.
+
+const DianSectionsSchema = z.object({
+  header: z.string().min(1).describe('Ciudad y fecha, destinatario DIAN, Direccion Seccional, referencia y NIT'),
+  opening: z.string().min(1).describe('Saludo formal ("Respetados senores:") e identificacion del requerimiento'),
+  body: z.string().min(1).describe('Cuerpo punto por punto, con fundamento normativo en cada respuesta'),
+  evidenceList: z.string().min(1).describe('Anexos numerados: "Anexo 1: ...", "Anexo 2: ..."'),
+  legalBasis: z.string().min(1).describe('Articulos del E.T. y doctrina aplicable'),
+  closing: z.string().min(1).describe('"Cordialmente," + nombre, NIT/CC, contador publico y tarjeta profesional si aplica'),
+});
+
+export const DianResponseDraftSchema = z.object({
+  sections: DianSectionsSchema,
+  // Los articulos del ejemplo son solo ilustrativos del FORMATO de la cita; el
+  // codigo no depende de ellos. Verificados vigentes a 2026-08:
+  //   Art. 705 E.T.   — Termino para notificar el requerimiento especial
+  //                     (3 anos; termino elevado de 2 a 3 por la Ley 1819/2016).
+  //   Art. 771-2 E.T. — Procedencia de costos, deducciones e impuestos
+  //                     descontables (exige factura o documento equivalente).
+  citedArticles: z.array(z.string().min(1)).describe('Ej: ["Art. 705 E.T.", "Art. 771-2 E.T."]'),
+  warnings: z.array(z.string().min(1)).describe('Riesgos procesales o datos faltantes que el contador debe revisar'),
+});
+
+// El schema NO va en prosa — lo enforza `Output.object({ schema })`. Aqui solo
+// queda la estructura formal del escrito y las reglas de juicio.
 const GENERATION_SYSTEM_PROMPT = `Eres un experto en procedimiento tributario colombiano especializado en redactar respuestas formales a requerimientos de la DIAN.
 
-Tu tarea es generar un borrador de respuesta profesional en formato oficial colombiano.
+<task>Redactar el borrador de una respuesta formal en el formato oficial colombiano.</task>
 
-DEBES responder UNICAMENTE con un objeto JSON valido (sin markdown, sin backticks) con esta estructura:
-
-{
-  "sections": {
-    "header": "Encabezado completo con destinatario, referencia, NIT",
-    "opening": "Saludo formal e identificacion del requerimiento",
-    "body": "Cuerpo estructurado respondiendo punto por punto, citando articulos",
-    "evidenceList": "Lista numerada de anexos/documentos soporte",
-    "legalBasis": "Fundamentos juridicos aplicables",
-    "closing": "Cierre profesional con bloque de firma"
-  },
-  "citedArticles": ["Art. XXX E.T.", "Art. YYY E.T."],
-  "warnings": ["Advertencia o nota importante para el contador"]
-}
-
-FORMATO DE LA RESPUESTA DIAN:
-1. ENCABEZADO: Ciudad y fecha, "Senores DIRECCION DE IMPUESTOS Y ADUANAS NACIONALES - DIAN", Direccion Seccional, Ciudad.
-2. REFERENCIA: Tipo de requerimiento, numero y fecha.
-3. ASUNTO: Respuesta al requerimiento con identificacion del contribuyente y NIT.
-4. SALUDO: "Respetados senores:"
-5. CUERPO: "En atencion al [tipo de requerimiento] No. [numero] del [fecha], me permito dar respuesta en los siguientes terminos:" seguido de respuesta punto por punto.
-6. ANEXOS: "Para efectos probatorios, adjunto los siguientes documentos:" seguido de lista numerada "Anexo 1: ...", "Anexo 2: ...".
-7. FUNDAMENTO LEGAL: Articulos del E.T. y doctrina aplicable.
-8. CIERRE: "Cordialmente," seguido de nombre, NIT/CC, contador publico (si aplica), tarjeta profesional.
-
-REGLAS:
-- Usa lenguaje formal y juridico colombiano.
-- Cita articulos especificos del Estatuto Tributario.
-- Cada punto del requerimiento debe tener una respuesta estructurada.
-- Incluye recomendaciones en warnings si detectas riesgos procesales.
-- Si faltan datos (NIT, numero de requerimiento), usa placeholders como [NIT DEL CONTRIBUYENTE].
-- SIEMPRE responde en espanol.`;
+<constraints>
+  - NEVER cites articulos, doctrina, cifras o hechos que no consten en el requerimiento o en los hechos relevantes recibidos.
+  - Estructura del escrito: encabezado (ciudad y fecha, "Senores DIRECCION DE IMPUESTOS Y ADUANAS NACIONALES - DIAN", Direccion Seccional, Ciudad); referencia (tipo de requerimiento, numero y fecha); asunto con identificacion del contribuyente y NIT; saludo "Respetados senores:"; cuerpo que abre con "En atencion al [tipo] No. [numero] del [fecha], me permito dar respuesta en los siguientes terminos:" y responde punto por punto; anexos numerados precedidos de "Para efectos probatorios, adjunto los siguientes documentos:"; fundamento legal; cierre "Cordialmente," con bloque de firma.
+  - Lenguaje formal y juridico colombiano.
+  - Cada punto del requerimiento debe tener su respuesta con fundamento normativo.
+  - If faltan datos (NIT, numero de requerimiento, fecha) then usa un placeholder explicito como [NIT DEL CONTRIBUYENTE] y anotalo en warnings, otherwise no agregues placeholders.
+  - If detectas un riesgo procesal (termino por vencer, carga probatoria no cubierta) then registralo en warnings.
+  - Responde siempre en espanol.
+</constraints>`;
 
 /**
  * Generate a professional DIAN response draft.
@@ -81,52 +99,36 @@ export async function generateDianResponse(
   const userPrompt = buildPromptFromRequest(request);
 
   try {
-    const result = await generateText({
+    const json = await callStructuredTool({
+      toolName: 'dian-response-generator',
       model: MODELS.CHAT,
-      messages: [
-        { role: 'system', content: GENERATION_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.2,
+      schema: DianResponseDraftSchema,
+      system: GENERATION_SYSTEM_PROMPT,
+      userContent: userPrompt,
       maxOutputTokens: 3000,
+      temperature: 0.2,
     });
 
-    const content = result.text?.trim();
-    if (!content) {
-      return fallbackDraft(request, 'No se obtuvo respuesta del modelo.');
-    }
-
-    const cleaned = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-    const parsed = JSON.parse(cleaned);
-
-    // Assemble the full draft from sections
-    const sections = parsed.sections || {};
+    const { sections } = json;
     const fullDraft = [
-      sections.header || '',
+      sections.header,
       '',
-      sections.opening || '',
+      sections.opening,
       '',
-      sections.body || '',
+      sections.body,
       '',
-      sections.evidenceList || '',
+      sections.evidenceList,
       '',
-      sections.legalBasis || '',
+      sections.legalBasis,
       '',
-      sections.closing || '',
+      sections.closing,
     ].join('\n');
 
     return {
       fullDraft,
-      sections: {
-        header: sections.header || '',
-        opening: sections.opening || '',
-        body: sections.body || '',
-        evidenceList: sections.evidenceList || '',
-        legalBasis: sections.legalBasis || '',
-        closing: sections.closing || '',
-      },
-      citedArticles: Array.isArray(parsed.citedArticles) ? parsed.citedArticles : [],
-      warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+      sections,
+      citedArticles: json.citedArticles,
+      warnings: json.warnings,
     };
   } catch (error) {
     console.error('DIAN response generation failed:', error);

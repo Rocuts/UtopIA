@@ -315,7 +315,7 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
           <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500">
             {isEs ? 'Tendencia · Pilar Futuro' : 'Trend · Future Pillar'}
           </span>
-          <span className="text-xs text-n-600 dark:text-n-600">
+          <span className="text-xs text-n-600">
             {isEs
               ? 'Factores: Base ajustable · Conservador 0.85× · Agresivo 1.10×'
               : 'Factors: Adjustable base · Conservative 0.85× · Aggressive 1.10×'}
@@ -385,7 +385,7 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1',
                   isActive
                     ? 'bg-violet-600 text-white shadow-sm'
-                    : 'bg-n-50 text-n-700 hover:bg-n-100 dark:bg-n-800 dark:text-n-300 dark:hover:bg-n-700',
+                    : 'bg-n-50 text-n-700 hover:bg-n-100',
                   !hasBalance ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
                 ].join(' ')}
                 aria-pressed={isActive}
@@ -410,18 +410,17 @@ export function FuturoTrendBars({ series, language, density, balance, workspaceI
                 className={[
                   'w-16 rounded-md border border-n-200 bg-n-50 px-2 py-1 text-xs-mono text-n-900',
                   'focus:outline-none focus:ring-2 focus:ring-violet-500',
-                  'dark:border-n-700 dark:bg-n-800 dark:text-n-100',
                   !hasBalance ? 'cursor-not-allowed opacity-40' : '',
                 ].join(' ')}
               />
-              <span className="text-xs text-n-600 dark:text-n-600">%</span>
+              <span className="text-xs text-n-600">%</span>
             </div>
           )}
         </div>
 
         {/* Etiqueta dinámica o mensaje "Sube un balance" */}
         {hasBalance ? (
-          <p className="text-xs text-n-600 dark:text-n-600">
+          <p className="text-xs text-n-600">
             {isEs
               ? `Crecimiento esperado: ${formatGrowthPct(growthOverride)} (escenario base)`
               : `Expected growth: ${formatGrowthPct(growthOverride)} (base scenario)`}

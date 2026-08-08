@@ -28,7 +28,7 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('block rounded animate-pulse bg-n-300/30 dark:bg-n-700/30', className)}
+      className={cn('block rounded animate-pulse bg-n-300/30', className)}
     />
   );
 }
@@ -82,7 +82,7 @@ function ScenarioCard({ escenario, isRecommended, language }: ScenarioCardProps)
         'relative flex flex-col gap-3 p-4 rounded-lg',
         isRecommended
           ? 'ring-2 ring-gold-500 bg-[rgb(var(--color-gold-500-rgb)_/_0.06)]'
-          : 'ring-1 ring-n-200/40 dark:ring-n-800/40 bg-n-50/30 dark:bg-n-900/20',
+          : 'ring-1 ring-n-200/40 bg-n-50/30',
       )}
       aria-label={SCENARIO_LABEL[escenario.nombre][language]}
     >
@@ -138,7 +138,7 @@ function ScenarioCard({ escenario, isRecommended, language }: ScenarioCardProps)
       )}
 
       {/* Justificación */}
-      <p className="text-xs leading-relaxed text-n-700 dark:text-n-600 line-clamp-3">
+      <p className="text-xs leading-relaxed text-n-700 line-clamp-3">
         {escenario.justificacion}
       </p>
     </div>
@@ -236,7 +236,7 @@ export function PlaneacionCard({ data, loading, error, t, language = 'es' }: Pla
           {data.warnings.length > 0 && (
             <ul role="list" className="flex flex-col gap-1.5">
               {data.warnings.map((w, i) => (
-                <li key={i} className="text-xs text-n-700 dark:text-n-600 flex items-start gap-1.5">
+                <li key={i} className="text-xs text-n-700 flex items-start gap-1.5">
                   <span aria-hidden="true" className="shrink-0 mt-1 h-1 w-1 rounded-full bg-warning" />
                   {w}
                 </li>
@@ -248,7 +248,7 @@ export function PlaneacionCard({ data, loading, error, t, language = 'es' }: Pla
 
       {/* Footer */}
       {!loading && !error && (
-        <div className="mt-auto pt-2 border-t border-n-200/40 dark:border-n-800/40">
+        <div className="mt-auto pt-2 border-t border-n-200/40">
           <NormaCitation norma="Arts. 254-260 E.T." />
         </div>
       )}

@@ -155,23 +155,103 @@ export const financialReportRequestSchema = z.object({
 export const excludedFactIdsSchema = z.array(z.string().max(64)).max(200);
 
 // ---- Financial report split endpoints (Wave 3.F1) ----
-// `/api/financial-report/strategy` and `/api/financial-report/governance` son
-// stateless por diseño: el caller envia el output del agente anterior + los
-// totales vinculantes pre-calculados. El shape de `niifResult` / `preprocessed`
-// se valida con un `z.object({}).passthrough()` permisivo + cast en el handler
-// (mismo patron que `financialAuditRequestSchema`) porque los schemas Zod
-// recursivos completos de NiifAnalysisResult / PreprocessedBalance son
-// prohibitivamente caros y la informacion de tipos vive en el codigo TS.
+// `/api/financial-report/strategy` y `/api/financial-report/governance` son
+// stateless por diseño: el navegador reenvia el output del agente anterior +
+// los totales vinculantes pre-calculados.
+//
+// ENDURECIDO (auditoria 2026-08). Antes el handoff se validaba con
+// `z.object({ fullContent }).passthrough()`: cualquier clave que mandara el
+// cliente sobrevivia el parseo y el servidor la trataba como si la hubiera
+// producido el pipeline. Ahora la regla es shape EXPLICITO: Zod elimina toda
+// clave desconocida (comportamiento por defecto de `z.object`), de modo que al
+// handler solo llega lo que las fases 2 y 3 realmente consumen. Y lo que
+// consumen es, hoy, unicamente `fullContent` (ver `runStrategyDirector` /
+// `runGovernanceSpecialist`; el resto de secciones se conservan por
+// compatibilidad de tipo con `NiifAnalysisResult` / `StrategicAnalysisResult`).
+//
+// QUE GANA ESTO, Y QUE NO (revision adversarial 2026-08 — leelo antes de dar
+// el handoff por blindado):
+//
+//   GANA. Reduccion de superficie + cota de tamaño. `niifResult.json`
+//   (cifras en centavos) y `niifResult.reconciliation` (veredicto del
+//   reconciliador) ya no sobreviven el parseo, asi que ninguna fase futura
+//   puede empezar a leerlos por accidente creyendo que los produjo el
+//   pipeline. Y `fullContent` / `bindingTotals` dejan de ser un canal de
+//   prompt-stuffing y de gasto de tokens sin techo.
+//
+//   NO GANA. Esto NO hace autoritativo el sello "REPORTE CON SALVEDADES" ni
+//   el bloqueo de descarga. El bloqueo se decide en el navegador
+//   (`PipelineWorkspace`: `report.niifAnalysis.reconciliation.clean`), sobre
+//   estado del propio cliente, y el sello lo estampa `runNiifPhase` DENTRO de
+//   `fullContent` / `balanceSheet` (orchestrator.ts ~1637) — que es
+//   justamente el campo que se conserva verbatim. Un cliente que quiera
+//   quitarse las salvedades edita su propio estado o recorta el bloque del
+//   Markdown antes de reenviarlo; nunca necesito `reconciliation`. Cerrar el
+//   shape no toca ese camino.
+//
+// Si una fase futura necesita `niifResult.json`, se declara AQUI con su shape y
+// su procedencia; NO se reabre `.passthrough()`.
+
+/**
+ * Techo de longitud del Markdown de handoff entre fases. El NIIF Analyst
+ * produce del orden de 40-80K caracteres; un balance multiperiodo puede
+ * inflarlo. 500K deja margen amplio y a la vez cierra el handoff como canal de
+ * prompt-stuffing / gasto de tokens ilimitado: `fullContent` viaja CRUDO al
+ * prompt del siguiente agente.
+ */
+export const HANDOFF_MAX_CHARS = 500_000;
+
+/**
+ * Techo del bloque TOTALES VINCULANTES. Es un resumen tabular (decenas de
+ * renglones), no un documento; 200K es holgado y sigue acotando el prompt.
+ */
+export const BINDING_TOTALS_MAX_CHARS = 200_000;
+
+/** Seccion Markdown de un handoff: opcional, acotada, sin claves extra. */
+const handoffSection = z.string().max(HANDOFF_MAX_CHARS).optional();
+
+/**
+ * Output de la Fase 1 (NIIF Analyst) tal como lo reenvia el cliente. Shape
+ * cerrado — todo lo no declarado se descarta en el parseo.
+ */
+const niifHandoffSchema = z.object({
+  fullContent: z.string().min(1).max(HANDOFF_MAX_CHARS),
+  balanceSheet: handoffSection,
+  incomeStatement: handoffSection,
+  cashFlowStatement: handoffSection,
+  equityChangesStatement: handoffSection,
+  technicalNotes: handoffSection,
+});
+
+/**
+ * Output de la Fase 2 (Strategy Director) tal como lo reenvia el cliente.
+ * Shape cerrado, mismo criterio que `niifHandoffSchema`.
+ */
+const strategyHandoffSchema = z.object({
+  fullContent: z.string().min(1).max(HANDOFF_MAX_CHARS),
+  kpiDashboard: handoffSection,
+  breakEvenAnalysis: handoffSection,
+  projectedCashFlow: handoffSection,
+  strategicRecommendations: handoffSection,
+});
 
 /**
  * Body para POST /api/financial-report/strategy. El caller envia el
  * `niifResult` ya generado por /niif, el bloque `bindingTotals` que /niif
  * pre-calculo, y opcionalmente el `preprocessed` completo (recomendado para
  * activar modo comparativo + elite context).
+ *
+ * `preprocessed` sigue siendo `z.unknown()` a proposito: el handler lo pasa por
+ * `revivePreprocessedBalance()`, que valida estructura y revive los BigInt de
+ * centavos, y rechaza con 400 si no cuadra. Duplicar ese contrato aqui en Zod
+ * lo desincronizaria.
  */
 export const strategyPhaseRequestSchema = z.object({
-  niifResult: z.object({ fullContent: z.string().min(1) }).passthrough(),
-  bindingTotals: z.string().min(1, 'bindingTotals (pre-calculados por phase 1) is required'),
+  niifResult: niifHandoffSchema,
+  bindingTotals: z
+    .string()
+    .min(1, 'bindingTotals (pre-calculados por phase 1) is required')
+    .max(BINDING_TOTALS_MAX_CHARS, 'bindingTotals too large'),
   preprocessed: z.unknown().optional(),
   company: companyInfoSchema,
   language: z.enum(['es', 'en']).default('es'),
@@ -183,9 +263,12 @@ export const strategyPhaseRequestSchema = z.object({
  * incluye tambien el `strategyResult`.
  */
 export const governancePhaseRequestSchema = z.object({
-  niifResult: z.object({ fullContent: z.string().min(1) }).passthrough(),
-  strategyResult: z.object({ fullContent: z.string().min(1) }).passthrough(),
-  bindingTotals: z.string().min(1, 'bindingTotals (pre-calculados por phase 1) is required'),
+  niifResult: niifHandoffSchema,
+  strategyResult: strategyHandoffSchema,
+  bindingTotals: z
+    .string()
+    .min(1, 'bindingTotals (pre-calculados por phase 1) is required')
+    .max(BINDING_TOTALS_MAX_CHARS, 'bindingTotals too large'),
   preprocessed: z.unknown().optional(),
   company: companyInfoSchema,
   language: z.enum(['es', 'en']).default('es'),

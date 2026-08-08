@@ -189,8 +189,8 @@ function AlertCard({ alerta, language, isResolving, onResolve }: AlertCardProps)
               className={cn(
                 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md',
                 'text-xs font-medium',
-                'bg-n-50 dark:bg-n-900 border border-n-200 dark:border-n-700',
-                'text-n-700 hover:text-n-1000 hover:border-n-400 dark:hover:border-n-500',
+                'bg-n-50 border border-n-200',
+                'text-n-700 hover:text-n-1000 hover:border-n-400',
                 'transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed disabled:text-n-600',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1',
@@ -222,7 +222,7 @@ function AlertCard({ alerta, language, isResolving, onResolve }: AlertCardProps)
       </div>
 
       {/* Footer — norma citada */}
-      <div className="border-t border-n-200 dark:border-n-800 pt-2 flex items-center gap-2">
+      <div className="border-t border-n-200 pt-2 flex items-center gap-2">
         <span className="text-xs text-n-500">
           {language === 'es' ? 'Norma:' : 'Rule:'}
         </span>

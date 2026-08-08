@@ -13,6 +13,12 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
 import { excludedFactIdsSchema } from '@/lib/validation/schemas';
+import {
+  runWithTelemetryContext,
+  asTelemetryUuid,
+  resolveOwnedReportId,
+  type TelemetryContext,
+} from '@/lib/db/telemetry';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/strategy (Wave 3.F1)
@@ -64,6 +70,28 @@ export async function POST(req: Request) {
       { excludedFactIds },
     );
 
+    // Telemetría — mismo cableado que /niif: el tenant se fija en el contexto
+    // AQUÍ, dentro del scope del request. Dentro del stream SSE la cookie ya no
+    // es legible y `persistAgentTelemetry` descartaba cada medición del
+    // Director de Estrategia. Ver src/lib/db/telemetry.ts.
+    // El contexto lleva el valor CRUDO, no el filtrado: quien clasifica el modo
+    // de fallo es `persistAgentTelemetry` (`workspace-no-uuid` vs
+    // `sin-workspace`), y esa distincion es justo el diagnostico que el
+    // operador necesita. Si filtraramos aqui, una cookie `utopia_workspace_id`
+    // corrupta llegaria al contexto como `null`, la persistencia caeria al
+    // fallback de `cookies()` — que dentro del stream SSE lanza — y la medicion
+    // quedaria registrada como `sin-workspace`: el operador buscaria un route
+    // handler sin cablear en vez de la cookie corrupta, que es el bug real.
+    // El filtro de uuid sigue existiendo aguas abajo, antes del INSERT.
+    const telemetryWorkspaceId = asTelemetryUuid(workspaceId);
+    const telemetryCtx: TelemetryContext = {
+      workspaceId: workspaceId ?? null,
+      reportId: await resolveOwnedReportId(
+        (body as { reportId?: unknown }).reportId,
+        telemetryWorkspaceId,
+      ),
+    };
+
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
@@ -86,26 +114,30 @@ export async function POST(req: Request) {
     }
 
     if (stream) {
-      return handleStreaming({
+      return runWithTelemetryContext(telemetryCtx, () =>
+        handleStreaming({
+          niifResult: typedNiif,
+          bindingTotals,
+          preprocessed: typedPp,
+          company,
+          language,
+          instructions,
+          hechosEmpresa,
+        }),
+      );
+    }
+
+    const strategy = await runWithTelemetryContext(telemetryCtx, () =>
+      runStrategyPhase({
         niifResult: typedNiif,
         bindingTotals,
         preprocessed: typedPp,
         company,
         language,
         instructions,
-        hechosEmpresa,
-      });
-    }
-
-    const strategy = await runStrategyPhase({
-      niifResult: typedNiif,
-      bindingTotals,
-      preprocessed: typedPp,
-      company,
-      language,
-      instructions,
-      elite: hechosEmpresa ? { hechosEmpresa } : undefined,
-    });
+        elite: hechosEmpresa ? { hechosEmpresa } : undefined,
+      }),
+    );
 
     return NextResponse.json({ strategy });
   } catch (error) {

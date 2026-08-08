@@ -18,7 +18,7 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('block rounded animate-pulse bg-n-300/30 dark:bg-n-700/30', className)}
+      className={cn('block rounded animate-pulse bg-n-300/30', className)}
     />
   );
 }
@@ -128,12 +128,12 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
         <div className="flex flex-col gap-4">
           {/* Type + plazo */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1 p-3 rounded-md bg-n-50/50 dark:bg-n-900/20 ring-1 ring-n-200/40 dark:ring-n-800/40">
+            <div className="flex flex-col gap-1 p-3 rounded-md bg-n-50/50 ring-1 ring-n-200/40">
               <span className="text-xs uppercase tracking-eyebrow text-n-500">{t.tipoLabel}</span>
               <span className="font-medium text-n-1000 text-sm">{kindInfo?.[language] ?? data.data.tipoRequerimiento}</span>
               {kindInfo?.norma && <NormaCitation norma={kindInfo.norma} />}
             </div>
-            <div className="flex flex-col gap-1 p-3 rounded-md bg-n-50/50 dark:bg-n-900/20 ring-1 ring-n-200/40 dark:ring-n-800/40">
+            <div className="flex flex-col gap-1 p-3 rounded-md bg-n-50/50 ring-1 ring-n-200/40">
               <span className="text-xs uppercase tracking-eyebrow text-n-500 flex items-center gap-1">
                 <Clock className="h-3 w-3" aria-hidden="true" />
                 {t.plazoLabel}
@@ -157,7 +157,7 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
               <p className="text-xs uppercase tracking-eyebrow text-n-500 font-medium mb-1.5">{t.reduccionesLabel}</p>
               <ul role="list" className="flex flex-col gap-1">
                 {data.data.reduccionesDisponibles.map((r, i) => (
-                  <li key={i} className="text-xs text-n-700 dark:text-n-600 flex items-start gap-1.5">
+                  <li key={i} className="text-xs text-n-700 flex items-start gap-1.5">
                     <span aria-hidden="true" className="shrink-0 mt-1 h-1 w-1 rounded-full bg-success" />
                     {r}
                   </li>
@@ -175,8 +175,8 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
               aria-controls="carta-defensa-preview"
               className={cn(
                 'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm font-medium',
-                'bg-n-100/60 dark:bg-n-800/60 text-n-800 dark:text-n-700',
-                'hover:bg-n-200/60 dark:hover:bg-n-700/60 transition-colors',
+                'bg-n-100/60 text-n-800',
+                'hover:bg-n-200/60 transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-area-escudo',
               )}
             >
@@ -190,11 +190,11 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
                 id="carta-defensa-preview"
                 className={cn(
                   'mt-2 p-3 rounded-md max-h-64 overflow-y-auto',
-                  'bg-n-50/60 dark:bg-n-900/40 ring-1 ring-n-200/40 dark:ring-n-800/40',
+                  'bg-n-50/60 ring-1 ring-n-200/40',
                 )}
                 data-lenis-prevent
               >
-                <pre className="text-xs leading-relaxed text-n-800 dark:text-n-700 whitespace-pre-wrap font-[family-name:var(--font-geist-mono,monospace)]">
+                <pre className="text-xs leading-relaxed text-n-800 whitespace-pre-wrap font-[family-name:var(--font-geist-mono,monospace)]">
                   {data.data.cartaCompleta}
                 </pre>
               </div>
@@ -221,7 +221,7 @@ export function DefensaDianCard({ data, loading, error, t, language = 'es' }: De
 
       {/* Footer */}
       {!loading && !error && (
-        <div className="mt-auto pt-2 border-t border-n-200/40 dark:border-n-800/40">
+        <div className="mt-auto pt-2 border-t border-n-200/40">
           <NormaCitation norma="Art. 647 E.T." />
         </div>
       )}

@@ -17,6 +17,21 @@ import * as authSchema from '@/lib/db/schema-auth';
 // FAIL-CLOSED: if the env var is unset/empty, NO ONE can register. This is the
 // intended closed-beta default — set the allowlist (including the admin email)
 // before onboarding. Remove/relax this hook to open registration.
+//
+// ⚠️  RIESGO DE LOCK-OUT EN EL FLIP A FASE 2 — leer antes de activar auth.
+//     El hook `databaseHooks.user.create.before` (más abajo) rechaza con
+//     APIError FORBIDDEN cualquier email que no esté en UTOPIA_AUTH_ALLOWLIST.
+//     No hay seed de administrador ni bypass del primer usuario: si se pone
+//     BETTER_AUTH_SECRET en producción con UTOPIA_AUTH_ALLOWLIST vacía, NADIE
+//     puede registrarse — ni siquiera el dueño — y como no hay cuentas
+//     previas, tampoco hay forma de entrar a arreglarlo desde la app. La
+//     recuperación exige tocar env vars en Vercel (y redesplegar) o insertar
+//     el usuario a mano en la DB.
+//     Checklist del flip: setear UTOPIA_AUTH_ALLOWLIST con el email del admin
+//     ANTES (o a la vez que) BETTER_AUTH_SECRET, nunca después.
+//     No se "arregla" aquí a propósito: abrir el registro cuando falta la
+//     variable convertiría un despliegue mal configurado en un registro
+//     público abierto — peor que quedarse fuera.
 // ---------------------------------------------------------------------------
 function signupAllowlist(): Set<string> {
   return new Set(
@@ -101,6 +116,57 @@ function buildBillingPlugins() {
     }),
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Assert de arranque — BETTER_AUTH_URL es obligatoria en producción.
+//
+// El `baseURL` de abajo cae a `https://${VERCEL_URL}` cuando falta
+// BETTER_AUTH_URL. En preview eso es deliberado: cada deploy efímero emite sus
+// cookies para su propio host y no hay que tocar env por rama. En PRODUCCIÓN
+// el mismo fallback es un fallo silencioso caro — VERCEL_URL es el host
+// interno del deployment, no el dominio canónico, así que las cookies de
+// sesión se emiten para un origen que el usuario nunca visita y los callbacks
+// OAuth apuntan a una URL muerta. El síntoma es "el login no funciona" sin un
+// solo error en los logs.
+//
+// Sólo dispara en la combinación exacta que importa (fase 2 + producción):
+// en fase 1 y en preview/dev no cambia absolutamente nada.
+//
+// Nota sobre dónde aterriza el throw: los consumidores importan este módulo de
+// forma perezosa y dentro de try/catch (`require-session.ts`,
+// `db/workspace.ts`), así que en caliente el efecto es que la validación de
+// sesión falla CERRADA (401) en vez de emitir cookies para el origen
+// equivocado. Es el modo de fallo correcto.
+// ---------------------------------------------------------------------------
+type AuthEnvVars = {
+  BETTER_AUTH_SECRET?: string;
+  BETTER_AUTH_URL?: string;
+  VERCEL_ENV?: string;
+  /** Sólo documenta el fallback que este assert impide usar en producción. */
+  VERCEL_URL?: string;
+  // La firma de índice existe para poder pasar `process.env` tal cual: sin
+  // ella TS aplica la regla de "weak type" (todas las props opcionales) y
+  // rechaza ProcessEnv por no compartir propiedades declaradas.
+  [key: string]: string | undefined;
+};
+
+export function assertAuthUrlConfigured(
+  env: AuthEnvVars = process.env,
+): void {
+  if (!env.BETTER_AUTH_SECRET) return; // fase 1: auth apagada, nada que validar
+  if (env.VERCEL_ENV !== 'production') return; // preview/dev: el fallback es válido
+  if (env.BETTER_AUTH_URL) return;
+  throw new Error(
+    '[auth] BETTER_AUTH_URL es obligatoria cuando BETTER_AUTH_SECRET está ' +
+      'definida en producción. Sin ella baseURL cae a https://$VERCEL_URL (el ' +
+      'host interno del deployment) y las cookies de sesión se emiten para un ' +
+      'origen distinto del dominio canónico: el login falla en silencio. ' +
+      'Defina BETTER_AUTH_URL=https://<dominio-canónico> en las env vars de ' +
+      'producción en Vercel.',
+  );
+}
+
+assertAuthUrlConfigured();
 
 export const auth = betterAuth({
   database: drizzleAdapter(getDb(), {

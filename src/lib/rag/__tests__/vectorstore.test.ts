@@ -34,6 +34,9 @@ import {
 const mockEmbedMany = vi.mocked(embedMany);
 const mockGetDb = vi.mocked(getDb);
 
+/** Tenant de prueba — obligatorio para todo `user_upload`. */
+const WORKSPACE = '11111111-2222-3333-4444-555555555555';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -50,6 +53,9 @@ function makeChunkRow(overrides: Partial<Record<string, unknown>> = {}) {
     contextual_prefix: null,
     metadata: {},
     rrf_score: 0.85,
+    // La query real SIEMPRE proyecta `cosine_sim` (null si el chunk entro solo
+    // por el canal lexico). Un valor sobre el umbral = hit vectorial corroborado.
+    cosine_sim: 0.61,
     ...overrides,
   };
 }
@@ -182,8 +188,10 @@ describe('addDocumentsToStore', () => {
     vi.clearAllMocks();
   });
 
+  // Todos los casos de upload pasan `workspaceId`: desde 2026-08 la libreria
+  // RECHAZA un `user_upload` sin tenant (ver vectorstore-tenant-guard.test.ts).
   it('devuelve 0 cuando texts es un array vacío', async () => {
-    const result = await addDocumentsToStore([], {});
+    const result = await addDocumentsToStore([], { workspaceId: WORKSPACE });
     expect(result).toBe(0);
   });
 
@@ -196,7 +204,7 @@ describe('addDocumentsToStore', () => {
     const mockExecute = vi.fn().mockResolvedValue([]);
     mockGetDb.mockReturnValue({ execute: mockExecute } as unknown as ReturnType<typeof getDb>);
 
-    const count = await addDocumentsToStore([longText], { source: 'test.pdf' });
+    const count = await addDocumentsToStore([longText], { source: 'test.pdf', workspaceId: WORKSPACE });
 
     expect(count).toBeGreaterThan(0);
     expect(mockExecute).toHaveBeenCalled();
@@ -210,7 +218,7 @@ describe('addDocumentsToStore', () => {
       throw new Error('insert failed');
     });
 
-    const count = await addDocumentsToStore(['Texto de prueba'], { source: 'test.pdf' });
+    const count = await addDocumentsToStore(['Texto de prueba'], { source: 'test.pdf', workspaceId: WORKSPACE });
 
     expect(count).toBe(0);
   });
@@ -221,7 +229,7 @@ describe('addDocumentsToStore', () => {
     const mockExecute = vi.fn().mockResolvedValue([]);
     mockGetDb.mockReturnValue({ execute: mockExecute } as unknown as ReturnType<typeof getDb>);
 
-    await addDocumentsToStore([text], { source: 'doc.pdf' });
+    await addDocumentsToStore([text], { source: 'doc.pdf', workspaceId: WORKSPACE });
 
     // El SQL generado debe contener 'user_upload'
     const callArg = mockExecute.mock.calls[0]?.[0];

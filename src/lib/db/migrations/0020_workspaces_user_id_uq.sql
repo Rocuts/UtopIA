@@ -1,0 +1,60 @@
+-- ---------------------------------------------------------------------------
+-- 0020 — Índice UNIQUE parcial sobre workspaces.user_id
+-- ---------------------------------------------------------------------------
+--
+-- QUÉ ARREGLA
+--   Hoy `workspaces.user_id` sólo tiene un índice NO único
+--   (`workspaces_user_id_idx`). Nada impide que un usuario autenticado termine
+--   con dos workspaces: `getOrCreateWorkspace()` hace SELECT-then-INSERT sin
+--   candado, así que dos requests concurrentes del mismo login (doble clic,
+--   dos pestañas, un retry del cliente) pueden insertar ambas. A partir de ahí
+--   el usuario ve una empresa u otra según lo que decida el planner. Este
+--   índice convierte esa condición de carrera en un error 23505 explícito.
+--
+--   Es PARCIAL (`WHERE user_id IS NOT NULL`) porque los 51 workspaces anónimos
+--   comparten `user_id = NULL` y en Postgres los NULL no colisionan en un
+--   índice único de todos modos — pero declararlo parcial deja la intención
+--   escrita y mantiene el índice pequeño.
+--
+--   Complemento en código: las tres funciones de `src/lib/db/workspace.ts` que
+--   buscan por `user_id` llevan `ORDER BY created_at ASC` para que, mientras
+--   el índice no exista, la selección sea al menos determinista.
+--
+-- ⚠️  ESTA MIGRACIÓN SE APLICA A MANO. NO ESTÁ EN meta/_journal.json.
+--
+--   Dos razones independientes, cualquiera basta:
+--
+--   1. `npm run db:migrate` contra producción HOY falla. La base se construyó
+--      con `drizzle-kit push`, así que la tabla de control de drizzle está
+--      vacía y el migrador intentaría aplicar las 12 migraciones pendientes
+--      en UNA sola transacción sobre objetos que ya existen. Journalear este
+--      archivo lo metería en esa misma bomba.
+--
+--   2. `CREATE INDEX CONCURRENTLY` no puede ejecutarse dentro de un bloque
+--      transaccional, y el migrador de drizzle envuelve todo en uno. Aunque el
+--      journal estuviera sano, esta sentencia fallaría con
+--      "CREATE INDEX CONCURRENTLY cannot run inside a transaction block".
+--      Usamos CONCURRENTLY a propósito: la variante bloqueante toma un
+--      ACCESS EXCLUSIVE sobre `workspaces`, que es la tabla raíz de todo el
+--      multi-tenant — congelaría la app entera mientras construye.
+--
+-- CÓMO APLICARLA (psql conectado a producción, fuera de transacción):
+--
+--   -- 1. Verificar que no hay duplicados; debe devolver 0 filas.
+--   SELECT user_id, count(*) FROM workspaces
+--    WHERE user_id IS NOT NULL GROUP BY user_id HAVING count(*) > 1;
+--
+--   -- 2. Crear el índice (la sentencia de abajo).
+--
+--   -- 3. Comprobar que quedó válido. Un CREATE ... CONCURRENTLY que falla
+--   --    deja el índice en estado INVALID y hay que hacerle DROP y reintentar.
+--   SELECT indisvalid FROM pg_index
+--    WHERE indexrelid = 'workspaces_user_id_uq'::regclass;
+--
+-- Estado verificado el 2026-08-08 en producción: 52 workspaces, 1 con user_id,
+-- 1 user_id distinto → sin duplicados, el índice construye limpio.
+-- ---------------------------------------------------------------------------
+
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS workspaces_user_id_uq
+  ON workspaces (user_id)
+  WHERE user_id IS NOT NULL;

@@ -89,8 +89,11 @@ describe('RAG — gate de relevancia', () => {
     await searchDocuments('cuantas patas tiene un gato');
 
     const text = sqlText(execute.mock.calls[0]?.[0]);
-    // El subselect ordenado se filtra POR FUERA (patron pgvector) con el umbral.
-    expect(text).toMatch(/WHERE v\.dist <= \?0\.7\?/);
+    // El subselect ordenado se filtra POR FUERA (patron pgvector) con el umbral
+    // CALIBRADO 0.48 ⇒ distancia maxima 0.52. Ver scripts/rag-calibrate-threshold.ts:
+    // con 0.30 la consulta-ruido de control ("receta de arepas de choclo con
+    // queso", top1=0.355) entregaba 30 chunks rotulados "Fuente:".
+    expect(text).toMatch(/WHERE v\.dist <= \?0\.52\?/);
   });
 
   it('no usa una CTE compartida: cada canal lee directo de rag_chunks (indice HNSW vivo)', async () => {
@@ -106,6 +109,31 @@ describe('RAG — gate de relevancia', () => {
     // vector_hits + lex_hits + JOIN final = 3 lecturas directas de la tabla.
     expect(text.match(/FROM rag_chunks/g)?.length).toBeGreaterThanOrEqual(2);
     expect(text).toContain('JOIN rag_chunks c ON c.id = fused.id');
+  });
+
+  // -------------------------------------------------------------------------
+  // Deduplicacion de la ventana. El corpus tiene 51,4% de chunks repetidos
+  // (el ingest corrio dos veces: decreto_1625_2016.md tiene 9.800 chunks y
+  // 4.892 contenidos distintos). Medido con scripts/rag-corpus-dedup-report.ts,
+  // el especialista recibia 4,7 de 8 contenidos distintos — el 41% de su
+  // ventana era el MISMO parrafo repetido, gastando tokens y sesgando al
+  // modelo hacia lo que aparece dos veces.
+  // -------------------------------------------------------------------------
+  it('deduplica por contenido en el SELECT final (la ventana no repite parrafos)', async () => {
+    mockEmbedding();
+    const execute = vi.fn().mockResolvedValue([]);
+    mockGetDb.mockReturnValue({ execute } as never);
+
+    await searchDocuments('tarifa general del impuesto sobre la renta');
+
+    const text = sqlText(execute.mock.calls[0]?.[0]);
+    expect(text).toMatch(/DISTINCT ON \(md5\(c\.content\)\)/);
+    // Se conserva la copia mejor rankeada, y entre empates la que trae prueba
+    // vectorial (dist no nula) para no perder la corroboracion semantica.
+    expect(text).toMatch(/ORDER BY md5\(c\.content\), fused\.rrf_score DESC/);
+    expect(text).toMatch(/vector_hits\.dist ASC NULLS LAST/);
+    // El orden final sigue siendo por relevancia, no por hash.
+    expect(text).toMatch(/ORDER BY d\.rrf_score DESC/);
   });
 
   it('devuelve NO_RESULTS cuando el reranker descarta todos los candidatos', async () => {
@@ -125,6 +153,53 @@ describe('RAG — gate de relevancia', () => {
 
     expect(result).toContain('NO_RESULTS');
     expect(result).not.toContain('Resultado 1');
+  });
+
+  // -------------------------------------------------------------------------
+  // Gate de corroboracion semantica — el agujero que dejaba el rerank muerto.
+  //
+  // `maybeRerank()` salia con `rows.slice(0, topN)` ANTES del filtro por score
+  // cuando no hay COHERE_API_KEY (que es el estado real del deploy), asi que
+  // MIN_RERANK_SCORE nunca se evaluaba. Consecuencia concreta: un chunk que
+  // entra SOLO por el canal lexico (`cosine_sim = null`, sin ninguna prueba
+  // semantica) se servia como "Fuente:" aunque el canal vectorial no hubiera
+  // encontrado NADA sobre la consulta. Medido: las 16 consultas-ruido de
+  // control producen 0 hits lexicos, y las 20 normativas conservan sus 30 hits
+  // vectoriales a τ=0.48 — o sea, castigar al canal lexico con el umbral
+  // coseno costaria recall (p05 de sus hits = 0.447) sin cerrar ninguna fuga.
+  // El gate correcto es exigir CORROBORACION: si el canal vectorial no aporto
+  // ni un chunk, una coincidencia de palabras no es una fuente.
+  // -------------------------------------------------------------------------
+  it('sin COHERE_API_KEY, descarta los hits SOLO-lexicos cuando el canal vectorial no aporto nada', async () => {
+    mockEmbedding();
+    // Todos con cosine_sim null ⇒ ninguno supero el umbral vectorial; entraron
+    // por coincidencia de lexemas.
+    const rows = [
+      makeChunkRow({ cosine_sim: null, content: 'coincidencia lexica irrelevante' }),
+      makeChunkRow({ id: 'chunk-2', cosine_sim: null, content: 'otra coincidencia suelta' }),
+    ];
+    mockGetDb.mockReturnValue({ execute: vi.fn().mockResolvedValue(rows) } as never);
+
+    const result = await searchDocuments('melamina');
+
+    expect(result).toContain('NO_RESULTS');
+    expect(result).not.toContain('coincidencia lexica irrelevante');
+  });
+
+  it('sin COHERE_API_KEY, conserva los hits lexicos cuando el canal vectorial SI corrobora', async () => {
+    mockEmbedding();
+    const rows = [
+      makeChunkRow({ cosine_sim: 0.61, content: 'Art. 240 E.T. — tarifa del impuesto sobre la renta.' }),
+      // Hit solo-lexico: sin coseno propio, pero la consulta esta corroborada
+      // por el canal vectorial ⇒ se conserva (aporta match exacto de la cita).
+      makeChunkRow({ id: 'chunk-2', cosine_sim: null, content: 'paragrafo 5 del articulo 240' }),
+    ];
+    mockGetDb.mockReturnValue({ execute: vi.fn().mockResolvedValue(rows) } as never);
+
+    const result = await searchDocuments('Art. 240 E.T. tarifa');
+
+    expect(result).toContain('Art. 240 E.T.');
+    expect(result).toContain('paragrafo 5 del articulo 240');
   });
 
   it('conserva los chunks que el reranker sí puntua por encima del piso', async () => {

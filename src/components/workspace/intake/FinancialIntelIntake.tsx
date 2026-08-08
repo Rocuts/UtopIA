@@ -20,6 +20,8 @@ import { StepWizard, FileUploadZone } from '@/design-system';
 import type { WizardStep } from '@/design-system';
 import type { FinancialIntelIntake as FinancialIntelIntakeType } from '@/types/platform';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { dict } from '@/lib/i18n/dictionaries';
 import { useIntakePersistence } from './useIntakePersistence';
 import { IntakePreview } from './IntakePreview';
 import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtraction';
@@ -28,54 +30,19 @@ import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtrac
 
 type AnalysisType = FinancialIntelIntakeType['analyses'][number];
 
-const ANALYSIS_TYPES: Array<{
-  value: AnalysisType;
-  label: string;
-  description: string;
-  icon: typeof TrendingUp;
-}> = [
-  {
-    value: 'cash_flow',
-    label: 'Flujo de Caja',
-    description: 'Análisis y proyección del flujo de efectivo operativo, de inversión y financiamiento.',
-    icon: TrendingUp,
-  },
-  {
-    value: 'breakeven',
-    label: 'Punto de Equilibrio',
-    description: 'Cálculo del volumen de ventas necesario para cubrir costos fijos y variables.',
-    icon: Target,
-  },
-  {
-    value: 'dcf_valuation',
-    label: 'Valoración DCF',
-    description: 'Valoración por flujos de caja descontados con tasa WACC.',
-    icon: BarChart3,
-  },
-  {
-    value: 'cost_structure',
-    label: 'Estructura de Costos',
-    description: 'Desglose y análisis de costos fijos, variables y semi-variables.',
-    icon: PieChart,
-  },
-  {
-    value: 'profitability',
-    label: 'Rentabilidad',
-    description: 'Márgenes, ROE, ROA, EBITDA y otros indicadores de rendimiento.',
-    icon: Percent,
-  },
-  {
-    value: 'tax_simulation',
-    label: 'Simulación Tributaria',
-    description: 'Proyección de carga fiscal y escenarios de planeación tributaria.',
-    icon: Calculator,
-  },
-  {
-    value: 'merger_scenario',
-    label: 'Escenario de Fusión',
-    description: 'Modelado financiero de escenarios de integración empresarial.',
-    icon: GitMerge,
-  },
+/**
+ * Valor de enum + icono en el componente; etiqueta y descripción en
+ * `intake.financialIntel.analyses`. El valor es lo que se persiste y lo que
+ * viaja al pipeline, así que no puede depender del idioma de la interfaz.
+ */
+const ANALYSIS_TYPES: Array<{ value: AnalysisType; icon: typeof TrendingUp }> = [
+  { value: 'cash_flow', icon: TrendingUp },
+  { value: 'breakeven', icon: Target },
+  { value: 'dcf_valuation', icon: BarChart3 },
+  { value: 'cost_structure', icon: PieChart },
+  { value: 'profitability', icon: Percent },
+  { value: 'tax_simulation', icon: Calculator },
+  { value: 'merger_scenario', icon: GitMerge },
 ];
 
 const DEFAULT_VALUES: FinancialIntelIntakeType = {
@@ -87,12 +54,14 @@ const DEFAULT_VALUES: FinancialIntelIntakeType = {
 
 // ─── Confidence Dot ─────────────────────────────────────────────────────────
 
-function ConfidenceDot({ level }: { level?: FieldConfidence }) {
+type IntakeCommon = (typeof dict)['es']['intake']['common'];
+
+function ConfidenceDot({ level, c }: { level?: FieldConfidence; c: IntakeCommon }) {
   if (!level || level === 'none') return null;
   return (
     <span
       className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
-      title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
+      title={level === 'high' ? c.confHigh : c.confMedium}
     />
   );
 }
@@ -103,6 +72,9 @@ export function FinancialIntelIntake() {
   const { startNewConsultation, setIntakeModalOpen, clearIntakeDraft, setActiveMode } =
     useWorkspace();
   const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
+  const { language } = useLanguage();
+  const c = dict[language].intake.common;
+  const t = dict[language].intake.financialIntel;
   const [step, setStep] = useState(0);
   const [skippedUpload, setSkippedUpload] = useState(false);
   const [values, setValues] = useIntakePersistence('financial_intel', DEFAULT_VALUES);
@@ -196,10 +168,8 @@ export function FinancialIntelIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-600">
-          Cargue estados financieros o datos de soporte
-        </p>
+        <h3 className="text-base font-semibold text-n-900 mb-1">{c.uploadTitle}</h3>
+        <p className="text-xs text-n-600">{t.uploadSubtitle}</p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
@@ -210,19 +180,26 @@ export function FinancialIntelIntake() {
               <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-success/80">
-              {detected} de {totalFields} campos detectados automáticamente
+              {c.fieldsDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </p>
             {extractionState.extracted.isTrialBalance && (
               <div className="mt-2 pt-2 border-t border-success/20 text-xs text-success/80 space-y-0.5">
-                {extractionState.extracted.accountsDetected && <p>Cuentas detectadas: {extractionState.extracted.accountsDetected}</p>}
+                {extractionState.extracted.accountsDetected && (
+                  <p>
+                    {c.accountsDetected} {extractionState.extracted.accountsDetected}
+                  </p>
+                )}
                 {extractionState.extracted.equationValid !== undefined && (
-                  <p>Ecuación patrimonial: {extractionState.extracted.equationValid ? 'Válida' : 'Con discrepancias'}</p>
+                  <p>
+                    {c.equationLabel}{' '}
+                    {extractionState.extracted.equationValid ? c.equationValid : c.equationInvalid}
+                  </p>
                 )}
               </div>
             )}
           </div>
           <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
-            Subir otro archivo
+            {c.uploadAnother}
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
@@ -231,7 +208,7 @@ export function FinancialIntelIntake() {
             <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
           <p className="text-sm text-gold-700 mt-2 font-medium">
-            {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
+            {extractionState.status === 'uploading' ? c.uploading : c.extracting}
           </p>
           <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
             <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
@@ -243,15 +220,15 @@ export function FinancialIntelIntake() {
             <AlertCircle className="w-4 h-4 text-danger" />
             <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">{c.retry}</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={100}
-          label="Arrastre su archivo aquí"
-          sublabel="Estados financieros, balances de prueba, datos de soporte"
+          label={c.dropzoneLabel}
+          sublabel={t.dropzoneSublabel}
         />
       )}
 
@@ -261,7 +238,7 @@ export function FinancialIntelIntake() {
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
-          Llenar manualmente sin documento
+          {c.manualFill}
         </button>
       )}
     </div>
@@ -272,19 +249,17 @@ export function FinancialIntelIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Tipos de Análisis</h3>
-        <p className="text-xs text-n-500">
-          Seleccione uno o más tipos de análisis financiero. Minimo 1 requerido.
-        </p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.analysesStepTitle}</h3>
+        <p className="text-xs text-n-500">{t.analysesStepDesc}</p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
             <CheckCircle className="w-3.5 h-3.5 text-success" />
             <span className="text-xs text-success font-medium">
-              {detected} de {totalFields} campos auto-detectados
+              {c.fieldsAutoDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </span>
             <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> {c.confHighShort}
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> {c.confMediumShort}
             </span>
           </div>
         )}
@@ -317,9 +292,11 @@ export function FinancialIntelIntake() {
                 )}
               />
               <div>
-                <span className="text-sm font-medium text-n-900 block">{analysis.label}</span>
+                <span className="text-sm font-medium text-n-900 block">
+                  {t.analyses[analysis.value].label}
+                </span>
                 <p className="text-xs-mono text-n-500 leading-relaxed mt-0.5">
-                  {analysis.description}
+                  {t.analyses[analysis.value].description}
                 </p>
               </div>
             </button>
@@ -328,8 +305,15 @@ export function FinancialIntelIntake() {
       </div>
       {values.analyses.length > 0 && (
         <p className="text-xs text-gold-500 font-medium">
-          {values.analyses.length} análisis seleccionado{values.analyses.length > 1 ? 's' : ''}
-          {extractedConfidence.analyses && <ConfidenceDot level={extractedConfidence.analyses} />}
+          {/* El plural va como cadena completa, no como sufijo 's': en inglés
+              "analysis" → "analyses" cambia la raíz, no sólo la terminación. */}
+          {(values.analyses.length === 1 ? t.selectedOne : t.selectedMany).replace(
+            '{n}',
+            String(values.analyses.length),
+          )}
+          {extractedConfidence.analyses && (
+            <ConfidenceDot level={extractedConfidence.analyses} c={c} />
+          )}
         </p>
       )}
     </div>
@@ -340,14 +324,15 @@ export function FinancialIntelIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Detalles y Documentos</h3>
-        <p className="text-xs text-n-500">Periodo de análisis, pregunta específica y documentos soporte.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.detailsTitle}</h3>
+        <p className="text-xs text-n-500">{t.detailsDesc}</p>
       </div>
 
       {/* Periodo */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Periodo de análisis <ConfidenceDot level={extractedConfidence.period} /> <span className="text-danger ml-1">*</span>
+          {t.periodLabel} <ConfidenceDot level={extractedConfidence.period} c={c} />{' '}
+          <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="month"
@@ -360,8 +345,7 @@ export function FinancialIntelIntake() {
       {/* Pregunta especifica */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5">
-          Pregunta o instrucción específica{' '}
-          <span className="text-n-600 font-normal">-- opcional, max 500 caracteres</span>
+          {t.questionLabel} <span className="text-n-600 font-normal">{t.questionOptional}</span>
         </label>
         <textarea
           value={values.specificQuestion ?? ''}
@@ -370,7 +354,7 @@ export function FinancialIntelIntake() {
               updateField('specificQuestion', e.target.value);
             }
           }}
-          placeholder="Ej: Necesito comparar el margen EBITDA con el sector retail en Colombia..."
+          placeholder={t.questionPlaceholder}
           rows={3}
           className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 resize-none focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
@@ -384,8 +368,8 @@ export function FinancialIntelIntake() {
       {/* Documentos */}
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
-        label="Estados financieros y datos de soporte"
-        sublabel="PDF, DOCX, XLSX, CSV -- Max 100MB"
+        label={t.docsLabel}
+        sublabel={t.docsSublabel}
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={100}
       />
@@ -406,20 +390,20 @@ export function FinancialIntelIntake() {
   // ─── Wizard Steps ──────────────────────────────────────────────────────────
 
   const steps: WizardStep[] = [
-    { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
+    { id: 'upload', label: c.stepDocument, isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
     {
       id: 'analyses',
-      label: 'Análisis',
+      label: t.stepAnalyses,
       isValid: values.analyses.length >= 1,
       component: step1,
     },
     {
       id: 'details',
-      label: 'Detalles',
+      label: c.stepDetails,
       isValid: !!values.period,
       component: step2,
     },
-    { id: 'preview', label: 'Vista Previa', isValid: true, component: step3 },
+    { id: 'preview', label: c.stepPreview, isValid: true, component: step3 },
   ];
 
   return (
@@ -429,7 +413,7 @@ export function FinancialIntelIntake() {
       onNext={() => setStep((s) => Math.min(s + 1, steps.length - 1))}
       onBack={() => setStep((s) => Math.max(s - 1, 0))}
       onSubmit={handleSubmit}
-      submitLabel="Iniciar Análisis"
+      submitLabel={t.submitLabel}
       className="h-full"
     />
   );

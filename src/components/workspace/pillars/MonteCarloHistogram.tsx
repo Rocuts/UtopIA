@@ -96,7 +96,7 @@ interface MiniCardProps {
 function MiniCard({ label, value, color }: MiniCardProps) {
   return (
     <div
-      className="flex flex-col gap-0.5 rounded-lg border border-n-200 dark:border-n-700 bg-n-50 dark:bg-n-900 px-3 py-2 min-w-[90px]"
+      className="flex flex-col gap-0.5 rounded-lg border border-n-200 bg-n-50 px-3 py-2 min-w-[90px]"
     >
       <span className="font-mono text-[10px] uppercase tracking-widest text-n-500">{label}</span>
       <span
@@ -277,8 +277,8 @@ export function MonteCarloHistogram({ result, language, density }: MonteCarloHis
 
       {roi === null ? (
         /* Callout sin PPE */
-        <div className="rounded-lg border border-n-200 dark:border-n-700 bg-n-50 dark:bg-n-900 px-4 py-3">
-          <p className="text-xs text-n-600 dark:text-n-400 italic">{noPpeLabel}</p>
+        <div className="rounded-lg border border-n-200 bg-n-50 px-4 py-3">
+          <p className="text-xs text-n-600 italic">{noPpeLabel}</p>
         </div>
       ) : (
         <>

@@ -39,8 +39,16 @@ const nextConfig: NextConfig = {
   },
 
   allowedDevOrigins: ['localhost', '192.168.40.67'],
-  // CSP is set per-request with nonces in src/middleware.ts (replaces 'unsafe-inline').
-  // Static security headers that don't require per-request values stay here.
+  // CSP se emite por request, con nonce, desde `src/proxy.ts` (reemplaza
+  // 'unsafe-inline'). Aqui solo viven los headers estaticos que no necesitan
+  // valores por request.
+  //
+  // OJO: Next 16.2 renombro el interceptor de request; el archivo con el nombre
+  // legacy (pre-Next-16) fue ELIMINADO y recrearlo tumba el build de produccion
+  // — tener los dos archivos a la vez aborta `next build`. Por eso este config
+  // no debe volver a apuntar a esa ruta muerta: quien la lea va a buscarla, no
+  // la va a encontrar, y el siguiente paso natural rompe prod.
+  // Ver docs/PLATFORM_MIGRATION.md §1. Guard: src/__tests__/next-config-proxy.test.ts
   async headers() {
     return [
       {
@@ -53,11 +61,10 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), geolocation=(), microphone=(self)',
           },
-          // NOTE (merge fix/prod-hardening ← main): CSP is now emitted per-request
-          // with nonces from src/middleware.ts (origin/main approach, replaces the
-          // static 'unsafe-inline' CSP that used to live here). The Google Fonts +
-          // connect-src origins the v10.1 HTML report needs are carried into the
-          // middleware CSP instead — see src/middleware.ts.
+          // NOTE: el CSP se emite por request, con nonce, desde `src/proxy.ts`
+          // (reemplaza el CSP estatico con 'unsafe-inline' que vivia aqui). Los
+          // origins de Google Fonts + connect-src que necesita el reporte HTML
+          // v10.1 viajan en ese CSP — ver `src/proxy.ts`.
         ],
       },
     ];

@@ -6,6 +6,8 @@
 // reopen} pero invocables desde Client Components sin pagar el round-trip
 // HTTP. Cada accion:
 //
+//   0. Gate de sesion (`denyIfNoSession`) — no-op en fase 1, rechaza con
+//      code 'UNAUTHENTICATED' en fase 2. Ver `_auth-gate.ts`.
 //   1. Deriva `workspaceId` del cookie.
 //   2. Valida input con Zod.
 //   3. Ejecuta la mutacion en una TX serializable (mismo enfoque que los routes).
@@ -30,6 +32,7 @@ import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
 import { accountingPeriods, type AccountingPeriodRow } from '@/lib/db/schema';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { denyIfNoSession } from './_auth-gate';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -157,6 +160,11 @@ function computeBoundaries(
 export async function createPeriodAction(
   rawInput: unknown,
 ): Promise<CreatePeriodResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = createPeriodSchema.safeParse(rawInput);
   if (!parsed.success) return zodToActionError(parsed.error);
 
@@ -203,6 +211,11 @@ export async function createPeriodAction(
 export async function closePeriodAction(
   periodId: string,
 ): Promise<PeriodTransitionResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = periodIdSchema.safeParse(periodId);
   if (!parsed.success) {
     return {
@@ -285,6 +298,11 @@ export async function closePeriodAction(
 export async function reopenPeriodAction(
   periodId: string,
 ): Promise<PeriodTransitionResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = periodIdSchema.safeParse(periodId);
   if (!parsed.success) {
     return {
@@ -364,6 +382,11 @@ export async function reopenPeriodAction(
 export async function lockPeriodAction(
   periodId: string,
 ): Promise<PeriodTransitionResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = periodIdSchema.safeParse(periodId);
   if (!parsed.success) {
     return {

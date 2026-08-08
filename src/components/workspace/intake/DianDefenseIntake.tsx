@@ -18,52 +18,28 @@ import { StepWizard, FileUploadZone } from '@/design-system';
 import type { WizardStep } from '@/design-system';
 import type { DianDefenseIntake as DianDefenseIntakeType } from '@/types/platform';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { dict } from '@/lib/i18n/dictionaries';
 import { useIntakePersistence } from './useIntakePersistence';
 import { IntakePreview } from './IntakePreview';
 import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtraction';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+/**
+ * Sólo la identidad del acto (valor de enum + icono) vive en el componente.
+ * La etiqueta y la descripción viajan por `intake.dian.actTypes`: son copy y
+ * cambian con el idioma; el valor persistido en el borrador NO puede cambiar.
+ */
 const ACT_TYPES = [
-  {
-    value: 'requerimiento_ordinario' as const,
-    label: 'Requerimiento Ordinario',
-    description: 'Solicitud de información o aclaración por parte de la DIAN.',
-    icon: FileSearch,
-  },
-  {
-    value: 'requerimiento_especial' as const,
-    label: 'Requerimiento Especial',
-    description: 'Propuesta de modificación de la declaración tributaria.',
-    icon: FileWarning,
-  },
-  {
-    value: 'pliego_cargos' as const,
-    label: 'Pliego de Cargos',
-    description: 'Formulación de cargos por presunta infracción tributaria.',
-    icon: AlertTriangle,
-  },
-  {
-    value: 'liquidacion_oficial' as const,
-    label: 'Liquidación Oficial',
-    description: 'Determinación oficial del impuesto por parte de la DIAN.',
-    icon: FileCheck,
-  },
-  {
-    value: 'emplazamiento' as const,
-    label: 'Emplazamiento',
-    description: 'Citación previa al requerimiento especial para corregir.',
-    icon: Clock,
-  },
-  {
-    value: 'otro' as const,
-    label: 'Otro Acto Administrativo',
-    description: 'Resolución sanción, auto de archivo u otro acto DIAN.',
-    icon: HelpCircle,
-  },
+  { value: 'requerimiento_ordinario' as const, icon: FileSearch },
+  { value: 'requerimiento_especial' as const, icon: FileWarning },
+  { value: 'pliego_cargos' as const, icon: AlertTriangle },
+  { value: 'liquidacion_oficial' as const, icon: FileCheck },
+  { value: 'emplazamiento' as const, icon: Clock },
+  { value: 'otro' as const, icon: HelpCircle },
 ];
 
-const TAX_OPTIONS = ['IVA', 'Renta', 'Retención', 'ICA', 'Otro'] as const;
 const TAX_VALUES = ['iva', 'renta', 'retencion', 'ica', 'otro'] as const;
 
 const DEFAULT_VALUES: DianDefenseIntakeType = {
@@ -80,12 +56,15 @@ const DEFAULT_VALUES: DianDefenseIntakeType = {
 
 // ─── Confidence Dot ─────────────────────────────────────────────────────────
 
-function ConfidenceDot({ level }: { level?: FieldConfidence }) {
+type IntakeCommon = (typeof dict)['es']['intake']['common'];
+
+
+function ConfidenceDot({ level, c }: { level?: FieldConfidence; c: IntakeCommon }) {
   if (!level || level === 'none') return null;
   return (
     <span
       className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
-      title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
+      title={level === 'high' ? c.confHigh : c.confMedium}
     />
   );
 }
@@ -96,6 +75,9 @@ export function DianDefenseIntake() {
   const { startNewConsultation, setIntakeModalOpen, clearIntakeDraft, setActiveMode } =
     useWorkspace();
   const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
+  const { language } = useLanguage();
+  const c = dict[language].intake.common;
+  const t = dict[language].intake.dian;
   const [step, setStep] = useState(0);
   const [skippedUpload, setSkippedUpload] = useState(false);
   const [values, setValues] = useIntakePersistence('dian_defense', DEFAULT_VALUES);
@@ -221,10 +203,8 @@ export function DianDefenseIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-600">
-          Cargue el requerimiento, liquidación o acto administrativo de la DIAN
-        </p>
+        <h3 className="text-base font-semibold text-n-900 mb-1">{c.uploadTitle}</h3>
+        <p className="text-xs text-n-600">{t.uploadSubtitle}</p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
@@ -235,11 +215,11 @@ export function DianDefenseIntake() {
               <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-success/80">
-              {detected} de {totalFields} campos detectados automáticamente
+              {c.fieldsDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </p>
           </div>
           <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
-            Subir otro archivo
+            {c.uploadAnother}
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
@@ -248,7 +228,7 @@ export function DianDefenseIntake() {
             <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
           <p className="text-sm text-gold-700 mt-2 font-medium">
-            {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
+            {extractionState.status === 'uploading' ? c.uploading : c.extracting}
           </p>
           <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
             <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
@@ -260,15 +240,15 @@ export function DianDefenseIntake() {
             <AlertCircle className="w-4 h-4 text-danger" />
             <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">{c.retry}</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={100}
-          label="Arrastre su archivo aquí"
-          sublabel="Requerimientos, liquidaciones, actos administrativos DIAN"
+          label={c.dropzoneLabel}
+          sublabel={t.dropzoneSublabel}
         />
       )}
 
@@ -278,7 +258,7 @@ export function DianDefenseIntake() {
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
-          Llenar manualmente sin documento
+          {c.manualFill}
         </button>
       )}
     </div>
@@ -289,17 +269,17 @@ export function DianDefenseIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Tipo de Acto Administrativo</h3>
-        <p className="text-xs text-n-500">Seleccione el tipo de acto que desea controvertir.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.actStepTitle}</h3>
+        <p className="text-xs text-n-500">{t.actStepDesc}</p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
             <CheckCircle className="w-3.5 h-3.5 text-success" />
             <span className="text-xs text-success font-medium">
-              {detected} de {totalFields} campos auto-detectados
+              {c.fieldsAutoDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </span>
             <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> {c.confHighShort}
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> {c.confMediumShort}
             </span>
           </div>
         )}
@@ -336,10 +316,12 @@ export function DianDefenseIntake() {
                       selected ? 'text-gold-500' : 'text-n-600',
                     )}
                   />
-                  <span className="text-sm font-medium text-n-900">{act.label}</span>
-                  {selected && <ConfidenceDot level={extractedConfidence.actType} />}
+                  <span className="text-sm font-medium text-n-900">{t.actTypes[act.value].label}</span>
+                  {selected && <ConfidenceDot level={extractedConfidence.actType} c={c} />}
                 </div>
-                <p className="text-xs-mono text-n-500 leading-relaxed">{act.description}</p>
+                <p className="text-xs-mono text-n-500 leading-relaxed">
+                  {t.actTypes[act.value].description}
+                </p>
               </div>
             </button>
           );
@@ -353,18 +335,17 @@ export function DianDefenseIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Detalles del Caso</h3>
-        <p className="text-xs text-n-500">Proporcione la información relevante del acto administrativo.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.detailsTitle}</h3>
+        <p className="text-xs text-n-500">{t.detailsDesc}</p>
       </div>
 
       {/* Impuestos involucrados */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-2 flex items-center gap-0.5">
-          Impuestos involucrados <ConfidenceDot level={extractedConfidence.taxes} />
+          {t.taxesLabel} <ConfidenceDot level={extractedConfidence.taxes} c={c} />
         </label>
         <div className="flex flex-wrap gap-2">
-          {TAX_OPTIONS.map((label, i) => {
-            const val = TAX_VALUES[i];
+          {TAX_VALUES.map((val) => {
             const active = values.taxes.includes(val);
             return (
               <button
@@ -378,7 +359,7 @@ export function DianDefenseIntake() {
                     : 'bg-n-0 text-n-600 border-n-200 hover:border-n-400',
                 )}
               >
-                {label}
+                {t.taxOptions[val]}
               </button>
             );
           })}
@@ -388,7 +369,7 @@ export function DianDefenseIntake() {
       {/* Periodo */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-n-600 mb-1.5">Periodo desde</label>
+          <label className="block text-xs font-medium text-n-600 mb-1.5">{c.periodFrom}</label>
           <input
             type="month"
             value={values.periodStart}
@@ -397,7 +378,7 @@ export function DianDefenseIntake() {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-n-600 mb-1.5">Periodo hasta</label>
+          <label className="block text-xs font-medium text-n-600 mb-1.5">{c.periodTo}</label>
           <input
             type="month"
             value={values.periodEnd}
@@ -410,7 +391,8 @@ export function DianDefenseIntake() {
       {/* Monto en disputa */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Monto en disputa (COP) <ConfidenceDot level={extractedConfidence.disputedAmount} /> <span className="text-n-600 font-normal ml-1">-- opcional</span>
+          {t.disputedAmountLabel} <ConfidenceDot level={extractedConfidence.disputedAmount} c={c} />{' '}
+          <span className="text-n-600 font-normal ml-1">{c.optional}</span>
         </label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-n-500">$</span>
@@ -428,7 +410,8 @@ export function DianDefenseIntake() {
       {/* Fecha limite de respuesta */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Fecha límite de respuesta <ConfidenceDot level={extractedConfidence.responseDeadline} /> <span className="text-danger ml-1">*</span>
+          {t.deadlineLabel} <ConfidenceDot level={extractedConfidence.responseDeadline} c={c} />{' '}
+          <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="date"
@@ -441,13 +424,14 @@ export function DianDefenseIntake() {
       {/* Numero de expediente */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Número de expediente <ConfidenceDot level={extractedConfidence.expedienteNumber} /> <span className="text-n-600 font-normal ml-1">-- opcional</span>
+          {t.expedienteLabel} <ConfidenceDot level={extractedConfidence.expedienteNumber} c={c} />{' '}
+          <span className="text-n-600 font-normal ml-1">{c.optional}</span>
         </label>
         <input
           type="text"
           value={values.expedienteNumber ?? ''}
           onChange={(e) => updateField('expedienteNumber', e.target.value)}
-          placeholder="Ej: 2024-00001234"
+          placeholder={t.expedientePlaceholder}
           className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
@@ -459,15 +443,13 @@ export function DianDefenseIntake() {
   const step3 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Documentos de Soporte</h3>
-        <p className="text-xs text-n-500">
-          Adjunte documentos adicionales de soporte (declaraciones, soportes contables).
-        </p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{c.supportDocsTitle}</h3>
+        <p className="text-xs text-n-500">{t.docsDesc}</p>
       </div>
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
-        label="Actos administrativos, declaraciones y soportes"
-        sublabel="PDF, DOCX, XLSX, imágenes -- Max 100MB"
+        label={t.docsLabel}
+        sublabel={c.fileTypesHint}
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={100}
       />
@@ -488,16 +470,16 @@ export function DianDefenseIntake() {
   // ─── Wizard Steps ──────────────────────────────────────────────────────────
 
   const steps: WizardStep[] = [
-    { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
-    { id: 'act-type', label: 'Tipo de Acto', isValid: !!values.actType, component: step1 },
+    { id: 'upload', label: c.stepDocument, isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
+    { id: 'act-type', label: t.stepActType, isValid: !!values.actType, component: step1 },
     {
       id: 'details',
-      label: 'Detalles',
+      label: c.stepDetails,
       isValid: !!values.responseDeadline && values.taxes.length > 0,
       component: step2,
     },
-    { id: 'documents', label: 'Documentos', isValid: true, component: step3 },
-    { id: 'preview', label: 'Vista Previa', isValid: true, component: step4 },
+    { id: 'documents', label: c.stepDocuments, isValid: true, component: step3 },
+    { id: 'preview', label: c.stepPreview, isValid: true, component: step4 },
   ];
 
   return (
@@ -507,7 +489,7 @@ export function DianDefenseIntake() {
       onNext={() => setStep((s) => Math.min(s + 1, steps.length - 1))}
       onBack={() => setStep((s) => Math.max(s - 1, 0))}
       onSubmit={handleSubmit}
-      submitLabel="Iniciar Defensa"
+      submitLabel={t.submitLabel}
       className="h-full"
     />
   );

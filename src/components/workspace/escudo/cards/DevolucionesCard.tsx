@@ -26,7 +26,7 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('block rounded animate-pulse bg-n-300/30 dark:bg-n-700/30', className)}
+      className={cn('block rounded animate-pulse bg-n-300/30', className)}
     />
   );
 }
@@ -123,11 +123,11 @@ export function DevolucionesCard({ data, loading, error, t, language = 'es' }: D
 
           {/* Viabilidad + plazos */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div className="p-3 rounded-md bg-n-50/50 dark:bg-n-900/20 ring-1 ring-n-200/40 dark:ring-n-800/40">
+            <div className="p-3 rounded-md bg-n-50/50 ring-1 ring-n-200/40">
               <span className="block text-xs text-n-500 mb-0.5">{language === 'es' ? 'Plazo DIAN' : 'DIAN deadline'}</span>
               <span className="font-medium text-n-1000">{data.data.plazoDian}</span>
             </div>
-            <div className="p-3 rounded-md bg-n-50/50 dark:bg-n-900/20 ring-1 ring-n-200/40 dark:ring-n-800/40">
+            <div className="p-3 rounded-md bg-n-50/50 ring-1 ring-n-200/40">
               <span className="block text-xs text-n-500 mb-0.5">{language === 'es' ? 'Con garantía' : 'With guarantee'}</span>
               <span className="font-medium text-n-1000">{data.data.plazoConGarantia}</span>
             </div>
@@ -139,7 +139,7 @@ export function DevolucionesCard({ data, loading, error, t, language = 'es' }: D
               <p className="text-xs uppercase tracking-eyebrow text-n-500 font-medium mb-1.5">{t.documentosLabel}</p>
               <ul role="list" className="flex flex-col gap-1">
                 {data.data.documentosRequeridos.map((doc, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-xs text-n-700 dark:text-n-600">
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-n-700">
                     <CheckSquare className="h-3 w-3 text-success shrink-0 mt-0.5" strokeWidth={2} aria-hidden="true" />
                     {doc}
                   </li>
@@ -168,7 +168,7 @@ export function DevolucionesCard({ data, loading, error, t, language = 'es' }: D
 
       {/* Footer */}
       {!loading && !error && (
-        <div className="mt-auto pt-2 border-t border-n-200/40 dark:border-n-800/40">
+        <div className="mt-auto pt-2 border-t border-n-200/40">
           <NormaCitation norma="Arts. 850 / 854 / 815 E.T." />
         </div>
       )}

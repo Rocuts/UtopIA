@@ -37,6 +37,12 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import { getHechosEmpresaBlock } from '@/lib/facts/report-facts';
 import { excludedFactIdsSchema } from '@/lib/validation/schemas';
+import {
+  runWithTelemetryContext,
+  asTelemetryUuid,
+  resolveOwnedReportId,
+  type TelemetryContext,
+} from '@/lib/db/telemetry';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -89,6 +95,29 @@ export async function POST(req: Request) {
       { excludedFactIds },
     );
 
+    // Telemetría — mismo cableado que /niif: el tenant se fija en el contexto
+    // AQUÍ, dentro del scope del request. Dentro del stream SSE la cookie ya no
+    // es legible y `persistAgentTelemetry` descartaba la medición del Editor
+    // Jefe HTML, que es la llamada más cara del pipeline (32-48K tokens de
+    // output). Ver src/lib/db/telemetry.ts.
+    // El contexto lleva el valor CRUDO, no el filtrado: quien clasifica el modo
+    // de fallo es `persistAgentTelemetry` (`workspace-no-uuid` vs
+    // `sin-workspace`), y esa distincion es justo el diagnostico que el
+    // operador necesita. Si filtraramos aqui, una cookie `utopia_workspace_id`
+    // corrupta llegaria al contexto como `null`, la persistencia caeria al
+    // fallback de `cookies()` — que dentro del stream SSE lanza — y la medicion
+    // quedaria registrada como `sin-workspace`: el operador buscaria un route
+    // handler sin cablear en vez de la cookie corrupta, que es el bug real.
+    // El filtro de uuid sigue existiendo aguas abajo, antes del INSERT.
+    const telemetryWorkspaceId = asTelemetryUuid(workspaceId);
+    const telemetryCtx: TelemetryContext = {
+      workspaceId: workspaceId ?? null,
+      reportId: await resolveOwnedReportId(
+        (body as { reportId?: unknown }).reportId,
+        telemetryWorkspaceId,
+      ),
+    };
+
     // El header X-Stream o el query param ?stream=1 activan SSE. Espejado de
     // los otros endpoints financieros (niif/strategy/governance) para
     // consistencia con el cliente.
@@ -99,7 +128,9 @@ export async function POST(req: Request) {
     if (!wantsStream) {
       // Non-streaming: ejecuta y devuelve el output completo en una sola
       // respuesta JSON. Útil para invocaciones server-to-server o tests.
-      const result = await runHtmlEditor(parsed.data, undefined, undefined, hechosEmpresa);
+      const result = await runWithTelemetryContext(telemetryCtx, () =>
+        runHtmlEditor(parsed.data, undefined, undefined, hechosEmpresa),
+      );
       logIfNotEmittable(result);
       return NextResponse.json(result, {
         // El payload sigue viajando con 200 aunque no sea emitible: el HTML ya
@@ -115,7 +146,8 @@ export async function POST(req: Request) {
     // payload final como `event: html_phase`.
     const language = parsed.data.language;
 
-    const stream = new ReadableStream({
+    const makeStream = () =>
+      new ReadableStream({
       async start(controller) {
         const sse = createSafeSse(controller);
         const send = sse.send;
@@ -153,6 +185,11 @@ export async function POST(req: Request) {
         }
       },
     });
+
+    // El contexto de telemetría envuelve la CONSTRUCCIÓN del stream: `start` se
+    // invoca dentro de ella, así que el pipeline y todas sus continuaciones
+    // async heredan el AsyncLocalStorage con el tenant.
+    const stream = runWithTelemetryContext(telemetryCtx, makeStream);
 
     return new Response(stream, {
       headers: {

@@ -1,4 +1,26 @@
 /**
+ * @deprecated SIN USO EN PRODUCCIÓN. Para cifrar secretos use
+ * `src/lib/security/vault.ts` (AES-256-GCM en Node, envelope
+ * `v1:gcm:<iv>:<tag>:<ct>`, rotación vía `UTOPIA_VAULT_KEY_PREV`), que es lo
+ * que realmente protege las credenciales ERP. Este módulo se conserva sólo
+ * como la receta pgcrypto documentada en `docs/SECURITY_ENCRYPTION.md` para el
+ * día que se cifren columnas PII (NIT, salarios, dirección fiscal); no tiene
+ * ni un solo importador de producción.
+ *
+ * POR QUÉ ESTÁ DEPRECADO, y no sólo "sin usar": pgcrypto consume la variable
+ * de entorno como PASSPHRASE en crudo — no decodifica el base64 ni valida
+ * nada. Un '\n' pegado al final de `DB_ENCRYPTION_KEY` (lo normal al pegar en
+ * un dashboard) genera un digest distinto SIN error: las filas se cifran con
+ * una clave que luego no descifra, y los lookups HMAC devuelven 0 filas para
+ * siempre. `vault.ts` no tiene ese modo de fallo porque decodifica la clave y
+ * verifica el tag GCM.
+ *
+ * Mitigación mientras siga aquí: `getKey()` ahora LANZA ante una clave de
+ * forma sospechosa en vez de emitir un warning (ver `assertKeyShape`). Antes
+ * seguía adelante y corrompía en silencio.
+ *
+ * ---
+ *
  * Column-level encryption helpers backed by Postgres `pgcrypto`.
  *
  * Use to satisfy Ley 1581 / Proyecto 274/2025C / Habeas Data: sensitive
@@ -52,47 +74,49 @@ import type { SQL, AnyColumn } from 'drizzle-orm';
 const ENCRYPTION_KEY_ENV = 'DB_ENCRYPTION_KEY';
 const HMAC_KEY_ENV = 'DB_HMAC_KEY';
 
-// pgcrypto consumes the raw env STRING as the passphrase/key (not decoded
-// bytes). So a stray newline / surrounding whitespace (very common when pasting
-// into a dashboard) or a base64-vs-base64url form mismatch silently changes the
-// digest and breaks decryption / deterministic lookups with NO error. We warn
-// loudly but do NOT mutate DB_ENCRYPTION_KEY: trimming a value that existing
-// rows were already encrypted with would itself break their decryption. See
-// GO_LIVE_RUNBOOK.md §6.1.
-let warnedKeyShape = false;
-function warnOnSuspiciousKeyShape(envName: string, raw: string): void {
-  if (warnedKeyShape) return;
+// pgcrypto consume el STRING crudo del env como passphrase (no los bytes
+// decodificados). Un salto de línea o espacio pegado al valor — habitual al
+// pegar en un dashboard — o un base64 que no decodifica a 32 bytes cambia el
+// digest SIN lanzar ningún error: se cifra con una clave y luego no descifra,
+// y los lookups HMAC devuelven 0 filas para siempre.
+//
+// Antes esto era un `console.warn` una-vez-por-proceso, con el argumento de
+// que trimear la clave rompería las filas ya cifradas con el valor sucio. Ese
+// argumento sólo vale si HAY filas cifradas — y no las hay: el módulo no tiene
+// importadores de producción (ver el @deprecated de la cabecera). Con cero
+// filas en riesgo, fallar en el primer uso es estrictamente mejor que dejar
+// que alguien cifre un año de datos PII contra una clave que no podrá volver a
+// leer. `encryptedLookupValue()` ya se comportaba así; ahora los dos caminos
+// (cifrado y HMAC) fallan igual de duro, que es lo que evita que el par
+// cifrado/lookup se desincronice en silencio. Ver GO_LIVE_RUNBOOK.md §6.1.
+//
+// Seguimos SIN mutar el valor: no adivinamos qué quiso decir el operador, le
+// decimos que lo re-aprovisione bien.
+function assertKeyShape(envName: string, raw: string): void {
   const hasWhitespace = raw.trim() !== raw;
   const decodedBytes = Buffer.from(raw.trim(), 'base64').length;
-  if (hasWhitespace || decodedBytes !== 32) {
-    warnedKeyShape = true;
-    console.warn(
-      `[encryption] ${envName} has a suspicious shape ` +
-        `(${hasWhitespace ? 'surrounding whitespace; ' : ''}decodes to ${decodedBytes} bytes, expected 32). ` +
-        `pgcrypto uses the raw string as passphrase — a stray newline silently breaks decryption/lookups. ` +
-        `Re-provision with \`printf %s\` (no trailing newline). See GO_LIVE_RUNBOOK.md §6.1.`,
-    );
-  }
+  if (!hasWhitespace && decodedBytes === 32) return;
+  throw new Error(
+    `[encryption] ${envName} tiene forma inválida ` +
+      `(${hasWhitespace ? 'espacios/salto de línea alrededor; ' : ''}decodifica a ${decodedBytes} bytes, se esperaban 32). ` +
+      `pgcrypto usa el string crudo como passphrase: un '\\n' suelto rompe el descifrado y los lookups sin avisar. ` +
+      `Re-aprovisione con \`printf %s\` (sin salto final): ` +
+      `node -e "console.log(crypto.randomBytes(32).toString('base64'))". Ver GO_LIVE_RUNBOOK.md §6.1.`,
+  );
 }
 
 function getKey(): string {
   const key = process.env[ENCRYPTION_KEY_ENV];
   if (!key) {
     throw new Error(
-      `[encryption] ${ENCRYPTION_KEY_ENV} is not set. ` +
-        `Generate one with: node -e "console.log(crypto.randomBytes(32).toString('base64'))" ` +
-        `and add it to Vercel project env vars.`,
+      `[encryption] ${ENCRYPTION_KEY_ENV} no está definida. ` +
+        `Genere una con: node -e "console.log(crypto.randomBytes(32).toString('base64'))" ` +
+        `y agréguela a las env vars del proyecto en Vercel.`,
     );
   }
-  if (key.length < 24) {
-    // Soft sanity check — a base64 32-byte key is 44 chars. Anything shorter
-    // is almost certainly wrong / dev placeholder.
-    throw new Error(
-      `[encryption] ${ENCRYPTION_KEY_ENV} looks too short (${key.length} chars). ` +
-        `Expected base64-encoded 32 bytes (~44 chars).`,
-    );
-  }
-  warnOnSuspiciousKeyShape(ENCRYPTION_KEY_ENV, key);
+  // Subsume el viejo chequeo de "clave demasiado corta": 32 bytes en base64
+  // son 44 caracteres, así que cualquier valor más corto ya falla acá.
+  assertKeyShape(ENCRYPTION_KEY_ENV, key);
   return key;
 }
 

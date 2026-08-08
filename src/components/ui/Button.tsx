@@ -136,7 +136,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             'relative inline-flex items-center justify-center whitespace-nowrap',
             'rounded-lg',
             'transition-[background,color,box-shadow,border-color] duration-200 ease-out',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+            // El ring-offset sigue a la SUPERFICIE, no al modo (CLAUDE.md). n-1000 es el
+            // extremo de TINTA: en claro pintaba un halo casi negro (#0C0A06) alrededor
+            // de cada botón enfocado por teclado sobre página crema. n-0 es el papel de
+            // cada tema, así que el halo desaparece en ambos.
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             ELITE_VARIANT_CLASSES[eliteKey],
             ELITE_SIZE_CLASSES[size],
@@ -184,7 +188,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             'relative inline-flex items-center justify-center whitespace-nowrap',
             'rounded-lg',
             'transition-[background,color,box-shadow,border-color] duration-200 ease-out',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+            // El ring-offset sigue a la SUPERFICIE, no al modo (CLAUDE.md). n-1000 es el
+            // extremo de TINTA: en claro pintaba un halo casi negro (#0C0A06) alrededor
+            // de cada botón enfocado por teclado sobre página crema. n-0 es el papel de
+            // cada tema, así que el halo desaparece en ambos.
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             ELITE_VARIANT_CLASSES[eliteKey],
             ELITE_SIZE_CLASSES[size],

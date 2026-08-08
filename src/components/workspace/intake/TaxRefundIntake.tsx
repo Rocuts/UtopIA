@@ -8,34 +8,23 @@ import { StepWizard, FileUploadZone } from '@/design-system';
 import type { WizardStep } from '@/design-system';
 import type { TaxRefundIntake as TaxRefundIntakeType } from '@/types/platform';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { dict } from '@/lib/i18n/dictionaries';
 import { useIntakePersistence } from './useIntakePersistence';
 import { IntakePreview } from './IntakePreview';
 import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtraction';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+/**
+ * Sólo el valor de enum y el icono viven aquí. La etiqueta, la descripción y
+ * la cita normativa (Arts. 850-865 E.T. y concordantes) viajan por
+ * `intake.refund.taxTypes`: el valor persistido no puede depender del idioma.
+ */
 const TAX_TYPES = [
-  {
-    value: 'iva' as const,
-    label: 'IVA Saldo a Favor',
-    description: 'Devolución o compensación de saldos a favor en IVA.',
-    reference: 'Arts. 850-865 E.T. / Decreto 1625 de 2016 (DUR) / Res. DIAN 000151/2012',
-    icon: Receipt,
-  },
-  {
-    value: 'renta' as const,
-    label: 'Renta Saldo a Favor',
-    description: 'Devolución de saldos originados en declaración de renta.',
-    reference: 'Arts. 850-865 E.T. / Art. 854 E.T.',
-    icon: Landmark,
-  },
-  {
-    value: 'retencion' as const,
-    label: 'Retención en la Fuente',
-    description: 'Devolución por exceso de retenciones practicadas.',
-    reference: 'Arts. 850-865 E.T. / Art. 861 E.T.',
-    icon: Banknote,
-  },
+  { value: 'iva' as const, icon: Receipt },
+  { value: 'renta' as const, icon: Landmark },
+  { value: 'retencion' as const, icon: Banknote },
 ];
 
 const DEFAULT_VALUES: TaxRefundIntakeType = {
@@ -49,12 +38,14 @@ const DEFAULT_VALUES: TaxRefundIntakeType = {
 
 // ─── Confidence Dot ─────────────────────────────────────────────────────────
 
-function ConfidenceDot({ level }: { level?: FieldConfidence }) {
+type IntakeCommon = (typeof dict)['es']['intake']['common'];
+
+function ConfidenceDot({ level, c }: { level?: FieldConfidence; c: IntakeCommon }) {
   if (!level || level === 'none') return null;
   return (
     <span
       className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
-      title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
+      title={level === 'high' ? c.confHigh : c.confMedium}
     />
   );
 }
@@ -65,6 +56,9 @@ export function TaxRefundIntake() {
   const { startNewConsultation, setIntakeModalOpen, clearIntakeDraft, setActiveMode } =
     useWorkspace();
   const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
+  const { language } = useLanguage();
+  const c = dict[language].intake.common;
+  const t = dict[language].intake.refund;
   const [step, setStep] = useState(0);
   const [skippedUpload, setSkippedUpload] = useState(false);
   const [values, setValues] = useIntakePersistence('tax_refund', DEFAULT_VALUES);
@@ -165,10 +159,8 @@ export function TaxRefundIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-600">
-          Cargue la declaración tributaria o solicitud de devolución
-        </p>
+        <h3 className="text-base font-semibold text-n-900 mb-1">{c.uploadTitle}</h3>
+        <p className="text-xs text-n-600">{t.uploadSubtitle}</p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
@@ -179,11 +171,11 @@ export function TaxRefundIntake() {
               <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-success/80">
-              {detected} de {totalFields} campos detectados automáticamente
+              {c.fieldsDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </p>
           </div>
           <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
-            Subir otro archivo
+            {c.uploadAnother}
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
@@ -192,7 +184,7 @@ export function TaxRefundIntake() {
             <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
           <p className="text-sm text-gold-700 mt-2 font-medium">
-            {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
+            {extractionState.status === 'uploading' ? c.uploading : c.extracting}
           </p>
           <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
             <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
@@ -204,15 +196,15 @@ export function TaxRefundIntake() {
             <AlertCircle className="w-4 h-4 text-danger" />
             <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">{c.retry}</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={100}
-          label="Arrastre su archivo aquí"
-          sublabel="Declaraciones tributarias, solicitudes de devolución"
+          label={c.dropzoneLabel}
+          sublabel={t.dropzoneSublabel}
         />
       )}
 
@@ -222,7 +214,7 @@ export function TaxRefundIntake() {
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
-          Llenar manualmente sin documento
+          {c.manualFill}
         </button>
       )}
     </div>
@@ -233,17 +225,17 @@ export function TaxRefundIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Tipo de Devolución</h3>
-        <p className="text-xs text-n-500">Seleccione el tipo de saldo a favor que desea solicitar.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.typeStepTitle}</h3>
+        <p className="text-xs text-n-500">{t.typeStepDesc}</p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
             <CheckCircle className="w-3.5 h-3.5 text-success" />
             <span className="text-xs text-success font-medium">
-              {detected} de {totalFields} campos auto-detectados
+              {c.fieldsAutoDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </span>
             <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> {c.confHighShort}
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> {c.confMediumShort}
             </span>
           </div>
         )}
@@ -280,12 +272,12 @@ export function TaxRefundIntake() {
                       selected ? 'text-gold-500' : 'text-n-600',
                     )}
                   />
-                  <span className="text-sm font-semibold text-n-900">{tax.label}</span>
-                  {selected && <ConfidenceDot level={extractedConfidence.taxType} />}
+                  <span className="text-sm font-semibold text-n-900">{t.taxTypes[tax.value].label}</span>
+                  {selected && <ConfidenceDot level={extractedConfidence.taxType} c={c} />}
                 </div>
-                <p className="text-xs text-n-500 mb-1.5">{tax.description}</p>
+                <p className="text-xs text-n-500 mb-1.5">{t.taxTypes[tax.value].description}</p>
                 <span className="text-2xs font-mono text-n-700 bg-n-100 border border-n-200 px-2 py-0.5 rounded">
-                  {tax.reference}
+                  {t.taxTypes[tax.value].reference}
                 </span>
               </div>
             </button>
@@ -300,14 +292,15 @@ export function TaxRefundIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Detalles de la Solicitud</h3>
-        <p className="text-xs text-n-500">Información del periodo y monto a solicitar.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.detailsTitle}</h3>
+        <p className="text-xs text-n-500">{t.detailsDesc}</p>
       </div>
 
       {/* Periodo */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Periodo gravable <ConfidenceDot level={extractedConfidence.period} /> <span className="text-danger ml-1">*</span>
+          {t.periodLabel} <ConfidenceDot level={extractedConfidence.period} c={c} />{' '}
+          <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="month"
@@ -320,7 +313,8 @@ export function TaxRefundIntake() {
       {/* Monto aproximado */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Monto aproximado (COP) <ConfidenceDot level={extractedConfidence.approximateAmount} /> <span className="text-n-600 font-normal ml-1">-- opcional</span>
+          {t.amountLabel} <ConfidenceDot level={extractedConfidence.approximateAmount} c={c} />{' '}
+          <span className="text-n-600 font-normal ml-1">{c.optional}</span>
         </label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-n-500">$</span>
@@ -338,12 +332,12 @@ export function TaxRefundIntake() {
       {/* Ya radicado? */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-2">
-          ¿Ya radicó la solicitud ante la DIAN?
+          {t.alreadyFiledLabel}
         </label>
         <div className="flex gap-3">
           {[
-            { value: true, label: 'Sí, ya radiqué' },
-            { value: false, label: 'No, aún no' },
+            { value: true, label: t.filedYes },
+            { value: false, label: t.filedNo },
           ].map((opt) => (
             <button
               key={String(opt.value)}
@@ -366,13 +360,13 @@ export function TaxRefundIntake() {
       {values.alreadyFiled && (
         <div>
           <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-            Número de radicado <ConfidenceDot level={extractedConfidence.filingNumber} />
+            {t.filingNumberLabel} <ConfidenceDot level={extractedConfidence.filingNumber} c={c} />
           </label>
           <input
             type="text"
             value={values.filingNumber ?? ''}
             onChange={(e) => updateField('filingNumber', e.target.value)}
-            placeholder="Ej: 202400123456"
+            placeholder={t.filingNumberPlaceholder}
             className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
           />
         </div>
@@ -385,15 +379,13 @@ export function TaxRefundIntake() {
   const step3 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Documentos de Soporte</h3>
-        <p className="text-xs text-n-500">
-          Adjunte documentos adicionales de soporte de la solicitud.
-        </p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{c.supportDocsTitle}</h3>
+        <p className="text-xs text-n-500">{t.docsDesc}</p>
       </div>
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
-        label="Declaraciones tributarias y soportes"
-        sublabel="PDF, DOCX, XLSX, imágenes -- Max 100MB"
+        label={t.docsLabel}
+        sublabel={c.fileTypesHint}
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={100}
       />
@@ -414,11 +406,11 @@ export function TaxRefundIntake() {
   // ─── Wizard Steps ──────────────────────────────────────────────────────────
 
   const steps: WizardStep[] = [
-    { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
-    { id: 'tax-type', label: 'Tipo', isValid: !!values.taxType, component: step1 },
-    { id: 'details', label: 'Detalles', isValid: !!values.period, component: step2 },
-    { id: 'documents', label: 'Documentos', isValid: true, component: step3 },
-    { id: 'preview', label: 'Vista Previa', isValid: true, component: step4 },
+    { id: 'upload', label: c.stepDocument, isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
+    { id: 'tax-type', label: c.stepType, isValid: !!values.taxType, component: step1 },
+    { id: 'details', label: c.stepDetails, isValid: !!values.period, component: step2 },
+    { id: 'documents', label: c.stepDocuments, isValid: true, component: step3 },
+    { id: 'preview', label: c.stepPreview, isValid: true, component: step4 },
   ];
 
   return (
@@ -428,7 +420,7 @@ export function TaxRefundIntake() {
       onNext={() => setStep((s) => Math.min(s + 1, steps.length - 1))}
       onBack={() => setStep((s) => Math.max(s - 1, 0))}
       onSubmit={handleSubmit}
-      submitLabel="Iniciar Solicitud"
+      submitLabel={t.submitLabel}
       className="h-full"
     />
   );

@@ -99,9 +99,18 @@ export function BankAccountForm({ initial, onSave, onCancel, loading }: Props) {
     }
   }
 
+  /*
+   * Sin variantes `dark:` a propósito. La escala n-* ya se invierte por tema, así
+   * que `dark:bg-n-800 dark:text-n-100` NO era un fallo de contraste (n-100 sobre
+   * n-800 da 11.97:1) sino de POLARIDAD: en modo oscuro n-800 = #DED5BD, o sea el
+   * input se volvía una caja CREMA con tinta negra flotando dentro de un
+   * formulario oscuro. `bg-n-50 text-n-900` da 16.52:1 en claro y 15.26:1 en
+   * oscuro respetando la superficie de cada tema.
+   */
   const fieldClass =
-    'w-full rounded-lg border border-n-200 bg-n-50 px-3 py-2 text-sm text-n-900 placeholder:text-n-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 dark:border-n-700 dark:bg-n-800 dark:text-n-100';
-  const labelClass = 'block text-xs font-medium text-n-600 dark:text-n-600 mb-1';
+    'w-full rounded-lg border border-n-200 bg-n-50 px-3 py-2 text-sm text-n-900 placeholder:text-n-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+  // Tinta secundaria: n-700 (5.45:1 con n-600 quedaba justo al filo de AA).
+  const labelClass = 'block text-xs font-medium text-n-700 mb-1';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -214,7 +223,7 @@ export function BankAccountForm({ initial, onSave, onCancel, loading }: Props) {
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-n-200 px-4 py-2 text-sm text-n-600 hover:bg-n-100 transition-colors dark:border-n-700 dark:text-n-600 dark:hover:bg-n-800"
+          className="rounded-lg border border-n-200 px-4 py-2 text-sm text-n-600 hover:bg-n-100 transition-colors"
         >
           {es ? 'Cancelar' : 'Cancel'}
         </button>

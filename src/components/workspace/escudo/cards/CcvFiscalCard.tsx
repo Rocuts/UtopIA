@@ -69,7 +69,7 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('block rounded animate-pulse bg-n-300/30 dark:bg-n-700/30', className)}
+      className={cn('block rounded animate-pulse bg-n-300/30', className)}
     />
   );
 }
@@ -172,7 +172,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
           <div className="overflow-x-auto -mx-1 px-1">
             <table className="w-full text-sm border-collapse" aria-label={t.tableLabel}>
               <thead>
-                <tr className="border-b border-n-200/40 dark:border-n-800/40">
+                <tr className="border-b border-n-200/40">
                   <th className="text-left py-1.5 pr-3 text-xs uppercase tracking-eyebrow text-n-500 font-medium w-6">#</th>
                   <th className="text-left py-1.5 pr-3 text-xs uppercase tracking-eyebrow text-n-500 font-medium">{t.colConcepto}</th>
                   <th className="text-right py-1.5 pr-3 text-xs uppercase tracking-eyebrow text-n-500 font-medium tabular-nums">{t.colValor}</th>
@@ -184,8 +184,8 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
                   <tr
                     key={row.key}
                     className={cn(
-                      'border-b border-n-200/20 dark:border-n-800/20',
-                      'hover:bg-n-50 dark:hover:bg-n-900/30 transition-colors',
+                      'border-b border-n-200/20',
+                      'hover:bg-n-50 transition-colors',
                       row.bold && 'font-semibold',
                     )}
                   >
@@ -222,7 +222,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
               aria-live="polite"
             >
               <span className="font-semibold text-danger">{t.alertaTasaMinima} </span>
-              <span className="text-n-700 dark:text-n-600">
+              <span className="text-n-700">
                 {language === 'es'
                   ? `F09 actual ${fmtPct(data.data.alertaTasaMinima.f09Actual / 100)} — brecha ${fmtPct(data.data.alertaTasaMinima.brechaPp / 100)} bajo el mínimo. Impuesto adicional estimado: ${fmtCop(data.data.alertaTasaMinima.impuestoAdicionalEstimado)}.`
                   : `Current F09 ${fmtPct(data.data.alertaTasaMinima.f09Actual / 100)} — ${fmtPct(data.data.alertaTasaMinima.brechaPp / 100)} below the minimum. Estimated additional tax: ${fmtCop(data.data.alertaTasaMinima.impuestoAdicionalEstimado)}.`}
@@ -254,7 +254,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
 
       {/* Footer */}
       {!loading && !error && (
-        <div className="mt-auto pt-2 border-t border-n-200/40 dark:border-n-800/40">
+        <div className="mt-auto pt-2 border-t border-n-200/40">
           <NormaCitation norma="Art. 240 E.T." />
         </div>
       )}

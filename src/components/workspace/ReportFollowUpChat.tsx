@@ -540,8 +540,13 @@ export function ReportFollowUpChat({
                   aria-label={copy.sendLabel}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium transition-colors shrink-0',
+                    // Deshabilitado ≠ invisible. `text-n-400` sobre `bg-n-100`
+                    // daba 1.94:1 en claro y 2.28:1 en oscuro: el botón "Enviar"
+                    // desaparecía justo mientras el usuario espera la respuesta,
+                    // que es cuando más necesita ver que sigue ahí. n-600 es el
+                    // mínimo de CLAUDE.md para estado disabled → 4.99:1 / 5.99:1.
                     isStreaming || !input.trim()
-                      ? 'bg-n-100 text-n-400 cursor-not-allowed'
+                      ? 'bg-n-100 text-n-600 cursor-not-allowed'
                       : 'bg-gold-500 text-n-0 hover:bg-gold-700',
                   )}
                 >

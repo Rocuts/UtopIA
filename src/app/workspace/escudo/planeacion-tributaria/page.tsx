@@ -89,7 +89,7 @@ export default function PlaneacionTributariaPage() {
           {stats.map(({ label, value, accent }) => (
             <div
               key={label}
-              className="rounded-xl border border-n-200 bg-n-100 dark:bg-n-900 dark:border-n-700 px-5 py-4 space-y-1"
+              className="rounded-xl border border-n-200 bg-n-100 px-5 py-4 space-y-1"
             >
               <div className="text-xs font-medium text-n-500 uppercase tracking-wide">{label}</div>
               <div
@@ -111,7 +111,7 @@ export default function PlaneacionTributariaPage() {
             {strategies.map(({ Icon, title, legal, savings, priority, priorityColor }) => (
               <div
                 key={title}
-                className="flex items-center gap-4 rounded-xl border border-n-200 bg-n-100 dark:bg-n-900 dark:border-n-700 px-5 py-4"
+                className="flex items-center gap-4 rounded-xl border border-n-200 bg-n-100 px-5 py-4"
               >
                 {/* Icon container */}
                 <div

@@ -3,6 +3,8 @@
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Rocket } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/context/LanguageContext';
+import { dict } from '@/lib/i18n/dictionaries';
 import { tokens } from '../tokens';
 
 export interface WizardStep {
@@ -28,10 +30,12 @@ export function StepWizard({
   onNext,
   onBack,
   onSubmit,
-  submitLabel = 'Enviar',
+  submitLabel,
   className,
 }: StepWizardProps) {
   const prefersReduced = useReducedMotion();
+  const { language } = useLanguage();
+  const t = dict[language].intake.wizard;
   const isLast = currentStep === steps.length - 1;
   const isFirst = currentStep === 0;
   const current = steps[currentStep];
@@ -40,21 +44,27 @@ export function StepWizard({
     <div className={cn('flex flex-col h-full', className)}>
       {/* Progress bar */}
       <div className="px-6 pt-6 pb-4 shrink-0">
-        <nav aria-label="Pasos del formulario">
+        <nav aria-label={t.navLabel}>
           <ol className="flex items-center gap-2 mb-3">
             {steps.map((step, i) => {
               const completionState =
                 i < currentStep
-                  ? 'completado'
+                  ? t.stateDone
                   : i === currentStep
-                    ? 'actual'
-                    : 'pendiente';
+                    ? t.stateCurrent
+                    : t.statePending;
+              /* El aria-label del paso es el único texto que un usuario de
+                 lector de pantalla no puede sortear: se anunciaba siempre en
+                 español aunque la interfaz estuviera en inglés. */
               return (
                 <li
                   key={step.id}
                   className="flex items-center gap-2 flex-1"
                   aria-current={currentStep === i ? 'step' : undefined}
-                  aria-label={`Paso ${i + 1}: ${step.label} (${completionState})`}
+                  aria-label={t.stepAria
+                    .replace('{n}', String(i + 1))
+                    .replace('{label}', step.label)
+                    .replace('{state}', completionState)}
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <div
@@ -128,7 +138,7 @@ export function StepWizard({
           )}
         >
           <ChevronLeft className="w-4 h-4" />
-          Anterior
+          {t.back}
         </button>
 
         {isLast ? (
@@ -144,7 +154,7 @@ export function StepWizard({
             )}
           >
             <Rocket className="w-4 h-4" />
-            {submitLabel}
+            {submitLabel ?? t.submit}
           </button>
         ) : (
           <button
@@ -158,7 +168,7 @@ export function StepWizard({
                 : 'bg-[#e5e5e5] text-[#a3a3a3] cursor-not-allowed',
             )}
           >
-            Siguiente
+            {t.next}
             <ChevronRight className="w-4 h-4" />
           </button>
         )}

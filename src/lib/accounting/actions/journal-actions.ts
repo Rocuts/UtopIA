@@ -6,6 +6,8 @@
 // Components (formularios) los invoquen via `useTransition` o `<form action>`
 // sin pagar el costo de un Route Handler HTTP. Cada accion:
 //
+//   0. Gate de sesion (`denyIfNoSession`) — no-op en fase 1, rechaza con
+//      code 'UNAUTHENTICATED' en fase 2. Ver `_auth-gate.ts`.
 //   1. Deriva `workspaceId` del COOKIE (NUNCA del input — vector de IDOR).
 //   2. Valida el input con Zod (mismo schema que /api/accounting/*).
 //   3. Llama al servicio puro (createEntry / postEntry / reverseEntry / voidDraft).
@@ -45,6 +47,7 @@ import {
   type SourceType,
 } from '@/lib/accounting/types';
 import { getOrCreateWorkspace } from '@/lib/db/workspace';
+import { denyIfNoSession } from './_auth-gate';
 
 // ---------------------------------------------------------------------------
 // Schemas (mirror de /lib/validation/accounting-schemas.ts pero independientes
@@ -201,6 +204,11 @@ function zodToActionError(error: z.ZodError): ActionError {
 export async function createJournalEntryAction(
   rawInput: unknown,
 ): Promise<CreateJournalEntryResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = createEntrySchema.safeParse(rawInput);
   if (!parsed.success) return zodToActionError(parsed.error);
 
@@ -256,6 +264,11 @@ export async function createJournalEntryAction(
 export async function postJournalEntryAction(
   entryId: string,
 ): Promise<PostJournalEntryResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   if (typeof entryId !== 'string' || entryId.length === 0) {
     return {
       ok: false,
@@ -289,6 +302,11 @@ export async function postJournalEntryAction(
 export async function reverseJournalEntryAction(
   rawInput: unknown,
 ): Promise<ReverseJournalEntryResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   const parsed = reverseEntrySchema.safeParse(rawInput);
   if (!parsed.success) return zodToActionError(parsed.error);
 
@@ -328,6 +346,11 @@ export async function reverseJournalEntryAction(
 export async function voidDraftEntryAction(
   entryId: string,
 ): Promise<VoidDraftEntryResult> {
+  // Gate de sesion (fase 1 = no-op). Va ANTES de Zod: sin sesion el caller
+  // no debe aprender la forma del schema via mensajes de validacion.
+  const denied = await denyIfNoSession();
+  if (denied) return denied;
+
   if (typeof entryId !== 'string' || entryId.length === 0) {
     return {
       ok: false,

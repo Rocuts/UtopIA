@@ -97,7 +97,7 @@ function StatCard({
   accent?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-n-200/60 bg-n-0/60 px-5 py-4 backdrop-blur-sm dark:border-n-800/60 dark:bg-n-900/40">
+    <div className="flex flex-col gap-1 rounded-xl border border-n-200/60 bg-n-0/60 px-5 py-4 backdrop-blur-sm">
       <span className="text-xs font-medium uppercase tracking-wider text-n-500">{label}</span>
       <span
         className="text-3xl font-semibold tabular-nums leading-none"
@@ -124,7 +124,7 @@ function StepIndicator({ state, index }: { state: StepState; index: number }) {
   if (state === 'active') {
     return (
       <span
-        className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 bg-n-0 text-sm font-bold dark:bg-n-950"
+        className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 bg-n-0 text-sm font-bold"
         style={{ borderColor: AC, color: AC }}
         aria-label="En progreso"
       >
@@ -132,9 +132,13 @@ function StepIndicator({ state, index }: { state: StepState; index: number }) {
       </span>
     );
   }
+  // `text-n-400` daba 2.23:1 en claro y 2.59:1 en oscuro — el icono de paso
+  // pendiente era casi invisible. n-600 lo sube a 5.74:1 / 6.81:1 sin dejar de
+  // leerse como estado inactivo. `dark:bg-n-950` además NO existía en la escala
+  // (globals.css sólo define 0/50/100..1000): compilaba a nada.
   return (
     <span
-      className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-n-300 bg-n-0 text-sm text-n-400 dark:border-n-700 dark:bg-n-950"
+      className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-n-300 bg-n-0 text-sm text-n-600"
       aria-label="Pendiente"
     >
       <Circle className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -201,7 +205,7 @@ function BadgePill({ status, label }: { status: 'warning' | 'success'; label: st
 
 function CaseRow({ item }: { item: CaseItem }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-n-200/60 bg-n-0/60 px-4 py-3 backdrop-blur-sm dark:border-n-800/50 dark:bg-n-900/40">
+    <div className="flex items-center gap-3 rounded-xl border border-n-200/60 bg-n-0/60 px-4 py-3 backdrop-blur-sm">
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
         style={{ background: 'rgba(168,56,56,0.12)', color: AC }}
@@ -210,7 +214,7 @@ function CaseRow({ item }: { item: CaseItem }) {
         <Gavel className="h-4.5 w-4.5" strokeWidth={1.75} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-n-900 dark:text-n-100">{item.title}</p>
+        <p className="truncate text-sm font-medium text-n-900">{item.title}</p>
         <p className="mt-0.5 text-xs text-n-500">{item.meta}</p>
       </div>
       <BadgePill status={item.status} label={item.statusLabel} />
@@ -255,7 +259,7 @@ export default function DefensaDianPage() {
           <Link
             href="/workspace/escudo"
             prefetch={false}
-            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-n-800 transition-colors dark:hover:text-n-200"
+            className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-n-800 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             {language === 'es' ? 'El Escudo' : 'The Shield'}
@@ -302,7 +306,7 @@ export default function DefensaDianPage() {
                 : 'Ordinary notice — Grupo 2tres S.A.S.'}
             </p>
           </div>
-          <div className="rounded-xl border border-n-200/60 bg-n-0/60 px-6 py-6 backdrop-blur-sm dark:border-n-800/50 dark:bg-n-900/40">
+          <div className="rounded-xl border border-n-200/60 bg-n-0/60 px-6 py-6 backdrop-blur-sm">
             <VerticalStepper steps={STEPS} />
           </div>
         </motion.section>

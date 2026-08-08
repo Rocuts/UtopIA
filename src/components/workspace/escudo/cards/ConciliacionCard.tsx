@@ -32,7 +32,7 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('block rounded animate-pulse bg-n-300/30 dark:bg-n-700/30', className)}
+      className={cn('block rounded animate-pulse bg-n-300/30', className)}
     />
   );
 }
@@ -137,7 +137,7 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
           <div className="overflow-x-auto -mx-1 px-1">
             <table className="w-full text-sm border-collapse" aria-label={t.tableLabel}>
               <thead>
-                <tr className="border-b border-n-200/40 dark:border-n-800/40">
+                <tr className="border-b border-n-200/40">
                   <th className="text-left py-1.5 pr-3 text-xs uppercase tracking-eyebrow text-n-500 font-medium">{t.colConcepto}</th>
                   <th className="text-right py-1.5 pr-3 text-xs uppercase tracking-eyebrow text-n-500 font-medium tabular-nums">{t.colMonto}</th>
                   <th className="text-left py-1.5 text-xs uppercase tracking-eyebrow text-n-500 font-medium hidden sm:table-cell">{t.colNorma}</th>
@@ -145,7 +145,7 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
               </thead>
               <tbody>
                 {/* UAI base */}
-                <tr className="border-b border-n-200/20 dark:border-n-800/20 font-semibold">
+                <tr className="border-b border-n-200/20 font-semibold">
                   <td className="py-1.5 pr-3 text-n-1000">{language === 'es' ? 'UAI Contable (F01)' : 'Pre-tax Income (F01)'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-n-1000">{fmtCop(data.data.uaiContable)}</td>
                   <td className="py-1.5 hidden sm:table-cell"><NormaCitation norma="Art. 26 E.T." /></td>
@@ -155,7 +155,7 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
                 {data.data.lineas.map((l, i) => (
                   <tr
                     key={i}
-                    className="border-b border-n-200/20 dark:border-n-800/20 hover:bg-n-50 dark:hover:bg-n-900/30 transition-colors"
+                    className="border-b border-n-200/20 hover:bg-n-50 transition-colors"
                   >
                     <td className="py-1.5 pr-3">
                       <span className="text-n-800">{l.concepto}</span>
@@ -171,27 +171,27 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
                 ))}
 
                 {/* Subtotales */}
-                <tr className="border-b border-n-200/40 dark:border-n-800/40 font-semibold bg-n-50/50 dark:bg-n-900/20">
+                <tr className="border-b border-n-200/40 font-semibold bg-n-50/50">
                   <td className="py-1.5 pr-3 text-n-1000">{language === 'es' ? 'Renta Líquida Gravable' : 'Taxable Net Income'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-n-1000">{fmtCop(data.data.rentaLiquidaGravable)}</td>
                   <td className="py-1.5 hidden sm:table-cell"><NormaCitation norma="Art. 26 E.T." /></td>
                 </tr>
-                <tr className="border-b border-n-200/20 dark:border-n-800/20">
+                <tr className="border-b border-n-200/20">
                   <td className="py-1.5 pr-3 text-n-800">{language === 'es' ? `Tarifa (${fmtPct(data.data.tarifaPct)})` : `Rate (${fmtPct(data.data.tarifaPct)})`}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-n-800">{fmtCop(data.data.impuestoBruto)}</td>
                   <td className="py-1.5 hidden sm:table-cell"><NormaCitation norma="Art. 240 E.T." /></td>
                 </tr>
-                <tr className="border-b border-n-200/20 dark:border-n-800/20">
+                <tr className="border-b border-n-200/20">
                   <td className="py-1.5 pr-3 text-n-800">{language === 'es' ? 'Descuentos' : 'Tax Credits'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-success">({fmtCop(data.data.totalDescuentos)})</td>
                   <td className="py-1.5 hidden sm:table-cell"><NormaCitation norma="Arts. 254-257 E.T." /></td>
                 </tr>
-                <tr className="border-b border-n-200/40 dark:border-n-800/40 font-semibold">
+                <tr className="border-b border-n-200/40 font-semibold">
                   <td className="py-1.5 pr-3 text-n-1000">{language === 'es' ? 'Impuesto Neto' : 'Net Tax'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-n-1000">{fmtCop(data.data.impuestoNeto)}</td>
                   <td className="py-1.5 hidden sm:table-cell"><NormaCitation norma="Art. 240 E.T." /></td>
                 </tr>
-                <tr className="border-b border-n-200/20 dark:border-n-800/20">
+                <tr className="border-b border-n-200/20">
                   <td className="py-1.5 pr-3 text-n-800">{language === 'es' ? 'Retenciones y Anticipos' : 'Withholdings & Prepayments'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-warning">({fmtCop(data.data.retencionesYAnticipos)})</td>
                   <td className="py-1.5 hidden sm:table-cell"><NormaCitation norma="Arts. 365-367 E.T." /></td>
@@ -221,7 +221,7 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
           {data.warnings.length > 0 && (
             <ul role="list" className="flex flex-col gap-1.5">
               {data.warnings.map((w, i) => (
-                <li key={i} className="text-xs text-n-700 dark:text-n-600 flex items-start gap-1.5">
+                <li key={i} className="text-xs text-n-700 flex items-start gap-1.5">
                   <span aria-hidden="true" className="shrink-0 mt-1 h-1 w-1 rounded-full bg-warning" />
                   {w}
                 </li>
@@ -233,7 +233,7 @@ export function ConciliacionCard({ data, loading, error, t, language = 'es' }: C
 
       {/* Footer */}
       {!loading && !error && (
-        <div className="mt-auto pt-2 border-t border-n-200/40 dark:border-n-800/40">
+        <div className="mt-auto pt-2 border-t border-n-200/40">
           <NormaCitation norma="Art. 26 + Art. 647 E.T." />
         </div>
       )}

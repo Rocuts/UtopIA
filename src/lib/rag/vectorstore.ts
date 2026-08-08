@@ -83,20 +83,46 @@ const DEFAULT_K = 8;
  * codigo muerto y el agente redactaba con aplomo sobre normativa que no
  * respondia la pregunta.
  *
- * VALOR NO CALIBRADO CONTRA EL CORPUS. 0.30 es un punto de partida conservador
- * para `text-embedding-3-small` (pares irrelevantes suelen quedar por debajo de
- * 0.25; pares relevantes en espanol, por encima de 0.35). Se ajusta con
- * `RAG_MIN_COSINE_SIMILARITY` y se calibra con el log `[vectorstore] top1_sim`.
+ * CALIBRADO 2026-08 contra el corpus de produccion (Neon pgvector, 71.273
+ * chunks, `text-embedding-3-small`) con `scripts/rag-calibrate-threshold.ts`:
+ * 20 consultas normativas colombianas reales (incluidas las citas cortas que
+ * mandan los especialistas, tipo "Art. 240 E.T. tarifa") contra 16
+ * consultas-ruido de control, seis de ellas adversariales (tramites y salud en
+ * Colombia, que rozan el vocabulario de un corpus con Codigo Penal, Codigo de
+ * Minas y resoluciones de MinSalud).
+ *
+ *   ruido      top1: max 0.447  (peor caso: "instrucciones para armar un
+ *                                mueble de melamina")
+ *   normativa  rank-30 min: 0.508 (peor caso: "Art. 240 E.T. tarifa")
+ *
+ * Las poblaciones se separan limpiamente; la banda que conserva el 100% del
+ * recall actual con 0% de fuga es [0.448, 0.508] y 0.48 es su punto medio
+ * (margen +0.033 sobre el ruido, -0.028 bajo la normativa peor rankeada).
+ *
+ * El 0.30 anterior dejaba pasar el 69% de las consultas-ruido con 12,3 chunks
+ * de promedio: la consulta de control "receta de arepas de choclo con queso"
+ * (top1=0.355, rank30=0.312) entregaba sus 30 candidatos al especialista
+ * rotulados "Fuente:".
+ *
+ * Se ajusta con `RAG_MIN_COSINE_SIMILARITY`. Recalibrar tras cualquier cambio
+ * de modelo de embeddings o ampliacion grande del corpus.
  */
 const MIN_COSINE_SIMILARITY = clamp01(
-  Number(process.env.RAG_MIN_COSINE_SIMILARITY ?? '0.30'),
-  0.3,
+  Number(process.env.RAG_MIN_COSINE_SIMILARITY ?? '0.48'),
+  0.48,
 );
 
 /**
  * Score minimo del rerank de Cohere para conservar un chunk. `rerank-v3.5`
  * devuelve scores calibrados en [0,1]; por debajo de este piso el documento no
- * responde la consulta. TAMBIEN SIN CALIBRAR: `RAG_MIN_RERANK_SCORE` lo ajusta.
+ * responde la consulta.
+ *
+ * SIN CALIBRAR y no calibrable hoy: `COHERE_API_KEY` no esta configurada en
+ * ningun entorno, asi que esta rama no se ejecuta nunca. Cuando se active hay
+ * que repetir el ejercicio de `scripts/rag-calibrate-threshold.ts` sobre los
+ * scores del reranker. Mientras tanto el gate real vive en
+ * `MIN_COSINE_SIMILARITY` + `requiereCorroboracionSemantica()`, que SI corren
+ * en la ruta sin reranker. `RAG_MIN_RERANK_SCORE` lo ajusta.
  */
 const MIN_RERANK_SCORE = clamp01(
   Number(process.env.RAG_MIN_RERANK_SCORE ?? '0.05'),
@@ -221,6 +247,18 @@ async function hybridSearch(
   //
   // El filtro de distancia va FUERA del subselect ordenado (patron recomendado
   // por pgvector): dentro del WHERE impediria el index scan HNSW.
+  //
+  // `DISTINCT ON (md5(content))` en el SELECT final: el corpus tiene 51,4% de
+  // chunks repetidos porque el ingest no es idempotente y corrio dos veces
+  // (decreto_1625_2016.md: 9.800 chunks, 4.892 contenidos distintos). Sin
+  // deduplicar, el especialista recibia 4,7 de 8 contenidos distintos — el 41%
+  // de su ventana era el mismo parrafo dos veces, gastando tokens y reforzando
+  // artificialmente lo duplicado frente a lo unico. Se conserva la copia con
+  // mayor rrf_score y, entre empates, la que trae distancia vectorial (la que
+  // aporta corroboracion semantica); el orden final vuelve a ser por
+  // relevancia. Esto NO arregla la causa — hace falta un indice unico
+  // (source, md5(content)) en el ingest — pero corta el sintoma en la ruta
+  // caliente sin borrar una sola fila. Ver scripts/rag-corpus-dedup-report.ts.
   const filterClause: SQL = sql`${tenantClause} ${docTypeClause} ${entityClause} ${yearClause}`;
 
   const rows = await db.execute<ChunkRow>(sql`
@@ -255,21 +293,24 @@ async function hybridSearch(
       ) s
       GROUP BY id
     )
-    SELECT
-      c.id,
-      c.source,
-      c.doc_type,
-      c.entity,
-      c.year,
-      c.content,
-      c.contextual_prefix,
-      c.metadata,
-      fused.rrf_score,
-      (1 - vector_hits.dist) AS cosine_sim
-    FROM fused
-    JOIN rag_chunks c ON c.id = fused.id
-    LEFT JOIN vector_hits ON vector_hits.id = fused.id
-    ORDER BY fused.rrf_score DESC
+    SELECT * FROM (
+      SELECT DISTINCT ON (md5(c.content))
+        c.id,
+        c.source,
+        c.doc_type,
+        c.entity,
+        c.year,
+        c.content,
+        c.contextual_prefix,
+        c.metadata,
+        fused.rrf_score,
+        (1 - vector_hits.dist) AS cosine_sim
+      FROM fused
+      JOIN rag_chunks c ON c.id = fused.id
+      LEFT JOIN vector_hits ON vector_hits.id = fused.id
+      ORDER BY md5(c.content), fused.rrf_score DESC, vector_hits.dist ASC NULLS LAST
+    ) d
+    ORDER BY d.rrf_score DESC
     LIMIT ${PER_CHANNEL_LIMIT}
   `);
 
@@ -284,11 +325,49 @@ async function hybridSearch(
 // Optional rerank with Cohere (AI SDK native)
 // ---------------------------------------------------------------------------
 
+/**
+ * Gate de corroboracion semantica. Corre SIEMPRE, con o sin reranker.
+ *
+ * Por que existe: `maybeRerank()` salia con `rows.slice(0, topN)` antes de
+ * evaluar `MIN_RERANK_SCORE` cuando no hay `COHERE_API_KEY` — que es el estado
+ * real de todos los entornos. El unico filtro vivo en esa ruta era el umbral
+ * coseno del canal vectorial, y los chunks que entran SOLO por el canal lexico
+ * (`cosine_sim === null`) lo esquivaban por completo: llegaban al especialista
+ * rotulados "Fuente:" sin ninguna prueba semantica de que respondieran la
+ * consulta. Basta una consulta de una palabra que aparezca en cualquier
+ * decreto del corpus.
+ *
+ * Por que NO se les aplica el umbral coseno directamente: medido con
+ * `scripts/rag-calibrate-threshold.ts`, los hits lexicos de consultas
+ * normativas legitimas tienen p05 = 0.447 de coseno — por debajo de cualquier
+ * umbral defendible. Filtrarlos costaria recall real (son los match exactos de
+ * cita, "articulo 771-5") sin cerrar ninguna fuga: las 16 consultas-ruido de
+ * control producen CERO hits lexicos, porque `plainto_tsquery` exige todos los
+ * lexemas (semantica AND).
+ *
+ * La regla correcta es de corroboracion, no de puntaje: si el canal vectorial
+ * no aporto ni un solo chunk sobre el umbral, el corpus no habla del tema y una
+ * coincidencia de palabras no es una fuente. Si SI aporto, los hits lexicos
+ * suman precision y se conservan enteros.
+ */
+function requiereCorroboracionSemantica(rows: ChunkRow[]): ChunkRow[] {
+  if (rows.length === 0) return rows;
+  const corroborado = rows.some((r) => r.cosine_sim != null);
+  if (corroborado) return rows;
+  console.info(
+    `[vectorstore] descartados ${rows.length} hits SOLO-lexicos: ningun chunk ` +
+      `supero el umbral coseno ${MIN_COSINE_SIMILARITY} ⇒ sin corroboracion semantica`,
+  );
+  return [];
+}
+
 async function maybeRerank(
   query: string,
   rows: ChunkRow[],
   topN: number,
 ): Promise<ChunkRow[]> {
+  // Sin reranker el corte es puramente por ranking RRF; el gate de relevancia
+  // ya se aplico aguas arriba (umbral coseno + corroboracion semantica).
   if (!process.env.COHERE_API_KEY) return rows.slice(0, topN);
 
   try {
@@ -373,13 +452,16 @@ export async function searchDocuments(
       `[vectorstore] top1_sim=${top1Sim ?? 'n/a'} hits=${rrfHits.length} threshold=${MIN_COSINE_SIMILARITY}`,
     );
 
-    if (rrfHits.length === 0) {
+    // Gate de relevancia que SI corre sin COHERE_API_KEY (ver la funcion).
+    const corroborados = requiereCorroboracionSemantica(rrfHits);
+
+    if (corroborados.length === 0) {
       backendStatus = 'pgvector_empty';
       return noResultsMessage();
     }
 
     backendStatus = 'pgvector';
-    const top = await maybeRerank(safeQuery, rrfHits, safeK);
+    const top = await maybeRerank(safeQuery, corroborados, safeK);
 
     // El reranker puede vaciar el conjunto: entregar cero fuentes es la
     // respuesta correcta, entregar chunks irrelevantes rotulados "Fuente:" no.
@@ -422,15 +504,48 @@ export async function searchDocuments(
  * `doc_type = 'user_upload'`.
  *
  * Si `metadata.workspaceId` se pasa, el chunk queda scoped a ese tenant.
- * Si NO, queda como global (corpus oficial). El upload route deberia
- * pasar workspaceId desde la cookie `utopia_workspace_id`.
+ * Si NO, queda como global (corpus oficial) — permitido SOLO para corpus
+ * normativo, nunca para `user_upload` (ver la guardia mas abajo).
  *
  * Devuelve la cantidad de chunks insertados (0 si vectorizacion fallo).
+ *
+ * LANZA si un `user_upload` llega sin `workspaceId`.
  */
 export async function addDocumentsToStore(
   texts: string[],
   metadata: Record<string, string>,
 ): Promise<number> {
+  const workspaceId = metadata.workspaceId?.trim() || null;
+  const docType = metadata.docType || 'user_upload';
+
+  // -------------------------------------------------------------------------
+  // Guardia multi-tenant. FUERA del try: un upload sin tenant es un error de
+  // programacion del caller, no un fallo degradable.
+  //
+  // Modo de fallo que cierra: `workspace_id NULL` significa "corpus global", y
+  // toda query de cualquier tenant incluye `workspace_id IS NULL`. Un documento
+  // de cliente insertado sin workspaceId queda recuperable por CUALQUIER otro
+  // tenant via `search_docs`. Ya paso: la auditoria 2026-08 encontro 1.892
+  // chunks `user_upload` globales — tres balances de prueba y un documento de
+  // defensa ante la DIAN de clientes reales (ultimo 2026-05-28). El leak del
+  // lado del caller se cerro en 8ff6c0ab (2026-06-10), pero la libreria seguia
+  // sin defensa propia y cualquier caller nuevo lo reabria en silencio.
+  //
+  // Por que lanzar y no devolver 0: devolver 0 es indistinguible de "el
+  // embedding fallo" — el caller lo trata como no-critico y el bug vuelve a
+  // pasar desapercibido, que es exactamente como llegamos a los 1.892 chunks.
+  // Los residuos se limpian con `scripts/rag-purge-orphan-uploads.ts`.
+  // -------------------------------------------------------------------------
+  if (docType === 'user_upload' && !workspaceId) {
+    throw new Error(
+      `[vectorstore] Rechazado: doc_type='user_upload' sin workspaceId (source="${
+        metadata.source ?? 'sin nombre'
+      }"). Un chunk con workspace_id NULL entra al corpus GLOBAL y seria ` +
+        'recuperable por cualquier otro tenant. Pasa metadata.workspaceId, o ' +
+        'usa un docType de corpus normativo si el documento es publico.',
+    );
+  }
+
   try {
     await initRagSchema();
     const fullText = texts.join('\n\n');
@@ -448,8 +563,6 @@ export async function addDocumentsToStore(
     });
 
     const db = getDb();
-    const workspaceId = metadata.workspaceId || null;
-    const docType = metadata.docType || 'user_upload';
 
     // Bulk insert. INSERT ... VALUES (...), (...), ... — `db.execute(sql)`
     // permite construir multi-row con sql.join.

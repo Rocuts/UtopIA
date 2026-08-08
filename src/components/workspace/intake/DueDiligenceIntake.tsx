@@ -18,64 +18,34 @@ import { StepWizard, FileUploadZone } from '@/design-system';
 import type { WizardStep } from '@/design-system';
 import type { DueDiligenceIntake as DueDiligenceIntakeType } from '@/types/platform';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { dict } from '@/lib/i18n/dictionaries';
 import { useIntakePersistence } from './useIntakePersistence';
 import { IntakePreview } from './IntakePreview';
 import { useDocumentExtraction, type FieldConfidence } from './useDocumentExtraction';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+/**
+ * Valor de enum + icono en el componente; etiqueta y descripción en
+ * `intake.dueDiligence`. El borrador persiste el valor, nunca la etiqueta.
+ */
 const PURPOSES = [
-  {
-    value: 'credito' as const,
-    label: 'Solicitud de Crédito',
-    description: 'Evaluación financiera para respaldo de solicitud crediticia.',
-    icon: CreditCard,
-  },
-  {
-    value: 'inversion' as const,
-    label: 'Atracción de Inversión',
-    description: 'Análisis para presentar a inversionistas potenciales.',
-    icon: TrendingUp,
-  },
-  {
-    value: 'venta' as const,
-    label: 'Venta de Empresa',
-    description: 'Due diligence previo a la enajenación de participaciones.',
-    icon: Store,
-  },
-  {
-    value: 'fusion' as const,
-    label: 'Fusión / Adquisición',
-    description: 'Evaluación integral para proceso de integración empresarial.',
-    icon: GitMerge,
-  },
-  {
-    value: 'otro' as const,
-    label: 'Otro Propósito',
-    description: 'Análisis para otro requerimiento específico.',
-    icon: HelpCircle,
-  },
+  { value: 'credito' as const, icon: CreditCard },
+  { value: 'inversion' as const, icon: TrendingUp },
+  { value: 'venta' as const, icon: Store },
+  { value: 'fusion' as const, icon: GitMerge },
+  { value: 'otro' as const, icon: HelpCircle },
 ];
 
-const ENTITY_TYPES = ['SAS', 'SA', 'LTDA', 'SCS', 'Otro'] as const;
+// 'SAS' | 'SA' | 'LTDA' | 'SCS' son formas societarias colombianas: son el
+// valor y a la vez su propia etiqueta. Sólo 'otro' necesita traducción.
 const ENTITY_VALUES: DueDiligenceIntakeType['entityType'][] = ['SAS', 'SA', 'LTDA', 'SCS', 'otro'];
 
 const NIIF_GROUPS = [
-  {
-    value: 1 as const,
-    label: 'Grupo 1 -- NIIF Plenas',
-    description: 'Emisores de valores, entidades de interés público, empresas grandes.',
-  },
-  {
-    value: 2 as const,
-    label: 'Grupo 2 -- NIIF para PYMES',
-    description: 'Mediana y pequeña empresa que no cumplan requisitos de Grupo 1.',
-  },
-  {
-    value: 3 as const,
-    label: 'Grupo 3 -- Microempresas',
-    description: 'Contabilidad simplificada para microempresas.',
-  },
+  { value: 1 as const, key: 'g1' as const },
+  { value: 2 as const, key: 'g2' as const },
+  { value: 3 as const, key: 'g3' as const },
 ];
 
 const DEFAULT_VALUES: DueDiligenceIntakeType = {
@@ -102,12 +72,14 @@ function formatNIT(raw: string): string {
 
 // ─── Confidence Dot ─────────────────────────────────────────────────────────
 
-function ConfidenceDot({ level }: { level?: FieldConfidence }) {
+type IntakeCommon = (typeof dict)['es']['intake']['common'];
+
+function ConfidenceDot({ level, c }: { level?: FieldConfidence; c: IntakeCommon }) {
   if (!level || level === 'none') return null;
   return (
     <span
       className={cn('inline-block w-1.5 h-1.5 rounded-full ml-1', level === 'high' ? 'bg-success' : 'bg-warning')}
-      title={level === 'high' ? 'Auto-detectado' : 'Inferido — verificar'}
+      title={level === 'high' ? c.confHigh : c.confMedium}
     />
   );
 }
@@ -118,6 +90,9 @@ export function DueDiligenceIntake() {
   const { startNewConsultation, setIntakeModalOpen, clearIntakeDraft, setActiveMode } =
     useWorkspace();
   const { state: extractionState, uploadAndExtract, reset: resetExtraction } = useDocumentExtraction();
+  const { language } = useLanguage();
+  const c = dict[language].intake.common;
+  const t = dict[language].intake.dueDiligence;
   const [step, setStep] = useState(0);
   const [skippedUpload, setSkippedUpload] = useState(false);
   const [values, setValues] = useIntakePersistence('due_diligence', DEFAULT_VALUES);
@@ -193,10 +168,8 @@ export function DueDiligenceIntake() {
   const stepUpload = (
     <div className="space-y-4 pb-6">
       <div>
-        <h3 className="text-base font-semibold text-n-900 mb-1">Cargue su documento</h3>
-        <p className="text-xs text-n-600">
-          Cargue estados financieros, certificado de existencia o declaraciones
-        </p>
+        <h3 className="text-base font-semibold text-n-900 mb-1">{c.uploadTitle}</h3>
+        <p className="text-xs text-n-600">{t.uploadSubtitle}</p>
       </div>
 
       {extractionState.status === 'done' && extractionState.extracted ? (
@@ -207,11 +180,11 @@ export function DueDiligenceIntake() {
               <span className="text-sm font-semibold text-success">{extractionState.fileName}</span>
             </div>
             <p className="text-xs text-success/80">
-              {detected} de {totalFields} campos detectados automáticamente
+              {c.fieldsDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </p>
           </div>
           <button type="button" onClick={resetExtraction} className="text-xs text-n-400 hover:text-n-600 transition-colors">
-            Subir otro archivo
+            {c.uploadAnother}
           </button>
         </div>
       ) : extractionState.status === 'uploading' || extractionState.status === 'extracting' ? (
@@ -220,7 +193,7 @@ export function DueDiligenceIntake() {
             <Upload className="w-6 h-6 text-gold-500 mx-auto" />
           </motion.div>
           <p className="text-sm text-gold-700 mt-2 font-medium">
-            {extractionState.status === 'uploading' ? 'Subiendo archivo...' : 'Extrayendo datos...'}
+            {extractionState.status === 'uploading' ? c.uploading : c.extracting}
           </p>
           <div className="w-48 h-1.5 bg-gold-500/20 rounded-full overflow-hidden mx-auto mt-3">
             <motion.div className="h-full bg-gold-500 rounded-full" animate={{ width: `${extractionState.progress}%` }} />
@@ -232,15 +205,15 @@ export function DueDiligenceIntake() {
             <AlertCircle className="w-4 h-4 text-danger" />
             <span className="text-sm text-danger">{extractionState.error}</span>
           </div>
-          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">Intentar de nuevo</button>
+          <button type="button" onClick={resetExtraction} className="text-xs text-danger hover:underline mt-2">{c.retry}</button>
         </div>
       ) : (
         <FileUploadZone
           accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
           onUpload={uploadAndExtract}
           maxSizeMB={100}
-          label="Arrastre su archivo aquí"
-          sublabel="Estados financieros, certificados de existencia, declaraciones"
+          label={c.dropzoneLabel}
+          sublabel={t.dropzoneSublabel}
         />
       )}
 
@@ -250,7 +223,7 @@ export function DueDiligenceIntake() {
           onClick={() => { setSkippedUpload(true); setStep(1); }}
           className="text-xs text-n-400 hover:text-n-600 transition-colors block mx-auto"
         >
-          Llenar manualmente sin documento
+          {c.manualFill}
         </button>
       )}
     </div>
@@ -261,8 +234,8 @@ export function DueDiligenceIntake() {
   const step1 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Propósito del Due Diligence</h3>
-        <p className="text-xs text-n-500">Seleccione la razón principal de la evaluación.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.purposeStepTitle}</h3>
+        <p className="text-xs text-n-500">{t.purposeStepDesc}</p>
       </div>
       <div className="space-y-3">
         {PURPOSES.map((purpose) => {
@@ -296,9 +269,11 @@ export function DueDiligenceIntake() {
                       selected ? 'text-gold-500' : 'text-n-600',
                     )}
                   />
-                  <span className="text-sm font-medium text-n-900">{purpose.label}</span>
+                  <span className="text-sm font-medium text-n-900">
+                    {t.purposes[purpose.value].label}
+                  </span>
                 </div>
-                <p className="text-xs text-n-500">{purpose.description}</p>
+                <p className="text-xs text-n-500">{t.purposes[purpose.value].description}</p>
               </div>
             </button>
           );
@@ -312,17 +287,17 @@ export function DueDiligenceIntake() {
   const step2 = (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Datos de la Empresa</h3>
-        <p className="text-xs text-n-500">Información básica de la entidad a evaluar.</p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{t.companyStepTitle}</h3>
+        <p className="text-xs text-n-500">{t.companyStepDesc}</p>
         {detected > 0 && !skippedUpload && (
           <div className="flex items-center gap-2 mt-1.5 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
             <CheckCircle className="w-3.5 h-3.5 text-success" />
             <span className="text-xs text-success font-medium">
-              {detected} de {totalFields} campos auto-detectados
+              {c.fieldsAutoDetected.replace('{n}', String(detected)).replace('{total}', String(totalFields))}
             </span>
             <span className="text-2xs text-success/60 ml-auto flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success" /> alta
-              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> inferido
+              <span className="w-1.5 h-1.5 rounded-full bg-success" /> {c.confHighShort}
+              <span className="w-1.5 h-1.5 rounded-full bg-warning ml-1" /> {c.confMediumShort}
             </span>
           </div>
         )}
@@ -331,13 +306,14 @@ export function DueDiligenceIntake() {
       {/* Razon Social */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          Razón Social <ConfidenceDot level={extractedConfidence.companyName} /> <span className="text-danger ml-1">*</span>
+          {c.companyName} <ConfidenceDot level={extractedConfidence.companyName} c={c} />{' '}
+          <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="text"
           value={values.companyName}
           onChange={(e) => updateField('companyName', e.target.value)}
-          placeholder="Ej: Empresa Ejemplo S.A.S."
+          placeholder={t.companyPlaceholder}
           className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
       </div>
@@ -345,13 +321,14 @@ export function DueDiligenceIntake() {
       {/* NIT */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-1.5 flex items-center gap-0.5">
-          NIT <ConfidenceDot level={extractedConfidence.nit} /> <span className="text-danger ml-1">*</span>
+          {c.nit} <ConfidenceDot level={extractedConfidence.nit} c={c} />{' '}
+          <span className="text-danger ml-1">*</span>
         </label>
         <input
           type="text"
           value={values.nit}
           onChange={(e) => updateField('nit', formatNIT(e.target.value))}
-          placeholder="XXX.XXX.XXX-X"
+          placeholder={c.nitPlaceholder}
           maxLength={13}
           className="w-full px-3 py-2 rounded-lg border border-n-200 text-sm text-n-900 font-mono focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
         />
@@ -360,11 +337,10 @@ export function DueDiligenceIntake() {
       {/* Tipo de Entidad */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-2 flex items-center gap-0.5">
-          Tipo de Sociedad <ConfidenceDot level={extractedConfidence.entityType} />
+          {c.entityType} <ConfidenceDot level={extractedConfidence.entityType} c={c} />
         </label>
         <div className="flex flex-wrap gap-2">
-          {ENTITY_TYPES.map((label, i) => {
-            const val = ENTITY_VALUES[i];
+          {ENTITY_VALUES.map((val) => {
             const active = values.entityType === val;
             return (
               <button
@@ -378,7 +354,7 @@ export function DueDiligenceIntake() {
                     : 'bg-n-0 text-n-600 border-n-200 hover:border-n-400',
                 )}
               >
-                {label}
+                {val === 'otro' ? c.other : val}
               </button>
             );
           })}
@@ -388,7 +364,7 @@ export function DueDiligenceIntake() {
       {/* Grupo NIIF */}
       <div>
         <label className="block text-xs font-medium text-n-600 mb-2 flex items-center gap-0.5">
-          Grupo NIIF <ConfidenceDot level={extractedConfidence.niifGroup} />
+          {c.niifGroup} <ConfidenceDot level={extractedConfidence.niifGroup} c={c} />
         </label>
         <div className="space-y-2">
           {NIIF_GROUPS.map((group) => {
@@ -414,8 +390,10 @@ export function DueDiligenceIntake() {
                   {selected && <div className="w-2 h-2 rounded-full bg-gold-500" />}
                 </div>
                 <div>
-                  <span className="text-xs font-medium text-n-900">{group.label}</span>
-                  <p className="text-xs-mono text-n-500">{group.description}</p>
+                  <span className="text-xs font-medium text-n-900">
+                    {t.niifGroups[group.key].label}
+                  </span>
+                  <p className="text-xs-mono text-n-500">{t.niifGroups[group.key].description}</p>
                 </div>
               </button>
             );
@@ -427,7 +405,7 @@ export function DueDiligenceIntake() {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-medium text-n-600 mb-1.5">
-            Periodo desde <span className="text-danger">*</span>
+            {c.periodFrom} <span className="text-danger">*</span>
           </label>
           <input
             type="month"
@@ -438,7 +416,7 @@ export function DueDiligenceIntake() {
         </div>
         <div>
           <label className="block text-xs font-medium text-n-600 mb-1.5">
-            Periodo hasta <span className="text-danger">*</span>
+            {c.periodTo} <span className="text-danger">*</span>
           </label>
           <input
             type="month"
@@ -456,27 +434,17 @@ export function DueDiligenceIntake() {
   const step3 = (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-n-900 mb-1">Documentos de Soporte</h3>
-        <p className="text-xs text-n-500">
-          Adjunte documentos adicionales para el análisis.
-        </p>
+        <h3 className="text-sm font-semibold text-n-900 mb-1">{c.supportDocsTitle}</h3>
+        <p className="text-xs text-n-500">{t.docsDesc}</p>
       </div>
 
       {/* Document checklist */}
       <div className="rounded-lg border border-n-200 bg-n-50 p-3 space-y-1.5">
         <div className="flex items-center gap-1.5 mb-2">
           <Info className="w-3.5 h-3.5 text-gold-500" />
-          <span className="text-xs font-semibold text-n-600">Documentos recomendados</span>
+          <span className="text-xs font-semibold text-n-600">{t.checklistTitle}</span>
         </div>
-        {[
-          'Estados financieros (último periodo)',
-          'Balances de prueba',
-          'Declaraciones de renta',
-          'Certificado de existencia y representación',
-          'RUT actualizado',
-          'Certificado de composición accionaria',
-          'Contratos relevantes',
-        ].map((doc) => (
+        {t.checklist.map((doc) => (
           <div key={doc} className="flex items-center gap-2 text-xs-mono text-n-500">
             <div className="w-1 h-1 rounded-full bg-n-300 shrink-0" />
             {doc}
@@ -486,8 +454,8 @@ export function DueDiligenceIntake() {
 
       <FileUploadZone
         onUpload={async (_file: File) => { await new Promise((resolve) => setTimeout(resolve, 800)); }}
-        label="Estados financieros y documentos corporativos"
-        sublabel="PDF, DOCX, XLSX, imágenes -- Max 100MB"
+        label={t.docsLabel}
+        sublabel={c.fileTypesHint}
         accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
         maxSizeMB={100}
       />
@@ -508,16 +476,16 @@ export function DueDiligenceIntake() {
   // ─── Wizard Steps ──────────────────────────────────────────────────────────
 
   const steps: WizardStep[] = [
-    { id: 'upload', label: 'Documento', isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
-    { id: 'purpose', label: 'Propósito', isValid: !!values.purpose, component: step1 },
+    { id: 'upload', label: c.stepDocument, isValid: extractionState.status === 'done' || skippedUpload, component: stepUpload },
+    { id: 'purpose', label: t.stepPurpose, isValid: !!values.purpose, component: step1 },
     {
       id: 'company',
-      label: 'Empresa',
+      label: c.stepCompany,
       isValid: !!values.companyName && !!values.nit && !!values.periodStart && !!values.periodEnd,
       component: step2,
     },
-    { id: 'documents', label: 'Documentos', isValid: true, component: step3 },
-    { id: 'preview', label: 'Vista Previa', isValid: true, component: step4 },
+    { id: 'documents', label: c.stepDocuments, isValid: true, component: step3 },
+    { id: 'preview', label: c.stepPreview, isValid: true, component: step4 },
   ];
 
   return (
@@ -527,7 +495,7 @@ export function DueDiligenceIntake() {
       onNext={() => setStep((s) => Math.min(s + 1, steps.length - 1))}
       onBack={() => setStep((s) => Math.max(s - 1, 0))}
       onSubmit={handleSubmit}
-      submitLabel="Iniciar Due Diligence"
+      submitLabel={t.submitLabel}
       className="h-full"
     />
   );

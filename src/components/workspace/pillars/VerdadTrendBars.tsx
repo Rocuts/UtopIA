@@ -182,7 +182,7 @@ export function VerdadTrendBars({ series, language, density }: VerdadTrendBarsPr
           <span className="font-mono text-xs-mono uppercase tracking-eyebrow text-n-500">
             {isEs ? 'Tendencia · Pilar Verdad' : 'Trend · Truth Pillar'}
           </span>
-          <span className="text-xs text-n-600 dark:text-n-600">{goal}</span>
+          <span className="text-xs text-n-600">{goal}</span>
           {hasInterpolated && (
             <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
@@ -191,10 +191,15 @@ export function VerdadTrendBars({ series, language, density }: VerdadTrendBarsPr
           )}
         </div>
 
+        {/* Segmentado de métrica. El píldoro activo es la INVERSA de la superficie y la
+          escala n-* ya se invierte sola por tema, así que basta n-1000/n-0 sin `dark:`.
+          La forma vieja (`bg-n-900 text-white dark:bg-n-100 dark:text-n-900`) invertía
+          DOS veces y encima fijaba `text-white`, que no se adapta: en claro dejaba una
+          píldora casi negra correcta, pero en oscuro pintaba blanco sobre crema (1.2:1). */}
         <div
           role="group"
           aria-label={isEs ? 'Seleccionar métrica' : 'Select metric'}
-          className="flex rounded-md border border-n-200 overflow-hidden dark:border-n-700"
+          className="flex rounded-md border border-n-200 overflow-hidden"
         >
           {TOGGLES.map((m) => (
             <button
@@ -205,8 +210,8 @@ export function VerdadTrendBars({ series, language, density }: VerdadTrendBarsPr
               className={[
                 'px-3 py-1 text-xs font-mono transition-colors focus-visible:outline focus-visible:outline-2',
                 metric === m
-                  ? 'bg-n-900 text-white dark:bg-n-100 dark:text-n-900'
-                  : 'bg-white text-n-600 hover:bg-n-100 dark:bg-n-900 dark:text-n-400 dark:hover:bg-n-800',
+                  ? 'bg-n-1000 text-n-0'
+                  : 'bg-n-0 text-n-600 hover:bg-n-100',
               ].join(' ')}
             >
               {METRIC_LABELS[m][language]}

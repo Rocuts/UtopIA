@@ -471,7 +471,11 @@ export default function FactibilidadPage() {
                     'bg-[rgb(var(--color-gold-500-rgb)_/_0.1)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
                     'hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.18)] transition-colors',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+                    // El ring-offset sigue a la SUPERFICIE, no al modo (CLAUDE.md regla 4).
+                    // `ring-offset-n-1000` es el extremo de TINTA: al tabular por los
+                    // controles de años dibujaba un marco casi negro sobre página crema
+                    // (y crema en oscuro). n-0 es el papel de cada tema.
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
                   )}
                 >
                   <Minus className="h-4 w-4" strokeWidth={2} />
@@ -486,7 +490,7 @@ export default function FactibilidadPage() {
                     'bg-[rgb(var(--color-gold-500-rgb)_/_0.1)] text-gold-600 border border-[rgb(var(--color-gold-500-rgb)_/_0.3)]',
                     'hover:bg-[rgb(var(--color-gold-500-rgb)_/_0.18)] transition-colors',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-n-0',
                   )}
                 >
                   <Plus className="h-4 w-4" strokeWidth={2} />
@@ -520,7 +524,7 @@ export default function FactibilidadPage() {
                   'flex-1 h-10 px-3 rounded-md text-sm',
                   'bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
                   'text-n-800 placeholder:text-n-600',
-                  'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
+                  'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-0',
                 )}
               />
               <EliteButton
@@ -795,7 +799,7 @@ function LabeledNumberInput({
           'h-10 px-3 rounded-md text-base',
           'bg-n-50 dark:bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.25)]',
           'text-n-800 placeholder:text-n-600 tabular-nums',
-          'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-1000',
+          'focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-n-0',
           'transition-[border-color,box-shadow]',
         )}
       />

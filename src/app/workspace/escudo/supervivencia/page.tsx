@@ -76,7 +76,7 @@ const badgeStyles: Record<DefenseCard['badgeColor'], string> = {
 
 export default function SupervivenciaPage() {
   return (
-    <div className="min-h-screen bg-n-50 dark:bg-n-950 text-n-1000">
+    <div className="min-h-screen bg-n-50 text-n-1000">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
 
         {/* Back link */}
@@ -129,7 +129,9 @@ export default function SupervivenciaPage() {
         {/* Section header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-semibold text-n-1000 text-lg">Defensas activas</h2>
-          <span className="text-xs font-medium text-n-500 bg-n-100 dark:bg-n-800 px-2.5 py-1 rounded-full">
+          {/* n-500 sobre n-100 da 3.24:1 y esto es texto-xs con contenido real
+              (el conteo de controles), no un eyebrow decorativo: n-700 → 7.85:1. */}
+          <span className="text-xs font-medium text-n-700 bg-n-100 px-2.5 py-1 rounded-full">
             6 controles
           </span>
         </div>
@@ -139,7 +141,7 @@ export default function SupervivenciaPage() {
           {cards.map((card) => (
             <article
               key={card.name}
-              className="group relative flex flex-col gap-3 rounded-2xl border border-n-200 dark:border-n-800 bg-n-0 dark:bg-n-900 p-5 hover:border-[#A83838]/40 hover:shadow-md transition-all cursor-pointer"
+              className="group relative flex flex-col gap-3 rounded-2xl border border-n-200 bg-n-0 p-5 hover:border-[#A83838]/40 hover:shadow-md transition-all cursor-pointer"
             >
               {/* Icon */}
               <div
@@ -169,7 +171,7 @@ export default function SupervivenciaPage() {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between pt-2 border-t border-n-100 dark:border-n-800">
+              <div className="flex items-center justify-between pt-2 border-t border-n-100">
                 <span
                   className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${badgeStyles[card.badgeColor]}`}
                   style={

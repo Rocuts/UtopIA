@@ -7,11 +7,81 @@
  * - Risk indicators and inconsistencies
  * - Relevant Estatuto Tributario articles
  * - Recommended next actions
+ *
+ * Auditoria 2026-08: la llamada pasa por `callStructuredTool`, que audita el
+ * `finishReason`, valida el output contra el schema Zod y registra telemetria.
+ * Antes se hacia `JSON.parse(result.text)` a pelo: un corte por `length` que
+ * cayera justo despues de una llave valida entregaba un analisis mutilado como
+ * si estuviera completo.
  */
 
-import { generateText } from 'ai';
+import { z } from 'zod';
 import { MODELS } from '@/lib/config/models';
 import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
+import { callStructuredTool } from './structured-tool-call';
+
+// ---------------------------------------------------------------------------
+// Contrato de salida (strict mode 2026 — ver docs/spec/zod-strict-mode-2026.md)
+// ---------------------------------------------------------------------------
+// Todo campo es obligatorio. Cuando el modelo no tenga nada que reportar debe
+// devolver el array vacio, NO omitir la clave: `strict: true` de OpenAI exige
+// que `required` liste todas las propiedades.
+
+const KeyFigureCategoryEnum = z.enum([
+  'ingreso',
+  'costo',
+  'deduccion',
+  'impuesto',
+  'patrimonio',
+  'saldo',
+  'otro',
+]);
+
+const SeverityEnum = z.enum(['bajo', 'medio', 'alto', 'critico']);
+
+const DocumentTypeCodeEnum = z.enum([
+  'declaracion_renta',
+  'declaracion_iva',
+  'declaracion_retefuente',
+  'declaracion_ica',
+  'estado_financiero',
+  'requerimiento_dian',
+  'factura_electronica',
+  'certificado_ingresos',
+  'informacion_exogena',
+  'otro',
+]);
+
+const KeyFigureSchema = z.object({
+  label: z.string().min(1).describe('Nombre del campo tal como aparece en el documento'),
+  value: z.string().min(1).describe('Valor encontrado, con su formato original'),
+  category: KeyFigureCategoryEnum,
+});
+
+const RiskIndicatorSchema = z.object({
+  description: z.string().min(1).describe('Riesgo o inconsistencia detectada'),
+  severity: SeverityEnum,
+  recommendation: z.string().min(1).describe('Accion recomendada, concreta'),
+});
+
+const RelevantArticleSchema = z.object({
+  // El articulo del ejemplo ilustra el FORMATO de la cita; el codigo no depende
+  // de el. Art. 771-2 E.T. (procedencia de costos, deducciones e impuestos
+  // descontables) verificado vigente a 2026-08.
+  article: z.string().min(1).describe('Referencia normativa. Ej: "Art. 771-2 E.T."'),
+  description: z.string().min(1).describe('De que trata la norma'),
+  relevance: z.string().min(1).describe('Por que aplica a ESTE documento'),
+});
+
+export const DocumentAnalysisSchema = z.object({
+  documentType: z.string().min(1).describe('Nombre descriptivo del tipo de documento'),
+  documentTypeCode: DocumentTypeCodeEnum,
+  keyFigures: z.array(KeyFigureSchema),
+  riskIndicators: z.array(RiskIndicatorSchema),
+  relevantArticles: z.array(RelevantArticleSchema),
+  recommendedActions: z.array(z.string().min(1)),
+  summary: z.string().min(1).describe('Resumen ejecutivo de 2-3 oraciones'),
+});
 
 export interface DocumentAnalysis {
   documentType: string;
@@ -41,53 +111,23 @@ export interface RelevantArticle {
   relevance: string;
 }
 
+// El schema NO se describe en prosa: lo enforza `Output.object({ schema })`
+// (CLAUDE.md — patron canonico GPT-5.4). Aqui solo van las reglas de juicio.
 const ANALYSIS_SYSTEM_PROMPT = `Eres un experto analizador de documentos contables y tributarios colombianos.
-Tu tarea es analizar el texto extraido de un documento y devolver un analisis estructurado en formato JSON.
 
-DEBES responder UNICAMENTE con un objeto JSON valido (sin markdown, sin backticks, sin texto adicional) con esta estructura exacta:
+<task>Analizar el texto extraido de un documento y devolver su tipo, cifras clave, riesgos, normas aplicables y acciones recomendadas.</task>
 
-{
-  "documentType": "Nombre descriptivo del tipo de documento",
-  "documentTypeCode": "uno de: declaracion_renta, declaracion_iva, declaracion_retefuente, declaracion_ica, estado_financiero, requerimiento_dian, factura_electronica, certificado_ingresos, informacion_exogena, otro",
-  "keyFigures": [
-    {
-      "label": "nombre del campo",
-      "value": "valor encontrado con formato",
-      "category": "uno de: ingreso, costo, deduccion, impuesto, patrimonio, saldo, otro"
-    }
-  ],
-  "riskIndicators": [
-    {
-      "description": "descripcion del riesgo identificado",
-      "severity": "uno de: bajo, medio, alto, critico",
-      "recommendation": "accion recomendada"
-    }
-  ],
-  "relevantArticles": [
-    {
-      "article": "Art. XXX E.T.",
-      "description": "de que trata el articulo",
-      "relevance": "por que es relevante para este documento"
-    }
-  ],
-  "recommendedActions": [
-    "accion recomendada 1",
-    "accion recomendada 2"
-  ],
-  "summary": "Resumen ejecutivo del analisis del documento en 2-3 oraciones."
-}
-
-REGLAS:
-- Identifica TODAS las cifras financieras mencionadas en el documento.
-- Si detectas inconsistencias (ej. ingresos muy bajos vs patrimonio alto), reportalas como riskIndicators.
-- Cita articulos especificos del Estatuto Tributario que apliquen.
-- Las acciones recomendadas deben ser especificas y accionables.
-- Si no puedes identificar el tipo de documento con certeza, usa "otro" y explica en el summary.
-- SIEMPRE responde en espanol.
-- El JSON debe ser valido y parseable directamente.`;
+<constraints>
+  - NEVER inventes cifras, articulos ni fechas que no esten en el texto recibido.
+  - Si una cifra aparece en el documento, reportala en keyFigures con su formato original.
+  - If detectas una inconsistencia entre cifras (p. ej. ingresos muy bajos frente a patrimonio alto) then reportala en riskIndicators con su severidad, otherwise deja riskIndicators vacio.
+  - If no puedes identificar el tipo de documento con certeza then usa documentTypeCode "otro" y explicalo en summary.
+  - Cita solo articulos del Estatuto Tributario que apliquen realmente al documento.
+  - Responde siempre en espanol.
+</constraints>`;
 
 /**
- * Analyze a document's extracted text using OpenAI to identify type, figures, risks, and recommendations.
+ * Analyze a document's extracted text: type, figures, risks, recommendations.
  */
 export async function analyzeDocument(
   documentText: string,
@@ -113,39 +153,16 @@ export async function analyzeDocument(
     : `Analiza el siguiente documento:\n\n${truncatedText}`;
 
   try {
-    const result = await generateText({
+    const json = await callStructuredTool({
+      toolName: 'document-analyzer',
       model: MODELS.CHAT,
-      messages: [
-        { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.1,
+      schema: DocumentAnalysisSchema,
+      system: ANALYSIS_SYSTEM_PROMPT,
+      userContent: userPrompt,
       maxOutputTokens: 2000,
     });
 
-    const content = result.text?.trim();
-    if (!content) {
-      return fallbackAnalysis('No se obtuvo respuesta del modelo de analisis.');
-    }
-
-    // Parse the JSON response, stripping any accidental markdown fences
-    const cleaned = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-    const parsed = JSON.parse(cleaned) as DocumentAnalysis;
-
-    // Validate required fields
-    if (!parsed.documentType || !parsed.documentTypeCode) {
-      return fallbackAnalysis('El analisis no pudo determinar el tipo de documento.');
-    }
-
-    return {
-      documentType: parsed.documentType,
-      documentTypeCode: parsed.documentTypeCode,
-      keyFigures: Array.isArray(parsed.keyFigures) ? parsed.keyFigures : [],
-      riskIndicators: Array.isArray(parsed.riskIndicators) ? parsed.riskIndicators : [],
-      relevantArticles: Array.isArray(parsed.relevantArticles) ? parsed.relevantArticles : [],
-      recommendedActions: Array.isArray(parsed.recommendedActions) ? parsed.recommendedActions : [],
-      summary: parsed.summary || 'Analisis completado.',
-    };
+    return json;
   } catch (error) {
     console.error('Document analysis failed:', error);
     return fallbackAnalysis(

@@ -5,6 +5,27 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
 
+/**
+ * Inicio de sesion con credenciales.
+ *
+ * Vive fuera del componente a proposito: `rememberMe` tenia estado y casilla
+ * pero su valor no viajaba a ninguna parte — la casilla no hacia nada. Al
+ * extraer la llamada queda cubierta por un test unitario que verifica que el
+ * valor SI llega a BetterAuth (`rememberMe` controla si la sesion sobrevive al
+ * cierre del navegador; sin el, "Recordarme" era decorativo).
+ */
+export async function signInWithCredentials(args: {
+  email: string;
+  password: string;
+  rememberMe: boolean;
+}) {
+  return authClient.signIn.email({
+    email: args.email,
+    password: args.password,
+    rememberMe: args.rememberMe,
+  });
+}
+
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,7 +70,7 @@ function LoginContent() {
       return;
     }
 
-    const { error: err } = await authClient.signIn.email({ email, password });
+    const { error: err } = await signInWithCredentials({ email, password, rememberMe });
     if (err) {
       setError(err.message ?? 'Credenciales incorrectas.');
       setLoading(false);
@@ -254,7 +275,13 @@ function LoginContent() {
             {/* name field — signup only */}
             {!isLogin && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-[0.08em] text-n-700">
+                {/* htmlFor/id: sin este par el <label> es solo texto suelto y el
+                    input queda SIN nombre accesible — el lector de pantalla
+                    anuncia "cuadro de edicion" a secas. */}
+                <label
+                  htmlFor="login-name"
+                  className="text-xs font-semibold uppercase tracking-[0.08em] text-n-700"
+                >
                   Nombre completo
                 </label>
                 <div className="flex items-center gap-2.5 h-[46px] px-3.5 bg-n-0 border border-n-200 rounded-xl focus-within:border-gold-500 focus-within:ring-[3px] focus-within:ring-gold-500/15 transition-all">
@@ -263,6 +290,7 @@ function LoginContent() {
                   </svg>
                   <input
                     required
+                    id="login-name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -276,7 +304,10 @@ function LoginContent() {
 
             {/* email */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-n-700">
+              <label
+                htmlFor="login-email"
+                className="text-xs font-semibold uppercase tracking-[0.08em] text-n-700"
+              >
                 Correo electrónico
               </label>
               <div className="flex items-center gap-2.5 h-[46px] px-3.5 bg-n-0 border border-n-200 rounded-xl focus-within:border-gold-500 focus-within:ring-[3px] focus-within:ring-gold-500/15 transition-all">
@@ -285,6 +316,7 @@ function LoginContent() {
                 </svg>
                 <input
                   required
+                  id="login-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -297,7 +329,10 @@ function LoginContent() {
 
             {/* password */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-n-700">
+              <label
+                htmlFor="login-password"
+                className="text-xs font-semibold uppercase tracking-[0.08em] text-n-700"
+              >
                 Contraseña
               </label>
               <div className="flex items-center gap-2.5 h-[46px] px-3.5 bg-n-0 border border-n-200 rounded-xl focus-within:border-gold-500 focus-within:ring-[3px] focus-within:ring-gold-500/15 transition-all">
@@ -306,6 +341,7 @@ function LoginContent() {
                 </svg>
                 <input
                   required
+                  id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -335,8 +371,12 @@ function LoginContent() {
             {/* remember me + forgot password — login only */}
             {isLogin && (
               <div className="flex items-center justify-between mt-[-4px]">
-                <label className="flex items-center gap-2 text-sm text-n-600 cursor-pointer select-none">
+                <label
+                  htmlFor="login-remember"
+                  className="flex items-center gap-2 text-sm text-n-600 cursor-pointer select-none"
+                >
                   <input
+                    id="login-remember"
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
@@ -381,11 +421,30 @@ function LoginContent() {
             <span className="flex-1 h-px bg-n-200" />
           </div>
 
-          {/* SSO buttons — visual only */}
+          {/* ── Proveedores alternos — DESACTIVADOS a proposito ──
+              SSO empresarial (SAML/OIDC) y passkey (WebAuthn) exigen plugins de
+              BetterAuth configurados en el servidor, y BetterAuth aun corre en
+              despliegue por fases (Fase 1 = no-op si falta BETTER_AUTH_SECRET).
+              Mientras no exista el backend, la unica opcion honesta es que se
+              vean apagados: un boton enfocable, con hover y sin `onClick` es un
+              control muerto que aparenta estar vivo — el usuario pulsa, no pasa
+              nada, y concluye que su cuenta esta rota.
+              CONTRASTE — la cifra real es la COMPUESTA, no la del token:
+              `opacity-70` aplica al boton entero, asi que la tinta efectiva no
+              es `n-600` sino `n-600` mezclado al 70% sobre `n-0`. Medido:
+              3.03:1 en claro (#6B6354 sobre #FCFBF8) y 3.81:1 en oscuro
+              (#A09683 sobre #0A0907). Pasa el piso de 3:1 de CLAUDE.md para
+              deshabilitado, pero en claro con ~1% de margen: si alguien baja la
+              opacidad o mueve el token un peldaño, esto cae por debajo del piso
+              sin que ningun guard lo note. Al tocar aqui, recalcula la
+              compuesta en LOS DOS modos. */}
           <div className="flex gap-3">
             <button
               type="button"
-              className="flex-1 h-11 border border-n-200 bg-n-0 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-n-800 hover:border-n-300 hover:bg-n-50 transition-all"
+              disabled
+              aria-disabled="true"
+              title="Disponible próximamente"
+              className="flex-1 h-11 border border-n-200 bg-n-0 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-n-600 cursor-not-allowed opacity-70"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>
@@ -394,7 +453,10 @@ function LoginContent() {
             </button>
             <button
               type="button"
-              className="flex-1 h-11 border border-n-200 bg-n-0 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-n-800 hover:border-n-300 hover:bg-n-50 transition-all"
+              disabled
+              aria-disabled="true"
+              title="Disponible próximamente"
+              className="flex-1 h-11 border border-n-200 bg-n-0 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-n-600 cursor-not-allowed opacity-70"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 9.33-2.5"/>
@@ -402,6 +464,9 @@ function LoginContent() {
               Llave de acceso
             </button>
           </div>
+          <p className="text-xs text-n-600 mt-2 text-center">
+            SSO empresarial y llave de acceso estarán disponibles próximamente.
+          </p>
 
           {/* footer link */}
           <p className="text-center text-sm text-n-600 mt-6">
