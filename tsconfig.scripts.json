@@ -1,0 +1,10 @@
+{
+  "//": "tsconfig para los scripts de scripts/ ejecutados con tsx. Extiende el base y añade el alias del sentinel `server-only` de Next (mismo stub que usa Vitest en vitest.config.ts). Sin esto, cualquier script que importe el orquestador financiero muere con MODULE_NOT_FOUND porque `server-only` sólo existe dentro del runtime de Next.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./src/__mocks__/server-only.ts"]
+    }
+  }
+}

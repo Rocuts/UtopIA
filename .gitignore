@@ -59,3 +59,6 @@ src/data/vector_store/
 # Documentos editoriales/de orientación (no se versionan)
 Documentos de orientacion/
 
+
+# Salidas del harness de medición FASE 0 (regenerables)
+.fase0/

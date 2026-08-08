@@ -28,6 +28,7 @@
 // ---------------------------------------------------------------------------
 
 import { runCurator } from './balance-curator';
+import { normalizeSignConvention } from './sign-convention';
 import type {
   CashFlowStatement,
   Class18ClassificationAudit,
@@ -715,6 +716,21 @@ export interface ParseTrialBalanceOptions {
    * fuerza ese periodo en TODOS los rows, ignorando headers de año.
    */
   forcePeriod?: string;
+  /**
+   * Normaliza la convencion de signos del archivo a la convencion NATURAL que
+   * asume el resto del sistema (activo/pasivo/patrimonio/ingresos como
+   * magnitudes de su naturaleza). Default `true`.
+   *
+   * Los ERP que exportan en convencion ALGEBRAICA (debitos +, creditos -)
+   * entregan las clases 2, 3 y 4 en negativo; sin normalizar, el preprocesador
+   * lee un Pasivo negativo y R8 tapa la diferencia en la cuenta virtual 3710VC,
+   * de modo que la ecuacion patrimonial cuadra contra si misma y ninguna
+   * cuadratura del pipeline detecta el error. Ver `sign-convention.ts`.
+   *
+   * Se pone en `false` solo para medir el comportamiento previo (tests de
+   * regresion) o cuando el caller ya normalizo por su cuenta.
+   */
+  normalizeSignConvention?: boolean;
 }
 
 interface BalanceColumn {
@@ -810,7 +826,19 @@ export function parseTrialBalanceCSV(
     });
   }
 
-  return rows;
+  // -------------------------------------------------------------------------
+  // Normalizacion de la convencion de signos (FASE 0, 2026-08).
+  // -------------------------------------------------------------------------
+  // La unica normalizacion por naturaleza PUC del parser vive en la rama
+  // debito/credito de arriba, y esa rama es inalcanzable en cuanto el archivo
+  // trae cualquier columna que `isBalanceHeader` reconozca — el caso de todos
+  // los exports de ERP con columna de saldo. Aqui cubrimos ese hueco: si el
+  // archivo viene en convencion algebraica (debitos +, creditos -), invertimos
+  // las clases 2/3/4 para que el resto del pipeline reciba magnitudes de su
+  // naturaleza, que es lo que `netIncome = totalRevenue - gastos` y
+  // `equationBalance = activo - pasivo - patrimonio` asumen.
+  if (options.normalizeSignConvention === false) return rows;
+  return normalizeSignConvention(rows).rows;
 }
 
 /**
