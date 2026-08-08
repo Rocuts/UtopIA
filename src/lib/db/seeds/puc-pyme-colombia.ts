@@ -119,11 +119,16 @@ export const PUC_PYME_COLOMBIA: AccountSeed[] = [
   { code: '1528',  name: 'EQUIPO DE COMPUTACION Y COMUNICACION',                       type: 'ACTIVO', level: 3, parentCode: '15',    isPostable: false },
   { code: '152805', name: 'Equipos de procesamiento de datos',                          type: 'ACTIVO', level: 4, parentCode: '1528',  isPostable: true,  requiresCostCenter: true },
   { code: '152810', name: 'Equipos de telecomunicaciones',                              type: 'ACTIVO', level: 4, parentCode: '1528',  isPostable: true,  requiresCostCenter: true },
-  // Depreciacion acumulada (saldo natural credito, presentado restando)
+  // Depreciacion acumulada (saldo natural credito, presentado restando).
+  // Auditoria normativa 2026-08: los nombres estaban corridos un slot respecto
+  // del Decreto 2650/1993, que asigna 159210 = MAQUINARIA Y EQUIPO,
+  // 159215 = EQUIPO DE OFICINA y 159220 = EQUIPO DE COMPUTACION Y
+  // COMUNICACION. Cada subcuenta de 1592 espeja su cuenta bruta: 159205↔1516,
+  // 159215↔1524, 159220↔1528.
   { code: '1592',  name: 'DEPRECIACION ACUMULADA',                                     type: 'ACTIVO', level: 3, parentCode: '15',    isPostable: false },
   { code: '159205', name: 'Construcciones y edificaciones',                             type: 'ACTIVO', level: 4, parentCode: '1592',  isPostable: true },
-  { code: '159210', name: 'Equipo de oficina',                                          type: 'ACTIVO', level: 4, parentCode: '1592',  isPostable: true },
-  { code: '159215', name: 'Equipo de computacion y comunicacion',                       type: 'ACTIVO', level: 4, parentCode: '1592',  isPostable: true },
+  { code: '159215', name: 'Equipo de oficina',                                          type: 'ACTIVO', level: 4, parentCode: '1592',  isPostable: true },
+  { code: '159220', name: 'Equipo de computacion y comunicacion',                       type: 'ACTIVO', level: 4, parentCode: '1592',  isPostable: true },
 
   // ════════════════════════════════════════════════════════════════════════
   // CLASE 2 — PASIVO

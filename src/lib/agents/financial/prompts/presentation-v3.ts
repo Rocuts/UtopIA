@@ -126,23 +126,30 @@ export function mergeDepreciation(snapshot: PeriodSnapshot): DepreciationInfo {
   // distinto de cero. Si ambos coinciden, da igual cual gane.
   const daCop = Math.max(Math.abs(gastoPeriodo), Math.abs(cfDA));
 
-  // Derecho de uso (NIIF 16) — cuentas 15XX (subcuentas de derecho de uso).
-  // No todas las empresas las usan; default 0 si no se encuentran.
-  const roU = sumAbsoluteBalanceForCodes(snapshot, [
-    '1530', '1531', '1532', '1533', '1534', '1535',
-  ]);
-  // Solo contar como amortizacion ROU si tambien hay contracuenta de
-  // amortizacion acumulada (sufijo "92") — evita doble-conteo con PPE.
-  const roUAmortization = sumAbsoluteBalanceForCodes(snapshot, [
-    '159230', '159231',
-  ]);
-
-  // Deterioro acumulado — cuentas 1915 (deterioro PPE) y 1810 (deterioro
-  // intangibles). Tomamos el saldo absoluto como proxy del deterioro
-  // acumulado; el curator R-future puede afinar a "deterioro del periodo".
-  const impairment = sumAbsoluteBalanceForCodes(snapshot, [
-    '1915', '191505', '191510', '181005',
-  ]);
+  // -------------------------------------------------------------------------
+  // Auditoria normativa 2026-08 — codigos retirados por no existir en el PUC.
+  //
+  // Este bloque usaba codigos que NO estan en el Decreto 2650/1993 y que en un
+  // caso COLISIONAN con una cuenta real:
+  //   - '1530'..'1535' como "derecho de uso NIIF 16": en el decreto 1532 es
+  //     Equipo medico-cientifico; 1530/1531/1533/1534/1535 no existen.
+  //   - '159230'/'159231' como "amortizacion de derecho de uso": 159230 es
+  //     Depreciacion acumulada — EQUIPO DE HOTELES Y RESTAURANTES. En una
+  //     empresa hotelera esto DUPLICABA la D&A del EFE.
+  //   - '1915'/'191505'/'191510' como "deterioro PPE": no existen. 1910 es
+  //     Valorizaciones de PPE, de naturaleza debito.
+  //   - '1810'/'181005' como "deterioro intangibles": no existen; el grupo 18
+  //     solo tiene 1805, 1895 y 1899.
+  //
+  // Las entidades PUEDEN definir codigos propios para derecho de uso y
+  // deterioro (Ley 1314/2009; CTCP 2024-0061), pero adivinarlos produce
+  // dobles conteos silenciosos. Hasta que exista un mapeo verificado por
+  // entidad, estos componentes se reportan en cero: la doctrina del EFE
+  // manda OMITIR la linea cuando no hay D&A material, que es un resultado
+  // honesto, en vez de inventar una cifra.
+  // -------------------------------------------------------------------------
+  const roUAmortization = 0;
+  const impairment = 0;
 
   const totalNonCashAdjustments = daCop + roUAmortization + impairment;
   return {
@@ -289,18 +296,6 @@ function sumBalanceForPrefix(snapshot: PeriodSnapshot, prefix: string): number {
   return total;
 }
 
-function sumAbsoluteBalanceForCodes(snapshot: PeriodSnapshot, prefixes: string[]): number {
-  let total = 0;
-  for (const account of iterAccounts(snapshot)) {
-    for (const prefix of prefixes) {
-      if (account.code.startsWith(prefix)) {
-        total += Math.abs(account.balance);
-        break;
-      }
-    }
-  }
-  return total;
-}
 
 // ---------------------------------------------------------------------------
 // Doctrina Markdown — se antepone al system prompt entre Seccion 0 y

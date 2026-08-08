@@ -37,7 +37,18 @@ export type CuratorRuleCode =
   // Wave 2.F4 — Parte 5 spec v2.0 anomalías catalogadas como reglas curator.
   | 'CUR-R17'
   | 'CUR-R18'
-  | 'CUR-R19';
+  | 'CUR-R19'
+  // Sub-códigos de R1 — trazan lo que la regla decidió NO reclasificar. Sin
+  // ellos, "no hubo reclasificación" es indistinguible de "no había nada".
+  // Ver ./contra-asset-registry.ts para el fundamento normativo.
+  /** Correctora de activo preservada (NIC 1 párr. 33). */
+  | 'CUR-R1-CA'
+  /** Correctora con saldo débito — anomalía inversa. */
+  | 'CUR-R1-B'
+  /** Cuenta 1596 de naturaleza mixta sin desglosar. */
+  | 'CUR-R1-MX'
+  /** Presunta correctora fuera del catálogo PUC, detectada por denominación. */
+  | 'CUR-R1-CP';
 
 export interface CuratorFinding {
   code: CuratorRuleCode;
