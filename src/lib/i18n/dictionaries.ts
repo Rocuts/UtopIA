@@ -1005,6 +1005,21 @@ export const dict = {
       successDraft: 'Asiento guardado como borrador',
       successPosted: 'Asiento posteado correctamente',
     },
+    /**
+     * Intake del reporte NIIF. Solo cubre la captura manual del balance:
+     * es el único bloqueante duro del wizard (el backend rechaza rawData vacío)
+     * y por eso su copy no puede quedar hardcodeado en el componente.
+     */
+    niifIntake: {
+      rawDataTitle: 'Balance de prueba',
+      rawDataHint:
+        'Pegue aquí su balance de prueba (cuenta PUC, nombre, débito, crédito o saldo). Puede copiarlo directamente desde Excel o su ERP.',
+      rawDataPlaceholder:
+        '1105  CAJA GENERAL            12.500.000\n1110  BANCOS                 148.300.000\n2205  PROVEEDORES NACIONALES  -62.700.000',
+      rawDataMissing:
+        'Debe cargar un archivo o pegar su balance de prueba para generar el reporte.',
+      rawDataFromFile: 'Datos contables tomados del archivo cargado.',
+    },
   },
   en: {
     slogan: 'As simple as 1+1',
@@ -2010,6 +2025,16 @@ export const dict = {
       validationDescriptionRequired: 'Enter a description for the entry',
       successDraft: 'Entry saved as draft',
       successPosted: 'Entry posted successfully',
+    },
+    niifIntake: {
+      rawDataTitle: 'Trial balance',
+      rawDataHint:
+        'Paste your trial balance here (PUC account, name, debit, credit or balance). You can copy it straight from Excel or your ERP.',
+      rawDataPlaceholder:
+        '1105  CAJA GENERAL            12.500.000\n1110  BANCOS                 148.300.000\n2205  PROVEEDORES NACIONALES  -62.700.000',
+      rawDataMissing:
+        'You must upload a file or paste your trial balance to generate the report.',
+      rawDataFromFile: 'Accounting data taken from the uploaded file.',
     },
   },
 };

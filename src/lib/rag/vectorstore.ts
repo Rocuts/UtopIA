@@ -71,6 +71,43 @@ const PER_CHANNEL_LIMIT = 30;
 // Top-N que devuelve el rerank (o el fallback RRF directo).
 const DEFAULT_K = 8;
 
+/**
+ * Similaridad coseno minima para que un chunk cuente como evidencia del canal
+ * vectorial.
+ *
+ * Why existe: sin umbral, `ORDER BY embedding <=> q LIMIT 30` devuelve SIEMPRE
+ * los 30 chunks mas cercanos del corpus, existan o no chunks relevantes. El
+ * unico disparador de NO_RESULTS era "cero filas", que con corpus no vacio no
+ * ocurria nunca: el rail anti-alucinacion de los especialistas ("si search_docs
+ * retorna NO_RESULTS ... escala a search_web o admite desconocimiento") era
+ * codigo muerto y el agente redactaba con aplomo sobre normativa que no
+ * respondia la pregunta.
+ *
+ * VALOR NO CALIBRADO CONTRA EL CORPUS. 0.30 es un punto de partida conservador
+ * para `text-embedding-3-small` (pares irrelevantes suelen quedar por debajo de
+ * 0.25; pares relevantes en espanol, por encima de 0.35). Se ajusta con
+ * `RAG_MIN_COSINE_SIMILARITY` y se calibra con el log `[vectorstore] top1_sim`.
+ */
+const MIN_COSINE_SIMILARITY = clamp01(
+  Number(process.env.RAG_MIN_COSINE_SIMILARITY ?? '0.30'),
+  0.3,
+);
+
+/**
+ * Score minimo del rerank de Cohere para conservar un chunk. `rerank-v3.5`
+ * devuelve scores calibrados en [0,1]; por debajo de este piso el documento no
+ * responde la consulta. TAMBIEN SIN CALIBRAR: `RAG_MIN_RERANK_SCORE` lo ajusta.
+ */
+const MIN_RERANK_SCORE = clamp01(
+  Number(process.env.RAG_MIN_RERANK_SCORE ?? '0.05'),
+  0.05,
+);
+
+function clamp01(value: number, fallback: number): number {
+  if (!Number.isFinite(value) || value < 0 || value > 1) return fallback;
+  return value;
+}
+
 let backendStatus: 'pgvector' | 'pgvector_empty' | 'uninitialized' | 'error' =
   'uninitialized';
 
@@ -120,6 +157,11 @@ interface ChunkRow extends Record<string, unknown> {
   contextual_prefix: string | null;
   metadata: Record<string, unknown> | null;
   rrf_score: number;
+  /**
+   * Similaridad coseno (1 - distancia) frente a la consulta. `null` cuando el
+   * chunk entro SOLO por el canal lexico (no supero el umbral vectorial).
+   */
+  cosine_sim: number | null;
 }
 
 /**
@@ -165,32 +207,44 @@ async function hybridSearch(
       : sql``;
 
   // RRF query:
-  //   - vector_hits: top PER_CHANNEL_LIMIT por similaridad coseno.
+  //   - vector_hits: top PER_CHANNEL_LIMIT por similaridad coseno, DESCARTANDO
+  //     lo que no supere MIN_COSINE_SIMILARITY (ver constante).
   //   - lex_hits  : top PER_CHANNEL_LIMIT por ts_rank('spanish', plainto_tsquery).
   //   - fusion    : RRF score = sum(1 / (k + rank_i)) sobre cada canal donde aparece.
+  //
+  // Sin CTE `base` compartida: PostgreSQL solo inlinea una CTE referenciada UNA
+  // vez; con tres referencias la materializaba y el `ORDER BY embedding <=> ...`
+  // corria sobre un resultset intermedio SIN indices, anulando
+  // `rag_chunks_hnsw_idx` y convirtiendo cada search_docs en un scan secuencial
+  // del corpus del tenant. Ahora cada canal filtra directamente sobre
+  // `rag_chunks` y el SELECT final vuelve por id.
+  //
+  // El filtro de distancia va FUERA del subselect ordenado (patron recomendado
+  // por pgvector): dentro del WHERE impediria el index scan HNSW.
+  const filterClause: SQL = sql`${tenantClause} ${docTypeClause} ${entityClause} ${yearClause}`;
+
   const rows = await db.execute<ChunkRow>(sql`
-    WITH base AS (
-      SELECT id, source, doc_type, entity, year, content, contextual_prefix, metadata, embedding, tsv
-      FROM rag_chunks
-      WHERE ${tenantClause}
-      ${docTypeClause}
-      ${entityClause}
-      ${yearClause}
-    ),
-    vector_hits AS (
-      SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> ${embLiteral}::vector ASC) AS rnk
-      FROM base
-      ORDER BY embedding <=> ${embLiteral}::vector ASC
-      LIMIT ${PER_CHANNEL_LIMIT}
+    WITH vector_hits AS (
+      SELECT id, dist, ROW_NUMBER() OVER (ORDER BY dist ASC) AS rnk
+      FROM (
+        SELECT id, embedding <=> ${embLiteral}::vector AS dist
+        FROM rag_chunks
+        WHERE ${filterClause}
+        ORDER BY embedding <=> ${embLiteral}::vector ASC
+        LIMIT ${PER_CHANNEL_LIMIT}
+      ) v
+      WHERE v.dist <= ${1 - MIN_COSINE_SIMILARITY}
     ),
     lex_hits AS (
-      SELECT id, ROW_NUMBER() OVER (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY lex_rank DESC) AS rnk
+      FROM (
+        SELECT id, ts_rank(tsv, plainto_tsquery('spanish', ${query})) AS lex_rank
+        FROM rag_chunks
+        WHERE ${filterClause}
+        AND tsv @@ plainto_tsquery('spanish', ${query})
         ORDER BY ts_rank(tsv, plainto_tsquery('spanish', ${query})) DESC
-      ) AS rnk
-      FROM base
-      WHERE tsv @@ plainto_tsquery('spanish', ${query})
-      ORDER BY ts_rank(tsv, plainto_tsquery('spanish', ${query})) DESC
-      LIMIT ${PER_CHANNEL_LIMIT}
+        LIMIT ${PER_CHANNEL_LIMIT}
+      ) l
     ),
     fused AS (
       SELECT id, SUM(score) AS rrf_score
@@ -202,17 +256,19 @@ async function hybridSearch(
       GROUP BY id
     )
     SELECT
-      base.id,
-      base.source,
-      base.doc_type,
-      base.entity,
-      base.year,
-      base.content,
-      base.contextual_prefix,
-      base.metadata,
-      fused.rrf_score
+      c.id,
+      c.source,
+      c.doc_type,
+      c.entity,
+      c.year,
+      c.content,
+      c.contextual_prefix,
+      c.metadata,
+      fused.rrf_score,
+      (1 - vector_hits.dist) AS cosine_sim
     FROM fused
-    JOIN base ON base.id = fused.id
+    JOIN rag_chunks c ON c.id = fused.id
+    LEFT JOIN vector_hits ON vector_hits.id = fused.id
     ORDER BY fused.rrf_score DESC
     LIMIT ${PER_CHANNEL_LIMIT}
   `);
@@ -233,7 +289,6 @@ async function maybeRerank(
   rows: ChunkRow[],
   topN: number,
 ): Promise<ChunkRow[]> {
-  if (rows.length <= topN) return rows;
   if (!process.env.COHERE_API_KEY) return rows.slice(0, topN);
 
   try {
@@ -248,7 +303,18 @@ async function maybeRerank(
       query,
       topN,
     });
-    return ranking.map((r) => rows[r.originalIndex]);
+    // Con reranker disponible, SU score manda como gate de relevancia: es una
+    // senal cross-encoder mucho mejor que la distancia coseno del bi-encoder.
+    // Un chunk que el reranker puntua por debajo del piso no responde la
+    // consulta y no debe entregarse al especialista como "fuente".
+    const kept = ranking.filter((r) => r.score >= MIN_RERANK_SCORE);
+    if (kept.length === 0) {
+      console.info(
+        `[vectorstore] rerank descarto los ${ranking.length} candidatos ` +
+          `(top score=${ranking[0]?.score ?? 'n/a'} < ${MIN_RERANK_SCORE})`,
+      );
+    }
+    return kept.map((r) => rows[r.originalIndex]);
   } catch (err) {
     console.warn(
       '[vectorstore] Rerank fallback ⇒ RRF only:',
@@ -261,6 +327,19 @@ async function maybeRerank(
 // ---------------------------------------------------------------------------
 // Public API: searchDocuments
 // ---------------------------------------------------------------------------
+
+/**
+ * Mensaje unico de "sin fuente". Los prompts de especialista lo detectan por el
+ * prefijo `NO_RESULTS:` para escalar a `search_web` o admitir desconocimiento.
+ */
+function noResultsMessage(): string {
+  return [
+    'NO_RESULTS: Ningun fragmento del corpus (Neon pgvector) supera el umbral de relevancia para esta consulta.',
+    'ACCION OBLIGATORIA: invoca la tool "search_web" con una query enfocada en normativa colombiana',
+    '(ej: "Art. 240 ET Ley 2277/2022 site:dian.gov.co") para obtener fuentes oficiales. NO inventes citas',
+    'y NO respondas con normativa de memoria: si search_web tampoco encuentra, di que no hallaste fuente confiable.',
+  ].join(' ');
+}
 
 /**
  * Hybrid search sobre `rag_chunks`. Devuelve un string formateado listo
@@ -284,17 +363,30 @@ export async function searchDocuments(
     const embedding = await embedSingle(safeQuery);
     const rrfHits = await hybridSearch(safeQuery, embedding, filter);
 
+    // Observabilidad para calibrar MIN_COSINE_SIMILARITY: sin este log no hay
+    // forma de saber si el umbral esta cortando de mas o de menos.
+    const top1Sim = rrfHits.reduce<number | null>(
+      (acc, r) => (r.cosine_sim != null && (acc === null || r.cosine_sim > acc) ? r.cosine_sim : acc),
+      null,
+    );
+    console.info(
+      `[vectorstore] top1_sim=${top1Sim ?? 'n/a'} hits=${rrfHits.length} threshold=${MIN_COSINE_SIMILARITY}`,
+    );
+
     if (rrfHits.length === 0) {
       backendStatus = 'pgvector_empty';
-      return [
-        'NO_RESULTS: No se encontraron coincidencias en el RAG (Neon pgvector).',
-        'ACCION OBLIGATORIA: invoca la tool "search_web" con una query enfocada en normativa colombiana',
-        '(ej: "Art. 240 ET Ley 2277/2022 site:dian.gov.co") para obtener fuentes oficiales. NO inventes citas.',
-      ].join(' ');
+      return noResultsMessage();
     }
 
     backendStatus = 'pgvector';
     const top = await maybeRerank(safeQuery, rrfHits, safeK);
+
+    // El reranker puede vaciar el conjunto: entregar cero fuentes es la
+    // respuesta correcta, entregar chunks irrelevantes rotulados "Fuente:" no.
+    if (top.length === 0) {
+      backendStatus = 'pgvector_empty';
+      return noResultsMessage();
+    }
 
     return top
       .map((row, i) => {

@@ -20,6 +20,7 @@ import type {
   ParsedStatement,
 } from '../types';
 import { BankingError, BANK_ERR } from '../types';
+import { parseMoneyAmount } from './number';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -53,12 +54,20 @@ function parseOfxDate(raw: string | undefined): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-/** TRNAMT con '.' o ',' decimal → number. */
+/**
+ * TRNAMT → number. El estándar OFX exige punto decimal y prohíbe separador de
+ * miles, pero los exportadores locales incumplen ambas cosas: se ven
+ * `-1.234.567,89` (ES-CO) y `1,234,567.89` (EN-US) en archivos reales.
+ *
+ * La implementación anterior hacía `replace(',', '.')` (solo la PRIMERA coma) y
+ * luego borraba el resto de caracteres no numéricos: `1.234.567,89` quedaba
+ * como `1.234.567.89` → NaN → movimiento descartado; y `1,234,567.89` quedaba
+ * como `1.234567.89` → NaN. Delegamos en el parser canónico compartido con el
+ * CSV para que los tres formatos den el mismo número.
+ */
 function parseOfxAmount(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
-  const normalized = raw.replace(',', '.').replace(/[^\d.+-]/g, '');
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : undefined;
+  return parseMoneyAmount(raw) ?? undefined;
 }
 
 // ── Parser ───────────────────────────────────────────────────────────────────

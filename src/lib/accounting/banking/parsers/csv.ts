@@ -2,7 +2,7 @@
 // parsers/csv.ts — Generic CSV bank statement parser
 //
 // Handles:
-//  - Delimiters: semicolon (;) or comma (,) — auto-detected from first data row.
+//  - Delimiters: semicolon (;), tab or comma (,) — auto-detected from the header.
 //  - Encoding: UTF-8 and latin-1 (Excel CO commonly exports latin-1). If raw
 //    Buffer is provided and contains byte sequences that look like
 //    ISO-8859-1 (0x80–0xFF without valid UTF-8 continuations), we fall back
@@ -16,13 +16,19 @@
 //      saldo / balance
 //      referencia / reference / ref
 //  - If debit+credit columns: amount = credit - debit  (positive = cash in)
-//  - Decimal separator: comma or period (auto-detected per value)
+//  - Números: la desambiguación miles/decimales vive en `./number.ts`
+//    (ES-CO `1.234.567,89` y `1.234.567` sin centavos, EN-US `1,234,567.89`).
+//    Celda vacía = 0; celda ilegible = fila omitida con warning — NUNCA 0
+//    silencioso.
+//  - Fechas: DD/MM/AAAA por defecto (Colombia); si esa lectura es imposible se
+//    reinterpreta MM/DD/AAAA y se emite warning.
 //
 // Implements: BankStatementParser
 // ---------------------------------------------------------------------------
 
 import type { BankStatementParser, ParsedBankTransaction, ParsedStatement } from '../types';
 import { BankingError, BANK_ERR } from '../types';
+import { parseMoneyAmount } from './number';
 
 // ── Column alias maps ───────────────────────────────────────────────────────
 
@@ -55,12 +61,22 @@ const REF_ALIASES = new Set([
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Normaliza un encabezado para compararlo contra los alias.
+ *
+ * ORDEN CRÍTICO: primero NFD + quitar diacríticos, DESPUÉS quitar los
+ * caracteres no-\w. Al revés (como estaba), `\w` no matchea 'ó' y el
+ * `replace(/[^\w]/g,'')` la BORRABA antes de que NFD la pudiera descomponer:
+ * "Descripción" → "descripcin", que no está en `DESC_ALIASES` → el parser
+ * lanzaba "No se encontró columna de descripción" con cualquier CSV que
+ * trajera encabezados tildados (o sea, casi todos los bancos colombianos).
+ */
 function normalizeHeader(h: string): string {
   return h
-    .toLowerCase()
-    .replace(/[^\w]/g, '')  // strip spaces, accents chars already lowercased below
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, ''); // strip combining diacritics
+    .replace(/[̀-ͯ]/g, '') // diacríticos combinantes
+    .toLowerCase()
+    .replace(/[^\w]/g, ''); // espacios, guiones, BOM, comillas
 }
 
 function decodeContent(content: string | Buffer): string {
@@ -75,17 +91,28 @@ function decodeContent(content: string | Buffer): string {
   }
 }
 
-function detectDelimiter(firstLine: string): ';' | ',' {
-  const semicolons = (firstLine.match(/;/g) ?? []).length;
-  const commas = (firstLine.match(/,/g) ?? []).length;
-  return semicolons >= commas ? ';' : ',';
+type Delimiter = ';' | ',' | '\t';
+
+/**
+ * El TAB entra en la detección porque `canParse` acepta `.txt` y el "guardar
+ * como texto" de Excel exporta tabulado. Empate → ';' (formato dominante en
+ * Colombia: la coma ya está tomada por los decimales).
+ */
+function detectDelimiter(firstLine: string): Delimiter {
+  const counts: Array<[Delimiter, number]> = [
+    [';', (firstLine.match(/;/g) ?? []).length],
+    ['\t', (firstLine.match(/\t/g) ?? []).length],
+    [',', (firstLine.match(/,/g) ?? []).length],
+  ];
+  counts.sort((a, b) => b[1] - a[1]);
+  return counts[0][1] > 0 ? counts[0][0] : ';';
 }
 
 /**
  * Split a CSV row respecting double-quoted fields.
  * Handles the common case of `"value with, comma"` or `"value with ""quotes"""`.
  */
-function splitRow(row: string, delimiter: ';' | ','): string[] {
+function splitRow(row: string, delimiter: Delimiter): string[] {
   const cells: string[] = [];
   let current = '';
   let inQuote = false;
@@ -110,51 +137,78 @@ function splitRow(row: string, delimiter: ';' | ','): string[] {
 }
 
 /**
- * Parse a Colombian number string.
- * Handles: 1.234.567,89 (ES-CO) and 1,234,567.89 (EN-US) and 1234567.89.
+ * Celda de importe → número. Distingue "vacía" (0 legítimo: las columnas
+ * débito/crédito llegan vacías en la mitad de las filas) de "ilegible"
+ * (`null`: el caller omite la fila con warning).
+ *
+ * La desambiguación miles/decimales vive en `./number.ts` — ver ahí por qué
+ * "1.234.567" vale 1.234.567 y no 1,23.
  */
-function parseNumber(raw: string): number {
-  const s = raw.trim().replace(/[$ ]/g, '');
+function parseAmountCell(raw: string | undefined): number | null {
+  const s = (raw ?? '').trim();
   if (!s) return 0;
-  // Determine decimal separator: if comma appears last after dot → ES-CO
-  const lastDot = s.lastIndexOf('.');
-  const lastComma = s.lastIndexOf(',');
-  let normalized: string;
-  if (lastComma > lastDot) {
-    // ES-CO: dots are thousands, comma is decimal
-    normalized = s.replace(/\./g, '').replace(',', '.');
-  } else {
-    // EN-US or plain: commas are thousands
-    normalized = s.replace(/,/g, '');
-  }
-  return parseFloat(normalized) || 0;
+  return parseMoneyAmount(s);
+}
+
+interface ParsedCsvDate {
+  date: Date;
+  /** `true` si la fecha solo tiene sentido leída como MM/DD/YYYY (export EN-US). */
+  usFormatAssumed: boolean;
 }
 
 /**
- * Parse a date string, trying several formats common in Colombian exports.
- * Returns a UTC-midnight Date or throws.
+ * Construye una fecha UTC validando rangos REALES. `Date.UTC(2026, 14, 1)` no
+ * es NaN: JS desborda el mes al año siguiente. Sin esta validación,
+ * "01/15/2026" (export en inglés) se aceptaba como día 1 del mes 15 y salía
+ * convertido en 2027-03-01 — una transacción desplazada 14 meses, silenciosa.
  */
-function parseDate(raw: string): Date {
+function makeUtcDate(year: number, month: number, day: number): Date | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(d.getTime())) return null;
+  // Rechaza desbordes tipo 31/02 → 03/03.
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    return null;
+  }
+  return d;
+}
+
+/**
+ * Parsea una fecha de extracto. Colombia escribe DD/MM/YYYY, así que ese es el
+ * orden por defecto; solo si esa lectura es imposible (mes > 12) se reinterpreta
+ * como MM/DD/YYYY y se marca `usFormatAssumed` para que el caller avise —
+ * un extracto ambiguo (p.ej. 03/04/2026) NO se puede detectar y se lee como
+ * día/mes, que es lo correcto en Colombia.
+ */
+function parseDate(raw: string): ParsedCsvDate {
   const s = raw.trim();
-  // YYYY-MM-DD or YYYY/MM/DD
+
+  // YYYY-MM-DD o YYYY/MM/DD (ISO — sin ambigüedad)
   let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (m) {
-    const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-    if (!isNaN(d.getTime())) return d;
+    const d = makeUtcDate(+m[1], +m[2], +m[3]);
+    if (d) return { date: d, usFormatAssumed: false };
   }
-  // DD/MM/YYYY or DD-MM-YYYY
+
+  // DD/MM/YYYY | DD-MM-YYYY  (y su lectura alterna MM/DD/YYYY)
   m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
   if (m) {
-    const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
-    if (!isNaN(d.getTime())) return d;
+    const esCo = makeUtcDate(+m[3], +m[2], +m[1]);
+    if (esCo) return { date: esCo, usFormatAssumed: false };
+    const enUs = makeUtcDate(+m[3], +m[1], +m[2]);
+    if (enUs) return { date: enUs, usFormatAssumed: true };
   }
-  // DD/MM/YY
+
+  // DD/MM/YY  (pivote de siglo: >=50 ⇒ 19xx)
   m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
   if (m) {
     const year = +m[3] >= 50 ? 1900 + +m[3] : 2000 + +m[3];
-    const d = new Date(Date.UTC(year, +m[2] - 1, +m[1]));
-    if (!isNaN(d.getTime())) return d;
+    const esCo = makeUtcDate(year, +m[2], +m[1]);
+    if (esCo) return { date: esCo, usFormatAssumed: false };
+    const enUs = makeUtcDate(year, +m[1], +m[2]);
+    if (enUs) return { date: enUs, usFormatAssumed: true };
   }
+
   throw new Error(`No se pudo parsear la fecha: "${raw}"`);
 }
 
@@ -172,9 +226,12 @@ export const csvParser: BankStatementParser = {
   async parse(filename: string, content: string | Buffer): Promise<ParsedStatement> {
     const text = decodeContent(content);
     const lines = text
+      // Solo se recorta \r y el BOM: hacer `trim()` completo borraba tabs y
+      // espacios de borde, y con delimitador TAB eso elimina la primera/última
+      // columna vacía y DESPLAZA todos los índices de columna.
       .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
+      .map((l) => l.replace(/^﻿/, '').replace(/\r$/, ''))
+      .filter((l) => l.trim().length > 0);
 
     if (lines.length < 2) {
       throw new BankingError(
@@ -222,6 +279,9 @@ export const csvParser: BankStatementParser = {
     let firstDate: Date | undefined;
     let lastDate: Date | undefined;
     let lastBalance: number | undefined;
+    let usFormatWarned = false;
+    let continuityWarned = false;
+    let prevBalance: number | undefined;
 
     for (let rowIdx = 1; rowIdx < lines.length; rowIdx++) {
       const cells = splitRow(lines[rowIdx], delimiter);
@@ -230,7 +290,15 @@ export const csvParser: BankStatementParser = {
       // Date
       let postedAt: Date;
       try {
-        postedAt = parseDate(cells[colDate] ?? '');
+        const parsedDate = parseDate(cells[colDate] ?? '');
+        postedAt = parsedDate.date;
+        if (parsedDate.usFormatAssumed && !usFormatWarned) {
+          usFormatWarned = true;
+          warnings.push(
+            `Fila ${rowIdx + 1}: fecha "${cells[colDate]}" no es válida como DD/MM/AAAA; ` +
+              `se interpretó como MM/DD/AAAA (export en inglés). Verifique el periodo del extracto.`,
+          );
+        }
       } catch {
         warnings.push(`Fila ${rowIdx + 1}: fecha inválida ("${cells[colDate]}") — fila omitida.`);
         continue;
@@ -242,21 +310,63 @@ export const csvParser: BankStatementParser = {
         continue;
       }
 
-      // Amount
+      // Amount — una celda ilegible NO puede degradarse a 0: eso inventa un
+      // movimiento inexistente y descuadra la conciliación sin dejar rastro.
       let amountCop: number;
       if (hasSigned) {
-        amountCop = parseNumber(cells[colAmount] ?? '');
+        const signed = parseAmountCell(cells[colAmount]);
+        if (signed === null) {
+          warnings.push(
+            `Fila ${rowIdx + 1}: monto ilegible ("${cells[colAmount]}") — fila omitida.`,
+          );
+          continue;
+        }
+        amountCop = signed;
       } else {
         // credit - debit: positive = cash in
-        const credit = colCredit !== -1 ? parseNumber(cells[colCredit] ?? '') : 0;
-        const debit = colDebit !== -1 ? parseNumber(cells[colDebit] ?? '') : 0;
+        const credit = colCredit !== -1 ? parseAmountCell(cells[colCredit]) : 0;
+        const debit = colDebit !== -1 ? parseAmountCell(cells[colDebit]) : 0;
+        if (credit === null || debit === null) {
+          warnings.push(
+            `Fila ${rowIdx + 1}: débito/crédito ilegible ` +
+              `("${cells[colDebit] ?? ''}" / "${cells[colCredit] ?? ''}") — fila omitida.`,
+          );
+          continue;
+        }
         amountCop = credit - debit;
       }
 
-      const runningBalance =
-        colBalance !== -1 && cells[colBalance]
-          ? parseNumber(cells[colBalance]).toFixed(2)
-          : undefined;
+      let balanceValue: number | undefined;
+      if (colBalance !== -1 && cells[colBalance]) {
+        const parsedBalance = parseMoneyAmount(cells[colBalance]);
+        if (parsedBalance === null) {
+          warnings.push(
+            `Fila ${rowIdx + 1}: saldo ilegible ("${cells[colBalance]}") — se omite el saldo de esta fila.`,
+          );
+        } else {
+          balanceValue = parsedBalance;
+        }
+      }
+      const runningBalance = balanceValue !== undefined ? balanceValue.toFixed(2) : undefined;
+
+      // Defensa en profundidad: si el extracto trae saldo, la variación entre
+      // filas consecutivas debe igualar el monto (o su opuesto, si el banco
+      // lista de más reciente a más antiguo). Un desajuste delata un parseo de
+      // números roto ANTES de que el error llegue a la conciliación — es lo
+      // que habría atrapado el bug "1.234.567 → 1,23" sin test dirigido.
+      if (balanceValue !== undefined && prevBalance !== undefined && !continuityWarned) {
+        const delta = balanceValue - prevBalance;
+        const tolerance = 1; // 1 peso: redondeos de exportación
+        if (Math.abs(delta - amountCop) > tolerance && Math.abs(delta + amountCop) > tolerance) {
+          continuityWarned = true;
+          warnings.push(
+            `Fila ${rowIdx + 1}: el saldo no cuadra con el movimiento ` +
+              `(variación ${delta.toFixed(2)} vs monto ${amountCop.toFixed(2)}). ` +
+              `Revise el formato numérico del archivo antes de conciliar.`,
+          );
+        }
+      }
+      if (balanceValue !== undefined) prevBalance = balanceValue;
 
       const reference =
         colRef !== -1 && cells[colRef] ? cells[colRef].trim() : undefined;
@@ -275,9 +385,13 @@ export const csvParser: BankStatementParser = {
       transactions.push(tx);
 
       if (!firstDate || postedAt < firstDate) firstDate = postedAt;
-      if (!lastDate || postedAt > lastDate) lastDate = postedAt;
-      if (runningBalance !== undefined) {
-        lastBalance = parseFloat(runningBalance);
+      // `endingBalance` debe ser el saldo de la fila MÁS RECIENTE, no el de la
+      // última fila del archivo: hay bancos que exportan en orden descendente,
+      // y ahí "última fila" es el saldo más ANTIGUO. `runReconciliation` usa
+      // este valor como saldo bancario de cierre.
+      if (!lastDate || postedAt >= lastDate) {
+        lastDate = postedAt;
+        if (balanceValue !== undefined) lastBalance = balanceValue;
       }
     }
 

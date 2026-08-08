@@ -60,6 +60,7 @@ import {
   niifJsonToEquityTable,
   niifJsonToIncomeTable,
 } from './compose-statements-from-json';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 
 // ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
 //
@@ -647,6 +648,57 @@ function readControlTotals(
   return primary.controlTotals ?? null;
 }
 
+// ─── Ratios — fuente única para KPI grid y diales ────────────────────────────
+//
+// Why: el KPI grid y los diales calculaban los MISMOS indicadores por caminos
+// distintos (el grid con fórmulas locales, los diales con los campos
+// pre-calculados de Wave 2.F4), de modo que un mismo PDF imprimía dos ROE
+// distintos — uno sobre patrimonio de cierre y otro sobre patrimonio promedio —
+// y ninguno coincidía con el HTML, que consume `controlTotals` por contrato
+// (`html-editor.prompt.ts`: "ROE consistente ... fórmula única de
+// controlTotals.roe"). Este resolver es el único punto donde se decide de dónde
+// sale cada ratio: primero el campo pre-calculado del preprocesador, y sólo si
+// viene null/ausente (balances cacheados pre-F4) se recurre al fallback local.
+//
+// Convención de escala, la misma que `ControlTotals`:
+//   - `*Pct`   → porcentaje 0-100 (ej. 40 = 40 %).
+//   - el resto → razón adimensional (ej. 1,5 veces).
+interface ResolvedRatios {
+  razonCorriente: number | null;
+  pruebaAcida: number | null;
+  /** Endeudamiento total en PORCENTAJE (0-100), igual que controlTotals. */
+  endeudamientoPct: number | null;
+  coberturaIntereses: number | null;
+  /** Margen neto en PORCENTAJE (0-100). */
+  margenNetoPct: number | null;
+  /** ROE en PORCENTAJE (0-100). */
+  roePct: number | null;
+}
+
+function resolveRatios(totals: ControlTotals): ResolvedRatios {
+  const div = (num: number, den: number): number | null =>
+    den === 0 || !Number.isFinite(num) || !Number.isFinite(den) ? null : num / den;
+
+  const pctOf = (num: number, den: number): number | null => {
+    const r = div(num, den);
+    return r === null ? null : r * 100;
+  };
+
+  return {
+    razonCorriente:
+      totals.razonCorriente ?? div(totals.activoCorriente, totals.pasivoCorriente),
+    pruebaAcida:
+      totals.pruebaAcida ??
+      div(totals.activoCorriente - (totals.inventarios14 ?? 0), totals.pasivoCorriente),
+    endeudamientoPct: totals.endeudamientoTotal ?? pctOf(totals.pasivo, totals.activo),
+    // `coberturaIntereses === null` significa "sin gasto financiero" (no es 0).
+    // Sin el campo (balances pre-F4) tampoco hay denominador para calcularlo.
+    coberturaIntereses: totals.coberturaIntereses ?? null,
+    margenNetoPct: totals.margenNeto ?? pctOf(totals.utilidadNeta, totals.ingresos),
+    roePct: totals.roe ?? pctOf(totals.utilidadNeta, totals.patrimonio),
+  };
+}
+
 // ─── KPI grid ─────────────────────────────────────────────────────────────────
 
 function buildKpiGrid(
@@ -655,6 +707,8 @@ function buildKpiGrid(
 ): KpiGridSpec {
   const kpis: KpiCell[] = [];
   if (totals) {
+    const ratios = resolveRatios(totals);
+
     push(kpis, 'Activo Total', formatCop(totals.activo));
     push(kpis, 'Pasivo Total', formatCop(totals.pasivo));
     push(kpis, 'Patrimonio', formatCop(totals.patrimonio));
@@ -662,27 +716,17 @@ function buildKpiGrid(
     push(kpis, 'Gastos + Costos', formatCop(totals.gastos));
     push(kpis, 'Utilidad Neta', formatCop(totals.utilidadNeta));
 
-    // Margin neta = utilidadNeta / ingresos
-    if (totals.ingresos !== 0) {
-      const margin = totals.utilidadNeta / totals.ingresos;
-      push(kpis, 'Margen Neto', formatPct(margin));
+    if (ratios.margenNetoPct !== null) {
+      push(kpis, 'Margen Neto', formatPct(ratios.margenNetoPct / 100));
     }
-    // ROE = utilidadNeta / patrimonio
-    if (totals.patrimonio !== 0) {
-      const roe = totals.utilidadNeta / totals.patrimonio;
-      push(kpis, 'ROE', formatPct(roe));
+    if (ratios.roePct !== null) {
+      push(kpis, 'ROE', formatPct(ratios.roePct / 100));
     }
-    // Razon corriente
-    if (totals.pasivoCorriente !== 0) {
-      push(
-        kpis,
-        'Razón Corriente',
-        formatRatio(totals.activoCorriente / totals.pasivoCorriente),
-      );
+    if (ratios.razonCorriente !== null) {
+      push(kpis, 'Razón Corriente', formatRatio(ratios.razonCorriente));
     }
-    // Endeudamiento
-    if (totals.activo !== 0) {
-      push(kpis, 'Endeudamiento', formatPct(totals.pasivo / totals.activo));
+    if (ratios.endeudamientoPct !== null) {
+      push(kpis, 'Endeudamiento', formatPct(ratios.endeudamientoPct / 100));
     }
   }
 
@@ -729,23 +773,51 @@ function findCardValue(
 
 // ─── Waterfall ────────────────────────────────────────────────────────────────
 
+/**
+ * Puente Ingresos → (Gastos + Costos) → (Impuestos) → Utilidad Neta.
+ *
+ * Invariante que este builder debe cumplir: la suma acumulada de las barras
+ * intermedias tiene que aterrizar EXACTAMENTE en la barra total. El gráfico
+ * dibuja la barra `total` desde cero (WaterfallPnL) y por tanto no delata un
+ * puente descuadrado: el error se vuelve invisible y el cliente lee un nivel
+ * intermedio falso.
+ *
+ * El defecto anterior: la barra "(Impuestos)" restaba `impuestosCuenta24`, que
+ * es el SALDO del pasivo fiscal (PUC 24 — lo que se le debe a la DIAN al
+ * cierre), no el GASTO de impuestos del periodo. Además `controlTotals.gastos`
+ * (Clase 5+6+7) YA incluye el gasto de impuestos del grupo 54 y
+ * `utilidadNeta = ingresos − gastos`, de modo que la barra extra doble-contaba.
+ *
+ * Corrección: el impuesto se SEPARA de la barra de gastos usando el impuesto
+ * causado real del periodo (`cents.impuestoCausado`, grupo 54). Cuando ese
+ * ancla no está disponible (balances cacheados pre-cents) el puente se emite
+ * con una sola barra de deducción, que sigue cerrando contra Utilidad Neta.
+ */
 function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
   if (!totals) return [];
   const items: WaterfallItem[] = [];
   items.push({ label: 'Ingresos', amount: totals.ingresos, sign: 'pos' });
-  // Split gastos vs costos when individually known is non-trivial here; we use
-  // the consolidated `gastos` field (which already includes Class 5+6+7) and
-  // approximate costs as 0 if no separate handle exists. We emit a single
-  // negative bucket plus impuesto + utilidad for clarity.
-  const gastosOp = totals.gastos;
-  // Approximate impuesto = impuestos PUC 24 if present, otherwise 0.
-  const impuestos =
-    typeof totals.impuestosCuenta24 === 'number' ? totals.impuestosCuenta24 : 0;
-  if (gastosOp !== 0) {
-    items.push({ label: '(Gastos + Costos)', amount: -Math.abs(gastosOp), sign: 'neg' });
+
+  // `cents` viaja en centavos (BigInt) — a pesos para la misma unidad que el
+  // resto de `controlTotals`.
+  const impuestoCausado = totals.cents
+    ? Number(totals.cents.impuestoCausado) / 100
+    : 0;
+  const gastosSinImpuesto = totals.gastos - impuestoCausado;
+
+  if (gastosSinImpuesto !== 0) {
+    items.push({
+      label: '(Gastos + Costos)',
+      amount: -Math.abs(gastosSinImpuesto),
+      sign: 'neg',
+    });
   }
-  if (impuestos !== 0) {
-    items.push({ label: '(Impuestos)', amount: -Math.abs(impuestos), sign: 'neg' });
+  if (impuestoCausado !== 0) {
+    items.push({
+      label: '(Impuestos)',
+      amount: -Math.abs(impuestoCausado),
+      sign: 'neg',
+    });
   }
   items.push({ label: 'Utilidad Neta', amount: totals.utilidadNeta, sign: 'total' });
   return items;
@@ -756,44 +828,25 @@ function buildWaterfall(totals: ControlTotals | null): WaterfallItem[] {
 function buildDialGauges(totals: ControlTotals | null): DialGaugeSpec[] {
   if (!totals) return [];
 
-  // Razón Corriente — consume pre-calculado de Wave 2.F4 cuando existe;
-  // fallback defensivo al cálculo local para balances cacheados pre-F4.
-  const razonCorriente =
-    totals.razonCorriente != null
-      ? totals.razonCorriente
-      : totals.pasivoCorriente !== 0
-        ? totals.activoCorriente / totals.pasivoCorriente
-        : 0;
+  // Misma resolución de ratios que el KPI grid — un solo camino de cálculo por
+  // indicador para que el dial y la tarjeta no puedan contradecirse.
+  const ratios = resolveRatios(totals);
 
-  // Prueba Ácida — consume pre-calculado de Wave 2.F4 (usa inventarios14 real).
-  // Fallback: resta inventarios14 si el campo existe, si no aproxima con 0.
-  // Why: el fallback con inventario=0 era idéntico a Razón Corriente — KPI falso.
-  const pruebaAcida =
-    totals.pruebaAcida != null
-      ? totals.pruebaAcida
-      : totals.pasivoCorriente !== 0
-        ? (totals.activoCorriente - (totals.inventarios14 ?? 0)) / totals.pasivoCorriente
-        : 0;
+  const razonCorriente = ratios.razonCorriente ?? 0;
+  const pruebaAcida = ratios.pruebaAcida ?? 0;
 
-  // Endeudamiento — consume pre-calculado (porcentaje decimal, ej. 40 = 40%);
-  // el dial espera 0..1, así que si viene como % lo normalizamos.
-  const endeudamientoRaw =
-    totals.endeudamientoTotal != null
-      ? totals.endeudamientoTotal
-      : totals.activo !== 0
-        ? (totals.pasivo / totals.activo) * 100
-        : 0;
-  // Wave 2.F4 almacena endeudamientoTotal como porcentaje (0-100). El gauge
-  // trabaja en escala 0-1, por lo que dividimos entre 100.
-  const endeudamiento = endeudamientoRaw > 1 ? endeudamientoRaw / 100 : endeudamientoRaw;
+  // `endeudamientoTotal` tiene escala definida POR CONTRATO: porcentaje 0-100
+  // (`computeDerivedKpis` multiplica la razón por 100). El código anterior
+  // aplicaba la heurística `> 1 ? /100 : v`, que asume que todo porcentaje es
+  // mayor que 1: una SAS capitalizada con 0,8 % de endeudamiento entraba como
+  // 0,8 en una escala 0-1 con umbrales [0,3 / 0,5 / 0,7] y el dial la pintaba
+  // en zona crítica al 80 %, contradiciendo el bloque de KPIs del mismo PDF.
+  const endeudamiento = (ratios.endeudamientoPct ?? 0) / 100;
 
-  // Cobertura de Intereses — consume pre-calculado de Wave 2.F4.
-  // null significa "sin gasto financiero" (gastoFinanciero5305 === 0); se
-  // renderiza como "N/A" en lugar de 0, que sería información falsa.
-  const coberturaIntereses =
-    'coberturaIntereses' in totals
-      ? totals.coberturaIntereses // puede ser number | null
-      : null; // campo ausente en balances pre-F4 → omitir gauge
+  // Cobertura de Intereses — null significa "sin gasto financiero"
+  // (gastoFinanciero5305 === 0); se renderiza como "N/A" en lugar de 0, que
+  // sería información falsa.
+  const coberturaIntereses = ratios.coberturaIntereses;
 
   // Construir array de gauges; Cobertura Intereses solo se incluye cuando el
   // ratio es computable (not null) — evita mostrar dial con valor 0 cuando el
@@ -1044,6 +1097,37 @@ function buildAppendix(
   };
 }
 
+/**
+ * Parsea un monto escrito en convención colombiana (`$1.234.567,89`,
+ * `(1.234,56)`, `-$1.234`) a pesos.
+ *
+ * El parser anterior hacía `Number(raw.replace(/[^\d.-]/g, ''))`, que trata el
+ * punto de MILES es-CO como punto decimal: `"$1.234.567,89"` quedaba como
+ * `"1.234.567.89"` → `NaN` → `0`, y `"$1.234"` quedaba como `1.234` — el valor
+ * real dividido por mil. La tabla de ajustes del apéndice imprimía entonces $0
+ * (o una milésima) justo donde el cliente debe ver el ajuste NIIF aplicado.
+ *
+ * Devuelve `null` cuando el texto no contiene un monto interpretable, para que
+ * el llamador pueda hacer visible el hueco en vez de fabricar un cero.
+ */
+export function parseCopAmount(raw: unknown): number | null {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw !== 'string') return null;
+  const text = raw.trim();
+  if (!text) return null;
+  // Paréntesis = negativo (convención contable NIIF); se detecta ANTES de
+  // limpiar, porque la limpieza elimina los paréntesis.
+  const parenthesized = /^\(.*\)$/.test(text);
+  const digitsOnly = text.replace(/[^\d.,-]/g, '');
+  if (!/\d/.test(digitsOnly)) return null;
+  const negative = parenthesized || digitsOnly.trim().startsWith('-');
+  // es-CO: '.' separa miles, ',' separa decimales.
+  const normalized = digitsOnly.replace(/-/g, '').replace(/\./g, '').replace(',', '.');
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return null;
+  return negative ? -n : n;
+}
+
 function parseAdjustmentsLedger(ledger: unknown): AdjustmentRow[] {
   if (!ledger) return [];
   // Accept either an array of rows or a markdown-table string.
@@ -1058,13 +1142,14 @@ function parseAdjustmentsLedger(ledger: unknown): AdjustmentRow[] {
         norma?: unknown;
       };
       const cuenta = String(row.cuenta ?? '');
-      const descripcion = String(row.descripcion ?? '');
-      const ajuste =
-        typeof row.ajuste === 'number' && Number.isFinite(row.ajuste) ? row.ajuste : 0;
+      // El ledger llega sin tipar desde `governance`; el monto puede venir como
+      // número o como texto ya formateado en COP.
+      const parsed = parseCopAmount(row.ajuste);
+      const descripcion = withUnparsedAmountNote(String(row.descripcion ?? ''), parsed, row.ajuste);
       out.push({
         cuenta,
         descripcion,
-        ajuste,
+        ajuste: parsed ?? 0,
         ...(row.norma ? { norma: String(row.norma) } : {}),
       });
     }
@@ -1075,20 +1160,37 @@ function parseAdjustmentsLedger(ledger: unknown): AdjustmentRow[] {
     const out: AdjustmentRow[] = [];
     for (const row of t.rows) {
       const cuenta = row.account;
-      const descripcion = row.cells[0] ?? '';
-      const ajusteRaw = row.cells[1] ?? '0';
-      const ajuste = Number(String(ajusteRaw).replace(/[^\d.-]/g, '')) || 0;
+      const ajusteRaw = row.cells[1] ?? '';
+      const parsed = parseCopAmount(ajusteRaw);
+      const descripcion = withUnparsedAmountNote(row.cells[0] ?? '', parsed, ajusteRaw);
       const norma = row.cells[2];
       out.push({
         cuenta,
         descripcion,
-        ajuste,
+        ajuste: parsed ?? 0,
         ...(norma ? { norma } : {}),
       });
     }
     return out;
   }
   return [];
+}
+
+/**
+ * `AdjustmentRow.ajuste` es `number` por contrato del IR, así que un monto
+ * ilegible no puede renderizarse como "N/D" en su propia celda. En vez de
+ * dejar un $0 que se lee como "no hubo ajuste", anotamos el texto original en
+ * la descripción para que el hueco sea visible y auditable.
+ */
+function withUnparsedAmountNote(
+  descripcion: string,
+  parsed: number | null,
+  raw: unknown,
+): string {
+  if (parsed !== null) return descripcion;
+  const rawText = typeof raw === 'string' ? raw.trim() : '';
+  if (!rawText) return descripcion;
+  return `${descripcion} [monto no interpretable: ${rawText}]`.trim();
 }
 
 function formatBindingTotals(t: ControlTotals): string {
@@ -1109,14 +1211,23 @@ function formatBindingTotals(t: ControlTotals): string {
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
+/**
+ * Formatea pesos (float) delegando en el helper canónico `formatCopFromCents`.
+ *
+ * Why: este archivo tenía su propio formatter con convención `-$1.234,56`
+ * mientras los estados financieros del MISMO PDF (vía
+ * `compose-statements-from-json.ts` → `formatCopFromCents`) usan la convención
+ * NIIF de paréntesis `($1.234,56)`. Dos tipografías para el mismo signo en el
+ * mismo entregable, y dos redondeos distintos (`toLocaleString` sobre float vs
+ * aritmética exacta en centavos). Se unifica en el helper canónico.
+ *
+ * `controlTotals` viaja en PESOS (number); el helper trabaja en centavos, por
+ * eso el ×100 redondeado — el mismo redondeo al centavo que usa el
+ * preprocesador (`toRawString`).
+ */
 function formatCop(n: number | undefined | null): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/D';
-  const abs = Math.abs(n);
-  const formatted = abs.toLocaleString('es-CO', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return (n < 0 ? '-$' : '$') + formatted;
+  return formatCopFromCents(Math.round(n * 100), false);
 }
 
 function formatRatio(n: number | undefined | null): string {

@@ -36,7 +36,6 @@ import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import {
   HtmlEditorInputSchema,
   type HtmlEditorInput,
-  type HtmlEditorMetadata,
   type HtmlEditorOutput,
 } from '../contracts/html-editor';
 import {
@@ -45,6 +44,12 @@ import {
 } from '../prompts/html-editor.prompt';
 import type { FinancialProgressEvent } from '../types';
 import { withRetry } from '@/lib/agents/utils/retry';
+import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
+import {
+  reconcileBindingFigures,
+  validateHtmlChecklist,
+  type ChecklistFailure,
+} from './html-editor-validator';
 
 /**
  * Editor Jefe HTML — agente cap-stone del pipeline 1+1 v10.1.
@@ -57,13 +62,31 @@ import { withRetry } from '@/lib/agents/utils/retry';
  * @param signal    - AbortSignal opcional para cancelación temprana
  *                    (timeout SSE, cierre del cliente).
  *
- * @returns HtmlEditorOutput con `html` (string), echo de `metadata` y
- *          `checklistFailures` del linter post-emisión.
+ * @returns HtmlEditorOutput con `html` (string), echo de `metadata`,
+ *          `checklistFailures` de los 3 linters y `emittable`.
  *
  * @throws Error si:
  *   - el input no pasa `HtmlEditorInputSchema.safeParse`,
- *   - el modelo emite un output vacío o sin DOCTYPE,
+ *   - el modelo trunca el output (`finishReason !== 'stop'`),
+ *   - el HTML no abre con DOCTYPE o no cierra con </html>,
  *   - el provider OpenAI lanza error no-retriable.
+ *
+ * ## Política de `severity: 'block'` (decisión 2026-08)
+ *
+ * Antes de esta ola, `block` no significaba nada: ni la route ni el viewer lo
+ * consultaban, así que un reporte con el Activo inflado 100× se servía y se
+ * descargaba con un banner que el usuario podía ignorar. La política ahora es:
+ *
+ *   1. Un reintento correctivo, con los fallos concretos inyectados en el
+ *      prompt. Se conserva la mejor de las dos emisiones.
+ *   2. Si sobrevive algún `block`, el HTML se estampa como BORRADOR (banner en
+ *      pantalla + marca de agua al imprimir) y `emittable` viaja en `false`.
+ *
+ * Por qué NO se responde 422 y se deja al cliente sin documento: los checks
+ * incluyen heurísticas y un falso positivo dejaría al contador sin entregable
+ * después de ~10 minutos de pipeline. El estampado degrada en vez de romper, y
+ * a diferencia de un banner viaja DENTRO del artefacto: quien lo imprima o lo
+ * reenvíe ve que no es firmable.
  */
 export async function runHtmlEditor(
   input: HtmlEditorInput,
@@ -96,150 +119,238 @@ export async function runHtmlEditor(
   // tarda 30-60s; 3 reintentos × 60s = 180s sólo en LLM, comiendo el budget
   // de maxDuration=800. 2 attempts cubren los transients (429/5xx) sin
   // explotar el timeout.
-  const result = await withRetry(
-    () =>
-      generateText({
-        model: MODELS.FINANCIAL_PIPELINE,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0,
-        maxOutputTokens: MODELS_CONFIG.htmlEditor.maxOutputTokens,
-        abortSignal: signal,
-        providerOptions: {
-          openai: {
-            store: true,
-            reasoningEffort: MODELS_CONFIG.htmlEditor.reasoningEffort,
-            textVerbosity: MODELS_CONFIG.htmlEditor.textVerbosity,
+  const emit = (content: string) =>
+    withRetry(
+      () =>
+        generateText({
+          model: MODELS.FINANCIAL_PIPELINE,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content },
+          ],
+          temperature: 0,
+          maxOutputTokens: MODELS_CONFIG.htmlEditor.maxOutputTokens,
+          abortSignal: signal,
+          providerOptions: {
+            openai: {
+              store: true,
+              reasoningEffort: MODELS_CONFIG.htmlEditor.reasoningEffort,
+              textVerbosity: MODELS_CONFIG.htmlEditor.textVerbosity,
+            },
           },
-        },
-      }),
-    { maxAttempts: 2, label: 'html-editor', signal },
-  );
+        }),
+      { maxAttempts: 2, label: 'html-editor', signal },
+    );
 
-  const html = result.text ?? '';
-  if (!html.trim() || !html.includes('<!DOCTYPE html>')) {
+  const result = await emit(userContent);
+
+  // Why FUERA del closure de `withRetry`: con `temperature: 0`, reintentar una
+  // truncación por presupuesto reproduce el mismo corte y quema 60s del
+  // maxDuration=800 sin ganancia. Es un fallo de configuración, no un
+  // transient.
+  //
+  // Why aquí y no sólo el check de DOCTYPE: el DOCTYPE es el PRIMER byte que
+  // emite el modelo, de modo que un informe cortado a mitad de la Página 09
+  // lo contiene siempre y pasaba el gate. El hash tampoco lo atrapa: va en la
+  // portada. Sin este assert, un entregable premium incompleto llegaba al
+  // cliente sin una sola advertencia.
+  assertFinishedCleanlyOrThrow(result, 'html-editor');
+  const html = assertWellFormedHtml(result.text ?? '', result.finishReason);
+
+  let checklistFailures = runAllChecks(html, parsed.data);
+  let finalHtml = html;
+
+  // Reintento correctivo — ver "Política de severity: 'block'" en el docblock.
+  if (countBlocking(checklistFailures) > 0) {
+    onProgress?.({
+      type: 'stage_progress',
+      stage: 4,
+      detail: 'Editor Jefe HTML — corrigiendo fallos de verificación numérica...',
+    });
+
+    try {
+      const retryResult = await emit(
+        `${userContent}\n\n${buildCorrectionBlock(checklistFailures)}`,
+      );
+      assertFinishedCleanlyOrThrow(retryResult, 'html-editor(corrección)');
+      const retryHtml = assertWellFormedHtml(
+        retryResult.text ?? '',
+        retryResult.finishReason,
+      );
+      const retryFailures = runAllChecks(retryHtml, parsed.data);
+
+      // Se conserva la emisión con MENOS fallos bloqueantes. Sin esta guarda,
+      // un reintento peor sustituiría a un original casi correcto.
+      if (countBlocking(retryFailures) < countBlocking(checklistFailures)) {
+        finalHtml = retryHtml;
+        checklistFailures = retryFailures;
+      }
+    } catch (err) {
+      // El reintento es una mejora best-effort, no un gate: si falla, se
+      // conserva la primera emisión (que se estampará como BORRADOR). Tumbar
+      // la request dejaría al usuario sin nada tras ~10 min de pipeline.
+      if (signal?.aborted) throw err; // salvo cancelación explícita del cliente
+      console.warn(
+        `[html-editor] el reintento correctivo falló (${err instanceof Error ? err.message : String(err)}); ` +
+          'se conserva la emisión original, estampada como BORRADOR.',
+      );
+    }
+  }
+
+  const emittable = countBlocking(checklistFailures) === 0;
+  if (!emittable) {
+    // El estampado ocurre DESPUÉS de validar: la marca es nuestra, no del
+    // modelo, y no debe influir en ningún check.
+    finalHtml = stampAsDraft(finalHtml, checklistFailures);
+  }
+
+  return {
+    html: finalHtml,
+    metadata: parsed.data.metadata,
+    checklistFailures,
+    emittable,
+  };
+}
+
+function countBlocking(failures: ChecklistFailure[]): number {
+  return failures.filter((f) => f.severity === 'block').length;
+}
+
+/**
+ * Verifica que el HTML abra y CIERRE. El check anterior sólo miraba el DOCTYPE
+ * — el primer byte emitido —, así que no distinguía un documento completo de
+ * uno cortado a la mitad.
+ *
+ * `endsWith` y no `includes('</html>')`: un `</html>` dentro de un ejemplo o de
+ * un comentario no prueba que el documento haya terminado.
+ */
+function assertWellFormedHtml(html: string, finishReason?: string): string {
+  const trimmed = html.trim();
+  if (!trimmed || !trimmed.includes('<!DOCTYPE html>')) {
     throw new Error(
       `runHtmlEditor: output inválido — sin DOCTYPE html ` +
-        `(finishReason=${result.finishReason}, textLen=${html.length}). ` +
+        `(finishReason=${finishReason}, textLen=${html.length}). ` +
         `Probable causa: prompt cache miss + budget insuficiente. ` +
         `Subir MODELS_CONFIG.htmlEditor.maxOutputTokens o cambiar a FINANCIAL_PIPELINE_PREMIUM.`,
     );
   }
-
-  // Validación post-emisión liviana — §10 + §1.6 + §5 hash. F9 amplía a §11
-  // completo con parser DOM.
-  const checklistFailures = lightweightChecklist(html, parsed.data.metadata);
-
-  return {
-    html,
-    metadata: parsed.data.metadata,
-    checklistFailures,
-  };
+  if (!trimmed.endsWith('</html>')) {
+    throw new Error(
+      `runHtmlEditor: output TRUNCADO — el documento no cierra con </html> ` +
+        `(finishReason=${finishReason}, textLen=${html.length}). ` +
+        `Un HTML cortado a mitad de página se vería completo en el visor: no se sirve. ` +
+        `Subir MODELS_CONFIG.htmlEditor.maxOutputTokens o cambiar a FINANCIAL_PIPELINE_PREMIUM.`,
+    );
+  }
+  return trimmed;
 }
 
 /**
- * Linter de DOM básico — verifica los checks más críticos sin linkedom.
+ * Corre los tres linters sobre el HTML emitido:
  *
- * Cubre:
- *   - §10 mandatory HTML comments (REPORT_MODE, ENTITY, AGENT_VERSION).
- *   - §1.6 vocabulario prohibido (lista de adjetivos de marketing).
- *   - §11 hash verificación coincide con metadata.reportHashSha256.
- *   - §1.9 metadatos internos del pipeline (Pass-1, anchors, curatorFlags,
- *     *Primary/Comparative, cifras en centavos crudos).
- *   - v10.1 paleta — NO oro (#C49A2E / #9A7418 / #DDB94A / --gold). El
- *     acento es azul prusia #1E3A5F.
+ *   1. `validateHtmlChecklist` — §11 completo con parser DOM (estructura,
+ *      15 páginas, aritmética por columna, vocabulario, paleta, hash).
+ *   2. `reconcileBindingFigures` — HTML contra el JSON de origen.
+ *   3. `internalMetadataChecklist` — §1.9, metadatos internos del pipeline.
  *
- * Lo que NO cubre (lo añade `html-editor-validator.ts` con linkedom):
- *   - Estructura de las 15 páginas en orden.
- *   - Tabular-nums aplicado a columnas numéricas.
- *   - Cero $0 huérfanos sin nota.
- *   - Cuadre aritmético de totales.
- *
- * Why regex y no string contains naive: las palabras prohibidas (Élite,
- * Sólido) pueden aparecer como substring de palabras legítimas (e.g.
- * "establece" contiene "estable" pero NO "Sólido"). El regex `\b…\b` evita
- * falsos positivos limitando a word boundaries.
+ * Why (1) no se solapa con (3): hasta esta ola producción sólo corría un
+ * linter ligero que duplicaba §10/§1.6/§5/§6 del validador profundo — y ese
+ * validador profundo, el único con aritmética, no lo importaba ningún archivo
+ * de producción. En vez de fusionar y deduplicar strings, se eliminó el
+ * solapamiento: el profundo es superconjunto en todo salvo §1.9, que es lo
+ * único que queda en el linter local.
  */
-function lightweightChecklist(
-  html: string,
-  metadata: HtmlEditorMetadata,
-): HtmlEditorOutput['checklistFailures'] {
-  const failures: HtmlEditorOutput['checklistFailures'] = [];
+function runAllChecks(html: string, input: HtmlEditorInput): ChecklistFailure[] {
+  const failures: ChecklistFailure[] = [];
 
-  // §10 mandatory HTML comments — buscamos la presencia LITERAL de los
-  // valores declarados en metadata, no patrones genéricos. Si el LLM omite
-  // o cambia un valor, el linter lo detecta como BLOCK.
-  const requiredComments = [
-    { needle: `REPORT_MODE: ${metadata.reportMode}`, label: 'REPORT_MODE' },
-    { needle: `ENTITY: ${metadata.entityNit}`, label: 'ENTITY' },
-    { needle: 'AGENT_VERSION: 1+1 v10.1', label: 'AGENT_VERSION' },
-  ];
-  for (const { needle, label } of requiredComments) {
-    if (!html.includes(needle)) {
-      failures.push({
-        rule: '§10 mandatory HTML comments',
-        detail: `Falta comentario ${label} con valor literal "${needle}"`,
-        severity: 'block',
-      });
-    }
-  }
-
-  // §1.6 vocabulario prohibido — palabra completa. La lista está en el spec
-  // verbatim, pero la espejamos aquí para que el linter sea self-contained y
-  // no requiera parsear el spec cada vez.
-  //
-  // Why lookbehind/lookahead en lugar de \b para É/Ú/Ó: `\b` en JavaScript
-  // solo reconoce [a-zA-Z0-9_] como word chars — `\bÉlite\b` NO matchea
-  // "Élite" precedida de espacio. Mismo patrón que el validador profundo
-  // (`html-editor-validator.ts` Check 15) para que ambos linters coincidan.
-  //
-  // Why "Único"/"Mejor" solo capitalizados: la spec §1.6 prohíbe adjetivos de
-  // MARKETING. En prosa técnica española "único"/"mejor" minúsculas son
-  // legítimos y hasta obligatorios ("dato único defensible" — spec §5 P07;
-  // "mejor estimación" — NIIF Pymes Sec. 21). El case-insensitive bloqueaba
-  // reportes canónicamente correctos.
-  //
-  // Why se escanea sobre visibleHtml (sin <style>/<script>/comments): los
-  // comentarios CSS de la plantilla maestra §13 contienen "acento único" —
-  // texto no visible para el lector que disparaba falsos BLOCK.
-  const visibleHtml = html
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ');
-  const forbiddenWords: Array<{ pattern: RegExp; label: string }> = [
-    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[EÉeé]lite(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Élite' },
-    { pattern: /\bExcelencia\b/i, label: 'Excelencia' },
-    { pattern: /\bPremium\b/i, label: 'Premium' },
-    { pattern: /\bExcepcional\b/i, label: 'Excepcional' },
-    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[ÚU]nico(?![a-zA-ZÀ-ÖØ-öø-ÿ])/, label: 'Único' },
-    { pattern: /\bMejor\b/, label: 'Mejor' },
-    { pattern: /(?<![a-zA-ZÀ-ÖØ-öø-ÿ])[SsÓóOo]lido(?![a-zA-ZÀ-ÖØ-öø-ÿ])/i, label: 'Sólido' },
-    { pattern: /\bRobusto\b/i, label: 'Robusto' },
-    { pattern: /\bExtraordinario\b/i, label: 'Extraordinario' },
-  ];
-  for (const { pattern, label } of forbiddenWords) {
-    const match = visibleHtml.match(pattern);
-    if (match) {
-      failures.push({
-        rule: '§1.6 vocabulario prohibido',
-        detail: `Palabra prohibida detectada: "${match[0]}" (lista: ${label})`,
-        severity: 'block',
-      });
-    }
-  }
-
-  // §5 Página 14 — hash declarado coincide con metadata.reportHashSha256. El
-  // hash es un SHA-256 hex de 64 chars; si el LLM lo trunca o inventa, no
-  // coincidirá con el helper determinístico.
-  if (!html.includes(metadata.reportHashSha256)) {
+  // Un HTML tan malformado que linkedom no pueda parsearlo es, por sí mismo,
+  // un entregable inválido: se reporta en vez de tumbar la request.
+  try {
+    failures.push(...validateHtmlChecklist(html, input.metadata));
+  } catch (err) {
     failures.push({
-      rule: '§5 Página 14 — hash verificación',
-      detail: `Hash SHA-256 ${metadata.reportHashSha256} no encontrado en HTML output`,
+      rule: '§11 — validador profundo',
+      detail: `El HTML no pudo parsearse como DOM: ${err instanceof Error ? err.message : String(err)}`,
       severity: 'block',
     });
   }
+
+  try {
+    failures.push(...reconcileBindingFigures(html, input));
+  } catch (err) {
+    failures.push({
+      rule: '§1.1 · Reconciliación JSON↔HTML',
+      detail: `La reconciliación no pudo ejecutarse: ${err instanceof Error ? err.message : String(err)}`,
+      severity: 'block',
+    });
+  }
+
+  failures.push(...internalMetadataChecklist(html));
+  return failures;
+}
+
+/**
+ * Bloque correctivo para el reintento. Enumera los fallos concretos en vez de
+ * pedir genéricamente "revisa las cifras": el modelo corrige lo que se le
+ * nombra.
+ */
+function buildCorrectionBlock(failures: ChecklistFailure[]): string {
+  const blocking = failures.filter((f) => f.severity === 'block');
+  const lines = blocking.map((f) => `- [${f.rule}] ${f.detail}`).join('\n');
+  return `<correcciones_obligatorias>
+La emisión anterior de este mismo informe falló la verificación determinística en los puntos siguientes. Vuelve a emitir el documento COMPLETO corrigiéndolos, sin alterar nada más.
+
+${lines}
+
+Las cifras de <cifras_vinculantes> se copian carácter por carácter: si una de ellas falta en el HTML, es que fue reescrita o reconvertida.
+</correcciones_obligatorias>`;
+}
+
+/**
+ * Estampa el HTML como BORRADOR cuando sobrevive un fallo bloqueante.
+ *
+ * Es el gate real: un banner en el visor se ignora y no sobrevive a la
+ * descarga; esto viaja dentro del artefacto y se imprime en cada página.
+ *
+ * Paleta: azul prusia `#1E3A5F` (acento único v10.1 §6). No se usa rojo ni
+ * oro — el oro está prohibido por el propio checklist.
+ */
+function stampAsDraft(html: string, failures: ChecklistFailure[]): string {
+  const blocking = countBlocking(failures);
+  const style = `<style>
+  .utopia-borrador{position:relative;z-index:9999;margin:0;padding:10px 16px;background:#1E3A5F;color:#FFFFFF;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.45;letter-spacing:.02em;text-align:center}
+  .utopia-borrador strong{letter-spacing:.14em}
+  @media print{
+    .utopia-borrador{position:fixed;top:0;left:0;right:0}
+    .page::after{content:"BORRADOR";position:absolute;top:45%;left:0;right:0;text-align:center;font-family:Inter,system-ui,sans-serif;font-size:96pt;font-weight:700;color:rgba(30,58,95,.10);letter-spacing:.18em;pointer-events:none;z-index:9998}
+  }
+</style>`;
+  const banner = `<div class="utopia-borrador"><strong>BORRADOR</strong> — este documento no superó la verificación numérica automática (${blocking} hallazgo${blocking === 1 ? '' : 's'} bloqueante${blocking === 1 ? '' : 's'}). No es apto para firma ni para presentación ante terceros hasta su revisión.</div>`;
+
+  // Inserta tras la etiqueta <body ...>. Si por lo que sea no aparece, se
+  // antepone: es preferible un banner desubicado a un borrador sin marcar.
+  const bodyOpen = html.match(/<body[^>]*>/i);
+  if (!bodyOpen) return `${style}${banner}${html}`;
+  const at = (bodyOpen.index ?? 0) + bodyOpen[0].length;
+  return `${html.slice(0, at)}${style}${banner}${html.slice(at)}`;
+}
+
+/**
+ * Linter local §1.9 — metadatos internos del pipeline que jamás deben llegar
+ * al cliente (nombres de variables, etapas del chunking, centavos crudos).
+ *
+ * Why sólo §1.9: hasta la ola 2026-08 esta función era `lightweightChecklist`
+ * y comprobaba además §10 comments, §1.6 vocabulario, §5 hash y §6 paleta —
+ * exactamente los mismos cuatro checks que ya implementa `validateHtmlChecklist`
+ * (Checks 1, 15, 13 y 16). Al cablear el validador profundo en producción esos
+ * checks salían DUPLICADOS en el banner. En lugar de deduplicar strings a
+ * posteriori se eliminó el solapamiento en origen: el validador profundo es
+ * superconjunto salvo en §1.9, que vive aquí porque no necesita DOM.
+ */
+function internalMetadataChecklist(
+  html: string,
+): HtmlEditorOutput['checklistFailures'] {
+  const failures: HtmlEditorOutput['checklistFailures'] = [];
 
   // Wave 6.F4 — metadatos internos del pipeline NUNCA en el output final
   // (v2.1 corrección 8). Estos son nombres de variables internas, etapas del
@@ -263,19 +374,41 @@ function lightweightChecklist(
     }
   }
 
-  // v10.1 §6 paleta — NO oro. La spec v10.1 reemplaza la paleta oro de v8.1
-  // por azul prusia (#1E3A5F) como acento único. Si el LLM regresa al
-  // muscle memory de v8.1 emitiendo --gold, #C49A2E, #9A7418 o #DDB94A,
-  // el linter lo detecta como BLOCK.
-  for (const { pattern, label } of FORBIDDEN_GOLD_PATTERNS) {
-    const match = htmlSinComments.match(pattern);
-    if (match) {
-      failures.push({
-        rule: '§6 v10.1 — paleta sin oro',
-        detail: `Color/token oro detectado: "${match[0]}" (${label}). Acento único v10.1 = #1E3A5F.`,
-        severity: 'block',
-      });
-    }
+  // Fuga de CENTAVOS CRUDOS sin la palabra "centavos" al lado.
+  //
+  // Why además del patrón `\d{10,}\s*centavos` de arriba: ese patrón exige la
+  // palabra literal, que es justo lo que NO aparece cuando el modelo copia un
+  // MoneyCop del JSON o un token `[MoneyCop: N]` del bloque de cifras
+  // vinculantes. Es decir, no cubría el caso real.
+  //
+  // Why 11 dígitos y no 9: un NIT colombiano son 9-10 dígitos y un teléfono
+  // 10. A partir de 11 dígitos seguidos sin separador en texto visible ya no
+  // hay identificador legítimo — sólo un monto en centavos sin formatear.
+  //
+  // Se escanea sobre texto visible y con el hash SHA-256 removido: un hash hex
+  // real puede contener rachas largas de dígitos.
+  const visibleText = htmlSinComments
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\b[0-9a-f]{64}\b/gi, ' ');
+
+  if (/\bMoneyCop\b/.test(visibleText)) {
+    failures.push({
+      rule: '§v2.1 corrección 8 — formato moneda (debe ser $X.XXX.XXX,XX)',
+      detail:
+        'Token interno "MoneyCop" detectado en el cuerpo del informe: el modelo copió el ancla en vez de la cifra formateada.',
+      severity: 'block',
+    });
+  }
+
+  const rawCents = visibleText.match(/(?<![\d.,-])\d{11,}(?![\d.,])/);
+  if (rawCents) {
+    failures.push({
+      rule: '§v2.1 corrección 8 — formato moneda (debe ser $X.XXX.XXX,XX)',
+      detail: `Entero de ${rawCents[0].length} dígitos sin separadores detectado ("${rawCents[0]}") — cifra en centavos crudos sin formatear.`,
+      severity: 'block',
+    });
   }
 
   return failures;
@@ -304,27 +437,9 @@ function lightweightChecklist(
 // (Pass-1) usamos pattern explícito que cubre "Pass1", "Pass-1", "Pass 1".
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Patrones prohibidos de paleta oro (v10.1 §6 — acento único azul prusia)
-// ---------------------------------------------------------------------------
-// La spec v10.1 reemplaza la paleta oro de v8.1 por azul prusia (#1E3A5F)
-// como acento único. Estos patrones detectan el regreso accidental a oro:
-//
-//   - Tokens CSS: --gold, --gold-d, --gold-l, --accent-gold
-//   - Hex literals: #C49A2E (oro), #9A7418 (oro oscuro), #DDB94A (oro claro)
-//   - Nombres de clase: .gold, .accent-gold (si el LLM inventa)
-//
-// Nota: el patrón evita falsos positivos en palabras españolas comunes (oro
-// no es token CSS sino sustantivo). Por eso requerimos el contexto técnico:
-// el guion `--`, el `#` hex, o el punto `.` de clase CSS.
-// ---------------------------------------------------------------------------
-
-const FORBIDDEN_GOLD_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /--gold(?:-[dl])?\b/, label: 'CSS token --gold/--gold-d/--gold-l' },
-  { pattern: /#C49A2E\b/i, label: 'hex #C49A2E (oro v8.1)' },
-  { pattern: /#9A7418\b/i, label: 'hex #9A7418 (oro oscuro v8.1)' },
-  { pattern: /#DDB94A\b/i, label: 'hex #DDB94A (oro claro v8.1)' },
-];
+// La paleta oro (§6, Check 16) y el vocabulario prohibido (§1.6, Check 15) ya
+// no se comprueban aquí: los cubre `validateHtmlChecklist`, ahora cableado en
+// producción. Duplicarlos sólo producía fallos dobles en el banner.
 
 const FORBIDDEN_METADATA_PATTERNS: Array<{
   pattern: RegExp;

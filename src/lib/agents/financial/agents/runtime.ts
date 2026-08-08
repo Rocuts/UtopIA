@@ -105,8 +105,27 @@ export interface CallFinancialAgentOptions<TSchema extends z.ZodTypeAny> {
    * justo antes del return con el `meta` final. El caller (cada agent.ts)
    * decide qué hacer con él — típicamente emitir el SSE event `agent_telemetry`
    * vía su propio `onProgress`. No bloquea: si el callback lanza, propaga.
+   *
+   * NO es el canal de persistencia: la fila de `agent_telemetry` la escribe
+   * este runtime directamente (ver `persistAgentTelemetry`). Antes se esperaba
+   * que cada agente cableara la persistencia aquí y ninguno lo hacía.
    */
   onTelemetry?: (meta: CallFinancialAgentResult<TSchema>['meta']) => void;
+  /**
+   * Aviso de degradación. Se invoca cuando el agente entrega un resultado
+   * producido con `reasoningEffort='low'` tras agotar el effort solicitado.
+   * El caller debe propagarlo al SSE (`FinancialProgressEvent` type `warning`)
+   * para que la UI marque la sección como generada en modo degradado: el
+   * cliente firma este reporte ante la DIAN y tiene derecho a saberlo.
+   */
+  onDegraded?: (info: { agentName: string; requestedEffort: ReasoningEffort; message: string }) => void;
+  /**
+   * Tenant dueño de la llamada (telemetría). Si se omite se toma del
+   * `AsyncLocalStorage` que abra el route handler con `runWithTelemetryContext`.
+   */
+  workspaceId?: string | null;
+  /** Reporte asociado, si el orchestrator ya creó la fila. */
+  reportId?: string | null;
 }
 
 export interface CallFinancialAgentResult<TSchema extends z.ZodTypeAny> {
@@ -115,6 +134,8 @@ export interface CallFinancialAgentResult<TSchema extends z.ZodTypeAny> {
   /** Telemetría observable. */
   meta: {
     agentName: string;
+    /** Modelo efectivamente usado (para costo y dashboards). */
+    modelId: string;
     finishReason: string;
     inputTokens?: number;
     outputTokens?: number;
@@ -141,7 +162,26 @@ export interface CallFinancialAgentResult<TSchema extends z.ZodTypeAny> {
      * perdía porque `meta.finishReason` reflejaba el segundo pase exitoso.
      */
     firstPassFinishReason?: string;
+    /**
+     * `true` si hubo un reintento al MISMO `reasoningEffort` antes de degradar.
+     * Cubre el caso de JSON no parseable (el getter `experimental_output`
+     * lanza `NoObjectGeneratedError`, que `safeOutput` traga FUERA de
+     * `withRetry`, así que la rama retryable de `retry.ts` nunca lo veía).
+     */
+    retriedSameEffort?: boolean;
+    /**
+     * `true` si el resultado se generó con effort degradado. Alias semántico de
+     * `fallbackUsed` pensado para consumidores de UI: un dictamen `high`
+     * entregado en modo `low` NO es de calidad plena.
+     */
+    degraded: boolean;
   };
+}
+
+/** Id del modelo detrás de un `LanguageModel` del AI SDK (string o instancia). */
+function resolveModelId(model: LanguageModel): string {
+  if (typeof model === 'string') return model;
+  return (model as { modelId?: string }).modelId ?? 'unknown';
 }
 
 // ---------------------------------------------------------------------------
@@ -227,39 +267,74 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
     }
   };
 
+  /** `true` si el pase no produjo output utilizable (bug length / stop vacío). */
+  const isEmptyPass = (r: Awaited<ReturnType<typeof runPass>>): boolean => {
+    const out = safeOutput(r);
+    if (out !== undefined && out !== null) return false;
+    // Tras Wave 2 la detección incluye finishReason='stop' con output null — el
+    // reasoning model puede agotar el budget interno sin marcar 'length'.
+    return r.finishReason === 'length' || r.finishReason === 'stop';
+  };
+
+  const passDiagnostics = (r: Awaited<ReturnType<typeof runPass>>) => {
+    const usage = (r as unknown as { usage?: Record<string, number | undefined> }).usage ?? {};
+    return { reasoningTokens: usage.reasoningTokens, finishReason: r.finishReason };
+  };
+
   let result = await runPass(reasoningEffort);
   let fallbackUsed = false;
-  // Captura del PRIMER pase fallido cuando el auto-fallback se activa. Antes
-  // se perdía esta señal porque `result` quedaba sobrescrito por el segundo
-  // pase. Es el indicador diagnóstico clave (cuánto reasoning consumió GPT-5
-  // antes de morir con finish_reason=length).
+  let retriedSameEffort = false;
+  // Captura del PRIMER pase fallido. Antes se perdía esta señal porque
+  // `result` quedaba sobrescrito por el segundo pase. Es el indicador
+  // diagnóstico clave (cuánto reasoning consumió GPT-5 antes de morir con
+  // finish_reason=length).
   let firstPassMeta: { reasoningTokens?: number; finishReason: string } | null = null;
 
-  // Salvaguarda contra el bug `finish_reason=length` + textLen=0 propio de los
-  // reasoning models GPT-5: si el reasoning consumió todo el budget, reintentar
-  // UNA vez con effort='low' (solo si el caller pidió medium/high — bajar
-  // desde 'low' o 'minimal' no aporta). Tras Wave 2 ampliamos la detección
-  // para incluir el caso finishReason='stop' con output null — el reasoning
-  // model puede agotar el budget interno sin marcar finishReason='length'.
-  const firstOutput = safeOutput(result);
-  const noOutput = firstOutput === undefined || firstOutput === null;
-  const hitLengthBug = result.finishReason === 'length' && noOutput;
-  const hitStopButEmpty = result.finishReason === 'stop' && noOutput;
+  if (isEmptyPass(result)) {
+    firstPassMeta = passDiagnostics(result);
 
-  if ((hitLengthBug || hitStopButEmpty) && (reasoningEffort === 'medium' || reasoningEffort === 'high')) {
-    const firstUsage =
-      (result as unknown as { usage?: Record<string, number | undefined> }).usage ?? {};
-    firstPassMeta = {
-      reasoningTokens: firstUsage.reasoningTokens,
-      finishReason: result.finishReason,
-    };
     console.warn(
       `[callFinancialAgent:${agentName}] sin output con effort=${reasoningEffort} ` +
-        `(finishReason=${result.finishReason}, reasoningTokens=${firstUsage.reasoningTokens ?? 'n/a'}); ` +
-        `reintentando con effort='low' (auto-fallback).`,
+        `(finishReason=${firstPassMeta.finishReason}, reasoningTokens=${firstPassMeta.reasoningTokens ?? 'n/a'}).`,
     );
-    result = await runPass('low');
-    fallbackUsed = true;
+
+    // Un output vacío tiene DOS causas distintas y merecen respuestas distintas:
+    //
+    //  - `finishReason='length'`: el reasoning se comió el budget. Repetir al
+    //    mismo effort volvería a chocar contra el mismo techo — solo quemaría
+    //    otro pase de 60-180s y su costo. Se degrada de una.
+    //  - `finishReason='stop'` con output null: típicamente JSON no parseable.
+    //    `safeOutput` se traga ese `NoObjectGeneratedError` FUERA de `withRetry`,
+    //    así que la rama retryable de retry.ts nunca lo veía y el agente se
+    //    degradaba por un fallo transitorio. Aquí sí vale reintentar al MISMO
+    //    effort antes de bajar la calidad.
+    if (firstPassMeta.finishReason !== 'length') {
+      console.warn(
+        `[callFinancialAgent:${agentName}] reintentando al MISMO effort antes de degradar.`,
+      );
+      result = await runPass(reasoningEffort);
+      retriedSameEffort = true;
+    }
+
+    // Solo si seguimos sin output degradamos a 'low' (libera ~8K tokens
+    // internos para output). Bajar desde 'low' o 'minimal' no aporta nada.
+    if (isEmptyPass(result) && (reasoningEffort === 'medium' || reasoningEffort === 'high')) {
+      const message =
+        `El agente "${agentName}" no pudo generar salida con effort=${reasoningEffort} ` +
+        `y esta sección se generó con razonamiento reducido (effort='low'). ` +
+        `Revísela antes de firmarla.`;
+      console.warn(`[callFinancialAgent:${agentName}] auto-fallback a effort='low'. ${message}`);
+      result = await runPass('low');
+      fallbackUsed = true;
+      // El aviso se emite aunque el pase 'low' termine fallando: el caller ya
+      // sabe que hubo degradación. Nunca dejamos que un callback de UI tumbe
+      // el pipeline.
+      try {
+        opts.onDegraded?.({ agentName, requestedEffort: reasoningEffort, message });
+      } catch (err) {
+        console.error(`[callFinancialAgent:${agentName}] onDegraded lanzó:`, err);
+      }
+    }
   }
 
   assertFinishedCleanlyOrThrow(result, agentName);
@@ -296,6 +371,7 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
 
   const meta: CallFinancialAgentResult<TSchema>['meta'] = {
     agentName,
+    modelId: resolveModelId(model),
     finishReason: result.finishReason,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
@@ -305,7 +381,54 @@ export async function callFinancialAgent<TSchema extends z.ZodTypeAny>(
     fallbackUsed,
     firstPassReasoningTokens: firstPassMeta?.reasoningTokens,
     firstPassFinishReason: firstPassMeta?.finishReason,
+    retriedSameEffort,
+    degraded: fallbackUsed,
   };
+
+  // Persistencia de telemetría — se cablea AQUÍ, no en los ~40 callsites: es el
+  // único punto por el que pasan todas las llamadas LLM del pipeline. Sin esto
+  // la tabla `agent_telemetry` quedaba vacía y las alertas de
+  // docs/TELEMETRY.md (fallback >3%, finishReason!=stop >1%, costo >$50/día)
+  // se evaluaban sobre cero filas.
+  //
+  // Fire-and-forget de verdad: import dinámico (no arrastramos `pg` al grafo de
+  // módulos de quien solo importa el runtime), promesa sin `await` y `catch`
+  // final — ni la latencia ni los fallos de DB tocan el pipeline.
+  const telemetryTask = (async () => {
+    try {
+      const { persistAgentTelemetry } = await import('@/lib/db/telemetry');
+      await persistAgentTelemetry({
+        workspaceId: opts.workspaceId ?? null,
+        reportId: opts.reportId ?? null,
+        agentName: meta.agentName,
+        modelId: meta.modelId,
+        inputTokens: meta.inputTokens ?? null,
+        outputTokens: meta.outputTokens ?? null,
+        reasoningTokens: meta.reasoningTokens ?? null,
+        cachedInputTokens: meta.cachedInputTokens ?? null,
+        elapsedMs: meta.elapsedMs,
+        finishReason: meta.finishReason,
+        fallbackUsed: meta.fallbackUsed,
+        firstPassReasoningTokens: meta.firstPassReasoningTokens ?? null,
+        firstPassFinishReason: meta.firstPassFinishReason ?? null,
+      });
+    } catch (err) {
+      console.error(`[callFinancialAgent:${agentName}] telemetría no persistida:`, err);
+    }
+  })();
+
+  // En Vercel la instancia puede evictarse en cuanto la respuesta termina y el
+  // insert quedaría a medias. `waitUntil` lo mantiene vivo SIN bloquear el
+  // return. Fuera de Vercel (dev, tests) el import falla y seguimos con el
+  // fire-and-forget puro.
+  void (async () => {
+    try {
+      const { waitUntil } = await import('@vercel/functions');
+      waitUntil(telemetryTask);
+    } catch {
+      /* entorno sin runtime Vercel — la promesa igual se resuelve sola. */
+    }
+  })();
 
   opts.onTelemetry?.(meta);
 

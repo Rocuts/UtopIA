@@ -16,7 +16,15 @@ import type {
   NiifReportIntake,
 } from '@/types/platform';
 import type { FinancialReport, CompanyInfo } from '@/lib/agents/financial/types';
+import type { AuditReport as BackendAuditReport } from '@/lib/agents/financial/audit/types';
+import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { ReportIterationTurn } from '@/components/workspace/types';
+import {
+  savePendingRun,
+  loadPendingRun,
+  clearPendingRun as clearPendingRunStorage,
+  type PendingRunRecord,
+} from '@/components/workspace/pipeline-resilience';
 
 // ─── Preserved existing types ─────────────────────────────────────────────────
 
@@ -64,6 +72,19 @@ export interface WorkspaceState {
   intakeDrafts: Partial<Record<CaseType, Partial<IntakeFormUnion>>>;
   intakeModalOpen: boolean;
   pipelineInput: NiifReportIntake | null;
+
+  /**
+   * Corrida disparada en una sesión anterior del navegador (persistida al
+   * llamar `setPipelineInput`). Auditoría 2026-08: un F5 durante la generación
+   * perdía el intake ya confirmado y el usuario tenía que rehacer el wizard
+   * entero. NO se re-dispara sola — gastar 3-5 min y varios dólares de LLM
+   * requiere un click explícito del usuario (`resumePendingRun`).
+   */
+  pendingRun: PendingRunRecord | null;
+  /** Promueve la corrida pendiente a `pipelineInput` (la relanza). */
+  resumePendingRun: () => void;
+  /** Descarta la corrida pendiente sin relanzarla. */
+  clearPendingRun: () => void;
 
   // Reporte financiero mas reciente completado (backend report + turnos del chat de seguimiento)
   lastCompletedReport: LastCompletedReport | null;
@@ -117,7 +138,27 @@ export interface LastCompletedReport {
   company: CompanyInfo;
   conversationId: string;
   turns: ReportIterationTurn[];
+  /**
+   * Auditoría 2026-08: `auditReport` y `qualityReport` vivían SOLO en el estado
+   * del componente. Tras un refresh el usuario exportaba el PDF y el documento
+   * salía sin las páginas de auditoría ni de meta-auditoría — las que él había
+   * esperado (y pagado en tiempo de LLM) — sin ningún aviso de que faltaban.
+   * Ahora viajan con el registro persistido.
+   */
+  auditReport?: BackendAuditReport | null;
+  qualityReport?: BackendQualityAssessment | null;
 }
+
+/**
+ * El registro persistido lleva dos campos extra sobre `StoredReportRecord`.
+ * `saveReport` hace spread del objeto completo (`capRecord` incluido), así que
+ * los campos adicionales sobreviven el round-trip a localStorage sin tocar el
+ * módulo de storage.
+ */
+type StoredReportRecordWithAudit = StoredReportRecord & {
+  auditReport?: unknown;
+  qualityReport?: unknown;
+};
 
 // ─── Default pipeline state ───────────────────────────────────────────────────
 
@@ -158,6 +199,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [intakeDrafts, setIntakeDrafts] = useState<Partial<Record<CaseType, Partial<IntakeFormUnion>>>>({});
   const [intakeModalOpen, setIntakeModalOpen] = useState(false);
   const [pipelineInput, setPipelineInputState] = useState<NiifReportIntake | null>(null);
+  // Corrida persistida de una sesión anterior. Inicializador lazy: `loadPendingRun`
+  // devuelve null en SSR (no hay `localStorage` en `globalThis`).
+  const [pendingRun, setPendingRunState] = useState<PendingRunRecord | null>(() => loadPendingRun());
   const [pendingChatSeed, setPendingChatSeedState] = useState<string | null>(null);
   const [pendingChatContext, setPendingChatContextState] = useState<string | null>(null);
   // Hidratar el reporte mas reciente desde localStorage al crear el state.
@@ -168,7 +212,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     () => {
       try {
         const all = listReports();
-        const latest = all[0];
+        const latest = all[0] as StoredReportRecordWithAudit | undefined;
         if (!latest) return null;
         const report = latest.report as FinancialReport | null;
         if (!report || typeof report.consolidatedReport !== 'string') return null;
@@ -178,6 +222,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           company: report.company,
           conversationId: latest.conversationId,
           turns: (latest.turns as ReportIterationTurn[] | undefined) ?? [],
+          // Rehidratamos auditoría y meta-auditoría: sin esto el PDF exportado
+          // tras un refresh omitía silenciosamente sus páginas.
+          auditReport: (latest.auditReport as BackendAuditReport | undefined) ?? null,
+          qualityReport: (latest.qualityReport as BackendQualityAssessment | undefined) ?? null,
         };
       } catch {
         // Si el storage esta corrupto, ignoramos — el usuario empieza vacio.
@@ -263,8 +311,34 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  /**
+   * Fija el intake que dispara el pipeline y lo PERSISTE antes de que arranque
+   * la corrida. Ese orden importa: si el tab se cierra o el usuario refresca a
+   * los 30 segundos, el intake ya está en disco y se le puede ofrecer reanudar
+   * en vez de obligarlo a rehacer el wizard.
+   */
   const setPipelineInput = useCallback((input: NiifReportIntake | null) => {
     setPipelineInputState(input);
+    if (input) {
+      savePendingRun(input);
+      // Una corrida nueva invalida la oferta de reanudar la anterior.
+      setPendingRunState(null);
+    } else {
+      clearPendingRunStorage();
+      setPendingRunState(null);
+    }
+  }, []);
+
+  const resumePendingRun = useCallback(() => {
+    setPendingRunState((prev) => {
+      if (prev) setPipelineInputState(prev.input);
+      return null;
+    });
+  }, []);
+
+  const clearPendingRun = useCallback(() => {
+    clearPendingRunStorage();
+    setPendingRunState(null);
   }, []);
 
   const setPendingChatSeed = useCallback((seed: string | null) => {
@@ -293,7 +367,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setLastCompletedReportState(data);
     if (!data) return;
     try {
-      const record: StoredReportRecord = {
+      const record: StoredReportRecordWithAudit = {
         conversationId: data.conversationId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -303,6 +377,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         report: data.report,
         rawData: data.rawData,
         turns: data.turns,
+        // Se persisten SIEMPRE que existan: el PDF editorial las necesita para
+        // AuditFindingsPage / QualityMetaAuditPage y antes se perdían con el
+        // primer refresh.
+        auditReport: data.auditReport ?? null,
+        qualityReport: data.qualityReport ?? null,
       };
       saveReport(record);
     } catch (err) {
@@ -321,7 +400,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (prev && prev.conversationId === conversationId) {
           const next: LastCompletedReport = { ...prev, turns };
           try {
-            saveReport({
+            const record: StoredReportRecordWithAudit = {
               conversationId,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -331,7 +410,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               report: next.report,
               rawData: next.rawData,
               turns,
-            });
+              // Re-escribir el registro sin estos campos los borraría: un turno
+              // del chat de seguimiento dejaría al PDF sin páginas de auditoría.
+              auditReport: next.auditReport ?? null,
+              qualityReport: next.qualityReport ?? null,
+            };
+            saveReport(record);
           } catch (err) {
             console.error('Failed to update report turns in localStorage:', err);
           }
@@ -391,6 +475,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         intakeDrafts,
         intakeModalOpen,
         pipelineInput,
+        pendingRun,
+        resumePendingRun,
+        clearPendingRun,
         lastCompletedReport,
         setActiveCaseType,
         setActiveMode,

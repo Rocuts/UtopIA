@@ -23,6 +23,7 @@ export default function WorkspacePage() {
     activeUseCase,
     activeCaseType,
     activeMode,
+    pipelineState,
     setRiskAssessment,
     addDocument,
   } = useWorkspace();
@@ -44,24 +45,45 @@ export default function WorkspacePage() {
   };
 
   // MODE: PIPELINE — NIIF Elite
-  if (activeCaseType === 'niif_report' && activeMode === 'pipeline') {
-    return <PipelineWorkspace />;
-  }
+  const showPipeline = activeCaseType === 'niif_report' && activeMode === 'pipeline';
 
-  // MODE: CHAT — Active case with conversation
-  if (activeCase) {
-    return (
-      <ChatWorkspace
-        key={activeCase}
-        conversationId={activeCase}
-        useCase={activeUseCase}
-        language={language}
-        onRiskAssessment={handleRiskAssessment}
-        onDocumentUploaded={handleDocumentUploaded}
-      />
-    );
-  }
+  // Auditoría 2026-08 (`navegacion-mata-corrida`): antes, cambiar de área
+  // durante la generación DESMONTABA `PipelineWorkspace` y el cleanup de su
+  // efecto abortaba el reporte — 3-5 minutos y varios dólares de LLM tirados,
+  // sin confirmación ni aviso.
+  //
+  // `PipelineWorkspace` se mantiene montado mientras la corrida siga viva,
+  // SIEMPRE en la misma posición del árbol (primer hijo del fragmento) para
+  // que React preserve la instancia cuando `showPipeline` pasa a false. Si se
+  // renderizara condicionalmente en otra rama, React lo desmontaría y volvería
+  // a montarlo, que es exactamente lo que queremos evitar.
+  const pipelineRunning =
+    pipelineState.mode === 'running' ||
+    pipelineState.mode === 'auditing' ||
+    pipelineState.mode === 'quality';
+  const keepPipelineMounted = showPipeline || pipelineRunning;
 
-  // MODE: HOME — No active case → Executive Dashboard
-  return <ExecutiveDashboard />;
+  return (
+    <>
+      <div className={showPipeline ? 'h-full' : 'hidden'} aria-hidden={!showPipeline}>
+        {keepPipelineMounted && <PipelineWorkspace />}
+      </div>
+
+      {!showPipeline &&
+        (activeCase ? (
+          // MODE: CHAT — Active case with conversation
+          <ChatWorkspace
+            key={activeCase}
+            conversationId={activeCase}
+            useCase={activeUseCase}
+            language={language}
+            onRiskAssessment={handleRiskAssessment}
+            onDocumentUploaded={handleDocumentUploaded}
+          />
+        ) : (
+          // MODE: HOME — No active case → Executive Dashboard
+          <ExecutiveDashboard />
+        ))}
+    </>
+  );
 }

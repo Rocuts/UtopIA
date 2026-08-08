@@ -24,15 +24,20 @@ const DEADLINES = [
   { title: 'ICA Bogotá — Bimestre 2', days: '30 días', amount: '$42.000.000' },
 ];
 
+// POR QUÉ no hay variantes `dark:` en esta página: la escala n-0..n-1000 YA se
+// invierte sola en [data-theme="dark"] (globals.css) y el @custom-variant `dark`
+// dispara con EXACTAMENTE el mismo selector. Un `text-n-800 dark:text-n-200`
+// se invierte dos veces: en oscuro renderiza n-200 = #27231D sobre fondo #0A0907
+// (1.3:1 → invisible). El tinte se elige una sola vez, por ROL.
 export default function AgenteFiscalPage() {
   return (
-    <div className="min-h-screen bg-n-50 dark:bg-n-950 text-n-1000 dark:text-n-1000">
+    <div className="min-h-screen bg-n-50 text-n-1000">
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
 
         {/* Back link */}
         <Link
           href="/workspace/escudo"
-          className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-n-500 hover:text-n-800 dark:hover:text-n-200 transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-n-600 hover:text-n-1000 transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Volver a El Escudo
@@ -57,7 +62,7 @@ export default function AgenteFiscalPage() {
             {STATS.map((s) => (
               <div
                 key={s.label}
-                className="rounded-xl border border-n-200 dark:border-n-800 bg-white dark:bg-n-900 p-4 space-y-1"
+                className="rounded-xl border border-n-200 bg-n-0 p-4 space-y-1"
               >
                 <div className="text-xs text-n-600">{s.label}</div>
                 <div
@@ -90,7 +95,7 @@ export default function AgenteFiscalPage() {
             </span>
           </div>
 
-          <div className="rounded-xl border border-n-200 dark:border-n-800 bg-white dark:bg-n-900 p-4 space-y-4">
+          <div className="rounded-xl border border-n-200 bg-n-0 p-4 space-y-4">
             {STREAM_LINES.map((line, i) => (
               <div key={i} className="flex items-start gap-3">
                 <div
@@ -99,10 +104,10 @@ export default function AgenteFiscalPage() {
                 >
                   <Bot className="h-4 w-4" style={{ color: '#A83838' }} />
                 </div>
-                <div className="flex-1 text-sm text-n-800 dark:text-n-200 bg-n-100 dark:bg-n-800 rounded-lg px-3 py-2 leading-relaxed">
+                <div className="flex-1 text-sm text-n-900 bg-n-100 rounded-lg px-3 py-2 leading-relaxed">
                   {line}
                   {i === STREAM_LINES.length - 1 && (
-                    <span className="inline-block w-0.5 h-4 ml-1 align-middle bg-n-600 dark:bg-n-400 animate-[blink_1s_step-end_infinite]" />
+                    <span className="inline-block w-0.5 h-4 ml-1 align-middle bg-n-700 animate-[blink_1s_step-end_infinite]" />
                   )}
                 </div>
               </div>
@@ -132,10 +137,10 @@ export default function AgenteFiscalPage() {
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-xs font-semibold uppercase tracking-widest text-n-500">Próximos vencimientos</div>
-            <span className="text-xs text-n-500">4 obligaciones</span>
+            <span className="text-xs text-n-600">4 obligaciones</span>
           </div>
 
-          <div className="rounded-xl border border-n-200 dark:border-n-800 bg-white dark:bg-n-900 divide-y divide-n-100 dark:divide-n-800">
+          <div className="rounded-xl border border-n-200 bg-n-0 divide-y divide-n-200">
             {DEADLINES.map((d, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3">
                 <div
@@ -145,10 +150,10 @@ export default function AgenteFiscalPage() {
                   <CalendarClock className="h-4 w-4" style={{ color: '#A83838' }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-n-900 dark:text-n-100 truncate">{d.title}</div>
-                  <div className="text-xs text-n-500 mt-0.5">en {d.days}</div>
+                  <div className="text-sm font-medium text-n-1000 truncate">{d.title}</div>
+                  <div className="text-xs text-n-600 mt-0.5">en {d.days}</div>
                 </div>
-                <div className="text-sm font-mono font-semibold text-n-800 dark:text-n-200 whitespace-nowrap">
+                <div className="text-sm font-mono font-semibold text-n-900 whitespace-nowrap">
                   {d.amount}
                 </div>
               </div>

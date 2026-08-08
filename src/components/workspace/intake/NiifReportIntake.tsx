@@ -23,11 +23,13 @@ import type {
 } from '@/types/platform';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { dict } from '@/lib/i18n/dictionaries';
 import { useIntakePersistence } from './useIntakePersistence';
 import { useDocumentExtraction } from './useDocumentExtraction';
 import type { FieldConfidence } from './useDocumentExtraction';
 import { IntakePreview } from './IntakePreview';
 import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
+import { collectMissingRequired, resolveNiifRawData } from './niifIntakeValidation';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -241,7 +243,9 @@ function ExtractionProgress({
                   ? 'text-success'
                   : active
                     ? 'text-gold-500'
-                    : 'text-n-400',
+                    // n-600 y no n-400: la etapa pendiente sigue siendo texto que
+                    // el usuario lee para saber qué falta (n-400 da 2.2:1).
+                    : 'text-n-600',
               )}
             >
               {reached ? (
@@ -351,6 +355,7 @@ export function NiifReportIntake() {
     setPipelineState,
   } = useWorkspace();
   const { language } = useLanguage();
+  const t = dict[language].niifIntake;
   const [step, setStep] = useState(0);
   const [values, setValues] = useIntakePersistence('niif_report', DEFAULT_VALUES);
   const [sectorOpen, setSectorOpen] = useState(false);
@@ -483,14 +488,25 @@ export function NiifReportIntake() {
     setStep(1);
   }, []);
 
+  // Datos contables efectivos. Una sola fuente de verdad para el submit, el
+  // banner de faltantes y la validación del wizard (antes cada uno decidía por
+  // su cuenta y el desfase dejaba pasar corridas sin balance).
+  const extractedRawText =
+    extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
+  const resolvedRawData = resolveNiifRawData(extractedRawText, values.rawData);
+
   const handleSubmit = useCallback(() => {
     const extractedRaw =
       extractionState.status === 'done' ? extractionState.extracted?.rawText : undefined;
-    const resolvedRawData = (extractedRaw || values.rawData || '').trim();
+    const finalRawData = resolveNiifRawData(extractedRaw, values.rawData);
+
+    // Guarda dura: el backend exige rawData.min(1). Sin esto el usuario llegaba
+    // al final del wizard y recibía un HTTP 400 críptico.
+    if (!finalRawData) return;
 
     const finalIntake: NiifReportIntakeType = {
       ...values,
-      rawData: resolvedRawData,
+      rawData: finalRawData,
       excludedFactIds,
     };
 
@@ -543,14 +559,18 @@ export function NiifReportIntake() {
   );
 
   // Required fields missing in step 2. Drives the red banner and aria-invalid hints.
-  const missingRequired = useMemo(() => {
-    const missing: string[] = [];
-    if (!values.company.name?.trim()) missing.push('Razón Social');
-    if (!values.company.nit?.trim()) missing.push('NIT');
-    if (!values.fiscalPeriod) missing.push('Periodo Fiscal');
-    if (!values.niifGroup) missing.push('Grupo NIIF');
-    return missing;
-  }, [values.company.name, values.company.nit, values.fiscalPeriod, values.niifGroup]);
+  const missingRequired = useMemo(
+    () =>
+      collectMissingRequired(
+        {
+          company: values.company,
+          fiscalPeriod: values.fiscalPeriod,
+          niifGroup: values.niifGroup,
+        },
+        resolvedRawData,
+      ),
+    [values.company, values.fiscalPeriod, values.niifGroup, resolvedRawData],
+  );
 
   // ─── Step 1: Upload Document ──────────────────────────────────────────────
 
@@ -660,6 +680,52 @@ export function NiifReportIntake() {
         <DetectionSummary confidence={confidenceMap} />
       )}
 
+      {/* Balance de prueba.
+          POR QUÉ vive en el paso 2: la ruta "Llenar manualmente" saltaba el
+          upload y ningún paso posterior pedía datos contables, así que el
+          usuario completaba los 4 pasos y solo entonces el backend respondía
+          HTTP 400 (`rawData` es obligatorio). Aquí el bloqueo aparece donde
+          todavía se puede corregir. */}
+      <div className="border-t border-n-200 pt-5">
+        <div className="flex items-center gap-2 mb-1">
+          <FileSpreadsheet className="w-4 h-4 text-gold-500" />
+          <h3 className="text-sm font-semibold text-n-900">{t.rawDataTitle}</h3>
+          <span className="text-danger">*</span>
+        </div>
+        {extractedRawText ? (
+          <p className="text-xs text-n-600 flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
+            {t.rawDataFromFile}
+          </p>
+        ) : (
+          <>
+            <label htmlFor="niif-raw-data" className="block text-xs text-n-600 mb-1.5">
+              {t.rawDataHint}
+            </label>
+            <textarea
+              id="niif-raw-data"
+              value={values.rawData ?? ''}
+              onChange={(e) => updateField('rawData', e.target.value)}
+              placeholder={t.rawDataPlaceholder}
+              rows={6}
+              aria-invalid={!resolvedRawData}
+              aria-describedby={
+                !resolvedRawData && missingRequired.length > 0
+                  ? 'niif-required-errors'
+                  : undefined
+              }
+              className={cn(
+                'w-full px-3 py-2 rounded-lg border text-sm text-n-900 font-mono resize-y focus:outline-none focus:ring-1',
+                fieldBorderClass('rawData', !!resolvedRawData, true),
+              )}
+            />
+            {!resolvedRawData && (
+              <p className="text-2xs text-danger mt-1">{t.rawDataMissing}</p>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Company data section */}
       <div>
         <div className="flex items-center gap-2 mb-1">
@@ -671,11 +737,15 @@ export function NiifReportIntake() {
 
       {/* Razon Social -- full width */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+        <label
+          htmlFor="niif-company-name"
+          className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+        >
           Razón Social <span className="text-danger">*</span>
           <ConfidenceDot level={getFieldConfidence('name')} />
         </label>
         <input
+          id="niif-company-name"
           type="text"
           value={values.company.name}
           onChange={(e) => updateCompany('name', e.target.value)}
@@ -696,11 +766,15 @@ export function NiifReportIntake() {
       {/* 2-column grid: NIT + Sector */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          <label
+            htmlFor="niif-company-nit"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+          >
             NIT <span className="text-danger">*</span>
             <ConfidenceDot level={getFieldConfidence('nit')} />
           </label>
           <input
+            id="niif-company-nit"
             type="text"
             value={values.company.nit}
             onChange={(e) => updateCompany('nit', formatNIT(e.target.value))}
@@ -720,24 +794,37 @@ export function NiifReportIntake() {
         </div>
 
         <div className="relative">
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          {/* Combobox: un <label htmlFor> no nombra a un <button>, por eso el
+              control se apoya en aria-labelledby contra el id del label. */}
+          <label
+            id="niif-sector-label"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+          >
             Sector
             <ConfidenceDot level={getFieldConfidence('sector')} />
           </label>
           <button
             type="button"
+            id="niif-sector"
+            aria-labelledby="niif-sector-label niif-sector"
+            aria-haspopup="listbox"
+            aria-expanded={sectorOpen}
             onClick={() => setSectorOpen(!sectorOpen)}
             className={cn(
               'w-full px-3 py-2 rounded-lg border text-sm text-left bg-n-0 focus:outline-none focus:ring-1',
               fieldBorderClass('sector', !!values.company.sector),
             )}
           >
-            <span className={values.company.sector ? 'text-n-900' : 'text-n-400'}>
+            {/* n-600 y no n-400: "Seleccionar sector" es la etiqueta visible de
+                un control interactivo, no un placeholder de campo de texto. */}
+            <span className={values.company.sector ? 'text-n-900' : 'text-n-600'}>
               {values.company.sector || 'Seleccionar sector'}
             </span>
           </button>
           {sectorOpen && (
             <div
+              role="listbox"
+              aria-labelledby="niif-sector-label"
               data-lenis-prevent
               className="absolute z-20 top-full mt-1 left-0 right-0 bg-n-0 border border-n-200 rounded-lg shadow-lg max-h-48 overflow-y-auto styled-scrollbar"
             >
@@ -745,6 +832,8 @@ export function NiifReportIntake() {
                 <button
                   key={sector}
                   type="button"
+                  role="option"
+                  aria-selected={values.company.sector === sector}
                   onClick={() => {
                     updateCompany('sector', sector);
                     setSectorOpen(false);
@@ -766,17 +855,26 @@ export function NiifReportIntake() {
 
       {/* Entity Type */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-2">
+        <label
+          id="niif-entity-type-label"
+          className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-2"
+        >
           Tipo de Sociedad
           <ConfidenceDot level={getFieldConfidence('entityType')} />
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div
+          role="radiogroup"
+          aria-labelledby="niif-entity-type-label"
+          className="flex flex-wrap gap-2"
+        >
           {ENTITY_TYPES.map((et) => {
             const active = values.company.entityType === et.value;
             return (
               <button
                 key={et.value}
                 type="button"
+                role="radio"
+                aria-checked={active}
                 onClick={() => updateCompany('entityType', et.value)}
                 className={cn(
                   'px-3.5 py-1.5 rounded-full text-xs font-medium border transition-colors',
@@ -795,11 +893,15 @@ export function NiifReportIntake() {
       {/* 2-column: city + representante legal */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          <label
+            htmlFor="niif-company-city"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+          >
             Ciudad
             <ConfidenceDot level={getFieldConfidence('city')} />
           </label>
           <input
+            id="niif-company-city"
             type="text"
             value={values.company.city ?? ''}
             onChange={(e) => updateCompany('city', e.target.value)}
@@ -811,11 +913,15 @@ export function NiifReportIntake() {
           />
         </div>
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          <label
+            htmlFor="niif-company-legal-rep"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+          >
             Representante Legal
             <ConfidenceDot level={getFieldConfidence('legalRepresentative')} />
           </label>
           <input
+            id="niif-company-legal-rep"
             type="text"
             value={values.company.legalRepresentative ?? ''}
             onChange={(e) => updateCompany('legalRepresentative', e.target.value)}
@@ -831,11 +937,15 @@ export function NiifReportIntake() {
       {/* Contador + Revisor Fiscal */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          <label
+            htmlFor="niif-company-accountant"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+          >
             Contador
             <ConfidenceDot level={getFieldConfidence('accountant')} />
           </label>
           <input
+            id="niif-company-accountant"
             type="text"
             value={values.company.accountant ?? ''}
             onChange={(e) => updateCompany('accountant', e.target.value)}
@@ -847,7 +957,10 @@ export function NiifReportIntake() {
           />
         </div>
         <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+          <label
+            htmlFor="niif-company-fiscal-auditor"
+            className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+          >
             Revisor Fiscal{' '}
             <span className="text-n-600 font-normal">-- opcional</span>
             <ConfidenceDot level={getFieldConfidence('fiscalAuditor')} />
@@ -860,6 +973,7 @@ export function NiifReportIntake() {
             </span>
           </label>
           <input
+            id="niif-company-fiscal-auditor"
             type="text"
             value={values.company.fiscalAuditor ?? ''}
             onChange={(e) => updateCompany('fiscalAuditor', e.target.value)}
@@ -879,11 +993,15 @@ export function NiifReportIntake() {
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+            <label
+              htmlFor="niif-fiscal-period"
+              className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+            >
               Periodo Fiscal <span className="text-danger">*</span>
               <ConfidenceDot level={getFieldConfidence('fiscalPeriod')} />
             </label>
             <select
+              id="niif-fiscal-period"
               value={values.fiscalPeriod}
               onChange={(e) => updateField('fiscalPeriod', e.target.value)}
               aria-invalid={!values.fiscalPeriod}
@@ -906,10 +1024,14 @@ export function NiifReportIntake() {
             </select>
           </div>
           <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5">
+            <label
+              htmlFor="niif-comparative-period"
+              className="flex items-center gap-1.5 text-xs font-medium text-n-600 mb-1.5"
+            >
               Periodo Comparativo <span className="text-n-600 font-normal">-- opcional</span>
             </label>
             <select
+              id="niif-comparative-period"
               value={values.comparativePeriod ?? ''}
               onChange={(e) => {
                 const val = e.target.value;
@@ -1044,11 +1166,15 @@ export function NiifReportIntake() {
 
       {/* Instrucciones especiales */}
       <div>
-        <label className="block text-xs font-medium text-n-600 mb-1.5">
+        <label
+          htmlFor="niif-special-instructions"
+          className="block text-xs font-medium text-n-600 mb-1.5"
+        >
           Instrucciones especiales{' '}
           <span className="text-n-600 font-normal">-- opcional</span>
         </label>
         <textarea
+          id="niif-special-instructions"
           value={values.specialInstructions ?? ''}
           onChange={(e) => updateField('specialInstructions', e.target.value)}
           placeholder="Ej: Enfatizar el análisis de cartera morosa, incluir simulación de provisión..."
@@ -1097,7 +1223,9 @@ export function NiifReportIntake() {
     {
       id: 'review',
       label: 'Revisar',
-      isValid: !!values.company.name && !!values.company.nit && !!values.fiscalPeriod && !!values.niifGroup,
+      // Misma lista que alimenta el banner rojo: si falta algo (incluido el
+      // balance) el wizard no deja avanzar, en vez de fallar 2 pasos después.
+      isValid: missingRequired.length === 0,
       component: step2Review,
     },
     {

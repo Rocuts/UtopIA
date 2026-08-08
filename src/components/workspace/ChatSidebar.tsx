@@ -73,6 +73,8 @@ import {
   type ConversationMessage,
 } from '@/lib/storage/conversation-history';
 import { cn } from '@/lib/utils';
+import { consumeSSE } from '@/lib/sse/consume';
+import { resolveFinalAnswer } from '@/components/workspace/chat/utils';
 import type { SuggestedRoute } from '@/lib/agents/types';
 import { uploadDocument } from '@/lib/upload/blob-client';
 import { SkeletonText } from '@/components/ui/SkeletonText';
@@ -856,55 +858,43 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
         let finalData: { content?: string; suggestedRoute?: SuggestedRoute | null } | null = null;
 
         if (contentType.includes('text/event-stream') && response.body) {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            let currentEvent = '';
-            for (const line of lines) {
-              if (line.startsWith('event: ')) {
-                currentEvent = line.slice(7).trim();
-              } else if (line.startsWith('data: ')) {
-                const json = line.slice(6);
-                try {
-                  const data = JSON.parse(json);
-                  if (currentEvent === 'content' && typeof data.delta === 'string') {
-                    if (data.delta) {
-                      streamed += data.delta;
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === streamId ? { ...m, content: streamed } : m,
-                        ),
-                      );
-                    }
-                  } else if (currentEvent === 'result') {
-                    finalData = data;
-                  } else if (currentEvent === 'error') {
-                    throw new Error(data.error || 'Stream error');
-                  }
-                } catch (e) {
-                  if (e instanceof SyntaxError) continue;
-                  throw e;
-                }
-              }
-            }
-          }
+          // Parser SSE compartido (`@/lib/sse/consume`). El parser inline previo
+          // declaraba `currentEvent` DENTRO del bucle de lectura: cuando la linea
+          // `event: content` caia al final de un chunk TCP y su `data:` llegaba en
+          // el siguiente, el delta se procesaba con currentEvent === '' y se
+          // descartaba en silencio — al usuario le faltaban trozos de texto (una
+          // cifra, una fila de tabla) sin ningun indicio. `consumeSSE` mantiene el
+          // estado entre chunks y respeta el framing por linea en blanco.
+          await consumeSSE(response, controller.signal, {
+            content: (event) => {
+              const delta = (event as { delta?: unknown }).delta;
+              if (typeof delta !== 'string' || !delta) return;
+              streamed += delta;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === streamId ? { ...m, content: streamed } : m)),
+              );
+            },
+            result: (event) => {
+              finalData = event as typeof finalData;
+            },
+            error: (event) => {
+              throw new Error((event as { error?: string })?.error || 'Stream error');
+            },
+          });
         } else {
           finalData = await response.json();
         }
 
-        const finalContent =
-          (finalData && typeof finalData.content === 'string' && finalData.content) ||
-          streamed ||
-          '';
+        // `consumeSSE` retorna sin lanzar cuando el usuario aborta: replicamos
+        // aqui el camino de "Detener" para no persistir el parcial como final.
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-        if (!finalContent) throw new Error('No response data received');
+        // Sin evento `result` el servidor nunca termino `orchestrate` (techo de
+        // 300s o caida del proveedor): `resolveFinalAnswer` marca el parcial
+        // como amputado en vez de persistirlo como respuesta terminada.
+        const resolved = resolveFinalAnswer({ result: finalData, streamed, language });
+        if (!resolved) throw new Error('No response data received');
+        const finalContent = resolved.content;
 
         const routeSuggestion = finalData?.suggestedRoute ?? null;
         const updated = messagesRef.current.map((m) =>

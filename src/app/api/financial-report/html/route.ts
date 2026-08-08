@@ -25,7 +25,10 @@
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from 'next/server';
-import { HtmlEditorInputSchema } from '@/lib/agents/financial/contracts/html-editor';
+import {
+  HtmlEditorInputSchema,
+  type HtmlEditorOutput,
+} from '@/lib/agents/financial/contracts/html-editor';
 import { runHtmlEditor } from '@/lib/agents/financial/agents/html-editor';
 import type { FinancialProgressEvent } from '@/lib/agents/financial/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
@@ -37,6 +40,23 @@ import { excludedFactIdsSchema } from '@/lib/validation/schemas';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
+
+/**
+ * Deja rastro en el servidor cuando el informe no superó la verificación
+ * numérica. Sin esto el único testigo de un entregable defectuoso sería el
+ * banner del navegador, que nadie audita a posteriori.
+ */
+function logIfNotEmittable(result: HtmlEditorOutput): void {
+  // `!== false` y no `!emittable`: sólo se alerta ante una negativa explícita
+  // del agente, nunca ante un payload sin la bandera.
+  if (result.emittable !== false) return;
+  const blocking = result.checklistFailures.filter((f) => f.severity === 'block');
+  console.warn(
+    `[financial-report/html] NO EMITIBLE — entidad=${result.metadata.entityNit} ` +
+      `periodo=${result.metadata.periodEnd} bloqueantes=${blocking.length}: ` +
+      blocking.map((f) => f.rule).join(' | '),
+  );
+}
 
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
@@ -80,7 +100,15 @@ export async function POST(req: Request) {
       // Non-streaming: ejecuta y devuelve el output completo en una sola
       // respuesta JSON. Útil para invocaciones server-to-server o tests.
       const result = await runHtmlEditor(parsed.data, undefined, undefined, hechosEmpresa);
-      return NextResponse.json(result);
+      logIfNotEmittable(result);
+      return NextResponse.json(result, {
+        // El payload sigue viajando con 200 aunque no sea emitible: el HTML ya
+        // viene estampado como BORRADOR por `runHtmlEditor` y devolver 422
+        // dejaría al contador sin entregable tras ~10 min de pipeline por un
+        // eventual falso positivo del checklist. La bandera `emittable` y la
+        // cabecera son la señal máquina-legible para gatear la descarga.
+        headers: { 'X-Report-Emittable': result.emittable ? 'true' : 'false' },
+      });
     }
 
     // Streaming SSE — emite progress events durante la generación y el
@@ -102,6 +130,7 @@ export async function POST(req: Request) {
           };
 
           const result = await runHtmlEditor(parsed.data, onProgress, req.signal, hechosEmpresa);
+          logIfNotEmittable(result);
 
           send('html_phase', result);
           send('done', { stage: 'html' });
