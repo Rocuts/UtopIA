@@ -349,14 +349,17 @@ function addBalanceSheet(
       row++;
     }
 
+    // El patrimonio conserva su signo. Un patrimonio NEGATIVO es una causal de
+    // disolución (Art. 457 num. 2 C.Co.) y una bandera de empresa en marcha
+    // (NIA 570): imprimirlo en valor absoluto lo convertía en su contrario
+    // justo en el renglón que el socio mira primero.
+    // Auditoría 2026-08 — mismo defecto que en `agents/renderer.ts`.
     row = addStatementTotalRow(
       ws,
       row,
       'TOTAL PATRIMONIO',
-      Math.abs(primary.summary.totalEquity),
-      comparative?.summary.totalEquity !== undefined
-        ? Math.abs(comparative.summary.totalEquity)
-        : undefined,
+      primary.summary.totalEquity,
+      comparative?.summary.totalEquity,
       isMultiPeriod,
     );
     row++;
