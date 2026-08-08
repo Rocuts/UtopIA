@@ -42,10 +42,7 @@
 import { ANCHOR_LABELS, type AnchorKey, type ReportAnchors } from '../contracts/anchors';
 import { parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import { sumStatementDetail } from '../contracts/statement-lines';
-import type {
-  NiifReportJson,
-  BalanceAndPnlSubJson,
-} from '../contracts/niif-report';
+import type { NiifReportJson } from '../contracts/niif-report';
 
 /**
  * Lo mínimo que necesita el reconciliador. Se define estructuralmente para que
