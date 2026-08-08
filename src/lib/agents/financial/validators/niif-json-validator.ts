@@ -41,6 +41,7 @@
 // orchestrator pueda sumar errores/warnings sin discriminar el origen.
 // ---------------------------------------------------------------------------
 
+import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
@@ -648,9 +649,66 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E15. Los renglones impresos suman el total impreso ---------------------
+  //
+  // Auditoría 2026-08 (`sin-invariante-lineas-vs-total`). Ningún invariante
+  // exigía que la suma de las líneas de un estado fuera igual al total que ese
+  // mismo estado declara, y todos los fixtures usaban arrays de líneas VACÍOS,
+  // así que la brecha nunca se notó. Es el síntoma más visible para el lector:
+  // suma la columna con la calculadora y no le da.
+  //
+  // Sutileza que hace no trivial el chequeo: por regla del NIIF Analyst las
+  // líneas del Balance viajan con `isAbsolute = true`, es decir la depreciación
+  // acumulada aparece como un positivo aunque RESTE. Sumar a ciegas daría un
+  // exceso sistemático de 2× la correctora en toda empresa con PPE depreciado.
+  // Por eso las correctoras se identifican por su código PUC (Decreto
+  // 2650/1993, ver `preprocessing/curator-rules/contra-asset-registry.ts`) y se
+  // restan.
+  //
+  // Se emite como WARNING, no como error: la clasificación de una línea puede
+  // ser legítimamente discutible y bloquear un informe correcto es peor que
+  // señalarlo. El anclaje duro contra el preprocesador ya lo hace E14.
+  for (const [nombre, lineas, totalDeclarado] of [
+    ['Activo', bs.assets, bs.totalAssetsPrimary],
+    ['Pasivo', bs.liabilities, bs.totalLiabilitiesPrimary],
+    ['Patrimonio', bs.equity, bs.totalEquityPrimary],
+  ] as const) {
+    const detalle = lineas.filter((l) => l.level === 2);
+    if (detalle.length === 0) continue; // sin desglose no hay nada que cuadrar
+
+    let suma = ZERO;
+    for (const l of detalle) {
+      const monto = parseMoneyCop(l.amountPrimary);
+      const esCorrectora = isContraAsset(l.account ?? '');
+      // Una correctora presentada en absoluto resta; una presentada con signo
+      // ya viene negativa y se suma tal cual.
+      suma += esCorrectora && l.isAbsolute ? -abs(monto) : monto;
+    }
+
+    const total = parseMoneyCop(totalDeclarado);
+    if (suma !== total) {
+      const gap = suma - total;
+      warnings.push(
+        `E15. En ${nombre}, la suma de los ${detalle.length} renglones de detalle ` +
+          `(${fmtCop(suma)}) ≠ el total declarado (${fmtCop(total)}). Brecha: ${fmtCop(gap)}. ` +
+          `El lector que sume la columna no obtendrá el total impreso. ` +
+          `${
+            gap < ZERO
+              ? 'La suma es MENOR: probablemente falta desglosar algún rubro.'
+              : 'La suma es MAYOR: revisar doble conteo o una cuenta correctora presentada en valor absoluto sin identificar.'
+          }`,
+      );
+    }
+  }
+
   return {
     ok: errors.length === 0,
     errors,
     warnings,
   };
+}
+
+/** Valor absoluto en BigInt. */
+function abs(v: bigint): bigint {
+  return v < ZERO ? -v : v;
 }
