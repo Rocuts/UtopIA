@@ -22,6 +22,7 @@ import {
   getRunByPeriodId,
   upsertCloseRun,
 } from '@/lib/workflows/monthly-close/repository';
+import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 300;
 
@@ -30,17 +31,11 @@ export async function GET(req: Request) {
   // FIX (audit E4): fail-CLOSED cuando CRON_SECRET no está configurado.
   // El cierre contable mensual NO debe correr en entornos sin secret
   // provisionado — workflow crítico que muta datos contables.
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json(
-      { error: 'CRON_SECRET no configurado en este entorno' },
-      { status: 401 },
-    );
-  }
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  // SECURITY: comparación en tiempo constante (timingSafeEqual) vía helper
+  // compartido — antes usaba `!==` de strings, inconsistente con el resto
+  // del repo para este tipo de secreto.
+  const authError = checkCronAuth(req);
+  if (authError) return authError;
 
   // 2. Feature flag
   if (!isMonthlyCloseEnabled()) {

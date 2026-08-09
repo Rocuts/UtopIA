@@ -380,17 +380,26 @@ export async function proxy(req: NextRequest) {
   // -------------------------------------------------------------------------
   // 2. Rate limiting.
   //
-  // Key prefers the anonymous workspace cookie (stable per-tenant) over IP
-  // (which is shared by NAT'd users and proxies). Falls back to IP.
-  // -------------------------------------------------------------------------
-  const workspaceId = req.cookies.get('utopia_workspace_id')?.value;
+  // La clave es SOLO la IP. Antes incluía `utopia_workspace_id`, una cookie que
+  // el cliente escribe: cada UUID nuevo era un bucket nuevo, así que un atacante
+  // rotaba la cookie por request y anulaba a la vez el WAF (`rateLimitKey`) y el
+  // limitador en memoria. Añadir un componente elegido por el atacante no ancla
+  // la clave, la multiplica. La granularidad por ruta la sigue dando el sufijo
+  // `:${pathname}` del backstop en memoria y el `rateLimitId` por-ruta del WAF.
+  // La identidad de tenant volverá a la clave en fase 2, pero desde la sesión ya
+  // validada dentro del handler — el proxy corre antes de que exista pg.Pool y
+  // no puede verificar el workspace contra la DB.
+  //
+  // Orden de la IP invertido a propósito: `x-forwarded-for` es una cadena de
+  // hops y su PRIMER elemento lo puede anteponer el cliente, reintroduciendo el
+  // mismo bypass. En Vercel `x-real-ip` lo pone el edge y no es falsificable; el
+  // último elemento de XFF es el fallback (el hop más cercano al edge), y
+  // 'unknown' agrupa todo en un bucket único: fallar cerrado, no abierto.
   const ip =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||
+    req.headers.get('x-forwarded-for')?.split(',').pop()?.trim() ||
     'unknown';
-  // Composite key: the IP is ALWAYS part of the key. A workspace-only key is
-  // rotatable by the client (clear the cookie → fresh bucket → limit bypass).
-  const rateKey = `${ip}:${workspaceId ?? 'anon'}`;
+  const rateKey = ip;
 
   const { limit, id: rateLimitId } = getRateLimitConfig(pathname);
 

@@ -1,4 +1,15 @@
-import 'server-only';
+// NOTA (auditoría OWASP 2026-08): este módulo tenía `import 'server-only'`. Hubo
+// que retirarlo cuando los conectores ERP pasaron a auto-validar sus destinos:
+// `sap-s4hana.ts` (y sus hermanos) entran en el grafo de cliente por la cadena
+// registry → adapter → service → kpis/live → ExecutiveDashboard, así que el
+// marcador rompía el build del bundle de navegador.
+//
+// Retirarlo es seguro AQUÍ: el módulo no lee `process.env`, no toca la DB y no
+// contiene secretos — es aritmética de rangos IP y parsing de URL. Lo que sí
+// señala es un problema de fondo preexistente: los conectores ERP no deberían
+// estar en el bundle del cliente. Mientras esa cadena no se corte, cualquier
+// `server-only` que se añada bajo `src/lib/erp/` volverá a romper el build.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // SSRF guard for client-supplied ERP base URLs.
@@ -91,5 +102,121 @@ export function assertSafeBaseUrl(url: string): void {
     throw new Error(
       'baseUrl inválida: direcciones IPv6 privadas o de loopback no están permitidas.',
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SSRF: `tenantId` interpolado como AUTORIDAD de la URL.
+//
+// Oracle / SAP / World Office arman el endpoint con `https://${tenantId}...`.
+// Un valor como `x@169.254.169.254/latest/meta-data/?a` hace que el parser
+// WHATWG resuelva el host al servicio interno y empuje el resto a path/query,
+// de modo que el guard de `baseUrl` —que mira otro campo— nunca lo ve.
+//
+// Por eso hacen falta las dos capas: rechazar los caracteres que permiten
+// reescribir la autoridad NO basta, porque un tenantId «limpio» como
+// `169.254.169.254` sigue siendo un literal de IP interna. Quien descarta eso
+// es `assertSafeBaseUrl` sobre la URL YA construida.
+// ---------------------------------------------------------------------------
+
+const TENANT_AUTHORITY_CHARS_RE = /[/:@?#%\\`\s]/;
+
+/**
+ * Valida un `tenantId` que se interpola como autoridad y la URL resultante.
+ * Lanza con un mensaje seguro de devolver (no revela el host resuelto).
+ */
+export function assertSafeTenantUrl(
+  tenantId: string,
+  builtUrl: string,
+  provider: string,
+): void {
+  if (!tenantId || TENANT_AUTHORITY_CHARS_RE.test(tenantId)) {
+    throw new Error(
+      `${provider}: tenantId inválido — no puede contener espacios ni los caracteres / : @ ? # % \\ \``,
+    );
+  }
+
+  try {
+    assertSafeBaseUrl(builtUrl);
+  } catch {
+    throw new Error(
+      `${provider}: tenantId inválido — el host resultante no es un destino público permitido.`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SSRF: la redirección también es un salto de red.
+//
+// `assertSafeBaseUrl` valida un string antes de volar, o sea sólo cubre el
+// PRIMER salto. Con el `redirect: 'follow'` por defecto, un host público
+// permitido puede contestar `302 Location: http://169.254.169.254/...` y undici
+// lo sigue —incluso degradando https→http, que el guard prohíbe explícitamente—,
+// con lo que el guard queda decorativo para los 13 conectores.
+//
+// Poner `redirect: 'manual'` a secas NO es una opción: devolvería el 3xx tal
+// cual y el `if (!res.ok)` de los conectores empezaría a lanzar sobre cualquier
+// ERP que redirija de forma legítima (normalización de trailing slash). De ahí
+// que el bucle manual sea obligatorio: se sigue la cadena a mano, validando
+// cada destino y con tope de saltos.
+// ---------------------------------------------------------------------------
+
+const MAX_REDIRECT_HOPS = 3;
+
+function isRedirectStatus(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+/**
+ * Replica la semántica de método/cuerpo que aplica `redirect: 'follow'`:
+ * 303 siempre pasa a GET; 301/302 degradan POST a GET; 307/308 conservan
+ * método y cuerpo. Sin esto el bucle manual cambiaría el comportamiento
+ * observable de los ERP que hoy redirigen bien.
+ */
+function initForRedirect(init: RequestInit, status: number): RequestInit {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const dropsBody =
+    status === 303 || ((status === 301 || status === 302) && method === 'POST');
+  return dropsBody ? { ...init, method: 'GET', body: undefined } : init;
+}
+
+/**
+ * `fetch` que sigue redirecciones pasando cada destino por `assertSafeBaseUrl`.
+ * Úsalo en todo fetch de conector ERP hacia una URL derivada de input del cliente.
+ */
+export async function fetchWithSafeRedirects(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  let currentUrl = url;
+  let currentInit: RequestInit = { ...init, redirect: 'manual' };
+
+  for (let hop = 0; ; hop++) {
+    const res = await fetch(currentUrl, currentInit);
+
+    const location = isRedirectStatus(res.status)
+      ? res.headers.get('location')
+      : null;
+    if (!location) return res;
+
+    if (hop >= MAX_REDIRECT_HOPS) {
+      throw new Error(
+        'ERP: demasiadas redirecciones en la respuesta del proveedor.',
+      );
+    }
+
+    let next: string;
+    try {
+      next = new URL(location, currentUrl).toString();
+      assertSafeBaseUrl(next);
+    } catch {
+      // Sin detalle del destino: el mensaje llega al cliente y sería un oráculo.
+      throw new Error(
+        'ERP: redirección bloqueada — el destino no es un host público https permitido.',
+      );
+    }
+
+    currentInit = initForRedirect(currentInit, res.status);
+    currentUrl = next;
   }
 }

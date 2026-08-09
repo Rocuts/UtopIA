@@ -11,6 +11,10 @@
 // connector funciona directamente.
 
 import { BaseERPConnector } from '../connector';
+import {
+  assertSafeTenantUrl,
+  fetchWithSafeRedirects,
+} from '../validate-base-url';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -74,7 +78,9 @@ async function fetchWithRetry(
   delayMs = INITIAL_DELAY_MS,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(url, init);
+    // Las redirecciones se validan salto a salto: un host permitido que
+    // conteste `302 Location: http://10.x.y.z:8080/...` anularía el guard.
+    const res = await fetchWithSafeRedirects(url, init);
 
     // Transient errors — backoff and retry
     if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
@@ -117,9 +123,14 @@ export class SAPS4HANAConnector extends BaseERPConnector {
   private tokenEndpoint(credentials: ERPCredentials): string {
     // BTP XSUAA pattern: tenantId holds the BTP subdomain
     if (credentials.tenantId) {
-      return `https://${credentials.tenantId}.authentication.eu10.hana.ondemand.com/oauth/token`;
+      // El subdominio viene del cliente y se interpola como AUTORIDAD: un valor
+      // con `@` o `/` reescribe el host hacia la red interna sin pasar nunca
+      // por el guard de baseUrl, que inspecciona otro campo.
+      const endpoint = `https://${credentials.tenantId}.authentication.eu10.hana.ondemand.com/oauth/token`;
+      assertSafeTenantUrl(credentials.tenantId, endpoint, 'SAP S/4HANA');
+      return endpoint;
     }
-    // Default: embedded XSUAA on the S/4 tenant
+    // Default: embedded XSUAA on the S/4 tenant (baseUrl ya pasó por el guard)
     const base = (credentials.baseUrl ?? '').replace(/\/+$/, '');
     return `${base}/sap/bc/sec/oauth2/token`;
   }
@@ -158,8 +169,13 @@ export class SAPS4HANAConnector extends BaseERPConnector {
     });
 
     if (!res.ok) {
+      // El cuerpo del upstream sólo al log: dentro del Error terminaba en el
+      // JSON que /api/erp/sync devuelve al cliente.
       const text = await res.text().catch(() => '');
-      throw new Error(`SAP S/4HANA token error ${res.status}: ${text.slice(0, 300)}`);
+      console.error(
+        `[sap_s4hana] token error ${res.status}: ${text.slice(0, 300)}`,
+      );
+      throw new Error(`SAP S/4HANA token error ${res.status}.`);
     }
 
     const data = (await res.json()) as OAuthTokenResponse;
@@ -192,8 +208,13 @@ export class SAPS4HANAConnector extends BaseERPConnector {
     });
 
     if (!res.ok) {
+      // Ni el cuerpo ni la URL destino salen en el Error: la URL sola ya es un
+      // oráculo de qué host se alcanzó. Ambos quedan en el log del servidor.
       const text = await res.text().catch(() => '');
-      throw new Error(`SAP S/4HANA OData error ${res.status} [${url}]: ${text.slice(0, 300)}`);
+      console.error(
+        `[sap_s4hana] OData error ${res.status} [${url}]: ${text.slice(0, 300)}`,
+      );
+      throw new Error(`SAP S/4HANA OData error ${res.status}.`);
     }
 
     return res;

@@ -6,7 +6,8 @@
  * Flag:      UTOPIA_ENABLE_ANOMALY_DETECTION=true (OFF por defecto).
  *
  * Flow:
- *   1. Verifica auth — sin CRON_SECRET o bearer incorrecto → 401.
+ *   1. Verifica auth (checkCronAuth, timing-safe) — sin CRON_SECRET → 503
+ *      (fail-closed); bearer incorrecto → 401.
  *   2. Verifica feature flag — si OFF → 200 { skipped: 'flag_disabled' }.
  *   3. Itera workspaces activos con períodos open/closed-reciente.
  *   4. Por cada workspace + período: runForensicScan().
@@ -21,21 +22,9 @@ import { getDb } from '@/lib/db/client';
 import { workspaces, accountingPeriods, reports } from '@/lib/db/schema';
 import { runForensicScan } from '@/lib/agents/financial/audit/forensic';
 import type { ForensicScanResult } from '@/lib/agents/financial/audit/forensic';
+import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 300;
-
-// ---------------------------------------------------------------------------
-// Auth helper (patrón del cron calendar-sync)
-// ---------------------------------------------------------------------------
-
-function isVercelCronAuthorized(req: NextRequest): boolean {
-  // En desarrollo sin CRON_SECRET, permite pasar (para pruebas locales).
-  if (process.env.NODE_ENV !== 'production' && !process.env.CRON_SECRET) {
-    return true;
-  }
-  const auth = req.headers.get('authorization');
-  return !!process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`;
-}
 
 // ---------------------------------------------------------------------------
 // Idempotency key
@@ -92,10 +81,11 @@ async function maybeSendAnomalyNotification(
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
-  // 1. Auth
-  if (!isVercelCronAuthorized(request)) {
-    return new Response('Unauthorized', { status: 401 });
-  }
+  // 1. Auth — fail-closed: sin CRON_SECRET configurado, 503 (antes permitía
+  // pasar sin secret fuera de NODE_ENV=production, dejando la ruta abierta
+  // en cualquier deploy donde NODE_ENV no fuera literalmente 'production').
+  const authError = checkCronAuth(request);
+  if (authError) return authError;
 
   // 2. Feature flag
   if (process.env.UTOPIA_ENABLE_ANOMALY_DETECTION !== 'true') {

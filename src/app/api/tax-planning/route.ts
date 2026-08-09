@@ -5,6 +5,7 @@ import { orchestrateTaxPlanning } from '@/lib/agents/financial/tax-planning/orch
 import type { TaxPlanningProgressEvent } from '@/lib/agents/financial/tax-planning/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/tax-planning
@@ -135,7 +136,7 @@ function handleStreaming(
         );
         sse.send('error', {
           error: 'Error during tax planning report generation.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

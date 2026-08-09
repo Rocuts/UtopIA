@@ -12,7 +12,23 @@ export const maxDuration = 120;
 
 const syncSchema = z.object({
   provider: z.string(),
-  credentials: z.record(z.string(), z.string().optional()),
+  // Objeto explícito, no `z.record`: con claves libres el cliente podía colar
+  // campos que los conectores interpolan en la URL (tenantId) sin que ningún
+  // guard los mirara. Misma forma que /api/erp/connect.
+  credentials: z.object({
+    apiKey: z.string().optional(),
+    apiToken: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    companyId: z.string().optional(),
+    baseUrl: z.string().optional(),
+    accessToken: z.string().optional(),
+    refreshToken: z.string().optional(),
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    tenantId: z.string().optional(),
+    databaseName: z.string().optional(),
+  }),
   syncType: z.enum(['trial_balance', 'journal_entries', 'invoices', 'contacts', 'chart_of_accounts', 'all']),
   period: z.string().optional(),
   dateFrom: z.string().optional(),
@@ -118,6 +134,13 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sync error';
+    // El mensaje crudo arrastraba el status, la URL destino y hasta 300 bytes
+    // del cuerpo del upstream: devolverlo convertía cualquier SSRF en una
+    // primitiva de lectura. El detalle queda en el log del servidor y en el
+    // activity log, correlacionado por requestId. Mismo patrón que
+    // /api/erp/connect.
+    const requestId = crypto.randomUUID();
+    console.error(`[erp-sync] requestId=${requestId}:`, message);
     void logApiActivity(req, {
       category: 'erp',
       action: 'erp.sync.failed',
@@ -126,12 +149,14 @@ export async function POST(req: Request) {
       durationMs: Date.now() - startedAt,
       statusCode: 500,
       resourceType: 'erp_sync',
-      metadata: { error: message },
+      metadata: { error: message, requestId },
     });
     return NextResponse.json(
       {
         success: false,
-        error: message,
+        error:
+          'No se pudo completar la sincronización con el ERP. Verifique las credenciales y vuelva a intentar.',
+        requestId,
         syncedAt: new Date().toISOString(),
         recordCount: 0,
       },

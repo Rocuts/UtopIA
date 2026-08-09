@@ -44,6 +44,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 import {
   ArrowRight,
   BookOpen,
@@ -468,7 +469,7 @@ function MessageBubble({
           <div className="chat-sidebar-markdown">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeSanitize]}
+              rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}
               components={{
                 p: ({ children }) => (
                   <p className="leading-relaxed my-1.5 text-n-800">{children}</p>

@@ -151,8 +151,29 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
       .limit(1);
     return found[0]?.id ?? null;
   }
+  // Camino cookie: mismas dos guardas que `requireWorkspace()` — el formato y
+  // `user_id IS NULL` — en vez de devolver el valor crudo de la cookie.
+  //
+  // Nueve rutas resuelven su tenant por aquí (chat, rag, tax-planning, los
+  // cuatro tramos de financial-report, escudo/fiscal-anchor —que ESCRIBE en
+  // `reports`— y pyme/uploads), así que devolver lo que venga en el header
+  // significaba dos cosas: un valor no-UUID llegaba tal cual al WHERE y
+  // Postgres respondía 500 filtrando su mensaje de error, y un id válido pero
+  // ajeno alcanzaba incluso un workspace YA reclamado por una cuenta, porque
+  // faltaba el filtro que su hermana sí aplica. Resolver contra la DB también
+  // cierra el fail-open del `catch` de `getAuthSession()`: si la lectura de
+  // sesión falla de forma transitoria en fase 2, el camino cookie ya no alcanza
+  // un workspace con dueño — falla cerrado.
   const jar = await cookies();
-  return jar.get(COOKIE_NAME)?.value ?? null;
+  const id = jar.get(COOKIE_NAME)?.value;
+  if (!id || !UUID_V4_RE.test(id)) return null;
+  const db = getDb();
+  const found = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(and(eq(workspaces.id, id), isNullUserId()))
+    .limit(1);
+  return found[0]?.id ?? null;
 }
 
 // UUID v4 format guard — prevents forged/malformed cookie values from hitting the DB.

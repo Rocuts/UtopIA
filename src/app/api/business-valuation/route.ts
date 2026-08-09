@@ -4,6 +4,7 @@ import { businessValuationRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateValuation } from '@/lib/agents/financial/valuation/orchestrator';
 import type { ValuationProgressEvent } from '@/lib/agents/financial/valuation/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/business-valuation
@@ -107,7 +108,7 @@ function handleStreaming(
         );
         sse.send('error', {
           error: 'Error during business valuation.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

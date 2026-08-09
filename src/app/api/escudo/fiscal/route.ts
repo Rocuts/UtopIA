@@ -26,6 +26,7 @@ import {
 } from '@/lib/agents/financial/escudo-survival/fiscal-agent';
 import { fiscalAgentRequestSchema } from '@/lib/validation/schemas';
 import { logActivity } from '@/lib/db/activity-log';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -208,7 +209,7 @@ function handleStreaming(args: {
             language === 'en'
               ? 'Fiscal agent execution failed.'
               : 'La ejecución del Agente Fiscal falló.',
-          detail: error instanceof Error ? error.message : 'unknown',
+          detail: toFriendlyError(error).message,
         });
         void logActivity({
           category: 'financial',

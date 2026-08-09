@@ -31,6 +31,7 @@ import { useMemo, useState, useId } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 import { cn } from '@/lib/utils';
 import { diffMarkdown, type DiffSegment } from '@/lib/diff/markdown-diff';
 
@@ -274,7 +275,7 @@ export function ReportDiff({
             <p className="text-xs text-n-700 italic">{labels.emptyBefore}</p>
           ) : (
             <div className="prose prose-sm max-w-none text-n-900 prose-headings:text-n-900 prose-headings:font-semibold prose-p:leading-relaxed prose-strong:text-n-900">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
                 {before}
               </ReactMarkdown>
             </div>
@@ -342,7 +343,7 @@ export function ReportDiff({
             <p className="text-xs text-n-700 italic">{labels.emptyAfter}</p>
           ) : (
             <div className="prose prose-sm max-w-none text-n-900 prose-headings:text-n-900 prose-headings:font-semibold prose-p:leading-relaxed prose-strong:text-n-900">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
                 {after}
               </ReactMarkdown>
             </div>

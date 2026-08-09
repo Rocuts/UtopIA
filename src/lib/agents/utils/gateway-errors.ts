@@ -27,7 +27,8 @@ export interface FriendlyError {
     | 'gateway_model_not_found'
     | 'gateway_unauthorized'
     | 'gateway_rate_limited'
-    | 'pipeline_validation_failed';
+    | 'pipeline_validation_failed'
+    | 'internal_error';
 }
 
 const PATTERNS: Array<{
@@ -144,8 +145,18 @@ const PATTERNS: Array<{
 ];
 
 /**
- * Translate any error into a user-facing FriendlyError. Falls back to the raw
- * error message if no pattern matches (so we never lose information).
+ * Translate any error into a user-facing FriendlyError.
+ *
+ * OWASP A05:2021 — antes, si ningun patron matcheaba, se devolvia
+ * `error.message` crudo al llamador (JSON `detail` / evento SSE `error`).
+ * Estas rutas hoy no estan auth-gated (requireAuthSession es no-op en Fase 1
+ * sin BETTER_AUTH_SECRET), asi que cualquier excepcion no contemplada en
+ * PATTERNS (timeout de Postgres, constraint de Drizzle, error interno de Zod,
+ * ruta de modulo) se filtraba verbatim a un caller anonimo. El fallback ahora
+ * es un mensaje generico + un id de correlacion (no ligado al X-Request-Id
+ * del proxy — eso requeriria propagarlo como request header en proxy.ts,
+ * fuera del alcance de este fichero); el mensaje crudo se loguea server-side
+ * via console.error para que soporte pueda cruzar el id con el log.
  */
 export function toFriendlyError(error: unknown, lang: Lang = 'es'): FriendlyError {
   const raw =
@@ -159,5 +170,14 @@ export function toFriendlyError(error: unknown, lang: Lang = 'es'): FriendlyErro
     if (p.test(raw)) return p.build(lang);
   }
 
-  return { message: raw };
+  const correlationId = crypto.randomUUID();
+  console.error(`[gateway-errors] unmatched (ref: ${correlationId}):`, raw);
+
+  return {
+    code: 'internal_error',
+    message:
+      lang === 'en'
+        ? `An internal error occurred. Contact support with reference ${correlationId} if this persists.`
+        : `Ocurrio un error interno. Contacta a soporte con la referencia ${correlationId} si persiste.`,
+  };
 }

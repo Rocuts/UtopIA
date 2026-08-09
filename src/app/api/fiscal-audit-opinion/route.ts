@@ -6,6 +6,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { FiscalOpinionProgressEvent } from '@/lib/agents/financial/fiscal-opinion/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/fiscal-audit-opinion
@@ -122,7 +123,7 @@ function handleStreaming(
         );
         sse.send('error', {
           error: 'Error during fiscal opinion generation.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

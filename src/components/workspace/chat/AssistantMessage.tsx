@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 import {
   Globe,
   WifiOff,
@@ -140,7 +141,12 @@ export function AssistantMessage({
               {hasContent ? (
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeSanitize]}
+                  // El plugin va INVOCADO con el schema endurecido: pasarlo a secas
+                  // aplicaba el schema por defecto, que admite <img src=https://...>.
+                  // Con la CSP dejando img-src https: abierta, esa etiqueta era el
+                  // canal de exfiltración zero-click del contexto del tenant cuando
+                  // la respuesta del modelo venía contaminada por prompt injection.
+                  rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}
                   components={{
                     pre: ({ children, className }) => (
                       <CodeBlockPre className={className}>{children}</CodeBlockPre>

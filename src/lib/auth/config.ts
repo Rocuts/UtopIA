@@ -144,6 +144,12 @@ type AuthEnvVars = {
   VERCEL_ENV?: string;
   /** Sólo documenta el fallback que este assert impide usar en producción. */
   VERCEL_URL?: string;
+  /**
+   * Marcador EXPLÍCITO de fase 2: '1' declara que este despliegue espera auth
+   * activa. Existe porque la fase no es inferible desde VERCEL_ENV — producción
+   * corre hoy en fase 1 anónima a propósito.
+   */
+  UTOPIA_AUTH_REQUIRED?: string;
   // La firma de índice existe para poder pasar `process.env` tal cual: sin
   // ella TS aplica la regla de "weak type" (todas las props opcionales) y
   // rechaza ProcessEnv por no compartir propiedades declaradas.
@@ -167,6 +173,56 @@ export function assertAuthUrlConfigured(
 }
 
 assertAuthUrlConfigured();
+
+// ---------------------------------------------------------------------------
+// Assert de arranque — BETTER_AUTH_SECRET, la variable que arma TODOS los gates.
+//
+// Sin ella la plataforma entera se degrada a no-op SILENCIOSO y con 200 en todo:
+// el bloque de auth del proxy no corre (ni /workspace/* redirige a /login ni las
+// rutas protegidas devuelven 401), `requireAuthSession()` devuelve {ok:true},
+// `denyIfNoSession()` devuelve null y `getAuthSession()` devuelve null, con lo
+// que la cookie `utopia_workspace_id` queda como ÚNICO bearer del tenant. Un
+// rollback de Vercel, la promoción de un preview o una rotación de secreto que
+// deje la variable vacía borran la autenticación de toda la plataforma sin un
+// solo error en los logs.
+//
+// NO se infiere la fase desde VERCEL_ENV a propósito: hoy producción corre
+// deliberadamente en fase 1 anónima SIN el secreto, así que un
+// `VERCEL_ENV==='production' && !BETTER_AUTH_SECRET → throw` tumbaría el
+// despliegue actual y no distinguiría "fase 1 intencional" de "fase 2 mal
+// desplegada". La fase se declara explícitamente con UTOPIA_AUTH_REQUIRED=1, que
+// debe añadirse a las env vars de producción EN EL MISMO cambio que introduce
+// BETTER_AUTH_SECRET. Hoy la variable no existe, así que este assert es inerte.
+//
+// El console.error es la red de seguridad barata para el caso que el assert no
+// puede cubrir todavía: deja rastro inequívoco en los logs de arranque de
+// producción mientras la fase siga siendo implícita.
+// ---------------------------------------------------------------------------
+export function assertAuthSecretConfigured(
+  env: AuthEnvVars = process.env,
+): void {
+  if (env.BETTER_AUTH_SECRET) return;
+  if (env.UTOPIA_AUTH_REQUIRED === '1') {
+    throw new Error(
+      '[auth] UTOPIA_AUTH_REQUIRED=1 pero BETTER_AUTH_SECRET está ausente: ' +
+        'todos los gates de autenticación (proxy, requireAuthSession, ' +
+        'denyIfNoSession) serían no-op y la cookie utopia_workspace_id quedaría ' +
+        'como único bearer del tenant. Defina BETTER_AUTH_SECRET en las env vars ' +
+        'de producción en Vercel, o retire UTOPIA_AUTH_REQUIRED si el despliegue ' +
+        'debe seguir en fase 1 anónima.',
+    );
+  }
+  if (env.VERCEL_ENV === 'production') {
+    console.error(
+      '[auth] AUTENTICACIÓN DESACTIVADA en producción: BETTER_AUTH_SECRET no ' +
+        'está definida. Todos los gates de sesión son no-op y el acceso al ' +
+        'workspace depende sólo de la cookie utopia_workspace_id. Esto es ' +
+        'esperado en fase 1; si NO lo es, el despliegue está mal configurado.',
+    );
+  }
+}
+
+assertAuthSecretConfigured();
 
 export const auth = betterAuth({
   database: drizzleAdapter(getDb(), {
@@ -193,9 +249,28 @@ export const auth = betterAuth({
       : 'http://localhost:3000'),
 
   // Origins allowed to initiate auth flows. BetterAuth always trusts the
-  // baseURL origin; we ADD Vercel preview deployments (utopia-*.vercel.app) so
-  // login works on preview URLs without hardcoding each ephemeral host.
-  trustedOrigins: (request) => {
+  // baseURL origin; ADEMÁS añadimos los hosts del propio deployment para que el
+  // login funcione en las URLs de preview sin fijar a mano cada host efímero.
+  //
+  // Esta lista se recalcula POR REQUEST y alimenta dos controles distintos: el
+  // chequeo CSRF del header Origin y la validación de callbackURL/redirectTo.
+  // La versión anterior derivaba el origen confiable del header `Origin` que
+  // manda el cliente, aceptando cualquier host que terminara en `.vercel.app` y
+  // CONTUVIERA la subcadena 'utopia'. Ese namespace no lo controla la
+  // organización: los nombres de proyecto en Vercel no están reservados
+  // globalmente, así que cualquiera podía crear `utopia-x` en SU cuenta,
+  // obtener `https://utopia-x-<hash>.vercel.app` y quedar dentro de la lista de
+  // confianza del dominio de producción — se le desactivaba el CSRF propio de
+  // BetterAuth y, el día que se monten proveedores OAuth, sus redirectores
+  // aceptarían un callbackURL hacia el atacante con el sello de la marca.
+  //
+  // Por eso ya no se lee NUNCA el Origin del solicitante: los hosts confiables
+  // salen de las env vars que inyecta el propio deployment, por igualdad exacta
+  // y sólo fuera de producción. Producción no pierde nada (el origen canónico
+  // sigue llegando por BETTER_AUTH_URL y BetterAuth confía siempre en su
+  // baseURL) y las previews siguen funcionando, porque VERCEL_URL es
+  // precisamente el host que el tester visita.
+  trustedOrigins: () => {
     const origins: string[] = [];
     const base = process.env.BETTER_AUTH_URL;
     if (base) {
@@ -205,15 +280,13 @@ export const auth = betterAuth({
         /* malformed BETTER_AUTH_URL — baseURL fallback handles it */
       }
     }
-    const reqOrigin = request?.headers.get('origin');
-    if (reqOrigin) {
-      try {
-        const host = new URL(reqOrigin).host;
-        if (host.endsWith('.vercel.app') && host.includes('utopia')) {
-          origins.push(new URL(reqOrigin).origin);
-        }
-      } catch {
-        /* ignore malformed Origin header */
+    if (process.env.VERCEL_ENV !== 'production') {
+      for (const host of [
+        process.env.VERCEL_URL,
+        process.env.VERCEL_BRANCH_URL,
+        process.env.VERCEL_PROJECT_PRODUCTION_URL,
+      ]) {
+        if (host) origins.push(`https://${host}`);
       }
     }
     return origins;

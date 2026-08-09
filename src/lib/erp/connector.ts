@@ -2,6 +2,7 @@
 // All provider connectors implement this interface.
 
 import type { RawAccountRow } from '@/lib/preprocessing/trial-balance';
+import { fetchWithSafeRedirects } from './validate-base-url';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -64,7 +65,9 @@ export abstract class BaseERPConnector implements ERPConnectorInterface {
     const timer = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(url, {
+      // fetchWithSafeRedirects, no fetch: el guard de baseUrl sólo valida el
+      // primer salto y una redirección hacia la red interna lo anularía.
+      const response = await fetchWithSafeRedirects(url, {
         ...options,
         signal: controller.signal,
         headers: {
@@ -75,9 +78,15 @@ export abstract class BaseERPConnector implements ERPConnectorInterface {
       });
 
       if (!response.ok) {
+        // El cuerpo del upstream se queda en el log del servidor y NO en el
+        // Error: concatenarlo lo hacía viajar hasta la respuesta JSON del
+        // handler, convirtiendo cualquier SSRF en primitiva de lectura.
         const errorBody = await response.text().catch(() => '');
+        console.error(
+          `[erp-connector] ${response.status} ${response.statusText} en ${url}: ${errorBody.slice(0, 200)}`,
+        );
         throw new Error(
-          `ERP API error ${response.status}: ${response.statusText}. ${errorBody.slice(0, 200)}`,
+          `ERP API error ${response.status}: ${response.statusText}.`,
         );
       }
 

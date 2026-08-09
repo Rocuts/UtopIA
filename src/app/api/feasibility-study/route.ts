@@ -4,6 +4,7 @@ import { feasibilityStudyRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateFeasibilityStudy } from '@/lib/agents/financial/feasibility/orchestrator';
 import type { FeasibilityProgressEvent } from '@/lib/agents/financial/feasibility/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/feasibility-study
@@ -96,7 +97,7 @@ function handleStreaming(
         );
         sse.send('error', {
           error: 'Error during feasibility study generation.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

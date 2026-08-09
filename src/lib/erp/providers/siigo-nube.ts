@@ -7,6 +7,7 @@
 // Idempotency-Key: UTOPIA-TB-<year>-<period> en cada POST.
 
 import { BaseERPConnector } from '../connector';
+import { fetchWithSafeRedirects } from '../validate-base-url';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -71,7 +72,10 @@ async function fetchWithRetry(
   delayMs = INITIAL_DELAY_MS,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(url, init);
+    // `fetchWithSafeRedirects` en vez de `fetch`: con `redirect: 'follow'` un host
+    // permitido podía redirigir a la red interna y el guard de baseUrl, que sólo
+    // mira la URL inicial, no volvía a mirar. Aquí cada salto se revalida.
+    const res = await fetchWithSafeRedirects(url, init);
 
     if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
       if (attempt === retries) return res;
@@ -142,8 +146,14 @@ export class SiigoNubeConnector extends BaseERPConnector {
     });
 
     if (!res.ok) {
+      // El cuerpo del upstream va SÓLO al log: incrustarlo en el Error lo convertía
+      // en un oráculo de lectura sobre cualquier host alcanzable desde la Function.
       const text = await res.text().catch(() => '');
-      throw new Error(`Siigo Nube auth error ${res.status}: ${text.slice(0, 300)}`);
+      console.error('[siigo-nube] auth error', {
+        status: res.status,
+        body: text.slice(0, 300),
+      });
+      throw new Error(`Siigo Nube auth error ${res.status}`);
     }
 
     const data = (await res.json()) as SiigoAuthResponse;
@@ -187,9 +197,14 @@ export class SiigoNubeConnector extends BaseERPConnector {
       });
 
       if (!res.ok) {
+        // Mismo criterio que en auth: el cuerpo upstream no viaja en el Error.
         const text = await res.text().catch(() => '');
+        console.error('[siigo-nube] test-balance-report error', {
+          status: res.status,
+          body: text.slice(0, 300),
+        });
         throw new Error(
-          `Siigo Nube /v1/test-balance-report error ${res.status}: ${text.slice(0, 300)}`,
+          `Siigo Nube /v1/test-balance-report error ${res.status}`,
         );
       }
 

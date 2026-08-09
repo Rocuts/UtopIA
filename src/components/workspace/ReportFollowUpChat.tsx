@@ -25,6 +25,7 @@ import { ChevronDown, ChevronUp, Send, MessageSquare, CheckCircle, AlertTriangle
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 import { cn } from '@/lib/utils';
 import { consumeSSE } from '@/lib/sse/consume';
 import { DOCUMENT_MAX_CHARS } from '@/lib/validation/schemas';
@@ -471,7 +472,7 @@ export function ReportFollowUpChat({
                       {turn.role === 'assistant' ? (
                         <div className="prose prose-sm max-w-none text-n-900 prose-p:leading-relaxed prose-headings:text-n-900">
                           {turn.content ? (
-                            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
                               {turn.content}
                             </ReactMarkdown>
                           ) : (

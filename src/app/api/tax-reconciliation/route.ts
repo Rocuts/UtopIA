@@ -4,6 +4,7 @@ import { taxReconciliationRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTaxReconciliation } from '@/lib/agents/financial/tax-reconciliation/orchestrator';
 import type { TaxReconciliationProgressEvent } from '@/lib/agents/financial/tax-reconciliation/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/tax-reconciliation
@@ -105,7 +106,7 @@ function handleStreaming(
         );
         sse.send('error', {
           error: 'Error during tax reconciliation.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

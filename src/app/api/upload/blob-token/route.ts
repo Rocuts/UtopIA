@@ -37,6 +37,52 @@ const ALLOWED_CONTENT_TYPES = [
 ];
 
 /**
+ * MIME concretos por extension. La lista global de arriba autoriza CUALQUIER
+ * tipo para CUALQUIER extension (un `.png` firmado podia subir un `text/xml`);
+ * acotarla por extension recorta esa holgura sin cambiar el flujo del cliente.
+ *
+ * `application/octet-stream` se mantiene para todo lo que no sea una imagen
+ * web clasica: los navegadores lo emiten cuando el SO no tiene el tipo
+ * registrado — `.csv` / `.md` siempre, y `.xlsx` / `.doc` en Windows sin
+ * Office. Quitarlo de esas extensiones rompe subidas reales. El contenido se
+ * revalida igual por magic bytes en POST /api/upload antes de parsearse.
+ */
+const CONTENT_TYPES_BY_EXT: Record<string, string[]> = {
+  '.pdf': ['application/pdf'],
+  '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  '.xls': ['application/vnd.ms-excel'],
+  '.doc': ['application/msword'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.csv': ['text/csv', 'text/plain'],
+  '.txt': ['text/plain'],
+  '.md': ['text/markdown', 'text/plain'],
+  '.json': ['application/json', 'text/plain'],
+  '.xml': ['application/xml', 'text/xml', 'text/plain'],
+  '.jpg': ['image/jpeg'],
+  '.jpeg': ['image/jpeg'],
+  '.png': ['image/png'],
+  '.gif': ['image/gif'],
+  '.webp': ['image/webp'],
+  '.tiff': ['image/tiff'],
+  '.tif': ['image/tiff'],
+  '.bmp': ['image/bmp'],
+  '.heic': ['image/heic'],
+};
+
+/** Imagenes que todo navegador tipa bien: no necesitan el fallback binario. */
+const EXTS_WITHOUT_OCTET_STREAM_FALLBACK = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp',
+]);
+
+function allowedContentTypesFor(ext: string): string[] {
+  const specific = CONTENT_TYPES_BY_EXT[ext];
+  if (!specific) return ALLOWED_CONTENT_TYPES;
+  return EXTS_WITHOUT_OCTET_STREAM_FALLBACK.has(ext)
+    ? specific
+    : [...specific, 'application/octet-stream'];
+}
+
+/**
  * POST /api/upload/blob-token
  *
  * Firma un token de subida directa a Vercel Blob via `handleUpload`. El
@@ -66,11 +112,27 @@ export async function POST(request: Request): Promise<NextResponse> {
         if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
           throw new Error(`Tipo de archivo no soportado: ${ext}`);
         }
+        // El `pathname` lo elige el CLIENTE y `handleUpload` no permite
+        // reescribirlo desde este callback: es el unico punto donde se puede
+        // acotar. Sin acotarlo, cualquier sesion firma un token que escribe
+        // bytes arbitrarios dentro del namespace de OTRO tenant del store
+        // compartido (p.ej. `pyme/<uuid-ajeno>/soporte-dian.pdf`), que a ojo
+        // humano queda indistinguible de un archivo legitimo de esa empresa.
+        // Regla: o el nombre es plano (lo que sube hoy `uploadDocument`, que
+        // pasa `file.name`), o va bajo el prefijo del propio workspace.
+        const scopedPrefix = `u/${workspace.id}/`;
+        const traversal = pathname.startsWith('/') || pathname.split('/').includes('..');
+        const foreignPrefix = pathname.includes('/') && !pathname.startsWith(scopedPrefix);
+        if (traversal || foreignPrefix) {
+          throw new Error('Ruta de destino no autorizada.');
+        }
         return {
-          allowedContentTypes: ALLOWED_CONTENT_TYPES,
+          allowedContentTypes: allowedContentTypesFor(ext),
           maximumSizeInBytes: MAX_UPLOAD_SIZE,
           addRandomSuffix: true,
-          tokenPayload: JSON.stringify({}),
+          // Deja rastro del dueno del blob en el token: `onUploadCompleted` lo
+          // recibe firmado y permite auditar/cobrar por workspace.
+          tokenPayload: JSON.stringify({ workspaceId: workspace.id }),
         };
       },
       // No-op: el cliente llama POST /api/upload directamente con el blobUrl

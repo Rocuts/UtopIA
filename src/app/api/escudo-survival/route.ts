@@ -18,6 +18,7 @@ import type {
   OrchestrateEscudoSurvivalInput,
 } from '@/lib/agents/financial/escudo-survival/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // 5 minutos — el pipeline corre 5 LLM calls + sintetizador en paralelo.
 export const maxDuration = 300;
@@ -92,7 +93,7 @@ function handleStreaming(input: OrchestrateEscudoSurvivalInput) {
         );
         sse.send('error', {
           error: 'Error during Escudo Survival pipeline execution.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

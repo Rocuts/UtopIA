@@ -22,6 +22,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -1573,13 +1574,13 @@ function ReportViewer({
             {sections.length > 0 ? (
               sections.map((s) => (
                 <div key={s.id} id={`report-section-${s.id}`} className="mb-8">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
                     {s.content}
                   </ReactMarkdown>
                 </div>
               ))
             ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
                 {content}
               </ReactMarkdown>
             )}
@@ -3309,7 +3310,7 @@ export function PipelineWorkspace() {
           </h3>
           <StreamingText isStreaming={isRunning}>
             <div className="prose prose-sm max-w-none text-n-900">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
                 {streamedContent}
               </ReactMarkdown>
             </div>

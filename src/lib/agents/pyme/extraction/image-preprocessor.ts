@@ -32,6 +32,63 @@ export interface PreprocessOptions {
   outputFormat?: 'jpeg' | 'png' | 'webp';
 }
 
+// ---------------------------------------------------------------------------
+// Guardas de decodificacion (endurecimiento del decoder nativo)
+// ---------------------------------------------------------------------------
+// Los bytes que llegan aqui son 100% del usuario y libvips los decodifica en el
+// mismo proceso que tiene OPENAI_API_KEY, DATABASE_URL y la llave del vault ERP
+// en el entorno. El gate de /api/pyme/uploads valida el MIME *declarado*, pero
+// libvips ignora ese MIME y elige el loader sniffeando el contenido: para
+// HEIC/HEIF aguas arriba solo se comprueba 'ftyp' en los bytes 4-7 y los bytes
+// 0-3 quedan libres, que es justo donde caben 'GIF8' o 'II*\0' y donde el
+// sniffer decide abrir el loader de GIF o TIFF. De ahi las tres guardas:
+//   1. firma fijada en los bytes 0-3 ANTES de que sharp toque el buffer;
+//   2. tope de raster (limitInputPixels): el default de sharp (~268MP) deja
+//      pasar un PNG de 16000x16000 que son ~768MB de raster crudo;
+//   3. rechazo del formato sniffeado que no este entre los que el modulo Pyme
+//      acepta aguas arriba, para no alimentar loaders que no usamos.
+// `failOn` NO se toca a proposito: su default es 'warning', el nivel MAS
+// estricto de la escala (none < truncated < error < warning); fijarlo en
+// 'error' relajaria la validacion en lugar de endurecerla.
+// ---------------------------------------------------------------------------
+
+/** Tope de pixeles del raster de entrada. Default de sharp = ~268MP. */
+const MAX_INPUT_PIXELS = 25_000_000;
+
+/** Formatos sniffeados aceptables — espejo de ALLOWED_MIMES en /api/pyme/uploads. */
+const ALLOWED_SNIFFED_FORMATS = new Set(['jpeg', 'png', 'webp', 'heif']);
+
+function hasSignature(buf: Buffer, offset: number, bytes: number[]): boolean {
+  return bytes.every((b, i) => buf[offset + i] === b);
+}
+
+/**
+ * Verifica la firma del contenedor incluyendo los bytes 0-3, que es donde
+ * libvips decide el loader. Se corre antes de instanciar sharp.
+ */
+function assertDecodableSignature(buf: Buffer): void {
+  if (buf.length < 12) {
+    throw new Error('preprocessImage: archivo demasiado corto para ser una imagen');
+  }
+  // JPEG — SOI
+  if (hasSignature(buf, 0, [0xff, 0xd8, 0xff])) return;
+  // PNG
+  if (hasSignature(buf, 0, [0x89, 0x50, 0x4e, 0x47])) return;
+  // WebP — 'RIFF' en 0-3 y 'WEBP' en 8-11 (RIFF a secas tambien envuelve AVI/WAV)
+  if (
+    hasSignature(buf, 0, [0x52, 0x49, 0x46, 0x46]) &&
+    hasSignature(buf, 8, [0x57, 0x45, 0x42, 0x50])
+  ) {
+    return;
+  }
+  // HEIC/HEIF (ISO BMFF) — 'ftyp' en 4-7 Y tamano de box plausible en 0-3.
+  if (hasSignature(buf, 4, [0x66, 0x74, 0x79, 0x70])) {
+    const boxSize = buf.readUInt32BE(0);
+    if (boxSize >= 8 && boxSize <= buf.length) return;
+  }
+  throw new Error('preprocessImage: firma de archivo no soportada');
+}
+
 export interface PreprocessResult {
   /** Data URL preprocesado listo para enviar al modelo de vision. */
   dataUrl: string;
@@ -78,11 +135,25 @@ export async function preprocessImage(
   }
   const bytesIn = buffer.byteLength;
 
+  // Firma en 0-3 antes de que el decoder nativo vea el buffer (ver arriba).
+  assertDecodableSignature(buffer);
+
   // --- Pipeline sharp --------------------------------------------------------
-  let pipeline = sharp(buffer);
+  let pipeline = sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS });
   const meta = await pipeline.metadata();
+  // El MIME declarado aguas arriba no manda: aqui vale el formato sniffeado.
+  if (!meta.format || !ALLOWED_SNIFFED_FORMATS.has(meta.format)) {
+    throw new Error(
+      `preprocessImage: formato no soportado (${meta.format ?? 'desconocido'})`,
+    );
+  }
   const w = meta.width  ?? 0;
   const h = meta.height ?? 0;
+  if (w * h > MAX_INPUT_PIXELS) {
+    throw new Error(
+      `preprocessImage: imagen de ${w}x${h} excede el limite de ${MAX_INPUT_PIXELS} pixeles`,
+    );
+  }
   const longEdge = Math.max(w, h);
 
   const appliedSteps: string[] = [];

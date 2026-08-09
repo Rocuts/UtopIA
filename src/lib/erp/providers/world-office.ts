@@ -4,6 +4,7 @@
 // Base URL: https://{tenant}.worldoffice.cloud/api/
 
 import { BaseERPConnector } from '../connector';
+import { assertSafeTenantUrl } from '../validate-base-url';
 import type {
   ERPCredentials,
   ERPAccount,
@@ -102,7 +103,12 @@ export class WorldOfficeConnector extends BaseERPConnector {
     if (!tenant) {
       throw new Error('World Office credentials require "tenantId" or "baseUrl".');
     }
-    return `https://${tenant}.worldoffice.cloud/api`;
+    // El tenant viene del cliente y es la AUTORIDAD de la URL: con `/` o `@`
+    // el parser WHATWG resuelve el host a donde quiera el atacante y el resto
+    // cae en el path. La rama de baseUrl ya la cubre el guard del handler.
+    const base = `https://${tenant}.worldoffice.cloud/api`;
+    assertSafeTenantUrl(tenant, base, 'World Office');
+    return base;
   }
 
   /** Build auth headers with the JWT token. */

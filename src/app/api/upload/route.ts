@@ -16,6 +16,7 @@ import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 
 // Vercel Fluid Compute: 300s ceiling for OCR-heavy uploads.
 // `export const runtime = 'nodejs'` removido en Ola 2: incompatible con
@@ -46,6 +47,204 @@ function validateMagicBytes(buffer: Buffer, ext: string): boolean {
   if (!expected) return true; // text formats don't have magic bytes
   if (buffer.length < expected.length) return false;
   return expected.every((byte, i) => buffer[i] === byte);
+}
+
+// ---------------------------------------------------------------------------
+// Anti zip-bomb para contenedores OOXML (.xlsx / .docx)
+// ---------------------------------------------------------------------------
+// El unico gate de contenido para ambos es el magic byte `PK\x03\x04`, es decir
+// el header generico de ZIP: cualquier ZIP pasa. Despues exceljs y mammoth
+// descomprimen el archivo entero en memoria y ninguno impone un tope propio,
+// asi que unos pocos MB de deflate pueden convertirse en varios GB de XML y
+// agotar la RAM de la Function (con `maxDuration = 300` hay tiempo de sobra
+// para lograrlo, y el rate limit de 20/min basta para sostenerlo).
+//
+// El `uncompressedSize` del directorio central NO sirve como control por si
+// solo: lo escribe quien construye el archivo y puede declarar 1KB mientras el
+// stream entrega GB. Por eso hay dos capas: se rechaza lo declarado cuando ya
+// se pasa, y ademas se inflan los streams contra un presupuesto duro de bytes
+// REALMENTE producidos, abortando en cuanto se supera.
+// ---------------------------------------------------------------------------
+
+/** Tope de tamano comprimido para contenedores OOXML (el global es 100MB). */
+const MAX_ZIP_CONTAINER_BYTES = 50 * 1024 * 1024;
+/** Tope de entradas del ZIP. Un .xlsx/.docx real ronda las decenas. */
+const MAX_ZIP_ENTRIES = 2048;
+/** Presupuesto de bytes descomprimidos, declarados y reales. */
+const MAX_ZIP_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
+/** Techo de pared para el parseo, muy por debajo de `maxDuration`. */
+const OOXML_PARSE_TIMEOUT_MS = 120_000;
+
+/** Corta una promesa que no acepta AbortSignal (exceljs / mammoth no lo exponen). */
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label}: el archivo tardo demasiado en procesarse (>${Math.round(ms / 1000)}s).`));
+    }, ms);
+    work.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/** Localiza el End Of Central Directory (puede llevar hasta 64KB de comentario). */
+function findEndOfCentralDirectory(buf: Buffer): number {
+  const minPos = Math.max(0, buf.length - 22 - 0xffff);
+  for (let i = buf.length - 22; i >= minPos; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) return i;
+  }
+  return -1;
+}
+
+/** Lee el extra field ZIP64 (id 0x0001) para los campos desbordados a 0xFFFFFFFF. */
+function readZip64Extra(
+  buf: Buffer,
+  start: number,
+  length: number,
+  need: { compressed: boolean; uncompressed: boolean; localOffset: boolean },
+): { compressedSize?: number; uncompressedSize?: number; localOffset?: number } {
+  const out: { compressedSize?: number; uncompressedSize?: number; localOffset?: number } = {};
+  const end = Math.min(start + length, buf.length);
+  let p = start;
+  while (p + 4 <= end) {
+    const id = buf.readUInt16LE(p);
+    const size = buf.readUInt16LE(p + 2);
+    if (id === 0x0001) {
+      // Orden fijo del spec: uncompressed, compressed, offset local, disco.
+      let q = p + 4;
+      if (need.uncompressed && q + 8 <= end) { out.uncompressedSize = Number(buf.readBigUInt64LE(q)); q += 8; }
+      if (need.compressed && q + 8 <= end) { out.compressedSize = Number(buf.readBigUInt64LE(q)); q += 8; }
+      if (need.localOffset && q + 8 <= end) { out.localOffset = Number(buf.readBigUInt64LE(q)); q += 8; }
+      return out;
+    }
+    p += 4 + size;
+  }
+  return out;
+}
+
+/**
+ * Infla un stream deflate contando SOLO los bytes que salen, sin retenerlos, y
+ * aborta en cuanto se pasa de `limit`. Es la capa que no depende de lo que el
+ * archivo declare de si mismo.
+ */
+function inflatedByteCount(slice: Buffer, limit: number): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const inflater = zlib.createInflateRaw({ finishFlush: zlib.constants.Z_SYNC_FLUSH });
+    let total = 0;
+    let settled = false;
+    inflater.on('data', (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > limit && !settled) {
+        settled = true;
+        inflater.destroy();
+        reject(new Error(
+          'El archivo comprimido se expande por encima del limite permitido ' +
+          `(${Math.round(MAX_ZIP_UNCOMPRESSED_BYTES / (1024 * 1024))}MB descomprimidos).`,
+        ));
+      }
+    });
+    inflater.on('end', () => { if (!settled) { settled = true; resolve(total); } });
+    // Un stream corrupto no es una bomba: no lo tratamos como ataque y dejamos
+    // que el parser real devuelva el mensaje de negocio que corresponda.
+    inflater.on('error', () => { if (!settled) { settled = true; resolve(total); } });
+    inflater.end(slice);
+  });
+}
+
+/**
+ * Verifica que un contenedor ZIP (.xlsx / .docx) no sea una bomba de
+ * descompresion ANTES de entregarselo a exceljs o mammoth.
+ */
+async function assertZipContainerWithinLimits(buffer: Buffer): Promise<void> {
+  const eocd = findEndOfCentralDirectory(buffer);
+  if (eocd < 0) {
+    throw new Error('El archivo no es un contenedor valido: falta el directorio central del ZIP.');
+  }
+
+  let entryCount = buffer.readUInt16LE(eocd + 10);
+  let cdOffset = buffer.readUInt32LE(eocd + 16);
+
+  // ZIP64: los campos desbordados viven en el registro extendido.
+  if (entryCount === 0xffff || cdOffset === 0xffffffff) {
+    const locator = eocd - 20;
+    if (locator < 0 || buffer.readUInt32LE(locator) !== 0x07064b50) {
+      throw new Error('Contenedor ZIP64 sin localizador valido.');
+    }
+    const z64 = Number(buffer.readBigUInt64LE(locator + 8));
+    if (z64 < 0 || z64 + 56 > buffer.length || buffer.readUInt32LE(z64) !== 0x06064b50) {
+      throw new Error('Contenedor ZIP64 con directorio central invalido.');
+    }
+    entryCount = Number(buffer.readBigUInt64LE(z64 + 32));
+    cdOffset = Number(buffer.readBigUInt64LE(z64 + 48));
+  }
+
+  if (entryCount > MAX_ZIP_ENTRIES) {
+    throw new Error(`El archivo comprimido declara ${entryCount} entradas (maximo ${MAX_ZIP_ENTRIES}).`);
+  }
+
+  const entries: Array<{ method: number; localOffset: number; uncompressedSize: number }> = [];
+  let declaredUncompressed = 0;
+  let p = cdOffset;
+  for (let i = 0; i < entryCount; i++) {
+    if (p + 46 > buffer.length || buffer.readUInt32LE(p) !== 0x02014b50) {
+      throw new Error('Directorio central del archivo comprimido corrupto.');
+    }
+    const method = buffer.readUInt16LE(p + 10);
+    let compressedSize = buffer.readUInt32LE(p + 20);
+    let uncompressedSize = buffer.readUInt32LE(p + 24);
+    const fnLen = buffer.readUInt16LE(p + 28);
+    const exLen = buffer.readUInt16LE(p + 30);
+    const cmLen = buffer.readUInt16LE(p + 32);
+    let localOffset = buffer.readUInt32LE(p + 42);
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localOffset === 0xffffffff) {
+      const z = readZip64Extra(buffer, p + 46 + fnLen, exLen, {
+        compressed: compressedSize === 0xffffffff,
+        uncompressed: uncompressedSize === 0xffffffff,
+        localOffset: localOffset === 0xffffffff,
+      });
+      compressedSize = z.compressedSize ?? compressedSize;
+      uncompressedSize = z.uncompressedSize ?? uncompressedSize;
+      localOffset = z.localOffset ?? localOffset;
+    }
+    declaredUncompressed += uncompressedSize;
+    entries.push({ method, localOffset, uncompressedSize });
+    p += 46 + fnLen + exLen + cmLen;
+  }
+
+  if (declaredUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES) {
+    throw new Error(
+      'El archivo comprimido declara mas de ' +
+      `${Math.round(MAX_ZIP_UNCOMPRESSED_BYTES / (1024 * 1024))}MB descomprimidos.`,
+    );
+  }
+
+  // Segunda capa: bytes reales. `budget` es compartido por todas las entradas.
+  let budget = MAX_ZIP_UNCOMPRESSED_BYTES;
+  for (const entry of entries) {
+    const lh = entry.localOffset;
+    if (lh < 0 || lh + 30 > buffer.length || buffer.readUInt32LE(lh) !== 0x04034b50) {
+      throw new Error('Cabecera local del archivo comprimido corrupta.');
+    }
+    const fnLen = buffer.readUInt16LE(lh + 26);
+    const exLen = buffer.readUInt16LE(lh + 28);
+    const dataStart = lh + 30 + fnLen + exLen;
+
+    // Metodo 0 (stored) y cualquier otro que no sea deflate no pueden expandir
+    // el contenido: basta con descontar lo declarado del presupuesto.
+    if (entry.method !== 8) {
+      budget -= entry.uncompressedSize;
+      if (budget < 0) {
+        throw new Error('El archivo comprimido excede el limite de descompresion permitido.');
+      }
+      continue;
+    }
+    if (dataStart >= cdOffset) continue;
+    // Se infla hasta el inicio del directorio central: zlib se detiene solo al
+    // final del stream, asi que no dependemos del tamano declarado (que puede
+    // estar falseado a la baja para colarse por la primera capa).
+    budget -= await inflatedByteCount(buffer.subarray(dataStart, cdOffset), budget);
+  }
 }
 
 /**
@@ -220,6 +419,21 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
     throw new Error('File content does not match its extension.');
   }
 
+  // Formatos que van a un parser que descomprime/desestructura el archivo
+  // entero en memoria (exceljs, mammoth): tope de tamano por debajo del global
+  // de 100MB, porque aqui el costo no es el binario sino lo que expande.
+  if (ext === '.xlsx' || ext === '.docx' || ext === '.doc') {
+    if (buffer.length > MAX_ZIP_CONTAINER_BYTES) {
+      throw new Error(
+        `Archivo de Office demasiado grande. Maximo ${Math.round(MAX_ZIP_CONTAINER_BYTES / (1024 * 1024))}MB.`,
+      );
+    }
+    // .doc es OLE2, no ZIP: solo aplica el tope de tamano y el timeout.
+    if (ext === '.xlsx' || ext === '.docx') {
+      await assertZipContainerWithinLimits(buffer);
+    }
+  }
+
   // --- Image files: OCR via OpenAI Vision API ---
   if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.heic'].includes(ext)) {
     return extractTextFromImage(buffer, filename);
@@ -228,7 +442,11 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   // --- Word documents (.docx) ---
   if (ext === '.docx') {
     const mammoth = await import('mammoth');
-    const result = await mammoth.extractRawText({ buffer });
+    const result = await withTimeout(
+      mammoth.extractRawText({ buffer }),
+      OOXML_PARSE_TIMEOUT_MS,
+      'DOCX',
+    );
     if (!result.value.trim()) {
       throw new Error('El documento Word esta vacio o no contiene texto extraible.');
     }
@@ -239,7 +457,11 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   if (ext === '.doc') {
     try {
       const mammoth = await import('mammoth');
-      const result = await mammoth.extractRawText({ buffer });
+      const result = await withTimeout(
+        mammoth.extractRawText({ buffer }),
+        OOXML_PARSE_TIMEOUT_MS,
+        'DOC',
+      );
       if (result.value.trim()) return result.value;
     } catch {
       // mammoth has limited .doc support — fall through to error
@@ -300,7 +522,11 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   if (ext === '.xlsx') {
     const { Workbook } = await import('exceljs');
     const workbook = new Workbook();
-    await workbook.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
+    await withTimeout(
+      workbook.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer),
+      OOXML_PARSE_TIMEOUT_MS,
+      'XLSX',
+    );
     const blocks: string[] = [];
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];

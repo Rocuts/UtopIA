@@ -158,7 +158,16 @@ export async function POST(req: NextRequest) {
       // adivina UUIDs. El sufijo random hace la URL no-adivinable. Deuda
       // tecnica documentada en docs/PYME_MODULE_TODO.md: migrar a Blob
       // privado o servir todo via /api/pyme/uploads/[id]/image.
-      const key = `pyme/${ws.id}/${crypto.randomUUID()}-${safeName}`;
+      //
+      // Auditoria OWASP 2026-08 (A01): la clave NO puede llevar `ws.id`. El blob
+      // esta en modo `public`, asi que el UUID del workspace viajaba en una URL
+      // que se entrega al navegador y al proveedor de OCR — y en Fase 1 ese UUID
+      // ES el bearer del tenant (el valor de la cookie `utopia_workspace_id`, que
+      // no tiene password detras). Quien viera una sola URL de imagen podia fijar
+      // esa cookie y operar como esa empresa. La relacion upload -> workspace vive
+      // en la fila de `pyme_uploads`, que es donde debe estar; la clave solo
+      // necesita ser no-adivinable.
+      const key = `pyme/${crypto.randomUUID()}-${safeName}`;
       const blob = await put(key, buffer, {
         access: 'public',
         addRandomSuffix: true,

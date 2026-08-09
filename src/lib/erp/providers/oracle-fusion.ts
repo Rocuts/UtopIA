@@ -9,6 +9,10 @@
 // Rate limit: 429 con Retry-After. Token TTL=3600s, renovar a 3300s.
 
 import { BaseERPConnector } from '../connector';
+import {
+  assertSafeTenantUrl,
+  fetchWithSafeRedirects,
+} from '../validate-base-url';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -73,7 +77,9 @@ async function fetchWithRetry(
   delayMs = INITIAL_DELAY_MS,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(url, init);
+    // Las redirecciones se validan salto a salto: un host permitido que
+    // conteste `302 Location: http://169.254.169.254/...` anularía el guard.
+    const res = await fetchWithSafeRedirects(url, init);
 
     if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
       if (attempt === retries) return res;
@@ -118,7 +124,12 @@ export class OracleFusionConnector extends BaseERPConnector {
         'Oracle Fusion: tenantId es obligatorio (dominio IDCS, e.g. "idcs-<hash>.identity.oraclecloud.com").',
       );
     }
-    return `https://${domain}/oauth2/v1/token`;
+    // `domain` viene del cliente y se interpola como AUTORIDAD de la URL:
+    // `x@169.254.169.254/latest/meta-data/?a` resolvería el host al servicio
+    // interno. El guard de baseUrl mira otro campo y nunca vería esto.
+    const endpoint = `https://${domain}/oauth2/v1/token`;
+    assertSafeTenantUrl(domain, endpoint, 'Oracle Fusion');
+    return endpoint;
   }
 
   private buildScope(credentials: ERPCredentials): string {
@@ -162,8 +173,13 @@ export class OracleFusionConnector extends BaseERPConnector {
     });
 
     if (!res.ok) {
+      // El cuerpo del upstream sólo al log: dentro del Error terminaba en el
+      // JSON que /api/erp/sync devuelve al cliente.
       const text = await res.text().catch(() => '');
-      throw new Error(`Oracle Fusion token error ${res.status}: ${text.slice(0, 300)}`);
+      console.error(
+        `[oracle_fusion] token error ${res.status}: ${text.slice(0, 300)}`,
+      );
+      throw new Error(`Oracle Fusion token error ${res.status}.`);
     }
 
     const data = (await res.json()) as OracleTokenResponse;
@@ -202,8 +218,13 @@ export class OracleFusionConnector extends BaseERPConnector {
     }
 
     if (!res.ok) {
+      // Ni el cuerpo ni la URL destino salen en el Error: la URL sola ya es un
+      // oráculo de qué host se alcanzó. Ambos quedan en el log del servidor.
       const text = await res.text().catch(() => '');
-      throw new Error(`Oracle Fusion API error ${res.status} [${url}]: ${text.slice(0, 300)}`);
+      console.error(
+        `[oracle_fusion] API error ${res.status} [${url}]: ${text.slice(0, 300)}`,
+      );
+      throw new Error(`Oracle Fusion API error ${res.status}.`);
     }
 
     return res;

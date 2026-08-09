@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
   // listo para cuando el flag se prenda.
   // cacheComponents: true,
 
+  // `X-Powered-By: Next.js` no aporta nada al cliente y sí ayuda al inventario
+  // de un atacante que busca objetivos por framework. Higiene: se apaga aquí y
+  // no en el proxy porque el matcher del proxy excluye _next/static y los
+  // assets, que seguirían emitiéndola.
+  poweredByHeader: false,
+
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
       ? { exclude: ['error', 'warn'] }
@@ -50,6 +56,7 @@ const nextConfig: NextConfig = {
   // la va a encontrar, y el siguiente paso natural rompe prod.
   // Ver docs/PLATFORM_MIGRATION.md §1. Guard: src/__tests__/next-config-proxy.test.ts
   async headers() {
+    const isProd = process.env.NODE_ENV === 'production';
     return [
       {
         source: '/:path*',
@@ -61,6 +68,23 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), geolocation=(), microphone=(self)',
           },
+          // HSTS. Cierra la ventana de SSL-strip de la PRIMERA navegación en
+          // claro (la CSP ya lleva `upgrade-insecure-requests`, pero eso sólo
+          // aplica a subrecursos una vez cargada la página). Vive aquí y no en
+          // el proxy porque este bloque cubre `/:path*` sin exclusiones,
+          // mientras el matcher del proxy salta _next/static y las imágenes.
+          // Sin `preload`: es de facto irreversible (salir de la lista tarda
+          // meses) y el dominio propio aún no está en producción con todos sus
+          // subdominios sirviendo HTTPS. Sólo en prod — en dev el servidor es
+          // http://localhost y una respuesta HSTS ahí sólo estorba.
+          ...(isProd
+            ? [
+                {
+                  key: 'Strict-Transport-Security',
+                  value: 'max-age=63072000; includeSubDomains',
+                },
+              ]
+            : []),
           // NOTE: el CSP se emite por request, con nonce, desde `src/proxy.ts`
           // (reemplaza el CSP estatico con 'unsafe-inline' que vivia aqui). Los
           // origins de Google Fonts + connect-src que necesita el reporte HTML

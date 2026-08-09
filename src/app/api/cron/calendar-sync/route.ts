@@ -27,16 +27,16 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { verifiedCalendars } from '@/lib/db/schema';
 import { scrapeDIANCalendar } from '@/lib/scrapers/dian-scraper';
+import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   // Auth — Vercel Cron envía Authorization: Bearer ${CRON_SECRET}.
-  // Si CRON_SECRET no está provisionado, fallar cerrado.
-  const auth = req.headers.get('authorization');
-  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
+  // Si CRON_SECRET no está provisionado, fallar cerrado. Comparación en
+  // tiempo constante vía helper compartido (antes `!==` de strings).
+  const authError = checkCronAuth(req);
+  if (authError) return authError;
 
   const startedAt = Date.now();
 

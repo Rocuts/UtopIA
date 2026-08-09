@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMacroFactors } from '@/lib/macro/service';
+import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -20,17 +21,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // El comportamiento previo (`if (cronSecret) { verificar }`) dejaba el
   // endpoint completamente abierto en entornos sin la variable provisionada
   // (preview/staging) — riesgo de ejecución no autorizada.
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json(
-      { error: 'CRON_SECRET no configurado en este entorno' },
-      { status: 401 },
-    );
-  }
-  const auth = req.headers.get('authorization') ?? '';
-  if (auth !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  // SECURITY: comparación en tiempo constante vía helper compartido (antes
+  // `!==` de strings).
+  const authError = checkCronAuth(req);
+  if (authError) return authError;
 
   try {
     const macro = await getMacroFactors({ force: true });

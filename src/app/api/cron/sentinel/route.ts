@@ -23,18 +23,15 @@ import {
   getCachedPreprocessedBalance,
   getLatestOpenPeriod,
 } from '@/lib/cache/preprocessed-balance';
+import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  // Fail-closed: CRON_SECRET must be configured; bearer token must match.
-  const auth = req.headers.get('authorization');
-  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json(
-      { error: 'unauthorized' },
-      { status: 401, headers: { 'Cache-Control': 'no-store' } },
-    );
-  }
+  // Fail-closed: CRON_SECRET must be configured; bearer token must match
+  // (timingSafeEqual vía helper compartido — antes `!==` de strings).
+  const authError = checkCronAuth(req);
+  if (authError) return authError;
 
   try {
     const db = getDb();

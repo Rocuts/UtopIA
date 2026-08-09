@@ -35,6 +35,7 @@ import { generateMonthlyReportPDF } from '@/lib/pyme/reportPDF';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
@@ -346,7 +347,7 @@ function ReportView({ payload, fmt, tt, reviewT }: ReportViewProps) {
           <article className="rounded-xl glass-elite p-5 prose prose-workspace max-w-none">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeSanitize]}
+              rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}
             >
               {payload.narrative}
             </ReactMarkdown>

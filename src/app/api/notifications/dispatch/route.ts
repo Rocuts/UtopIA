@@ -1,5 +1,6 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { notificationsPort, isNotificationsEnabled } from '@/lib/notifications';
 
@@ -39,8 +40,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const providedSecret = req.headers.get('x-utopia-internal-secret');
-  if (!providedSecret || providedSecret !== secret) {
+  // SECURITY: timingSafeEqual en vez de `!==` — este secreto se comparte con
+  // la clave HMAC de unsubscribe-token.ts, y la ruta es alcanzable sin sesión
+  // (AUTH_EXEMPT_APIS + CSRF_ALLOWLIST en src/proxy.ts), igual que
+  // admin-auth.ts y erp/webhook/[provider]/route.ts (audit E2).
+  const providedSecret = req.headers.get('x-utopia-internal-secret') ?? '';
+  const a = Buffer.from(providedSecret, 'utf8');
+  const b = Buffer.from(secret, 'utf8');
+  // Length check first: timingSafeEqual throws on unequal-length buffers.
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return NextResponse.json(
       { error: 'unauthorized' },
       { status: 401 },

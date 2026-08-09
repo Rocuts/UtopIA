@@ -4,6 +4,7 @@ import { transferPricingRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateTransferPricing } from '@/lib/agents/financial/transfer-pricing/orchestrator';
 import type { TPProgressEvent } from '@/lib/agents/financial/transfer-pricing/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
+import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 
 // ---------------------------------------------------------------------------
 // POST /api/transfer-pricing
@@ -109,7 +110,7 @@ function handleStreaming(
         );
         sse.send('error', {
           error: 'Error during transfer pricing analysis.',
-          detail: error instanceof Error ? error.message : 'Unknown error',
+          detail: toFriendlyError(error).message,
         });
       } finally {
         sse.close();

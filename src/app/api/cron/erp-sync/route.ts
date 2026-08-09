@@ -4,9 +4,9 @@
  * Vercel Cron polling job for ERPs that do NOT support push webhooks.
  * Runs every 2 hours (schedule configured in vercel.ts).
  *
- * Auth: `Authorization: Bearer ${CRON_SECRET}` only. The `x-vercel-cron-id`
- * header is NOT trusted — it's a plain request header any client can spoof.
- * Without CRON_SECRET configured, only non-production environments pass.
+ * Auth: `Authorization: Bearer ${CRON_SECRET}` only (checkCronAuth, timing-safe).
+ * The `x-vercel-cron-id` header is NOT trusted — it's a plain request header
+ * any client can spoof. Fail-closed: sin CRON_SECRET configurado, 503.
  *
  * Flow per workspace+provider:
  *   1. Load erp_credentials row (provider + metadata with connection config).
@@ -28,23 +28,9 @@ import { ERPAdapter } from '@/lib/erp/adapter';
 import type { ERPCredentials } from '@/lib/erp/types';
 import { loadCredentials } from '@/lib/erp/credentials';
 import { getLatestOpenPeriod, getCachedPreprocessedBalance } from '@/lib/cache/preprocessed-balance';
+import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 300;
-
-// ---------------------------------------------------------------------------
-// Auth helpers
-// ---------------------------------------------------------------------------
-
-function isAuthorized(req: Request): boolean {
-  // SECURITY: never trust `x-vercel-cron-id` — spoofable request header.
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    // No secret configured — allow in local dev, reject in production.
-    return process.env.NODE_ENV !== 'production';
-  }
-  const auth = req.headers.get('authorization');
-  return auth === `Bearer ${cronSecret}`;
-}
 
 // ---------------------------------------------------------------------------
 // Current period helper — YYYY-MM for the current calendar month.
@@ -120,9 +106,8 @@ async function syncWorkspace(row: typeof erpCredentials.$inferSelect): Promise<S
 // ---------------------------------------------------------------------------
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = checkCronAuth(req);
+  if (authError) return authError;
 
   const db = getDb();
 
@@ -137,7 +122,7 @@ export async function GET(req: Request) {
   });
 
   if (activeRows.length === 0) {
-    return NextResponse.json({ ok: true, processed: 0, outcomes: [] });
+    return NextResponse.json({ ok: true, processed: 0, errors: 0 });
   }
 
   const results = await Promise.allSettled(activeRows.map(syncWorkspace));
@@ -160,10 +145,14 @@ export async function GET(req: Request) {
     `[erp-sync] complete processed=${outcomes.length} errors=${errorCount}`,
   );
 
+  // SECURITY: no devolver `outcomes` (contiene workspaceId) en el body — en
+  // fase 1 el UUID del workspace ES el bearer del tenant, así que exponerlo
+  // en la respuesta habilitaría enumeración/impersonación. Los console.info
+  // de syncWorkspace() ya loggean workspaceId al lugar correcto (logs, no
+  // response body). Devolvemos sólo contadores agregados.
   return NextResponse.json({
     ok: true,
     processed: outcomes.length,
     errors: errorCount,
-    outcomes,
   });
 }

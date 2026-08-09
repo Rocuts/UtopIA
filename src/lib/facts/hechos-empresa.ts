@@ -30,6 +30,32 @@ export function selectNarrativeContents(
     .map((f) => ({ title: f.title, body: f.body }));
 }
 
+// Techos defensivos. El contrato (contracts.ts) y las columnas `text` de la DB no
+// acotan title/body, así que las filas ya persistidas pueden ser arbitrariamente
+// largas: un solo hecho no puede desplazar el resto del <context> del reporte.
+const FACT_TITLE_MAX = 200;
+const FACT_BODY_MAX = 2000;
+
+/**
+ * Escapa `<` y `>` del texto del hecho.
+ *
+ * El sanitizador anterior sólo borraba `<hechos_empresa>` / `</hechos_empresa>`, y
+ * el bloque se interpola DENTRO del `<context>` de cinco prompts financieros: bastaba
+ * con que el body trajera un `</context>` para cerrar el bloque envolvente y colar un
+ * `<constraints>` falso con la misma jerarquía que los reales, en TODA corrida futura
+ * del workspace. Una lista negra de delimitadores envejece mal (ni siquiera cubría
+ * `</ hechos_empresa >`), así que escapamos los caracteres: los hechos son PROSA
+ * escrita por el usuario —o extraída por el modelo de un documento de tercero—, nunca
+ * llevan markup legítimo, de modo que escapar no pierde información y cierra cualquier
+ * delimitador, presente o futuro.
+ *
+ * El recorte va ANTES del escape para no partir una entidad por la mitad.
+ */
+function sanitizeFactText(s: string, max: number): string {
+  const clipped = s.length > max ? `${s.slice(0, max)} [...]` : s;
+  return clipped.replace(/[<>]/g, (c) => (c === '<' ? '&lt;' : '&gt;'));
+}
+
 /**
  * Renderiza el bloque <hechos_empresa>. Devuelve '' cuando no hay narrativos (no
  * se inyecta un tag vacío — cache-friendly). El header lleva el guardrail
@@ -45,8 +71,9 @@ export function renderHechosEmpresaBlock(
     language === 'es'
       ? 'Hechos duraderos del negocio confirmados por el usuario. Son CONTEXTO para la redacción (notas, análisis, narrativa); NUNCA una fuente de cifras. Todo número vinculante proviene de los TOTALES VINCULANTES / bloques deterministas, jamás de estos hechos.'
       : 'Durable business facts confirmed by the user. They are CONTEXT for the narrative (notes, analysis, prose); NEVER a source of figures. Every binding number comes from the BINDING TOTALS / deterministic blocks, never from these facts.';
-  const sanitize = (s: string) => s.replace(/<\/?hechos_empresa>/gi, ' ');
-  const items = narratives.map((n) => `- ${sanitize(n.title)}: ${sanitize(n.body)}`).join('\n');
+  const items = narratives
+    .map((n) => `- ${sanitizeFactText(n.title, FACT_TITLE_MAX)}: ${sanitizeFactText(n.body, FACT_BODY_MAX)}`)
+    .join('\n');
   return `<hechos_empresa>
 ${header}
 ${items}
