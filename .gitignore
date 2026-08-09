@@ -62,3 +62,8 @@ Documentos de orientacion/
 
 # Salidas del harness de medición FASE 0 (regenerables)
 .fase0*/
+/.swc
+
+# Material de auditoría de seguridad — NUNCA publicar en un repo público:
+# exploit paths y hallazgos aún abiertos.
+/.security-private/
