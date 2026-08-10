@@ -333,8 +333,75 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
   const totalExpenses = getClassTotal(5);
   const totalCosts = getClassTotal(6);
   const totalProduction = getClassTotal(7);
+
+  // Devoluciones 4175 — ESPEJO EXACTO de `trial-balance.ts`, incluida la guarda
+  // NIA 240 de más abajo. Este bloque es una segunda implementación de la misma
+  // regla contable: si diverge, un ajuste de reparación reescribe el P&L con
+  // otro criterio que el preprocesador y el bloque vinculante deja de cuadrar.
+  // La duplicación sin sincronizar ya fue la causa raíz de esta familia de
+  // defectos, así que cualquier cambio allí se replica aquí — arriba Y abajo.
+  const ZERO_BIG = BigInt(0);
+  const absBig = (v: bigint): bigint => (v < ZERO_BIG ? -v : v);
+  const cls4 = snap.classes.find((c) => c.code === 4);
+  let sumOrdinariasCents = ZERO_BIG;
+  let sumDevolucionesFirmadaCents = ZERO_BIG;
+  if (cls4) {
+    for (const acc of cls4.accounts) {
+      const c = toCents(Number(acc.balance) || 0);
+      if (normalizeCode(acc.code).startsWith('4175')) {
+        sumDevolucionesFirmadaCents += c;
+      } else {
+        sumOrdinariasCents += c;
+      }
+    }
+  }
+  const ingresosBrutoCents = absBig(sumOrdinariasCents);
+  const totalDevolucionesCents = absBig(sumDevolucionesFirmadaCents);
+  const ingresosNetosCents = ingresosBrutoCents - totalDevolucionesCents;
+  const totalDevoluciones = Number(totalDevolucionesCents) / 100;
+  const ingresosNetos = Number(ingresosNetosCents) / 100;
+
+  // `ingresosNetos`, NO `totalRevenue` — mismo motivo que en el preprocesador:
+  // bajo convención de magnitudes la Σ de la clase vale bruto + devoluciones e
+  // infla la utilidad en 2 × devoluciones sobre un ancla dura.
   const netIncome =
-    totalRevenue - totalExpenses - totalCosts - totalProduction;
+    ingresosNetos - totalExpenses - totalCosts - totalProduction;
+
+  // Guarda NIA 240 — la mitad declarativa del espejo. Sin esto, un ajuste que
+  // deje las devoluciones por encima de los ingresos ordinarios publicaba un
+  // ingreso neto NEGATIVO con `blocking = false` y cero avisos.
+  if (totalDevolucionesCents > ingresosBrutoCents) {
+    const motivo =
+      `[${snap.period}] Devoluciones 4175 (${fmtCop(totalDevoluciones)}) mayores que los ` +
+      `ingresos ordinarios de Clase 4 (${fmtCop(Number(ingresosBrutoCents) / 100)}). ` +
+      `El ingreso neto resultante es negativo: ${fmtCop(ingresosNetos)}.`;
+    if (!snap.validation.reasons.includes(motivo)) {
+      snap.validation.reasons.push(motivo);
+    }
+    snap.validation.blocking = true;
+    const yaReportada = snap.discrepancies.some((d) =>
+      d.location.includes('Devoluciones 4175'),
+    );
+    if (!yaReportada) {
+      snap.discrepancies.push({
+        location: `Devoluciones 4175 [${snap.period}]`,
+        reported: Number(ingresosBrutoCents) / 100,
+        calculated: totalDevoluciones,
+        difference: ingresosNetos,
+        description: motivo,
+      });
+    }
+  } else {
+    // El ajuste puede haber SANEADO la anomalía: si ya no se cumple, se retira
+    // el motivo y la discrepancia para no dejar un bloqueo permanente.
+    snap.validation.reasons = snap.validation.reasons.filter(
+      (r) => !r.includes('Devoluciones 4175'),
+    );
+    snap.discrepancies = snap.discrepancies.filter(
+      (d) => !d.location.includes('Devoluciones 4175'),
+    );
+    snap.validation.blocking = snap.validation.reasons.length > 0;
+  }
 
   const equationBalance = totalAssets - totalLiabilities - totalEquity;
   const equationBalanced = Math.abs(equationBalance) < 100;
@@ -395,7 +462,8 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
   // este mirror tiene exactamente la misma precision que el original.
   // -------------------------------------------------------------------------
   const impuestoCausado = sumByGroupPrefixes('5', new Set(['54']));
-  const utilidadAntesImpuestos = totalRevenue - (gastosTotales - impuestoCausado);
+  // `ingresosNetos` — espejo de `trial-balance.ts`.
+  const utilidadAntesImpuestos = ingresosNetos - (gastosTotales - impuestoCausado);
 
   // Saldo a favor del impuesto de renta — mismo detector del preprocessor:
   // 5404 acreedor (negativo en clase 5) > 1805 > 1355 > 0.
@@ -411,19 +479,8 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     saldoAFavorImpuesto = saldo1355;
   }
 
-  // Devoluciones 4175 — acumuladas en cents como el preprocessor (Wave 2.F4).
-  const ZERO_BIG = BigInt(0);
-  let totalDevolucionesCents = ZERO_BIG;
-  const cls4 = snap.classes.find((c) => c.code === 4);
-  if (cls4) {
-    for (const acc of cls4.accounts) {
-      if (!normalizeCode(acc.code).startsWith('4175')) continue;
-      const c = toCents(Number(acc.balance) || 0);
-      totalDevolucionesCents += c < ZERO_BIG ? -c : c;
-    }
-  }
-  const totalDevoluciones = Number(totalDevolucionesCents) / 100;
-  const ingresosNetos = Math.abs(totalRevenue) - totalDevoluciones;
+  // `ingresosNetos`, `totalDevoluciones` y sus centavos se calculan arriba,
+  // junto a `netIncome` y su guarda, porque todo el P&L cuelga de ellos.
 
   const cents: ControlTotalsCents = {
     activo: toCents(totalAssets),
@@ -437,7 +494,7 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     efectivoCuenta11: toCents(efectivoCuenta11),
     saldoAFavorImpuesto: toCents(saldoAFavorImpuesto),
     totalDevoluciones: totalDevolucionesCents,
-    ingresosNetos: toCents(ingresosNetos),
+    ingresosNetos: ingresosNetosCents,
   };
 
   const raw: ControlTotalsRaw = {

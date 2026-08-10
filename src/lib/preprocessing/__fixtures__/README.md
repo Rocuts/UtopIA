@@ -93,3 +93,44 @@ npx vitest run src/lib/preprocessing/__tests__/elite-pulido-diamante-binding.tes
 # Suite completa del Curator + binding:
 npx vitest run src/lib/preprocessing/__tests__
 ```
+
+## `devoluciones-4175/`
+
+Cuatro balances mínimos que aíslan el cálculo de **ingresos netos de
+devoluciones (PUC 4175 · NIIF 15 §47)**. Los consume
+`__tests__/devoluciones-4175.test.ts`.
+
+La 4175 es una cuenta **correctora**: naturaleza débito dentro de una clase 4 de
+naturaleza crédito. Según cómo exporte el ERP llega con el signo contrario al de
+los ingresos ordinarios (la clase 4 **ya viene neta**) o con el mismo signo (el
+export perdió el débito y la clase 4 vale bruto + devoluciones). Por eso el motor
+**no** puede restar las devoluciones a `|Σ clase 4|`: la base es
+`|Σ de las cuentas ORDINARIAS de clase 4|`.
+
+Los cuatro comparten el mismo esqueleto (Activo $400M = Pasivo $60M + Patrimonio
+$340M, costos $200M, gastos $60M) y **todos deben producir ingresos netos de
+$450.000.000** — ésa es la comparación que hace el test.
+
+| Fixture | Forma del grupo 4175 | Σ clase 4 | `ingresosNetos` correcto | Lo que publicaba el código defectuoso |
+|---|---|---|---|---|
+| `natural.csv` | ordinarias +$500M, 4175 **+$50M** (misma polaridad) | $550M | **$450M** | $500M |
+| `algebraica.csv` | archivo en partida doble literal (clases 2/3/4 negativas, 4175 en débito positivo); tras `normalizeSignConvention` queda ordinarias +$500M, 4175 −$50M | $450M (ya neto) | **$450M** | $400M — doble resta |
+| `signos-mixtos.csv` | 4175 = −$55M, −$0,5M y **+$5,5M** (Σ firmada −$50M) | $450M (ya neto) | **$450M** | $389M — doble resta **+** `abs` por cuenta, que invierte la cuenta de saldo contrario e infla las devoluciones a $61M |
+| `sin-devoluciones.csv` | sin cuentas 4175 (control) | $450M | **$450M** | $450M — idéntico |
+
+`signos-mixtos.csv` reproduce a escala la forma del único balance de cliente real
+del repo (`grupo-empresarial-2tres-sas.xlsx`), donde la `41750503` trae saldo
+débito $494.568,88 dentro de un grupo que suma −$326.922.206,12.
+
+> **Riesgo residual conocido.** En `natural.csv` la `360505` trae la utilidad
+> **verdadera** ($190M = netos − costos − gastos). El motor publica `utilidadNeta`
+> $290M porque `netIncome` se deriva de `Σ clase 4`, no de `ingresosNetos` —
+> desfase de exactamente 2 × devoluciones. Es el corolario pendiente descrito en
+> `docs/AUDITORIA_CALCULOS_2026-08.md`; el test lo afirma explícitamente para que
+> se ponga rojo cuando se corrija.
+
+### Cómo ejecutar
+
+```bash
+npx vitest run src/lib/preprocessing/__tests__/devoluciones-4175.test.ts
+```

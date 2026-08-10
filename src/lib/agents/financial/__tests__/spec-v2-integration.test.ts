@@ -135,10 +135,13 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
 // Spec v2.0 Parte 1.3 — REGLA CRÍTICA sobre Devoluciones (4175).
 // ---------------------------------------------------------------------------
 describe('Wave 2.F7 — Test 1 — Devoluciones 4175 netadas en controlTotals', () => {
-  it('ventas $200M + devoluciones $10M → bruto $210M, netos $200M, devoluciones $10M', () => {
+  it('ventas $200M + devoluciones $10M → bruto $200M, netos $190M, devoluciones $10M', () => {
     // Spec Parte 1.3: ingresos netos = |Grupo 41 crédito| − |Grupo 41 débito (4175)|
-    // El parser registra el bruto absoluto de Clase 4 (suma auxiliares).
-    // El detector Wave 2.F4 extrae totalDevoluciones desde cuentas 4175xx.
+    // → |$200M| − |$10M| = $190M. Este test AFIRMABA $200M, es decir citaba la
+    // fórmula del spec y a renglón seguido aseveraba un número que la fórmula no
+    // produce: se contradecía a sí mismo y fosilizaba la doble resta.
+    // El detector extrae totalDevoluciones desde las cuentas 4175xx y la base
+    // del neto son las ORDINARIAS de clase 4, no Σ clase 4.
     const csv = [
       'codigo,nombre,nivel,saldo 2025',
       // Clase 4 entera (nivel Clase — solo referencia, no se suma)
@@ -155,15 +158,20 @@ describe('Wave 2.F7 — Test 1 — Devoluciones 4175 netadas en controlTotals', 
     const pre = preprocessTrialBalance(rows);
     const ct = pre.primary.controlTotals;
 
-    // Ingresos brutos (auxiliares Clase 4, incluyendo 4175 por su saldo positivo)
-    // El bruto es la suma absoluta de todas las auxiliares de Clase 4.
+    // `ct.ingresos` es Σ clase 4 (incluye la 4175 con su saldo positivo), o sea
+    // ventas + devoluciones. NO es el bruto contable: bajo esta convención el
+    // bruto son las ordinarias ($200M). Anclar el P&L sobre `ingresos` en vez de
+    // `ingresosNetos` es el corolario pendiente
+    // (docs/AUDITORIA_CALCULOS_2026-08.md); aquí sólo se documenta la cifra que
+    // el motor publica hoy.
     expect(ct.ingresos).toBe(210_000_000);
 
-    // Devoluciones detectadas como cuentas 4175xx con saldo positivo.
+    // Devoluciones detectadas como cuentas 4175xx (Σ FIRMADA, en magnitud).
     expect(ct.totalDevoluciones).toBe(10_000_000);
 
-    // Ingresos netos = bruto − devoluciones (NIIF 15 §47 — presentación neta).
-    expect(ct.ingresosNetos).toBe(200_000_000);
+    // Ingresos netos = ordinarias − devoluciones (NIIF 15 §47 — presentación
+    // neta): $200M − $10M = $190M.
+    expect(ct.ingresosNetos).toBe(190_000_000);
   });
 
   it('sin cuentas 4175 → totalDevoluciones = 0, ingresosNetos = ingresos brutos', () => {

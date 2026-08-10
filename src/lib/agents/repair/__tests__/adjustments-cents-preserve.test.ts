@@ -84,6 +84,93 @@ describe('applyAdjustments — preserva cents/raw tras recomputar (regresión bl
     expect(cents!.activo).toBe(before + BigInt(500_000_000));
   });
 
+  it('las devoluciones 4175 recomputadas NO divergen del preprocesador', () => {
+    // El mirror de `recomputeSnapshotTotals` replica la fórmula de ingresos
+    // netos del preprocesador. Cuando divergía, cualquier balance reparado
+    // volvía a publicar la cifra defectuosa (doble resta + abs por cuenta):
+    // medido sobre el balance real, $2.101.198.187,69 en vez de
+    // $2.429.109.531,57. Un ajuste que no toca clase 4 debe dejar intactos
+    // `totalDevoluciones` e `ingresosNetos`.
+    const balance = buildBalance();
+    const antes = balance.primary.controlTotals;
+    // Ventas $200M (ordinarias) − devoluciones $10M = $190M netos.
+    expect(antes.cents!.ingresosNetos).toBe(BigInt(19_000_000_000));
+    expect(antes.cents!.totalDevoluciones).toBe(BigInt(1_000_000_000));
+
+    const { balance: adjusted } = applyAdjustments(balance, [mkAdjustment({})]);
+    const despues = adjusted.primary.controlTotals;
+
+    expect(despues.cents!.ingresosNetos).toBe(antes.cents!.ingresosNetos);
+    expect(despues.cents!.totalDevoluciones).toBe(antes.cents!.totalDevoluciones);
+    expect(despues.ingresosNetos).toBe(antes.ingresosNetos);
+    expect(despues.totalDevoluciones).toBe(antes.totalDevoluciones);
+  });
+
+  it('un ajuste que hunde los ingresos bajo las devoluciones DISPARA la guarda', () => {
+    // Hallazgo de la refutación adversarial: el mirror había replicado la mitad
+    // ARITMÉTICA de la regla 4175 pero no la DECLARATIVA. Medido antes de este
+    // arreglo: un ajuste que subía las devoluciones por encima de los ingresos
+    // ordinarios publicaba `ingresosNetos` NEGATIVO con `blocking = false`,
+    // cero motivos y cero discrepancias — el preprocesador bloqueaba ese mismo
+    // balance y el reparador lo dejaba pasar.
+    const balance = buildBalance();
+    // El fixture puede traer otros motivos de bloqueo; lo que importa es que
+    // NO haya todavía uno por devoluciones.
+    expect(
+      balance.primary.validation.reasons.some((r) => r.includes('Devoluciones 4175')),
+    ).toBe(false);
+
+    // Ventas ordinarias $200M; se suben las devoluciones a $210M.
+    const { balance: adjusted } = applyAdjustments(balance, [
+      mkAdjustment({
+        accountCode: '417505',
+        accountName: 'Devoluciones en ventas',
+        amount: 200_000_000,
+      }),
+    ]);
+    const snap = adjusted.primary;
+
+    expect(snap.controlTotals.ingresosNetos).toBeLessThan(0);
+    expect(snap.validation.blocking).toBe(true);
+    expect(
+      snap.validation.reasons.some((r) => r.includes('Devoluciones 4175')),
+    ).toBe(true);
+    expect(
+      snap.discrepancies.some((d) => d.location.includes('Devoluciones 4175')),
+    ).toBe(true);
+  });
+
+  it('un ajuste que SANEA la anomalía retira el bloqueo, no lo deja pegado', () => {
+    // La otra mitad: si la guarda no se reevalúa, el balance queda bloqueado
+    // para siempre aunque el contador corrija la causa.
+    const balance = buildBalance();
+    const { balance: roto } = applyAdjustments(balance, [
+      mkAdjustment({
+        accountCode: '417505',
+        accountName: 'Devoluciones en ventas',
+        amount: 200_000_000,
+      }),
+    ]);
+    expect(roto.primary.validation.blocking).toBe(true);
+
+    const { balance: sano } = applyAdjustments(roto, [
+      mkAdjustment({
+        id: 'adj-fix',
+        accountCode: '417505',
+        accountName: 'Devoluciones en ventas',
+        amount: -200_000_000,
+      }),
+    ]);
+
+    expect(sano.primary.controlTotals.ingresosNetos).toBe(190_000_000);
+    expect(
+      sano.primary.validation.reasons.some((r) => r.includes('Devoluciones 4175')),
+    ).toBe(false);
+    expect(
+      sano.primary.discrepancies.some((d) => d.location.includes('Devoluciones 4175')),
+    ).toBe(false);
+  });
+
   it('los cents recomputados son coherentes con los floats ajustados', () => {
     const balance = buildBalance();
     const { balance: adjusted } = applyAdjustments(balance, [mkAdjustment({})]);

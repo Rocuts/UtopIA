@@ -1,0 +1,9 @@
+codigo,nombre,nivel,transaccional,Saldo 2025
+110505,Caja general,Auxiliar,1,400000000
+220505,Proveedores nacionales,Auxiliar,1,-60000000
+310505,Capital suscrito y pagado,Auxiliar,1,-150000000
+360505,Utilidad o perdida del ejercicio,Auxiliar,1,-190000000
+410505,Comercio al por mayor y al por menor,Auxiliar,1,-500000000
+417505,Devoluciones en ventas,Auxiliar,1,50000000
+613550,Costo de venta de mercancias,Auxiliar,1,200000000
+510506,Sueldos de personal administrativo,Auxiliar,1,60000000

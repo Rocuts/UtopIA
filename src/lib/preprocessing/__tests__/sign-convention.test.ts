@@ -200,8 +200,17 @@ describe('parseTrialBalanceCSV — normalización automática', () => {
       Math.abs(s.virtualCloseAdjustment?.residualGapBeforeCents ?? 0) /
       Math.abs(s.controlTotals.activo);
 
-    expect(ratio(snapAntes)).toBeGreaterThan(2); // 210% del activo
+    // El "antes" medía 210% del activo hasta que `netIncome` pasó a derivarse de
+    // `ingresosNetos` en vez de Σ clase 4: sin normalizar, la clase 4 llega
+    // negativa y `netIncome` heredaba ese signo, inflando el residual de R8. La
+    // fórmula nueva toma magnitudes (|Σ ordinarias| − |Σ4175|), así que el caso
+    // sin normalizar ya no es tan catastrófico. Medido hoy: 93,5% del activo.
+    // Lo que este test guarda sigue intacto — sin normalización R8 tapa un
+    // agujero del orden del activo entero; con ella, es inmaterial.
+    expect(ratio(snapAntes)).toBeGreaterThan(0.5); // 93,5% del activo
     expect(ratio(snapDespues)).toBeLessThan(0.01); // 0,12% del activo
+    // Y la mejora sigue siendo de dos órdenes de magnitud.
+    expect(ratio(snapAntes) / ratio(snapDespues)).toBeGreaterThan(50);
   });
 
   it('no altera el fixture canónico, que ya venía en convención natural', () => {

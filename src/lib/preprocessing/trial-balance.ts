@@ -1367,7 +1367,49 @@ function buildSnapshotForPeriod(
   const totalExpenses = getClassTotal(5);
   const totalCosts = getClassTotal(6);
   const totalProduction = getClassTotal(7);
-  const netIncome = totalRevenue - totalExpenses - totalCosts - totalProduction;
+
+  // ---------------------------------------------------------------------------
+  // Devoluciones 4175 → ingresos netos. Se calcula AQUI, antes que `netIncome`,
+  // porque TODO el P&L tiene que colgar del neto y no de la Σ de la clase 4.
+  //
+  // La 4175 es correctora (naturaleza débito dentro de una clase de naturaleza
+  // crédito) y cada ERP la exporta distinto. Si llega con signo CONTRARIO al de
+  // los ingresos, la Σ clase 4 ya viene neta y volver a restarle las
+  // devoluciones es una DOBLE RESTA. Si llega con el MISMO signo (el export
+  // perdió el débito), la Σ clase 4 vale bruto + devoluciones, una magnitud sin
+  // significado contable. Tomar como base las cuentas ORDINARIAS resuelve los
+  // dos casos con una sola fórmula, sin ramificar por convención detectada
+  // — ramificar así se midió y da $3.082.953.943,81 sobre el balance testigo.
+  //
+  // Y la magnitud sale del TOTAL firmado, nunca cuenta por cuenta: el grupo 4175
+  // admite saldos de naturaleza contraria entre sí (en el balance real la
+  // 41750503 vale +$494.568,88 frente a dos saldos crédito), y sumar valores
+  // absolutos por cuenta los invierte — $989.137,76 de error extra.
+  //
+  // Fuente: spec v2 Parte 4.1 (ingresos netos = |Σ 41xx crédito| − |Σ 4175xx
+  // débito|), NIIF 15 §47, PUC Decreto 2649/93 grupo 4175.
+  // ---------------------------------------------------------------------------
+  const ZERO_BIG = BigInt(0);
+  const absBig = (v: bigint): bigint => (v < ZERO_BIG ? -v : v);
+  const clase4Leaves = leafRows.filter((r) => r.code.startsWith('4'));
+  const devolucionesAuxiliares = clase4Leaves.filter((r) => r.code.startsWith('4175'));
+  const ordinariasClase4 = clase4Leaves.filter((r) => !r.code.startsWith('4175'));
+  const sumFirmadaCents = (rows: typeof clase4Leaves): bigint =>
+    rows.reduce<bigint>((acc, r) => acc + toCents(r.balance), ZERO_BIG);
+
+  const ingresosBrutoCents = absBig(sumFirmadaCents(ordinariasClase4));
+  const totalDevolucionesCents = absBig(sumFirmadaCents(devolucionesAuxiliares));
+  const ingresosNetosCents = ingresosBrutoCents - totalDevolucionesCents;
+  const totalDevoluciones = Number(totalDevolucionesCents) / 100;
+  const ingresosNetos = Number(ingresosNetosCents) / 100;
+
+  // `ingresosNetos`, NO `totalRevenue`. Bajo convención de magnitudes la Σ de la
+  // clase vale bruto + devoluciones, y derivar de ahí infla la utilidad en
+  // exactamente 2 × devoluciones — sobre un ANCLA DURA que E14 certifica con
+  // tolerancia $0, hasta el punto de RECHAZAR la utilidad correcta si un humano
+  // la corrige a mano. Medido: ventas $1.000M + devoluciones $100M + gastos
+  // $650M publicaba $450.000.000 donde la verdad es $250.000.000.
+  const netIncome = ingresosNetos - totalExpenses - totalCosts - totalProduction;
 
   // -------------------------------------------------------------------------
   // 4.1. Patrimonio crudo — la "Lógica de Cierre Virtual" (R8 del Curator)
@@ -1420,7 +1462,10 @@ function buildSnapshotForPeriod(
     new Set(['54']),
   );
   const gastosTotales = totalExpenses + totalCosts + totalProduction;
-  const utilidadAntesImpuestos = totalRevenue - (gastosTotales - impuestoCausadoPeriodo);
+  // `ingresosNetos` por el mismo motivo que `netIncome`: la Σ de la clase 4 no
+  // es una base válida bajo convención de magnitudes, y la UAI alimenta la
+  // conciliación fiscal (Art. 26 E.T.).
+  const utilidadAntesImpuestos = ingresosNetos - (gastosTotales - impuestoCausadoPeriodo);
 
   // -------------------------------------------------------------------------
   // Saldo a favor del impuesto de renta (Pulido NIIF PYME Grupo 2).
@@ -1458,19 +1503,31 @@ function buildSnapshotForPeriod(
   // NIIF 15 §47: ingresos se presentan netos de devoluciones, descuentos
   // comerciales y rebajas. Decreto 2649/93 PUC grupo 4175.
   // -------------------------------------------------------------------------
-  const devolucionesAuxiliares = leafRows.filter((r) => r.code.startsWith('4175'));
-  const ZERO_BIG = BigInt(0);
-  const totalDevolucionesCents = devolucionesAuxiliares.reduce<bigint>(
-    (acc, r) => {
-      const cents = toCents(r.balance);
-      const absCents = cents < ZERO_BIG ? -cents : cents;
-      return acc + absCents;
-    },
-    ZERO_BIG,
-  );
-  const totalDevoluciones = Number(totalDevolucionesCents) / 100;
-  const ingresosBrutoAbs = Math.abs(totalRevenue);
-  const ingresosNetos = ingresosBrutoAbs - totalDevoluciones;
+  // `ingresosNetos`, `totalDevoluciones` y sus centavos se calculan arriba,
+  // junto a `netIncome`, porque todo el P&L cuelga de ellos. Aquí sólo queda la
+  // guarda, que necesita `validationReasons` (declarado más abajo que aquel
+  // bloque).
+
+  // Guarda NIA 240: la anomalía se DECLARA, no se maquilla. No se clampea a 0
+  // ni se invierte el signo — se publica el neto negativo y se bloquea la
+  // emisión, para que nadie firme un estado con un ingreso que no existe.
+  if (totalDevolucionesCents > ingresosBrutoCents) {
+    discrepancies.push({
+      location: `Devoluciones 4175 [${period}]`,
+      reported: Number(ingresosBrutoCents) / 100,
+      calculated: totalDevoluciones,
+      difference: ingresosNetos,
+      description:
+        `[${period}] Las Devoluciones 4175 ($${formatCOP(totalDevoluciones)}) superan los ingresos ` +
+        `ordinarios de Clase 4 ($${formatCOP(Number(ingresosBrutoCents) / 100)}), lo que arroja un ` +
+        `ingreso neto negativo de $${formatCOP(ingresosNetos)}. Revisar la clasificacion del grupo 4175.`,
+    });
+    validationReasons.push(
+      `[${period}] Devoluciones 4175 (${formatCOP(totalDevoluciones)}) mayores que los ingresos ` +
+        `ordinarios de Clase 4 (${formatCOP(Number(ingresosBrutoCents) / 100)}). ` +
+        `El ingreso neto resultante es negativo: ${formatCOP(ingresosNetos)}.`,
+    );
+  }
   // -------------------------------------------------------------------------
   // Wave 2.F4 — Sub-bloque P&L de soporte para KPIs.
   // EBIT = utilidadBruta − gastos operacionales (grupo 51 + 52).
@@ -1532,7 +1589,9 @@ function buildSnapshotForPeriod(
     efectivoCuenta11: toCents(efectivoCuenta11),
     saldoAFavorImpuesto: toCents(saldoAFavorImpuesto),
     totalDevoluciones: totalDevolucionesCents,
-    ingresosNetos: toCents(ingresosNetos),
+    // Directo desde el BigInt: `toCents(ingresosNetos)` volvía a pasar por
+    // `number` un valor que ya era exacto en centavos.
+    ingresosNetos: ingresosNetosCents,
   };
 
   const raw: ControlTotalsRaw = {

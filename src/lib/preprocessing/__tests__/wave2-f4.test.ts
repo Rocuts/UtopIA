@@ -138,13 +138,21 @@ describe('Wave 2.F4 — Fix #2 — inferPeriodoTipo', () => {
 // ---------------------------------------------------------------------------
 
 describe('Wave 2.F4 — Fix #1 — Devoluciones 4175 → ingresosNetos', () => {
-  it('CSV con 410505 (ventas $100M) + 417505 (devolución $10M positiva) → bruto $110M, netos $100M', () => {
-    // Spec v2.0 Parte 1.3: devoluciones 4175 entran como saldos POSITIVOS en
-    // Clase 4 (la convención del parser ya las suma al bruto). El detector
-    // las identifica + las RESTA del bruto para producir ingresosNetos.
-    //   totalRevenue (auxiliar sum) = 100M + 10M = 110M
-    //   totalDevoluciones = 10M
-    //   ingresosNetos = |110M| − 10M = 100M (= ventas reales sin retornos)
+  it('CSV con 410505 (ventas $100M) + 417505 (devolución $10M positiva) → bruto $100M, netos $90M', () => {
+    // Spec Parte 1.3 / NIIF 15 §47: ingresos netos = |Σ ordinarias Clase 4| −
+    // |Σ FIRMADA de las 4175|. Aquí la 4175 llega con la MISMA polaridad que
+    // las ventas (el export perdió el signo débito), así que:
+    //   Σ ordinarias = $100M  ← el BRUTO real
+    //   Σ 4175       = $10M
+    //   ingresosNetos = 100M − 10M = $90M
+    // Ojo con `ct.ingresos` ($110M): es Σ clase 4 = ventas + devoluciones, y
+    // bajo esta convención no es ni el bruto ni el neto. Anclarlo al P&L es el
+    // corolario pendiente documentado en docs/AUDITORIA_CALCULOS_2026-08.md.
+    //
+    // Este test AFIRMABA netos = $100M. Era falso: la fórmula restaba las
+    // devoluciones a |Σ clase 4| ($110M), que sólo por casualidad devuelve el
+    // bruto en esta convención — sobre un balance donde la 4175 llega con signo
+    // contrario la misma fórmula produce una DOBLE RESTA.
     const csv = [
       'codigo,nombre,nivel,saldo 2025',
       '4,Ingresos,Clase,110000000',
@@ -159,10 +167,10 @@ describe('Wave 2.F4 — Fix #1 — Devoluciones 4175 → ingresosNetos', () => {
     const ct = pre.primary.controlTotals;
 
     expect(ct.totalDevoluciones).toBe(10_000_000);
-    expect(ct.ingresosNetos).toBe(100_000_000);
+    expect(ct.ingresosNetos).toBe(90_000_000);
     // raw + cents poblados (cents = pesos × 100).
     expect(ct.cents?.totalDevoluciones).toBe(BigInt(1_000_000_000));
-    expect(ct.cents?.ingresosNetos).toBe(BigInt(10_000_000_000));
+    expect(ct.cents?.ingresosNetos).toBe(BigInt(9_000_000_000));
   });
 
   it('CSV sin devoluciones 4175 → totalDevoluciones = 0, ingresosNetos = |ingresos|', () => {
