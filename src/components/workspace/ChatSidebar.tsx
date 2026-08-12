@@ -75,7 +75,7 @@ import {
 } from '@/lib/storage/conversation-history';
 import { cn } from '@/lib/utils';
 import { consumeSSE } from '@/lib/sse/consume';
-import { resolveFinalAnswer } from '@/components/workspace/chat/utils';
+import { resolveFinalAnswer, uploadErrorText } from '@/components/workspace/chat/utils';
 import type { SuggestedRoute } from '@/lib/agents/types';
 import { uploadDocument } from '@/lib/upload/blob-client';
 import { SkeletonText } from '@/components/ui/SkeletonText';
@@ -1005,16 +1005,13 @@ export function ChatSidebar({ className }: ChatSidebarProps) {
             timestamp: new Date().toISOString(),
           },
         ]);
-      } catch {
+      } catch (err) {
         setMessages((prev) => [
           ...prev,
           {
             id: generateId(),
             role: 'assistant',
-            content:
-              language === 'es'
-                ? 'No pude procesar el archivo. Intente de nuevo.'
-                : 'Could not process the file. Please try again.',
+            content: uploadErrorText(err, file.name, language),
             timestamp: new Date().toISOString(),
             error: true,
           },
