@@ -170,7 +170,11 @@ const CODIGO_PREVIO_AL_FIX = `
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-n-1000',
 `;
 
-describe('polaridad de tokens n-*', () => {
+// Timeout propio: varios de estos casos recorren `src/` entero leyendo cada
+// archivo. Aislados tardan ~2 s, pero compitiendo por disco y CPU con el resto
+// de la suite pasan de los 10 s del `testTimeout` global y caen por tiempo, no
+// por una violación de polaridad — un rojo que no señala nada roto.
+describe('polaridad de tokens n-*', { timeout: 45_000 }, () => {
   it('el detector marca el código previo al fix (prueba del guard)', () => {
     expect(violaciones(CODIGO_PREVIO_AL_FIX, DARK_SOBRE_TOKEN_N).length).toBeGreaterThan(0);
     expect(violaciones(CODIGO_PREVIO_AL_FIX, TINTA_PROHIBIDA).length).toBeGreaterThan(0);
