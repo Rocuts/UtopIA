@@ -19,6 +19,16 @@
 // desde route handlers y desde tests sin arrastrar pg.Pool.
 // ---------------------------------------------------------------------------
 
+/**
+ * Los tres nombres que BetterAuth 1.6 resuelve por su cuenta:
+ * `options.secret || env.BETTER_AUTH_SECRET || env.AUTH_SECRET`, más
+ * `BETTER_AUTH_SECRETS` para la rotación. Si el guard mirara sólo el primero,
+ * un despliegue que pasa el secreto por cualquiera de los otros dos tenía login
+ * antes de este cambio y se quedaría sin él: BetterAuth no se montaría y todo
+ * inicio de sesión respondería 503.
+ */
+const SECRET_VARS = ['BETTER_AUTH_SECRET', 'AUTH_SECRET', 'BETTER_AUTH_SECRETS'] as const;
+
 export function isAuthConfigured(): boolean {
-  return Boolean(process.env.BETTER_AUTH_SECRET);
+  return SECRET_VARS.some((name) => Boolean(process.env[name]));
 }

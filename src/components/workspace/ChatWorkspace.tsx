@@ -39,6 +39,7 @@ import {
   extractLegalReferences,
   resolveAgentPresentation,
   resolveFinalAnswer,
+  uploadErrorText,
   type ChatErrorKind,
 } from './chat/utils';
 import type { PipelineVizState } from './chat/types';
@@ -610,9 +611,6 @@ export function ChatWorkspace({
         meta: 'upload-notice',
       }]);
     } catch (err) {
-      // `uploadDocument` propaga el motivo real del servidor. Mostrarlo en
-      // lugar de un consejo genérico que el usuario no puede accionar.
-      const reason = (err instanceof Error ? err.message : String(err)).trim();
       setUploadedDocs(prev => {
         const next = prev.filter(d => d.uploadedAt !== newDoc.uploadedAt);
         // Mantener el almacenamiento sincronizado tras el rollback.
@@ -621,13 +619,7 @@ export function ChatWorkspace({
       });
       setMessages(prev => [...prev, {
         id: generateId(), role: 'assistant',
-        content: reason
-          ? (language === 'es'
-            ? `No pude procesar **"${file.name}"**: ${reason}`
-            : `Could not process **"${file.name}"**: ${reason}`)
-          : (language === 'es'
-            ? `No pude procesar el archivo. Verifique el formato e intente de nuevo.`
-            : `Could not process the file. Please check the format and try again.`),
+        content: uploadErrorText(err, file.name, language),
         timestamp: new Date().toISOString(),
       }]);
     } finally {

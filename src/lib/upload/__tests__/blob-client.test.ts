@@ -20,7 +20,12 @@ vi.mock('@vercel/blob/client', () => ({
   upload: (...args: unknown[]) => uploadMock(...args),
 }));
 
-import { DIRECT_UPLOAD_MAX_BYTES, uploadDocument } from '../blob-client';
+import {
+  BlobUnavailableError,
+  DIRECT_UPLOAD_MAX_BYTES,
+  UploadFailedError,
+  uploadDocument,
+} from '../blob-client';
 
 /** File con `size` falseado — evita reservar megabytes reales en el test. */
 function fileOfSize(bytes: number, name = 'balance.csv'): File {
@@ -95,11 +100,32 @@ describe('uploadDocument — archivo pequeño (camino directo)', () => {
     expect(reported.at(-1)).toBe(100);
   });
 
-  it('propaga el error del servidor cuando /api/upload responde !ok', async () => {
+  it('guarda el motivo del servidor en `detail`, no en el mensaje visible', async () => {
+    // El mensaje de /api/upload puede venir de una librería de terceros o del
+    // proveedor de OCR (endpoint, motivo de facturación). Se conserva para la
+    // consola y el soporte, pero no se expone como texto de cara al usuario.
     fetchMock.mockResolvedValue(jsonResponse({ error: 'Unsupported file type.' }, 400));
 
-    await expect(uploadDocument(fileOfSize(1024), 'x.csv')).rejects.toThrow(
-      'Unsupported file type.',
+    const err = await uploadDocument(fileOfSize(1024), 'x.csv').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UploadFailedError);
+    const failed = err as UploadFailedError;
+    expect(failed.detail).toBe('Unsupported file type.');
+    expect(failed.status).toBe(400);
+    expect(failed.message).not.toContain('Unsupported file type.');
+  });
+
+  it('no resuelve a null cuando un 200 trae un cuerpo ilegible', async () => {
+    // Un proxy que trunca la respuesta, o una página de error servida con 200:
+    // devolver null haría reventar al llamador al leer `.preprocessed`.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    } as unknown as Response);
+
+    await expect(uploadDocument(fileOfSize(1024), 'x.csv')).rejects.toBeInstanceOf(
+      UploadFailedError,
     );
   });
 });
@@ -149,28 +175,49 @@ describe('uploadDocument — Blob no disponible', () => {
   const BLOB_ERROR =
     'Vercel Blob: No token found (falta configurar BLOB_READ_WRITE_TOKEN — provisione un Blob store en Vercel)';
 
-  it('reintenta por el camino directo si el archivo aún cabe en el body', async () => {
+  it('NO reintenta directo un archivo por encima del umbral con holgura', async () => {
     uploadMock.mockRejectedValue(new Error(BLOB_ERROR));
-    // 4.2 MB: por encima del umbral con holgura, por debajo del límite duro
-    // de 4.5 MB de la Function.
+    // 4.2 MB: cabe en el límite duro de 4.5 MB, pero no en el umbral con
+    // holgura. Empaquetado en multipart puede pasarse, y entonces la plataforma
+    // responde 413 sin cuerpo JSON: el usuario vería un error mudo en vez del
+    // mensaje accionable.
     const file = fileOfSize(Math.floor(4.2 * 1024 * 1024), 'balance.xlsx');
 
-    const result = await uploadDocument(file, 'balance.xlsx');
+    await expect(uploadDocument(file, 'balance.xlsx')).rejects.toBeInstanceOf(
+      BlobUnavailableError,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('un fallo del PASO 2 no reenvía el archivo: no se procesa dos veces', async () => {
+    // Si el reintento cubriera también el procesado, una respuesta perdida tras
+    // un OCR ya ejecutado volvería a subir el archivo: segundo OCR facturado y
+    // fragmentos duplicados en el índice.
+    uploadMock.mockResolvedValue({ url: 'https://x.blob.vercel-storage.com/a.pdf' });
+    fetchMock.mockRejectedValue(new Error('network gone'));
+
+    await expect(
+      uploadDocument(fileOfSize(30 * 1024 * 1024, 'a.pdf'), 'ctx'),
+    ).rejects.toThrow('network gone');
 
     expect(uploadMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][1]?.body).toBeInstanceOf(FormData);
-    expect(result).toEqual(SERVER_RESULT);
   });
 
-  it('lanza un error accionable que conserva la explicación del servidor', async () => {
+  it('lanza un error legible sin filtrar la configuración del despliegue', async () => {
     uploadMock.mockRejectedValue(new Error(BLOB_ERROR));
 
-    const promise = uploadDocument(fileOfSize(30 * 1024 * 1024, 'auxiliares.pdf'), 'ctx');
+    const err = await uploadDocument(
+      fileOfSize(30 * 1024 * 1024, 'auxiliares.pdf'),
+      'ctx',
+    ).catch((e: unknown) => e);
 
-    await expect(promise).rejects.toThrow(/auxiliares\.pdf/);
-    await expect(promise).rejects.toThrow(/Blob store en Vercel/);
-    await expect(promise).rejects.toThrow(/BLOB_READ_WRITE_TOKEN/);
+    expect(err).toBeInstanceOf(BlobUnavailableError);
+    const blobErr = err as BlobUnavailableError;
+    expect(blobErr.message).toMatch(/hasta 4 MB/);
+    expect(blobErr.message).not.toMatch(/BLOB_READ_WRITE_TOKEN/);
+    // El detalle sigue disponible para la consola y el soporte.
+    expect(blobErr.detail).toMatch(/BLOB_READ_WRITE_TOKEN/);
     // No se intenta el POST directo: garantizaría un 413 de plataforma.
     expect(fetchMock).not.toHaveBeenCalled();
   });

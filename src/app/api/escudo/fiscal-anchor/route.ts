@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
 
-import { getCurrentWorkspaceId, getOrCreateWorkspace } from '@/lib/db/workspace';
+import { getCurrentWorkspaceId } from '@/lib/db/workspace';
 import { getDb } from '@/lib/db/client';
 import { reports } from '@/lib/db/schema';
 import {
@@ -24,12 +24,11 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 //       pendientes/snoozed como AlertView[].
 //
 // Workspace (cookie utopia_workspace_id / sesión) — asimetría deliberada:
-//   POST (escritura) resuelve con `getOrCreateWorkspace()`, igual que el resto
-//     de endpoints de escritura workspace-aware (`/api/upload`,
-//     `/api/repair-session`, `/api/accounting/**`). Es el único momento en que
-//     hay datos que necesitan dueño ⇒ emitir la cookie acá no sorprende.
-//   GET (lectura) NO crea nada: sin workspace todavía no hay snapshot, así que
-//     devuelve el estado vacío con 200 (mismo criterio que
+//   POST (escritura) exige workspace ya existente y devuelve 401 si no lo hay.
+//     Ninguna de las dos operaciones lo CREA: en fase 1 `requireAuthSession()`
+//     es un no-op, así que un POST que creara el workspace sería una fábrica
+//     anónima de tenants y de filas `reports` con el cuerpo de cualquiera.
+//   GET (lectura) devuelve el estado vacío con 200 (mismo criterio que
 //     `/api/pyme/uploads/[uploadId]`, que responde "no existe" en vez de 401).
 //     Antes devolvía 401 `no_workspace`, lo que en la primera carga limpia de
 //     /workspace/escudo pintaba un error de red sin que hubiera nada roto.
@@ -64,15 +63,14 @@ export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
 
-  let workspaceId: string;
-  try {
-    workspaceId = (await getOrCreateWorkspace()).id;
-  } catch (error) {
-    console.error('[escudo/fiscal-anchor.POST] workspace', error);
-    return NextResponse.json(
-      { error: 'failed_to_resolve_workspace' },
-      { status: 500 },
-    );
+  // Resuelve, NUNCA crea. En fase 1 `requireAuthSession()` es un no-op, así que
+  // crear el workspace aquí convertiría este POST en una fábrica anónima de
+  // workspaces y de filas `reports` con el cuerpo que mande quien sea. El
+  // workspace lo emite el arranque de la sesión; si todavía no existe, esto es
+  // una escritura sin dueño y se rechaza.
+  const workspaceId = await getCurrentWorkspaceId();
+  if (!workspaceId) {
+    return NextResponse.json({ error: 'no_workspace' }, { status: 401 });
   }
 
   const contentLength = req.headers.get('content-length');

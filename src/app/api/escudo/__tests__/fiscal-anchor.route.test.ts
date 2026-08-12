@@ -96,7 +96,10 @@ describe('GET /api/escudo/fiscal-anchor sin workspace (primera carga limpia)', (
 });
 
 describe('POST /api/escudo/fiscal-anchor sin workspace', () => {
-  it('resuelve/crea el workspace y persiste en vez de responder 401', async () => {
+  // En fase 1 `requireAuthSession()` es un no-op. Si el POST creara el
+  // workspace, cualquiera sin cookie podría fabricar tenants y filas `reports`
+  // con el cuerpo que quisiera. Una escritura sin dueño se rechaza.
+  it('responde 401 y no escribe nada', async () => {
     const res = await POST(
       new Request(URL_BASE, {
         method: 'POST',
@@ -113,11 +116,27 @@ describe('POST /api/escudo/fiscal-anchor sin workspace', () => {
       }),
     );
 
-    expect(res.status).toBe(200);
-    expect(mockGetOrCreateWorkspace).toHaveBeenCalledTimes(1);
-    await expect(res.json()).resolves.toMatchObject({
-      ok: true,
-      reportId: 'report-1',
-    });
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ error: 'no_workspace' });
+  });
+
+  it('no crea workspace: una escritura sin dueño no emite la cookie de tenant', async () => {
+    await POST(
+      new Request(URL_BASE, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          fiscalSnapshot: {
+            anchor: { alertas: [] },
+            riskScore: { score: 10 },
+            period: '2025',
+            computedAt: '2026-08-10T00:00:00.000Z',
+          },
+          company: { name: 'Empresa Test SAS', nit: '900123456-1' },
+        }),
+      }),
+    );
+
+    expect(mockGetOrCreateWorkspace).not.toHaveBeenCalled();
   });
 });

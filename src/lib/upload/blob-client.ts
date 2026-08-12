@@ -45,17 +45,15 @@ export interface UploadDocumentResult {
 }
 
 /**
- * Límite duro documentado del body de una Function de Vercel: 4.5 MB. Por
- * encima, la plataforma corta la request con 413 antes de invocar el handler.
- */
-const VERCEL_FUNCTION_BODY_LIMIT_BYTES = Math.floor(4.5 * 1024 * 1024);
-
-/**
- * Umbral de enrutamiento: 4 MB. Deja ~0.5 MB de holgura sobre el límite duro
- * para el overhead del sobre multipart (boundaries, headers de parte, el campo
- * `context`) y para el redondeo entre `file.size` y los bytes realmente
- * transmitidos. Un archivo de exactamente 4.4 MB podría pasarse de 4.5 MB una
- * vez empaquetado; con 4 MB eso no ocurre.
+ * Umbral de enrutamiento: 4 MB.
+ *
+ * El límite duro del body de una Function de Vercel son 4.5 MB, y por encima la
+ * plataforma corta con 413 antes de invocar el handler — sin cuerpo JSON, así
+ * que el usuario vería un error mudo. Los 0.5 MB restantes son holgura para el
+ * sobre multipart (boundaries, headers de parte, el campo `context`) y para el
+ * redondeo entre `file.size` y los bytes realmente transmitidos: un archivo de
+ * 4.4 MB puede pasarse de 4.5 MB una vez empaquetado. Este umbral es el único
+ * que decide el camino, también en el reintento tras un fallo de Blob.
  */
 export const DIRECT_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
 
@@ -77,19 +75,28 @@ export async function uploadDocument(
     return uploadDirect(file, context, onProgress);
   }
 
+  // El reintento SOLO cubre el paso 1 (subir a Blob). Si envolviera también el
+  // paso 2, un fallo después de que /api/upload ya procesó el documento —una
+  // red que se cae al recibir la respuesta— reenviaría el archivo entero: OCR
+  // facturado dos veces y los mismos fragmentos indexados por duplicado en el
+  // store vectorial, de modo que toda búsqueda posterior lo recuperaría dos
+  // veces. Un fallo del paso 2 debe propagarse tal cual.
+  let blobUrl: string;
   try {
-    return await uploadViaBlob(file, context, onProgress);
+    blobUrl = await putOnBlob(file, onProgress);
   } catch (error) {
-    // Blob no está disponible (típicamente falta BLOB_READ_WRITE_TOKEN y
-    // /api/upload/blob-token responde 400). Si el archivo aún cabe en el body
-    // de la Function reintentamos por el camino directo: aquí ya renunciamos a
-    // la holgura del umbral porque la alternativa es un fallo seguro — un 413
-    // improbable es mejor que no intentarlo.
-    if (file.size <= VERCEL_FUNCTION_BODY_LIMIT_BYTES) {
+    // Blob no disponible (típicamente falta BLOB_READ_WRITE_TOKEN y
+    // /api/upload/blob-token responde 400). Se reintenta directo sólo si el
+    // archivo cabe con la MISMA holgura que usa el enrutado normal: forzar el
+    // límite duro cambiaría un mensaje accionable por un 413 mudo de la
+    // plataforma, que ni siquiera llega al handler.
+    if (file.size <= DIRECT_UPLOAD_MAX_BYTES) {
       return uploadDirect(file, context, onProgress);
     }
-    throw new Error(blobUnavailableMessage(file, error));
+    throw new BlobUnavailableError(file, error);
   }
+
+  return processBlob(blobUrl, context, file.name);
 }
 
 /**
@@ -122,31 +129,35 @@ async function uploadDirect(
   return result;
 }
 
-/** Camino Blob en 2 pasos — para archivos que no caben en el body. */
-async function uploadViaBlob(
-  file: File,
-  context: string,
-  onProgress?: (pct: number) => void,
-): Promise<UploadDocumentResult> {
-  // 1. Subida directa a Blob — el token lo emite /api/upload/blob-token.
-  //    `multipart: true` parte el archivo, sube las partes en paralelo y
-  //    reintenta las que fallen — crítico para archivos grandes (hasta 100 MB)
-  //    en conexiones inestables. Sin él, una subida de 100 MB es un único
-  //    PUT sin reintentos. Ref: docs Vercel Blob `upload()`.
+/**
+ * Paso 1 del camino Blob — sube el archivo y devuelve su URL.
+ *
+ * `multipart: true` parte el archivo, sube las partes en paralelo y reintenta
+ * las que fallen — crítico para archivos grandes (hasta 100 MB) en conexiones
+ * inestables. Sin él, una subida de 100 MB es un único PUT sin reintentos.
+ * Ref: docs Vercel Blob `upload()`.
+ */
+async function putOnBlob(file: File, onProgress?: (pct: number) => void): Promise<string> {
   const blob = await upload(file.name, file, {
     access: 'public',
     handleUploadUrl: '/api/upload/blob-token',
     multipart: true,
     onUploadProgress: (e) => onProgress?.(Math.round(e.percentage)),
   });
+  return blob.url;
+}
 
-  // 2. Procesamiento por URL — body JSON, no multipart.
+/** Paso 2 del camino Blob — procesamiento por URL, body JSON en vez de multipart. */
+async function processBlob(
+  blobUrl: string,
+  context: string,
+  filename: string,
+): Promise<UploadDocumentResult> {
   const res = await fetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ blobUrl: blob.url, context, filename: file.name }),
+    body: JSON.stringify({ blobUrl, context, filename }),
   });
-
   return readUploadResponse(res);
 }
 
@@ -163,10 +174,13 @@ async function readUploadResponse(res: Response): Promise<UploadDocumentResult> 
   }
 
   if (!res.ok) {
-    throw new Error(
-      extractErrorMessage(payload) ??
-        `No se pudo procesar el documento (HTTP ${res.status}).`,
-    );
+    throw new UploadFailedError(extractErrorMessage(payload), res.status);
+  }
+  // Un 200 con cuerpo ilegible (buffering de un proxy, página de error servida
+  // con 200) dejaría `payload` en null y el llamador reventaría al leer
+  // `.preprocessed` de null. Mejor un error de subida que un TypeError.
+  if (!payload || typeof payload !== 'object') {
+    throw new UploadFailedError(null, res.status);
   }
   return payload as UploadDocumentResult;
 }
@@ -180,18 +194,48 @@ function extractErrorMessage(payload: unknown): string | null {
 }
 
 /**
- * Mensaje accionable para un usuario no técnico cuando Blob falla y el archivo
- * es demasiado grande para el camino directo. Conserva la explicación del
- * servidor al final: es la que le dice al administrador qué provisionar.
+ * Errores de subida con la explicación del servidor SEPARADA del texto que ve
+ * el usuario.
+ *
+ * `/api/upload` propaga mensajes de terceros tal cual —pdf-parse, exceljs,
+ * mammoth, y el error del proveedor en la lectura OCR, que puede incluir el
+ * endpoint y el motivo de facturación—. Volcarlos en la burbuja del chat
+ * expone tripas del despliegue a un usuario final. Así que el motivo crudo
+ * viaja en `detail` (para la consola y el soporte) y `message` queda como
+ * texto neutro; la UI decide qué enseñar.
  */
-function blobUnavailableMessage(file: File, error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-  const sizeMb = (file.size / (1024 * 1024)).toFixed(1).replace('.', ',');
-  return (
-    `No pudimos subir «${file.name}» (${sizeMb} MB). Los archivos de más de 4 MB ` +
-    'necesitan un almacenamiento Blob que hoy no está disponible. Vuelve a ' +
-    'intentarlo con un archivo más liviano (por ejemplo, exporta el balance a ' +
-    'CSV o Excel en vez de PDF escaneado) o pide a tu administrador que ' +
-    `provisione un Blob store en Vercel. Detalle técnico: ${detail}`
-  );
+export class UploadFailedError extends Error {
+  readonly detail: string | null;
+  readonly status: number;
+
+  constructor(detail: string | null, status: number) {
+    super('No se pudo procesar el documento.');
+    this.name = 'UploadFailedError';
+    this.detail = detail;
+    this.status = status;
+  }
+}
+
+/**
+ * El almacenamiento Blob no está disponible y el archivo no cabe por el camino
+ * directo. El usuario necesita saber qué hacer (mandar algo más liviano); el
+ * nombre de la variable de entorno que falta es asunto de quien opera el
+ * despliegue, así que va en `detail`, no en el mensaje.
+ */
+export class BlobUnavailableError extends Error {
+  readonly detail: string;
+  readonly sizeMb: number;
+
+  constructor(file: File, cause: unknown) {
+    const sizeMb = file.size / (1024 * 1024);
+    super(
+      `El archivo pesa ${sizeMb.toFixed(1)} MB y ahora mismo sólo podemos ` +
+        'procesar archivos de hasta 4 MB. Vuelve a intentarlo con una versión ' +
+        'más liviana — por ejemplo, exporta el balance a CSV o Excel en vez de ' +
+        'un PDF escaneado.',
+    );
+    this.name = 'BlobUnavailableError';
+    this.sizeMb = sizeMb;
+    this.detail = cause instanceof Error ? cause.message : String(cause);
+  }
 }
