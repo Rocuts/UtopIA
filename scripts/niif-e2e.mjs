@@ -54,11 +54,32 @@ await page.waitForTimeout(2500);
 await shot('01-wizard');
 
 console.log(`3) Subiendo ${FIXTURE}`);
-const input = page.locator('input[type="file"]').first();
-await input.setInputFiles(FIXTURE, { timeout: 20000 });
+// El input del ASISTENTE, no el clip del chat: la página tiene varios
+// input[type=file] y el primero es el de la barra lateral, que sólo adjunta el
+// documento a la conversación y deja el wizard sin balance.
+const dialog = page.locator('[role="dialog"]').first();
+const scope = (await dialog.count().catch(() => 0)) ? dialog : page;
+const inputs = scope.locator('input[type="file"]');
+console.log(`   inputs de archivo en el asistente: ${await inputs.count()}`);
+await inputs.first().setInputFiles(FIXTURE, { timeout: 20000 });
 await page.waitForTimeout(6000);
 await shot('02-subido');
 console.log('   texto:', (await seen()).slice(0, 260));
+
+// Paso 2 «Revisar» pide los datos que el balance no trae (razón social, NIT).
+// Sin ellos «Siguiente» queda deshabilitado y el pipeline no arranca nunca.
+const REQUIRED = [
+  [/raz[oó]n social/i, 'Comercializadora Diamante S.A.S.'],
+  [/^nit/i, '901456789-3'],
+];
+for (const [label, value] of REQUIRED) {
+  const field = page.getByLabel(label).first();
+  if (await field.count().catch(() => 0)) {
+    await field.fill(value).catch(() => {});
+    console.log(`   campo «${label}» = ${value}`);
+  }
+}
+await page.waitForTimeout(1200);
 
 // Avanza por los pasos que queden habilitados.
 for (let step = 0; step < 4; step++) {
@@ -85,7 +106,7 @@ while ((Date.now() - t0) / 1000 < WAIT) {
   if (/error|falló|fallo|no se pudo|intente/i.test(txt) && !/sin errores/i.test(txt)) {
     console.log(`   [${Math.round((Date.now() - t0) / 1000)}s] posible error en pantalla`);
   }
-  if (/descargar|vista previa lista|informe listo|completado/i.test(txt)) { console.log('   ¡Informe terminado!'); break; }
+  if (/descargar informe|vista previa lista|informe listo|reporte listo|completado con éxito/i.test(txt)) { console.log('   ¡Informe terminado!'); break; }
   await page.waitForTimeout(5000);
 }
 await shot('04-final');
