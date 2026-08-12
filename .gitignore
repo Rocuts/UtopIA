@@ -67,3 +67,14 @@ Documentos de orientacion/
 # Material de auditoría de seguridad — NUNCA publicar en un repo público:
 # exploit paths y hallazgos aún abiertos.
 /.security-private/
+
+# Artefactos de auditoría e inspección local (capturas, PDFs de comprobación,
+# logs de navegador). Se regeneran con scripts/audit-*.mjs; no van al repo.
+/docs/audit-2026-08-10/capturas/
+/docs/audit-2026-08-10/niif-probe/
+/pdf-check*.png
+/pdf-p*.png
+/dev.log
+/.next-dev.log
+/.playwright-mcp/
+/__wa-prompts-tmp__/

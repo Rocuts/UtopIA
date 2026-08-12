@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
 
-import { getCurrentWorkspaceId } from '@/lib/db/workspace';
+import { getCurrentWorkspaceId, getOrCreateWorkspace } from '@/lib/db/workspace';
 import { getDb } from '@/lib/db/client';
 import { reports } from '@/lib/db/schema';
 import {
@@ -23,7 +23,16 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 // GET:  devuelve el último snapshot del workspace + las alertas Escudo
 //       pendientes/snoozed como AlertView[].
 //
-// Sin workspace (cookie utopia_workspace_id ausente o inválida) → 401.
+// Workspace (cookie utopia_workspace_id / sesión) — asimetría deliberada:
+//   POST (escritura) resuelve con `getOrCreateWorkspace()`, igual que el resto
+//     de endpoints de escritura workspace-aware (`/api/upload`,
+//     `/api/repair-session`, `/api/accounting/**`). Es el único momento en que
+//     hay datos que necesitan dueño ⇒ emitir la cookie acá no sorprende.
+//   GET (lectura) NO crea nada: sin workspace todavía no hay snapshot, así que
+//     devuelve el estado vacío con 200 (mismo criterio que
+//     `/api/pyme/uploads/[uploadId]`, que responde "no existe" en vez de 401).
+//     Antes devolvía 401 `no_workspace`, lo que en la primera carga limpia de
+//     /workspace/escudo pintaba un error de red sin que hubiera nada roto.
 // Contrato: docs/wave-notes/escudo-autowire-contract.md §4.3.
 // ---------------------------------------------------------------------------
 
@@ -55,9 +64,15 @@ export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
 
-  const workspaceId = await getCurrentWorkspaceId();
-  if (!workspaceId) {
-    return NextResponse.json({ error: 'no_workspace' }, { status: 401 });
+  let workspaceId: string;
+  try {
+    workspaceId = (await getOrCreateWorkspace()).id;
+  } catch (error) {
+    console.error('[escudo/fiscal-anchor.POST] workspace', error);
+    return NextResponse.json(
+      { error: 'failed_to_resolve_workspace' },
+      { status: 500 },
+    );
   }
 
   const contentLength = req.headers.get('content-length');
@@ -192,9 +207,17 @@ export async function GET(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
 
+  // Lectura pura: si aún no hay workspace (primera visita, la cookie la emite
+  // el primer endpoint de escritura) tampoco hay snapshot que devolver ⇒
+  // estado vacío, no error. `useAncoraView` ya pinta el placeholder con esto.
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
-    return NextResponse.json({ error: 'no_workspace' }, { status: 401 });
+    return NextResponse.json({
+      hasData: false,
+      fiscalSnapshot: null,
+      ancora: null,
+      alertas: [],
+    });
   }
 
   const period = new URL(req.url).searchParams.get('period');
