@@ -500,6 +500,19 @@ export interface L3Context {
    * L3 verifica que contenga las frases y citas normativas obligatorias.
    */
   markdownBlock: string;
+  /**
+   * Desagregación del 1355/1805 del balance, en centavos. Cuando viene, L3.7
+   * ancla F03 al centavo: F03 = Σ(1355+1805) − ReteIVA(135517) − ReteICA(135518).
+   * Ausente ⇒ el check se declara no aplicable (no se inventa un veredicto).
+   */
+  creditoRenta?: {
+    /** Σ de TODAS las hojas 1355 + 1805, sin excluir nada. */
+    total1355y1805Cents: number;
+    /** Σ(135517) — IVA retenido. */
+    reteIva135517Cents: number;
+    /** Σ(135518) — ICA retenido / anticipo de ICA. */
+    reteIca135518Cents: number;
+  };
 }
 
 /**
@@ -519,7 +532,49 @@ export function validateFiscalAnchorL3(
 
   const f01 = parseCents(block.f01);
   const f02 = parseCents(block.f02);
+  const f03 = parseCents(block.f03);
   const f04 = parseCents(block.f04);
+
+  // -------------------------------------------------------------------
+  // L3.7 — F03 sólo con crédito imputable a RENTA (Art. 373 E.T.)
+  //
+  // Auditoría 2026-08, superficie 2: el extractor sumaba a F03 el ReteIVA
+  // (135517) y el ReteICA (135518). El Art. 484-1 E.T. manda acreditar el
+  // ReteIVA en la DECLARACIÓN DE IVA y el ICA retenido se acredita en la
+  // declaración municipal; ninguno de los dos se imputa al impuesto de renta,
+  // que es lo que el Art. 373 E.T. permite para lo retenido a título de renta.
+  // Inflarlo baja el «neto a pagar» F04 y empuja a subdeclarar: Art. 647 E.T.
+  // (sanción 100% del mayor impuesto) y, si media devolución, Art. 670 E.T.
+  //
+  // Tolerancia CERO: es un ancla, no una estimación.
+  // -------------------------------------------------------------------
+  {
+    const cr = ctx.creditoRenta;
+    if (!cr) {
+      checks.push({
+        name: 'L3.7_f03_solo_credito_renta',
+        passed: true,
+        severity: 'error',
+        norma: 'Art. 373 E.T. — imputación de lo retenido a título de renta',
+        detail:
+          'Sin desagregación de 1355/1805 en el contexto — el ancla de F03 no se puede evaluar. Provea `creditoRenta` para activarla.',
+      });
+    } else {
+      const esperado = cr.total1355y1805Cents - cr.reteIva135517Cents - cr.reteIca135518Cents;
+      const diff = Math.abs(f03 - esperado);
+      const ok = diff === 0;
+      const noRenta = cr.reteIva135517Cents + cr.reteIca135518Cents;
+      checks.push({
+        name: 'L3.7_f03_solo_credito_renta',
+        passed: ok,
+        severity: 'error',
+        norma: 'Arts. 373 y 484-1 E.T. — ReteIVA y ReteICA no acreditan renta',
+        detail: ok
+          ? `F03 ${formatCentsCop(f03)} = Σ(1355+1805) ${formatCentsCop(cr.total1355y1805Cents)} − ReteIVA ${formatCentsCop(cr.reteIva135517Cents)} − ReteICA ${formatCentsCop(cr.reteIca135518Cents)}. Defensa: sólo se imputa a renta lo retenido a título de renta (Art. 373 E.T.).`
+          : `F03 ${formatCentsCop(f03)} ≠ ${formatCentsCop(esperado)} (Σ 1355+1805 menos ReteIVA y ReteICA). Diferencia ${formatCentsCop(diff)}; crédito ajeno a renta detectado en el balance: ${formatCentsCop(noRenta)}. El ReteIVA se acredita en la declaración de IVA (Art. 484-1 E.T.) y el ICA retenido en la declaración municipal; acreditarlos en renta configura inexactitud (Art. 647 E.T.) y, si origina devolución, sanción del Art. 670 E.T.`,
+      });
+    }
+  }
 
   // -------------------------------------------------------------------
   // L3.1 — Sin provisión renta (Art. 647 E.T. + NIIF para PYMES §29)

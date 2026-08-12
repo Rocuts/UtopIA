@@ -36,6 +36,11 @@ import {
 } from './niif-colombia-knowledge';
 import { buildResilienceSection0 } from './resilience-section0';
 import { buildPresentationV3, type PresentationV3Data } from './presentation-v3';
+import {
+  buildDeterministicCashFlow,
+  type DeterministicCashFlow,
+} from '../contracts/deterministic-breakdown';
+import { formatCopFromCents } from '../contracts/money';
 
 /**
  * Contexto Élite consumido por el Agente 1 desde el orchestrator. Optional
@@ -301,6 +306,12 @@ interface SharedPromptContext {
   efeVarCxC: number | undefined;
   efeVarInv: number | undefined;
   efeVarCxP: number | undefined;
+  /**
+   * EFE determinista completo (renglones + subtotales + cierre) construido
+   * desde los snapshots finales. `null` sin periodo comparativo: sin saldo de
+   * apertura no hay variación que medir y el EFE no es calculable (NIC 7 ¶1).
+   */
+  deterministicCashFlow: DeterministicCashFlow | null;
   // Corrección v2.4 — Saldo INICIAL de Cta.3605 (= utilidad del ejercicio del
   // periodo comparativo, que entra como utilidad acumulada en el patrimonio
   // de apertura del periodo actual). Si > $0 material, debe traviajar como
@@ -413,6 +424,19 @@ function buildSharedContext(
   const efeVarInv = efeOp?.varInventarios;
   const efeVarCxP = efeOp?.varCuentasPorPagar;
 
+  // EFE determinista — el estado completo, renglón a renglón, en centavos.
+  // Reemplaza al EFE del curator R2 como autoridad del Pass-2: R2 fabricaba
+  // una línea de "dividendos estimados" a partir de las cuentas VIRTUALES que
+  // el propio curator R8 inyecta (medido: $1.570.997.737,30 = 64,9% del flujo
+  // de operación, contra un balance donde la cuenta 2360 no existe), y sus
+  // deltas se calculan a mitad del curator, antes de las reclasificaciones R1
+  // (medido: $13.714.221,38 de diferencia en el grupo 14). El determinista se
+  // construye sobre los snapshots FINALES —los mismos que publican el Balance—
+  // y cierra contra el Δ PUC 11 con brecha $0.
+  const deterministicCashFlow = preprocessed?.primary
+    ? buildDeterministicCashFlow(preprocessed.primary, preprocessed.comparative ?? undefined)
+    : null;
+
   // Corrección v2.4 — utilidad del ejercicio del periodo comparativo,
   // que para el periodo ACTUAL representa el saldo INICIAL de Cta.3605
   // (utilidad acumulada arrastrada en el patrimonio de apertura).
@@ -456,6 +480,7 @@ function buildSharedContext(
     efeVarCxC,
     efeVarInv,
     efeVarCxP,
+    deterministicCashFlow,
     openingUtilidadEjercicio3605,
     fmtCop,
     company,
@@ -598,41 +623,104 @@ Saldo a favor (PUC 1355/1805): $${ctx.fmtCop(ctx.saldoAFavorCents!)} COP. Presen
 }
 
 /**
- * Bloque Regla R2 (EFE Indirecto) — valores autoritativos EFE indirecto
- * (curator R2). EXCLUSIVO de Pass-2 (Pass-1 no produce EFE; Pass-3 lo recibe
- * como anchor).
+ * Bloque "EFE VINCULANTE" — el Estado de Flujos de Efectivo determinista,
+ * renglón a renglón, en centavos. EXCLUSIVO de Pass-2 (Pass-1 no produce EFE;
+ * Pass-3 lo recibe como anchor).
+ *
+ * Por qué el bloque imprime el estado COMPLETO y no tres deltas: la auditoría
+ * de cálculos midió que, con sólo ΔCxC/ΔInv/ΔCxP en el prompt, el modelo
+ * entregó una sección de operación cuyos 8 renglones sumaban $834.754.377,59
+ * bajo un subtotal impreso de $2.421.190.071,93, y una sección de financiación
+ * con CERO renglones bajo ($1.570.997.737,30). Copiar un estado ya cuadrado es
+ * una tarea que el modelo hace bien; reconstruirlo desde deltas sueltos, no.
+ *
+ * El bloque además DEROGA explícitamente la línea "Dividendos estimados" del
+ * bloque TOTALES VINCULANTES del orquestador (curator R2), porque esa cifra
+ * sale de cuentas virtuales `3605VC`/`3710VC` que el propio curator inyecta y
+ * no de una distribución real. Mientras esa línea siga imprimiéndose aguas
+ * arriba, la derogación tiene que estar escrita aquí.
  */
 function renderEfeAuthoritativeBlock(ctx: SharedPromptContext): string {
-  const hasOpening3605 =
-    typeof ctx.openingUtilidadEjercicio3605 === 'number' &&
-    Math.abs(ctx.openingUtilidadEjercicio3605) > 0;
-  const hasAny =
-    typeof ctx.efeVarCxC === 'number' ||
-    typeof ctx.efeVarInv === 'number' ||
-    typeof ctx.efeVarCxP === 'number' ||
-    hasOpening3605;
-  if (!hasAny) return '';
-  const lines: string[] = [];
-  if (typeof ctx.efeVarCxC === 'number') {
-    lines.push(`- ΔCxC = ${ctx.efeVarCxC.toLocaleString('es-CO', { maximumFractionDigits: 2 })} (signo aplicado).`);
+  const efe = ctx.deterministicCashFlow;
+
+  // Sin EFE determinista (falta el comparativo) el estado NO es calculable por
+  // el método indirecto. Se dice eso — no se rellena con estimaciones.
+  if (!efe) {
+    return `## EFE — no calculable por método indirecto
+No hay periodo comparativo, así que no hay saldo de apertura contra el cual medir variaciones (NIC 7 ¶1). NO construyas un EFE con saldos de apertura asumidos en $0 ni con partidas estimadas: emite \`cashFlow.degeneracyFlag='indirect_method_unreliable'\` y la limitación al alcance en methodNote (NIC 7 ¶18 + NIA 705 ¶7). Si el bloque TOTALES VINCULANTES trae una línea "Dividendos estimados", IGNÓRALA: está derogada por este bloque.`;
   }
-  if (typeof ctx.efeVarInv === 'number') {
-    lines.push(`- ΔInventarios = ${ctx.efeVarInv.toLocaleString('es-CO', { maximumFractionDigits: 2 })} (signo aplicado).`);
-  }
-  if (typeof ctx.efeVarCxP === 'number') {
-    lines.push(`- ΔCxP = ${ctx.efeVarCxP.toLocaleString('es-CO', { maximumFractionDigits: 2 })} (signo aplicado).`);
-  }
-  // Corrección v2.4 — Saldo inicial Cta.3605 (= utilidad de periodos
-  // anteriores en el patrimonio de apertura). Material >0 → ajuste no-cash
-  // en operating con signo NEGATIVO.
-  if (hasOpening3605) {
-    const opening = ctx.openingUtilidadEjercicio3605!;
-    lines.push(
-      `- Saldo INICIAL Cta.3605 (utilidad de periodos anteriores en patrimonio de apertura) = $${ctx.fmtCop(opening)} COP — incluir como ajuste NO-CASH NEGATIVO en operating (NIC 7 §18(b) / NIIF for SMEs §7.7-7.8). NO va en financiación.`,
+
+  const sectionTitle: Record<string, string> = {
+    operating: 'Actividades de Operación',
+    investing: 'Actividades de Inversión',
+    financing: 'Actividades de Financiación',
+  };
+
+  const body: string[] = [];
+  for (const section of efe.sections) {
+    body.push(`### ${sectionTitle[section.section]} (\`${section.section}\`)`);
+    if (section.rows.length === 0) {
+      body.push(
+        `- SIN RENGLONES. netFlow = 0 (MoneyCop "0"). La sección va vacía y su subtotal es CERO — no la rellenes.`,
+      );
+    } else {
+      for (const row of section.rows) {
+        body.push(
+          `- [PUC ${row.account}] ${row.label} = ${formatCopFromCents(row.cents)} → MoneyCop "${row.cents.toString()}"`,
+        );
+      }
+    }
+    body.push(
+      `- SUBTOTAL netFlow = ${formatCopFromCents(section.netFlowCents)} → MoneyCop "${section.netFlowCents.toString()}" (= suma exacta de los ${section.rows.length} renglones de arriba).`,
     );
   }
-  return `## Regla R2 (EFE Indirecto) — Valores autoritativos curator R2
-${lines.join('\n')}`;
+
+  const dividendLine = efe.dividendEvidence.found
+    ? `- Distribución a socios: hay evidencia en el balance (${efe.dividendEvidence.accounts.join(', ')}). El flujo de caja a socios ya está incluido arriba como ${formatCopFromCents(efe.dividendEvidence.cashFlowCents)}; NO lo dupliques ni lo re-estimes.`
+    : `- Distribución a socios: NO hay evidencia en el balance — la cuenta 2360 (Dividendos o participaciones por pagar, Decreto 2650/1993) no registra movimiento y no hay dividendos decretados en acciones (grupo 35). Por lo tanto NO existe ninguna línea de dividendos en este EFE, ni "estimados", ni "presuntos", ni "inferidos". Si el bloque TOTALES VINCULANTES trae "Dividendos estimados", esa cifra está DEROGADA: proviene de las cuentas virtuales 3605VC/3710VC que inyecta el curator, no de una distribución (NIC 7 ¶43).`;
+
+  const gapLine =
+    efe.reconciliationGapCents === BigInt(0)
+      ? `- Brecha de reconciliación: $0,00. El EFE cierra exacto; no hay nada que ajustar.`
+      : `- Brecha de reconciliación: ${formatCopFromCents(efe.reconciliationGapCents)}. NO la absorbas moviendo capital de trabajo ni inventando una línea de financiación: decláralarla en methodNote como limitación al alcance (NIC 7 ¶18 + NIA 705 ¶7) y emite \`degeneracyFlag='indirect_method_unreliable'\`.`;
+
+  const unclassified =
+    efe.unclassifiedGroups.length > 0
+      ? `\n- Grupos PUC sin clasificación NIIF explícita, presentados en su sección por defecto: ${efe.unclassifiedGroups.join(', ')}. Menciónalos en methodNote.`
+      : '';
+
+  return `## EFE VINCULANTE (determinista, ${efe.comparativePeriod} → ${efe.primaryPeriod})
+Este es el Estado de Flujos de Efectivo COMPLETO, calculado desde el balance de prueba. Cada renglón es la variación de un grupo PUC real; la suma de los renglones ES el subtotal de su sección, y la suma de las tres secciones ES la variación observada del PUC 11. Cópialo: la aritmética ya está hecha y es vinculante. Tu aporte es la etiqueta NIIF, el orden de presentación y la narrativa de \`methodNote\` — nunca las cifras.
+
+${body.join('\n')}
+
+### Cierre
+- cashOpening = ${formatCopFromCents(efe.cashOpeningCents)} → MoneyCop "${efe.cashOpeningCents.toString()}"
+- netChange = ${formatCopFromCents(efe.netChangeCents)} → MoneyCop "${efe.netChangeCents.toString()}"
+- cashClosing = ${formatCopFromCents(efe.cashClosingCents)} → MoneyCop "${efe.cashClosingCents.toString()}"
+${gapLine}
+${dividendLine}${unclassified}`;
+}
+
+/**
+ * Bloque compacto para Pass-3 (notas técnicas): la evidencia —o su ausencia—
+ * de distribución a socios.
+ *
+ * Existe porque la cifra fabricada de dividendos no se quedó en el EFE: el
+ * escéptico que corrió el LLM real la encontró verbatim en la Nota 6 del
+ * informe entregado, con cita normativa de respaldo, mientras la tabla de
+ * financiación salía vacía. Pass-3 lee TOTALES VINCULANTES igual que Pass-2,
+ * así que la derogación tiene que repetirse aquí.
+ */
+function renderDividendEvidenceBlockForNotes(ctx: SharedPromptContext): string {
+  const efe = ctx.deterministicCashFlow;
+  if (!efe) return '';
+  if (efe.dividendEvidence.found) {
+    return `## Distribución a socios — evidencia del balance
+Cuentas con movimiento: ${efe.dividendEvidence.accounts.join(', ')}. Flujo de caja a socios del período: ${formatCopFromCents(efe.dividendEvidence.cashFlowCents)}. Cualquier nota que hable de dividendos cita ESTA cifra y ninguna otra.`;
+  }
+  return `## Distribución a socios — SIN evidencia en el balance
+La cuenta 2360 (Dividendos o participaciones por pagar, Decreto 2650/1993) no registra movimiento y no hay dividendos decretados en acciones (grupo 35): en el período NO hubo distribución. PROHIBIDO que cualquier nota técnica mencione dividendos pagados, decretados, estimados o presuntos, y PROHIBIDO citar la línea "Dividendos estimados" del bloque "EFE INDIRECTO PRECALCULADO (Curator R2)" de TOTALES VINCULANTES: esa cifra sale de cuentas virtuales que inyecta el propio curator y su publicación viola NIC 7 ¶43.`;
 }
 
 /**
@@ -1011,7 +1099,12 @@ ${ctx.niifDisclosures}
 - cashFlow.sections[operating].lines[0] ancla EXACTAMENTE al netIncomePrimary del Pass-1 anchor (\`<previously_computed>\`). El label canónico es "Utilidad neta del ejercicio" (o "Resultado neto del período"). PROHIBIDO emitir como primer ítem el Δ saldo de la cuenta 3605 entre cierre y apertura ("3605-movimiento-periodo", "Δ Utilidades acumuladas", o cualquier variante similar).
 - Corrección v2.5 (ECP cuadre matricial): equityChanges.rows SIEMPRE incluye una fila kind="profit_for_period" cuyo resultadoEjercicio == netIncomePrimary del Pass-1 anchor (al centavo). Esta fila es la fuente autoritativa del resultado registrado en el ECP — NO se infiere del delta closing − opening. Si opening_balance.resultadoEjercicio es material (|saldo| > $1.000.000 COP, típico cuando PUC 3605 no fue cerrado vía asiento contable al cierre prior), equityChanges.rows ADEMÁS incluye una fila kind="prior_period_result_cancellation" con resultadoEjercicio = -opening_balance.resultadoEjercicio (signo negativo, mismo monto al centavo) y total = el mismo monto negativo. La suma matricial columna a columna (opening + Σ movement rows = closing) DEBE cerrar exactamente.
 - EFE Método Indirecto presenta las 3 secciones operating / investing / financing con sus respectivas líneas y subtotales.
-- Las tres líneas de Cambios en Capital de Trabajo del EFE usan los nombres PLURAL del curator R2 (\`varCuentasPorCobrar\`, \`varInventarios\`, \`varCuentasPorPagar\`) — singular es inválido.
+- INVARIANTE ARITMÉTICA DEL EFE, tolerancia $0 al centavo, comprobada antes de devolver el JSON — las tres a la vez:
+  (i) para CADA sección: Σ lines[].amountPrimary == netFlow de esa sección. Una sección sin renglones DEBE tener netFlow "0"; un netFlow distinto de "0" con \`lines: []\` es un estado financiero inválido.
+  (ii) Σ de los tres netFlow == netChange.
+  (iii) cashOpening + netChange == cashClosing.
+  Si el bloque "EFE VINCULANTE" está presente, las tres se cumplen copiándolo tal cual: sus renglones ya suman sus subtotales y sus subtotales ya suman la variación observada del PUC 11.
+- Los renglones y los subtotales del EFE se copian del bloque "EFE VINCULANTE" del \`<context>\` (cifras en MoneyCop ya calculadas). El modelo elige la etiqueta NIIF y el orden de presentación; NO elige los montos, no agrega renglones que no estén en el bloque, y no omite ninguno.
 ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}) donde aplique; cuando un saldo comparativo no exista, amountComparative = null.` : '- isComparative=false: amountComparative = null en TODAS las líneas.'}
 - Cuando reportMode='LINEA_BASE': ni methodNote ni equityChanges.notes usan verbos comparativos (mejoró/creció/aumentó/se redujo/evolucionó).
 - If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (por ausencia de auxiliares de capital de trabajo) then \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y methodNote incluye literal de limitación al alcance.
@@ -1021,7 +1114,7 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 <constraints>
 - MUST: anclar cashClosing, totalEquity y netIncome a los valores del bloque \`<previously_computed>\` (Pass-1 anchors). NO recalcular.
 - MUST: MoneyCop serializado en CENTAVOS como string entero (sin separadores, sin decimales, sin signo de pesos).
-- MUST: PRESENTACIÓN VISUAL ABSOLUTA en líneas del EFE excepto cuando el flujo es naturalmente negativo (uso de caja en operaciones, inversiones netas negativas, financiamiento neto negativo) — esas líneas conservan signo. En el ECP, las disminuciones de patrimonio conservan signo negativo.
+- MUST: en el EFE TODA línea conserva su signo algebraico (\`isAbsolute=false\`) — un renglón que consume caja va en negativo. La presentación absoluta NO aplica aquí: el subtotal de cada sección es la suma algebraica de sus renglones, y volver absoluto un renglón negativo rompe esa suma. La regla de valor absoluto sigue vigente en el Balance y el P&G. En el ECP, las disminuciones de patrimonio conservan signo negativo.
 
 - MUST: ecoar el valor "${ctx.reportMode}" del bloque "MODO DEL REPORTE" para coherencia narrativa (el campo \`reportMode\` root vive en Pass-1; aquí solo se usa para gobernar verbos y disclaimers).
 
@@ -1056,21 +1149,15 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
   Estos ítems SOLO pueden ir en \`cashFlow.sections[financing].lines\` con evidencia REAL de pago en efectivo a socios (acta de distribución de dividendos + comprobante de egreso bancario). Sin esa evidencia → el ítem NO va en el EFE.
 
-  REMEDIACIÓN — Corrección v2.4 — si el EFE NO cuadra (cashClosing != cashOpening + netChange), seguir este ORDEN ESTRICTO:
+  REMEDIACIÓN — si el EFE NO cuadra (cashClosing != cashOpening + netChange):
 
-    1. PRIMER PATH — Ajuste NO-CASH en operating por saldo inicial Cta.3605.
-       If TOTALES VINCULANTES expone \`openingUtilidadEjercicio3605\` (o equivalente en "Regla R2") con valor > $0 material (= utilidad del periodo comparativo arrastrada como utilidad acumulada en el patrimonio de apertura) then INCLUIR una línea en \`cashFlow.sections[operating].lines\` con:
-         - label LITERAL: "Resultado de periodos anteriores reconocido en patrimonio de apertura (ajuste de conciliación — no representa flujo de efectivo del período actual)"
-         - amountPrimary = saldo inicial Cta.3605 (signo NEGATIVO en centavos como string)
-         - isAbsolute = false (preserva signo)
-         - level = 1
-       Sustento NIIF: NIC 7 §18(b) / NIIF for SMEs §7.7-7.8 (método indirecto: ajuste de partidas no monetarias). Análogo a depreciación (gasto sin salida de caja → SUMA) ↔ resultado anterior (ingreso ya reconocido → RESTA). Citar en cashFlow.methodNote.
+    1. If el bloque "EFE VINCULANTE" está en el \`<context>\` then el EFE cuadra copiándolo: sus renglones ya incluyen TODA partida conciliatoria (el resultado de periodos anteriores del patrimonio de apertura, el ajuste de cierre virtual, las partidas no monetarias del NIC 7 ¶43). No falta nada por añadir y no sobra nada por quitar. Si al copiarlo no cuadra, el error está en la copia — revísala contra el bloque, cifra por cifra.
 
-    2. SEGUNDO PATH — Revisar magnitudes/signos de las variaciones de capital de trabajo (varCuentasPorCobrar, varInventarios, varCuentasPorPagar) hasta que el EFE cuadre matemáticamente con tolerancia $0 al centavo.
+    2. Else (no hay bloque vinculante) emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
 
-    3. TERCER PATH (último recurso) — Si pese a los dos pasos anteriores el EFE sigue sin cuadrar, emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
+  PROHIBIDO ajustar las variaciones de capital de trabajo —ni su magnitud ni su signo— para hacer cuadrar el EFE. Esas cifras salen del balance de prueba: moverlas para forzar un cuadre es fabricar un estado financiero. Un EFE que no cuadra se declara; no se acomoda.
 
-  NEVER usar el asiento 3605 como "comodín" en financing para hacer cuadrar el EFE. NEVER crear flujos ficticios de financiación. La sección financing solo acepta: dividendos pagados en efectivo (acta + comprobante), aportes de capital recibidos (ingreso bancario verificado), pago de créditos bancarios (Cta.21 disminuyó en el período).
+  NEVER usar el asiento 3605 como "comodín" en financing para hacer cuadrar el EFE. NEVER crear flujos ficticios de financiación. La sección financing solo acepta lo que el balance prueba: obligaciones financieras del grupo 21 que variaron, aportes o reembolsos de capital (grupos 31/32/33) y dividendos con movimiento REAL en la cuenta 2360. Sin movimiento en 2360 no hay línea de dividendos — ni "estimados", ni "presuntos", ni "inferidos" (NIC 7 ¶43).
 
 - MUST: la PRIMERA línea de cashFlow.sections.find(s => s.section==='operating').lines DEBE tener amountPrimary === netIncomePrimary (anchor Pass-1) al centavo. Label aceptado: "Utilidad neta del ejercicio" / "Resultado neto del período" / "Utilidad neta del período" (anclado al P&L). PROHIBIDO usar como primer ítem cualquiera de: "Δ 3605", "Movimiento 3605", "Variación utilidades acumuladas", "3605-movimiento-periodo", "Incremento utilidades retenidas".
 
@@ -1094,9 +1181,9 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
 - EFE degenerado (§5 Slide 08 spec v8.1). If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (típicamente por ausencia de auxiliares de variaciones de capital de trabajo — el balance solo expone saldos agregados sin movimientos) then poblar \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y emitir methodNote LITERAL: "EFE Método Indirecto no computado por ausencia de auxiliares de variaciones de capital de trabajo. Variación neta de caja como dato único defensible (cashClosing − cashOpening). NIC 7 §18 + NIA 705 §7 limitación al alcance." Else \`cashFlow.degeneracyFlag = 'none'\` y construir EFE Indirecto completo.
 
-EFE Método Indirecto (Regla R2 — EFE Indirecto): el campo cashFlow.sections[operating].lines DEBE incluir las tres líneas de Cambios en Capital de Trabajo usando los nombres PLURAL del curator R2: \`varCuentasPorCobrar\` (Δ CxC — aumento RESTA caja), \`varInventarios\` (Δ Inventarios — aumento RESTA caja), \`varCuentasPorPagar\` (Δ CxP — aumento SUMA caja). Cita "NIC 7 §18(b) / Sec. 7.7-7.8 PYMES" en cashFlow.methodNote.
+EFE Método Indirecto — FUENTE ÚNICA: el bloque "EFE VINCULANTE" del \`<context>\`. Ese bloque deroga cualquier cifra de EFE que aparezca en TOTALES VINCULANTES bajo "EFE INDIRECTO PRECALCULADO (Curator R2)" — incluida la línea "Dividendos estimados", que sale de cuentas virtuales inyectadas por el propio curator y NO de una distribución (NIC 7 ¶43). Ante conflicto entre los dos bloques, gana "EFE VINCULANTE" siempre. Cita "NIC 7 §18(b) / Sec. 7.7-7.8 PYMES" en cashFlow.methodNote.
 
-If TOTALES VINCULANTES contiene \`cashFlowClosureAdjustment\` ≠ 0 then incluir una línea LITERAL "Variaciones en Capital de Trabajo (ajuste de cierre)" dentro de cashFlow.sections[operating].lines con el monto y signo del bloque vinculante, y emitir cashFlow.methodNote o equityChanges.notes con la Nota Maestra Defensa Art. 647 E.T. citando NIC 7 §45 ("Se aplicó un ajuste de cierre de \$X para reconciliar el EFE con PUC 11") otherwise el EFE debe cerrar naturalmente; cashClosing se copia desde controlTotals.efectivoCuenta11.
+If existe el bloque "EFE VINCULANTE" then NO agregar ninguna línea de ajuste de cierre (\`cashFlowClosureAdjustment\`, "Variaciones en Capital de Trabajo (ajuste de cierre)" o equivalente): el bloque ya cierra contra el PUC 11 con brecha $0 y añadir el ajuste rompería la suma de la sección. Else if TOTALES VINCULANTES contiene \`cashFlowClosureAdjustment\` ≠ 0 then incluir una línea LITERAL "Variaciones en Capital de Trabajo (ajuste de cierre)" dentro de cashFlow.sections[operating].lines con el monto y signo del bloque vinculante, sumarla al netFlow de la sección, y emitir cashFlow.methodNote o equityChanges.notes con la Nota Maestra Defensa Art. 647 E.T. citando NIC 7 §45 ("Se aplicó un ajuste de cierre de \$X para reconciliar el EFE con PUC 11") otherwise el EFE debe cerrar naturalmente; cashClosing se copia desde controlTotals.efectivoCuenta11.
 
 - CRÍTICO — ECP MATRICIAL v2.5 (Corrección 14 spec v2.5 — cuadre opening + Σ movement rows = closing al centavo).
 
@@ -1274,6 +1361,8 @@ ${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '-
 
 - NEVER emitir las frases "no se suministró información", "información no detallada", "datos no disponibles". Si un dato falta, citar la norma de impracticabilidad correspondiente (NIIF for SMEs §3.14, §10.21, §29.27).
 
+- NEVER citar en una nota cifras de dividendos, distribuciones o pagos a socios que no estén respaldadas por el bloque "Distribución a socios" del \`<context>\`. Si ese bloque declara que NO hay evidencia, entonces en el período no hubo distribución y ninguna nota puede afirmar lo contrario — tampoco con las palabras "estimados", "presuntos", "inferidos" o "implícitos". Publicar una distribución que el balance no prueba viola NIC 7 ¶43 y expone el informe al Art. 647 E.T.
+
 - NEVER en notas, labels ni body: "Élite", "Excelencia", "Premium", "Excepcional", "Único", "Mejor", "Sólido", "Robusto", "Extraordinario", "Sin precedentes", "De clase mundial" (§1.6 spec v8.1 — prohibición vocabulario marketing). El registro narrativo es technico-contable, no comercial.
 
 - NEVER en technicalNotes (Corrección 7 spec v2.1 — eliminación de notas internas):
@@ -1353,6 +1442,8 @@ ${renderReclasifNoCompBlock(ctx)}
 ${renderSaldoAFavorBlock(ctx)}
 
 ${renderActividadInferidaBlock(ctx)}
+
+${renderDividendEvidenceBlockForNotes(ctx)}
 
 ${renderPresentationV3AnchorsBlock(ctx)}
 

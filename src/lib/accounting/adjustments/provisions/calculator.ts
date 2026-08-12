@@ -25,6 +25,7 @@
 import type { AccountingPeriodRow, ProvisionsConfigRow } from '@/lib/db/schema';
 import type { CreateEntryInput, JournalLineInput } from '@/lib/accounting/types';
 import type { ProvisionLine, ProvisionsPreview } from '../types';
+import { computePretaxIncome } from './income-tax';
 
 // ---------------------------------------------------------------------------
 // BigInt helpers
@@ -148,21 +149,14 @@ export function calculateProvisions(
       if (input.pretaxIncome !== null && input.pretaxIncome !== undefined) {
         baseCentavos = toCentavos(input.pretaxIncome);
       } else {
-        // Convención colombiana: INGRESO (crédito neto) - GASTO/COSTO (débito neto)
-        let ingresos = ZERO;
-        let gastosCostos = ZERO;
-        for (const b of periodBalances) {
-          const bal = balanceMap.get(b.code);
-          if (!bal) continue;
-          const code = b.code;
-          // Clase 4 = INGRESO (saldo crédito normal)
-          if (code.startsWith('4')) ingresos += bal.credit > bal.debit ? bal.credit - bal.debit : ZERO;
-          // Clase 5 = GASTO, Clase 6 = COSTO (saldo débito normal)
-          if (code.startsWith('5') || code.startsWith('6'))
-            gastosCostos += bal.debit > bal.credit ? bal.debit - bal.credit : ZERO;
-        }
-        baseCentavos = ingresos > gastosCostos ? ingresos - gastosCostos : ZERO;
+        // Una sola implementación de la base gravable. Este bloque tenía su
+        // propia copia —clampeada por cuenta, sin clase 7 y restando el grupo
+        // 54— y como es el camino que POSTEA ASIENTOS, la copia divergente
+        // provisionaba de más. Ver `income-tax.ts` para la identidad completa.
+        baseCentavos = toCentavos(computePretaxIncome(periodBalances));
       }
+      // Sobre pérdida no hay provisión de renta corriente.
+      if (baseCentavos < ZERO) baseCentavos = ZERO;
     } else {
       // Provisiones laborales: base = suma de saldos débito de las cuentas en base_account_codes.
       const baseCodePrefixes: string[] = Array.isArray(cfg.baseAccountCodes)

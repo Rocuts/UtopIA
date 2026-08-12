@@ -9,11 +9,12 @@
 //        L1.2 suma detallesDeducciones = deduccionesCents
 //        L1.3 rentaLiquida = UAI + adiciones − deducciones
 //        L1.4 impuestoBruto = rentaLiquida × tarifa Art. 240
-//        L1.5 impuestoNeto = impuestoBruto − descuento258_1 − min(descuentos254_256_257, tope25%)
+//        L1.5 impuestoNeto = impuestoBruto − descuento258_1 − descuento254
+//                            − min(descuentos255_256_257, tope25%)
 //
 //   L2 — Lógica de negocio
 //        L2.1 descuento258_1 NO entra en tope conjunto 25%
-//        L2.2 descuentos254/256/257 respetan tope 25% impuesto bruto (Art. 258)
+//        L2.2 descuentos 255/256/257 respetan tope 25% impuesto bruto (Art. 258)
 //        L2.3 rentas exentas > UAI dispara warning de plausibilidad
 //        L2.4 tarifa coincide con régimen declarado (35/40)
 //
@@ -46,7 +47,20 @@ const TARIFA_FINANCIERA_PCT = 40;
 /** Tarifas legítimas reconocidas por el validator. */
 const TARIFAS_VALIDAS = [TARIFA_PJ_PCT, TARIFA_FINANCIERA_PCT, 38]; // 38 = hidroeléctricas (+3pp)
 
-/** Tope conjunto Arts. 254/256/257 sobre impuesto bruto — Art. 258 E.T. */
+/**
+ * Tope conjunto sobre el impuesto a cargo — Art. 258 E.T.
+ *
+ * Texto vigente (mod. Art. 106 Ley 1819/2016), verbatim: «Los descuentos de que
+ * tratan los artículos 255, 256 y 257 del Estatuto Tributario tomados en su
+ * conjunto no podrán exceder del 25% del impuesto sobre la renta a cargo del
+ * contribuyente en el respectivo año gravable.» El propio título del artículo
+ * enumera 255, 256 y 257 — el Art. 254 (descuento por impuestos pagados en el
+ * exterior) NO está cobijado: su límite es el impuesto colombiano generado por
+ * esas rentas (Art. 254 lit. e y par. 1) y el piso general del Art. 259.
+ *
+ * Aplicarle el 25% al Art. 254 obliga al contribuyente a pagar de más y hace
+ * que el validador rechace conciliaciones correctas.
+ */
 const TOPE_DESCUENTOS_PCT = 25;
 
 // ---------------------------------------------------------------------------
@@ -158,23 +172,70 @@ export function validateConciliacionL1(m2: Modulo2Conciliacion): ValidationCheck
   }
 
   // -------------------------------------------------------------------
-  // L1.5 — impuestoNeto = impuestoBruto − desc258_1 − min(descOtros, tope25%)
+  // L1.5 — impuestoNeto = bruto − 258-1 − 254 − min(255/256/257, tope 25%)
+  //
+  // El tope del Art. 258 cobija sólo 255, 256 y 257. Cuando la conciliación
+  // declara qué parte es del Art. 254, la identidad es exacta y se exige al
+  // centavo. Cuando NO lo declara, el reparto es desconocido y el validador
+  // NO inventa una cifra: valida que el neto caiga dentro del rango que
+  // delimitan los dos extremos posibles (todo topeado ↔ todo del Art. 254).
+  // Antes se exigía siempre el extremo topeado, y eso rechazaba la
+  // conciliación correcta exigiendo una liquidación mayor a la debida.
   // -------------------------------------------------------------------
   {
     const tope = tope25pct(impuestoBruto);
-    const descOtrosAplicable = Math.min(descOtros, tope);
-    const esperado = Math.max(0, impuestoBruto - desc258_1 - descOtrosAplicable);
-    const diff = Math.abs(impuestoNeto - esperado);
-    checks.push({
-      name: 'M2.L1.5_impuesto_neto_descuentos',
-      passed: diff <= TOLERANCE_CENTS,
-      severity: 'error',
-      norma: 'Arts. 254, 256, 257, 258, 258-1 E.T.',
-      detail:
-        diff <= TOLERANCE_CENTS
-          ? `Impuesto neto ${formatCentsCop(impuestoNeto)} = bruto ${formatCentsCop(impuestoBruto)} − 258-1 ${formatCentsCop(desc258_1)} − min(${formatCentsCop(descOtros)}, tope25%=${formatCentsCop(tope)})=${formatCentsCop(descOtrosAplicable)}.`
-          : `Impuesto neto reportado ${formatCentsCop(impuestoNeto)} ≠ esperado ${formatCentsCop(esperado)} (bruto ${formatCentsCop(impuestoBruto)}, 258-1 ${formatCentsCop(desc258_1)}, otros ${formatCentsCop(descOtros)} tope ${formatCentsCop(tope)}; diff ${formatCentsCop(diff)}).`,
-    });
+    const declara254 = m2.descuento254Cents !== undefined && m2.descuento254Cents !== null;
+    const desc254 = declara254 ? Math.max(0, parseCents(m2.descuento254Cents as string)) : 0;
+
+    if (desc254 > descOtros) {
+      // El 254 declarado no cabe dentro del total: el desglose se contradice.
+      checks.push({
+        name: 'M2.L1.5_impuesto_neto_descuentos',
+        passed: false,
+        severity: 'error',
+        norma: 'Arts. 254 y 258 E.T.',
+        detail: `Descuento del Art. 254 declarado ${formatCentsCop(desc254)} excede el total de descuentos distintos del 258-1 ${formatCentsCop(descOtros)}. El 254 es una PARTE de ese total, no un sumando adicional.`,
+      });
+    } else if (declara254) {
+      const desc255_256_257 = descOtros - desc254;
+      const aplicable = desc254 + Math.min(desc255_256_257, tope);
+      const esperado = Math.max(0, impuestoBruto - desc258_1 - aplicable);
+      const diff = Math.abs(impuestoNeto - esperado);
+      checks.push({
+        name: 'M2.L1.5_impuesto_neto_descuentos',
+        passed: diff <= TOLERANCE_CENTS,
+        severity: 'error',
+        norma: 'Arts. 254, 255, 256, 257, 258, 258-1 E.T.',
+        detail:
+          diff <= TOLERANCE_CENTS
+            ? `Impuesto neto ${formatCentsCop(impuestoNeto)} = bruto ${formatCentsCop(impuestoBruto)} − 258-1 ${formatCentsCop(desc258_1)} − 254 ${formatCentsCop(desc254)} (sin tope) − min(255/256/257 ${formatCentsCop(desc255_256_257)}, tope25% ${formatCentsCop(tope)}).`
+            : `Impuesto neto reportado ${formatCentsCop(impuestoNeto)} ≠ esperado ${formatCentsCop(esperado)} (bruto ${formatCentsCop(impuestoBruto)}, 258-1 ${formatCentsCop(desc258_1)}, 254 sin tope ${formatCentsCop(desc254)}, 255/256/257 ${formatCentsCop(desc255_256_257)} topeados a ${formatCentsCop(tope)}; diff ${formatCentsCop(diff)}).`,
+      });
+    } else {
+      // Sin desglose: dos extremos legítimos.
+      //   piso  = todo el descuento es del Art. 254 → nada se topea.
+      //   techo = nada es del Art. 254 → se topea todo al 25%.
+      const netoSiTodo254 = Math.max(0, impuestoBruto - desc258_1 - descOtros);
+      const netoSiNada254 = Math.max(
+        0,
+        impuestoBruto - desc258_1 - Math.min(descOtros, tope),
+      );
+      const dentro =
+        impuestoNeto >= netoSiTodo254 - TOLERANCE_CENTS &&
+        impuestoNeto <= netoSiNada254 + TOLERANCE_CENTS;
+      const hayTope = descOtros > tope;
+      checks.push({
+        name: 'M2.L1.5_impuesto_neto_descuentos',
+        passed: dentro,
+        severity: 'error',
+        norma: 'Arts. 254, 255, 256, 257, 258, 258-1 E.T.',
+        detail: dentro
+          ? hayTope
+            ? `Impuesto neto ${formatCentsCop(impuestoNeto)} dentro del rango admisible [${formatCentsCop(netoSiTodo254)} … ${formatCentsCop(netoSiNada254)}]. La conciliación no separa el Art. 254 (sin tope) de los Arts. 255/256/257 (tope 25% = ${formatCentsCop(tope)}); declare \`descuento254Cents\` para exigir la cifra exacta.`
+            : `Impuesto neto ${formatCentsCop(impuestoNeto)} = bruto ${formatCentsCop(impuestoBruto)} − 258-1 ${formatCentsCop(desc258_1)} − descuentos ${formatCentsCop(descOtros)} (por debajo del tope 25% ${formatCentsCop(tope)}: el reparto entre 254 y 255/256/257 no altera el resultado).`
+          : `Impuesto neto reportado ${formatCentsCop(impuestoNeto)} fuera del rango admisible [${formatCentsCop(netoSiTodo254)} … ${formatCentsCop(netoSiNada254)}] (bruto ${formatCentsCop(impuestoBruto)}, 258-1 ${formatCentsCop(desc258_1)}, descuentos ${formatCentsCop(descOtros)}, tope 25% ${formatCentsCop(tope)}).`,
+      });
+    }
   }
 
   return checks;
@@ -212,22 +273,29 @@ export function validateConciliacionL2(m2: Modulo2Conciliacion): ValidationCheck
   }
 
   // -------------------------------------------------------------------
-  // L2.2 — descuentos 254/256/257 respetan tope 25% del impuesto bruto
+  // L2.2 — sólo 255/256/257 respetan el tope 25% del impuesto a cargo
+  //
+  // El Art. 254 queda fuera del tope. Si la conciliación no separa su porción
+  // y el total excede el tope, el reparto es material y hay que pedirlo: la
+  // diferencia entre topear o no topear es dinero real que el cliente paga.
   // -------------------------------------------------------------------
   {
     const tope = tope25pct(impuestoBruto);
-    // Si el agente reporta descOtros > tope, debe haberlos limitado en L1.5.
-    // Como L1.5 ya valida la fórmula, acá emitimos un warning informativo
-    // si excede para que el usuario sepa que se le aplica el tope.
-    const excede = descOtros > tope;
+    const declara254 = m2.descuento254Cents !== undefined && m2.descuento254Cents !== null;
+    const desc254 = declara254 ? Math.max(0, parseCents(m2.descuento254Cents as string)) : 0;
+    const desc255_256_257 = Math.max(0, descOtros - desc254);
+    const excede = desc255_256_257 > tope;
+    const ambiguo = !declara254 && descOtros > tope;
     checks.push({
       name: 'M2.L2.2_descuentos_otros_tope_25pct',
-      passed: true, // No es error en sí — L1.5 ya capó el cálculo
+      passed: !ambiguo, // L1.5 ya validó la fórmula; acá señalamos el desglose faltante
       severity: 'warning',
-      norma: 'Art. 258 E.T.',
-      detail: excede
-        ? `Descuentos Arts. 254/256/257 reportados ${formatCentsCop(descOtros)} exceden el tope del 25% del impuesto bruto ${formatCentsCop(tope)}. Se aplica solo el tope (Art. 258 E.T.).`
-        : `Descuentos Arts. 254/256/257 ${formatCentsCop(descOtros)} ≤ tope 25% ${formatCentsCop(tope)} — OK.`,
+      norma: 'Art. 258 E.T. — tope conjunto sólo de los Arts. 255, 256 y 257',
+      detail: ambiguo
+        ? `Descuentos distintos del 258-1 ${formatCentsCop(descOtros)} exceden el tope del 25% ${formatCentsCop(tope)} y la conciliación no declara cuánto corresponde al Art. 254 (impuestos pagados en el exterior), que NO está sujeto a ese tope. Diferencia en juego: ${formatCentsCop(descOtros - tope)}. Declare \`descuento254Cents\`.`
+        : excede
+          ? `Descuentos Arts. 255/256/257 ${formatCentsCop(desc255_256_257)} exceden el tope del 25% ${formatCentsCop(tope)}: se aplica sólo el tope y el exceso se traslada (Art. 258 nums. 1-3). El descuento del Art. 254 ${formatCentsCop(desc254)} se aplica sin ese tope.`
+          : `Descuentos Arts. 255/256/257 ${formatCentsCop(desc255_256_257)} ≤ tope 25% ${formatCentsCop(tope)} — OK. Art. 254 ${formatCentsCop(desc254)} fuera del tope por norma.`,
     });
   }
 

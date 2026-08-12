@@ -26,9 +26,21 @@ import {
   type AuditCompanyContext,
 } from '@/lib/pillars/audit-report-emittable';
 import { validateConsolidatedReport, type ControlTotalsInput } from './validators/report-validator';
-import { validateNiifReportJson } from './validators/niif-json-validator';
-import { serializeMoneyCop, moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
+import {
+  validateNiifReportJson,
+  type NiifJsonValidatorOptions,
+} from './validators/niif-json-validator';
+import { moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
+import {
+  checkCashFlowInvariants,
+  formatCashFlowViolations,
+} from './contracts/deterministic-breakdown';
 import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
+import {
+  fillComparativeBreakdownFromSnapshot,
+  buildQualificationSeal,
+} from './agents/reconcile-anchors';
+import { toNiifAnalysisResult } from './agents/renderer';
 
 /** Serializa centavos a MoneyCop, o `undefined` si el ancla no existe. */
 function centsOrUndefined(cents: bigint | undefined): string | undefined {
@@ -151,39 +163,124 @@ function deriveControlTotals(preprocessed: unknown): ControlTotalsInput | undefi
 
 /**
  * Construye las anclas del periodo comparativo para `validateNiifReportJson`
- * (E9 cross-check). Toma cents BigInt cuando están disponibles
- * (`controlTotals.cents`); si solo hay `ControlTotals` flotante, multiplica
- * por 100 con `Math.round` (única vía sin un BigInt fuente).
+ * (E9 cross-check).
  *
- * NOTA: grossProfit / operatingProfit no se cruzan porque el preprocesador no
- * los computa directamente — el chequeo NOT-NULL en E9 todavía cubre que
- * Pass-1 los emita. Cuando esos campos lleguen al preprocesador, agregar
- * aquí.
+ * Auditoría 2026-08 (superficie 5): `grossProfit` y `operatingProfit` estaban
+ * declarados en el contrato del validador y E9 tenía el cruce YA ESCRITO, pero
+ * esta función nunca poblaba esas dos claves — un `crossCheck` muerto por falta
+ * de dato. Desde la ola 1 el preprocesador sí permite derivarlos al centavo
+ * (`buildPeriodAnchors` los expone como `utilidadBruta` / `ebit`), así que el
+ * cruce revive sin tocar E9.
  */
 function buildComparativeAnchorsForValidator(
-  totals: ControlTotalsInput,
   snap: PeriodSnapshot | null,
 ):
   | {
       totalAssets?: string;
       totalLiabilities?: string;
       totalEquity?: string;
+      grossProfit?: string;
+      operatingProfit?: string;
       netIncome?: string;
     }
   | undefined {
-  const cents = snap?.controlTotals?.cents;
-  const toCentsString = (value: number | undefined, big: bigint | undefined): string | undefined => {
-    if (typeof big === 'bigint') return serializeMoneyCop(big);
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return serializeMoneyCop(BigInt(Math.round(value * 100)));
-    }
-    return undefined;
-  };
+  const anchors = buildPeriodAnchors(snap ?? undefined);
+  if (!anchors) return undefined;
+  const c = anchors.cents;
   return {
-    totalAssets: toCentsString(totals.activo, cents?.activo),
-    totalLiabilities: toCentsString(totals.pasivo, cents?.pasivo),
-    totalEquity: toCentsString(totals.patrimonio, cents?.patrimonio),
-    netIncome: toCentsString(totals.utilidadNeta, cents?.utilidadNeta),
+    totalAssets: centsOrUndefined(c.activo),
+    totalLiabilities: centsOrUndefined(c.pasivo),
+    totalEquity: centsOrUndefined(c.patrimonio),
+    grossProfit: centsOrUndefined(c.utilidadBruta),
+    operatingProfit: centsOrUndefined(c.ebit),
+    netIncome: centsOrUndefined(c.utilidadNeta),
+  };
+}
+
+/**
+ * Sella el informe como "REPORTE CON SALVEDADES" y lo saca del canal de
+ * descarga.
+ *
+ * Es el único mecanismo del sistema que el cliente no puede pasar por alto:
+ * `reconciliation.clean === false` hace que el botón de exportar no se ofrezca
+ * (`PipelineWorkspace.tsx`) y el sello viaja en el CUERPO del entregable, así
+ * que llega al informe consolidado, al HTML y al PDF sin que ninguna superficie
+ * tenga que acordarse de consultar un flag. Los eventos SSE `warning` no
+ * sirven: la auditoría integral verificó que el navegador no registra handler
+ * para ese canal.
+ */
+export function sellarConSalvedades(
+  niif: NiifAnalysisResult,
+  motivos: string[],
+  language: 'es' | 'en',
+): void {
+  const previous = niif.reconciliation;
+  niif.reconciliation = {
+    deviations: previous?.deviations ?? [],
+    lineGaps: previous?.lineGaps ?? [],
+    repairAttempted: previous?.repairAttempted ?? false,
+    clean: false,
+  };
+  const seal = [
+    language === 'es'
+      ? '> ## REPORTE CON SALVEDADES — INTEGRIDAD ARITMÉTICA'
+      : '> ## REPORT WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
+    '>',
+    language === 'es'
+      ? '> Los estados financieros no superaron los invariantes deterministas. ' +
+        'Este informe NO es firmable tal como está. Salvedades:'
+      : '> The financial statements failed the deterministic invariants. ' +
+        'This report is NOT signable as issued. Qualifications:',
+    '>',
+    ...motivos.map((m) => `> - ${m}`),
+    '',
+  ].join('\n');
+  niif.fullContent = `${seal}\n${niif.fullContent}`;
+  niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
+}
+
+/**
+ * Todas las anclas que el validador JSON puede cruzar, en un solo sitio.
+ *
+ * Existe como función exportada —y no inline en `runNiifPhase`— por la razón
+ * que la auditoría integral nombró como causa raíz de los números malos: la
+ * duplicación sin sincronizar. Cualquier medición, test o endpoint que quiera
+ * saber "qué cruza hoy el validador" llama a esto y obtiene exactamente lo que
+ * corre en producción, no una copia que envejece aparte.
+ */
+export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValidatorOptions {
+  const primarySnap = getPrimarySnapshot(preprocessed);
+  const comparativeSnap = getComparativeSnapshot(preprocessed);
+  const primaryAnchors = buildPeriodAnchors(primarySnap ?? undefined);
+  const c = primaryAnchors?.cents;
+
+  return {
+    bindingComparativeTotalsCents: buildComparativeAnchorsForValidator(comparativeSnap),
+    // E14 — anclas del periodo PRIMARIO. Hasta la auditoría 2026-08 sólo se
+    // cruzaba el comparativo: del año que el cliente firma, el único control
+    // era E1 (coherencia interna del balance consigo mismo). Con las anclas
+    // primarias, un total inventado deja de pasar aunque cuadre.
+    bindingPrimaryTotalsCents: c
+      ? {
+          totalAssets: centsOrUndefined(c.activo),
+          totalLiabilities: centsOrUndefined(c.pasivo),
+          totalEquity: centsOrUndefined(c.patrimonio),
+          netIncome: centsOrUndefined(c.utilidadNeta),
+          grossProfit: centsOrUndefined(c.utilidadBruta),
+          operatingProfit: centsOrUndefined(c.ebit),
+          utilidadAntesImpuestos: centsOrUndefined(c.utilidadAntesImpuestos),
+          impuestoCausado: centsOrUndefined(c.impuestoCausado),
+        }
+      : undefined,
+    // E3 — el efectivo de cierre del EFE contra el PUC 11 del periodo que se
+    // firma. El call-site anterior derivaba esta cifra del COMPARATIVO y luego
+    // la descartaba con un `void`: el cruce existía en el validador y no corría.
+    cashAccountPuc11Cents: centsOrUndefined(c?.efectivoCuenta11),
+    // E8 — anti-duplicación del Grupo 53. Medido por la auditoría: pasando este
+    // total, E8 detecta una duplicación de $16.122.033,37; el call-site de
+    // producción no lo pasaba.
+    totalExpensesClass5Cents: centsOrUndefined(c?.gastosClase5),
+    presentationV3: primarySnap?.curator?.presentationV3,
   };
 }
 
@@ -1557,57 +1654,64 @@ export async function runNiifPhase(
     });
   }
 
-  // Wave 5 — 2026-05-14: validator JSON-strict (E1..E9) sobre el output del
-  // NIIF Analyst. Cruza los SEIS totales del periodo comparativo emitidos
-  // por Pass-1 contra el preprocesador (tolerancia $0). Errores se emiten
-  // como SSE `warning` — no rompemos pipelines en producción, pero la falla
-  // queda visible en logs/UI y la telemetría puede alertar.
+  // ---------------------------------------------------------------------------
+  // La columna comparativa del Balance, antes de validar nada.
+  // ---------------------------------------------------------------------------
+  // El completado determinista del desglose (dentro del analista) reemplaza la
+  // sección con la proyección del periodo actual y deja `amountComparative` en
+  // null. Aquí se le pone al lado la proyección del año anterior, que es la
+  // misma función sobre el otro snapshot. Va ANTES del validador porque E9
+  // cruza precisamente esa columna, y antes del sello porque el re-render tiene
+  // que salir con la tabla ya completa. NIIF para las PYMES §3.14.
   if (niif.json) {
     const comparativeSnap = getComparativeSnapshot(context.preprocessed);
-    const comparativeTotals = deriveControlTotalsFromSnapshot(comparativeSnap);
-    const bindingComparativeTotalsCents = comparativeTotals
-      ? buildComparativeAnchorsForValidator(comparativeTotals, comparativeSnap)
-      : undefined;
-    const cashAnchorCents =
-      typeof comparativeSnap?.controlTotals?.efectivoCuenta11 === 'number'
-        ? serializeMoneyCop(
-            BigInt(Math.round(comparativeSnap.controlTotals.efectivoCuenta11 * 100)),
-          )
-        : undefined;
-    void cashAnchorCents; // PUC 11 del primary ya se cruza en validateConsolidatedReport
-
-    // E14 — anclas del periodo PRIMARIO. Hasta la auditoría 2026-08 sólo se
-    // cruzaba el comparativo: del año que el cliente firma, el único control
-    // era E1 (coherencia interna del balance consigo mismo). Con las anclas
-    // primarias, un total inventado deja de pasar aunque cuadre.
-    const primarySnap = getPrimarySnapshot(context.preprocessed);
-    const primaryAnchors = buildPeriodAnchors(primarySnap ?? undefined);
-    const bindingPrimaryTotalsCents = primaryAnchors
-      ? {
-          totalAssets: centsOrUndefined(primaryAnchors.cents.activo),
-          totalLiabilities: centsOrUndefined(primaryAnchors.cents.pasivo),
-          totalEquity: centsOrUndefined(primaryAnchors.cents.patrimonio),
-          netIncome: centsOrUndefined(primaryAnchors.cents.utilidadNeta),
-          utilidadAntesImpuestos: centsOrUndefined(
-            primaryAnchors.cents.utilidadAntesImpuestos,
-          ),
-          impuestoCausado: centsOrUndefined(primaryAnchors.cents.impuestoCausado),
-        }
-      : undefined;
-
-    const jsonValidation = validateNiifReportJson(niif.json, {
-      bindingComparativeTotalsCents,
-      bindingPrimaryTotalsCents,
-      presentationV3: context.ppForAgents?.primary?.curator?.presentationV3,
-    });
-    if (!jsonValidation.ok && jsonValidation.errors.length > 0) {
+    const { json: conComparativo, filled } = fillComparativeBreakdownFromSnapshot(
+      niif.json,
+      comparativeSnap ?? undefined,
+    );
+    if (filled.length > 0) {
+      const rerendered = toNiifAnalysisResult(conComparativo);
+      // El sello del analista vive en el CUERPO del Markdown, así que un
+      // re-render lo borraría y dejaría un informe con salvedades sin la
+      // portada que las declara. Se reconstruye desde la misma reconciliación
+      // que lo produjo — es una función pura de ese veredicto.
+      const sello = niif.reconciliation
+        ? buildQualificationSeal(niif.reconciliation, language)
+        : '';
+      niif.json = conComparativo;
+      niif.balanceSheet = sello ? `${sello}\n${rerendered.balanceSheet}` : rerendered.balanceSheet;
+      niif.incomeStatement = rerendered.incomeStatement;
+      niif.cashFlowStatement = rerendered.cashFlowStatement;
+      niif.equityChangesStatement = rerendered.equityChangesStatement;
+      niif.technicalNotes = rerendered.technicalNotes;
+      niif.fullContent = sello ? `${sello}\n${rerendered.fullContent}` : rerendered.fullContent;
       onProgress?.({
-        type: 'warning',
-        warnings: jsonValidation.errors.map(
-          (e) => `[NIIF JSON validator E1..E9] ${e}`,
-        ),
+        type: 'stage_progress',
+        stage: 1,
+        detail:
+          `Columna comparativa (${comparativeSnap?.period}) completada desde el balance ` +
+          `preprocesado en: ${filled.join(', ')}.`,
       });
     }
+  }
+
+  // Wave 5 — 2026-05-14: validator JSON-strict (E1..E16) sobre el output del
+  // NIIF Analyst.
+  //
+  // Auditoría 2026-08: hasta esta versión los errores del validador se emitían
+  // como SSE `warning` y NADA más. La misma auditoría integral había verificado
+  // que el cliente no registra handler para `warning`, así que E1..E15 —cruces
+  // correctos, escritos y probados— morían en el navegador: un balance con la
+  // ecuación patrimonial rota salía `clean = true`, sin sello y descargable.
+  // Ahora los ERRORES entran al mismo veredicto que la reconciliación, que es
+  // el único canal que el usuario no puede pasar por alto (el botón no está).
+  // Los WARNINGS siguen siendo informativos por diseño: E5, E6, E13 y E15 son
+  // señales de criterio, y bloquear un informe correcto es peor que señalarlo.
+  if (niif.json) {
+    const jsonValidation = validateNiifReportJson(
+      niif.json,
+      buildNiifValidatorOptions(context.preprocessed),
+    );
     if (jsonValidation.warnings.length > 0) {
       onProgress?.({
         type: 'warning',
@@ -1615,6 +1719,40 @@ export async function runNiifPhase(
           (w) => `[NIIF JSON validator soft-check] ${w}`,
         ),
       });
+    }
+    if (!jsonValidation.ok && jsonValidation.errors.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: jsonValidation.errors.map((e) => `[NIIF JSON validator] ${e}`),
+      });
+      sellarConSalvedades(niif, jsonValidation.errors, language);
+    }
+
+    // -------------------------------------------------------------------------
+    // Invariantes del EFE — el mismo canal que el validador JSON.
+    //
+    // `checkCashFlowInvariants` comprueba las tres identidades del flujo con
+    // tolerancia $0: Σ renglones == subtotal de sección, Σ subtotales ==
+    // variación neta, y apertura + variación == cierre. Existía escrito y
+    // probado SIN UN SOLO LLAMADOR — el mismo patrón que la auditoría integral
+    // ya había nombrado como causa raíz, y que volvió a repetirse aquí.
+    //
+    // Lo que dejaba pasar, medido sobre un artefacto REAL de una corrida con
+    // LLM (`.fase0-final2`): una sección de operación cuyos 8 renglones suman
+    // $834.754.377,59 bajo un subtotal impreso de $2.421.190.071,93, y una
+    // financiación con CERO renglones bajo −$1.570.997.737,30. Salía con 0
+    // errores, sin sello y con la descarga habilitada.
+    // -------------------------------------------------------------------------
+    if (niif.json.cashFlow) {
+      const efeViolations = checkCashFlowInvariants(niif.json.cashFlow);
+      if (efeViolations.length > 0) {
+        const mensajes = formatCashFlowViolations(efeViolations);
+        onProgress?.({
+          type: 'warning',
+          warnings: mensajes.map((m) => `[EFE invariantes] ${m}`),
+        });
+        sellarConSalvedades(niif, mensajes, language);
+      }
     }
   }
 

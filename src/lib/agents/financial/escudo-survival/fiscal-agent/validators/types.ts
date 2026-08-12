@@ -51,7 +51,9 @@ export type FiscalResponseMode = 'quick' | 'full';
 //   deduccionesCents  — Suma deducciones fiscales (rentas exentas, etc.).
 //   rentaLiquidaCents — UAI + adiciones − deducciones (debe cuadrar exacto).
 //   impuestoBrutoCents — rentaLiquida × tarifa Art. 240.
-//   descuentos254_256_257Cents — descuentos con tope 25% (Art. 258).
+//   descuentos254_256_257Cents — TOTAL de descuentos distintos del 258-1.
+//   descuento254Cents — parte del total anterior que corresponde al Art. 254
+//     (impuestos pagados en el exterior). NO entra en el tope del Art. 258.
 //   descuento258_1Cents — descuento IVA bienes capital (sin tope conjunto).
 //   impuestoNetoCents — impuestoBruto − descuentos totales aplicables.
 //   tarifa            — porcentaje aplicado (35 para Art. 240, 40 financiera).
@@ -72,6 +74,17 @@ export interface Modulo2Conciliacion {
   readonly impuestoBrutoCents: string;
   readonly descuento258_1Cents: string;
   readonly descuentos254_256_257Cents: string;
+  /**
+   * Porción del campo anterior atribuible al Art. 254 E.T. (descuento por
+   * impuestos pagados en el exterior). El tope del 25% del Art. 258 cobija
+   * ÚNICAMENTE los Arts. 255, 256 y 257 — el 254 tiene su propio límite
+   * (el impuesto colombiano generado por esas rentas, Art. 254 lit. e y par. 1)
+   * y por eso no puede topearse con el 25%.
+   *
+   * Ausente ⇒ el validador no adivina el reparto: valida un rango en lugar de
+   * exigir una cifra concreta (ver M2.L1.5).
+   */
+  readonly descuento254Cents?: string;
   readonly impuestoNetoCents: string;
   readonly tarifa: number;
   readonly detallesAdiciones: readonly ConciliacionDetalle[];

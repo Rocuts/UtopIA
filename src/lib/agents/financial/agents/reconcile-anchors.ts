@@ -474,6 +474,7 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
   json: T,
   gaps: LineGap[],
   snapshot: PeriodSnapshot | undefined,
+  comparativeSnapshot?: PeriodSnapshot | undefined,
 ): { json: T; completed: LineGap['statement'][] } {
   if (!snapshot || gaps.length === 0) return { json, completed: [] };
 
@@ -495,12 +496,17 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
     const labelByAccount = new Map(
       previous.filter((l) => l.account).map((l) => [l.account as string, l.label]),
     );
+    // Cifra comparativa del MISMO grupo PUC, por la misma proyección
+    // determinista. Ver la nota de `fillComparativeBreakdownFromSnapshot`.
+    const comparativeByAccount = buildComparativeCentsByAccount(comparativeSnapshot, section);
 
     balanceSheet[section] = rows.map((row) => ({
       account: row.account,
       label: labelByAccount.get(row.account) ?? row.label,
       amountPrimary: serializeMoneyCop(row.cents),
-      amountComparative: null,
+      amountComparative: comparativeByAccount?.has(row.account)
+        ? serializeMoneyCop(comparativeByAccount.get(row.account)!.cents)
+        : null,
       level: 2,
       // Se emite CON signo: una correctora agregada dentro de su grupo ya viene
       // neta, y forzar valor absoluto convertiría una reducción en un aumento.
@@ -524,3 +530,133 @@ export function completeBreakdownFromSnapshot<T extends ReconcilableReport>(
   if (completed.length === 0) return { json, completed: [] };
   return { json: { ...json, balanceSheet }, completed };
 }
+
+// ---------------------------------------------------------------------------
+// La columna comparativa del Balance
+// ---------------------------------------------------------------------------
+// Auditoría 2026-08 (superficie 4, 2/10): el completado determinista de arriba
+// era una REGRESIÓN para el periodo anterior. Reemplazaba la sección entera y
+// escribía `amountComparative: null` en cada renglón, así que el PDF salía con
+// "n/c" en las once líneas de detalle bajo un TOTAL ACTIVOS 2024 de
+// $2.798.204.117,50 que ningún renglón sostenía — y con `clean = true`, sin
+// sello y con la descarga habilitada. Medido en 2/2 corridas de cierre y
+// reproducido aquí: 11 celdas "n/c" en la tabla del PDF Élite.
+//
+// La proyección comparativa NO había que inventarla: es la misma
+// `buildDeterministicBreakdown` sobre el snapshot del año anterior, y cuadra al
+// centavo con las anclas ($2.798.204.117,50 / $1.232.263.178,39 /
+// $1.565.940.939,11). Lo único que faltaba era pasarle el snapshot.
+//
+// Incumplimiento que cierra: NIIF para las PYMES §3.14 exige información
+// comparativa para todos los importes del periodo anterior.
+// ---------------------------------------------------------------------------
+
+/**
+ * Renglones del periodo comparativo indexados por grupo PUC, o `null` si no hay
+ * snapshot anterior. La etiqueta viaja con la fila —la produce el propio
+ * `buildDeterministicBreakdown`— para no duplicar aquí el diccionario PUC↔NIIF.
+ */
+function buildComparativeCentsByAccount(
+  comparativeSnapshot: PeriodSnapshot | undefined,
+  section: BreakdownSection,
+): Map<string, { cents: bigint; label: string }> | null {
+  if (!comparativeSnapshot) return null;
+  const rows = buildDeterministicBreakdown(comparativeSnapshot, section);
+  if (rows.length === 0) return null;
+  return new Map(rows.map((r) => [r.account, { cents: r.cents, label: r.label }]));
+}
+
+/**
+ * Rellena la columna del periodo comparativo del Balance con la proyección
+ * determinista del snapshot anterior, y añade los grupos PUC que existían en
+ * el comparativo y desaparecieron en el periodo actual.
+ *
+ * Por qué la unión de grupos y no sólo los del periodo actual: si un rubro
+ * existió en 2024 y no en 2025, omitirlo deja la columna 2024 sumando menos que
+ * su propio total — el mismo defecto que este módulo viene a cerrar, movido de
+ * columna. El renglón entra con `amountPrimary = "0"`, que es la verdad.
+ *
+ * Sólo actúa sobre secciones cuyos renglones ya son la proyección determinista
+ * (todos con código de grupo PUC de dos dígitos). Cuando el modelo conservó su
+ * propio desglose —porque cuadraba, y su granularidad suele ser mejor— no se
+ * toca: mapear una cuenta auxiliar del modelo a un grupo del comparativo
+ * produciría doble conteo, que es exactamente lo que
+ * `completeBreakdownFromSnapshot` evita reemplazando en vez de mezclar.
+ */
+export function fillComparativeBreakdownFromSnapshot<T extends ReconcilableReport>(
+  json: T,
+  comparativeSnapshot: PeriodSnapshot | undefined,
+): { json: T; filled: LineGap['statement'][] } {
+  if (!comparativeSnapshot) return { json, filled: [] };
+
+  const balanceSheet = { ...json.balanceSheet };
+  const filled: LineGap['statement'][] = [];
+
+  for (const [statement, section] of Object.entries(SECTION_BY_STATEMENT) as Array<
+    [LineGap['statement'], BreakdownSection]
+  >) {
+    const comparativeByAccount = buildComparativeCentsByAccount(comparativeSnapshot, section);
+    if (!comparativeByAccount) continue;
+
+    const lines = balanceSheet[section] as ReadonlyArray<{
+      account: string | null;
+      label: string;
+      amountPrimary: string;
+      amountComparative: string | null;
+      level: number;
+      isAbsolute: boolean;
+      confidence: unknown;
+      anomalyFlag: unknown;
+    }>;
+    if (lines.length === 0) continue;
+
+    // Firma de "esto ya es la proyección determinista": todos los renglones
+    // llevan código de grupo PUC de dos dígitos y ninguno se repite.
+    const codes = lines.map((l) => (l.account ?? '').trim());
+    const esProyeccionDeterminista =
+      codes.every((c) => /^\d{2}$/.test(c)) && new Set(codes).size === codes.length;
+    if (!esProyeccionDeterminista) continue;
+
+    const yaTieneComparativo = lines.every((l) => l.amountComparative !== null);
+    const gruposFaltantes = [...comparativeByAccount.keys()].filter((g) => !codes.includes(g));
+    if (yaTieneComparativo && gruposFaltantes.length === 0) continue;
+
+    const conComparativo = lines.map((l) => {
+      const cmp = comparativeByAccount.get(l.account ?? '');
+      return {
+        ...l,
+        amountComparative: cmp
+          ? serializeMoneyCop(cmp.cents)
+          : // El grupo no existía el año anterior: `null` es la verdad (cuenta
+            // nueva del periodo), no un cero que el lector leería como saldo.
+            l.amountComparative,
+        confidence: 'high',
+      };
+    });
+
+    const nuevos = gruposFaltantes
+      .sort((a, b) => a.localeCompare(b))
+      .map((grupo) => {
+        const cmp = comparativeByAccount.get(grupo)!;
+        return {
+          account: grupo,
+          label: cmp.label,
+          amountPrimary: '0',
+          amountComparative: serializeMoneyCop(cmp.cents),
+          level: 2,
+          isAbsolute: false,
+          confidence: 'high',
+          anomalyFlag: null,
+        };
+      });
+
+    balanceSheet[section] = [...conComparativo, ...nuevos].sort((a, b) =>
+      (a.account ?? '').localeCompare(b.account ?? ''),
+    ) as T['balanceSheet'][typeof section];
+    filled.push(statement);
+  }
+
+  if (filled.length === 0) return { json, filled: [] };
+  return { json: { ...json, balanceSheet }, filled };
+}
+

@@ -177,16 +177,32 @@ describe('Sección B — Score de Riesgo DIAN · Reconciliación vs pseudocódig
     expect(riskResult.nivel).toBe('muy_alto');
   });
 
-  it('exactamente 6 factores en el array factores[]', () => {
-    expect(riskResult.factores).toHaveLength(6);
+  it('exactamente 7 factores en el array factores[]', () => {
+    // Eran 6 hasta que `tet_baja` se partió en dos. La auditoría 2026-08 midió
+    // que aquel factor colapsaba tres situaciones contablemente distintas en un
+    // único «F09 = 0 → +30»: empresa EN PÉRDIDA (donde no causar impuesto es lo
+    // correcto, Art. 147 E.T.), libros sin cerrar, y provisión ínfima con libros
+    // cerrados. Sólo la tercera es indicio de elusión.
+    expect(riskResult.factores).toHaveLength(7);
   });
 
-  it('Factor1 (tet_baja): F09=0% → 30 puntos', () => {
+  it('Factor1 (tet_baja): sin Clase 54 la tasa efectiva NO es medible → 0 puntos', () => {
     const f1 = riskResult.factores.find((f) => f.factor === 'tet_baja');
     expect(f1).toBeDefined();
-    expect(f1!.puntos).toBe(30);
-    // El detalle debe mencionar que activa Modo Supervivencia
-    expect(f1!.detalle).toMatch(/supervivencia|nula|0%/i);
+    expect(f1!.puntos).toBe(0);
+    // Ya no se acusa de «tasa efectiva nula»: se dice lo que de verdad pasa.
+    expect(f1!.detalle).toMatch(/sin provisión|no está|no es medible|A5_SIN_PROVISION/i);
+  });
+
+  it('Factor1-bis (sin_provision_renta): UAI > 0 y Clase 54 = $0 → 30 puntos', () => {
+    // Los 30 puntos NO desaparecen: cambian de factor y de motivo. Una utilidad
+    // de $2.228M sin impuesto causado sigue siendo riesgo frente a la DIAN, pero
+    // por el Art. 240 E.T. + NIC 12 §46, no por una tasa efectiva que aún no se
+    // puede calcular. Este es el factor que mantiene el score en 68.
+    const fBis = riskResult.factores.find((f) => f.factor === 'sin_provision_renta');
+    expect(fBis).toBeDefined();
+    expect(fBis!.puntos).toBe(30);
+    expect(fBis!.detalle).toMatch(/647|240|NIC 12/);
   });
 
   it('Factor2 (margen_alto): margen 92.95% > 90% → 25 puntos', () => {

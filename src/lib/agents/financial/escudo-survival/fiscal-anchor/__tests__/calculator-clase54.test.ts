@@ -20,6 +20,9 @@ const UTILIDAD_NETA_CENTS = UAI_CENTS - IMPUESTO_CENTS; // $2.500.000,00
 
 const RAW: FiscalRawBase = {
   retencionesAFavorCents: BigInt('20000000'), // $200.000,00
+  // ReteIVA (135517) y ReteICA (135518) viajan aparte: no acreditan renta.
+  reteIvaAFavorCents: BigInt(0),
+  reteIcaAFavorCents: BigInt(0),
   ivaPorPagarCents: BigInt(0),
   reteFuentePorPagarCents: BigInt(0),
   icaPorPagarCents: BigInt(0),

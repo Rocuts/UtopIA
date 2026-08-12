@@ -108,8 +108,25 @@ function buildFiscalContextBlock(
     `F09 Carga sobre Utilidad Neta: ${fmtPct(anchor.f09)}`,
     `F10 Cobertura de Retenciones: ${fmtPct(anchor.f10)}`,
     '─'.repeat(60),
-    `Score DIAN: ${riskScore.score}/100 — ${riskScore.nivel.toUpperCase()}`,
   ];
+
+  // El Score DIAN sólo significa algo con base gravable: sus seis factores son
+  // razones sobre F01 o sobre los ingresos. Con F01 = $0 el cálculo devuelve
+  // `publicable: false` y aquí NO se publica la cifra — un "0/100 bajo" que en
+  // realidad es ausencia de datos sería una afirmación de bajo riesgo que el
+  // balance no soporta (auditoría 2026-08, superficie 6). El campo llega por
+  // JSON desde `computeRiskScore`; el `FiscalRiskScore` público aún no lo
+  // declara, de ahí el ensanche estructural local.
+  const scoreMeta = riskScore as { publicable?: boolean; noPublicableMotivo?: string | null };
+  if (scoreMeta.publicable === false) {
+    lines.push(
+      language === 'es'
+        ? `Score DIAN: NO DETERMINABLE — ${scoreMeta.noPublicableMotivo ?? 'sin base gravable (F01 = $0).'}`
+        : `DIAN risk score: NOT DETERMINABLE — no taxable base for the period (F01 = $0); the score model has nothing to measure.`,
+    );
+  } else {
+    lines.push(`Score DIAN: ${riskScore.score}/100 — ${riskScore.nivel.toUpperCase()}`);
+  }
 
   if (anchor.alertas.length > 0) {
     lines.push(language === 'es' ? 'Alertas:' : 'Alerts:');
@@ -1212,7 +1229,12 @@ function ReportViewer({
   // de impresión. Renderizar server-side con @react-pdf/renderer elimina ese
   // problema porque las páginas las define el documento, no el browser.
   const handleExportPdf = useCallback(async () => {
-    if (!report || isExportingPdf) return;
+    // Mismo gate que el Excel. El sello "REPORTE CON SALVEDADES" declara que la
+    // reconciliación contra el balance preprocesado NO cerró: el informe no es
+    // firmable tal como está, y el formato de salida no cambia ese hecho.
+    // Auditoría 2026-08 (item 9): el PDF editorial se descargaba igual, de modo
+    // que el mismo entregable quedaba bloqueado en .xlsx y disponible en .pdf.
+    if (!report || isExportingPdf || reportHasQualifications) return;
     setIsExportingPdf(true);
     setExportError(null);
     try {
@@ -1263,7 +1285,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf]);
+  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf, reportHasQualifications]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -1428,12 +1450,29 @@ function ReportViewer({
           <button
             type="button"
             onClick={handleExportPdf}
-            disabled={isExportingPdf || !report}
-            aria-label={language === 'es' ? 'Exportar a PDF editorial' : 'Export to editorial PDF'}
+            disabled={isExportingPdf || !report || reportHasQualifications}
+            aria-label={
+              reportHasQualifications
+                ? language === 'es'
+                  ? 'Descarga bloqueada: el informe tiene salvedades de reconciliación'
+                  : 'Download blocked: the report has reconciliation qualifications'
+                : language === 'es'
+                  ? 'Exportar a PDF editorial'
+                  : 'Export to editorial PDF'
+            }
+            title={
+              reportHasQualifications
+                ? language === 'es'
+                  ? 'La reconciliación contra el balance preprocesado no cerró. El informe no es firmable tal como está; revise las salvedades de la portada.'
+                  : 'Reconciliation against the preprocessed trial balance did not close. This report is not signable as issued; see the qualifications on the cover.'
+                : undefined
+            }
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
-              isExportingPdf || !report
-                ? 'border-n-200 text-n-400 cursor-not-allowed'
+              // `text-n-600` es el mínimo WCAG AA para estado deshabilitado
+              // (3:1); `text-n-400` es nivel superficie y colapsa bajo 2:1.
+              isExportingPdf || !report || reportHasQualifications
+                ? 'border-n-200 text-n-600 cursor-not-allowed'
                 : 'border-n-200 text-n-700 hover:bg-n-50 hover:text-n-1000',
             )}
           >
@@ -1474,15 +1513,29 @@ function ReportViewer({
             <button
               type="button"
               onClick={htmlReady && onShowHtml ? onShowHtml : onGenerateHtml}
-              disabled={isGeneratingHtml || !report}
+              // El HTML editorial es un entregable como el .xlsx y el .pdf:
+              // reproduce las mismas cifras que la reconciliación no cuadró.
+              // Un informe CON SALVEDADES no se emite en ningún formato.
+              disabled={isGeneratingHtml || !report || reportHasQualifications}
               aria-label={
-                htmlReady
-                  ? language === 'es' ? 'Ver reporte HTML' : 'View HTML report'
-                  : language === 'es' ? 'Generar reporte HTML' : 'Generate HTML report'
+                reportHasQualifications
+                  ? language === 'es'
+                    ? 'Generación bloqueada: el informe tiene salvedades de reconciliación'
+                    : 'Generation blocked: the report has reconciliation qualifications'
+                  : htmlReady
+                    ? language === 'es' ? 'Ver reporte HTML' : 'View HTML report'
+                    : language === 'es' ? 'Generar reporte HTML' : 'Generate HTML report'
+              }
+              title={
+                reportHasQualifications
+                  ? language === 'es'
+                    ? 'La reconciliación contra el balance preprocesado no cerró. El informe no es firmable tal como está; revise las salvedades de la portada.'
+                    : 'Reconciliation against the preprocessed trial balance did not close. This report is not signable as issued; see the qualifications on the cover.'
+                  : undefined
               }
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
-                isGeneratingHtml || !report
+                isGeneratingHtml || !report || reportHasQualifications
                   ? 'border-n-200 text-n-600 cursor-not-allowed'
                   : htmlReady
                     ? 'border-success/30 bg-success/10 text-success hover:bg-success/20'
@@ -2700,6 +2753,19 @@ export function PipelineWorkspace() {
   // intacto. Permite reintentar haciendo click otra vez.
   const handleGenerateHtml = useCallback(async () => {
     if (!backendReport || !companyInfo || !cachedPreprocessed || isGeneratingHtml) return;
+    // Mismo gate que Excel y PDF: el HTML editorial de 15 páginas es el
+    // entregable que más lee el cliente, y reproduce las mismas cifras que la
+    // reconciliación no logró cuadrar. Un informe sellado CON SALVEDADES no se
+    // emite en NINGÚN formato — el visor Markdown sigue disponible con el sello
+    // en portada, que es donde el usuario debe leer las salvedades.
+    if (backendReport.niifAnalysis.reconciliation?.clean === false) {
+      setHtmlError(
+        language === 'es'
+          ? 'La reconciliación contra el balance preprocesado no cerró: el informe está sellado CON SALVEDADES y no es firmable tal como está. Revise las salvedades de la portada antes de emitirlo.'
+          : 'Reconciliation against the preprocessed trial balance did not close: the report is sealed WITH QUALIFICATIONS and is not signable as issued. Review the qualifications on the cover before issuing it.',
+      );
+      return;
+    }
 
     setHtmlError(null);
     setIsGeneratingHtml(true);

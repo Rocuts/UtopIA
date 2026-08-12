@@ -187,7 +187,11 @@ export interface RiskFactorBreakdown {
     | 'costo_bajo'
     | 'crecimiento_inusual'
     | 'saldo_favor_sin_solicitar'
-    | 'cobertura_retenciones_baja';
+    | 'cobertura_retenciones_baja'
+    // Utilidad positiva sin provisión de renta causada. Separado de `tet_baja`
+    // a propósito: son dos hechos distintos y mezclarlos hacía que una empresa
+    // EN PÉRDIDA recibiera 30 puntos por "tasa efectiva nula sobre utilidad".
+    | 'sin_provision_renta';
   descripcion: string;
   puntos: number;
   detalle: string;

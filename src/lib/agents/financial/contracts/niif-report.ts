@@ -209,6 +209,37 @@ const BalanceSheetSchema = z.object({
     ),
 });
 
+// ---------------------------------------------------------------------------
+// Por qué la UAI y el impuesto NO son campos propios del P&L
+// ---------------------------------------------------------------------------
+// La auditoría de cálculos 2026-08 midió que la línea del impuesto de renta era
+// libre: un impuesto inventado de $700.000.000 producía 0 errores, uno de
+// −$700.000.000 tampoco, y borrar un impuesto real de $63.000.000 salía limpio y
+// descargable. La corrección propuesta era elevar UAI e impuesto a campos de
+// primera clase de este schema.
+//
+// Se descartó por dos razones, en ese orden:
+//
+//   1. No cierra el agujero. Bajo el contrato de Zod strict mode del repo, un
+//      campo nuevo sólo puede ser `.nullable()`; el `anchorCheck` sale temprano
+//      ante `null`, así que el modelo recupera la libertad simplemente
+//      null-eándolo. Es exactamente la grieta que E9 tuvo que cerrar en
+//      2026-05-14 ("Pass-1 era libre de devolver null y el validator lo
+//      aceptaba").
+//   2. La vía que sí cierra es más fuerte y ya está: el impuesto se contrasta
+//      sumando los renglones cuyo CÓDIGO PUC pertenece al grupo 54 (Decreto
+//      2650/1993, catálogo cerrado) contra el grupo 54 del balance de prueba, y
+//      la UAI cae de la cascada completa. Ahí el modelo no tiene salida: no
+//      puede null-ear un renglón que no existe como campo, y si omite el gasto
+//      la suma deja de aterrizar en el ancla. Ver E14/E16 en
+//      `validators/niif-json-validator.ts`.
+//
+// Medición del cambio descartado, por si alguien lo retoma: añadir los cuatro
+// campos rompe la compilación de 7 ficheros de test (77 errores de `tsc`), seis
+// de ellos fuera del pipeline NIIF (Excel, PDF Élite, integración). Es un
+// cambio de contrato que hay que coordinar, no un añadido.
+// ---------------------------------------------------------------------------
+
 const IncomeStatementSchema = z.object({
   lines: z.array(StatementLineV8Schema).describe('Ingresos, costos, gastos, resultado (con confidence/anomalyFlag v8.1)'),
   grossProfitPrimary: MoneyCop,

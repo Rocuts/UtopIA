@@ -115,6 +115,17 @@ export interface NiifJsonValidatorOptions {
     totalLiabilities?: string;
     totalEquity?: string;
     netIncome?: string;
+    /**
+     * Utilidad Bruta y EBIT del periodo primario. Auditoría 2026-08
+     * (superficie 5, P&G): eran CUATRO cifras libres —UB y EBIT en los dos
+     * periodos—. Medido: `+$500.000.000` en `grossProfitPrimary` producía 0
+     * errores, 0 warnings, `clean=true` y descarga habilitada, y la cifra
+     * falsa se promovía a *binding figure* del HTML, donde
+     * `reconcileBindingFigures` EXIGE reproducirla literalmente: el sistema
+     * certificaba fidelidad a un número que nadie había verificado.
+     */
+    grossProfit?: string;
+    operatingProfit?: string;
     utilidadAntesImpuestos?: string;
     impuestoCausado?: string;
   };
@@ -171,6 +182,16 @@ export function validateNiifReportJson(
     anchorCheck('TotalLiabilities', bs.totalLiabilitiesPrimary, bpt.totalLiabilities);
     anchorCheck('TotalEquity', bs.totalEquityPrimary, bpt.totalEquity);
     anchorCheck('NetIncome', json.incomeStatement.netIncomePrimary, bpt.netIncome);
+    // Utilidad Bruta y EBIT. Sólo se pueden anclar DESPUÉS de la corrección de
+    // la doble resta de las devoluciones 4175 (`trial-balance.ts`, ola 1
+    // 2026-08): anclarlas antes habría cementado la cifra equivocada, que es
+    // exactamente lo que la auditoría advirtió.
+    anchorCheck('GrossProfit', json.incomeStatement.grossProfitPrimary, bpt.grossProfit);
+    anchorCheck(
+      'OperatingProfit (EBIT)',
+      json.incomeStatement.operatingProfitPrimary,
+      bpt.operatingProfit,
+    );
   }
 
   // -- E1. Ecuación patrimonial -----------------------------------------------
@@ -695,6 +716,197 @@ export function validateNiifReportJson(
               : 'La suma es MAYOR: revisar doble conteo o una cuenta correctora presentada en valor absoluto sin identificar.'
           }`,
       );
+    }
+  }
+
+  // -- E16. Los renglones del P&G sostienen la cascada que declara -----------
+  //
+  // Auditoría 2026-08 (superficie 5): el Estado de Resultados no tenía NINGÚN
+  // invariante de detalle. Medido sobre el balance real: `lines = []` → 0
+  // errores; el renglón de ingresos multiplicado ×3 → 0 errores; un impuesto
+  // inventado de $700.000.000 → 0 errores; el impuesto real borrado → limpio y
+  // descargable. Los subtotales viajaban anclados y el desglose que los
+  // sostiene, libre.
+  //
+  // La verificación NO usa etiquetas. Usa el CÓDIGO PUC de cada renglón
+  // (Decreto 2650/1993, catálogo cerrado), que es dato estructurado:
+  //
+  //   Utilidad Bruta = Σ|clase 4 salvo 4175| − Σ|4175| − Σ|clase 6| − Σ|clase 7|
+  //   EBIT           = Utilidad Bruta − Σ|grupo 51| − Σ|grupo 52|
+  //   UAI            = EBIT − Σ|grupo 53| − Σ|resto de clase 5 salvo 54|
+  //   Utilidad Neta  = UAI − Σ|grupo 54|
+  //
+  // El 4175 (Devoluciones en ventas, naturaleza débito) se RESTA aunque venga
+  // en valor absoluto: NIIF 15 §47 exige presentar el ingreso neto, y un
+  // informe que liste "Ingresos brutos" y "(-) Devoluciones" por separado es
+  // presentación legítima que no debe producir un falso positivo.
+  //
+  // Se toma la MAGNITUD de cada renglón (`abs`) porque el contrato permite las
+  // dos convenciones —`isAbsolute = true` imprime el gasto como positivo que
+  // resta, `false` lo trae ya firmado— y un costo es una resta en ambas.
+  //
+  // Tolerancia $0. Todas las cifras son enteros de centavos que el modelo
+  // compone en la misma respuesta: no existe ruta de redondeo que produzca
+  // deriva de un centavo. Medido en las 7 corridas reales con LLM archivadas
+  // en `.fase0*`: la cascada reprodujo los tres subtotales con brecha $0,00 en
+  // 7/7.
+  {
+    const is = json.incomeStatement;
+    const bucket = { ingresos: ZERO, devoluciones: ZERO, costos: ZERO, g51: ZERO, g52: ZERO, g53: ZERO, g54: ZERO, otros5: ZERO };
+    let codedLines = 0;
+    let revenueLines = 0;
+    for (const line of is.lines) {
+      if (line.account === null) continue; // subtotales del propio modelo
+      const code = String(line.account).replace(/\D/g, '');
+      if (code.length === 0) continue;
+      const magnitude = abs(parseMoneyCop(line.amountPrimary));
+      codedLines++;
+      if (code.startsWith('4')) {
+        revenueLines++;
+        if (code.startsWith('4175')) bucket.devoluciones += magnitude;
+        else bucket.ingresos += magnitude;
+      } else if (code.startsWith('6') || code.startsWith('7')) {
+        bucket.costos += magnitude;
+      } else if (code.startsWith('51')) bucket.g51 += magnitude;
+      else if (code.startsWith('52')) bucket.g52 += magnitude;
+      else if (code.startsWith('53')) bucket.g53 += magnitude;
+      else if (code.startsWith('54')) bucket.g54 += magnitude;
+      else if (code.startsWith('5')) bucket.otros5 += magnitude;
+    }
+
+    const gross = parseMoneyCop(is.grossProfitPrimary);
+    const opProfit = parseMoneyCop(is.operatingProfitPrimary);
+    const netIncome = parseMoneyCop(is.netIncomePrimary);
+    // Un P&G cuyo mayor subtotal es inmaterial no tiene nada que sostener.
+    const MATERIAL = BigInt(100_000_000); // $1.000.000 COP en centavos
+    const declaresMaterial =
+      abs(gross) > MATERIAL || abs(opProfit) > MATERIAL || abs(netIncome) > MATERIAL;
+
+    if (revenueLines === 0) {
+      if (declaresMaterial) {
+        errors.push(
+          `E16. El Estado de Resultados declara subtotales materiales ` +
+            `(Utilidad Bruta ${fmtCop(gross)}, EBIT ${fmtCop(opProfit)}, ` +
+            `Utilidad Neta ${fmtCop(netIncome)}) y no lista NI UN renglón de ingresos con ` +
+            `código PUC de clase 4 (${codedLines} renglones codificados en total). ` +
+            `El lector no puede reconstruir una sola de las tres cifras. ` +
+            `Cada renglón del P&G debe llevar su código PUC (Decreto 2650/1993).`,
+        );
+      }
+    } else {
+      const grossCalc = bucket.ingresos - bucket.devoluciones - bucket.costos;
+      const opCalc = gross - bucket.g51 - bucket.g52;
+      const uaiCalc = opProfit - bucket.g53 - bucket.otros5;
+      const netCalc = uaiCalc - bucket.g54;
+
+      const cascada: Array<[string, bigint, bigint, string]> = [
+        [
+          'Utilidad Bruta',
+          grossCalc,
+          gross,
+          'Σ ingresos (clase 4) − devoluciones (4175) − costos (clases 6 y 7)',
+        ],
+        ['Resultado Operacional (EBIT)', opCalc, opProfit, 'Utilidad Bruta − grupo 51 − grupo 52'],
+        [
+          'Utilidad Neta',
+          netCalc,
+          netIncome,
+          'EBIT − grupo 53 − resto de clase 5 − impuesto (grupo 54)',
+        ],
+      ];
+      for (const [nombre, calculado, declarado, formula] of cascada) {
+        if (calculado === declarado) continue;
+        errors.push(
+          `E16. ${nombre}: los renglones del P&G suman ${fmtCop(calculado)} y el estado declara ` +
+            `${fmtCop(declarado)}. Brecha: ${fmtCop(calculado - declarado)} (${formula}). ` +
+            `El lector que sume la columna con la calculadora no obtiene el subtotal impreso.`,
+        );
+      }
+
+      // Impuesto de renta — la línea que la auditoría midió como totalmente
+      // libre. Se contrasta contra el grupo 54 preprocesado con tolerancia $0.
+      // Defensa Art. 647 E.T.: un gasto por impuesto que no existe en libros
+      // es inexactitud sancionable con el 100% del mayor impuesto.
+      if (bpt?.impuestoCausado !== undefined) {
+        const impuestoAncla = abs(parseMoneyCop(bpt.impuestoCausado));
+        if (bucket.g54 !== impuestoAncla) {
+          errors.push(
+            `E14. Impuesto de renta del periodo ${json.company.fiscalPeriod}: los renglones del ` +
+              `P&G del grupo PUC 54 suman ${fmtCop(bucket.g54)} y el preprocesador causó ` +
+              `${fmtCop(impuestoAncla)}. Brecha: ${fmtCop(bucket.g54 - impuestoAncla)}. ` +
+              `El gasto por impuesto no lo autora el analista: sale del grupo 54 del balance ` +
+              `de prueba (Art. 26 y Art. 647 E.T.).`,
+          );
+        }
+      }
+
+      // Utilidad Antes de Impuestos — se calcula en centavos exactos, se pasa
+      // al validador desde 2026-08 y hasta ahora NADIE la leía.
+      if (bpt?.utilidadAntesImpuestos !== undefined) {
+        const uaiAncla = parseMoneyCop(bpt.utilidadAntesImpuestos);
+        if (uaiCalc !== uaiAncla) {
+          errors.push(
+            `E14. Utilidad Antes de Impuestos del periodo ${json.company.fiscalPeriod}: la cascada ` +
+              `del P&G aterriza en ${fmtCop(uaiCalc)} y el preprocesador calcula ` +
+              `${fmtCop(uaiAncla)}. Brecha: ${fmtCop(uaiCalc - uaiAncla)}. ` +
+              `La UAI es la base de la conciliación fiscal (Art. 26 E.T.) y no puede diferir ` +
+              `del balance de prueba.`,
+          );
+        }
+      }
+
+      // -- Los renglones de SUBTOTAL que el modelo escribe a mano -------------
+      //
+      // Las filas de subtotal del P&G viajan con `account = null` —no son una
+      // cuenta PUC— así que la cascada de arriba no las mira: la Utilidad Antes
+      // de Impuestos, por ejemplo, es una fila impresa que nada contrasta.
+      // Medido: sumarle $500.000.000 a esa fila producía 0 errores.
+      //
+      // La regla no usa la etiqueta (que el modelo redacta libre, y ya se vio
+      // salir como "RESULTADO OPERACIONAL", "Resultado operativo" y
+      // "RESULTADO INTEGRAL TOTAL DEL PERIODO" en corridas del mismo balance).
+      // Usa el VALOR: un subtotal honesto es, por definición, uno de los
+      // escalones de la cascada o una agregación de los renglones que el propio
+      // modelo listó. Si no es ninguno de los dos, es una cifra que nadie puede
+      // reconstruir sumando la columna.
+      //
+      // Medido sobre las 7 corridas reales archivadas: 37 de 37 filas de
+      // subtotal caen en el conjunto. Cero falsos positivos.
+      const cierres = [
+        gross,
+        opProfit,
+        uaiCalc,
+        netIncome,
+        parseMoneyCop(is.oriPrimary),
+        netIncome + parseMoneyCop(is.oriPrimary),
+      ];
+      const agregados = [
+        bucket.ingresos,
+        bucket.ingresos - bucket.devoluciones,
+        bucket.devoluciones,
+        bucket.costos,
+        bucket.g51,
+        bucket.g52,
+        bucket.g51 + bucket.g52,
+        bucket.g53,
+        bucket.g54,
+        bucket.otros5,
+        bucket.g53 + bucket.otros5,
+        bucket.g51 + bucket.g52 + bucket.g53 + bucket.g54 + bucket.otros5,
+      ];
+      const admisibles = new Set([ZERO, ...cierres, ...agregados].map((v) => v.toString()));
+      for (const line of is.lines) {
+        if (line.account !== null) continue;
+        if (line.level < 3) continue; // encabezados de sección, no subtotales
+        const v = parseMoneyCop(line.amountPrimary);
+        if (admisibles.has(v.toString()) || admisibles.has((-v).toString())) continue;
+        errors.push(
+          `E16. El subtotal "${line.label}" imprime ${fmtCop(v)}, que no corresponde a ningún ` +
+            `escalón de la cascada del P&G (Utilidad Bruta ${fmtCop(gross)}, EBIT ` +
+            `${fmtCop(opProfit)}, UAI ${fmtCop(uaiCalc)}, Utilidad Neta ${fmtCop(netIncome)}) ` +
+            `ni a ninguna suma de los renglones listados. El lector no puede reconstruirlo.`,
+        );
+      }
     }
   }
 

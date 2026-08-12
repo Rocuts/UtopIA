@@ -24,19 +24,39 @@ const CIEN = BigInt(100);
 const TTD_UMBRAL_PCT = 15;
 
 /**
+ * Escala de la brecha: diezmilésimas de punto porcentual.
+ *
+ * Antes se cuantizaba a DÉCIMAS de punto (`× 10`). Con eso una brecha real de
+ * 0,06 pp se redondeaba a 0,1 pp —60% de sobreestimación— y una de 0,04 pp
+ * se redondeaba a 0 pp, borrando el impuesto por completo. La escala tiene que
+ * ser más fina que el dato de entrada, no igual: F09 llega con 1 decimal, así
+ * que con 4 decimales de escala el redondeo nunca lo toca.
+ */
+const BRECHA_ESCALA = 10_000;
+
+/** Divisor para pasar de (centavos × diezmilésimas de pp) a centavos: 100 × 10.000. */
+const BRECHA_DIVISOR = BigInt(1_000_000);
+
+/**
  * Brecha en puntos porcentuales con respecto al umbral 15%.
  * Positivo cuando F09 está debajo del umbral (problema).
+ *
+ * Se conserva la misma precisión que usa el cálculo del dinero para que el
+ * texto («brecha de X pp») y la cifra no se contradigan.
  */
 function brechaPpVsUmbral(f09Actual: number): number {
-  // round 1 decimal to mirror f09 precision
-  return Math.round((TTD_UMBRAL_PCT - f09Actual) * 10) / 10;
+  return Math.round((TTD_UMBRAL_PCT - f09Actual) * BRECHA_ESCALA) / BRECHA_ESCALA;
 }
 
 /**
  * Calcula el impuesto adicional estimado por TTD baja.
  *
- * Fórmula (Art. 240 par. 6 E.T.): impuestoAdicional = (15% − F09) × UAI.
- * Si F09 ≥ 15% → 0n.
+ * Fórmula (Art. 240 par. 6 E.T., adicionado por el Art. 10 de la Ley 2277/2022,
+ * declarado EXEQUIBLE en Sentencia C-219 de 2024): si TTD < 15%,
+ * IA = (UD × 15%) − ID, que es lo mismo que (15% − TTD) × UD.
+ *
+ * Aritmética entera en centavos: uai × brecha(diezmilésimas de pp) / 1.000.000,
+ * con redondeo half-up al centavo. Ninguna división en punto flotante.
  *
  * NOTA: la TTD real usa Utilidad Depurada (UD), no UAI bruta. Para el
  * Módulo 1 usamos UAI como proxy conservador — el cálculo refinado vive
@@ -48,15 +68,13 @@ function calcularImpuestoAdicionalCents(
 ): bigint {
   if (uaiCents <= ZERO) return ZERO;
   if (f09Pct >= TTD_UMBRAL_PCT) return ZERO;
-  // brecha en décimas de pp (BigInt-safe): (150 − f09 × 10)
-  const brechaDecimas = BigInt(Math.round((TTD_UMBRAL_PCT - f09Pct) * 10));
-  if (brechaDecimas <= ZERO) return ZERO;
-  // impuestoAdicional = uai × brechaDecimas / 1000
-  const numerator = uaiCents * brechaDecimas;
-  const MIL = BigInt(1000);
-  const quotient = numerator / MIL;
-  const remainder = numerator % MIL;
-  return remainder * BigInt(2) >= MIL ? quotient + BigInt(1) : quotient;
+  // brecha en diezmilésimas de pp (BigInt-safe): (15,0000 − f09) × 10.000
+  const brecha = BigInt(Math.round((TTD_UMBRAL_PCT - f09Pct) * BRECHA_ESCALA));
+  if (brecha <= ZERO) return ZERO;
+  const numerator = uaiCents * brecha;
+  const quotient = numerator / BRECHA_DIVISOR;
+  const remainder = numerator % BRECHA_DIVISOR;
+  return remainder * BigInt(2) >= BRECHA_DIVISOR ? quotient + BigInt(1) : quotient;
 }
 
 /**
