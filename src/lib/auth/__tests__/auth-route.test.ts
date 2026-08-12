@@ -168,7 +168,11 @@ describe('/api/auth/[...all] — fase 2 (con BETTER_AUTH_SECRET)', () => {
 
 // ---------------------------------------------------------------------------
 
-describe('causa raíz — BetterAuth sin secret en producción', () => {
+// Timeout propio: este caso hace `vi.resetModules()` y vuelve a importar
+// `better-auth` en frío. Aislado tarda ~1,5 s, pero compitiendo por CPU con el
+// resto de la suite pasa de los 10 s del `testTimeout` global y caía por tiempo
+// —no por comportamiento—, con lo que la suite fallaba al azar.
+describe('causa raíz — BetterAuth sin secret en producción', { timeout: 45_000 }, () => {
   it('rechaza al despachar la primera petición (motivo del guard)', async () => {
     clearSecrets();
     // BetterAuth solo lanza fuera de test: `validateSecret()` hace
