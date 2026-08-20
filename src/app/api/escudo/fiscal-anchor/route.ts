@@ -23,7 +23,15 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 // GET:  devuelve el último snapshot del workspace + las alertas Escudo
 //       pendientes/snoozed como AlertView[].
 //
-// Sin workspace (cookie utopia_workspace_id ausente o inválida) → 401.
+// Workspace (cookie utopia_workspace_id / sesión) — asimetría deliberada:
+//   POST (escritura) exige workspace ya existente y devuelve 401 si no lo hay.
+//     Ninguna de las dos operaciones lo CREA: en fase 1 `requireAuthSession()`
+//     es un no-op, así que un POST que creara el workspace sería una fábrica
+//     anónima de tenants y de filas `reports` con el cuerpo de cualquiera.
+//   GET (lectura) devuelve el estado vacío con 200 (mismo criterio que
+//     `/api/pyme/uploads/[uploadId]`, que responde "no existe" en vez de 401).
+//     Antes devolvía 401 `no_workspace`, lo que en la primera carga limpia de
+//     /workspace/escudo pintaba un error de red sin que hubiera nada roto.
 // Contrato: docs/wave-notes/escudo-autowire-contract.md §4.3.
 // ---------------------------------------------------------------------------
 
@@ -55,6 +63,11 @@ export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
 
+  // Resuelve, NUNCA crea. En fase 1 `requireAuthSession()` es un no-op, así que
+  // crear el workspace aquí convertiría este POST en una fábrica anónima de
+  // workspaces y de filas `reports` con el cuerpo que mande quien sea. El
+  // workspace lo emite el arranque de la sesión; si todavía no existe, esto es
+  // una escritura sin dueño y se rechaza.
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
     return NextResponse.json({ error: 'no_workspace' }, { status: 401 });
@@ -192,9 +205,17 @@ export async function GET(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
 
+  // Lectura pura: si aún no hay workspace (primera visita, la cookie la emite
+  // el primer endpoint de escritura) tampoco hay snapshot que devolver ⇒
+  // estado vacío, no error. `useAncoraView` ya pinta el placeholder con esto.
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
-    return NextResponse.json({ error: 'no_workspace' }, { status: 401 });
+    return NextResponse.json({
+      hasData: false,
+      fiscalSnapshot: null,
+      ancora: null,
+      alertas: [],
+    });
   }
 
   const period = new URL(req.url).searchParams.get('period');

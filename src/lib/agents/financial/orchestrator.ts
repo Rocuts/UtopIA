@@ -1778,6 +1778,21 @@ export async function runNiifPhase(
         sellarConSalvedades(niif, mensajes, language);
       }
     }
+  } else {
+    // Sin `niif.json` no hay nada que cruzar y las E1..E9 no corren. Antes eso
+    // pasaba en silencio: el informe salía 200 y con sello, indistinguible de
+    // uno cuyas cifras SÍ se cruzaron contra el preprocesador a tolerancia $0.
+    // La política de este bloque es que un fallo no rompe el pipeline pero
+    // queda visible; que la validación no se haya ejecutado merece la misma
+    // visibilidad — es la diferencia entre "cuadra" y "nadie lo comprobó".
+    onProgress?.({
+      type: 'warning',
+      warnings: [
+        language === 'es'
+          ? '[NIIF JSON validator E1..E9] No se ejecutó: el Analista NIIF no devolvió cifras estructuradas. Las cifras del informe NO se cruzaron contra el balance de origen.'
+          : '[NIIF JSON validator E1..E9] Did not run: the NIIF Analyst returned no structured figures. The report figures were NOT cross-checked against the source trial balance.',
+      ],
+    });
   }
 
   // ---------------------------------------------------------------------------

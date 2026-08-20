@@ -1,6 +1,7 @@
 import type { LegalReference } from '../types';
 import { extractCitations } from '@/lib/agents/financial/escudo-survival/normative/validators/citation.validator';
 import type { NormativeCitationKind } from '@/lib/agents/financial/escudo-survival/normative/types';
+import { BlobUnavailableError, UploadFailedError } from '@/lib/upload/blob-client';
 
 export function generateId(): string {
   try {
@@ -268,4 +269,34 @@ export function saveFeedback(messageId: string, value: FeedbackValue): void {
     else log[messageId] = value;
     localStorage.setItem('utopia_msg_feedback', JSON.stringify(log));
   } catch { /* ignore */ }
+}
+
+/**
+ * Texto que ve el usuario cuando falla la subida de un documento.
+ *
+ * Vive aquí porque ChatSidebar y ChatWorkspace lo necesitan idéntico, y porque
+ * concentra una decisión que conviene tomar una sola vez: qué parte del error
+ * se enseña. `/api/upload` propaga mensajes de librerías de terceros y del
+ * proveedor de OCR —que pueden nombrar el endpoint o el motivo de facturación—,
+ * así que sólo se muestra el mensaje de los errores que el cliente de subida
+ * construyó a propósito para ser leídos (`BlobUnavailableError`). Del resto se
+ * enseña un texto neutro y el motivo crudo se manda a la consola, que es donde
+ * sirve para soporte.
+ */
+export function uploadErrorText(err: unknown, filename: string, language: 'es' | 'en'): string {
+  if (err instanceof BlobUnavailableError) {
+    return language === 'es'
+      ? `No pude procesar **"${filename}"**. ${err.message}`
+      : `Could not process **"${filename}"**. The file is ${err.sizeMb.toFixed(1)} MB and right now we can only handle files up to 4 MB. Try a lighter version — for example, export the trial balance to CSV or Excel instead of a scanned PDF.`;
+  }
+
+  if (err instanceof UploadFailedError && err.detail) {
+    console.error('[upload] fallo procesando el documento:', err.detail);
+  } else if (err) {
+    console.error('[upload] fallo procesando el documento:', err);
+  }
+
+  return language === 'es'
+    ? `No pude procesar **"${filename}"**. Verifique que el archivo no esté dañado y que sea CSV, Excel, PDF o Word, e intente de nuevo.`
+    : `Could not process **"${filename}"**. Check that the file isn't damaged and is a CSV, Excel, PDF or Word document, then try again.`;
 }

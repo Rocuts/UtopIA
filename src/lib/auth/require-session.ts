@@ -2,6 +2,8 @@ import 'server-only';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+import { isAuthConfigured } from '@/lib/auth/enabled';
+
 // ---------------------------------------------------------------------------
 // requireAuthSession — REAL session validation for costly API routes.
 //
@@ -27,7 +29,7 @@ export async function requireAuthSession(
   _req?: Request,
 ): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
   // Phase 1 — auth not configured: no-op.
-  if (!process.env.BETTER_AUTH_SECRET) {
+  if (!isAuthConfigured()) {
     return { ok: true };
   }
 

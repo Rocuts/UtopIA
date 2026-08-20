@@ -237,7 +237,14 @@ function expectValidPdfHeader(buf: Buffer) {
 beforeAll(() => registerEditorialFonts());
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
-describe('pdf-elite-react · pages render valid PDF', () => {
+//
+// Timeout propio, por encima del `testTimeout: 10_000` global de vitest.config.
+// Estas 15 pruebas componen PDFs de verdad con @react-pdf/renderer (~26 s de
+// trabajo en total) y corren en paralelo con el resto de la suite. Con el
+// techo global, la prueba que perdía la carrera por CPU caía por timeout — y
+// cuál caía cambiaba en cada corrida, así que la suite fallaba al azar sin que
+// hubiera nada roto en el código. No es lentitud a esconder: es contención.
+describe('pdf-elite-react · pages render valid PDF', { timeout: 45_000 }, () => {
   it('CoverPage', async () => {
     const buf = await renderPageToBuffer(<CoverPage doc={fixture} />);
     expectValidPdfHeader(buf);
