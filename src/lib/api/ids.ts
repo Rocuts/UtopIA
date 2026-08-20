@@ -25,13 +25,15 @@ export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES] | string;
 /** UUIDv7 canónico: 48 bits de unix-ms + versión 7 + variante 10 + random. */
 export function uuidv7(): string {
   const bytes = randomBytes(16);
-  const ms = BigInt(Date.now());
-  bytes[0] = Number((ms >> 40n) & 0xffn);
-  bytes[1] = Number((ms >> 32n) & 0xffn);
-  bytes[2] = Number((ms >> 24n) & 0xffn);
-  bytes[3] = Number((ms >> 16n) & 0xffn);
-  bytes[4] = Number((ms >> 8n) & 0xffn);
-  bytes[5] = Number(ms & 0xffn);
+  // Target ES2017: sin literales BigInt — se opera el timestamp en number
+  // (48 bits < 2^53, seguro hasta el año 10889).
+  const ms = Date.now();
+  bytes[0] = Math.floor(ms / 2 ** 40) & 0xff;
+  bytes[1] = Math.floor(ms / 2 ** 32) & 0xff;
+  bytes[2] = Math.floor(ms / 2 ** 24) & 0xff;
+  bytes[3] = Math.floor(ms / 2 ** 16) & 0xff;
+  bytes[4] = Math.floor(ms / 2 ** 8) & 0xff;
+  bytes[5] = ms & 0xff;
   bytes[6] = (bytes[6] & 0x0f) | 0x70;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString('hex');

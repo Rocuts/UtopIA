@@ -82,21 +82,27 @@ export function crc32Base62(input: string): string {
 // Crockford base32 — 16 bytes ↔ 26 chars (130 bits, los 2 altos en cero).
 // ---------------------------------------------------------------------------
 
-const UUID_BIT_LIMIT = 1n << 128n;
+// Target TS del repo = ES2017: sin literales BigInt (`1n`) — constructor.
+const BIG_0 = BigInt(0);
+const BIG_5 = BigInt(5);
+const BIG_8 = BigInt(8);
+const BIG_31 = BigInt(31);
+const BIG_255 = BigInt(255);
+const UUID_BIT_LIMIT = BigInt(1) << BigInt(128);
 
 /** Codifica exactamente 16 bytes en 26 chars Crockford lowercase. */
 export function encodeCrockford32(bytes: Uint8Array): string {
   if (bytes.length !== 16) {
     throw new Error(`encodeCrockford32 espera 16 bytes, llegaron ${bytes.length}`);
   }
-  let n = 0n;
+  let n = BIG_0;
   for (const byte of bytes) {
-    n = (n << 8n) | BigInt(byte);
+    n = (n << BIG_8) | BigInt(byte);
   }
   let out = '';
   for (let i = 0; i < 26; i++) {
-    out = CROCKFORD_ALPHABET[Number(n & 31n)] + out;
-    n >>= 5n;
+    out = CROCKFORD_ALPHABET[Number(n & BIG_31)] + out;
+    n >>= BIG_5;
   }
   return out;
 }
@@ -104,17 +110,17 @@ export function encodeCrockford32(bytes: Uint8Array): string {
 /** Decodifica 26 chars Crockford a 16 bytes; null si es inválido u overflow. */
 export function decodeCrockford32(s: string): Uint8Array | null {
   if (s.length !== 26) return null;
-  let n = 0n;
+  let n = BIG_0;
   for (const ch of s) {
     const v = CROCKFORD_INDEX[ch];
     if (v === undefined) return null;
-    n = (n << 5n) | v;
+    n = (n << BIG_5) | v;
   }
   if (n >= UUID_BIT_LIMIT) return null;
   const bytes = new Uint8Array(16);
   for (let i = 15; i >= 0; i--) {
-    bytes[i] = Number(n & 0xffn);
-    n >>= 8n;
+    bytes[i] = Number(n & BIG_255);
+    n >>= BIG_8;
   }
   return bytes;
 }

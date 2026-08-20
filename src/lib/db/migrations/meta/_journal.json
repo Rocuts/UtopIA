@@ -143,6 +143,13 @@
       "when": 1784407266859,
       "tag": "0019_unique_random",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787189359037,
+      "tag": "0020_smart_black_knight",
+      "breakpoints": true
     }
   ]
 }

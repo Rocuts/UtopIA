@@ -801,6 +801,9 @@ export * from './schema-adjustments';
 export * from './schema-notifications';
 export * from './schema-sentinel';
 export * from './schema-activity';
+// API público de clientes (/api/v1): llaves, idempotencia, remisiones de
+// balance y webhooks. Spec: docs/spec/api-clientes-v1.md.
+export * from './schema-api';
 // BetterAuth tables (user/session/account/verification). Re-exported so
 // drizzle-kit sees them via drizzle.config `schema: './schema.ts'` and does
 // NOT treat them as undeclared drift (a db:push/generate would otherwise emit
