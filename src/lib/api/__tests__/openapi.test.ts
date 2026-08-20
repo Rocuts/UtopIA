@@ -63,7 +63,7 @@ describe('anti-drift rutas ↔ contrato', () => {
   it('cada route.ts de /api/v1 está declarado en OPENAPI_PATHS', () => {
     if (!existsSync(V1_DIR)) return; // Task 14 crea las rutas; hasta entonces no aplica
     const EXCLUDED = new Set(['/docs', '/openapi.json']); // meta-rutas del propio contrato
-    const declared = new Set(OPENAPI_PATHS);
+    const declared = new Set<string>(OPENAPI_PATHS);
     for (const route of routeDirs(V1_DIR)) {
       if (EXCLUDED.has(route)) continue;
       const asOpenApi = `/v1${route.replace(/\[([^\]]+)\]/g, '{$1}')}`;

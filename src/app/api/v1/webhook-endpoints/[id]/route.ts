@@ -47,20 +47,21 @@ export const PATCH = withApiV1(
       req.headers.get('if-match'),
     );
 
-    if (result.status === 404) return problemResponse('not_found', { requestId, instance });
+    if ('row' in result) {
+      return apiJson(200, serializeWebhookEndpoint(result.row), requestId, {
+        ETag: endpointEtag(result.row),
+      });
+    }
+    if ('problem' in result) {
+      return problemResponse(result.problem, { requestId, instance, errors: result.errors });
+    }
     if (result.status === 428) {
       return problemResponse('precondition_required', { requestId, instance });
     }
     if (result.status === 412) {
       return problemResponse('precondition_failed', { requestId, instance });
     }
-    if ('problem' in result) {
-      return problemResponse(result.problem, { requestId, instance, errors: result.errors });
-    }
-
-    return apiJson(200, serializeWebhookEndpoint(result.row), requestId, {
-      ETag: endpointEtag(result.row),
-    });
+    return problemResponse('not_found', { requestId, instance });
   },
 );
 

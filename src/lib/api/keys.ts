@@ -29,7 +29,9 @@ export const CURRENT_PEPPER_VERSION = 1;
 
 const KEY_BODY_LENGTH = 26;
 const KEY_CHECKSUM_LENGTH = 6;
-const KEY_TOKEN_RE = /^utop_sk_(live|test)_([0-9A-Za-z]{26})([0-9A-Za-z]{6})$/;
+const KEY_TOKEN_RE = new RegExp(
+  `^utop_sk_(live|test)_([0-9A-Za-z]{${KEY_BODY_LENGTH}})([0-9A-Za-z]{${KEY_CHECKSUM_LENGTH}})$`,
+);
 
 /** Genera un token nuevo. El token completo se muestra UNA sola vez. */
 export function generateApiKeyToken(mode: ApiKeyMode): GeneratedApiKey {
