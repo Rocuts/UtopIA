@@ -14,6 +14,10 @@
 // Limits (per IP, per 60-second window):
 //   'upload' — 10 requests  (file uploads are expensive: OCR + embedding)
 //   'chat'   — 30 requests  (LLM calls)
+//
+// `checkRateLimitDynamic` (API v1) acepta un límite explícito por llave y
+// reporta `resetSeconds` para los headers RateLimit del draft IETF. El
+// `checkRateLimit` legado delega en él sin cambiar su contrato.
 // ---------------------------------------------------------------------------
 
 const WINDOW_MS = 60_000; // 1 minute
@@ -24,14 +28,21 @@ const LIMITS: Record<string, number> = {
   chat: 30,
 };
 
+const DEFAULT_LIMIT = 20;
+
 // ---------------------------------------------------------------------------
-// Shared result type
+// Shared result types
 // ---------------------------------------------------------------------------
 
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
   limit: number;
+}
+
+export interface DynamicRateLimitResult extends RateLimitResult {
+  /** Segundos hasta que la ventana actual expira (para Retry-After/RateLimit). */
+  resetSeconds: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,14 +69,15 @@ async function upstashPipeline(
   return body.map((r) => r.result);
 }
 
-async function checkRateLimitUpstash(
-  key: string,
-  endpoint: string,
-): Promise<RateLimitResult> {
-  const limit = LIMITS[endpoint] ?? 20;
+async function checkUpstashDynamic(
+  name: string,
+  limit: number,
+): Promise<DynamicRateLimitResult> {
+  const now = Date.now();
   // Fixed-window bucket key: resets every WINDOW_MS.
-  const bucket = Math.floor(Date.now() / WINDOW_MS);
-  const redisKey = `rl:${endpoint}:${key}:${bucket}`;
+  const bucket = Math.floor(now / WINDOW_MS);
+  const redisKey = `rl:${name}:${bucket}`;
+  const resetSeconds = Math.max(1, Math.ceil(((bucket + 1) * WINDOW_MS - now) / 1000));
 
   const [count] = await upstashPipeline([
     ['INCR', redisKey],
@@ -74,7 +86,7 @@ async function checkRateLimitUpstash(
 
   const n = typeof count === 'number' ? count : Number(count);
   const remaining = Math.max(0, limit - n);
-  return { allowed: n <= limit, remaining, limit };
+  return { allowed: n <= limit, remaining, limit, resetSeconds };
 }
 
 // ---------------------------------------------------------------------------
@@ -86,24 +98,21 @@ interface WindowEntry {
   windowStart: number;
 }
 
-const store = new Map<string, Map<string, WindowEntry>>();
+const store = new Map<string, WindowEntry>();
 
-function checkRateLimitMemory(key: string, endpoint: string): RateLimitResult {
-  const limit = LIMITS[endpoint] ?? 20;
+function checkMemoryDynamic(name: string, limit: number): DynamicRateLimitResult {
   const now = Date.now();
 
-  if (!store.has(endpoint)) store.set(endpoint, new Map());
-  const endpointMap = store.get(endpoint)!;
-
-  const entry = endpointMap.get(key);
+  const entry = store.get(name);
   if (!entry || now - entry.windowStart >= WINDOW_MS) {
-    endpointMap.set(key, { count: 1, windowStart: now });
-    return { allowed: true, remaining: limit - 1, limit };
+    store.set(name, { count: 1, windowStart: now });
+    return { allowed: true, remaining: limit - 1, limit, resetSeconds: WINDOW_SECS };
   }
 
   entry.count += 1;
   const remaining = Math.max(0, limit - entry.count);
-  return { allowed: entry.count <= limit, remaining, limit };
+  const resetSeconds = Math.max(1, Math.ceil((entry.windowStart + WINDOW_MS - now) / 1000));
+  return { allowed: entry.count <= limit, remaining, limit, resetSeconds };
 }
 
 // ---------------------------------------------------------------------------
@@ -111,25 +120,45 @@ function checkRateLimitMemory(key: string, endpoint: string): RateLimitResult {
 // ---------------------------------------------------------------------------
 
 /**
+ * Variante con límite explícito (API v1: cuota por llave, no por endpoint
+ * fijo). `name` debe ser único por bucket lógico (p.ej. `apiv1:read:<keyId>`).
+ * Upstash cuando está configurado; memoria como fallback fail-open.
+ */
+export async function checkRateLimitDynamic(
+  name: string,
+  limit: number,
+): Promise<DynamicRateLimitResult> {
+  if (USE_UPSTASH) {
+    try {
+      return await checkUpstashDynamic(name, limit);
+    } catch (err) {
+      // Upstash unreachable — fail open with in-memory fallback to avoid
+      // blocking all requests during a Redis outage.
+      console.warn('[rate-limit] Upstash error, falling back to memory:', err);
+      return checkMemoryDynamic(name, limit);
+    }
+  }
+  return checkMemoryDynamic(name, limit);
+}
+
+/**
  * Check whether `key` (typically client IP) has exceeded the rate limit for
  * `endpoint`. Uses Upstash Redis when env vars are configured, falls back to
  * in-memory sliding window otherwise.
+ *
+ * Contrato legado intacto: mismo shape de retorno y mismas claves Redis
+ * (`rl:${endpoint}:${key}:${bucket}`) que antes del refactor dinámico.
  */
 export async function checkRateLimit(
   key: string,
   endpoint: string,
 ): Promise<RateLimitResult> {
-  if (USE_UPSTASH) {
-    try {
-      return await checkRateLimitUpstash(key, endpoint);
-    } catch (err) {
-      // Upstash unreachable — fail open with in-memory fallback to avoid
-      // blocking all requests during a Redis outage.
-      console.warn('[rate-limit] Upstash error, falling back to memory:', err);
-      return checkRateLimitMemory(key, endpoint);
-    }
-  }
-  return checkRateLimitMemory(key, endpoint);
+  const limit = LIMITS[endpoint] ?? DEFAULT_LIMIT;
+  const { allowed, remaining } = await checkRateLimitDynamic(
+    `${endpoint}:${key}`,
+    limit,
+  );
+  return { allowed, remaining, limit };
 }
 
 /**
