@@ -25,6 +25,7 @@
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts",
     "db:encrypt-erp": "dotenv -e .env.local -- tsx scripts/encrypt-erp-credentials.ts",
+    "api:create-key": "dotenv -e .env.local -- tsx scripts/create-api-key.ts",
     "lint:strict-mode": "node scripts/lint-strict-mode.mjs"
   },
   "dependencies": {

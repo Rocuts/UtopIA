@@ -30,6 +30,8 @@ export interface AuthenticatedKey {
   scopes: string[];
   rpmRead: number;
   rpmWrite: number;
+  /** Derivado del prefix ('utop_sk_live_' | 'utop_sk_test_'). */
+  mode?: 'live' | 'test';
 }
 
 export interface AuthDeps {
@@ -93,6 +95,7 @@ export function createDrizzleAuthDeps(db: DbClient): AuthDeps {
           scopes: apiKeys.scopes,
           rpmRead: apiKeys.rpmRead,
           rpmWrite: apiKeys.rpmWrite,
+          prefix: apiKeys.prefix,
         })
         .from(apiKeys)
         .where(
@@ -103,7 +106,10 @@ export function createDrizzleAuthDeps(db: DbClient): AuthDeps {
           ),
         )
         .limit(1);
-      return rows[0] ?? null;
+      const row = rows[0];
+      if (!row) return null;
+      const { prefix, ...key } = row;
+      return { ...key, mode: prefix.includes('_test_') ? 'test' : 'live' };
     },
 
     touchLastUsed(keyId) {

@@ -46,6 +46,9 @@ const AUTH_EXEMPT_APIS: readonly string[] = [
   '/api/erp/webhook/',
   '/api/cron/',
   '/api/notifications/dispatch',
+  // API público de clientes: autentica con su propia llave (Bearer utop_sk_*)
+  // dentro de withApiV1 — nunca con la cookie de sesión del navegador.
+  '/api/v1/',
 ];
 const PUBLIC_PREFIXES = ['/api/auth', '/login', '/signup', '/_next', '/favicon'];
 
@@ -179,6 +182,10 @@ const RATE_LIMITS: Record<string, number> = {
   // Workspace bootstrap
   '/api/workspace': 60,
 
+  // API público de clientes (backstop por IP; la cuota REAL es por llave
+  // dentro del handler — rpm_read/rpm_write de api_keys).
+  '/api/v1': 120,
+
   // Stripe webhook (server-to-server; authenticity = HMAC signature inside
   // the handler). 60/min is generous for real subscription traffic but caps
   // replay floods. NOTE: must precede any broader '/api/auth' entry if one is
@@ -214,6 +221,10 @@ const CSRF_ALLOWLIST: readonly string[] = [
   // catch-all): Stripe servers POST without an Origin header. Authenticity is
   // enforced inside the plugin via HMAC signature (STRIPE_WEBHOOK_SECRET).
   '/api/auth/stripe/webhook',
+  // API público de clientes (server-to-server): los ERPs no mandan Origin por
+  // diseño. La autenticidad la da la llave Bearer dentro del handler
+  // (withApiV1) y el rate limit sigue aplicando (RATE_LIMITS abajo).
+  '/api/v1/',
 ];
 
 function getRateLimitConfig(pathname: string): { limit: number; id: string } {
@@ -438,9 +449,17 @@ export async function proxy(req: NextRequest) {
   // -------------------------------------------------------------------------
   // 3. Security headers on the API response.
   // -------------------------------------------------------------------------
-  const response = NextResponse.next();
+  // Un solo request-id por request: se propaga al handler como request header
+  // `x-request-id` (mismo patrón que x-nonce) para que /api/v1 lo eche en los
+  // cuerpos problem+json y en logs, y sale en la respuesta con el MISMO valor
+  // — antes aquí se generaba un UUID distinto al del handler y la correlación
+  // soporte ↔ logs era imposible.
+  const requestId = crypto.randomUUID();
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-request-id', requestId);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Request-Id', crypto.randomUUID());
+  response.headers.set('X-Request-Id', requestId);
   response.headers.set('Content-Security-Policy', csp);
 
   return response;

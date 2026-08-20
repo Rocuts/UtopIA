@@ -127,6 +127,7 @@ Run the `utopia-contrast-auditor` agent on any "no se ve / fantasma / muy claro 
 | **Qué cifras son deterministas y cuáles las autora el LLM** | [docs/AUDITORIA_CALCULOS_2026-08.md](docs/AUDITORIA_CALCULOS_2026-08.md) |
 | **Postura de seguridad OWASP (repo público: el detalle vive en `.security-private/`)** | [docs/AUDITORIA_OWASP_2026-08.md](docs/AUDITORIA_OWASP_2026-08.md) |
 | Insumos pendientes (balances reales, decisiones de negocio) | [docs/INSUMOS_REQUERIDOS_2026-08.md](docs/INSUMOS_REQUERIDOS_2026-08.md) |
+| **API público de clientes (`/api/v1`): llaves, contrato, webhooks** | [docs/spec/api-clientes-v1.md](docs/spec/api-clientes-v1.md) |
 | Authoritative specs (financial pipeline v2.1, report v10.1, zod strict mode) | [docs/spec/](docs/spec/) |
 | Wave notes (historical context + per-wave runbooks) | [docs/wave-notes/](docs/wave-notes/) |
 | AI SDK v6 migration contract | [docs/AI_SDK_MIGRATION.md](docs/AI_SDK_MIGRATION.md) |
