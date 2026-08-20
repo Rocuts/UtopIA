@@ -222,6 +222,73 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
     expect(out.findings[0].code).toBe('CUR-R2');
   });
 
+  // -------------------------------------------------------------------------
+  // Dividendos fabricados — auditoría 2026-08, superficie 1 (EFE, 1/10)
+  // -------------------------------------------------------------------------
+  // El peor número que llegaba al cliente: -$1.570.997.737,30 de "dividendos
+  // estimados" (2,09× la facturación del año, 64,9% del flujo operativo)
+  // inferidos de las cuentas VIRTUALES que inyecta R8, sobre un balance donde
+  // la cuenta 2360 no existe. Viajaba al modelo como VINCULANTE y salía impreso
+  // verbatim en la Nota 6 del informe entregado, con cita normativa de respaldo
+  // y la tabla de financiación VACÍA. NIC 7 ¶43.
+
+  it('NO infiere dividendos cuando el balance no trae evidencia (2360 / grupo 35)', () => {
+    const prev = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 0 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(3, [{ code: '360505', name: 'Utilidades acumuladas', balance: 0 }]),
+      ],
+    });
+    const curr = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 500_000_000 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        // Las utilidades acumuladas NO crecen lo que la utilidad neta: la
+        // fórmula vieja leía eso como "hubo distribución" y fabricaba el plug.
+        makeClass(3, [{ code: '360505', name: 'Utilidades acumuladas', balance: 0 }]),
+      ],
+    });
+    const out = runR2(curr, prev);
+    expect(out.cashFlowIndirecto!.financing.dividendosEstimados).toBe(0);
+    // Y el subtotal sigue siendo la suma exacta de sus renglones.
+    const f = out.cashFlowIndirecto!.financing;
+    expect(f.varObligacionesFinancieras + f.varCapitalReservas + f.dividendosEstimados).toBe(f.total);
+  });
+
+  it('las cuentas virtuales de R8 (sufijo VC) no alimentan el cálculo de dividendos', () => {
+    const prev = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 0 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '236005', name: 'Dividendos por pagar', balance: 0 }]),
+        makeClass(3, [{ code: '360505', name: 'Utilidades acumuladas', balance: 0 }]),
+      ],
+    });
+    // CON evidencia (2360 presente) el plug sí aplica — pero debe ignorar la
+    // cuenta virtual 3605VC, que es el cierre contable que inyecta R8 y no
+    // representa movimiento real de caja.
+    const curr = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 500_000_000 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '236005', name: 'Dividendos por pagar', balance: 0 }]),
+        makeClass(3, [
+          { code: '360505', name: 'Utilidades acumuladas', balance: 0 },
+          { code: '3605VC', name: 'Cierre virtual R8', balance: 500_000_000 },
+        ]),
+      ],
+    });
+    const out = runR2(curr, prev);
+    // Sin la exclusión, 3605VC haría deltaUtilAcum = 500M y el plug daría $0.
+    // Con ella, deltaUtilAcum = 0 y el plug refleja la distribución real.
+    expect(out.cashFlowIndirecto!.financing.dividendosEstimados).toBe(-500_000_000);
+  });
+
   it('marca reconciled=false si la brecha excede tolerancia', () => {
     const prev = makeSnapshot({
       period: '2025',

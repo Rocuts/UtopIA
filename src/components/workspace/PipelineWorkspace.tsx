@@ -2371,6 +2371,23 @@ export function PipelineWorkspace() {
       // parcial con los resultados reales y reconstruimos el consolidatedReport
       // canónico (concatenación de los 3 fullContent — mismo formato que el
       // orchestrator legacy en `buildConsolidatedReport`).
+      // Las salvedades del acta se pliegan sobre la reconciliación del NIIF: es
+      // el ÚNICO canal que apaga los botones de descarga (`reportHasQualifications`
+      // lee `niifAnalysis.reconciliation.clean`). Sin esto, un acta con la reserva
+      // legal mal calculada seguiría siendo descargable en Excel, PDF y HTML pese
+      // a llevar el sello impreso en el cuerpo.
+      if (governanceResult.actaQualifications?.clean === false) {
+        niifResult = {
+          ...niifResult,
+          reconciliation: {
+            deviations: niifResult.reconciliation?.deviations ?? [],
+            lineGaps: niifResult.reconciliation?.lineGaps ?? [],
+            repairAttempted: niifResult.reconciliation?.repairAttempted ?? false,
+            clean: false,
+          },
+        };
+      }
+
       const fullConsolidated = buildClientConsolidatedReport(
         niifContext.company,
         niifResult.fullContent,

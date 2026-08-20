@@ -20,6 +20,7 @@
 import type { PUCClass, PeriodSnapshot } from '../trial-balance';
 
 import type { CashFlowStatement, CuratorFinding } from './types';
+import { hasDividendEvidenceAccounts } from './dividend-evidence';
 
 export interface R2Result {
   cashFlowIndirecto?: CashFlowStatement;
@@ -87,12 +88,25 @@ export function runR2(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): R2
     deltaByGroup.classGroup('3', '31') +
     deltaByGroup.classGroup('3', '32') +
     deltaByGroup.classGroup('3', '33');
-  // Dividendos estimados: Δ utilidades acumuladas − utilidad neta del periodo.
-  // Si las utilidades acumuladas crecieron MENOS que la utilidad neta, hubo
-  // distribución (dividendo).
+  // Dividendos: SÓLO con evidencia real en el balance, y sobre saldos REALES.
+  //
+  // Este bloque fabricaba dividendos por -$1.570.997.737,30 sobre el balance
+  // testigo — 2,09× la facturación del año y el 64,9% del flujo operativo — a
+  // partir de las cuentas virtuales 3605VC/3710VC que inyecta R8. La cifra
+  // viajaba luego al modelo marcada como VINCULANTE y salía impresa en la Nota
+  // 6 del informe entregado, con cita normativa de respaldo y la tabla de
+  // financiación vacía. En ese balance la cuenta 2360 no existe.
+  //
+  // Dos condiciones, y hacen falta las dos: excluir las virtuales POR SÍ SOLO
+  // empeora el número (se midió: -$2.228.496.789,73), porque el tapa-huecos
+  // sigue siendo un tapa-huecos. NIC 7 ¶43: una partida que no movió caja no se
+  // presenta como flujo.
+  const hayEvidenciaDividendos = hasDividendEvidenceAccounts(snapshot);
   const deltaUtilAcum =
-    deltaByGroup.classGroup('3', '36') + deltaByGroup.classGroup('3', '37');
-  const dividendosEstimados = Math.min(0, deltaUtilAcum - utilidadNeta);
+    deltaByGroup.classGroupReal('3', '36') + deltaByGroup.classGroupReal('3', '37');
+  const dividendosEstimados = hayEvidenciaDividendos
+    ? Math.min(0, deltaUtilAcum - utilidadNeta)
+    : 0;
   const financingTotal = deltaOblFin + deltaCapital + dividendosEstimados;
 
   const netChangeInCash = operatingTotal + investingTotal + financingTotal;
@@ -170,6 +184,14 @@ interface DeltaByGroup {
   classGroup(classDigit: string, group: string): number;
   /** Variación total para cuentas que empiezan con `subaccountPrefix` (4 dígitos). */
   subaccount(prefix: string): number;
+  /**
+   * Igual que `classGroup`, pero EXCLUYE las cuentas virtuales que inyecta R8
+   * (código con sufijo `VC`). Existen para cuadrar la ecuación patrimonial en
+   * el cierre virtual; no representan movimiento real de caja, y colarlas en la
+   * variación de utilidades acumuladas es lo que convirtió un tapa-huecos en un
+   * "dividendo" de -$1.570.997.737,30.
+   */
+  classGroupReal(classDigit: string, group: string): number;
 }
 
 function computeDeltaByGroup(snapshot: PeriodSnapshot, prev: PeriodSnapshot): DeltaByGroup {
@@ -202,6 +224,15 @@ function computeDeltaByGroup(snapshot: PeriodSnapshot, prev: PeriodSnapshot): De
       let total = 0;
       for (const [code, delta] of deltas) {
         if (code.startsWith(prefix)) total += delta;
+      }
+      return total;
+    },
+    classGroupReal(classDigit, group) {
+      let total = 0;
+      for (const [code, delta] of deltas) {
+        if (code.toUpperCase().includes('VC')) continue;
+        if (!code.startsWith(classDigit)) continue;
+        if (code.length >= 2 && code.slice(0, 2) === group) total += delta;
       }
       return total;
     },

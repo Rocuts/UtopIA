@@ -26,6 +26,7 @@
 
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
+import { DIVIDEND_EVIDENCE_PREFIXES } from '@/lib/preprocessing/curator-rules/dividend-evidence';
 
 const ZERO = BigInt(0);
 
@@ -324,7 +325,8 @@ const ACCUMULATED_DEPRECIATION_PREFIXES = ['1592', '1595', '1598'];
  * dividendo decretado en acciones, que NO es flujo de efectivo (NIC 7 ¶43)
  * pero sí es evidencia de que hubo distribución.
  */
-const DIVIDEND_EVIDENCE_PREFIXES = ['2360', '35'];
+// La lista canónica vive en preprocessing — ver `curator-rules/dividend-evidence.ts`.
+// Se importa en vez de redeclararse para que R2 y el EFE no puedan divergir.
 
 interface LeafBalance {
   cents: bigint;

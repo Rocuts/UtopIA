@@ -89,7 +89,7 @@ export function buildGovernancePrompt(
     (company as unknown as { estatutosRequierenReservaLegal?: unknown })
       .estatutosRequierenReservaLegal,
   );
-  const reserveRegime: ActaReserveRegime = deriveActaReserveRegime(isSAS, estatutosReservaLegal);
+  const reserveRegime: ActaReserveRegime = deriveActaRegimeForCompany(company);
   const reservaLegalAplica = regimeConstituyeReservaLegal(reserveRegime);
   const reserveLegalCitation = RESERVE_REGIME_CITATION[reserveRegime];
   const entityRegimeCitation = isSAS
@@ -435,6 +435,38 @@ function buildActaPrimaryArithmetic(
     reservaOcasionalPct: 50,
     capitalizationPct: 40,
   });
+}
+
+/**
+ * Régimen de reserva legal de la sociedad.
+ *
+ * Exportado a propósito: el orquestador tiene que reconciliar el acta emitida
+ * contra EXACTAMENTE la misma aritmética que se le inyectó al modelo. Derivar el
+ * régimen dos veces —una aquí y otra en el reconciliador— es la duplicación sin
+ * sincronizar que esta auditoría ya nombró como causa raíz de la familia entera
+ * de defectos.
+ */
+export function deriveActaRegimeForCompany(company: CompanyInfo): ActaReserveRegime {
+  const isSAS = (company.entityType || 'SAS').toUpperCase().includes('SAS');
+  return deriveActaReserveRegime(
+    isSAS,
+    normalizeEstatutosReservaLegal(
+      (company as unknown as { estatutosRequierenReservaLegal?: unknown })
+        .estatutosRequierenReservaLegal,
+    ),
+  );
+}
+
+/**
+ * Aritmética vinculante del acta — la MISMA que viajó al modelo en el prompt.
+ * `null` cuando el preprocesador no trae `controlTotals.cents`: en ese caso el
+ * prompt tampoco inyectó cifras, así que no hay nada que reconciliar.
+ */
+export function buildActaExpectedArithmetic(
+  company: CompanyInfo,
+  preprocessed?: PreprocessedBalance,
+): ActaArithmetic | null {
+  return buildActaPrimaryArithmetic(preprocessed, deriveActaRegimeForCompany(company));
 }
 
 /** Una cifra vinculante: legible para redactar + token literal para copiar. */

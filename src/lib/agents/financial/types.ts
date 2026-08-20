@@ -175,6 +175,20 @@ export interface GovernanceResult {
   fullContent: string;
   /** JSON-strict del Governance Specialist (Fase 2 outcome-first). Ver `NiifAnalysisResult.json`. */
   json?: GovernanceReportJson;
+  /**
+   * Salvedades del reconciliador determinista del acta (auditoría 2026-08 §3).
+   *
+   * El acta se firma, se inscribe en Cámara de Comercio y reparte dinero, y toda
+   * su aritmética la autoraba el LLM sin un solo cruce: se midió una reserva
+   * legal calculada sobre el patrimonio en vez de la utilidad y una
+   * capitalización deslizada de 40% a 4% ($802.258.844,31 de error) pasando con
+   * `emittable: true` y descarga habilitada.
+   *
+   * `clean: false` obliga al consumidor a plegar estas salvedades sobre
+   * `niifAnalysis.reconciliation`, que es el único canal que apaga el botón de
+   * descarga.
+   */
+  actaQualifications?: { clean: boolean; motivos: string[] };
 }
 
 // ---------------------------------------------------------------------------

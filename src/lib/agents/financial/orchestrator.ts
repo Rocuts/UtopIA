@@ -35,6 +35,12 @@ import {
   checkCashFlowInvariants,
   formatCashFlowViolations,
 } from './contracts/deterministic-breakdown';
+import { hasDividendEvidenceAccounts } from '@/lib/preprocessing/curator-rules/dividend-evidence';
+import {
+  reconcileActaArithmetic,
+  describeActaQualifications,
+} from './contracts/base';
+import { buildActaExpectedArithmetic } from './prompts/governance-specialist.prompt';
 import { buildPeriodAnchors, moneyCopToken } from './contracts/anchors';
 import {
   fillComparativeBreakdownFromSnapshot,
@@ -968,9 +974,27 @@ export function renderSnapshotLines(snap: PeriodSnapshot): string[] {
     lines.push(
       `  - Variación Capital + Reservas: ${fmtCop(cfi.financing.varCapitalReservas)}`,
     );
-    lines.push(
-      `  - Dividendos estimados: ${fmtCop(cfi.financing.dividendosEstimados)}`,
-    );
+    // Dividendos: SÓLO con evidencia real en el balance.
+    //
+    // `dividendosEstimados` de R2 es un tapa-huecos —
+    // `Math.min(0, deltaUtilAcum - utilidadNeta)`— y sobre este mismo balance
+    // fabricó -$1.570.997.737,30 (2,09× la facturación del año, 64,9% del flujo
+    // operativo) a partir de las cuentas VIRTUALES 3605VC/3710VC que inyecta R8.
+    // La cuenta 2360 no existe en el balance. Marcarlo VINCULANTE hizo que el
+    // modelo lo imprimiera obediente en la Nota 6 del informe entregado, con
+    // cita normativa de respaldo y la tabla de financiación vacía. NIC 7 ¶43
+    // prohíbe presentar como flujo una partida que no lo es.
+    if (hasDividendEvidenceAccounts(snap)) {
+      lines.push(
+        `  - Dividendos estimados: ${fmtCop(cfi.financing.dividendosEstimados)}`,
+      );
+    } else {
+      lines.push(
+        `  - Dividendos: NO hay evidencia en el balance (sin movimiento en PUC 2360 ` +
+          `ni en el grupo 35). NO presentes dividendos en el EFE, ni "estimados" ni ` +
+          `de ninguna otra clase, ni los menciones en las notas (NIC 7 ¶43).`,
+      );
+    }
     lines.push(
       `  - = Flujo neto Actividades de Financiación: ${fmtCop(cfi.financing.total)}`,
     );
@@ -1916,6 +1940,71 @@ export async function runGovernancePhase(
     AbortSignal.timeout(720_000),
     reportMode,
   );
+
+  // -------------------------------------------------------------------------
+  // Reconciliación determinista del acta.
+  //
+  // El acta es el documento que se FIRMA, se inscribe en Cámara de Comercio y
+  // reparte dinero — y hasta ahora toda su aritmética la autoraba el modelo sin
+  // un solo cruce. Medido por la auditoría 2026-08: reserva legal calculada
+  // sobre el patrimonio en vez de la utilidad ($222.343.999,15 vs
+  // $222.849.678,97) y capitalización deslizada de 40% a 4% ($89.139.871,58 vs
+  // $891.398.715,89 — $802.258.844,31 de error) salían con `ok: true`,
+  // `emittable: true`, cero blockers y descarga habilitada.
+  //
+  // `buildActaExpectedArithmetic` es la MISMA función que alimentó el bloque
+  // vinculante del prompt: reconciliamos contra lo que se le pidió al modelo,
+  // no contra una segunda derivación que podría divergir.
+  // -------------------------------------------------------------------------
+  const actaEsperada = buildActaExpectedArithmetic(company, preprocessed);
+  const acta = governance.json?.shareholderMinutes;
+  if (actaEsperada && acta) {
+    const desviaciones = reconcileActaArithmetic(
+      {
+        netIncomeCop: acta.resultDistribution?.netIncomeCop ?? null,
+        distributionApplies: acta.resultDistribution?.applies ?? false,
+        distributionLines: (acta.resultDistribution?.lines ?? []).map((l) => ({
+          label: l.label,
+          amountCop: l.amountCop,
+        })),
+        capitalizationApplies: acta.capitalizationProposal?.applies ?? false,
+        capitalizationBaseCop: acta.capitalizationProposal?.retainedEarningsBaseCop ?? null,
+        capitalizationAmountCop: acta.capitalizationProposal?.capitalizationAmountCop ?? null,
+      },
+      actaEsperada,
+    );
+
+    if (desviaciones.length > 0) {
+      const motivos = describeActaQualifications(desviaciones);
+      onProgress?.({
+        type: 'warning',
+        warnings: motivos.map((m) => `[Acta — reconciliación] ${m}`),
+      });
+      governance.actaQualifications = { clean: false, motivos };
+
+      // El sello va en el cuerpo del acta además de en el flag: un evento SSE
+      // `warning` muere en el navegador sin handler (verificado por la auditoría
+      // integral), así que la señal tiene que viajar en el texto que se lee.
+      const seal = [
+        language === 'es'
+          ? '> ## ACTA CON SALVEDADES — INTEGRIDAD ARITMÉTICA'
+          : '> ## MINUTES WITH QUALIFICATIONS — ARITHMETIC INTEGRITY',
+        '>',
+        language === 'es'
+          ? '> Las cifras del acta no coinciden con la aritmética determinista sobre la ' +
+            'utilidad del ejercicio. Este documento NO es firmable ni inscribible tal como está:'
+          : '> The minutes figures do not match the deterministic arithmetic over the ' +
+            'period result. This document is NOT signable as issued:',
+        '>',
+        ...motivos.map((m) => `> - ${m}`),
+        '',
+      ].join('\n');
+      governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
+      governance.fullContent = `${seal}\n${governance.fullContent}`;
+    } else {
+      governance.actaQualifications = { clean: true, motivos: [] };
+    }
+  }
 
   onProgress?.({ type: 'stage_complete', stage: 3, label: completeLabel });
 
