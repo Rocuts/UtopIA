@@ -82,6 +82,20 @@ Tools are defined in `src/lib/agents/tools/registry.ts` using the AI SDK v6 `too
 - `src/lib/validation/schemas.ts`: Zod schemas for all API request validation.
 - `src/lib/security/vault.ts`: AES-256-GCM Node-side encryption for ERP credentials (`encrypted_secret` column on `erp_credentials`). Wire format `v1:gcm:<iv>:<tag>:<ct>` with base64url segments. Distinct from `encryption.ts` (pgcrypto for column-level PII). Key from `UTOPIA_VAULT_KEY`; rotation via `UTOPIA_VAULT_KEY_PREV` + `npm run db:encrypt-erp -- --rotate`. See `docs/SECURITY_ENCRYPTION.md`.
 
+## Public client API (`/api/v1`)
+
+B2B server-to-server surface (ERPs/integrators push PUC trial balances, get the
+deterministic NIIF validation back; signed webhooks notify them). Everything flows through
+`withApiV1` (`src/lib/api/handler.ts`): pepper fail-closed → Bearer `utop_sk_*` (CRC32
+checksum offline, HMAC-pepper lookup) → scopes → per-key quota → body caps → Zod →
+`Idempotency-Key` → RFC 9457 `problem+json` on every error. Tables in
+`src/lib/db/schema-api.ts` (migration `0021`); webhook delivery is a durable Workflow DevKit
+workflow (`src/lib/workflows/webhook-delivery/`, Svix retry schedule). `proxy.ts` exempts
+`/api/v1/` from the CSRF/origin gate and the BetterAuth cookie gate (it carries its own
+auth) but keeps the IP rate-limit backstop. OpenAPI 3.1.2 is generated from the same Zod
+schemas (`/api/v1/openapi.json`; `openapi.test.ts` enforces route↔contract sync). Ops guide:
+`docs/API_CLIENTES.md`; authoritative design spec: `docs/spec/api-clientes-v1.md`.
+
 ## State management
 
 - **Server (MVP, no auth)**: Neon Postgres via Vercel Marketplace, accessed through Drizzle ORM (`drizzle-orm/neon-http`). Schema in `src/lib/db/schema.ts` (4 tables: `workspaces`, `erp_credentials`, `reports`, `alert_thresholds`). Lazy `getDb()` in `src/lib/db/client.ts` (no Proxy — breaks adapters that introspect methods). Tenant identification is anonymous via httpOnly cookie `utopia_workspace_id` set by `getOrCreateWorkspace()` in `src/lib/db/workspace.ts`. Migrations run with `npm run db:push` (uses `dotenv-cli` to load `.env.local`).

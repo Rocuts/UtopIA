@@ -116,6 +116,19 @@ migrador de drizzle envuelve todo en uno.
 
 ---
 
+## D. API de clientes (`/api/v1`) — decisiones de negocio (2026-08-19)
+
+El API está construido y verificado ([guía](API_CLIENTES.md), [spec](spec/api-clientes-v1.md));
+lo que falta no es código:
+
+| # | Decisión | Por qué importa |
+|---|---|---|
+| 1 | **Cláusula de encargo de tratamiento** en los términos del API | Ley 1581: el cliente es Responsable y UtopIA Encargado — es requisito legal, insumo de abogado, no de repo |
+| 2 | **Política de retención** de remisiones de balance | El `DELETE` físico ya existe; falta definir si hay borrado automático a N meses y con qué aviso |
+| 3 | **Push protection en GitHub** para el patrón `utop_sk_` | El repo es público; una llave pegada en un commit quedaría expuesta. Config de la org, 10 minutos |
+| 4 | **Activación**: `UTOPIA_API_KEY_PEPPER` en Vercel + `npm run db:migrate` (0021) + primera llave + reglas WAF `api_v1` | Runbook completo en [API_CLIENTES.md](API_CLIENTES.md#activación-runbook) |
+| 5 | **v1.1 (jobs LLM vía API)**: decidir facturación por corrida antes de exponer el pipeline NIIF | Cada corrida cuesta dinero real; sin modelo de cobro, exponerla es regalar cómputo |
+
 ## Lo que NO hace falta
 
 Ni accesos nuevos, ni credenciales de producción, ni permisos adicionales.

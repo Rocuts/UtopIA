@@ -235,6 +235,27 @@ SMMLV 2026: $1,423,500 COP. Incentivos modelados: ZOMAC (tarifa progresiva 0%→
 
 ---
 
+## API para Clientes (`/api/v1`)
+
+Superficie B2B server-to-server para que los sistemas de los clientes (ERPs, software
+contable, integradores) se conecten a la plataforma:
+
+- **Validacion NIIF determinista**: `POST /v1/trial-balances` recibe un balance de prueba
+  PUC (CSV o JSON) y responde al instante con totales en centavos, delta de la ecuacion
+  contable y findings del curator NIIF — sin LLM en el camino.
+- **Llaves con checksum** (`utop_sk_live_…`, HMAC-pepper en reposo), scopes granulares,
+  cuotas por llave, rotacion con gracia de 7 dias.
+- **Webhooks firmados** con [Standard Webhooks v1](https://www.standardwebhooks.com/)
+  (la misma spec que usan OpenAI y Anthropic) y entrega durable con reintentos ~28 h.
+- **Estandares globales**: errores RFC 9457 (`problem+json`), `Idempotency-Key`, paginacion
+  por cursor firmado, OpenAPI 3.1.2 generado de los schemas Zod (`/api/v1/openapi.json`,
+  docs HTML en `/api/v1/docs`), descubrimiento RFC 9727 (`/.well-known/api-catalog`).
+
+Guia operativa: [docs/API_CLIENTES.md](docs/API_CLIENTES.md) · Spec de diseno con racional y
+fuentes: [docs/spec/api-clientes-v1.md](docs/spec/api-clientes-v1.md).
+
+---
+
 ## Stack Tecnico
 
 | Capa | Tecnologia |
