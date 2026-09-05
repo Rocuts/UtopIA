@@ -105,7 +105,15 @@ reales, todos corregidos y con prueba:
    y empresa— podían borrarse con las 35 pruebas en verde. La nueva prueba usa
    una versión propia y válida, con la cadena y el digest correctos, y nombra una
    auditoría guardada por otro workspace: es lo único que separa el contenido
-   ajeno del documento. Comprobada retirando cada guarda.
+   ajeno del documento. Comprobada retirando el predicado de workspace, y
+   retirando ambas guardas a la vez: en los dos casos la prueba falla.
+   `assertReportCompany` sobre la fila de auditoría **no queda aislada** por
+   ninguna prueba y no puede quedarlo: `saveAuditVersion` ya fija la empresa al
+   escribir, así que una fila de un workspace siempre lleva su empresa, y si el
+   NIT del workspace cambiase, la carga de la propia versión financiera fallaría
+   antes. Es defensa en profundidad redundante, no una comprobación con un caso
+   propio; el mensaje del commit `ee219dd8` dice «cada guarda» y en eso es
+   impreciso.
 6. **La regla de emparejamiento era asimétrica.** Se rechazaba una
    meta-auditoría que hubiera leído *otra* auditoría, pero no una que no hubiera
    leído *ninguna*, de modo que el documento podía yuxtaponer ambas sugiriendo
