@@ -2425,7 +2425,7 @@ export { extractCompanyMetadata };
 // Build the final consolidated Markdown report
 // ---------------------------------------------------------------------------
 
-function buildConsolidatedReport(
+export function buildConsolidatedReport(
   company: FinancialReportRequest['company'],
   niifContent: string,
   strategyContent: string,

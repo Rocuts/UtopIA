@@ -38,14 +38,13 @@ export function buildAlertaTasaMinima(anchor: FiscalAnchorBlock): CcvAlertaTasaM
  *   50% ≤ F10 < 80%  → media
  *   F10 < 50%  → baja
  *
- * Si F02 = 0 (utilidad antes impuestos no positiva), no aplica clasificación —
- * devolvemos 'media' como placeholder neutro.
+ * Sin base referencial positiva o porcentaje válido no hay clasificación: null.
  */
 export function clasificarEficienciaFiscal(
   anchor: FiscalAnchorBlock,
-): 'alta' | 'media' | 'baja' {
+): 'alta' | 'media' | 'baja' | null {
   const f02 = BigInt(anchor.f02);
-  if (f02 <= ZERO) return 'media';
+  if (f02 <= ZERO || !Number.isFinite(anchor.f10) || anchor.f10 < 0) return null;
   const f10 = anchor.f10;
   if (f10 >= 80) return 'alta';
   if (f10 >= 50) return 'media';
@@ -69,7 +68,7 @@ export interface CcvPrecomputedData {
   f09Pct: number;
   f10Pct: number;
   alertaTasaMinima: CcvAlertaTasaMinima;
-  eficienciaFiscal: 'alta' | 'media' | 'baja';
+  eficienciaFiscal: 'alta' | 'media' | 'baja' | null;
 }
 
 /**

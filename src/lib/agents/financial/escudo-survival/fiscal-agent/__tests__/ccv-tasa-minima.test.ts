@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildAlertaTasaMinima } from '../tools/ccv-calculator';
+import { buildAlertaTasaMinima, clasificarEficienciaFiscal } from '../tools/ccv-calculator';
 import { runCcvFiscalAgent } from '../agents/ccv-fiscal.agent';
 import { runSupervivenciaAgent } from '../agents/supervivencia.agent';
 import type { FiscalAgentInput } from '../types';
@@ -46,7 +46,7 @@ describe('TTD requires adjusted tax and adjusted profit, not accounting proxies'
 });
 
 vi.mock('../runtime', () => ({ callFiscalAgent: vi.fn(async () => ({ json: {
-  markdown: 'Analysis', warnings: [], data: { f01: '999',
+  markdown: 'Analysis', warnings: [], data: { f01: '999', eficienciaFiscal: 'alta',
     alertaTasaMinima: { aplica: true, impuestoAdicionalEstimado: '999' },
     tet: { tetActual: 99, brecha15Pct: 99, impuestoAdicional: '999' } },
 } })) }));
@@ -60,9 +60,23 @@ it('LLM output cannot override fiscal anchors or invent TTD in either module', a
   } as FiscalAgentInput;
   const ccv = await runCcvFiscalAgent({ input });
   expect(ccv.data.f01).toBe(UAI_CENTS);
+  expect(ccv.data.eficienciaFiscal).toBeNull();
   expect(ccv.data.alertaTasaMinima.aplica).toBeNull();
   expect(ccv.data.alertaTasaMinima.impuestoAdicionalEstimado).toBeNull();
   expect(ccv.warnings.join(' ')).toContain('TTD no determinable');
   const survival = await runSupervivenciaAgent({ input });
   expect(survival.data.tet).toEqual({ tetActual: 14.96, brecha15Pct: null, impuestoAdicional: null });
+});
+
+
+describe('Coverage classification requires its denominator', () => {
+  it.each(['0', '-100'])('F02=%s is unavailable, not medium efficiency', f02 => {
+    expect(clasificarEficienciaFiscal({ ...anchorConF09(10), f02, f10: 80 })).toBeNull();
+  });
+  it.each([NaN, Infinity, -1])('invalid coverage %s is unavailable', f10 => {
+    expect(clasificarEficienciaFiscal({ ...anchorConF09(10), f02: '100', f10 })).toBeNull();
+  });
+  it.each([[0, 'baja'], [49.99, 'baja'], [50, 'media'], [79.99, 'media'], [80, 'alta']])('preserves existing coverage thresholds for %s', (f10, expected) => {
+    expect(clasificarEficienciaFiscal({ ...anchorConF09(10), f02: '100', f10: f10 as number })).toBe(expected);
+  });
 });

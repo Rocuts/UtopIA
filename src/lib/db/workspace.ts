@@ -1,5 +1,6 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
+import { isAuthConfigured } from '@/lib/auth/enabled';
 import { eq, and, asc, isNull } from 'drizzle-orm';
 import { getDb } from './client';
 import { workspaces, type Workspace } from './schema';
@@ -69,7 +70,7 @@ function renewWorkspaceCookie(jar: CookieJar, id: string): void {
 
 // Lazy import to avoid pulling pg.Pool into Edge runtimes.
 async function getAuthSession(): Promise<{ userId: string } | null> {
-  if (!process.env.BETTER_AUTH_SECRET) return null;
+  if (!isAuthConfigured()) return null;
   try {
     const { auth } = await import('@/lib/auth/config');
     const h = await headers();
@@ -107,6 +108,8 @@ export async function getOrCreateWorkspace(): Promise<Workspace> {
       .returning();
     return created;
   }
+
+  if (isAuthConfigured()) throw new Error('Authentication required.');
 
   // ── Anonymous cookie path (dev / no auth configured) ────────────────────
   const jar = await cookies();
@@ -151,19 +154,9 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
       .limit(1);
     return found[0]?.id ?? null;
   }
-  // Camino cookie: mismas dos guardas que `requireWorkspace()` — el formato y
-  // `user_id IS NULL` — en vez de devolver el valor crudo de la cookie.
-  //
-  // Nueve rutas resuelven su tenant por aquí (chat, rag, tax-planning, los
-  // cuatro tramos de financial-report, escudo/fiscal-anchor —que ESCRIBE en
-  // `reports`— y pyme/uploads), así que devolver lo que venga en el header
-  // significaba dos cosas: un valor no-UUID llegaba tal cual al WHERE y
-  // Postgres respondía 500 filtrando su mensaje de error, y un id válido pero
-  // ajeno alcanzaba incluso un workspace YA reclamado por una cuenta, porque
-  // faltaba el filtro que su hermana sí aplica. Resolver contra la DB también
-  // cierra el fail-open del `catch` de `getAuthSession()`: si la lectura de
-  // sesión falla de forma transitoria en fase 2, el camino cookie ya no alcanza
-  // un workspace con dueño — falla cerrado.
+  if (isAuthConfigured()) return null;
+  // Cookie resolution is limited to deployments with no authentication configured.
+  // Validate both the UUID and anonymous ownership against storage.
   const jar = await cookies();
   const id = jar.get(COOKIE_NAME)?.value;
   if (!id || !UUID_V4_RE.test(id)) return null;
@@ -200,6 +193,7 @@ export async function requireWorkspace(): Promise<Workspace | null> {
     return found[0] ?? null;
   }
 
+  if (isAuthConfigured()) return null;
   const jar = await cookies();
   const id = jar.get(COOKIE_NAME)?.value;
   if (!id || !UUID_V4_RE.test(id)) return null;

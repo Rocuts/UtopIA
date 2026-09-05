@@ -1076,19 +1076,16 @@ interface ReportViewerProps {
   initialTurns?: ReportIterationTurn[];
   /**
    * Reporte completo de auditoría (4 auditores) si el usuario activó la
-   * Fase 2. Reenviado al endpoint /api/financial-report/export para que
-   * el PDF editorial incluya AuditFindingsPage.
+   * Fase 2. Disponible en pantalla; su versión servidor está pendiente.
    */
   auditReport?: BackendAuditReport | null;
   /**
    * Reporte completo de meta-auditoría de calidad si el usuario activó la
-   * Fase 3. Habilita QualityMetaAuditPage en el PDF editorial.
+   * Fase 3. Su persistencia servidor debe completarse antes de exportarla.
    */
   qualityReport?: BackendQualityAssessment | null;
   /**
-   * Toggle del intake (10 entregables destildables). Se reenvía al export
-   * endpoint para que EditorialReportDoc omita las páginas correspondientes.
-   * Si null/undefined → el PDF incluye TODO (default histórico).
+   * Toggle del intake. La versión servidor guarda las opciones de generación.
    */
   outputOptions?: NiifReportIntake['outputOptions'] | null;
   onReset?: () => void;
@@ -1127,9 +1124,6 @@ function ReportViewer({
   language,
   conversationId,
   initialTurns,
-  auditReport,
-  qualityReport,
-  outputOptions,
   onReset,
   onPatchReport,
   onTurnsChange,
@@ -1162,7 +1156,7 @@ function ReportViewer({
   }, []);
 
   // ─── Descargar Excel ─────────────────────────────────────────────────────
-  // POST /api/financial-report/export con { report, rawData } — el endpoint
+  // POST /api/financial-report/export con { reportVersionId } — el endpoint
   // responde con un .xlsx binario (Content-Disposition: attachment).
   /**
    * Salvedades del reconciliador determinista de anclas (2026-08).
@@ -1175,17 +1169,17 @@ function ReportViewer({
    */
   const reportQualifications = report?.niifAnalysis?.reconciliation;
   const reportHasQualifications =
-    reportQualifications !== undefined && reportQualifications.clean === false;
+    reportQualifications?.clean === false || report?.governance?.actaQualifications?.clean === false;
 
   const handleDownloadExcel = useCallback(async () => {
-    if (!report || isExportingExcel || reportHasQualifications) return;
+    if (!report?.reportVersionId || isExportingExcel || reportHasQualifications) return;
     setIsExportingExcel(true);
     setExportError(null);
     try {
       const res = await fetch('/api/financial-report/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ report, rawData }),
+        body: JSON.stringify({ reportVersionId: report.reportVersionId, format: 'excel' }),
       });
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
@@ -1216,46 +1210,23 @@ function ReportViewer({
     } finally {
       setIsExportingExcel(false);
     }
-  }, [report, rawData, isExportingExcel, language, reportHasQualifications]);
+  }, [report, isExportingExcel, language, reportHasQualifications]);
 
-  // ─── Exportar PDF ────────────────────────────────────────────────────────
-  // POST /api/financial-report/export con { report, rawData, company,
-  // language, format:'pdf-elite' } — el endpoint reutiliza el reporte que el
-  // cliente ya tiene en estado (fast-path: sin re-correr los 3 agentes) y
-  // responde con un .pdf editorial multipágina.
-  //
-  // Antes este botón llamaba window.print() y solo imprimía la primera página
-  // porque el contenedor `flex-1 overflow-y-auto` ancestro hijacka el viewport
-  // de impresión. Renderizar server-side con @react-pdf/renderer elimina ese
-  // problema porque las páginas las define el documento, no el browser.
+  // Download the selected immutable server version as an editorial PDF.
   const handleExportPdf = useCallback(async () => {
     // Mismo gate que el Excel. El sello "REPORTE CON SALVEDADES" declara que la
     // reconciliación contra el balance preprocesado NO cerró: el informe no es
     // firmable tal como está, y el formato de salida no cambia ese hecho.
     // Auditoría 2026-08 (item 9): el PDF editorial se descargaba igual, de modo
     // que el mismo entregable quedaba bloqueado en .xlsx y disponible en .pdf.
-    if (!report || isExportingPdf || reportHasQualifications) return;
+    if (!report?.reportVersionId || isExportingPdf || reportHasQualifications) return;
     setIsExportingPdf(true);
     setExportError(null);
     try {
       const res = await fetch('/api/financial-report/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          report,
-          rawData,
-          company,
-          language,
-          // Fase 2/3 — solo se envían si el usuario los activó. El endpoint
-          // tolera null/undefined (las páginas se omiten en el render).
-          auditReport: auditReport ?? null,
-          qualityReport: qualityReport ?? null,
-          // Toggle de los 10 entregables del intake. Si undefined el PDF
-          // incluye todo (default). Si presente, EditorialReportDoc gatea
-          // cada página según el flag correspondiente.
-          outputOptions: outputOptions ?? null,
-          format: 'pdf-elite',
-        }),
+        body: JSON.stringify({ reportVersionId: report.reportVersionId, format: 'pdf-elite' }),
       });
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
@@ -1285,7 +1256,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, rawData, company, language, auditReport, qualityReport, outputOptions, isExportingPdf, reportHasQualifications]);
+  }, [report, language, isExportingPdf, reportHasQualifications]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -1412,7 +1383,7 @@ function ReportViewer({
           <button
             type="button"
             onClick={handleDownloadExcel}
-            disabled={isExportingExcel || !report || reportHasQualifications}
+            disabled={isExportingExcel || !report?.reportVersionId || reportHasQualifications}
             aria-label={
               reportHasQualifications
                 ? language === 'es'
@@ -1433,7 +1404,7 @@ function ReportViewer({
               'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
               // `text-n-600` es el mínimo WCAG AA para estado deshabilitado
               // (3:1). `text-n-400` colapsa por debajo de 2:1 en modo claro.
-              isExportingExcel || !report || reportHasQualifications
+              isExportingExcel || !report?.reportVersionId || reportHasQualifications
                 ? 'bg-n-100 text-n-600 cursor-not-allowed'
                 : 'bg-gold-500 text-n-0 hover:bg-gold-700',
             )}
@@ -1450,7 +1421,7 @@ function ReportViewer({
           <button
             type="button"
             onClick={handleExportPdf}
-            disabled={isExportingPdf || !report || reportHasQualifications}
+            disabled={isExportingPdf || !report?.reportVersionId || reportHasQualifications}
             aria-label={
               reportHasQualifications
                 ? language === 'es'
@@ -1471,7 +1442,7 @@ function ReportViewer({
               'flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors',
               // `text-n-600` es el mínimo WCAG AA para estado deshabilitado
               // (3:1); `text-n-400` es nivel superficie y colapsa bajo 2:1.
-              isExportingPdf || !report || reportHasQualifications
+              isExportingPdf || !report?.reportVersionId || reportHasQualifications
                 ? 'border-n-200 text-n-600 cursor-not-allowed'
                 : 'border-n-200 text-n-700 hover:bg-n-50 hover:text-n-1000',
             )}
@@ -1605,6 +1576,18 @@ function ReportViewer({
           </div>
         )}
 
+        {report && !report.reportVersionId && (
+          <p className="px-6 py-3 text-sm text-n-800" role="status">
+            {language === 'es'
+              ? 'Regenera el informe para descargar una versión guardada y autorizada. Los cambios locales y los informes históricos no tienen una versión exportable.'
+              : 'Regenerate the report to download a saved, authorized version. Local edits and historical reports do not have an exportable version.'}
+          </p>
+        )}
+        {report?.reportVersionId && (
+          <p className="px-6 py-3 text-sm text-n-800">
+            {language === 'es' ? 'La descarga incluye el informe financiero guardado. Las auditorías adicionales se consultan en pantalla; aún no se incluyen en esta versión.' : 'Downloads include the saved financial report. Additional audits are available on screen and are not yet part of this version.'}
+          </p>
+        )}
         {exportError && (
           <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1793,6 +1776,7 @@ export function PipelineWorkspace() {
    * que el LLM devuelva cifras distintas a las que el usuario ya vio.
    */
   interface NiifRunCheckpoint {
+    reportVersionId?: string;
     niifResult: NiifAnalysisResult;
     bindingTotals: string;
     preprocessed: unknown;
@@ -1855,6 +1839,7 @@ export function PipelineWorkspace() {
       const stored = loadNiifCheckpoint(lastCompletedReport.conversationId);
       if (missing.length > 0 && stored) {
         checkpointRef.current = {
+          reportVersionId: stored.reportVersionId,
           niifResult: lastCompletedReport.report.niifAnalysis,
           bindingTotals: stored.bindingTotals,
           preprocessed: null,
@@ -1963,9 +1948,10 @@ export function PipelineWorkspace() {
       // fallida. Diagnóstico por sub-fase: el mensaje de error indica
       // exactamente qué agente reventó (no genérico "Phase 1 falló").
       let phase1Report: BackendFinancialReport | null = null;
+      let serverReport: BackendFinancialReport | undefined;
+      let reportVersionId = resumeCheckpoint?.reportVersionId;
       let niifResult: NiifAnalysisResult | null = null;
       let strategyResult: StrategicAnalysisResult | null = null;
-      let governanceResult: GovernanceResult | null = null;
       let niifContext: {
         bindingTotals: string;
         preprocessed: unknown;
@@ -2076,6 +2062,8 @@ export function PipelineWorkspace() {
       // de este `try/catch` — no hay más ramas.
       try {
         const niifBody: Record<string, unknown> = {
+          persist: true,
+          outputOptions: intake?.outputOptions,
           rawData: intake!.rawData,
           company: companyBody,
           language: runLanguage,
@@ -2094,6 +2082,7 @@ export function PipelineWorkspace() {
         ancoraRef.current = null;
 
         const niifPayload = await runSSEPhase<{
+          reportVersionId: string;
           niif: NiifAnalysisResult;
           context: { bindingTotals: string; preprocessed: unknown; company: CompanyInfo };
           fiscalSnapshot?: FiscalSnapshot;
@@ -2122,6 +2111,7 @@ export function PipelineWorkspace() {
           },
         );
 
+        reportVersionId = niifPayload.reportVersionId;
         niifResult = niifPayload.niif;
         niifContext = niifPayload.context;
         // Fallback: si fiscal_snapshot llegó embebido en niif_phase (contrato §4.2 —
@@ -2157,6 +2147,7 @@ export function PipelineWorkspace() {
       // /strategy revienta, el usuario puede reintentar SOLO esa sub-fase sin
       // volver a pagar el Analista NIIF.
       checkpointRef.current = {
+        reportVersionId,
         niifResult,
         bindingTotals: niifContext.bindingTotals,
         preprocessed: niifContext.preprocessed,
@@ -2169,6 +2160,7 @@ export function PipelineWorkspace() {
       if (start === 'niif') {
         saveNiifCheckpoint({
           conversationId: nextConvId,
+          reportVersionId,
           bindingTotals: niifContext.bindingTotals,
           savedAt: new Date().toISOString(),
         });
@@ -2298,17 +2290,10 @@ export function PipelineWorkspace() {
       // el mensaje específico de la sub-fase para que el banner lo muestre.
       if (start !== 'governance' || strategyResult === null) {
         try {
-          const strategyBody = {
-            niifResult,
-            bindingTotals: niifContext.bindingTotals,
-            preprocessed: niifContext.preprocessed,
-            company: niifContext.company,
-            language: runLanguage,
-            instructions,
-            ...(excludedFactIds.length ? { excludedFactIds } : {}),
-          };
+          if (!reportVersionId) throw new Error(runLanguage === 'es' ? 'Regenera el informe histórico para continuar con una versión guardada.' : 'Regenerate the historical report to continue with a saved version.');
+          const strategyBody = { reportVersionId };
 
-          const strategyPayload = await runSSEPhase<{ strategy: StrategicAnalysisResult }>(
+          const strategyPayload = await runSSEPhase<{ strategy: StrategicAnalysisResult; reportVersionId: string }>(
             '/api/financial-report/strategy',
             strategyBody,
             'strategy_phase',
@@ -2317,8 +2302,9 @@ export function PipelineWorkspace() {
             { onProgress: onSubPhaseProgress, onWarning: collectWarnings },
           );
 
+          reportVersionId = strategyPayload.reportVersionId;
           strategyResult = strategyPayload.strategy;
-          checkpointRef.current = { ...checkpointRef.current!, strategyResult };
+          checkpointRef.current = { ...checkpointRef.current!, strategyResult, reportVersionId };
         } catch (err) {
           if ((err as Error)?.name === 'AbortError') return;
           const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -2335,18 +2321,9 @@ export function PipelineWorkspace() {
 
       // ─── Sub-fase 1.3: Gobierno Corporativo ────────────────────────────
       try {
-        const governanceBody = {
-          niifResult,
-          strategyResult,
-          bindingTotals: niifContext.bindingTotals,
-          preprocessed: niifContext.preprocessed,
-          company: niifContext.company,
-          language: runLanguage,
-          instructions,
-          ...(excludedFactIds.length ? { excludedFactIds } : {}),
-        };
+        const governanceBody = { reportVersionId };
 
-        const governancePayload = await runSSEPhase<{ governance: GovernanceResult }>(
+        const governancePayload = await runSSEPhase<{ governance: GovernanceResult; report: BackendFinancialReport; reportVersionId: string }>(
           '/api/financial-report/governance',
           governanceBody,
           'governance_phase',
@@ -2355,7 +2332,7 @@ export function PipelineWorkspace() {
           { onProgress: onSubPhaseProgress, onWarning: collectWarnings },
         );
 
-        governanceResult = governancePayload.governance;
+        serverReport = governancePayload.report;
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
         const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -2366,45 +2343,9 @@ export function PipelineWorkspace() {
         return;
       }
 
-      // ─── Ensamblaje final: construir BackendFinancialReport completo ────
-      // Las 3 sub-fases corrieron OK. Reemplazamos los stubs del checkpoint
-      // parcial con los resultados reales y reconstruimos el consolidatedReport
-      // canónico (concatenación de los 3 fullContent — mismo formato que el
-      // orchestrator legacy en `buildConsolidatedReport`).
-      // Las salvedades del acta se pliegan sobre la reconciliación del NIIF: es
-      // el ÚNICO canal que apaga los botones de descarga (`reportHasQualifications`
-      // lee `niifAnalysis.reconciliation.clean`). Sin esto, un acta con la reserva
-      // legal mal calculada seguiría siendo descargable en Excel, PDF y HTML pese
-      // a llevar el sello impreso en el cuerpo.
-      if (governanceResult.actaQualifications?.clean === false) {
-        niifResult = {
-          ...niifResult,
-          reconciliation: {
-            deviations: niifResult.reconciliation?.deviations ?? [],
-            lineGaps: niifResult.reconciliation?.lineGaps ?? [],
-            repairAttempted: niifResult.reconciliation?.repairAttempted ?? false,
-            clean: false,
-          },
-        };
-      }
-
-      const fullConsolidated = buildClientConsolidatedReport(
-        niifContext.company,
-        niifResult.fullContent,
-        strategyResult.fullContent,
-        governanceResult.fullContent,
-        runLanguage,
-      );
-      phase1Report = {
-        company: niifContext.company,
-        niifAnalysis: niifResult,
-        strategicAnalysis: strategyResult,
-        governance: governanceResult,
-        consolidatedReport: fullConsolidated,
-        generatedAt: new Date().toISOString(),
-        ...(fiscalSnapshotRef.current ? { fiscalSnapshot: fiscalSnapshotRef.current } : {}),
-        ...(ancoraRef.current ? { ancora: ancoraRef.current } : {}),
-      };
+      // The final report is assembled and saved by the server.
+      if (!serverReport?.reportVersionId) throw new Error('The completed report was not saved.');
+      phase1Report = serverReport;
 
       // ─── CHECKPOINT 2: actualizar reporte completo en localStorage ──────
       setBackendReport(phase1Report);
@@ -2662,7 +2603,7 @@ export function PipelineWorkspace() {
       });
       setBackendReport((prev) => {
         if (!prev) return prev;
-        const next: BackendFinancialReport = { ...prev, consolidatedReport: newMd };
+        const next: BackendFinancialReport = { ...prev, reportVersionId: undefined, consolidatedReport: newMd };
         // Persistir el nuevo estado completo.
         if (companyInfo && conversationId) {
           setLastCompletedReport({

@@ -248,6 +248,8 @@ export interface FiscalSnapshot {
 // ---------------------------------------------------------------------------
 
 export interface FinancialReport {
+  /** Immutable server snapshot; absent on historical/browser-only reports. */
+  reportVersionId?: string;
   /** Company info echo */
   company: CompanyInfo;
   /** Stage 1 output */
