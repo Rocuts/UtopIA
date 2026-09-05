@@ -46,11 +46,12 @@ export type AreaKpiDirection = 'up' | 'down' | 'flat';
 export type AreaKpiSeverity = 'good' | 'neutral' | 'warn' | 'critical';
 
 export interface AreaKpi {
-  value: number;
+  value: number | null;
   formatted: string;
   label: string;
   trend?: { direction: AreaKpiDirection; delta: number };
   severity?: AreaKpiSeverity;
+  reason?: string;
 }
 
 /**
@@ -70,7 +71,7 @@ export type AreaKey = 'escudo' | 'valor' | 'verdad' | 'futuro';
  */
 export type AreaAccent = 'gold' | 'wine';
 
-export type AreaKpiSource = 'erp' | 'report' | 'mock';
+export type AreaKpiSource = 'erp' | 'report' | 'mock' | 'unavailable';
 
 export interface AreaCardProps {
   area: AreaKey;
@@ -295,7 +296,7 @@ export function AreaCard({
   const severity = kpi?.severity ?? 'neutral';
   const TrendIconCmp = kpi?.trend ? TREND_ICON[kpi.trend.direction] : null;
 
-  const curve = sparkline ?? deterministicCurve(area);
+  const curve = sparkline ?? (source === 'mock' ? deterministicCurve(area) : []);
   const seedKey = typeof concept === 'string' ? concept : area;
 
   const sourceLabel =
@@ -305,7 +306,7 @@ export function AreaCard({
         ? 'Reporte'
         : source === 'mock'
           ? 'Demo'
-          : null;
+          : source === 'unavailable' ? 'N/D' : null;
 
   return (
     <motion.div
@@ -410,7 +411,9 @@ export function AreaCard({
                 {sourceLabel && (
                   <span
                     title={
-                      source === 'mock'
+                      source === 'unavailable'
+                        ? kpi.reason
+                        : source === 'mock'
                         ? 'Datos de demostración. Conecta un ERP para ver métricas en vivo.'
                         : updatedAt
                           ? `Actualizado: ${new Date(updatedAt).toLocaleString('es-CO')}`
@@ -419,8 +422,8 @@ export function AreaCard({
                     className={cn(
                       'shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5',
                       'font-mono text-[9px] uppercase tracking-eyebrow font-medium',
-                      source === 'mock'
-                        ? 'border border-n-300/40 text-n-400 bg-transparent dark:border-n-600/40 dark:text-n-500'
+                      source === 'mock' || source === 'unavailable'
+                        ? 'border border-n-300/40 text-n-700 bg-transparent dark:border-n-600/40'
                         : 'bg-success/10 text-success border border-success/20',
                     )}
                   >
@@ -449,6 +452,7 @@ export function AreaCard({
                   </span>
                 )}
               </div>
+              {kpi.reason && <p className="text-xs text-n-700 leading-snug">{kpi.reason}</p>}
             </div>
           ) : tagline != null ? (
             <p className="text-sm leading-snug text-n-600 font-light">
@@ -458,13 +462,13 @@ export function AreaCard({
             <div />
           )}
 
-          <div className="shrink-0 self-end opacity-80 group-hover:opacity-100 transition-opacity">
+          {curve.length >= 2 && <div className="shrink-0 self-end opacity-80 group-hover:opacity-100 transition-opacity">
             <Sparkline
               key={seedKey}
               values={curve}
               stroke={palette.sparkStroke}
             />
-          </div>
+          </div>}
         </div>
 
         {/* ── Row 4: footer CTA + alerts ───────────────────────────────── */}

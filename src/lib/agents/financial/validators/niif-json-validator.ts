@@ -283,12 +283,36 @@ export function validateNiifReportJson(
     const absNet = net < ZERO ? -net : net;
     const EQUALITY_TOL = BigInt(100000); // $1.000 COP en centavos
     const NET_MATERIAL = BigInt(100000000); // $1.000.000 COP en centavos
-    if (opMinusNet < EQUALITY_TOL && absNet > NET_MATERIAL) {
-      errors.push(
+    const hasSourceProfits = bpt?.operatingProfit !== undefined && bpt.netIncome !== undefined;
+    const sourceProfitsDiffer = hasSourceProfits &&
+      !moneyCopEquals(bpt!.operatingProfit!, bpt!.netIncome!);
+    // Equality is valid when there are no net below-EBIT expenses. Materiality
+    // alone cannot establish an accounting error; E14 checks source anchors.
+    if (opMinusNet < EQUALITY_TOL && absNet > NET_MATERIAL &&
+        (!hasSourceProfits || sourceProfitsDiffer)) {
+      const messages = sourceProfitsDiffer ? errors : warnings;
+      messages.push(
         `E5. EBIT incorrectamente igualado a Utilidad Neta — el Grupo 53 debe deducirse DESPUÉS del EBIT. ` +
           `operatingProfitPrimary (${fmtCop(op)}) ≈ netIncomePrimary (${fmtCop(net)}); ` +
           `diferencia ${fmtCop(opMinusNet)} < tolerancia ${fmtCop(EQUALITY_TOL)} con netIncome material. ` +
           `Revisar cascada: EBIT = grossProfit − Grupo 51 − Grupo 52; UAI = EBIT − Grupo 53; netIncome = UAI − impuesto.`,
+      );
+    }
+  }
+
+  // E17: every printed ECP row must equal the sum of its seven components.
+  // Column checks alone allow an invented amount in both opening and closing.
+  const equityComponents = [
+    'capitalSocial', 'primaColocacion', 'reservaLegal', 'otrasReservas',
+    'resultadosAcumulados', 'resultadoEjercicio', 'ori',
+  ] as const;
+  for (const [index, row] of json.equityChanges.rows.entries()) {
+    const sum = equityComponents.reduce((acc, key) => acc + parseMoneyCop(row[key]), ZERO);
+    const total = parseMoneyCop(row.total);
+    if (sum !== total) {
+      errors.push(
+        `E17. ECP fila ${index + 1} (${row.kind}): suma de componentes ` +
+        `${fmtCop(sum)} ≠ total ${fmtCop(total)}. Brecha: ${fmtCop(sum - total)}.`,
       );
     }
   }

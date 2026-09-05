@@ -1,3 +1,4 @@
+import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 // route-integration.test.ts — exercises the export route's pdf-elite branch
 // in-process by mocking the orchestrator. Asserts content-type and PDF magic.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ function buildHappyReport(): FinancialReport {
       fiscalPeriod: '2026',
     },
     niifAnalysis: {
+      ...makeExportableReport().niifAnalysis,
       balanceSheet:
         '## Balance\n\n| Cuenta | 2026 |\n|---|---|\n| Activo | $1.000.000.000 |\n',
       incomeStatement:

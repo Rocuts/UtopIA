@@ -863,7 +863,8 @@ function detectBalanceColumns(
 
   rawHeaders.forEach((header, index) => {
     if (!isBalanceHeader(header)) return;
-    const year = detectYearFromString(header);
+    const explicitPeriod = header.match(/^saldo\s*\[(\d{4}(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})\]$/i)?.[1];
+    const year = explicitPeriod ?? detectYearFromString(header);
     const prev = isPreviousBalanceHeader(header);
     candidates.push({
       index,
@@ -1430,6 +1431,18 @@ function buildSnapshotForPeriod(
   // -------------------------------------------------------------------------
   const adjustments: string[] = [];
   const validationReasons: string[] = [];
+  // The current input contract uses JS numbers. BigInt after rounding cannot
+  // recover cents already lost by parsing or by an unsafe aggregate.
+  const monetaryValues = [
+    ...leafRows.map(row => row.balance), totalAssets, totalLiabilities,
+    totalEquityRaw, totalRevenue, totalExpenses, totalCosts, totalProduction, netIncome,
+  ];
+  if (monetaryValues.some(value => !Number.isSafeInteger(Math.round(value * 100)))) {
+    validationReasons.push(
+      `[${period}] Importe fuera del rango de precisión monetaria soportado. ` +
+      'Se requiere ingestión decimal exacta antes de emitir el informe.',
+    );
+  }
   const suggestedAccounts: string[] = [];
   const totalEquity = totalEquityRaw;
 

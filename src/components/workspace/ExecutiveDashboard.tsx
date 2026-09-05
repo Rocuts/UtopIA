@@ -122,6 +122,7 @@ function toAreaKpi(value: LiveKpiValue, label: string): AreaKpi {
     formatted: value.formatted,
     label,
     severity: value.severity,
+    reason: value.reason,
   };
   if (value.trend !== 'flat' || value.trendPercent !== 0) {
     kpi.trend = { direction: value.trend, delta: value.trendPercent };

@@ -26,23 +26,23 @@ const UVT_BY_YEAR: Record<number, number> = {
   2020: 35_607,
 };
 
-const OLDEST_UVT_YEAR = Math.min(...Object.keys(UVT_BY_YEAR).map(Number));
-
 /**
  * Convierte un valor en UVT a COP para un año dado usando el UVT oficial de
- * ESE año (antes todo período < 2025 usaba el UVT 2025 — retenciones
- * históricas incorrectas). Años posteriores al último conocido usan el más
- * reciente; años anteriores a 2020 usan 2020 con warning (el módulo contable
- * no procesa períodos tan antiguos).
+ * ESE año. Sin valor oficial tabulado se bloquea el cálculo; nunca se sustituye
+ * por una vigencia distinta. Fuente 2026:
+ * https://normograma.dian.gov.co/dian/compilacion/docs/resolucion_dian_0238_2025.htm
  */
 export function uvtToCopByYear(uvtAmount: number, year: number): number {
+  if (!Number.isInteger(year) || !Number.isFinite(uvtAmount) || uvtAmount < 0) {
+    throw new RangeError('UVT: año o cantidad inválidos.');
+  }
   const exact = UVT_BY_YEAR[year];
-  if (exact !== undefined) return Math.round(uvtAmount * exact);
-  if (year > 2026) return Math.round(uvtAmount * UVT_2026_COP);
-  console.warn(
-    `[tax-engine] UVT no tabulado para ${year}; usando UVT ${OLDEST_UVT_YEAR} como aproximación.`,
-  );
-  return Math.round(uvtAmount * UVT_BY_YEAR[OLDEST_UVT_YEAR]);
+  if (exact === undefined) {
+    throw new RangeError(`UVT oficial no configurada para ${year}. No se permite usar otro año.`);
+  }
+  const result = Math.round(uvtAmount * exact);
+  if (!Number.isSafeInteger(result)) throw new RangeError('UVT: resultado fuera del rango monetario seguro.');
+  return result;
 }
 
 // ---------------------------------------------------------------------------

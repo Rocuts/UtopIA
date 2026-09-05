@@ -99,14 +99,14 @@ export interface FiscalAgentInput {
 // ---------------------------------------------------------------------------
 
 export interface CcvAlertaTasaMinima {
-  /** ¿Aplica la alerta? F09 < 15% (Art. 10 Ley 2277/2022). */
-  aplica: boolean;
+  /** null means legal applicability cannot be established from this anchor. */
+  aplica: boolean | null;
   /** F09 actual (%). */
   f09Actual: number;
   /** Diferencia con el umbral 15%. */
-  brechaPp: number;
+  brechaPp: number | null;
   /** Impuesto adicional estimado (MoneyCop) si aplica. */
-  impuestoAdicionalEstimado: string;
+  impuestoAdicionalEstimado: string | null;
   /** Cita normativa (siempre "Art. 240 par. 6 E.T." vía Ley 2277/2022). */
   norma: string;
 }
@@ -320,7 +320,7 @@ export interface SupervivenciaModuleResult {
     exposicionFiscalEstimada: string;
     exposicionMitigada: string;
     /** Submódulos breves (reusa lógica/normas existente). */
-    tet: { tetActual: number; brecha15Pct: number; impuestoAdicional: string };
+    tet: { tetActual: number; brecha15Pct: number | null; impuestoAdicional: string | null };
     escudoRetenciones: { f03: string; ratioF10: number; recomendacion: string };
     antiDian: { resumen: string; norma: string };
     reservaContingencia: { sugerida: string; pctUtilidad: number };

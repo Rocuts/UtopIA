@@ -45,9 +45,8 @@ describe('uvtToCopByYear', () => {
     expect(uvtToCopByYear(1, 2025)).toBe(49_799);
   });
 
-  it('año futuro >= 2027 usa tarifa 2026 (sin salto al pasado)', () => {
-    // La función usa UVT_2026 para todo >= 2026
-    expect(uvtToCopByYear(1, 2027)).toBe(52_374);
+  it('rechaza un año futuro sin UVT oficial configurada', () => {
+    expect(() => uvtToCopByYear(1, 2027)).toThrow(/no configurada/);
   });
 
   it('años históricos usan el UVT oficial de SU año (resoluciones DIAN)', () => {
@@ -60,8 +59,11 @@ describe('uvtToCopByYear', () => {
     expect(uvtToCopByYear(1, 2020)).toBe(35_607);
   });
 
-  it('año anterior al histórico tabulado cae al más antiguo conocido (2020) con warning', () => {
-    expect(uvtToCopByYear(1, 2015)).toBe(35_607);
+  it('rechaza años sin normativa e inputs no finitos', () => {
+    expect(() => uvtToCopByYear(1, 2015)).toThrow(/no configurada/);
+    expect(() => uvtToCopByYear(NaN, 2026)).toThrow();
+    expect(() => uvtToCopByYear(1, NaN)).toThrow();
+    expect(() => uvtToCopByYear(Number.MAX_VALUE, 2026)).toThrow();
   });
 
   it('fracción de UVT se redondea correctamente (Math.round)', () => {

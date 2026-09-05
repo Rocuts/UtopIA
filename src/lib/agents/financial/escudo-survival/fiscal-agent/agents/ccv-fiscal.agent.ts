@@ -11,7 +11,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildCcvFiscalPrompt } from '../prompts/ccv-fiscal.prompt';
 import { ccvModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
-import { precomputeCcv } from '../tools/ccv-calculator';
+import { precomputeCcv, TTD_UNAVAILABLE_REASON } from '../tools/ccv-calculator';
 import type {
   CcvModuleResult,
   FiscalAgentInput,
@@ -47,7 +47,7 @@ ALERTA_TASA_MINIMA (Art. 240 par. 6 E.T. — Ley 2277/2022 Art. 10):
   aplica: ${snapshot.alertaTasaMinima.aplica}
   f09Actual: ${snapshot.alertaTasaMinima.f09Actual}%
   brechaPp: ${snapshot.alertaTasaMinima.brechaPp}
-  impuestoAdicionalEstimado: ${formatCopFromCents(BigInt(snapshot.alertaTasaMinima.impuestoAdicionalEstimado))}  (MoneyCop: ${snapshot.alertaTasaMinima.impuestoAdicionalEstimado})
+  impuestoAdicional: N/D. ${TTD_UNAVAILABLE_REASON}
 
 EFICIENCIA_FISCAL: ${snapshot.eficienciaFiscal}
 
@@ -70,5 +70,7 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // Enforce the deterministic snapshot after generation; prompts are not validators.
+  return { ...json, data: { ...json.data, ...snapshot },
+    warnings: [...json.warnings, TTD_UNAVAILABLE_REASON] };
 }

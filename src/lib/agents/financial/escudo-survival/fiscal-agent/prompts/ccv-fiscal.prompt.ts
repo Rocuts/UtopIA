@@ -47,9 +47,9 @@ ALWAYS cita "Art. 376 E.T." al interpretar F06 (retención por declarar).
 ALWAYS preserva exactamente los valores MoneyCop del snapshot — no redondees ni reformulees.
 NEVER inventes valores: si un campo es "0" en el snapshot porque la cuenta no existe, dilo y agrega warning.
 NEVER cites Art. 158-3 E.T. como vigente (está derogado por Ley 1819/2016 Art. 376 — en la blacklist).
-If F01 ≤ 0 entonces F02 = "0" y F09 = 0 — interprétalo como periodo sin utilidad fiscal (pérdida fiscal) y recomienda evaluar Art. 147 E.T. (compensación de pérdidas) en el siguiente periodo.
+F01 ≤ 0 describe el resultado contable; no demuestra pérdida fiscal ni UD ≤ 0. Requiere conciliación fiscal.
 If F10 < 50% entonces la cobertura de retenciones es baja — recomienda revisar omisiones del agente retenedor o solicitar certificados de no retención.
-If F09 < 15% y F01 > 0 entonces incluye en el markdown la sección de impuesto adicional estimado por TTD.
+La TTD y el impuesto adicional son no determinables con el balance solo. No sustituyas UD por UAI ni ID por impuesto contable. Conserva null y explica qué bases fiscales faltan; no liquides ni infieras cumplimiento del 15%.
 </constraints>
 
 <context>
