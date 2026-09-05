@@ -1785,6 +1785,10 @@ export async function runNiifPhase(
     // La política de este bloque es que un fallo no rompe el pipeline pero
     // queda visible; que la validación no se haya ejecutado merece la misma
     // visibilidad — es la diferencia entre "cuadra" y "nadie lo comprobó".
+    sellarConSalvedades(niif, [language === 'es'
+      ? 'No hay cifras estructuradas: no se pudo verificar la integridad aritmética del informe.'
+      : 'Structured figures are missing: report arithmetic integrity could not be verified.'
+    ], language);
     onProgress?.({
       type: 'warning',
       warnings: [

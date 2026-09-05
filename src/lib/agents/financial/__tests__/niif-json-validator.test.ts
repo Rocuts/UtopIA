@@ -507,7 +507,7 @@ describe('validateNiifReportJson — E10 flujos ficticios prohibidos (v2.4)', ()
 });
 
 describe('validateNiifReportJson — E5 hard (Wave v2.2 corr #3, EBIT ≠ Utilidad Neta)', () => {
-  it('E5: error duro cuando op == net con netIncome material (> $1M COP)', () => {
+  it('E5: sin anclas, igualdad material entre EBIT y utilidad requiere revisión, no prueba un error', () => {
     // Caso del bug 2026-05-14: el LLM deduce Grupo 53 dentro del EBIT y
     // emite operatingProfit == netIncome. netIncome = $2.000.000 COP
     // (200000000 cents). op == net exacto, diff = 0 < tolerancia $1.000.
@@ -556,7 +556,7 @@ describe('validateNiifReportJson — E5 hard (Wave v2.2 corr #3, EBIT ≠ Utilid
     });
     const result = validateNiifReportJson(broken);
     expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.includes('E5') && e.includes('EBIT'))).toBe(true);
+    expect(result.warnings.some((e) => e.includes('E5') && e.includes('EBIT'))).toBe(true);
   });
 
   it('E5: pasa cuando op == net pero netIncome es inmaterial (< $1M COP)', () => {

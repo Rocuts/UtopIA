@@ -44,10 +44,10 @@ const citaNormativa = z.string().min(1).max(200);
 // ---------------------------------------------------------------------------
 
 export const ccvAlertaTasaMinimaSchema = z.object({
-  aplica: z.boolean(),
+  aplica: z.boolean().nullable(),
   f09Actual: z.number(),
-  brechaPp: z.number(),
-  impuestoAdicionalEstimado: moneyCop,
+  brechaPp: z.number().nullable(),
+  impuestoAdicionalEstimado: moneyCop.nullable(),
   norma: citaNormativa,
 });
 
@@ -247,8 +247,8 @@ export const supervivenciaModuleSchema = z.object({
     exposicionMitigada: moneyCop,
     tet: z.object({
       tetActual: z.number(),
-      brecha15Pct: z.number(),
-      impuestoAdicional: moneyCop,
+      brecha15Pct: z.number().nullable(),
+      impuestoAdicional: moneyCop.nullable(),
     }),
     escudoRetenciones: z.object({
       f03: moneyCop,

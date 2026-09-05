@@ -275,6 +275,9 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   // Tab 2: P&L / Estado de Resultados
   addIncomeStatement(wb, report, layout);
 
+  // Complete the four structured statements from the same validated JSON.
+  if (report.niifAnalysis.json) addCashFlowAndEquitySheets(wb, report);
+
   // Tab 3: KPIs / Indicadores
   addKPISheet(wb, report, layout);
 
@@ -293,6 +296,49 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
 
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer);
+}
+
+function addCashFlowAndEquitySheets(wb: ExcelJS.Workbook, report: FinancialReport): void {
+  const json = report.niifAnalysis.json!;
+  const cash = wb.addWorksheet('Flujos de Efectivo');
+  cash.columns = [{ width: 58 }, { width: 24 }];
+  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', json.company.fiscalPeriod]);
+  cash.addRow([report.company.name, 'COP']);
+  const addCash = (label: string, cents: string, bold = false) => {
+    const row = cash.addRow([label, centsToPesos(cents)]);
+    row.font = { name: FONT_MAIN, bold };
+    row.getCell(2).numFmt = NUM_FMT_COP;
+  };
+  addCash('Efectivo al inicio', json.cashFlow.cashOpening, true);
+  const sectionNames = { operating: 'Operación', investing: 'Inversión', financing: 'Financiación' };
+  for (const section of json.cashFlow.sections) {
+    cash.addRow([sectionNames[section.section]]).font = { name: FONT_MAIN, bold: true };
+    for (const line of section.lines) addCash(line.label, line.amountPrimary);
+    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, true);
+  }
+  addCash('Variación neta del efectivo', json.cashFlow.netChange, true);
+  addCash('Efectivo al cierre', json.cashFlow.cashClosing, true);
+  cash.addRow([json.cashFlow.methodNote]);
+
+  const equity = wb.addWorksheet('Cambios en Patrimonio');
+  equity.columns = [{ width: 46 }, ...Array.from({ length: 8 }, () => ({ width: 23 }))];
+  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', json.company.fiscalPeriod]);
+  equity.addRow([report.company.name, 'COP']);
+  equity.addRow(['Movimiento', 'Capital social', 'Prima colocación', 'Reserva legal',
+    'Otras reservas', 'Resultados acumulados', 'Resultado ejercicio', 'ORI', 'Total'])
+    .font = { name: FONT_MAIN, bold: true };
+  const keys = ['capitalSocial', 'primaColocacion', 'reservaLegal', 'otrasReservas',
+    'resultadosAcumulados', 'resultadoEjercicio', 'ori', 'total'] as const;
+  for (const movement of json.equityChanges.rows) {
+    const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
+    row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
+    for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+  }
+  for (const sheet of [cash, equity]) {
+    sheet.views = [{ state: 'frozen', ySplit: 3 }];
+    sheet.pageSetup = { orientation: sheet === equity ? 'landscape' : 'portrait',
+      fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  }
 }
 
 /** Returns true if any Pulido Diamante mutation data exists in the primary snapshot. */

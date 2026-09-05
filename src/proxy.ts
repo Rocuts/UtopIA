@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAuthConfigured } from '@/lib/auth/enabled';
 
 // ---------------------------------------------------------------------------
 // Auth protection (BetterAuth phased rollout — 2026-06-05)
-// Phase 1 (BETTER_AUTH_SECRET absent): no-op. Phase 2 (secret set): workspace
+// Phase 1 (auth not configured): no-op. Phase 2 (supported secret set): workspace
 // pages redirect to /login; protected API routes return 401. Checked here
 // because the proxy runs before any Node module that requires pg.Pool.
 // ---------------------------------------------------------------------------
 
-const AUTH_ACTIVE = Boolean(process.env.BETTER_AUTH_SECRET);
 const PROTECTED_PAGES = ['/workspace'];
 // NOTE: this cookie-PRESENCE gate is only a cheap pre-filter (the cookie value
 // is NOT validated here — the Edge proxy can't reach the DB). The REAL session
@@ -317,9 +317,9 @@ export async function proxy(req: NextRequest) {
   ].join('; ');
 
   // -------------------------------------------------------------------------
-  // 0. Auth check (phase-gated — only active when BETTER_AUTH_SECRET is set).
+  // 0. Auth check (phase-gated — active when any supported auth secret is set).
   // -------------------------------------------------------------------------
-  if (AUTH_ACTIVE) {
+  if (isAuthConfigured()) {
     const kind = routeAuthKind(pathname);
     if (kind && !hasSessionCookie(req)) {
       if (kind === 'api') {

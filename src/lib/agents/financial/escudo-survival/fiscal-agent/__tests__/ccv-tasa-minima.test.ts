@@ -1,25 +1,8 @@
-// ---------------------------------------------------------------------------
-// Tasa Mínima de Tributación (TMT / TTD) — Art. 240 par. 6 E.T.
-// ---------------------------------------------------------------------------
-// Auditoría fiscal 2026-08 (superficie 2, defecto c). El cálculo del impuesto
-// adicional cuantizaba la brecha contra el umbral del 15% a DÉCIMAS de punto
-// porcentual —la misma resolución que ya trae F09—, de modo que el redondeo
-// caía encima del dato en vez de por debajo:
-//
-//   F09 = 14,94%  →  brecha real 0,06 pp, redondeada a 0,1 pp
-//                    entregaba $2.228.496,79 donde la norma da $1.337.098,07
-//                    (66,7% de sobreestimación).
-//   F09 = 14,96%  →  brecha real 0,04 pp, redondeada a 0 pp
-//                    entregaba $0,00 donde la norma da $891.398,72
-//                    (el impuesto adicional desaparecía).
-//
-// Norma: Art. 240 par. 6 E.T., adicionado por el Art. 10 de la Ley 2277/2022,
-// declarado EXEQUIBLE por la Sentencia C-219 de 2024. Si TTD < 15%,
-// IA = (UD × 15%) − ID, equivalente a (15% − TTD) × UD.
-// ---------------------------------------------------------------------------
-
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildAlertaTasaMinima } from '../tools/ccv-calculator';
+import { runCcvFiscalAgent } from '../agents/ccv-fiscal.agent';
+import { runSupervivenciaAgent } from '../agents/supervivencia.agent';
+import type { FiscalAgentInput } from '../types';
 import type { FiscalAnchorBlock } from '../../fiscal-anchor/types';
 
 /** UAI del balance real Grupo Empresarial 2 Tres SAS 2025: $2.228.496.789,73. */
@@ -49,47 +32,37 @@ function anchorConF09(f09: number, f01: string = UAI_CENTS): FiscalAnchorBlock {
   };
 }
 
-describe('buildAlertaTasaMinima — impuesto adicional Art. 240 par. 6 E.T.', () => {
-  it('F09 = 14,94% → $1.337.098,07 (antes $2.228.496,79)', () => {
-    const a = buildAlertaTasaMinima(anchorConF09(14.94));
-    expect(a.aplica).toBe(true);
-    expect(a.impuestoAdicionalEstimado).toBe('133709807');
-    expect(a.brechaPp).toBeCloseTo(0.06, 6);
+describe('TTD requires adjusted tax and adjusted profit, not accounting proxies', () => {
+  it.each([0, 10, 14.9, 14.94, 14.96, 15, 35])('F09=%s does not establish legal applicability or additional tax', f09 => {
+    const a = buildAlertaTasaMinima(anchorConF09(f09));
+    expect(a.aplica).toBeNull();
+    expect(a.brechaPp).toBeNull();
+    expect(a.impuestoAdicionalEstimado).toBeNull();
+    expect(a.f09Actual).toBe(f09);
   });
+  it.each(['0', '-100'])('UAI=%s does not prove that adjusted profit is nonpositive', f01 => {
+    expect(buildAlertaTasaMinima(anchorConF09(0, f01)).aplica).toBeNull();
+  });
+});
 
-  it('F09 = 14,96% → $891.398,72 (antes $0,00)', () => {
-    const a = buildAlertaTasaMinima(anchorConF09(14.96));
-    expect(a.aplica).toBe(true);
-    expect(a.impuestoAdicionalEstimado).toBe('89139872');
-  });
+vi.mock('../runtime', () => ({ callFiscalAgent: vi.fn(async () => ({ json: {
+  markdown: 'Analysis', warnings: [], data: { f01: '999',
+    alertaTasaMinima: { aplica: true, impuestoAdicionalEstimado: '999' },
+    tet: { tetActual: 99, brecha15Pct: 99, impuestoAdicional: '999' } },
+} })) }));
+vi.mock('../tools/risk-score-calculator', () => ({ computeRiskScore: () => ({
+  score: 0, nivel: 'bajo', factores: [],
+}) }));
 
-  it('brechas de una décima exacta no se mueven (sin regresión)', () => {
-    expect(buildAlertaTasaMinima(anchorConF09(14.9)).impuestoAdicionalEstimado).toBe(
-      '222849679',
-    );
-    expect(buildAlertaTasaMinima(anchorConF09(10)).impuestoAdicionalEstimado).toBe(
-      '11142483949',
-    );
-  });
-
-  it('F09 ≥ 15% → no aplica y el adicional es cero', () => {
-    const a = buildAlertaTasaMinima(anchorConF09(15));
-    expect(a.aplica).toBe(false);
-    expect(a.impuestoAdicionalEstimado).toBe('0');
-    expect(a.brechaPp).toBe(0);
-  });
-
-  it('UAI ≤ 0 → no aplica (par. 6 excluye utilidad depurada ≤ 0)', () => {
-    const a = buildAlertaTasaMinima(anchorConF09(0, '0'));
-    expect(a.aplica).toBe(false);
-    expect(a.impuestoAdicionalEstimado).toBe('0');
-  });
-
-  it('la brecha declarada y el dinero cuentan la misma historia', () => {
-    // brechaPp × UAI debe reproducir el adicional al centavo.
-    const a = buildAlertaTasaMinima(anchorConF09(14.94));
-    const esperado =
-      (BigInt(UAI_CENTS) * BigInt(Math.round(a.brechaPp * 10_000))) / BigInt(1_000_000);
-    expect(BigInt(a.impuestoAdicionalEstimado) - esperado <= BigInt(1)).toBe(true);
-  });
+it('LLM output cannot override fiscal anchors or invent TTD in either module', async () => {
+  const input = { fiscalAnchor: anchorConF09(14.96), language: 'es',
+    company: { name: 'Test', nit: '901714014-6' },
+  } as FiscalAgentInput;
+  const ccv = await runCcvFiscalAgent({ input });
+  expect(ccv.data.f01).toBe(UAI_CENTS);
+  expect(ccv.data.alertaTasaMinima.aplica).toBeNull();
+  expect(ccv.data.alertaTasaMinima.impuestoAdicionalEstimado).toBeNull();
+  expect(ccv.warnings.join(' ')).toContain('TTD no determinable');
+  const survival = await runSupervivenciaAgent({ input });
+  expect(survival.data.tet).toEqual({ tetActual: 14.96, brecha15Pct: null, impuestoAdicional: null });
 });

@@ -129,7 +129,7 @@ export class ERPService {
     }
 
     for (const conn of ordered) {
-      const cacheKey = `${conn.provider}:${op}:${periodLabel}`;
+      const cacheKey = `${conn.id}:${conn.provider}:${op}:${periodLabel}`;
       const cached = this.cache.get(cacheKey) as T | undefined;
       if (cached !== undefined) {
         return {
@@ -171,7 +171,7 @@ export class ERPService {
       };
     }
 
-    const cacheKey = `${primary.provider}:${op}:${periodLabel}`;
+    const cacheKey = `${primary.id}:${primary.provider}:${op}:${periodLabel}`;
     const cached = this.cache.get(cacheKey) as T | undefined;
     if (cached !== undefined) {
       return {

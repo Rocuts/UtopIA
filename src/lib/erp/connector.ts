@@ -1,3 +1,4 @@
+import { trialBalanceToCSV, trialBalanceToRawRows } from './trial-balance-serialization';
 // ─── Abstract ERP Connector ───────────────────────────────────────────────────
 // All provider connectors implement this interface.
 
@@ -98,28 +99,15 @@ export abstract class BaseERPConnector implements ERPConnectorInterface {
 
   /** Convert ERP trial balance to CSV format for the NIIF pipeline */
   trialBalanceToCSV(tb: ERPTrialBalance): string {
-    const header = 'codigo,cuenta,debitos,creditos,saldo';
-    const rows = tb.accounts
-      .filter(a => a.isAuxiliary)
-      .map(a => `${a.code},${a.name.replace(/,/g, ';')},${a.debit},${a.credit},${a.balance}`);
-    return [header, ...rows].join('\n');
+    return trialBalanceToCSV(tb);
   }
 
   /**
    * Convert an ERPTrialBalance to RawAccountRow[] — the type consumed by
    * preprocessTrialBalance / parseTrialBalanceCSV. The period key is the
-   * fiscal year extracted from `tb.period` (e.g. "2025-12" → "2025").
+   * exact period from `tb.period` (e.g. "2025-12" remains "2025-12").
    */
   trialBalanceToRawRows(tb: ERPTrialBalance): RawAccountRow[] {
-    const periodKey = tb.period.split('-')[0] ?? tb.period;
-    return tb.accounts
-      .filter((a) => a.isAuxiliary)
-      .map((a) => ({
-        code: a.code,
-        name: a.name,
-        level: 'Auxiliar',
-        transactional: true,
-        balancesByPeriod: { [periodKey]: a.balance },
-      }));
+    return trialBalanceToRawRows(tb);
   }
 }

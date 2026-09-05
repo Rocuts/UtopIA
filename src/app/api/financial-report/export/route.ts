@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { Readable } from 'node:stream';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
@@ -46,10 +47,19 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
 
   try {
-    const body = await req.json();
+    let body;
+    try { body = await req.json(); } catch {
+      return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 });
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
+    }
 
     const formatParse = exportFormatSchema.safeParse(body?.format);
-    const format = formatParse.success ? formatParse.data : 'excel';
+    if (!formatParse.success || formatParse.data === 'pdf') {
+      return NextResponse.json({ error: "Unsupported format. Use 'excel' or 'pdf-elite'." }, { status: 400 });
+    }
+    const format = formatParse.data;
 
     // -----------------------------------------------------------------------
     // EDITORIAL PDF branch
@@ -71,6 +81,8 @@ export async function POST(req: Request) {
         );
       }
       const report = body.report as FinancialReport;
+      const blocked = rejectInvalidExport(report);
+      if (blocked) return blocked;
       let preprocessed;
       if (typeof body.rawData === 'string' && body.rawData.length > 0) {
         const rows = parseTrialBalanceCSV(body.rawData);
@@ -181,18 +193,8 @@ export async function POST(req: Request) {
       instructions: enhancedInstructions,
     });
 
-    if (format === 'pdf') {
-      // El path jsPDF legacy fue retirado; el formato PDF vigente es
-      // 'pdf-elite'. Antes esta rama estaba VACÍA y el caller que pedía PDF
-      // recibía un Excel en silencio — ahora el contrato es explícito.
-      return NextResponse.json(
-        {
-          error:
-            "format 'pdf' is no longer supported. Use format 'pdf-elite' (editorial template) or omit for Excel.",
-        },
-        { status: 400 },
-      );
-    }
+    const blocked = rejectInvalidExport(report);
+    if (blocked) return blocked;
 
     const buffer = await generateFinancialExcel({ report, preprocessed });
     return createExcelResponse(buffer, effectiveCompany.name);
@@ -243,6 +245,8 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       );
     }
     const report = b.report;
+    const blocked = rejectInvalidExport(report);
+    if (blocked) return blocked;
     const language: 'es' | 'en' = b.language ?? 'es';
 
     let preprocessed;
@@ -361,6 +365,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     return pdfResponse(stream, company.name);
   }
 
+  const blocked = rejectInvalidExport(report);
+  if (blocked) return blocked;
+
   // Successful path: optionally aggregate pillars (fail-soft).
   let pillars = null;
   if (preprocessed?.primary) {
@@ -385,6 +392,13 @@ async function handlePdfElite(body: unknown): Promise<Response> {
   return pdfResponse(stream, company.name);
 }
 
+function rejectInvalidExport(report: FinancialReport): Response | null {
+  const details = financialExportBlockers(report);
+  return details.length > 0
+    ? NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 })
+    : null;
+}
+
 function pdfResponse(stream: Readable, companyName: string): Response {
   const safeName = companyName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
   const filename = `Reporte_Editorial_${safeName}_${Date.now()}.pdf`;
@@ -407,6 +421,7 @@ function createExcelResponse(buffer: Buffer, companyName: string): Response {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': String(buffer.length),
+      'Cache-Control': 'no-store',
     },
   });
 }

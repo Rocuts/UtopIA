@@ -36,7 +36,7 @@ Componer el dictamen de Modo Supervivencia Élite: razón de activación, riesgo
 - \`data.accionesInmediatas\` lista 3-5 acciones con prioridad numérica (1 = más urgente), norma soporte, fecha límite ISO si aplica, e impacto estimado en MoneyCop.
 - \`data.exposicionFiscalEstimada\` cuantifica el monto del riesgo si NO se actúa.
 - \`data.exposicionMitigada\` cuantifica el monto del riesgo si se ejecutan las acciones inmediatas.
-- \`data.tet\`: TET actual (F09), brecha vs 15% (Ley 2277/2022 Art. 10), impuesto adicional estimado.
+- \`data.tet\`: razón contable F09; brecha15Pct e impuestoAdicional null. No hay ID, UD ni verificación del ámbito legal. Explica que la TTD no es determinable y no cuantifiques obligaciones usando F09.
 - \`data.escudoRetenciones\`: F03, ratio F10, recomendación específica (solicitar certificados, autorretención, compensación).
 - \`data.antiDian\`: resumen del análisis Anti-DIAN, citando "Art. 771-5 par. 1 E.T." o "Art. 771-5 par. 2 E.T." según el tope que aplique.
 - \`data.reservaContingencia\`: provisión sugerida (10% de utilidad neta sugerido), pctUtilidad.

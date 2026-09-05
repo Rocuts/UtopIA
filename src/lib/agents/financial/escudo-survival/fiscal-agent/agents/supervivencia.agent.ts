@@ -6,7 +6,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildSupervivenciaPrompt } from '../prompts/supervivencia.prompt';
 import { supervivenciaModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
-import { precomputeCcv } from '../tools/ccv-calculator';
+import { precomputeCcv, TTD_UNAVAILABLE_REASON } from '../tools/ccv-calculator';
 import { computeRiskScore } from '../tools/risk-score-calculator';
 import type { FiscalAgentInput, SupervivenciaModuleResult } from '../types';
 
@@ -50,7 +50,7 @@ ANCLAS_FISCALES (Bloque Âncora):
 ALERTA_TASA_MINIMA (Art. 240 par. 6 E.T.):
   aplica: ${ccv.alertaTasaMinima.aplica}
   brechaPp vs 15%: ${ccv.alertaTasaMinima.brechaPp}
-  impuestoAdicional estimado: ${formatCopFromCents(BigInt(ccv.alertaTasaMinima.impuestoAdicionalEstimado))}
+  impuestoAdicional: N/D. ${TTD_UNAVAILABLE_REASON}
 
 SCORE_FACTORES:
 ${risk.factores.map((f) => `  - ${f.factor} → ${f.puntos} pts | ${f.detalle}`).join('\n')}
@@ -85,5 +85,7 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  return { ...json, data: { ...json.data,
+    tet: { tetActual: ccv.f09Pct, brecha15Pct: null, impuestoAdicional: null } },
+    warnings: [...json.warnings, TTD_UNAVAILABLE_REASON] };
 }

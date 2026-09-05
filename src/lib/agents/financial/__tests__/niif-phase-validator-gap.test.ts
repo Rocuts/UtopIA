@@ -116,3 +116,13 @@ describe('runNiifPhase — el validador que no corre no puede pasar callado', ()
   // —el validador desreferencia una decena de campos anidados— y ese fixture
   // se desincronizaría del schema real sin proteger nada.
 });
+
+ it('seals an unverified report and prevents download when JSON is missing', async () => {
+   mockNiifAnalyst.mockResolvedValue({ ...NIIF_SIN_JSON });
+   const result = await runNiifPhase(
+     { rawData: BALANCED_CSV, company: TEST_COMPANY, language: 'es' },
+     { preprocessed },
+   );
+   expect(result.niif.reconciliation?.clean).toBe(false);
+   expect(result.niif.fullContent).toContain('INTEGRIDAD ARITMÉTICA');
+ });

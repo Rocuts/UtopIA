@@ -212,7 +212,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
           </div>
 
           {/* Alerta tasa mínima */}
-          {data.data.alertaTasaMinima.aplica && (
+          {data.data.alertaTasaMinima && (
             <div
               className={cn(
                 'rounded-md p-3 text-xs leading-relaxed',
@@ -224,8 +224,8 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
               <span className="font-semibold text-danger">{t.alertaTasaMinima} </span>
               <span className="text-n-700">
                 {language === 'es'
-                  ? `F09 actual ${fmtPct(data.data.alertaTasaMinima.f09Actual / 100)} — brecha ${fmtPct(data.data.alertaTasaMinima.brechaPp / 100)} bajo el mínimo. Impuesto adicional estimado: ${fmtCop(data.data.alertaTasaMinima.impuestoAdicionalEstimado)}.`
-                  : `Current F09 ${fmtPct(data.data.alertaTasaMinima.f09Actual / 100)} — ${fmtPct(data.data.alertaTasaMinima.brechaPp / 100)} below the minimum. Estimated additional tax: ${fmtCop(data.data.alertaTasaMinima.impuestoAdicionalEstimado)}.`}
+                  ? 'TTD no determinable: faltan impuesto depurado, utilidad depurada y verificación de aplicabilidad. F09 no determina el impuesto adicional.'
+                  : 'TTD unavailable: adjusted tax, adjusted profit and applicability must be verified. F09 does not determine additional tax.'}
               </span>
             </div>
           )}
