@@ -1,5 +1,7 @@
 # Repo Analysis Agent Team
 
+> Documento histórico de planificación: sus hallazgos iniciales (incluidas las afirmaciones sobre pruebas, lint y README) no describen necesariamente el estado actual. Para continuar trabajo usa [el handoff](agents/HANDOFF.md) y [el mapa](agents/MAP.md). Esta propuesta de equipo no requiere iniciar varios agentes para cada tarea.
+
 ## Objetivo
 
 Definir un equipo de agentes para auditar este repo de forma paralela, con fronteras claras y entregables compatibles entre si. El repo es una app Next.js 16 + React 19 con:

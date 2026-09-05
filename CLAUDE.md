@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Entrada común para agentes: [AGENTS.md](AGENTS.md). Estado y siguiente tarea: [docs/agents/HANDOFF.md](docs/agents/HANDOFF.md). Consulta estas referencias antes de interpretar auditorías históricas como estado actual.
+
 UtopIA is an AI-powered Colombian accounting, tax, and financial advisory platform. Multi-agent orchestration via **AI SDK v6** + `@ai-sdk/openai` (default `gpt-5.4-mini`), RAG over curated tax docs, real-time web search.
 
 ## Commands
@@ -12,7 +14,7 @@ npm run lint:strict-mode  # Guard: Zod schemas headed to LLM follow strict-mode 
 npm run db:ingest         # Ingest tax documents into HNSWLib vector store
 ```
 
-No test framework is configured for the chat surface — validate with `npx tsc --noEmit` and `npm run build`. Vitest is wired for the financial pipeline (`npx vitest run`, `npx vitest run --config vitest.integration.config.ts`).
+Vitest está configurado para el proyecto, incluidas pruebas de APIs de chat y del pipeline financiero. Usa `npm test` o `npx vitest run <ruta>`; la configuración de integración está en `vitest.integration.config.ts`. Tipos y compilación: `npx tsc --noEmit` y `npm run build`. Los resultados verificados y su alcance están en `docs/agents/HANDOFF.md`.
 
 ## Environment
 
@@ -43,15 +45,7 @@ Optional model overrides live in `src/lib/config/models.ts` (`OPENAI_MODEL_CHAT`
 
 **`docs/spec/financial-report-v10.1.md`** is authoritative for the Editor Jefe HTML output (15-page editorial A4 template). It supersedes `financial-report-v8.1.md` (12 slides — deprecated).
 
-**Estado medido de la exactitud (2026-08-08).** Sólo el **Balance del periodo primario** tiene
-garantía estructural: anclas en centavos + desglose determinista (`contracts/deterministic-breakdown.ts`,
-clases 1/2/3 únicamente) + reconciliador + sello CON SALVEDADES + bloqueo de descarga. El P&G, el EFE,
-el ECP, la columna comparativa, el impuesto de renta y el acta **no tienen invariante**: sus cifras
-las autora el LLM y ningún validador las cruza. Medido: inflar `grossProfitPrimary` en $500M, vaciar
-`incomeStatement.lines`, o inventar un impuesto de $700M producen **0 errores y 0 warnings**.
-Antes de anclar Utilidad Bruta o EBIT hay que corregir la doble resta de la 4175
-(`trial-balance.ts:1461-1473`), o se cementa la cifra equivocada. Detalle y lista priorizada:
-[docs/AUDITORIA_CALCULOS_2026-08.md](docs/AUDITORIA_CALCULOS_2026-08.md).
+**Histórico de exactitud (2026-08-08).** La auditoría de agosto documentó brechas que motivaron correcciones posteriores. No utilizar sus reproducciones como descripción del checkout actual. El [handoff](docs/agents/HANDOFF.md) identifica el commit comprobado; la [revisión de septiembre](docs/reviews/main-financial-integrity-2026-09-05.md) distingue correcciones, evidencia y pendientes. La especificación continúa definiendo el contrato esperado y debe contrastarse con el código.
 
 Every financial agent calls `callFinancialAgent({ agentName, model, schema, system, userContent, ...MODELS_CONFIG[slot] })` from `src/lib/agents/financial/agents/runtime.ts`. Returns `{ json, meta }` (Zod-validated + reasoning/cache telemetry). When a file calls `generateText` directly it is **legacy / pending migration**.
 
@@ -124,7 +118,8 @@ Run the `utopia-contrast-auditor` agent on any "no se ve / fantasma / muy claro 
 | Need | File |
 |---|---|
 | Pipeline + tools + RAG + security + state architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| **Qué cifras son deterministas y cuáles las autora el LLM** | [docs/AUDITORIA_CALCULOS_2026-08.md](docs/AUDITORIA_CALCULOS_2026-08.md) |
+| Estado financiero verificado y pendientes | [docs/agents/HANDOFF.md](docs/agents/HANDOFF.md) |
+| Auditoría financiera histórica de agosto | [docs/AUDITORIA_CALCULOS_2026-08.md](docs/AUDITORIA_CALCULOS_2026-08.md) |
 | **Postura de seguridad OWASP (repo público: el detalle vive en `.security-private/`)** | [docs/AUDITORIA_OWASP_2026-08.md](docs/AUDITORIA_OWASP_2026-08.md) |
 | Insumos pendientes (balances reales, decisiones de negocio) | [docs/INSUMOS_REQUERIDOS_2026-08.md](docs/INSUMOS_REQUERIDOS_2026-08.md) |
 | **API público de clientes (`/api/v1`): guía operativa (llaves, webhooks, runbook)** | [docs/API_CLIENTES.md](docs/API_CLIENTES.md) |
