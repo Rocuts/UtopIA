@@ -227,7 +227,12 @@ export async function resolveVersionLineage(workspace: Workspace, id: string): P
   const chain: string[] = [];
   const seen = new Set<string>();
   let current: string | null = id;
-  while (current && !seen.has(current) && chain.length < MAX_LINEAGE_DEPTH) {
+  while (current && !seen.has(current)) {
+    // A truncated chain would silently look like "this audit examined another
+    // report". Refuse instead of reporting a mismatch that is not one.
+    if (chain.length >= MAX_LINEAGE_DEPTH) {
+      throw new ReportVersionError(409, 'Report version chain is too long to verify.');
+    }
     seen.add(current);
     chain.push(current);
     const parent: string | null = (await loadFinancialVersion(workspace, current)).parentId;

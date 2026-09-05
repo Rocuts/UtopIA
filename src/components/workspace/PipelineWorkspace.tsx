@@ -1601,8 +1601,8 @@ function ReportViewer({
             {'. '}
             {(auditReport && !auditVersionId) || (qualityReport && !qualityVersionId)
               ? (language === 'es'
-                ? 'Los resultados sin versión guardada se consultan en pantalla y no forman parte del archivo; vuelve a ejecutarlos para incluirlos.'
-                : 'Results without a saved version stay on screen and are not part of the file; run them again to include them.')
+                ? 'Los resultados que no quedaron guardados como versión completa se consultan en pantalla y no forman parte del archivo; vuelve a ejecutarlos para incluirlos.'
+                : 'Results that were not saved as a complete version stay on screen and are not part of the file; run them again to include them.')
               : (language === 'es'
                 ? 'Cada resultado incluido examinó esta misma versión del informe.'
                 : 'Every included result examined this same report version.')}
