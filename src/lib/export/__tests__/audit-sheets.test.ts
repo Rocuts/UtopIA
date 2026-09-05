@@ -126,6 +126,38 @@ describe('audit and meta-audit rendering in the workbook', () => {
     expect(flat).toContain(95); // anti-alucinación (ISO 42001)
   });
 
+  it('keeps every cell within the size Excel can open, and says where it cut', async () => {
+    // El texto de un hallazgo lo escribe un agente y el contrato no lo acota.
+    // Una celda de más de 32.767 caracteres produce un libro que Excel se niega
+    // a abrir, sin ningún aviso: peor que un texto recortado y declarado.
+    const long = 'A'.repeat(40_000);
+    const audit = makeAudit({ consolidatedFindings: [{
+      code: 'X-1', severity: 'critico', domain: 'niif', title: 'Hallazgo extenso',
+      description: long, normReference: 'NIC 1', recommendation: long, impact: 'i',
+    }] });
+    const wb = await load(await generateFinancialExcel({ report: makeExportableReport(), auditReport: audit }));
+    const values = rows(wb.getWorksheet('Auditoria')!).flat();
+    const longest = Math.max(...values.map(v => (typeof v === 'string' ? v.length : 0)));
+    expect(longest).toBeLessThanOrEqual(32_767);
+    expect(values.some(v => typeof v === 'string' && v.includes('texto recortado'))).toBe(true);
+  });
+
+  it('omits a meta-audit block that the stored row does not carry', async () => {
+    // Las filas se verifican por checksum, no por forma. Un bloque ausente no
+    // puede tumbar la descarga del informe completo.
+    const partial = {
+      overallScore: 60, grade: 'D', dimensions: [],
+      executiveSummary: '', fullReport: '# x', generatedAt: 'x',
+    } as unknown as QualityAssessment;
+    const wb = await load(await generateFinancialExcel({
+      report: makeExportableReport(), qualityReport: partial,
+    }));
+    const flat = rows(wb.getWorksheet('Meta-auditoria')!).flat();
+    expect(flat).toContain('D');
+    expect(flat).not.toContain('IFRS 18');
+    expect(flat).not.toContain('Gobernanza de IA (ISO 42001)');
+  });
+
   it('survives agent output with missing arrays and nested fields', async () => {
     const audit = { ...makeAudit(), auditorResults: undefined, consolidatedFindings: undefined } as unknown as AuditReport;
     const quality = { ...makeQuality(), dimensions: undefined } as unknown as QualityAssessment;
