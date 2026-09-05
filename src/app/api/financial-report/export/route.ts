@@ -67,9 +67,10 @@ export async function POST(req: Request): Promise<Response> {
         const quality = await loadBoundAuditVersion({
           workspace, id: qualityVersionId, kind: 'quality', lineage,
         });
-        // The meta-audit's conclusions rest on the audit it read: shipping it
-        // next to a different audit would misrepresent both.
-        if (quality.auditVersionId && quality.auditVersionId !== auditVersionId) {
+        // The meta-audit's conclusions rest on the audit it read. Shipping it
+        // next to a different audit misrepresents both; shipping it next to any
+        // audit when it read none suggests a review that never happened.
+        if ((quality.auditVersionId ?? null) !== (auditVersionId ?? null)) {
           throw new ReportVersionError(409, 'The meta-audit examined a different audit result.');
         }
         qualityReport = quality.quality ?? null;

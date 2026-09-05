@@ -75,7 +75,7 @@ contiene el archivo y qué queda solamente en pantalla.
 
 ## Defectos corregidos en la revisión adversarial de este cambio
 
-Una pasada de revisión adversarial sobre el propio cambio encontró cinco defectos
+Una pasada de revisión adversarial sobre el propio cambio encontró siete defectos
 reales, todos corregidos y con prueba:
 
 1. **Un informe nuevo heredaba la auditoría del anterior.** El estado de
@@ -98,7 +98,20 @@ reales, todos corregidos y con prueba:
    limitación al alcance —que no lista hallazgos— se publicaba como auditoría
    limpia. Defecto previo a este cambio, pero es este cambio el que lleva esa
    página a las descargas del servidor.
-5. **Robustez del libro Excel.** Una celda de más de 32.767 caracteres impide a
+5. **El aislamiento de las filas de auditoría no estaba probado.** La prueba de
+   acceso ajeno pasaba por el motivo equivocado: con la sesión de otra empresa,
+   la búsqueda de la *versión financiera* ya devolvía 404 antes de tocar la fila
+   de auditoría, así que ambas comprobaciones de la fila —predicado de workspace
+   y empresa— podían borrarse con las 35 pruebas en verde. La nueva prueba usa
+   una versión propia y válida, con la cadena y el digest correctos, y nombra una
+   auditoría guardada por otro workspace: es lo único que separa el contenido
+   ajeno del documento. Comprobada retirando cada guarda.
+6. **La regla de emparejamiento era asimétrica.** Se rechazaba una
+   meta-auditoría que hubiera leído *otra* auditoría, pero no una que no hubiera
+   leído *ninguna*, de modo que el documento podía yuxtaponer ambas sugiriendo
+   una revisión que nunca ocurrió. Ahora la referencia debe coincidir en ambos
+   sentidos; cada resultado por separado se sigue exportando.
+7. **Robustez del libro Excel.** Una celda de más de 32.767 caracteres impide a
    Excel abrir el archivo, y el contrato de auditoría no acota el texto de un
    hallazgo; se recorta declarando el recorte. Una fila de meta-auditoría sin
    alguno de sus bloques anidados rompía la descarga completa; cada bloque se
@@ -129,10 +142,11 @@ reales, todos corregidos y con prueba:
 
 | Comprobación | Resultado y alcance |
 |---|---|
-| `npm run test:report-integrity` | 35 aprobadas en 2 archivos con PostgreSQL embebido (PGlite). El script se amplió al directorio para que el nuevo archivo entre en el mismo job de CI, sin secretos de staging |
+| `npm run test:report-integrity` | 37 aprobadas en 2 archivos con PostgreSQL embebido (PGlite). El script se amplió al directorio para que el nuevo archivo entre en el mismo job de CI, sin secretos de staging |
 | `audit-versions.integration.test.ts` | 14 pruebas: guardado antes de anunciar (JSON y SSE), rechazo de contenido del cliente, acceso de otra empresa, referencias mal formadas/ausentes/de otro tipo, auditoría de otro informe, meta-auditoría con otra auditoría, fila alterada, versión examinada sustituida, resultado incompleto dentro y fuera de la descarga, meta-auditoría sobre versión en curso, fallo de persistencia y reintento de descarga sin reejecutar agentes |
 | `persisted-versions.integration.test.ts` | 21 aprobadas; se amplió el caso de claves rechazadas con referencias de auditoría falsificadas |
 | `npm test` | 201 archivos, 2.381 aprobadas, 3 omitidas |
+| `audit-versions.integration.test.ts` | 16 pruebas (2 añadidas tras la revisión adversarial) |
 | `audit-sheets.test.ts` | 12 pruebas de render contra ExcelJS real y el compositor real: secciones omitidas sin resultado vinculado, opinión/auditores/hallazgos escritos, alcance declarado, auditor caído declarado en vez de puntuado, límite de celda de Excel, bloque ausente omitido y dictamen no favorable no publicado como limpio |
 | `pipeline-resilience.test.ts` | 4 guardas de contrato del cliente, comprobadas retirando la protección que nombran |
 | `npx tsc --noEmit` | Correcto |

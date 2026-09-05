@@ -50,7 +50,10 @@ import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
 import { runQualityAudit } from '@/lib/agents/financial/quality/agent';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { composeEditorialReport } from '@/lib/export/pdf-elite-react';
-import { requireReportWorkspace, loadFinancialVersion, saveFinancialVersion } from '@/lib/db/financial-report-versions';
+import {
+  requireReportWorkspace, loadFinancialVersion, loadFinancialVersionRecord,
+  saveFinancialVersion, saveAuditVersion,
+} from '@/lib/db/financial-report-versions';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -221,6 +224,55 @@ describe('audit and meta-audit provenance with PostgreSQL', () => {
       reportVersionId: third.reportVersionId, auditVersionId: audit.auditVersionId,
     }))).status).toBe(404);
     expect(generateFinancialExcel).not.toHaveBeenCalled();
+  });
+
+  it('refuses an audit row owned by another workspace that names this very version', async () => {
+    // El caso que las demás pruebas no alcanzan: la versión financiera existe y
+    // es de quien exporta, la cadena encaja y el digest examinado coincide, así
+    // que lo único que separa el contenido de otra empresa del documento son las
+    // comprobaciones de workspace y empresa sobre la propia fila de auditoría.
+    const { third } = await complete();
+    const wsA = await requireReportWorkspace();
+    const examined = await loadFinancialVersionRecord(wsA, third.reportVersionId);
+
+    state.userId = 'user-b'; state.cookie = B;
+    const wsB = await requireReportWorkspace();
+    const companyB = { ...report.company, nit: '800123456' };
+    const auditOfB = await saveAuditVersion(wsB, {
+      kind: 'audit',
+      reportVersionId: third.reportVersionId,
+      examinedSha256: examined.sha256,
+      examinedStage: 'complete',
+      company: companyB,
+      language: 'es',
+      auditVersionId: null,
+      complete: true,
+      audit: makeAudit({ company: companyB, consolidatedReport: '# Auditoría de otra empresa' }),
+    });
+
+    state.userId = 'user-a'; state.cookie = A;
+    expect((await exportReport(req({
+      reportVersionId: third.reportVersionId, format: 'excel', auditVersionId: auditOfB,
+    }))).status).toBe(404);
+    expect(generateFinancialExcel).not.toHaveBeenCalled();
+  });
+
+  it('never ships an audit next to a meta-audit that did not read it', async () => {
+    // La regla es simétrica: si la meta-auditoría leyó otra auditoría se
+    // rechaza, y si no leyó ninguna tampoco puede publicarse junto a una, o el
+    // documento sugiere una revisión de la auditoría que nunca ocurrió.
+    const { first, third } = await complete();
+    const audit = await auditRoute(req({ reportVersionId: first.reportVersionId })).then(r => r.json());
+    const lonely = await qualityRoute(req({ reportVersionId: third.reportVersionId })).then(r => r.json());
+    expect(lonely.qualityVersionId).toBeDefined();
+    expect((await exportReport(req({
+      reportVersionId: third.reportVersionId,
+      auditVersionId: audit.auditVersionId, qualityVersionId: lonely.qualityVersionId,
+    }))).status).toBe(409);
+    // Cada uno por separado sigue siendo exportable.
+    for (const refs of [{ auditVersionId: audit.auditVersionId }, { qualityVersionId: lonely.qualityVersionId }]) {
+      expect((await exportReport(req({ reportVersionId: third.reportVersionId, ...refs }))).status).toBe(200);
+    }
   });
 
   it('rejects malformed, absent and wrong-kind audit references at export', async () => {
