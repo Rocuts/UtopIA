@@ -4,7 +4,7 @@ Este índice orienta; el contrato detallado vive en el código y en las especifi
 
 | Frente | Puntos de entrada | Verificación dirigida |
 |---|---|---|
-| Procedencia de informes y exportaciones | `src/app/api/financial-report/export/route.ts`, `src/lib/export/financial-export-validation.ts`, `src/lib/storage/conversation-history.ts`, `src/lib/auth/require-session.ts` | `src/app/api/financial-report/__tests__/export-integrity.route.test.ts`; seguir el almacenamiento servidor desde imports y referencias antes de diseñar otro |
+| Procedencia de informes y exportaciones | `src/lib/db/financial-report-versions.ts`, `src/app/api/financial-report/{niif,strategy,governance,export}/route.ts`, `src/lib/db/workspace.ts`, `src/components/workspace/PipelineWorkspace.tsx` | `npm run test:report-integrity` (PostgreSQL embebido); `export-integrity.route.test.ts`; contrato y límites en `docs/reviews/persisted-report-exports-2026-09-05.md` |
 | Aritmética y contrato NIIF | `src/lib/preprocessing/trial-balance.ts`, `src/lib/agents/financial/contracts/niif-report.ts`, `src/lib/agents/financial/contracts/money.ts`, `src/lib/agents/financial/validators/niif-json-validator.ts` | `financial-integrity-regression.test.ts`, `niif-json-validator.test.ts`, `precision-capacity.test.ts` (localizar con `rg --files src`) |
 | Entrada ERP, periodo, moneda y caché | `src/lib/erp/trial-balance-serialization.ts`, `src/lib/erp/pipeline.ts`, `src/lib/erp/service.ts` | `src/lib/erp/__tests__/trial-balance-integrity.test.ts` |
 | KPI y presentación de datos ausentes | `src/lib/kpis/live.ts`, `src/components/workspace/AreaCard.tsx`, `src/components/workspace/ExecutiveDashboard.tsx` | `src/lib/kpis/__tests__/live-integrity.test.ts` |
@@ -18,6 +18,7 @@ Este índice orienta; el contrato detallado vive en el código y en las especifi
 Usar scripts del `package.json` del checkout actual. Para una corrección concreta, empezar por `npx vitest run <ruta-de-prueba>`.
 
 - Suite: `npm test`.
+- Persistencia/aislamiento con PostgreSQL embebido, sin secretos: `npm run test:report-integrity`.
 - Tipos: `npx tsc --noEmit`.
 - Lint: `npm run lint`.
 - Contratos LLM: `npm run lint:strict-mode`.
