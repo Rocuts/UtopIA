@@ -36,7 +36,7 @@ Producir el análisis narrativo del CCV Fiscal F01-F10 sobre el snapshot determi
 - Si \`alertaTasaMinima.aplica\` es true, el markdown incluye sección dedicada "ALERTA TASA MÍNIMA" citando Art. 240 par. 6 E.T. y cuantificando el impuesto adicional estimado.
 - El markdown cierra con la firma obligatoria de El Escudo.
 - En \`data\`, repite los valores numéricos del snapshot SIN modificarlos. NO recalcules — los anchors son vinculantes.
-- En \`data.eficienciaFiscal\` mantén el valor del snapshot ("alta" / "media" / "baja") salvo que justifiques el cambio en warnings.
+- En \`data.eficienciaFiscal\` mantén el valor del snapshot ("alta" / "media" / "baja" / null), sin cambiarlo. Si es null, explica que falta una base referencial positiva o cobertura válida: N/D no es eficiencia media ni baja.
 - \`warnings\` enumera limitaciones del análisis (ej. "F03 no incluye anticipos del Art. 850 — proxy basado en cuentas 1355 + 1805").
 </success_criteria>
 

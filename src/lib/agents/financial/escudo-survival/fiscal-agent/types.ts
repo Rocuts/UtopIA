@@ -127,7 +127,7 @@ export interface CcvModuleResult {
     f09Pct: number;
     f10Pct: number;
     alertaTasaMinima: CcvAlertaTasaMinima;
-    eficienciaFiscal: 'alta' | 'media' | 'baja';
+    eficienciaFiscal: 'alta' | 'media' | 'baja' | null;
   };
   warnings: string[];
 }

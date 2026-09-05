@@ -75,7 +75,7 @@ export async function runSynthesizer(
   const m = inp.modules;
   const userContent = `<context>
 MODULO_1_CCV (resumen):
-  F09 TET: ${m.ccv.data.f09Pct}% | F10 cobertura: ${m.ccv.data.f10Pct}% | eficiencia: ${m.ccv.data.eficienciaFiscal}
+  F09 TET: ${m.ccv.data.f09Pct}% | F10 cobertura: ${m.ccv.data.f10Pct}% | eficiencia: ${m.ccv.data.eficienciaFiscal ?? 'N/D (base insuficiente; no es media ni baja)'}
   alerta tasa mínima aplica: ${m.ccv.data.alertaTasaMinima.aplica}
   ${m.ccv.markdown.slice(0, 500)}
 

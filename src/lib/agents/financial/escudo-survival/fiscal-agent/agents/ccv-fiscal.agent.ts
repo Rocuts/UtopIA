@@ -49,7 +49,7 @@ ALERTA_TASA_MINIMA (Art. 240 par. 6 E.T. — Ley 2277/2022 Art. 10):
   brechaPp: ${snapshot.alertaTasaMinima.brechaPp}
   impuestoAdicional: N/D. ${TTD_UNAVAILABLE_REASON}
 
-EFICIENCIA_FISCAL: ${snapshot.eficienciaFiscal}
+EFICIENCIA_FISCAL: ${snapshot.eficienciaFiscal ?? 'N/D: no hay base referencial positiva o cobertura válida; no clasifiques como media o baja'}
 
 PERIODO: ${input.fiscalAnchor.fuente.periodo}
 NIT_CLIENTE: ${input.fiscalAnchor.calendarioDian.nit ?? 'no provisto'}

@@ -139,6 +139,7 @@ export interface PendingRunRecord {
 }
 
 export interface NiifCheckpointRecord {
+  reportVersionId?: string;
   /** Ata el checkpoint al reporte persistido; si no coincide, se descarta. */
   conversationId: string;
   /**

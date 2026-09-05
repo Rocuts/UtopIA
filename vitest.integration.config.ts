@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { fileURLToPath } from 'node:url';
 
 // NOTE: @workflow/vitest does not yet exist as a published package (as of 2026-05).
 // The @workflow suite publishes @workflow/vite (hot-update plugin for dev server)
@@ -13,6 +14,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  resolve: { alias: { 'server-only': fileURLToPath(new URL('./src/__mocks__/server-only.ts', import.meta.url)) } },
   test: {
     include: ['src/**/__tests__/**/*.integration.test.ts'],
     environment: 'node',
