@@ -92,6 +92,12 @@ export type AuditOpinionType =
   | 'abstension';         // Abstención de opinión — disclaimer
 
 export interface AuditReport {
+  /** Immutable server snapshot of this audit; absent on browser-only results. */
+  auditVersionId?: string;
+  /** False when an auditor failed: the result stays on screen but is not exportable. */
+  auditComplete?: boolean;
+  /** Pipeline stage of the report version the auditors actually examined. */
+  examinedStage?: 'niif' | 'strategy' | 'complete';
   /** Company info echo */
   company: CompanyInfo;
   /** Individual auditor results */

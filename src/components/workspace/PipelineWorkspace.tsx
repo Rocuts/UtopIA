@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Download,
@@ -714,6 +714,10 @@ function emptyGovernance(): GovernanceResult {
 // La función devuelve `{ ok, value, error }` para que el caller la
 // pueda awaitear sin try/catch envolvente — el flujo del pipeline ya
 // maneja `phase2Error` como warning no-bloqueante.
+//
+// El contenido auditado ya no viaja en el cuerpo: el servidor lo reconstruye
+// desde la versión guardada y devuelve `auditVersionId`, `auditComplete` y
+// `examinedStage` junto al resultado.
 // ---------------------------------------------------------------------------
 interface ParallelAuditCallbacks {
   onAuditorStarted: (domain: string) => void;
@@ -727,30 +731,21 @@ type ParallelAuditOutcome =
   | { ok: false; error: string };
 
 async function runAuditInBackground(args: {
-  niifResult: NiifAnalysisResult;
-  company: CompanyInfo;
+  reportVersionId: string;
   language: 'es' | 'en';
   signal: AbortSignal;
   callbacks: ParallelAuditCallbacks;
 }): Promise<ParallelAuditOutcome> {
-  // Early-payload: niif-only consolidated; strategic + governance vacíos.
-  // El schema audit-request (financialAuditRequestSchema) requiere ambos
-  // como string — `''` pasa la validación; los auditors leen `consolidatedReport`.
-  const earlyReport: BackendFinancialReport = {
-    company: args.company,
-    niifAnalysis: args.niifResult,
-    strategicAnalysis: emptyStrategy(),
-    governance: emptyGovernance(),
-    consolidatedReport: args.niifResult.fullContent,
-    generatedAt: new Date().toISOString(),
-  };
-
+  // El navegador ya no envía el contenido auditado: nombra la versión guardada
+  // y el servidor reconstruye desde ella lo que los auditores examinan. En este
+  // punto del pipeline esa versión es la de la fase NIIF, y el resultado queda
+  // asociado exactamente a ella.
   let res: Response;
   try {
     res = await fetchSSEWithRetry('/api/financial-audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Stream': 'true' },
-      body: JSON.stringify({ report: earlyReport, language: args.language }),
+      body: JSON.stringify({ reportVersionId: args.reportVersionId, language: args.language }),
       signal: args.signal,
     });
   } catch (err) {
@@ -1076,12 +1071,13 @@ interface ReportViewerProps {
   initialTurns?: ReportIterationTurn[];
   /**
    * Reporte completo de auditoría (4 auditores) si el usuario activó la
-   * Fase 2. Disponible en pantalla; su versión servidor está pendiente.
+   * Fase 2. Lleva `auditVersionId` cuando el servidor lo guardó; sin esa
+   * referencia se consulta en pantalla y no entra en la descarga.
    */
   auditReport?: BackendAuditReport | null;
   /**
    * Reporte completo de meta-auditoría de calidad si el usuario activó la
-   * Fase 3. Su persistencia servidor debe completarse antes de exportarla.
+   * Fase 3. Lleva `qualityVersionId` cuando el servidor lo guardó.
    */
   qualityReport?: BackendQualityAssessment | null;
   /**
@@ -1124,6 +1120,8 @@ function ReportViewer({
   language,
   conversationId,
   initialTurns,
+  auditReport,
+  qualityReport,
   onReset,
   onPatchReport,
   onTurnsChange,
@@ -1171,6 +1169,18 @@ function ReportViewer({
   const reportHasQualifications =
     reportQualifications?.clean === false || report?.governance?.actaQualifications?.clean === false;
 
+  // Sólo se envían referencias a resultados guardados y completos. Una auditoría
+  // que vive únicamente en pantalla no tiene `auditVersionId`, y una parcial no
+  // es exportable: en ambos casos queda fuera del archivo en vez de hacer
+  // fracasar la descarga. El servidor vuelve a comprobar cada referencia contra
+  // la versión exportada.
+  const auditVersionId = auditReport?.auditComplete ? auditReport.auditVersionId ?? null : null;
+  const qualityVersionId = qualityReport?.qualityComplete ? qualityReport.qualityVersionId ?? null : null;
+  const exportRefs = useMemo(
+    () => ({ auditVersionId, qualityVersionId }),
+    [auditVersionId, qualityVersionId],
+  );
+
   const handleDownloadExcel = useCallback(async () => {
     if (!report?.reportVersionId || isExportingExcel || reportHasQualifications) return;
     setIsExportingExcel(true);
@@ -1179,7 +1189,7 @@ function ReportViewer({
       const res = await fetch('/api/financial-report/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportVersionId: report.reportVersionId, format: 'excel' }),
+        body: JSON.stringify({ reportVersionId: report.reportVersionId, format: 'excel', ...exportRefs }),
       });
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
@@ -1210,7 +1220,7 @@ function ReportViewer({
     } finally {
       setIsExportingExcel(false);
     }
-  }, [report, isExportingExcel, language, reportHasQualifications]);
+  }, [report, isExportingExcel, language, reportHasQualifications, exportRefs]);
 
   // Download the selected immutable server version as an editorial PDF.
   const handleExportPdf = useCallback(async () => {
@@ -1226,7 +1236,7 @@ function ReportViewer({
       const res = await fetch('/api/financial-report/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportVersionId: report.reportVersionId, format: 'pdf-elite' }),
+        body: JSON.stringify({ reportVersionId: report.reportVersionId, format: 'pdf-elite', ...exportRefs }),
       });
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
@@ -1256,7 +1266,7 @@ function ReportViewer({
     } finally {
       setIsExportingPdf(false);
     }
-  }, [report, language, isExportingPdf, reportHasQualifications]);
+  }, [report, language, isExportingPdf, reportHasQualifications, exportRefs]);
 
   // ─── Copiar Markdown ─────────────────────────────────────────────────────
   // Preferimos navigator.clipboard; fallback a textarea + execCommand.
@@ -1585,7 +1595,17 @@ function ReportViewer({
         )}
         {report?.reportVersionId && (
           <p className="px-6 py-3 text-sm text-n-800">
-            {language === 'es' ? 'La descarga incluye el informe financiero guardado. Las auditorías adicionales se consultan en pantalla; aún no se incluyen en esta versión.' : 'Downloads include the saved financial report. Additional audits are available on screen and are not yet part of this version.'}
+            {language === 'es' ? 'La descarga incluye el informe financiero guardado' : 'The download includes the saved financial report'}
+            {auditVersionId ? (language === 'es' ? ', la auditoría especializada' : ', the specialised audit') : ''}
+            {qualityVersionId ? (language === 'es' ? ' y la meta-auditoría de calidad' : ' and the quality meta-audit') : ''}
+            {'. '}
+            {(auditReport && !auditVersionId) || (qualityReport && !qualityVersionId)
+              ? (language === 'es'
+                ? 'Los resultados sin versión guardada se consultan en pantalla y no forman parte del archivo; vuelve a ejecutarlos para incluirlos.'
+                : 'Results without a saved version stay on screen and are not part of the file; run them again to include them.')
+              : (language === 'es'
+                ? 'Cada resultado incluido examinó esta misma versión del informe.'
+                : 'Every included result examined this same report version.')}
           </p>
         )}
         {exportError && (
@@ -2235,8 +2255,11 @@ export function PipelineWorkspace() {
       // (status quo).
       // En una reanudación sólo re-corremos la auditoría si el intake la pedía
       // y no tenemos ya un resultado: repetirla gratis quemaría LLM de más.
+      // Sin versión guardada no hay nada que auditar de forma verificable: la
+      // auditoría se omite en vez de correr sobre contenido del navegador.
       const auditEnabled =
         (intake?.outputOptions.auditPipeline ?? false) &&
+        !!reportVersionId &&
         (start === 'niif' || auditReportRef.current === null);
       let auditPromise: Promise<ParallelAuditOutcome> = Promise.resolve({
         ok: true,
@@ -2245,8 +2268,7 @@ export function PipelineWorkspace() {
       if (auditEnabled) {
         setPipelineState((prev) => ({ ...prev, mode: 'auditing' }));
         auditPromise = runAuditInBackground({
-          niifResult,
-          company: niifContext.company,
+          reportVersionId: reportVersionId!,
           language: runLanguage,
           signal: controller.signal,
           callbacks: {
@@ -2411,9 +2433,11 @@ export function PipelineWorkspace() {
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              // Igual que la auditoría: referencias, no contenido. El servidor
+              // evalúa la versión completa guardada y registra qué auditoría leyó.
               body: JSON.stringify({
-                report: phase1Report,
-                auditReport: phase2Report,
+                reportVersionId: phase1Report.reportVersionId,
+                auditVersionId: phase2Report?.auditVersionId ?? null,
                 language: runLanguage,
               }),
               signal: controller.signal,

@@ -18,6 +18,14 @@ export interface QualityDimension {
 
 /** Quality assessment result */
 export interface QualityAssessment {
+  /** Immutable server snapshot of this meta-audit; absent on browser-only results. */
+  qualityVersionId?: string;
+  /**
+   * False when this meta-audit is not exportable — either its own result is
+   * partial, or the audit it read was. A meta-audit never outlives the audit
+   * its conclusions rest on.
+   */
+  qualityComplete?: boolean;
   /** Overall quality score 0-100 */
   overallScore: number;
   /** Quality grade: A+ (95+), A (90+), B (80+), C (70+), D (60+), F (<60) */

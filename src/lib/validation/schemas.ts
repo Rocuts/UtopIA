@@ -374,18 +374,9 @@ export const feasibilityStudyRequestSchema = z.object({
 });
 
 // ---- Financial audit route ----
-export const financialAuditRequestSchema = z.object({
-  report: z.object({
-    company: companyInfoSchema,
-    niifAnalysis: z.object({ fullContent: z.string() }),
-    strategicAnalysis: z.object({ fullContent: z.string() }),
-    governance: z.object({ fullContent: z.string() }),
-    consolidatedReport: z.string().min(1, 'Consolidated report is required'),
-    generatedAt: z.string(),
-  }),
-  language: z.enum(['es', 'en']).default('es'),
-  auditFocus: z.string().max(2_000).optional(),
-});
+// The audit route takes a saved report version, never report content: its
+// request schema lives with the route. Reintroducing a content-carrying schema
+// here would reopen the client-supplied-report path.
 
 // ---- Fiscal audit opinion (Dictamen del Revisor Fiscal) route ----
 export const fiscalAuditOpinionRequestSchema = z.object({

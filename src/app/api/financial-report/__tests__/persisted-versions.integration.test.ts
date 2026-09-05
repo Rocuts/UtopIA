@@ -167,6 +167,11 @@ describe('authorized persisted report lifecycle with PostgreSQL', () => {
     for (const key of ['report', 'rawData', 'company', 'auditReport', 'qualityReport', 'workspaceId']) {
       expect((await exportReport(req({ reportVersionId: third.reportVersionId, [key]: 'forged' }))).status).toBe(400);
     }
+    // Audits enter the download by reference only; a reference is a stored id.
+    for (const key of ['auditVersionId', 'qualityVersionId']) {
+      expect((await exportReport(req({ reportVersionId: third.reportVersionId, [key]: 'forged' }))).status).toBe(400);
+      expect((await exportReport(req({ reportVersionId: third.reportVersionId, [key]: B }))).status).toBe(404);
+    }
     expect(generateFinancialExcel).not.toHaveBeenCalled();
   });
   it('rejects malformed, absent, foreign-kind and incomplete references', async () => {

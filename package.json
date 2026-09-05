@@ -27,7 +27,7 @@
     "db:encrypt-erp": "dotenv -e .env.local -- tsx scripts/encrypt-erp-credentials.ts",
     "api:create-key": "dotenv -e .env.local -- tsx scripts/create-api-key.ts",
     "lint:strict-mode": "node scripts/lint-strict-mode.mjs",
-    "test:report-integrity": "vitest run -c vitest.integration.config.ts src/app/api/financial-report/__tests__/persisted-versions.integration.test.ts"
+    "test:report-integrity": "vitest run -c vitest.integration.config.ts src/app/api/financial-report/__tests__/"
   },
   "dependencies": {
     "@ai-sdk/cohere": "^3.0.33",

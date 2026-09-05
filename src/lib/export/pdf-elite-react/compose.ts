@@ -152,6 +152,11 @@ export interface ComposeInput {
    */
   qualityReport?: QualityAssessment | null;
   /**
+   * Fase del informe que la auditoría persistida examinó realmente. La ruta de
+   * exportación la toma del resultado guardado; sin ella no se afirma cobertura.
+   */
+  auditExaminedStage?: 'niif' | 'strategy' | 'complete' | null;
+  /**
    * Toggle del intake — qué entregables incluir en el PDF. Si undefined
    * EditorialReportDoc renderiza el set completo (comportamiento histórico).
    * Si presente, cada flag false omite la(s) página(s) correspondiente(s).
@@ -169,6 +174,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     dictamen,
     auditReport,
     qualityReport,
+    auditExaminedStage,
     outputOptions,
   } = input;
 
@@ -225,7 +231,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   if (shareholderMinutes) {
     out.shareholderMinutes = shareholderMinutes;
   }
-  const auditFindings = buildAuditFindings(auditReport ?? null);
+  const auditFindings = buildAuditFindings(auditReport ?? null, auditExaminedStage ?? null);
   if (auditFindings) {
     out.auditFindings = auditFindings;
   }
@@ -256,7 +262,15 @@ const SEVERITY_ORDER: Record<AuditFindingSeverity, number> = {
 
 const MAX_TOP_FINDINGS = 12;
 
-function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | undefined {
+const AUDIT_COVERAGE_NOTE: Record<string, string> = {
+  niif: 'Auditoría realizada sobre la fase NIIF de esta versión del informe: los hallazgos de estrategia y gobierno no formaban parte del material examinado.',
+  strategy: 'Auditoría realizada sobre las fases NIIF y estratégica de esta versión del informe: el gobierno corporativo no formaba parte del material examinado.',
+  complete: 'Auditoría realizada sobre el informe completo de esta versión.',
+};
+
+function buildAuditFindings(
+  audit: AuditReport | null, examinedStage: string | null,
+): AuditFindingsSpec | undefined {
   if (!audit) return undefined;
 
   const auditorCards: AuditorScoreCard[] = (audit.auditorResults ?? []).map((r) => ({
@@ -301,6 +315,7 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
     topFindings,
     findingCounts,
     executiveSummary: scrubInternalMetadata(audit.executiveSummary ?? ''),
+    coverageNote: examinedStage ? AUDIT_COVERAGE_NOTE[examinedStage] ?? null : null,
   };
 }
 

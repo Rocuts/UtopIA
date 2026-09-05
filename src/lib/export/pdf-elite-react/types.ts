@@ -173,6 +173,12 @@ export interface AuditFindingsSpec {
   topFindings: AuditFindingRow[];
   findingCounts: Record<AuditFindingSeverity, number>;
   executiveSummary: string;
+  /**
+   * Qué versión del informe examinaron los auditores. La auditoría corre en
+   * paralelo con Estrategia y Gobierno, así que puede haber leído sólo la fase
+   * NIIF; decirlo evita presentarla como revisión del informe completo.
+   */
+  coverageNote?: string | null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

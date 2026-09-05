@@ -210,6 +210,21 @@ export function AuditFindingsPage({ doc }: Props) {
         <NormativePill label="Ley 43/1990" tone="sage-on-cream" />
       </View>
 
+      {/* Alcance examinado — la auditoría corre en paralelo con Estrategia y
+          Gobierno, así que el lector debe saber qué material se revisó. */}
+      {audit.coverageNote ? (
+        <Text
+          style={{
+            fontFamily: FONT_MONO,
+            fontSize: TYPE_CAPTION,
+            color: CHARCOAL_900,
+            marginBottom: S4,
+          }}
+        >
+          {audit.coverageNote}
+        </Text>
+      ) : null}
+
       {/* 4 auditor score cards */}
       <View style={{ flexDirection: 'row', gap: S3, marginBottom: S5 }}>
         {audit.auditorCards.map((c) => (

@@ -56,7 +56,7 @@ jobs:
       - name: Vitest unit tests
         run: npm test
 
-      - name: Persisted report isolation (embedded PostgreSQL, no staging secrets)
+      - name: Persisted report and audit provenance (embedded PostgreSQL, no staging secrets)
         run: npm run test:report-integrity
 
       - name: Next.js production build
