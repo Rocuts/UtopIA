@@ -1,3 +1,4 @@
+import { requireReportWorkspace, loadFinancialVersion, saveFinancialVersion, ReportVersionError } from '@/lib/db/financial-report-versions';
 import { NextResponse } from 'next/server';
 import { strategyPhaseRequestSchema } from '@/lib/validation/schemas';
 import { runStrategyPhase } from '@/lib/agents/financial/orchestrator';
@@ -24,7 +25,7 @@ import {
 // POST /api/financial-report/strategy (Wave 3.F1)
 // ---------------------------------------------------------------------------
 // Stage 2 del pipeline financiero — corre el Director de Estrategia.
-// Stateless: consume el output de /niif (niifResult + bindingTotals +
+// Sin referencia de versión, consume el output de /niif (niifResult + bindingTotals +
 // preprocessed) y devuelve el StrategicAnalysisResult.
 //
 // SSE events:
@@ -43,7 +44,15 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response;
 
   try {
-    const body = await req.json();
+    let body = await req.json();
+    const versionId = body?.reportVersionId;
+    const reportWorkspace = versionId !== undefined ? await requireReportWorkspace() : null;
+    const stored = reportWorkspace ? await loadFinancialVersion(reportWorkspace, versionId) : null;
+    if (stored && stored.stage !== 'niif') {
+      throw new ReportVersionError(409, 'Report version is not ready for this phase.');
+    }
+    // All financial inputs and generation options come from the authorized snapshot.
+    if (stored) body = { ...stored };
     const parsed = strategyPhaseRequestSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -60,7 +69,7 @@ export async function POST(req: Request) {
     // Ola 2 — Hechos del negocio: bloque narrativo <hechos_empresa> para el
     // <context> del Director de Estrategia. Tenancy: workspaceId SOLO del
     // servidor (nunca del body). Degrada SEGURO a '' ante cualquier fallo.
-    const workspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+    const workspaceId = reportWorkspace?.id ?? (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
     const excludedFactIds =
       excludedFactIdsSchema.safeParse((body as { excludedFactIds?: unknown }).excludedFactIds).data ?? null;
     const hechosEmpresa = await getHechosEmpresaBlock(
@@ -86,10 +95,18 @@ export async function POST(req: Request) {
     const telemetryWorkspaceId = asTelemetryUuid(workspaceId);
     const telemetryCtx: TelemetryContext = {
       workspaceId: workspaceId ?? null,
-      reportId: await resolveOwnedReportId(
+      reportId: stored ? versionId : await resolveOwnedReportId(
         (body as { reportId?: unknown }).reportId,
         telemetryWorkspaceId,
       ),
+    };
+
+    const persistPhase: PersistPhase = async (strategy) => {
+      if (!reportWorkspace || !stored) return {};
+      const reportVersionId = await saveFinancialVersion(reportWorkspace, {
+        ...stored, parentId: versionId, stage: 'strategy', strategyResult: strategy,
+      });
+      return { reportVersionId };
     };
 
     const stream =
@@ -123,6 +140,7 @@ export async function POST(req: Request) {
           language,
           instructions,
           hechosEmpresa,
+          persistPhase,
         }),
       );
     }
@@ -139,8 +157,9 @@ export async function POST(req: Request) {
       }),
     );
 
-    return NextResponse.json({ strategy });
+    return NextResponse.json({ strategy, ...await persistPhase(strategy) });
   } catch (error) {
+    if (error instanceof ReportVersionError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error(
       '[financial-report/strategy] API error:',
       error instanceof Error ? error.message : error,
@@ -152,6 +171,8 @@ export async function POST(req: Request) {
   }
 }
 
+type PersistPhase = (result: Awaited<ReturnType<typeof runStrategyPhase>>) => Promise<{ reportVersionId?: string }>;
+
 function handleStreaming(args: {
   niifResult: NiifAnalysisResult;
   bindingTotals: string;
@@ -160,8 +181,9 @@ function handleStreaming(args: {
   language: 'es' | 'en';
   instructions: string | undefined;
   hechosEmpresa: string;
+  persistPhase: PersistPhase;
 }) {
-  const { niifResult, bindingTotals, preprocessed, company, language, instructions, hechosEmpresa } =
+  const { niifResult, bindingTotals, preprocessed, company, language, instructions, hechosEmpresa, persistPhase } =
     args;
 
   const readableStream = new ReadableStream({
@@ -191,7 +213,7 @@ function handleStreaming(args: {
           },
         );
 
-        send('strategy_phase', { strategy });
+        send('strategy_phase', { strategy, ...await persistPhase(strategy) });
         send('done', { stage: 'strategy' });
       } catch (error) {
         console.error(

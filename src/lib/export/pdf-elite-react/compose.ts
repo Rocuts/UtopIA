@@ -152,6 +152,11 @@ export interface ComposeInput {
    */
   qualityReport?: QualityAssessment | null;
   /**
+   * Fase del informe que la auditoría persistida examinó realmente. La ruta de
+   * exportación la toma del resultado guardado; sin ella no se afirma cobertura.
+   */
+  auditExaminedStage?: 'niif' | 'strategy' | 'complete' | null;
+  /**
    * Toggle del intake — qué entregables incluir en el PDF. Si undefined
    * EditorialReportDoc renderiza el set completo (comportamiento histórico).
    * Si presente, cada flag false omite la(s) página(s) correspondiente(s).
@@ -169,6 +174,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     dictamen,
     auditReport,
     qualityReport,
+    auditExaminedStage,
     outputOptions,
   } = input;
 
@@ -225,7 +231,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   if (shareholderMinutes) {
     out.shareholderMinutes = shareholderMinutes;
   }
-  const auditFindings = buildAuditFindings(auditReport ?? null);
+  const auditFindings = buildAuditFindings(auditReport ?? null, auditExaminedStage ?? null);
   if (auditFindings) {
     out.auditFindings = auditFindings;
   }
@@ -256,7 +262,22 @@ const SEVERITY_ORDER: Record<AuditFindingSeverity, number> = {
 
 const MAX_TOP_FINDINGS = 12;
 
-function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | undefined {
+// Los auditores sólo leen `consolidatedReport`, y una versión que aún no está
+// completa lleva ahí únicamente el contenido NIIF: una auditoría de la fase
+// estratégica examinó exactamente el mismo material que una de la fase NIIF.
+// Ver `buildAuditSubject` en src/app/api/financial-audit/route.ts; si esa
+// función cambia lo que compone, esta nota debe cambiar con ella.
+function auditCoverageNote(examinedStage: string | null): string | null {
+  if (examinedStage === 'complete') return 'Auditoría realizada sobre el informe completo de esta versión.';
+  if (examinedStage === 'niif' || examinedStage === 'strategy') {
+    return 'Auditoría realizada sobre el contenido NIIF de esta versión del informe: el análisis estratégico y el gobierno corporativo no formaban parte del material examinado.';
+  }
+  return null;
+}
+
+function buildAuditFindings(
+  audit: AuditReport | null, examinedStage: string | null,
+): AuditFindingsSpec | undefined {
   if (!audit) return undefined;
 
   const auditorCards: AuditorScoreCard[] = (audit.auditorResults ?? []).map((r) => ({
@@ -301,6 +322,7 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
     topFindings,
     findingCounts,
     executiveSummary: scrubInternalMetadata(audit.executiveSummary ?? ''),
+    coverageNote: auditCoverageNote(examinedStage),
   };
 }
 

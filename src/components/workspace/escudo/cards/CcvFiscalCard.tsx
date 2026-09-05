@@ -99,7 +99,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
         { key: 'f06', label: t.f06, value: fmtCop(data.data.f06), norma: 'Cta. 2365', isMoney: true },
         { key: 'f07', label: t.f07, value: fmtCop(data.data.f07), norma: 'Cta. 2368', isMoney: true },
         { key: 'f08', label: t.f08, value: fmtCop(data.data.f08), norma: 'Cta. 24XX', isMoney: true, bold: true },
-        { key: 'f09', label: t.f09, value: fmtPct(data.data.f09Pct / 100), norma: 'Art. 240 par.6 E.T.', isPct: true },
+        { key: 'f09', label: t.f09, value: fmtPct(data.data.f09Pct / 100), norma: language === 'es' ? 'Razón contable: impuesto / UAI' : 'Accounting ratio: tax / pre-tax income', isPct: true },
         { key: 'f10', label: t.f10, value: fmtPct(data.data.f10Pct / 100), norma: 'Art. 240 E.T.', isPct: true },
       ]
     : [];
@@ -230,13 +230,18 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
             </div>
           )}
 
+          {data.data.eficienciaFiscal == null && (
+            <p className="text-xs text-n-700">{language === 'es' ? 'Eficiencia no determinable: falta base referencial positiva o cobertura válida.' : 'Efficiency unavailable: a positive reference base and valid coverage are required.'}</p>
+          )}
           {/* Eficiencia fiscal badge */}
           <div className="flex items-center justify-between gap-3 pt-1">
             <span className="text-xs text-n-500">{t.eficiencia}</span>
             <span
               className={cn(
                 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-label',
-                data.data.eficienciaFiscal === 'alta'
+                data.data.eficienciaFiscal == null
+                  ? 'bg-n-100 text-n-800'
+                  : data.data.eficienciaFiscal === 'alta'
                   ? 'bg-[rgb(34_197_94_/_0.12)] text-success ring-1 ring-[rgb(34_197_94_/_0.3)]'
                   : data.data.eficienciaFiscal === 'media'
                   ? 'bg-[rgb(234_179_8_/_0.14)] text-warning ring-1 ring-[rgb(234_179_8_/_0.35)]'
@@ -244,7 +249,7 @@ export function CcvFiscalCard({ data, loading, error, t, language = 'es' }: CcvF
               )}
             >
               {EficienciaIcon && <EficienciaIcon className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}
-              {language === 'es'
+              {data.data.eficienciaFiscal == null ? 'N/D' : language === 'es'
                 ? data.data.eficienciaFiscal === 'alta' ? 'Alta' : data.data.eficienciaFiscal === 'media' ? 'Media' : 'Baja'
                 : data.data.eficienciaFiscal === 'alta' ? 'High' : data.data.eficienciaFiscal === 'media' ? 'Medium' : 'Low'}
             </span>

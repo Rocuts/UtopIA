@@ -77,6 +77,16 @@ const OPINION_LABEL: Record<AuditOpinionKind, string> = {
   abstension: 'ABSTENCIÓN',
 };
 
+/**
+ * Texto cuando la página no lista hallazgos. Una lista vacía no acredita un
+ * dictamen limpio: el revisor puede abstenerse por una limitación al alcance
+ * sin listar hallazgos, y la página imprime el sello del dictamen justo encima.
+ */
+export function emptyFindingsNote(opinionType: AuditOpinionKind): string {
+  if (opinionType === 'favorable') return 'Sin hallazgos materiales. Dictamen favorable sin salvedades.';
+  return `Sin hallazgos listados en esta página. El dictamen de esta auditoría es ${OPINION_LABEL[opinionType].toLowerCase()}; su fundamento está en el informe consolidado de la auditoría.`;
+}
+
 function opinionColor(o: AuditOpinionKind): string {
   switch (o) {
     case 'favorable': return SAGE_500;
@@ -210,6 +220,21 @@ export function AuditFindingsPage({ doc }: Props) {
         <NormativePill label="Ley 43/1990" tone="sage-on-cream" />
       </View>
 
+      {/* Alcance examinado — la auditoría corre en paralelo con Estrategia y
+          Gobierno, así que el lector debe saber qué material se revisó. */}
+      {audit.coverageNote ? (
+        <Text
+          style={{
+            fontFamily: FONT_MONO,
+            fontSize: TYPE_CAPTION,
+            color: CHARCOAL_900,
+            marginBottom: S4,
+          }}
+        >
+          {audit.coverageNote}
+        </Text>
+      ) : null}
+
       {/* 4 auditor score cards */}
       <View style={{ flexDirection: 'row', gap: S3, marginBottom: S5 }}>
         {audit.auditorCards.map((c) => (
@@ -308,7 +333,7 @@ export function AuditFindingsPage({ doc }: Props) {
       <View style={{ flexGrow: 1 }} wrap>
         {audit.topFindings.length === 0 ? (
           <Text style={{ fontFamily: FONT_SANS, fontSize: TYPE_BODY, color: CHARCOAL_900, fontStyle: 'italic' }}>
-            Sin hallazgos materiales. Dictamen favorable sin salvedades.
+            {emptyFindingsNote(audit.opinionType)}
           </Text>
         ) : (
           audit.topFindings.map((f) => (

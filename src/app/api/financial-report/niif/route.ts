@@ -1,3 +1,4 @@
+import { requireReportWorkspace, assertReportCompany, saveFinancialVersion, reportOutputOptionsSchema, ReportVersionError } from '@/lib/db/financial-report-versions';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { financialReportRequestSchema, excludedFactIdsSchema } from '@/lib/validation/schemas';
@@ -99,6 +100,10 @@ export async function POST(req: Request) {
     }
 
     const { rawData, company, language, instructions } = parsed.data;
+    const reportWorkspace = body.persist === true ? await requireReportWorkspace() : null;
+    if (reportWorkspace) assertReportCompany(reportWorkspace, company);
+    const options = reportOutputOptionsSchema.safeParse(body.outputOptions);
+    if (!options.success) return NextResponse.json({ error: 'Invalid output options.' }, { status: 400 });
 
     const provisionalParsed = provisionalFlagSchema.safeParse(
       (body as { provisional?: unknown }).provisional,
@@ -134,9 +139,23 @@ export async function POST(req: Request) {
 
     // Ola 2 — tenancy SOLO desde la cookie (nunca del body) + IDs a excluir en
     // esta corrida (confirmación pre-reporte; no muta la DB).
-    const workspaceId = (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
+    const workspaceId = reportWorkspace?.id ?? (await getCurrentWorkspaceId().catch(() => null)) ?? undefined;
     const excludedFactIds =
       excludedFactIdsSchema.safeParse((body as { excludedFactIds?: unknown }).excludedFactIds).data ?? null;
+
+    const persistPhase: PersistNiifPhase = async (phase) => {
+      if (!reportWorkspace) return {};
+      const reportVersionId = await saveFinancialVersion(reportWorkspace, {
+        outputOptions: options.data,
+        stage: 'niif', parentId: null, rawData, language, instructions,
+        excludedFactIds, company: phase.context.effectiveCompany,
+        bindingTotals: phase.context.bindingTotalsBlock,
+        preprocessed: toJsonSafe(phase.context.ppForAgents) ?? null,
+        niifResult: phase.niif, provisional, adjustmentLedger,
+        fiscalSnapshot: phase.fiscalSnapshot, ancora: phase.ancora,
+      });
+      return { reportVersionId };
+    };
 
     // Telemetría — contexto del tenant para TODO el pipeline.
     //
@@ -176,7 +195,7 @@ export async function POST(req: Request) {
     // BigInt (cents) — un shape inválido es 400, nunca cast ciego.
     const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
     let preprocessed: PreprocessedBalance | undefined;
-    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
+    if (!reportWorkspace && bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
       const revived = revivePreprocessedBalance(bodyPreprocessed);
       if (!revived) {
         return NextResponse.json(
@@ -210,6 +229,7 @@ export async function POST(req: Request) {
           workspaceId,
           excludedFactIds,
           startedAt,
+          persistPhase,
         }),
       );
     }
@@ -234,6 +254,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       toJsonSafe({
+        ...await persistPhase(phase),
         niif: phase.niif,
         ancora: phase.ancora,
         fiscalSnapshot: phase.fiscalSnapshot ?? null,
@@ -241,6 +262,7 @@ export async function POST(req: Request) {
       }),
     );
   } catch (error) {
+    if (error instanceof ReportVersionError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof BalanceValidationError) {
       void logActivity({
         category: 'financial',
@@ -307,6 +329,8 @@ interface SerializableNiifContext {
 // SSE streaming handler
 // ---------------------------------------------------------------------------
 
+type PersistNiifPhase = (phase: Awaited<ReturnType<typeof runNiifPhase>>) => Promise<{ reportVersionId?: string }>;
+
 function handleStreaming(args: {
   rawData: string;
   company: Parameters<typeof runNiifPhase>[0]['company'];
@@ -318,6 +342,7 @@ function handleStreaming(args: {
   workspaceId: string | undefined;
   excludedFactIds: string[] | null;
   startedAt: number;
+  persistPhase: PersistNiifPhase;
 }) {
   const {
     rawData,
@@ -330,6 +355,7 @@ function handleStreaming(args: {
     workspaceId,
     excludedFactIds,
     startedAt,
+    persistPhase,
   } = args;
   const readableStream = new ReadableStream({
     async start(controller) {
@@ -355,6 +381,8 @@ function handleStreaming(args: {
           },
         );
 
+        const persisted = await persistPhase(phase);
+
         // Emisión separada del Bloque Âncora — los consumidores (UI Escudo,
         // Strategy/Governance handoff) lo leen sin tener que parsear el
         // payload pesado de `niif_phase`. El payload de `niif_phase` lo
@@ -365,6 +393,7 @@ function handleStreaming(args: {
         // FiscalSnapshot es JSON-safe (strings de centavos + numbers).
         send('fiscal_snapshot', { fiscalSnapshot: phase.fiscalSnapshot ?? null });
         send('niif_phase', {
+          ...persisted,
           niif: phase.niif,
           ancora: phase.ancora,
           fiscalSnapshot: phase.fiscalSnapshot ?? null,

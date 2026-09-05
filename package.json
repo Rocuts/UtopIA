@@ -26,7 +26,8 @@
     "smoke": "dotenv -e .env.local -- tsx scripts/smoke-test-1plus1.ts",
     "db:encrypt-erp": "dotenv -e .env.local -- tsx scripts/encrypt-erp-credentials.ts",
     "api:create-key": "dotenv -e .env.local -- tsx scripts/create-api-key.ts",
-    "lint:strict-mode": "node scripts/lint-strict-mode.mjs"
+    "lint:strict-mode": "node scripts/lint-strict-mode.mjs",
+    "test:report-integrity": "vitest run -c vitest.integration.config.ts src/app/api/financial-report/__tests__/"
   },
   "dependencies": {
     "@ai-sdk/cohere": "^3.0.33",
@@ -99,6 +100,7 @@
     }
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",

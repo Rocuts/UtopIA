@@ -1,55 +1,51 @@
 # Continuidad — integridad financiera del SaaS
 
-Actualizado: 2026-09-05. Alcance: revisión y correcciones a partir de **main**, no revisión de la PR #7. Prioridad del usuario: lógica financiera, concordancia normativa, métricas reales, informes y exportaciones, con seguridad y funcionamiento bajo distinta carga/conexión.
+Actualizado: 2026-09-05. Objetivo: métricas reales, trazables y coherentes con normativa colombiana; informes autorizados y resultados fiables. No hay certificación integral de producción.
 
-## Referencias verificadas
+## Estado remoto y referencia de trabajo
 
-- Repo: `Rocuts/UtopIA`.
-- Main revisado: `4d0db2db6176c7d8bae73da209e765a45f6a9d5b`.
-- Commit de correcciones funcionales: `fd77cc5357c3d6cc9bf76b274c0adfbc77bd4d22`.
-- Rama: `fix/main-financial-integrity-20260905`.
-- [PR #14](https://github.com/Rocuts/UtopIA/pull/14): abierta, borrador, sin fusionar en la última consulta. Esta documentación se añade después del commit funcional; consultar HEAD remoto antes de continuar.
-- [Informe y fuentes oficiales](../reviews/main-financial-integrity-2026-09-05.md).
+- Repo: `Rocuts/UtopIA`; revisión sobre **main**, no PR #7.
+- PR #14: fusionada. PR #15 (`fix/persisted-report-exports-20260905`, HEAD `7bffef011944956eed31142a4c9fc628638af99b`): **abierta, borrador, CI en verde** al comprobarla en esta sesión (Type + Tests + Build, Coverage, Integration Neon, Vercel Preview).
+- Rama de esta continuación: `claude/audit-trail-persistence-gmtj5v`, partiendo del HEAD de #15.
+- [Cambio, contrato, pruebas y límites de esta sesión](../reviews/audit-provenance-2026-09-05.md).
+- [Sesión anterior: versiones servidor de informes](../reviews/persisted-report-exports-2026-09-05.md). [Evidencia previa](../reviews/main-financial-integrity-2026-09-05.md); no repetirlas como revisión actual.
 
-No se fusionó ni desplegó. No hay certificación integral de preparación del SaaS para producción.
+No se fusionó ni se desplegó.
 
-## Lo que ya se implementó
+## Implementado antes de esta sesión — no rehacer sin encontrar una regresión
 
-- KPI sin bases verificadas → `null`/N/D con motivo; sin escenarios, curvas ni puntuaciones de relleno.
-- TTD: retirada la aproximación basada en F09/UAI. Aplicabilidad, brecha e impuesto adicional quedan `null` sin ID, UD y ámbito fiscal verificado. Se preserva esa salida estructurada después del LLM en CCV/Supervivencia.
-- ECP: suma exacta de componentes por fila (E17); corrección del falso positivo EBIT = utilidad neta; bloqueo explícito de integridad si falta JSON NIIF.
-- Exportación: comprobación estructural y aritmética servidor en Excel/PDF; Excel incorpora EFE y cambios en patrimonio.
-- ERP: periodo conservado en CSV y filas, serializador único, moneda COP validada, caché por conexión. Entradas y agregados fuera del rango seguro de centavos se rechazan.
-- UVT: años desconocidos no reutilizan otro año. Proxy reconoce los mismos secretos de auth que el backend.
+Versiones servidor por fase NIIF → estrategia → gobierno sobre `reports`; fuente, contexto, opciones, referencia anterior y checksum. Excel/PDF sólo desde una versión completa autorizada por empresa. Cada fase espera la escritura antes de comunicar éxito. Resolver de workspace alineado con los alias de auth. Eficiencia sin base referencial → `null`/N/D.
 
-**No rehacer estos cambios sin encontrar una regresión.** Hay informes históricos sobre 4175, P&G y validadores que ya no describen main. Verifica el código y sus pruebas antes de repetir sus conclusiones.
+## Implementado en esta continuación (FASE 1 — procedencia de auditorías)
 
-## Evidencia y límites
+- Auditoría y meta-auditoría se guardan en `reports` bajo `financial_audit_version_v1`, sin migración. Cada fila registra la versión examinada, su digest en ese momento (`examinedSha256`), la fase leída (`examinedStage`) y, en la meta-auditoría, la auditoría que consumió.
+- `/api/financial-audit` y `/api/financial-quality` sólo aceptan referencias; el servidor reconstruye el material desde la versión, comprueba sesión, workspace y NIT, y **guarda antes de anunciar éxito** en JSON y SSE.
+- Una auditoría vale para la versión exportada o para un ascendiente de su cadena `parentId`; cualquier otra combinación se rechaza. Se rechaza también una meta-auditoría que nombra una auditoría distinta de la enviada.
+- Resultado con un auditor caído → `complete: false`: se conserva y se ve en pantalla, no entra en la descarga; la meta-auditoría hereda esa condición. El informe base sigue descargable.
+- La exportación acepta `auditVersionId`/`qualityVersionId`, comprueba cadena, empresa, integridad y completitud, y devuelve `X-Audit-Version-Id`/`X-Quality-Version-Id`.
+- Excel gana las hojas `Auditoria` y `Meta-auditoria`; el PDF ya tenía sus páginas. Ambos declaran qué fase examinó la auditoría, para que una auditoría de la fase NIIF no se lea como revisión del informe completo.
+- El cliente envía referencias y sólo adjunta identificadores completos; el aviso de descarga enumera qué contiene el archivo y qué queda en pantalla.
 
-Sobre el código funcional indicado: suite de 199 archivos con 2.352 pruebas aprobadas y 3 omitidas; después, 3 pruebas adicionales de alias de auth en otro archivo. Tipos, lint y build pasaron. Strict-mode pasó con aviso sobre un `schemaRef` de OpenAPI no verificable por ese script. Prueba con 10.000 auxiliares y orden invertido conservó totales.
+## Pruebas y límites
 
-No se usaron credenciales reales de ERP/DB/LLM. No se acreditó carga concurrente de producción, todas las conexiones, validación visual integral ni seguridad completa. La prueba de volumen no garantiza latencia ni capacidad ilimitada. La documentación añadida posteriormente no modifica esos resultados funcionales.
+- Suite: **201 archivos, 2.381 aprobadas, 3 omitidas**.
+- Procedencia: **35 aprobadas** con PostgreSQL embebido (`npm run test:report-integrity`, ampliado al directorio para que corra en el mismo job de CI sin secretos). 14 nuevas cubren guardado previo al anuncio, rechazo de contenido del cliente, acceso de otra empresa, referencias mal formadas/ausentes/de otro tipo, auditoría de otro informe, meta-auditoría con otra auditoría, fila alterada, versión examinada sustituida, resultado incompleto, meta-auditoría sobre versión en curso, fallo de persistencia y reintento de descarga sin reejecutar agentes.
+- Render de auditoría: **12 pruebas** contra ExcelJS y el compositor reales (`audit-sheets.test.ts`), más **4 guardas** de contrato del cliente comprobadas retirando la protección que nombran.
+- Una pasada de revisión adversarial sobre este mismo cambio encontró y corrigió siete defectos: informe nuevo heredando la auditoría anterior, nota de alcance que afirmaba cobertura no ocurrida, aviso de descarga que afirmaba lo mismo, dictamen limpio publicado en el PDF sin mirar `opinionType`, aislamiento de las filas de auditoría sin prueba efectiva, regla de emparejamiento asimétrica, y dos fallos de robustez del libro Excel. Detalle en la revisión enlazada.
+- `npx tsc --noEmit` correcto. `npm run lint`: 0 errores, 197 advertencias. `lint:strict-mode` correcto con el aviso previo de OpenAPI. `npm run build` local correcto con credenciales ficticias.
+- PGlite y fronteras simuladas no acreditan BetterAuth/Neon/ERP/LLM reales, migraciones completas, RLS, carga ni latencia productiva. Checksum ≠ firma ni autenticidad de la fuente contable.
+- **Cambio incompatible**: ambas rutas de auditoría dejaron de aceptar `report` en el cuerpo y ahora exigen sesión, NIT del workspace y versión guardada; en un despliegue sin autenticación configurada devuelven 503. Los informes históricos o editados en el navegador deben regenerarse.
 
-## Próxima tarea recomendada: procedencia servidor de informes
+## Siguiente tarea concreta
 
-Objetivo: que una exportación se obtenga de una versión de informe persistida y autorizada para la empresa/sesión, con referencia a la fuente y a las reglas utilizadas. Validar cifras internamente no demuestra su procedencia.
+Cerrar el último punto donde contenido de auditoría cruza desde el cliente: `/api/financial-report/html` recibe el `auditReport` del navegador para `metadata.alertsCounts` (`PipelineWorkspace.tsx`, búsqueda `countAlertsBySeverity`). Debe leer la auditoría persistida por `auditVersionId`, comprobando cadena y empresa como hace la exportación, y no aceptar conteos calculados en el navegador. Entradas y pruebas: primera fila de `MAP.md`.
 
-1. Comprueba el estado remoto: si #14 sigue abierta, continúa desde su rama; si ya se fusionó, trabaja desde main actualizado. Preserva cambios ajenos y examina sólo el diff posterior al commit conocido.
-2. Usa la primera fila de `MAP.md` para rastrear generación → persistencia → selección de informe → exportación. Busca almacenamiento y permisos existentes; reutilízalos antes de introducir otro mecanismo.
-3. Define el cambio mínimo compatible y una prueba de integración con almacenamiento controlado: usuario autorizado obtiene su versión; acceso de otra empresa, versión ajena o referencia inválida se rechazan; contenido alterado no sustituye al informe persistido. No documentes detalles sensibles en público.
-4. Implementa y prueba ese recorrido. Explica migración/compatibilidad de informes históricos y modo anónimo. Un mock de auth aislado no acredita aislamiento real.
+## Pendientes priorizados después
 
-## Pendientes siguientes
+1. Bases ID/UD y aplicabilidad fiscal con fuentes oficiales vigentes; revisar consumidores y narrativas de riesgo (FASE 2, sin avance).
+2. Eficiencia, valoración y ROI: fórmula, unidad, periodo, fuente, supuestos y calidad (FASE 3, sin avance).
+3. Idempotencia de **generación** y recuperación de confirmaciones perdidas: reintentar una auditoría o meta-auditoría vuelve a ejecutar agentes y crea otra fila; `fetchJSONWithRetry` puede duplicar la meta-auditoría. Falta un catálogo servidor para recuperar versiones y auditorías cuando se pierde el índice del navegador.
+4. Sesiones, permisos y conexiones con servicios reales; decidir el modo de operación del SaaS.
+5. Carga, concurrencia y límites medidos. Anexos conocidos: ninguna ruta de auditoría envuelve la ejecución en `runWithTelemetryContext` (coste sin atribuir); `maxDuration` sigue en 300 s en ambas rutas y 120 s para calidad en `vercel.ts`, frente a 800 s en las fases del informe; `resolveVersionLineage` carga versiones completas para recorrer la cadena.
 
-| Orden | Trabajo | Criterio de cierre |
-|---|---|---|
-| 2 | Completar bases fiscales y revisar narrativas/consumidores | ID/UD y ámbito con fuentes oficiales vigentes; casos válidos, exentos/no aplicables e incompletos; el texto no convierte N/D en una liquidación |
-| 3 | Integrar métricas de eficiencia, valoración y ROI | Fórmula, unidad, periodo, fuente, supuestos y calidad explícitos; datos ausentes siguen ausentes; escenarios identificados como tales |
-| 4 | Comprobar aislamiento y configuración real | Sesiones y permisos por empresa en entorno de integración; decidir modo de operación del SaaS sin asumir que el modo anónimo está aprobado |
-| 5 | Probar fallos, carga y concurrencia | Límites medidos, datos parciales/caducados identificados, tiempos de espera y reintentos sin duplicación; sin ceros ni simulaciones de sustitución |
-
-Consultar vigencia normativa en fuentes oficiales al implementar reglas; enlaces y fechas previos son evidencia histórica, no una actualización automática.
-
-## Cómo ahorrar contexto al continuar
-
-Lee `AGENTS.md`, este archivo y sólo la fila pertinente de `MAP.md`. Amplía a contratos y evidencia cuando haga falta. No repitas auditoría completa, inventario del repo ni todas las pruebas al iniciar. Registra resultados con commit y distingue los nuevos de los heredados. Al cerrar sustituye este estado por un resumen breve y conserva la evidencia detallada enlazada.
+Lee sólo el frente pertinente del mapa. Preserva cambios ajenos y reutiliza resultados para el código al que correspondan.

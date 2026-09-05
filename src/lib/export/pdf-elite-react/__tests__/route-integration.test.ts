@@ -5,16 +5,13 @@ import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/cohere
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 
-// Mock the orchestrator so the test never touches OpenAI.
-vi.mock('@/lib/agents/financial/orchestrator', async () => {
-  const actual = await vi.importActual<
-    typeof import('@/lib/agents/financial/orchestrator')
-  >('@/lib/agents/financial/orchestrator');
-  return {
-    ...actual,
-    orchestrateFinancialReport: vi.fn(),
-  };
-});
+vi.mock('@/lib/auth/require-session', () => ({ requireAuthSession: async () => ({ ok: true }) }));
+vi.mock('@/lib/db/financial-report-versions', () => ({
+  requireReportWorkspace: async () => ({}),
+  loadFinancialVersion: vi.fn(),
+  ReportVersionError: class extends Error {},
+}));
+import { loadFinancialVersion } from '@/lib/db/financial-report-versions';
 
 // Mock pillars aggregation — we don't need real numbers for a smoke render.
 vi.mock('@/lib/pillars/service', () => {
@@ -23,12 +20,11 @@ vi.mock('@/lib/pillars/service', () => {
   };
 });
 
-import { orchestrateFinancialReport, BalanceValidationError } from '@/lib/agents/financial/orchestrator';
 import { POST } from '@/app/api/financial-report/export/route';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { registerEditorialFonts } from '../fonts';
 
-const mockedOrchestrate = vi.mocked(orchestrateFinancialReport);
+const mockedLoad = vi.mocked(loadFinancialVersion);
 
 function buildHappyReport(): FinancialReport {
   return {
@@ -66,17 +62,7 @@ function buildHappyReport(): FinancialReport {
   };
 }
 
-const validBody = {
-  rawData: 'Codigo,Nombre,Saldo\n1,Activo,1000000000\n',
-  company: {
-    name: 'Demo SAS',
-    nit: '900123456-7',
-    entityType: 'SAS',
-    fiscalPeriod: '2026',
-  },
-  language: 'es' as const,
-  format: 'pdf-elite' as const,
-};
+const validBody = { reportVersionId: '11111111-1111-4111-8111-111111111111', format: 'pdf-elite' };
 
 async function bodyStartsWithPdfMagic(res: Response): Promise<boolean> {
   const ab = await res.arrayBuffer();
@@ -97,7 +83,7 @@ beforeAll(() => {
 
 describe('POST /api/financial-report/export — pdf-elite branch', () => {
   it('returns a real PDF stream on the happy path', async () => {
-    mockedOrchestrate.mockResolvedValueOnce(buildHappyReport());
+    mockedLoad.mockResolvedValueOnce({ stage: 'complete', report: buildHappyReport(), preprocessed: null, language: 'es' } as never);
 
     const req = new Request('http://localhost/api/financial-report/export', {
       method: 'POST',
@@ -110,22 +96,14 @@ describe('POST /api/financial-report/export — pdf-elite branch', () => {
     expect(await bodyStartsWithPdfMagic(res)).toBe(true);
   }, 60_000);
 
-  it('still returns a PDF when the orchestrator throws BalanceValidationError', async () => {
-    mockedOrchestrate.mockImplementationOnce(async () => {
-      throw new BalanceValidationError(
-        ['Activo != Pasivo + Patrimonio'],
-        ['1105', '3605'],
-      );
-    });
-
-    const req = new Request('http://localhost/api/financial-report/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(validBody),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toBe('application/pdf');
-    expect(await bodyStartsWithPdfMagic(res)).toBe(true);
-  }, 60_000);
+  it('does not render a PDF from a persisted report with blocking qualifications', async () => {
+    const report = buildHappyReport();
+    report.niifAnalysis.reconciliation!.clean = false;
+    mockedLoad.mockResolvedValueOnce({ stage: 'complete', report, preprocessed: null } as never);
+    const res = await POST(new Request('http://localhost/api/financial-report/export', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(validBody),
+    }));
+    expect(res.status).toBe(422);
+    expect(res.headers.get('Content-Type')).toContain('application/json');
+  });
 });
