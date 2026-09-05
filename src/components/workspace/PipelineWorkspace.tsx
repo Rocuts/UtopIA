@@ -1604,8 +1604,12 @@ function ReportViewer({
                 ? 'Los resultados que no quedaron guardados como versión completa se consultan en pantalla y no forman parte del archivo; vuelve a ejecutarlos para incluirlos.'
                 : 'Results that were not saved as a complete version stay on screen and are not part of the file; run them again to include them.')
               : (language === 'es'
-                ? 'Cada resultado incluido examinó esta misma versión del informe.'
-                : 'Every included result examined this same report version.')}
+                // La auditoría corre en paralelo con Estrategia y Gobierno, así
+                // que examina una fase anterior de esta misma cadena, no la
+                // versión final. Afirmar lo contrario sería la cobertura que no
+                // ocurrió; el archivo declara qué fase se examinó.
+                ? 'Cada resultado incluido pertenece a la cadena de esta versión; el archivo declara qué fase examinó la auditoría.'
+                : 'Every included result belongs to this version chain; the file states which phase the audit examined.')}
           </p>
         )}
         {exportError && (

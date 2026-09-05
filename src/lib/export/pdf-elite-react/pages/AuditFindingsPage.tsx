@@ -77,6 +77,16 @@ const OPINION_LABEL: Record<AuditOpinionKind, string> = {
   abstension: 'ABSTENCIÓN',
 };
 
+/**
+ * Texto cuando la página no lista hallazgos. Una lista vacía no acredita un
+ * dictamen limpio: el revisor puede abstenerse por una limitación al alcance
+ * sin listar hallazgos, y la página imprime el sello del dictamen justo encima.
+ */
+export function emptyFindingsNote(opinionType: AuditOpinionKind): string {
+  if (opinionType === 'favorable') return 'Sin hallazgos materiales. Dictamen favorable sin salvedades.';
+  return `Sin hallazgos listados en esta página. El dictamen de esta auditoría es ${OPINION_LABEL[opinionType].toLowerCase()}; su fundamento está en el informe consolidado de la auditoría.`;
+}
+
 function opinionColor(o: AuditOpinionKind): string {
   switch (o) {
     case 'favorable': return SAGE_500;
@@ -323,7 +333,7 @@ export function AuditFindingsPage({ doc }: Props) {
       <View style={{ flexGrow: 1 }} wrap>
         {audit.topFindings.length === 0 ? (
           <Text style={{ fontFamily: FONT_SANS, fontSize: TYPE_BODY, color: CHARCOAL_900, fontStyle: 'italic' }}>
-            Sin hallazgos materiales. Dictamen favorable sin salvedades.
+            {emptyFindingsNote(audit.opinionType)}
           </Text>
         ) : (
           audit.topFindings.map((f) => (

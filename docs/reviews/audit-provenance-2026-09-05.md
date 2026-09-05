@@ -73,6 +73,37 @@ identificador viaja dentro del propio resultado, así que sobrevive a una recarg
 por la misma vía que ya conservaba el informe. El aviso de descarga enumera qué
 contiene el archivo y qué queda solamente en pantalla.
 
+## Defectos corregidos en la revisión adversarial de este cambio
+
+Una pasada de revisión adversarial sobre el propio cambio encontró cinco defectos
+reales, todos corregidos y con prueba:
+
+1. **Un informe nuevo heredaba la auditoría del anterior.** El estado de
+   auditoría se restaura del último informe guardado al montar el componente,
+   pero sólo se limpiaba dentro de la rama `isRerun`, falsa en la primera corrida
+   tras recargar la página. Con la auditoría desactivada en la corrida nueva, el
+   resultado viejo quedaba emparejado con el informe nuevo y la descarga
+   fracasaba. Ahora se limpia en toda corrida NIIF; una reanudación lo conserva.
+2. **La nota de alcance afirmaba cobertura que no ocurrió.** Los auditores sólo
+   leen `consolidatedReport`, y `buildAuditSubject` pone ahí únicamente el texto
+   NIIF para cualquier versión no completa. La nota de la fase estratégica
+   anunciaba «las fases NIIF y estratégica». Ambas fases declaran ahora que se
+   examinó el contenido NIIF, desde una función que nombra a `buildAuditSubject`.
+3. **El aviso de descarga afirmaba que todo resultado examinó la versión
+   exportada.** La auditoría examina un ascendiente de la cadena, no la versión
+   final; el aviso lo dice así.
+4. **El PDF publicaba un dictamen limpio que el revisor no dio.** Sin hallazgos
+   listados, la página imprimía «Dictamen favorable sin salvedades» sin mirar
+   `opinionType`, contradiciendo el sello impreso encima: una abstención por
+   limitación al alcance —que no lista hallazgos— se publicaba como auditoría
+   limpia. Defecto previo a este cambio, pero es este cambio el que lleva esa
+   página a las descargas del servidor.
+5. **Robustez del libro Excel.** Una celda de más de 32.767 caracteres impide a
+   Excel abrir el archivo, y el contrato de auditoría no acota el texto de un
+   hallazgo; se recorta declarando el recorte. Una fila de meta-auditoría sin
+   alguno de sus bloques anidados rompía la descarga completa; cada bloque se
+   dibuja sólo si está.
+
 ## Contrato y compatibilidad
 
 - `/api/financial-audit`: `{ reportVersionId, language?, auditFocus? }` con
@@ -101,7 +132,9 @@ contiene el archivo y qué queda solamente en pantalla.
 | `npm run test:report-integrity` | 35 aprobadas en 2 archivos con PostgreSQL embebido (PGlite). El script se amplió al directorio para que el nuevo archivo entre en el mismo job de CI, sin secretos de staging |
 | `audit-versions.integration.test.ts` | 14 pruebas: guardado antes de anunciar (JSON y SSE), rechazo de contenido del cliente, acceso de otra empresa, referencias mal formadas/ausentes/de otro tipo, auditoría de otro informe, meta-auditoría con otra auditoría, fila alterada, versión examinada sustituida, resultado incompleto dentro y fuera de la descarga, meta-auditoría sobre versión en curso, fallo de persistencia y reintento de descarga sin reejecutar agentes |
 | `persisted-versions.integration.test.ts` | 21 aprobadas; se amplió el caso de claves rechazadas con referencias de auditoría falsificadas |
-| `npm test` | Ver HANDOFF: resultado de esta sesión sobre este árbol |
+| `npm test` | 201 archivos, 2.381 aprobadas, 3 omitidas |
+| `audit-sheets.test.ts` | 12 pruebas de render contra ExcelJS real y el compositor real: secciones omitidas sin resultado vinculado, opinión/auditores/hallazgos escritos, alcance declarado, auditor caído declarado en vez de puntuado, límite de celda de Excel, bloque ausente omitido y dictamen no favorable no publicado como limpio |
+| `pipeline-resilience.test.ts` | 4 guardas de contrato del cliente, comprobadas retirando la protección que nombran |
 | `npx tsc --noEmit` | Correcto |
 | `npm run lint` | Sin errores |
 

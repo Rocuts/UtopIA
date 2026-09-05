@@ -28,8 +28,10 @@ Versiones servidor por fase NIIF → estrategia → gobierno sobre `reports`; fu
 
 ## Pruebas y límites
 
-- Suite: **200 archivos, 2.365 aprobadas, 3 omitidas**.
+- Suite: **201 archivos, 2.381 aprobadas, 3 omitidas**.
 - Procedencia: **35 aprobadas** con PostgreSQL embebido (`npm run test:report-integrity`, ampliado al directorio para que corra en el mismo job de CI sin secretos). 14 nuevas cubren guardado previo al anuncio, rechazo de contenido del cliente, acceso de otra empresa, referencias mal formadas/ausentes/de otro tipo, auditoría de otro informe, meta-auditoría con otra auditoría, fila alterada, versión examinada sustituida, resultado incompleto, meta-auditoría sobre versión en curso, fallo de persistencia y reintento de descarga sin reejecutar agentes.
+- Render de auditoría: **12 pruebas** contra ExcelJS y el compositor reales (`audit-sheets.test.ts`), más **4 guardas** de contrato del cliente comprobadas retirando la protección que nombran.
+- Una pasada de revisión adversarial sobre este mismo cambio encontró y corrigió cinco defectos: informe nuevo heredando la auditoría anterior, nota de alcance que afirmaba cobertura no ocurrida, aviso de descarga que afirmaba lo mismo, dictamen limpio publicado en el PDF sin mirar `opinionType`, y dos fallos de robustez del libro Excel. Detalle en la revisión enlazada.
 - `npx tsc --noEmit` correcto. `npm run lint`: 0 errores, 197 advertencias. `lint:strict-mode` correcto con el aviso previo de OpenAPI. `npm run build` local correcto con credenciales ficticias.
 - PGlite y fronteras simuladas no acreditan BetterAuth/Neon/ERP/LLM reales, migraciones completas, RLS, carga ni latencia productiva. Checksum ≠ firma ni autenticidad de la fuente contable.
 - **Cambio incompatible**: ambas rutas de auditoría dejaron de aceptar `report` en el cuerpo y ahora exigen sesión, NIT del workspace y versión guardada; en un despliegue sin autenticación configurada devuelven 503. Los informes históricos o editados en el navegador deben regenerarse.

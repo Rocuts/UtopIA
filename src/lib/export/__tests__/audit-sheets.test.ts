@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import { generateFinancialExcel } from '../excel-export';
 import { composeEditorialReport } from '../pdf-elite-react';
+import { emptyFindingsNote } from '../pdf-elite-react/pages/AuditFindingsPage';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 
@@ -193,6 +194,20 @@ describe('audit and meta-audit rendering in the editorial PDF', () => {
     });
     expect(doc.auditFindings?.coverageNote).toContain('sobre el contenido NIIF');
     expect(doc.auditFindings?.coverageNote).not.toContain('informe completo');
+  });
+
+  it('never states an unqualified opinion the reviewer did not give', () => {
+    // La página imprime el sello del dictamen y, si no lista hallazgos, una
+    // frase debajo. Esa frase afirmaba "favorable sin salvedades" siempre, de
+    // modo que una abstención por limitación al alcance —que no lista
+    // hallazgos— se publicaba como auditoría limpia.
+    expect(emptyFindingsNote('favorable')).toContain('favorable sin salvedades');
+    for (const opinion of ['con_salvedades', 'desfavorable', 'abstension'] as const) {
+      const note = emptyFindingsNote(opinion);
+      expect(note, opinion).not.toContain('favorable sin salvedades');
+      expect(note, opinion).toContain('informe consolidado');
+    }
+    expect(emptyFindingsNote('abstension')).toContain('abstención');
   });
 
   it('leaves the coverage note absent when the examined phase is unknown', () => {
