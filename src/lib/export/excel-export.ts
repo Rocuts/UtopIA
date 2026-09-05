@@ -1838,11 +1838,18 @@ const AUDIT_OPINION_LABEL: Record<string, string> = {
   abstension: 'Abstención de opinión',
 };
 
-const AUDIT_COVERAGE_NOTE: Record<string, string> = {
-  niif: 'Auditoría realizada sobre la fase NIIF de esta versión del informe: los hallazgos de estrategia y gobierno no formaban parte del material examinado.',
-  strategy: 'Auditoría realizada sobre las fases NIIF y estratégica de esta versión del informe: el gobierno corporativo no formaba parte del material examinado.',
-  complete: 'Auditoría realizada sobre el informe completo de esta versión.',
-};
+// Los auditores sólo leen `consolidatedReport`, y una versión que aún no está
+// completa lleva ahí únicamente el contenido NIIF: una auditoría de la fase
+// estratégica examinó exactamente el mismo material que una de la fase NIIF.
+// Ver `buildAuditSubject` en src/app/api/financial-audit/route.ts; si esa
+// función cambia lo que compone, esta nota debe cambiar con ella.
+function auditCoverageNote(examinedStage: string | null): string | null {
+  if (examinedStage === 'complete') return 'Auditoría realizada sobre el informe completo de esta versión.';
+  if (examinedStage === 'niif' || examinedStage === 'strategy') {
+    return 'Auditoría realizada sobre el contenido NIIF de esta versión del informe: el análisis estratégico y el gobierno corporativo no formaban parte del material examinado.';
+  }
+  return null;
+}
 
 function addAuditSheet(
   wb: ExcelJS.Workbook, report: FinancialReport, audit: AuditReport,
@@ -1867,7 +1874,7 @@ function addAuditSheet(
     });
   };
 
-  const coverage = examinedStage ? AUDIT_COVERAGE_NOTE[examinedStage] : null;
+  const coverage = auditCoverageNote(examinedStage);
   if (coverage) {
     const r = ws.getRow(row++);
     r.getCell(1).value = 'Alcance examinado';

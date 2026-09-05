@@ -323,6 +323,43 @@ describe('contrato: accesibilidad de errores y progreso', () => {
   });
 });
 
+describe('contrato: procedencia de auditoría y meta-auditoría', () => {
+  it('la auditoría y la meta-auditoría se piden por referencia, nunca con el contenido', () => {
+    // Patrón viejo: se construía un `earlyReport` en el navegador y se enviaba
+    // como `report`, así que el dictamen se formaba sobre lo que mandara el
+    // cliente y no sobre un artefacto del servidor.
+    expect(PIPELINE_SRC).not.toMatch(/const earlyReport/);
+    expect(PIPELINE_SRC).toMatch(
+      /'\/api\/financial-audit'[\s\S]{0,400}?body: JSON\.stringify\(\{ reportVersionId: args\.reportVersionId, language: args\.language \}\)/,
+    );
+    expect(PIPELINE_SRC).toMatch(/reportVersionId: phase1Report\.reportVersionId,\s*\n\s*auditVersionId:/);
+    // Ningún cuerpo vuelve a llevar el informe ni la auditoría completa.
+    expect(PIPELINE_SRC).not.toMatch(/body: JSON\.stringify\(\{\s*\n?\s*report: phase1Report/);
+  });
+
+  it('sin versión guardada no se audita nada', () => {
+    expect(PIPELINE_SRC).toMatch(/auditPipeline \?\? false\) &&\s*\n\s*!!reportVersionId &&/);
+  });
+
+  it('un informe nuevo no hereda la auditoría del anterior', () => {
+    // Antes esto sólo pasaba en un re-run (`if (isRerun)`), así que tras
+    // recargar la página el primer informe de la sesión conservaba la
+    // auditoría restaurada del informe previo y la descarga enviaba una
+    // referencia de otro informe.
+    expect(PIPELINE_SRC).toMatch(
+      /if \(start === 'niif'\) \{\s*\n\s*setAuditReport\(null\);\s*\n\s*auditReportRef\.current = null;\s*\n\s*setQualityReport\(null\);\s*\n\s*\}/,
+    );
+    expect(PIPELINE_SRC).not.toMatch(/if \(isRerun\) \{\s*\n\s*setAuditReport\(null\);/);
+  });
+
+  it('la descarga sólo adjunta referencias marcadas como completas', () => {
+    expect(PIPELINE_SRC).toMatch(/auditReport\?\.auditComplete \? auditReport\.auditVersionId \?\? null : null/);
+    expect(PIPELINE_SRC).toMatch(/qualityReport\?\.qualityComplete \? qualityReport\.qualityVersionId \?\? null : null/);
+    // Ambos formatos envían el mismo par de referencias que el servidor valida.
+    expect(PIPELINE_SRC.match(/format: '(excel|pdf-elite)', \.\.\.exportRefs/g)).toHaveLength(2);
+  });
+});
+
 describe('contrato: trazabilidad del modelo en la ficha técnica', () => {
   it('no hay modelId hardcodeado en el metadata del reporte', () => {
     expect(PIPELINE_SRC).not.toMatch(/modelId:\s*'gpt-/);

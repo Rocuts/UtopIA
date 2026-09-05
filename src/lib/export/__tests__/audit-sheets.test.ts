@@ -83,13 +83,20 @@ describe('audit and meta-audit rendering in the workbook', () => {
     expect(flat.join(' ')).toContain('Auditoría realizada sobre el informe completo');
   });
 
-  it('states the examined phase so a NIIF-stage audit is not read as a full review', async () => {
-    const wb = await load(await generateFinancialExcel({
-      report: makeExportableReport(), auditReport: makeAudit(), auditExaminedStage: 'niif',
-    }));
-    const text = rows(wb.getWorksheet('Auditoria')!).flat().join(' ');
-    expect(text).toContain('sobre la fase NIIF');
-    expect(text).toContain('estrategia y gobierno no formaban parte del material examinado');
+  it('states the examined material so a partial audit is not read as a full review', async () => {
+    // Los auditores sólo reciben `consolidatedReport`, que en una versión no
+    // completa lleva únicamente el contenido NIIF. La fase estratégica debe
+    // declarar lo mismo que la NIIF: afirmar que se examinó la estrategia
+    // sería una cobertura que no ocurrió.
+    for (const stage of ['niif', 'strategy'] as const) {
+      const wb = await load(await generateFinancialExcel({
+        report: makeExportableReport(), auditReport: makeAudit(), auditExaminedStage: stage,
+      }));
+      const text = rows(wb.getWorksheet('Auditoria')!).flat().join(' ');
+      expect(text, stage).toContain('sobre el contenido NIIF');
+      expect(text, stage).toContain('el análisis estratégico y el gobierno corporativo no formaban parte');
+      expect(text, stage).not.toContain('informe completo');
+    }
   });
 
   it('declares a failed auditor instead of scoring the domain it did not cover', async () => {
@@ -143,8 +150,17 @@ describe('audit and meta-audit rendering in the editorial PDF', () => {
     });
     expect(doc.auditFindings?.opinionType).toBe('con_salvedades');
     expect(doc.auditFindings?.topFindings[0]?.code).toBe('TRIB-004');
-    expect(doc.auditFindings?.coverageNote).toContain('sobre la fase NIIF');
+    expect(doc.auditFindings?.coverageNote).toContain('sobre el contenido NIIF');
     expect(doc.qualityScores?.grade).toBe('B');
+  });
+
+  it('does not claim strategy coverage for an audit that only read the NIIF content', () => {
+    const doc = composeEditorialReport({
+      report: makeExportableReport(), preprocessed: null, pillars: null, language: 'es',
+      auditReport: makeAudit(), auditExaminedStage: 'strategy',
+    });
+    expect(doc.auditFindings?.coverageNote).toContain('sobre el contenido NIIF');
+    expect(doc.auditFindings?.coverageNote).not.toContain('informe completo');
   });
 
   it('leaves the coverage note absent when the examined phase is unknown', () => {

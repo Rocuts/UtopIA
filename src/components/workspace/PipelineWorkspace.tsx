@@ -1921,10 +1921,19 @@ export function PipelineWorkspace() {
     // el "Score 95/100" estancado hasta que la nueva corrida terminaba 3 min
     // después. Aquí limpiamos TODO el estado audit + quality al inicio del
     // re-run para que la UI refleje el progreso correctamente.
-    if (isRerun) {
+    // Un informe nuevo nunca hereda la auditoría de otro. Antes esto sólo
+    // ocurría en un re-run, así que tras recargar la página el primer informe
+    // de la sesión conservaba la auditoría del informe anterior restaurada de
+    // `lastCompletedReport`: si la nueva corrida no pedía auditoría, el
+    // resultado viejo quedaba emparejado con el informe nuevo y la descarga
+    // enviaba una referencia que el servidor rechaza. En una reanudación
+    // (`start !== 'niif'`) el resultado sí pertenece a esta corrida y se conserva.
+    if (start === 'niif') {
       setAuditReport(null);
       auditReportRef.current = null;
       setQualityReport(null);
+    }
+    if (isRerun) {
       setPipelineState((prev) => ({
         ...prev,
         mode: 'running',
