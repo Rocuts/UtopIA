@@ -40,13 +40,14 @@ export const INDUSTRY_MULTIPLES: Record<ExitValueIndustry, number> = {
 };
 
 /**
- * Formateador COMPACTO heredado (`$X.YYM COP`). Sólo lo usa
- * `components/workspace/areas/ValorArea.tsx`, cuya prueba fija ese texto;
- * los KPIs de este módulo ya publican el formato es-CO de `./format`
- * (ratios-kpis-27). Un valor no finito es `N/D`, nunca `$0 COP`.
+ * Formateador COMPACTO heredado (`$X.YYM COP`). Ya no tiene consumidores de
+ * UI: `ValorArea` usa `formatBigCop` (I4-escudo 6) y los KPIs de este módulo
+ * publican el formato es-CO de `./format` (ratios-kpis-27). Sólo lo
+ * re-exporta el barrel `src/lib/kpis/index.ts`; se retira cuando el barrel
+ * deje de exportarlo. Un valor no finito es `N/D`, nunca `$0 COP`.
  *
  * @deprecated Usar `formatBigCop` de `@/lib/charts/format` (coma decimal,
- * `mil M`, paréntesis); pendiente migrar ValorArea (fuera de este paquete).
+ * `mil M`, paréntesis).
  */
 export function formatCop(n: number): string {
   if (!Number.isFinite(n)) return KPI_ND;

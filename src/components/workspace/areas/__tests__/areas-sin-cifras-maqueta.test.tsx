@@ -114,9 +114,21 @@ describe('ValorArea', () => {
     expect(t).toContain('Valor de salida (patrimonio)');
     expect(t).toMatch(/Valor de salida \(patrimonio\)\s+N\/D/);
     expect(t).toContain('EBIT operacional');
-    expect(t).toContain('$100.00M COP'); // A09
+    // Formato es-CO de @/lib/charts/format (formatBigCop), no el «$100.00M COP»
+    // con punto decimal del formatCop deprecado de exit-value (I4-escudo 6).
+    expect(t).toContain('$100 M'); // A09
     expect(t).toContain('EV/EBIT 6× (heurístico)');
-    expect(t).toContain('$600.00M COP'); // EV de referencia
+    expect(t).toContain('$600 M'); // EV de referencia
+    expect(t).not.toMatch(/\d\.\d{2}M COP/);
+  });
+
+  it('con datos en inglés: formato compacto en/US del mismo helper', () => {
+    withData();
+    state.lang = 'en';
+    const t = text(<ValorArea />);
+    expect(t).toContain('$100M'); // A09
+    expect(t).toContain('$600M'); // EV de referencia
+    expect(t).not.toContain('COP');
   });
 
   it('sin datos: N/D y aviso, nunca cifras del mockup', () => {
