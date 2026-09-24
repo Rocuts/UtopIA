@@ -185,6 +185,13 @@ function informeCorrecto(): NiifReportJson {
       degeneracyFlag: null,
     },
     equityChanges: {
+      // Auditoría 2026-09 (niif-contrato-11, regla E19): la corrida real abría
+      // el ECP en −$5.056.798,19 frente a un patrimonio 2024 de
+      // $1.565.940.939,11 y escondía la diferencia en el propio saldo inicial.
+      // El ECP ahora abre en el patrimonio comparativo, traslada el resultado
+      // 2024 (total $0) y declara como partida no conciliada la disminución
+      // que el balance no explica ($1.570.997.737,30: utilidad 2025 publicada
+      // acumulada, recalculo-03).
       rows: [
         {
           kind: 'opening_balance',
@@ -193,10 +200,34 @@ function informeCorrecto(): NiifReportJson {
           primaColocacion: '0',
           reservaLegal: '0',
           otrasReservas: '0',
-          resultadosAcumulados: '-505679819',
+          resultadosAcumulados: '-678053385',
+          resultadoEjercicio: '157272147296',
+          ori: '0',
+          total: '156594093911',
+        },
+        {
+          kind: 'prior_period_result_cancellation',
+          label: 'Traslado del resultado 2024 a resultados acumulados',
+          capitalSocial: '0',
+          primaColocacion: '0',
+          reservaLegal: '0',
+          otrasReservas: '0',
+          resultadosAcumulados: '157272147296',
+          resultadoEjercicio: '-157272147296',
+          ori: '0',
+          total: '0',
+        },
+        {
+          kind: 'convergence_adjustment',
+          label: 'Partida patrimonial no conciliada — requiere explicación del contador',
+          capitalSocial: '0',
+          primaColocacion: '0',
+          reservaLegal: '0',
+          otrasReservas: '0',
+          resultadosAcumulados: '-157099773730',
           resultadoEjercicio: '0',
           ori: '0',
-          total: '-505679819',
+          total: '-157099773730',
         },
         {
           kind: 'profit_for_period',

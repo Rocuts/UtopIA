@@ -135,7 +135,7 @@ export const EquityChangeRowSchema = z.object({
       'convergence_adjustment',
       'closing_balance',
     ])
-    .describe('Tipo de fila — taxonomía controlada para validación determinística. `prior_period_result_cancellation` (v2.5) es el asiento de cierre que cancela el resultado del periodo anterior arrastrado en PUC 3605 cuando ese saldo no fue trasladado a PUC 37 al cierre prior — la fila lleva resultadoEjercicio con signo NEGATIVO igual a opening_balance.resultadoEjercicio y total NEGATIVO de la misma magnitud (no es distribución de dividendos ni flujo de efectivo).'),
+    .describe('Tipo de fila — taxonomía controlada para validación determinística. `prior_period_result_cancellation` es el traslado interno del resultado del periodo anterior (Dr 3605 / Cr 37): resultadoEjercicio = -opening_balance.resultadoEjercicio, resultadosAcumulados = +ese mismo monto y total = 0 (no cambia el patrimonio). Una disminución del patrimonio no es un traslado: es una distribución (`dividend_distribution`, con soporte).'),
   label: z.string().min(1).describe('Etiqueta legible. Ej: "Saldo al 1 de enero de 2025"'),
   capitalSocial: MoneyCop,
   primaColocacion: MoneyCop,
