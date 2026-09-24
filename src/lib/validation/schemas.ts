@@ -122,6 +122,16 @@ export const companyInfoSchema = z.object({
   accountantTp: z.string().max(20).optional(),
   /** Períodos detectados en el archivo subido (e.g. ["2024","2025"]). */
   detectedPeriods: z.array(z.string().max(20)).max(10).optional(),
+  /**
+   * Régimen del impuesto de renta declarado en el intake (auditoria-calidad-31,
+   * I3-2). Con `'simple'` el gate de emitibilidad no exige V10 (TTD, par. 6
+   * Art. 240 E.T.): el Régimen Simple sustituye el impuesto sobre la renta
+   * (Art. 903 E.T.). `null` o ausente = sin dato → se evalúa como ordinario
+   * (V10 exigido, conservador). Entrada del usuario: no viaja al LLM como
+   * esquema de salida, así que `.optional()` es válido aquí (compatibilidad
+   * con clientes que no envían el campo).
+   */
+  regimenTributario: z.enum(['ordinario', 'simple']).nullable().optional(),
 });
 
 export const financialReportRequestSchema = z.object({

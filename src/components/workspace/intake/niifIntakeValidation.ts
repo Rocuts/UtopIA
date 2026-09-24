@@ -10,7 +10,7 @@
  * bloqueo aparece en el paso donde el usuario todavía puede corregirlo.
  */
 
-import type { NiifReportIntake } from '@/types/platform';
+import type { NiifReportIntake, RegimenTributarioIntake } from '@/types/platform';
 import {
   escribirDirectivasIngesta,
   leerDirectivasIngesta,
@@ -170,4 +170,14 @@ export function resolveExtractedFiscalPeriod(args: {
   if (!args.extracted) return current;
   if (!current.trim()) return args.extracted;
   return args.userEdited ? current : args.extracted;
+}
+
+/**
+ * Régimen de renta del intake (auditoria-calidad-31, I3-2) normalizado para
+ * /niif: sólo `'ordinario'` o `'simple'`; cualquier otro valor (borrador viejo
+ * de localStorage, campo ausente) → `null` = sin dato, que el gate evalúa como
+ * régimen ordinario (V10 exigido). Nunca se infiere el régimen.
+ */
+export function normalizeRegimenTributario(value: unknown): RegimenTributarioIntake | null {
+  return value === 'ordinario' || value === 'simple' ? value : null;
 }

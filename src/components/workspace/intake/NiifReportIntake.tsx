@@ -32,9 +32,11 @@ import { HechosEmpresaConfirm } from './HechosEmpresaConfirm';
 import {
   applyIntakeDirectives,
   collectMissingRequired,
+  normalizeRegimenTributario,
   resolveExtractedFiscalPeriod,
   resolveNiifRawData,
 } from './niifIntakeValidation';
+import { RegimenTributarioSelector } from './RegimenTributarioSelector';
 import { UnitConfirmationPanel } from './UnitConfirmationPanel';
 import { MaturityOverridesEditor } from './MaturityOverridesEditor';
 import type { UnidadMonetaria, Vencimiento } from '@/lib/upload/ingest-directives';
@@ -115,6 +117,8 @@ const DEFAULT_COMPANY: CompanyMetadata = {
   legalRepresentative: '',
   accountant: '',
   fiscalAuditor: '',
+  // Sin dato → se evalúa como régimen ordinario (V10 exigido).
+  regimenTributario: null,
 };
 
 const DEFAULT_OUTPUT_OPTIONS: NiifOutputOptions = {
@@ -968,6 +972,13 @@ export function NiifReportIntake() {
           })}
         </div>
       </div>
+
+      {/* Régimen de renta (auditoria-calidad-31): SIMPLE no exige V10 */}
+      <RegimenTributarioSelector
+        value={normalizeRegimenTributario(values.company.regimenTributario)}
+        onChange={(next) => updateCompany('regimenTributario', next)}
+        t={t}
+      />
 
       {/* 2-column: city + representante legal */}
       <div className="grid grid-cols-2 gap-4">

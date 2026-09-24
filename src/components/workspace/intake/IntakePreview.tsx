@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
 import { dict } from '@/lib/i18n/dictionaries';
 import type { CaseType, IntakeFormUnion, NiifReportIntake, NiifOutputOptions } from '@/types/platform';
+import { normalizeRegimenTributario } from './niifIntakeValidation';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,17 @@ type PreviewDict = (typeof dict)['es']['intake']['preview'];
 function formatCOP(amount: number | undefined): string {
   if (!amount) return '-';
   return `$${amount.toLocaleString('es-CO')}`;
+}
+
+/** Régimen de renta del intake NIIF (auditoria-calidad-31); sin dato → `regimenNone`. */
+function regimenLabel(
+  value: unknown,
+  niif: (typeof dict)['es']['niifIntake'],
+): string {
+  const regimen = normalizeRegimenTributario(value);
+  if (regimen === 'simple') return niif.regimenSimple;
+  if (regimen === 'ordinario') return niif.regimenOrdinario;
+  return niif.regimenNone;
 }
 
 // ─── Summary Section Component ───────────────────────────────────────────────
@@ -175,6 +187,7 @@ export function IntakePreview({ caseType, data }: IntakePreviewProps) {
   const { language } = useLanguage();
   const t = dict[language].intake.preview;
   const c = dict[language].intake.common;
+  const niif = dict[language].niifIntake;
   const isNiif = caseType === 'niif_report';
 
   const actLabels = t.actLabels as Record<string, string>;
@@ -274,6 +287,10 @@ export function IntakePreview({ caseType, data }: IntakePreviewProps) {
                   <SummaryRow label={c.companyName} value={d.company?.name ?? '-'} />
                   <SummaryRow label={c.nit} value={d.company?.nit ?? '-'} />
                   <SummaryRow label={c.entityType} value={d.company?.entityType ?? '-'} />
+                  <SummaryRow
+                    label={niif.regimenTitle}
+                    value={regimenLabel(d.company?.regimenTributario, niif)}
+                  />
                   {d.company?.sector && <SummaryRow label={c.sector} value={d.company.sector} />}
                   {d.company?.city && <SummaryRow label={c.city} value={d.company.city} />}
                   <SummaryRow

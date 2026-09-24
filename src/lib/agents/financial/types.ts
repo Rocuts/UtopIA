@@ -55,6 +55,13 @@ export interface CompanyInfo {
   fiscalPeriod: string;
   /** Periodo comparativo (e.g. "2024") */
   comparativePeriod?: string;
+  /**
+   * Régimen del impuesto de renta declarado en el intake (auditoria-calidad-31).
+   * `'simple'` (Art. 903 E.T.) exime de V10 (TTD, par. 6 Art. 240 E.T.) en el
+   * gate de emitibilidad (`regimenTributarioParaGate`). `null`/ausente = sin
+   * dato → se evalúa como régimen ordinario (V10 exigido).
+   */
+  regimenTributario?: 'ordinario' | 'simple' | null;
   /** Ciudad / municipio */
   city?: string;
   /** Representante legal (legacy — string simple). Mantener para retrocompat. */

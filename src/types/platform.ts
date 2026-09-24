@@ -147,6 +147,12 @@ export interface NiifReportIntake {
   excludedFactIds?: string[]
 }
 
+/**
+ * Régimen del impuesto de renta que captura el intake NIIF
+ * (auditoria-calidad-31). `null` = el usuario no lo indicó.
+ */
+export type RegimenTributarioIntake = 'ordinario' | 'simple'
+
 export interface CompanyMetadata {
   name: string
   nit: string
@@ -156,6 +162,12 @@ export interface CompanyMetadata {
   legalRepresentative?: string
   accountant?: string
   fiscalAuditor?: string
+  /**
+   * Régimen de renta (intake NIIF). Con `'simple'` (Art. 903 E.T.) el informe
+   * no exige la TTD (V10, par. 6 Art. 240 E.T.). Sin dato (`null`/ausente) el
+   * gate lo evalúa como régimen ordinario: V10 exigido (conservador).
+   */
+  regimenTributario?: RegimenTributarioIntake | null
 }
 
 export interface NiifOutputOptions {

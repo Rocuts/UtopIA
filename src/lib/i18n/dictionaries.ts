@@ -1763,6 +1763,13 @@ export const dict = {
       maturityInvalidCode: 'Escriba un código PUC de 2 a 20 dígitos (p. ej. 2105).',
       maturityInvalidClass: 'Sólo cuentas de activo (clase 1) o de pasivo (clase 2).',
       maturityMax: 'Máximo {max} excepciones.',
+      // I3-2 (auditoria-calidad-31) — régimen del impuesto de renta.
+      regimenTitle: 'Régimen del impuesto de renta',
+      regimenHint:
+        'En el Régimen Simple de Tributación (Art. 903 E.T.), que sustituye el impuesto de renta, el informe no exige la Tasa de Tributación Depurada (par. 6 Art. 240 E.T.). Si no lo indica, se evalúa como régimen ordinario.',
+      regimenNone: 'Sin indicar',
+      regimenOrdinario: 'Ordinario',
+      regimenSimple: 'Régimen Simple (RST)',
     },
     /**
      * Procedencia servidor de informes (fase 2, P1). Textos que imprimen los
@@ -3518,6 +3525,13 @@ export const dict = {
       maturityInvalidCode: 'Enter a PUC code of 2 to 20 digits (e.g. 2105).',
       maturityInvalidClass: 'Only asset (class 1) or liability (class 2) accounts.',
       maturityMax: 'At most {max} overrides.',
+      // I3-2 (auditoria-calidad-31) — income tax regime.
+      regimenTitle: 'Income tax regime',
+      regimenHint:
+        'Under the Simple Taxation Regime (Art. 903 of the Tax Code), which replaces income tax, the report does not require the Adjusted Tax Rate (par. 6, Art. 240 of the Tax Code). If you do not specify it, the ordinary regime is assumed.',
+      regimenNone: 'Not specified',
+      regimenOrdinario: 'Ordinary',
+      regimenSimple: 'Simple Regime (RST)',
     },
     reportProvenance: {
       verifiedTitle: 'VERIFIED PROVENANCE',

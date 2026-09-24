@@ -45,6 +45,7 @@ import type {
   QualityGrade,
   NiifReportIntake,
 } from '@/types/platform';
+import { normalizeRegimenTributario } from './intake/niifIntakeValidation';
 import type {
   FinancialReport as BackendFinancialReport,
   FinancialProgressEvent,
@@ -899,7 +900,9 @@ export function buildRegenerationIntake(
 /**
  * `company` del cuerpo de /niif. ITEM 5 ORDEN DE CIERRE: T.P. y C.C. viajan si
  * el intake los trae (lectura defensiva: `CompanyMetadata` todavía no los
- * declara).
+ * declara). El régimen de renta viaja siempre (`null` sin dato): /niif lo
+ * valida con `companyInfoSchema` y el contexto que devuelve lo lleva a
+ * /consolidate y al gate de emitibilidad.
  */
 export function buildNiifCompanyBody(intake: NiifReportIntake): Record<string, unknown> {
   const companyExt = intake.company as NiifReportIntake['company'] & {
@@ -922,6 +925,9 @@ export function buildNiifCompanyBody(intake: NiifReportIntake): Record<string, u
     niifGroup: intake.niifGroup,
     fiscalPeriod: intake.fiscalPeriod,
     comparativePeriod: intake.comparativePeriod,
+    // auditoria-calidad-31: sin dato viaja `null` y el gate exige V10 como en
+    // el régimen ordinario (conservador).
+    regimenTributario: normalizeRegimenTributario(intake.company.regimenTributario),
   };
 }
 
