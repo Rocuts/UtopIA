@@ -72,4 +72,26 @@ export const CONCEPTOS_DIAN: readonly DianConceptEntry[] = [
     urlOficial: null,
     verificadoEnNormograma: true,
   },
+  {
+    // Fase 2 (I2 6b): el prompt del Módulo 8, la norma determinista de
+    // dividendos del Modo Supervivencia y las entradas de este mismo catálogo
+    // (Art. 36-3, Oficio 0348/2020) lo citan; sin entrada Capa 2 lo bloqueaba.
+    // Fuente del corpus: escudo_normativa_supervivencia_co_2026.md (fecha
+    // 19-feb-2026, num. 16, texto citado) y estatuto_tributario_completo.md
+    // (doctrina concordante). `verificadoEnNormograma` sigue el criterio con el
+    // que se cargó el Concepto 211 de 2025 del mismo pack (radicado, fecha y
+    // texto en una fuente del repo); en esta fase no se consultó normograma
+    // (sin acceso web), por eso urlOficial queda null.
+    id: 'CONCEPTO_DIAN_2769_2026',
+    cita: 'Concepto DIAN 2769 de 2026',
+    radicado: '2769',
+    fecha: '2026-02-19',
+    titulo: 'Capitalización de utilidades tras la derogatoria del Art. 36-3 E.T.',
+    tesis:
+      'Derogado el Art. 36-3 E.T. por el art. 96 de la Ley 2277 de 2022, desapareció el fundamento legal del tratamiento como INCRNGO: la capitalización de utilidades se somete al régimen general de distribución de utilidades (Arts. 48-49, 242 y 242-1 E.T.).',
+    articulosAplicables: ['Art. 36-3 E.T.', 'Art. 242 E.T.', 'Art. 242-1 E.T.'],
+    estado: 'VIGENTE_2026',
+    urlOficial: null,
+    verificadoEnNormograma: true,
+  },
 ] as const;
