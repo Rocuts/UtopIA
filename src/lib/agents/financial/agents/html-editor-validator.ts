@@ -1214,8 +1214,17 @@ function buildMoneyConcepts(input: ReconciliationInput): MoneyConcept[] {
     },
     {
       label: 'Total Patrimonio',
-      re: /\btotal\s+(?:del?\s+)?patrimonio\b/gi,
+      // "Total patrimonio", "el patrimonio al cierre", "el patrimonio al 31 de
+      // diciembre de 2025" (notas en prosa, e2e-niif-10).
+      re: /\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?))\b/gi,
       values: vals(centsToPesos(bs?.totalEquityPrimary), centsToPesos(bs?.totalEquityComparative)),
+      nd: false,
+    },
+    {
+      label: 'Efectivo al cierre',
+      // El cierre del comparativo es la apertura del periodo actual.
+      re: /\befectivo(?:\s+y\s+equivalentes(?:\s+(?:de|al)\s+efectivo)?)?\s+al\s+(?:cierre|final)(?:\s+del\s+(?:per[ií]odo|ejercicio|a[nñ]o))?(?:\s+(?:de|del)\s+\d{4})?/gi,
+      values: vals(centsToPesos(niif?.cashFlow?.cashClosing), centsToPesos(niif?.cashFlow?.cashOpening)),
       nd: false,
     },
   ];

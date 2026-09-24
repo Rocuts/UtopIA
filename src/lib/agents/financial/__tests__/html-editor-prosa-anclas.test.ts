@@ -117,6 +117,19 @@ describe('R6 — conceptos anclados en prosa y abreviados (e2e-niif-11)', () => 
     expect(all).toMatch(/Ingresos: el HTML imprime \$95\.000\.000,00/);
   });
 
+  it('e2e-niif-10: notas en prosa con efectivo, utilidad o patrimonio falsos bloquean', () => {
+    const b = r6(html(
+      '<section><h3>Notas</h3>' +
+        '<p>Nota 2 — El efectivo al cierre de 2025 asciende a $9.999.999,00.</p>' +
+        '<p>Nota 3 — La utilidad neta del ejercicio 2025 fue de $44.444.444,00.</p>' +
+        '<p>Nota 1 — El patrimonio al 31 de diciembre de 2025 es $77.777.777,00.</p></section>',
+    ));
+    const all = b.map((f) => f.detail).join('\n');
+    expect(all).toMatch(/Efectivo al cierre: el HTML imprime \$9\.999\.999,00/);
+    expect(all).toMatch(/Utilidad neta: el HTML imprime \$44\.444\.444,00/);
+    expect(all).toMatch(/Total Patrimonio: el HTML imprime \$77\.777\.777,00/);
+  });
+
   it('una pérdida presentada como utilidad en prosa (misma magnitud) bloquea', () => {
     const b = r6(html('<p>La utilidad neta del ejercicio fue de $40.000.000,00.</p>'));
     expect(b.map((f) => f.detail).join(' ')).toMatch(/Utilidad neta: es negativa/);
