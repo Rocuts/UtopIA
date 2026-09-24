@@ -2,6 +2,7 @@ import type { Adjustment } from '@/lib/agents/repair/types';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import { preprocessTrialBalance, type PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { preprocessedAnchorMismatches } from '@/lib/preprocessing/json-safe';
+import { adjustmentPeriodSchema } from './adjustment-ledger';
 
 // ---------------------------------------------------------------------------
 // Re-derivación del preprocesado que envía el cliente (niif-preproceso-33)
@@ -71,10 +72,10 @@ export function rederivePreprocessedFromRows(
  * si el ledger viene con forma inválida (el caller responde 400); `[]` si no
  * llegó. Sólo interesan los `applied`: son los que /niif aplicó al balance.
  *
- * Mismo contrato que el esquema de /niif, /consolidate y /export: `period` no
- * forma parte de él (esos esquemas lo descartan y el ajuste va al periodo
- * primario), así que aquí tampoco se conserva; de lo contrario la
- * re-derivación aplicaría el ajuste a otro periodo que /niif.
+ * Mismo contrato que el esquema de /niif, /consolidate y /export
+ * (`src/lib/reports/adjustment-ledger.ts`): `period` se conserva, de modo que
+ * la re-derivación aplica cada ajuste al MISMO snapshot que /niif (un ajuste
+ * del comparativo no se aplica al primario).
  */
 export function readAppliedAdjustments(ledger: unknown): Adjustment[] | null {
   if (ledger === undefined || ledger === null) return [];
@@ -95,6 +96,8 @@ export function readAppliedAdjustments(ledger: unknown): Adjustment[] | null {
     ) {
       return null;
     }
+    const period = a.period === undefined || a.period === null ? undefined : adjustmentPeriodSchema.safeParse(a.period);
+    if (period && !period.success) return null;
     if (a.status !== 'applied') continue;
     out.push({
       id: a.id,
@@ -104,6 +107,7 @@ export function readAppliedAdjustments(ledger: unknown): Adjustment[] | null {
       rationale: typeof a.rationale === 'string' ? a.rationale : '',
       status: 'applied',
       proposedAt: typeof a.proposedAt === 'string' ? a.proposedAt : '',
+      ...(period?.success ? { period: period.data } : {}),
     });
   }
   return out;

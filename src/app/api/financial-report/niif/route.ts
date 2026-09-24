@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adjustmentLedgerSchema } from '@/lib/reports/adjustment-ledger';
 import { z } from 'zod';
 import { financialReportRequestSchema, excludedFactIdsSchema } from '@/lib/validation/schemas';
 import { getCurrentWorkspaceId } from '@/lib/db/workspace';
@@ -68,22 +69,7 @@ const provisionalFlagSchema = z
   })
   .optional();
 
-const adjustmentSchema = z.object({
-  id: z.string().min(1).max(100),
-  accountCode: z.string().min(1).max(10),
-  accountName: z.string().min(1).max(200),
-  amount: z.number().refine((n) => Number.isFinite(n), 'amount debe ser finito'),
-  rationale: z.string().min(1).max(2_000),
-  status: z.enum(['proposed', 'applied', 'rejected']),
-  proposedAt: z.string().min(1).max(40),
-  appliedAt: z.string().min(1).max(40).optional(),
-  rejectedAt: z.string().min(1).max(40).optional(),
-});
-const adjustmentLedgerSchema = z
-  .object({
-    adjustments: z.array(adjustmentSchema).max(50),
-  })
-  .optional();
+// Contrato único del ledger (incluye `period` del ajuste multiperiodo).
 
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
