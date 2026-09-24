@@ -453,7 +453,7 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
       // activo), no el patrimonio (revisión I5-3; frase habitual de las notas
       // de la Parte I).
       re: new RegExp(
-        String.raw`(?<!\bpasivos?\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?)\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})${WORD_END}`,
+        String.raw`(?<!\bpasivos?(?:\s+total(?:es)?)?\s*(?:y|\+|m[aá]s)\s*(?:el\s+)?)\b(?:total\s+(?:del?\s+)?patrimonio|patrimonio\s+(?:total|al\s+cierre|al\s+31\s+de\s+diciembre(?:\s+(?:de|del)\s+\d{4})?)|patrimonio(?:\s+(?:neto|total))?(?:\s+de\s+la\s+(?:sociedad|compa[nñ][ií]a|empresa|entidad))?\s+${AMOUNT_VERBS})${WORD_END}`,
         'gi',
       ),
       values: vals(
@@ -642,7 +642,7 @@ function actaConcepts(sources: NarrativeAnchorSources, netValues: number[]): Nar
       // acta. "Distribuir entre los accionistas la suma de", "se reparten" y
       // "distribución a los socios" son la misma decisión (narrativa-10).
       new RegExp(
-        String.raw`(?<!ingresos\s+por\s+)\bdividendos?\b(?!\s+(?:por\s+(?:pagar|cobrar)|recibidos?))|\butilidades?\s+(?:a\s+distribuir|por\s+distribuir)\b|\bsaldo\s+distribuible\b|\bm[ií]nimo\s+(?:legal\s+)?a\s+repartir\b|\bdistribu(?:ir|ye|yen|y[oó]|yeron|ir[aá]n?)${WORD_END}${ACTA_CONTEXT_AHEAD}|\bdistribuci[oó]n(?:es)?\s+(?:a|entre)\s+(?:los\s+)?(?:accionistas|socios|asociados)\b|\brepart(?:ir|e|en|i[oó]|ieron)${WORD_END}${ACTA_CONTEXT_AHEAD}`,
+        String.raw`(?<!ingresos\s+por\s+)\bdividendos?\b(?!\s+(?:por\s+(?:pagar|cobrar)|recibidos?))|\butilidades?\s+(?:a\s+distribuir|por\s+distribuir)\b|\bsaldo\s+distribuible\b|\bm[ií]nimo\s+(?:legal\s+)?a\s+repartir\b|\bdistribu(?:ir|ye|yen|y[oó]|yeron|ir[aá]n?)${WORD_END}${ACTA_CONTEXT_AHEAD}|\bdistribuci[oó]n(?:es)?\s+(?:a|entre)\s+(?:los\s+)?(?:accionistas|socios|asociados)\b|\b(?:reparto|distribuci[oó]n)\s+de\s+(?:las\s+|los\s+)?(?:utilidades|dividendos|excedentes)\b|\brepart(?:ir|e|en|i[oó]|ieron)${WORD_END}${ACTA_CONTEXT_AHEAD}`,
         'gi',
       ),
       vals(

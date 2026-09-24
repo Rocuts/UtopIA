@@ -310,6 +310,7 @@ const HONEST: Phrase[] = [
   { id: 'H86', scope: 'estados', text: () => 'El impuesto sobre la utilidad neta fue de $6.000.000,00.' },
   { id: 'H87', scope: 'estados', text: (s) => `El estado de resultado del ejercicio ${s.year} presenta ingresos por $123.456.789,00.` },
   { id: 'H88', scope: 'estados', text: (s) => (s.un > ZERO ? `La utilidad neta del ejercicio fue de ${cop(s.un)} (pérdida de $1.234.567,00 en el año anterior).` : null) },
+  { id: 'H89', scope: 'estados', text: (s) => `Los pasivos totales y el patrimonio suman ${cop(s.activo)}, igual al activo total.` },
 ];
 
 // ---------------------------------------------------------------------------
@@ -375,6 +376,7 @@ const FALSE: Phrase[] = [
   { id: 'F55', scope: 'estados', text: (s) => (s.un < ZERO ? `El resultado del ejercicio fue de ${cop(s.un)}, pese a mayores ventas.` : null) },
   { id: 'F56', scope: 'acta', text: () => 'Se aprueba distribuir la suma de $987.654.321,00 a título de dividendo.' },
   { id: 'F57', scope: 'estados', text: (s) => `La ${res(s.un)} neta del ejercicio fue de ${Math.round(pesos(absB(s.un) * B(3)) / 1e6) + 7} millones de COP.` },
+  { id: 'F58', scope: 'acta', text: () => 'Se aprueba el reparto de utilidades por $987.654.321,00.' },
 ];
 
 // ---------------------------------------------------------------------------
