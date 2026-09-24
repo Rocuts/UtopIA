@@ -1118,6 +1118,22 @@ function yearOf(period: string | null | undefined): string | null {
 }
 
 /**
+ * Rótulo de una fila de estado para R4, sin lo accesorio: el paréntesis
+ * ("Otro resultado integral (ORI)", "Utilidad (pérdida) neta"), la coletilla
+ * "neto de impuestos" / "net of tax" y la puntuación final. Revisión F-html:
+ * con esas variantes el ORI impreso con el signo invertido no se conciliaba.
+ */
+function periodRowLabel(label: string): string {
+  return label
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[,;]?\s*(?:net[oa]s?\s+de\s+impuestos?(?:\s+diferidos?)?|net\s+of\s+(?:income\s+)?tax(?:es)?)$/i, '')
+    .replace(/[\s.:;,]+$/, '')
+    .trim();
+}
+
+/**
  * R4 — en las tablas con encabezado de año, la cifra vinculante del periodo
  * actual debe estar bajo la columna del periodo actual (y la comparativa bajo
  * la suya). R5 — los encabezados y la fecha de corte deben corresponder al
@@ -1201,20 +1217,20 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
     { re: /^total\s+(?:de\s+)?pasivos?$|^total\s+liabilities$/i, label: 'Total Pasivo', primary: bs?.totalLiabilitiesPrimary ?? null, comparative: bs?.totalLiabilitiesComparative ?? null },
     { re: /^total\s+(?:del?\s+)?patrimonio$|^total\s+equity$/i, label: 'Total Patrimonio', primary: bs?.totalEquityPrimary ?? null, comparative: bs?.totalEquityComparative ?? null },
     {
-      re: /^(?:utilidad|resultado|p[eé]rdida|ganancia)\s+net[oa](?:\s+del\s+(?:ejercicio|per[ií]odo))?$|^net\s+(?:income|profit|loss)(?:\s+for\s+the\s+(?:year|period))?$/i,
+      re: /^(?:utilidad|resultado|p[eé]rdida|ganancia)\s+net[oa](?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o))?$|^net\s+(?:income|profit|loss)(?:\s+for\s+the\s+(?:year|period))?$/i,
       label: 'Utilidad Neta',
       primary: is?.netIncomePrimary ?? null,
       comparative: is?.netIncomeComparative ?? null,
     },
     {
-      re: /^(?:otro\s+resultado\s+integral|ori|other\s+comprehensive\s+income|oci)(?:\s+del\s+(?:ejercicio|per[ií]odo)|\s+for\s+the\s+(?:year|period))?$/i,
+      re: /^(?:otro\s+resultado\s+integral|ori|other\s+comprehensive\s+income|oci)(?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o)|\s+for\s+the\s+(?:year|period))?$/i,
       label: 'Otro Resultado Integral (ORI)',
       primary: is?.oriPrimary ?? null,
       comparative: is?.oriComparative ?? null,
       signed: true,
     },
     {
-      re: /^(?:resultado\s+integral\s+total|total\s+(?:del\s+)?resultado\s+integral|total\s+comprehensive\s+income)(?:\s+del\s+(?:ejercicio|per[ií]odo)|\s+for\s+the\s+(?:year|period))?$/i,
+      re: /^(?:resultado\s+integral\s+total|total\s+(?:del\s+)?resultado\s+integral|total\s+comprehensive\s+income)(?:\s+del\s+(?:ejercicio|per[ií]odo|a[nñ]o)|\s+for\s+the\s+(?:year|period))?$/i,
       label: 'Resultado Integral Total',
       primary: sumCents(is?.netIncomePrimary, is?.oriPrimary),
       comparative: sumCents(is?.netIncomeComparative, is?.oriComparative),
@@ -1248,7 +1264,7 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
     for (const row of Array.from(table.querySelectorAll('tr')).slice(1)) {
       const cells = cellTexts(row);
       if (cells.length !== headers.length) continue;
-      const concept = concepts.find((k) => k.re.test(cells[0].replace(/\s+/g, ' ')));
+      const concept = concepts.find((k) => k.re.test(periodRowLabel(cells[0])));
       if (!concept || concept.primary === null || renders(concept.primary).length === 0) continue;
       // Sólo celdas con la cifra completa: una tabla de resumen con montos
       // abreviados ($1.000 M, §1.9/L38) no es un estado financiero.

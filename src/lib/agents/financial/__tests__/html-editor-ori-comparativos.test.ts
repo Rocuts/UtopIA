@@ -171,6 +171,18 @@ describe('e2e-niif2-03 — ORI y resultado integral total conciliados con signo'
     expect(blocks(h, s).some((f) => /Resultado Integral Total/.test(f.detail))).toBe(true);
   });
 
+  // Revisión F-html: con el rótulo en otra variante habitual el ORI invertido
+  // no se conciliaba (R4 exigía el rótulo exacto y R3 lo encontraba con su
+  // signo en la columna ORI del ECP).
+  for (const label of ['Otro resultado integral (ORI)', 'Otro resultado integral, neto de impuestos', 'Otro resultado integral del año']) {
+    it(`ORI 2025 con el signo invertido bloquea con el rótulo "${label}"; el honesto con ese rótulo pasa`, () => {
+      const honest = withRow(row('Otro resultado integral', cop(ori), cop(oriC)), row(label, cop(ori), cop(oriC)));
+      expect(blocks(honest, s)).toEqual([]);
+      const h = withRow(row('Otro resultado integral', cop(ori), cop(oriC)), row(label, cop(-BigInt(ori)), cop(oriC)));
+      expect(blocks(h, s).some((f) => /columna/.test(f.rule) && /Otro Resultado Integral/.test(f.detail))).toBe(true);
+    });
+  }
+
   it('un ORI que no aparece en ninguna parte del HTML bloquea (cifra vinculante)', () => {
     const h = withRow(row('Otro resultado integral', cop(ori), cop(oriC)), '').replace(/<td>\(\$2\.000\.000,00\)<\/td>/g, '<td>—</td>');
     expect(h).not.toContain('($2.000.000,00)');
