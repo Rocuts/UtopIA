@@ -49,12 +49,13 @@ export interface PeriodLockedPayload {
   periodHash: string;
   withWarnings: boolean;
   overrideReason?: string;
-  /** KPIs por pilar (Resiliencia / Valor / Verdad / Futuro). */
+  /** KPIs por pilar (Resiliencia / Valor / Verdad / Futuro). `null` = sin
+   *  base verificada: la plantilla muestra "N/D", nunca 0 (ratios-kpis-08). */
   pillars: {
-    resiliencia: { totalProvisionTaxesCop: string };
-    valor: { ebitdaCop: string };
-    verdad: { documentsVerifiedPct: number };
-    futuro: { freeCashFlowProjectedCop: string };
+    resiliencia: { totalProvisionTaxesCop: string | null };
+    valor: { ebitdaCop: string | null };
+    verdad: { documentsVerifiedPct: number | null };
+    futuro: { freeCashFlowProjectedCop: string | null };
   };
   /** Links a CTAs. */
   links: {

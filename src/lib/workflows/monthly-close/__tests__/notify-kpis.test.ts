@@ -42,19 +42,24 @@ describe('correo de cierre — KPIs de pilares', () => {
     const res = await sendLockNotification(input);
     expect(res.sent).toBe(true);
     const payload = (dispatch.mock.calls[0] as unknown as [{ payload: { pillars: Record<string, Record<string, unknown>> } }])[0].payload;
-    expect(payload.pillars.resiliencia.totalProvisionTaxesCop).toBe('N/D');
-    expect(payload.pillars.valor.ebitdaCop).toBe('N/D');
-    expect(payload.pillars.futuro.freeCashFlowProjectedCop).toBe('N/D');
+    // IW4: el contrato acepta null (N/D) y la plantilla lo rotula "N/D".
+    expect(payload.pillars.resiliencia.totalProvisionTaxesCop).toBeNull();
+    expect(payload.pillars.valor.ebitdaCop).toBeNull();
+    expect(payload.pillars.futuro.freeCashFlowProjectedCop).toBeNull();
     expect(payload.pillars.verdad.documentsVerifiedPct).toBe(87);
     expect(JSON.stringify(payload.pillars)).not.toMatch(/"0"|:0[,}]/);
   });
 
-  it('sin documentos verificables no inventa 0 %: omite el envío y lo explica', async () => {
+  // IW4: antes se omitía el correo de cierre porque el payload exigía un
+  // número; ahora sale con el % en null (N/D), nunca 0 %.
+  it('sin documentos verificables no inventa 0 %: envía con el % en null', async () => {
     docsPct.value = null;
     const res = await sendLockNotification(input);
-    expect(res.sent).toBe(false);
-    expect(res.error).toMatch(/N\/D/);
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(res.sent).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const payload = (dispatch.mock.calls[0] as unknown as [{ payload: { pillars: Record<string, Record<string, unknown>> } }])[0].payload;
+    expect(payload.pillars.verdad.documentsVerifiedPct).toBeNull();
+    expect(JSON.stringify(payload.pillars)).not.toMatch(/"0"|:0[,}]/);
   });
 
   it('el puerto se importa con un especificador que el bundler resuelve (sin webpackIgnore)', () => {
