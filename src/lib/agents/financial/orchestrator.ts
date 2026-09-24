@@ -230,18 +230,30 @@ function buildComparativeAnchorsForValidator(
  * sirven: la auditoría integral verificó que el navegador no registra handler
  * para ese canal.
  */
-export function sellarConSalvedades(
-  niif: NiifAnalysisResult,
-  motivos: string[],
-  language: 'es' | 'en',
-): void {
-  const previous = niif.reconciliation;
-  niif.reconciliation = {
+/**
+ * Veredicto `clean: false` que CONSERVA lo que ya traía la reconciliación del
+ * analista: discrepancias del EFE contra el determinista y pases degradados
+ * (niif-contrato-02, pipeline-flujo-15). Reconstruirlo campo a campo las
+ * borraba del artefacto en cuanto otro gate sellaba el informe.
+ */
+function markReconciliationQualified(
+  previous: NiifAnalysisResult['reconciliation'],
+): NonNullable<NiifAnalysisResult['reconciliation']> {
+  return {
+    ...previous,
     deviations: previous?.deviations ?? [],
     lineGaps: previous?.lineGaps ?? [],
     repairAttempted: previous?.repairAttempted ?? false,
     clean: false,
   };
+}
+
+export function sellarConSalvedades(
+  niif: NiifAnalysisResult,
+  motivos: string[],
+  language: 'es' | 'en',
+): void {
+  niif.reconciliation = markReconciliationQualified(niif.reconciliation);
   const seal = [
     language === 'es'
       ? '> ## REPORTE CON SALVEDADES — INTEGRIDAD ARITMÉTICA'
@@ -380,6 +392,14 @@ export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValida
     // producción no lo pasaba.
     totalExpensesClass5Cents: centsOrUndefined(c?.gastosClase5),
     presentationV3: primarySnap?.curator?.presentationV3,
+    // E18 — el EFE emitido contra el EFE determinista de los dos cortes
+    // (niif-contrato-02). Sólo corría dentro del analista; con él aquí lo
+    // evalúan también runNiifPhase, /export y /html. Sin comparativo no hay
+    // saldo de apertura y el EFE no es calculable (NIC 7 ¶1).
+    deterministicCashFlow:
+      primarySnap && comparativeSnap
+        ? buildDeterministicCashFlow(primarySnap, comparativeSnap)
+        : null,
   };
 }
 
@@ -1731,7 +1751,10 @@ export async function prepareFinancialContext(
           actividadInferida: ppForAgents?.actividadInferida,
           reclasificacionesNoCompensacion: ppForAgents?.reclasificacionesNoCompensacion,
         },
-        { skipReportTextChecks: true },
+        // V3 sobre el EFE determinista también en Stage 0 (recalculo-11).
+        // `collectNiifGateMessages` descarta V3/V15 del pre-vuelo y los
+        // re-evalúa con el informe: no hay doble conteo.
+        { skipReportTextChecks: true, comparativeSnapshot: ppForAgents?.comparative ?? null },
       );
       if (!preflight.emittable) {
         onProgress?.({
@@ -1923,12 +1946,19 @@ export async function runNiifPhase(
         ),
       });
     }
-    if (!jsonValidation.ok && jsonValidation.errors.length > 0) {
+    // E18 repite el cruce del EFE contra el determinista que el analista ya
+    // pudo declarar en `reconciliation.cashFlowDiscrepancies` (y en su sello):
+    // sólo se añaden las discrepancias que no estén ya declaradas.
+    const declaredCashFlow = new Set(niif.reconciliation?.cashFlowDiscrepancies ?? []);
+    const jsonErrors = jsonValidation.errors.filter(
+      (e) => !(e.startsWith('E18. ') && declaredCashFlow.has(e.slice('E18. '.length))),
+    );
+    if (jsonErrors.length > 0) {
       onProgress?.({
         type: 'warning',
-        warnings: jsonValidation.errors.map((e) => `[NIIF JSON validator] ${e}`),
+        warnings: jsonErrors.map((e) => `[NIIF JSON validator] ${e}`),
       });
-      sellarConSalvedades(niif, jsonValidation.errors, language);
+      sellarConSalvedades(niif, jsonErrors, language);
     }
 
     // -------------------------------------------------------------------------
@@ -1994,13 +2024,7 @@ export async function runNiifPhase(
   // sobre un texto vacío (pipeline-flujo-02, recalculo-11).
   const gateMessages = collectNiifGateMessages(niif, context, language);
   if (gateMessages.length > 0) {
-    const previous = niif.reconciliation;
-    niif.reconciliation = {
-      deviations: previous?.deviations ?? [],
-      lineGaps: previous?.lineGaps ?? [],
-      repairAttempted: previous?.repairAttempted ?? false,
-      clean: false,
-    };
+    niif.reconciliation = markReconciliationQualified(niif.reconciliation);
     const blockerSeal = [
       language === 'es'
         ? '> ## REPORTE CON SALVEDADES — GATE DE EMISIÓN'
