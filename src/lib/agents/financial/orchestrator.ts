@@ -76,7 +76,9 @@ import {
   type StrategyQualifications,
 } from './validators/strategy-anchors';
 import {
+  buildNiifNarrativeSeal,
   checkGovernanceNarrative,
+  checkNiifNarrative,
   narrativeSourcesFromPreprocessed,
   sealGovernanceNarrative,
 } from './validators/narrative-anchors';
@@ -295,6 +297,24 @@ export function sellarConSalvedades(
     ...motivos.map((m) => `> - ${m}`),
     '',
   ].join('\n');
+  niif.fullContent = `${seal}\n${niif.fullContent}`;
+  niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
+}
+
+/**
+ * Sella la Parte I por cifras citadas en las notas de los estados o en las
+ * notas técnicas que contradicen los estados o el balance (I5-3,
+ * `checkNiifNarrative`). Mismo canal que `sellarConSalvedades`: reconciliación
+ * en `clean: false` y sello en la portada. Lo usan `runNiifPhase` y el
+ * re-render del servidor (src/lib/reports/part-markdown.ts).
+ */
+export function sellarProsaNiif(
+  niif: NiifAnalysisResult,
+  motivos: string[],
+  language: 'es' | 'en',
+): void {
+  niif.reconciliation = markReconciliationQualified(niif.reconciliation);
+  const seal = buildNiifNarrativeSeal(motivos, language);
   niif.fullContent = `${seal}\n${niif.fullContent}`;
   niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
 }
@@ -2447,6 +2467,22 @@ export async function runNiifPhase(
         });
         sellarConSalvedades(niif, mensajes, language);
       }
+    }
+
+    // Cifras citadas en las notas de los estados y en las notas técnicas
+    // (I5-3): el Markdown, el PDF y el Excel las imprimen tal cual. Mismas
+    // fuentes que el servidor (`serverNiifIntegrity`): paridad del sello.
+    const narrative = checkNiifNarrative(
+      niif.json,
+      narrativeSourcesFromPreprocessed(context.ppForAgents, niif.json),
+      language,
+    );
+    if (narrative.motivos.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: narrative.motivos.map((m) => `[Parte I — cifras en notas] ${m}`),
+      });
+      sellarProsaNiif(niif, narrative.motivos, language);
     }
   } else {
     // Sin `niif.json` no hay nada que cruzar y las E1..E9 no corren. Antes eso

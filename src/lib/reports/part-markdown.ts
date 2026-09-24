@@ -23,7 +23,11 @@ import {
   governanceDegradationNotice,
   renderGovernanceResult,
 } from '@/lib/agents/financial/agents/governance-specialist';
-import { buildAdjustmentsAuditSection, sellarConSalvedades } from '@/lib/agents/financial/orchestrator';
+import {
+  buildAdjustmentsAuditSection,
+  sellarConSalvedades,
+  sellarProsaNiif,
+} from '@/lib/agents/financial/orchestrator';
 import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import type { Adjustment } from '@/lib/agents/repair/types';
 import { sealGovernanceNarrative } from '@/lib/agents/financial/validators/narrative-anchors';
@@ -206,6 +210,7 @@ export function renderNiifPart(
   const reconciliation = out.reconciliation;
   if (integrity?.jsonErrors.length) sellarConSalvedades(out, integrity.jsonErrors, language);
   if (integrity?.efeViolations.length) sellarConSalvedades(out, integrity.efeViolations, language);
+  if (integrity?.narrative.length) sellarProsaNiif(out, integrity.narrative, language);
   // El veredicto lo fija `applyServerPartVerdicts`; el render sólo escribe texto.
   out.reconciliation = reconciliation;
   return out;

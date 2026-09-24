@@ -359,6 +359,26 @@ describe('I3 — paridad de la Parte I sellada por los invariantes de /niif', ()
     expect(c.report.niifAnalysis.reconciliation?.clean).toBe(false);
     expect(markdownOf(c.report)).toEqual(markdownOf(f));
   });
+
+  it('I5-3 — cifra falsa en una nota técnica del JSON NIIF: la fase y el servidor sellan igual', async () => {
+    const json = structuredClone(informeHonesto(pp));
+    json.technicalNotes = [...json.technicalNotes, { ref: 'Nota 9', norma: null, body: FAKE }];
+    vi.mocked(runNiifAnalyst).mockResolvedValue({
+      ...toNiifAnalysisResult(json),
+      reconciliation: { clean: true, deviations: [], lineGaps: [], repairAttempted: false },
+    });
+    const f = await fases();
+    expect(f.niifAnalysis.reconciliation?.clean).toBe(false);
+    expect(f.niifAnalysis.fullContent).toMatch(/REPORTE CON SALVEDADES — CIFRAS EN NOTAS SIN RESPALDO/);
+    // El cliente "limpia" la reconciliación y reenvía: el servidor recalcula el sello.
+    const c = await consolidar(
+      { ...f, niifAnalysis: { ...f.niifAnalysis, reconciliation: { clean: true, deviations: [], lineGaps: [], repairAttempted: false } } },
+      f.context.company,
+    );
+    expect(c.report.niifAnalysis.reconciliation?.clean).toBe(false);
+    expect(markdownOf(c.report)).toEqual(markdownOf(f));
+    expect(c.report.niifAnalysis.balanceSheet).toMatch(/Notas técnicas — Nota \d+ · Utilidad neta: la nota imprime \$987\.654\.321,00/);
+  });
 });
 
 describe('I3 — cifra falsa SÓLO en el Markdown (JSON honesto, flags limpios)', () => {

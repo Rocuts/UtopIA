@@ -22,6 +22,7 @@ import {
 } from '@/lib/agents/financial/contracts/governance-report';
 import {
   checkGovernanceNarrative,
+  checkNiifNarrative,
   narrativeSourcesFromPreprocessed,
   type NarrativeCheckResult,
 } from '@/lib/agents/financial/validators/narrative-anchors';
@@ -455,17 +456,21 @@ export interface ServerNiifIntegrity {
   jsonErrors: string[];
   /** Violaciones de las identidades del EFE (`checkCashFlowInvariants`). */
   efeViolations: string[];
+  /** Cifras en las notas de los estados y notas técnicas sin respaldo (`checkNiifNarrative`, I5-3). */
+  narrative: string[];
 }
 
 /**
  * Los MISMOS cruces con que `runNiifPhase` sella la Parte I
- * (`validateNiifReportJson` con las anclas del balance y los invariantes del
- * EFE). `null` si la Parte I no trae un JSON válido.
+ * (`validateNiifReportJson` con las anclas del balance, los invariantes del
+ * EFE y las cifras en las notas, I5-3). `null` si la Parte I no trae un JSON
+ * válido.
  */
 export function serverNiifIntegrity(
   niifJson: unknown,
   reconciliation: NiifAnalysisResult['reconciliation'],
   preprocessed: PreprocessedBalance | null | undefined,
+  language: 'es' | 'en' = 'es',
 ): ServerNiifIntegrity | null {
   const json = parseNiif(niifJson);
   if (!json) return null;
@@ -476,7 +481,9 @@ export function serverNiifIntegrity(
     (e) => !(e.startsWith('E18. ') && declared.has(e.slice('E18. '.length))),
   );
   const efeViolations = json.cashFlow ? formatCashFlowViolations(checkCashFlowInvariants(json.cashFlow)) : [];
-  return { jsonErrors, efeViolations };
+  // Mismas fuentes que `runNiifPhase` (I5-3).
+  const narrative = checkNiifNarrative(json, narrativeSourcesFromPreprocessed(preprocessed, json), language).motivos;
+  return { jsonErrors, efeViolations, narrative };
 }
 
 /**
@@ -493,6 +500,7 @@ function hardenedReconciliation(
     !integrity ||
     integrity.jsonErrors.length > 0 ||
     integrity.efeViolations.length > 0 ||
+    integrity.narrative.length > 0 ||
     (rec?.deviations?.length ?? 0) > 0 ||
     (rec?.lineGaps?.length ?? 0) > 0 ||
     (rec?.cashFlowDiscrepancies?.length ?? 0) > 0;
@@ -532,7 +540,7 @@ export function serverPartChecks(
   const governanceJson = isValidGovernanceJson(report.governance.json) ? report.governance.json : null;
   return {
     sources,
-    niif: serverNiifIntegrity(report.niifAnalysis.json, report.niifAnalysis.reconciliation, preprocessed),
+    niif: serverNiifIntegrity(report.niifAnalysis.json, report.niifAnalysis.reconciliation, preprocessed, language),
     strategy,
     acta: serverActaChecks(report.governance.json, sources),
     identity: {
