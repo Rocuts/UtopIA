@@ -32,6 +32,23 @@ export const UVT_2026 = 52374;
 export const SMMLV_2026 = 1750905;
 
 /**
+ * SMMLV por año con fuente verificada en el repo (2026: Decreto 1469/2025,
+ * `SMMLV_2026`). Fuente ÚNICA para las provisiones de nómina (Art. 114-1
+ * E.T., `accounting/adjustments/provisions/employer.ts`) y el umbral de
+ * SAGRILAFT (`fiscal-opinion/sagrilaft.ts`). Un año que no esté aquí es N/D:
+ * nunca se sustituye por el SMMLV de otro año (re-auditoría 2026-09, NM-15).
+ */
+export const SMMLV_POR_ANIO: Readonly<Record<number, number>> = Object.freeze({
+  2026: SMMLV_2026,
+});
+
+/** SMMLV del año, o `null` si el repo no tiene la constante verificada. */
+export function smmlvVerificado(anio: number | null | undefined): number | null {
+  if (typeof anio !== 'number') return null;
+  return SMMLV_POR_ANIO[anio] ?? null;
+}
+
+/**
  * Tope de ingresos brutos para PERTENECER al Régimen Simple.
  * Art. 905 num. 2 E.T. (mod. art. 41 Ley 2155 de 2021); el sublímite de
  * 12.000 UVT de la Ley 2277 de 2022 fue declarado INEXEQUIBLE por la
