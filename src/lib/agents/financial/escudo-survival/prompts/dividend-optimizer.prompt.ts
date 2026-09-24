@@ -3,8 +3,9 @@
 // ---------------------------------------------------------------------------
 // Outcome-first GPT-5.4 (CTCO + XML). Schema (DividendOptimizationReportSchema)
 // se enforza via experimental_output. Compara distribuir vs capitalizar
-// utilidades segun Art. 242 E.T. (post-Ley 2277/2022) y Art. 36-3 E.T.
-// (capitalizacion = INCRGNO al accionista — impuestoSocio = 0).
+// utilidades segun Art. 242 E.T. (post-Ley 2277/2022). El Art. 36-3 E.T. fue
+// derogado por la Ley 2277/2022 art. 96: capitalizar tributa como distribuir
+// (auditoria 2026-09, tributario-calc-01).
 // ---------------------------------------------------------------------------
 // AUDITORIA NORMATIVA 2026-08-07 — dos correcciones:
 //  1) El 15% sobre el exceso de 1.090 UVT es RETENCION EN LA FUENTE
