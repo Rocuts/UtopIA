@@ -362,19 +362,18 @@ function fmt(value: string, unit: KpiJson['unit'] = 'cop'): string {
 }
 
 /**
- * Formato compacto $X.XXX M / $X,X B para el Dashboard Ejecutivo (Parte 8.2 spec).
+ * Formato compacto $X.XXX M para el Dashboard Ejecutivo (Parte 8.2 spec).
  * Why: el reporte C-Level necesita escaneo visual rápido — pesos crudos saturan.
- * Mantiene formato es-CO (coma decimal). El umbral B salta cuando |M| ≥ 1.000.
+ * Mantiene formato es-CO (punto de miles, coma decimal) y SIEMPRE en millones
+ * (pipeline-flujo-20): el antiguo "$2,0 B" se lee como billón, que en español
+ * es 10^12, cuando el valor eran miles de millones. "$2.000 M" no es ambiguo.
+ * El negativo conserva la forma "$-40 M" que leen los validadores.
  */
 function formatCopAsMillions(centsStr: string): string {
   const cents = parseMoneyCop(centsStr);
   const pesos = Number(cents) / 100;
   const millions = pesos / 1_000_000;
-  if (Math.abs(millions) >= 1000) {
-    const billones = millions / 1000;
-    return `$${billones.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} B`;
-  }
-  return `$${millions.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} M`;
+  return `$${millions.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 1, useGrouping: true })} M`;
 }
 
 function renderDashboard(json: StrategyReportJson): string {
@@ -389,9 +388,9 @@ function renderDashboard(json: StrategyReportJson): string {
   ].join('\n');
   const rows = dash.rows
     .map((r: ExecutiveDashboardRowJson) => {
-      // Why: Dashboard ejecutivo usa formato compacto $X.XXX M / $X B (Parte 8.2
-      // spec). La tabla detallada de KPIs y demás secciones conservan pesos
-      // completos vía formatCopFromCents.
+      // Why: Dashboard ejecutivo usa formato compacto $X.XXX M (Parte 8.2
+      // spec; nunca "B", pipeline-flujo-20). La tabla detallada de KPIs y demás
+      // secciones conservan pesos completos vía formatCopFromCents.
       const primary = formatCopAsMillions(r.primary);
       const comparative = r.comparative !== null
         ? formatCopAsMillions(r.comparative)
