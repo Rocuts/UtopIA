@@ -26,7 +26,7 @@ describe('valoracion-07 — sin WACC 13,5 % por defecto', () => {
     const r = calculateExitValue({
       ebitda: 800_000_000, industry: 'services', growthRate: 0.1, wacc: 0.142, netDebt: 0,
     });
-    expect((r.assumptions ?? []).join(' | ')).toMatch(/WACC declarado por el usuario \(supuesto\) = 14\.2%/);
+    expect((r.assumptions ?? []).join(' | ')).toMatch(/WACC declarado por el usuario \(supuesto\) = 14,2%/);
   });
 
   it('ROI probabilístico sin tasa declarada no publica 13,5 %', () => {

@@ -26,14 +26,14 @@ import type {
   RoiProbabilisticProject,
 } from '@/types/kpis';
 import { KpiNoCalculableError } from './no-calculable';
+import { formatKpiCop, formatKpiNumber, formatKpiPercentPoints, formatKpiRate } from './format';
 
-/** Supuestos que el usuario debe declarar (valoracion-25). */
-export interface RoiProbabilisticInputDeclarado extends RoiProbabilisticInput {
-  /** Retorno si el proyecto fracasa (−1 = pérdida total de la inversión). Obligatorio. */
-  failureReturn?: number;
-  /** Fuente del riesgo de mercado declarado (p. ej. acta del comité). */
-  marketRiskSource?: string;
-}
+/**
+ * Supuestos que el usuario debe declarar (valoracion-25). `failureReturn` y
+ * `marketRiskSource` ya forman parte de `RoiProbabilisticInput`; el alias se
+ * conserva por compatibilidad.
+ */
+export type RoiProbabilisticInputDeclarado = RoiProbabilisticInput;
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -45,21 +45,6 @@ function severityFor(roiPct: number): KpiResult['severity'] {
   if (roiPct < 10) return 'warn';
   if (roiPct < 20) return 'neutral';
   return 'good';
-}
-
-function formatPct(value: number, decimals = 1): string {
-  if (!Number.isFinite(value)) return '0.0%';
-  return `${value.toFixed(decimals)}%`;
-}
-
-function formatCopShort(n: number): string {
-  if (!Number.isFinite(n)) return '$0 COP';
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T COP`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B COP`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M COP`;
-  return `${sign}$${Math.round(abs).toLocaleString('es-CO')} COP`;
 }
 
 function expectedReturnOf(p: RoiProbabilisticProject, failureReturn: number): number {
@@ -132,17 +117,17 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInputDeclarado)
     {
       label: 'Inversión total',
       value: totalInv,
-      formatted: formatCopShort(totalInv),
+      formatted: formatKpiCop(totalInv),
     },
     {
       label: 'Retorno esperado ponderado',
       value: weightedReturn,
-      formatted: formatPct(weightedReturn * 100, 2),
+      formatted: formatKpiPercentPoints(weightedReturn * 100, 2),
     },
     {
       label: 'Retorno en caso de fracaso (declarado)',
       value: failureReturn,
-      formatted: formatPct(failureReturn * 100, 0),
+      formatted: formatKpiPercentPoints(failureReturn * 100, 0),
     },
   ];
   if (marketRisk !== null) {
@@ -150,12 +135,12 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInputDeclarado)
       {
         label: 'Riesgo de mercado (declarado)',
         value: marketRisk,
-        formatted: formatPct(marketRisk * 100, 0),
+        formatted: formatKpiPercentPoints(marketRisk * 100, 0),
       },
       {
         label: 'Factor de ajuste por riesgo',
         value: riskAdj,
-        formatted: riskAdj.toFixed(2),
+        formatted: formatKpiNumber(riskAdj, 2),
       },
     );
   }
@@ -164,7 +149,7 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInputDeclarado)
     breakdown.push({
       label: `Top ${idx + 1}: ${r.project.name}`,
       value: r.contribution * 100,
-      formatted: formatPct(r.contribution * 100, 2),
+      formatted: formatKpiPercentPoints(r.contribution * 100, 2),
       weight: r.project.investment / totalInv,
     });
   });
@@ -172,11 +157,11 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInputDeclarado)
   const assumptions = [
     marketRisk === null
       ? 'Riesgo de mercado no declarado: no se aplica ajuste'
-      : `Riesgo de mercado declarado = ${(marketRisk * 100).toFixed(0)}% (${input.marketRiskSource?.trim() || 'sin fuente: supuesto del usuario'}); no achica pérdidas`,
-    `Retorno en caso de fracaso declarado = ${(failureReturn * 100).toFixed(0)}%`,
+      : `Riesgo de mercado declarado = ${formatKpiRate(marketRisk, 0)} (${input.marketRiskSource?.trim() || 'sin fuente: supuesto del usuario'}); no achica pérdidas`,
+    `Retorno en caso de fracaso declarado = ${formatKpiRate(failureReturn, 0)}`,
     discountRate === null
       ? 'Tasa de descuento no declarada (no se aplica al retorno del portafolio)'
-      : `Tasa de descuento declarada por el usuario (supuesto) = ${(discountRate * 100).toFixed(1)}%`,
+      : `Tasa de descuento declarada por el usuario (supuesto) = ${formatKpiRate(discountRate, 1)}`,
     'Probabilidades de éxito provistas por proyecto; se clampean a [0,1]',
     'Retornos expresados como TIR efectiva anual',
     'Ponderación por inversión relativa en el portfolio',
@@ -191,7 +176,7 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInputDeclarado)
   return {
     kind: 'roi_probabilistic',
     value: Number(roiPct.toFixed(2)),
-    formatted: formatPct(roiPct, 1),
+    formatted: formatKpiPercentPoints(roiPct, 1),
     unit: '%',
     label: 'ROI Probabilístico',
     severity: severityFor(roiPct),

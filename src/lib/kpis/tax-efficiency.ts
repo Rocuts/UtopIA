@@ -23,30 +23,16 @@ import type {
   TefInput,
 } from '@/types/kpis';
 import { KpiNoCalculableError } from './no-calculable';
+import { formatKpiCop, formatKpiPercentPoints, formatKpiRate } from './format';
 
-/** Tarifa del escenario optimizado cuando difiere de la de referencia. */
-export interface TefInputDeclarado extends TefInput {
-  /** Tarifa del escenario optimizado (0-1). Default: la misma `taxRate`. */
-  taxRateOptimized?: number;
-}
+/**
+ * `taxRateOptimized` ya forma parte de `TefInput`; el alias se conserva por
+ * compatibilidad.
+ */
+export type TefInputDeclarado = TefInput;
 
 const DEFAULT_TAX_RATE = 0.35;
 const CALC_VERSION_LABEL = 'Tasa de Eficiencia Fiscal';
-
-function formatCopShort(value: number): string {
-  const abs = Math.abs(value);
-  const sign = value < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T COP`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B COP`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M COP`;
-  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K COP`;
-  return `${sign}$${Math.round(abs).toLocaleString('es-CO')} COP`;
-}
-
-function formatPct(value: number, decimals = 1): string {
-  if (!Number.isFinite(value)) return '0.0%';
-  return `${value.toFixed(decimals)}%`;
-}
 
 function severityFor(tef: number): KpiResult['severity'] {
   if (!Number.isFinite(tef) || tef < 3) return 'critical';
@@ -138,39 +124,39 @@ export function calculateTef(input: TefInputDeclarado): KpiResult {
     {
       label: 'Impuesto baseline',
       value: taxBaseline,
-      formatted: formatCopShort(taxBaseline),
+      formatted: formatKpiCop(taxBaseline),
     },
     {
       label: 'Impuesto optimizado',
       value: taxOptimized,
-      formatted: formatCopShort(taxOptimized),
+      formatted: formatKpiCop(taxOptimized),
     },
     {
       label: 'Ahorro total',
       value: savings,
-      formatted: formatCopShort(savings),
+      formatted: formatKpiCop(savings),
     },
   ];
   if (effBaseline !== null) {
     breakdown.push({
       label: 'Tasa efectiva baseline',
       value: effBaseline,
-      formatted: formatPct(effBaseline * 100, 2),
+      formatted: formatKpiRate(effBaseline, 2),
     });
   }
   if (effOptimized !== null) {
     breakdown.push({
       label: 'Tasa efectiva optimizada',
       value: effOptimized,
-      formatted: formatPct(effOptimized * 100, 2),
+      formatted: formatKpiRate(effOptimized, 2),
     });
   }
 
   const assumptions = [
-    `Tarifa de referencia = ${(rateBaseline * 100).toFixed(0)}%${input.taxRate === undefined ? ' (general Art. 240 E.T.)' : ' (declarada)'}`,
+    `Tarifa de referencia = ${formatKpiRate(rateBaseline, 0)}${input.taxRate === undefined ? ' (general Art. 240 E.T.)' : ' (declarada)'}`,
     rateOptimized === rateBaseline
       ? 'El escenario optimizado usa la misma tarifa (sólo cambia la base gravable)'
-      : `Tarifa del escenario optimizado declarada = ${(rateOptimized * 100).toFixed(0)}%`,
+      : `Tarifa del escenario optimizado declarada = ${formatKpiRate(rateOptimized, 0)}`,
     'Base gravable neta de deducciones vigentes (Art. 107 ET y correlacionados)',
     'Ahorro se mide como diferencia absoluta de impuesto sobre base gravable ajustada',
     'No incluye anticipos, retenciones ni autorretenciones del periodo',
@@ -190,7 +176,7 @@ export function calculateTef(input: TefInputDeclarado): KpiResult {
   return {
     kind: 'tef',
     value: Number(tef.toFixed(2)),
-    formatted: formatPct(tef, 1),
+    formatted: formatKpiPercentPoints(tef, 1),
     unit: '%',
     label: CALC_VERSION_LABEL,
     severity: severityFor(tef),
