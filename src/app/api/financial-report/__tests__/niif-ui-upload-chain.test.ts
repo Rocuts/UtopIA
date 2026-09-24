@@ -138,6 +138,11 @@ function pass1Prompt(): string {
   return `${p!.system}\n${p!.userContent}`;
 }
 
+// Libros cerrados y coherentes: A 200M = P 80M + K 120M, y el 3605 ($20M) es
+// el resultado de las clases 4-7 (190M netos − 20M − 10M − 140M). Con CMV de
+// $150M el P&G daba $10M ≠ 3605: el archivo cuadraba SIN el resultado y R8
+// (auditoría 2026-09, niif-preproceso-06) lo bloquea con razón en vez de
+// absorber $10M en 3710VC.
 const BALANCED_CSV = [
   'codigo,nombre,nivel,saldo 2025',
   '110505,Caja,Auxiliar,50000000',
@@ -153,7 +158,7 @@ const BALANCED_CSV = [
   '417505,Devoluciones,Auxiliar,10000000',
   '510505,Sueldos,Auxiliar,20000000',
   '530505,Intereses,Auxiliar,10000000',
-  '613505,CMV,Auxiliar,150000000',
+  '613505,CMV,Auxiliar,140000000',
 ].join('\n');
 
 beforeAll(() => {

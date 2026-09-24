@@ -17,13 +17,19 @@ import { moneyCopToken } from '@/lib/agents/financial/contracts/anchors';
 
 const COMPANY = { name: 'X SAS', nit: '900123456-7', fiscalPeriod: '2025' };
 
+// Libros cerrados y coherentes en ambos cortes: el 3605 es el resultado de las
+// clases 4-7 del año (2024: $20M; 2025: $40M) y la utilidad 2024 se trasladó a
+// 3705. Antes el 3605 de 2025 traía $60M (20M + 40M) con un balance que ya
+// cuadraba SIN el P&G: R8 (auditoría 2026-09, niif-preproceso-06) lo bloquea
+// como descuadre de $40M en vez de absorberlo en 3710VC.
 const TWO_PERIODS = [
   'codigo,nombre,nivel,transaccional,saldo 2024,saldo 2025',
   '110505,Caja,Auxiliar,1,50000000,80000000',
   '130505,Clientes,Auxiliar,1,40000000,60000000',
   '220505,Proveedores,Auxiliar,1,30000000,40000000',
   '311505,Capital,Auxiliar,1,40000000,40000000',
-  '360505,Utilidad del ejercicio,Auxiliar,1,20000000,60000000',
+  '360505,Utilidad del ejercicio,Auxiliar,1,20000000,40000000',
+  '370505,Utilidades acumuladas,Auxiliar,1,0,20000000',
   '410505,Ventas,Auxiliar,1,100000000,150000000',
   '510505,Sueldos,Auxiliar,1,80000000,110000000',
 ].join('\n');
