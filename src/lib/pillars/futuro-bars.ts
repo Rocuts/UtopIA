@@ -24,6 +24,8 @@
 
 import type { PreprocessedBalance, PUCClass } from '@/lib/preprocessing/trial-balance';
 
+import { ingresosNetosPeriodo, monthsCovered } from './shared-metrics';
+
 // ─── Tipos públicos ─────────────────────────────────────────────────────────
 
 export interface FuturoBarSeries {
@@ -76,7 +78,8 @@ const FACTOR_BASE = 1.0;
 const FACTOR_CONSERVADOR = 0.85;
 const FACTOR_AGRESIVO = 1.10;
 
-/** IPC default Colombia 2026 (BanRep target). */
+/** Supuesto de ESCENARIO para indexar gastos fijos (4,5 % anual). No es un dato
+ *  oficial ni la meta del BanRep; el usuario puede cambiarlo en la UI. */
 export const IPC_DEFAULT = 0.045;
 
 /** Prefijos PUC de gastos identificados como FIJOS (sujetos a indexación IPC).
@@ -133,12 +136,16 @@ export function buildFuturoBarSeries(
   const ct = balance.primary.controlTotals;
   const claseGastos = balance.primary.classes.find((c) => c.code === 5);
 
+  // Flujos mensuales = ingresos netos (4175) y egresos del periodo divididos
+  // por los MESES CUBIERTOS por el snapshot (YYYY-MM ⇒ acumulado del año), no
+  // por 12 fijo (ratios-kpis-03).
+  const meses = monthsCovered(balance.primary);
   const cajaInicial = ct.efectivoCuenta11;
-  const ingresoMes = ct.ingresos / 12;
-  const egresoMes = ct.gastos / 12;
+  const ingresoMes = ingresosNetosPeriodo(ct) / meses;
+  const egresoMes = ct.gastos / meses;
 
-  const gastosFijosAnual = sumFixedExpenses(claseGastos);
-  const gastosFijosMes = gastosFijosAnual / 12;
+  const gastosFijosPeriodo = sumFixedExpenses(claseGastos);
+  const gastosFijosMes = gastosFijosPeriodo / meses;
   const gastosVariablesMes = Math.max(0, egresoMes - gastosFijosMes);
 
   const factorBase = FACTOR_BASE + (opts.growthOverride ?? 0);

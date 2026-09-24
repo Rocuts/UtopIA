@@ -10,17 +10,8 @@ export { calculateExitValue, formatCop, INDUSTRY_MULTIPLES } from './exit-value'
 export { calculateComplianceScore, COMPLIANCE_WEIGHTS } from './compliance-score';
 export { calculateRoiProbabilistic } from './roi-probabilistic';
 
-// Mocks / fixtures
-export {
-  mockTef,
-  mockTefExplicit,
-  mockExitValue,
-  mockCompliance,
-  mockRoiProbabilistic,
-  generateMockKpiSet,
-  MOCK_KPI_SET_DEFAULT,
-} from './mocks';
-export type { MockKpiSet } from './mocks';
+// Los mocks de KPIs viven en ./__fixtures__/mocks.ts y NO se exportan: sólo
+// pruebas pueden usarlos (ratios-kpis-12).
 
 // Type re-exports so consumers can `import { type KpiResult } from '@/lib/kpis'`
 export type {

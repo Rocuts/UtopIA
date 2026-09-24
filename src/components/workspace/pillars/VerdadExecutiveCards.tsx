@@ -127,7 +127,9 @@ function ExecutiveCardTile({ card, language, density }: TileProps) {
         {/* Middle: animated value (con caso especial Ecuación Maestra) */}
         <div className={`font-serif-elite text-2xl lg:text-3xl leading-none`}>
           {card.value === null ? (
-            <span className="text-n-500">—</span>
+            <span className="text-n-600" title={isEs ? 'No disponible: ver motivo en la descripción' : 'Not available: see reason in the description'}>
+              {isEs ? 'N/D' : 'N/A'}
+            </span>
           ) : isSynced ? (
             <span className="text-emerald-600 dark:text-emerald-400">{syncedLabel}</span>
           ) : (

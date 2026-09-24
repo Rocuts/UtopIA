@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // Cubre los casos canónicos del Guardián de Integridad:
 //   1. Balance perfectamente sincronizado → ecuación = 0, salud baja.
-//   2. Saldos negativos en activo + positivos en pasivo → consistencia baja.
+//   2. Saldos contrarios a la naturaleza (activo crédito, pasivo débito) → consistencia baja.
 //   3. Anomalía de variación >500% vs comparativo → counter incrementa.
 //   4. Margen bruto >95% → flag posible omisión costos + +1 anomalía.
 //   5. Ecuación descalzada → status crítico.
@@ -184,7 +184,7 @@ describe('computeVerdadExecutiveCards', () => {
     expect(cards.audit.equationGap).toBeCloseTo(0, 0);
   });
 
-  it('saldos negativos en activo y positivos en pasivo → consistencia degradada', () => {
+  it('activo con saldo crédito y pasivo con saldo débito → consistencia degradada', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -207,10 +207,12 @@ describe('computeVerdadExecutiveCards', () => {
 
     const cards = computeVerdadExecutiveCards({ snapshot: snap });
 
-    expect(cards.audit.saldosNegativosActivo).toBe(1); // 120505
-    expect(cards.audit.saldosPositivosPasivo).toBe(1); // 220505 con balance > 1000? Espera: −30M es negativo en pasivo (signo natural), no "positivo en pasivo".
-    // Re-revisando: el motor cuenta `balance > 1000` como "positivo en pasivo" porque el saldo natural de pasivo es CRÉDITO (negativo en formato accounting). Aquí balance=−30M < 1000 → no cuenta. Correcto: cero positivos en pasivo.
-    // Ajustamos la aserción real:
+    // ratios-kpis-09: con la convención de magnitudes del preprocesador un
+    // pasivo con saldo débito llega NEGATIVO; antes la aserción dudaba de la
+    // convención y no fijaba el caso. 120505 (activo con saldo crédito) y
+    // 220505 (pasivo con saldo débito) son las dos anomalías.
+    expect(cards.audit.saldosContrariosActivo).toBe(1); // 120505
+    expect(cards.audit.saldosContrariosPasivo).toBe(1); // 220505
     expect(cards.audit.totalCuentasAnalizadas).toBe(5); // 3 activo + 2 pasivo
     expect(cards.consistencia.value).not.toBeNull();
     expect(cards.consistencia.value!).toBeLessThan(95); // signo correcto < 100% → score baja

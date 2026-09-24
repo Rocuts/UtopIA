@@ -3,13 +3,17 @@
 // ---------------------------------------------------------------------------
 // Tarjetas:
 //   1. Autonomía Financiera  — azul   — Días que la empresa opera sin ventas
-//   2. Cobertura de Pasivos  — naranja — Activo Corriente / Pasivo Corriente
-//   3. Reserva Fiscal        — morada  — Provisión 24 − Renta teórica 35%
+//                                        (misma definición que el pilar)
+//   2. Prueba ácida          — naranja — (AC − Inventarios 14) / PC
+//   3. Reserva Fiscal        — morada  — N/D sin base fiscal verificada
 //   4. Brecha Escudo         — verde   — Caja(11) − Proveedores(2205)
 //
 // Fuente de la verdad:
-//   - snapshot.controlTotals (post-Curator garantiza totales sincronizados).
-//   - snapshot.classes (granularidad por prefijo PUC para 12, 21-24, 2205).
+//   - ./shared-metrics.ts (ratios-kpis-15): una sola definición de liquidez y
+//     días de autonomía para pilar, tarjetas, Centro de Mando, Sentinel y PDF.
+//     Antes la tarjeta usaba (11+12)/promedio mensual × 30 y
+//     (11+12+13)/(21..24) con el centinela 999.
+//   - snapshot.classes (granularidad por prefijo PUC para 12 y 2205).
 //   - comparative snapshot opcional → deltas vs periodo anterior.
 //
 // TypeScript estricto — sin `any`.
@@ -17,6 +21,13 @@
 
 import type { PUCClass } from '@/lib/preprocessing/trial-balance';
 
+import {
+  FISCAL_ND_REASON_EN,
+  FISCAL_ND_REASON_ES,
+  diasAutonomia,
+  monthsCovered,
+  pruebaAcida,
+} from './shared-metrics';
 import type {
   EscudoExecutiveCards,
   EscudoExecutiveCardsAudit,
@@ -29,7 +40,9 @@ import type {
 // Constantes
 // ---------------------------------------------------------------------------
 
-/** Tasa de impuesto de renta — Art. 240 E.T. Colombia 2026. */
+/** Tasa general Art. 240 E.T. — SÓLO para el diagnóstico interno
+ *  `audit.rentaTeorica` (lo lee single-source-validator). No se publica ninguna
+ *  métrica fiscal derivada de ella (ratios-kpis-10). */
 export const RENTA_RATE = 0.35;
 
 // ---------------------------------------------------------------------------
@@ -66,27 +79,6 @@ function safeDelta(curr: number | null, prev: number | null): number | null {
 }
 
 // ---------------------------------------------------------------------------
-// Cómputo del promedio mensual de egresos (lógica de períodos)
-// ---------------------------------------------------------------------------
-
-/**
- * Calcula el promedio mensual de egresos considerando el snapshot actual y,
- * opcionalmente, el comparativo. Pragmático:
- *   - 1 período: totalEgresos / 12.
- *   - 2 períodos (con comparative): promedio de ambos / 12.
- */
-function computeAvgMonthlyEgresos(
-  snapshotEgresos: number,
-  comparativeEgresos?: number,
-): { avg: number; periodosUsados: number } {
-  if (comparativeEgresos !== undefined && comparativeEgresos > 0) {
-    const avg = (snapshotEgresos + comparativeEgresos) / 2 / 12;
-    return { avg, periodosUsados: 2 };
-  }
-  return { avg: snapshotEgresos / 12, periodosUsados: 1 };
-}
-
-// ---------------------------------------------------------------------------
 // Status thresholds
 // ---------------------------------------------------------------------------
 
@@ -99,23 +91,13 @@ function autonomiaStatus(days: number | null): PillarStatus {
   return 'critical';
 }
 
-/** Cobertura de pasivos — ratio (higher-better). */
-function coberturaStatus(ratio: number | null): PillarStatus {
+/** Prueba ácida — ratio (higher-better). ≥1,0 cubre el pasivo corriente sin
+ *  vender inventario. */
+function pruebaAcidaStatus(ratio: number | null): PillarStatus {
   if (ratio === null) return 'watch';
-  if (ratio >= 1.5) return 'healthy';
-  if (ratio >= 1.2) return 'watch';
-  if (ratio >= 1.0) return 'warning';
-  return 'critical';
-}
-
-/** Reserva fiscal — brecha COP (negativo = déficit). */
-function reservaStatus(brecha: number | null, rentaTeorica: number): PillarStatus {
-  if (brecha === null) return 'watch';
-  // Sin utilidad → sin riesgo
-  if (rentaTeorica <= 0) return 'healthy';
-  if (brecha >= 0) return 'healthy';
-  if (brecha > -rentaTeorica * 0.2) return 'watch';
-  if (brecha > -rentaTeorica * 0.5) return 'warning';
+  if (ratio >= 1.0) return 'healthy';
+  if (ratio >= 0.8) return 'watch';
+  if (ratio >= 0.5) return 'warning';
   return 'critical';
 }
 
@@ -137,21 +119,10 @@ function brechaStatus(
 
 function buildEscudoAudit(
   snapshot: PillarsAggregateInput['snapshot'],
-  avgMonthlyEgresos: number,
-  periodosUsados: number,
 ): EscudoExecutiveCardsAudit {
   const ct = snapshot.controlTotals;
-  const classes = snapshot.classes;
-
-  const clase1 = classes.find((c) => c.code === 1);
-  const clase2 = classes.find((c) => c.code === 2);
-
-  const efectivoCuenta11 = ct.efectivoCuenta11;
-  const inversionesTemporales12 = sumClassByPrefixes(clase1, ['12']);
-  const activoCorriente = sumClassByPrefixes(clase1, ['11', '12', '13']);
-  const pasivoCorriente = sumClassByPrefixes(clase2, ['21', '22', '23', '24']);
-  const provisionCuenta24 = ct.impuestosCuenta24;
-  const rentaTeorica = Math.max(0, ct.utilidadNeta * RENTA_RATE);
+  const clase1 = snapshot.classes.find((c) => c.code === 1);
+  const clase2 = snapshot.classes.find((c) => c.code === 2);
 
   // Proveedores 2205; si balance es 0, fallback a prefijo '22'
   const proveedoresCuenta2205 = (() => {
@@ -160,17 +131,18 @@ function buildEscudoAudit(
   })();
 
   return {
-    efectivoCuenta11,
-    inversionesTemporales12,
+    efectivoCuenta11: ct.efectivoCuenta11,
+    inversionesTemporales12: sumClassByPrefixes(clase1, ['12']),
     totalEgresosPeriodo: ct.gastos,
-    promedioEgresosMensuales: avgMonthlyEgresos,
-    activoCorriente,
-    pasivoCorriente,
-    provisionCuenta24,
-    rentaTeorica,
+    promedioEgresosMensuales: ct.gastos / monthsCovered(snapshot),
+    activoCorriente: ct.activoCorriente,
+    pasivoCorriente: ct.pasivoCorriente,
+    inventarios14: ct.inventarios14 ?? 0,
+    provisionCuenta24: ct.impuestosCuenta24,
+    rentaTeorica: Math.max(0, ct.utilidadNeta * RENTA_RATE),
     proveedoresCuenta2205,
     tasaRenta: RENTA_RATE,
-    periodosUsados,
+    periodosUsados: 1,
   };
 }
 
@@ -183,134 +155,40 @@ export function computeEscudoExecutiveCards(
 ): EscudoExecutiveCards {
   const { snapshot, comparative } = input;
   const ct = snapshot.controlTotals;
-  const classes = snapshot.classes;
+  const audit = buildEscudoAudit(snapshot);
 
-  const clase1 = classes.find((c) => c.code === 1);
-  const clase2 = classes.find((c) => c.code === 2);
+  // ── CapEx próximos 6 meses (eventos declarados por el usuario) ──────────
+  const capexProximos = (input.capexEvents ?? []).filter((ev) => ev.monthOffset <= 6);
+  const proyectosFuturoCop = capexProximos.reduce((s, ev) => s + ev.amountCop, 0);
+  audit.proyectosFuturoCop = proyectosFuturoCop;
+  audit.cantidadEventosProximos = capexProximos.length;
 
-  // ── Egresos promedio ─────────────────────────────────────────────────────
-  const comparativeEgresos = comparative ? comparative.controlTotals.gastos : undefined;
-  const { avg: avgMonthlyEgresos, periodosUsados } = computeAvgMonthlyEgresos(
-    ct.gastos,
-    comparativeEgresos,
-  );
+  // ─── 1. Autonomía Financiera (misma función que el pilar) ───────────────
+  // Con CapEx comprometido en ≤ 6 meses, la caja disponible se reduce.
+  const dias = diasAutonomia(snapshot, proyectosFuturoCop);
+  const autonomiaValue = dias.value;
 
-  // ── Audit del snapshot actual ────────────────────────────────────────────
-  const audit = buildEscudoAudit(snapshot, avgMonthlyEgresos, periodosUsados);
+  // ─── 2. Prueba ácida (controlTotals, sin centinela 999) ────────────────
+  const coberturaValue = pruebaAcida(ct);
 
-  // ─── 1. Autonomía Financiera (días) ─────────────────────────────────────
-  // FIX (audit B2): saldos negativos en cuentas de inversiones (ej. 120505
-  // con balance crédito) NO deben restar a la liquidez disponible — un saldo
-  // crédito en activo es una incoherencia contable (NIC 1 párr. 32) que
-  // debe ser saneada por R1 del Curator antes de llegar aquí. Como capa
-  // defensiva clamp a 0 el componente de inversiones temporales.
-  const inversionesLiquidas = Math.max(0, audit.inversionesTemporales12);
-  const liquidezTotal = audit.efectivoCuenta11 + inversionesLiquidas;
-  let autonomiaValue: number | null;
-  if (avgMonthlyEgresos <= 0) {
-    autonomiaValue = liquidezTotal > 0 ? 365 : null;
-  } else {
-    autonomiaValue = (liquidezTotal / avgMonthlyEgresos) * 30;
-  }
-
-  // ─── 2. Cobertura de Pasivos ─────────────────────────────────────────────
-  const activoCorriente = sumClassByPrefixes(clase1, ['11', '12', '13']);
-  const pasivoCorriente = sumClassByPrefixes(clase2, ['21', '22', '23', '24']);
-  let coberturaValue: number | null;
-  if (pasivoCorriente <= 0 && activoCorriente > 0) {
-    coberturaValue = 999;
-  } else if (pasivoCorriente <= 0 && activoCorriente <= 0) {
-    coberturaValue = null;
-  } else {
-    coberturaValue = activoCorriente / pasivoCorriente;
-  }
-
-  // ─── 3. Reserva Fiscal ───────────────────────────────────────────────────
-  const rentaTeorica = Math.max(0, ct.utilidadNeta * RENTA_RATE);
-  const provisionCuenta24 = ct.impuestosCuenta24;
-  const reservaValue = provisionCuenta24 - rentaTeorica;
+  // ─── 3. Reserva Fiscal: N/D (ratios-kpis-10) ───────────────────────────
+  const reservaValue: number | null = null;
 
   // ─── 4. Brecha Escudo ────────────────────────────────────────────────────
-  const caja = ct.efectivoCuenta11;
-  const proveedoresCuenta2205 = (() => {
-    const v2205 = sumClassByPrefixes(clase2, ['2205']);
-    return v2205 > 0 ? v2205 : sumClassByPrefixes(clase2, ['22']);
-  })();
-  const brechaValue = caja - proveedoresCuenta2205;
+  const brechaValue = ct.efectivoCuenta11 - audit.proveedoresCuenta2205;
+  const brechaValueAjustada = brechaValue - proyectosFuturoCop;
+  const proveedoresCuenta2205 = audit.proveedoresCuenta2205;
 
-  // ── Deltas vs comparativo ────────────────────────────────────────────────
+  // ── Deltas vs comparativo (mismas funciones) ─────────────────────────────
   let prevAutonomia: number | null = null;
   let prevCobertura: number | null = null;
-  let prevReserva: number | null = null;
   let prevBrecha: number | null = null;
-
   if (comparative) {
-    const comparativeAvgMonthly = comparative.controlTotals.gastos / 12;
-    const prevAudit = buildEscudoAudit(comparative, comparativeAvgMonthly, 1);
-
-    const prevClase1 = comparative.classes.find((c) => c.code === 1);
-    const prevClase2 = comparative.classes.find((c) => c.code === 2);
-
-    // Autonomía previa
-    const prevLiquidezTotal =
-      prevAudit.efectivoCuenta11 + prevAudit.inversionesTemporales12;
-    prevAutonomia =
-      comparativeAvgMonthly > 0
-        ? (prevLiquidezTotal / comparativeAvgMonthly) * 30
-        : prevLiquidezTotal > 0
-          ? 365
-          : null;
-
-    // Cobertura previa
-    const prevAC = sumClassByPrefixes(prevClase1, ['11', '12', '13']);
-    const prevPC = sumClassByPrefixes(prevClase2, ['21', '22', '23', '24']);
-    if (prevPC <= 0 && prevAC > 0) prevCobertura = 999;
-    else if (prevPC <= 0) prevCobertura = null;
-    else prevCobertura = prevAC / prevPC;
-
-    // Reserva previa
-    const prevRentaTeorica = Math.max(
-      0,
-      comparative.controlTotals.utilidadNeta * RENTA_RATE,
-    );
-    prevReserva = prevAudit.provisionCuenta24 - prevRentaTeorica;
-
-    // Brecha previa
-    const prevCaja = comparative.controlTotals.efectivoCuenta11;
-    const prevProv2205 = (() => {
-      const v = sumClassByPrefixes(prevClase2, ['2205']);
-      return v > 0 ? v : sumClassByPrefixes(prevClase2, ['22']);
-    })();
-    prevBrecha = prevCaja - prevProv2205;
+    const prevAudit = buildEscudoAudit(comparative);
+    prevAutonomia = diasAutonomia(comparative).value;
+    prevCobertura = pruebaAcida(comparative.controlTotals);
+    prevBrecha = comparative.controlTotals.efectivoCuenta11 - prevAudit.proveedoresCuenta2205;
   }
-
-  // ── CapEx próximos 6 meses ───────────────────────────────────────────────
-  const capexProximos = (input.capexEvents ?? []).filter(
-    (ev) => ev.monthOffset <= 6,
-  );
-  const proyectosFuturoCop = capexProximos.reduce(
-    (s, ev) => s + ev.amountCop,
-    0,
-  );
-  const cantidadEventosProximos = capexProximos.length;
-
-  // Registrar en audit (campos opcionales del tipo extendido)
-  audit.proyectosFuturoCop = proyectosFuturoCop;
-  audit.cantidadEventosProximos = cantidadEventosProximos;
-
-  // Autonomía ajustada: resta CapEx próximos al numerador de caja disponible
-  if (proyectosFuturoCop > 0 && autonomiaValue !== null) {
-    const cajaAjustada = liquidezTotal - proyectosFuturoCop;
-    if (avgMonthlyEgresos <= 0) {
-      autonomiaValue = cajaAjustada > 0 ? 365 : 0;
-    } else {
-      autonomiaValue = (cajaAjustada / avgMonthlyEgresos) * 30;
-    }
-  }
-
-  // Brecha Escudo ajustada: resta CapEx próximos adicionalmente
-  const brechaValueAjustada =
-    proyectosFuturoCop > 0 ? brechaValue - proyectosFuturoCop : brechaValue;
 
   // ── Construir tarjetas ───────────────────────────────────────────────────
   const autonomia: ExecutiveCard = {
@@ -323,30 +201,36 @@ export function computeEscudoExecutiveCards(
     status: autonomiaValue !== null && autonomiaValue < 0 ? 'critical' : autonomiaStatus(autonomiaValue),
     deltaVsComparative: safeDelta(autonomiaValue, prevAutonomia),
     descriptionEs:
-      'Cuántos días puede operar la empresa sin un peso de venta. Combina caja + inversiones temporales contra egresos promedio.',
+      dias.reasonEs ??
+      'Cuántos días puede operar la empresa sin un peso de venta: efectivo contra egresos diarios del periodo (menos CapEx comprometido a 6 meses).',
     descriptionEn:
-      'How many days the company can operate without any sales. Combines cash + short-term investments against average monthly outflows.',
+      dias.reasonEn ??
+      'How many days the company can operate without any sales: cash against the period daily outflows (less CapEx committed within 6 months).',
     formulaEs:
-      '(Efectivo PUC 11 + Inversiones Temporales PUC 12) / Egresos promedio mensuales × 30 días',
+      '(Efectivo PUC 11 − CapEx ≤ 6 meses) / (Egresos clases 5+6+7 del periodo / días del periodo, base 365)',
     formulaEn:
-      '(Cash PUC 11 + Short-term Investments PUC 12) / Average monthly outflows × 30 days',
+      '(Cash PUC 11 − CapEx ≤ 6 months) / (Period outflows classes 5+6+7 / period days, 365 basis)',
   };
 
   const cobertura_pasivos: ExecutiveCard = {
     key: 'cobertura_pasivos',
-    labelEs: 'Cobertura de Pasivos',
-    labelEn: 'Liability Coverage',
+    labelEs: 'Prueba ácida',
+    labelEn: 'Acid-test ratio',
     value: coberturaValue,
     unit: 'ratio',
     color: 'orange',
-    status: coberturaStatus(coberturaValue),
+    status: pruebaAcidaStatus(coberturaValue),
     deltaVsComparative: safeDelta(coberturaValue, prevCobertura),
     descriptionEs:
-      'Cuántos pesos líquidos hay por cada peso adeudado a corto plazo. Mínimo aceptable 1.0; ideal 1.5+.',
+      coberturaValue === null
+        ? 'N/D — sin pasivo corriente registrado.'
+        : 'Pesos líquidos (sin inventarios) por cada peso adeudado a corto plazo. ≥1,0 cubre el pasivo corriente sin vender inventario.',
     descriptionEn:
-      'Liquid assets per peso owed short-term. Minimum acceptable 1.0; ideal 1.5+.',
-    formulaEs: 'Activo Corriente (PUC 11+12+13) / Pasivo Corriente (PUC 21+22+23+24)',
-    formulaEn: 'Current Assets (PUC 11+12+13) / Current Liabilities (PUC 21+22+23+24)',
+      coberturaValue === null
+        ? 'N/A — no current liabilities recorded.'
+        : 'Liquid assets (excluding inventory) per peso owed short-term. ≥1.0 covers current liabilities without selling inventory.',
+    formulaEs: '(Activo corriente − Inventarios PUC 14) / Pasivo corriente',
+    formulaEn: '(Current assets − Inventories PUC 14) / Current liabilities',
   };
 
   const reserva_fiscal: ExecutiveCard = {
@@ -356,14 +240,14 @@ export function computeEscudoExecutiveCards(
     value: reservaValue,
     unit: 'cop',
     color: 'purple',
-    status: reservaStatus(reservaValue, rentaTeorica),
-    deltaVsComparative: safeDelta(reservaValue, prevReserva),
-    descriptionEs:
-      'Diferencia entre la provisión registrada (PUC 24) y la renta teórica al 35%. Negativo significa que estás gastando dinero que es de la DIAN.',
-    descriptionEn:
-      'Gap between recorded provision (PUC 24) and theoretical income tax at 35%. Negative = spending money that belongs to DIAN.',
-    formulaEs: 'PUC 24 (Impuestos) − Utilidad Neta × 35% (Art. 240 E.T.)',
-    formulaEn: 'PUC 24 (Taxes Payable) − Net Income × 35% (Art. 240 Tax Code)',
+    status: 'watch',
+    deltaVsComparative: null,
+    descriptionEs: FISCAL_ND_REASON_ES,
+    descriptionEn: FISCAL_ND_REASON_EN,
+    formulaEs:
+      'Impuesto de renta por pagar verificado − impuesto de renta causado sobre renta líquida (sin base verificada: N/D)',
+    formulaEn:
+      'Verified income tax payable − income tax accrued on taxable income (no verified base: N/A)',
   };
 
   const brecha_escudo: ExecutiveCard = {

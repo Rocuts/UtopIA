@@ -3,12 +3,12 @@
 /**
  * /workspace/futuro/escenarios — Modelado de Escenarios.
  *
- * - Hero + descripción (Monte Carlo-style, base/optimista/pesimista,
+ * - Hero + descripción (escenarios deterministas ilustrativos, base/optimista/pesimista,
  *   sensibilidad multivariada).
  * - Simulador visual: 3 escenarios side-by-side (Pesimista / Base / Optimista)
  *   con variables ajustables globalmente (crecimiento ingresos, costos
- *   variables, inflación, TRM). Output por escenario:
- *     Ingresos Año 3, Margen EBITDA, Caja Final, Probabilidad de éxito.
+ *   variables). Output por escenario:
+ *     Ingresos Año 3, Margen EBITDA, EBITDA − capex acumulado (sin probabilidades).
  * - Gráfico combinado SVG: 3 líneas proyectadas de ingresos 5 años bajo cada
  *   escenario (wine / neutral / gold).
  * - CTA: "Simular escenario personalizado" → chat + cálculos.
@@ -25,7 +25,6 @@ import {
   ArrowLeft,
   TrendingUp,
   Minus as MinusIcon,
-  Zap,
   Target,
   Wallet,
   Percent,
@@ -52,8 +51,6 @@ interface ScenarioModifier {
   labelEn: string;
   description: string;
   descriptionEn: string;
-  /** Probabilidad base de este escenario (se recalcula con sliders). */
-  baseProb: number;
   /** Factor multiplicativo sobre crecimiento (escenario vs base). */
   growthMod: number;
   /** Shift (pp) sobre costos variables. */
@@ -75,7 +72,6 @@ const SCENARIOS: ScenarioModifier[] = [
     labelEn: 'Pessimistic',
     description: 'Crecimiento débil, costos crecen, consumo se contrae.',
     descriptionEn: 'Weak growth, costs rise, consumption contracts.',
-    baseProb: 0.2,
     growthMod: -0.35,
     costMod: +0.04,
     ebitdaMod: -0.04,
@@ -87,9 +83,9 @@ const SCENARIOS: ScenarioModifier[] = [
     key: 'base',
     label: 'Base',
     labelEn: 'Base',
-    description: 'Outlook central. Variables según consenso BanRep.',
-    descriptionEn: 'Central outlook. Variables per BanRep consensus.',
-    baseProb: 0.5,
+    // Sin "consenso BanRep": no hay fuente citada (valoracion-23).
+    description: 'Escenario central con las entradas del simulador.',
+    descriptionEn: 'Central scenario with the simulator inputs.',
     growthMod: 0,
     costMod: 0,
     ebitdaMod: 0,
@@ -103,7 +99,6 @@ const SCENARIOS: ScenarioModifier[] = [
     labelEn: 'Optimistic',
     description: 'Ciclo expansivo, costos controlados, demanda robusta.',
     descriptionEn: 'Expansion cycle, controlled costs, robust demand.',
-    baseProb: 0.3,
     growthMod: +0.45,
     costMod: -0.03,
     ebitdaMod: +0.05,
@@ -113,24 +108,22 @@ const SCENARIOS: ScenarioModifier[] = [
   },
 ];
 
+// Auditoría valoracion-23: la inflación y la TRM sólo alimentaban una
+// "probabilidad de éxito" inventada (probabilidades base 20/50/30 % menos
+// penalizaciones ad hoc). Al retirarla no afectan ningún cálculo, así que se
+// eliminan como entradas (una TRM fija de 4.120 tampoco es un dato vigente).
 interface Controls {
   /** Crecimiento anual de ingresos en escenario base (0-1). */
   revenueGrowth: number;
   /** Costos variables como % de ingresos (0-1). */
   variableCostRate: number;
-  /** Inflación esperada (0-1). */
-  inflation: number;
-  /** TRM COP/USD. */
-  trm: number;
-  /** Revenue base Año 0 (COP). */
+  /** Ingresos base ILUSTRATIVOS del Año 0 (COP) — supuesto, no dato del cliente. */
   baseRevenue: number;
 }
 
 const DEFAULT_CONTROLS: Controls = {
   revenueGrowth: 0.12,
   variableCostRate: 0.58,
-  inflation: 0.042,
-  trm: 4120,
   baseRevenue: 5_000_000_000,
 };
 
@@ -141,13 +134,9 @@ interface ScenarioOutput {
   revenueByYear: number[]; // años 1..5
   ebitdaMargin: number; // final
   year3Revenue: number;
-  finalCash: number; // al año 5 (aprox)
-  successProb: number; // 0..1
-}
-
-function clamp01(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(1, Math.max(0, n));
+  /** Σ (EBITDA − capex 8 %) de los años 1..5. NO es caja: sin impuestos,
+   *  capital de trabajo ni caja inicial. */
+  ebitdaMenosCapex5y: number;
 }
 
 function computeScenario(ctrl: Controls, s: ScenarioModifier): ScenarioOutput {
@@ -168,30 +157,21 @@ function computeScenario(ctrl: Controls, s: ScenarioModifier): ScenarioOutput {
 
   const year3Revenue = revenueByYear[2] ?? 0;
 
-  // Caja final: suma simplificada de EBITDA acumulado menos capex 8%/año.
+  // Σ (EBITDA − capex 8 %) — no es caja final (sin impuestos, capital de
+  // trabajo ni caja inicial). Sin "probabilidad de éxito": el modelo es
+  // determinista y no estima probabilidades (valoracion-23).
   const capexRate = 0.08;
-  let cash = 0;
+  let acumulado = 0;
   for (const r of revenueByYear) {
-    const ebitda = r * ebitdaMargin;
-    const capex = r * capexRate;
-    cash += ebitda - capex;
+    acumulado += r * ebitdaMargin - r * capexRate;
   }
-
-  // Prob éxito: penalizamos con inflación alta y TRM alta (riesgo CO).
-  const infPenalty = Math.max(0, ctrl.inflation - 0.03) * 4; // cada punto sobre 3% pega
-  const trmPenalty = Math.max(0, (ctrl.trm - 4000) / 4000) * 0.6;
-  let rawProb = s.baseProb - infPenalty * 0.1 - trmPenalty * 0.08;
-  // Boost por ebitdaMargin
-  rawProb += Math.max(0, ebitdaMargin - 0.2) * 0.4;
-  const successProb = clamp01(rawProb);
 
   return {
     scenario: s,
     revenueByYear,
     ebitdaMargin,
     year3Revenue,
-    finalCash: cash,
-    successProb,
+    ebitdaMenosCapex5y: acumulado,
   };
 }
 
@@ -220,6 +200,7 @@ export default function EscenariosPage() {
   const reduced = useReducedMotion();
   const { setActiveCaseType, setActiveMode, startNewConsultation } = useWorkspace();
   const futuro = t.elite.areas.futuro;
+  const esc = t.elite.dataStatus.escenarios;
   const isEs = language === 'es';
 
   const [controls, setControls] = useState<Controls>(DEFAULT_CONTROLS);
@@ -298,11 +279,7 @@ export default function EscenariosPage() {
           <SectionHeader
             eyebrow={isEs ? 'Modelado de Escenarios' : 'Scenario Modeling'}
             title={futuro.submodules.escenarios.title}
-            subtitle={
-              isEs
-                ? 'Simulaciones tipo Monte Carlo · Base / Optimista / Pesimista · Sensibilidad multivariada'
-                : 'Monte Carlo-style simulations · Base / Optimistic / Pessimistic · Multivariate sensitivity'
-            }
+            subtitle={esc.subtitle}
             align="left"
             accent="gold"
             divider
@@ -318,9 +295,15 @@ export default function EscenariosPage() {
             'text-n-700 max-w-3xl mb-10',
           )}
         >
-          {isEs
-            ? 'El futuro no es una línea; es un abanico de posibilidades. Aquí puede mover cuatro variables — crecimiento, costos, inflación, TRM — y ver cómo los tres escenarios reaccionan en tiempo real.'
-            : 'The future is not a line; it is a fan of possibilities. Here you can move four variables — growth, costs, inflation, FX — and watch three scenarios react in real time.'}
+          {esc.narrative}
+        </motion.p>
+
+        <motion.p
+          {...fade(2)}
+          role="note"
+          className="mb-8 inline-flex rounded-full border border-n-300 bg-n-100 px-3 py-1 text-xs font-medium text-n-800"
+        >
+          {esc.badge}
         </motion.p>
 
         {/* Controls */}
@@ -364,7 +347,7 @@ export default function EscenariosPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <SliderControl
                 label={isEs ? 'Crecimiento ingresos' : 'Revenue growth'}
                 value={controls.revenueGrowth}
@@ -385,40 +368,16 @@ export default function EscenariosPage() {
                 icon={Percent}
                 onChange={(v) => setControls((c) => ({ ...c, variableCostRate: v }))}
               />
-              <SliderControl
-                label={isEs ? 'Inflación esperada' : 'Expected inflation'}
-                value={controls.inflation}
-                min={0.02}
-                max={0.12}
-                step={0.002}
-                formatter={(v) => formatPct(v, 2)}
-                icon={Zap}
-                onChange={(v) => setControls((c) => ({ ...c, inflation: v }))}
-              />
-              <SliderControl
-                label={isEs ? 'TRM (COP/USD)' : 'USD/COP FX'}
-                value={controls.trm}
-                min={3600}
-                max={5000}
-                step={10}
-                formatter={(v) => `$${Math.round(v).toLocaleString('es-CO')}`}
-                icon={Target}
-                onChange={(v) => setControls((c) => ({ ...c, trm: v }))}
-              />
             </div>
 
             <div className="mt-5 pt-5 border-t border-[rgb(var(--color-gold-500-rgb)_/_0.16)] flex items-center justify-between gap-3 text-xs text-n-500">
               <span>
-                {isEs ? 'Ingresos base (Año 0):' : 'Base revenue (Year 0):'}{' '}
+                {esc.baseRevenue}:{' '}
                 <span className="text-n-700 tabular-nums">
                   {formatCopShort(controls.baseRevenue)} COP
                 </span>
               </span>
-              <span className="text-n-600">
-                {isEs
-                  ? 'Horizonte 5 años · Capex 8% ingresos · Overhead 12%'
-                  : '5-year horizon · Capex 8% of revenue · Overhead 12%'}
-              </span>
+              <span className="text-n-600">{esc.assumptions}</span>
             </div>
           </EliteCard>
         </motion.div>
@@ -429,7 +388,12 @@ export default function EscenariosPage() {
           className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-10"
         >
           {outputs.map((out) => (
-            <ScenarioColumn key={out.scenario.key} output={out} isEs={isEs} />
+            <ScenarioColumn
+              key={out.scenario.key}
+              output={out}
+              isEs={isEs}
+              cumulativeLabel={esc.cumulativeLabel}
+            />
           ))}
         </motion.div>
 
@@ -596,7 +560,15 @@ function SliderControl({
 
 // ─── Scenario column (3 columnas lado a lado) ────────────────────────────────
 
-function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolean }) {
+function ScenarioColumn({
+  output,
+  isEs,
+  cumulativeLabel,
+}: {
+  output: ScenarioOutput;
+  isEs: boolean;
+  cumulativeLabel: string;
+}) {
   const s = output.scenario;
   const label = isEs ? s.label : s.labelEn;
   const description = isEs ? s.description : s.descriptionEn;
@@ -608,13 +580,6 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
       : s.accent === 'gold'
         ? 'linear-gradient(135deg, rgb(var(--color-gold-500-rgb) / 0.6), rgba(232,180,44,0.4) 60%, rgb(var(--color-gold-500-rgb) / 0.25))'
         : 'linear-gradient(135deg, rgba(168,168,168,0.5), rgba(212,212,212,0.3) 60%, rgba(168,168,168,0.2))';
-
-  const successColor =
-    output.successProb >= 0.55
-      ? 'text-success-light'
-      : output.successProb >= 0.3
-        ? 'text-gold-600'
-        : 'text-danger-light';
 
   return (
     <div
@@ -649,15 +614,6 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
             {label}
           </span>
         </div>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium tabular-nums',
-            successColor,
-            'bg-[rgba(10,10,10,0.6)] border border-[rgb(var(--color-gold-500-rgb)_/_0.2)]',
-          )}
-        >
-          P={(output.successProb * 100).toFixed(0)}%
-        </span>
       </div>
 
       <h3 className="font-serif-elite text-3xl leading-[1.05] text-n-800 relative">
@@ -687,10 +643,10 @@ function ScenarioColumn({ output, isEs }: { output: ScenarioOutput; isEs: boolea
         />
         <ScenarioMetric
           icon={Wallet}
-          label={isEs ? 'Caja final 5Y' : 'Final cash 5Y'}
-          value={`${formatCopShort(output.finalCash)} COP`}
+          label={cumulativeLabel}
+          value={`${formatCopShort(output.ebitdaMenosCapex5y)} COP`}
           color={
-            output.finalCash > 0 ? 'text-success-light' : 'text-danger-light'
+            output.ebitdaMenosCapex5y > 0 ? 'text-success-light' : 'text-danger-light'
           }
         />
       </div>

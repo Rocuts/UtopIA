@@ -99,8 +99,9 @@ const MOCK_VERDAD_EXECUTIVE_CARDS: VerdadExecutiveCards = {
   salud_contable: buildCard({ key: 'salud_contable', labelEs: 'Salud Contable', labelEn: 'Accounting Health', value: 2, unit: 'count', color: 'green', status: 'watch', deltaVsComparative: -1 }),
   audit: {
     equationGap: 0,
-    saldosNegativosActivo: 0,
-    saldosPositivosPasivo: 0,
+    saldosContrariosActivo: 0,
+    saldosContrariosPasivo: 0,
+    saldosContrariosPatrimonio: 0,
     totalCuentasAnalizadas: 48,
     reclasificacionesR1: 1,
     discrepanciasPreprocessing: 0,

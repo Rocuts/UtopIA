@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 //  Capa 1 · Integridad Aritmética   — centavos→pesos exactos, márgenes, round2.
 //  Capa 2 · Lógica de Negocio       — null cuando el input falta/≤0; valoración.
-//  Capa 3 · Defensa Tributaria      — Altman=null justificado, Art. 36-3 40%,
+//  Capa 3 · Defensa Tributaria      — Altman=null justificado, Art. 36-3 null,
 //                                     rúbrica scoreNiif sobre checks reales.
 // ---------------------------------------------------------------------------
 
@@ -77,19 +77,36 @@ describe('deriveAncoraView · Capa 2 — Lógica de Negocio', () => {
     expect(v.derived.deRatio).toBeNull();
   });
 
-  it('EV/EBIT solo aplica si EBIT > 0; ponderado promedia los disponibles', () => {
+  // valoracion-01: antes `ponderado` promediaba EV/EBIT×6 (un valor EMPRESA)
+  // con el patrimonio contable (un valor del PATRIMONIO) sin restar la deuda
+  // neta, y la UI lo rotulaba "VALOR DE SALIDA · DCF". El Âncora no expone la
+  // deuda financiera (grupo 21), así que no hay puente EV → patrimonio: el
+  // valor de salida queda en null y cada método se expone por separado.
+  it('EV/EBIT solo aplica si EBIT > 0 y se expone como valor EMPRESA, no de salida', () => {
     const sano = deriveAncoraView(makeAncora(), null);
-    expect(sano.derived.valoracion.evEbit).toBe(600_000_000); // 100M × 6
-    expect(sano.derived.valoracion.liquidacion).toBe(600_000_000); // patrimonio
-    expect(sano.derived.valoracion.ponderado).toBe(600_000_000); // (600+600)/2
+    expect(sano.derived.valoracion.evEbit).toBe(600_000_000); // 100M × 6 (EV)
+    expect(sano.derived.valoracion.liquidacion).toBe(600_000_000); // patrimonio contable
+    expect(sano.derived.valoracion.deudaNeta).toBeNull();
+    expect(sano.derived.valoracion.equityDesdeEvEbit).toBeNull();
+    expect(sano.derived.valoracion.ponderado).toBeNull();
 
     const ebitNeg = deriveAncoraView(
       makeAncora({ ccvNiif: { ...makeAncora().ccvNiif, A09: '-5000000000' } }),
       null,
     );
     expect(ebitNeg.derived.valoracion.evEbit).toBeNull(); // EBIT<0 ⇒ no aplica
-    // sólo queda liquidación ⇒ ponderado = liquidación
-    expect(ebitNeg.derived.valoracion.ponderado).toBe(600_000_000);
+    // El patrimonio contable solo no es un valor de salida.
+    expect(ebitNeg.derived.valoracion.ponderado).toBeNull();
+  });
+
+  it('una empresa endeudada no conserva el mismo "valor" que una sana', () => {
+    // Mismo EBIT (100M) y pasivos de 900M: sin deuda neta verificada no se
+    // puede publicar un valor del patrimonio.
+    const endeudada = deriveAncoraView(
+      makeAncora({ ccvNiif: { ...makeAncora().ccvNiif, A03: '90000000000', A05: '10000000000' } }),
+      null,
+    );
+    expect(endeudada.derived.valoracion.ponderado).toBeNull();
   });
 
   it('métodos que requieren WACC/BVC siempre son null (faltaWacc:true)', () => {
@@ -108,16 +125,11 @@ describe('deriveAncoraView · Capa 3 — Defensa Tributaria', () => {
     expect(v.derived.altmanRazon).toMatch(/[Uu]tilidades [Rr]etenidas|RE/);
   });
 
-  it('capitalización Art. 36-3 = utilidadNeta × 0.40 (heurístico)', () => {
+  // Art. 36-3 E.T. fue derogado (Ley 2277/2022 art. 96 — decisión del
+  // coordinador de la auditoría). La "oportunidad" de capitalización al 40 %
+  // se retira: null siempre.
+  it('capitalización Art. 36-3 = null (norma derogada; no se estima)', () => {
     const v = deriveAncoraView(makeAncora(), null);
-    expect(v.derived.oportunidades.capitalizacion36_3).toBe(20_000_000); // 50M×0.4
-  });
-
-  it('capitalización = null si utilidad neta ≤ 0', () => {
-    const v = deriveAncoraView(
-      makeAncora({ ccvNiif: { ...makeAncora().ccvNiif, A11: '0' } }),
-      null,
-    );
     expect(v.derived.oportunidades.capitalizacion36_3).toBeNull();
   });
 

@@ -16,8 +16,9 @@ const STATUS_COLOR: Record<PillarStatus, string> = {
   critical: 'text-danger',
 };
 
-function formatValue(kpi: PillarKpi): string {
-  if (kpi.value === null) return '—';
+function formatValue(kpi: PillarKpi, language: 'es' | 'en'): string {
+  // Sin dato ⇒ N/D (el motivo va en la descripción del KPI).
+  if (kpi.value === null) return language === 'es' ? 'N/D' : 'N/A';
   switch (kpi.unit) {
     case 'cop':
       return formatBigCop(kpi.value);
@@ -62,7 +63,7 @@ export function PillarKpiList({ kpis, language }: Props) {
             )}
           </div>
           <span className={cn('font-mono tabular-nums text-base font-semibold shrink-0', STATUS_COLOR[k.status])}>
-            {formatValue(k)}
+            {formatValue(k, language)}
           </span>
         </li>
       ))}

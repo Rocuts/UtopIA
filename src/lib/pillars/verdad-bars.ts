@@ -5,7 +5,7 @@
 // renderizar en ECharts. Lógica determinística, sin LLM.
 //
 // Granularidades:
-//   'annual'    → 1 período en el balance  → interpolar 12 meses provisionales
+//   'annual'    → 1 período en el balance  → un único punto real (sin interpolar)
 //   'quarterly' → 2-3 períodos             → mostrar cada período (T-n…T-0)
 //   'monthly'   → >= 4 períodos            → mostrar cada período directamente
 //
@@ -89,18 +89,16 @@ function extractIntegrity(snap: PeriodSnapshot): {
 /**
  * Construye la serie `VerdadBarSeries[]` a partir del balance preprocesado.
  *
- * - 1 período anual → interpola 12 meses con tendencia DESCENDENTE (isInterpolated=true).
+ * - 1 período → un único punto real (la UI oculta la tendencia).
  * - Múltiples períodos → un punto por período (T-n … T-0).
  */
 export function buildVerdadBarSeries(balance: PreprocessedBalance): VerdadBarSeries[] {
   const { periods } = balance;
   if (periods.length === 0) return [];
 
-  const granularity = detectGranularity(periods);
-
-  if (granularity === 'annual' && periods.length === 1) {
-    return buildInterpolatedMonths(periods[0]);
-  }
+  // Un punto por periodo REAL. Con un solo periodo se devuelve ese único punto
+  // (la UI oculta la tendencia): antes se fabricaban 12 meses (saldos de cierre
+  // ÷ 12, tendencias descendentes o estacionalidad senoidal) — ratios-kpis-20.
 
   return periods.map((snap, idx) => {
     const { errores, descalces, anomalias } = extractIntegrity(snap);
@@ -111,35 +109,6 @@ export function buildVerdadBarSeries(balance: PreprocessedBalance): VerdadBarSer
       descalces,
       anomalias,
       isInterpolated: false,
-    };
-  });
-}
-
-/**
- * Interpola 12 meses cuando sólo hay 1 período anual.
- * Genera una tendencia DESCENDENTE: el mes inicial tiene el total anual
- * y cada mes subsiguiente baja linealmente (fórmula: errores_total * (12-i) / 12).
- * Descalces y anomalías también se distribuyen linealmente hacia 0.
- */
-function buildInterpolatedMonths(snap: PeriodSnapshot): VerdadBarSeries[] {
-  const { errores: erroresTotal, descalces: descalcesTotal, anomalias: anomaliasTotal } =
-    extractIntegrity(snap);
-
-  const yearMatch = snap.period.match(/(\d{4})/);
-  const year = yearMatch ? yearMatch[1].slice(2) : '??';
-
-  return MESES_ES.map((mes, i) => {
-    const errores = Math.round(erroresTotal * (12 - i) / 12);
-    const anomalias = Math.round(anomaliasTotal * (12 - i) / 12);
-    // descalces es binario: sólo en la primera mitad del año si hay descalce
-    const descalces = descalcesTotal === 1 && i < 6 ? 1 : 0;
-    return {
-      label: `${mes} ${year}`,
-      period: `${snap.period}-${String(i + 1).padStart(2, '0')}`,
-      errores,
-      descalces,
-      anomalias,
-      isInterpolated: true,
     };
   });
 }

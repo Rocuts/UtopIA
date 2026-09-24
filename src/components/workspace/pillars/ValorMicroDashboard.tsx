@@ -69,7 +69,8 @@ export function ValorMicroDashboard({ metrics, pnlBridge, segments, density, val
       />
 
       {/* Gráfico de tendencia temporal EBITDA/FCF/Ingresos */}
-      {valorTrend && valorTrend.length > 0 && (
+      {/* Una tendencia necesita ≥ 2 periodos reales (ratios-kpis-20). */}
+      {valorTrend && valorTrend.length >= 2 && (
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <ValorTrendBars series={valorTrend} language={language} density={density} />
         </Card>

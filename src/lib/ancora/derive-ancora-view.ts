@@ -7,15 +7,18 @@
 // Fórmulas defendibles (dictamen `escudo-tributario-co` + KB tributaria CO 2026):
 //  - EV/EBIT operacional: múltiplo de mercado 6.0× (PYME servicios CO 2026, rango
 //    sectorial 4–8×). Heurístico de mercado, NO norma. El Âncora expone EBIT (A09),
-//    no EBITDA — se rotula EV/EBIT en la UI.
+//    no EBITDA — se rotula EV/EBIT en la UI. Es un valor EMPRESA (EV).
 //  - DCF / Gordon: requieren WACC ⇒ null (faltaWacc:true) hasta que el DF lo capture.
 //  - Liquidación ≈ patrimonio neto contable (A05).
+//  - Valor de salida (`ponderado`, valoracion-01): valor del PATRIMONIO. Exige
+//    convertir el EV en patrimonio restando la deuda financiera neta; el Âncora
+//    no expone el grupo 21 ⇒ deudaNeta = null ⇒ ponderado = null. Nunca se
+//    promedia un EV con un patrimonio ni se usa el patrimonio contable solo.
 //  - Altman Z: la variante original (1968) y Z'' (servicios) exigen el término
 //    X2 = Utilidades Retenidas / Activo Total, no expuesto en el Âncora. Imputarlo
 //    sería inventar ⇒ altmanZ = null con `altmanRazon`.
-//  - capitalizacion36_3 = utilidadNeta × 0.40. Art. 36-3 E.T. (capitalización de
-//    utilidades = INCRNGO). El 40% es heurístico estratégico (porción típicamente
-//    capitalizable tras la reserva legal 10% Art. 452 C.Co.), NO porcentaje legal.
+//  - capitalizacion36_3 = null: el Art. 36-3 E.T. fue derogado (Ley 2277/2022
+//    art. 96, decisión del coordinador de la auditoría 2026-09).
 //  - scoreNiif: rúbrica determinística sobre `ancora.checks` (ecuación patrimonial
 //    actual 40 + comparativa 20 + EFE concilia 20 + sin A5 10 + sin DEV 10 = 100).
 // ---------------------------------------------------------------------------
@@ -27,8 +30,6 @@ import type { AncoraView } from './ancora-view';
 
 /** Múltiplo EV/EBIT operacional — PYME servicios CO 2026 (rango 4–8×). */
 const EV_EBIT_MULTIPLE = 6.0;
-/** Fracción de utilidad neta capitalizable — heurístico Art. 36-3 E.T. */
-const CAPITALIZACION_36_3_FRACCION = 0.4;
 
 /** MoneyCop centavos string → COP pesos. null si el string no es válido. */
 function centsToPesos(cents: string | undefined | null): number | null {
@@ -79,8 +80,8 @@ function emptyView(company?: { name?: string | null; nit?: string | null }): Anc
       crecimientoIngresosPct: null, margenNetoPct: null, margenOperacionalPct: null,
       deRatio: null,
       valoracion: {
-        evEbit: null, liquidacion: null, dcf: null, gordon: null,
-        transacciones: null, ponderado: null, faltaWacc: true,
+        evEbit: null, liquidacion: null, deudaNeta: null, equityDesdeEvEbit: null,
+        dcf: null, gordon: null, transacciones: null, ponderado: null, faltaWacc: true,
       },
       scoreNiif: null,
       altmanZ: null,
@@ -178,12 +179,20 @@ export function deriveAncoraView(
   const dcf = null;
   const gordon = null;
   const transacciones = null;
-  const disponibles = [evEbit, liquidacion].filter(
-    (v): v is number => v != null,
-  );
+  // El Âncora no expone obligaciones financieras (grupo 21): sin deuda neta no
+  // hay puente EV → patrimonio. `deudaNeta` queda explícitamente en null.
+  const deudaNeta: number | null = null;
+  const equityDesdeEvEbit: number | null =
+    evEbit != null && deudaNeta != null ? round2(evEbit - deudaNeta) : null;
+  // Métodos de PATRIMONIO: sólo cuentan si existe el patrimonio implícito del
+  // múltiplo; el patrimonio contable (si es > 0) lo acompaña, nunca solo.
   const ponderado =
-    disponibles.length > 0
-      ? round2(disponibles.reduce((a, b) => a + b, 0) / disponibles.length)
+    equityDesdeEvEbit != null
+      ? round2(
+          liquidacion != null && liquidacion > 0
+            ? (equityDesdeEvEbit + liquidacion) / 2
+            : equityDesdeEvEbit,
+        )
       : null;
 
   // scoreNiif — rúbrica determinística sobre checks reales.
@@ -203,10 +212,8 @@ export function deriveAncoraView(
     'inventar. Pendiente capturar utilidades retenidas para activarlo.';
 
   // Oportunidades.
-  const capitalizacion36_3 =
-    utilidadNeta != null && utilidadNeta > 0
-      ? round2(utilidadNeta * CAPITALIZACION_36_3_FRACCION)
-      : null;
+  // Art. 36-3 E.T. derogado (Ley 2277/2022 art. 96): no se estima.
+  const capitalizacion36_3: number | null = null;
   const liberacionCartera = cartera;
   const expansionIngresos =
     crecimientoIngresosPct != null && crecimientoIngresosPct > 0 && ingresos != null
@@ -233,8 +240,8 @@ export function deriveAncoraView(
     derived: {
       crecimientoIngresosPct, margenNetoPct, margenOperacionalPct, deRatio,
       valoracion: {
-        evEbit, liquidacion, dcf, gordon, transacciones, ponderado,
-        faltaWacc: true,
+        evEbit, liquidacion, deudaNeta, equityDesdeEvEbit, dcf, gordon,
+        transacciones, ponderado, faltaWacc: true,
       },
       scoreNiif,
       altmanZ,

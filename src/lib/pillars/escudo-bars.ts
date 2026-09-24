@@ -5,11 +5,12 @@
 // renderizar en ECharts. Lógica determinística, sin LLM.
 //
 // Granularidades:
-//   'annual'    → 1 período en el balance  → interpolar 12 meses provisionales
+//   'annual'    → 1 período en el balance  → un único punto real (sin interpolar)
 //   'quarterly' → 2-3 períodos             → mostrar cada período (T-n…T-0)
 //   'monthly'   → >= 4 períodos            → mostrar cada período directamente
 //
-// El campo `isInterpolated` marca si el punto es real o estimado linealmente.
+// `isInterpolated` se conserva en el contrato pero siempre es false: ya no se
+// generan puntos sintéticos (auditoría ratios-kpis-20).
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -80,18 +81,16 @@ function extractLiquidity(snap: PeriodSnapshot): {
 /**
  * Construye la serie `EscudoBarSeries[]` a partir del balance preprocesado.
  *
- * - 1 período anual → interpola 12 meses linealmente (isInterpolated=true).
+ * - 1 período → un único punto real (la UI oculta la tendencia).
  * - Múltiples períodos → un punto por período (T-n … T-0).
  */
 export function buildEscudoBarSeries(balance: PreprocessedBalance): EscudoBarSeries[] {
   const { periods } = balance;
   if (periods.length === 0) return [];
 
-  const granularity = detectGranularity(periods);
-
-  if (granularity === 'annual' && periods.length === 1) {
-    return buildInterpolatedMonths(periods[0]);
-  }
+  // Un punto por periodo REAL. Con un solo periodo se devuelve ese único punto
+  // (la UI oculta la tendencia): antes se fabricaban 12 meses (saldos de cierre
+  // ÷ 12, tendencias descendentes o estacionalidad senoidal) — ratios-kpis-20.
 
   return periods.map((snap, idx) => {
     const { efectivo, activoCorriente, pasivoCorriente, solvencia } = extractLiquidity(snap);
@@ -103,37 +102,6 @@ export function buildEscudoBarSeries(balance: PreprocessedBalance): EscudoBarSer
       pasivoCorriente,
       solvencia,
       isInterpolated: false,
-    };
-  });
-}
-
-/**
- * Interpola 12 meses cuando sólo hay 1 período anual.
- * Distribuye linealmente efectivo y activo/pasivo corriente.
- * Variación estacional sinusoidal ±5% sobre efectivo (igual que valor-bars).
- */
-function buildInterpolatedMonths(snap: PeriodSnapshot): EscudoBarSeries[] {
-  const { efectivo: efectivoAnual, activoCorriente: acAnual, pasivoCorriente: pcAnual } =
-    extractLiquidity(snap);
-
-  const yearMatch = snap.period.match(/(\d{4})/);
-  const year = yearMatch ? yearMatch[1].slice(2) : '??';
-
-  return MESES_ES.map((mes, i) => {
-    const seasonal = 1 + (Math.sin((i * Math.PI) / 6) * 0.05);
-    const weight = seasonal / 12;
-    const efectivo = Math.round(efectivoAnual * weight);
-    const activoCorriente = Math.round(acAnual * weight);
-    const pasivoCorriente = Math.round(pcAnual / 12);
-    const solvencia = pasivoCorriente > 0 ? activoCorriente / pasivoCorriente : null;
-    return {
-      label: `${mes} ${year}`,
-      period: `${snap.period}-${String(i + 1).padStart(2, '0')}`,
-      efectivo,
-      activoCorriente,
-      pasivoCorriente,
-      solvencia,
-      isInterpolated: true,
     };
   });
 }

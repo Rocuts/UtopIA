@@ -6,9 +6,9 @@
  * Centro de mando con telemetría completa de los 4 pilares: hero con score
  * global, tarjetas de salud por pilar, y los 4 micro-dashboards apilados.
  *
- * Si no se le pasan datos (props undefined), usa MOCK_PILLARS y mock series
- * para que la página NUNCA salga vacía — el usuario puede ver el formato
- * y entender qué viene cuando suba un balance real.
+ * Si no se le pasan datos (modo demo), usa MOCK_PILLARS y mock series con el
+ * badge "Demo" para que el usuario vea el formato. Con datos reales nunca se
+ * rellenan huecos con maquetas (ver resolveCommandCenterData).
  */
 
 import Link from 'next/link';
@@ -80,22 +80,49 @@ export interface PillarsCommandCenterProps {
   monteCarlo?: MonteCarloResult;
 }
 
+/**
+ * Resuelve los datos a pintar. Las maquetas (MOCK_*) SÓLO se usan en modo demo,
+ * que la vista rotula con el badge "Demo" y el aviso de datos de demostración.
+ * Con datos reales (`demo=false`) una serie ausente queda vacía/undefined y el
+ * micro-dashboard la oculta: nunca se mezclan segmentos DuPont, cascadas o
+ * tendencias inventadas con la telemetría real (auditoría ratios-kpis-06).
+ */
+export function resolveCommandCenterData(props: PillarsCommandCenterProps) {
+  const isDemo = props.demo ?? !props.pillars;
+  return {
+    isDemo,
+    pillars: props.pillars ?? MOCK_PILLARS,
+    liquidity:
+      props.liquidity ??
+      (isDemo ? { razonCorriente: 1.6, pruebaAcida: 1.2, diasAutonomia: 65 } : undefined),
+    pnlBridge: props.pnlBridge ?? (isDemo ? MOCK_PNL_WATERFALL : undefined),
+    segments: props.segments ?? (isDemo ? MOCK_DUPONT_SEGMENTS : []),
+    inflectionSeries: props.inflectionSeries ?? (isDemo ? MOCK_INFLECTION_SERIES : []),
+    runway: props.runway ?? (isDemo ? MOCK_RUNWAY : []),
+    valorTrend: props.valorTrend ?? (isDemo ? MOCK_VALOR_TREND : []),
+    escudoTrend: props.escudoTrend ?? (isDemo ? MOCK_ESCUDO_TREND : []),
+    verdadTrend: props.verdadTrend ?? (isDemo ? MOCK_VERDAD_TREND : []),
+    futuroTrend: props.futuroTrend ?? (isDemo ? MOCK_FUTURO_TREND : []),
+  };
+}
+
 export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
   const { language } = useLanguage();
   const isEs = language === 'es';
 
-  // Fallback a mocks si no se pasaron datos.
-  const pillars = props.pillars ?? MOCK_PILLARS;
-  const isDemo = props.demo ?? !props.pillars;
-  const liquidity = props.liquidity ?? {
-    razonCorriente: 1.6,
-    pruebaAcida: 1.2,
-    diasAutonomia: 65,
-  };
-  const pnlBridge = props.pnlBridge ?? MOCK_PNL_WATERFALL;
-  const segments = props.segments ?? MOCK_DUPONT_SEGMENTS;
-  const inflectionSeries = props.inflectionSeries ?? MOCK_INFLECTION_SERIES;
-  const runway = props.runway ?? MOCK_RUNWAY;
+  const {
+    isDemo,
+    pillars,
+    liquidity,
+    pnlBridge,
+    segments,
+    inflectionSeries,
+    runway,
+    valorTrend,
+    escudoTrend,
+    verdadTrend,
+    futuroTrend,
+  } = resolveCommandCenterData(props);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:py-10">
@@ -130,10 +157,10 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
         aria-label={isEs ? 'Health Scores por pilar' : 'Health scores by pillar'}
         className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
       >
-        <PillarHealthBadge pillar="escudo" score={pillars.escudo.healthScore} status={pillars.escudo.status} language={language} variant="card" />
-        <PillarHealthBadge pillar="valor" score={pillars.valor.healthScore} status={pillars.valor.status} language={language} variant="card" />
-        <PillarHealthBadge pillar="verdad" score={pillars.verdad.healthScore} status={pillars.verdad.status} language={language} variant="card" />
-        <PillarHealthBadge pillar="futuro" score={pillars.futuro.healthScore} status={pillars.futuro.status} language={language} variant="card" />
+        <PillarHealthBadge pillar="escudo" score={pillars.escudo.healthScore} status={pillars.escudo.status} coverage={pillars.escudo.kpiCoverage} language={language} variant="card" />
+        <PillarHealthBadge pillar="valor" score={pillars.valor.healthScore} status={pillars.valor.status} coverage={pillars.valor.kpiCoverage} language={language} variant="card" />
+        <PillarHealthBadge pillar="verdad" score={pillars.verdad.healthScore} status={pillars.verdad.status} coverage={pillars.verdad.kpiCoverage} language={language} variant="card" />
+        <PillarHealthBadge pillar="futuro" score={pillars.futuro.healthScore} status={pillars.futuro.status} coverage={pillars.futuro.kpiCoverage} language={language} variant="card" />
       </section>
 
       {/* Score global */}
@@ -180,10 +207,10 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
 
       {/* Micro-dashboards apilados */}
       <div className="flex flex-col gap-10">
-        <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} escudoTrend={props.escudoTrend ?? MOCK_ESCUDO_TREND} />
-        <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={props.valorTrend ?? MOCK_VALOR_TREND} />
-        <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} verdadTrend={props.verdadTrend ?? MOCK_VERDAD_TREND} />
-        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={props.futuroTrend ?? MOCK_FUTURO_TREND} balance={props.balance} monteCarlo={props.monteCarlo} />
+        <EscudoMicroDashboard metrics={pillars.escudo} liquidity={liquidity} escudoTrend={escudoTrend} />
+        <ValorMicroDashboard metrics={pillars.valor} pnlBridge={pnlBridge} segments={segments} valorTrend={valorTrend} />
+        <VerdadMicroDashboard metrics={pillars.verdad} gapAttribution={props.gapAttribution} verdadTrend={verdadTrend} />
+        <FuturoMicroDashboard metrics={pillars.futuro} runway={runway} inflectionSeries={inflectionSeries} futuroTrend={futuroTrend} balance={props.balance} monteCarlo={props.monteCarlo} />
       </div>
     </div>
   );
