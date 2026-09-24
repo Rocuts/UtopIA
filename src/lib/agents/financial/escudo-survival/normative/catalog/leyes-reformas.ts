@@ -154,6 +154,21 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
       'https://www.secretariasenado.gov.co/senado/basedoc/ley_0098_1993.html',
   },
   {
+    // Revisión de la fase 2 (pendiente #8): el esqueleto de la carta DIAN cita
+    // su Art. 261 para el plazo del requerimiento ordinario
+    // (src/data/tax_docs/ley_0223_1995.md).
+    id: 'LEY_223_1995',
+    cita: 'Ley 223 de 1995',
+    titulo: 'Normas sobre racionalización tributaria',
+    resumen:
+      'Reforma tributaria de 1995. Su Art. 261 fija en quince (15) días calendario el plazo mínimo para responder los requerimientos ordinarios o solicitudes de información de la DIAN (concordante con el Art. 686 E.T.).',
+    articulosClave: ['Art. 686 E.T.'],
+    estado: 'VIGENTE_2026',
+    sentenciaCorte: null,
+    urlOficial:
+      'https://www.secretariasenado.gov.co/senado/basedoc/ley_0223_1995.html',
+  },
+  {
     id: 'LEY_43_1990',
     cita: 'Ley 43 de 1990',
     titulo: 'Ley que regula la profesión de Contador Público en Colombia',
