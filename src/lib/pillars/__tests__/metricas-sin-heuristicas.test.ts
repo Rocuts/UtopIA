@@ -105,15 +105,30 @@ describe('ratios-kpis-25 — KPIs ausentes no puntúan', () => {
     expect(out.kpiCoverage).toEqual({ available: 2, total: 3 });
   });
 
-  it('sin análisis forense la integridad es N/D (no 100 − 20 × críticos)', () => {
+  it('integridad: sin forense ni Curator ⇒ N/D; con Curator ⇒ rotulada como derivada de sus hallazgos', () => {
     const snap = makeSnapshot(
       makeControlTotals({ activo: 1_000_000_000, pasivo: 600_000_000, patrimonio: 400_000_000 }),
       [],
     );
+    const sinFuente = kpi(computeVerdadPillar({ snapshot: snap }), 'score_integridad');
+    expect(sinFuente.value).toBeNull();
+    expect(sinFuente.score).toBeNull();
+
+    snap.curator = {
+      period: '2026',
+      comparativePeriod: null,
+      reclassifications: [],
+      findings: [
+        { code: 'X', severity: 'critico', title: 't', description: 'd', normReference: 'n', recommendation: 'r', impact: 'i' },
+      ],
+      errors: {},
+      generatedAt: '2026-09-24T00:00:00.000Z',
+    } as unknown as NonNullable<typeof snap.curator>;
     const out = computeVerdadPillar({ snapshot: snap });
-    const integ = kpi(out, 'score_integridad');
-    expect(integ.value).toBeNull();
-    expect(integ.score).toBeNull();
+    const curator = out.kpis.find((k) => k.key === 'score_integridad')!;
+    expect(curator.value).toBe(80);
+    expect(curator.labelEs).toMatch(/Curator/);
+    expect(curator.descriptionEs).not.toMatch(/Benford/);
   });
 
   it('EVA sin costo de capital declarado ⇒ N/D; con capital empleado ≤ 0 ⇒ N/D', () => {

@@ -2,9 +2,10 @@
 // Pilar VERDAD — Integridad y Transparencia
 // ---------------------------------------------------------------------------
 // KPIs maestros:
-//   1. Score de Integridad  = forensicScore (0-100); sin análisis forense ⇒ N/D
-//      (ratios-kpis-25: antes 100 − 20 × hallazgos críticos del Curator,
-//      presentado como "Benford, gaps, montos repetidos")
+//   1. Score de Integridad  = forensicScore (0-100); sin análisis forense, se
+//      deriva de los hallazgos críticos del Curator ROTULADO como tal; sin
+//      ninguna fuente ⇒ N/D (ratios-kpis-25: antes se presentaba como
+//      "Benford, gaps, montos repetidos" sin serlo)
 //   2. Brecha de Cuadratura = |equationDiff| / totalActivo (decimal)
 //   3. Índice de Conciliación = facturasCruzadas / totalFacturas
 //
@@ -14,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import {
+  clampScore,
   kpiCoverage,
   kpiSeverity,
   kpiStatus,
@@ -33,9 +35,21 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
   const ct = snapshot.controlTotals;
 
   // ─── KPI 1 — Score de Integridad ────────────────────────────────────────
-  // Sólo el motor forense lo mide; sin él ⇒ N/D (no se deriva de hallazgos).
-  const integridad: number | null =
-    forensic && Number.isFinite(forensic.score) ? forensic.score : null;
+  // Fuente preferente: el motor forense. Sin él, si el Curator corrió, se
+  // deriva de sus hallazgos críticos y se ROTULA así (antes se presentaba como
+  // "Benford, gaps, montos repetidos" sin serlo — ratios-kpis-25). Sin ninguna
+  // de las dos fuentes ⇒ N/D.
+  const curatorRes = input.curator ?? snapshot.curator ?? null;
+  let integridad: number | null = null;
+  let integridadOrigen: 'forense' | 'curator' | null = null;
+  if (forensic && Number.isFinite(forensic.score)) {
+    integridad = forensic.score;
+    integridadOrigen = 'forense';
+  } else if (curatorRes) {
+    const criticos = curatorRes.findings.filter((f) => f.severity === 'critico').length;
+    integridad = clampScore(100 - criticos * 20);
+    integridadOrigen = 'curator';
+  }
   const integridadScore = kpiToScore(
     integridad,
     { healthy: 90, watch: 70, warning: 50 },
@@ -43,8 +57,8 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
   );
   const integridadKpi: PillarKpi = {
     key: 'score_integridad',
-    labelEs: 'Score de Integridad',
-    labelEn: 'Integrity Score',
+    labelEs: integridadOrigen === 'curator' ? 'Integridad (hallazgos del Curator)' : 'Score de Integridad',
+    labelEn: integridadOrigen === 'curator' ? 'Integrity (Curator findings)' : 'Integrity Score',
     value: integridad,
     unit: 'score',
     target: 90,
@@ -52,13 +66,17 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
     status: kpiStatus(integridadScore),
     severity: kpiSeverity(integridadScore),
     descriptionEs:
-      integridad === null
-        ? 'N/D — requiere un análisis forense de los asientos (Benford, gaps, montos repetidos).'
-        : 'Limpieza forense de los asientos contables (Benford, gaps, montos repetidos, etc.).',
+      integridadOrigen === 'forense'
+        ? 'Limpieza forense de los asientos contables (Benford, gaps, montos repetidos, etc.).'
+        : integridadOrigen === 'curator'
+          ? 'Derivado de los hallazgos críticos del Curator (100 − 20 por hallazgo crítico). No hay análisis forense de asientos.'
+          : 'N/D — requiere un análisis forense de los asientos o el resultado del Curator.',
     descriptionEn:
-      integridad === null
-        ? 'N/A — requires a forensic scan of journal entries (Benford, gaps, repeated amounts).'
-        : 'Forensic cleanliness of journal entries (Benford, gaps, repeated amounts, etc.).',
+      integridadOrigen === 'forense'
+        ? 'Forensic cleanliness of journal entries (Benford, gaps, repeated amounts, etc.).'
+        : integridadOrigen === 'curator'
+          ? 'Derived from Curator critical findings (100 − 20 per critical finding). No forensic scan of entries.'
+          : 'N/A — requires a forensic scan of entries or the Curator result.',
   };
 
   // ─── KPI 2 — Brecha de Cuadratura ──────────────────────────────────────
