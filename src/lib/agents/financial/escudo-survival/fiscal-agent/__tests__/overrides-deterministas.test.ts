@@ -14,8 +14,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const llm: Record<string, unknown> = {};
+const userContents: Record<string, string> = {};
 vi.mock('@/lib/agents/financial/agents/runtime', () => ({
-  callFinancialAgent: vi.fn(async (opts: { agentName: string }) => {
+  callFinancialAgent: vi.fn(async (opts: { agentName: string; userContent: string }) => {
+    userContents[opts.agentName] = opts.userContent;
     if (!(opts.agentName in llm)) throw new Error(`sin fixture para ${opts.agentName}`);
     return { json: structuredClone(llm[opts.agentName]), meta: {} };
   }),
@@ -191,5 +193,17 @@ describe('Orquestador — modo devolución y validación', () => {
     expect(r.validation).toBeDefined();
     expect(r.validation.checks.some((c) => c.name === 'CN.summary')).toBe(true);
     expect(r.validation.checks.some((c) => c.name.startsWith('M7'))).toBe(true);
+  });
+
+  it('el contexto que recibe el modelo no rotula F04 como «saldo» (tributario-modulos-02)', async () => {
+    llm['escudo-fiscal:ccv'] = ccvJson;
+    llm['escudo-fiscal:risk-score'] = riskJson;
+    llm['escudo-fiscal:synthesizer'] = synthJson;
+    await orchestrateFiscalAgent({ rawData: '', preprocessed: p, fiscalAnchor: anchor, company: input.company, mode: 'full' }).catch(() => undefined);
+    const ccv = userContents['escudo-fiscal:ccv'];
+    expect(ccv).toBeDefined();
+    expect(ccv).not.toMatch(/Saldo neto F02-F03/);
+    expect(ccv).not.toMatch(/F03 \(Retenciones a favor\)/);
+    expect(ccv).toMatch(/F04 \(Posición de referencia F02 − F03; estimación contable/);
   });
 });

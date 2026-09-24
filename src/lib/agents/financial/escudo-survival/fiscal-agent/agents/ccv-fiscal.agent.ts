@@ -33,9 +33,9 @@ export async function runCcvFiscalAgent(
   const userContent = `<context>
 SNAPSHOT_CCV_PRECOMPUTADO (números vinculantes — no modificar):
   F01 (UAI): ${formatCopFromCents(BigInt(snapshot.f01))}  (MoneyCop: ${snapshot.f01})
-  F02 (Impuesto Ref. 35%): ${formatCopFromCents(BigInt(snapshot.f02))}  (MoneyCop: ${snapshot.f02})
-  F03 (Retenciones a favor): ${formatCopFromCents(BigInt(snapshot.f03))}  (MoneyCop: ${snapshot.f03})
-  F04 (Saldo neto F02-F03): ${formatCopFromCents(BigInt(snapshot.f04))}  (MoneyCop: ${snapshot.f04})
+  F02 (Impuesto de referencia = UAI × 35%, no liquidación): ${formatCopFromCents(BigInt(snapshot.f02))}  (MoneyCop: ${snapshot.f02})
+  F03 (Crédito de renta: retenciones y anticipos de renta): ${formatCopFromCents(BigInt(snapshot.f03))}  (MoneyCop: ${snapshot.f03})
+  F04 (Posición de referencia F02 − F03; estimación contable, no saldo a favor ni a pagar): ${formatCopFromCents(BigInt(snapshot.f04))}  (MoneyCop: ${snapshot.f04})
   F05 (IVA por pagar): ${formatCopFromCents(BigInt(snapshot.f05))}  (MoneyCop: ${snapshot.f05})
   F06 (Retefuente por declarar): ${formatCopFromCents(BigInt(snapshot.f06))}  (MoneyCop: ${snapshot.f06})
   F07 (ICA por pagar): ${formatCopFromCents(BigInt(snapshot.f07))}  (MoneyCop: ${snapshot.f07})

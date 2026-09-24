@@ -8,8 +8,10 @@
 //   F02 = round(F01 × 35 / 100) — impuesto de referencia tarifa general
 //         persona jurídica (Art. 240 E.T.). 0 si F01 ≤ 0 (no aplica anticipo
 //         sobre pérdida fiscal — la base presunta se evalúa en otra capa).
-//   F03 = retencionesAFavorCents (input crudo del extractor).
-//   F04 = F02 − F03  (positivo = a pagar, negativo = saldo a favor Art. 850).
+//   F03 = retencionesAFavorCents (crédito de renta en lista blanca, extractor).
+//   F04 = F02 − F03  posición de referencia contable (estimación, no
+//         liquidación): negativo = POSIBLE saldo a favor a verificar contra
+//         la declaración (Arts. 26, 807 y 850 E.T.).
 //   F05..F08 = inputs crudos del extractor (ya absolutos).
 //   F09 = (impuestoCausado / F01) × 100, 1 decimal. 0 si F01 ≤ 0.
 //   F10 = (F03 / F02) × 100, 1 decimal. 0 si F02 ≤ 0.

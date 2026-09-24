@@ -47,8 +47,8 @@ DATOS_EMPRESA:
 ANCLAS_FISCALES_REFERENCIA (Bloque Âncora):
   F01 UAI: ${formatCopFromCents(BigInt(input.fiscalAnchor.f01))}
   F02 Imp. ref.: ${formatCopFromCents(BigInt(input.fiscalAnchor.f02))}
-  F03 Retenciones: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
-  F04 Saldo: ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
+  F03 Crédito de renta: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
+  F04 Posición de referencia (estimación contable, no saldo a favor): ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
   F09 TET: ${input.fiscalAnchor.f09}%
 
 PERIODO: ${input.fiscalAnchor.fuente.periodo}

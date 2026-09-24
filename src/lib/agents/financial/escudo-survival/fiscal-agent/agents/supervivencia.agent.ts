@@ -68,7 +68,7 @@ PROXIMOS_VENCIMIENTOS_DIAN (15 días anticipación):
 ${input.fiscalAnchor.calendarioDian.vencimientos
   .filter((v) => v.estado === 'proximo' || v.estado === 'verificar')
   .slice(0, 5)
-  .map((v) => `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} | ${v.diasRestantes} días | est. ${formatCopFromCents(BigInt(v.valorEstimado))}`)
+  .map((v) => `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} | ${v.diasRestantes} días | est. ${v.valorEstimado === null ? 'N/D' : formatCopFromCents(BigInt(v.valorEstimado))}`)
   .join('\n') || '  (sin vencimientos próximos)'}
 
 PERIODO: ${input.fiscalAnchor.fuente.periodo}

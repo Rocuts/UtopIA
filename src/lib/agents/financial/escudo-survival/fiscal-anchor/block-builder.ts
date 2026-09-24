@@ -74,7 +74,7 @@ export function buildFiscalAnchorBlockMarkdown(block: FiscalAnchorBlock): string
   lines.push(`- NIT: ${block.calendarioDian.nit || '(no disponible)'} · último dígito: ${block.calendarioDian.ultimoDigito >= 0 ? block.calendarioDian.ultimoDigito : '(verificar)'} · periodo ${block.calendarioDian.periodo}`);
   for (const v of block.calendarioDian.vencimientos) {
     lines.push(
-      `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} · ${v.diasRestantes} días · estado=${v.estado} · base=${v.baseCcv} · valor≈${formatCopFromCents(BigInt(v.valorEstimado))} · ${v.norma}`,
+      `  - ${v.obligacion} (${v.frecuencia}) → ${v.proximoVencimiento} · ${v.diasRestantes} días · estado=${v.estado} · base=${v.baseCcv} · valor≈${v.valorEstimado === null ? 'N/D (F04 negativa: estimación contable, verificar contra la declaración)' : formatCopFromCents(BigInt(v.valorEstimado))} · ${v.norma}`,
     );
   }
 

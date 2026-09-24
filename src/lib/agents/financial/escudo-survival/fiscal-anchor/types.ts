@@ -65,8 +65,12 @@ export type VencimientoDian = {
   estado: 'pendiente' | 'proximo' | 'verificar' | 'vencido';
   /** Campo F## de referencia para estimar el valor. */
   baseCcv: 'F03' | 'F04' | 'F05' | 'F06' | 'F07';
-  /** Valor estimado de la obligación en centavos (string BigInt-safe). */
-  valorEstimado: string;
+  /**
+   * Valor estimado de la obligación en centavos (string BigInt-safe).
+   * `null` = N/D: con base F04 negativa no hay valor a pagar estimable (F04
+   * es una estimación contable; el saldo real sale de la declaración).
+   */
+  valorEstimado: string | null;
   /** Norma legal de respaldo. */
   norma: string;
 };

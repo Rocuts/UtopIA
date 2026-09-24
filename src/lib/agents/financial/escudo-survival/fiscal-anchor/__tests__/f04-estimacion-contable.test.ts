@@ -92,6 +92,13 @@ describe('F04 negativo — posible saldo a favor como estimación contable', () 
     expect(f.detalle).toMatch(/estimación contable/);
   });
 
+  it('el calendario DIAN no convierte |F04| en valor a pagar de la declaración de renta', () => {
+    const renta = anchor.calendarioDian.vencimientos.filter((v) => v.baseCcv === 'F04');
+    expect(renta.length).toBeGreaterThan(0);
+    for (const v of renta) expect(v.valorEstimado).toBeNull();
+    expect(buildFiscalAnchorBlockMarkdown(anchor)).not.toMatch(/valor≈\$15\.000\.000/);
+  });
+
   it('el bloque Markdown rotula F04 como posición de referencia contable', () => {
     const md = buildFiscalAnchorBlockMarkdown(anchor);
     expect(md).toMatch(/F04 · Posición de referencia contable/);

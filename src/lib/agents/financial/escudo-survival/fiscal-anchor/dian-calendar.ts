@@ -373,25 +373,22 @@ function computeEstado(
 
 const ZERO = BigInt(0);
 
-function absBigInt(value: bigint): bigint {
-  return value < ZERO ? -value : value;
-}
-
 /**
  * Valor estimado a presentar en el vencimiento según la base CCV declarada
- * por el template. F04 puede ser negativa (saldo a favor); para mostrar el
- * "valor a pagar" devolvemos la magnitud absoluta — el dictamen distingue
- * el signo en F04 directamente.
+ * por el template. F04 es una estimación contable (UAI × 35% − F03): si es
+ * negativa NO hay valor a pagar estimable y se devuelve `null` (N/D). Antes
+ * se devolvía |F04|, con lo que un posible saldo a favor aparecía como valor
+ * a pagar de la declaración de renta (auditoría 2026-09, tributario-modulos-02).
  */
 function valorEstimadoCents(
   baseCcv: VencimientoBaseCcv,
   metrics: FiscalDerivedMetrics,
-): bigint {
+): bigint | null {
   switch (baseCcv) {
     case 'F03':
       return metrics.f03Cents;
     case 'F04':
-      return absBigInt(metrics.f04Cents);
+      return metrics.f04Cents < ZERO ? null : metrics.f04Cents;
     case 'F05':
       return metrics.f05Cents;
     case 'F06':
@@ -446,6 +443,7 @@ export function buildCalendarioDian(input: BuildCalendarioDianInput): Calendario
             : 'el NIT llegó sin separador de dígito de verificación, no se puede saber cuál es el último dígito sin DV'
         }; se muestra una fecha de referencia. ${tpl.norma}`
       : tpl.norma;
+    const valor = valorEstimadoCents(tpl.baseCcv, metrics);
     return {
       obligacion: tpl.obligacion,
       frecuencia: tpl.frecuencia,
@@ -457,7 +455,7 @@ export function buildCalendarioDian(input: BuildCalendarioDianInput): Calendario
         Boolean(tpl.requiereVerificacion) || dudaSobreElDigito,
       ),
       baseCcv: tpl.baseCcv,
-      valorEstimado: serializeMoneyCop(valorEstimadoCents(tpl.baseCcv, metrics)),
+      valorEstimado: valor === null ? null : serializeMoneyCop(valor),
       norma,
     };
   });
