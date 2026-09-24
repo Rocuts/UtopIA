@@ -15,8 +15,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
-import { foldReportQualifications } from '@/lib/reports/fold-qualifications';
-import { serverActaVerdict, withServerActaVerdict } from '@/lib/reports/acta-verdict';
+import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import { parseReportParts } from '@/lib/reports/report-parts';
 import { buildFinancialReportVersion } from '@/lib/reports/financial-report-version';
 import {
@@ -172,34 +171,33 @@ export async function POST(req: Request) {
     if (!fromParts) return NextResponse.json(result);
 
     // ─── Versión persistida (procedencia servidor) ─────────────────────────
-    // El informe final lo ensambla el servidor: el acta se vuelve a cruzar
-    // contra la aritmética determinista del balance re-derivado (un veredicto
-    // omitido o reescrito por el cliente no llega a la versión: el del servidor
-    // sólo endurece el recibido); las salvedades de la Parte II y del acta se
-    // pliegan con la misma regla que la UI; el snapshot fiscal y el Âncora son
-    // los que `prepareFinancialContext` acaba de calcular desde el balance
-    // re-derivado (no los que el navegador recibió de /niif).
-    const governance = withServerActaVerdict(
-      fromParts.governance,
-      serverActaVerdict(fromParts.governance, ctx.effectiveCompany, ctx.ppForAgents),
-    );
+    // El informe final lo ensambla el servidor. Los veredictos de las Partes II
+    // y III se RECALCULAN contra el balance re-derivado con las mismas
+    // funciones que las fases (`withServerPartVerdicts`): aritmética del acta,
+    // cifras en la prosa de notas y acta (P3) y anclas + prosa de la Parte II.
+    // Un veredicto omitido o reescrito por el cliente no llega a la versión:
+    // el del servidor sólo endurece el recibido. Las salvedades se pliegan
+    // sobre la reconciliación NIIF con la misma regla que la UI; el snapshot
+    // fiscal y el Âncora son los que `prepareFinancialContext` acaba de
+    // calcular desde el balance re-derivado (no los que el navegador recibió
+    // de /niif).
     const ancora = ancoraOrNull(ctx.ancora);
-    const report: FinancialReport = {
-      company: ctx.effectiveCompany,
-      niifAnalysis: foldReportQualifications(
-        fromParts.niifAnalysis,
-        fromParts.strategicAnalysis,
-        governance,
-      ),
-      strategicAnalysis: fromParts.strategicAnalysis,
-      governance,
-      consolidatedReport: result.consolidatedReport,
-      validation: result.validation,
-      ...(result.emittability ? { emittability: result.emittability } : {}),
-      generatedAt: new Date().toISOString(),
-      ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
-      ...(ancora ? { ancora } : {}),
-    };
+    const report: FinancialReport = withServerPartVerdicts(
+      {
+        company: ctx.effectiveCompany,
+        niifAnalysis: fromParts.niifAnalysis,
+        strategicAnalysis: fromParts.strategicAnalysis,
+        governance: fromParts.governance,
+        consolidatedReport: result.consolidatedReport,
+        validation: result.validation,
+        ...(result.emittability ? { emittability: result.emittability } : {}),
+        generatedAt: new Date().toISOString(),
+        ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
+        ...(ancora ? { ancora } : {}),
+      },
+      ctx.ppForAgents,
+      language,
+    );
     const version = buildFinancialReportVersion({
       report,
       preprocessed: ctx.ppForAgents,

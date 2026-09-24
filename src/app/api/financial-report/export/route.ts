@@ -37,6 +37,7 @@ import {
   type PersistedReportResolution,
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
+import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
   appendPdfProvenance,
   provenanceHeaders,
@@ -253,10 +254,10 @@ async function exportPersisted(
   format: 'excel' | 'pdf-elite',
 ): Promise<Response> {
   const { report, preprocessed, provenance } = persisted;
-  const blocked = rejectInvalidExport(report, preprocessed);
+  const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+  const blocked = rejectInvalidExport(report, preprocessed, language);
   if (blocked) return blocked;
   const stamp: ArtifactProvenance = { kind: 'verified', provenance };
-  const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
   const headers = provenanceHeaders(stamp);
 
   if (format === 'pdf-elite') {
@@ -342,9 +343,9 @@ export async function POST(req: Request) {
       const source = resolveExportPreprocessed(body, 'export/excel');
       if (!source.ok) return source.response;
       const { preprocessed } = source;
-      const blocked = rejectInvalidExport(report, preprocessed);
-      if (blocked) return blocked;
       const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+      const blocked = rejectInvalidExport(report, preprocessed, excelLanguage);
+      if (blocked) return blocked;
       const buffer = await generateFinancialExcel({
         report: withExcelProvenance(report, UNVERIFIED, excelLanguage),
         preprocessed,
@@ -417,7 +418,7 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    const blocked = rejectInvalidExport(report, preprocessed);
+    const blocked = rejectInvalidExport(report, preprocessed, language);
     if (blocked) return blocked;
 
     const buffer = await generateFinancialExcel({
@@ -480,9 +481,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     const source = resolveExportPreprocessed(b as Record<string, unknown>, 'pdf-elite/fast');
     if (!source.ok) return source.response;
     const { preprocessed } = source;
-    const blocked = rejectInvalidExport(report, preprocessed);
+    const language: 'es' | 'en' = b.language === 'en' ? 'en' : 'es';
+    const blocked = rejectInvalidExport(report, preprocessed, language);
     if (blocked) return blocked;
-    const language: 'es' | 'en' = b.language ?? 'es';
 
     let pillars = null;
     if (preprocessed?.primary) {
@@ -597,7 +598,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     return pdfResponse(stream, company.name, provenanceHeaders(UNVERIFIED));
   }
 
-  const blocked = rejectInvalidExport(report, preprocessed);
+  const blocked = rejectInvalidExport(report, preprocessed, language);
   if (blocked) return blocked;
 
   // Successful path: optionally aggregate pillars (fail-soft).
@@ -628,10 +629,18 @@ async function handlePdfElite(body: unknown): Promise<Response> {
 function rejectInvalidExport(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
 ): Response | null {
   // Un solo gate (mismo que /html): coherencia interna, procedencia contra el
-  // preprocesado de la petición, Parte II, completitud e identidad.
-  const details = financialExportBlockers(report, preprocessed);
+  // preprocesado de la petición, Parte II, completitud e identidad. Antes, los
+  // veredictos de las Partes II y III se RECALCULAN contra ese preprocesado
+  // (aritmética y prosa del acta y de las notas, anclas y prosa de la Parte
+  // II): un `clean: true` del cliente —o de una versión persistida con reglas
+  // anteriores— no sustituye el cruce; el recálculo sólo endurece.
+  const details = financialExportBlockers(
+    withServerPartVerdicts(report, preprocessed, language),
+    preprocessed,
+  );
   return details.length > 0
     ? NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 })
     : null;

@@ -56,14 +56,9 @@ import {
 } from '@/lib/export/financial-export-validation';
 import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
-import {
-  describeActaQualifications,
-  reconcileActaArithmetic,
-} from '@/lib/agents/financial/contracts/base';
-import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
-import { buildActaExpectedArithmetic } from '@/lib/agents/financial/prompts/governance-specialist.prompt';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
+import { serverActaVerdict } from '@/lib/reports/part-verdicts';
 import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
 import { htmlInputFromPersisted } from '@/lib/reports/html-input';
 import {
@@ -97,29 +92,32 @@ function logIfNotEmittable(result: HtmlEditorOutput): void {
 }
 
 const ACTA_QUALIFIED_BLOCKER =
-  'El acta de asamblea (Parte III) contiene cifras que no coinciden con la aritmética determinista del balance.';
+  'Las notas o el acta de asamblea (Parte III) contienen cifras que no coinciden con el balance o con ' +
+  'la aritmética determinista del acta.';
 const STRATEGY_QUALIFIED_BLOCKER =
   'El análisis estratégico (Parte II) contiene cifras sin respaldo en el balance.';
 
 /**
  * Bloqueantes de las Partes II y III para /html, con la misma regla que
- * /export (auditoría 2026-09-24, e2e-niif-16):
- *   - el acta se RECALCULA en el servidor contra el preprocesado de la
- *     petición (`buildActaExpectedArithmetic` + `reconcileActaArithmetic`, la
- *     misma aritmética que alimentó el prompt del Especialista de Gobierno);
- *     sin preprocesado, una destinación o capitalización con monto no tiene
- *     ancla y tampoco se emite;
+ * /export (auditoría 2026-09-24, e2e-niif-16; integración P1 × P3):
+ *   - la Parte III se RECALCULA en el servidor contra el preprocesado de la
+ *     petición (`serverActaVerdict`: la aritmética determinista del acta —la
+ *     misma que alimentó el prompt del Especialista de Gobierno— y las cifras
+ *     citadas en la prosa de las notas y del acta); sin preprocesado, una
+ *     destinación o capitalización con monto no tiene ancla y tampoco se emite;
  *   - los veredictos que el cliente reenvía (`actaQualifications`,
  *     `strategyQualifications`) bloquean cuando traen `clean: false`. Un
- *     `clean: true` del cliente no levanta nada: el recálculo del acta y el
- *     cruce de la Parte II contra sus anclas (`niifArithmeticBlockers`) corren
- *     igual.
+ *     `clean: true` del cliente no levanta nada: el recálculo de la Parte III y
+ *     el cruce de la Parte II contra sus anclas y su prosa
+ *     (`niifArithmeticBlockers` → `reconcileStrategyAnchors`) corren igual.
  */
 function partQualificationBlockers(
   body: unknown,
   input: {
+    niifReport: unknown;
     governanceReport: GovernanceReportJson;
     company: { name: string; nit: string; fiscalPeriod: string; entityType: string | null };
+    language: 'es' | 'en';
   },
   preprocessed: PreprocessedBalance | undefined,
 ): string[] {
@@ -132,8 +130,6 @@ function partQualificationBlockers(
   if (raw.actaQualifications?.clean === false) out.push(ACTA_QUALIFIED_BLOCKER);
   if (raw.strategyQualifications?.clean === false) out.push(STRATEGY_QUALIFIED_BLOCKER);
 
-  const acta = input.governanceReport.shareholderMinutes;
-  if (!acta) return out;
   // Régimen de la reserva legal: tipo societario del contrato y, si el cliente
   // lo envía, lo que declaran los estatutos (mismo insumo que usó /governance).
   const company = {
@@ -143,43 +139,13 @@ function partQualificationBlockers(
     fiscalPeriod: input.company.fiscalPeriod,
     entityType: input.company.entityType ?? undefined,
   } as CompanyInfo;
-  const expected = preprocessed ? buildActaExpectedArithmetic(company, preprocessed) : null;
-  if (expected) {
-    const devs = reconcileActaArithmetic(
-      {
-        netIncomeCop: acta.resultDistribution?.netIncomeCop ?? null,
-        distributionApplies: acta.resultDistribution?.applies ?? false,
-        distributionLines: (acta.resultDistribution?.lines ?? []).map((l) => ({
-          label: l.label,
-          amountCop: l.amountCop,
-        })),
-        capitalizationApplies: acta.capitalizationProposal?.applies ?? false,
-        capitalizationBaseCop: acta.capitalizationProposal?.retainedEarningsBaseCop ?? null,
-        capitalizationAmountCop: acta.capitalizationProposal?.capitalizationAmountCop ?? null,
-      },
-      expected,
-    );
-    if (devs.length > 0) {
-      out.push(ACTA_QUALIFIED_BLOCKER, ...describeActaQualifications(devs).map((m) => `Acta — ${m}`));
-    }
-    return Array.from(new Set(out));
-  }
-  // Sin preprocesado no hay aritmética contra la cual reconciliar el acta: una
-  // destinación o capitalización con monto no se emite (pipeline-flujo-03).
-  const nonZero = (v: unknown) =>
-    typeof v === 'string' && /^-?\d+$/.test(v) && parseMoneyCop(v) !== BigInt(0);
-  const distributes =
-    acta.resultDistribution?.applies === true ||
-    (acta.resultDistribution?.lines ?? []).some((l) => nonZero(l.amountCop));
-  const capitalizes =
-    acta.capitalizationProposal?.applies === true ||
-    nonZero(acta.capitalizationProposal?.capitalizationAmountCop);
-  if (distributes || capitalizes) {
-    out.push(
-      'Acta — propone destinación de utilidades o capitalización sin el balance preprocesado: ' +
-        'sus cifras no pueden reconciliarse con la aritmética determinista.',
-    );
-  }
+  const verdict = serverActaVerdict(input.governanceReport, {
+    company,
+    preprocessed,
+    niifJson: input.niifReport,
+    language: input.language,
+  });
+  if (verdict && !verdict.clean) out.push(ACTA_QUALIFIED_BLOCKER, ...verdict.motivos);
   return Array.from(new Set(out));
 }
 
