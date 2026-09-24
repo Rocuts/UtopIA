@@ -445,11 +445,11 @@ export async function runNiifAnalyst(
 
   // Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente
   // #3; NIIF para las PYMES 3.14). No los redacta el modelo: se calculan desde
-  // el corte anterior al comparativo (tres cortes) o se declaran impracticables
-  // con una nota determinista (NIIF para las PYMES 10.21).
+  // el corte anterior al comparativo (tres cortes) o no se presentan, con una
+  // nota determinista que pide el corte (3.14), en el idioma del informe.
   const withComparatives = attachComparativeStatements(
     parsed.data,
-    buildComparativeStatementsBasis(preprocessed),
+    buildComparativeStatementsBasis(preprocessed, language),
     deterministicCashFlow,
   );
 
