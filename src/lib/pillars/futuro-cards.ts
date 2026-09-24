@@ -4,8 +4,9 @@
 // Tarjetas:
 //   1. CAGR                    — azul    — Tasa crecimiento anual de ingresos
 //   2. Punto de Quiebre        — naranja — Mes donde caja cruza 0 (escenario conservador)
-//   3. Provisión Tributaria    — morada  — Impuesto renta proyectado próximo año
-//   4. Capacidad de Inversión  — verde   — Caja libre tras provisionar renta + reserva 60d
+//   3. Provisión Tributaria    — morada  — N/D sin base fiscal verificada (ratios-kpis-10)
+//   4. Capacidad de Inversión  — verde   — shared-metrics.capacidadInversion (misma
+//                                           función que el pilar; ratios-kpis-19)
 //
 // Fuente de la verdad:
 //   - snapshot.controlTotals (efectivoCuenta11, ingresos, gastos, utilidadNeta).
@@ -14,6 +15,14 @@
 // TypeScript estricto — sin `any`.
 // ---------------------------------------------------------------------------
 
+import {
+  FISCAL_ND_REASON_EN,
+  FISCAL_ND_REASON_ES,
+  capacidadInversion,
+  ingresosNetosPeriodo,
+  monthsCovered,
+  periodsComparable,
+} from './shared-metrics';
 import type {
   ExecutiveCard,
   FuturoExecutiveCards,
@@ -28,6 +37,8 @@ import type {
 
 const HORIZON_MONTHS = 36;
 const SCENARIO_CONSERVATIVE_FACTOR = 0.85;
+/** SÓLO diagnóstico interno (audit.utilidadProyectadaAnual/tasaRenta, que lee
+ *  single-source-validator). No se publica ninguna métrica con esta tasa. */
 const TAX_RATE = 0.35;
 
 // ---------------------------------------------------------------------------
@@ -93,14 +104,18 @@ function buildFuturoAudit(
 ): FuturoExecutiveCardsAudit {
   const ct = snapshot.controlTotals;
 
-  const ingresoMes = ct.ingresos / 12;
-  const egresoMes = ct.gastos / 12;
+  const meses = monthsCovered(snapshot);
+  const ingresoMes = ingresosNetosPeriodo(ct) / meses;
+  const egresoMes = ct.gastos / meses;
 
-  // CAGR — n = 1 (current vs comparative). Si en el futuro `history` permite
-  // múltiples períodos, pasar `periods.length - 1` como n para anualizar.
-  const ingresosAnteriores = comparative?.controlTotals.ingresos ?? null;
-  const cagrIngresos = computeCagr(ct.ingresos, ingresosAnteriores, 1);
-  const periodosCagr = comparative ? 2 : null;
+  // CAGR — n = 1 (current vs comparative). Sólo entre periodos de IGUAL
+  // duración (año vs año, o mismo mes acumulado): comparar un acumulado a
+  // agosto con un año completo no es un crecimiento (ratios-kpis-03).
+  const comparable = comparative ? periodsComparable(snapshot, comparative) : false;
+  const ingresosAnteriores =
+    comparative && comparable ? ingresosNetosPeriodo(comparative.controlTotals) : null;
+  const cagrIngresos = computeCagr(ingresosNetosPeriodo(ct), ingresosAnteriores, 1);
+  const periodosCagr = comparative && comparable ? 2 : null;
 
   // Punto de quiebre — escenario conservador
   const conservadorProj = projectRunway(
@@ -119,21 +134,13 @@ function buildFuturoAudit(
   const mesesAlQuiebreBase =
     baseProj.monthsToZero <= HORIZON_MONTHS ? baseProj.monthsToZero : null;
 
-  // Provisión tributaria futura
-  const cagrParaProyeccion = cagrIngresos ?? 0.05;
-  const utilidadProyectadaAnual = Math.max(0, ct.utilidadNeta) * (1 + cagrParaProyeccion);
-  const provisionTributariaFutura = utilidadProyectadaAnual * TAX_RATE;
-
-  // Capacidad de inversión
-  // FIX (audit B5): si la empresa YA provisionó renta en cuenta 24 (saldo de
-  // pasivo), restar `provisionRenta` completa duplica la deducción de caja
-  // (la cuenta 24 es deuda diferida que sí se paga, pero la caja ya reflejó
-  // ese pasivo). Restamos sólo el déficit pendiente: max(0, esperada − ya
-  // provisionada). Conservador (no asume sobre-provisión como sobrante).
-  const rentaTeoricaAnual = Math.max(0, ct.utilidadNeta) * TAX_RATE;
-  const provisionRenta = Math.max(0, rentaTeoricaAnual - ct.impuestosCuenta24);
-  const reserva60Dias = (ct.gastos / 365) * 60;
-  const capacidadInversion = ct.efectivoCuenta11 - provisionRenta - reserva60Dias;
+  // Diagnóstico interno (NO se publica): lo lee single-source-validator para
+  // verificar que el pilar Futuro lee la misma utilidad neta. La provisión
+  // tributaria y la capacidad de inversión son N/D (ratios-kpis-10/19).
+  const utilidadProyectadaAnual = Math.max(0, ct.utilidadNeta) * (1 + (cagrIngresos ?? 0.05));
+  const provisionTributariaFutura: number | null = null;
+  const reserva60Dias = (ct.gastos / ((meses * 365) / 12)) * 60;
+  const capacidad = capacidadInversion(snapshot).value;
 
   return {
     cagrIngresos,
@@ -144,7 +151,7 @@ function buildFuturoAudit(
     mesesAlQuiebreBase,
     utilidadProyectadaAnual,
     provisionTributariaFutura,
-    capacidadInversion,
+    capacidadInversion: capacidad,
     reserva60Dias,
     cajaProyectada36mBase: baseProj.cashAtMonth36,
     tasaRenta: TAX_RATE,
@@ -173,16 +180,9 @@ function puntoQuiebreStatus(meses: number | null): PillarStatus {
   return 'healthy';
 }
 
-/** Provisión Tributaria — compara con caja actual. */
-function provisionStatus(provision: number, caja: number): PillarStatus {
-  if (caja <= 0) return provision > 0 ? 'critical' : 'watch';
-  if (provision > caja) return 'critical';
-  if (provision > caja * 0.5) return 'warning';
-  return 'healthy';
-}
-
 /** Capacidad de Inversión — compara con caja actual. */
-function capacidadInversionStatus(capex: number, caja: number): PillarStatus {
+function capacidadInversionStatus(capex: number | null, caja: number): PillarStatus {
+  if (capex === null) return 'watch';
   if (capex < 0) return 'critical';
   if (capex < caja * 0.1) return 'warning';
   if (capex < caja * 0.3) return 'watch';
@@ -220,11 +220,15 @@ export function computeFuturoExecutiveCards(
     // CAGR ya usa el comparativo — delta no aplica (sería circular)
     deltaVsComparative: null,
     descriptionEs:
-      'Tasa de crecimiento anual de ingresos. Calculada con últimos 2 cierres (Excel) o 24 meses (ERP).',
+      audit.cagrIngresos === null
+        ? 'N/D — requiere un periodo comparativo de igual duración (año contra año o el mismo mes acumulado).'
+        : 'Crecimiento de ingresos netos frente al periodo comparativo de igual duración.',
     descriptionEn:
-      'Annual revenue growth rate. Calculated from the last 2 closing periods (Excel) or 24 months (ERP).',
-    formulaEs: '(Ingresos T / Ingresos T-1) − 1',
-    formulaEn: '(Revenue T / Revenue T-1) − 1',
+      audit.cagrIngresos === null
+        ? 'N/A — requires a comparative period of equal length (year vs year or the same year-to-date month).'
+        : 'Net revenue growth versus the comparative period of equal length.',
+    formulaEs: '(Ingresos netos T / Ingresos netos T-1) − 1',
+    formulaEn: '(Net revenue T / Net revenue T-1) − 1',
   };
 
   // ─── 2. Punto de Quiebre ─────────────────────────────────────────────────
@@ -255,14 +259,12 @@ export function computeFuturoExecutiveCards(
     value: audit.provisionTributariaFutura,
     unit: 'cop',
     color: 'purple',
-    status: provisionStatus(audit.provisionTributariaFutura, ct.efectivoCuenta11),
+    status: 'watch',
     deltaVsComparative: safeDelta(audit.provisionTributariaFutura, prevProvision),
-    descriptionEs:
-      'Estimado de impuesto de renta a pagar el próximo año, basado en utilidad proyectada al 35% (Art. 240 E.T.).',
-    descriptionEn:
-      'Estimated income tax payable next year, based on projected net income at 35% (Art. 240 Colombian Tax Code).',
-    formulaEs: 'Utilidad Neta × (1 + CAGR) × 35%',
-    formulaEn: 'Net Income × (1 + CAGR) × 35%',
+    descriptionEs: FISCAL_ND_REASON_ES,
+    descriptionEn: FISCAL_ND_REASON_EN,
+    formulaEs: 'Impuesto sobre renta líquida proyectada con tarifa y régimen verificados (sin base: N/D)',
+    formulaEn: 'Tax on projected taxable income with verified rate and regime (no base: N/A)',
   };
 
   // ─── 4. Capacidad de Inversión ────────────────────────────────────────────
@@ -277,11 +279,15 @@ export function computeFuturoExecutiveCards(
     status: capacidadInversionStatus(audit.capacidadInversion, ct.efectivoCuenta11),
     deltaVsComparative: safeDelta(audit.capacidadInversion, prevCapacidad),
     descriptionEs:
-      'Caja libre disponible para inversión tras provisionar renta del año y reserva operacional de 60 días.',
+      audit.capacidadInversion === null
+        ? FISCAL_ND_REASON_ES
+        : 'Caja libre disponible para inversión tras impuesto de renta pendiente y reserva operacional de 60 días.',
     descriptionEn:
-      'Free cash available for investment after provisioning annual income tax and a 60-day operational reserve.',
-    formulaEs: 'Caja PUC 11 − Provisión Renta (35%) − Reserva 60 días gastos',
-    formulaEn: 'Cash PUC 11 − Income Tax Provision (35%) − 60-day expense reserve',
+      audit.capacidadInversion === null
+        ? FISCAL_ND_REASON_EN
+        : 'Free cash available for investment after pending income tax and a 60-day operational reserve.',
+    formulaEs: 'Caja PUC 11 − Impuesto de renta pendiente verificado − Reserva 60 días de egresos',
+    formulaEn: 'Cash PUC 11 − Verified pending income tax − 60-day outflow reserve',
   };
 
   return {

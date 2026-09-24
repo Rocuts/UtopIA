@@ -110,7 +110,8 @@ describe('health-score helpers', () => {
     expect(kpiToScore(60, th, 'higher-better')).toBe(75);
     expect(kpiToScore(30, th, 'higher-better')).toBe(50);
     expect(kpiToScore(10, th, 'higher-better')).toBe(15);
-    expect(kpiToScore(null, th, 'higher-better')).toBe(50); // neutral
+    // ratios-kpis-25: sin dato no hay score (antes 50 "neutral" que sumaba puntos).
+    expect(kpiToScore(null, th, 'higher-better')).toBeNull();
   });
 
   it('kpiToScore lower-better', () => {
@@ -312,7 +313,9 @@ describe('Futuro Pillar', () => {
     expect(out.alerts.some((a) => a.code === 'FUTURE-INFLECTION-NEAR')).toBe(true);
   });
 
-  it('CapEx negativo dispara alerta', () => {
+  // ratios-kpis-10/19: la capacidad de inversión restaba UN × 35 % sin base
+  // fiscal verificada; ahora es N/D y no dispara alerta con una cifra inventada.
+  it('capacidad de inversión N/D: sin alerta FUTURE-CAPEX-NEG basada en UN × 35 %', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -322,7 +325,8 @@ describe('Futuro Pillar', () => {
       }),
     });
     const out = computeFuturoPillar({ snapshot: snap });
-    expect(out.alerts.some((a) => a.code === 'FUTURE-CAPEX-NEG')).toBe(true);
+    expect(out.kpis.find((k) => k.key === 'capex_capacity')?.value).toBeNull();
+    expect(out.alerts.some((a) => a.code === 'FUTURE-CAPEX-NEG')).toBe(false);
   });
 });
 

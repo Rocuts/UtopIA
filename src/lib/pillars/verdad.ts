@@ -2,15 +2,25 @@
 // Pilar VERDAD — Integridad y Transparencia
 // ---------------------------------------------------------------------------
 // KPIs maestros:
-//   1. Score de Integridad  = forensicScore (0-100) o derivado de findings
+//   1. Score de Integridad  = forensicScore (0-100); sin análisis forense ⇒ N/D
+//      (ratios-kpis-25: antes 100 − 20 × hallazgos críticos del Curator,
+//      presentado como "Benford, gaps, montos repetidos")
 //   2. Brecha de Cuadratura = |equationDiff| / totalActivo (decimal)
 //   3. Índice de Conciliación = facturasCruzadas / totalFacturas
 //
-// Score Verdad = weighted (Brecha 50%, Integridad 30%, Conciliación 20%).
+// Score Verdad = weighted (Brecha 50%, Integridad 30%, Conciliación 20%) sobre
+// los KPIs con dato (los N/D se excluyen y se renormaliza).
 // HARD CAP: si Brecha > 1% del activo → score se cap a 30 (critical).
 // ---------------------------------------------------------------------------
 
-import { clampScore, kpiToScore, scoreToStatus, statusToSeverity, weightedScore } from './health-score';
+import {
+  kpiCoverage,
+  kpiSeverity,
+  kpiStatus,
+  kpiToScore,
+  scoreToStatus,
+  weightedScore,
+} from './health-score';
 import type {
   PillarAlert,
   PillarKpi,
@@ -21,17 +31,11 @@ import type {
 export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics {
   const { snapshot, forensic, conciliation } = input;
   const ct = snapshot.controlTotals;
-  const curatorRes = input.curator ?? snapshot.curator ?? null;
 
   // ─── KPI 1 — Score de Integridad ────────────────────────────────────────
-  let integridad: number | null = null;
-  if (forensic && Number.isFinite(forensic.score)) {
-    integridad = forensic.score;
-  } else {
-    // Fallback: derivamos de findings críticos del curator.
-    const criticos = (curatorRes?.findings ?? []).filter((f) => f.severity === 'critico').length;
-    integridad = clampScore(100 - criticos * 20);
-  }
+  // Sólo el motor forense lo mide; sin él ⇒ N/D (no se deriva de hallazgos).
+  const integridad: number | null =
+    forensic && Number.isFinite(forensic.score) ? forensic.score : null;
   const integridadScore = kpiToScore(
     integridad,
     { healthy: 90, watch: 70, warning: 50 },
@@ -45,10 +49,16 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
     unit: 'score',
     target: 90,
     score: integridadScore,
-    status: scoreToStatus(integridadScore),
-    severity: statusToSeverity(scoreToStatus(integridadScore)),
-    descriptionEs: 'Limpieza forense de los asientos contables (Benford, gaps, montos repetidos, etc.).',
-    descriptionEn: 'Forensic cleanliness of journal entries (Benford, gaps, repeated amounts, etc.).',
+    status: kpiStatus(integridadScore),
+    severity: kpiSeverity(integridadScore),
+    descriptionEs:
+      integridad === null
+        ? 'N/D — requiere un análisis forense de los asientos (Benford, gaps, montos repetidos).'
+        : 'Limpieza forense de los asientos contables (Benford, gaps, montos repetidos, etc.).',
+    descriptionEn:
+      integridad === null
+        ? 'N/A — requires a forensic scan of journal entries (Benford, gaps, repeated amounts).'
+        : 'Forensic cleanliness of journal entries (Benford, gaps, repeated amounts, etc.).',
   };
 
   // ─── KPI 2 — Brecha de Cuadratura ──────────────────────────────────────
@@ -74,8 +84,8 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
     unit: 'pct',
     target: 0.0001,
     score: brechaScore,
-    status: scoreToStatus(brechaScore),
-    severity: statusToSeverity(scoreToStatus(brechaScore)),
+    status: kpiStatus(brechaScore),
+    severity: kpiSeverity(brechaScore),
     descriptionEs: 'Activo − (Pasivo + Patrimonio) sobre Activo. ≤0.01% saludable.',
     descriptionEn: 'Assets − (Liabilities + Equity) over Assets. ≤0.01% is healthy.',
   };
@@ -98,8 +108,8 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
     unit: 'pct',
     target: 0.85,
     score: concScore,
-    status: scoreToStatus(concScore),
-    severity: statusToSeverity(scoreToStatus(concScore)),
+    status: kpiStatus(concScore),
+    severity: kpiSeverity(concScore),
     descriptionEs:
       concIdx === null
         ? 'Sin datos de conciliación bancaria. Habilita WS3 para activar.'
@@ -149,12 +159,14 @@ export function computeVerdadPillar(input: PillarsAggregateInput): PillarMetrics
   }
   const status = scoreToStatus(healthScore);
 
+  const kpis = [integridadKpi, brechaKpi, concKpi];
   return {
     pillarId: 'verdad',
     healthScore,
     status,
-    kpis: [integridadKpi, brechaKpi, concKpi],
+    kpis,
     alerts,
+    kpiCoverage: kpiCoverage(kpis),
     generatedAt: new Date().toISOString(),
   };
 }

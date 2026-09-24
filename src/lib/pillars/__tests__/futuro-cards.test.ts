@@ -2,12 +2,12 @@
 // Tests del motor de tarjetas ejecutivas del Pilar FUTURO
 // ---------------------------------------------------------------------------
 // Cubre los 6 escenarios canónicos del Simulador Predictivo:
-//   1. Sin comparative → CAGR null + provisión usa default 5%.
+//   1. Sin comparative → CAGR null; provisión tributaria N/D (ratios-kpis-10).
 //   2. Con comparative ingresos crecientes → CAGR positivo + provisión > snapshot.
 //   3. Con comparative ingresos decrecientes → CAGR negativo + status warning.
 //   4. Caja saludable, escenario base no cae → punto_quiebre null.
 //   5. Caja escasa con gastos altos → punto_quiebre <= 6 meses → critical.
-//   6. Capacidad de inversión negativa → status critical.
+//   6. Capacidad de inversión → N/D sin base fiscal verificada (ratios-kpis-19).
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -103,7 +103,10 @@ function makeSnapshot(opts: {
 // ---------------------------------------------------------------------------
 
 describe('computeFuturoExecutiveCards', () => {
-  it('sin comparative → CAGR null + provisión usa default 5%', () => {
+  // ratios-kpis-10: la provisión tributaria era UN × (1 + CAGR ?? 5 %) × 35 %,
+  // una métrica fiscal heurística sin base verificada. Ahora N/D. El audit
+  // conserva el diagnóstico interno que lee single-source-validator.
+  it('sin comparative → CAGR null + provisión tributaria N/D', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -121,7 +124,8 @@ describe('computeFuturoExecutiveCards', () => {
     // utilidadProyectadaAnual = 300M × (1 + 0.05) = 315M
     // provision = 315M × 0.35 = 110.25M
     expect(cards.audit.utilidadProyectadaAnual).toBeCloseTo(315_000_000, -3);
-    expect(cards.provision_tributaria.value).toBeCloseTo(110_250_000, -3);
+    expect(cards.provision_tributaria.value).toBeNull();
+    expect(cards.audit.provisionTributariaFutura).toBeNull();
   });
 
   it('con comparative ingresos crecientes 20% → CAGR positivo', () => {
@@ -220,9 +224,11 @@ describe('computeFuturoExecutiveCards', () => {
     expect(cards.punto_quiebre.status).toBe('critical');
   });
 
-  it('capacidad de inversión negativa → status critical', () => {
-    // Caja 50M, utilidadNeta 500M (provRenta = 175M), gastos 1.200M/año (reserva60d = 197M).
-    // capInv = 50M - 175M - 197M = -322M.
+  // ratios-kpis-19: antes esta tarjeta (caja − max(0, UN × 35 % − PUC 24) −
+  // 60 días) y el KPI del pilar (caja − UN × 35 % − 60 días) daban dos cifras
+  // distintas con la misma etiqueta. Ahora una sola función, N/D sin base
+  // fiscal verificada.
+  it('capacidad de inversión sin base fiscal verificada → N/D (no una cifra con UN × 35 %)', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -235,15 +241,12 @@ describe('computeFuturoExecutiveCards', () => {
 
     const cards = computeFuturoExecutiveCards({ snapshot: snap });
 
-    expect(cards.capacidad_inversion.value).toBeLessThan(0);
-    expect(cards.capacidad_inversion.status).toBe('critical');
-    expect(cards.audit.capacidadInversion).toBeLessThan(0);
+    expect(cards.capacidad_inversion.value).toBeNull();
+    expect(cards.capacidad_inversion.status).toBe('watch');
+    expect(cards.audit.capacidadInversion).toBeNull();
   });
 
-  it('utilidadNeta negativa → provision_tributaria.value = 0 y utilidadProyectadaAnual = 0', () => {
-    // utilidadNeta = -200M → Math.max(0, utilidadNeta) = 0
-    // utilidadProyectadaAnual = 0 × (1 + 0.05) = 0
-    // provision = 0 × 0.35 = 0 (no provisión negativa)
+  it('utilidadNeta negativa → provisión N/D (no 0) y diagnóstico interno 0', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -256,7 +259,7 @@ describe('computeFuturoExecutiveCards', () => {
 
     const cards = computeFuturoExecutiveCards({ snapshot: snap });
 
-    expect(cards.provision_tributaria.value).toBe(0);
+    expect(cards.provision_tributaria.value).toBeNull();
     expect(cards.audit.utilidadProyectadaAnual).toBe(0);
   });
 });

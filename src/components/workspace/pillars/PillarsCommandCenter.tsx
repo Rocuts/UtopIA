@@ -130,10 +130,10 @@ export function PillarsCommandCenter(props: PillarsCommandCenterProps) {
         aria-label={isEs ? 'Health Scores por pilar' : 'Health scores by pillar'}
         className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
       >
-        <PillarHealthBadge pillar="escudo" score={pillars.escudo.healthScore} status={pillars.escudo.status} language={language} variant="card" />
-        <PillarHealthBadge pillar="valor" score={pillars.valor.healthScore} status={pillars.valor.status} language={language} variant="card" />
-        <PillarHealthBadge pillar="verdad" score={pillars.verdad.healthScore} status={pillars.verdad.status} language={language} variant="card" />
-        <PillarHealthBadge pillar="futuro" score={pillars.futuro.healthScore} status={pillars.futuro.status} language={language} variant="card" />
+        <PillarHealthBadge pillar="escudo" score={pillars.escudo.healthScore} status={pillars.escudo.status} coverage={pillars.escudo.kpiCoverage} language={language} variant="card" />
+        <PillarHealthBadge pillar="valor" score={pillars.valor.healthScore} status={pillars.valor.status} coverage={pillars.valor.kpiCoverage} language={language} variant="card" />
+        <PillarHealthBadge pillar="verdad" score={pillars.verdad.healthScore} status={pillars.verdad.status} coverage={pillars.verdad.kpiCoverage} language={language} variant="card" />
+        <PillarHealthBadge pillar="futuro" score={pillars.futuro.healthScore} status={pillars.futuro.status} coverage={pillars.futuro.kpiCoverage} language={language} variant="card" />
       </section>
 
       {/* Score global */}

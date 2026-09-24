@@ -1,13 +1,16 @@
 // ---------------------------------------------------------------------------
 // Tests del motor de tarjetas ejecutivas del Pilar ESCUDO
 // ---------------------------------------------------------------------------
-// Cubre los 6 escenarios financieros canónicos:
-//   1. ERP a mitad de año con caja saludable → 4 cards verdes.
-//   2. Reserva fiscal en déficit (provisión 24 < utilidadNeta × 35%).
+// Cubre los escenarios financieros canónicos. Auditoría ratios-kpis-10/15:
+// la autonomía y la liquidez usan las MISMAS funciones que el pilar
+// (shared-metrics), la reserva fiscal es N/D sin base fiscal verificada y ya no
+// existe el centinela 999 ni la autonomía "saturada" de 365 días.
+//   1. Caja saludable → autonomía, prueba ácida y brecha calculadas; reserva N/D.
+//   2. Reserva fiscal: N/D aunque haya provisión 24 y utilidad (diagnóstico interno intacto).
 //   3. Brecha Escudo negativa (caja < proveedores 2205).
-//   4. Sin egresos del periodo (gastos=0 + caja>0) → autonomía cap.
-//   5. Multi-período (comparative) → promedio mensual de 2 períodos.
-//   6. Pasivo corriente = 0 → cobertura saturada a 999.
+//   4. Sin egresos del periodo → autonomía N/D.
+//   5. Con comparativo → autonomía del periodo actual (sin promediar periodos).
+//   6. Pasivo corriente = 0 → prueba ácida N/D.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -111,7 +114,9 @@ describe('computeEscudoExecutiveCards', () => {
         gastos: 900_000_000,
         utilidadNeta: 200_000_000,
         efectivoCuenta11: 200_000_000,
-        impuestosCuenta24: 100_000_000, // sobre los 70M teóricos (35% × 200M)
+        impuestosCuenta24: 100_000_000,
+        activoCorriente: 400_000_000,
+        pasivoCorriente: 110_000_000,
       }),
       classes: [
         makeClass(1, [
@@ -130,24 +135,20 @@ describe('computeEscudoExecutiveCards', () => {
 
     expect(cards.autonomia.value).not.toBeNull();
     expect(cards.cobertura_pasivos.value).not.toBeNull();
-    expect(cards.reserva_fiscal.value).not.toBeNull();
+    expect(cards.reserva_fiscal.value).toBeNull();
     expect(cards.brecha_escudo.value).not.toBeNull();
 
-    // Autonomía: (200M + 50M) / (900M / 12) × 30 = 250M / 75M × 30 ≈ 100 días
-    expect(cards.autonomia.value).toBeCloseTo(100, 0);
-    // Cobertura: AC=400M (110505+120505+130505 → 200+50+150=400) /
-    //   PC=110M (22+23=80+30=110) ≈ 3.636
+    // Autonomía: caja 200M / (900M / 365) ≈ 81,1 días (misma función que el pilar)
+    expect(cards.autonomia.value).toBeCloseTo(200_000_000 / (900_000_000 / 365), 6);
+    // Prueba ácida: (AC 400M − inventarios 0) / PC 110M ≈ 3,636
     expect(cards.cobertura_pasivos.value).toBeCloseTo(3.636, 2);
-    // Reserva fiscal: 100M − (200M × 35%=70M) = +30M (sobrada)
-    expect(cards.reserva_fiscal.value).toBeCloseTo(30_000_000, 0);
-    expect(cards.reserva_fiscal.status).toBe('healthy');
     // Brecha: caja(200M) − proveedores 2205. Aquí no hay 2205 explícito → fallback a 22 → 80M.
     // Brecha = 200M − 80M = 120M
     expect(cards.brecha_escudo.value).toBeCloseTo(120_000_000, 0);
     expect(cards.brecha_escudo.status).toBe('healthy');
   });
 
-  it('Reserva fiscal en déficit (provisión 24 << renta teórica)', () => {
+  it('Reserva fiscal N/D aunque haya provisión 24 y utilidad (sin base fiscal verificada)', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -164,10 +165,11 @@ describe('computeEscudoExecutiveCards', () => {
 
     const cards = computeEscudoExecutiveCards({ snapshot: snap });
 
-    // 10M − 175M = −165M (déficit grande)
-    expect(cards.reserva_fiscal.value).toBeCloseTo(-165_000_000, 0);
-    // Déficit > 50% de renta teórica → critical.
-    expect(cards.reserva_fiscal.status).toBe('critical');
+    // Antes: 10M − UN × 35 % = −165M "critical". Ni la utilidad contable es base
+    // fiscal ni el grupo 24 es sólo renta ⇒ N/D.
+    expect(cards.reserva_fiscal.value).toBeNull();
+    expect(cards.reserva_fiscal.status).toBe('watch');
+    // Diagnóstico interno que lee single-source-validator (no se publica).
     expect(cards.audit.tasaRenta).toBe(RENTA_RATE);
     expect(cards.audit.rentaTeorica).toBeCloseTo(175_000_000, 0);
   });
@@ -197,7 +199,7 @@ describe('computeEscudoExecutiveCards', () => {
     expect(cards.audit.proveedoresCuenta2205).toBeCloseTo(80_000_000, 0);
   });
 
-  it('Sin egresos del periodo + caja > 0 → autonomía saturada (cap visual)', () => {
+  it('Sin egresos del periodo + caja > 0 → autonomía N/D (no 365 inventados)', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -213,13 +215,10 @@ describe('computeEscudoExecutiveCards', () => {
 
     const cards = computeEscudoExecutiveCards({ snapshot: snap });
 
-    // value puede ser 365 (cap visual) o null. Acepto cualquiera.
-    expect(
-      cards.autonomia.value === null || cards.autonomia.value >= 365,
-    ).toBe(true);
+    expect(cards.autonomia.value).toBeNull();
   });
 
-  it('Multi-período: promedio mensual usa egresos del actual + comparativo', () => {
+  it('Con comparativo: autonomía del periodo actual y delta contra la del comparativo', () => {
     const current = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -250,10 +249,13 @@ describe('computeEscudoExecutiveCards', () => {
       comparative: previous,
     });
 
-    // Audit refleja 2 períodos.
-    expect(cards.audit.periodosUsados).toBe(2);
-    // Promedio mensual ≈ (600M + 1200M) / 2 / 12 = 75M/mes (vs 50M/mes solo current).
-    expect(cards.audit.promedioEgresosMensuales).toBeCloseTo(75_000_000, -3);
+    // Una sola definición: caja actual / egresos diarios del periodo actual
+    // (antes promediaba egresos de dos periodos sólo en la tarjeta).
+    const actual = 250_000_000 / (600_000_000 / 365);
+    const previo = 100_000_000 / (1_200_000_000 / 365);
+    expect(cards.autonomia.value).toBeCloseTo(actual, 6);
+    expect(cards.autonomia.deltaVsComparative).toBeCloseTo(actual - previo, 6);
+    expect(cards.audit.promedioEgresosMensuales).toBeCloseTo(50_000_000, -3);
   });
 
   // ── CapEx tests ───────────────────────────────────────────────────────────
@@ -305,8 +307,8 @@ describe('computeEscudoExecutiveCards', () => {
       capexEvents: [{ id: 'ce1', name: 'Maquinaria', monthOffset: 3, amountCop: 200_000_000 }],
     });
 
-    // Sin CapEx ~60 días
-    expect(sinCapex.autonomia.value).toBeCloseTo(60, 0);
+    // Sin CapEx: 100M / (600M / 365) ≈ 60,8 días
+    expect(sinCapex.autonomia.value).toBeCloseTo(100_000_000 / (600_000_000 / 365), 6);
     // Con CapEx: caja ajustada = 100M − 200M = −100M → días <0
     expect(conCapex.autonomia.value).toBeLessThan(0);
     expect(conCapex.autonomia.status).toBe('critical');
@@ -370,7 +372,7 @@ describe('computeEscudoExecutiveCards', () => {
     expect(cards.brecha_escudo.status).toBe('critical');
   });
 
-  it('Pasivo corriente = 0 → cobertura saturada a 999 (sin division by zero)', () => {
+  it('Pasivo corriente = 0 → prueba ácida N/D (sin centinela 999)', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -389,7 +391,7 @@ describe('computeEscudoExecutiveCards', () => {
 
     const cards = computeEscudoExecutiveCards({ snapshot: snap });
 
-    expect(cards.cobertura_pasivos.value).toBe(999);
-    expect(cards.cobertura_pasivos.status).toBe('healthy');
+    expect(cards.cobertura_pasivos.value).toBeNull();
+    expect(cards.cobertura_pasivos.status).toBe('watch');
   });
 });

@@ -38,8 +38,9 @@ export interface PillarKpi {
   unit: KpiUnit;
   /** Target o umbral healthy de referencia (opcional). */
   target?: number;
-  /** Score parcial 0-100 que aporta este KPI al pilar. */
-  score: number;
+  /** Score parcial 0-100 que aporta este KPI al pilar. `null` = sin dato
+   *  (no aporta al health score). */
+  score: number | null;
   status: PillarStatus;
   severity: PillarSeverity;
   /** Descripción corta, accionable. */
@@ -72,6 +73,9 @@ export interface PillarMetrics {
   alerts: PillarAlert[];
   /** Errores capturados durante el cómputo (no rompen el pilar). */
   errors?: Record<string, string>;
+  /** KPIs con valor sobre el total: el health score sólo promedia los medidos
+   *  (ratios-kpis-25). Un pilar con available < total está incompleto. */
+  kpiCoverage?: { available: number; total: number };
   generatedAt: string;
   /** Advertencia R7 (Curator) sobre costo de ventas posiblemente subestimado. */
   presumedCostWarning?: PresumedCostWarning;
@@ -172,17 +176,22 @@ export interface EscudoExecutiveCardsAudit {
   /** Promedio mensual de egresos (totalEgresosPeriodo / 12 si anual,
    *  o promedio de los últimos N meses si multi-período). */
   promedioEgresosMensuales: number;
-  /** Activo Corriente (clases 11 + 12 + 13). */
+  /** Activo corriente de controlTotals (misma base que computeDerivedKpis). */
   activoCorriente: number;
-  /** Pasivo Corriente (clases 21 + 22 + 23 + 24). */
+  /** Pasivo corriente de controlTotals. */
   pasivoCorriente: number;
+  /** Inventarios PUC 14 (se restan en la prueba ácida). */
+  inventarios14?: number;
   /** Provisión registrada en cuenta 24 (Impuestos por Pagar). */
   provisionCuenta24: number;
-  /** Renta teórica = utilidadNeta × 35% (Art. 240 E.T.). */
+  /** Diagnóstico interno (NO se publica): utilidadNeta × 35 %. Lo lee
+   *  single-source-validator para verificar que todos los pilares leen la misma
+   *  utilidad neta. La tarjeta "Reserva Fiscal" es N/D (ratios-kpis-10). */
   rentaTeorica: number;
   /** Saldo de cuenta 2205 (Proveedores) — proxy de exigible 30 días. */
   proveedoresCuenta2205: number;
-  /** Tasa de impuesto de renta aplicada (default 0.35). */
+  /** Tasa usada SÓLO como diagnóstico interno (no se publica ninguna métrica
+   *  fiscal heurística; ver shared-metrics FISCAL_ND_REASON_ES). */
   tasaRenta: number;
   /** Cantidad de períodos usados para promedio (1 = anual, 3 = trimestre). */
   periodosUsados: number;
@@ -196,9 +205,9 @@ export interface EscudoExecutiveCardsAudit {
 export interface EscudoExecutiveCards {
   /** Días de Autonomía Financiera = (caja + inversiones12) / promEgresosMes. */
   autonomia: ExecutiveCard;
-  /** Cobertura de Pasivos = Activo Corriente / Pasivo Corriente. */
+  /** Prueba ácida = (Activo corriente − Inventarios 14) / Pasivo corriente. */
   cobertura_pasivos: ExecutiveCard;
-  /** Reserva Fiscal = provisión24 − utilidadNeta×35% (negativo = déficit). */
+  /** Reserva Fiscal: N/D sin base fiscal verificada (ratios-kpis-10). */
   reserva_fiscal: ExecutiveCard;
   /** Brecha Escudo = Caja(11) − Proveedores(2205) en COP (negativo = riesgo). */
   brecha_escudo: ExecutiveCard;
@@ -271,12 +280,14 @@ export interface FuturoExecutiveCardsAudit {
   mesesAlQuiebreConservador: number | null;
   /** Mes donde el escenario base (factor 1.0) cruza 0. */
   mesesAlQuiebreBase: number | null;
-  /** Utilidad neta anualizada proyectada al año siguiente (utilidadActual × (1+CAGR)). */
+  /** Diagnóstico interno (NO se publica): max(0, UN) × (1 + CAGR ?? 0,05). Lo
+   *  lee single-source-validator; la tarjeta de provisión es N/D. */
   utilidadProyectadaAnual: number;
-  /** Provisión tributaria proyectada = utilidadProyectadaAnual × 35%. */
-  provisionTributariaFutura: number;
-  /** Capacidad de inversión actual = caja − provRenta − reserva60d. */
-  capacidadInversion: number;
+  /** Provisión tributaria proyectada: null sin base fiscal verificada. */
+  provisionTributariaFutura: number | null;
+  /** Capacidad de inversión (shared-metrics.capacidadInversion): null sin base
+   *  fiscal verificada. */
+  capacidadInversion: number | null;
   /** Reserva 60 días de gastos en COP. */
   reserva60Dias: number;
   /** Caja proyectada al final del horizonte (escenario base). */

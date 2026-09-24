@@ -5,7 +5,7 @@
 // BigInt) porque los scores son ratios sin precision crítica.
 // ---------------------------------------------------------------------------
 
-import type { PillarSeverity, PillarStatus } from './types';
+import type { PillarKpi, PillarSeverity, PillarStatus } from './types';
 
 /** Mapea un score 0-100 a status. */
 export function scoreToStatus(score: number): PillarStatus {
@@ -31,17 +31,36 @@ export function clampScore(n: number): number {
   return Math.round(n);
 }
 
-/** Promedio ponderado de scores parciales. weights debe sumar ~1. */
-export function weightedScore(parts: Array<{ score: number; weight: number }>): number {
+/**
+ * Promedio ponderado de scores parciales. Un score `null` (KPI sin dato) se
+ * EXCLUYE y los pesos restantes se renormalizan (ratios-kpis-25): un KPI
+ * ausente nunca aporta puntos.
+ */
+export function weightedScore(parts: Array<{ score: number | null; weight: number }>): number {
   let total = 0;
   let totalW = 0;
   for (const p of parts) {
-    if (!Number.isFinite(p.score) || !Number.isFinite(p.weight)) continue;
+    if (p.score === null || !Number.isFinite(p.score) || !Number.isFinite(p.weight)) continue;
     total += p.score * p.weight;
     totalW += p.weight;
   }
   if (totalW <= 0) return 0;
   return clampScore(total / totalW);
+}
+
+/** Status de un KPI: sin score (N/D) ⇒ 'watch' neutro, nunca 'healthy'. */
+export function kpiStatus(score: number | null): PillarStatus {
+  return score === null ? 'watch' : scoreToStatus(score);
+}
+
+/** Severidad de un KPI: sin score ⇒ 'neutral'. */
+export function kpiSeverity(score: number | null): PillarSeverity {
+  return score === null ? 'neutral' : statusToSeverity(scoreToStatus(score));
+}
+
+/** Cobertura de KPIs medidos del pilar (n de m con valor). */
+export function kpiCoverage(kpis: PillarKpi[]): { available: number; total: number } {
+  return { available: kpis.filter((k) => k.value !== null).length, total: kpis.length };
 }
 
 // ─── Threshold-based KPI scoring ────────────────────────────────────────────
@@ -70,15 +89,15 @@ export interface KpiThresholds {
  *     value <= warning  → 50
  *     else              → 15
  *
- * Para `value === null`, retornamos 50 (neutral) — el llamador decide si
- * eso aporta a su weighted score o lo excluye.
+ * Para `value === null` retornamos `null`: el KPI no se midió y
+ * `weightedScore` lo excluye (antes devolvía 50 y sumaba puntos inexistentes).
  */
 export function kpiToScore(
   value: number | null,
   thresholds: KpiThresholds,
   direction: ThresholdDirection,
-): number {
-  if (value === null || !Number.isFinite(value)) return 50;
+): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
   if (direction === 'higher-better') {
     if (value >= thresholds.healthy) return 95;
     if (value >= thresholds.watch) return 75;
