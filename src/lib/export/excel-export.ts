@@ -80,10 +80,14 @@ const COLORS = {
 
 const FONT_MAIN = 'Calibri';
 
-// Colombian currency format codes.
-// The [$-es-CO] LCID prefix forces Excel to render with Colombian locale rules:
-//   thousands separator = "."  |  decimal separator = ","
-// producing: $1.234.567,89  (regardless of the viewer's OS regional settings).
+// Formatos de moneda COP.
+// En un código de formato de Excel, `,` y `.` NO son caracteres literales: son
+// los marcadores del separador de miles y del decimal que el visor toma de su
+// configuración regional (sistema o aplicación). El prefijo [$-es-CO] fija la
+// configuración regional de fechas, nombres de mes y símbolos, pero NO fuerza
+// los separadores (reportes-export-19): en un equipo es-CO la celda se ve
+// $1.234.567,89 y en uno en-US, $1,234,567.89. El valor numérico es el mismo;
+// las cifras incrustadas en texto usan `fmtCopPesos`, que sí es es-CO fijo.
 //
 // La sección negativa usa PARÉNTESIS — misma convención NIIF que
 // `formatCopFromCents` (contracts/money.ts) y que los estados financieros del
