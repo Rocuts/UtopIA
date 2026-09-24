@@ -82,10 +82,14 @@ const TRIAL_BALANCE_SCHEMA = {
       type: 'string',
       enum: ['balanced', 'unbalanced'],
       description:
-        'balanced sólo si equation_delta = 0 y no hay motivos de integridad. unbalanced cubre el ' +
-        'descuadre del archivo (equation_delta ≠ 0) y también los motivos de integridad aunque la ' +
-        'ecuación cuadre: importes ilegibles, columnas de saldo ambiguas, filas desplazadas o ' +
-        'códigos que no son cuentas PUC (el detalle los lista en validation_reasons).',
+        'balanced sólo si equation_delta = 0 y ningún periodo del archivo trae un motivo ' +
+        'persistente. unbalanced cubre el descuadre del archivo (equation_delta ≠ 0) y también, ' +
+        'aunque la ecuación cuadre, los motivos persistentes: integridad de la lectura (importes ' +
+        'ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos que no son cuentas PUC), ' +
+        'importes fuera del rango de precisión monetaria, unidad declarada ("en miles" / "en ' +
+        'millones") sin confirmar y bloqueos del curador posteriores al Cierre Virtual (R8), p. ej. ' +
+        'CUR-R12. El detalle los lista en validation_reasons. El riesgo de liquidez (activo ' +
+        'corriente < pasivo corriente) no cambia el status. Contrato tb-2026-09-24.2.',
     },
     period_label: { type: 'string' },
     row_count: { type: 'integer' },
@@ -169,7 +173,8 @@ const TRIAL_BALANCE_DETAIL_SCHEMA = {
           items: { type: 'string' },
           description:
             'Motivos por los que la remisión no es certificable (descuadres, importes ' +
-            'ilegibles, columnas ambiguas, códigos que no son cuentas PUC). Vacío si no hay.',
+            'ilegibles, columnas ambiguas, códigos que no son cuentas PUC, precisión monetaria, ' +
+            'unidad declarada sin confirmar, bloqueos del curador post-R8). Vacío si no hay.',
         },
         discrepancies: {
           type: 'array',
@@ -353,7 +358,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           operationId: 'createTrialBalance',
           summary: 'Remitir un balance de prueba (CSV o filas) y validarlo',
           description:
-            'Idempotente vía header Idempotency-Key (TTL 24 h; replay devuelve la misma respuesta con Idempotent-Replayed: true). Un balance descuadrado NO es error: la remisión se crea con status=unbalanced y el descuadre del archivo de origen (antes del Cierre Virtual) viaja en control_totals.equation_delta; status=unbalanced también cubre los motivos de integridad (ver validation_reasons en el detalle). csv y rows pasan por la misma normalización (convención de signos, hojas estructurales).',
+            'Idempotente vía header Idempotency-Key (TTL 24 h; replay devuelve la misma respuesta con Idempotent-Replayed: true). Un balance descuadrado NO es error: la remisión se crea con status=unbalanced y el descuadre del archivo de origen (antes del Cierre Virtual) viaja en control_totals.equation_delta; status=unbalanced también cubre los motivos persistentes aunque la ecuación cuadre — integridad, precisión monetaria, unidad declarada sin confirmar, bloqueos del curador post-R8 (ver validation_reasons en el detalle); el riesgo de liquidez no cambia el status. csv y rows pasan por la misma normalización (convención de signos, hojas estructurales).',
           parameters: [
             {
               name: 'Idempotency-Key',
