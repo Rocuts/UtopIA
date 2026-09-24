@@ -8,6 +8,9 @@
 //   <macro_vigente> con fecha y fuente, o N/D.
 // valoracion-06: el código recalcula Ke, WACC, FCF, TV, EV, puente y
 //   sensibilidad; el LLM aporta supuestos.
+// valoracion-21: FCF, WACC y g en la misma base (COP nominales); el tope de g
+//   no se justifica con el PIB; la tarifa t contempla los puntos adicionales
+//   del Art. 240 E.T. (par. 2-4, estatuto_tributario_completo.md del corpus).
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
@@ -42,11 +45,13 @@ Tasa libre de riesgo en la moneda de los flujos (los flujos se proyectan en COP 
 - Construcción B — riskFreeBasis = UST_USD_fisher: Rf = UST 10Y USD; Ke USD = Rf + Beta × ERP madura + CRP + SP; Ke COP = (1 + Ke USD) × (1 + inflación COP) / (1 + inflación USD) − 1.
 - ERP = prima de mercado MADURO (sin riesgo país); el riesgo país entra una sola vez, en CRP.
 
-Tarifa impositiva:
+Tarifa impositiva (t del impuesto operacional y del escudo fiscal de Kd):
 - 35% — Art. 240 E.T., tarifa general sociedades 2026.
+- Puntos adicionales del mismo Art. 240 E.T. cuando la entidad está en su supuesto: par. 2 — instituciones financieras, aseguradoras y reaseguradoras, comisionistas de bolsa y demás entidades del parágrafo: 5 puntos (40%) en 2023-2027 con renta gravable ≥ 120.000 UVT; par. 3 — extracción de carbón (CIIU 0510/0520: 0, 5 o 10 puntos) y de petróleo crudo (CIIU 0610: 0, 5, 10 o 15 puntos) según el percentil de precios del año gravable, con renta gravable ≥ 50.000 UVT; par. 4 — generación de energía hidroeléctrica: 3 puntos (38%) en 2023-2026 con renta gravable ≥ 30.000 UVT (no aplica a pequeñas centrales ≤ 1.000 kW). Los 15 puntos del Decreto Legislativo 1474/2025 para el sector financiero en 2026 están suspendidos (Auto A-084-26 de la Corte Constitucional).
 
-Crecimiento perpetuo (g):
-- g nominal ≤ 4% y SIEMPRE < WACC; de lo contrario el valor terminal de Gordon no está definido y el DCF no es emitible.
+Crecimiento perpetuo (g) y base de los flujos:
+- FCF, WACC y g se expresan en la MISMA base: COP nominales (incluyen la inflación esperada). El WACC de las construcciones A y B ya es nominal en COP.
+- g nominal ≤ 4% y SIEMPRE < WACC; de lo contrario el valor terminal de Gordon no está definido y el DCF no es emitible. El 4% es un tope prudencial del modelo, no una estimación del PIB: un g nominal combina crecimiento real e inflación, (1 + g) = (1 + g real) × (1 + inflación de largo plazo).
 
 Parámetros de mercado (TES, UST, diferencial soberano, CRP/EMBI, ERP, inflaciones, beta): se toman de <macro_vigente> con su fecha y fuente o de los datos del usuario. UVT 2026: $52.374 COP.
 
@@ -74,7 +79,8 @@ Construir el modelo DCF: proyección de FCF a 5-10 años (mínimo 3) en años ca
 - Cada año proyectado expone los componentes íntegros del FCF (ingresos, EBITDA, EBIT, impuesto operacional, D&A, CAPEX, ΔWC, FCF).
 - WACC con riskFreeBasis declarado y cada componente cuantificado: TES bruto y diferencial soberano (base A) o inflaciones COP/USD (base B), CRP, ERP madura, Beta, size premium, Ke, Kd, t, E/V, D/V.
 - marketDataProvenance indica fuente y fecha de corte de cada parámetro de mercado.
-- g perpetuo ≤ 4% nominal y estrictamente menor que WACC.
+- g perpetuo ≤ 4% nominal y estrictamente menor que WACC; terminalValue.rationale declara g en COP nominales con su descomposición (crecimiento real + inflación de largo plazo), sin presentarlo como una cifra del PIB.
+- FCF, WACC y g en la misma base (COP nominales).
 - Si VP(TV) supera el 75% del EV se declara la dependencia del TV como limitación.
 - Deuda financiera y efectivo reportados por separado cuando están en los datos; Equity = EV − Deuda Neta.
 </success_criteria>
@@ -82,7 +88,9 @@ Construir el modelo DCF: proyección de FCF a 5-10 años (mínimo 3) en años ca
 <constraints>
 - NEVER presentes como "vigente" un parámetro de mercado que no venga de <macro_vigente> o de los datos del usuario; NEVER inventes cifras de TES, UST, EMBI, ERP o inflación sin rotularlas como supuesto con fuente y fecha en marketDataProvenance.
 - NEVER sumes CRP sobre el TES completo: con riskFreeBasis = TES_COP_ex_default y CRP > 0 declara sovereignYieldPercent y defaultSpreadPercent.
-- MUST declarar la tarifa impositiva utilizada y justificar cualquier desviación del 35% (Zona Franca, ZOMAC, SIMPLE — citar artículo aplicable).
+- MUST declarar la tarifa impositiva utilizada y justificar cualquier desviación del 35% (Zona Franca, ZOMAC, SIMPLE o puntos adicionales del Art. 240 par. 2-4 E.T. — citar artículo aplicable).
+- If la entidad está en un supuesto de puntos adicionales que vencen dentro del horizonte (par. 2 hasta 2027, par. 4 hasta 2026), then taxRatePercent es la tarifa que regirá en perpetuidad y los años con puntos adicionales se declaran en keyAssumptions y limitations; otherwise taxRatePercent incluye los puntos vigentes (par. 3: según el percentil de precios declarado).
+- If un supuesto de crecimiento (PIB, sector, ingresos) llega en términos reales, then conviértelo a nominal con la inflación de largo plazo declarada en marketDataProvenance antes de usarlo en las filas proyectadas o en g; otherwise úsalo como nominal y dilo en keyAssumptions.
 - If un parámetro de <macro_vigente> es N/D y el usuario no lo suministra, then úsalo sólo como supuesto explícito (valor, fuente y fecha de referencia) y regístralo en limitations; otherwise usa el valor de <macro_vigente> citando su fecha y fuente.
 - If solo existe un periodo histórico, then declara como supuesto crítico que la proyección se construye con un único año de ancla y usa supuestos conservadores; otherwise calcula tasas YoY observadas y úsalas como input principal.
 - If el número de acciones o cuotas no está en los datos, then sharesOutstanding y pricePerShareCop son null; otherwise repórtalos.
