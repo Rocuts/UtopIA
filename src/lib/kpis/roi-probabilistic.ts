@@ -1,20 +1,22 @@
 /**
- * ROI Probabilístico — Expected return ponderado por inversión y probabilidad,
- * ajustado por riesgo de mercado (Colombia 2026 ~25% por defecto).
+ * ROI Probabilístico — retorno esperado del portafolio ponderado por inversión.
  *
  * Fórmula:
  *   totalInv    = Σ investment
- *   weightedRet = Σ(expectedReturn * probability * investment) / totalInv
- *   riskAdj     = 1 - marketRisk
- *   roiProb     = weightedRet * riskAdj
+ *   E[r_i]      = p_i · r_i + (1 − p_i) · failureReturn
+ *   weightedRet = Σ(E[r_i] · investment_i) / totalInv
+ *   roiProb     = weightedRet · (1 − marketRisk)   sólo si weightedRet > 0 y
+ *                 el riesgo de mercado fue declarado
+ *
+ * valoracion-25: el retorno en caso de fracaso era 0 % implícito (con pérdida
+ * total el E[r] del ejemplo pasa de +9,38 % a −37,5 %) y el «riesgo de
+ * mercado CO 25 %» se aplicaba por defecto sin fuente, achicando incluso las
+ * pérdidas. Ahora failureReturn es obligatorio (N/D sin él) y el riesgo de
+ * mercado sólo se aplica si se declara, rotulado con su fuente.
  *
  * Sanity check manual:
- *   Proyectos: A (ret 25%, p 0.8, inv 100M), B (ret 15%, p 0.9, inv 200M), C (ret 40%, p 0.5, inv 50M)
- *   totalInv = 350M
- *   weightedRet = (0.25*0.8*100 + 0.15*0.9*200 + 0.40*0.5*50) / 350
- *               = (20 + 27 + 10) / 350 = 57 / 350 = 0.1629 = 16.29%
- *   marketRisk 0.25 -> riskAdj 0.75
- *   roiProb = 0.1629 * 0.75 = 0.1221 = 12.21% -> neutral
+ *   A (ret 25 %, p 0,5, inv 100), failureReturn −100 %
+ *   E[r] = 0,5 × 25 % + 0,5 × (−100 %) = −37,5 %
  */
 
 import type {
@@ -23,8 +25,15 @@ import type {
   RoiProbabilisticInput,
   RoiProbabilisticProject,
 } from '@/types/kpis';
+import { KpiNoCalculableError } from './no-calculable';
 
-const DEFAULT_MARKET_RISK = 0.25;
+/** Supuestos que el usuario debe declarar (valoracion-25). */
+export interface RoiProbabilisticInputDeclarado extends RoiProbabilisticInput {
+  /** Retorno si el proyecto fracasa (−1 = pérdida total de la inversión). Obligatorio. */
+  failureReturn?: number;
+  /** Fuente del riesgo de mercado declarado (p. ej. acta del comité). */
+  marketRiskSource?: string;
+}
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -53,15 +62,24 @@ function formatCopShort(n: number): string {
   return `${sign}$${Math.round(abs).toLocaleString('es-CO')} COP`;
 }
 
-function contributionOf(p: RoiProbabilisticProject, totalInv: number): number {
-  if (totalInv <= 0) return 0;
-  return (p.expectedReturn * p.probability * p.investment) / totalInv;
+function expectedReturnOf(p: RoiProbabilisticProject, failureReturn: number): number {
+  return clamp01(p.probability) * p.expectedReturn + (1 - clamp01(p.probability)) * failureReturn;
 }
 
-/** Calculates risk-adjusted probabilistic ROI across a project portfolio. Pure. */
-export function calculateRoiProbabilistic(input: RoiProbabilisticInput): KpiResult {
+/** Calculates the probabilistic ROI across a project portfolio. Pure. */
+export function calculateRoiProbabilistic(input: RoiProbabilisticInputDeclarado): KpiResult {
   const projects = Array.isArray(input.projects) ? input.projects : [];
-  const marketRisk = clamp01(input.marketRisk ?? DEFAULT_MARKET_RISK);
+  const failureReturn = input.failureReturn;
+  if (typeof failureReturn !== 'number' || !Number.isFinite(failureReturn)) {
+    throw new KpiNoCalculableError(
+      'roi_probabilistic',
+      'Falta el retorno en caso de fracaso de los proyectos (p. ej. −100 % = pérdida total): sin él el retorno esperado no es verificable.',
+    );
+  }
+  const marketRisk =
+    typeof input.marketRisk === 'number' && Number.isFinite(input.marketRisk)
+      ? clamp01(input.marketRisk)
+      : null;
   // valoracion-07: sin tasa por defecto (13,5 % "CO típico" sin fuente). La
   // tasa es informativa y sólo se publica si el usuario la declara.
   const discountRate =
@@ -73,24 +91,40 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInput): KpiResu
     (acc, p) => acc + Math.max(0, p.investment || 0),
     0,
   );
-
-  let weightedReturn = 0;
-  if (totalInv > 0) {
-    weightedReturn = projects.reduce((acc, p) => {
-      const inv = Math.max(0, p.investment || 0);
-      const prob = clamp01(p.probability);
-      const ret = Number.isFinite(p.expectedReturn) ? p.expectedReturn : 0;
-      return acc + (ret * prob * inv) / totalInv;
-    }, 0);
+  if (projects.length === 0 || totalInv <= 0) {
+    throw new KpiNoCalculableError(
+      'roi_probabilistic',
+      'Sin proyectos con inversión documentada no hay retorno ponderado.',
+    );
   }
 
-  const riskAdj = 1 - marketRisk;
+  const incompleto = projects.find(
+    (p) => !Number.isFinite(p.expectedReturn) || !Number.isFinite(p.probability),
+  );
+  if (incompleto) {
+    throw new KpiNoCalculableError(
+      'roi_probabilistic',
+      `El proyecto «${incompleto.name}» no tiene retorno o probabilidad documentados.`,
+    );
+  }
+
+  const weightedReturn = projects.reduce(
+    (acc, p) => acc + (expectedReturnOf(p, failureReturn) * Math.max(0, p.investment || 0)) / totalInv,
+    0,
+  );
+
+  // El ajuste por riesgo de mercado recorta retornos positivos; nunca achica
+  // una pérdida esperada.
+  const riskAdj = marketRisk === null || weightedReturn <= 0 ? 1 : 1 - marketRisk;
   const roiProb = weightedReturn * riskAdj;
   const roiPct = roiProb * 100;
 
   // Top 3 projects by contribution
   const ranked = projects
-    .map((p) => ({ project: p, contribution: contributionOf(p, totalInv) * riskAdj }))
+    .map((p) => ({
+      project: p,
+      contribution: (expectedReturnOf(p, failureReturn) * Math.max(0, p.investment || 0)) / totalInv,
+    }))
     .sort((a, b) => b.contribution - a.contribution)
     .slice(0, 3);
 
@@ -106,41 +140,51 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInput): KpiResu
       formatted: formatPct(weightedReturn * 100, 2),
     },
     {
-      label: 'Riesgo de mercado CO',
-      value: marketRisk,
-      formatted: formatPct(marketRisk * 100, 0),
-    },
-    {
-      label: 'Factor de ajuste por riesgo',
-      value: riskAdj,
-      formatted: riskAdj.toFixed(2),
+      label: 'Retorno en caso de fracaso (declarado)',
+      value: failureReturn,
+      formatted: formatPct(failureReturn * 100, 0),
     },
   ];
+  if (marketRisk !== null) {
+    breakdown.push(
+      {
+        label: 'Riesgo de mercado (declarado)',
+        value: marketRisk,
+        formatted: formatPct(marketRisk * 100, 0),
+      },
+      {
+        label: 'Factor de ajuste por riesgo',
+        value: riskAdj,
+        formatted: riskAdj.toFixed(2),
+      },
+    );
+  }
 
   ranked.forEach((r, idx) => {
     breakdown.push({
       label: `Top ${idx + 1}: ${r.project.name}`,
       value: r.contribution * 100,
       formatted: formatPct(r.contribution * 100, 2),
-      weight: totalInv > 0 ? r.project.investment / totalInv : 0,
+      weight: r.project.investment / totalInv,
     });
   });
 
   const assumptions = [
-    `Riesgo de mercado CO 2026 estimado en ${(marketRisk * 100).toFixed(0)}%`,
+    marketRisk === null
+      ? 'Riesgo de mercado no declarado: no se aplica ajuste'
+      : `Riesgo de mercado declarado = ${(marketRisk * 100).toFixed(0)}% (${input.marketRiskSource?.trim() || 'sin fuente: supuesto del usuario'}); no achica pérdidas`,
+    `Retorno en caso de fracaso declarado = ${(failureReturn * 100).toFixed(0)}%`,
     discountRate === null
       ? 'Tasa de descuento no declarada (no se aplica al retorno del portafolio)'
       : `Tasa de descuento declarada por el usuario (supuesto) = ${(discountRate * 100).toFixed(1)}%`,
     'Probabilidades de éxito provistas por proyecto; se clampean a [0,1]',
     'Retornos expresados como TIR efectiva anual',
     'Ponderación por inversión relativa en el portfolio',
-    'Ajuste por riesgo multiplicativo: roi = Σ(ret·p·w) · (1 - marketRisk)',
   ];
 
   // Confidence heuristics
   let confidence: KpiResult['confidence'] = 'medium';
-  if (projects.length === 0 || totalInv <= 0) confidence = 'low';
-  else if (projects.length >= 3 && projects.every((p) => p.riskScore !== undefined)) {
+  if (projects.length >= 3 && projects.every((p) => p.riskScore !== undefined)) {
     confidence = 'high';
   }
 

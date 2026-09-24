@@ -1,18 +1,19 @@
 /**
- * Exit Value — método híbrido DCF-lite + múltiplos de EBITDA por industria.
+ * Exit Value — múltiplos de EBITDA por industria.
  *
  * Pipeline:
  *   ebitdaAjustado = ebitda + sum(adjustments)
- *   multiple_base  = INDUSTRY_MULTIPLES[industry]  (o override manual)
- *   multiple_adj   = multiple_base * (1 + growthRate)
- *   EV             = ebitdaAjustado * multiple_adj
+ *   multiple       = override del usuario, o INDUSTRY_MULTIPLES[industry]
+ *   EV             = ebitdaAjustado * multiple
  *   Equity Value   = EV - netDebt
  *
+ * valoracion-25: EBITDA ausente o ≤ 0 y deuda neta no declarada ⇒ N/D
+ * (KpiNoCalculableError), nunca 0; el crecimiento ya no multiplica el
+ * múltiplo (g = 100 % lo duplicaba) y sólo informa la severidad.
+ *
  * Sanity check manual:
- *   ebitda 800M, industry 'services' (7x), growth 15%, netDebt 200M, sin ajustes
- *   multiple_adj = 7 * 1.15 = 8.05
- *   EV = 800M * 8.05 = 6_440M = $6.44B
- *   Equity = 6_440M - 200M = 6_240M = $6.24B COP -> severity good
+ *   ebitda 800M, industry 'services' (7x), netDebt 200M, sin ajustes
+ *   EV = 800M * 7 = 5_600M ; Equity = 5_400M COP
  */
 
 import type {
@@ -21,8 +22,13 @@ import type {
   KpiBreakdown,
   KpiResult,
 } from '@/types/kpis';
+import { KpiNoCalculableError } from './no-calculable';
 
-/** Múltiplos EBITDA de referencia para transacciones CO 2024-2026 (midpoints). */
+/**
+ * Múltiplos EBITDA de referencia internos (midpoints por industria). No tienen
+ * fuente de mercado verificable en el repositorio: son un supuesto rotulado y
+ * dan confianza «low»; un múltiplo declarado por el usuario la sube a «medium».
+ */
 export const INDUSTRY_MULTIPLES: Record<ExitValueIndustry, number> = {
   tech: 10,
   retail: 6,
@@ -58,21 +64,38 @@ function severityFor(growthRate: number, equityValue: number): KpiResult['severi
 
 /** Calculates company Exit Value (equity). Pure, deterministic. */
 export function calculateExitValue(input: ExitValueInput): KpiResult {
+  if (typeof input.ebitda !== 'number' || !Number.isFinite(input.ebitda)) {
+    throw new KpiNoCalculableError('exit_value', 'EBITDA no disponible: sin EBITDA validado no hay valor por múltiplos.');
+  }
+  if (typeof input.netDebt !== 'number' || !Number.isFinite(input.netDebt)) {
+    throw new KpiNoCalculableError(
+      'exit_value',
+      'Deuda neta no declarada: el patrimonio no se deriva del Enterprise Value sin restarla.',
+    );
+  }
   const adjustmentsTotal = (input.adjustments ?? []).reduce(
     (acc, a) => acc + (Number.isFinite(a.amount) ? a.amount : 0),
     0,
   );
-  const ebitdaAdj = (input.ebitda || 0) + adjustmentsTotal;
+  const ebitdaAdj = input.ebitda + adjustmentsTotal;
+  if (ebitdaAdj <= 0) {
+    throw new KpiNoCalculableError(
+      'exit_value',
+      'EBITDA normalizado ≤ 0: el método por múltiplos de EBITDA no aplica.',
+    );
+  }
 
-  const baseMultiple =
-    input.comparableMultiplesOverride ?? INDUSTRY_MULTIPLES[input.industry] ?? INDUSTRY_MULTIPLES.other;
-
-  // Growth adjustment: clamp to [-0.5, +1.0] to keep the multiple physically reasonable.
-  const growth = Math.min(1.0, Math.max(-0.5, input.growthRate ?? 0));
-  const adjMultiple = baseMultiple * (1 + growth);
+  const override =
+    typeof input.comparableMultiplesOverride === 'number' &&
+    Number.isFinite(input.comparableMultiplesOverride) &&
+    input.comparableMultiplesOverride > 0
+      ? input.comparableMultiplesOverride
+      : null;
+  const adjMultiple = override ?? INDUSTRY_MULTIPLES[input.industry] ?? INDUSTRY_MULTIPLES.other;
+  const growth = Number.isFinite(input.growthRate) ? input.growthRate : 0;
 
   const enterpriseValue = ebitdaAdj * adjMultiple;
-  const netDebt = input.netDebt ?? 0;
+  const netDebt = input.netDebt;
   const equityValue = enterpriseValue - netDebt;
 
   // valoracion-07: sin WACC por defecto (el 13,5 % "CO típico" no tenía
@@ -119,17 +142,17 @@ export function calculateExitValue(input: ExitValueInput): KpiResult {
   const assumptions = [
     wacc === null
       ? 'WACC no declarado: el valor por múltiplos no usa tasa de descuento'
-      : `WACC declarado por el usuario (supuesto) = ${(wacc * 100).toFixed(1)}%`,
-    'Múltiplos basados en transacciones comparables CO 2024-2026 por industria',
-    'Ajuste por crecimiento lineal sobre el múltiplo base',
+      : `WACC declarado por el usuario (supuesto) = ${(wacc * 100).toFixed(1)}% — informativo: el valor por múltiplos no lo usa`,
+    override === null
+      ? 'Múltiplo de referencia interno por industria, sin fuente de mercado verificable (supuesto)'
+      : `Múltiplo declarado por el usuario (supuesto) = ${override}x`,
+    'El crecimiento esperado no ajusta el múltiplo; sólo informa la severidad',
     'Cifras expresadas en COP corrientes',
     'Equity Value = Enterprise Value - Deuda neta',
   ];
 
-  // Confidence: override manual = high, tabla por industria = medium, ebitda<=0 = low
-  let confidence: KpiResult['confidence'] = 'medium';
-  if (input.comparableMultiplesOverride !== undefined) confidence = 'high';
-  if (input.ebitda <= 0) confidence = 'low';
+  // Confidence: múltiplo interno sin fuente = low; declarado por el usuario = medium.
+  const confidence: KpiResult['confidence'] = override === null ? 'low' : 'medium';
 
   return {
     kind: 'exit_value',

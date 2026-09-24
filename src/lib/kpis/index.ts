@@ -9,6 +9,7 @@ export { calculateTef } from './tax-efficiency';
 export { calculateExitValue, formatCop, INDUSTRY_MULTIPLES } from './exit-value';
 export { calculateComplianceScore, COMPLIANCE_WEIGHTS } from './compliance-score';
 export { calculateRoiProbabilistic } from './roi-probabilistic';
+export { KpiNoCalculableError } from './no-calculable';
 
 // Los mocks de KPIs viven en ./__fixtures__/mocks.ts y NO se exportan: sólo
 // pruebas pueden usarlos (ratios-kpis-12).

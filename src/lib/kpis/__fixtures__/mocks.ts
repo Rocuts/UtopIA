@@ -88,6 +88,7 @@ export const mockRoiProbabilistic: KpiResult = freeze(
       { name: 'Zona Franca PYME', expectedReturn: 0.22, probability: 0.7, investment: 300_000_000, riskScore: 35 },
       { name: 'ZOMAC expansion', expectedReturn: 0.35, probability: 0.55, investment: 120_000_000, riskScore: 50 },
     ],
+    failureReturn: 0, // supuesto de la fixture: el fracaso recupera la inversión
     marketRisk: 0.22,
     discountRate: 0.135,
   }),
@@ -151,6 +152,7 @@ export function generateMockKpiSet(severity: KpiSeverity): MockKpiSet {
               { name: 'Proyecto Beta', expectedReturn: 0.28, probability: 0.75, investment: 250_000_000 },
               { name: 'Proyecto Gamma', expectedReturn: 0.42, probability: 0.6, investment: 100_000_000 },
             ],
+            failureReturn: 0, // supuesto de la fixture: el fracaso recupera la inversión
             marketRisk: 0.2,
           }),
         ),
@@ -191,6 +193,7 @@ export function generateMockKpiSet(severity: KpiSeverity): MockKpiSet {
               { name: 'Proyecto Delta', expectedReturn: 0.18, probability: 0.65, investment: 200_000_000 },
               { name: 'Proyecto Epsilon', expectedReturn: 0.14, probability: 0.7, investment: 150_000_000 },
             ],
+            failureReturn: 0, // supuesto de la fixture: el fracaso recupera la inversión
             marketRisk: 0.25,
           }),
         ),
@@ -231,6 +234,7 @@ export function generateMockKpiSet(severity: KpiSeverity): MockKpiSet {
               { name: 'Proyecto Sigma', expectedReturn: 0.1, probability: 0.5, investment: 100_000_000 },
               { name: 'Proyecto Tau', expectedReturn: 0.08, probability: 0.6, investment: 150_000_000 },
             ],
+            failureReturn: 0, // supuesto de la fixture: el fracaso recupera la inversión
             marketRisk: 0.35,
           }),
         ),
@@ -272,6 +276,7 @@ export function generateMockKpiSet(severity: KpiSeverity): MockKpiSet {
               { name: 'Proyecto Omega', expectedReturn: 0.05, probability: 0.4, investment: 80_000_000 },
               { name: 'Proyecto Zeta', expectedReturn: 0.02, probability: 0.3, investment: 120_000_000 },
             ],
+            failureReturn: 0, // supuesto de la fixture: el fracaso recupera la inversión
             marketRisk: 0.45,
           }),
         ),
