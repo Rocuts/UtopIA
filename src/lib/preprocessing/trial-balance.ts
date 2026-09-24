@@ -316,6 +316,12 @@ export interface ControlTotals {
   diasInventario?: number | null;
   /** Días de proveedores = (proveedores22 / (costoVentas6 + costoProduccion7)) × 365. null si costos anómalos. */
   diasProveedores?: number | null;
+  /**
+   * Motivo de los KPIs publicados como N/D por base no interpretable (p. ej.
+   * ROE con patrimonio promedio ≤ 0). Los renderizadores y el bloque
+   * vinculante deben mostrar el motivo en lugar de recalcular el KPI.
+   */
+  kpiNdMotivos?: KpiNdMotivos;
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,6 +1105,7 @@ export function preprocessTrialBalance(
     ct.diasCartera = recomputed.diasCartera;
     ct.diasInventario = recomputed.diasInventario;
     ct.diasProveedores = recomputed.diasProveedores;
+    ct.kpiNdMotivos = recomputed.kpiNdMotivos;
   }
 
   // -------------------------------------------------------------------------
@@ -2230,13 +2237,33 @@ interface DerivedKpis {
   diasCartera: number | null;
   diasInventario: number | null;
   diasProveedores: number | null;
+  /** Motivo por KPI cuando el valor es `null` por una base no interpretable. */
+  kpiNdMotivos: KpiNdMotivos;
 }
+
+/** Motivo legible (es) de un KPI publicado como N/D. */
+export type KpiNdMotivos = Partial<Record<'roe' | 'apalancamientoFinanciero', string>>;
+
+const MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO =
+  'N/D — patrimonio promedio ≤ 0 (patrimonio negativo o nulo): el ROE no es interpretable';
+const MOTIVO_PATRIMONIO_NO_POSITIVO =
+  'N/D — patrimonio ≤ 0 (insolvencia técnica): el apalancamiento no es interpretable';
 
 function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
   const safeDiv = (num: number, den: number): number | null => {
     if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
     return num / den;
   };
+
+  // Auditoría 2026-09 (ratios-kpis-07): con patrimonio negativo el ROE y el
+  // apalancamiento cambian de signo y dejan de medir lo que dicen — una
+  // pérdida sobre patrimonio promedio negativo publicaba ROE +451 % como KPI
+  // VINCULANTE. Sin base interpretable, el KPI es N/D con motivo.
+  const kpiNdMotivos: KpiNdMotivos = {};
+  const patrimonioPromedioNoPositivo = !(inputs.patrimonioPromedio > 0);
+  const patrimonioNoPositivo = !(inputs.patrimonio > 0);
+  if (patrimonioPromedioNoPositivo) kpiNdMotivos.roe = MOTIVO_PATRIMONIO_PROMEDIO_NO_POSITIVO;
+  if (patrimonioNoPositivo) kpiNdMotivos.apalancamientoFinanciero = MOTIVO_PATRIMONIO_NO_POSITIVO;
 
   const ingresosBase = Math.abs(inputs.ingresosNetos);
   const costoTotalForRotation = inputs.costoVentas6 + inputs.costoProduccion7;
@@ -2259,7 +2286,9 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
       const r = safeDiv(inputs.pasivo, inputs.activo);
       return r === null ? null : r * 100;
     })(),
-    apalancamientoFinanciero: safeDiv(inputs.pasivo, inputs.patrimonio),
+    apalancamientoFinanciero: patrimonioNoPositivo
+      ? null
+      : safeDiv(inputs.pasivo, inputs.patrimonio),
     coberturaIntereses: (() => {
       const den = Math.abs(inputs.gastoFinanciero5305);
       if (den === 0) return null;
@@ -2274,6 +2303,7 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
       return r === null ? null : r * 100;
     })(),
     roe: (() => {
+      if (patrimonioPromedioNoPositivo) return null;
       const r = safeDiv(inputs.utilidadNeta, inputs.patrimonioPromedio);
       return r === null ? null : r * 100;
     })(),
@@ -2292,6 +2322,7 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
     diasProveedores: costsAnomalous
       ? null
       : (inputs.proveedores22 / costoTotalForRotation) * 365,
+    kpiNdMotivos,
   };
 }
 

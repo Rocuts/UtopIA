@@ -6,6 +6,9 @@
 // bloque cita el ID del hallazgo confirmado.
 // ---------------------------------------------------------------------------
 
+import * as fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -386,6 +389,41 @@ describe('niif-preproceso-17 — R4 no compara el grupo 24 completo contra el 35
     const r4 = (s.curator?.findings ?? []).filter((f) => f.code === 'CUR-R4');
     expect(r4).toHaveLength(0);
     expect(s.curator?.taxProvisionRisk).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ratios-kpis-07 — ROE y apalancamiento con patrimonio ≤ 0
+// ---------------------------------------------------------------------------
+describe('ratios-kpis-07 — ROE/apalancamiento N/D con patrimonio no positivo', () => {
+  it('pérdida con patrimonio promedio negativo: ROE null con motivo (no +451 %)', () => {
+    const csv = fs.readFileSync(
+      path.join(__dirname, '..', '__fixtures__', 'patologicos', 'perdida-y-patrimonio-negativo.csv'),
+      'utf8',
+    );
+    const ct = pp(csv).primary.controlTotals;
+    expect(ct.utilidadNeta).toBeLessThan(0);
+    expect(ct.patrimonioPromedio!).toBeLessThan(0);
+    expect(ct.roe).toBeNull();
+    expect(ct.apalancamientoFinanciero).toBeNull();
+    expect(ct.kpiNdMotivos?.roe).toMatch(/patrimonio promedio ≤ 0/);
+    expect(ct.kpiNdMotivos?.apalancamientoFinanciero).toMatch(/patrimonio ≤ 0/);
+  });
+
+  it('patrimonio positivo: ROE y apalancamiento se publican sin motivo N/D', () => {
+    const ct = pp(
+      [
+        'codigo,nombre,Saldo 2025',
+        '110505,Caja,1000000000',
+        '220505,Proveedores,400000000',
+        '310505,Capital,400000000',
+        '413505,Ventas,900000000',
+        '513505,Gastos,700000000',
+      ].join('\n'),
+    ).primary.controlTotals;
+    expect(ct.roe).toBeCloseTo(33.33, 1); // 200 / 600
+    expect(ct.apalancamientoFinanciero).toBeCloseTo(0.667, 2);
+    expect(ct.kpiNdMotivos).toEqual({});
   });
 });
 
