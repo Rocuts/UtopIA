@@ -1255,10 +1255,17 @@ function checkComparativeStatements(
       ])
     : renderingsOf([]);
   const comparativeRows = eq.comparativeRows ?? null;
+  // Celdas de cada fila y, además, las sumas de sus columnas de componentes:
+  // la plantilla v10.1 (página 08) presenta el ECP en 6 columnas —"Reservas"
+  // agrega reserva legal y otras reservas, y la prima o el ORI pueden ir con
+  // otra columna—, así que una fila honesta imprime sumas que no son una celda
+  // del JSON (revisión I2). Sumas DENTRO de una misma fila del JSON: una
+  // cifra que no sale de ninguna fila sigue bloqueando.
   const equityCells = (rows: ReadonlyArray<Record<string, unknown>>) =>
-    rows.flatMap((r) =>
-      EQUITY_FIGURE_KEYS.map((k) => (typeof r[k] === 'string' ? (r[k] as string) : null)),
-    );
+    rows.flatMap((r) => [
+      ...EQUITY_FIGURE_KEYS.map((k) => (typeof r[k] === 'string' ? (r[k] as string) : null)),
+      ...equityRowColumnSums(r),
+    ]);
   const eqAllowed = renderingsOf([
     ...equityCells(comparativeRows ?? []),
     ...equityCells(eq.rows ?? []),
@@ -1361,6 +1368,37 @@ const EQUITY_FIGURE_KEYS = [
   'ori',
   'total',
 ] as const;
+
+/** Columnas de componentes del ECP (sin el total), las que la plantilla puede agregar. */
+const EQUITY_COMPONENT_KEYS = EQUITY_FIGURE_KEYS.filter((k) => k !== 'total');
+
+/**
+ * Sumas (MoneyCop) de todo subconjunto de dos o más columnas de componentes
+ * no nulas de UNA fila del ECP: lo que imprime una columna agregada de la
+ * plantilla ("Reservas" = legal + otras). Siete componentes a lo sumo → ≤ 120
+ * sumas por fila.
+ */
+function equityRowColumnSums(row: Record<string, unknown>): string[] {
+  const values: bigint[] = [];
+  for (const k of EQUITY_COMPONENT_KEYS) {
+    const v = row[k];
+    if (typeof v !== 'string') continue;
+    try {
+      const c = parseMoneyCop(v);
+      if (c !== BigInt(0)) values.push(c);
+    } catch {
+      /* no es MoneyCop */
+    }
+  }
+  const out: string[] = [];
+  for (let mask = 1; mask < 1 << values.length; mask++) {
+    if ((mask & (mask - 1)) === 0) continue; // una sola columna: ya es una celda
+    let sum = BigInt(0);
+    for (let i = 0; i < values.length; i++) if (mask & (1 << i)) sum += values[i];
+    out.push(sum.toString());
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // R6 — conceptos anclados en prosa, resúmenes y cifras abreviadas (e2e-niif-11)

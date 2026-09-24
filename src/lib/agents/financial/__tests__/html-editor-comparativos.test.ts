@@ -16,8 +16,10 @@ import { reconcileBindingFigures } from '../agents/html-editor-validator';
 import type { HtmlEditorInput } from '../contracts/html-editor';
 import type { NiifReportJson } from '../contracts/niif-report';
 import { buildHtmlEditorUserContent } from '../prompts/html-editor.prompt';
+import { formatCopFromCents } from '../contracts/money';
 import {
   csvDosCortes,
+  csvTresCortes,
   informeTresCortes,
   preprocesarTresCortes,
 } from '../__fixtures__/tres-cortes-comparativo';
@@ -160,6 +162,56 @@ describe('Validador HTML — comparativo del ECP', () => {
       niif,
     );
     expect(soloApertura).toEqual([]);
+  });
+});
+
+describe('Validador HTML — ECP en las 6 columnas de la plantilla v10.1 (revisión I2)', () => {
+  // La página 08 de la plantilla agrega "Reservas" (legal + otras). Con
+  // reservas estatutarias (3315) además de la legal, una fila honesta imprime
+  // una suma que no es una celda del JSON: antes bloqueaba el informe.
+  const conOtrasReservas = () =>
+    informeTresCortes(
+      preprocesarTresCortes(
+        csvTresCortes()
+          .replace('110505,Caja general,Auxiliar,1,20000000,35000000,30000000', '110505,Caja general,Auxiliar,1,22000000,37000000,32000000')
+          .replace('360505,', '331505,Reservas estatutarias,Auxiliar,1,2000000,2000000,2000000\n360505,'),
+      ),
+    );
+  const cop = (cents: bigint) => formatCopFromCents(cents < BigInt(0) ? -cents : cents, true);
+  type Row = NiifReportJson['equityChanges']['rows'][number];
+  const filaPlantilla = (label: string, r: Row, reservas?: string) => [
+    label,
+    cop(BigInt(r.capitalSocial)),
+    reservas ?? cop(BigInt(r.reservaLegal) + BigInt(r.otrasReservas)),
+    cop(BigInt(r.resultadosAcumulados)),
+    cop(BigInt(r.resultadoEjercicio)),
+    cop(BigInt(r.total)),
+  ];
+  const tabla = (niif: NiifReportJson, reservasApertura?: string) => {
+    const cmp = niif.equityChanges.comparativeRows!;
+    const cur = niif.equityChanges.rows;
+    return ecpComparativo([
+      ['Periodo 2024', '', '', '', '', ''],
+      ...cmp.map((r, i) => filaPlantilla(r.label, r, i === 0 ? reservasApertura : undefined)),
+      ['Periodo 2025', '', '', '', '', ''],
+      filaPlantilla('Saldo al 31 de diciembre de 2024', cur[0]),
+      ...cur.slice(1).map((r) => filaPlantilla(r.label, r)),
+    ]);
+  };
+
+  it('Reservas = legal + otras en las filas 2024 y en la apertura 2025 no bloquea', () => {
+    const niif = conOtrasReservas();
+    const apertura = niif.equityChanges.comparativeRows![0];
+    expect(BigInt(apertura.reservaLegal)).not.toBe(BigInt(0));
+    expect(BigInt(apertura.otrasReservas)).not.toBe(BigInt(0));
+    expect(failuresOf(html(tabla(niif)), niif)).toEqual([]);
+  });
+
+  it('una cifra inventada en la columna agregada sigue bloqueando', () => {
+    const niif = conOtrasReservas();
+    const out = failuresOf(html(tabla(niif, '$7.777.777,00')), niif);
+    expect(out.map((f) => f.severity)).toEqual(['block']);
+    expect(out[0].detail).toContain('$7.777.777,00');
   });
 });
 
