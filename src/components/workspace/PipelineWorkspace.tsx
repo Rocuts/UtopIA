@@ -1873,7 +1873,9 @@ function ReportViewer({
             rawData,
             preprocessed,
             adjustmentLedger,
-            presentation: {},
+            // e2e-niif2-05: el idioma viaja como en el PDF (sin él el
+            // servidor usa el de la versión persistida).
+            presentation: { language },
           }),
         ),
       });

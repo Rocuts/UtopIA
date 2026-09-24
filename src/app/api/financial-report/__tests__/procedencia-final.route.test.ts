@@ -615,3 +615,39 @@ describe('R2-04 — firmantes y Revisor Fiscal del acta salen del intake, no del
     expect(xlsx.status).toBe(200);
   });
 });
+
+// ---------------------------------------------------------------------------
+// e2e-niif2-05 — idioma del informe persistido por defecto
+// ---------------------------------------------------------------------------
+
+describe('e2e-niif2-05 — un informe en inglés pedido sin language sale en inglés', () => {
+  it('Excel por referencia con el cuerpo de la UI (buildExportRequestBody, presentación vacía)', async () => {
+    const out = await consolidateWith(makeProvenanceParts(), { language: 'en' });
+    expect(out.report.consolidatedReport).toMatch(/^# CONSOLIDATED FINANCIAL REPORT$/m);
+    const { buildExportRequestBody } = await import('@/components/workspace/PipelineWorkspace');
+    const withRef = { ...out.report, serverVersion: { ...(out.provenance as object), ...out.reportRef } };
+    const body = buildExportRequestBody({
+      report: withRef as never,
+      rawData: PROVENANCE_CSV,
+      preprocessed: null,
+      adjustmentLedger: null,
+      presentation: {},
+    });
+    expect(body.language).toBeUndefined();
+    const res = await exportReport(req('/api/financial-report/export', body));
+    expect(res.status).toBe(200);
+    const excel = vi.mocked(generateFinancialExcel).mock.calls[0][0];
+    expect(excel.language).toBe('en');
+    expect(excel.report.consolidatedReport.startsWith('# VERIFIED PROVENANCE')).toBe(true);
+    expect(excel.report.consolidatedReport).not.toMatch(/PROCEDENCIA VERIFICADA/);
+  });
+
+  it('un language explícito del cuerpo prevalece (presentación)', async () => {
+    const out = await consolidateWith(makeProvenanceParts(), { language: 'en' });
+    const res = await exportReport(
+      req('/api/financial-report/export', { reportRef: out.reportRef, format: 'excel', language: 'es' }),
+    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(generateFinancialExcel).mock.calls[0][0].language).toBe('es');
+  });
+});

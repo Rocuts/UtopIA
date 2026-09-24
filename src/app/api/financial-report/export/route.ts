@@ -37,6 +37,7 @@ import {
   type PersistedReportResolution,
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
+import { versionLanguage } from '@/lib/reports/financial-report-version';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
   withServerRenderedClientReport,
@@ -295,6 +296,11 @@ function serverGeneratedVerdicts(
   return withServerPartVerdicts(report, preprocessed, language, { sealUnstructuredParts: false });
 }
 
+/** `language` explícito del cuerpo (presentación), si es válido. */
+function requestedLanguage(body: Record<string, unknown>): 'es' | 'en' | null {
+  return body.language === 'en' || body.language === 'es' ? body.language : null;
+}
+
 function incoherentSourcesResponse(details: string[]): Response {
   return NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 });
 }
@@ -322,7 +328,10 @@ async function exportPersisted(
   format: 'excel' | 'pdf-elite',
 ): Promise<Response> {
   const { preprocessed, provenance } = persisted;
-  const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+  // e2e-niif2-05: sin `language` en el cuerpo (el Excel de la UI no lo
+  // enviaba) el artefacto sale en el idioma de la versión persistida, no en
+  // español por defecto.
+  const language: 'es' | 'en' = requestedLanguage(body) ?? persisted.language;
   // Veredictos con las reglas vigentes y Markdown re-renderizado desde el JSON
   // persistido (una versión anterior a I3 pudo guardar el texto del cliente).
   const report = withServerRenderedPersisted(persisted.report, preprocessed, language);
@@ -434,7 +443,8 @@ export async function POST(req: Request) {
       const source = resolveExportPreprocessed(body, 'export/excel');
       if (!source.ok) return source.response;
       const { preprocessed } = source;
-      const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+      // Sin `language`, el idioma del consolidado recibido (presentación).
+      const excelLanguage: 'es' | 'en' = requestedLanguage(body) ?? versionLanguage({ report: body.report });
       const report = clientReportWithServerMarkdown(body.report as FinancialReport, source, excelLanguage);
       const blocked = rejectInvalidExport(report, preprocessed);
       if (blocked) return blocked;
@@ -577,7 +587,8 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     const source = resolveExportPreprocessed(b as Record<string, unknown>, 'pdf-elite/fast');
     if (!source.ok) return source.response;
     const { preprocessed } = source;
-    const language: 'es' | 'en' = b.language === 'en' ? 'en' : 'es';
+    const language: 'es' | 'en' =
+      requestedLanguage(b as Record<string, unknown>) ?? versionLanguage({ report: b.report });
     const report = clientReportWithServerMarkdown(b.report, source, language);
     const blocked = rejectInvalidExport(report, preprocessed);
     if (blocked) return blocked;

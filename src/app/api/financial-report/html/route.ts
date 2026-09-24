@@ -78,6 +78,15 @@ import {
 } from '@/lib/reports/provenance-stamp';
 
 /**
+ * Idioma del HTML: el `language` explícito del cuerpo o, con versión
+ * persistida, el de esa versión (e2e-niif2-05); sin ninguno, español.
+ */
+function htmlLanguage(body: unknown, persisted: 'es' | 'en' | null): 'es' | 'en' {
+  const requested = (body as { language?: unknown } | null)?.language;
+  return requested === 'en' || requested === 'es' ? requested : (persisted ?? 'es');
+}
+
+/**
  * Procedencia del HTML generado (procedencia-R2-06): un HTML que el Editor
  * Jefe declaró no emitible sale estampado BORRADOR por `runHtmlEditor`; el
  * sello de procedencia lo aclara en vez de decir "verificada" a secas.
@@ -186,7 +195,7 @@ export async function POST(req: Request) {
             report: withServerRenderedPersisted(
               resolved.report,
               resolved.preprocessed,
-              (rawBody as { language?: unknown } | null)?.language === 'en' ? 'en' : 'es',
+              htmlLanguage(rawBody, resolved.language),
             ),
           }
         : resolved;
@@ -209,7 +218,10 @@ export async function POST(req: Request) {
         : { kind: 'unverified', ...(draft ? { draft } : {}) };
     const body: unknown =
       persisted.kind === 'ok' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
-        ? htmlInputFromPersisted(rawBody as Record<string, unknown>, persisted)
+        ? {
+            ...htmlInputFromPersisted(rawBody as Record<string, unknown>, persisted),
+            language: htmlLanguage(rawBody, persisted.language),
+          }
         : rawBody;
     const parsed = HtmlEditorInputSchema.safeParse(body);
 
