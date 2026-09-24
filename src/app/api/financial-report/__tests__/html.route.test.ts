@@ -16,6 +16,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ChecklistFailure } from '@/lib/agents/financial/agents/html-editor-validator';
+import { makeCoherentNiifReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 
 // ---------------------------------------------------------------------------
 // Mocks — declarados ANTES del dynamic import del route
@@ -122,7 +123,9 @@ const { POST } = await import('../html/route.js');
 
 /** Body mínimo que pasa la validación mockeada del schema */
 const VALID_BODY = {
-  niifReport: { company: { name: 'Test SAS', nit: '900123456-1', fiscalPeriod: '2025' } },
+  // JSON NIIF estructuralmente válido y coherente: el route aplica el gate
+  // aritmético servidor (misma regla que Excel/PDF) antes del Editor Jefe.
+  niifReport: makeCoherentNiifReport(),
   strategyReport: {},
   governanceReport: {},
   company: { name: 'Empresa Test SAS', nit: '900123456-1', fiscalPeriod: '2025' },
@@ -310,5 +313,90 @@ describe('POST /api/financial-report/html', () => {
     expect(mockRunHtmlEditor).toHaveBeenCalledOnce();
     const [calledWith] = mockRunHtmlEditor.mock.calls[0] as [{ metadata: { entityNit: string } }];
     expect(calledWith.metadata.entityNit).toBe('900123456-1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pipeline-flujo-10 — gate aritmético servidor (misma regla que Excel/PDF)
+// ---------------------------------------------------------------------------
+
+/** Parte II mínima válida según StrategyReportSchema. */
+function strategyReportWith(totalActivoCents: string) {
+  const rec = {
+    title: 'Revisar cartera', diagnosis: 'Cartera alta.', action: 'Cobrar.', expectedImpact: 'Liquidez.',
+    priority: 'medium' as const, horizon: 'short_term' as const, normReference: null,
+  };
+  return {
+    company: {
+      name: 'Empresa Prueba SAS', nit: '900123456', entityType: null, sector: null, niifGroup: 2,
+      fiscalPeriod: '2025', comparativePeriod: null, city: null, signatories: null,
+    },
+    reportMode: 'LINEA_BASE',
+    confidence: null,
+    executiveDashboard: {
+      rows: [{ label: 'Total Activo', primary: totalActivoCents, comparative: null, variation: null, variationPct: null, commentary: 'Cierre.' }],
+      executiveCommentary: 'Primer cierre.',
+    },
+    technicalAlerts: [],
+    kpis: [{
+      category: 'liquidity', name: 'Capital de trabajo', formula: 'AC − PC', resultPrimary: '1', resultComparative: null,
+      unit: 'cop', benchmarkBand: { description: '> 0', lowerBound: '0', upperBound: null }, diagnosis: 'ok',
+      yoyVariation: null, confidence: null, anomalyFlag: null, presentationMode: null, baselineLabel: null, sparklinePoints: null,
+    }],
+    dupontAnalysis: null,
+    trends: null,
+    breakEven: {
+      fixedCostsCop: '1', variableCostsCop: '1', revenueCop: '1', breakEvenPointCop: '1', marginOfSafetyPct: '1',
+      classificationNote: 'nota',
+    },
+    projectedCashFlow: {
+      liquidityGate: { triggered: false, currentAssetsCop: '2', currentLiabilitiesCop: '1', gapCop: '1', message: null },
+      initialCashBalanceCop: '1', dsoDays: '30', inflationIndexPct: '5', scenarios: [], solvencyNarrative: 'ok',
+      controlKpis: [], assumptionsNote: 'supuestos',
+    },
+    recommendations: [rec, rec, rec],
+    presumedCostWarning: null,
+    preparerNotes: [],
+  };
+}
+
+describe('POST /api/financial-report/html — gate aritmético servidor', () => {
+  beforeEach(() => {
+    mockRunHtmlEditor.mockReset();
+    mockRunHtmlEditor.mockResolvedValue(MOCK_HTML_OUTPUT);
+  });
+
+  it('JSON NIIF que NO cuadra (A ≠ P + Pt) → 422 y no se paga el Editor Jefe', async () => {
+    const niif = makeCoherentNiifReport();
+    niif.balanceSheet.equity = [{ ...niif.balanceSheet.equity[0], amountPrimary: '500000' }];
+    niif.balanceSheet.totalEquityPrimary = '500000';
+    for (const req of [makeNonStreamingRequest, makeStreamingRequest]) {
+      const res = await POST(req({ ...VALID_BODY, niifReport: niif }));
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { details: string[] };
+      expect(body.details.length).toBeGreaterThan(0);
+    }
+    expect(mockRunHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('Parte II con Total Activo distinto del Balance NIIF → 422', async () => {
+    const res = await POST(
+      makeNonStreamingRequest({ ...VALID_BODY, strategyReport: strategyReportWith('10000000') }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { details: string[] };
+    expect(body.details.join(' ')).toMatch(/Parte II — Dashboard — Total Activo/);
+  });
+
+  it('Parte II coherente con el Balance NIIF → 200', async () => {
+    const res = await POST(
+      makeNonStreamingRequest({ ...VALID_BODY, strategyReport: strategyReportWith('1000000') }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('preprocesado malformado → 400', async () => {
+    const res = await POST(makeNonStreamingRequest({ ...VALID_BODY, preprocessed: { periods: [] } }));
+    expect(res.status).toBe(400);
   });
 });

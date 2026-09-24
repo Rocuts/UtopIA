@@ -43,9 +43,65 @@ import {
   resolveOwnedReportId,
   type TelemetryContext,
 } from '@/lib/db/telemetry';
+import { NiifReportSchema } from '@/lib/agents/financial/contracts/niif-report';
+import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
+import { validateNiifReportJson } from '@/lib/agents/financial/validators/niif-json-validator';
+import {
+  checkCashFlowInvariants,
+  formatCashFlowViolations,
+} from '@/lib/agents/financial/contracts/deterministic-breakdown';
+import { reconcileStrategyAnchors } from '@/lib/agents/financial/validators/strategy-anchors';
+import { buildNiifValidatorOptions } from '@/lib/agents/financial/orchestrator';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
+
+/**
+ * Gate aritmético servidor del HTML — la MISMA regla que Excel/PDF
+ * (`financialExportBlockers` en /export): errores del validador JSON NIIF, E15
+ * promovido a bloqueante e invariantes del EFE; más el cruce de la Parte II
+ * contra sus anclas. Si el cliente envía el preprocesado que usó /niif, el JSON
+ * se cruza además contra esas anclas (mismo validador que /niif).
+ *
+ * Antes /html sólo validaba la forma: un JSON NIIF con Activo ≠ Pasivo +
+ * Patrimonio producía un HTML "emitible" (pipeline-flujo-10). La UI deshabilita
+ * el botón con reconciliation.clean=false, pero la API aceptaba cualquier JSON.
+ *
+ * TODO(cross-dep WP06): extraer con `financialExportBlockers` un helper común
+ * sobre el JSON NIIF para que las tres superficies compartan una sola función.
+ */
+function htmlArithmeticBlockers(
+  niifReport: unknown,
+  strategyReport: unknown,
+  preprocessed: PreprocessedBalance | undefined,
+): string[] {
+  const niif = NiifReportSchema.safeParse(niifReport);
+  if (!niif.success) {
+    return ['Faltan cifras estructuradas válidas. Regenera el informe antes de exportar.'];
+  }
+  const blockers: string[] = [];
+  const validation = validateNiifReportJson(
+    niif.data,
+    preprocessed ? buildNiifValidatorOptions(preprocessed) : undefined,
+  );
+  blockers.push(...validation.errors);
+  // Un balance impreso sin detalle que lo soporte no es descargable (igual que /export).
+  blockers.push(...validation.warnings.filter((w) => w.startsWith('E15.')));
+  blockers.push(...formatCashFlowViolations(checkCashFlowInvariants(niif.data.cashFlow)));
+
+  const strategy = StrategyReportSchema.safeParse(strategyReport);
+  if (strategy.success) {
+    const check = reconcileStrategyAnchors(strategy.data, {
+      primary: preprocessed?.primary,
+      comparative: preprocessed ? (preprocessed.comparative ?? null) : undefined,
+      niif: niif.data,
+    });
+    blockers.push(...check.deviations.map((d) => `Parte II — ${d}`));
+  }
+  return Array.from(new Set(blockers));
+}
 
 /**
  * Deja rastro en el servidor cuando el informe no superó la verificación
@@ -79,6 +135,31 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: 'Invalid request format.', details: errors },
         { status: 400 },
+      );
+    }
+
+    // Preprocesado opcional (el que usó /niif): habilita el cruce contra anclas.
+    const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
+    let preprocessed: PreprocessedBalance | undefined;
+    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
+      const revived = revivePreprocessedBalance(bodyPreprocessed);
+      if (!revived) {
+        return NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 });
+      }
+      preprocessed = revived;
+    }
+
+    // Gate aritmético ANTES de pagar el Editor Jefe (32-48K tokens): misma
+    // regla que Excel/PDF. Un informe que no cuadra no produce HTML.
+    const blockers = htmlArithmeticBlockers(
+      parsed.data.niifReport,
+      parsed.data.strategyReport,
+      preprocessed,
+    );
+    if (blockers.length > 0) {
+      return NextResponse.json(
+        { error: 'Report is not exportable.', details: blockers },
+        { status: 422 },
       );
     }
 

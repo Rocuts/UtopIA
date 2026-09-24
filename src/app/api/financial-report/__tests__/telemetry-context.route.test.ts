@@ -24,6 +24,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { makeCoherentNiifReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const REPORT = '33333333-3333-4333-8333-333333333333';
@@ -227,7 +228,9 @@ const RUTAS = [
     agente: 'html-editor',
     post: postHtml,
     body: (extra: Record<string, unknown> = {}) => ({
-      niifReport: NIIF_RESULT,
+      // JSON NIIF estructuralmente válido: /html aplica el gate aritmético
+      // servidor antes de invocar al Editor Jefe (pipeline-flujo-10).
+      niifReport: makeCoherentNiifReport(),
       strategyReport: { fullContent: '## Estrategia' },
       governanceReport: { fullContent: '## Gobierno' },
       metadata: { entityNit: '900123456-1' },
