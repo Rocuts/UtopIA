@@ -2046,29 +2046,31 @@ function labelYearErrors(json: NiifReportJson): string[] {
   const cp = json.company.comparativePeriod ? /\d{4}/.exec(json.company.comparativePeriod)?.[0] : undefined;
   if (cp) allowed.add(cp);
   // El ECP del periodo comparativo abre con el cierre del año anterior al
-  // comparativo (traslado de su resultado).
+  // comparativo (traslado de su resultado): ese año se admite SÓLO en sus
+  // filas; en el resto del informe sigue fuera de periodo (e2e-niif-09).
   const comparativeRows = json.equityChanges.comparativeRows ?? [];
-  if (cp && comparativeRows.length > 0) allowed.add(String(Number(cp) - 1));
-  const labels: Array<[string, string]> = [];
+  const allowedComparativeRows = new Set(allowed);
+  if (cp) allowedComparativeRows.add(String(Number(cp) - 1));
+  const labels: Array<[string, string, Set<string>]> = [];
   for (const [where, lines] of [
     ['Estado de Situación Financiera', [...json.balanceSheet.assets, ...json.balanceSheet.liabilities, ...json.balanceSheet.equity]],
     ['Estado de Resultados', json.incomeStatement.lines],
     ['Estado de Flujos de Efectivo', json.cashFlow.sections.flatMap((s) => s.lines)],
   ] as const) {
-    for (const l of lines) labels.push([where, l.label]);
+    for (const l of lines) labels.push([where, l.label, allowed]);
   }
-  for (const r of json.equityChanges.rows) labels.push(['Estado de Cambios en el Patrimonio', r.label]);
+  for (const r of json.equityChanges.rows) labels.push(['Estado de Cambios en el Patrimonio', r.label, allowed]);
   for (const r of comparativeRows) {
-    labels.push(['Estado de Cambios en el Patrimonio (periodo comparativo)', r.label]);
+    labels.push(['Estado de Cambios en el Patrimonio (periodo comparativo)', r.label, allowedComparativeRows]);
   }
 
   const out: string[] = [];
-  for (const [where, label] of labels) {
+  for (const [where, label, years] of labels) {
     const re = /(?<![\d/.,])((?:19|20)\d{2})(?![\d])/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(label)) !== null) {
       const year = m[1];
-      if (allowed.has(year)) continue;
+      if (years.has(year)) continue;
       const before = label.slice(0, m.index);
       if (/\/\s*$/.test(before) || CITATION_BEFORE_YEAR_RE.test(before)) continue;
       out.push(

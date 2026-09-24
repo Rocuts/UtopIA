@@ -271,6 +271,30 @@ describe('validador — la columna comparativa cumple E2/E3/E11/E18/E23 y el ECP
   const pp = preprocesarTresCortes();
   const base = () => clonar(informeTresCortes(pp));
 
+  it('E25: el año anterior al comparativo (2023) sólo se admite en las filas del ECP comparativo', () => {
+    // Revisión adversarial P2: el año 2023 se había admitido en TODOS los
+    // rótulos del informe; un "31 de diciembre de 2023" en el ESF, el EFE o el
+    // ECP del periodo 2025 (el caso de e2e-niif-09) volvía a pasar sin error.
+    const ok = validar(base(), pp).errors;
+    expect(ok.filter((e) => e.startsWith('E25.'))).toEqual([]);
+    for (const mutate of [
+      (j: NiifReportJson) => {
+        j.balanceSheet.equity[0].label = `${j.balanceSheet.equity[0].label} al 31 de diciembre de 2023`;
+      },
+      (j: NiifReportJson) => {
+        seccion(j, 'operating').lines[1].label = 'Depreciación del ejercicio 2023';
+      },
+      (j: NiifReportJson) => {
+        const row = j.equityChanges.rows.find((r) => r.kind === 'profit_for_period')!;
+        row.label = 'Utilidad del ejercicio 2023';
+      },
+    ]) {
+      const j = base();
+      mutate(j);
+      expect(validar(j, pp).errors.some((e) => e.startsWith('E25.') && e.includes('2023'))).toBe(true);
+    }
+  });
+
   it('mover $1.000.000 entre renglones comparativos de la misma actividad → E23', () => {
     const j = base();
     const op = seccion(j, 'operating');
