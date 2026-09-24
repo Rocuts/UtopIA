@@ -38,6 +38,7 @@ import {
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
   appendPdfProvenance,
   provenanceHeaders,
@@ -192,7 +193,11 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
   if (typeof body.rawData !== 'string' || body.rawData.trim().length === 0) {
     return fromOwnRows();
   }
-  const read = readRawData(body.rawData, label);
+  // Mismas confirmaciones de ingesta que /niif (unidad, vencimientos): sin
+  // ellas un balance "en miles" se re-derivaría sin reexpresar (422 falso).
+  const confirmed = applyRequestConfirmations(body, body.rawData);
+  if (!confirmed.ok) return { ok: false, response: confirmed.response };
+  const read = readRawData(confirmed.rawData, label);
   if (read.kind === 'rejected') return { ok: false, response: ingestRejectedResponse(read.reasons) };
   if (read.kind === 'empty') {
     // Mismo respaldo que /niif: sin filas legibles en `rawData` se usa el
@@ -363,7 +368,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid request.', details: errors }, { status: 400 });
     }
 
-    const { rawData, company, language, instructions } = parsed.data;
+    const { company, language, instructions } = parsed.data;
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     const read = readRawData(rawData, 'export/full');
     if (read.kind === 'rejected') return ingestRejectedResponse(read.reasons);
@@ -519,7 +527,10 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     const errors = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
     return NextResponse.json({ error: 'Invalid request.', details: errors }, { status: 400 });
   }
-  const { rawData, company, language, instructions } = parsed.data;
+  const { company, language, instructions } = parsed.data;
+  const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+  if (!confirmed.ok) return confirmed.response;
+  const rawData = confirmed.rawData;
 
   // Preprocess up front so we can reuse the snapshot for both pillars and the
   // BLOQUEADO degenerate path. El orquestador recibe el MISMO preprocesado: una

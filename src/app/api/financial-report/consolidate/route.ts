@@ -16,6 +16,7 @@ import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import { parseReportParts } from '@/lib/reports/report-parts';
 import { buildFinancialReportVersion } from '@/lib/reports/financial-report-version';
 import {
@@ -141,7 +142,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const { rawData, company, language } = base.data;
+  const { company, language } = base.data;
+  // P4 × P1: la unidad confirmada y los vencimientos declarados que /niif
+  // recibió como campos se aplican igual aquí; sin ellos la re-derivación del
+  // balance volvería a bloquear un archivo "en miles" (422 falso).
+  const confirmed = applyRequestConfirmations(body, base.data.rawData);
+  if (!confirmed.ok) return confirmed.response;
+  const rawData = confirmed.rawData;
   try {
     const ctx = await prepareFinancialContext(
       { rawData, company, language },

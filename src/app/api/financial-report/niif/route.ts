@@ -11,11 +11,10 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import {
-  incorporarConfirmaciones,
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
-import { leerCampoUnidad, MAX_VENCIMIENTOS_DECLARADOS } from '@/lib/upload/ingest-directives';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
   revivePreprocessedBalance,
   toJsonSafe,
@@ -86,22 +85,6 @@ const adjustmentLedgerSchema = z
   })
   .optional();
 
-/**
- * P4-b: excepciones de vencimiento por cuenta (`código → corriente |
- * no_corriente`). Sólo cuentas de activo (1) o pasivo (2). No viaja al LLM:
- * es entrada del usuario que el preprocesador aplica de forma determinista.
- */
-const maturityOverridesSchema = z
-  .record(
-    z.string().regex(/^[12]\d{1,19}$/, 'código PUC de activo (1) o pasivo (2), 2 a 20 dígitos'),
-    z.enum(['corriente', 'no_corriente']),
-  )
-  .refine((m) => Object.keys(m).length <= MAX_VENCIMIENTOS_DECLARADOS, {
-    message: `máximo ${MAX_VENCIMIENTOS_DECLARADOS} excepciones`,
-  })
-  .nullable()
-  .optional();
-
 export async function POST(req: Request) {
   const gate = await requireAuthSession();
   if (!gate.ok) return gate.response;
@@ -128,47 +111,11 @@ export async function POST(req: Request) {
     // al inicio de `rawData` (el intake ya las trae ahí): Stage 0, los agentes
     // y /export re-derivan el balance del MISMO texto. Una contradicción con
     // las directivas del texto es 422, nunca se elige una en silencio.
-    const unitField = leerCampoUnidad((body as { unitMultiplier?: unknown }).unitMultiplier);
-    if (!unitField.ok) {
-      return NextResponse.json(
-        { error: 'Invalid request format.', details: [`unitMultiplier: ${unitField.error}`] },
-        { status: 400 },
-      );
-    }
-    const maturityParsed = maturityOverridesSchema.safeParse(
-      (body as { maturityOverrides?: unknown }).maturityOverrides,
-    );
-    if (!maturityParsed.success) {
-      return NextResponse.json(
-        {
-          error: 'Invalid request format.',
-          details: maturityParsed.error.issues.map(
-            (i) => `maturityOverrides.${i.path.join('.')}: ${i.message}`,
-          ),
-        },
-        { status: 400 },
-      );
-    }
-    let rawData: string;
-    try {
-      rawData = incorporarConfirmaciones(parsed.data.rawData, {
-        ...(unitField.unidad ? { unidadConfirmada: unitField.unidad } : {}),
-        ...(maturityParsed.data ? { vencimientos: maturityParsed.data } : {}),
-      });
-    } catch (err) {
-      if (err instanceof TrialBalanceIngestError) {
-        return NextResponse.json(
-          {
-            error: 'El balance de prueba tiene inconsistencias criticas.',
-            code: 'BALANCE_VALIDATION_FAILED',
-            reasons: err.reasons,
-            suggestedAccounts: [],
-          },
-          { status: 422 },
-        );
-      }
-      throw err;
-    }
+    // /consolidate y /export aceptan los mismos campos con el mismo helper
+    // (`applyRequestConfirmations`), para quien no reenvía el texto confirmado.
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     const provisionalParsed = provisionalFlagSchema.safeParse(
       (body as { provisional?: unknown }).provisional,
