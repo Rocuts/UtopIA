@@ -30,7 +30,11 @@ import type {
   ControlTotalsCents,
   ControlTotalsRaw,
 } from '@/lib/preprocessing/trial-balance';
-import { curatorFindingToDiscrepancy } from '@/lib/preprocessing/trial-balance';
+import {
+  curatorFindingToDiscrepancy,
+  extractEquityBreakdown,
+  isRentaCreditAccount,
+} from '@/lib/preprocessing/trial-balance';
 import { runR8 } from '@/lib/preprocessing/curator-rules/r8-virtual-close';
 import type { Adjustment } from './types';
 
@@ -483,20 +487,6 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     return total;
   };
 
-  // Suma de cuentas por prefijo de codigo dentro de una clase (mirror de
-  // `sumLeavesPrecise` + filtros por startsWith del preprocessor).
-  const sumByCodePrefix = (classDigit: number, prefix: string): number => {
-    const cls = snap.classes.find((c) => c.code === classDigit);
-    if (!cls) return 0;
-    let total = 0;
-    for (const acc of cls.accounts) {
-      if (normalizeCode(acc.code).startsWith(prefix)) {
-        total += Number(acc.balance) || 0;
-      }
-    }
-    return total;
-  };
-
   const gastosTotales = totalExpenses + totalCosts + totalProduction;
   const efectivoCuenta11 = sumByGroupPrefixes('1', new Set(['11']));
 
@@ -512,19 +502,24 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
   // `ingresosNetos` — espejo de `trial-balance.ts`.
   const utilidadAntesImpuestos = ingresosNetos - (gastosTotales - impuestoCausado);
 
-  // Saldo a favor del impuesto de renta — mismo detector del preprocessor:
-  // 5404 acreedor (negativo en clase 5) > 1805 > 1355 > 0.
-  const saldo5404 = sumByCodePrefix(5, '5404');
-  const saldo1805 = sumByCodePrefix(1, '1805');
-  const saldo1355 = sumByCodePrefix(1, '1355');
-  let saldoAFavorImpuesto = 0;
-  if (saldo5404 < 0) {
-    saldoAFavorImpuesto = Math.abs(saldo5404);
-  } else if (saldo1805 > 0) {
-    saldoAFavorImpuesto = saldo1805;
-  } else if (saldo1355 > 0) {
-    saldoAFavorImpuesto = saldo1355;
-  }
+  // Saldo a favor del impuesto de renta — MISMA regla del preprocesador
+  // (niif-preproceso-19): créditos de renta de la lista blanca
+  // `isRentaCreditAccount` (135505, 135515, 135595 de renta y 1805 sólo si su
+  // nombre indica un impuesto) menos el pasivo 2404, en centavos y sólo si es
+  // positivo. El detector anterior (5404 → 1805 → 1355 bruto) publicaba obras
+  // de arte, ReteIVA o ReteICA como saldo a favor tras cualquier ajuste.
+  const sumCentsWhere = (classDigit: number, pred: (code: string, name: string) => boolean): bigint => {
+    const cls = snap.classes.find((c) => c.code === classDigit);
+    if (!cls) return ZERO_BIG;
+    let acc = ZERO_BIG;
+    for (const a of cls.accounts) {
+      if (pred(normalizeCode(a.code), a.name ?? '')) acc += toCents(Number(a.balance) || 0);
+    }
+    return acc;
+  };
+  const saldoAFavorCents =
+    sumCentsWhere(1, isRentaCreditAccount) - sumCentsWhere(2, (code) => code.startsWith('2404'));
+  const saldoAFavorImpuesto = saldoAFavorCents > ZERO_BIG ? Number(saldoAFavorCents) / 100 : 0;
 
   // `ingresosNetos`, `totalDevoluciones` y sus centavos se calculan arriba,
   // junto a `netIncome` y su guarda, porque todo el P&L cuelga de ellos.
@@ -539,7 +534,7 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     utilidadAntesImpuestos: toCents(utilidadAntesImpuestos),
     impuestoCausado: toCents(impuestoCausado),
     efectivoCuenta11: toCents(efectivoCuenta11),
-    saldoAFavorImpuesto: toCents(saldoAFavorImpuesto),
+    saldoAFavorImpuesto: saldoAFavorCents > ZERO_BIG ? saldoAFavorCents : ZERO_BIG,
     totalDevoluciones: totalDevolucionesCents,
     ingresosNetos: ingresosNetosCents,
   };
@@ -631,57 +626,31 @@ function toRawString(value: number): string {
 // equityBreakdown re-compute (mismas convenciones del preprocessor)
 // ---------------------------------------------------------------------------
 
+/**
+ * Desglose del patrimonio con la MISMA regla del preprocesador
+ * (`extractEquityBreakdown`, niif-preproceso-13): grupo 31 completo como
+ * capital suscrito y pagado (310505 informativo), 32 superávit de capital,
+ * 3305 / resto del 33 reservas, 34 revalorización, 35 dividendos en acciones,
+ * 36 (3605 y 3610) resultado del ejercicio, 37 completo acumuladas, 38
+ * valorizaciones y el resto de la clase 3 aparte. Las cuentas de la clase son
+ * hojas (preprocesador o ajuste), así que se marcan transaccionales para que
+ * el extractor no las vuelva a filtrar por nivel.
+ */
 function recomputeEquityBreakdown(
   classes: PUCClass[],
 ): PeriodSnapshot['equityBreakdown'] {
-  const out: PeriodSnapshot['equityBreakdown'] = {};
   const cls3 = classes.find((c) => c.code === 3);
-  if (!cls3) return out;
-
-  const sumLeavesUnder = (prefix: string): number => {
-    return cls3.accounts.reduce((s, a) => {
-      const code = normalizeCode(a.code);
-      return code.startsWith(prefix) ? s + (Number(a.balance) || 0) : s;
-    }, 0);
-  };
-
-  const v3105 = sumLeavesUnder('3105');
-  if (v3105 !== 0) out.capitalAutorizado = v3105;
-
-  const v3115 = sumLeavesUnder('3115');
-  const v3120 = sumLeavesUnder('3120');
-  if (v3115 !== 0 || v3120 !== 0) {
-    out.capitalSuscritoPagado = v3115 + v3120;
-  }
-
-  const v3305 = sumLeavesUnder('3305');
-  if (v3305 !== 0) out.reservaLegal = v3305;
-
-  // Otras reservas: hojas bajo grupo 33 excluyendo prefijo 3305
-  let otrasRes = 0;
-  for (const a of cls3.accounts) {
-    const code = normalizeCode(a.code);
-    if (
-      code.startsWith('33') &&
-      !code.startsWith('3305') &&
-      Number(a.balance) !== 0
-    ) {
-      otrasRes += Number(a.balance) || 0;
-    }
-  }
-  if (otrasRes !== 0) out.otrasReservas = otrasRes;
-
-  const v3605 = sumLeavesUnder('3605');
-  if (v3605 !== 0) out.utilidadEjercicio = v3605;
-
-  const v3610 = sumLeavesUnder('3610');
-  const v3705 = sumLeavesUnder('3705');
-  const v3710 = sumLeavesUnder('3710');
-  if (v3610 !== 0 || v3705 !== 0 || v3710 !== 0) {
-    out.utilidadesAcumuladas = v3610 + v3705 + v3710;
-  }
-
-  return out;
+  if (!cls3) return {};
+  return extractEquityBreakdown(
+    cls3.accounts.map((a) => ({
+      code: normalizeCode(a.code),
+      name: a.name,
+      level: a.level,
+      transactional: true,
+      balance: Number(a.balance) || 0,
+    })),
+    [],
+  );
 }
 
 // ---------------------------------------------------------------------------
