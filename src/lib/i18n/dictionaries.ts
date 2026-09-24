@@ -328,6 +328,16 @@ export const dict = {
           monteCarloEmpty:
             'Sin simulación ejecutada sobre sus datos. El escenario simulado se calcula en el Centro de Mando con su balance.',
         },
+        escenarios: {
+          subtitle: 'Escenarios deterministas ilustrativos · Base / Optimista / Pesimista · entradas editables',
+          badge: 'Ilustrativo — supuestos del simulador; no son datos de su empresa',
+          narrative:
+            'El futuro no es una línea; es un abanico. Mueva el crecimiento y los costos variables y vea cómo reaccionan tres escenarios deterministas. No hay probabilidades: son ejercicios de sensibilidad.',
+          baseRevenue: 'Ingresos base ilustrativos (Año 0)',
+          assumptions: 'Horizonte 5 años · Capex 8 % de ingresos · Overhead 12 % · sin impuestos ni capital de trabajo',
+          baseDescription: 'Escenario central con las entradas del simulador.',
+          cumulativeLabel: 'EBITDA − capex acumulado (5 años)',
+        },
         macro: {
           eyebrow: 'El Futuro — Macroeconomía',
           title: 'Macroeconomía',
@@ -1904,6 +1914,16 @@ export const dict = {
           monteCarloTitle: 'Monte Carlo simulation',
           monteCarloEmpty:
             'No simulation has been run on your data. The simulated scenario is computed in the Command Center from your trial balance.',
+        },
+        escenarios: {
+          subtitle: 'Illustrative deterministic scenarios · Base / Optimistic / Pessimistic · editable inputs',
+          badge: 'Illustrative — simulator assumptions; not your company data',
+          narrative:
+            'The future is not a line; it is a fan. Move growth and variable costs and watch three deterministic scenarios react. There are no probabilities: these are sensitivity exercises.',
+          baseRevenue: 'Illustrative base revenue (Year 0)',
+          assumptions: '5-year horizon · Capex 8% of revenue · Overhead 12% · no taxes or working capital',
+          baseDescription: 'Central scenario with the simulator inputs.',
+          cumulativeLabel: 'EBITDA − capex, cumulative (5 years)',
         },
         macro: {
           eyebrow: 'The Future — Macroeconomics',
