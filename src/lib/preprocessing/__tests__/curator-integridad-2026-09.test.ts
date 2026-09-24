@@ -352,6 +352,44 @@ describe('niif-preproceso-22 — reclasificación de saldos crédito de activo c
 });
 
 // ---------------------------------------------------------------------------
+// niif-preproceso-17 — R4 sólo con cuentas de renta, sin "pasivo oculto"
+// ---------------------------------------------------------------------------
+describe('niif-preproceso-17 — R4 no compara el grupo 24 completo contra el 35 % de la utilidad', () => {
+  it('IVA por pagar alto sin renta causada: hallazgo informativo (antes: silencio)', () => {
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2025',
+        '110505,Caja,2000000000',
+        '240805,IVA por pagar,400000000',
+        '310505,Capital,600000000',
+        '413505,Ventas,3000000000',
+        '513505,Gastos,2000000000',
+      ].join('\n'),
+    ).primary;
+    const r4 = (s.curator?.findings ?? []).filter((f) => f.code === 'CUR-R4');
+    expect(r4).toHaveLength(1);
+    expect(r4[0].severity).toBe('informativo');
+    expect(s.curator?.taxProvisionRisk).toBeUndefined();
+  });
+
+  it('renta causada (5405 = 35 % de la UAI) y 2404 = 0: sin crítico ni monto "a provisionar"', () => {
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2025',
+        '110505,Caja,1650000000',
+        '310505,Capital,1000000000',
+        '413505,Ventas,3000000000',
+        '513505,Gastos,2000000000',
+        '540505,Impuesto de renta,350000000',
+      ].join('\n'),
+    ).primary;
+    const r4 = (s.curator?.findings ?? []).filter((f) => f.code === 'CUR-R4');
+    expect(r4).toHaveLength(0);
+    expect(s.curator?.taxProvisionRisk).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // niif-preproceso-26 — R12 respeta periodoTipo
 // ---------------------------------------------------------------------------
 describe('niif-preproceso-26 — cortes parciales no se sellan por libros abiertos', () => {

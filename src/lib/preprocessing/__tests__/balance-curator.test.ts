@@ -420,40 +420,49 @@ describe('R3 — Brecha de Cuadratura con Atribución', () => {
 // R4 — Validación de provisión de renta
 // ---------------------------------------------------------------------------
 
-describe('R4 — Riesgo de Pasivo Fiscal Oculto', () => {
-  it('emite finding crítico cuando provisión < 30% de utilidad neta', () => {
+describe('R4 — Causación del impuesto de renta (sólo cuentas de renta)', () => {
+  // Auditoría 2026-09 (niif-preproceso-17): la versión anterior comparaba TODO
+  // el grupo 24 contra el 35 % de la utilidad NETA y emitía un crítico con un
+  // monto "a provisionar". La utilidad contable no es base fiscal: R4 sólo
+  // informa, sin monto, cuando no hay gasto de renta causado.
+
+  it('UAI positiva sin gasto de renta (54): hallazgo INFORMATIVO sin cifra de impuesto', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
         utilidadNeta: 2_000_000_000,
-        impuestosCuenta24: 3_800_000, // 0.19% — muy bajo
+        impuestosCuenta24: 3_800_000, // IVA/ICA: no es renta
       }),
       classes: [],
     });
     const out = runR4(snap);
-    expect(out.taxProvisionRisk).toBeDefined();
-    expect(out.taxProvisionRisk!.severidad).toBe('critico');
-    expect(out.taxProvisionRisk!.expectedProvisionCop).toBe(700_000_000);
-    expect(out.taxProvisionRisk!.gapCop).toBeCloseTo(696_200_000, -3);
+    expect(out.taxProvisionRisk).toBeUndefined();
     expect(out.findings).toHaveLength(1);
     expect(out.findings[0].code).toBe('CUR-R4');
+    expect(out.findings[0].severity).toBe('informativo');
+    // No afirma "pasivo oculto" ni cuantifica 35 %.
+    expect(out.findings[0].title).not.toMatch(/oculto/i);
+    expect(out.findings[0].description).not.toMatch(/35\s*%/);
+    expect(out.findings[0].recommendation).not.toMatch(/Provisionar \$/);
   });
 
-  it('no dispara cuando la provisión cubre 35% (ratio = 1)', () => {
+  it('renta causada (5405) y compensada (2404 = 0): sin hallazgo de R4', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
-        utilidadNeta: 2_000_000_000,
-        impuestosCuenta24: 700_000_000, // 35%
+        utilidadNeta: 650_000_000,
+        impuestosCuenta24: 0,
       }),
-      classes: [],
+      classes: [
+        makeClass(5, [{ code: '540505', name: 'Impuesto de renta', balance: 350_000_000 }]),
+      ],
     });
     const out = runR4(snap);
     expect(out.taxProvisionRisk).toBeUndefined();
     expect(out.findings).toHaveLength(0);
   });
 
-  it('no dispara cuando utilidadNeta = 0 (evita div/0)', () => {
+  it('no dispara cuando la UAI no es positiva', () => {
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -493,7 +502,8 @@ describe('runCurator (orchestrator)', () => {
     expect(codes).toContain('CUR-R3');
     expect(codes).toContain('CUR-R4');
     expect(out.reclassifications).toHaveLength(1);
-    expect(out.taxProvisionRisk).toBeDefined();
+    // R4 ya no cuantifica una "renta teórica" (auditoría 2026-09).
+    expect(out.taxProvisionRisk).toBeUndefined();
     expect(Object.keys(out.errors)).toHaveLength(0);
   });
 
@@ -516,8 +526,8 @@ describe('runCurator (orchestrator)', () => {
     const out = runCurator(broken, null);
     // R1 falla porque accede a classes.find(...).
     expect(out.errors['CUR-R1']).toBeDefined();
-    // R4 sí funciona aunque classes esté roto (no las usa).
-    expect(out.taxProvisionRisk).toBeDefined();
+    // R4 sí funciona aunque classes esté roto (lo trata como vacío).
+    expect(out.errors['CUR-R4']).toBeUndefined();
     expect(out.findings.some((f) => f.code === 'CUR-R4')).toBe(true);
   });
 

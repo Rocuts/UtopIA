@@ -204,14 +204,16 @@ export interface BalanceGapAttribution {
 }
 
 // ---------------------------------------------------------------------------
-// R4 — Validación renta teórica (Art. 240 E.T., 35%)
+// R4 — Causación del impuesto de renta
+// ---------------------------------------------------------------------------
+// Auditoría 2026-09 (niif-preproceso-17): R4 ya no calcula una "renta teórica"
+// (35 % de la utilidad neta contra todo el grupo 24). La utilidad contable no
+// es base fiscal; sin depuración verificada no se cuantifica impuesto ni
+// brecha. `TaxProvisionRisk` se conserva sólo por compatibilidad de tipos y
+// R4 no lo emite.
 // ---------------------------------------------------------------------------
 
-/** Tasa nominal de renta colombiana 2026 (Art. 240 E.T.). */
-export const RENTA_NOMINAL_RATE = 0.35;
-/** Threshold a partir del cual disparamos el riesgo. */
-export const RENTA_PROVISION_FLOOR = 0.30;
-
+/** @deprecated R4 ya no cuantifica una brecha de renta (ver arriba). */
 export interface TaxProvisionRisk {
   utilidadNeta: number;
   /** Provisión observada en cuenta 24xx. */
@@ -242,7 +244,7 @@ export interface CuratorResult {
   cashFlowIndirecto?: CashFlowStatement;
   /** R3: atribución de brecha de cuadratura (si hay descuadre). */
   balanceGapAttribution?: BalanceGapAttribution;
-  /** R4: riesgo fiscal (si la provisión < 30% de utilidad). */
+  /** R4 (histórico): ya no se emite; R4 sólo produce un hallazgo informativo. */
   taxProvisionRisk?: TaxProvisionRisk;
   /** R5: ajuste de anclaje patrimonial (Balance ↔ ECP). */
   convergenceAdjustment?: ConvergenceAdjustment;
