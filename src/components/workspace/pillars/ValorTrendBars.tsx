@@ -110,7 +110,7 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
               ? metric === 'fcf'
                 ? (isEs ? 'N/D (sin comparativo)' : 'N/A (no comparative period)')
                 : (isEs ? 'N/D (sin base verificable)' : 'N/A (no verifiable basis)')
-              : formatCop(v);
+              : formatCop(v, language);
           const provisional = point.isInterpolated
             ? `<br/><span style="font-size:10px;opacity:0.6">${isEs ? 'Estimado (interpolación lineal)' : 'Estimated (linear interpolation)'}</span>`
             : '';

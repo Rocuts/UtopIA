@@ -59,12 +59,36 @@ import { buildAntiHallucinationGuardrail } from './anti-hallucination';
 import { buildColombia2026Context } from './colombia-2026-context';
 import { buildNiifDisclosureKnowledge } from './niif-colombia-knowledge';
 import { buildResilienceSection0 } from './resilience-section0';
+import { regimenRentaDeEmpresa } from '../audit/prompts/tax-auditor.prompt';
 
 export interface GovernanceEliteContext {
   comparativosImpracticables?: boolean;
   actividadInferida?: { sectorCIIU: string; descripcion: string; evidencia?: string };
   /** Bloque <hechos_empresa> pre-renderizado (Ola 2). '' o undefined = no se inyecta. */
   hechosEmpresa?: string | null;
+}
+
+
+/**
+ * Contenido de la Nota 9 según el régimen de renta informado en el intake
+ * (re-auditoría 2026-09-24, NT-02). En el Régimen Simple el impuesto unificado
+ * sustituye el impuesto sobre la renta (Art. 903 E.T., corpus
+ * estatuto_tributario_completo.md): no se presenta la tarifa del Art. 240 ni
+ * la TTD. Sin dato se mantiene el régimen ordinario (conservador).
+ */
+function notaImpuestosDelRegimen(company: CompanyInfo): string {
+  if (regimenRentaDeEmpresa(company) === 'simple') {
+    return (
+      'Impuestos, Gravámenes y Tasas (Régimen Simple de Tributación, Arts. 903-916 E.T.: el impuesto unificado ' +
+      'sustituye el impuesto sobre la renta (Art. 903); NUNCA presentes la tarifa de renta del Art. 240 ni un ' +
+      'impuesto teórico al 35 %; la Tasa de Tributación Depurada (Art. 240 par. 6 E.T.) no aplica; impuesto ' +
+      'unificado reconocido en libros, IVA, ReteFuente)'
+    );
+  }
+  return (
+    'Impuestos, Gravámenes y Tasas (renta 35% Art. 240 E.T., Tasa de Tributación Depurada (TTD, Art. 240 par. 6 ' +
+    'E.T.) — N/D sin impuesto y utilidad depurados verificados, NIC 12 diferencias temporarias, IVA, ICA, ReteFuente)'
+  );
 }
 
 export function buildGovernancePrompt(
@@ -263,7 +287,7 @@ If la entidad NO está obligada a Revisor Fiscal (Art. 203 C.Co.: sociedades por
 If comparativosImpracticables=true (delegado del Agente 1) then las notas materiales referencian ÚNICAMENTE el periodo ${primaryPeriod}; NO emitir columnas comparativas; financialNotes incluye una nota técnica con cita LITERAL NIIF for SMEs §3.14, §10.21 otherwise referenciar ambos periodos cuando applicable.
 
 Notas obligatorias de cobertura mínima (NIC 1 / Sec. 8 PYMES):
-1 Entidad y Actividad Económica; 2 Políticas Contables Significativas (going concern, moneda funcional COP, reconocimiento ingresos NIIF 15 / Sec. 23, deterioro de instrumentos financieros —Grupo 2: modelo de pérdida incurrida (NIIF para las PYMES, Sección 11.21-11.26); Grupo 1: pérdida crediticia esperada (NIIF 9)—, inventarios, PPE, beneficios a empleados); 3 Efectivo y Equivalentes; 4 Deudores Comerciales (modelo de deterioro); 5 Inventarios (valuación + valor neto realizable); 6 PPE (movimiento del periodo, vidas útiles); 7 Obligaciones Financieras (CP/LP, garantías); 8 Cuentas por Pagar y Proveedores; 9 Impuestos, Gravámenes y Tasas (renta 35% Art. 240 E.T., Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.) — N/D sin impuesto y utilidad depurados verificados, NIC 12 diferencias temporarias, IVA, ICA, ReteFuente); 10 Pasivos Laborales (saldo por concepto sólo con auxiliares de la Clase 25; sin auxiliares, total de la Clase 25 y declaración de que el desglose no está disponible); 11 Patrimonio (capital autorizado/suscrito/pagado + reserva legal según el régimen del bloque CIFRAS VINCULANTES DEL ACTA, incluido el techo del Art. 452 C.Co. cuando sea evaluable); 12 Ingresos Operacionales (NIIF 15 / Sec. 23); 13 Contingencias y Hechos Posteriores (NIC 10 / Sec. 32 — afirmar explícitamente "no se identifican hechos posteriores" cuando aplique); 14 Preparación voluntaria NIIF 18 — sólo Grupo 1: If company.niifGroup === 1 y la preparación es material then una nota cuyo body aclara que la NIIF 18 fue emitida por el IASB (vigencia internacional 01-01-2027) y no está incorporada al DUR 2420 de 2015 a la fecha del ejercicio —preparación voluntaria, sin impacto contable en el periodo; no afirmes una fecha de obligatoriedad en Colombia—, identifica MPMs candidatas del sector y describe brechas de datos conocidas; otherwise no emitir la nota. If company.niifGroup ∈ {2, 3} (o no informado) then NO emitir ninguna nota sobre IFRS 18 ni mencionar IFRS 18 en otras notas: no es marco aplicable al Grupo ${niifGroupNumLabel(company.niifGroup)} (Decreto 2420/2015) y, por la Corrección 6 v2.1, la nota que no aplica no se incluye y las siguientes se renumeran sin saltos; 15 Partes Vinculadas y Personal Clave Directivo (NIC 24 §13-22 / Sec. 33 PYMES — revelar transacciones con matriz/subsidiarias/asociadas, compensaciones a personal clave directivo, garantías cruzadas, préstamos entre partes vinculadas; si no se identifican transacciones con partes vinculadas, materiality="immaterial" con afirmación explícita); 16 Autorización para la Publicación de los Estados Financieros (NIC 10 §17 / Sec. 32.9 PYMES — fecha de autorización + órgano que autoriza la publicación, típicamente Junta Directiva o Representante Legal con respaldo de Asamblea).
+1 Entidad y Actividad Económica; 2 Políticas Contables Significativas (going concern, moneda funcional COP, reconocimiento ingresos NIIF 15 / Sec. 23, deterioro de instrumentos financieros —Grupo 2: modelo de pérdida incurrida (NIIF para las PYMES, Sección 11.21-11.26); Grupo 1: pérdida crediticia esperada (NIIF 9)—, inventarios, PPE, beneficios a empleados); 3 Efectivo y Equivalentes; 4 Deudores Comerciales (modelo de deterioro); 5 Inventarios (valuación + valor neto realizable); 6 PPE (movimiento del periodo, vidas útiles); 7 Obligaciones Financieras (CP/LP, garantías); 8 Cuentas por Pagar y Proveedores; 9 ${notaImpuestosDelRegimen(company)}; 10 Pasivos Laborales (saldo por concepto sólo con auxiliares de la Clase 25; sin auxiliares, total de la Clase 25 y declaración de que el desglose no está disponible); 11 Patrimonio (capital autorizado/suscrito/pagado + reserva legal según el régimen del bloque CIFRAS VINCULANTES DEL ACTA, incluido el techo del Art. 452 C.Co. cuando sea evaluable); 12 Ingresos Operacionales (NIIF 15 / Sec. 23); 13 Contingencias y Hechos Posteriores (NIC 10 / Sec. 32 — afirmar explícitamente "no se identifican hechos posteriores" cuando aplique); 14 Preparación voluntaria NIIF 18 — sólo Grupo 1: If company.niifGroup === 1 y la preparación es material then una nota cuyo body aclara que la NIIF 18 fue emitida por el IASB (vigencia internacional 01-01-2027) y no está incorporada al DUR 2420 de 2015 a la fecha del ejercicio —preparación voluntaria, sin impacto contable en el periodo; no afirmes una fecha de obligatoriedad en Colombia—, identifica MPMs candidatas del sector y describe brechas de datos conocidas; otherwise no emitir la nota. If company.niifGroup ∈ {2, 3} (o no informado) then NO emitir ninguna nota sobre IFRS 18 ni mencionar IFRS 18 en otras notas: no es marco aplicable al Grupo ${niifGroupNumLabel(company.niifGroup)} (Decreto 2420/2015) y, por la Corrección 6 v2.1, la nota que no aplica no se incluye y las siguientes se renumeran sin saltos; 15 Partes Vinculadas y Personal Clave Directivo (NIC 24 §13-22 / Sec. 33 PYMES — revelar transacciones con matriz/subsidiarias/asociadas, compensaciones a personal clave directivo, garantías cruzadas, préstamos entre partes vinculadas; si no se identifican transacciones con partes vinculadas, materiality="immaterial" con afirmación explícita); 16 Autorización para la Publicación de los Estados Financieros (NIC 10 §17 / Sec. 32.9 PYMES — fecha de autorización + órgano que autoriza la publicación, típicamente Junta Directiva o Representante Legal con respaldo de Asamblea).
 
 Identidad fiscal en Nota 9: utilidadNeta = utilidadAntesImpuestos − impuestoCausado. El impuesto SIEMPRE aparece como RESTA en la conciliación; PROHIBIDO sumar.
 

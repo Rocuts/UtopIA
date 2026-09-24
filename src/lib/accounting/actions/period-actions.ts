@@ -35,6 +35,7 @@ import { getOrCreateWorkspace } from '@/lib/db/workspace';
 import {
   findOverlappingPeriod,
   isCanonicalYearEndRange,
+  isRangeWithinDeclaredPeriod,
   yearEndAdjustmentsInstant,
   YEAR_END_ADJUSTMENTS_MONTH,
 } from '@/lib/accounting/periods/ranges';
@@ -226,6 +227,15 @@ export async function createPeriodAction(
         message:
           `El rango se solapa con el periodo ${overlap.year}-${String(overlap.month).padStart(2, '0')} ` +
           'del workspace. Los periodos contables deben ser disjuntos.',
+      };
+    }
+    // ICU-05 (re-auditoría 2026-09-24): igual que POST /api/accounting/periods,
+    // el rango explícito debe caer dentro del (año, mes) declarado.
+    if (!isRangeWithinDeclaredPeriod(parsed.data.year, parsed.data.month, startsAt, endsAt)) {
+      return {
+        ok: false,
+        code: 'INVALID_INPUT',
+        message: `El rango debe caer dentro del periodo ${parsed.data.year}-${String(parsed.data.month).padStart(2, '0')}.`,
       };
     }
 

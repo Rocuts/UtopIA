@@ -261,11 +261,14 @@ function buildChecks(args: {
   // hay Clase 54 (impuesto teórico existe pero no se registró contablemente).
   const alertaA5 = BigInt(fiscal.F02) > BigInt(0) && !hasClase54 ? 'activa' : 'inactiva';
 
-  // Alerta DEV — devoluciones materiales (>1% ingresos).
+  // Alerta DEV — devoluciones materiales (>1% de los ingresos brutos). Base:
+  // ingresos netos + devoluciones, no la Σ firmada de la clase 4, que cambia
+  // con la convención de signos del ERP (re-auditoría 2026-09-24,
+  // recalculo-final2-05).
   const ct = actual.controlTotals;
   const devTotal = ct.totalDevoluciones ?? 0;
-  const ingresos = ct.ingresos > 0 ? ct.ingresos : 1;
-  const devRatio = devTotal / ingresos;
+  const ingresosBrutos = (ct.ingresosNetos ?? Math.abs(ct.ingresos)) + devTotal;
+  const devRatio = ingresosBrutos > 0 ? devTotal / ingresosBrutos : 0;
   const alertaDev: AncoraChecks['alertaDev'] = devRatio > 0.01 ? 'activa' : 'inactiva';
 
   // Suprimir lint sobre `comparativo` (lo recibimos por contrato pero los

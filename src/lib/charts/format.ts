@@ -63,11 +63,13 @@ function withMoneySign(formatted: string, negative: boolean): string {
  * `$1.234.567` (sin decimales); negativos entre paréntesis `($500.000)`.
  * Apto para tooltips y labels donde la precisión céntima distrae.
  */
-export function formatCop(amount: number | null | undefined): string {
+export function formatCop(amount: number | null | undefined, language: FormatLanguage = 'es'): string {
   if (amount === null || amount === undefined || !Number.isFinite(amount)) return '—';
   const rounded = Math.round(Math.abs(amount));
   // Un -0,4 redondea a $0: sin paréntesis (no hay monto negativo que mostrar).
-  return withMoneySign(`$${INTEGER.format(rounded)}`, amount < 0 && rounded !== 0);
+  // Separadores del idioma de la interfaz (re-auditoría 2026-09-24, ICU-07).
+  const integer = INTEGER_BY_LANG[language === 'en' ? 'en' : 'es'];
+  return withMoneySign(`$${integer.format(rounded)}`, amount < 0 && rounded !== 0);
 }
 
 /** Escalas compactas por idioma, de menor a mayor. */

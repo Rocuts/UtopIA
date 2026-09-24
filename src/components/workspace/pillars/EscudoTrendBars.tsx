@@ -73,7 +73,7 @@ function isSolvenciaNull(point: EscudoBarSeries, metric: Metric): boolean {
  */
 export function formatEscudoValue(v: number, metric: Metric, language: 'es' | 'en'): string {
   if (metric === 'solvencia') return formatDecimal(v, 2, language);
-  return formatCop(v);
+  return formatCop(v, language);
 }
 
 /** Etiqueta del eje Y: razón con el formato del idioma; montos compactos del idioma. */

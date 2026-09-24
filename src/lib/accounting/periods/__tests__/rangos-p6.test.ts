@@ -105,6 +105,15 @@ describe('createPeriodAction — rangos disjuntos', () => {
     expect(inserted.calls).toBe(0);
   });
 
+  it('rechaza un rango explícito fuera del (año, mes) declarado (ICU-05, paridad con la ruta)', async () => {
+    const r = await createPeriodAction({
+      year: 2026, month: 3, startsAt: '2027-01-01T00:00:00Z', endsAt: '2027-01-31T23:59:59.999Z',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('INVALID_INPUT');
+    expect(inserted.calls).toBe(0);
+  });
+
   it('un mes sin solapamiento se crea', async () => {
     existing.rows = [month(2026, 1), month(2026, 3), p13(2025)];
     const r = await createPeriodAction({ year: 2026, month: 2 });

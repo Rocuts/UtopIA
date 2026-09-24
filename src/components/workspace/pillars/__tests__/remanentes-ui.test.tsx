@@ -127,6 +127,10 @@ describe('(b) formato por idioma en ValorTrendBars y EscudoTrendBars (ratios-kpi
   it('solvencia: razón con formatDecimal del idioma, no toFixed(2)', () => {
     expect(formatEscudoValue(1.254, 'solvencia', 'es')).toBe('1,25');
     expect(formatEscudoValue(1.254, 'solvencia', 'en')).toBe('1.25');
+    // Re-auditoría 2026-09-24 (ICU-07): los montos del tooltip también siguen el idioma.
+    expect(formatEscudoValue(1_234_567, 'efectivo', 'es')).toBe('$1.234.567');
+    expect(formatEscudoValue(1_234_567, 'efectivo', 'en')).toBe('$1,234,567');
+    expect(formatEscudoValue(-1_234_567, 'efectivo', 'en')).toBe('($1,234,567)');
     expect(formatEscudoAxis(1.5, 'solvencia', 'es')).toBe('1,50');
     expect(formatEscudoAxis(1_300_000_000, 'efectivo', 'en')).toBe('$1.3B');
     expect(formatEscudoValue(1_300_000, 'efectivo', 'es')).toBe('$1.300.000');

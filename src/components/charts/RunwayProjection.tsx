@@ -95,7 +95,7 @@ export function RunwayProjection({
           if (!arr.length) return '';
           const m = (arr[0] as { axisValue: string }).axisValue;
           const lines = (arr as Array<{ seriesName: string; value: number; color: string }>)
-            .map((p) => `<span style="color:${p.color}">●</span> ${p.seriesName}: ${formatCop(p.value)}`)
+            .map((p) => `<span style="color:${p.color}">●</span> ${p.seriesName}: ${formatCop(p.value, language)}`)
             .join('<br/>');
           return `<strong>${m}</strong><br/>${lines}`;
         },
