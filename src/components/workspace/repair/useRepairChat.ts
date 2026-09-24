@@ -80,6 +80,39 @@ export interface UseRepairChat {
   clearAutosaveError: () => void;
 }
 
+// ─── Ledger: ajuste propuesto por el Doctor ─────────────────────────────────
+
+/**
+ * Entrada del ledger para un `propose_adjustment` que el servidor aceptó.
+ * Conserva el `period` con el que el agente ancló el ajuste (p. ej. el
+ * comparativo 2024): antes se omitía y el ajuste confirmado viajaba a /niif sin
+ * periodo, así que `applyAdjustments` lo aplicaba al primario aunque el preview
+ * del Doctor lo hubiera calculado sobre el comparativo (cross-dep I1-4). Sin
+ * periodo (o vacío) el ajuste va al primario, igual que en la tool.
+ */
+export function adjustmentFromProposal(
+  input: Partial<ProposeAdjustmentInput>,
+  result: ProposeAdjustmentOutput,
+  proposedAt: string,
+): Adjustment {
+  const adj: Adjustment = {
+    id: result.id,
+    accountCode: String(input.accountCode ?? ''),
+    accountName:
+      input.accountName ??
+      result.preview?.affectedAccount?.name ??
+      `Cuenta ${input.accountCode ?? '?'}`,
+    amount: Number(input.amount ?? 0),
+    rationale: String(input.rationale ?? ''),
+    status: 'proposed',
+    proposedAt,
+  };
+  // Mismo recorte que la tool (`resolveSnapshot` compara con `period.trim()`).
+  const period = typeof input.period === 'string' ? input.period.trim() : '';
+  if (period) adj.period = period;
+  return adj;
+}
+
 // ─── Implementación ─────────────────────────────────────────────────────────
 
 export function useRepairChat(initialContext: RepairContext): UseRepairChat {
@@ -444,19 +477,10 @@ export function useRepairChat(initialContext: RepairContext): UseRepairChat {
               // hacemos upsert idempotente.
               setAdjustments((prev) => {
                 if (prev.some((a) => a.id === result.id)) return prev;
-                const adj: Adjustment = {
-                  id: result.id,
-                  accountCode: String(input.accountCode ?? ''),
-                  accountName:
-                    input.accountName ??
-                    result.preview?.affectedAccount?.name ??
-                    `Cuenta ${input.accountCode ?? '?'}`,
-                  amount: Number(input.amount ?? 0),
-                  rationale: String(input.rationale ?? ''),
-                  status: 'proposed',
-                  proposedAt: new Date().toISOString(),
-                };
-                return [...prev, adj];
+                return [
+                  ...prev,
+                  adjustmentFromProposal(input, result, new Date().toISOString()),
+                ];
               });
             } else if (name === 'recheck_validation') {
               const result = ev.result as RecheckValidationOutput | undefined;

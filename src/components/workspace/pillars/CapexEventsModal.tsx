@@ -52,6 +52,16 @@ export interface CapexEventsModalProps {
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
+/**
+ * Superficie y tinta de los campos (polaridad, CLAUDE.md; criterio del
+ * utopia-contrast-auditor). Antes: `bg-n-900/60` + `text-n-100` +
+ * `placeholder:text-n-600`, un campo de polaridad invertida dentro del vidrio
+ * claro del modal: texto 4,3:1 en claro y placeholder fantasma (1,2:1 claro,
+ * 1,1:1 oscuro). Ahora superficie de nivel `n-0`, tinta primaria `n-1000`
+ * (18:1 / 16:1) y placeholder `n-500` (3,6:1 / 3,9:1).
+ */
+const INPUT_SURFACE = 'bg-n-0/60 border border-n-300 text-n-1000 placeholder:text-n-500';
+
 export function CapexEventsModal({
   open,
   onOpenChange,
@@ -138,7 +148,7 @@ export function CapexEventsModal({
             maxLength={80}
             className={cn(
               'w-full rounded-lg px-3 py-2 text-sm',
-              'bg-n-900/60 border border-n-700 text-n-100 placeholder:text-n-600',
+              INPUT_SURFACE,
               'focus:outline-none focus:ring-1 focus:ring-gold-500/60 focus:border-gold-500/60',
               'transition-colors duration-150',
             )}
@@ -162,7 +172,7 @@ export function CapexEventsModal({
               placeholder="1"
               className={cn(
                 'w-full rounded-lg px-3 py-2 text-sm',
-                'bg-n-900/60 border border-n-700 text-n-100 placeholder:text-n-600',
+                INPUT_SURFACE,
                 'focus:outline-none focus:ring-1 focus:ring-gold-500/60 focus:border-gold-500/60',
                 'transition-colors duration-150',
               )}
@@ -182,7 +192,7 @@ export function CapexEventsModal({
               placeholder="1.200.000"
               className={cn(
                 'w-full rounded-lg px-3 py-2 text-sm',
-                'bg-n-900/60 border border-n-700 text-n-100 placeholder:text-n-600',
+                INPUT_SURFACE,
                 'focus:outline-none focus:ring-1 focus:ring-gold-500/60 focus:border-gold-500/60',
                 'transition-colors duration-150',
               )}
@@ -192,7 +202,7 @@ export function CapexEventsModal({
 
         {/* Error */}
         {error && (
-          <p className="text-xs text-red-400" role="alert">
+          <p className="text-xs text-danger" role="alert">
             {error}
           </p>
         )}
@@ -204,7 +214,9 @@ export function CapexEventsModal({
             'inline-flex items-center justify-center gap-2 self-start',
             'rounded-lg px-4 py-2 text-sm font-medium',
             'bg-gold-500/20 hover:bg-gold-500/30 border border-gold-500/40',
-            'text-gold-300 hover:text-gold-200',
+            // gold-300 como tinta era 1,1:1 (claro) / 1,5:1 (oscuro); el hover
+            // a gold-200 (peldaño inexistente) no intensificaba.
+            'text-gold-700 hover:text-n-1000',
             'transition-colors duration-150',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500/60',
           )}
@@ -222,7 +234,7 @@ export function CapexEventsModal({
       ) : (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-n-500 uppercase tracking-wide font-mono">
+            <span className="text-xs text-n-600 uppercase tracking-wide font-mono">
               {isEs
                 ? `${events.length} evento${events.length !== 1 ? 's' : ''} · Total ${formatCopShort(totalCop, isEs)}`
                 : `${events.length} event${events.length !== 1 ? 's' : ''} · Total ${formatCopShort(totalCop, isEs)}`}
@@ -234,15 +246,17 @@ export function CapexEventsModal({
               key={ev.id}
               className={cn(
                 'flex items-center justify-between gap-3 rounded-lg px-3 py-2',
-                'bg-n-900/40 border border-n-700/50',
+                // Fila de superficie (n-100), no la n-900 invertida: sobre ésta
+                // el texto n-500 y el monto gold-400 caían a ~1,4:1.
+                'bg-n-100/60 border border-n-200',
               )}
             >
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-n-1000 truncate">{ev.name}</p>
-                <p className="text-xs text-n-500">
+                <p className="text-xs text-n-700">
                   {isEs ? `Mes ${ev.monthOffset}` : `Month ${ev.monthOffset}`}
                   {' · '}
-                  <span className="text-gold-400">{formatCopShort(ev.amountCop, isEs)}</span>
+                  <span className="text-gold-700">{formatCopShort(ev.amountCop, isEs)}</span>
                 </p>
               </div>
               <button
@@ -251,7 +265,7 @@ export function CapexEventsModal({
                 aria-label={isEs ? `Eliminar ${ev.name}` : `Remove ${ev.name}`}
                 className={cn(
                   'shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md',
-                  'text-n-500 hover:text-red-400',
+                  'text-n-600 hover:text-danger',
                   'hover:bg-red-500/10',
                   'transition-colors duration-150',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60',

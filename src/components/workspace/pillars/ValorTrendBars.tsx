@@ -130,7 +130,8 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
         axisLabel: {
           color: tokens.textSecondary,
           fontSize: 10,
-          formatter: (v: number) => formatBigCop(v),
+          // ratios-kpis-27: escala del idioma ('$2,4 mil M' / '$2.4B').
+          formatter: (v: number) => formatBigCop(v, language),
         },
         splitLine: { lineStyle: { color: tokens.textSecondary + '22', type: 'dashed' } },
       },
@@ -148,7 +149,7 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
             fontSize: 9,
             formatter: (p: { dataIndex: number }) => {
               const v = getValue(series[p.dataIndex], metric);
-              return v === null ? 'N/D' : formatBigCop(v);
+              return v === null ? (isEs ? 'N/D' : 'N/A') : formatBigCop(v, language);
             },
           },
           animationDelay: (idx: number) => idx * 60,
@@ -156,7 +157,7 @@ export function ValorTrendBars({ series, language, density }: ValorTrendBarsProp
         },
       ],
     };
-  }, [series, metric, tokens, baseColor, isEs]);
+  }, [series, metric, tokens, baseColor, isEs, language]);
 
   const subtitle = hasInterpolated
     ? (isEs

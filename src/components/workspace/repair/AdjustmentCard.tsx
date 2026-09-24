@@ -39,6 +39,7 @@ const COPY = {
     statusApplied: 'Aplicado',
     statusRejected: 'Rechazado',
     accountLabel: 'Cuenta',
+    periodLabel: 'Periodo',
     amountLabel: 'Monto',
     rationaleLabel: 'Razón',
     confirm: 'Aplicar',
@@ -59,6 +60,7 @@ const COPY = {
     statusApplied: 'Applied',
     statusRejected: 'Rejected',
     accountLabel: 'Account',
+    periodLabel: 'Period',
     amountLabel: 'Amount',
     rationaleLabel: 'Reason',
     confirm: 'Apply',
@@ -211,6 +213,17 @@ function AdjustmentCardImpl({
           <span className="font-mono text-n-900">{accountCode}</span>{' '}
           <span className="text-n-700">({accountName})</span>
         </div>
+        {/*
+          Periodo al que el Doctor ancló el ajuste (cross-dep I1-4): el usuario
+          confirma sabiendo si corrige el comparativo o el periodo actual. Sin
+          periodo el ajuste va al primario y no se muestra la línea.
+        */}
+        {adjustment.period && (
+          <div className="text-xs text-n-700">
+            <span className="text-n-500">{copy.periodLabel}:</span>{' '}
+            <span className="font-mono text-n-900">{adjustment.period}</span>
+          </div>
+        )}
         <div className="text-sm">
           <span className="text-n-500 text-xs">{copy.amountLabel}:</span>{' '}
           <span

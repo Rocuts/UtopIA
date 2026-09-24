@@ -14,8 +14,8 @@ import {
   buildExportRequestBody,
   persistPreprocessedForResume,
   recallAdjustmentLedgerForResume,
+  pairCachedSource,
   recallPreprocessedForResume,
-  resolveEffectiveAdjustmentLedger,
   resolveHtmlSource,
 } from '../PipelineWorkspace';
 import { attachServerVersion, detachServerVersion, type ReportProvenance } from '@/lib/reports/report-ref';
@@ -154,18 +154,27 @@ describe('ledger del Doctor de Datos tras una recarga', () => {
     expect(recallAdjustmentLedgerForResume('report-3', s)).toBeNull();
   });
 
-  it('el ledger de la corrida vigente manda; sin corrida se usa el recuperado', () => {
-    expect(resolveEffectiveAdjustmentLedger({ adjustmentLedger: LEDGER }, null)).toBe(LEDGER);
+  // I3-3: antes el ledger de /export y /html salía de la corrida en memoria o
+  // pendiente ("la corrida vigente manda"). Tras una regeneración con ajustes
+  // que falló en /niif (y una recarga) esa corrida no es la que produjo el
+  // preprocesado en caché: ledger nuevo + preprocesado viejo → 422. Ahora el
+  // ledger es el que produjo ESE preprocesado y viaja con él.
+  it('el ledger viaja con el preprocesado que produjo (sólo confirmados); sin ajustes, null', () => {
+    expect(pairCachedSource(pp, withProposed)).toEqual({ preprocessed: pp, adjustmentLedger: LEDGER });
     // Una corrida nueva sin ajustes no hereda el ledger de otra conversación.
-    expect(resolveEffectiveAdjustmentLedger({}, LEDGER)).toBeNull();
-    expect(resolveEffectiveAdjustmentLedger(null, LEDGER)).toBe(LEDGER);
-    expect(resolveEffectiveAdjustmentLedger(null, null)).toBeNull();
+    expect(pairCachedSource(pp, null).adjustmentLedger).toBeNull();
+    expect(pairCachedSource(pp, { adjustments: [] }).adjustmentLedger).toBeNull();
+    // Sin preprocesado no hay nada que re-derivar.
+    expect(pairCachedSource(null, LEDGER)).toEqual({ preprocessed: null, adjustmentLedger: null });
   });
 
   it('el cuerpo de /export sin referencia lleva el ledger recuperado junto al preprocesado', () => {
     const s = memoryStorage();
     persistPreprocessedForResume('report-1', pp, s, LEDGER);
-    const ledger = resolveEffectiveAdjustmentLedger(null, recallAdjustmentLedgerForResume('report-1', s));
+    const ledger = pairCachedSource(
+      recallPreprocessedForResume('report-1', s),
+      recallAdjustmentLedgerForResume('report-1', s),
+    ).adjustmentLedger;
     const body = buildExportRequestBody({
       report: makeExportableReport(),
       rawData: 'csv',
