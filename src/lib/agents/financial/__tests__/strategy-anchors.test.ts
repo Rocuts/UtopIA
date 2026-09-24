@@ -18,6 +18,8 @@ vi.mock('@/lib/macro/prompt-snapshot', () => ({ getMacroSnapshotForPrompts: vi.f
 
 import { runStrategyPhase } from '@/lib/agents/financial/orchestrator';
 import {
+  deterministicTrends,
+  fmtTrendPct,
   reconcileStrategyAnchors,
   readStrategyQualifications,
   strategyAnchorSources,
@@ -57,7 +59,10 @@ function coherentStrategy(): StrategyReportJson {
       rows: [
         { label: 'Total Activo', primary: cents(ct.activo), comparative: null, variation: null, variationPct: null, commentary: 'Cierre.' },
         { label: 'Utilidad Neta', primary: cents(ct.utilidadNeta), comparative: null, variation: null, variationPct: null, commentary: 'Cierre.' },
-        { label: 'EBITDA', primary: '123', comparative: null, variation: null, variationPct: null, commentary: 'Estimado.' },
+        // Desde W3-A el EBITDA (definición única computeEbitda) va en TOTALES
+        // VINCULANTES: copiar el bloque es copiar el ancla (e2e-niif-14).
+        { label: 'EBITDA', primary: cents(ct.ebitda!), comparative: null, variation: null, variationPct: null, commentary: 'Cierre.' },
+        { label: 'Capital de trabajo neto', primary: '123', comparative: null, variation: null, variationPct: null, commentary: 'Estimado.' },
       ],
       executiveCommentary: 'Primer cierre.',
     },
@@ -140,7 +145,8 @@ describe('reconcileStrategyAnchors', () => {
     const r = reconcileStrategyAnchors(coherentStrategy(), { primary: pp.primary, comparative: null });
     expect(r.deviations).toEqual([]);
     expect(r.verifiedCount).toBeGreaterThanOrEqual(8);
-    expect(r.unverifiable.join(' ')).toMatch(/EBITDA/);
+    expect(r.unverifiable.join(' ')).toMatch(/Capital de trabajo neto/);
+    expect(r.unverifiable.join(' ')).not.toMatch(/EBITDA/);
     expect(r.unverifiable.join(' ')).toMatch(/Punto de equilibrio/);
   });
 
@@ -226,5 +232,141 @@ describe('runStrategyPhase — sella la Parte II ante desviaciones', () => {
     expect(out.strategyQualifications?.clean).toBe(true);
     expect(out.fullContent).not.toContain('CON SALVEDADES');
     expect(out.fullContent).toContain('Verificación determinista de la Parte II');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// e2e-niif-14 (re-auditoría 2026-09): rótulos y KPIs fuera de la regex y
+// tendencias con comparativo se declaraban "no verificables" y se exportaban
+// con signo o cifra falsos ("Utilidad neta 2025 | $40 M" con pérdida de $40M,
+// "EBITDA $25 M" con EBITDA −$20M, "Rentabilidad del patrimonio 25,0 %",
+// tendencia de la utilidad neta "+33,3 %" para −$30M → −$40M).
+// ---------------------------------------------------------------------------
+
+/** Pérdida en ambos años: UN −30M (2024) → −40M (2025); ingresos 100M → 80M. */
+const LOSS_TWO = [
+  'codigo,nombre,nivel,transaccional,saldo 2024,saldo 2025',
+  '110505,Caja general,Auxiliar,1,30000000,5000000',
+  '130505,Clientes nacionales,Auxiliar,1,20000000,15000000',
+  '152405,Equipo de oficina,Auxiliar,1,50000000,50000000',
+  '159205,Depreciacion acumulada equipo,Auxiliar,1,-10000000,-20000000',
+  '210505,Bancos nacionales,Auxiliar,1,40000000,45000000',
+  '220505,Proveedores nacionales,Auxiliar,1,30000000,25000000',
+  '311505,Capital suscrito y pagado,Auxiliar,1,100000000,100000000',
+  '360505,Perdida del ejercicio,Auxiliar,1,-30000000,-40000000',
+  '370505,Perdidas acumuladas,Auxiliar,1,0,-30000000',
+  '410505,Ventas,Auxiliar,1,100000000,80000000',
+  '510506,Sueldos,Auxiliar,1,40000000,30000000',
+  '516015,Depreciacion equipo,Auxiliar,1,0,10000000',
+  '530505,Intereses bancarios,Auxiliar,1,10000000,10000000',
+  '613505,Costo de ventas,Auxiliar,1,80000000,70000000',
+].join('\n');
+
+describe('reconcileStrategyAnchors — rótulos, KPIs y tendencias (e2e-niif-14)', () => {
+  const ppLoss = preprocessTrialBalance(parseTrialBalanceCSV(LOSS_TWO));
+  const ctLoss = ppLoss.primary.controlTotals;
+  const sources = strategyAnchorSources(ppLoss, null);
+
+  function lossStrategy(): StrategyReportJson {
+    const j = coherentStrategy();
+    j.company.comparativePeriod = '2024';
+    j.reportMode = 'COMPARATIVO_COMPLETO';
+    j.executiveDashboard.rows = [];
+    j.kpis = [];
+    j.dupontAnalysis = null;
+    j.projectedCashFlow.liquidityGate = {
+      triggered: ctLoss.activoCorriente < ctLoss.pasivoCorriente,
+      currentAssetsCop: cents(ctLoss.activoCorriente),
+      currentLiabilitiesCop: cents(ctLoss.pasivoCorriente),
+      gapCop: String(BigInt(cents(ctLoss.activoCorriente)) - BigInt(cents(ctLoss.pasivoCorriente))),
+      message: null,
+    };
+    return j;
+  }
+
+  it('las anclas del caso: UN −40M, EBITDA −20M', () => {
+    expect(ctLoss.utilidadNeta).toBe(-40_000_000);
+    expect(ctLoss.ebitda).toBe(-20_000_000);
+  });
+
+  it('"Utilidad neta 2025" y "EBITDA" con signo o cifra falsos son desviaciones', () => {
+    const j = lossStrategy();
+    j.executiveDashboard.rows = [
+      { label: 'Utilidad neta 2025', primary: '4000000000', comparative: null, variation: null, variationPct: null, commentary: 'x' },
+      { label: 'EBITDA', primary: '2500000000', comparative: null, variation: null, variationPct: null, commentary: 'x' },
+      { label: 'Utilidad del ejercicio', primary: '-4000000000', comparative: null, variation: null, variationPct: null, commentary: 'x' },
+    ];
+    const r = reconcileStrategyAnchors(j, sources);
+    const all = r.deviations.join('\n');
+    expect(all).toMatch(/Dashboard — Utilidad neta 2025: el Director de Estrategia emitió \$40\.000\.000,00/);
+    expect(all).toMatch(/Dashboard — EBITDA: el Director de Estrategia emitió \$25\.000\.000,00/);
+    expect(all).not.toMatch(/Utilidad del ejercicio/);
+    expect(r.unverifiable.join(' ')).not.toMatch(/Utilidad neta 2025|EBITDA/);
+  });
+
+  it('EBITDA impreso cuando el preprocesador lo publica N/D es desviación', () => {
+    const pp2 = preprocessTrialBalance(parseTrialBalanceCSV(LOSS_TWO));
+    pp2.primary.controlTotals.ebitda = null;
+    const j = lossStrategy();
+    j.executiveDashboard.rows = [
+      { label: 'EBITDA', primary: '-2000000000', comparative: null, variation: null, variationPct: null, commentary: 'x' },
+    ];
+    const r = reconcileStrategyAnchors(j, strategyAnchorSources(pp2, null));
+    expect(r.deviations.join(' ')).toMatch(/EBITDA: .* N\/D/);
+  });
+
+  it('"Rentabilidad del patrimonio" es el ROE y "Margen EBITDA" se ancla a EBITDA / ingresos operacionales netos', () => {
+    const j = lossStrategy();
+    const base = coherentStrategy().kpis[0];
+    j.kpis = [
+      { ...base, name: 'Rentabilidad del patrimonio', resultPrimary: '25,0', resultComparative: null },
+      { ...base, name: 'Margen EBITDA', resultPrimary: '31,3', resultComparative: null },
+    ];
+    const r = reconcileStrategyAnchors(j, sources);
+    const all = r.deviations.join('\n');
+    expect(all).toMatch(/KPI Rentabilidad del patrimonio: el Director de Estrategia emitió 25,0%/);
+    // −20M / 80M = −25,0 %.
+    expect(all).toMatch(/KPI Margen EBITDA: el Director de Estrategia emitió 31,3% frente a -25%/);
+
+    j.kpis = [{ ...base, name: 'Margen EBITDA', resultPrimary: '-25,0', resultComparative: null }];
+    expect(reconcileStrategyAnchors(j, sources).deviations).toEqual([]);
+  });
+
+  it('tendencias con comparativo se recalculan: "+33,3 %" para −30M → −40M es desviación', () => {
+    const j = lossStrategy();
+    j.trends = {
+      yoyRevenue: '+20,0%', yoyEbitda: '+15,0%', yoyNetIncome: '+33,3%', yoyEquity: '+10,0%',
+      marginDeltaPp: '+5,0', qualitativeCommentary: 'Crecimiento sano.',
+    };
+    const all = reconcileStrategyAnchors(j, sources).deviations.join('\n');
+    expect(all).toMatch(/Tendencias — Ingresos: el Director de Estrategia emitió \+20,0% frente a -20,0%/);
+    expect(all).toMatch(/Tendencias — Utilidad neta: el Director de Estrategia emitió \+33,3% frente a -33,3%/);
+    expect(all).toMatch(/Tendencias — Patrimonio/);
+    expect(all).toMatch(/Tendencias — EBITDA/);
+  });
+
+  it('tendencias correctas (a la precisión impresa) no son desviación', () => {
+    const t = deterministicTrends(sources);
+    const j = lossStrategy();
+    j.trends = {
+      yoyRevenue: fmtTrendPct(t.revenue!), yoyEbitda: fmtTrendPct(t.ebitda!), yoyNetIncome: '-33,3%',
+      yoyEquity: fmtTrendPct(t.equity!), marginDeltaPp: null, qualitativeCommentary: 'x',
+    };
+    expect(t.netIncome).toBeCloseTo(-33.333, 2);
+    expect(reconcileStrategyAnchors(j, sources).deviations).toEqual([]);
+  });
+
+  it('comparativo de saldos de apertura: una tendencia del P&G no tiene base comparable', () => {
+    const ppOpen = preprocessTrialBalance(parseTrialBalanceCSV(LOSS_TWO), { openingPeriods: ['2024'] });
+    const t = deterministicTrends(strategyAnchorSources(ppOpen, null));
+    expect(t.netIncome).toBeNull();
+    expect(t.motivo).toMatch(/saldos de apertura/);
+    const j = lossStrategy();
+    j.trends = {
+      yoyRevenue: null, yoyEbitda: null, yoyNetIncome: '-33,3%', yoyEquity: null,
+      marginDeltaPp: null, qualitativeCommentary: 'x',
+    };
+    const r = reconcileStrategyAnchors(j, strategyAnchorSources(ppOpen, null));
+    expect(r.deviations.join(' ')).toMatch(/Tendencias — Utilidad neta: .* no tiene base comparable/);
   });
 });
