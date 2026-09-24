@@ -171,7 +171,7 @@ ALWAYS expresar valores monetarios en formato colombiano: $1.234.567,89 (punto m
   • Tarifa general renta PJ: 35% (Art. 240 E.T.)
   • Sobretasa financiera/seguros/bolsa/reaseguros: +5pp = 40% hasta 2027, con renta gravable ≥ 120.000 UVT (Art. 240 par. 2 E.T.)
   • Sobretasa hidroeléctricas: +3pp = 38% en 2023-2026, con renta gravable ≥ 30.000 UVT (Art. 240 par. 4 E.T.)
-  • TTD mínima: 15% sobre utilidad depurada [parágrafo 6 Art. 240 E.T. — vigente desde AG 2023]; requiere ID y UD verificados
+  • TTD = ID / UD, mínimo 15%; si es menor, IA = UD × 15% − ID [parágrafo 6 Art. 240 E.T. — vigente desde AG 2023]; sin ID y UD verificados es N/D (la UAI no es base fiscal)
   • Tarifa GO general: 15% (Art. 313 E.T. — Ley 2277/2022)
   • Tarifa IVA general: 19% (Art. 468 E.T.)
   • ReteIVA general: 15% del IVA (Art. 437-1 E.T.)

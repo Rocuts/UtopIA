@@ -20,6 +20,7 @@ import { dict } from '@/lib/i18n/dictionaries';
 import { buildFiscalAnchorBlockMarkdown } from '@/lib/agents/financial/escudo-survival/fiscal-anchor/block-builder';
 import { buildFiscalAnchor } from '@/lib/agents/financial/escudo-survival/fiscal-anchor';
 import { buildCcvFiscalPrompt } from '@/lib/agents/financial/escudo-survival/fiscal-agent/prompts/ccv-fiscal.prompt';
+import { buildMotorNormativoPrompt } from '@/lib/agents/financial/escudo-survival/normative/prompts/motor-normativo.prompt';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 
 const CSV = [
@@ -122,6 +123,13 @@ describe('NM-13 — rótulos F01/F09 del Âncora Fiscal (es/en)', () => {
     const f09 = md.split('\n').find((l) => l.includes('F09'))!;
     expect(f09).toMatch(/tasa efectiva contable/i);
     expect(f09).toMatch(/no es la TTD/i);
+  });
+
+  it('el Motor Normativo describe la TTD como ID / UD con impuesto a adicionar y N/D sin base', () => {
+    const m = buildMotorNormativoPrompt({ language: 'es' });
+    expect(m).not.toContain('TTD mínima: 15% sobre utilidad depurada');
+    expect(m).toContain('TTD = ID / UD');
+    expect(m).toContain('IA = UD × 15% − ID');
   });
 
   it('el prompt del CCV no pide cuantificar un impuesto adicional sin ID/UD', () => {
