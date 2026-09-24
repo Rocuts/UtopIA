@@ -64,6 +64,7 @@ import type { StrategyReportJson } from '@/lib/agents/financial/contracts/strate
 import type { CompanyInfo, FinancialReport } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { makeReportsTableFake } from '@/lib/reports/__tests__/provenance-fixture';
+import { COMPLIANCE_CHECKLIST, TTD_NOTE_BODY } from '@/lib/reports/__tests__/coherent-parts';
 
 const W1 = '11111111-1111-4111-8111-111111111111';
 const COMPANY: CompanyInfo = { name: 'Demo Perdidas SAS', nit: '900123456-8', entityType: 'SAS', fiscalPeriod: '2025', niifGroup: 2 };
@@ -108,7 +109,17 @@ function estrategia(executive?: string): StrategyReportJson {
     technicalAlerts: [
       { severity: 'amber', title: 'TTD', description: 'TTD (parágrafo 6 del art. 240 E.T.): N/D sin ID/UD verificados; la utilidad contable no es base fiscal.', normReference: null },
     ],
-    kpis: [],
+    // ≥ 1 KPI (contrato): desde I3 el servidor re-renderiza la Parte II desde
+    // su JSON y sella la que no cumple `StrategyReportSchema`.
+    kpis: [
+      {
+        category: 'efficiency', name: 'Rotación de inventarios', formula: 'Costo de ventas / inventario promedio',
+        resultPrimary: '45', resultComparative: null, unit: 'days',
+        benchmarkBand: { description: 'Sector', lowerBound: null, upperBound: null },
+        diagnosis: 'Rotación estable.', yoyVariation: null, confidence: null, anomalyFlag: null,
+        presentationMode: null, baselineLabel: null, sparklinePoints: null,
+      },
+    ],
     dupontAnalysis: null,
     trends: null,
     breakEven: { fixedCostsCop: '1', variableCostsCop: '1', revenueCop: '1', breakEvenPointCop: '1', marginOfSafetyPct: '1', classificationNote: 'nota' },
@@ -144,6 +155,8 @@ function gobierno(development?: string): GovernanceReportJson {
         body: `El efectivo al cierre fue de ${cop(T.efectivo)} y el efectivo al cierre de 2024 fue de $30.000.000,00. El total de activos asciende a ${cop(T.activo)}.`,
         normReference: null, materiality: 'material' as const, confidence: null,
       },
+      // La TTD (V10) la aborda la nota de impuestos, como en el prompt de Gobierno.
+      { number: 2, title: 'Impuestos', body: TTD_NOTE_BODY, normReference: 'Art. 240 E.T.', materiality: 'material' as const, confidence: null },
     ],
     shareholderMinutes: {
       assemblyType: 'Asamblea General de Accionistas', entityRegimeCitation: 'Ley 1258 de 2008', city: null, meetingDate: null,
@@ -169,7 +182,7 @@ function gobierno(development?: string): GovernanceReportJson {
       fiscalReviewerOpinion: { applies: false, reviewerName: null, reviewerTp: null, opinionType: null, opinionBody: null, exemptionReason: 'No obligada.' },
       closingStatement: 'Se levanta la sesión.',
     },
-    complianceChecklist: [],
+    complianceChecklist: COMPLIANCE_CHECKLIST,
     disclaimers: [],
     preparerNotes: [],
   } as unknown as GovernanceReportJson;
@@ -204,9 +217,10 @@ async function correr(opts: { rawData: string; ledger?: typeof LEDGER; governanc
   };
   state.queue.push(opts.strategy ?? estrategia());
   const { strategy } = await json<{ strategy: Corrida['strategy'] }>(await strategyRoute(req('/api/financial-report/strategy', handoff)));
-  // V10 (TTD) lo exige el gate de emitibilidad sobre el texto; el Director real
-  // lo redacta, el mock no.
-  strategy.fullContent += '\n\nTTD (parágrafo 6 del art. 240 E.T.): N/D sin ID/UD verificados.';
+  // V10 (TTD) lo exige el gate de emitibilidad sobre el texto: antes esta
+  // prueba lo AÑADÍA al Markdown de la Parte II en el "navegador"; desde I3 el
+  // servidor descarta ese texto y re-renderiza desde el JSON, así que la TTD
+  // viaja en la nota de impuestos del JSON de Gobierno.
   state.queue.push(opts.governance ?? gobierno());
   const { governance } = await json<{ governance: Corrida['governance'] }>(
     await governanceRoute(req('/api/financial-report/governance', { ...handoff, strategyResult: strategy })),

@@ -15,9 +15,10 @@ import {
 import {
   orchestrateFinancialReport,
   BalanceValidationError,
+  buildAdjustmentsAuditSection,
 } from '@/lib/agents/financial/orchestrator';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
-import type { AdjustmentLedger } from '@/lib/agents/repair/types';
+import type { Adjustment, AdjustmentLedger } from '@/lib/agents/repair/types';
 import {
   financialReportRequestSchema,
   exportFormatSchema,
@@ -38,6 +39,11 @@ import {
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
+import {
+  buildServerConsolidatedReport,
+  withServerPartsInConsolidated,
+  withServerRenderedParts,
+} from '@/lib/reports/part-markdown';
 import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
   appendPdfProvenance,
@@ -127,7 +133,12 @@ function ingestRejectedResponse(reasons: string[]): Response {
 // Contrato único del ledger (incluye `period` del ajuste multiperiodo).
 
 type ExportSource =
-  | { ok: true; preprocessed: PreprocessedBalance | undefined }
+  | {
+      ok: true;
+      preprocessed: PreprocessedBalance | undefined;
+      /** Ajustes confirmados aplicados y su detalle (traza del consolidado, I3). */
+      adjustments?: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] };
+    }
   | { ok: false; response: Response };
 
 /**
@@ -177,7 +188,11 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
     if (!claimed) return { ok: true, preprocessed: undefined };
     const rederived = rederivePreprocessedFromRows(claimed, applied);
     if (!rederived.ok) return { ok: false, response: incoherentSourcesResponse(rederived.details) };
-    return { ok: true, preprocessed: rederived.preprocessed };
+    return {
+      ok: true,
+      preprocessed: rederived.preprocessed,
+      ...(applied.length > 0 ? { adjustments: { applied, affected: rederived.affected } } : {}),
+    };
   };
 
   if (typeof body.rawData !== 'string' || body.rawData.trim().length === 0) {
@@ -216,8 +231,8 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
   // rechazo de un ajuste confirmado con un periodo inexistente.
   const periodErrors = unknownAdjustmentPeriodReasons(read.preprocessed, applied);
   if (periodErrors.length > 0) return { ok: false, response: incoherentSourcesResponse(periodErrors) };
-  const derived =
-    applied.length === 0 ? read.preprocessed : applyAdjustments(read.preprocessed, applied).balance;
+  const application = applied.length === 0 ? null : applyAdjustments(read.preprocessed, applied);
+  const derived = application ? application.balance : read.preprocessed;
   if (claimed) {
     const mismatches = preprocessedAnchorMismatches(claimed, derived);
     if (mismatches.length > 0) {
@@ -231,7 +246,71 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
       };
     }
   }
-  return { ok: true, preprocessed: derived };
+  return {
+    ok: true,
+    preprocessed: derived,
+    ...(application ? { adjustments: { applied, affected: application.affected } } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Markdown de las Partes I–III (I3)
+// ---------------------------------------------------------------------------
+// El PDF (notas, acta, recomendaciones, punto de equilibrio, proyecciones) y el
+// Excel (Parte II y pestaña Resumen = consolidado) imprimen el Markdown de las
+// Partes. Ese texto se RE-RENDERIZA en el servidor desde el JSON de cada Parte
+// (`withServerRenderedParts`) antes del gate y de componer el artefacto; el
+// que trae el cuerpo o una versión persistida anterior se descarta:
+//   - por referencia, en el consolidado persistido (ensamblado por el
+//     servidor) se sustituye sólo el segmento de las Partes;
+//   - sin referencia, el consolidado se reconstruye entero con la misma
+//     función que /consolidate y la traza de ajustes del ledger de la petición.
+// ---------------------------------------------------------------------------
+
+function persistedWithServerMarkdown(
+  report: FinancialReport,
+  preprocessed: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
+): FinancialReport {
+  const rendered = withServerRenderedParts(report, preprocessed, language);
+  const consolidated = withServerPartsInConsolidated(report.consolidatedReport, rendered, language);
+  return { ...rendered, consolidatedReport: consolidated ?? rendered.consolidatedReport };
+}
+
+function clientReportWithServerMarkdown(
+  report: FinancialReport,
+  source: Extract<ExportSource, { ok: true }>,
+  language: 'es' | 'en',
+): FinancialReport {
+  // Sin las tres Partes no hay nada que re-renderizar: el gate lo rechaza
+  // (informe incompleto / sin cifras estructuradas).
+  if (!report?.niifAnalysis || !report.strategicAnalysis || !report.governance) return report;
+  const rendered = withServerRenderedParts(report, source.preprocessed, language);
+  return {
+    ...rendered,
+    consolidatedReport: buildServerConsolidatedReport({
+      report: rendered,
+      preprocessed: source.preprocessed,
+      language,
+      clientConsolidated: report.consolidatedReport,
+      adjustmentsSection: source.adjustments
+        ? buildAdjustmentsAuditSection(source.adjustments.applied, source.adjustments.affected, language)
+        : null,
+    }),
+  };
+}
+
+/**
+ * Veredictos del informe que el pipeline completo acaba de producir en esta
+ * misma petición: su Markdown es del servidor (no se re-renderiza) y una Parte
+ * sin JSON no es texto del cliente, así que no se sella por esa sola razón.
+ */
+function serverGeneratedVerdicts(
+  report: FinancialReport,
+  preprocessed: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
+): FinancialReport {
+  return withServerPartVerdicts(report, preprocessed, language, { sealUnstructuredParts: false });
 }
 
 function incoherentSourcesResponse(details: string[]): Response {
@@ -256,9 +335,12 @@ async function exportPersisted(
   body: Record<string, unknown>,
   format: 'excel' | 'pdf-elite',
 ): Promise<Response> {
-  const { report, preprocessed, provenance } = persisted;
+  const { preprocessed, provenance } = persisted;
   const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
-  const blocked = rejectInvalidExport(report, preprocessed, language);
+  // Veredictos con las reglas vigentes y Markdown re-renderizado desde el JSON
+  // persistido (una versión anterior a I3 pudo guardar el texto del cliente).
+  const report = persistedWithServerMarkdown(persisted.report, preprocessed, language);
+  const blocked = rejectInvalidExport(report, preprocessed);
   if (blocked) return blocked;
   const stamp: ArtifactProvenance = isProvisionalDraft(report)
     ? { kind: 'verified', provenance, draft: true }
@@ -344,12 +426,12 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      const report = body.report as FinancialReport;
       const source = resolveExportPreprocessed(body, 'export/excel');
       if (!source.ok) return source.response;
       const { preprocessed } = source;
       const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
-      const blocked = rejectInvalidExport(report, preprocessed, excelLanguage);
+      const report = clientReportWithServerMarkdown(body.report as FinancialReport, source, excelLanguage);
+      const blocked = rejectInvalidExport(report, preprocessed);
       if (blocked) return blocked;
       const stamp = unverified(report);
       const buffer = await generateFinancialExcel({
@@ -427,7 +509,7 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    const blocked = rejectInvalidExport(report, preprocessed, language);
+    const blocked = rejectInvalidExport(serverGeneratedVerdicts(report, preprocessed, language), preprocessed);
     if (blocked) return blocked;
 
     const stamp = unverified(report);
@@ -487,12 +569,12 @@ async function handlePdfElite(body: unknown): Promise<Response> {
         { status: 400 },
       );
     }
-    const report = b.report;
     const source = resolveExportPreprocessed(b as Record<string, unknown>, 'pdf-elite/fast');
     if (!source.ok) return source.response;
     const { preprocessed } = source;
     const language: 'es' | 'en' = b.language === 'en' ? 'en' : 'es';
-    const blocked = rejectInvalidExport(report, preprocessed, language);
+    const report = clientReportWithServerMarkdown(b.report, source, language);
+    const blocked = rejectInvalidExport(report, preprocessed);
     if (blocked) return blocked;
 
     let pillars = null;
@@ -613,7 +695,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     return pdfResponse(stream, company.name, provenanceHeaders(stamp));
   }
 
-  const blocked = rejectInvalidExport(report, preprocessed, language);
+  const blocked = rejectInvalidExport(serverGeneratedVerdicts(report, preprocessed, language), preprocessed);
   if (blocked) return blocked;
 
   // Successful path: optionally aggregate pillars (fail-soft).
@@ -642,21 +724,22 @@ async function handlePdfElite(body: unknown): Promise<Response> {
   return pdfResponse(stream, company.name, provenanceHeaders(stamp));
 }
 
+/**
+ * Un solo gate (mismo que /html): coherencia interna, procedencia contra el
+ * preprocesado de la petición, Parte II, completitud e identidad. El informe
+ * que llega aquí ya trae los veredictos RECALCULADOS contra ese preprocesado
+ * (`withServerRenderedParts` en los caminos que exportan un informe recibido o
+ * persistido; `withServerPartVerdicts` en el pipeline completo): invariantes
+ * del JSON NIIF, aritmética y prosa del acta y de las notas, anclas y prosa de
+ * la Parte II y sello de la Parte sin JSON válido. Un `clean: true` del
+ * cliente —o de una versión persistida con reglas anteriores— no sustituye el
+ * cruce; el recálculo sólo endurece.
+ */
 function rejectInvalidExport(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | undefined,
-  language: 'es' | 'en',
 ): Response | null {
-  // Un solo gate (mismo que /html): coherencia interna, procedencia contra el
-  // preprocesado de la petición, Parte II, completitud e identidad. Antes, los
-  // veredictos de las Partes II y III se RECALCULAN contra ese preprocesado
-  // (aritmética y prosa del acta y de las notas, anclas y prosa de la Parte
-  // II): un `clean: true` del cliente —o de una versión persistida con reglas
-  // anteriores— no sustituye el cruce; el recálculo sólo endurece.
-  const details = financialExportBlockers(
-    withServerPartVerdicts(report, preprocessed, language),
-    preprocessed,
-  );
+  const details = financialExportBlockers(report, preprocessed);
   return details.length > 0
     ? NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 })
     : null;

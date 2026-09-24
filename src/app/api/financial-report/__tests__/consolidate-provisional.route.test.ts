@@ -70,9 +70,8 @@ type Consolidated = {
 };
 
 async function consolidateWith(extra: Record<string, unknown>) {
+  // Partes con JSON del contrato (I3: el servidor re-renderiza su Markdown).
   const parts = makeProvenanceParts();
-  (parts.strategicAnalysis as { json?: unknown }).json = { technicalAlerts: [] };
-  (parts.governance as { json?: unknown }).json = { shareholderMinutes: null };
   return consolidate(req('/api/financial-report/consolidate', consolidateBody({ reportParts: parts, ...extra })));
 }
 

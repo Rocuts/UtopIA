@@ -31,8 +31,12 @@ export const FINANCIAL_REPORT_VERSION_FORMAT = 'utopia.financial-report-version.
  * (`financialExportBlockers`) y gates post-render de /consolidate, según la
  * auditoría integral del 2026-09-24. Subirla cuando cambie de forma observable
  * lo que una versión persistida garantiza.
+ *
+ * `.2` (I3): el Markdown de las Partes I–III de la versión lo re-renderizó el
+ * servidor desde el JSON de cada Parte (el del navegador se descarta), y una
+ * Parte II/III sin JSON válido queda sellada.
  */
-export const FINANCIAL_REPORT_CONTRACT_VERSION = 'informe-niif-2026-09-24.1';
+export const FINANCIAL_REPORT_CONTRACT_VERSION = 'informe-niif-2026-09-24.2';
 
 /**
  * Contrato del preprocesador con el que se derivó el balance persistido.

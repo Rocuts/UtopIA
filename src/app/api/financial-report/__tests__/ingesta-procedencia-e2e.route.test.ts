@@ -59,6 +59,8 @@ import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-repor
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { makeProvenanceParts, makeReportsTableFake } from '@/lib/reports/__tests__/provenance-fixture';
+import { coherentReportParts } from '@/lib/reports/__tests__/coherent-parts';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 
 const W1 = '11111111-1111-4111-8111-111111111111';
 const COMPANY = { name: 'Demo Perdidas SAS', nit: '900123456-8', entityType: 'SAS', niifGroup: 2, fiscalPeriod: '2025' };
@@ -109,14 +111,16 @@ async function run(vehicle: 'directives' | 'fields') {
   expect(niifRes.status, niifBody).toBe(200);
   const phase = JSON.parse(niifBody) as NiifOut;
 
-  const p = makeProvenanceParts();
+  // Partes II y III con JSON del contrato coherente con el balance reexpresado
+  // (I3: el servidor re-renderiza su Markdown y sella la Parte sin JSON).
+  const pp = revivePreprocessedBalance(structuredClone(phase.context.preprocessed));
   const consolidateRes = await consolidate(
     req('/api/financial-report/consolidate', {
       rawData,
       company: COMPANY,
       language: 'es',
       ...confirmations,
-      reportParts: { niifAnalysis: phase.niif, strategicAnalysis: p.strategicAnalysis, governance: p.governance },
+      reportParts: coherentReportParts(phase.niif, COMPANY, pp),
     }),
   );
   const consolidateBody = await consolidateRes.text();

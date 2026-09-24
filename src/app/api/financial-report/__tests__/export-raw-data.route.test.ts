@@ -30,8 +30,13 @@ import { POST } from '../export/route';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { composeEditorialReport, renderEditorialReportToStream } from '@/lib/export/pdf-elite-react';
 import { orchestrateFinancialReport } from '@/lib/agents/financial/orchestrator';
-import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
-import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import { makeExportableReport as makeNiifOnlyReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
+import { withCoherentParts } from '@/lib/reports/__tests__/coherent-parts';
+import {
+  parseTrialBalanceCSV,
+  preprocessTrialBalance,
+  type PreprocessedBalance,
+} from '@/lib/preprocessing/trial-balance';
 
 /** Balance cuyas anclas coinciden con `makeCoherentNiifReport` (Activo $10.000). */
 const CSV_COHERENTE = [
@@ -48,6 +53,14 @@ const CSV_COHERENTE = [
   '530505,Intereses,Auxiliar,1,1000',
   '613505,CMV,Auxiliar,1,2000',
 ].join('\n');
+
+/**
+ * Informe coherente con `CSV_COHERENTE`, con Partes II y III estructuradas
+ * (I3: el servidor re-renderiza su Markdown desde el JSON y sella la Parte sin
+ * JSON válido).
+ */
+const makeExportableReport = () =>
+  withCoherentParts(makeNiifOnlyReport(), preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)));
 
 /** Lo que /upload envía como rawData para un XLSX de una hoja. */
 const XLSX_BLOCKS = `[period=Balance 2025]\n${CSV_COHERENTE.replace('saldo 2025', 'saldo')}\n[/period]`;
@@ -117,8 +130,11 @@ describe('export con informe — rawData leído con parseUploadedTrialBalanceTex
     it(`${format}: informe con la Parte II o III vacía → 422 (INCOMPLETO)`, async () => {
       for (const part of ['strategicAnalysis', 'governance'] as const) {
         vi.clearAllMocks();
+        // Vacía = sin texto y sin JSON (con JSON el servidor re-renderiza el
+        // texto desde él, I3).
         const report = makeExportableReport();
         report[part].fullContent = '   ';
+        delete report[part].json;
         const res = await POST(request({ report, format }));
         expect(res.status).toBe(422);
         const body = (await res.json()) as { details: string[] };

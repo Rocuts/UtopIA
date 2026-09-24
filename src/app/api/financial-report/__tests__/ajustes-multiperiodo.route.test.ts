@@ -57,6 +57,7 @@ import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { makeProvenanceParts, makeReportsTableFake } from '@/lib/reports/__tests__/provenance-fixture';
+import { coherentReportParts } from '@/lib/reports/__tests__/coherent-parts';
 
 const W1 = '11111111-1111-4111-8111-111111111111';
 const COMPANY = { name: 'Demo Perdidas SAS', nit: '900123456-8', entityType: 'SAS', niifGroup: 2, fiscalPeriod: '2025' };
@@ -143,14 +144,16 @@ describe('ajuste del Doctor de Datos anclado al comparativo', () => {
     expect(snapshot(pp, '2024').controlTotals.efectivoCuenta11).toBe(snapshot(HONEST, '2024').controlTotals.efectivoCuenta11);
     expect(snapshot(pp, '2025').controlTotals.efectivoCuenta11).toBe(snapshot(HONEST, '2025').controlTotals.efectivoCuenta11);
 
-    const p = makeProvenanceParts();
+    // Partes II y III con JSON del contrato coherente con el balance ajustado
+    // (I3: el servidor re-renderiza su Markdown y sella la Parte sin JSON).
+    const p = coherentReportParts(phase.niif, COMPANY, HONEST);
     const consolidateRes = await consolidate(
       req('/api/financial-report/consolidate', {
         rawData: CSV_2024_DESCUADRADO,
         company: COMPANY,
         language: 'es',
         adjustmentLedger: LEDGER,
-        reportParts: { niifAnalysis: phase.niif, strategicAnalysis: p.strategicAnalysis, governance: p.governance },
+        reportParts: p,
       }),
     );
     const consolidateText = await consolidateRes.text();

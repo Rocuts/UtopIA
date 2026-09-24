@@ -84,19 +84,29 @@ type ConsolidateJson = {
   provenance: { status: string; reason?: string; reportHash: string; sourceHash: string | null; contractVersion: string };
 };
 
-/** Partes con JSON de Estrategia y Gobierno (el HTML los exige). */
-function partsWithJson() {
-  const parts = makeProvenanceParts();
-  (parts.strategicAnalysis as { json?: unknown }).json = {
-    technicalAlerts: [{ severity: 'red' }, { severity: 'amber' }],
+/**
+ * Partes con JSON de Estrategia y Gobierno (el HTML los exige). Desde I3 el
+ * JSON debe cumplir el contrato: el servidor re-renderiza el Markdown desde él
+ * y sella la Parte cuyo JSON no es válido.
+ */
+function partsWithJson(csv?: string) {
+  const parts = makeProvenanceParts(csv);
+  const alert = (severity: 'red' | 'amber', title: string) => ({
+    severity, title, description: 'Revisar la política de cobro de cartera.', normReference: null,
+  });
+  parts.strategicAnalysis.json = {
+    ...parts.strategicAnalysis.json!,
+    technicalAlerts: [alert('red', 'Cartera'), alert('amber', 'Liquidez')],
   };
-  (parts.governance as { json?: unknown }).json = { shareholderMinutes: null };
   return parts;
 }
 
 async function consolidateIn(workspace: string | null, extra: Record<string, unknown> = {}) {
   state.workspace = workspace;
-  const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody({ reportParts: partsWithJson(), ...extra })));
+  const csv = typeof extra.rawData === 'string' ? extra.rawData : undefined;
+  const res = await consolidate(
+    req('/api/financial-report/consolidate', consolidateBody({ reportParts: partsWithJson(csv), ...extra })),
+  );
   expect(res.status).toBe(200);
   return (await res.json()) as ConsolidateJson;
 }
@@ -275,12 +285,18 @@ describe('/export usa la versión persistida referenciada', () => {
     // Informe cuyo JSON no corresponde al balance (Activo $10.000 frente a uno de $20.000).
     const otherCsv = PROVENANCE_CSV.replace('130505,Clientes,Auxiliar,1,8300', '130505,Clientes,Auxiliar,1,18300')
       .replace('311505,Capital,Auxiliar,1,3000', '311505,Capital,Auxiliar,1,13000');
-    const { reportRef, report } = await consolidateIn(W1, { rawData: otherCsv });
-    // Sin referencia ni balance, el mismo informe sólo prueba coherencia interna.
-    const bodyOnly = await exportReport(req('/api/financial-report/export', { report, format: 'excel' }));
-    expect(bodyOnly.status).toBe(200);
-    expect(bodyOnly.headers.get('X-Report-Provenance')).toBe('unverified');
-    vi.mocked(generateFinancialExcel).mockClear();
+    // La Parte II no cita totales (sólo la puerta de liquidez del balance de
+    // la petición): lo único que contradice al balance es el JSON NIIF.
+    const parts = partsWithJson(otherCsv);
+    parts.strategicAnalysis.json!.executiveDashboard.rows[0].label = 'Indicador de gestión';
+    const { reportRef, report } = await consolidateIn(W1, { rawData: otherCsv, reportParts: parts });
+    // I3: /consolidate ya cruza el JSON NIIF contra el balance re-derivado (los
+    // mismos invariantes que /niif) y persiste la Parte I sellada, con el sello
+    // de integridad en su Markdown. (Antes se persistía "limpia" y sólo el gate
+    // por referencia la detenía; la exportación sólo del cuerpo, sin balance,
+    // la dejaba pasar.)
+    expect(report.niifAnalysis.reconciliation?.clean).toBe(false);
+    expect(report.niifAnalysis.fullContent).toMatch(/REPORTE CON SALVEDADES — INTEGRIDAD ARITMÉTICA/);
     const byRef = await exportReport(req('/api/financial-report/export', { reportRef, format: 'excel' }));
     expect(byRef.status).toBe(422);
     expect(((await byRef.json()) as { details: string[] }).details.join('\n')).toMatch(/Fuentes incoherentes/);
@@ -331,10 +347,11 @@ describe('/html usa la versión persistida referenciada', () => {
   });
 
   it('mismo gate que /export: una versión persistida no emitible no sale en HTML "verificado"', async () => {
-    // Texto de la Parte I sin la declaración de impracticabilidad de los
-    // comparativos: /consolidate la persiste con emittability 'no-emitible'.
+    // Parte I sin la declaración de impracticabilidad de los comparativos (en
+    // su JSON: el texto lo re-renderiza el servidor): /consolidate la persiste
+    // con emittability 'no-emitible'.
     const parts = partsWithJson();
-    parts.niifAnalysis.fullContent = 'Estado de Situación Financiera.';
+    parts.niifAnalysis.json = { ...parts.niifAnalysis.json!, technicalNotes: [] };
     state.workspace = W1;
     const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody({ reportParts: parts })));
     const { reportRef, report } = (await res.json()) as ConsolidateJson;
