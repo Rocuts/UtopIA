@@ -153,6 +153,37 @@ export function isNonCurrentGroup(section: BreakdownSection, group: string): boo
   return false;
 }
 
+/**
+ * Clasificación corriente / no corriente por grupo PUC que usa el
+ * preprocesador para `controlTotals.activoCorriente` / `pasivoCorriente`
+ * (`trial-balance.ts`: activo 11-14 / 15-19; pasivo 21-26 / 27-29). Es la
+ * misma partición, así que los subtotales que produce el completado
+ * determinista coinciden con esas anclas por construcción.
+ *
+ * Auditoría 2026-09 (niif-contrato-07): el completado del ESF reemplazaba la
+ * sección por renglones de grupo sin subtotales y la clasificación
+ * corriente/no corriente (NIIF PYMES 4.4) desaparecía del informe.
+ */
+const TERM_BY_GROUP: Record<'assets' | 'liabilities', Record<string, 'current' | 'nonCurrent'>> = {
+  assets: {
+    '11': 'current', '12': 'current', '13': 'current', '14': 'current',
+    '15': 'nonCurrent', '16': 'nonCurrent', '17': 'nonCurrent', '18': 'nonCurrent', '19': 'nonCurrent',
+  },
+  liabilities: {
+    '21': 'current', '22': 'current', '23': 'current', '24': 'current', '25': 'current', '26': 'current',
+    '27': 'nonCurrent', '28': 'nonCurrent', '29': 'nonCurrent',
+  },
+};
+
+export function termOfGroup(
+  section: BreakdownSection,
+  group: string,
+): 'current' | 'nonCurrent' | null {
+  if (section === 'equity') return null;
+  const map = TERM_BY_GROUP[section];
+  return Object.prototype.hasOwnProperty.call(map, group) ? map[group] : null;
+}
+
 // ===========================================================================
 // Desglose determinista del Estado de Flujos de Efectivo (EFE indirecto)
 // ===========================================================================

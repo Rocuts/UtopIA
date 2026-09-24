@@ -449,7 +449,10 @@ describe('columna comparativa del Balance (NIIF para las PYMES §3.14)', () => {
       equity: anchors.comparative!.cents.patrimonio!,
     };
     for (const seccion of ['assets', 'liabilities', 'equity'] as const) {
-      const lineas = conComparativo.balanceSheet[seccion];
+      // Desde la auditoría 2026-09 (niif-contrato-07) el completado agrega los
+      // subtotales corriente / no corriente (renglones sin código): la suma
+      // del detalle se hace sobre los renglones con código PUC.
+      const lineas = conComparativo.balanceSheet[seccion].filter((l) => l.account !== null);
       // Cero "n/c": la auditoría midió 11 de 11 renglones sin cifra comparativa.
       expect(lineas.filter((l) => l.amountComparative === null)).toHaveLength(0);
       const suma = lineas.reduce(
