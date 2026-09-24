@@ -211,7 +211,11 @@ export interface MonthlySummary {
     ingresos: number;
     egresos: number;
     margen: number;
-    margenPct: number;
+    /**
+     * Margen / ingresos como fracción (0.18 = 18 %). `null` (N/D) cuando el
+     * mes no tiene ingresos: el margen porcentual no existe y no es 0 %.
+     */
+    margenPct: number | null;
   };
   topIngresoCategories: { category: string; amount: number }[];
   topEgresoCategories: { category: string; amount: number }[];
@@ -583,7 +587,7 @@ Convenciones de design:
 
 `Ledger.tsx` — tabla virtualizada. Filtros: mes, kind, search description. Total agregado footer.
 
-`MonthlyReport.tsx` — KPIs: ingresos, egresos, margen, margen %. Lista alertas con severity chips.
+`MonthlyReport.tsx` — KPIs: ingresos, egresos, margen, margen % (N/D —N/A en inglés— cuando `margenPct` es `null`, vía `formatPymeMargin`). Lista alertas con severity chips. La alerta de pérdida del summarizer se decide por `margen < 0`, no por `margenPct`, así que un mes con egresos y sin ingresos también la dispara.
 
 i18n keys nuevas (a añadir en `src/lib/i18n/dictionaries.ts`):
 ```
