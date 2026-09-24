@@ -20,8 +20,7 @@ import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financia
 import {
   CURRENCY_NOTE,
   comparativeNotPresentedLegend,
-  incomeTotalLabel,
-  incomeTotalLabelVariants,
+  incomeStatementTotalRows,
   presentedLineCents,
   statementDateLabel,
   type PeriodoTipo,
@@ -89,21 +88,32 @@ const NO_COMPARATIVE_PLACEHOLDER = 'n/c';
  * todo renglón se imprime firmado (paréntesis NIIF) y las correctoras en
  * magnitud absoluta se presentan restando (`presentedLineCents`).
  */
-function fmtLine(line: StatementLineJson, value: string): string {
+function fmtLine(line: StatementLineJson, value: string, contraAware: boolean): string {
+  const cents = parseMoneyCop(value);
   return formatCopFromCents(
-    presentedLineCents(line.account, parseMoneyCop(value), line.isAbsolute),
+    contraAware ? presentedLineCents(line.account, cents, line.isAbsolute) : cents,
     false,
   );
 }
 
-function lineToRow(line: StatementLineJson, hasComparative: boolean): ParsedTableRow {
+/**
+ * `contraAware = false` en el EFE: sus renglones ya viajan firmados como flujo
+ * (la depreciación 1592 que se SUMA en el método indirecto es positiva). La
+ * regla de correctoras del ESF la imprimía entre paréntesis mientras el Excel
+ * y el Markdown la mostraban positiva (paridad de superficies).
+ */
+function lineToRow(
+  line: StatementLineJson,
+  hasComparative: boolean,
+  contraAware = true,
+): ParsedTableRow {
   const account = line.account ? `${line.account} — ${line.label}` : line.label;
-  const primary = fmtLine(line, line.amountPrimary);
+  const primary = fmtLine(line, line.amountPrimary, contraAware);
   const cells: string[] = [primary];
   if (hasComparative) {
     cells.push(
       line.amountComparative !== null
-        ? fmtLine(line, line.amountComparative)
+        ? fmtLine(line, line.amountComparative, contraAware)
         : NO_COMPARATIVE_PLACEHOLDER,
     );
   }
@@ -281,47 +291,16 @@ export function niifJsonToIncomeTable(
   const p = json.incomeStatement;
   const hasComparative = json.company.comparativePeriod !== null;
   const rows: ParsedTableRow[] = p.lines.map((l) => lineToRow(l, hasComparative));
-  // Append los totales emphasized si no vinieron como líneas. Se comparan las
-  // DOS variantes del rótulo (utilidad / pérdida) para no duplicar un total que
-  // el analista ya emitió con el rótulo del signo contrario.
-  const accounts = new Set(rows.map((r) => normalizeLabel(r.account)));
-  const pushTotal = (label: string, variants: string[], primary: string, comp: string | null) => {
-    if (variants.some((v) => accounts.has(normalizeLabel(v)))) return;
+  // Totales (UTILIDAD/PÉRDIDA según el signo, ORI y resultado integral total —
+  // NIIF para las PYMES 5.5 / NIC 1.81A, reportes-export-01/-15) con la regla
+  // compartida por el Markdown y el Excel: un total ya emitido como renglón no
+  // se duplica.
+  for (const t of incomeStatementTotalRows(p)) {
     rows.push({
-      account: label,
-      cells: totalCells(primary, comp, hasComparative),
+      account: t.label,
+      cells: totalCells(t.primary, t.comparative, hasComparative),
       emphasis: 'total',
     });
-  };
-  for (const [kind, primary, comp] of [
-    ['gross', p.grossProfitPrimary, p.grossProfitComparative],
-    ['operating', p.operatingProfitPrimary, p.operatingProfitComparative],
-    ['net', p.netIncomePrimary, p.netIncomeComparative],
-  ] as const) {
-    pushTotal(
-      incomeTotalLabel(kind, parseMoneyCop(primary)),
-      incomeTotalLabelVariants(kind),
-      primary,
-      comp,
-    );
-  }
-
-  // Enfoque de un único estado (NIIF para las PYMES 5.5 / NIC 1.81A): el ERI
-  // "Integral" presenta el ORI y el resultado integral total. Antes sólo se
-  // listaba hasta la utilidad neta y el ORI desaparecía (reportes-export-15).
-  const hasTotalIntegral = rows.some((r) =>
-    normalizeLabel(r.account).startsWith('RESULTADO INTEGRAL TOTAL'),
-  );
-  pushTotal('OTRO RESULTADO INTEGRAL', ['OTRO RESULTADO INTEGRAL'], p.oriPrimary, p.oriComparative);
-  if (!hasTotalIntegral) {
-    const sum = (a: string | null, b: string | null): string | null =>
-      a !== null && b !== null ? (parseMoneyCop(a) + parseMoneyCop(b)).toString(10) : null;
-    pushTotal(
-      'RESULTADO INTEGRAL TOTAL',
-      ['RESULTADO INTEGRAL TOTAL'],
-      sum(p.netIncomePrimary, p.oriPrimary) ?? p.netIncomePrimary,
-      sum(p.netIncomeComparative, p.oriComparative),
-    );
   }
 
   return {
@@ -330,15 +309,6 @@ export function niifJsonToIncomeTable(
     rows,
     ...presentationMeta(json, 'period', ctx, p.notes),
   };
-}
-
-function normalizeLabel(label: string): string {
-  return label
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
 }
 
 export function niifJsonToCashFlowTable(
@@ -358,7 +328,7 @@ export function niifJsonToCashFlowTable(
   const rows: ParsedTableRow[] = [];
   for (const s of cf.sections) {
     rows.push({ account: sectionLabel[s.section], cells: [], emphasis: 'subtotal' });
-    rows.push(...s.lines.map((l) => lineToRow(l, false)));
+    rows.push(...s.lines.map((l) => lineToRow(l, false, false)));
     rows.push({
       account: `FLUJO NETO ${sectionLabel[s.section]}`,
       cells: [fmtCop(s.netFlow, false)],

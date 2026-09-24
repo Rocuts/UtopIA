@@ -36,6 +36,10 @@
 // ---------------------------------------------------------------------------
 
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
+import {
+  incomeStatementTotalRows,
+  presentedLineCents,
+} from '@/lib/export/statement-presentation';
 import type { NiifReportJson } from '../contracts/niif-report';
 import type { StatementLineJson, StatementNoteJson } from '../contracts/base';
 import type { NiifAnalysisResult } from '../types';
@@ -139,6 +143,13 @@ const fmtTotal = (value: string): string =>
 const fmtMagnitude = (cents: bigint): string => formatCopFromCents(cents, true);
 
 /**
+ * Marcador visible cuando el informe declara comparativo pero el renglón no
+ * trae cifra del periodo anterior — el mismo "n/c" del PDF y del Excel. Una
+ * celda vacía ocultaba el hueco y hacía que las superficies difirieran.
+ */
+const NO_COMPARATIVE_PLACEHOLDER = 'n/c';
+
+/**
  * Convierte una línea de estado financiero en una row de tabla Markdown.
  *
  * Reglas:
@@ -147,20 +158,30 @@ const fmtMagnitude = (cents: bigint): string => formatCopFromCents(cents, true);
  *   - `level >= 2` se indenta con 2 espacios (sub-líneas de detalle/subgrupo).
  *     Level 0/1 son secciones — sin indent.
  *   - El label se prefija con el código PUC si existe (`11 — Efectivo`).
- *   - Las cifras se formatean con `formatCopFromCents(parseMoneyCop(...))` —
- *     SIEMPRE produce `$X.XXX.XXX,XX` (es-CO). Negativos entre paréntesis
- *     cuando `isAbsolute === false`.
+ *   - Cifras SIEMPRE firmadas (paréntesis NIIF), igual que el PDF Élite y el
+ *     Excel (reportes-export-01/-17). Antes se formateaban con `isAbsolute`,
+ *     que borraba el signo de un renglón negativo marcado como absoluto e
+ *     imprimía la depreciación acumulada (1592) en positivo: la columna no
+ *     sumaba el total. En el ESF/ERI las correctoras en magnitud absoluta se
+ *     presentan restando (`presentedLineCents`); en el EFE (`contraAware =
+ *     false`) el importe ya viaja firmado como flujo — una depreciación que se
+ *     suma en el método indirecto no se invierte.
  */
 function lineToTableRow(
   line: StatementLineJson,
   hasComparative: boolean,
+  contraAware = true,
 ): MarkdownTableRow {
-  const cents = parseMoneyCop(line.amountPrimary);
-  const primary = formatCopFromCents(cents, line.isAbsolute);
+  const fmt = (value: string): string => {
+    const cents = parseMoneyCop(value);
+    return formatCopFromCents(
+      contraAware ? presentedLineCents(line.account, cents, line.isAbsolute) : cents,
+      false,
+    );
+  };
+  const primary = fmt(line.amountPrimary);
   const comparative =
-    line.amountComparative !== null
-      ? formatCopFromCents(parseMoneyCop(line.amountComparative), line.isAbsolute)
-      : '';
+    line.amountComparative !== null ? fmt(line.amountComparative) : NO_COMPARATIVE_PLACEHOLDER;
 
   const baseLabel = line.account ? `${line.account} — ${line.label}` : line.label;
   // Indentación: 2 espacios para subgrupos/detalle (level 2), sin indent para
@@ -224,7 +245,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
           fmtTotal(b.totalAssetsPrimary),
           b.totalAssetsComparative !== null
             ? fmtTotal(b.totalAssetsComparative)
-            : '',
+            : NO_COMPARATIVE_PLACEHOLDER,
         ]
       : [fmtTotal(b.totalAssetsPrimary)],
     bold: true,
@@ -242,7 +263,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
           fmtTotal(b.totalLiabilitiesPrimary),
           b.totalLiabilitiesComparative !== null
             ? fmtTotal(b.totalLiabilitiesComparative)
-            : '',
+            : NO_COMPARATIVE_PLACEHOLDER,
         ]
       : [fmtTotal(b.totalLiabilitiesPrimary)],
     bold: true,
@@ -260,7 +281,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
           fmtTotal(b.totalEquityPrimary),
           b.totalEquityComparative !== null
             ? fmtTotal(b.totalEquityComparative)
-            : '',
+            : NO_COMPARATIVE_PLACEHOLDER,
         ]
       : [fmtTotal(b.totalEquityPrimary)],
     bold: true,
@@ -280,14 +301,16 @@ export function renderBalanceSheet(json: NiifReportJson): string {
   const absDiffPrimary = diffPrimary < BigInt(0) ? -diffPrimary : diffPrimary;
   const cuadraPrimary = absDiffPrimary <= TOLERANCE_CENTS;
 
+  // P + C con signo (igual que el Excel): la magnitud se reserva a la brecha.
+  const fmtSigned = (cents: bigint): string => formatCopFromCents(cents, false);
   let cuadraComparative = true;
-  let comparativeCell = '';
+  let comparativeCell = NO_COMPARATIVE_PLACEHOLDER;
   if (hasComparative) {
     if (b.totalLiabilitiesComparative !== null && b.totalEquityComparative !== null) {
       const liabComp = parseMoneyCop(b.totalLiabilitiesComparative);
       const eqComp = parseMoneyCop(b.totalEquityComparative);
       const sumComp = liabComp + eqComp;
-      const sumCompStr = fmtMagnitude(sumComp);
+      const sumCompStr = fmtSigned(sumComp);
       if (b.totalAssetsComparative !== null) {
         const assetsComp = parseMoneyCop(b.totalAssetsComparative);
         const diffComp = sumComp - assetsComp;
@@ -302,7 +325,7 @@ export function renderBalanceSheet(json: NiifReportJson): string {
     }
   }
 
-  const sumPrimaryStr = fmtMagnitude(sumPrimary);
+  const sumPrimaryStr = fmtSigned(sumPrimary);
   const primaryCell = cuadraPrimary
     ? sumPrimaryStr
     : `${sumPrimaryStr} (DESCUADRE: ${fmtMagnitude(absDiffPrimary)})`;
@@ -359,38 +382,17 @@ export function renderIncomeStatement(json: NiifReportJson): string {
     rows.push(lineToTableRow(line, hasComparative));
   }
 
-  // Totales canónicos del P&L — siempre en negrita
-  const totals: { label: string; primary: string; comparative: string | null }[] = [
-    {
-      label: 'UTILIDAD BRUTA',
-      primary: p.grossProfitPrimary,
-      comparative: p.grossProfitComparative,
-    },
-    {
-      label: 'UTILIDAD OPERATIVA (EBIT)',
-      primary: p.operatingProfitPrimary,
-      comparative: p.operatingProfitComparative,
-    },
-    {
-      label: 'UTILIDAD NETA DEL PERÍODO',
-      primary: p.netIncomePrimary,
-      comparative: p.netIncomeComparative,
-    },
-    {
-      label: 'OTRO RESULTADO INTEGRAL (ORI)',
-      primary: p.oriPrimary,
-      comparative: p.oriComparative,
-    },
-  ];
-  for (const t of totals) {
+  // Totales canónicos del ERI — siempre en negrita. Misma lista, rótulos y
+  // orden que el PDF Élite y el Excel (`incomeStatementTotalRows`): PÉRDIDA
+  // cuando el total es negativo, ORI y RESULTADO INTEGRAL TOTAL = neto + ORI
+  // (reportes-export-01/-15); un total ya emitido como renglón no se duplica.
+  for (const t of incomeStatementTotalRows(p)) {
     rows.push({
       label: t.label,
       values: hasComparative
         ? [
             fmtTotal(t.primary),
-            t.comparative !== null
-              ? fmtTotal(t.comparative)
-              : '',
+            t.comparative !== null ? fmtTotal(t.comparative) : NO_COMPARATIVE_PLACEHOLDER,
           ]
         : [fmtTotal(t.primary)],
       bold: true,
@@ -434,7 +436,7 @@ export function renderCashFlowStatement(json: NiifReportJson): string {
   for (const s of cf.sections) {
     rows.push({ label: `**${sectionTitle[s.section]}**`, values: [''] });
     for (const line of s.lines) {
-      rows.push(lineToTableRow(line, false));
+      rows.push(lineToTableRow(line, false, false));
     }
     rows.push({
       label: `FLUJO NETO ${sectionTitle[s.section]}`,
