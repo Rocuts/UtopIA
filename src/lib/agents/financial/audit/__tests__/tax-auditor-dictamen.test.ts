@@ -50,7 +50,7 @@ function buildV21Sample(): TaxAuditReportJson {
       saldo24Cop: '120000000',
       posicionFiscalNetaCop: '555620400',
       evaluacion: 'Posicion fiscal neta a favor del contribuyente; pendiente solicitud de devolucion.',
-      reference: 'Art. 850 E.T.; Decreto 2235/2017',
+      reference: 'Art. 850 E.T.; DUR 1625/2016 Arts. 1.6.1.21.1 y ss.',
     },
     ivaIcaAnalysis: {
       pasivoIvaNetoCop: '85000000',
