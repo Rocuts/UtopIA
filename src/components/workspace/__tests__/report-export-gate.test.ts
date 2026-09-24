@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveReportExportBlock,
   reportExportBlockCopy,
+  reportExportDegradedNotice,
   type ReportExportBlock,
 } from '../report-export-gate';
 
@@ -77,5 +78,82 @@ describe('reportExportBlockCopy', () => {
     );
     expect(copy.title).toContain('V8 · V10 · V15');
     expect(copy.title).not.toContain('V1 ');
+  });
+});
+
+// pipeline-flujo-05 / pipeline-flujo-15 (W3-A): las salvedades de la Parte II
+// (`strategyQualifications`) y del acta (`actaQualifications`) tienen motivo
+// propio — no "la reconciliación no cerró" — y bloquean aunque el informe se
+// haya persistido antes de que la UI las plegara sobre la reconciliación.
+describe('resolveReportExportBlock — salvedades de Estrategia y del acta', () => {
+  const strategyQualified = {
+    ...FULL,
+    strategicAnalysis: {
+      fullContent: 'Estrategia',
+      strategyQualifications: { clean: false, motivos: ['ROE publicado 18 % ≠ ancla 12 %'], noVerificables: [] },
+    },
+  };
+
+  it('strategyQualifications.clean === false bloquea con motivo propio (lectura directa)', () => {
+    expect(resolveReportExportBlock(strategyQualified)).toEqual({
+      reason: 'part-qualifications',
+      parts: ['strategy'],
+      details: ['ROE publicado 18 % ≠ ancla 12 %'],
+    });
+  });
+
+  it('también cuando la UI ya plegó la salvedad sobre la reconciliación', () => {
+    const folded = { ...strategyQualified, niifAnalysis: { reconciliation: { clean: false } } };
+    expect(resolveReportExportBlock(folded)).toMatchObject({ reason: 'part-qualifications', parts: ['strategy'] });
+  });
+
+  it('actaQualifications.clean === false bloquea nombrando el acta', () => {
+    const acta = {
+      ...FULL,
+      governance: { fullContent: 'Acta', actaQualifications: { clean: false, motivos: ['Reserva legal ≠ 10 %'] } },
+    };
+    expect(resolveReportExportBlock(acta)).toEqual({
+      reason: 'part-qualifications',
+      parts: ['acta'],
+      details: ['Reserva legal ≠ 10 %'],
+    });
+  });
+
+  it('la copia no dice que la reconciliación no cerró', () => {
+    const block = resolveReportExportBlock(strategyQualified)!;
+    const es = reportExportBlockCopy(block, 'es', 'download');
+    expect(es.title).toMatch(/Estrategia \(Parte II\)/);
+    expect(es.title).toContain('ROE publicado 18 % ≠ ancla 12 %');
+    expect(es.title).not.toMatch(/reconciliación/);
+    expect(reportExportBlockCopy(block, 'en', 'generate').ariaLabel).toMatch(/^Generation blocked/);
+  });
+
+  it('strategyQualifications limpias no bloquean', () => {
+    expect(
+      resolveReportExportBlock({
+        ...FULL,
+        strategicAnalysis: { fullContent: 'Estrategia', strategyQualifications: { clean: true, motivos: [] } },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('reportExportDegradedNotice — aviso de pases degradados', () => {
+  it('sin pases degradados no hay aviso', () => {
+    expect(reportExportDegradedNotice(FULL, 'es')).toBeNull();
+  });
+
+  it('nombra las partes completadas con esfuerzo degradado (es/en)', () => {
+    const r = {
+      ...FULL,
+      strategicAnalysis: { fullContent: 'Estrategia', degraded: true },
+      governance: { fullContent: 'Acta', degraded: true },
+    };
+    const es = reportExportDegradedNotice(r, 'es')!;
+    expect(es).toMatch(/Estrategia \(Parte II\)/);
+    expect(es).toMatch(/Gobierno Corporativo \(Parte III\)/);
+    expect(reportExportDegradedNotice(r, 'en')).toMatch(/Strategy \(Part II\)/);
+    // Un aviso no bloquea la descarga.
+    expect(resolveReportExportBlock(r)).toBeNull();
   });
 });
