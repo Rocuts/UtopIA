@@ -66,6 +66,7 @@ import {
   rederivePreprocessedFromRows,
 } from '@/lib/reports/preprocessed-integrity';
 import {
+  isProvisionalDraft,
   provenanceHeaders,
   stampHtmlProvenance,
   type ArtifactProvenance,
@@ -158,10 +159,17 @@ export async function POST(req: Request) {
     // Versión persistida: prevalece sobre las cifras del cuerpo.
     const persisted = await resolvePersistedReport(rawBody);
     if (persisted.kind === 'error') return persisted.response;
+    // BORRADOR (pipeline-flujo-21): con versión persistida lo dice su
+    // consolidado; sin ella, el override que reenvía el cliente (sólo puede
+    // añadir la aclaración, nunca quitarla).
+    const draft =
+      persisted.kind === 'ok'
+        ? isProvisionalDraft(persisted.report)
+        : (rawBody as { provisional?: { active?: unknown } } | null)?.provisional?.active === true;
     const provenance: ArtifactProvenance =
       persisted.kind === 'ok'
-        ? { kind: 'verified', provenance: persisted.provenance }
-        : { kind: 'unverified' };
+        ? { kind: 'verified', provenance: persisted.provenance, ...(draft ? { draft } : {}) }
+        : { kind: 'unverified', ...(draft ? { draft } : {}) };
     const body: unknown =
       persisted.kind === 'ok' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
         ? htmlInputFromPersisted(rawBody as Record<string, unknown>, persisted)

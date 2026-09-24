@@ -79,6 +79,7 @@ import {
 } from './report-export-gate';
 import { derivePeriodBounds } from '@/lib/reports/period-bounds';
 import { foldReportQualifications } from '@/lib/reports/fold-qualifications';
+import { isProvisionalDraft } from '@/lib/reports/provenance-stamp';
 import {
   attachServerVersion,
   detachServerVersion,
@@ -907,6 +908,12 @@ export function buildConsolidationRequestBody(args: {
   strategyResult: StrategicAnalysisResult;
   governanceResult: GovernanceResult;
   adjustmentLedger?: AdjustmentLedger;
+  /**
+   * Override del Doctor de Datos ("Continuar de todas formas",
+   * pipeline-flujo-21): con `active` el servidor marca BORRADOR el
+   * consolidado, la versión persistida y el sello de procedencia.
+   */
+  provisional?: ProvisionalFlag | null;
 }): Record<string, unknown> {
   return {
     rawData: args.rawData,
@@ -920,6 +927,7 @@ export function buildConsolidationRequestBody(args: {
     ...(args.adjustmentLedger?.adjustments?.length
       ? { adjustmentLedger: args.adjustmentLedger }
       : {}),
+    ...(args.provisional?.active ? { provisional: args.provisional } : {}),
   };
 }
 
@@ -938,6 +946,7 @@ async function runServerConsolidation(args: {
   strategyResult: StrategicAnalysisResult;
   governanceResult: GovernanceResult;
   adjustmentLedger?: AdjustmentLedger;
+  provisional?: ProvisionalFlag | null;
   signal: AbortSignal;
 }): Promise<ServerConsolidation | null> {
   try {
@@ -2719,6 +2728,7 @@ export function PipelineWorkspace() {
         strategyResult,
         governanceResult,
         adjustmentLedger,
+        provisional,
         signal: controller.signal,
       });
       if (!serverConsolidation) return;
@@ -3370,6 +3380,9 @@ export function PipelineWorkspace() {
         // (clean === false), igual que Excel/PDF.
         actaQualifications: backendReport.governance?.actaQualifications ?? null,
         strategyQualifications: backendReport.strategicAnalysis?.strategyQualifications ?? null,
+        // pipeline-flujo-21: un consolidado BORRADOR (override del Doctor de
+        // Datos) hace que el sello de procedencia del HTML lo aclare.
+        ...(isProvisionalDraft(backendReport) ? { provisional: { active: true } } : {}),
         ...(excludedFactIds.length ? { excludedFactIds } : {}),
         // Procedencia servidor (P1): con referencia, el servidor toma los JSON,
         // el preprocesado, los veredictos y las cifras de la metadata de la

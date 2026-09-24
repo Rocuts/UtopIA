@@ -10,7 +10,7 @@ import {
   buildAdjustmentsAuditSection,
 } from '@/lib/agents/financial/orchestrator';
 import { consolidateSplitReport } from '@/lib/agents/financial/split-consolidation';
-import type { AdjustmentLedger } from '@/lib/agents/repair/types';
+import type { AdjustmentLedger, ProvisionalFlag } from '@/lib/agents/repair/types';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
@@ -72,6 +72,14 @@ const adjustmentSchema = z.object({
 const adjustmentLedgerSchema = z
   .object({ adjustments: z.array(adjustmentSchema).max(50) })
   .optional();
+// Override del Doctor de Datos ("Continuar de todas formas"), mismo contrato
+// que /niif (pipeline-flujo-21): con `active` el consolidado sale BORRADOR.
+const provisionalFlagSchema = z
+  .object({
+    active: z.boolean(),
+    reason: z.string().min(1).max(2_000),
+  })
+  .optional();
 
 // Los textos de las partes pueden omitirse cuando llegan `reportParts`: se
 // toman de su `fullContent` (si llegan ambos, deben coincidir).
@@ -97,12 +105,21 @@ export async function POST(req: Request) {
   const ledger = adjustmentLedgerSchema.safeParse(
     (body as { adjustmentLedger?: unknown } | null)?.adjustmentLedger,
   );
+  const provisional = provisionalFlagSchema.safeParse(
+    (body as { provisional?: unknown } | null)?.provisional,
+  );
   const reportParts = parseReportParts((body as { reportParts?: unknown } | null)?.reportParts);
-  if (!base.success || !parts.success || !ledger.success || reportParts.kind === 'invalid') {
+  if (
+    !base.success || !parts.success || !ledger.success || !provisional.success ||
+    reportParts.kind === 'invalid'
+  ) {
     const issues = [
       ...(base.success ? [] : base.error.issues),
       ...(parts.success ? [] : parts.error.issues),
       ...(ledger.success ? [] : ledger.error.issues),
+      ...(provisional.success
+        ? []
+        : provisional.error.issues.map((i) => ({ ...i, path: ['provisional', ...i.path] }))),
     ];
     return NextResponse.json(
       {
@@ -162,6 +179,10 @@ export async function POST(req: Request) {
       strategyContent: contents.strategyContent as string,
       governanceContent: contents.governanceContent as string,
       language,
+      // pipeline-flujo-21: el override marca BORRADOR el consolidado (y con él
+      // la versión persistida, el PDF y el sello de procedencia); no levanta
+      // ningún gate.
+      provisional: provisional.data as ProvisionalFlag | undefined,
     });
     // Traza auditable de los ajustes confirmados del Doctor de Datos: la MISMA
     // sección que el legacy agrega al consolidado (pipeline-flujo-16). Va al

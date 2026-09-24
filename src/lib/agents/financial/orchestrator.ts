@@ -116,7 +116,9 @@ export interface OrchestrateFinancialOptions {
    * NO lanza si falla — el reporte se devuelve con un watermark BORRADOR y se
    * emite un `event: warning` con la lista de errores. Lo activa el repair
    * chat ("El Doctor de Datos") cuando el usuario insiste en generar el
-   * reporte a pesar del fallo.
+   * reporte a pesar del fallo. No levanta el gate de Stage 0
+   * (`prepareFinancialContext` lanza igual con un balance descuadrado); en el
+   * camino partido lo aplica /consolidate (pipeline-flujo-21).
    */
   provisional?: ProvisionalFlag;
   /**
@@ -1705,9 +1707,14 @@ export interface FinancialPipelineContext {
 /**
  * Stage 0 compartido: ERP pull → preprocess → ajustes → gate → bindingTotals.
  *
- * Lanza `BalanceValidationError` si el balance no cuadra y `options.provisional`
- * no esta activo. Los route handlers (legacy y nuevos) capturan ese error y
- * devuelven 422.
+ * Lanza `BalanceValidationError` si el balance no cuadra (o sus hojas son
+ * incompatibles), CON o SIN `options.provisional`: el override del Doctor de
+ * Datos no levanta el gate aritmético de Stage 0 —un balance descuadrado no
+ * produce cifras vinculantes ni siquiera como borrador—; sólo marca BORRADOR
+ * el consolidado (post-render en el legacy `orchestrateFinancialReport`, en
+ * /consolidate con `consolidateSplitReport({ provisional })` en el camino
+ * partido; pipeline-flujo-21). Los route handlers (legacy y nuevos) capturan
+ * ese error y devuelven 422.
  */
 export async function prepareFinancialContext(
   request: FinancialReportRequest,

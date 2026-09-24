@@ -19,11 +19,29 @@ import type { ReportProvenance } from './report-ref';
 //   - HTML: comentario + <meta> y un aviso visible tras <body>.
 // ---------------------------------------------------------------------------
 
+/**
+ * `draft`: el informe salió con el override del Doctor de Datos ("Continuar
+ * de todas formas", pipeline-flujo-21) y su consolidado lleva el encabezado
+ * BORRADOR. El sello lo aclara: "procedencia verificada" certifica la versión
+ * persistida y su balance, no que el documento sea definitivo.
+ */
 export type ArtifactProvenance =
-  | { kind: 'verified'; provenance: ReportProvenance }
-  | { kind: 'unverified' };
+  | { kind: 'verified'; provenance: ReportProvenance; draft?: boolean }
+  | { kind: 'unverified'; draft?: boolean };
 
 type Lang = 'es' | 'en';
+
+/**
+ * Encabezado BORRADOR del override (`buildProvisionalDraftBanner` del camino
+ * partido y `buildProvisionalWatermark` del legacy): mismo reconocimiento que
+ * el composer del PDF, que estampa la marca de agua con él.
+ */
+const PROVISIONAL_DRAFT_RE = /BORRADOR — VALIDACION PENDIENTE|DRAFT — VALIDATION PENDING/i;
+
+/** ¿El consolidado del informe está marcado como BORRADOR por el override? */
+export function isProvisionalDraft(report: { consolidatedReport?: unknown } | null | undefined): boolean {
+  return typeof report?.consolidatedReport === 'string' && PROVISIONAL_DRAFT_RE.test(report.consolidatedReport);
+}
 
 function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m));
@@ -32,11 +50,15 @@ function fill(template: string, values: Record<string, string>): string {
 /** Título + cuerpo + detalle de la procedencia, en el idioma del entregable. */
 export function provenanceLines(p: ArtifactProvenance, language: Lang): string[] {
   const t = dict[language].reportProvenance;
-  if (p.kind === 'unverified') return [t.unverifiedTitle, t.unverifiedBody];
+  const draft = p.draft === true ? [t.draftLine] : [];
+  if (p.kind === 'unverified') {
+    return [p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle, t.unverifiedBody, ...draft];
+  }
   const v = p.provenance;
   return [
-    t.verifiedTitle,
+    p.draft ? t.verifiedDraftTitle : t.verifiedTitle,
     t.verifiedBody,
+    ...draft,
     fill(t.versionLine, { reportId: v.reportId, createdAt: v.createdAt }),
     fill(t.reportHashLine, { hash: v.reportHash }),
     v.sourceHash ? fill(t.sourceHashLine, { hash: v.sourceHash }) : t.sourceMissingLine,
@@ -47,11 +69,13 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
 
 /** Encabezados máquina-legibles (complemento, no sustituto, del sello impreso). */
 export function provenanceHeaders(p: ArtifactProvenance): Record<string, string> {
-  if (p.kind === 'unverified') return { 'X-Report-Provenance': 'unverified' };
+  const draft: Record<string, string> = p.draft === true ? { 'X-Report-Draft': 'true' } : {};
+  if (p.kind === 'unverified') return { 'X-Report-Provenance': 'unverified', ...draft };
   return {
     'X-Report-Provenance': 'verified',
     'X-Report-Id': p.provenance.reportId,
     'X-Report-Hash': p.provenance.reportHash,
+    ...draft,
   };
 }
 
@@ -102,11 +126,12 @@ export function stampHtmlProvenance(html: string, p: ArtifactProvenance, languag
   const lines = provenanceLines(p, language);
   const [title, body, ...detail] = lines;
   const status = p.kind === 'verified' ? 'verified' : 'unverified';
+  const draft = p.draft === true ? '; draft=true' : '';
   const machine =
-    p.kind === 'verified'
+    (p.kind === 'verified'
       ? `status=${status}; report=${p.provenance.reportId}; hash=${p.provenance.reportHash}; ` +
         `source=${p.provenance.sourceHash ?? 'none'}; contract=${p.provenance.contractVersion}`
-      : `status=${status}`;
+      : `status=${status}`) + draft;
   const comment = `<!-- REPORT_PROVENANCE: ${machine.replace(/--/g, '- -')} -->`;
   const meta = `<meta name="utopia-report-provenance" content="${escapeHtml(machine)}">`;
   const style = `<style>
@@ -118,7 +143,7 @@ export function stampHtmlProvenance(html: string, p: ArtifactProvenance, languag
     ? `<br>${detail.map((d) => `<code>${escapeHtml(d)}</code>`).join('<br>')}`
     : '';
   const banner =
-    `<div class="utopia-procedencia" data-provenance="${status}"><strong>${escapeHtml(title)}</strong> — ` +
+    `<div class="utopia-procedencia" data-provenance="${status}"${p.draft === true ? ' data-draft="true"' : ''}><strong>${escapeHtml(title)}</strong> — ` +
     `${escapeHtml(body)}${detailHtml}</div>`;
 
   let out = html;
