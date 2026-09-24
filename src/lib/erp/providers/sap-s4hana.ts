@@ -11,6 +11,16 @@
 // connector funciona directamente.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildClosingTrialBalance } from '../trial-balance-builders';
+import {
+  accountLevelFromCode,
+  leafCodes,
+  pucClassFromCode,
+  pucTypeFromCode,
+  rawLevelFor,
+} from '../puc';
 import {
   assertSafeTenantUrl,
   fetchWithSafeRedirects,
@@ -99,25 +109,20 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: exceeded max retries');
 }
 
-// ─── Cached token shape ────────────────────────────────────────────────────────
-
-interface CachedToken {
-  value: string;
-  expiresAt: number;
-}
-
 // ─── Connector ────────────────────────────────────────────────────────────────
 
 export class SAPS4HANAConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'sap_s4hana';
 
-  /** Per-instance token cache so tests don't bleed across connector instances. */
-  private readonly tokenCache = new Map<string, CachedToken>();
-
   // ─── Auth ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Cache key of THIS connection: provider + SHA-256 of every identity and
+   * secret field. A request with the same user but another secret, or another
+   * tenant/company, never receives a token issued for different credentials.
+   */
   private tokenCacheKey(credentials: ERPCredentials): string {
-    return `sap_s4hana:${credentials.clientId ?? ''}:${credentials.baseUrl ?? ''}`;
+    return connectionKey(credentials, 'token');
   }
 
   private tokenEndpoint(credentials: ERPCredentials): string {
@@ -135,12 +140,15 @@ export class SAPS4HANAConnector extends BaseERPConnector {
     return `${base}/sap/bc/sec/oauth2/token`;
   }
 
-  private async getAccessToken(credentials: ERPCredentials): Promise<string> {
+  private async getAccessToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
     const key = this.tokenCacheKey(credentials);
-    const cached = this.tokenCache.get(key);
     // Refresh 5 minutes before expiry
-    if (cached && Date.now() < cached.expiresAt - 300_000) {
-      return cached.value;
+    const cached = options.forceRefresh ? null : this.sessions.get<string>(key, 300_000);
+    if (cached) {
+      return cached;
     }
 
     const endpoint = this.tokenEndpoint(credentials);
@@ -179,10 +187,7 @@ export class SAPS4HANAConnector extends BaseERPConnector {
     }
 
     const data = (await res.json()) as OAuthTokenResponse;
-    this.tokenCache.set(key, {
-      value: data.access_token,
-      expiresAt: Date.now() + data.expires_in * 1000,
-    });
+    this.sessions.set(key, data.access_token, data.expires_in * 1000);
 
     return data.access_token;
   }
@@ -280,13 +285,14 @@ export class SAPS4HANAConnector extends BaseERPConnector {
     return {
       code: pucCode,
       name: row.AccountName,
-      type: inferTypeFromPUC(pucCode),
-      pucClass: parseInt(pucCode.charAt(0), 10) || undefined,
+      type: pucTypeFromCode(pucCode),
+      pucClass: pucClassFromCode(pucCode) || undefined,
       balance,
       debit,
       credit,
-      level: accountLevel(pucCode),
-      isAuxiliary: pucCode.length >= 6,
+      level: accountLevelFromCode(pucCode),
+      // Recalculado por jerarquía real en buildClosingTrialBalance.
+      isAuxiliary: false,
     };
   }
 
@@ -315,14 +321,17 @@ export class SAPS4HANAConnector extends BaseERPConnector {
       correlationId,
     );
 
-    return rows.map((row): RawAccountRow => {
-      const pucCode = pucMappingTable?.[row.GLAccount] ?? row.GLAccount;
+    const codes = rows.map((row) => pucMappingTable?.[row.GLAccount] ?? row.GLAccount);
+    const leaves = leafCodes(codes.map((code) => ({ code })));
+    return rows.map((row, i): RawAccountRow => {
+      const pucCode = codes[i];
       const balance = parseFloat(row.BalanceAmountInCompanyCodeCurrency) || 0;
+      const isLeaf = leaves.has(pucCode);
       return {
         code: pucCode,
         name: row.AccountName,
-        level: 'Auxiliar',
-        transactional: true,
+        level: rawLevelFor(pucCode, isLeaf),
+        transactional: isLeaf,
         balancesByPeriod: { [fiscalYear]: balance },
       };
     });
@@ -332,7 +341,8 @@ export class SAPS4HANAConnector extends BaseERPConnector {
 
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.getAccessToken(credentials);
+      // Siempre contra el proveedor: nunca se valida con un token en caché.
+      await this.getAccessToken(credentials, { forceRefresh: true });
       return true;
     } catch {
       return false;
@@ -351,11 +361,10 @@ export class SAPS4HANAConnector extends BaseERPConnector {
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    // period format esperado por ERPAdapter: "2025-12"
-    const [fiscalYear, fiscalMonthRaw] = period.split('-');
-    const fiscalMonth = parseInt(fiscalMonthRaw ?? '12', 10);
-    // SAP FiscalPeriod es 3 chars zero-padded: "012"
-    const fiscalPeriod = String(fiscalMonth).padStart(3, '0');
+    // FiscalPeriod del mes de corte del periodo pedido ("012" = diciembre).
+    const resolved = resolveERPPeriod(period);
+    const fiscalYear = String(resolved.cutoffYear);
+    const fiscalPeriod = String(resolved.cutoffMonth).padStart(3, '0');
     const correlationId = crypto.randomUUID();
 
     const rows = await this.fetchAllTrialBalanceRows(
@@ -365,19 +374,22 @@ export class SAPS4HANAConnector extends BaseERPConnector {
       correlationId,
     );
 
-    const accounts = rows.map((r) => this.mapToERPAccount(r));
-    const totalDebit = accounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = accounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+    return buildClosingTrialBalance({
+      period: resolved,
+      rows: rows.map((r) => {
+        const account = this.mapToERPAccount(r);
+        return {
+          code: account.code,
+          name: account.name,
+          debit: account.debit,
+          credit: account.credit,
+          closing: account.balance,
+        };
+      }),
       companyName: credentials.companyId ?? 'SAP S/4HANA Company',
-      currency: rows[0]?.CompanyCodeCurrency ?? 'COP',
-      accounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+      // Moneda de la sociedad según el propio informe; vacía si no llega.
+      currency: rows[0]?.CompanyCodeCurrency ?? '',
+    });
   }
 
   async getJournalEntries(
@@ -405,27 +417,4 @@ export class SAPS4HANAConnector extends BaseERPConnector {
       'SAP S/4HANA: getContacts no implementado en este conector. Use el servicio BusinessPartner_CDS.',
     );
   }
-}
-
-// ─── PUC helpers (compartidos) ────────────────────────────────────────────────
-
-function inferTypeFromPUC(code: string): ERPAccount['type'] {
-  switch (code.charAt(0)) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'expense';
-    case '6': return 'cost';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
 }

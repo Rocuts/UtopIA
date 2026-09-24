@@ -87,15 +87,33 @@ export interface ERPAccount {
   isAuxiliary: boolean;
 }
 
+/**
+ * Qué representan los saldos de un `ERPTrialBalance`:
+ *  - `complete`: saldos finales a la fecha de corte entregados por el ERP
+ *    (informe de balance nativo o saldo inicial + movimientos verificados).
+ *  - `partial`: saldos finales, pero con cuentas excluidas o inconsistencias
+ *    (ver `warnings`); no se usa como balance de prueba.
+ *  - `movements_only`: el proveedor sólo expone movimientos del periodo, sin
+ *    saldo inicial ni saldos acumulados. NO es un balance de prueba: las
+ *    cuentas de balance muestran la variación del periodo.
+ */
+export type ERPTrialBalanceStatus = 'complete' | 'partial' | 'movements_only';
+
 export interface ERPTrialBalance {
   period: string;
   companyName: string;
   companyNit?: string;
+  /** Moneda funcional del ERP. Cadena vacía = no determinada (falla cerrado). */
   currency: string;
   accounts: ERPAccount[];
   totalDebit: number;
   totalCredit: number;
   generatedAt: string;
+  balanceStatus: ERPTrialBalanceStatus;
+  /** Motivo cuando `balanceStatus` no es `complete`; null si es completo. */
+  balanceStatusReason: string | null;
+  /** Advertencias de integridad (cuentas sin código PUC, saldos inconsistentes…). */
+  warnings: string[];
 }
 
 export interface ERPJournalEntry {

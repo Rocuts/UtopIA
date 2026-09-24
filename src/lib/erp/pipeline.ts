@@ -67,7 +67,20 @@ export async function pullTrialBalanceForPeriod(
   }
 
   const provider = result.source.provider as ERPProvider;
-  const csv = trialBalanceToCSV(result.data);
+  // trialBalanceToCSV rechaza (con motivo) todo lo que no sea un balance con
+  // saldos finales completos en COP: movimientos del periodo, balances
+  // parciales o moneda distinta nunca llegan al preprocesador.
+  let csv: string;
+  try {
+    csv = trialBalanceToCSV(result.data);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new ERPPipelineError(
+      `El balance del ERP (${provider}) no se puede usar como balance de prueba: ${reason}`,
+      [...result.warnings, ...(result.data.warnings ?? [])],
+      provider,
+    );
+  }
 
   // WHY: validamos que el CSV tenga al menos una fila ademas del header —
   // si el ERP responde sin auxiliares, el preprocesador no podra calcular

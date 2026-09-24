@@ -15,9 +15,10 @@
  *   1. Validate X-Webhook-Token — 401 on mismatch/missing.
  *   2. Parse + Zod-validate the provider-specific payload.
  *   3. Resolve workspace from credentials row.
- *   4. Fire-and-forget: fetch trial balance via ERPAdapter + persist via
- *      getCachedPreprocessedBalance helpers, then revalidate Next.js tags.
- *   5. Return 202 Accepted immediately (processing is async via waitUntil).
+ *   4. Record the event. The ERP → persisted balance import is not wired
+ *      yet, so nothing is fetched, persisted or revalidated (and nothing is
+ *      logged as "sync ok").
+ *   5. Return 202 Accepted with `persisted: false`.
  *
  * maxDuration: 60s — the 202 is immediate; the waitUntil task can use up
  * to the function's max wall time (300s in vercel.ts for ERP webhook).
@@ -27,16 +28,11 @@ import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { after } from 'next/server';
-import { revalidateTag } from 'next/cache';
 import { z } from 'zod';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db/client';
 import { erpCredentials } from '@/lib/db/schema';
-import { ERPAdapter } from '@/lib/erp/adapter';
-import type { ERPCredentials } from '@/lib/erp/types';
-import { loadCredentials } from '@/lib/erp/credentials';
-import { getLatestOpenPeriod, getCachedPreprocessedBalance } from '@/lib/cache/preprocessed-balance';
 
 export const maxDuration = 60;
 
@@ -144,60 +140,19 @@ async function findCredentialByToken(
 }
 
 // ---------------------------------------------------------------------------
-// Background sync task
+// Background task
 // ---------------------------------------------------------------------------
+// La ruta ERP → balance persistido → informes todavía no existe: leer el
+// balance aquí y descartarlo gastaba cuota del ERP y, peor, registraba
+// "sync ok" y revalidaba caches como si hubiera datos nuevos. Hasta que la
+// importación persista, el webhook sólo registra el evento de forma honesta:
+// sin lectura del ERP, sin revalidación y sin recalcular balances.
 
-async function syncTrialBalance(
-  workspaceId: string,
-  cred: CredentialRow,
-): Promise<void> {
-  const start = Date.now();
-
-  let credentials: ERPCredentials;
-  try {
-    credentials = loadCredentials(cred);
-  } catch (err) {
-    console.error('[erp/webhook] credential decrypt failed', {
-      workspaceId: cred.workspaceId,
-      provider: cred.provider,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return;
-  }
-
-  try {
-    // Determine current fiscal period (YYYY-MM)
-    const now = new Date();
-    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    const adapter = new ERPAdapter({ provider: credentials.provider, credentials });
-    await adapter.fetchTrialBalance(period);
-
-    // Invalidate Next.js cache tags so cached consumers (dashboards, pillars)
-    // pick up the fresh data on next render.
-    // Next.js 16: two-arg revalidateTag(tag, profile) — 'max' = aggressive
-    // revalidation, appropriate for ERP sync events that bring real new data.
-    revalidateTag('workspace-balance', 'max');
-    revalidateTag(`pillars-${workspaceId}`, 'max');
-
-    // If there is an open accounting period, recompute the preprocessed balance
-    // so sentinel / pillar KPI queries reflect the ERP sync.
-    const latestPeriod = await getLatestOpenPeriod(workspaceId);
-    if (latestPeriod) {
-      await getCachedPreprocessedBalance(workspaceId, latestPeriod.id);
-    }
-
-    const duration = Date.now() - start;
-    console.info(
-      `[erp-webhook] sync ok workspaceId=${workspaceId} provider=${cred.provider} duration=${duration}ms`,
-    );
-  } catch (err) {
-    const duration = Date.now() - start;
-    console.error(
-      `[erp-webhook] sync error workspaceId=${workspaceId} provider=${cred.provider} duration=${duration}ms`,
-      err instanceof Error ? err.message : err,
-    );
-  }
+function recordWebhookEvent(workspaceId: string, cred: CredentialRow): void {
+  console.info(
+    `[erp-webhook] event received workspaceId=${workspaceId} provider=${cred.provider} ` +
+      'status=not_persisted (ERP import is not wired to persistence yet)',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -252,15 +207,16 @@ export async function POST(
   // 4. Fire-and-forget sync via `after` (Next.js 15+).
   //    202 is returned immediately; the sync task runs after the response
   //    is sent, within the function's remaining max duration.
-  after(async () => {
-    await syncTrialBalance(cred.workspaceId, cred);
+  after(() => {
+    recordWebhookEvent(cred.workspaceId, cred);
   });
 
   return NextResponse.json(
     {
       accepted: true,
       provider,
-      message: 'Webhook received. Trial balance sync queued.',
+      persisted: false,
+      message: 'Webhook received. ERP data import is not persisted yet; no balances were updated.',
     },
     { status: 202 },
   );

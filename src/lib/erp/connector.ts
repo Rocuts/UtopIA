@@ -4,6 +4,7 @@ import { trialBalanceToCSV, trialBalanceToRawRows } from './trial-balance-serial
 
 import type { RawAccountRow } from '@/lib/preprocessing/trial-balance';
 import { fetchWithSafeRedirects } from './validate-base-url';
+import { ERPSessionStore } from './session-store';
 import type {
   ERPProvider,
   ERPCredentials,
@@ -49,6 +50,17 @@ export interface ERPConnectorInterface {
  */
 export abstract class BaseERPConnector implements ERPConnectorInterface {
   abstract readonly provider: ERPProvider;
+
+  /**
+   * Tokens y sesiones de ESTE conector, indexados por conexión (proveedor +
+   * huella de credenciales, ver session-store.ts). Ningún token se guarda en
+   * un campo de instancia: la misma instancia puede atender a varias empresas.
+   */
+  protected readonly sessions: ERPSessionStore;
+
+  constructor(sessions?: ERPSessionStore) {
+    this.sessions = sessions ?? new ERPSessionStore();
+  }
 
   abstract testConnection(credentials: ERPCredentials): Promise<boolean>;
   abstract getChartOfAccounts(credentials: ERPCredentials): Promise<ERPAccount[]>;

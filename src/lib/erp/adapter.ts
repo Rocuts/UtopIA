@@ -17,67 +17,15 @@ import type {
   ERPAccount,
 } from './types';
 
+import { resolvePeriod, type PeriodSpec, type ResolvedPeriod } from './period';
+
 // ---------------------------------------------------------------------------
-// Period spec
+// Period spec — la resolución vive en ./period (compartida con los conectores).
 // ---------------------------------------------------------------------------
 
-export type PeriodSpec = string | { from: string; to: string };
+export { resolvePeriod };
+export type { PeriodSpec, ResolvedPeriod };
 
-export interface ResolvedPeriod {
-  from: string;
-  to: string;
-  label: string;
-}
-
-// WHY: los connectors toman `period: string` (anio, Q, mes) para trial balance,
-// y `dateFrom/dateTo` para invoices/journal_entries. Mantenemos ambos vectores
-// coherentes desde una sola PeriodSpec.
-export function resolvePeriod(spec: PeriodSpec): ResolvedPeriod {
-  if (typeof spec === 'object' && spec !== null) {
-    return { from: spec.from, to: spec.to, label: `${spec.from}..${spec.to}` };
-  }
-
-  const value = String(spec).trim();
-
-  const monthMatch = value.match(/^(\d{4})-(\d{1,2})$/);
-  if (monthMatch) {
-    const year = parseInt(monthMatch[1], 10);
-    const month = parseInt(monthMatch[2], 10);
-    const lastDay = new Date(year, month, 0).getDate();
-    const mm = String(month).padStart(2, '0');
-    return {
-      from: `${year}-${mm}-01`,
-      to: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
-      label: `${year}-${mm}`,
-    };
-  }
-
-  const quarterMatch = value.match(/^(\d{4})-Q([1-4])$/i);
-  if (quarterMatch) {
-    const year = parseInt(quarterMatch[1], 10);
-    const quarter = parseInt(quarterMatch[2], 10);
-    const startMonth = (quarter - 1) * 3 + 1;
-    const endMonth = startMonth + 2;
-    const lastDay = new Date(year, endMonth, 0).getDate();
-    return {
-      from: `${year}-${String(startMonth).padStart(2, '0')}-01`,
-      to: `${year}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-      label: `${year}-Q${quarter}`,
-    };
-  }
-
-  const yearMatch = value.match(/^(\d{4})$/);
-  if (yearMatch) {
-    return {
-      from: `${yearMatch[1]}-01-01`,
-      to: `${yearMatch[1]}-12-31`,
-      label: yearMatch[1],
-    };
-  }
-
-  // Fallback: tratamos el valor como fecha puntual (ISO) — el caller sabra.
-  return { from: value, to: value, label: value };
-}
 
 // ---------------------------------------------------------------------------
 // Error typing

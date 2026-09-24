@@ -7,6 +7,10 @@
 // Idempotency-Key: UTOPIA-TB-<year>-<period> en cada POST.
 
 import { BaseERPConnector } from '../connector';
+import { connectionKey } from '../session-store';
+import { resolveERPPeriod } from '../period';
+import { buildClosingTrialBalance } from '../trial-balance-builders';
+import { leafCodes, rawLevelFor } from '../puc';
 import { fetchWithSafeRedirects } from '../validate-base-url';
 import type {
   ERPProvider,
@@ -95,37 +99,35 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: exceeded max retries');
 }
 
-// ─── Cached token shape ────────────────────────────────────────────────────────
-
-interface CachedToken {
-  value: string;
-  expiresAt: number;
-}
-
 // ─── Connector ────────────────────────────────────────────────────────────────
 
 export class SiigoNubeConnector extends BaseERPConnector {
   readonly provider: ERPProvider = 'siigo';
 
-  /** Per-instance token cache so tests don't bleed across connector instances. */
-  private readonly tokenCache = new Map<string, CachedToken>();
-
   private baseUrl(credentials: ERPCredentials): string {
     return (credentials.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, '');
   }
 
+  /**
+   * Cache key of THIS connection: provider + SHA-256 of every identity and
+   * secret field. A request with the same user but another secret, or another
+   * tenant/company, never receives a token issued for different credentials.
+   */
   private tokenCacheKey(credentials: ERPCredentials): string {
-    return `siigo_nube:${credentials.username ?? ''}:${this.baseUrl(credentials)}`;
+    return connectionKey(credentials, 'token');
   }
 
   // ─── Auth ─────────────────────────────────────────────────────────────────
 
-  async getAccessToken(credentials: ERPCredentials): Promise<string> {
+  async getAccessToken(
+    credentials: ERPCredentials,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
     const key = this.tokenCacheKey(credentials);
-    const cached = this.tokenCache.get(key);
     // Token TTL 86400s (24h) — refresh 10 min before expiry
-    if (cached && Date.now() < cached.expiresAt - 600_000) {
-      return cached.value;
+    const cached = options.forceRefresh ? null : this.sessions.get<string>(key, 600_000);
+    if (cached) {
+      return cached;
     }
 
     const username = credentials.username ?? '';
@@ -157,10 +159,7 @@ export class SiigoNubeConnector extends BaseERPConnector {
     }
 
     const data = (await res.json()) as SiigoAuthResponse;
-    this.tokenCache.set(key, {
-      value: data.access_token,
-      expiresAt: Date.now() + (data.expires_in ?? 86400) * 1000,
-    });
+    this.sessions.set(key, data.access_token, (data.expires_in ?? 86400) * 1000);
 
     return data.access_token;
   }
@@ -245,20 +244,27 @@ export class SiigoNubeConnector extends BaseERPConnector {
       costCenter,
     );
 
-    return rows.map((row): RawAccountRow => ({
-      code: row.account.identification,
-      name: row.account.name,
-      level: 'Auxiliar',
-      transactional: true,
-      balancesByPeriod: { [String(year)]: row.final_balance },
-    }));
+    // Sólo las hojas del informe son transaccionales: un reporte jerárquico
+    // con subcuenta y auxiliares no debe sumar ambos niveles.
+    const leaves = leafCodes(rows.map((row) => ({ code: row.account.identification })));
+    return rows.map((row): RawAccountRow => {
+      const isLeaf = leaves.has(row.account.identification);
+      return {
+        code: row.account.identification,
+        name: row.account.name,
+        level: rawLevelFor(row.account.identification, isLeaf),
+        transactional: isLeaf,
+        balancesByPeriod: { [String(year)]: row.final_balance },
+      };
+    });
   }
 
   // ─── ERPConnectorInterface implementation ─────────────────────────────────
 
   async testConnection(credentials: ERPCredentials): Promise<boolean> {
     try {
-      await this.getAccessToken(credentials);
+      // Siempre contra el proveedor: nunca se valida con un token en caché.
+      await this.getAccessToken(credentials, { forceRefresh: true });
       return true;
     } catch {
       return false;
@@ -279,9 +285,11 @@ export class SiigoNubeConnector extends BaseERPConnector {
     credentials: ERPCredentials,
     period: string,
   ): Promise<ERPTrialBalance> {
-    const [yearStr, monthStr] = period.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr ?? '12', 10);
+    // Informe nativo al mes de corte del periodo pedido (saldo inicial,
+    // débitos, créditos y saldo final por cuenta).
+    const resolved = resolveERPPeriod(period);
+    const year = resolved.cutoffYear;
+    const month = resolved.cutoffMonth;
     const idempotencyKey = `UTOPIA-TB-${year}-${String(month).padStart(2, '0')}`;
 
     const rows = await this.fetchAllTrialBalanceRows(
@@ -291,33 +299,19 @@ export class SiigoNubeConnector extends BaseERPConnector {
       idempotencyKey,
     );
 
-    const accounts: ERPAccount[] = rows.map((row) => {
-      const code = row.account.identification;
-      return {
-        code,
+    return buildClosingTrialBalance({
+      period: resolved,
+      rows: rows.map((row) => ({
+        code: row.account.identification,
         name: row.account.name,
-        type: inferTypeFromPUC(code),
-        pucClass: parseInt(code.charAt(0), 10) || undefined,
-        balance: row.final_balance,
+        opening: row.initial_balance,
         debit: row.debit,
         credit: row.credit,
-        level: accountLevel(code),
-        isAuxiliary: code.length >= 6,
-      };
-    });
-
-    const totalDebit = accounts.reduce((s, a) => s + a.debit, 0);
-    const totalCredit = accounts.reduce((s, a) => s + a.credit, 0);
-
-    return {
-      period,
+        closing: row.final_balance,
+      })),
       companyName: '',
       currency: 'COP',
-      accounts,
-      totalDebit,
-      totalCredit,
-      generatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   async getJournalEntries(
@@ -345,27 +339,4 @@ export class SiigoNubeConnector extends BaseERPConnector {
       'Siigo Nube: getContacts no implementado en este conector. Use el SiigoConnector de alliances/api.',
     );
   }
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function inferTypeFromPUC(code: string): ERPAccount['type'] {
-  switch (code.charAt(0)) {
-    case '1': return 'asset';
-    case '2': return 'liability';
-    case '3': return 'equity';
-    case '4': return 'revenue';
-    case '5': return 'expense';
-    case '6': return 'cost';
-    case '7': return 'cost';
-    default: return 'asset';
-  }
-}
-
-function accountLevel(code: string): number {
-  if (code.length <= 1) return 1;
-  if (code.length <= 2) return 2;
-  if (code.length <= 4) return 3;
-  if (code.length <= 6) return 4;
-  return 5;
 }
