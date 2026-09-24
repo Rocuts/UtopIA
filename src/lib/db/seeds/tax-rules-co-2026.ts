@@ -357,7 +357,8 @@ const REGLAS_HONORARIOS: BuiltInRule[] = [
       'naturales cuyo contrato o pagos acumulados del año con el mismo agente superen ' +
       '3.300 UVT (Art. 392 E.T.; DUR 1625/2016 Art. 1.2.4.3.1). Sin base mínima',
     rate: '0.110000',
-    taxAccountCode: '236525',
+    // Honorarios: 236515 (PUC Decreto 2650/1993), no 236525 «Servicios».
+    taxAccountCode: '236515',
     accountSide: 'credit',
     isDeductible: false,
     applyThresholdUvt: null,
@@ -378,7 +379,8 @@ const REGLAS_HONORARIOS: BuiltInRule[] = [
       'acumulados del año con el mismo agente retenedor no superan 3.300 UVT ' +
       '(DUR 1625/2016 Art. 1.2.4.3.1). Sin base mínima',
     rate: '0.100000',
-    taxAccountCode: '236525',
+    // Honorarios: 236515 (PUC Decreto 2650/1993), no 236525 «Servicios».
+    taxAccountCode: '236515',
     accountSide: 'credit',
     isDeductible: false,
     applyThresholdUvt: null,

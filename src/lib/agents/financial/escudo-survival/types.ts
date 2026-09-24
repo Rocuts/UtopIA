@@ -35,6 +35,14 @@ export interface CompanyContext {
   nit?: string;
   sector?: string;
   ciiu?: string;
+  /**
+   * Tipo societario («SAS», «S.A.», «Ltda.»…) si el usuario lo declaró. Decide
+   * si la reserva legal es obligatoria (Arts. 452 y 371 C.Co.; S.A.S. sólo por
+   * estatutos — Supersociedades 220-069664/2017). Sin él no se afirma.
+   */
+  entityType?: string | null;
+  /** S.A.S.: `true` si los estatutos prevén la reserva legal; `null` si no consta. */
+  bylawsRequireLegalReserve?: boolean | null;
 }
 
 export interface SurvivalAgentInput {

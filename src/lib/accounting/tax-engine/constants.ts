@@ -83,11 +83,16 @@ export const RTF_HONORARIOS_THRESHOLD_UVT = 0;
 export const CUENTA_IVA_GENERADO = '240805';
 /** IVA descontable — activo (mayor valor del gasto/activo en Colombia) */
 export const CUENTA_IVA_DESCONTABLE = '240810';
-/** ReteFuente practicada (por pagar a DIAN) — pasivo */
+/** ReteFuente practicada por servicios (por pagar a DIAN) — pasivo 236525 «Servicios» */
 export const CUENTA_RETEFUENTE = '236525';
+/** ReteFuente practicada por honorarios — pasivo 236515 «Honorarios» (no 236525) */
+export const CUENTA_RETEFUENTE_HONORARIOS = '236515';
 /** ICA por pagar — pasivo */
 export const CUENTA_ICA = '236805';
-/** Cuentas por pagar a proveedores — pasivo */
-export const CUENTA_CXP_PROVEEDORES = '220500';
+/**
+ * Cuentas por pagar a proveedores — pasivo 220505 «Proveedores nacionales».
+ * 220500 no existe en el PUC (Decreto 2650/1993) ni en el PUC sembrado.
+ */
+export const CUENTA_CXP_PROVEEDORES = '220505';
 /** Gastos generales de publicidad / servicios (ejemplo en smoke test) */
 export const CUENTA_GASTO_SERVICIOS = '529505';

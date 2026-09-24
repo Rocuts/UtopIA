@@ -426,8 +426,9 @@ describe('Sección E — Capa 3 Defensa Tributaria Art. 647 · Grupo 2 Tres SAS'
     const check = checks.find((c) => c.name === 'L3.1_sin_provision_renta');
     expect(check).toBeDefined();
     expect(check!.passed).toBe(true);
-    // Verificar que la evidencia cita Art. 647 E.T.
-    expect(check!.norma).toContain('Art. 647 E.T.');
+    // Integración W3-B (auditoría 2026-09): la norma es contable (reconocer
+    // el impuesto corriente), no la «diferencia de criterio» del Art. 647.
+    expect(check!.norma).toContain('Sección 29');
   });
 
   it('L3.2: F02 calculado al 35% (Art. 240 E.T.) — correcto', () => {
@@ -452,20 +453,41 @@ describe('Sección E — Capa 3 Defensa Tributaria Art. 647 · Grupo 2 Tres SAS'
     expect(check!.passed).toBe(true);
   });
 
-  it('L3.5: vencimiento retefuente en día 13 (NIT dígito 6) ∈ [8..17] → passed', () => {
+  // Integración W3-B (auditoría 2026-09): L3.5/L3.6 comparan contra el día
+  // hábil del dígito (Decreto 2229/2023). Con hoy = 2025-12-29 el calendario
+  // sale «verificar» (año sin festivos verificados) y el check es N/D.
+  it('L3.5: retención con fecha «verificar» → N/D, sin veredicto', () => {
     const checks = validateFiscalAnchorL3(anchor, l3Ctx);
     const check = checks.find((c) => c.name === 'L3.5_retefuente_rango_dias');
     expect(check).toBeDefined();
     expect(check!.passed).toBe(true);
-    expect(check!.detail).toContain('[8..17]');
-    expect(check!.norma).toContain('Art. 376 E.T.');
+    expect(check!.detail).toContain('N/D');
+    expect(check!.norma).toContain('Decreto 2229');
   });
 
-  it('L3.6: vencimiento renta jurídica 2025 en rango [2026-04-09..2026-04-22] → passed', () => {
+  it('L3.6: renta PJ con fecha «verificar» → N/D, sin veredicto', () => {
     const checks = validateFiscalAnchorL3(anchor, l3Ctx);
     const check = checks.find((c) => c.name === 'L3.6_renta_juridica_2025_fecha');
     expect(check).toBeDefined();
     expect(check!.passed).toBe(true);
+  });
+
+  it('L3.5/L3.6: con calendario 2026 verificado (hoy 1-mar-2026) las fechas del ancla pasan', () => {
+    // Dígito 4 (NIT 901714014-6): retención 13-mar, renta 15-may y 14-jul.
+    // El check anterior exigía la renta entre el 9 y el 22 de abril.
+    const anchor2026 = buildFiscalAnchor({
+      preprocessed: GRUPO_2TRES_PREPROCESSED,
+      company: GRUPO_2TRES_COMPANY,
+      hoy: new Date('2026-03-01T12:00:00Z'),
+      nitFromFile: '901714014-6',
+    });
+    const checks = validateFiscalAnchorL3(anchor2026, l3Ctx);
+    const l35 = checks.find((c) => c.name === 'L3.5_retefuente_rango_dias')!;
+    const l36 = checks.find((c) => c.name === 'L3.6_renta_juridica_2025_fecha')!;
+    expect(l35.passed).toBe(true);
+    expect(l35.detail).not.toContain('N/D');
+    expect(l36.passed).toBe(true);
+    expect(l36.detail).toContain('mayo / julio');
   });
 
   it('L3: sin errores de severity "error" (con markdown correcto)', () => {

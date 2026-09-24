@@ -8,7 +8,6 @@
     "authorizedBy": "equipo UtopIA",
     "purpose": "regression fixture — validator L1+L2+L3 golden path"
   },
-
   "f01": "222849678973",
   "f02": "77997387641",
   "f03": "4607340776",
@@ -19,7 +18,6 @@
   "f08": "10553782441",
   "f09": 0.0,
   "f10": 5.9,
-
   "calendarioDian": {
     "nit": "901714014-6",
     "ultimoDigito": 4,
@@ -33,7 +31,7 @@
         "estado": "pendiente",
         "baseCcv": "F03",
         "valorEstimado": "4607340776",
-        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 6"
+        "norma": "Arts. 376 y 382 E.T.; plazo del 7º al 16º día hábil del mes siguiente según el último dígito del NIT sin DV (Decreto 2229 de 2023)."
       },
       {
         "obligacion": "IVA bimestral",
@@ -46,14 +44,14 @@
         "norma": "Art. 600 E.T. — períodos gravables IVA bimestral, último dígito 6"
       },
       {
-        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "obligacion": "Declaración de Renta PJ — Declaración y 1ª cuota",
         "frecuencia": "anual",
-        "proximoVencimiento": "2026-04-14",
+        "proximoVencimiento": "2026-05-15",
         "diasRestantes": 135,
         "estado": "pendiente",
         "baseCcv": "F04",
         "valorEstimado": "73390046865",
-        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 6"
+        "norma": "Art. 1.6.1.13.2.12 del DUR 1625 de 2016 (modif. Decreto 2229 de 2023); art. 591 E.T. Declaración y 1ª cuota en mayo, 2ª cuota en julio."
       },
       {
         "obligacion": "ICA Bogotá bimestral",
@@ -68,9 +66,7 @@
     ],
     "alertaAnticipacionDias": 15
   },
-
   "alertas": [],
-
   "fuente": {
     "periodo": "2025",
     "balanceHash": "sha256-grupo2tres-sas-2025-golden"

@@ -63,7 +63,7 @@ Sin este flag, el endpoint `/api/accounting/tax-engine/preview` devuelve HTTP 50
 - Neto a girar = $1.190.000 − $40.000 = **$1.150.000**.
 - El IVA descontable ($190.000) queda en `240810` para cruzar con IVA generado.
 
-> **Nota**: la línea de CxP del proveedor (233595 o 220500) la construye el caller
+> **Nota**: la línea de CxP del proveedor (233595 o 220505 — `CUENTA_CXP_PROVEEDORES`) la construye el caller
 > (WS2 o el usuario), no el tax engine. El motor solo propone las líneas de impuesto.
 > El campo `totalPayableCop` da el neto para que el caller cree la línea de CxP.
 

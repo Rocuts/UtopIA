@@ -15,6 +15,9 @@ import type {
 } from '../types';
 import { UVT_2026, TOPE_INDIVIDUAL_UVT, TET_ALERTA_ROJA } from '../types';
 import { componerActivosImpuestoSnapshot } from '../fiscal-anchor/credito-renta';
+import { buildFiscalAnchorBlockMarkdown } from '../fiscal-anchor/block-builder';
+import type { FiscalAnchorBlock } from '../fiscal-anchor/types';
+import { validateFiscalAnchorAll } from './fiscal-anchor-validators';
 
 // ---------------------------------------------------------------------------
 // Tolerancias (constantes explícitas — no magic numbers)
@@ -1149,6 +1152,54 @@ function runStressDefensaArt647(report: EscudoSurvivalReport): StressTestResult 
  *
  * `ok: false` cuando hay cualquier hard fail. Los warnings no bloquean.
  */
+/**
+ * Âncora Fiscal (F01..F10 + calendario DIAN) — protocolo L1/L2/L3 de
+ * `fiscal-anchor-validators.ts` con los contextos que salen del mismo balance
+ * que usó `buildFiscalAnchor` (auditoría 2026-09, tributario-modulos-03,
+ * integración W3-B): impuesto causado de `controlTotals.cents`, presencia de
+ * 1355/1805, caja PUC 11, markdown del bloque y la composición de crédito de
+ * renta de la lista blanca única.
+ */
+function runFiscalAnchorChecks(
+  block: FiscalAnchorBlock,
+  preprocessed: PreprocessedBalance,
+): CheckResult[] {
+  const snap = preprocessed.primary;
+  const cents = snap.controlTotals.cents;
+  const hojas: ValidatedAccount[] = [];
+  for (const cls of snap.classes ?? []) {
+    for (const a of cls.accounts ?? []) if (a.isLeaf) hojas.push(a);
+  }
+  const sumaCents = (prefijo: string) =>
+    hojas
+      .filter((a) => a.code.startsWith(prefijo))
+      .reduce((acc, a) => acc + Math.round((Number.isFinite(a.balance) ? a.balance : 0) * 100), 0);
+  const composicion = componerActivosImpuestoSnapshot(snap);
+  // Mismo impuesto causado que `buildFiscalAnchor` (0 si no hay `cents`).
+  const clase54Cents = cents ? Number(cents.impuestoCausado) : 0;
+  return validateFiscalAnchorAll(
+    block,
+    {
+      clase54Cents,
+      rawBalance: {
+        hasCta1355: hojas.some((a) => a.code.startsWith('1355')),
+        hasCta1805: hojas.some((a) => a.code.startsWith('1805')),
+        caja: cents ? Number(cents.efectivoCuenta11) : sumaCents('11'),
+      },
+    },
+    {
+      clase54Cents,
+      markdownBlock: buildFiscalAnchorBlockMarkdown(block),
+      creditoRenta: {
+        creditoRentaCents: Number(composicion.creditoRentaCents),
+        reteIvaCents: Number(composicion.reteIvaCents),
+        reteIcaCents: Number(composicion.reteIcaCents),
+        otrosNoRentaCents: Number(composicion.otrosNoRentaCents),
+      },
+    },
+  );
+}
+
 export function validateSurvivalReport(
   report: EscudoSurvivalReport,
   preprocessed: PreprocessedBalance,
@@ -1187,6 +1238,16 @@ export function validateSurvivalReport(
     hardFails.push(`[Stress C — Art. 647] ${stressArt647.detail}`);
   }
 
+  // Âncora Fiscal: errores → hard fail; advertencias → soft (tributario-modulos-03).
+  const anchorChecks = report.fiscalAnchor
+    ? runFiscalAnchorChecks(report.fiscalAnchor, preprocessed)
+    : [];
+  for (const c of anchorChecks) {
+    if (!c.passed && c.severity === 'error') {
+      hardFails.push(`[Âncora Fiscal] ${c.name}: ${c.detail ?? ''}`);
+    }
+  }
+
   // Soft warnings: layer2 warnings + stress tests A y B
   const softWarnings: string[] = [];
 
@@ -1208,6 +1269,12 @@ export function validateSurvivalReport(
   for (const c of layer3.checks) {
     if (!c.passed && c.severity === 'warning') {
       softWarnings.push(`[Capa 3] ${c.name}: ${c.detail ?? ''}`);
+    }
+  }
+
+  for (const c of anchorChecks) {
+    if (!c.passed && c.severity === 'warning') {
+      softWarnings.push(`[Âncora Fiscal] ${c.name}: ${c.detail ?? ''}`);
     }
   }
 

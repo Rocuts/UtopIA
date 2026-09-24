@@ -53,6 +53,32 @@ export interface FiscalAgentStartInput {
   instructions?: string;
   dianRequirementText?: string;
   dianRequirementKind?: FiscalAgentOrchestratorInput['dianRequirementKind'];
+  /**
+   * Saldo a favor LIQUIDADO en la declaración de renta (Formulario 110), en
+   * centavos MoneyCop (string de enteros no negativos). Sin él la devolución
+   * queda N/D: F04 es una estimación contable, no la declaración
+   * (tributario-modulos-02).
+   */
+  saldoAFavorDeclaradoCents?: string | null;
+}
+
+/**
+ * Cuerpo JSON para POST /api/escudo/fiscal. `saldoAFavorDeclaradoCents` sólo
+ * viaja cuando se conoce: nunca se sustituye por 0 ni por F04.
+ */
+export function buildFiscalAgentRequestBody(input: FiscalAgentStartInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    rawData: input.rawData,
+    mode: input.mode,
+    language: input.language ?? 'es',
+    company: input.company,
+    instructions: input.instructions,
+    dianRequirementText: input.dianRequirementText,
+    dianRequirementKind: input.dianRequirementKind,
+  };
+  const saldo = input.saldoAFavorDeclaradoCents?.trim();
+  if (saldo) body.saldoAFavorDeclaradoCents = saldo;
+  return body;
 }
 
 export interface UseFiscalAgentSSE {
@@ -120,15 +146,7 @@ export function useFiscalAgentSSE(): UseFiscalAgentSSE {
           'Content-Type': 'application/json',
           'X-Stream': 'true',
         },
-        body: JSON.stringify({
-          rawData: input.rawData,
-          mode: input.mode,
-          language: input.language ?? 'es',
-          company: input.company,
-          instructions: input.instructions,
-          dianRequirementText: input.dianRequirementText,
-          dianRequirementKind: input.dianRequirementKind,
-        }),
+        body: JSON.stringify(buildFiscalAgentRequestBody(input)),
         signal: controller.signal,
       });
 
