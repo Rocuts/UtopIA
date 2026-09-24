@@ -51,15 +51,27 @@ export class EscudoBalanceBloqueadoError extends Error {
   }
 }
 
-const MOTIVO_TABULAR_SIN_FILAS =
-  'No se pudieron leer las filas del balance de prueba: el archivo tiene códigos de cuenta ' +
-  'pero su primera fila no es un encabezado reconocible (código, nombre, saldo / débito / ' +
-  'crédito) o las cifras no se pudieron interpretar. Deje el encabezado de columnas en la ' +
-  'primera fila y vuelva a cargarlo.';
+/** Motivos propios de este módulo, en el idioma del informe (los del preprocesador van tal cual). */
+const MOTIVO_TABULAR_SIN_FILAS: Record<'es' | 'en', string> = {
+  es:
+    'No se pudieron leer las filas del balance de prueba: el archivo tiene códigos de cuenta ' +
+    'pero su primera fila no es un encabezado reconocible (código, nombre, saldo / débito / ' +
+    'crédito) o las cifras no se pudieron interpretar. Deje el encabezado de columnas en la ' +
+    'primera fila y vuelva a cargarlo.',
+  en:
+    'The trial balance rows could not be read: the file has account codes but its first row ' +
+    'is not a recognizable header (code, name, balance / debit / credit) or the amounts could ' +
+    'not be interpreted. Keep the column header in the first row and upload it again.',
+};
 
-const MOTIVO_SIN_FILAS =
-  'No se pudieron leer filas contables del balance de prueba. Cargue el balance como CSV o ' +
-  'Excel con encabezado de columnas (código, nombre, saldo / débito / crédito).';
+const MOTIVO_SIN_FILAS: Record<'es' | 'en', string> = {
+  es:
+    'No se pudieron leer filas contables del balance de prueba. Cargue el balance como CSV o ' +
+    'Excel con encabezado de columnas (código, nombre, saldo / débito / crédito).',
+  en:
+    'No accounting rows could be read from the trial balance. Upload it as CSV or Excel with a ' +
+    'column header (code, name, balance / debit / credit).',
+};
 
 /**
  * Motivos de integridad de la lectura en todos los periodos (deduplicados).
@@ -112,10 +124,10 @@ export function leerBalanceEscudo(
   if (leido.kind === 'rejected') throw new EscudoBalanceBloqueadoError(leido.reasons, language);
   if (leido.kind === 'empty') {
     if (leido.tabular) {
-      throw new EscudoBalanceBloqueadoError([MOTIVO_TABULAR_SIN_FILAS], language);
+      throw new EscudoBalanceBloqueadoError([MOTIVO_TABULAR_SIN_FILAS[language]], language);
     }
     if ((options.sinFilas ?? 'bloquear') === 'bloquear') {
-      throw new EscudoBalanceBloqueadoError([MOTIVO_SIN_FILAS], language);
+      throw new EscudoBalanceBloqueadoError([MOTIVO_SIN_FILAS[language]], language);
     }
     return preprocessTrialBalance([]);
   }
