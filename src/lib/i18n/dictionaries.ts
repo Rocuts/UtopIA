@@ -948,6 +948,57 @@ export const dict = {
         match_heuristic: 'Heurístico',
         no_account: 'Sin cuenta — se omitirá',
       },
+      empleados: {
+        employerTitle: 'Condición del empleador (Art. 114-1 E.T.)',
+        employerHelp:
+          'La exoneración de salud (8,5 %), SENA (2 %) e ICBF (3 %) por trabajadores que devenguen menos de 10 SMMLV aplica a sociedades y personas jurídicas declarantes de renta y a personas naturales empleadoras con dos o más trabajadores. Mientras no la declare, se liquida sin exoneración.',
+        employerLabel: '¿Su empresa es beneficiaria?',
+        employerUnset: 'Sin declarar (se liquida sin exoneración)',
+        employerYes: 'Sí — sociedad/PJ declarante de renta o persona natural con 2 o más trabajadores',
+        employerNo: 'No es beneficiaria',
+        employerSaving: 'Guardando…',
+        employerError: 'No se pudo guardar la condición del empleador.',
+        salarioIntegral: 'Salario integral (CST art. 132)',
+        salarioIntegralHelp: 'Mínimo 13 SMMLV; incluye prestaciones y la base de aportes es el 70 %.',
+        salarioIntegralMin: 'El salario integral no puede ser inferior a 13 SMMLV ({min}).',
+        salarioIntegralSaveError:
+          'No se pudo actualizar el salario integral. Revise que el salario sea de al menos 13 SMMLV.',
+        estadoAplicada: 'Exonerado Art. 114-1: sin aportes de salud del empleador, SENA ni ICBF.',
+        estadoNoAplicaSalario: 'Sin exoneración 114-1: devenga 10 SMMLV o más, o tiene salario integral.',
+        estadoNoBeneficiario: 'Sin exoneración 114-1: se declaró que el empleador no es beneficiario.',
+        estadoSinConfirmar:
+          'Condición del empleador sin declarar: se liquida SIN exoneración. Si es beneficiario, ahorraría {cop} al mes.',
+        exoneradoTag: 'exonerado 114-1',
+        fspLabel: 'Fondo de Solidaridad Pensional',
+        totalIncompleto: 'Total incompleto: no incluye el Fondo de Solidaridad Pensional (N/D).',
+        notasTitle: 'Supuestos y datos faltantes',
+        notAvailable: 'N/D',
+      },
+      pagos: {
+        tipoContribuyente: 'Tipo de contribuyente',
+        personaNatural: 'Persona natural',
+        personaJuridica: 'Persona jurídica',
+        margen: 'Margen de utilidad (%)',
+        margenPlaceholder: 'Ej. 15',
+        ica: 'Tarifa de ICA de su municipio (por mil)',
+        icaPlaceholder: 'Ej. 9,66',
+        inputsHelp:
+          'El margen y la tarifa de ICA son datos suyos: sin ellos la cifra del régimen ordinario sería un supuesto y se muestra como N/D.',
+        notAvailable: 'N/D',
+        ordinarioND: 'N/D: falta {faltantes} (dato suyo). Sin él la cifra del régimen ordinario sería un supuesto.',
+        faltaMargen: 'el margen de utilidad',
+        faltaIca: 'la tarifa de ICA del municipio',
+        faltaY: ' y ',
+        baseLegalPN: 'Persona natural residente — tabla marginal del Art. 241 E.T. (0 % a 39 %)',
+        baseLegalPJ: 'Persona jurídica — tarifa general del 35 % (Art. 240 E.T.)',
+        advertencias: 'Advertencias del cálculo',
+        noRecomendacion: 'Comparación de referencia, no una recomendación',
+        noRecomendacionBody:
+          'Falta {faltantes}. Como optar por el Régimen Simple es irrevocable durante el año gravable (Art. 909 E.T.), no le señalamos un ganador sin esos datos. Consúltelo con su contador.',
+        noRecomendacionPension:
+          'Tiene aportes a pensión que se descuentan del SIMPLE y falta el componente de ICA consolidado de su municipio (Art. 903 par. 4 E.T.). Consúltelo con su contador.',
+        saveDisabled: 'Para guardar la comparación complete el margen y la tarifa de ICA.',
+      },
     },
     settings: {
       title: 'Configuración',
@@ -1090,6 +1141,57 @@ export const dict = {
       validationDescriptionRequired: 'Ingrese una descripción para el asiento',
       successDraft: 'Asiento guardado como borrador',
       successPosted: 'Asiento posteado correctamente',
+      validationAmountInvalid:
+        'Monto no interpretable en la línea {n}: escríbalo como 1.234.567,89 (punto de miles, coma decimal). No se envía hasta corregirlo.',
+      validationAmountNegative:
+        'Los montos de débito y crédito no pueden ser negativos (línea {n}).',
+      journalList: 'Asientos contables',
+      journalListDesc: 'Listado y búsqueda de los asientos del libro diario',
+      bankReconciliation: 'Conciliación bancaria',
+      bankReconciliationDesc: 'Saldo en libros frente al extracto bancario del período',
+      periods: {
+        title: 'Periodos fiscales',
+        month13: 'Cierre anual',
+        month13Option: 'Cierre anual (13) — 31 de diciembre',
+        annualCloseHint:
+          'El cierre anual se ejecuta sobre el período 13 del año (31 de diciembre): ábralo con «Abrir nuevo periodo» → mes 13 y use «Cierre anual». Los cierres mensuales no trasladan resultados a patrimonio.',
+        annualCloseAction: 'Cierre anual',
+        annualCloseTitle: 'Cierre anual del ejercicio',
+        annualCloseDescription: 'Vas a ejecutar el cierre anual {year} sobre el período 13 (31 de diciembre).',
+        annualCloseBody:
+          'El workflow de cierre ejecuta el health check (cuadratura, conciliación bancaria, borradores pendientes), genera el asiento de cierre que cancela las cuentas de resultado (clases 4, 5 y 6) contra 360505 Utilidad del ejercicio o 361005 Pérdida del ejercicio, bloquea el período 13 y calcula su hash de integridad. El bloqueo es terminal.',
+        annualCloseConfirm:
+          'Acepto que el cierre anual trasladará el resultado del ejercicio a patrimonio y bloqueará el período 13.',
+        annualCloseRun: 'Ejecutar cierre anual',
+        annualCloseStarted: 'Cierre anual {year} iniciado. El período 13 quedará bloqueado cuando termine el workflow.',
+        annualCloseAlreadyRunning: 'Ya hay un cierre en curso para este período.',
+        monthlyCloseTitle: 'Cerrar periodo contable',
+        monthlyCloseDescription: 'Vas a cerrar {period}.',
+        monthlyCloseBody:
+          'El cierre mensual marca el período como cerrado y bloquea nuevos asientos. No genera asiento de cierre ni traslada resultados a patrimonio: eso ocurre en el cierre anual (período 13). Es reversible con «Reabrir» hasta que se bloquee.',
+        monthlyCloseConfirm: 'Acepto que este cierre bloqueará nuevos asientos en el período.',
+        closeRun: 'Cerrar periodo',
+        running: 'Ejecutando…',
+        closed: 'Periodo {period} cerrado',
+        alreadyClosed: 'El periodo ya estaba cerrado.',
+        networkError: 'Falla de red.',
+        errorPrefix: 'Error',
+        cancel: 'Cancelar',
+        periodLabel: 'Periodo',
+        currentStatus: 'Estado actual',
+      },
+      reconciliation: {
+        notReconcilable: 'No conciliable — sin extracto del período',
+        reason: 'Motivo',
+        notAvailable: 'N/D',
+      },
+    },
+    erp: {
+      recordsRead: '{n} registros leídos desde {provider}',
+      notPersistedNote:
+        'La conexión funciona, pero estos datos todavía no se guardan ni se usan en reportes. Para un reporte NIIF, cargue el balance de prueba desde el formulario del reporte.',
+      close: 'Cerrar',
+      lastRead: 'Última lectura',
     },
     /**
      * Superficie de intake: chasis StepWizard + vista previa + modal + los 5
@@ -2535,6 +2637,57 @@ export const dict = {
         match_heuristic: 'Heuristic',
         no_account: 'No account — will be skipped',
       },
+      empleados: {
+        employerTitle: 'Employer status (Art. 114-1 Tax Code)',
+        employerHelp:
+          'The exemption from health (8.5%), SENA (2%) and ICBF (3%) contributions for workers earning less than 10 monthly minimum wages applies to companies and legal entities that file income tax and to individual employers with two or more workers. Until you declare it, costs are computed without the exemption.',
+        employerLabel: 'Is your business eligible?',
+        employerUnset: 'Not declared (computed without the exemption)',
+        employerYes: 'Yes — company/legal entity filing income tax, or individual employer with 2 or more workers',
+        employerNo: 'Not eligible',
+        employerSaving: 'Saving…',
+        employerError: 'The employer status could not be saved.',
+        salarioIntegral: 'Integral salary (Labor Code art. 132)',
+        salarioIntegralHelp: 'Minimum 13 monthly minimum wages; it includes benefits and the contribution base is 70%.',
+        salarioIntegralMin: 'An integral salary cannot be lower than 13 monthly minimum wages ({min}).',
+        salarioIntegralSaveError:
+          'The integral salary could not be updated. Check that the salary is at least 13 monthly minimum wages.',
+        estadoAplicada: 'Art. 114-1 exemption applied: no employer health, SENA or ICBF contributions.',
+        estadoNoAplicaSalario: 'No 114-1 exemption: earns 10 minimum wages or more, or has an integral salary.',
+        estadoNoBeneficiario: 'No 114-1 exemption: the employer was declared not eligible.',
+        estadoSinConfirmar:
+          'Employer status not declared: computed WITHOUT the exemption. If eligible, you would save {cop} per month.',
+        exoneradoTag: '114-1 exempt',
+        fspLabel: 'Pension Solidarity Fund',
+        totalIncompleto: 'Incomplete total: excludes the Pension Solidarity Fund (N/A).',
+        notasTitle: 'Assumptions and missing data',
+        notAvailable: 'N/A',
+      },
+      pagos: {
+        tipoContribuyente: 'Taxpayer type',
+        personaNatural: 'Individual',
+        personaJuridica: 'Legal entity',
+        margen: 'Profit margin (%)',
+        margenPlaceholder: 'E.g. 15',
+        ica: 'Municipal ICA rate (per thousand)',
+        icaPlaceholder: 'E.g. 9,66',
+        inputsHelp:
+          'Margin and ICA rate are your data: without them the ordinary-regime figure would be an assumption and is shown as N/A.',
+        notAvailable: 'N/A',
+        ordinarioND: 'N/A: missing {faltantes} (your data). Without it the ordinary-regime figure would be an assumption.',
+        faltaMargen: 'the profit margin',
+        faltaIca: 'the municipal ICA rate',
+        faltaY: ' and ',
+        baseLegalPN: 'Resident individual — marginal table of Art. 241 Tax Code (0% to 39%)',
+        baseLegalPJ: 'Legal entity — general 35% rate (Art. 240 Tax Code)',
+        advertencias: 'Calculation warnings',
+        noRecomendacion: 'Reference comparison, not a recommendation',
+        noRecomendacionBody:
+          'Missing {faltantes}. Since opting into the Simple Regime is irrevocable for the tax year (Art. 909 Tax Code), we do not pick a winner without that data. Check with your accountant.',
+        noRecomendacionPension:
+          'You have pension contributions deductible from the SIMPLE tax and the consolidated municipal ICA component is missing (Art. 903 par. 4 Tax Code). Check with your accountant.',
+        saveDisabled: 'To save the comparison, fill in the margin and the ICA rate.',
+      },
     },
     settings: {
       title: 'Settings',
@@ -2676,6 +2829,57 @@ export const dict = {
       validationDescriptionRequired: 'Enter a description for the entry',
       successDraft: 'Entry saved as draft',
       successPosted: 'Entry posted successfully',
+      validationAmountInvalid:
+        'Unreadable amount on line {n}: type it in Colombian format 1.234.567,89 (dot for thousands, comma for decimals). Nothing is sent until it is fixed.',
+      validationAmountNegative:
+        'Debit and credit amounts cannot be negative (line {n}).',
+      journalList: 'Journal entries',
+      journalListDesc: 'List and search the journal entries',
+      bankReconciliation: 'Bank reconciliation',
+      bankReconciliationDesc: 'Book balance against the bank statement of the period',
+      periods: {
+        title: 'Fiscal periods',
+        month13: 'Year-end close',
+        month13Option: 'Year-end close (13) — December 31',
+        annualCloseHint:
+          'The year-end close runs on period 13 of the year (December 31): open it with "Open new period" → month 13 and use "Year-end close". Monthly closes do not transfer results to equity.',
+        annualCloseAction: 'Year-end close',
+        annualCloseTitle: 'Fiscal year-end close',
+        annualCloseDescription: 'You are about to run the {year} year-end close on period 13 (December 31).',
+        annualCloseBody:
+          'The close workflow runs the health check (balance, bank reconciliation, pending drafts), posts the closing entry that clears the income-statement accounts (classes 4, 5 and 6) against 360505 Profit for the year or 361005 Loss for the year, locks period 13 and computes its integrity hash. The lock is terminal.',
+        annualCloseConfirm:
+          'I accept that the year-end close will transfer the result for the year to equity and lock period 13.',
+        annualCloseRun: 'Run year-end close',
+        annualCloseStarted: '{year} year-end close started. Period 13 will be locked when the workflow finishes.',
+        annualCloseAlreadyRunning: 'A close is already running for this period.',
+        monthlyCloseTitle: 'Close accounting period',
+        monthlyCloseDescription: 'You are about to close {period}.',
+        monthlyCloseBody:
+          'The monthly close marks the period as closed and blocks new entries. It does not post a closing entry nor transfer results to equity: that happens in the year-end close (period 13). It can be undone with "Reopen" until the period is locked.',
+        monthlyCloseConfirm: 'I accept this close will block new entries in the period.',
+        closeRun: 'Close period',
+        running: 'Running…',
+        closed: 'Period {period} closed',
+        alreadyClosed: 'Period was already closed.',
+        networkError: 'Network failure.',
+        errorPrefix: 'Error',
+        cancel: 'Cancel',
+        periodLabel: 'Period',
+        currentStatus: 'Current status',
+      },
+      reconciliation: {
+        notReconcilable: 'Not reconcilable — no bank statement for the period',
+        reason: 'Reason',
+        notAvailable: 'N/A',
+      },
+    },
+    erp: {
+      recordsRead: '{n} records read from {provider}',
+      notPersistedNote:
+        'The connection works, but this data is not stored or used in reports yet. For an IFRS report, upload the trial balance from the report form.',
+      close: 'Close',
+      lastRead: 'Last read',
     },
     intake: {
       common: {
