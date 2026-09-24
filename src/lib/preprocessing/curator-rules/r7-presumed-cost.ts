@@ -30,7 +30,13 @@ export interface R7Result {
 }
 
 export function runR7(snapshot: PeriodSnapshot): R7Result {
-  const revenue = snapshot.controlTotals.ingresos;
+  // Base del margen bruto: ingresos operacionales netos (grupo 41 − devoluciones
+  // 4175), la misma de `utilidadBruta` y `margenBruto`. La Σ firmada de la clase
+  // 4 (`controlTotals.ingresos`) suma la 4175 como ingreso cuando el ERP la
+  // exporta con el signo de su naturaleza y el mismo balance disparaba o no la
+  // advertencia según la exportación (recalculo-final2-05).
+  const ct = snapshot.controlTotals;
+  const revenue = ct.ingresosOperacionalesNetos ?? ct.ingresosNetos ?? Math.abs(ct.ingresos);
   if (revenue <= 0) return { findings: [] };
 
   // COGS: Clase 6 + Clase 7 (costo ventas + costo producción).
@@ -55,7 +61,7 @@ export function runR7(snapshot: PeriodSnapshot): R7Result {
 
   const calloutBody =
     `El margen bruto observado es ${(observedGrossMargin * 100).toFixed(1)}% ` +
-    `(Costo de Ventas $${formatCop(cogs)} vs Ingresos $${formatCop(revenue)}), ` +
+    `(Costo de Ventas $${formatCop(cogs)} vs Ingresos operacionales netos $${formatCop(revenue)}), ` +
     `muy por encima del rango razonable para el sector (40-50%). El saldo de Inventario ` +
     `al cierre es $${formatCop(inventory)}, lo cual sugiere que el Costo de Mercancía ` +
     `Vendida puede estar SUBESTIMADO. Posibles causas: inventario no descargado al cierre, ` +

@@ -2101,7 +2101,9 @@ function inferActividadFromSnapshot(
   const evidencia: string[] = [];
   const activoTotal = snap.controlTotals.activo;
   const activoCorriente = snap.controlTotals.activoCorriente;
-  const ingresos = snap.controlTotals.ingresos;
+  // Ingresos netos de devoluciones 4175 (no la Σ firmada de la clase 4, que
+  // depende de la exportación del ERP — recalculo-final2-05).
+  const ingresos = snap.controlTotals.ingresosNetos ?? Math.abs(snap.controlTotals.ingresos);
 
   if (activoTotal <= 0) return undefined;
 
@@ -4561,7 +4563,15 @@ function buildMultiPeriodValidationReport(
     lines.push(`- **Activo Total:** $${formatCOP(snap.controlTotals.activo)} (corriente $${formatCOP(snap.controlTotals.activoCorriente)} + no corriente $${formatCOP(snap.controlTotals.activoNoCorriente)})`);
     lines.push(`- **Pasivo Total:** $${formatCOP(snap.controlTotals.pasivo)} (corriente $${formatCOP(snap.controlTotals.pasivoCorriente)} + no corriente $${formatCOP(snap.controlTotals.pasivoNoCorriente)})`);
     lines.push(`- **Patrimonio Total:** $${formatCOP(snap.controlTotals.patrimonio)}`);
-    lines.push(`- **Ingresos:** $${formatCOP(snap.controlTotals.ingresos)}`);
+    // Ingresos canónicos (recalculo-final2-05): la Σ firmada de la clase 4
+    // (`controlTotals.ingresos`) depende de cómo el ERP exporta la 4175.
+    const ctR = snap.controlTotals;
+    const ingresosNetosR = ctR.ingresosNetos ?? Math.abs(ctR.ingresos);
+    lines.push(
+      `- **Ingresos operacionales netos (grupo 41 − devoluciones 4175):** ` +
+        `$${formatCOP(ctR.ingresosOperacionalesNetos ?? ingresosNetosR)}`,
+    );
+    lines.push(`- **Ingresos netos (clase 4 neta de devoluciones 4175):** $${formatCOP(ingresosNetosR)}`);
     lines.push(`- **Gastos+Costos:** $${formatCOP(snap.controlTotals.gastos)}`);
     lines.push(`- **Utilidad Neta:** $${formatCOP(snap.controlTotals.utilidadNeta)}`);
     lines.push('');

@@ -459,7 +459,20 @@ function pushSnapshotTotals(
       : `- Liabilities: ${fmtCop(ct.pasivo)} (current ${fmtCop(ct.pasivoCorriente)} / non-current ${fmtCop(ct.pasivoNoCorriente)})`,
   );
   lines.push(isEs ? `- Patrimonio: ${fmtCop(ct.patrimonio)}` : `- Equity: ${fmtCop(ct.patrimonio)}`);
-  lines.push(isEs ? `- Ingresos: ${fmtCop(ct.ingresos)}` : `- Revenue: ${fmtCop(ct.ingresos)}`);
+  // Ingresos canónicos (recalculo-final2-05): la Σ firmada de la clase 4
+  // (`ct.ingresos`) depende de cómo el ERP exporta la devolución 4175.
+  const ingresosNetos = ct.ingresosNetos ?? Math.abs(ct.ingresos);
+  const ingresosOperacionales = ct.ingresosOperacionalesNetos ?? ingresosNetos;
+  lines.push(
+    isEs
+      ? `- Ingresos operacionales netos (grupo 41 − devoluciones 4175): ${fmtCop(ingresosOperacionales)}`
+      : `- Net operating revenue (group 41 − returns 4175): ${fmtCop(ingresosOperacionales)}`,
+  );
+  lines.push(
+    isEs
+      ? `- Ingresos netos (clase 4 neta de devoluciones 4175): ${fmtCop(ingresosNetos)}`
+      : `- Net revenue (class 4 net of returns 4175): ${fmtCop(ingresosNetos)}`,
+  );
   lines.push(isEs ? `- Gastos+Costos: ${fmtCop(ct.gastos)}` : `- Expenses+Costs: ${fmtCop(ct.gastos)}`);
   lines.push(isEs ? `- Utilidad neta: ${fmtCop(ct.utilidadNeta)}` : `- Net income: ${fmtCop(ct.utilidadNeta)}`);
   const equationDiff = ct.activo - (ct.pasivo + ct.patrimonio);
