@@ -41,7 +41,7 @@ function llmDcf(o: Overrides = {}): DcfModelReportJson {
   }));
   return {
     company: { name: 'ACME SAS', nit: '900123456-7', fiscalPeriod: '2025', entityType: null, sector: null, city: null, comparativePeriod: null, niifGroup: null, signatories: null } as never,
-    projection: { rows, keyAssumptions: ['Crecimiento 0%'] },
+    projection: { rows, keyAssumptions: ['Crecimiento 0%'], cashFlowBasis: 'nominal' },
     wacc: {
       riskFreeBasis: 'TES_COP_ex_default',
       sovereignYieldPercent: 6.5,

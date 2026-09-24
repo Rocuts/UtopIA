@@ -80,7 +80,7 @@ Construir el modelo DCF: proyección de FCF a 5-10 años (mínimo 3) en años ca
 - WACC con riskFreeBasis declarado y cada componente cuantificado: TES bruto y diferencial soberano (base A) o inflaciones COP/USD (base B), CRP, ERP madura, Beta, size premium, Ke, Kd, t, E/V, D/V.
 - marketDataProvenance indica fuente y fecha de corte de cada parámetro de mercado.
 - g perpetuo ≤ 4% nominal y estrictamente menor que WACC; terminalValue.rationale declara g en COP nominales con su descomposición (crecimiento real + inflación de largo plazo), sin presentarlo como una cifra del PIB.
-- FCF, WACC y g en la misma base (COP nominales).
+- FCF, WACC y g en la misma base (COP nominales), declarada en cashFlowBasis.
 - Si VP(TV) supera el 75% del EV se declara la dependencia del TV como limitación.
 - Deuda financiera y efectivo reportados por separado cuando están en los datos; Equity = EV − Deuda Neta.
 </success_criteria>

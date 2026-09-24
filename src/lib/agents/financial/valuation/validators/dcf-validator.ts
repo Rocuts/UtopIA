@@ -20,7 +20,9 @@
 //   Sensibilidad WACC ± {1, 2} pp × g ± {0,5, 1} pp, calculada aquí.
 //
 // Bloqueos (DCF no emitible): g ≥ WACC, años no consecutivos, WACC inválido
-// (ver `recomputeWacc`), acciones en circulación ≤ 0.
+// (ver `recomputeWacc`), acciones en circulación ≤ 0, flujos en base real
+// (valoracion-21: el WACC recalculado es nominal en COP; g < WACC sólo tiene
+// sentido en la misma base). Sin base declarada se asume nominal con nota.
 // Aritmética: centavos BigInt + tasas escaladas (calc/fixed-point.ts).
 // ---------------------------------------------------------------------------
 
@@ -142,7 +144,26 @@ export function validateDcf(json: DcfModelReportJson): DcfValidation {
     });
   }
 
-  // -- 3. g < WACC ---------------------------------------------------------------
+  // -- 3. Base de los flujos y g < WACC en la misma base ----------------------------
+  // El WACC recalculado es nominal en COP (Ke COP de la construcción A o por
+  // Fisher en la B). Flujos y g reales descontados a una tasa nominal mezclan
+  // bases (valoracion-21): el código no convierte con una inflación que no
+  // tiene fuente; exige que el modelo entregue flujos y g nominales.
+  const basis = json.projection.cashFlowBasis;
+  if (basis === 'real') {
+    blocking.push({
+      code: 'cash_flow_basis_real',
+      es: 'Los FCF y g están en base real y el WACC recalculado es nominal en COP: descontarlos a esa tasa mezcla bases y g < WACC no es comparable. Convierta los flujos y g a COP nominales, (1 + g) = (1 + g real) × (1 + inflación de largo plazo), con la inflación declarada y su fuente, y declare cashFlowBasis = nominal. DCF no emitible.',
+      en: 'FCF and g are in real terms while the recomputed WACC is nominal in COP: discounting them at that rate mixes bases and g < WACC is not comparable. Convert cash flows and g to nominal COP, (1 + g) = (1 + real g) × (1 + long-term inflation), with the stated inflation and its source, and declare cashFlowBasis = nominal. DCF cannot be issued.',
+    });
+  } else if (basis !== 'nominal') {
+    // null (o ausente en un JSON anterior al campo): se declara el supuesto.
+    notes.push({
+      code: 'cash_flow_basis_undeclared',
+      es: 'Base de los FCF y de g no declarada: se asume nominal en COP, la misma base del WACC recalculado; g < WACC se verifica en esa base.',
+      en: 'Cash-flow and g basis not declared: assumed nominal COP, the same basis as the recomputed WACC; g < WACC is checked on that basis.',
+    });
+  }
   const growthPercent = roundPercent(json.terminalValue.perpetualGrowthPercent);
   if (waccCheck.status === 'ok' && growthPercent >= waccCheck.computed.waccPercent) {
     blocking.push({

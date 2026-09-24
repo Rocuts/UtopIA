@@ -76,6 +76,17 @@ export const RiskFreeBasisSchema = z.enum(['TES_COP_ex_default', 'UST_USD_fisher
 
 export type RiskFreeBasis = z.infer<typeof RiskFreeBasisSchema>;
 
+/**
+ * Base monetaria de los FCF proyectados y de g (valoracion-21). El WACC que
+ * recalcula el código es nominal en COP (Ke COP por la construcción A o por
+ * Fisher en la B), así que los flujos y g deben estar en COP nominales:
+ * descontar flujos reales a una tasa nominal, o comparar un g real con un WACC
+ * nominal, mezcla bases. El validador DCF bloquea `real` y deja nota con `null`.
+ */
+export const CashFlowBasisSchema = z.enum(['nominal', 'real']);
+
+export type CashFlowBasis = z.infer<typeof CashFlowBasisSchema>;
+
 /** Componentes del WACC. El código recalcula Rf, Ke y WACC a partir de ellos. */
 export const WaccBreakdownSchema = z.object({
   riskFreeBasis: RiskFreeBasisSchema.describe(
@@ -138,10 +149,13 @@ export const DcfModelReportSchema = z.object({
   projection: z.object({
     rows: z
       .array(FcfProjectionRowSchema)
-      .min(3, 'Mínimo 3 años de proyección. Recomendado 5-10 (NIC 36 §33).'),
+      .min(3, 'Mínimo 3 años de proyección (regla del modelo).'),
     keyAssumptions: z
       .array(z.string().min(1))
       .describe('Supuestos críticos: crecimiento, márgenes, capex como % de ingresos'),
+    cashFlowBasis: CashFlowBasisSchema.nullable().describe(
+      'Base monetaria de los FCF proyectados y de g: nominal = COP corrientes (incluyen la inflación esperada), la misma base del WACC en COP; real = COP constantes (el código no lo emite hasta convertirlo a nominal). null si no se declara.',
+    ),
   }),
 
   // -- 2. WACC --------------------------------------------------------------
@@ -153,7 +167,7 @@ export const DcfModelReportSchema = z.object({
     perpetualGrowthPercent: z
       .number()
       .describe(
-        'Tasa de crecimiento perpetuo g. NUNCA > 4% nominal (alineada con PIB Colombia largo plazo) y SIEMPRE < WACC.',
+        'Tasa de crecimiento perpetuo g en la misma base nominal (COP) que los FCF y el WACC: (1 + g) = (1 + g real) × (1 + inflación de largo plazo). Tope prudencial del modelo: 4% nominal; SIEMPRE < WACC.',
       ),
     waccPercent: z.number().describe('WACC reusado del bloque anterior'),
     terminalValueCop: MoneyCop.describe('TV = FCF_{n+1} / (WACC - g) (el código lo recalcula)'),
