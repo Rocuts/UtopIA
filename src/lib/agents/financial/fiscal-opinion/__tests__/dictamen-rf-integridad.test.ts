@@ -79,7 +79,8 @@ describe('Evaluadores fallidos (tributario-modulos-11)', () => {
 describe('SAGRILAFT (prompts-normativa-02)', () => {
   it('el umbral general es 40.000 SMMLV (CE 100-000016/2020), no 160.000 UVT', async () => {
     const { evaluateSagrilaft, SAGRILAFT_FUENTE } = await import('../sagrilaft');
-    const ev = evaluateSagrilaft({ activosCop: 20_000_000_000, ingresosCop: 10_000_000_000 });
+    // Balance con corte 2026: SMMLV 2026 del repo (NM-15: el SMMLV sale del año del corte).
+    const ev = evaluateSagrilaft({ activosCop: 20_000_000_000, ingresosCop: 10_000_000_000, anioCorte: 2026 });
     expect(ev.umbralCop).toBe(70_036_200_000);
     expect(ev.superaUmbralGeneral).toBe(false);
     expect(ev.obligada).toBe('no_determinable');

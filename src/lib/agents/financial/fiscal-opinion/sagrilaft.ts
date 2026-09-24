@@ -22,6 +22,17 @@
 // SAGRILAFT y PTEE con un umbral expresado en UVB. Su texto no está en el
 // corpus normativo del repositorio y no se pudo confirmar, así que se aplica
 // el umbral de la CE 100-000016/2020 hasta verificar la norma vigente.
+//
+// Re-auditoría 2026-09 (NM-15):
+//   - Ingresos = ingresos netos de devoluciones del preprocesador (clase 4
+//     menos 4175, NIIF 15 §47). Antes se leía `controlTotals.ingresos`, la Σ
+//     de la clase 4 que bajo la convención de magnitudes SUMA las
+//     devoluciones (2.120 M en vez de 1.920 M).
+//   - SMMLV del AÑO DEL CORTE, de las constantes verificadas del repo. Antes
+//     se aplicaba siempre el de 2026; un año sin constante verificada deja el
+//     umbral N/D con motivo.
+//   - El umbral mide cifras al 31 de diciembre: un corte parcial (menos de
+//     12 meses de resultados) no compara sus ingresos contra el umbral.
 // ---------------------------------------------------------------------------
 
 import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
@@ -34,12 +45,41 @@ export const SAGRILAFT_FUENTE =
 export const SAGRILAFT_NOTA_VIGENCIA =
   'Vigencia por confirmar: la Circular Externa 100-000020 de 2026 (umbral en UVB, transición hasta el 31-05-2027) no está en el corpus normativo verificado; se aplica el umbral de la CE 100-000016/2020.';
 
+/**
+ * SMMLV por año con fuente verificada en el repo (2026: Decreto 1469/2025,
+ * `SMMLV_2026` de `@/lib/tax/taxCalculator`). Un año que no esté aquí no se
+ * sustituye por otro.
+ */
+const SMMLV_POR_ANIO: Readonly<Record<number, number>> = {
+  2026: SMMLV_2026,
+};
+
+/** SMMLV del año, o `null` si el repo no tiene la constante verificada. */
+export function smmlvDelAnio(anio: number | null | undefined): number | null {
+  if (typeof anio !== 'number') return null;
+  return SMMLV_POR_ANIO[anio] ?? null;
+}
+
+export interface SagrilaftInputs {
+  activosCop: number | null;
+  /** Ingresos totales netos de devoluciones del periodo (null si no son anuales o no hay cifra). */
+  ingresosCop: number | null;
+  /** Año del corte del balance; `null` si la etiqueta del periodo no lo identifica. */
+  anioCorte?: number | null;
+  /** Motivo cuando `ingresosCop` es null habiendo resultados (p. ej. corte parcial). */
+  motivoIngresos?: string | null;
+}
+
 export interface SagrilaftEvaluation {
-  umbralCop: number;
-  smmlv: number;
+  /** 40.000 × SMMLV del año del corte; null si ese SMMLV no está verificado. */
+  umbralCop: number | null;
+  smmlv: number | null;
+  /** Año del SMMLV aplicado (= año del corte). */
+  anioSmmlv: number | null;
   activosCop: number | null;
   ingresosCop: number | null;
-  /** true/false si hay cifras; null si no hay cifras suficientes. */
+  motivoIngresos: string | null;
+  /** true/false si hay cifras y umbral; null si no hay cifras suficientes o umbral. */
   superaUmbralGeneral: boolean | null;
   /** Siempre 'no_determinable' mientras no conste la vigilancia por Supersociedades. */
   obligada: 'si' | 'no' | 'no_determinable';
@@ -50,40 +90,76 @@ function finiteOrNull(n: unknown): number | null {
   return typeof n === 'number' && Number.isFinite(n) ? n : null;
 }
 
-/** Lee activos e ingresos del snapshot primario del preprocesador (forma `unknown`). */
-export function readSagrilaftInputs(preprocessed: unknown): { activosCop: number | null; ingresosCop: number | null } {
-  if (!preprocessed || typeof preprocessed !== 'object') return { activosCop: null, ingresosCop: null };
-  const primary = (preprocessed as { primary?: { controlTotals?: { activo?: unknown; ingresos?: unknown } } }).primary;
+/** Último año (20AA) que aparece en la etiqueta del periodo: "2025", "2025-06", "2025-01-01..2025-12-31". */
+function anioDelPeriodo(periodo: unknown): number | null {
+  if (typeof periodo !== 'string') return null;
+  const anios = periodo.match(/20\d{2}/g);
+  return anios ? Number(anios[anios.length - 1]) : null;
+}
+
+interface SnapshotSagrilaft {
+  period?: unknown;
+  controlTotals?: {
+    activo?: unknown;
+    ingresosNetos?: unknown;
+    mesesPeriodo?: unknown;
+    cents?: { ingresosNetos?: unknown } | null;
+  };
+}
+
+/** Lee activos, ingresos netos y año del corte del snapshot primario (forma `unknown`). */
+export function readSagrilaftInputs(preprocessed: unknown): SagrilaftInputs {
+  if (!preprocessed || typeof preprocessed !== 'object') {
+    return { activosCop: null, ingresosCop: null, anioCorte: null, motivoIngresos: null };
+  }
+  const primary = (preprocessed as { primary?: SnapshotSagrilaft }).primary;
   const ct = primary?.controlTotals;
   const activo = finiteOrNull(ct?.activo);
-  const ingresos = finiteOrNull(ct?.ingresos);
+  const centsNetos = ct?.cents?.ingresosNetos;
+  const ingresosNetos =
+    typeof centsNetos === 'bigint' ? Number(centsNetos) / 100 : finiteOrNull(ct?.ingresosNetos);
+  const meses = finiteOrNull(ct?.mesesPeriodo);
+  const parcial = meses !== null && meses < 12;
   return {
     activosCop: activo === null ? null : Math.abs(activo),
-    ingresosCop: ingresos === null ? null : Math.abs(ingresos),
+    ingresosCop: ingresosNetos === null || parcial ? null : Math.abs(ingresosNetos),
+    anioCorte: anioDelPeriodo(primary?.period),
+    motivoIngresos: parcial
+      ? `corte parcial (${meses} meses de resultados): el umbral mide los ingresos del año completo al 31 de diciembre`
+      : null,
   };
 }
 
 export function evaluateSagrilaft(
-  inputs: { activosCop: number | null; ingresosCop: number | null },
-  smmlv: number = SMMLV_2026,
+  inputs: SagrilaftInputs,
+  smmlvOverride?: number,
 ): SagrilaftEvaluation {
-  const umbralCop = SAGRILAFT_UMBRAL_SMMLV * smmlv;
+  const anio = inputs.anioCorte ?? null;
+  const smmlv = smmlvOverride ?? smmlvDelAnio(anio);
+  const umbralCop = smmlv === null ? null : SAGRILAFT_UMBRAL_SMMLV * smmlv;
   const { activosCop, ingresosCop } = inputs;
+  const motivoIngresos = inputs.motivoIngresos ?? null;
   let superaUmbralGeneral: boolean | null = null;
-  if (activosCop !== null || ingresosCop !== null) {
+  if (umbralCop !== null && (activosCop !== null || ingresosCop !== null)) {
     superaUmbralGeneral = (activosCop ?? 0) >= umbralCop || (ingresosCop ?? 0) >= umbralCop;
   }
   const motivo =
-    superaUmbralGeneral === null
-      ? 'Sin cifras estructuradas de activos e ingresos: el umbral no se evalúa.'
-      : superaUmbralGeneral
-        ? 'Supera el umbral general de ingresos o activos; la obligatoriedad depende además de la vigilancia por la Superintendencia de Sociedades, que no consta.'
-        : 'No supera el umbral general de ingresos ni de activos; los supuestos sectoriales y la vigilancia por la Superintendencia de Sociedades no constan.';
+    umbralCop === null
+      ? anio === null
+        ? 'Sin año de corte identificable: el SMMLV aplicable y el umbral no se determinan.'
+        : `El SMMLV del año ${anio} no está en las constantes verificadas del repositorio (sólo 2026, Decreto 1469/2025): el umbral no se evalúa.`
+      : superaUmbralGeneral === null
+        ? 'Sin cifras estructuradas de activos e ingresos: el umbral no se evalúa.'
+        : superaUmbralGeneral
+          ? 'Supera el umbral general de ingresos o activos; la obligatoriedad depende además de la vigilancia por la Superintendencia de Sociedades, que no consta.'
+          : 'No supera el umbral general de ingresos ni de activos; los supuestos sectoriales y la vigilancia por la Superintendencia de Sociedades no constan.';
   return {
     umbralCop,
     smmlv,
+    anioSmmlv: smmlv === null ? null : anio,
     activosCop,
     ingresosCop,
+    motivoIngresos,
     superaUmbralGeneral,
     obligada: 'no_determinable',
     motivo,
@@ -94,10 +170,20 @@ const fmtCop = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
 /** Bloque de datos para el prompt del verificador (el LLM copia, no calcula). */
 export function renderSagrilaftBlock(ev: SagrilaftEvaluation): string {
+  const umbral =
+    ev.umbralCop === null || ev.smmlv === null
+      ? `N/D — ${ev.motivo}`
+      : `SMMLV ${ev.anioSmmlv ?? ''} = ${fmtCop(ev.smmlv)} ⇒ umbral = ${fmtCop(ev.umbralCop)}.`;
+  const ingresos =
+    ev.ingresosCop !== null
+      ? `${fmtCop(ev.ingresosCop)} (ingresos totales netos de devoluciones)`
+      : ev.motivoIngresos
+        ? `N/D — ${ev.motivoIngresos}`
+        : 'N/D';
   return [
     '<sagrilaft_determinista>',
-    `- Norma y umbral: ${SAGRILAFT_FUENTE}. SMMLV 2026 = ${fmtCop(ev.smmlv)} ⇒ umbral = ${fmtCop(ev.umbralCop)}.`,
-    `- Activos al cierre: ${ev.activosCop === null ? 'N/D' : fmtCop(ev.activosCop)}; ingresos: ${ev.ingresosCop === null ? 'N/D' : fmtCop(ev.ingresosCop)}.`,
+    `- Norma y umbral: ${SAGRILAFT_FUENTE}. ${umbral}`,
+    `- Activos al cierre: ${ev.activosCop === null ? 'N/D' : fmtCop(ev.activosCop)}; ingresos: ${ingresos}.`,
     `- Supera el umbral general: ${ev.superaUmbralGeneral === null ? 'no determinable' : ev.superaUmbralGeneral ? 'sí' : 'no'}.`,
     `- Obligada a SAGRILAFT: no determinable — ${ev.motivo}`,
     `- ${SAGRILAFT_NOTA_VIGENCIA}`,
