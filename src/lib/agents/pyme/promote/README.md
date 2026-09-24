@@ -33,7 +33,11 @@ POST /api/pyme/promote
    b. Contrapartida: siempre cuenta 110505 (Caja general, no requiere CC).
    c. Opcional: si applyTaxEngine=true Y UTOPIA_ENABLE_TAX_ENGINE=true
       Y el entry parece una factura → import('@/lib/accounting/tax-engine').evaluate()
-      → reemplaza la línea de Caja con líneas tributarias del motor WS1.
+      con la fecha del grupo y amountIncludesTax=true (la suma del libro es el
+      valor pagado/cobrado, IVA incluido) → el asiento combina línea base
+      (gasto/ingreso por la base gravable) + líneas de impuesto del motor +
+      Caja por el neto (totalPayableCop). El cuadre se valida antes de
+      createEntry; si no cuadra, el grupo va a skipped con `unbalanced_entry:`.
    d. createEntry({ status: 'draft', sourceType: 'ai_generated',
                     sourceRef: 'pyme_book:<bookId>',
                     metadata: { promotedFromPymeEntryIds: [...] } })
@@ -136,7 +140,7 @@ curl -X POST http://localhost:3000/api/pyme/promote \
 - **Sin auto-promote**: la acción es siempre explícita. El usuario debe seleccionar y pulsar "Promover".
 - **Sin aprendizaje**: el clasificador no aprende del PUC final que el contador ratifica vs el `pucHint` sugerido. Diferido a `auto-rules.ts`.
 - **Sin promote retroactivo masivo**: el endpoint acepta máximo 200 entries por request para no saturar el período.
-- **Caja única**: la contrapartida del MVP es siempre 110505 (Caja general). CxP/CxC solo se generan si el tax engine está activo y detecta factura.
+- **Caja única**: la contrapartida del MVP es siempre 110505 (Caja general). Con el tax engine activo y factura detectada, la caja se acredita/debita por el neto (base + IVA − retenciones).
 - **Agrupación por (fecha, kind)**: una journal_entry por (día, tipo). Entries de días distintos o kinds distintos generan asientos separados.
 
 ## TODOs encolados

@@ -14,8 +14,12 @@
 //   egreso  → Db <cuenta gasto/costo> / Cr 1105 Caja
 //
 // Cuando applyTaxEngine=true y el entry sugiere factura, el caller
-// (index.ts) ya habrá resuelto líneas adicionales y las pasa en
-// `extraLines`. Este módulo las incorpora respetando la partida doble.
+// (index.ts) ya evaluó el motor tributario y pasa `taxEngine`: la base
+// gravable, las líneas de impuesto y el neto a pagar/cobrar. El asiento
+// COMBINA línea base + líneas de impuesto + contrapartida neta en caja
+// (auditoría 2026-09, tributario-calc-10: antes las líneas del motor
+// reemplazaban todo el asiento y quedaba sin gasto/ingreso ni caja). El cuadre
+// se valida aquí, antes de createEntry.
 // ---------------------------------------------------------------------------
 
 import type { CreateEntryInput, JournalLineInput } from '@/lib/accounting/types';
@@ -38,10 +42,32 @@ export interface BuildGroupInput {
    */
   primaryCostCenterId?: string | null;
   /**
-   * Líneas adicionales del tax engine (opcionales). Si se proveen, reemplazan
-   * la línea de caja simple y el builder ajusta el cuadre automáticamente.
+   * Resultado del motor tributario (opcional). Con él el asiento es:
+   *   egreso  → Db gasto (base) + líneas de impuesto + Cr caja (neto)
+   *   ingreso → Db caja (neto) + Cr ingreso (base) + líneas de impuesto
    */
-  taxEngineLines?: JournalLineInput[];
+  taxEngine?: TaxEngineGroupLines;
+}
+
+export interface TaxEngineGroupLines {
+  /** Base gravable resuelta por el motor (sin IVA), NUMERIC string. */
+  baseAmountCop: string;
+  /** Líneas de impuesto del motor (IVA, retenciones), ya con su lado. */
+  taxLines: JournalLineInput[];
+  /** Neto pagado / cobrado = base + IVA − retenciones (contrapartida en caja). */
+  totalPayableCop: string;
+}
+
+/** El asiento armado no cuadra o tiene una contrapartida no positiva. */
+export class PromoteUnbalancedError extends Error {
+  constructor(
+    message: string,
+    readonly totalDebit: string,
+    readonly totalCredit: string,
+  ) {
+    super(message);
+    this.name = 'PromoteUnbalancedError';
+  }
 }
 
 export interface BuildGroupResult {
@@ -63,18 +89,13 @@ export function buildGroupEntry(args: BuildGroupInput): BuildGroupResult {
     cajaAccountId,
     primaryAccountId,
     primaryCostCenterId,
-    taxEngineLines,
+    taxEngine,
   } = args;
 
   const sourceEntryIds = group.entries.map((e) => e.id);
 
   // Suma total del grupo (string NUMERIC → BigInt para exactitud).
-  const totalCentavos = group.entries.reduce((acc, e) => {
-    const centavos = parseToCentavos(e.amount);
-    return acc + centavos;
-  }, BigInt(0));
-
-  const totalStr = centavosToNumericStr(totalCentavos);
+  const totalStr = groupTotalNumeric(group);
 
   // Descripción: "Promoción OCR – <kind> – <dateKey> (<N> renglones)"
   const kindLabel = group.kind === 'ingreso' ? 'Ingresos' : 'Egresos';
@@ -89,10 +110,14 @@ export function buildGroupEntry(args: BuildGroupInput): BuildGroupResult {
   // ── Construir líneas ────────────────────────────────────────────────────
   let lines: JournalLineInput[];
 
-  if (taxEngineLines && taxEngineLines.length > 0) {
-    // Tax engine proveyó líneas completas. Las usamos directamente.
-    // El engine ya garantiza que el conjunto está cuadrado (debit = credit).
-    lines = taxEngineLines;
+  if (taxEngine && taxEngine.taxLines.length > 0) {
+    lines = buildTaxEngineLines(
+      group.kind,
+      taxEngine,
+      primaryAccountId,
+      cajaAccountId,
+      primaryCostCenterId ?? null,
+    );
   } else {
     // Líneas simples: Caja + cuenta primaria.
     lines = buildSimpleLines(
@@ -103,6 +128,8 @@ export function buildGroupEntry(args: BuildGroupInput): BuildGroupResult {
       primaryCostCenterId ?? null,
     );
   }
+
+  assertBalanced(lines);
 
   const input: CreateEntryInput = {
     workspaceId,
@@ -128,6 +155,61 @@ export function buildGroupEntry(args: BuildGroupInput): BuildGroupResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Suma exacta (BigInt centavos) de los montos del grupo, "12345.67". */
+export function groupTotalNumeric(group: EntryGroup): string {
+  const total = group.entries.reduce(
+    (acc, e) => acc + parseToCentavos(e.amount),
+    BigInt(0),
+  );
+  return centavosToNumericStr(total);
+}
+
+function buildTaxEngineLines(
+  kind: 'ingreso' | 'egreso',
+  taxEngine: TaxEngineGroupLines,
+  primaryAccountId: string,
+  cajaAccountId: string,
+  primaryCostCenterId: string | null,
+): JournalLineInput[] {
+  const baseStr = centavosToNumericStr(parseToCentavos(taxEngine.baseAmountCop));
+  const netStr = centavosToNumericStr(parseToCentavos(taxEngine.totalPayableCop));
+  if (parseToCentavos(netStr) <= BigInt(0) || parseToCentavos(baseStr) <= BigInt(0)) {
+    throw new PromoteUnbalancedError(
+      `Base ${baseStr} o neto ${netStr} no positivo: no se arma el asiento con impuestos.`,
+      baseStr,
+      netStr,
+    );
+  }
+  const cc = primaryCostCenterId ? { costCenterId: primaryCostCenterId } : {};
+  if (kind === 'ingreso') {
+    return [
+      { accountId: cajaAccountId, debit: netStr, credit: '0.00', description: 'Caja – cobro ingreso OCR (neto)' },
+      { accountId: primaryAccountId, debit: '0.00', credit: baseStr, description: 'Ingreso OCR pyme (base)', ...cc },
+      ...taxEngine.taxLines,
+    ];
+  }
+  return [
+    { accountId: primaryAccountId, debit: baseStr, credit: '0.00', description: 'Gasto OCR pyme (base)', ...cc },
+    ...taxEngine.taxLines,
+    { accountId: cajaAccountId, debit: '0.00', credit: netStr, description: 'Caja – pago egreso OCR (neto)' },
+  ];
+}
+
+/** Partida doble exacta en centavos; si no cuadra, no se llama a createEntry. */
+function assertBalanced(lines: JournalLineInput[]): void {
+  let debit = BigInt(0);
+  let credit = BigInt(0);
+  for (const l of lines) {
+    debit += parseToCentavos(l.debit);
+    credit += parseToCentavos(l.credit);
+  }
+  if (debit !== credit || debit <= BigInt(0)) {
+    const d = centavosToNumericStr(debit);
+    const c = centavosToNumericStr(credit);
+    throw new PromoteUnbalancedError(`Asiento descuadrado: débitos ${d} ≠ créditos ${c}.`, d, c);
+  }
+}
 
 function buildSimpleLines(
   kind: 'ingreso' | 'egreso',
@@ -181,10 +263,13 @@ function buildSimpleLines(
  * Usa split en '.' para evitar pérdida de precisión de floating point.
  */
 function parseToCentavos(numeric: string): bigint {
-  const clean = (numeric ?? '0').trim();
+  const raw = (numeric ?? '0').trim();
+  const negative = raw.startsWith('-');
+  const clean = negative ? raw.slice(1) : raw;
   const [intPart, fracPart = ''] = clean.split('.');
   const cents = fracPart.padEnd(2, '0').slice(0, 2);
-  return BigInt(intPart || '0') * BigInt(100) + BigInt(cents);
+  const abs = BigInt(intPart || '0') * BigInt(100) + BigInt(cents);
+  return negative ? -abs : abs;
 }
 
 /** Convierte BigInt centavos → string "12345.67" (dos decimales fijos). */
@@ -199,7 +284,7 @@ function centavosToNumericStr(centavos: bigint): string {
 }
 
 /** Parsea 'YYYY-MM-DD' → Date UTC mediodía (consistente con orchestrator PYME). */
-function parseDateKey(dateKey: string): Date {
+export function parseDateKey(dateKey: string): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
   if (!match) return new Date();
   const [, y, m, d] = match;
