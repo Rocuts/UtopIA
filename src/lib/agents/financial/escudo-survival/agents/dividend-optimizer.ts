@@ -4,14 +4,16 @@
 // Refactor outcome-first GPT-5.4 con `callFinancialAgent` +
 // `DividendOptimizationReportSchema` + `MODELS_CONFIG.dividendOptimizer`.
 //
-// El validator C1.6 enforza data.escenarios.capitalizarTotal.impuestoSocio = 0
-// (INCRGNO Art. 36-3 E.T.) — el prompt lo declara como invariante.
+// Art. 36-3 E.T. derogado por Ley 2277/2022 art. 96: capitalizar tributa como
+// distribuir. `enforceDividend` iguala la carga del socio y el validador C1.6
+// lo comprueba (auditoría 2026-09, tributario-calc-01).
 // ---------------------------------------------------------------------------
 
 import { callFinancialAgent } from '../../agents/runtime';
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildDividendOptimizerPrompt } from '../prompts/dividend-optimizer.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { enforceDividend } from '../lib/deterministic-survival';
 import { DividendOptimizationReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, DividendOptimizerResult } from '../types';
 
@@ -45,5 +47,6 @@ export async function runDividendOptimizer(
     ...MODELS_CONFIG.dividendOptimizer,
   });
 
-  return json as DividendOptimizerResult;
+  // Art. 36-3 derogado: capitalizar = distribuir para el socio (tributario-calc-01).
+  return enforceDividend(json as DividendOptimizerResult);
 }

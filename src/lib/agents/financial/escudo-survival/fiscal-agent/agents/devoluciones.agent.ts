@@ -6,7 +6,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildDevolucionesPrompt } from '../prompts/devoluciones.prompt';
 import { devolucionesModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
-import { analyzeRefund } from '../tools/refund-analyzer';
+import { analyzeRefund, REFUND_NO_DETERMINABLE_MOTIVO } from '../tools/refund-analyzer';
 import type { DevolucionesModuleResult, FiscalAgentInput } from '../types';
 
 export interface DevolucionesAgentOptions {
@@ -18,13 +18,16 @@ export async function runDevolucionesAgent(
   opts: DevolucionesAgentOptions,
 ): Promise<DevolucionesModuleResult> {
   const { input } = opts;
-  const analysis = analyzeRefund(input.fiscalAnchor);
+  const analysis = analyzeRefund(input.fiscalAnchor, {
+    saldoAFavorDeclaradoCents: input.saldoAFavorDeclaradoCents ?? null,
+  });
 
   const system = buildDevolucionesPrompt(input.language, input.company.nit);
 
   const userContent = `<context>
 REFUND_ANALYSIS_PRECOMPUTADO (vinculante):
-  saldoAFavor (MoneyCop): ${analysis.saldoAFavor}  (= ${formatCopFromCents(BigInt(analysis.saldoAFavor))})
+  saldoAFavor declarado (MoneyCop): ${analysis.saldoAFavor === null ? 'null — N/D' : `${analysis.saldoAFavor}  (= ${formatCopFromCents(BigInt(analysis.saldoAFavor))})`}
+  posible saldo según estimación contable |F04| (NO es base de devolución): ${analysis.posibleSaldoContable === null ? 'no aplica' : formatCopFromCents(BigInt(analysis.posibleSaldoContable))}
   viabilidad: ${analysis.viabilidad}
   plazoDian: ${analysis.plazoDian}
   plazoConGarantia: ${analysis.plazoConGarantia}
@@ -42,7 +45,7 @@ ${analysis.riesgosBase.map((r) => `  - ${r}`).join('\n')}
 ANCLAS_FISCALES_REFERENCIA:
   F02 Imp. ref.: ${formatCopFromCents(BigInt(input.fiscalAnchor.f02))}
   F03 Retenciones: ${formatCopFromCents(BigInt(input.fiscalAnchor.f03))}
-  F04 Saldo neto: ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
+  F04 Posición de referencia contable (estimación, no liquidación): ${formatCopFromCents(BigInt(input.fiscalAnchor.f04))}
   F10 Cobertura retenciones: ${input.fiscalAnchor.f10}%
 
 PERIODO: ${input.fiscalAnchor.fuente.periodo}
@@ -60,5 +63,23 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // Saldo, viabilidad, plazos y norma: siempre los del análisis determinista.
+  const warnings = [...json.warnings];
+  if (analysis.viabilidad === 'no_determinable') warnings.push(REFUND_NO_DETERMINABLE_MOTIVO);
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      saldoAFavor: analysis.saldoAFavor,
+      viabilidad: analysis.viabilidad,
+      plazoDian: analysis.plazoDian,
+      plazoConGarantia: analysis.plazoConGarantia,
+      normaRef: analysis.normaRef,
+      pasosProcedimentales:
+        analysis.viabilidad === 'no_determinable' || analysis.viabilidad === 'no_aplica'
+          ? analysis.pasosBase
+          : json.data.pasosProcedimentales,
+    },
+    warnings,
+  };
 }

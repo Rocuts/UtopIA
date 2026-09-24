@@ -110,7 +110,7 @@ const BLACKLIST: readonly BlacklistEntry[] = [
     razon:
       'Concepto DIAN 481/2018 trata sobre ESALs, NO sobre capitalización de utilidades. El spec original lo atribuía a Art. 36-3 capitalización — error.',
     alternativaCorrecta:
-      'Oficio DIAN 0348 (005875) de 18-03-2020 para capitalización utilidades Art. 36-3 E.T.',
+      'La capitalización de utilidades se trata como distribución gravada (Arts. 48-49, 242 y 242-1 E.T.); el Art. 36-3 E.T. fue derogado por la Ley 2277 de 2022 art. 96 (DIAN Concepto 2769 de 2026).',
     severidad: 'ALTA',
     categoria: 'concepto_dian_no_verificable',
   },

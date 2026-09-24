@@ -23,6 +23,7 @@ const RAW: FiscalRawBase = {
   // ReteIVA (135517) y ReteICA (135518) viajan aparte: no acreditan renta.
   reteIvaAFavorCents: BigInt(0),
   reteIcaAFavorCents: BigInt(0),
+  otrosActivosImpuestoNoRentaCents: BigInt(0),
   ivaPorPagarCents: BigInt(0),
   reteFuentePorPagarCents: BigInt(0),
   icaPorPagarCents: BigInt(0),

@@ -44,7 +44,7 @@ export {
 
 // Tools determinísticos (los consume el validator agent + tests del otro agente)
 export { precomputeCcv, buildAlertaTasaMinima, clasificarEficienciaFiscal } from './tools/ccv-calculator';
-export { computeRiskScore, saldoAFavorCents } from './tools/risk-score-calculator';
+export { computeRiskScore, posibleSaldoAFavorContableCents } from './tools/risk-score-calculator';
 export { buildConciliacionSkeleton, TARIFA_GENERAL_PCT_VAL } from './tools/conciliacion-builder';
 export { analyzeRefund } from './tools/refund-analyzer';
 export {

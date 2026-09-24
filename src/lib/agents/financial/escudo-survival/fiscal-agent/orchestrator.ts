@@ -30,6 +30,7 @@ import { runDefensaDianAgent } from './agents/defensa-dian.agent';
 import { runDevolucionesAgent } from './agents/devoluciones.agent';
 import { runSupervivenciaAgent } from './agents/supervivencia.agent';
 import { runSynthesizer } from './agents/synthesizer.agent';
+import { buildFiscalAgentValidation } from './validation';
 import type {
   CcvModuleResult,
   ConciliacionModuleResult,
@@ -103,10 +104,12 @@ function selectModules(mode: FiscalAgentMode): ModulesToRun {
         supervivencia: false,
       };
     case 'devolucion':
+      // riskScore activo: el sintetizador lo exige y el score es determinista
+      // (auditoría 2026-09, tributario-modulos-12 — el modo siempre fallaba).
       return {
         ccv: true,
         conciliacion: false,
-        riskScore: false,
+        riskScore: true,
         planeacion: false,
         defensaDian: false,
         devoluciones: true,
@@ -303,7 +306,7 @@ export async function orchestrateFiscalAgent(
   const modulesFailed = moduleMetas.filter((m) => !m.ok).map((m) => m.stage);
   const partial = modulesFailed.length > 0;
 
-  return {
+  const reportSinValidar: Omit<FiscalAgentReport, 'validation'> = {
     ccv: ccvForSynth,
     conciliacion: conciliacionR.value,
     riskScore: riskForSynth,
@@ -324,6 +327,23 @@ export async function orchestrateFiscalAgent(
       modulesFailed,
     },
   };
+
+  // ── 7. Validación determinista (auditoría 2026-09, tributario-modulos-03).
+  callbacks?.onProgress?.({ stage: 'validation', status: 'started' });
+  let validation: FiscalAgentReport['validation'];
+  try {
+    validation = buildFiscalAgentValidation(reportSinValidar, mode);
+    callbacks?.onProgress?.({
+      stage: 'validation',
+      status: validation.veredicto === 'bloqueo' ? 'failed' : 'completed',
+      message: `Veredicto ${validation.veredicto}: ${validation.errores} errores, ${validation.advertencias} advertencias`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'validation_error';
+    validation = { veredicto: 'bloqueo', errores: 1, advertencias: 0, checks: [], modulosSinValidar: [`Validación no ejecutada: ${message}`] };
+    callbacks?.onProgress?.({ stage: 'validation', status: 'failed', message });
+  }
+  return { ...reportSinValidar, validation };
 }
 
 function enabledFor(stage: FiscalAgentStage, modules: ModulesToRun): boolean {

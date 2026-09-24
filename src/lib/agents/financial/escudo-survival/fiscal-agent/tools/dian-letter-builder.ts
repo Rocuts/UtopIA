@@ -15,7 +15,16 @@
 
 import type { DianRequirementKind } from '../types';
 
-/** Reglas (keyword, kind, plazo, norma del plazo). Ordenadas por especificidad. */
+/**
+ * Reglas (keyword, kind, plazo, norma del plazo). Ordenadas por especificidad.
+ *
+ * Auditoría 2026-09 (tributario-modulos-13):
+ *   - Pliego de cargos: 1 mes para responder el traslado de cargos (p. ej.
+ *     Arts. 651 y 860 E.T.), NO 3 meses: los 3 meses del Art. 707 son para
+ *     responder el REQUERIMIENTO ESPECIAL, que ahora es un tipo propio.
+ *   - Requerimiento ordinario: el plazo que fije el acto, mínimo 15 días
+ *     calendario (Art. 261 Ley 223/1995; deber del Art. 686 E.T.).
+ */
 const RULES: ReadonlyArray<{
   keywords: readonly string[];
   kind: DianRequirementKind;
@@ -29,10 +38,16 @@ const RULES: ReadonlyArray<{
     normaPlazo: 'Art. 720 E.T.',
   },
   {
+    kind: 'requerimiento_especial',
+    keywords: ['requerimiento especial', 'ampliación al requerimiento especial', 'ampliacion al requerimiento especial'],
+    plazo: '3 meses desde la notificación para responder (Art. 707 E.T.).',
+    normaPlazo: 'Art. 707 E.T.',
+  },
+  {
     kind: 'pliego_cargos',
     keywords: ['pliego de cargos'],
-    plazo: '3 meses para responder (Art. 707 E.T.).',
-    normaPlazo: 'Art. 707 E.T.',
+    plazo: '1 mes desde la notificación para responder el traslado de cargos (p. ej. Arts. 651 y 860 E.T.); verificar el término que indique el acto.',
+    normaPlazo: 'Traslado de cargos — 1 mes (p. ej. Arts. 651 y 860 E.T.)',
   },
   {
     kind: 'emplazamiento_corregir',
@@ -49,8 +64,8 @@ const RULES: ReadonlyArray<{
   {
     kind: 'requerimiento_ordinario',
     keywords: ['requerimiento ordinario', 'requerimiento de información', 'requerimiento ordinario de información'],
-    plazo: '15 días hábiles desde la notificación (Art. 752 E.T.).',
-    normaPlazo: 'Art. 752 E.T.',
+    plazo: 'El plazo que fije el requerimiento, que no puede ser inferior a 15 días calendario (Art. 261 Ley 223/1995; Art. 686 E.T.).',
+    normaPlazo: 'Art. 686 E.T. y Art. 261 Ley 223/1995',
   },
 ];
 
@@ -83,7 +98,7 @@ export function classifyDianRequirement(
   return {
     kind: 'desconocido',
     plazoRespuesta: 'Plazo no identificable — verificar texto del requerimiento manualmente.',
-    normaPlazo: 'Art. 752 E.T. (referencia genérica al régimen de requerimientos)',
+    normaPlazo: 'No identificable — verificar el acto',
   };
 }
 
@@ -93,7 +108,7 @@ function classificationFromKind(kind: DianRequirementKind): DianRequirementClass
     return {
       kind: 'desconocido',
       plazoRespuesta: 'Plazo no identificable — verificar tipo de actuación.',
-      normaPlazo: 'Art. 752 E.T.',
+      normaPlazo: 'No identificable — verificar el acto',
     };
   }
   return { kind: rule.kind, plazoRespuesta: rule.plazo, normaPlazo: rule.normaPlazo };
@@ -110,21 +125,25 @@ export function reduccionesDisponibles(
     'Reducciones escalonadas por principios de gradualidad y proporcionalidad (Art. 640 E.T.).',
   ];
   switch (kind) {
+    case 'requerimiento_especial':
+      return [
+        ...arts640,
+        'Reducción de la sanción por inexactitud a la cuarta parte si en la respuesta al requerimiento especial (o a su ampliación) se aceptan total o parcialmente los hechos y se corrige la declaración (Art. 709 E.T.).',
+      ];
     case 'pliego_cargos':
       return [
         ...arts640,
-        'Reducción al 25% por aceptación del pliego de cargos (Art. 709 E.T.).',
-        'Reducción al 50% del valor inicial por corrección antes del emplazamiento (Art. 644 E.T.).',
+        'Reducciones propias del artículo que regula la sanción propuesta (p. ej. Art. 651 E.T. para información exógena); la reducción del Art. 709 E.T. aplica sólo a la sanción por inexactitud.',
       ];
     case 'liquidacion_oficial_revision':
       return [
         ...arts640,
-        'Reducción al 50% por aceptación de la liquidación oficial de revisión (Art. 713 E.T.).',
+        'Reducción de la sanción por inexactitud a la mitad si se aceptan los hechos de la liquidación oficial de revisión dentro del término del recurso (Art. 713 E.T.).',
       ];
     case 'emplazamiento_corregir':
       return [
         ...arts640,
-        'Reducción al 10% por corrección voluntaria antes del emplazamiento (Art. 644 E.T.); 20% si la corrección es posterior al emplazamiento.',
+        'Sanción por corrección del Art. 644 E.T.: 10% del mayor valor a pagar si se corrige antes del emplazamiento; 20% si se corrige después de notificado el emplazamiento para corregir y antes del requerimiento especial.',
       ];
     case 'emplazamiento_no_declarar':
       return [

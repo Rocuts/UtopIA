@@ -17,7 +17,9 @@ export type Language = 'es' | 'en';
 // los mismos valores. Cambiar UVT requiere actualizacion explicita.
 // ---------------------------------------------------------------------------
 export const UVT_2026 = 52374;
-export const TOPE_INDIVIDUAL_UVT = 100; // Art. 771-5 §2 — pago efectivo a un mismo NIT
+// Art. 771-5 par. 2 — tope por PAGO individual en efectivo (cada transacción),
+// no acumulado por beneficiario (C.E. Secc. 4ª, sentencia 26676 de 19-jul-2023).
+export const TOPE_INDIVIDUAL_UVT = 100;
 export const TOPE_GENERAL_UVT = 40000; // Art. 771-5 §1 — tope efectivo agregado
 // Umbrales de alerta TET — alineados con tet-calculator.prompt.ts:
 // verde < 20%; amarillo 20-30%; rojo > 30%.
@@ -99,10 +101,14 @@ export interface AgentResultBase {
 
 export interface TetCalculatorResult extends AgentResultBase {
   data: {
-    tet: number;
-    ttd: number;
-    nivelAlerta: AlertLevel;
-    impuestoProyectado: number;
+    /** Tasa efectiva CONTABLE = impuesto causado (clase 54) / UAI. null si UAI ≤ 0. */
+    tet: number | null;
+    /** TTD (Art. 240 par. 6) = ID/UD — null sin ID/UD verificados. */
+    ttd: number | null;
+    /** null cuando la TET no es medible (N/D). */
+    nivelAlerta: AlertLevel | null;
+    /** Impuesto de renta causado en libros (clase 54). */
+    impuestoProyectado: number | null;
     uai: number;
     sugerenciasOptimizacion: OptimizationSuggestion[];
   };
@@ -114,9 +120,12 @@ export interface TetCalculatorResult extends AgentResultBase {
 
 export interface RetentionShieldResult extends AgentResultBase {
   data: {
+    /** Crédito imputable a renta (lista blanca de fiscal-anchor/credito-renta.ts). */
     retencionesAcumuladas: number;
-    impuestoProyectado: number;
-    saldoAFavorProyectado: number;
+    /** Impuesto de renta causado en libros (clase 54). */
+    impuestoProyectado: number | null;
+    /** null: sin declaración no hay saldo a favor determinable (F04 es estimación contable). */
+    saldoAFavorProyectado: number | null;
     acciones: RetentionAction[];
   };
 }
@@ -127,11 +136,12 @@ export interface RetentionShieldResult extends AgentResultBase {
 
 export interface AntiDianResult extends AgentResultBase {
   data: {
-    pagosEfectivoTotal: number;
+    /** null: el balance no trae el flujo de pagos en efectivo del año. */
+    pagosEfectivoTotal: number | null;
     pagosNoDeduciblesIndividuales: CashPaymentViolation[];
-    excesoNoDeducibleGeneral: number;
+    excesoNoDeducibleGeneral: number | null;
     crucesExogenaSospechosos: ExogenaCross[];
-    mayorImpuestoEstimado: number;
+    mayorImpuestoEstimado: number | null;
   };
 }
 
@@ -163,7 +173,7 @@ export interface DividendOptimizerResult extends AgentResultBase {
       hibrido50_50: DividendScenario;
     };
     recomendacion: string;
-    norma: 'Art. 242 E.T.' | 'Art. 36-3 E.T.';
+    norma: 'Art. 242 E.T.' | 'Art. 242-1 E.T.';
   };
 }
 
@@ -200,12 +210,16 @@ export interface EscudoSurvivalReport {
    */
   fiscalAnchor?: FiscalAnchorBlock;
   /**
-   * Lo adjunta el validator (rama paralela). Se tipa como `unknown` aqui para
-   * evitar acoplar este modulo al shape de `SurvivalValidationResult` mientras
-   * la rama del validator esta en flight; cuando se mergee, basta con
-   * reemplazar `unknown` por el tipo importado sin romper consumidores.
+   * Resultado de `validateSurvivalReport` (3 capas deterministas). Lo adjunta
+   * el orquestador antes de entregar el reporte (auditoría 2026-09,
+   * tributario-modulos-03). Tipado estructural mínimo para no crear un ciclo
+   * de imports con validators/survival-validators.ts.
    */
-  validation?: unknown;
+  validation?: {
+    ok: boolean;
+    errors: string[];
+    warnings: string[];
+  };
   metadata: {
     uvt: number;
     period: string;

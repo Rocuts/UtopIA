@@ -5,6 +5,10 @@ import { orchestrateTransferPricing } from '@/lib/agents/financial/transfer-pric
 import type { TPProgressEvent } from '@/lib/agents/financial/transfer-pricing/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import {
+  taxYearFromFiscalPeriod,
+  tpObligationThresholds,
+} from '@/lib/agents/financial/transfer-pricing/lib/deterministic';
 
 // ---------------------------------------------------------------------------
 // POST /api/transfer-pricing
@@ -43,6 +47,18 @@ export async function POST(req: Request) {
       if (inferred) {
         (company as { comparativePeriod?: string }).comparativePeriod = inferred;
       }
+    }
+
+    // Los umbrales de los Arts. 260-5 / 260-9 se miden con la UVT del año
+    // gravable: sin año identificable o sin UVT registrada no se analiza
+    // (error explícito, nunca otra UVT de sustitución).
+    try {
+      tpObligationThresholds(taxYearFromFiscalPeriod(company.fiscalPeriod));
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Año gravable no soportado.' },
+        { status: 422 },
+      );
     }
 
     // Check for streaming request

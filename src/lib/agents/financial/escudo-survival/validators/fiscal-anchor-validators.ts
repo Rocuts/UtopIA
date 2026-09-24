@@ -257,8 +257,8 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
   }
 
   // -------------------------------------------------------------------
-  // L1.6 — Si F04 < 0, debe existir alerta SALDO_A_FAVOR
-  // Art. 850 E.T. — devolución de saldos a favor
+  // L1.6 — Si F04 < 0, debe existir alerta SALDO_A_FAVOR (posible saldo a
+  // favor como estimación contable; no liquidación ni acción de devolución)
   // -------------------------------------------------------------------
   {
     if (f04 < 0) {
@@ -269,10 +269,10 @@ export function validateFiscalAnchorL1(block: FiscalAnchorBlock): ValidationChec
         name: 'L1.6_saldo_favor_alerta',
         passed: tieneAlerta,
         severity: 'error',
-        norma: 'Art. 850 E.T. — devolución / compensación saldo a favor renta',
+        norma: 'Estimación contable F04 — posible saldo a favor (no liquidación)',
         detail: tieneAlerta
-          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR presente. Correcto.`
-          : `F04 ${formatCentsCop(f04)} < 0 (saldo a favor) pero NO existe alerta SALDO_A_FAVOR en alertas[]. Art. 850 E.T. exige reportarlo explícitamente.`,
+          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR (estimación contable) presente. Correcto.`
+          : `F04 ${formatCentsCop(f04)} < 0 (posible saldo a favor, estimación contable) pero NO existe alerta SALDO_A_FAVOR en alertas[]. Debe advertirse que requiere verificación contra la declaración.`,
       });
     } else {
       checks.push({
@@ -660,12 +660,11 @@ export function validateFiscalAnchorL3(
   }
 
   // -------------------------------------------------------------------
-  // L3.4 — Saldo a favor sin alerta SALDO_A_FAVOR (Art. 850 E.T.)
-  // Si F04 < 0 y no hay alerta → el dictamen omite un derecho del contribuyente
-  //
-  // Evidencia adversarial DIAN: "El contribuyente no solicitó devolución
-  // del saldo a favor en tiempo oportuno por omisión del dictamen."
-  // Evidencia defensa: alerta SALDO_A_FAVOR documenta el derecho a devolución.
+  // L3.4 — Posible saldo a favor sin alerta SALDO_A_FAVOR
+  // Si F04 < 0 y no hay alerta → el dictamen omite advertir que la estimación
+  // contable sugiere revisar la declaración. F04 no es el saldo a favor del
+  // Formulario 110 (no depura renta, descuentos ni anticipo Art. 807 E.T.): la
+  // alerta es informativa y no recomienda devolución (Art. 670 E.T.).
   // -------------------------------------------------------------------
   {
     if (f04 < 0) {
@@ -676,10 +675,10 @@ export function validateFiscalAnchorL3(
         name: 'L3.4_saldo_favor_art850',
         passed: tieneAlerta,
         severity: 'error',
-        norma: 'Art. 850 E.T. — devolución saldos a favor renta',
+        norma: 'Arts. 26, 807 y 850 E.T. — el saldo a favor sale de la declaración',
         detail: tieneAlerta
-          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR presente. Defensa: derecho devolución Art. 850 E.T. documentado.`
-          : `F04 ${formatCentsCop(f04)} < 0 pero sin alerta SALDO_A_FAVOR. Art. 850 E.T. reconoce el derecho a devolución; omitirlo en el dictamen perjudica al contribuyente.`,
+          ? `F04 ${formatCentsCop(f04)} < 0 y alerta SALDO_A_FAVOR (estimación contable, no liquidación) presente.`
+          : `F04 ${formatCentsCop(f04)} < 0 pero sin alerta SALDO_A_FAVOR. El dictamen debe advertir que la estimación contable sugiere verificar un posible saldo a favor en la declaración.`,
       });
     } else {
       checks.push({

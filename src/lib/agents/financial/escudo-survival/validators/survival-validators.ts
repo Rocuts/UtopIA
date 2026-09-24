@@ -14,6 +14,7 @@ import type {
   RetentionAction,
 } from '../types';
 import { UVT_2026, TOPE_INDIVIDUAL_UVT, TET_ALERTA_ROJA } from '../types';
+import { componerActivosImpuestoSnapshot } from '../fiscal-anchor/credito-renta';
 
 // ---------------------------------------------------------------------------
 // Tolerancias (constantes explícitas — no magic numbers)
@@ -95,13 +96,6 @@ function sumLeafAccountsByPrefix(pucClass: PUCClass, prefix: string): number {
     .reduce((acc: number, a: ValidatedAccount) => acc + a.balance, 0);
 }
 
-/**
- * Encuentra una clase PUC por su código numérico (primer dígito = número de clase).
- */
-function findClass(classes: PUCClass[], classCode: number): PUCClass | undefined {
-  return classes.find((c) => c.code === classCode);
-}
-
 // ---------------------------------------------------------------------------
 // CAPA 1 — Aritmética (cero LLM, sólo matemáticas)
 // ---------------------------------------------------------------------------
@@ -111,7 +105,6 @@ function runLayer1(
   preprocessed: PreprocessedBalance,
 ): LayerResult {
   const checks: CheckResult[] = [];
-  const classes = preprocessed.primary.classes;
 
   // -----------------------------------------------------------------------
   // C1.1 — tet_calculada_reconcilia
@@ -119,7 +112,14 @@ function runLayer1(
   {
     const { tet, uai, impuestoProyectado } = report.tet.data;
 
-    if (uai === 0) {
+    if (tet === null || impuestoProyectado === null) {
+      checks.push({
+        name: 'tet_calculada_reconcilia',
+        passed: true,
+        severity: 'warning',
+        detail: 'TET contable no medible (UAI ≤ 0 o sin impuesto causado): N/D, no se reconcilia.',
+      });
+    } else if (uai === 0) {
       checks.push({
         name: 'tet_calculada_reconcilia',
         passed: true,
@@ -159,51 +159,23 @@ function runLayer1(
   // -----------------------------------------------------------------------
   // C1.2 — retencionesAcumuladas_suma_subcuentas
   // -----------------------------------------------------------------------
+  // Auditoría 2026-09 (tributario-modulos-01): el crédito se compara con la
+  // lista blanca de crédito de renta (135505, 135515; 135595/1805 con nombre
+  // de renta), no con todo 1355.
   {
     const reportedRetenciones = report.retentionShield.data.retencionesAcumuladas;
-
-    // Cuenta 1355 — Anticipo de impuestos y contribuciones (retenciones a favor)
-    // Buscar cuentas 13550* (subcuentas postables de 1355)
-    const class1 = findClass(classes, 1);
-    let sumaRetenciones = 0;
-
-    if (class1) {
-      // Cuentas de 6 dígitos que comienzan con 1355
-      const retCuentas = class1.accounts.filter(
-        (a) => a.isLeaf && a.code.startsWith('1355'),
-      );
-      sumaRetenciones = retCuentas.reduce((s, a) => s + a.balance, 0);
-
-      // Si no hay auxiliares 1355.* postables, usar el saldo de la cuenta 1355 misma
-      if (sumaRetenciones === 0) {
-        const cta1355 = class1.accounts.find((a) => a.code === '1355');
-        if (cta1355) sumaRetenciones = cta1355.balance;
-      }
-    }
-
+    const sumaRetenciones =
+      Number(componerActivosImpuestoSnapshot(preprocessed.primary).creditoRentaCents) / 100;
     const diff = Math.abs(reportedRetenciones - sumaRetenciones);
 
-    // Sólo validamos si hay algo en el balance (si sumaRetenciones = 0 y
-    // reportedRetenciones > 0, el agente extrajo de texto libre — advertir
-    // pero no fallar duro, pues el balance puede no traer cuenta 1355)
-    if (sumaRetenciones === 0 && reportedRetenciones > 0) {
-      checks.push({
-        name: 'retencionesAcumuladas_suma_subcuentas',
-        passed: true,
-        severity: 'warning',
-        detail:
-          `Cuenta 1355 no encontrada en el balance preprocesado. ` +
-          `El agente reporta ${formatCop(reportedRetenciones)} basado en texto libre del balance. ` +
-          `Verificar que el archivo incluya la cuenta 1355 con sus auxiliares.`,
-      });
-    } else if (diff > TOLERANCE_PESOS) {
+    if (diff > TOLERANCE_PESOS) {
       checks.push({
         name: 'retencionesAcumuladas_suma_subcuentas',
         passed: false,
         severity: 'error',
         detail:
           `Retenciones acumuladas: reportado ${formatCop(reportedRetenciones)} ≠ ` +
-          `suma auxiliares 1355 en balance ${formatCop(sumaRetenciones)} ` +
+          `crédito de renta del balance ${formatCop(sumaRetenciones)} ` +
           `(diferencia ${formatCop(diff)}; tolerancia ${formatCop(TOLERANCE_PESOS)}).`,
       });
     } else {
@@ -213,7 +185,7 @@ function runLayer1(
         severity: 'error',
         detail:
           `Retenciones acumuladas ${formatCop(reportedRetenciones)} concilia con ` +
-          `suma auxiliares 1355 en balance ${formatCop(sumaRetenciones)} ` +
+          `el crédito de renta del balance ${formatCop(sumaRetenciones)} ` +
           `(diff ${formatCop(diff)} ≤ ${formatCop(TOLERANCE_PESOS)}).`,
       });
     }
@@ -226,7 +198,17 @@ function runLayer1(
     const { pagosNoDeduciblesIndividuales, pagosEfectivoTotal } =
       report.antiDian.data;
 
-    if (pagosNoDeduciblesIndividuales.length > 0) {
+    if (pagosEfectivoTotal === null) {
+      checks.push({
+        name: 'pagosNoDeducibles_listado_suma',
+        passed: pagosNoDeduciblesIndividuales.length === 0,
+        severity: 'error',
+        detail:
+          pagosNoDeduciblesIndividuales.length === 0
+            ? 'Pagos en efectivo N/D (sin flujo de pagos): no hay pagos individuales que sumar.'
+            : 'Se listan pagos individuales no deducibles sin flujo de pagos que los sustente.',
+      });
+    } else if (pagosNoDeduciblesIndividuales.length > 0) {
       const sumaIndividuales = pagosNoDeduciblesIndividuales.reduce(
         (s: number, v: CashPaymentViolation) => s + v.monto,
         0,
@@ -302,6 +284,18 @@ function runLayer1(
     const { mayorImpuestoEstimado, pagosNoDeduciblesIndividuales, excesoNoDeducibleGeneral } =
       report.antiDian.data;
 
+    if (mayorImpuestoEstimado === null || excesoNoDeducibleGeneral === null) {
+      checks.push({
+        name: 'mayorImpuesto_es_35pct_excedente',
+        passed: mayorImpuestoEstimado === null,
+        severity: 'error',
+        detail:
+          mayorImpuestoEstimado === null
+            ? 'Mayor impuesto por bancarización N/D: sin flujo de pagos en efectivo no se cuantifica.'
+            : `Mayor impuesto ${formatCop(mayorImpuestoEstimado)} publicado sin exceso determinable.`,
+      });
+    } else {
+
     // El mayor impuesto estimado = 35% del total de pagos no deducibles
     // (suma de individuales + exceso general, sin doble contar)
     const sumaIndividuales = pagosNoDeduciblesIndividuales.reduce(
@@ -355,36 +349,34 @@ function runLayer1(
         });
       }
     }
-  }
-
-  // -----------------------------------------------------------------------
-  // C1.6 — dividend_escenarios_capitalizar_tieneCero
-  // -----------------------------------------------------------------------
-  {
-    const impuestoCapitalizar =
-      report.dividendOptimizer.data.escenarios.capitalizarTotal.impuestoSocio;
-
-    if (impuestoCapitalizar !== 0) {
-      checks.push({
-        name: 'dividend_escenarios_capitalizar_tieneCero',
-        passed: false,
-        severity: 'error',
-        detail:
-          `Escenario capitalización: impuestoSocio = ${formatCop(impuestoCapitalizar)} ` +
-          `pero debe ser $0 (capitalización es INCRGNO según Art. 36-3 E.T. — ` +
-          `ingreso no constitutivo de renta ni ganancia ocasional, sin tributación al socio).`,
-      });
-    } else {
-      checks.push({
-        name: 'dividend_escenarios_capitalizar_tieneCero',
-        passed: true,
-        severity: 'error',
-        detail:
-          'Escenario capitalización: impuestoSocio = $0 (INCRGNO Art. 36-3 E.T.). Correcto.',
-      });
     }
   }
 
+  // -----------------------------------------------------------------------
+  // C1.6 — dividend_capitalizar_tributa_como_distribuir
+  // -----------------------------------------------------------------------
+  // El Art. 36-3 E.T. fue derogado por la Ley 2277/2022 art. 96 (DIAN Concepto
+  // 2769 de 2026): capitalizar utilidades es distribuirlas en acciones o
+  // cuotas, con la misma carga del socio. Antes este check EXIGÍA impuesto $0
+  // en capitalización (auditoría 2026-09, tributario-calc-01).
+  {
+    const esc = report.dividendOptimizer.data.escenarios;
+    const impuestoCapitalizar = esc.capitalizarTotal.impuestoSocio;
+    const impuestoDistribuir = esc.distribuirTotal.impuestoSocio;
+    const diff = Math.abs(impuestoCapitalizar - impuestoDistribuir);
+    checks.push({
+      name: 'dividend_capitalizar_tributa_como_distribuir',
+      passed: diff <= TOLERANCE_PESOS,
+      severity: 'error',
+      norma: 'Arts. 48-49, 242 y 242-1 E.T.; Art. 36-3 E.T. derogado (Ley 2277/2022 art. 96)',
+      detail:
+        diff <= TOLERANCE_PESOS
+          ? `Capitalización con la misma carga del socio que distribuir (${formatCop(impuestoDistribuir)}). Correcto.`
+          : `Capitalización con impuestoSocio ${formatCop(impuestoCapitalizar)} ≠ distribución ${formatCop(impuestoDistribuir)}: sin el Art. 36-3 (derogado) no hay tratamiento no gravado.`,
+    });
+  }
+
+  // -----------------------------------------------------------------------
   const hardFails = checks.filter((c) => c.severity === 'error' && !c.passed);
   return { ok: hardFails.length === 0, checks };
 }
@@ -449,7 +441,16 @@ function runLayer2(
   {
     const { saldoAFavorProyectado, acciones } = report.retentionShield.data;
 
-    if (saldoAFavorProyectado > 0) {
+    if (saldoAFavorProyectado === null) {
+      checks.push({
+        name: 'saldo_favor_genera_acciones',
+        passed: !acciones.some((a) => a.tipo === 'devolucion'),
+        severity: 'error',
+        detail: acciones.some((a) => a.tipo === 'devolucion')
+          ? 'Se recomienda devolución sin saldo a favor determinable (riesgo Art. 670 E.T.).'
+          : 'Saldo a favor N/D sin declaración: no se recomienda devolución. Correcto.',
+      });
+    } else if (saldoAFavorProyectado > 0) {
       if (acciones.length < 1) {
         checks.push({
           name: 'saldo_favor_genera_acciones',
@@ -484,13 +485,20 @@ function runLayer2(
   // -----------------------------------------------------------------------
   {
     const { pagosEfectivoTotal, pagosNoDeduciblesIndividuales } = report.antiDian.data;
-    const topeIndividual = TOPE_INDIVIDUAL_UVT * UVT_2026; // $5.237.400 COP
+    const topeIndividual = TOPE_INDIVIDUAL_UVT * UVT_2026; // $5.237.400 COP por PAGO
 
     // Si hay pagos totales en efectivo > 0, verificar que los pagos individuales
     // que superen 100 UVT estén listados.
     // Heurística: si pagosEfectivoTotal > topeIndividual × 3, es plausible que
     // haya pagos individuales; si el listado está vacío, es sospechoso.
-    if (pagosEfectivoTotal > topeIndividual) {
+    if (pagosEfectivoTotal === null) {
+      checks.push({
+        name: 'bancarizacion_violada_listada',
+        passed: true,
+        severity: 'warning',
+        detail: 'Pagos en efectivo N/D (sin detalle por transacción): el tope de 100 UVT por pago individual no se puede verificar.',
+      });
+    } else if (pagosEfectivoTotal > topeIndividual) {
       const tieneListados = pagosNoDeduciblesIndividuales.length > 0;
       const todosConNorma = pagosNoDeduciblesIndividuales.every(
         (v: CashPaymentViolation) => v.norma === 'Art. 771-5 §2 E.T.',
@@ -504,7 +512,7 @@ function runLayer2(
           detail:
             `Pagos en efectivo total ${formatCop(pagosEfectivoTotal)} supera tope individual ` +
             `100 UVT (${formatCop(topeIndividual)}) pero pagosNoDeduciblesIndividuales[] está vacío. ` +
-            `Si hay pagos a un mismo beneficiario > 100 UVT, deben aparecer listados (Art. 771-5 §2 E.T.).`,
+            `Cada PAGO individual en efectivo > 100 UVT (no el acumulado por beneficiario — C.E. 26676/2023) debe aparecer listado (Art. 771-5 §2 E.T.).`,
         });
       } else if (!todosConNorma) {
         checks.push({
@@ -543,7 +551,14 @@ function runLayer2(
   {
     const { tet, uai } = report.tet.data;
 
-    if (uai !== 0) {
+    if (tet === null) {
+      checks.push({
+        name: 'tet_no_implausible',
+        passed: true,
+        severity: 'warning',
+        detail: 'TET contable N/D — check de implausibilidad no aplica.',
+      });
+    } else if (uai !== 0) {
       if (tet < 0.05) {
         checks.push({
           name: 'tet_no_implausible',
@@ -682,19 +697,24 @@ function runLayer3(report: EscudoSurvivalReport): LayerResult {
   }
 
   // -----------------------------------------------------------------------
-  // C3.3 — dividendos_cita_art_242_o_36_3
+  // C3.3 — dividendos_cita_art_242_sin_36_3_vigente
   // -----------------------------------------------------------------------
   {
     const md = report.dividendOptimizer.markdown;
-    const citaOk = md.includes('Art. 242') || md.includes('Art. 36-3');
+    const cita242 = md.includes('Art. 242');
+    // Mencionar el 36-3 sólo es aceptable para declarar su derogatoria.
+    const cita363ComoVigente = /36-3/.test(md) && !/derog/i.test(md);
+    const citaOk = cita242 && !cita363ComoVigente;
     checks.push({
-      name: 'dividendos_cita_art_242_o_36_3',
+      name: 'dividendos_cita_art_242_sin_36_3_vigente',
       passed: citaOk,
       severity: 'error',
-      norma: 'Art. 242 E.T. — Impuesto a dividendos personas naturales | Art. 36-3 E.T. — Capitalización INCRGNO',
+      norma: 'Art. 242 E.T. — Dividendos personas naturales | Art. 36-3 E.T. derogado (Ley 2277/2022 art. 96)',
       detail: citaOk
-        ? 'Markdown dividendos cita Art. 242 o Art. 36-3 E.T. Correcto.'
-        : 'Markdown dividendos NO cita Art. 242 E.T. ni Art. 36-3 E.T. Los escenarios tributarios de dividendos requieren ambas normas.',
+        ? 'Markdown dividendos cita Art. 242 E.T. y no presenta el Art. 36-3 como vigente. Correcto.'
+        : cita363ComoVigente
+          ? 'Markdown dividendos cita el Art. 36-3 E.T. como vigente: fue derogado por la Ley 2277/2022 art. 96.'
+          : 'Markdown dividendos NO cita Art. 242 E.T.',
     });
   }
 

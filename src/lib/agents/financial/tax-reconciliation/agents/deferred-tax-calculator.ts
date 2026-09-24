@@ -19,6 +19,7 @@ import type {
   DeferredTaxResult,
   TaxReconciliationProgressEvent,
 } from '../types';
+import { enforceDeferredTaxReport } from '../lib/deterministic';
 
 /**
  * Takes identified NIIF-fiscal differences from Agent 1 and calculates
@@ -58,7 +59,8 @@ export async function runDeferredTaxCalculator(
     signal,
   });
 
-  return toLegacyShape(json);
+  // Hoja, totales y saldos finales con las diferencias y tarifas del Agente 1.
+  return toLegacyShape(enforceDeferredTaxReport(json, differenceOutput.items));
 }
 
 // ---------------------------------------------------------------------------

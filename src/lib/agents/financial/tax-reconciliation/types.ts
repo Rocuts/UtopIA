@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
+import type { TaxDifferenceItemJson } from '../contracts/tax-reconciliation';
 
 // ---------------------------------------------------------------------------
 // Input
@@ -26,6 +27,10 @@ export interface TaxReconciliationRequest {
 // ---------------------------------------------------------------------------
 
 export interface DifferenceIdentifierResult {
+  /** Diferencias con tarifa y DTA/DTL recalculados en código (lib/deterministic.ts). */
+  items: TaxDifferenceItemJson[];
+  /** false ⇒ la cédula puente no cuadra (se declara en el reporte). */
+  bridgeBalances: boolean;
   /** Analisis de diferencias en INGRESOS (NIIF 15 vs Art. 28 ET) */
   revenueDifferences: string;
   /** Analisis de diferencias en COSTOS Y DEDUCCIONES */

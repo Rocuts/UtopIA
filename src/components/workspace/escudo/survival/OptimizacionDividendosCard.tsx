@@ -2,7 +2,8 @@
 
 /**
  * OptimizacionDividendosCard (Módulo 8 submódulo) — Optimización de Dividendos.
- * Capitalizar (Art. 36-3) vs distribuir gravados (Art. 242).
+ * Capitalizar vs distribuir (Art. 242). El Art. 36-3 E.T. está derogado
+ * (Ley 2277/2022 art. 96): capitalizar tributa como distribuir.
  */
 
 import { TrendingUp } from 'lucide-react';
@@ -14,7 +15,7 @@ const REC_LABEL: Record<
   SupervivenciaModuleResult['data']['dividendos']['recomendacion'],
   { es: string; en: string }
 > = {
-  capitalizar: { es: 'Capitalizar (Art. 36-3 E.T.)', en: 'Capitalize (Art. 36-3 T.S.)' },
+  capitalizar: { es: 'Capitalizar (tributa como distribución)', en: 'Capitalize (taxed as distribution)' },
   distribuir: { es: 'Distribuir dividendos', en: 'Distribute dividends' },
   hibrido: { es: 'Estrategia híbrida', en: 'Hybrid strategy' },
 };
@@ -41,8 +42,8 @@ export function OptimizacionDividendosCard({ data, loading, error, t, language =
       description={
         data
           ? language === 'es'
-            ? 'Comparativa capitalización Art. 36-3 E.T. vs distribución gravada Art. 242 E.T.'
-            : 'Comparison: capitalize Art. 36-3 T.S. vs taxable distribution Art. 242 T.S.'
+            ? 'Capitalizar o distribuir: misma carga del socio (Art. 242 E.T.; Art. 36-3 derogado por Ley 2277/2022)'
+            : 'Capitalize or distribute: same shareholder tax (Art. 242; Art. 36-3 repealed by Ley 2277/2022)'
           : undefined
       }
       norma={data?.norma ?? t.norma}

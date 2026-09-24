@@ -86,6 +86,7 @@ export async function orchestrateTaxPlanning(
     options.workspaceId,
     company.fiscalPeriod,
     taxOptimizerResult.impuestoACargoCents,
+    taxOptimizerResult.impuestoBasicoOrdinarioCents,
   );
 
   // ---------------------------------------------------------------------------
@@ -252,10 +253,11 @@ ${complianceContent}
 // del período. Fail-loud SÓLO vía `resolveRule` si existe la donación pero no
 // hay regla vigente — nunca cae silenciosamente a una regla vieja.
 
-async function computeDonationDiscount(
+export async function computeDonationDiscount(
   workspaceId: string | undefined,
   fiscalPeriod: string,
-  impuestoACargoCents: string,
+  impuestoACargoVerificadoCents: string | null,
+  impuestoBasicoEstimadoCents: string,
 ): Promise<DonationDiscountBlock | null> {
   if (!workspaceId) return null;
   // El período de un hecho donation se guarda como 'YYYY'; el company.fiscalPeriod
@@ -275,11 +277,20 @@ async function computeDonationDiscount(
   const rule = resolveRule('descuento_donaciones_257', period); // fail-loud
   const { tasaDescuentoPct, limitePctImpuesto } = art257Params(rule);
   const creditoCents = computeCredito257(montoDonadoCents, tasaDescuentoPct);
+  // Base: impuesto a cargo verificado si existiera; hoy el optimizador no lo
+  // verifica (TTD N/D), así que se usa el impuesto básico ordinario estimado
+  // y el bloque se publica como ESTIMACIÓN, no como total vinculante.
+  const baseVerificada = impuestoACargoVerificadoCents !== null;
+  const impuestoBaseCents = impuestoACargoVerificadoCents ?? impuestoBasicoEstimadoCents;
+  // Art. 258: el 25% es tope CONJUNTO de 255 + 256 + 257. Sin datos de 255/256
+  // en esta ruta, el consumo previo es 0 y se advierte en el render.
+  const otrosDescuentos255_256Cents = '0';
   const { limiteCents, descuentoCents, impuestoNetoCents } = computeDescuentoAplicado257({
     creditoCents,
-    impuestoBaseCents: impuestoACargoCents,
+    impuestoBaseCents,
     limitePctImpuesto,
   });
+  const excedente = BigInt(creditoCents) - BigInt(descuentoCents);
   return {
     fiscalPeriod: period,
     ruleKey: 'descuento_donaciones_257',
@@ -287,29 +298,44 @@ async function computeDonationDiscount(
     montoDonadoCents,
     creditoCents,
     limiteCents,
+    otrosDescuentos255_256Cents,
     descuentoCents,
-    impuestoACargoCents,
+    excedenteTrasladableCents: (excedente > BigInt(0) ? excedente : BigInt(0)).toString(),
+    impuestoACargoCents: impuestoBaseCents,
     impuestoNetoCents,
+    baseVerificada,
+    baseFuente: baseVerificada
+      ? 'Impuesto a cargo verificado'
+      : 'Impuesto básico ordinario estimado por el optimizador (renta líquida estimada × 35%); la TTD y el impuesto a cargo final son N/D',
   };
 }
 
 function renderDonationDiscountBlock(b: DonationDiscountBlock, language: 'es' | 'en'): string {
   const money = (c: string) => formatCopFromCents(parseMoneyCop(c), false);
   const t = (es: string, en: string) => (language === 'es' ? es : en);
+  const titulo = b.baseVerificada
+    ? t('DESCUENTO POR DONACIONES (Art. 257 E.T.) — TOTAL VINCULANTE', 'DONATION DISCOUNT (Art. 257) — BINDING TOTAL')
+    : t('DESCUENTO POR DONACIONES (Art. 257 E.T.) — ESTIMACIÓN (base del optimizador)', 'DONATION DISCOUNT (Art. 257) — ESTIMATE (optimizer base)');
   return [
-    `## ${t('DESCUENTO POR DONACIONES (Art. 257 E.T.) — TOTAL VINCULANTE', 'DONATION DISCOUNT (Art. 257) — BINDING TOTAL')}`,
+    `## ${titulo}`,
     `> ${t(
-      `Descuento calculado de forma DETERMINISTA (regla ${b.ruleKey} v${b.ruleVersion}). El impuesto a cargo base proviene del diagnóstico del Optimizador Tributario.`,
-      `Discount computed DETERMINISTICALLY (rule ${b.ruleKey} v${b.ruleVersion}). The base tax-on-charge comes from the Tax Optimizer's diagnosis.`,
+      `Crédito calculado de forma determinista (regla ${b.ruleKey} v${b.ruleVersion}). Base del tope: ${b.baseFuente}.`,
+      `Credit computed deterministically (rule ${b.ruleKey} v${b.ruleVersion}). Cap base: ${b.baseFuente}.`,
+    )}`,
+    `> ${t(
+      'El tope del 25% del Art. 258 E.T. es CONJUNTO para los descuentos de los Arts. 255, 256 y 257: si la empresa usa descuentos 255/256 en el mismo año, el espacio para el 257 se reduce. El exceso del 257 no descontado puede tomarse en el periodo gravable siguiente (Art. 258 num. 3).',
+      'The 25% cap of Art. 258 is JOINT for Arts. 255, 256 and 257 discounts: any 255/256 discount used in the same year reduces the room for Art. 257. Unused Art. 257 excess may be taken in the following tax year (Art. 258 num. 3).',
     )}`,
     '',
     '| Concepto | Valor |',
     '|---|---|',
     `| ${t('Valor donado', 'Donation value')} | ${money(b.montoDonadoCents)} |`,
     `| ${t('Crédito Art. 257 (25%)', 'Art. 257 credit (25%)')} | ${money(b.creditoCents)} |`,
-    `| ${t('Tope (25% del impuesto)', 'Cap (25% of tax)')} | ${money(b.limiteCents)} |`,
+    `| ${t('Base del tope (impuesto)', 'Cap base (tax)')} | ${money(b.impuestoACargoCents)}${b.baseVerificada ? '' : t(' (estimada)', ' (estimated)')} |`,
+    `| ${t('Tope conjunto Art. 258 (25%)', 'Joint cap Art. 258 (25%)')} | ${money(b.limiteCents)} |`,
+    `| ${t('Descuentos 255/256 que consumen el tope', '255/256 discounts using the cap')} | ${b.otrosDescuentos255_256Cents === '0' ? t('Sin datos (se asume $0 — verificar)', 'No data (assumed $0 — verify)') : money(b.otrosDescuentos255_256Cents)} |`,
     `| ${t('Descuento aplicado', 'Applied discount')} | ${money(b.descuentoCents)} |`,
-    `| ${t('Impuesto a cargo', 'Tax before discount')} | ${money(b.impuestoACargoCents)} |`,
-    `| **${t('Impuesto neto (TOTAL VINCULANTE)', 'Net tax (BINDING TOTAL)')}** | **${money(b.impuestoNetoCents)}** |`,
+    `| ${t('Excedente trasladable al periodo siguiente', 'Excess carried to next year')} | ${money(b.excedenteTrasladableCents)} |`,
+    `| **${b.baseVerificada ? t('Impuesto neto (TOTAL VINCULANTE)', 'Net tax (BINDING TOTAL)') : t('Impuesto neto estimado', 'Estimated net tax')}** | **${money(b.impuestoNetoCents)}** |`,
   ].join('\n');
 }

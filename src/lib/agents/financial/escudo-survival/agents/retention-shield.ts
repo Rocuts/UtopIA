@@ -9,6 +9,7 @@ import { callFinancialAgent } from '../../agents/runtime';
 import { MODELS, MODELS_CONFIG } from '@/lib/config/models';
 import { buildRetentionShieldPrompt } from '../prompts/retention-shield.prompt';
 import { extractSurvivalAnchors, buildAnchorBlock } from '../lib/extract-totals';
+import { enforceRetention } from '../lib/deterministic-survival';
 import { RetentionShieldReportSchema } from '../../contracts/escudo-survival';
 import type { SurvivalAgentInput, RetentionShieldResult } from '../types';
 
@@ -23,16 +24,13 @@ export async function runRetentionShield(
     ? `${company.name ?? 'empresa'} (NIT ${company.nit})`
     : undefined;
 
-  // Hint del impuesto proyectado (UAI x 35%) para evitar recalculo. Los 5
-  // agentes corren en paralelo (no en serie), por eso este hint suple al TET.
-  const impuestoHint = Math.max(0, anchors.utilidadAntesImpuestos) * 0.35;
-
   const userContent = [
     'Calcula el escudo de retenciones para los totales vinculantes siguientes:',
     '',
     anchorBlock,
     '',
-    `Impuesto proyectado de referencia (UAI x 35%): $${impuestoHint.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`,
+    `Impuesto de renta causado en libros (clase 54): $${anchors.impuestoCausado.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`,
+    'Saldo a favor: N/D — sin la declaración de renta no hay saldo a favor determinable; no recomiendes devolución.',
     '',
     input.instructions ? `INSTRUCCIONES ADICIONALES:\n${input.instructions}` : '',
   ]
@@ -48,5 +46,6 @@ export async function runRetentionShield(
     ...MODELS_CONFIG.retentionShield,
   });
 
-  return json as RetentionShieldResult;
+  // Crédito de renta (lista blanca), impuesto causado y saldo N/D: deterministas.
+  return enforceRetention(json as RetentionShieldResult, anchors);
 }

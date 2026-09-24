@@ -76,6 +76,84 @@ export function buildConciliacionSkeleton(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Recomputo determinista de la conciliación del LLM (auditoría 2026-09,
+// tributario-modulos-04). El modelo propone las LÍNEAS (adiciones,
+// deducciones, rentas exentas, INCRGNO, descuentos); las identidades se
+// calculan aquí en BigInt y sobrescriben las cifras del modelo:
+//   uaiContable            = F01 (Âncora)
+//   rentaLiquidaGravable   = UAI + Σ|adiciones| − Σ|deducciones, rentas exentas, INCRGNO|
+//   impuestoBruto          = max(renta, 0) × tarifa
+//   totalDescuentos        = 254 + 258-1 (sin tope conjunto) + min(255/256/257, 25% bruto)  (Art. 258)
+//   impuestoNeto           = max(bruto − descuentos, 0)
+//   retencionesYAnticipos  = F03 (Âncora)
+//   saldoFinal             = impuestoNeto − F03   (sin anticipo Art. 807 — borrador)
+// ---------------------------------------------------------------------------
+
+export interface ConciliacionLineaInput {
+  monto: string;
+  norma: string;
+  tipo: 'adicion' | 'deduccion' | 'renta_exenta' | 'incrgno' | 'descuento' | 'retencion' | 'anticipo';
+}
+
+export interface ConciliacionRecomputed {
+  uaiContable: string;
+  rentaLiquidaGravable: string;
+  impuestoBruto: string;
+  totalDescuentos: string;
+  impuestoNeto: string;
+  retencionesYAnticipos: string;
+  saldoFinal: string;
+  /** Descuentos 255/256/257 que excedieron el tope conjunto del Art. 258. */
+  excesoTope258: string;
+}
+
+function absBig(v: bigint): bigint {
+  return v < ZERO ? -v : v;
+}
+
+function parseMontoSeguro(m: string): bigint {
+  return /^-?\d+$/.test(m) ? BigInt(m) : ZERO;
+}
+
+export function recomputeConciliacion(
+  anchor: FiscalAnchorBlock,
+  lineas: readonly ConciliacionLineaInput[],
+  tarifaPct: number,
+): ConciliacionRecomputed {
+  const uai = parseMoneyCop(anchor.f01);
+  const f03 = parseMoneyCop(anchor.f03);
+  let adiciones = ZERO;
+  let restas = ZERO;
+  let descSinTope = ZERO; // 254 y 258-1
+  let descConTope = ZERO; // 255, 256, 257 (Art. 258)
+  for (const l of lineas) {
+    const m = absBig(parseMontoSeguro(l.monto));
+    if (l.tipo === 'adicion') adiciones += m;
+    else if (l.tipo === 'deduccion' || l.tipo === 'renta_exenta' || l.tipo === 'incrgno') restas += m;
+    else if (l.tipo === 'descuento') {
+      if (/258-1|\b254\b/.test(l.norma)) descSinTope += m;
+      else descConTope += m;
+    }
+  }
+  const renta = uai + adiciones - restas;
+  const bruto = pctOf(renta > ZERO ? renta : ZERO, tarifaPct);
+  const tope258 = pctOf(bruto, 25);
+  const descConTopeAplicado = descConTope > tope258 ? tope258 : descConTope;
+  const descuentos = descSinTope + descConTopeAplicado;
+  const neto = bruto - descuentos > ZERO ? bruto - descuentos : ZERO;
+  return {
+    uaiContable: serializeMoneyCop(uai),
+    rentaLiquidaGravable: serializeMoneyCop(renta),
+    impuestoBruto: serializeMoneyCop(bruto),
+    totalDescuentos: serializeMoneyCop(descuentos),
+    impuestoNeto: serializeMoneyCop(neto),
+    retencionesYAnticipos: serializeMoneyCop(f03),
+    saldoFinal: serializeMoneyCop(neto - f03),
+    excesoTope258: serializeMoneyCop(descConTope - descConTopeAplicado),
+  };
+}
+
 // Wrapper interno para que el centavo absoluto vea la luz cuando se requiera.
 export function _internals_pctOf(cents: bigint, pct: number): bigint {
   return pctOf(cents, pct);

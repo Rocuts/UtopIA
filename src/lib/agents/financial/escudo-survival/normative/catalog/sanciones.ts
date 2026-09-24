@@ -96,7 +96,7 @@ export const SANCIONES: readonly SanctionEntry[] = [
     supuesto:
       'Cualquier sanción tributaria no puede ser inferior al equivalente de 10 UVT.',
     tarifa: '10 UVT',
-    tope: '10 UVT = $523.740 COP (UVT 2026: $52.374).',
+    tope: '10 UVT = $524.000 COP en 2026 (10 × $52.374 = $523.740, aproximado según Art. 868 E.T.).',
     reducciones: [],
     estado: 'VIGENTE_2026',
   },

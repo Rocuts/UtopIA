@@ -16,6 +16,12 @@ import { TpAnalysisReportSchema, type TpAnalysisReportJson } from '../../contrac
 import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
 import type { CompanyInfo } from '../../types';
 import type { TPAnalysisResult, TPProgressEvent } from '../types';
+import {
+  enforceTpObligation,
+  taxYearFromFiscalPeriod,
+  tpObligationThresholds,
+  type TpObligationThresholds,
+} from '../lib/deterministic';
 
 /**
  * Procesa los datos de transacciones intercompañía y produce el análisis de
@@ -29,7 +35,10 @@ export async function runTPAnalyst(
   onProgress?: (event: TPProgressEvent) => void,
   signal?: AbortSignal,
 ): Promise<TPAnalysisResult> {
-  const system = buildTPAnalystPrompt(company, language);
+  // Umbrales con la UVT del año gravable del periodo (fail-loud si el año no
+  // se identifica o su UVT no está registrada) — ANTES de gastar la llamada.
+  const thresholds = tpObligationThresholds(taxYearFromFiscalPeriod(company.fiscalPeriod));
+  const system = buildTPAnalystPrompt(company, language, thresholds);
 
   const userContent = [
     'DATOS DE TRANSACCIONES INTERCOMPAÑÍA:',
@@ -44,7 +53,7 @@ export async function runTPAnalyst(
   onProgress?.({
     type: 'stage_progress',
     stage: 1,
-    detail: 'Evaluando obligatoriedad (Art. 260-1 E.T.) y caracterizando transacciones controladas...',
+    detail: 'Evaluando obligatoriedad (Arts. 260-5 y 260-9 E.T.) y caracterizando transacciones controladas...',
   });
 
   const { json } = await callFinancialAgent({
@@ -57,14 +66,19 @@ export async function runTPAnalyst(
     signal,
   });
 
-  return toTPAnalysisResult(json, language);
+  // Umbrales, booleanos y conclusión se recalculan en código (el LLM no decide).
+  return toTPAnalysisResult(enforceTpObligation(json, thresholds), language, thresholds);
 }
 
 // ---------------------------------------------------------------------------
 // Adapter local: TpAnalysisReportJson -> TPAnalysisResult legacy
 // ---------------------------------------------------------------------------
 
-function renderObligation(json: TpAnalysisReportJson, lang: 'es' | 'en'): string {
+function renderObligation(
+  json: TpAnalysisReportJson,
+  lang: 'es' | 'en',
+  thresholds: TpObligationThresholds,
+): string {
   const o = json.obligation;
   const yes = lang === 'en' ? 'YES' : 'SÍ';
   const no = lang === 'en' ? 'NO' : 'NO';
@@ -72,13 +86,15 @@ function renderObligation(json: TpAnalysisReportJson, lang: 'es' | 'en'): string
   const lines = [
     `**Conclusión:** ${o.isObligated ? (lang === 'en' ? 'OBLIGATED' : 'OBLIGADO') : (lang === 'en' ? 'NOT OBLIGATED' : 'NO OBLIGADO')}`,
     '',
-    `| Umbral | Valor empresa | Umbral 2026 | ¿Cumple? |`,
+    `| Umbral | Valor empresa | Umbral AG ${thresholds.year} | ¿Cumple? |`,
     `|---|---:|---:|:---:|`,
-    `| Patrimonio bruto (100.000 UVT) | ${formatCopFromCents(parseMoneyCop(o.grossEquityCop), true)} | ${formatCopFromCents(parseMoneyCop(o.grossEquityThresholdCop), true)} | ${o.grossEquityMeetsThreshold ? yes : no} |`,
-    `| Ingresos brutos (61.000 UVT) | ${formatCopFromCents(parseMoneyCop(o.grossIncomeCop), true)} | ${formatCopFromCents(parseMoneyCop(o.grossIncomeThresholdCop), true)} | ${o.grossIncomeMeetsThreshold ? yes : no} |`,
+    `| Patrimonio bruto (100.000 UVT, Arts. 260-5 y 260-9 E.T.) | ${formatCopFromCents(parseMoneyCop(o.grossEquityCop), true)} | ${formatCopFromCents(parseMoneyCop(o.grossEquityThresholdCop), true)} | ${o.grossEquityMeetsThreshold ? yes : no} |`,
+    `| Ingresos brutos (61.000 UVT, Arts. 260-5 y 260-9 E.T.) | ${formatCopFromCents(parseMoneyCop(o.grossIncomeCop), true)} | ${formatCopFromCents(parseMoneyCop(o.grossIncomeThresholdCop), true)} | ${o.grossIncomeMeetsThreshold ? yes : no} |`,
     `| Operaciones con paraíso fiscal (Art. 260-8 E.T.) | — | — | ${o.hasTaxHavenTransactions ? yes : no} |`,
     '',
     `**Estado:** ${status}`,
+    '',
+    `_Umbrales y conclusión calculados en código con la UVT ${thresholds.year} = $${thresholds.uvtCop.toLocaleString('es-CO')}; operaciones con paraísos fiscales se someten al régimen sin importar los umbrales (Art. 260-7 par. 2 E.T.)._`,
     '',
     o.rationale,
   ];
@@ -152,8 +168,12 @@ function renderPreliminary(json: TpAnalysisReportJson, lang: 'es' | 'en'): strin
   ].join('\n');
 }
 
-function toTPAnalysisResult(json: TpAnalysisReportJson, lang: 'es' | 'en'): TPAnalysisResult {
-  const obligationAssessment = renderObligation(json, lang);
+export function toTPAnalysisResult(
+  json: TpAnalysisReportJson,
+  lang: 'es' | 'en',
+  thresholds: TpObligationThresholds,
+): TPAnalysisResult {
+  const obligationAssessment = renderObligation(json, lang, thresholds);
   const transactionCharacterization = renderTransactions(json);
   const functionalAnalysis = renderFAR(json, lang);
   const methodSelection = renderMethodSelection(json, lang);
@@ -186,6 +206,7 @@ function toTPAnalysisResult(json: TpAnalysisReportJson, lang: 'es' | 'en'): TPAn
     .join('\n');
 
   return {
+    taxYear: thresholds.year,
     obligationAssessment,
     transactionCharacterization,
     functionalAnalysis,

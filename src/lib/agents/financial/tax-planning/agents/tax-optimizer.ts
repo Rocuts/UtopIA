@@ -14,6 +14,7 @@ import {
   type TaxOptimizationReportJson,
 } from '../../contracts/tax-planning';
 import { formatCopFromCents, parseMoneyCop } from '../../contracts/money';
+import { enforceTaxOptimization, TTD_ND_MOTIVO } from '../lib/deterministic';
 import { buildTaxOptimizerPrompt } from '../prompts/tax-optimizer.prompt';
 import type { CompanyInfo } from '../../types';
 import type { TaxOptimizerResult, TaxPlanningProgressEvent } from '../types';
@@ -61,7 +62,9 @@ export async function runTaxOptimizer(
     signal,
   });
 
-  return toLegacyShape(json);
+  // TTD/impuesto a cargo → N/D sin ID/UD; impuesto básico, Σ ahorros e
+  // impuesto optimizado recalculados en código (el LLM no decide esas cifras).
+  return toLegacyShape(enforceTaxOptimization(json));
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +74,7 @@ export async function runTaxOptimizer(
 // `fullContent` como prosa markdown. Hasta que esos consumers migren al
 // shape JSON, este adapter sintetiza markdown legible desde el JSON.
 
-function toLegacyShape(json: TaxOptimizationReportJson): TaxOptimizerResult {
+export function toLegacyShape(json: TaxOptimizationReportJson): TaxOptimizerResult {
   const currentStructureAnalysis = renderCurrentDiagnosis(json);
   const optimizationStrategies = renderRecommendations(json);
   const projectedSavings = renderSavingsProjection(json);
@@ -107,6 +110,7 @@ function toLegacyShape(json: TaxOptimizationReportJson): TaxOptimizerResult {
     implementationRoadmap,
     fullContent,
     impuestoACargoCents: json.currentDiagnosis.dualCalculation.impuestoACargoCents,
+    impuestoBasicoOrdinarioCents: json.currentDiagnosis.dualCalculation.rentaOrdinaria35Cents,
   };
 }
 
@@ -121,17 +125,19 @@ function renderCurrentDiagnosis(json: TaxOptimizationReportJson): string {
     `- **Régimen actual:** ${d.currentRegime}`,
     `- **Renta líquida gravable:** ${money(d.taxableIncomeCents)}`,
     `- **Utilidad contable antes de impuestos (UAI):** ${money(d.accountingProfitBeforeTaxCents)}`,
-    `- **Tasa efectiva actual:** ${d.effectiveTaxRatePct.toFixed(2)}%`,
+    `- **Tasa efectiva actual:** ${d.effectiveTaxRatePct === null ? 'N/D (impuesto a cargo no determinable)' : `${d.effectiveTaxRatePct.toFixed(2)}%`}`,
     '',
-    '**Cálculo dual TMT (Art. 240 parág. 6 E.T.):**',
+    '**Impuesto básico ordinario y Tasa de Tributación Depurada (Art. 240 E.T.):**',
     '',
     '| Concepto | Valor |',
     '|---|---|',
-    `| Renta Ordinaria 35% (Art. 240 E.T.) | ${money(dc.rentaOrdinaria35Cents)} |`,
-    `| Tributación Mínima 15% (parág. 6 Art. 240 E.T.) | ${money(dc.tributacionMinima15Cents)} |`,
-    `| Impuesto a cargo del periodo (MAX) | ${money(dc.impuestoACargoCents)} |`,
-    `| TMT aplicable | ${dc.tmtAplicable ? 'Sí' : 'No'} |`,
+    `| Impuesto básico: renta líquida estimada × 35% (Art. 240 E.T.) | ${money(dc.rentaOrdinaria35Cents)} |`,
+    `| Impuesto adicional por TTD (parág. 6 Art. 240 E.T.) | ${nd(dc.tributacionMinima15Cents)} |`,
+    `| Impuesto a cargo del periodo | ${nd(dc.impuestoACargoCents)} |`,
+    `| TTD aplicable | ${dc.tmtAplicable === null ? 'N/D' : dc.tmtAplicable ? 'Sí' : 'No'} |`,
     dc.tmtExemptionReason ? `| Excepción aplicable | ${dc.tmtExemptionReason} |` : '',
+    '',
+    `> ${TTD_ND_MOTIVO}`,
     '',
     benefitsRows
       ? ['**Beneficios actualmente aprovechados:**', '', '| Norma | Descripción | Ahorro estimado |', '|---|---|---|', benefitsRows].join('\n')
@@ -172,9 +178,9 @@ function renderSavingsProjection(json: TaxOptimizationReportJson): string {
   return [
     '| Escenario | Impuesto a cargo | Tasa efectiva |',
     '|---|---|---|',
-    `| Actual | ${money(p.currentScenarioTaxCents)} | ${p.effectiveRateBeforePct.toFixed(2)}% |`,
-    `| Optimizado | ${money(p.optimizedScenarioTaxCents)} | ${p.effectiveRateAfterPct.toFixed(2)}% |`,
-    `| **Ahorro anual proyectado** | **${money(p.totalAnnualSavingsCents)}** | — |`,
+    `| Actual (estimación del modelo) | ${money(p.currentScenarioTaxCents)} | ${pct(p.effectiveRateBeforePct)} |`,
+    `| Optimizado (actual − Σ ahorros) | ${money(p.optimizedScenarioTaxCents)} | ${pct(p.effectiveRateAfterPct)} |`,
+    `| **Ahorro anual proyectado (Σ recomendaciones)** | **${money(p.totalAnnualSavingsCents)}** | — |`,
     '',
     p.assumptions.length > 0
       ? ['**Supuestos del modelo:**', '', ...p.assumptions.map((a) => `- ${a}`)].join('\n')
@@ -201,4 +207,12 @@ function renderRoadmap(json: TaxOptimizationReportJson): string {
 
 function money(cents: string): string {
   return formatCopFromCents(parseMoneyCop(cents), false);
+}
+
+function nd(cents: string | null): string {
+  return cents === null ? 'N/D' : money(cents);
+}
+
+function pct(v: number | null): string {
+  return v === null ? 'N/D' : `${v.toFixed(2)}%`;
 }

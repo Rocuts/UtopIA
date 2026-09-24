@@ -28,10 +28,11 @@ function Shimmer({ className }: { className?: string }) {
 // ---------------------------------------------------------------------------
 
 const KIND_LABELS: Record<DianRequirementKind, { es: string; en: string; norma: string }> = {
-  requerimiento_ordinario: { es: 'Requerimiento ordinario', en: 'Ordinary notice', norma: 'Art. 752 E.T.' },
+  requerimiento_ordinario: { es: 'Requerimiento ordinario', en: 'Ordinary notice', norma: 'Art. 686 E.T.' },
+  requerimiento_especial: { es: 'Requerimiento especial', en: 'Special notice', norma: 'Art. 707 E.T.' },
   emplazamiento_corregir: { es: 'Emplazamiento para corregir', en: 'Notice to correct', norma: 'Art. 685 E.T.' },
   emplazamiento_no_declarar: { es: 'Emplazamiento por no declarar', en: 'Notice to file', norma: 'Art. 715 E.T.' },
-  pliego_cargos: { es: 'Pliego de cargos', en: 'Charge brief', norma: 'Art. 707 E.T.' },
+  pliego_cargos: { es: 'Pliego de cargos', en: 'Charge brief', norma: 'Traslado de cargos — 1 mes' },
   liquidacion_oficial_revision: { es: 'Liquidación oficial de revisión', en: 'Official assessment', norma: 'Art. 702 E.T.' },
   desconocido: { es: 'Tipo desconocido', en: 'Unknown type', norma: '' },
 };

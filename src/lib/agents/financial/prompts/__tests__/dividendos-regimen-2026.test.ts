@@ -242,9 +242,14 @@ describe('dividend-optimizer — formula del impuesto al socio y tope del Art. 4
     expect(prompt).toMatch(/NEVER asumas que el 100% de la utilidad distribuible es dividendo no gravado/i);
   });
 
-  it('mantiene la regla vigente de capitalizacion (Art. 36-3 E.T., impuestoSocio = 0)', () => {
-    // No debe romperse el validator C1.6 al corregir el escenario de distribucion.
-    expect(prompt).toMatch(/impuestoSocio = 0 \(INCRGNO Art\.?\s*36-3 E\.T\.\)/);
+  it('capitalizar tributa como distribuir: el Art. 36-3 E.T. esta derogado (Ley 2277/2022 art. 96)', () => {
+    // Auditoria 2026-09 (tributario-calc-01): esta prueba exigia antes
+    // «impuestoSocio = 0 (INCRGNO Art. 36-3 E.T.)», regla derogada desde el
+    // 1-ene-2023. El validador C1.6 ahora comprueba que capitalizar y
+    // distribuir tengan la misma carga del socio.
+    expect(prompt).not.toMatch(/impuestoSocio = 0 \(INCRGNO Art\.?\s*36-3 E\.T\.\)/);
+    expect(prompt).toMatch(/Art\.?\s*36-3 E\.T\. — DEROGADO \(Ley 2277\/2022 art\. 96/);
+    expect(prompt).toMatch(/NEVER reportes un ahorro tributario por capitalizar/);
   });
 
   it('sigue prohibiendo la escala derogada del 10% pre-Ley 2277/2022', () => {

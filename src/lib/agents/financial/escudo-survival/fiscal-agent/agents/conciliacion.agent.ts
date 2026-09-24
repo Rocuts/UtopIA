@@ -6,7 +6,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildConciliacionPrompt } from '../prompts/conciliacion.prompt';
 import { conciliacionModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
-import { buildConciliacionSkeleton } from '../tools/conciliacion-builder';
+import { buildConciliacionSkeleton, recomputeConciliacion } from '../tools/conciliacion-builder';
 import type { ConciliacionModuleResult, FiscalAgentInput } from '../types';
 
 export interface ConciliacionAgentOptions {
@@ -57,5 +57,30 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
     signal: opts.signal,
   });
 
-  return json;
+  // Identidades recalculadas en BigInt desde las líneas del modelo; F01 y F03
+  // del Âncora son intocables (auditoría 2026-09, tributario-modulos-04).
+  const r = recomputeConciliacion(input.fiscalAnchor, json.data.lineas, json.data.tarifaPct);
+  const warnings = [...json.warnings];
+  if (BigInt(r.excesoTope258) > BigInt(0)) {
+    warnings.push(
+      `Descuentos de los Arts. 255/256/257 exceden el tope conjunto del 25% (Art. 258 E.T.) en ${formatCopFromCents(BigInt(r.excesoTope258))}; el exceso no se descuenta en el año.`,
+    );
+  }
+  warnings.push(
+    'Borrador: el saldo final no incluye el anticipo del año siguiente (Art. 807 E.T.) ni sustituye la declaración.',
+  );
+  return {
+    ...json,
+    data: {
+      ...json.data,
+      uaiContable: r.uaiContable,
+      rentaLiquidaGravable: r.rentaLiquidaGravable,
+      impuestoBruto: r.impuestoBruto,
+      totalDescuentos: r.totalDescuentos,
+      impuestoNeto: r.impuestoNeto,
+      retencionesYAnticipos: r.retencionesYAnticipos,
+      saldoFinal: r.saldoFinal,
+    },
+    warnings,
+  };
 }

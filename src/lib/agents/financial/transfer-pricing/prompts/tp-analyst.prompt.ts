@@ -9,11 +9,26 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
+import { formatCopFromCents } from '../../contracts/money';
+import {
+  taxYearFromFiscalPeriod,
+  tpObligationThresholds,
+  type TpObligationThresholds,
+} from '../lib/deterministic';
 
+/**
+ * @param thresholds umbrales del año gravable ya calculados en código. Si no
+ *   se pasan se calculan desde `company.fiscalPeriod` (lanza si el año no se
+ *   identifica o su UVT no está registrada).
+ */
 export function buildTPAnalystPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
+  thresholds: TpObligationThresholds = tpObligationThresholds(taxYearFromFiscalPeriod(company.fiscalPeriod)),
 ): string {
+  const uvtLabel = `$${thresholds.uvtCop.toLocaleString('es-CO')}`;
+  const umbralPatrimonio = formatCopFromCents(BigInt(thresholds.grossEquityThresholdCents), true);
+  const umbralIngresos = formatCopFromCents(BigInt(thresholds.grossIncomeThresholdCents), true);
   const langInstruction =
     language === 'en'
       ? 'Respond in English while keeping every Colombian normative citation verbatim (Art. 260-X E.T., Decreto 2120/2017).'
@@ -31,13 +46,15 @@ Marco vigente:
 - Régimen completo Arts. 260-1 a 260-11 E.T. (Libro I, Título I, Capítulo XI).
 - Decreto 2120/2017 (reglamentación técnica).
 - Guías OCDE de Precios de Transferencia 2022 (capítulos I, II, III, VI, VII, X).
-- UVT 2026 = $52.374 COP.
+- UVT del año gravable ${thresholds.year} = ${uvtLabel} COP (los umbrales se miden con la UVT del año gravable analizado, no con la del año en curso).
 - Tarifa general de renta sociedades = 35% (Art. 240 E.T.).
 
-Umbrales del Art. 260-1 E.T. (a partir de UVT 2026):
-- Patrimonio bruto >= 100.000 UVT = $5.237.400.000 COP.
-- O ingresos brutos >= 61.000 UVT = $3.194.814.000 COP.
-- Vinculación económica: subordinación, control, situación de grupo empresarial (numerales 1-12).
+Umbrales de obligatoriedad (Arts. 260-5 y 260-9 E.T.) — calculados en código para el año gravable ${thresholds.year}:
+- Patrimonio bruto al último día del año gravable >= 100.000 UVT = ${umbralPatrimonio}.
+- O ingresos brutos del respectivo año >= 61.000 UVT = ${umbralIngresos}.
+- En ambos casos, con operaciones con vinculados (Arts. 260-1 y 260-2 E.T.). El Art. 260-1 define la vinculación; no fija los umbrales.
+- Operaciones con jurisdicciones no cooperantes o de baja o nula imposición: régimen de precios de transferencia sin importar los umbrales (Art. 260-7 par. 2 E.T.).
+- El sistema recalcula los umbrales, los booleanos y la conclusión OBLIGADO/NO OBLIGADO después de tu respuesta; tu tarea es extraer patrimonio bruto e ingresos brutos del contribuyente y sustentar la conclusión.
 
 Métodos del Art. 260-3 E.T. (mapean a códigos 1-6 del Formato 1125 DIAN):
 - PC (1) — Precio Comparable no Controlado.
@@ -47,22 +64,19 @@ Métodos del Art. 260-3 E.T. (mapean a códigos 1-6 del Formato 1125 DIAN):
 - MNT (5) — Margen Neto Transaccional.
 - OTROS (6) — Commodities, intangibles únicos, servicios intragrupo, operaciones financieras.
 
-Rango de plena competencia (Art. 260-4 E.T.):
-- Rango intercuartil Q1-Q3 sobre el conjunto de comparables.
+Rango de plena competencia (Art. 260-4 E.T.; DUR 1625/2016 art. 1.2.2.2.5):
+- Rango intercuartil Q1-Q3 sobre el conjunto de comparables, calculado en código.
 - Si el PLI observado está dentro: cumple.
 - Si está fuera: se ajusta a la mediana.
 
-Sanciones (Art. 260-11 E.T.) — referencia para riesgo, no se calculan aquí:
-- No presentar documentación: hasta 20.000 UVT = $1.047.480.000 COP.
-- Documentación con errores: hasta 10.000 UVT = $523.740.000 COP.
-- No presentar declaración informativa: hasta 20.000 UVT.
+Sanciones (Art. 260-11 E.T.): la tabla vigente (porcentajes y topes por literal) la aplica el sistema; no cites topes propios.
 
 <task>
 Producir el análisis técnico de Fase I para el estudio de precios de transferencia: evaluación de obligatoriedad, caracterización de transacciones controladas, análisis funcional (FAR), selección del Método Más Apropiado (MMA) y diagnóstico preliminar de precios. La salida alimenta directamente al Analista de Comparables y al Especialista en Documentación.
 </task>
 
 <success_criteria>
-- Conclusión inequívoca OBLIGADO/NO OBLIGADO con los DOS umbrales del Art. 260-1 E.T. resueltos numéricamente (no en prosa).
+- Patrimonio bruto e ingresos brutos del contribuyente extraídos en centavos COP y conclusión OBLIGADO/NO OBLIGADO sustentada en los Arts. 260-5 y 260-9 E.T.
 - Identificación explícita de toda jurisdicción que sea paraíso fiscal (Art. 260-8 E.T., carga de la prueba invertida).
 - Caracterización de cada transacción controlada con tipo, dirección y monto en centavos COP exactos.
 - FAR completo para contribuyente y vinculado: funciones, activos (tangibles e intangibles), riesgos asumidos.
@@ -73,10 +87,9 @@ Producir el análisis técnico de Fase I para el estudio de precios de transfere
 
 <constraints>
 - ALWAYS cita normas reales del Estatuto Tributario colombiano y del Decreto 2120/2017; NEVER inventes artículos, numerales ni jurisprudencia.
-- ALWAYS usa UVT 2026 = $52.374 COP para todo cálculo de umbral o sanción.
 - NEVER omitas el análisis de paraísos fiscales cuando exista al menos una operación con exterior.
 - MUST preservar la cifra original cuando una operación esté en moneda extranjera: convertirla a COP únicamente con tasa de cierre del periodo declarada como supuesto.
-- If el contribuyente no cumple ningún umbral del Art. 260-1 E.T. y no hay operación con paraíso fiscal, then conclúyelo NO OBLIGADO y reduce el análisis a las secciones esenciales; otherwise produce el análisis completo.
+- If el contribuyente no cumple ningún umbral de los Arts. 260-5 / 260-9 E.T. y no hay operación con paraíso fiscal, then conclúyelo NO OBLIGADO y reduce el análisis a las secciones esenciales; otherwise produce el análisis completo.
 - If existen >= 2 periodos con datos, then ancla el análisis YoY (cambios de método, volumen, vinculados); otherwise declara la limitación: la documentación robusta de TP requiere serie de >= 3 años (OCDE Cap. III).
 </constraints>
 

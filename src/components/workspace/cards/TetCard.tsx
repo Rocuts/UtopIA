@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * TetCard — Tasa Efectiva de Tributación card.
- * Displays TET %, TTD %, alert level, and optimization suggestions.
- * Art. 240 E.T. — tasa general 35%, TET óptima < 25% para PyME colombiana.
+ * TetCard — Tasa efectiva CONTABLE (impuesto causado clase 54 / UAI).
+ * La TTD (Art. 240 par. 6 E.T.) es ID/UD: sin esos datos se muestra N/D.
+ * Sin UAI positiva la TET no es medible: N/D y alerta neutra (nunca «verde»
+ * por defecto). Auditoría 2026-09, tributario-modulos-06.
  */
 
 import { BarChart3, ChevronRight } from 'lucide-react';
@@ -25,15 +26,22 @@ interface TetCardProps {
 }
 
 export function TetCard({ data, loading, error, t, language = 'es' }: TetCardProps) {
+  const nd = language === 'es' ? 'N/D' : 'N/A';
+  const tet = data?.data.tet ?? null;
+  const ttd = data?.data.ttd ?? null;
   return (
     <SurvivalCard
       title={t.title}
-      alertLevel={data?.data.nivelAlerta ?? 'verde'}
+      alertLevel={data?.data.nivelAlerta ?? 'amarillo'}
       primaryMetric={{
         label: t.metric,
-        value: data ? formatPct(data.data.tet) : '—',
+        value: data ? (tet === null ? nd : formatPct(tet)) : '—',
       }}
-      description={data?.data.nivelAlerta === 'rojo'
+      description={data && data.data.nivelAlerta === null
+        ? (language === 'es'
+          ? 'Tasa efectiva contable no medible: la utilidad antes de impuestos no es positiva.'
+          : 'Accounting effective rate not measurable: pre-tax income is not positive.')
+        : data?.data.nivelAlerta === 'rojo'
         ? (language === 'es'
           ? 'La empresa tributa por encima del umbral óptimo. Se detectaron oportunidades de optimización.'
           : 'The company is over-taxed. Optimization opportunities detected.')
@@ -55,8 +63,8 @@ export function TetCard({ data, loading, error, t, language = 'es' }: TetCardPro
         <div className="flex flex-col gap-3">
           {/* TTD secondary */}
           <div className="flex items-center justify-between text-sm">
-            <span className="text-n-500">TTD {language === 'es' ? '(Tasa Tributación Dividendos)' : '(Dividend Tax Rate)'}</span>
-            <span className="font-medium text-n-700 num">{formatPct(data.data.ttd)}</span>
+            <span className="text-n-600">TTD {language === 'es' ? '(Tasa de Tributación Depurada, Art. 240 par. 6)' : '(Adjusted Tax Rate, Art. 240 par. 6)'}</span>
+            <span className="font-medium text-n-700 num">{ttd === null ? nd : formatPct(ttd)}</span>
           </div>
 
           {/* Optimization suggestions */}
