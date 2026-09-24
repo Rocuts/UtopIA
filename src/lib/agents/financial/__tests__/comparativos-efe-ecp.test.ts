@@ -2,11 +2,10 @@
 // Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente #3)
 // ---------------------------------------------------------------------------
 // NIIF para las PYMES 3.14 exige información comparativa de todos los importes
-// de los estados del periodo, salvo impracticabilidad (3.14 / 10.21). El
-// informe presentaba el EFE y el ECP sólo con el periodo actual. El comparativo
-// de esos dos estados es calculable cuando el balance trae el corte ANTERIOR al
-// comparativo (tres cortes); sin él se declara impracticable con una nota
-// determinista, nunca con cifras del modelo.
+// de los estados del periodo. El informe presentaba el EFE y el ECP sólo con
+// el periodo actual. El comparativo de esos dos estados es calculable cuando el
+// balance trae el corte ANTERIOR al comparativo (tres cortes); sin él no se
+// presenta y una nota determinista pide el corte, nunca cifras del modelo.
 //
 // Fixture: src/lib/preprocessing/__fixtures__/tres-cortes-comparativo.csv
 // (2023 / 2024 / 2025). EFE 2024: operación 11M, inversión −20M, financiación
@@ -213,17 +212,23 @@ describe('revisión P2 — renglones del EFE con el mismo importe en el periodo 
   });
 });
 
-describe('dos cortes — comparativo impracticable, nota determinista', () => {
-  it('sin el corte 2023 no hay cifras comparativas del EFE ni del ECP, sólo la nota 3.14/10.21', () => {
+describe('dos cortes — comparativo no presentado, nota determinista', () => {
+  // Integración I2 (hallazgo prompts-normativa-23): la nota decía
+  // "Impracticabilidad declarada (NIIF para las PYMES 3.14 y 10.21)". Que el
+  // balance recibido no traiga el corte anterior no es impracticabilidad de la
+  // entidad: la nota dice qué falta y lo pide.
+  it('sin el corte 2023 no hay cifras comparativas del EFE ni del ECP, sólo la nota que pide el corte', () => {
     const pp = preprocesarTresCortes(csvDosCortes());
     expect(pp.periods.map((p) => p.period)).toEqual(['2024', '2025']);
     const basis = buildComparativeStatementsBasis(pp)!;
     expect(basis.cashFlow).toBeNull();
     expect(basis.equityRows).toBeNull();
     for (const note of [basis.cashFlowNote!, basis.equityNote!]) {
-      expect(note).toMatch(/información comparativa 2024 no presentada/);
-      expect(note).toMatch(/corte anterior al periodo comparativo \(2023\)/);
-      expect(note).toMatch(/3\.14 y 10\.21/);
+      expect(note).toMatch(
+        /comparativo 2024 no presentado: el balance no incluye el corte de cierre anterior al periodo comparativo \(2023\)/,
+      );
+      expect(note).toMatch(/NIIF para las PYMES 3\.14 exige comparativos — suministre ese corte\./);
+      expect(note).not.toMatch(/mpracticab|10\.21/);
     }
     const json = informeTresCortes(pp);
     const cf = json.cashFlow;
@@ -246,20 +251,48 @@ describe('dos cortes — comparativo impracticable, nota determinista', () => {
     expect(r.errors.some((e) => /^E24\. ECP \(periodo comparativo 2024\): se presentan filas del periodo comparativo sin base determinista/.test(e))).toBe(true);
   });
 
-  it('corte anterior que no es el cierre inmediatamente anterior → impracticable', () => {
+  it('corte anterior que no es el cierre inmediatamente anterior → no presentado, pide el cierre 2023', () => {
     const csv = csvTresCortes().replace('saldo 2023', 'saldo 2022');
     const basis = buildComparativeStatementsBasis(preprocesarTresCortes(csv))!;
     expect(basis.cashFlow).toBeNull();
     expect(basis.cashFlowNote).toMatch(/2022\) no es el cierre inmediatamente anterior/);
+    expect(basis.cashFlowNote).toMatch(/suministre el corte de cierre de 2023/);
+    expect(basis.cashFlowNote).not.toMatch(/mpracticab|10\.21/);
   });
 
-  it('comparativo de saldos de apertura → impracticable (no hay P&G del comparativo)', () => {
+  it('comparativo de saldos de apertura → no presentado (no hay P&G del comparativo), pide los cierres', () => {
     const pp = preprocesarTresCortes();
     pp.comparative!.saldosDeApertura = true;
     const basis = buildComparativeStatementsBasis(pp)!;
     expect(basis.cashFlow).toBeNull();
     expect(basis.equityRows).toBeNull();
     expect(basis.cashFlowNote).toMatch(/saldos de apertura/);
+    expect(basis.cashFlowNote).toMatch(/suministre el balance de prueba de cierre de 2024 y el de cierre de 2023/);
+    expect(basis.cashFlowNote).not.toMatch(/mpracticab|10\.21/);
+  });
+
+  it('corte anterior parcial → no presentado, pide el cierre del ejercicio', () => {
+    const pp = preprocesarTresCortes();
+    pp.periods[0].periodoTipo = 'parcial';
+    const basis = buildComparativeStatementsBasis(pp)!;
+    expect(basis.cashFlow).toBeNull();
+    expect(basis.equityNote).toMatch(/es un corte parcial, no el cierre del ejercicio 2023/);
+    expect(basis.equityNote).toMatch(/suministre el corte de cierre del ejercicio 2023/);
+  });
+
+  it('la nota se redacta en inglés cuando el informe es en inglés', () => {
+    const basis = buildComparativeStatementsBasis(preprocesarTresCortes(csvDosCortes()), 'en')!;
+    expect(basis.cashFlowNote).toBe(
+      'Statement of cash flows — 2024 comparative not presented: the trial balance does not include the ' +
+        'closing cut before the comparative period (2023) nor the 2024 opening balances; IFRS for SMEs 3.14 ' +
+        'requires comparative information — provide that cut. No estimated figures are substituted.',
+    );
+    expect(basis.equityNote).toMatch(/^Statement of changes in equity — 2024 comparative not presented/);
+    // El respaldo de attachComparativeStatements sigue el idioma de la base.
+    const json = attachComparativeStatements(informeTresCortes(preprocesarTresCortes(csvDosCortes())), basis, null);
+    expect(json.cashFlow.comparativeNote).toBe(basis.cashFlowNote);
+    const sinEfe = attachComparativeStatements(json, { ...basis, cashFlowNote: null }, null);
+    expect(sinEfe.cashFlow.comparativeNote).toMatch(/^Statement of cash flows — 2024 comparative not presented: the current-period/);
   });
 
   it('sin periodo comparativo no hay base ni nota', () => {

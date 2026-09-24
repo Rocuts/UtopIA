@@ -183,8 +183,8 @@ export interface NiifJsonValidatorOptions {
    *   - `null`: el balance no tiene periodo comparativo; presentar un
    *     comparativo del EFE o del ECP es error.
    *   - base: lo presentado se cruza al centavo contra ella, y presentarlo
-   *     cuando la base lo declara impracticable es error (NIIF para las PYMES
-   *     3.14 / 10.21: sin corte de apertura no hay comparativo que calcular).
+   *     cuando la base no lo presenta es error (NIIF para las PYMES 3.14: sin
+   *     corte de apertura no hay comparativo que calcular).
    */
   comparativeStatements?: ComparativeStatementsBasis | null;
   /**
@@ -2167,7 +2167,7 @@ function comparativeStatementErrors(
   } else if (presence.anyTotal && !presence.allTotals) {
     errors.push(
       `E2. EFE (${etiqueta}): la columna comparativa está incompleta (subtotales o efectivo al ` +
-        `inicio/final en null). O se presenta completa o no se presenta (nota de impracticabilidad).`,
+        `inicio/final en null). O se presenta completa o no se presenta (nota de comparativo no presentado).`,
     );
   } else if (presence.allTotals && cp !== null) {
     const netChange = parseMoneyCop(cf.netChangeComparative!);
@@ -2241,7 +2241,7 @@ function comparativeStatementErrors(
       const reason = basis?.cashFlowNote ?? 'el balance de prueba no tiene periodo comparativo';
       errors.push(
         `E18. EFE (${etiqueta}): se presenta una columna comparativa sin base determinista — ${reason} ` +
-          `Un comparativo del EFE sin corte de apertura no se presenta (NIIF para las PYMES 3.14 / 10.21).`,
+          `Un comparativo del EFE sin corte de apertura no se presenta (NIIF para las PYMES 3.14).`,
       );
     } else if (detCf !== null && presence.allTotals && cp !== null) {
       const view = comparativeCashFlowView(cf);
@@ -2357,7 +2357,7 @@ function comparativeStatementErrors(
       const reason = basis?.equityNote ?? 'el balance de prueba no tiene periodo comparativo';
       errors.push(
         `E24. ECP (${etiqueta}): se presentan filas del periodo comparativo sin base determinista — ${reason} ` +
-          `(NIIF para las PYMES 3.14 / 10.21).`,
+          `(NIIF para las PYMES 3.14).`,
       );
     } else if (rows !== null && detRows !== null) {
       errors.push(...equityComparativeRowDiffs(rows, detRows, etiqueta));

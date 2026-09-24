@@ -388,8 +388,8 @@ export function niifJsonToCashFlowTable(
   } as const;
   // Columna comparativa del EFE (auditoría 2026-09-24, pendiente #3): la
   // calcula el código desde el corte anterior al comparativo y sólo se imprime
-  // completa. Sin ella, la nota determinista de impracticabilidad (NIIF para
-  // las PYMES 3.14 / 10.21) va como leyenda visible (reportes-export-13).
+  // completa. Sin ella, la nota determinista de comparativo no presentado
+  // (NIIF para las PYMES 3.14) va como leyenda visible (reportes-export-13).
   const hasComparative = json.company.comparativePeriod !== null && cashFlowHasComparativeColumn(cf);
   const rows: ParsedTableRow[] = [];
   for (const s of cf.sections) {

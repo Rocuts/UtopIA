@@ -393,8 +393,8 @@ function addCashFlowAndEquitySheets(
   const cp = json.company.comparativePeriod;
   // Columna comparativa del EFE y ECP del periodo comparativo (auditoría
   // 2026-09-24, pendiente #3): los calcula el código desde el corte anterior
-  // al comparativo. Sin ellos, la nota determinista de impracticabilidad
-  // (NIIF para las PYMES 3.14 / 10.21) se declara en el propio estado
+  // al comparativo. Sin ellos, la nota determinista de comparativo no
+  // presentado (NIIF para las PYMES 3.14) se declara en el propio estado
   // (reportes-export-13). Orden de columnas: periodo actual | comparativo,
   // igual que el PDF.
   const cf = json.cashFlow;
