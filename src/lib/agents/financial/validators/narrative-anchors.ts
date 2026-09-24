@@ -746,7 +746,7 @@ const IDENTIFIER_BEFORE =
  */
 const OTHER_QUANTITY =
   /(?<![\p{L}])(?:impuestos?|provisi[oó]n|provisiones|retenci[oó]n|retenciones|costos?|gastos?|obligaci[oó]n|obligaciones|pagos?|pag[oó]|pagaron|compras?|inversi[oó]n|inversiones|pr[eé]stamos?|cr[eé]ditos?|deudas?|anticipos?|sanci[oó]n|sanciones|multas?|intereses|reservas?)(?![\p{L}])/iu;
-/** "Del total de activos, $X son corrientes": partitivo, la cifra es una parte. */
+/** "Del total de activos, $X son corrientes": partitivo, la cifra que sigue a la coma es una parte. */
 const PARTITIVE_PREFIX = /^\s*(?:del|de\s+(?:la|las|los|el))\s*$/i;
 /** "1.200.000 unidades", "USD 4.000.000": la cifra no está en pesos. */
 const NOT_PESOS_UNIT_AFTER =
@@ -1005,8 +1005,7 @@ export function checkNarrativeUnits(
       for (const hit of conceptHits(unit, concept)) {
         const prefix = sentencePrefix(unit.text, hit.index);
         // "La variación de la utilidad neta fue de $X": la cifra es la variación.
-        // "Del total de activos, $X son corrientes": la cifra es una parte.
-        if (VARIATION_NOUN_PREFIX.test(prefix) || PARTITIVE_PREFIX.test(prefix)) continue;
+        if (VARIATION_NOUN_PREFIX.test(prefix)) continue;
         const win = windowAfter(unit.text, hit.index + hit.text.length, stops);
         const candidates = extractCopTokens(win).filter(
           (t) =>
@@ -1021,6 +1020,9 @@ export function checkNarrativeUnits(
         // "Apropiada la reserva legal, queda un saldo de $X": el concepto es lo
         // que se resta; la cifra es de la cláusula siguiente.
         if (SUBTRACTED_PREFIX.test(prefix) && /^\s*[,)]/.test(before)) continue;
+        // "Del total de activos, $X corresponden a inventarios": la cifra es
+        // una parte. "De la utilidad neta, por $X, se apropia…" sí es el saldo.
+        if (PARTITIVE_PREFIX.test(prefix) && /^\s*,?\s*$/.test(before)) continue;
         if (prose && isComponent(before)) continue;
         if (concept.skipIfAfter?.test(afterToken(win, token))) continue;
         if (

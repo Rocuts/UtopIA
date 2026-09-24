@@ -335,6 +335,7 @@ const FALSE: Phrase[] = [
   { id: 'F40', scope: 'estados', text: (s) => `El total de pasivos, que incluye obligaciones financieras de $25.000.000,00, asciende a ${wrong(s.pasivo)}.` },
   { id: 'F41', scope: 'estados', text: (s) => `Se registró un total de activos por ${wrong(s.activo)}.` },
   { id: 'F42', scope: 'estados', text: (s) => `La ${res(s.un)} del ejercicio, neta de reservas, fue de ${wrong(s.un)}.` },
+  { id: 'F43', scope: 'estados', text: (s) => `De la ${res(s.un)} neta del ejercicio, por ${wrong(s.un)}, se apropia la reserva de ley.` },
 ];
 
 // ---------------------------------------------------------------------------
