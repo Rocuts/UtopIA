@@ -5,6 +5,8 @@ import { orchestrateFeasibilityStudy } from '@/lib/agents/financial/feasibility/
 import type { FeasibilityProgressEvent } from '@/lib/agents/financial/feasibility/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import type { MacroSnapshot } from '@/lib/agents/financial/valuation/macro-context';
+import { getMacroSnapshotForPrompts } from '@/lib/macro/prompt-snapshot';
 
 // ---------------------------------------------------------------------------
 // POST /api/feasibility-study
@@ -36,13 +38,17 @@ export async function POST(req: Request) {
 
     const { projectData, project, language, instructions } = parsed.data;
 
+    // Parámetros macro con valor, vigencia y fuente por campo (valoracion-18);
+    // sin dato verificado ⇒ N/D en <macro_vigente>. Nunca bloquea.
+    const macro = await getMacroSnapshotForPrompts();
+
     // Check for streaming request
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(projectData, project, language, instructions);
+      return handleStreaming(projectData, project, language, instructions, macro);
     }
 
     // Non-streaming: run the full pipeline and return JSON
@@ -51,6 +57,7 @@ export async function POST(req: Request) {
       project,
       language,
       instructions,
+      macro,
     });
 
     return NextResponse.json(report);
@@ -75,6 +82,7 @@ function handleStreaming(
   project: Parameters<typeof orchestrateFeasibilityStudy>[0]['project'],
   language: 'es' | 'en',
   instructions: string | undefined,
+  macro: MacroSnapshot | null,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -82,7 +90,7 @@ function handleStreaming(
 
       try {
         const report = await orchestrateFeasibilityStudy(
-          { projectData, project, language, instructions },
+          { projectData, project, language, instructions, macro },
           {
             onProgress: (event: FeasibilityProgressEvent) => {
               sse.send('progress', event);

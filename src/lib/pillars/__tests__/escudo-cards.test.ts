@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { computeEscudoExecutiveCards, RENTA_RATE } from '../escudo-cards';
+import { computeEscudoExecutiveCards } from '../escudo-cards';
 import type {
   ControlTotals,
   PUCClass,
@@ -169,9 +169,11 @@ describe('computeEscudoExecutiveCards', () => {
     // fiscal ni el grupo 24 es sólo renta ⇒ N/D.
     expect(cards.reserva_fiscal.value).toBeNull();
     expect(cards.reserva_fiscal.status).toBe('watch');
-    // Diagnóstico interno que lee single-source-validator (no se publica).
-    expect(cards.audit.tasaRenta).toBe(RENTA_RATE);
-    expect(cards.audit.rentaTeorica).toBeCloseTo(175_000_000, 0);
+    // IW4 (ratios-kpis-10): el audit expone la utilidad neta leída; el
+    // diagnóstico UN × 35 % (rentaTeorica/tasaRenta) se retiró.
+    expect(cards.audit.utilidadNeta).toBe(500_000_000);
+    expect(cards.audit.rentaTeorica).toBeUndefined();
+    expect(cards.audit.tasaRenta).toBeUndefined();
   });
 
   it('Brecha Escudo negativa (caja < proveedores 2205)', () => {

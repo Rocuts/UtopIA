@@ -10,8 +10,9 @@ import 'server-only';
 
 import { getDb } from '@/lib/db/client';
 import { aggregatePillars } from '@/lib/pillars/service';
+import { daysCovered, margenBruto as computeMargenBruto } from '@/lib/pillars/shared-metrics';
 import type { PillarsResult } from '@/lib/pillars/types';
-import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
+import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { sendInsightAlert } from '@/lib/notifications/sentinel-insight';
 
 import { runT1 } from './triggers/r1-truth-gap';
@@ -56,6 +57,24 @@ async function loadSentinelData(
     comparative: comparative ?? undefined,
   });
 
+  return {
+    pillars,
+    metrics: deriveSentinelMetrics(snapshot, pillars),
+    language: 'es',
+  };
+}
+
+/**
+ * Métricas de los disparadores (puro). Margen bruto sobre ingresos
+ * operacionales netos (41 − 4175) con la utilidad bruta del preprocesador —
+ * nunca la Σ de la clase 4, que suma devoluciones y el grupo 42
+ * (ratios-kpis-04). Los días de inventario usan los días que cubre el periodo
+ * (un acumulado a agosto no son 365 días de costo).
+ */
+export function deriveSentinelMetrics(
+  snapshot: PeriodSnapshot,
+  pillars: PillarsResult,
+): SentinelLoadResult['metrics'] {
   const ct = snapshot.controlTotals;
   const equationGapAmount = ct.activo - (ct.pasivo + ct.patrimonio);
   const equationGapPct = ct.activo > 0 ? Math.abs(equationGapAmount) / ct.activo : 0;
@@ -72,16 +91,15 @@ async function loadSentinelData(
   const puntoInflexion =
     (futuroKpis.find((k) => k.key === 'punto_inflexion')?.value as number | null) ?? null;
 
-  // Margen bruto e inventario aproximados desde control totals (no-NIIF).
-  // Margen bruto = 1 − costos/ingresos. PUC clase 6 = costos.
-  const costosClase6 = snapshot.classes.find((c) => c.code === 6)?.auxiliaryTotal ?? 0;
-  const margenBruto = ct.ingresos > 0 ? 1 - costosClase6 / ct.ingresos : null;
+  // Margen bruto: misma definición que el pilar Verdad (shared-metrics).
+  const margenBruto = computeMargenBruto(snapshot);
 
+  const costosClase6 = snapshot.classes.find((c) => c.code === 6)?.auxiliaryTotal ?? 0;
   const inventario = snapshot.classes.find((c) => c.code === 1)?.accounts.filter((a) => a.code.startsWith('14')).reduce((s, a) => s + a.balance, 0) ?? 0;
-  const costoDiario = costosClase6 / 365;
+  const costoDiario = costosClase6 / daysCovered(snapshot);
   const diasInventario = costoDiario > 0 ? inventario / costoDiario : null;
 
-  const metrics: SentinelLoadResult['metrics'] = {
+  return {
     equationGapPct,
     equationGapAmount,
     diasAutonomia,
@@ -92,12 +110,6 @@ async function loadSentinelData(
     efectivo: ct.efectivoCuenta11,
     utilidadNeta: ct.utilidadNeta,
     impuestos: ct.impuestosCuenta24,
-  };
-
-  return {
-    pillars,
-    metrics,
-    language: 'es',
   };
 }
 

@@ -25,7 +25,6 @@ import type {
 } from '@/types/kpis';
 
 const DEFAULT_MARKET_RISK = 0.25;
-const DEFAULT_DISCOUNT_RATE = 0.135;
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -63,7 +62,12 @@ function contributionOf(p: RoiProbabilisticProject, totalInv: number): number {
 export function calculateRoiProbabilistic(input: RoiProbabilisticInput): KpiResult {
   const projects = Array.isArray(input.projects) ? input.projects : [];
   const marketRisk = clamp01(input.marketRisk ?? DEFAULT_MARKET_RISK);
-  const discountRate = input.discountRate ?? DEFAULT_DISCOUNT_RATE;
+  // valoracion-07: sin tasa por defecto (13,5 % "CO típico" sin fuente). La
+  // tasa es informativa y sólo se publica si el usuario la declara.
+  const discountRate =
+    typeof input.discountRate === 'number' && Number.isFinite(input.discountRate)
+      ? input.discountRate
+      : null;
 
   const totalInv = projects.reduce(
     (acc, p) => acc + Math.max(0, p.investment || 0),
@@ -124,7 +128,9 @@ export function calculateRoiProbabilistic(input: RoiProbabilisticInput): KpiResu
 
   const assumptions = [
     `Riesgo de mercado CO 2026 estimado en ${(marketRisk * 100).toFixed(0)}%`,
-    `Tasa de descuento referencia (WACC) = ${(discountRate * 100).toFixed(1)}%`,
+    discountRate === null
+      ? 'Tasa de descuento no declarada (no se aplica al retorno del portafolio)'
+      : `Tasa de descuento declarada por el usuario (supuesto) = ${(discountRate * 100).toFixed(1)}%`,
     'Probabilidades de éxito provistas por proyecto; se clampean a [0,1]',
     'Retornos expresados como TIR efectiva anual',
     'Ponderación por inversión relativa en el portfolio',

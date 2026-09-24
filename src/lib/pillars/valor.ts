@@ -2,7 +2,9 @@
 // Pilar VALOR — Rentabilidad y Riqueza
 // ---------------------------------------------------------------------------
 // KPIs maestros:
-//   1. Margen Neto Real  = (utilidadNeta - sumaReclassR1) / ingresos
+//   1. Margen Neto Real  = (utilidadNeta - sumaReclassR1) / ingresos netos
+//      (clase 4 − 4175: misma base que controlTotals.margenNeto; nunca la Σ
+//      bruta de la clase 4 — ratios-kpis-04)
 //   2. ROE Dinámico      = utilidadNeta / promedio(patrimonio_T, T-1)
 //   3. EVA               = NOPAT − capital empleado × costo de capital DECLARADO
 //      NOPAT = EBIT operacional (./ebitda.ts) × (1 − tasa efectiva contable:
@@ -15,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import { computeEbitda } from './ebitda';
+import { ingresosNetosPeriodo } from './shared-metrics';
 import {
   kpiCoverage,
   kpiSeverity,
@@ -44,8 +47,9 @@ export function computeValorPillar(input: PillarsAggregateInput): PillarMetrics 
     0,
   );
   let margenNeto: number | null = null;
-  if (ct.ingresos > 0) {
-    margenNeto = (ct.utilidadNeta - reclassImpact) / ct.ingresos;
+  const ingresosNetos = ingresosNetosPeriodo(ct);
+  if (ingresosNetos > 0) {
+    margenNeto = (ct.utilidadNeta - reclassImpact) / ingresosNetos;
   }
   const margenScore = kpiToScore(
     margenNeto,
@@ -62,8 +66,8 @@ export function computeValorPillar(input: PillarsAggregateInput): PillarMetrics 
     score: margenScore,
     status: kpiStatus(margenScore),
     severity: kpiSeverity(margenScore),
-    descriptionEs: 'Utilidad neta ajustada por reclasificaciones del Curator, sobre ingresos.',
-    descriptionEn: 'Net income adjusted for Curator reclassifications, over revenue.',
+    descriptionEs: 'Utilidad neta ajustada por reclasificaciones del Curator, sobre ingresos netos de devoluciones.',
+    descriptionEn: 'Net income adjusted for Curator reclassifications, over revenue net of returns.',
   };
 
   // ─── KPI 2 — ROE Dinámico ──────────────────────────────────────────────

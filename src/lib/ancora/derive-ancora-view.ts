@@ -21,6 +21,10 @@
 //    art. 96, decisión del coordinador de la auditoría 2026-09).
 //  - scoreNiif: rúbrica determinística sobre `ancora.checks` (ecuación patrimonial
 //    actual 40 + comparativa 20 + EFE concilia 20 + sin A5 10 + sin DEV 10 = 100).
+//    Sin periodo comparativo los dos checks comparativos no son evaluables y el
+//    score se expresa sobre los 60 puntos medidos (pipeline-flujo-01).
+//  - Âncora sentinela persistido (todas las cifras NIIF "0") ⇒ vista vacía; sin
+//    comparativo, las cifras "previas" y la variación de caja son N/D.
 // ---------------------------------------------------------------------------
 
 import type { NiifAncora } from '@/lib/agents/financial/ancora/types';
@@ -108,26 +112,38 @@ export function deriveAncoraView(
   const c = ancora.ccvNiif;
   const f = ancora.ccvFiscal;
 
+  // Defensa para Âncoras ya persistidos (localStorage) de versiones previas
+  // (pipeline-flujo-01): el sentinela de `buildNiifAncora` sin preprocesado
+  // lleva TODAS las cifras NIIF en "0". Hoy los productores emiten `null`,
+  // pero un Âncora viejo guardado seguiría pintando $0 y un score inventado.
+  if (Object.values(c).every((v) => centsToPesos(v) === 0)) return emptyView(company);
+
+  // Sin periodo comparativo, build-ancora rellena los campos "previos" con
+  // "0" y A19 = efectivo − 0: no son cifras del cliente ⇒ N/D.
+  const hasComparative = ancora.periodos.comparativo != null;
+  const prev = (v: string | undefined | null): number | null =>
+    hasComparative ? centsToPesos(v) : null;
+
   // ── NIIF (centavos → pesos) ────────────────────────────────────────────────
   const activos = centsToPesos(c.A01);
-  const activosPrev = centsToPesos(c.A02);
+  const activosPrev = prev(c.A02);
   const pasivos = centsToPesos(c.A03);
-  const pasivosPrev = centsToPesos(c.A04);
+  const pasivosPrev = prev(c.A04);
   const patrimonio = centsToPesos(c.A05);
-  const patrimonioPrev = centsToPesos(c.A06);
+  const patrimonioPrev = prev(c.A06);
   const ingresos = centsToPesos(c.A07);
-  const ingresosPrev = centsToPesos(c.A08);
+  const ingresosPrev = prev(c.A08);
   const ebitOperacional = centsToPesos(c.A09);
-  const ebitOperacionalPrev = centsToPesos(c.A10);
+  const ebitOperacionalPrev = prev(c.A10);
   const utilidadNeta = centsToPesos(c.A11);
-  const utilidadNetaPrev = centsToPesos(c.A12);
+  const utilidadNetaPrev = prev(c.A12);
   const efectivo = centsToPesos(c.A13);
-  const efectivoPrev = centsToPesos(c.A14);
+  const efectivoPrev = prev(c.A14);
   const pasivoCorriente = centsToPesos(c.A15);
   const inventarios = centsToPesos(c.A16);
   const cartera = centsToPesos(c.A17);
   const proveedores = centsToPesos(c.A18);
-  const variacionCaja = centsToPesos(c.A19);
+  const variacionCaja = prev(c.A19);
   const gananciaBruta = centsToPesos(c.X01);
   const activoCorriente = centsToPesos(c.X03);
   const activoNoCorriente = centsToPesos(c.X04);
@@ -195,14 +211,21 @@ export function deriveAncoraView(
         )
       : null;
 
-  // scoreNiif — rúbrica determinística sobre checks reales.
+  // scoreNiif — rúbrica determinística sobre checks EVALUABLES. Sin periodo
+  // comparativo, Δ patrimonial 2024 ("0 − 0 − 0") y la conciliación del EFE
+  // (0 + A13 = A13) se cumplen por construcción: no suman puntos y el score se
+  // expresa sobre lo medido (0-100), como el health score de los pilares.
   const ck = ancora.checks;
-  let scoreNiif = 0;
-  if (ck.patrimonioDelta2025 === '0') scoreNiif += 40;
-  if (ck.patrimonioDelta2024 === '0') scoreNiif += 20;
-  if (ck.efeReconcilia === 'ok') scoreNiif += 20;
-  if (ck.alertaA5 === 'inactiva') scoreNiif += 10;
-  if (ck.alertaDev === 'inactiva') scoreNiif += 10;
+  const rubric: Array<{ weight: number; pass: boolean; evaluable: boolean }> = [
+    { weight: 40, pass: ck.patrimonioDelta2025 === '0', evaluable: true },
+    { weight: 20, pass: ck.patrimonioDelta2024 === '0', evaluable: hasComparative },
+    { weight: 20, pass: ck.efeReconcilia === 'ok', evaluable: hasComparative },
+    { weight: 10, pass: ck.alertaA5 === 'inactiva', evaluable: true },
+    { weight: 10, pass: ck.alertaDev === 'inactiva', evaluable: true },
+  ];
+  const maxEvaluable = rubric.reduce((s, r) => s + (r.evaluable ? r.weight : 0), 0);
+  const puntos = rubric.reduce((s, r) => s + (r.evaluable && r.pass ? r.weight : 0), 0);
+  const scoreNiif = Math.round((puntos * 100) / maxEvaluable);
 
   // Altman Z — no defendible sin Utilidades Retenidas (X2 = RE / Activo Total).
   const altmanZ = null;

@@ -6,7 +6,10 @@
  * - Hero + descripción (metodología DNP, Ley 2069/2020, VPN/TIR, WACC CO,
  *   incentivos ZOMAC/ZF).
  * - Calculadora VPN/TIR inline (inversión, 1-10 flujos, tasa descuento,
- *   impuestos). Output en vivo: VPN, TIR, payback, IR.
+ *   impuestos). Output en vivo: VPN, TIR, payback, IR — calculados con
+ *   `computeProjectMetrics` (la función determinista del pipeline, en
+ *   centavos) vía ./calculator.ts. La tasa de descuento es un supuesto que
+ *   declara el usuario: sin ella VPN e IR son N/D (valoracion-09).
  * - Guardar escenario → localStorage (key `futuro_factibilidad_scenarios`).
  * - CTA: "Generar Estudio Completo" → IntakeModal `feasibility_study`.
  * - Checklist de análisis incluidos (7 dimensiones DNP).
@@ -46,84 +49,7 @@ import { EliteCard } from '@/components/ui/EliteCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import Link from 'next/link';
 
-// ─── VPN / TIR puros ─────────────────────────────────────────────────────────
-
-/** VPN dado flujos[0..n-1] (año 1..n), inversión inicial y tasa (0..1). */
-function computeNpv(
-  initialInvestment: number,
-  cashflows: number[],
-  discountRate: number,
-): number {
-  const npvOperating = cashflows.reduce((acc, cf, idx) => {
-    const t = idx + 1;
-    const den = Math.pow(1 + discountRate, t);
-    return acc + cf / den;
-  }, 0);
-  return npvOperating - initialInvestment;
-}
-
-/**
- * TIR por bisección entre [-0.99, 5]. Ret. null si no converge.
- * Usa NPV como función objetivo.
- */
-function computeIrr(
-  initialInvestment: number,
-  cashflows: number[],
-  tolerance = 1e-6,
-  maxIter = 200,
-): number | null {
-  let lo = -0.99;
-  let hi = 5;
-  const f = (r: number) => computeNpv(initialInvestment, cashflows, r);
-  const fLo = f(lo);
-  const fHi = f(hi);
-  if (fLo * fHi > 0) return null; // sin raíz en el rango
-
-  for (let i = 0; i < maxIter; i++) {
-    const mid = (lo + hi) / 2;
-    const fm = f(mid);
-    if (Math.abs(fm) < tolerance) return mid;
-    if (fm * f(lo) < 0) {
-      hi = mid;
-    } else {
-      lo = mid;
-    }
-  }
-  return (lo + hi) / 2;
-}
-
-/** Payback simple (años hasta acumular inversión). ret null si no se recupera. */
-function computePayback(
-  initialInvestment: number,
-  cashflows: number[],
-): number | null {
-  let cum = 0;
-  for (let i = 0; i < cashflows.length; i++) {
-    const prev = cum;
-    cum += cashflows[i];
-    if (cum >= initialInvestment) {
-      // interpolar fracción del año i+1
-      const needed = initialInvestment - prev;
-      const frac = cashflows[i] > 0 ? needed / cashflows[i] : 1;
-      return i + frac;
-    }
-  }
-  return null;
-}
-
-/** Índice de Rentabilidad (PI) = VP(flujos) / inversión. */
-function computeProfitabilityIndex(
-  initialInvestment: number,
-  cashflows: number[],
-  discountRate: number,
-): number {
-  if (initialInvestment <= 0) return 0;
-  const pvFlows = cashflows.reduce((acc, cf, idx) => {
-    const t = idx + 1;
-    return acc + cf / Math.pow(1 + discountRate, t);
-  }, 0);
-  return pvFlows / initialInvestment;
-}
+import { computeCalculator } from './calculator';
 
 // ─── Format helpers ──────────────────────────────────────────────────────────
 
@@ -161,13 +87,16 @@ interface ScenarioSave {
   label: string;
   savedAt: string;
   investment: number;
-  discountRate: number;
+  /** Tasa de descuento declarada (fracción). null = no declarada. */
+  discountRate: number | null;
   taxRate: number;
   cashflows: number[];
-  npv: number;
+  /** null sin tasa declarada (N/D). */
+  npv: number | null;
   irr: number | null;
   payback: number | null;
-  pi: number;
+  /** null sin tasa declarada (N/D). */
+  pi: number | null;
 }
 
 function loadScenarios(): ScenarioSave[] {
@@ -205,7 +134,10 @@ export default function FactibilidadPage() {
   // Calculator state
   const [investment, setInvestment] = useState<number>(1_200_000_000);
   const [years, setYears] = useState<number>(5);
-  const [discountRate, setDiscountRate] = useState<number>(0.135); // 13.5% WACC CO típico
+  // Tasa de descuento: supuesto que declara el usuario (WACC o tasa mínima de
+  // retorno). Sin valor por defecto — el antiguo 13,5 % "WACC CO típico" no
+  // tenía fuente (valoracion-07/09).
+  const [discountRate, setDiscountRate] = useState<number | null>(null);
   const [taxRate, setTaxRate] = useState<number>(0.35); // Art. 240 ET
   const [cashflows, setCashflows] = useState<number[]>([
     300_000_000,
@@ -218,31 +150,22 @@ export default function FactibilidadPage() {
   const [saved, setSaved] = useState<ScenarioSave[]>(() => loadScenarios());
   const [toast, setToast] = useState<string | null>(null);
 
-  const effectiveCashflows = useMemo(() => {
-    // Ajuste por tasa de impuestos (simplified): cashflow * (1 - taxRate).
-    // Nota: los flujos que el usuario captura se consideran "ingresos netos antes de
-    // impuestos", y aquí aplicamos el factor (1 - t) para aproximar el flujo
-    // después de impuestos. Es una simplificación didáctica; el endpoint hace
-    // el análisis profesional completo con depreciación, etc.
-    return cashflows.map((cf) => cf * (1 - taxRate));
-  }, [cashflows, taxRate]);
-
-  const npv = useMemo(
-    () => computeNpv(investment, effectiveCashflows, discountRate),
-    [investment, effectiveCashflows, discountRate],
+  // Ajuste por tasa de impuestos (simplificación didáctica): los flujos que el
+  // usuario captura se consideran "antes de impuestos" y se multiplican por
+  // (1 − t); el endpoint hace el análisis completo con depreciación, etc.
+  // Las métricas salen de computeProjectMetrics (centavos, TIR N/D con flujos
+  // no convencionales) — la misma función del pipeline de factibilidad.
+  const calc = useMemo(
+    () =>
+      computeCalculator({
+        investmentCop: investment,
+        cashflowsCop: cashflows,
+        taxRate,
+        discountRatePercent: discountRate === null ? null : discountRate * 100,
+      }),
+    [investment, cashflows, taxRate, discountRate],
   );
-  const irr = useMemo(
-    () => computeIrr(investment, effectiveCashflows),
-    [investment, effectiveCashflows],
-  );
-  const payback = useMemo(
-    () => computePayback(investment, effectiveCashflows),
-    [investment, effectiveCashflows],
-  );
-  const pi = useMemo(
-    () => computeProfitabilityIndex(investment, effectiveCashflows, discountRate),
-    [investment, effectiveCashflows, discountRate],
-  );
+  const { npv, irr, payback, pi } = calc;
 
   const handleYearsChange = useCallback((next: number) => {
     const clamped = Math.max(1, Math.min(10, Math.round(next)));
@@ -314,15 +237,19 @@ export default function FactibilidadPage() {
         };
 
   const npvSeverity =
-    npv > investment * 0.5
-      ? 'good'
-      : npv > 0
-        ? 'neutral'
-        : npv > -investment * 0.1
-          ? 'warn'
-          : 'critical';
+    npv === null
+      ? 'nd'
+      : npv > investment * 0.5
+        ? 'good'
+        : npv > 0
+          ? 'neutral'
+          : npv > -investment * 0.1
+            ? 'warn'
+            : 'critical';
   const npvColor =
-    npvSeverity === 'good'
+    npvSeverity === 'nd'
+      ? 'text-n-700'
+      : npvSeverity === 'good'
       ? 'text-success-light'
       : npvSeverity === 'neutral'
         ? 'text-gold-600'
@@ -389,8 +316,8 @@ export default function FactibilidadPage() {
           )}
         >
           {isEs
-            ? 'Cada peso que se compromete debe pagar un costo de oportunidad. Modelamos su proyecto contra el WACC real de Colombia 2026, los incentivos tributarios disponibles y los riesgos sectoriales — para que la decisión de invertir deje de ser una intuición y se convierta en un número.'
-            : 'Every peso you commit must pay an opportunity cost. We model your project against the real 2026 Colombian WACC, available tax incentives, and sector risks — so the decision to invest stops being a hunch and becomes a number.'}
+            ? 'Cada peso que se compromete debe pagar un costo de oportunidad. Modelamos su proyecto contra su costo de capital (WACC) con supuestos declarados y datos macro con fecha y fuente, los incentivos tributarios disponibles y los riesgos sectoriales — para que la decisión de invertir deje de ser una intuición y se convierta en un número.'
+            : 'Every peso you commit must pay an opportunity cost. We model your project against its cost of capital (WACC) with declared assumptions and dated, sourced macro data, available tax incentives, and sector risks — so the decision to invest stops being a hunch and becomes a number.'}
         </motion.p>
 
         {/* Calculadora + resultados */}
@@ -432,12 +359,18 @@ export default function FactibilidadPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <LabeledNumberInput
                 label={isEs ? 'Tasa de descuento (WACC, %)' : 'Discount rate (WACC, %)'}
-                value={+(discountRate * 100).toFixed(2)}
+                value={discountRate === null ? null : +(discountRate * 100).toFixed(2)}
                 onChange={(v) => setDiscountRate(v / 100)}
+                onClear={() => setDiscountRate(null)}
+                placeholder={isEs ? 'Sin declarar' : 'Not declared'}
                 step={0.25}
                 min={0}
                 max={60}
-                helperText={isEs ? 'Ref. CO 2026: 12-15%' : 'CO 2026 ref.: 12-15%'}
+                helperText={
+                  isEs
+                    ? 'Supuesto del usuario (WACC o tasa mínima de retorno). Sin valor por defecto.'
+                    : 'User assumption (WACC or hurdle rate). No default value.'
+                }
               />
               <LabeledNumberInput
                 label={isEs ? 'Tasa de impuestos (%)' : 'Tax rate (%)'}
@@ -553,25 +486,31 @@ export default function FactibilidadPage() {
           <div className="lg:col-span-2 flex flex-col gap-4">
             <ResultCard
               label={isEs ? 'VPN' : 'NPV'}
-              value={`${formatCopShort(npv)} COP`}
+              value={npv === null ? 'N/D' : `${formatCopShort(npv)} COP`}
               color={npvColor}
               hint={
-                isEs
-                  ? npv > 0
-                    ? 'Proyecto crea valor'
-                    : 'Proyecto destruye valor'
-                  : npv > 0
-                    ? 'Project creates value'
-                    : 'Project destroys value'
+                npv === null
+                  ? calc.unavailable
+                    ? calc.unavailable.map((r) => (isEs ? r.es : r.en)).join('; ')
+                    : isEs
+                      ? 'Declare la tasa de descuento (supuesto) para calcular el VPN'
+                      : 'Enter the discount rate (assumption) to compute NPV'
+                  : isEs
+                    ? npv > 0
+                      ? 'Proyecto crea valor'
+                      : 'Proyecto destruye valor'
+                    : npv > 0
+                      ? 'Project creates value'
+                      : 'Project destroys value'
               }
               icon={Lightbulb}
             />
             <ResultCard
               label={isEs ? 'TIR' : 'IRR'}
-              value={formatPct(irr)}
+              value={irr === null ? 'N/D' : formatPct(irr)}
               color={
-                irr == null
-                  ? 'text-n-500'
+                irr == null || discountRate === null
+                  ? 'text-n-700'
                   : irr >= discountRate + 0.05
                     ? 'text-success-light'
                     : irr >= discountRate
@@ -579,9 +518,17 @@ export default function FactibilidadPage() {
                       : 'text-danger-light'
               }
               hint={
-                isEs
-                  ? `vs WACC ${formatPct(discountRate)}`
-                  : `vs WACC ${formatPct(discountRate)}`
+                irr === null && calc.irrNote
+                  ? isEs
+                    ? calc.irrNote.es
+                    : calc.irrNote.en
+                  : discountRate === null
+                    ? isEs
+                      ? 'Sin tasa de descuento declarada para comparar'
+                      : 'No declared discount rate to compare against'
+                    : isEs
+                      ? `vs tasa declarada ${formatPct(discountRate)}`
+                      : `vs declared rate ${formatPct(discountRate)}`
               }
               icon={BarChart3}
             />
@@ -608,18 +555,24 @@ export default function FactibilidadPage() {
             />
             <ResultCard
               label={isEs ? 'Índice Rentabilidad' : 'Profitability Index'}
-              value={pi.toFixed(2)}
+              value={pi === null ? 'N/D' : pi.toFixed(2)}
               color={
-                pi >= 1.3
-                  ? 'text-success-light'
-                  : pi >= 1
-                    ? 'text-gold-600'
-                    : 'text-danger-light'
+                pi === null
+                  ? 'text-n-700'
+                  : pi >= 1.3
+                    ? 'text-success-light'
+                    : pi >= 1
+                      ? 'text-gold-600'
+                      : 'text-danger-light'
               }
               hint={
-                isEs
-                  ? 'PI > 1.0 crea valor'
-                  : 'PI > 1.0 creates value'
+                pi === null
+                  ? isEs
+                    ? 'Requiere la tasa de descuento declarada'
+                    : 'Requires the declared discount rate'
+                  : isEs
+                    ? 'PI > 1.0 crea valor'
+                    : 'PI > 1.0 creates value'
               }
               icon={Info}
             />
@@ -653,8 +606,16 @@ export default function FactibilidadPage() {
                     <div className="flex items-center gap-4 shrink-0 tabular-nums">
                       <span className="text-n-500">
                         VPN{' '}
-                        <span className={s.npv > 0 ? 'text-success-light' : 'text-danger-light'}>
-                          {formatCopShort(s.npv)}
+                        <span
+                          className={
+                            s.npv == null
+                              ? 'text-n-700'
+                              : s.npv > 0
+                                ? 'text-success-light'
+                                : 'text-danger-light'
+                          }
+                        >
+                          {s.npv == null ? 'N/D' : formatCopShort(s.npv)}
                         </span>
                       </span>
                       <span className="text-n-500">
@@ -755,8 +716,12 @@ export default function FactibilidadPage() {
 
 interface LabeledNumberInputProps {
   label: string;
-  value: number;
+  /** null = campo vacío (sin valor declarado). */
+  value: number | null;
   onChange: (next: number) => void;
+  /** Si se pasa, vaciar el campo lo notifica (valor no declarado). */
+  onClear?: () => void;
+  placeholder?: string;
   step?: number;
   min?: number;
   max?: number;
@@ -768,6 +733,8 @@ function LabeledNumberInput({
   label,
   value,
   onChange,
+  onClear,
+  placeholder,
   step = 1,
   min,
   max,
@@ -786,8 +753,13 @@ function LabeledNumberInput({
       </span>
       <input
         type="number"
-        value={Number.isFinite(value) ? value : 0}
+        value={value === null ? '' : Number.isFinite(value) ? value : 0}
+        placeholder={placeholder}
         onChange={(e) => {
+          if (onClear && e.target.value.trim() === '') {
+            onClear();
+            return;
+          }
           const n = Number(e.target.value);
           if (!Number.isFinite(n)) return;
           onChange(n);

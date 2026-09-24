@@ -86,7 +86,9 @@ export interface ExitValueInput {
   industry: ExitValueIndustry;
   /** Tasa de crecimiento esperada (0-1). Ej. 0.15 = 15%. */
   growthRate: number;
-  /** WACC (0-1). Default 0.135 (13.5% CO típico 2026). Se usa para sanity-check/descuento. */
+  /** WACC (0-1) declarado por el usuario — supuesto, sin valor por defecto
+   *  (valoracion-07: el 13,5 % "CO típico" no tenía fuente). Informativo: el
+   *  método por múltiplos no descuenta flujos. */
   wacc?: number;
   /** Deuda neta en COP. Se resta al EV para obtener Equity Value. Default 0. */
   netDebt?: number;
@@ -101,6 +103,8 @@ export type LastAuditOpinion =
   | 'con_salvedades'
   | 'desfavorable'
   | 'abstension';
+// 'no_emitida' (sin dictamen del Revisor Fiscal) NO es una opinión: el score
+// de cumplimiento no se calcula (ver src/lib/kpis/live.ts).
 
 export interface ComplianceInput {
   /** Adherencia NIIF 0-100 */
@@ -135,7 +139,9 @@ export interface RoiProbabilisticInput {
   projects: RoiProbabilisticProject[];
   /** Riesgo de mercado agregado (0-1). Default 0.25 (CO medio-alto). */
   marketRisk?: number;
-  /** Tasa de descuento (0-1). Default 0.135. Informativa para el disclaimer; no se aplica por defecto al portfolio return (los proyectos ya traen TIR). */
+  /** Tasa de descuento (0-1) declarada por el usuario — supuesto, sin valor
+   *  por defecto. Informativa para el disclaimer; no se aplica al portfolio
+   *  return (los proyectos ya traen TIR). */
   discountRate?: number;
 }
 

@@ -39,12 +39,31 @@ export interface ThirdPartySummary {
 }
 
 // ---------------------------------------------------------------------------
+// Pares anulados (contab-nomina-01)
+// ---------------------------------------------------------------------------
+// Desde WP10 un asiento reversado conserva status='posted' (sólo gana
+// reversed_by_entry_id) y su reverso (source_type 'reversal') también es
+// 'posted': ambos netean en el libro. Las pruebas de MONTOS (Benford, montos
+// repetidos, sesgo a redondos, terceros nuevos) no deben contarlos: el mismo
+// monto aparecería dos veces y un tercero anulado conservaría un monto
+// material. La prueba de NUMERACIÓN sí los incluye (el reverso consume un
+// número del consecutivo; excluirlo fabricaría huecos).
+function sinParesAnulados() {
+  return [
+    sql`${journalEntries.reversedByEntryId} IS NULL`,
+    sql`${journalEntries.sourceType} <> 'reversal'`,
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
 
 /**
  * Retorna todas las journal_entries con status='posted' del período,
- * ordenadas por entry_number ASC.
+ * ordenadas por entry_number ASC. Incluye originales reversados y reversos:
+ * la usan huecos de numeración y horarios de registro, que evalúan el acto de
+ * registrar, no el monto.
  */
 export async function getPostedEntriesForPeriod(
   workspaceId: string,
@@ -73,7 +92,8 @@ export async function getPostedEntriesForPeriod(
 /**
  * Retorna todas las journal_lines de un período (filtrado via join con
  * journal_entries para respetar workspace + period).
- * Incluye solo líneas de entries posted.
+ * Incluye solo líneas de entries posted que NO forman un par anulado
+ * (original reversado o reverso).
  */
 export async function getJournalLinesForPeriod(
   workspaceId: string,
@@ -94,6 +114,7 @@ export async function getJournalLinesForPeriod(
         eq(journalEntries.workspaceId, workspaceId),
         eq(journalEntries.periodId, periodId),
         eq(journalEntries.status, 'posted'),
+        ...sinParesAnulados(),
       ),
     );
 
@@ -131,6 +152,7 @@ export async function getNewThirdPartiesForPeriod(
         eq(journalEntries.workspaceId, workspaceId),
         eq(journalEntries.periodId, periodId),
         eq(journalEntries.status, 'posted'),
+        ...sinParesAnulados(),
       ),
     );
 

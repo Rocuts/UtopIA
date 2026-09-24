@@ -5,11 +5,10 @@
 // Auditoría ratios-kpis-08:
 //   - Los 4 KPIs de pilares viajaban como '0'/0 literales y la plantilla los
 //     imprimía como cifras del cliente. Ahora: provisión de impuestos, EBITDA
-//     y flujo de caja libre NO tienen base verificada en este paso ⇒ 'N/D';
-//     el % de documentos verificados es el real del workspace. Si ese % no
-//     existe (sin documentos), el contrato actual del payload (número) no
-//     admite N/D ⇒ se omite el envío en lugar de publicar "0.0%". Cuando
-//     `PeriodLockedPayload` acepte null, el correo podrá salir siempre.
+//     y flujo de caja libre NO tienen base verificada en este paso ⇒ null; el
+//     % de documentos verificados es el real del workspace o null (sin
+//     documentos). `PeriodLockedPayload` acepta null (IW4) y la plantilla
+//     muestra "N/D": el correo de cierre sale siempre, sin inventar 0 %.
 //   - El puerto se cargaba con un import dinámico excluido del bundler, así que
 //     en runtime el alias '@/' no se resolvía. Ahora el bundler resuelve el
 //     especificador (el mismo barrel ya se importa estáticamente en
@@ -22,9 +21,6 @@ import { queryDocumentsVerifiedPct } from '@/lib/kpis/pillar-view';
 import { getPeriodById, getWorkspaceName } from '../repository';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.utopia.co';
-
-/** Valor mostrado cuando un KPI no tiene base verificada. */
-const ND = 'N/D';
 
 export async function sendLockNotification(
   input: CloseMonthInput & {
@@ -63,13 +59,6 @@ export async function sendLockNotification(
   } catch {
     documentsVerifiedPct = null;
   }
-  if (documentsVerifiedPct === null) {
-    const error =
-      'KPIs de pilares N/D: el payload period.locked exige un % numérico de documentos ' +
-      'verificados y no hay documentos; se omite el envío en vez de publicar 0 %.';
-    console.warn(`[notify] ${error}`);
-    return { sent: false, error };
-  }
 
   let notificationsPort: NotificationsPort;
   try {
@@ -87,11 +76,12 @@ export async function sendLockNotification(
     periodHash: hash,
     withWarnings,
     overrideReason: input.overrideReason,
+    // Sin base verificada en este paso ⇒ null (la plantilla pinta "N/D").
     pillars: {
-      resiliencia: { totalProvisionTaxesCop: ND },
-      valor: { ebitdaCop: ND },
+      resiliencia: { totalProvisionTaxesCop: null },
+      valor: { ebitdaCop: null },
       verdad: { documentsVerifiedPct },
-      futuro: { freeCashFlowProjectedCop: ND },
+      futuro: { freeCashFlowProjectedCop: null },
     },
     links: {
       viewReportUrl: `${BASE_URL}/workspace/contabilidad?run=${runId}`,

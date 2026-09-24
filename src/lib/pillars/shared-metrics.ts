@@ -23,6 +23,9 @@
 
 import type { ControlTotals, PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 
+import { computeEbitda } from './ebitda';
+import type { ForensicSummary } from './types';
+
 /** Meses cubiertos por los flujos de resultados del snapshot. */
 export function monthsCovered(snapshot: Pick<PeriodSnapshot, 'period'>): number {
   const m = /^(\d{4})-(\d{2})$/.exec(snapshot.period ?? '');
@@ -46,9 +49,53 @@ export function periodsComparable(
   return monthsCovered(a) === monthsCovered(b);
 }
 
-/** Ingresos del periodo netos de devoluciones (4175). */
+/**
+ * Ingresos del periodo netos de devoluciones (clase 4 − 4175, incluye el grupo
+ * 42). Base de la utilidad neta del preprocesador y de `controlTotals.margenNeto`:
+ * denominador del Margen Neto Real, del Ratio Operativo, del CAGR y de las
+ * proyecciones de caja (ratios-kpis-04). Nunca la Σ bruta de la clase 4.
+ */
 export function ingresosNetosPeriodo(ct: ControlTotals): number {
   return ct.ingresosNetos ?? ct.ingresos;
+}
+
+/**
+ * Ingresos operacionales netos = |Σ 41 (sin 4175)| − |Σ 4175| (decisión del
+ * coordinador de la auditoría 2026-09: el grupo 42 va debajo de la utilidad
+ * operacional). Prefiere el ancla del preprocesador; sin ella, la misma fórmula
+ * sobre las hojas de la clase 4 (computeEbitda). `null` sin grupo 41.
+ */
+export function ingresosOperacionalesNetosPeriodo(snapshot: PeriodSnapshot): number | null {
+  const fromDetail = computeEbitda(snapshot).ingresosOperacionalesNetos;
+  if (fromDetail === null) return null;
+  const anchor = snapshot.controlTotals.ingresosOperacionalesNetos;
+  return typeof anchor === 'number' && Number.isFinite(anchor) ? anchor : fromDetail;
+}
+
+/**
+ * Margen bruto = (ingresos operacionales netos − costos de las clases 6 y 7) /
+ * ingresos operacionales netos — misma utilidad bruta que el preprocesador
+ * (`controlTotals.utilidadBruta`). `null` sin grupo 41 o con ingresos ≤ 0.
+ */
+export function margenBruto(snapshot: PeriodSnapshot): number | null {
+  const ingresosOp = ingresosOperacionalesNetosPeriodo(snapshot);
+  if (ingresosOp === null || !(ingresosOp > 0)) return null;
+  const anchor = snapshot.controlTotals.utilidadBruta;
+  const utilidadBruta =
+    typeof anchor === 'number' && Number.isFinite(anchor)
+      ? anchor
+      : ingresosOp - computeEbitda(snapshot).costos;
+  return utilidadBruta / ingresosOp;
+}
+
+/**
+ * Score forense publicable como integridad de los asientos: sólo con cobertura
+ * COMPLETA (auditoria-calidad-19). Un escaneo parcial (reglas que no se
+ * pudieron evaluar) no equivale a "limpio".
+ */
+export function forensicIntegrityScore(forensic: ForensicSummary | null | undefined): number | null {
+  if (!forensic || forensic.coverage === 'parcial') return null;
+  return Number.isFinite(forensic.score) ? forensic.score : null;
 }
 
 export function razonCorriente(ct: ControlTotals): number | null {

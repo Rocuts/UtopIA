@@ -37,15 +37,6 @@ import type {
 } from './types';
 
 // ---------------------------------------------------------------------------
-// Constantes
-// ---------------------------------------------------------------------------
-
-/** Tasa general Art. 240 E.T. — SÓLO para el diagnóstico interno
- *  `audit.rentaTeorica` (lo lee single-source-validator). No se publica ninguna
- *  métrica fiscal derivada de ella (ratios-kpis-10). */
-export const RENTA_RATE = 0.35;
-
-// ---------------------------------------------------------------------------
 // Helpers (puros, internos)
 // ---------------------------------------------------------------------------
 
@@ -139,9 +130,10 @@ function buildEscudoAudit(
     pasivoCorriente: ct.pasivoCorriente,
     inventarios14: ct.inventarios14 ?? 0,
     provisionCuenta24: ct.impuestosCuenta24,
-    rentaTeorica: Math.max(0, ct.utilidadNeta * RENTA_RATE),
+    // Utilidad neta leída tal cual (ratios-kpis-10): single-source-validator la
+    // compara sin reconstruirla desde una "renta teórica" de UN × 35 %.
+    utilidadNeta: ct.utilidadNeta,
     proveedoresCuenta2205,
-    tasaRenta: RENTA_RATE,
     periodosUsados: 1,
   };
 }

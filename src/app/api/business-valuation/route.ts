@@ -5,6 +5,8 @@ import { orchestrateValuation } from '@/lib/agents/financial/valuation/orchestra
 import type { ValuationProgressEvent } from '@/lib/agents/financial/valuation/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
+import type { MacroSnapshot } from '@/lib/agents/financial/valuation/macro-context';
+import { getMacroSnapshotForPrompts } from '@/lib/macro/prompt-snapshot';
 
 // ---------------------------------------------------------------------------
 // POST /api/business-valuation
@@ -45,13 +47,18 @@ export async function POST(req: Request) {
       }
     }
 
+    // Parámetros macro con valor, vigencia y fuente por campo (valoracion-18):
+    // IPC, TRM y tasa de política del servicio macro; lo que no tenga dato
+    // verificado sale N/D en <macro_vigente>. Nunca bloquea (null ⇒ todo N/D).
+    const macro = await getMacroSnapshotForPrompts();
+
     // Check for streaming request
     const stream =
       req.headers.get('X-Stream') === 'true' ||
       new URL(req.url).searchParams.get('stream') === '1';
 
     if (stream) {
-      return handleStreaming(financialData, company, language, instructions, purpose);
+      return handleStreaming(financialData, company, language, instructions, purpose, macro);
     }
 
     // Non-streaming: run the full pipeline and return JSON
@@ -61,6 +68,7 @@ export async function POST(req: Request) {
       language,
       instructions,
       purpose,
+      macro,
     });
 
     return NextResponse.json(report);
@@ -86,6 +94,7 @@ function handleStreaming(
   language: 'es' | 'en',
   instructions: string | undefined,
   purpose: string | undefined,
+  macro: MacroSnapshot | null,
 ) {
   const readableStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -93,7 +102,7 @@ function handleStreaming(
 
       try {
         const report = await orchestrateValuation(
-          { financialData, company, language, instructions, purpose },
+          { financialData, company, language, instructions, purpose, macro },
           {
             onProgress: (event: ValuationProgressEvent) => {
               sse.send('progress', event);

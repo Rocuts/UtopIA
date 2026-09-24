@@ -37,9 +37,6 @@ import type {
 
 const HORIZON_MONTHS = 36;
 const SCENARIO_CONSERVATIVE_FACTOR = 0.85;
-/** SÓLO diagnóstico interno (audit.utilidadProyectadaAnual/tasaRenta, que lee
- *  single-source-validator). No se publica ninguna métrica con esta tasa. */
-const TAX_RATE = 0.35;
 
 // ---------------------------------------------------------------------------
 // Helpers internos (puros)
@@ -134,10 +131,9 @@ function buildFuturoAudit(
   const mesesAlQuiebreBase =
     baseProj.monthsToZero <= HORIZON_MONTHS ? baseProj.monthsToZero : null;
 
-  // Diagnóstico interno (NO se publica): lo lee single-source-validator para
-  // verificar que el pilar Futuro lee la misma utilidad neta. La provisión
-  // tributaria y la capacidad de inversión son N/D (ratios-kpis-10/19).
-  const utilidadProyectadaAnual = Math.max(0, ct.utilidadNeta) * (1 + (cagrIngresos ?? 0.05));
+  // La provisión tributaria y la capacidad de inversión son N/D
+  // (ratios-kpis-10/19); la utilidad neta se expone tal cual para
+  // single-source-validator (sin reconstruirla desde UN × (1 + CAGR)).
   const provisionTributariaFutura: number | null = null;
   const reserva60Dias = (ct.gastos / ((meses * 365) / 12)) * 60;
   const capacidad = capacidadInversion(snapshot).value;
@@ -145,16 +141,16 @@ function buildFuturoAudit(
   return {
     cagrIngresos,
     periodosCagr,
-    ingresosActuales: ct.ingresos,
+    // Misma base que el CAGR (ingresos netos, no la Σ de la clase 4).
+    ingresosActuales: ingresosNetosPeriodo(ct),
     ingresosAnteriores,
     mesesAlQuiebreConservador,
     mesesAlQuiebreBase,
-    utilidadProyectadaAnual,
+    utilidadNeta: ct.utilidadNeta,
     provisionTributariaFutura,
     capacidadInversion: capacidad,
     reserva60Dias,
     cajaProyectada36mBase: baseProj.cashAtMonth36,
-    tasaRenta: TAX_RATE,
   };
 }
 

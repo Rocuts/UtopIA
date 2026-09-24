@@ -144,7 +144,9 @@ export interface ValorExecutiveCardsAudit {
   totalGastos: number;
   /** Total Clase 6 (Costos de Ventas). */
   totalCostos: number;
-  /** Total Clase 4 (Ingresos). */
+  /** Ingresos netos del periodo (clase 4 − devoluciones 4175; base de la
+   *  utilidad neta y denominador del Ratio Operativo). No es la Σ bruta de la
+   *  clase 4 (ratios-kpis-04). */
   totalIngresos: number;
   /** Var. PPE (Clase 15) — proxy de CapEx, del EFE indirecto NIC 7. */
   capex: number | null;
@@ -184,15 +186,17 @@ export interface EscudoExecutiveCardsAudit {
   inventarios14?: number;
   /** Provisión registrada en cuenta 24 (Impuestos por Pagar). */
   provisionCuenta24: number;
-  /** Diagnóstico interno (NO se publica): utilidadNeta × 35 %. Lo lee
-   *  single-source-validator para verificar que todos los pilares leen la misma
-   *  utilidad neta. La tarjeta "Reserva Fiscal" es N/D (ratios-kpis-10). */
-  rentaTeorica: number;
+  /** Utilidad neta del periodo que leyó el pilar (controlTotals.utilidadNeta).
+   *  single-source-validator la compara directamente (ratios-kpis-10). */
+  utilidadNeta?: number;
+  /** @deprecated Retirado (ratios-kpis-10): era utilidadNeta × 35 %, una
+   *  métrica fiscal heurística. Ya no se produce; se conserva opcional sólo
+   *  por compatibilidad de lectura. */
+  rentaTeorica?: number;
   /** Saldo de cuenta 2205 (Proveedores) — proxy de exigible 30 días. */
   proveedoresCuenta2205: number;
-  /** Tasa usada SÓLO como diagnóstico interno (no se publica ninguna métrica
-   *  fiscal heurística; ver shared-metrics FISCAL_ND_REASON_ES). */
-  tasaRenta: number;
+  /** @deprecated Retirado (ratios-kpis-10); ya no se produce. */
+  tasaRenta?: number;
   /** Cantidad de períodos usados para promedio (1 = anual, 3 = trimestre). */
   periodosUsados: number;
   /** Suma COP de eventos CapEx en los próximos 6 meses (monthOffset ≤ 6).
@@ -271,7 +275,7 @@ export interface FuturoExecutiveCardsAudit {
   cagrIngresos: number | null;
   /** # períodos usados para el CAGR (2 si hay current+comparative; null si no). */
   periodosCagr: number | null;
-  /** Ingresos del periodo actual. */
+  /** Ingresos netos del periodo actual (misma base que el CAGR). */
   ingresosActuales: number;
   /** Ingresos del periodo anterior (null si no hay comparative). */
   ingresosAnteriores: number | null;
@@ -280,9 +284,12 @@ export interface FuturoExecutiveCardsAudit {
   mesesAlQuiebreConservador: number | null;
   /** Mes donde el escenario base (factor 1.0) cruza 0. */
   mesesAlQuiebreBase: number | null;
-  /** Diagnóstico interno (NO se publica): max(0, UN) × (1 + CAGR ?? 0,05). Lo
-   *  lee single-source-validator; la tarjeta de provisión es N/D. */
-  utilidadProyectadaAnual: number;
+  /** Utilidad neta del periodo que leyó el pilar (controlTotals.utilidadNeta).
+   *  single-source-validator la compara directamente (ratios-kpis-10). */
+  utilidadNeta?: number;
+  /** @deprecated Retirado (ratios-kpis-10): era max(0, UN) × (1 + CAGR ?? 5 %),
+   *  insumo de una provisión fiscal heurística. Ya no se produce. */
+  utilidadProyectadaAnual?: number;
   /** Provisión tributaria proyectada: null sin base fiscal verificada. */
   provisionTributariaFutura: number | null;
   /** Capacidad de inversión (shared-metrics.capacidadInversion): null sin base
@@ -292,8 +299,8 @@ export interface FuturoExecutiveCardsAudit {
   reserva60Dias: number;
   /** Caja proyectada al final del horizonte (escenario base). */
   cajaProyectada36mBase: number;
-  /** Tasa de impuesto de renta (Art. 240 E.T.). */
-  tasaRenta: number;
+  /** @deprecated Retirado (ratios-kpis-10); ya no se produce. */
+  tasaRenta?: number;
 }
 
 export interface FuturoExecutiveCards {
@@ -330,6 +337,10 @@ export interface ForensicSummary {
   score: number;
   totalAnomalies: number;
   bySeverity: { low: number; medium: number; high: number };
+  /** Cobertura del escaneo (ForensicScanResult.coverage). 'parcial' = alguna
+   *  regla no se pudo evaluar: el score NO es un score de integridad
+   *  (auditoria-calidad-19). Ausente = resumen legado sin el dato. */
+  coverage?: 'completa' | 'parcial';
 }
 
 /** Mínimo subset del estado de conciliación bancaria. */

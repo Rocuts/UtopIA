@@ -32,8 +32,6 @@ export const INDUSTRY_MULTIPLES: Record<ExitValueIndustry, number> = {
   other: 6,
 };
 
-const DEFAULT_WACC = 0.135;
-
 /**
  * Formats a COP amount into a compact human string.
  * n >= 1e12 → $X.YYT COP
@@ -77,7 +75,10 @@ export function calculateExitValue(input: ExitValueInput): KpiResult {
   const netDebt = input.netDebt ?? 0;
   const equityValue = enterpriseValue - netDebt;
 
-  const wacc = input.wacc ?? DEFAULT_WACC;
+  // valoracion-07: sin WACC por defecto (el 13,5 % "CO típico" no tenía
+  // fuente). El método por múltiplos no descuenta flujos; la tasa sólo se
+  // informa si el usuario la declara, rotulada como supuesto.
+  const wacc = typeof input.wacc === 'number' && Number.isFinite(input.wacc) ? input.wacc : null;
 
   const breakdown: KpiBreakdown[] = [
     {
@@ -116,7 +117,9 @@ export function calculateExitValue(input: ExitValueInput): KpiResult {
   }
 
   const assumptions = [
-    `WACC de referencia CO 2026 = ${(wacc * 100).toFixed(1)}%`,
+    wacc === null
+      ? 'WACC no declarado: el valor por múltiplos no usa tasa de descuento'
+      : `WACC declarado por el usuario (supuesto) = ${(wacc * 100).toFixed(1)}%`,
     'Múltiplos basados en transacciones comparables CO 2024-2026 por industria',
     'Ajuste por crecimiento lineal sobre el múltiplo base',
     'Cifras expresadas en COP corrientes',
