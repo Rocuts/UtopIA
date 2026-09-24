@@ -183,8 +183,11 @@ describe('compare() — no recomienda régimen con supuestos inventados', () => 
     expect(r.advertencias.join(' ')).toMatch(/concejo municipal/i);
   });
 
-  it('con tarifa municipal verificada sí compara', () => {
-    const r = compare(97_992_000, { group: 'tiendas', icaRate: 0.0069 });
+  it('con tarifa municipal verificada y margen del usuario sí compara', () => {
+    // Auditoría 2026-09 (tributario-calc-11): el margen de utilidad también es
+    // dato del usuario. Antes esta prueba aceptaba recomendar con el 35 %
+    // supuesto por defecto, que es justamente un supuesto inventado.
+    const r = compare(97_992_000, { group: 'tiendas', icaRate: 0.0069, margin: 0.35 });
     expect(r.comparable).toBe(true);
     expect(r.recommended === 'RST' || r.recommended === 'Ordinario').toBe(true);
     expect(r.savings).toBeCloseTo(Math.abs(r.ordinario - r.rst), 6);

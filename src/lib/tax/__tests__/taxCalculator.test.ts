@@ -100,8 +100,10 @@ describe('compare — SIMPLE vs Ordinario', () => {
     expect(r.comparable).toBe(false);
   });
 
-  it('tendero ~$8,2M/mes con ICA municipal conocido', () => {
-    const r = compare(97_992_000, { group: 'tiendas', icaRate: 0.0069 });
+  it('tendero ~$8,2M/mes con ICA municipal y margen conocidos', () => {
+    // El margen se pasa explícito: sin él la cifra ordinaria es un supuesto
+    // y compare() ya no la da por comparable (tributario-calc-11).
+    const r = compare(97_992_000, { group: 'tiendas', icaRate: 0.0069, margin: 0.35 });
     expect(r.rst).toBeCloseTo(97_992_000 * 0.012, 6);
     expect(r.comparable).toBe(true);
     expect(r.semaforo.level).toBe('verde'); // lejos de las 100.000 UVT
@@ -109,7 +111,7 @@ describe('compare — SIMPLE vs Ordinario', () => {
   });
 
   it('savings = |ordinario − rst| cuando la comparación es válida', () => {
-    const r = compare(60_000_000, { group: 'servicios', icaRate: 0.0069 });
+    const r = compare(60_000_000, { group: 'servicios', icaRate: 0.0069, margin: 0.35 });
     expect(r.savings).toBeCloseTo(Math.abs(r.ordinario - r.rst), 6);
   });
 });
