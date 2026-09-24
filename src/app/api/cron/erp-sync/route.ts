@@ -8,11 +8,17 @@
  * The `x-vercel-cron-id` header is NOT trusted — it's a plain request header
  * any client can spoof. Fail-closed: sin CRON_SECRET configurado, 503.
  *
- * Flow per workspace+provider:
- *   1. Load erp_credentials row (provider + metadata with connection config).
- *   2. Call ERPAdapter.fetchTrialBalance(currentPeriod).
- *   3. Revalidate Next.js cache tags.
- *   4. Log workspaceId + provider + duration.
+ * Estado honesto (auditoría 2026-09, ingesta-18): la ruta ERP → balance
+ * persistido → informes todavía no existe. Antes el cron llamaba
+ * `adapter.fetchTrialBalance`, descartaba el resultado, revalidaba las caches
+ * `workspace-balance` / `pillars-*`, recalculaba el balance preprocesado y
+ * registraba «ok»: gastaba cuota del ERP y declaraba una sincronización que no
+ * guardaba nada. Igual que el webhook (src/app/api/erp/webhook/[provider]),
+ * hasta que la importación persista el cron sólo comprueba que la credencial
+ * del workspace se puede abrir y registra `not_persisted`:
+ *   - sin lectura del ERP,
+ *   - sin revalidación de caches,
+ *   - sin recalcular balances.
  *
  * Concurrency: all workspaces run via Promise.allSettled — a single failing
  * workspace never blocks others.
@@ -21,34 +27,22 @@
  */
 
 import { NextResponse } from 'next/server';
-import { revalidateTag } from 'next/cache';
 import { getDb } from '@/lib/db/client';
 import { erpCredentials } from '@/lib/db/schema';
-import { ERPAdapter } from '@/lib/erp/adapter';
-import type { ERPCredentials } from '@/lib/erp/types';
 import { loadCredentials } from '@/lib/erp/credentials';
-import { getLatestOpenPeriod, getCachedPreprocessedBalance } from '@/lib/cache/preprocessed-balance';
 import { checkCronAuth } from '@/lib/security/cron-auth';
 
 export const maxDuration = 300;
 
 // ---------------------------------------------------------------------------
-// Current period helper — YYYY-MM for the current calendar month.
-// ---------------------------------------------------------------------------
-
-function currentPeriod(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
-// ---------------------------------------------------------------------------
-// Per-workspace sync
+// Per-workspace outcome
 // ---------------------------------------------------------------------------
 
 interface SyncOutcome {
   workspaceId: string;
   provider: string;
-  status: 'ok' | 'error';
+  /** `not_persisted`: credencial válida, pero no hay importación persistente. */
+  status: 'not_persisted' | 'error';
   duration: number;
   error?: string;
 }
@@ -58,47 +52,28 @@ async function syncWorkspace(row: typeof erpCredentials.$inferSelect): Promise<S
   const { workspaceId, provider } = row;
 
   try {
-    let credentials: ERPCredentials;
-    try {
-      credentials = loadCredentials(row);
-    } catch (err) {
-      console.error('[cron/erp-sync] credential decrypt failed, skipping workspace', {
-        workspaceId,
-        provider,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      const duration = Date.now() - start;
-      return { workspaceId, provider, status: 'error', duration, error: 'credential_decrypt_failed' };
-    }
-
-    const period = currentPeriod();
-    const adapter = new ERPAdapter({ provider: credentials.provider, credentials });
-    await adapter.fetchTrialBalance(period);
-
-    // Revalidate cached consumers — 'max' for ERP-sourced data (fresh signal).
-    revalidateTag('workspace-balance', 'max');
-    revalidateTag(`pillars-${workspaceId}`, 'max');
-
-    // Refresh preprocessed balance for the latest open accounting period.
-    const latestPeriod = await getLatestOpenPeriod(workspaceId);
-    if (latestPeriod) {
-      await getCachedPreprocessedBalance(workspaceId, latestPeriod.id);
-    }
-
-    const duration = Date.now() - start;
-    console.info(
-      `[erp-sync] ok workspaceId=${workspaceId} provider=${provider} period=${period} duration=${duration}ms`,
-    );
-    return { workspaceId, provider, status: 'ok', duration };
+    loadCredentials(row);
   } catch (err) {
-    const duration = Date.now() - start;
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[erp-sync] error workspaceId=${workspaceId} provider=${provider} duration=${duration}ms`,
-      message,
-    );
-    return { workspaceId, provider, status: 'error', duration, error: message };
+    console.error('[cron/erp-sync] credential decrypt failed, skipping workspace', {
+      workspaceId,
+      provider,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return {
+      workspaceId,
+      provider,
+      status: 'error',
+      duration: Date.now() - start,
+      error: 'credential_decrypt_failed',
+    };
   }
+
+  const duration = Date.now() - start;
+  console.info(
+    `[erp-sync] workspaceId=${workspaceId} provider=${provider} ` +
+      'status=not_persisted (ERP import is not wired to persistence yet)',
+  );
+  return { workspaceId, provider, status: 'not_persisted', duration };
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +97,13 @@ export async function GET(req: Request) {
   });
 
   if (activeRows.length === 0) {
-    return NextResponse.json({ ok: true, processed: 0, errors: 0 });
+    return NextResponse.json({
+      ok: true,
+      status: 'not_persisted',
+      processed: 0,
+      notPersisted: 0,
+      errors: 0,
+    });
   }
 
   const results = await Promise.allSettled(activeRows.map(syncWorkspace));
@@ -140,9 +121,10 @@ export async function GET(req: Request) {
   });
 
   const errorCount = outcomes.filter((o) => o.status === 'error').length;
+  const notPersistedCount = outcomes.filter((o) => o.status === 'not_persisted').length;
 
   console.info(
-    `[erp-sync] complete processed=${outcomes.length} errors=${errorCount}`,
+    `[erp-sync] complete processed=${outcomes.length} not_persisted=${notPersistedCount} errors=${errorCount}`,
   );
 
   // SECURITY: no devolver `outcomes` (contiene workspaceId) en el body — en
@@ -152,7 +134,9 @@ export async function GET(req: Request) {
   // response body). Devolvemos sólo contadores agregados.
   return NextResponse.json({
     ok: true,
+    status: 'not_persisted',
     processed: outcomes.length,
+    notPersisted: notPersistedCount,
     errors: errorCount,
   });
 }
