@@ -1872,19 +1872,22 @@ function buildSnapshotForPeriod(
     ...leafSelection.reasons,
     ...collectParseIssueReasons(allRows, period),
   ];
-  const validationReasons: string[] = [...integrityReasons];
   // The current input contract uses JS numbers. BigInt after rounding cannot
   // recover cents already lost by parsing or by an unsafe aggregate.
+  // recalculo-final-04: es un motivo de INTEGRIDAD de los datos leídos (ningún
+  // cierre virtual lo resuelve): va a `integrityReasons` para que el Bridge de
+  // Cuadratura no lo degrade y el API v1 no publique 'balanced'.
   const monetaryValues = [
     ...leafRows.map(row => row.balance), totalAssets, totalLiabilities,
     totalEquityRaw, totalRevenue, totalExpenses, totalCosts, totalProduction, netIncome,
   ];
   if (monetaryValues.some(value => !Number.isSafeInteger(Math.round(value * 100)))) {
-    validationReasons.push(
+    integrityReasons.push(
       `[${period}] Importe fuera del rango de precisión monetaria soportado. ` +
       'Se requiere ingestión decimal exacta antes de emitir el informe.',
     );
   }
+  const validationReasons: string[] = [...integrityReasons];
   const suggestedAccounts: string[] = [];
   const totalEquity = totalEquityRaw;
 
@@ -2136,18 +2139,15 @@ function buildSnapshotForPeriod(
     Math.abs(liquidezGap) > LIQUIDEZ_TOL;
 
   if (hasLiquidezRisk) {
-    validationReasons.push(
-      `[${period}] Riesgo de liquidez: Activo Corriente ($${formatCOP(controlTotals.activoCorriente)}) ` +
-        `< Pasivo Corriente ($${formatCOP(controlTotals.pasivoCorriente)}). ` +
-        `Brecha: $${formatCOP(Math.abs(liquidezGap))}.`,
-    );
-    suggestedAccounts.push(
-      '11 — Efectivo y equivalentes (revisar saldos depurados)',
-      '13 — Deudores comerciales (revisar rotacion de cartera)',
-      '21 — Obligaciones financieras CP (revisar refinanciacion)',
-      '23 — Cuentas por pagar (revisar plazos con proveedores)',
-      '24 — Impuestos por pagar (DIAN — revisar calendario y acuerdos de pago)',
-      '25 — Obligaciones laborales (revisar exigibilidad inmediata)',
+    // recalculo-final-07: AC < PC es un HALLAZGO financiero del cliente, no un
+    // error de los datos. Antes era motivo bloqueante: un ESF cuadrado sin P&G
+    // (R8 no actúa, el Bridge no degrada) recibía 422, y el mismo caso con P&G
+    // pasaba como informativo. Ahora el trato es igual con o sin P&G: ajuste
+    // informativo + discrepancia "Riesgo de Liquidez" para el análisis.
+    adjustments.push(
+      `[${period}] Riesgo de liquidez (hallazgo informativo, no bloqueante): Activo Corriente ` +
+        `($${formatCOP(controlTotals.activoCorriente)}) < Pasivo Corriente ` +
+        `($${formatCOP(controlTotals.pasivoCorriente)}). Brecha: $${formatCOP(Math.abs(liquidezGap))}.`,
     );
     discrepancies.push({
       location: `Riesgo de Liquidez (Big Four) [${period}]`,
