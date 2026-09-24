@@ -603,17 +603,19 @@ Cascada del P&G (enmienda spec v2.1 del 2026-09-24):
 }
 
 /**
- * Bloque Regla R3.b (Anticipo renta neto-bruto) — anticipo de renta material.
- * Aplicable a Pass-1 (presentación neto-bruto en Balance + sub-nota Defensa
+ * Bloque Regla R3.b (renta neto-bruto) — retenciones y anticipos de renta
+ * (1355/1805, regla única de `@/lib/accounting/renta-credit`) materiales.
+ * `anticipoActivo135515` conserva su nombre histórico, pero es la suma de
+ * TODOS los créditos de renta, no sólo la 135515. Aplicable a Pass-1 (presentación neto-bruto en Balance + sub-nota Defensa
  * Art. 647 E.T.) y referenciado en Pass-3 (nota maestra).
  */
 function renderAnticipoRentaBlock(ctx: SharedPromptContext): string {
   if (ctx.tieneAnticipoRentaMaterial && ctx.impuestoRentaNeto) {
-    return `## Regla R3.b (Anticipo renta neto-bruto) — valores autoritativos
+    return `## Regla R3.b (renta neto-bruto) — valores autoritativos
 - PUC 2404 (Bruto Pasivo): $${ctx.fmtCop(ctx.impuestoRentaNeto.brutoPasivo2404)} COP.
-- PUC 135515 (Anticipo Activo): $${ctx.fmtCop(ctx.impuestoRentaNeto.anticipoActivo135515)} COP.
+- Retenciones y anticipos de renta (1355/1805): $${ctx.fmtCop(ctx.impuestoRentaNeto.anticipoActivo135515)} COP.
 - Neto a Pagar: $${ctx.fmtCop(ctx.impuestoRentaNeto.netoAPagar)} COP.
-Citar en technicalNotes: "Conforme a la NIC 12, párrafo 71, y la NIIF para PYMES, Sección 29, el saldo del Impuesto de Renta corriente se presenta NETO en el Pasivo Corriente ($${ctx.fmtCop(ctx.impuestoRentaNeto.netoAPagar)}) porque la entidad tiene el derecho legal exigible de compensar el anticipo contra el impuesto a cargo y la intención de liquidar por el neto. Bruto: $${ctx.fmtCop(ctx.impuestoRentaNeto.brutoPasivo2404)}. Anticipo: $${ctx.fmtCop(ctx.impuestoRentaNeto.anticipoActivo135515)}."`;
+Citar en technicalNotes: "Conforme a la NIC 12, párrafo 71, y la NIIF para PYMES, Sección 29, el saldo del Impuesto de Renta corriente se presenta NETO en el Pasivo Corriente ($${ctx.fmtCop(ctx.impuestoRentaNeto.netoAPagar)}) porque la entidad tiene el derecho legal exigible de compensar las retenciones y anticipos de renta contra el impuesto a cargo y la intención de liquidar por el neto. Bruto: $${ctx.fmtCop(ctx.impuestoRentaNeto.brutoPasivo2404)}. Retenciones y anticipos de renta (1355/1805): $${ctx.fmtCop(ctx.impuestoRentaNeto.anticipoActivo135515)}."`;
   }
   return '';
 }
@@ -625,7 +627,7 @@ Citar en technicalNotes: "Conforme a la NIC 12, párrafo 71, y la NIIF para PYME
  */
 function renderReclasifNoCompBlock(ctx: SharedPromptContext): string {
   if (ctx.reclasifNoComp.length > 0) {
-    return `## Regla R4 (No-Compensación NIC 1 §32) — reclasificaciones detectadas (${ctx.reclasifNoComp.length})
+    return `## Regla R4 (No compensación, NIC 1, párrafo 32) — reclasificaciones detectadas (${ctx.reclasifNoComp.length})
 ${ctx.reclasifNoComp.map((r) => `- ${r.cuenta_origen} → ${r.cuenta_destino_pasivo} | saldo invertido: $${ctx.fmtCop(r.saldo_invertido_centavos)} | norma: ${r.motivo_norma}`).join('\n')}`;
   }
   return '';
@@ -1080,11 +1082,11 @@ ${ctx.reportMode === 'COMPARATIVO_COMPLETO' ? '  balanceSheet.modeBanner = null;
 anomalyFlag = {
   severity: 'high' | 'medium',
   message: 'Ratio Z% fuera de banda sectorial CIIU X-Y%',
-  normaRef: 'NIA 240 §A1 + benchmark CTCP/DANE 2026',
+  normaRef: 'NIA 240 + benchmark CTCP/DANE 2026',
   benchmarkBand: { lowerBound: 'X%', upperBound: 'Y%', observed: 'Z%' }
 }
 \`\`\`
-  NEVER emitir cifras de banda INVENTADAS — usar EXCLUSIVAMENTE las del header colombia-2026-context (si están presentes para el CIIU). If el header no expone banda para este CIIU then citar como \`normaRef: 'NIA 240 §A1 (banda sectorial CIIU no disponible — recomendación general)'\` y omitir benchmarkBand (null).
+  NEVER emitir cifras de banda INVENTADAS — usar EXCLUSIVAMENTE las del header colombia-2026-context (si están presentes para el CIIU). If el header no expone banda para este CIIU then citar como \`normaRef: 'NIA 240 (banda sectorial CIIU no disponible — recomendación general)'\` y omitir benchmarkBand (null).
 
 Devoluciones 4175 (Parte 1.3 spec v2.0). TOTALES VINCULANTES expone (cuando F4 lande) \`ingresosNetos\` = |Σ 41xx crédito| − |Σ 4175xx débito|. If quieres desglosar ingresos en incomeStatement.lines (Opción B) then incluir línea separada "(-) Devoluciones en ventas (Cta 4175)" con valor absoluto y signo NEGATIVO; verificar que Ingresos brutos − Devoluciones = ingresosNetos. Else if Opción A (consolidado) then una sola línea "(+) Ingresos de actividades ordinarias (Grupo 41, neto de devoluciones)" con el monto de "Ingresos operacionales netos" del bloque CASCADA VINCULANTE DEL P&G (no el total de la clase 4: el grupo 42 va en su propio renglón debajo del EBIT). NEVER duplicar la resta de 4175 cuando el ancla ya entrega el monto neto.
 
@@ -1098,10 +1100,10 @@ Las dos opciones son mutuamente excluyentes. Nunca ambas combinadas. Esta es la 
 
 Detección de Anomalías (Tabla 8 — Parte 5 spec v2.0). Para CADA condición detectada en TOTALES VINCULANTES o auxiliares, emitir nota en \`balanceSheet.notes\` (anomalías de Activo/Pasivo/Patrimonio) o \`incomeStatement.notes\` (anomalías P&L):
 
-- If preprocessed contiene cuenta auxiliar Clase 14 con saldo < 0 then nota "Anomalía A1: Inventarios con saldo negativo (Clase 14 < 0) — error contable; revisar kardex y movimientos (NIC 2 §9-10)".
-- If preprocessed contiene cuenta auxiliar Clase 11/13/14 con saldo crédito (negativo en convención PUC) then nota "Anomalía A2: Activo con saldo inverso (cta XXXX) — inconsistencia contable; revisar imputación (NIC 1 §32 No compensación)".
-- If preprocessed contiene Clase 12 (Inversiones) con saldo < 0 then nota "Anomalía A3: Inversiones con saldo negativo — requiere revisión documental (NIC 28 §10 / Sec. 14 PYMES)".
-- If (Clase 6 + Clase 7) / Clase 4 < 1% then nota "Anomalía A4: Costo de ventas/producción < 1% de ingresos — posible subregistro de costos; KPIs de ciclo operativo distorsionados (NIA 240 §A1-A6 fraude por subregistro)".
+- If preprocessed contiene cuenta auxiliar Clase 14 con saldo < 0 then nota "Anomalía A1: Inventarios con saldo negativo (Clase 14 < 0) — error contable; revisar kardex y movimientos (NIC 2, párrafos 9-10)".
+- If preprocessed contiene cuenta auxiliar Clase 11/13/14 con saldo crédito (negativo en convención PUC) then nota "Anomalía A2: Activo con saldo inverso (cta XXXX) — inconsistencia contable; revisar imputación (NIC 1, párrafo 32 — no compensación)".
+- If preprocessed contiene Clase 12 (Inversiones) con saldo < 0 then nota "Anomalía A3: Inversiones con saldo negativo — requiere revisión documental (NIC 28, párrafo 10 / NIIF para PYMES, Sección 14)".
+- If (Clase 6 + Clase 7) / Clase 4 < 1% then nota "Anomalía A4: Costo de ventas/producción < 1% de ingresos — posible subregistro de costos; KPIs de ciclo operativo distorsionados (NIA 240 — fraude por subregistro)".
 - If la UAI es positiva y el grupo 54 no tiene saldo then nota "Anomalía A5: no se registró gasto por impuesto de renta en el grupo 54 con utilidad antes de impuestos positiva — la conciliación fiscal (renta líquida, impuesto corriente y diferido) está pendiente del contador (NIC 12 / NIIF para PYMES, Sección 29)". No cuantifiques un impuesto teórico: la base gravable es la renta líquida, no la utilidad contable.
 - If preprocessed contiene cta 22xx (Proveedores) con saldo débito (saldo positivo en convención PUC Clase 2) then nota "Anomalía A6: Proveedores con saldo débito — posible anticipo o error de imputación; revisar".
 - If totalEquityPrimary < 0 then nota DEDICADA "Anomalía A7: PATRIMONIO NEGATIVO — alerta sobre la hipótesis de negocio en marcha (NIC 1, párrafos 25-26; NIIF para PYMES, Sección 3.8-3.9; NIA 570). Conforme al art. 4 de la Ley 2069 de 2020 y los indicadores del Decreto 1378 de 2021, los administradores deben abstenerse de iniciar nuevas operaciones distintas de las necesarias para la conservación del negocio y convocar al máximo órgano social para evaluar la continuidad de la empresa." (La causal de disolución por pérdidas de los Arts. 457 num. 2 y 459 C.Co. fue derogada por la Ley 2069 de 2020; no la cites.)
@@ -1111,11 +1113,11 @@ If TOTALES VINCULANTES contiene reclassifications[] con applied=true then manten
 
 NEVER inventar códigos PUC con sufijos no canónicos (ZZ, XX, transitorio, virtual, curator). El PUC colombiano (Decreto 2650/1993) tiene un catálogo cerrado; sufijos arbitrarios confunden al lector y rompen reconciliación con balance de prueba.
 
-If reclasifNoComp.length > 0 (Regla R4 — No-Compensación NIC 1 §32, saldos contranatura en Activo) then presentar las cuentas reclasificadas dentro de balanceSheet.liabilities (mantener saldo absoluto, citar cuenta de origen como referencia en notes) otherwise omitir.
+If reclasifNoComp.length > 0 (Regla R4 — No compensación, NIC 1, párrafo 32; saldos contranatura en Activo) then presentar las cuentas reclasificadas dentro de balanceSheet.liabilities (mantener saldo absoluto, citar cuenta de origen como referencia en notes) otherwise omitir.
 
 If tieneSaldoAFavor=true (saldo a favor de renta identificado por el preprocesador) then presentar el saldo a favor SEPARADO dentro de balanceSheet.assets, NUNCA neteado contra el gasto de impuestos del P&L; emitir balanceSheet.notes citando la NIIF para PYMES, Sección 29, y la NIC 12, párrafo 58 otherwise no añadir esta nota.
 
-If impuestoRentaNeto.applicable=true (Regla R3.b — Anticipo renta neto-bruto, PUC 135515 material) then presentar dentro de balanceSheet.liabilities tres líneas: "Impuesto de Renta — Bruto (PUC 2404)", "(-) Anticipo aplicable (PUC 135515)", "= Impuesto de Renta — Neto a Pagar"; totalLiabilitiesPrimary incluye SOLO el Neto a Pagar; NO mostrar PUC 135515 adicionalmente como Activo; emitir balanceSheet.notes citando la NIC 12, párrafo 71 otherwise omitir esta presentación neto-bruto.
+If impuestoRentaNeto.applicable=true (Regla R3.b — renta neto-bruto, retenciones y anticipos de renta 1355/1805 materiales) then presentar dentro de balanceSheet.liabilities tres líneas: "Impuesto de Renta — Bruto (PUC 2404)", "(-) Retenciones y anticipos de renta (1355/1805)", "= Impuesto de Renta — Neto a Pagar"; totalLiabilitiesPrimary incluye SOLO el Neto a Pagar; NO mostrar esas retenciones y anticipos de renta adicionalmente como Activo; emitir balanceSheet.notes citando la NIC 12, párrafo 71 otherwise omitir esta presentación neto-bruto.
 
 If comparativosImpracticables=true then balanceSheet e incomeStatement presentan amountComparative=null en todas las líneas otherwise usar el Opening Balance del periodo ${ctx.comparativePeriod ?? 'comparativo'} cuando exista.
 
@@ -1242,7 +1244,7 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
 - MUST: si reportMode != 'LINEA_BASE' Y \`comparativosImpracticables\` != true Y el bloque \`<previously_computed>\` (anchors Pass-1) expone cifras comparativas para los rubros relevantes (totalAssetsComparative, totalEquityComparative, netIncomeComparative, etc.), \`amountComparative\` en líneas del EFE y filas del ECP DEBE reflejar esa cifra (incluso si es "0"). \`amountComparative=null\` EXCLUSIVAMENTE cuando reportMode='LINEA_BASE' o la cuenta no existe en preprocessed.comparative. NUNCA null-ear silenciosamente.
 
-- MUST: TODA política contable elegida, TODA presentación lleva cita normativa entre paréntesis (§1.4 spec v8.1: NIC 7 §X / NIIF for SMEs §7.Y / NIC 1 §Z). Sin cita, sin afirmación.
+- MUST: TODA política contable elegida, TODA presentación lleva cita normativa entre paréntesis (§1.4 spec v8.1: NIC 7, párrafo X / NIIF para PYMES, Sección 7.Y / NIC 1, párrafo Z). Sin cita, sin afirmación.
 
 - Si un dato falta, escribir "— (dato no suministrado)" o N/D con el motivo concreto en methodNote o equityChanges.notes. La impracticabilidad sólo se cita cuando está acreditada (bloque "Regla R1").
 - NEVER inventar saldos del periodo comparativo: si comparativosImpracticables=true, amountComparative=null en todas las líneas.
@@ -1271,7 +1273,7 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
     1. If el bloque "EFE VINCULANTE" está en el \`<context>\` then el EFE cuadra copiándolo: sus renglones ya incluyen TODA partida del periodo (utilidad neta, gasto no monetario, capital de trabajo, inversión, obligaciones financieras y el flujo con socios que deduce el patrimonio; los traslados internos del patrimonio ya están neteados). No falta nada por añadir y no sobra nada por quitar. Si al copiarlo no cuadra, el error está en la copia — revísala contra el bloque, cifra por cifra.
 
-    2. Else (no hay bloque vinculante) emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
+    2. Else (no hay bloque vinculante) emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7, párrafo 18 + NIA 705).
 
   PROHIBIDO ajustar las variaciones de capital de trabajo —ni su magnitud ni su signo— para hacer cuadrar el EFE. Esas cifras salen del balance de prueba: moverlas para forzar un cuadre es fabricar un estado financiero. Un EFE que no cuadra se declara; no se acomoda.
 
@@ -1295,15 +1297,15 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
   - CORRECTO: equityChanges.rows[traslado].resultadosAcumulados = saldo3605 (calculado arriba).
 
   If saldo3605 == netIncomePrimary (tolerancia $0 al centavo) then proceed normal — no hay efecto Cta.3710.
-  Else if saldo3605 != netIncomePrimary then la diferencia se atribuye a Cta.3710 (convergencia NIIF). Documentar en equityChanges.notes citando NIC 1 §106 + Decreto 2420/2015 (transición NIIF) y emitir el monto del saldo3605 explícitamente en la fila de traslado.
+  Else if saldo3605 != netIncomePrimary then la diferencia se atribuye a Cta.3710 (convergencia NIIF). Documentar en equityChanges.notes citando NIC 1, párrafo 106 + Decreto 2420/2015 (transición NIIF) y emitir el monto del saldo3605 explícitamente en la fila de traslado.
 
-- EFE degenerado (§5 Slide 08 spec v8.1). If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (típicamente por ausencia de auxiliares de variaciones de capital de trabajo — el balance solo expone saldos agregados sin movimientos) then poblar \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y emitir methodNote LITERAL: "EFE Método Indirecto no computado por ausencia de auxiliares de variaciones de capital de trabajo. Variación neta de caja como dato único defensible (cashClosing − cashOpening). NIC 7 §18 + NIA 705 §7 limitación al alcance." Else \`cashFlow.degeneracyFlag = 'none'\` y construir EFE Indirecto completo.
+- EFE degenerado (§5 Slide 08 spec v8.1). If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (típicamente por ausencia de auxiliares de variaciones de capital de trabajo — el balance solo expone saldos agregados sin movimientos) then poblar \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y emitir methodNote LITERAL: "EFE Método Indirecto no computado por ausencia de auxiliares de variaciones de capital de trabajo. Variación neta de caja como dato único defensible (cashClosing − cashOpening). NIC 7, párrafo 18 + NIA 705 — limitación al alcance." Else \`cashFlow.degeneracyFlag = 'none'\` y construir EFE Indirecto completo.
 
-EFE Método Indirecto — FUENTE ÚNICA: el bloque "EFE VINCULANTE" del \`<context>\`, que es el mismo EFE determinista que TOTALES VINCULANTES resume en la sección "EFE DETERMINISTA" (el EFE del curator R2 ya no se publica como cifra vinculante). Ninguna otra cifra de flujo de efectivo es vinculante y no existen "dividendos estimados" (NIC 7 ¶43). Cita "NIC 7 §18(b) / Sec. 7.7-7.8 PYMES" en cashFlow.methodNote.
+EFE Método Indirecto — FUENTE ÚNICA: el bloque "EFE VINCULANTE" del \`<context>\`, que es el mismo EFE determinista que TOTALES VINCULANTES resume en la sección "EFE DETERMINISTA" (el EFE del curator R2 ya no se publica como cifra vinculante). Ninguna otra cifra de flujo de efectivo es vinculante y no existen "dividendos estimados" (NIC 7 ¶43). Cita "NIC 7, párrafo 18(b) / NIIF para PYMES, Sección 7.7-7.8" en cashFlow.methodNote.
 
 If la sección "EFE DETERMINISTA" de TOTALES VINCULANTES dice "no es calculable" (balance sin periodo comparativo) then NO presentes flujos por actividades, dividendos ni ajustes de cierre: la única cifra defendible es el efectivo al cierre (PUC 11) y methodNote declara que sin saldo de apertura el EFE por método indirecto no es calculable (NIC 7 ¶1).
 
-If existe el bloque "EFE VINCULANTE" then NO agregar ninguna línea de ajuste de cierre (\`cashFlowClosureAdjustment\`, "Variaciones en Capital de Trabajo (ajuste de cierre)" o equivalente): el bloque ya se reconcilia contra el PUC 11 (o declara su brecha de reconciliación) y añadir una línea rompería la suma de la sección. Else if hay periodo comparativo Y TOTALES VINCULANTES contiene la sección "Cierre de Flujo de Efectivo aplicado (Curator R6)" con brecha ≠ 0 then incluir una línea LITERAL "Variaciones en Capital de Trabajo (ajuste de cierre)" dentro de cashFlow.sections[operating].lines con el monto y signo de esa sección (R6 sólo absorbe redondeo de hasta $1), sumarla al netFlow de la sección, y describirla en cashFlow.methodNote citando NIC 7 §45 ("Se registró un ajuste de redondeo de \$X para reconciliar el EFE con PUC 11") otherwise (sin comparativo el EFE no es calculable y R6 no registra ajuste) no hay línea de ajuste; cashClosing se copia desde controlTotals.efectivoCuenta11.
+If existe el bloque "EFE VINCULANTE" then NO agregar ninguna línea de ajuste de cierre (\`cashFlowClosureAdjustment\`, "Variaciones en Capital de Trabajo (ajuste de cierre)" o equivalente): el bloque ya se reconcilia contra el PUC 11 (o declara su brecha de reconciliación) y añadir una línea rompería la suma de la sección. Else if hay periodo comparativo Y TOTALES VINCULANTES contiene la sección "Cierre de Flujo de Efectivo aplicado (Curator R6)" con brecha ≠ 0 then incluir una línea LITERAL "Variaciones en Capital de Trabajo (ajuste de cierre)" dentro de cashFlow.sections[operating].lines con el monto y signo de esa sección (R6 sólo absorbe redondeo de hasta $1), sumarla al netFlow de la sección, y describirla en cashFlow.methodNote citando NIC 7, párrafo 45 ("Se registró un ajuste de redondeo de \$X para reconciliar el EFE con PUC 11") otherwise (sin comparativo el EFE no es calculable y R6 no registra ajuste) no hay línea de ajuste; cashClosing se copia desde controlTotals.efectivoCuenta11.
 
 - CRÍTICO — ECP MATRICIAL v2.5 (Corrección 14 spec v2.5 — cuadre opening + Σ movement rows = closing al centavo).
 
@@ -1350,9 +1352,9 @@ If existe el bloque "EFE VINCULANTE" then NO agregar ninguna línea de ajuste de
   - Usar kind="dividend_distribution" para el traslado del resultado prior (el traslado no es distribución de dividendos; una distribución real sí va en dividend_distribution, con su cifra y soporte).
   - Usar kind="convergence_adjustment" para la cancelación del resultado prior (convergence_adjustment es para R5/Cta.3710 NIIF, no para 3605).
 
-If TOTALES VINCULANTES contiene \`equityAnchorAdjustment\` ≠ 0 (curatorFlags.equityConvergenceApplied=true) then insertar una fila ECP con kind=convergence_adjustment y resultadosAcumulados=ese monto (con su signo) como ANTEÚLTIMA fila antes de closing_balance, y emitir equityChanges.notes con la sub-nota Defensa Art. 647 E.T. citando NIC 1 §106 otherwise el ECP cuadra sin línea de ajuste.
+If TOTALES VINCULANTES contiene \`equityAnchorAdjustment\` ≠ 0 (curatorFlags.equityConvergenceApplied=true) then insertar una fila ECP con kind=convergence_adjustment y resultadosAcumulados=ese monto (con su signo) como ANTEÚLTIMA fila antes de closing_balance, y emitir equityChanges.notes con la sub-nota Defensa Art. 647 E.T. citando NIC 1, párrafo 106 otherwise el ECP cuadra sin línea de ajuste.
 
-If isComparative=true Y existe \`preprocessed.comparative.equityBreakdown\` then opening_balance del ECP toma SUS cifras (capital, superávit, reservas, resultadosAcumulados) y closing_balance compone las cifras del Pass-1 anchor (totalEquityPrimary) otherwise opening_balance.total=0 con kind=opening_balance y una nota en equityChanges.notes explicando la ausencia de comparativo (cite NIIF for SMEs §3.14, §10.21 si comparativosImpracticables=true).
+If isComparative=true Y existe \`preprocessed.comparative.equityBreakdown\` then opening_balance del ECP toma SUS cifras (capital, superávit, reservas, resultadosAcumulados) y closing_balance compone las cifras del Pass-1 anchor (totalEquityPrimary) otherwise opening_balance.total=0 con kind=opening_balance y una nota en equityChanges.notes explicando la ausencia de comparativo (cite NIIF para PYMES, Secciones 3.14 y 10.21 si comparativosImpracticables=true).
 
 If comparativosImpracticables=true then cashFlow y equityChanges presentan amountComparative=null en todas las líneas otherwise usar valores del periodo comparativo cuando existan.
 
@@ -1418,22 +1420,22 @@ export function buildNiifAnalystPass3Prompt(
     eliteActivators.push(`- Regla R1 (Impracticabilidad NIC 1): comparativo del periodo ${ctx.comparativePeriod ?? '(anterior)'} declarado IMPRACTICABLE.`);
   }
   if (pass1Anchors.curatorFlags.equityConvergenceApplied) {
-    eliteActivators.push('- R5: convergencia patrimonial aplicada (NIC 1 §106).');
+    eliteActivators.push('- R5: convergencia patrimonial aplicada (NIC 1, párrafo 106).');
   }
   if (pass1Anchors.curatorFlags.cashFlowClosureForced) {
-    eliteActivators.push('- R6: ajuste de cierre EFE aplicado (NIC 7 §45).');
+    eliteActivators.push('- R6: ajuste de cierre EFE aplicado (NIC 7, párrafo 45).');
   }
   if (pass1Anchors.curatorFlags.negativeAssetReclassified) {
-    eliteActivators.push('- R1: reclasificación de saldo negativo en Activo a Pasivo (NIC 1 §32 — no compensación).');
+    eliteActivators.push('- R1: reclasificación de saldo negativo en Activo a Pasivo (NIC 1, párrafo 32 — no compensación).');
   }
   if (pass1Anchors.curatorFlags.presumedCostWarning) {
     eliteActivators.push('- R7: costo presumido — advertencia sobre métricas de rentabilidad.');
   }
   if (ctx.tieneAnticipoRentaMaterial) {
-    eliteActivators.push('- Regla R3.b (Anticipo renta neto-bruto): anticipo de renta material (PUC 135515) — presentación neto-bruto.');
+    eliteActivators.push('- Regla R3.b (renta neto-bruto): retenciones y anticipos de renta (1355/1805) materiales — presentación neto-bruto.');
   }
   if (ctx.reclasifNoComp.length > 0) {
-    eliteActivators.push(`- Regla R4 (No-Compensación NIC 1 §32): ${ctx.reclasifNoComp.length} reclasificación(es) detectada(s).`);
+    eliteActivators.push(`- Regla R4 (No compensación, NIC 1, párrafo 32): ${ctx.reclasifNoComp.length} reclasificación(es) detectada(s).`);
   }
   if (ctx.tieneSaldoAFavor) {
     eliteActivators.push('- Regla R3 (Saldo a favor): saldo a favor del impuesto separado en Activos.');
@@ -1464,7 +1466,7 @@ ${ctx.niifDisclosures}
 - Cuando aplique cualquier ajuste curator, UNA SOLA nota al FINAL de technicalNotes con label "Criterios contables aplicados y soporte" que describe los criterios y su soporte documental (Corrección 9 spec v2.1, enmendada). Máximo 1 nota de este tipo en todo el reporte.
 ${ctx.comparativosImpracticables === true ? '- Nota de impracticabilidad (NIIF para PYMES, Secciones 3.14 y 10.21) presente.' : '- Sin nota de impracticabilidad (comparativo disponible o no declarado).'}
 ${ctx.isGroup1 ? '- Nota de preparación voluntaria NIIF 18 sólo si es material (Grupo 1; la NIIF 18 no está incorporada en Colombia a la fecha del ejercicio).' : `- IFRS 18 NUNCA mencionada (la entidad pertenece al Grupo ${company.niifGroup ?? 2}; mencionarla activa el blocker V8 del gate auditReportEmittable).`}
-${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '- Si margen bruto > 80% (derivable de los anchors P&L): nota "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7.' : ''}
+${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '- Si margen bruto > 80% (derivable de los anchors P&L): nota "verdad financiera condicionada" citando NIIF para PYMES, Sección 13.20 + NIA 705.' : ''}
 - Notas de mapeo PUC, reclasificaciones e impracticabilidades cuando apliquen.
 - If alguna nota Anomalía A1..A8 fue emitida en Pass-1 then technicalNotes incluye SECCIÓN dedicada "Anomalías e Inconsistencias Detectadas" agrupando las notas (consolidación para el lector ejecutivo).
 - If reportMode ∈ {'LINEA_BASE', 'TRANSICION'} then technicalNotes incluye al FINAL una nota dedicada con label LITERAL "Limitaciones de Información" agrupando los disclaimers automáticos aplicables (§8 spec v8.1). Esta sección AUMENTA credibilidad, no la disminuye — explicita el alcance de la información usada y el porqué de los n/c.
@@ -1510,9 +1512,9 @@ ${ctx.isGroup1
 
 If comparativosImpracticables=true then technicalNotes incluye la nota LITERAL de impracticabilidad: "Los estados financieros se presentan sin comparativos del periodo ${ctx.comparativePeriod ?? 'anterior'} dado que la información necesaria para reconstruirlos resultó impracticable de obtener (NIIF para PYMES, Secciones 3.14 y 10.21). La administración de la entidad efectuó esfuerzos razonables para obtener la información comparativa y documentó las gestiones realizadas." otherwise omitir.
 
-If actividadInferida.sectorCIIU empieza con "G" (Comercio) Y margen bruto > 80% (Utilidad Bruta / ingresos operacionales netos del bloque CASCADA VINCULANTE DEL P&G; el grupo 42 no entra en el margen bruto) then emitir technicalNotes con la nota "verdad financiera condicionada" citando NIIF for SMEs §13.20 + NIA 705 §7 otherwise omitir.
+If actividadInferida.sectorCIIU empieza con "G" (Comercio) Y margen bruto > 80% (Utilidad Bruta / ingresos operacionales netos del bloque CASCADA VINCULANTE DEL P&G; el grupo 42 no entra en el margen bruto) then emitir technicalNotes con la nota "verdad financiera condicionada" citando NIIF para PYMES, Sección 13.20 + NIA 705 otherwise omitir.
 
-If reclasifNoComp.length > 0 (Regla R4 — No-Compensación NIC 1 §32) then emitir technicalNotes con una nota DEDICADA NIIF for SMEs §2.52 + NIC 1 §32, listando cuenta_origen, saldo_invertido, cuenta_destino_pasivo, motivo_norma por cada reclasificación otherwise omitir.
+If reclasifNoComp.length > 0 (Regla R4 — No compensación, NIC 1, párrafo 32) then emitir technicalNotes con una nota DEDICADA (NIIF para PYMES, Sección 2.52 + NIC 1, párrafo 32), listando cuenta_origen, saldo_invertido, cuenta_destino_pasivo, motivo_norma por cada reclasificación otherwise omitir.
 
 If curatorFlags.negativeAssetReclassified=true (R1) then emitir technicalNotes con Nota de Reclasificación (NIC 1, párrafo 32 — no compensación), citando reclassifiedAmountCop del Pass-1 anchor otherwise omitir.
 
