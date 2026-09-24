@@ -56,14 +56,16 @@ interface Props {
   doc: EditorialReport;
 }
 
-function gradeColor(grade: string): string {
+function gradeColor(grade: string | null): string {
+  if (grade === null) return SAND_500;
   if (grade.startsWith('A')) return SAGE_500;
   if (grade === 'B') return SAND_500;
   if (grade === 'C') return SAND_500;
   return WINE_500;
 }
 
-function scoreColor(score: number): string {
+function scoreColor(score: number | null): string {
+  if (score === null) return SAND_500;
   if (score >= 80) return SAGE_500;
   if (score >= 60) return SAND_500;
   return WINE_500;
@@ -71,12 +73,13 @@ function scoreColor(score: number): string {
 
 interface BarRowProps {
   label: string;
-  value: number;
+  /** null = sin dato → "N/D" y barra vacía (nunca 0). */
+  value: number | null;
   framework?: string;
 }
 
 function BarRow({ label, value, framework }: BarRowProps) {
-  const pct = Math.max(0, Math.min(100, value));
+  const pct = value === null ? 0 : Math.max(0, Math.min(100, value));
   return (
     <View style={{ marginBottom: S2 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 2 }}>
@@ -101,7 +104,7 @@ function BarRow({ label, value, framework }: BarRowProps) {
             color: scoreColor(value),
           }}
         >
-          {value}
+          {value === null ? 'N/D' : value}
         </Text>
       </View>
       <View style={{ height: 4, backgroundColor: SAND_300, borderRadius: 2, overflow: 'hidden' }}>
@@ -198,7 +201,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
               lineHeight: 1,
             }}
           >
-            {q.grade}
+            {q.grade ?? 'N/D'}
           </Text>
           <Text
             style={{
@@ -209,7 +212,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
               letterSpacing: 1,
             }}
           >
-            SCORE {q.overallScore}/100
+            SCORE {q.overallScore === null ? 'N/D' : `${q.overallScore}/100`}
           </Text>
         </View>
 
@@ -230,7 +233,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: S2, marginTop: S1 }}>
             <Text style={{ fontFamily: FONT_DISPLAY, fontWeight: 'bold', fontSize: 28, color: FOREST_900 }}>
-              {q.ifrs18Score}
+              {q.ifrs18Score ?? 'N/D'}
             </Text>
             <Text style={{ fontFamily: FONT_SANS, fontSize: 10, color: FOREST_700 }}>/ 100</Text>
             <View
@@ -238,12 +241,12 @@ export function QualityMetaAuditPage({ doc }: Props) {
                 marginLeft: S2,
                 paddingHorizontal: S2,
                 paddingVertical: 2,
-                backgroundColor: q.ifrs18Ready ? SAGE_500 : SAND_500,
+                backgroundColor: q.ifrs18Ready === true ? SAGE_500 : SAND_500,
                 borderRadius: R_SM,
               }}
             >
               <Text style={{ fontFamily: FONT_MONO, fontSize: 7, color: N0, letterSpacing: 0.5 }}>
-                {q.ifrs18Ready ? 'LISTO' : 'EN PROGRESO'}
+                {q.ifrs18Ready === null ? 'SIN DATO' : q.ifrs18Ready ? 'LISTO' : 'EN PROGRESO'}
               </Text>
             </View>
           </View>

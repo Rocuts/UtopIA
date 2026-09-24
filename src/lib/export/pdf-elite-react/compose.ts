@@ -63,7 +63,7 @@ import {
   type StatementTableContext,
 } from './compose-statements-from-json';
 import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
-import { resolvePeriodoTipos } from '../statement-presentation';
+import { NARRATIVE_DISCLAIMER, resolvePeriodoTipos } from '../statement-presentation';
 import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
 // ─── v2.2 — Scrubber de metadatos internos (correcciones #6, #11, #12) ───────
@@ -161,6 +161,25 @@ export interface ComposeInput {
    * Si presente, cada flag false omite la(s) página(s) correspondiente(s).
    */
   outputOptions?: OutputOptionsToggle | null;
+  /**
+   * Procedencia de `auditReport` / `qualityReport`. Sólo 'server-persisted'
+   * (versión guardada y autorizada en el servidor) permite renderizar el
+   * dictamen especializado y el sello de calidad. Sin ella —hoy la ruta los
+   * recibe en el cuerpo de la petición— se omiten y el apéndice lo explica
+   * (reportes-export-11): un dictamen "favorable" o un grado "A+" enviados por
+   * el cliente no pueden salir con la marca del informe.
+   */
+  assuranceProvenance?: 'server-persisted' | null;
+}
+
+const UNVERIFIED_ASSURANCE_NOTE =
+  'Las páginas de Auditoría Especializada y Meta-auditoría de Calidad se omitieron: sus ' +
+  'resultados llegaron con la solicitud de exportación y no pueden verificarse contra una ' +
+  'versión persistida en el servidor.';
+
+/** Aviso en cursiva al inicio de un bloque de narrativa redactada por el LLM. */
+function withNarrativeDisclaimer(md: string): string {
+  return md.trim() ? `*${NARRATIVE_DISCLAIMER}*\n\n${md}` : md;
 }
 
 export function composeEditorialReport(input: ComposeInput): EditorialReport {
@@ -171,10 +190,15 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     language,
     emittable,
     dictamen,
-    auditReport,
-    qualityReport,
+    auditReport: auditReportInput,
+    qualityReport: qualityReportInput,
     outputOptions,
+    assuranceProvenance,
   } = input;
+  const assuranceVerified = assuranceProvenance === 'server-persisted';
+  const auditReport = assuranceVerified ? auditReportInput : null;
+  const qualityReport = assuranceVerified ? qualityReportInput : null;
+  const assuranceOmitted = !assuranceVerified && !!(auditReportInput || qualityReportInput);
 
   const meta = buildMeta(report, language, emittable, preprocessed);
   const cover = buildCover(report, language);
@@ -196,6 +220,9 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const recommendations = { items: buildRecommendations(report) };
   const shareholderMinutes = buildShareholderMinutes(report);
   const appendix = buildAppendix(report, preprocessed, totals, emittable);
+  if (assuranceOmitted) {
+    appendix.validationWarnings = [...(appendix.validationWarnings ?? []), UNVERIFIED_ASSURANCE_NOTE];
+  }
   const signatureBlock = buildSignatureBlock(report);
   const emphasisParagraphs = buildEmphasisParagraphs(dictamen);
 
@@ -302,7 +329,7 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
   };
 
   return {
-    overallScore: Math.round(audit.overallScore ?? 0),
+    overallScore: roundOrNull(audit.overallScore),
     opinionType: (audit.opinionType ?? 'abstension') as AuditOpinionKind,
     opinionText: scrubInternalMetadata(audit.opinionText ?? ''),
     auditorCards,
@@ -310,6 +337,10 @@ function buildAuditFindings(audit: AuditReport | null): AuditFindingsSpec | unde
     findingCounts,
     executiveSummary: scrubInternalMetadata(audit.executiveSummary ?? ''),
   };
+}
+
+function roundOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
 }
 
 // ─── Quality scores builder ───────────────────────────────────────────────────
@@ -324,25 +355,27 @@ function buildQualityScores(q: QualityAssessment | null): QualityScoresSpec | un
     framework: d.framework,
   }));
 
+  // Un campo ausente es N/D, no 0 ni 'F' (reportes-export-11): un 0 se lee
+  // como "calidad nula" y una 'F' como reprobado.
   return {
-    overallScore: Math.round(q.overallScore ?? 0),
-    grade: q.grade ?? 'F',
+    overallScore: roundOrNull(q.overallScore),
+    grade: typeof q.grade === 'string' && q.grade.trim() ? q.grade : null,
     dimensions,
-    ifrs18Ready: !!q.ifrs18Readiness?.ready,
-    ifrs18Score: Math.round(q.ifrs18Readiness?.score ?? 0),
+    ifrs18Ready: typeof q.ifrs18Readiness?.ready === 'boolean' ? q.ifrs18Readiness.ready : null,
+    ifrs18Score: roundOrNull(q.ifrs18Readiness?.score),
     ifrs18Gaps: scrubNotes(q.ifrs18Readiness?.gaps),
     dataQuality: {
-      completeness: Math.round(q.dataQuality?.completeness ?? 0),
-      accuracy: Math.round(q.dataQuality?.accuracy ?? 0),
-      consistency: Math.round(q.dataQuality?.consistency ?? 0),
-      timeliness: Math.round(q.dataQuality?.timeliness ?? 0),
-      validity: Math.round(q.dataQuality?.validity ?? 0),
+      completeness: roundOrNull(q.dataQuality?.completeness),
+      accuracy: roundOrNull(q.dataQuality?.accuracy),
+      consistency: roundOrNull(q.dataQuality?.consistency),
+      timeliness: roundOrNull(q.dataQuality?.timeliness),
+      validity: roundOrNull(q.dataQuality?.validity),
     },
     aiGovernance: {
-      traceability: Math.round(q.aiGovernance?.traceability ?? 0),
-      explainability: Math.round(q.aiGovernance?.explainability ?? 0),
-      antiHallucination: Math.round(q.aiGovernance?.antiHallucination ?? 0),
-      humanOversight: Math.round(q.aiGovernance?.humanOversight ?? 0),
+      traceability: roundOrNull(q.aiGovernance?.traceability),
+      explainability: roundOrNull(q.aiGovernance?.explainability),
+      antiHallucination: roundOrNull(q.aiGovernance?.antiHallucination),
+      humanOversight: roundOrNull(q.aiGovernance?.humanOversight),
     },
     executiveSummary: scrubInternalMetadata(q.executiveSummary ?? ''),
   };
@@ -1127,11 +1160,13 @@ function buildNotes(report: FinancialReport) {
   const sections = parseHeadingSections(md, 2);
   // Fallback to level 3 if level 2 yielded nothing (defensive).
   const eff = sections.length > 0 ? sections : parseHeadingSections(md, 3);
-  const blocks = eff.map((s) => {
+  const blocks = eff.map((s, i) => {
     const body = scrubInternalMetadata(s.body);
     return {
       heading: scrubInternalMetadata(s.heading),
-      bodyMarkdown: body,
+      // Notas en prosa del LLM: el aviso de narrativa no auditada va al inicio
+      // de la sección (reportes-export-11).
+      bodyMarkdown: i === 0 ? withNarrativeDisclaimer(body) : body,
       citations: extractCitations(body),
     };
   });
@@ -1162,7 +1197,7 @@ function buildBreakEven(report: FinancialReport) {
   const raw = (report.strategicAnalysis?.breakEvenAnalysis ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: md, citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md), citations: extractCitations(md) };
 }
 
 // ─── Projected Cash Flow ──────────────────────────────────────────────────────
@@ -1173,7 +1208,7 @@ function buildProjectedCashFlow(report: FinancialReport) {
   const raw = (report.strategicAnalysis?.projectedCashFlow ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: md, citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md), citations: extractCitations(md) };
 }
 
 // ─── Shareholder Minutes ──────────────────────────────────────────────────────
@@ -1184,7 +1219,7 @@ function buildShareholderMinutes(report: FinancialReport) {
   const raw = (report.governance?.shareholderMinutes ?? '').trim();
   if (!raw) return undefined;
   const md = scrubInternalMetadata(raw);
-  return { bodyMarkdown: md, citations: extractCitations(md) };
+  return { bodyMarkdown: withNarrativeDisclaimer(md), citations: extractCitations(md) };
 }
 
 // ─── Recommendations ──────────────────────────────────────────────────────────
@@ -1196,7 +1231,8 @@ function buildRecommendations(report: FinancialReport): RecommendationItem[] {
   const items = parseNumberedList(md);
   return items.map((it, idx) => ({
     title: scrubInternalMetadata(it.title),
-    bodyMarkdown: scrubInternalMetadata(it.body),
+    bodyMarkdown:
+      idx === 0 ? withNarrativeDisclaimer(scrubInternalMetadata(it.body)) : scrubInternalMetadata(it.body),
     areaAccent: ROTATION[idx % ROTATION.length],
   }));
 }

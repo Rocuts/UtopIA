@@ -159,7 +159,7 @@ function comparativeDetailBlockers(json: NiifReportJson): string[] {
   const out: string[] = [];
   // Un renglón sin cifra comparativa se imprime "n/c" y suma cero: si con eso
   // la columna no llega a su total, E15/E16 lo señalan.
-  const asPrimary = (lines: StatementLineJson[]) =>
+  const asPrimary = <T extends StatementLineJson>(lines: T[]): T[] =>
     lines.map((l) => ({ ...l, amountPrimary: l.amountComparative ?? '0', amountComparative: null }));
   const projected: NiifReportJson = {
     ...json,

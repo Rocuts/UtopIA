@@ -198,7 +198,7 @@ export function AuditFindingsPage({ doc }: Props) {
               opacity: 0.85,
             }}
           >
-            Score {audit.overallScore}/100
+            Score {audit.overallScore === null ? 'N/D' : `${audit.overallScore}/100`}
           </Text>
         </View>
       </View>

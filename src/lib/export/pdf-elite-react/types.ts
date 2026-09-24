@@ -196,7 +196,8 @@ export interface AuditorScoreCard {
  * activó `outputOptions.auditPipeline` o la corrida falló.
  */
 export interface AuditFindingsSpec {
-  overallScore: number;
+  /** `null` = sin puntaje entregado → "N/D" (nunca 0). */
+  overallScore: number | null;
   opinionType: AuditOpinionKind;
   opinionText: string;
   auditorCards: AuditorScoreCard[];
@@ -221,25 +222,26 @@ export interface QualityDimensionBar {
  * `QualityAssessment` (single-agent meta-auditor `/api/financial-quality`).
  * Renderizado por `QualityMetaAuditPage`. Si undefined, la página se omite.
  */
+/** `null` = el meta-auditor no entregó la cifra → la página imprime "N/D" (nunca 0 / 'F'). */
 export interface QualityScoresSpec {
-  overallScore: number;
-  grade: string;
+  overallScore: number | null;
+  grade: string | null;
   dimensions: QualityDimensionBar[];
-  ifrs18Ready: boolean;
-  ifrs18Score: number;
+  ifrs18Ready: boolean | null;
+  ifrs18Score: number | null;
   ifrs18Gaps: string[];
   dataQuality: {
-    completeness: number;
-    accuracy: number;
-    consistency: number;
-    timeliness: number;
-    validity: number;
+    completeness: number | null;
+    accuracy: number | null;
+    consistency: number | null;
+    timeliness: number | null;
+    validity: number | null;
   };
   aiGovernance: {
-    traceability: number;
-    explainability: number;
-    antiHallucination: number;
-    humanOversight: number;
+    traceability: number | null;
+    explainability: number | null;
+    antiHallucination: number | null;
+    humanOversight: number | null;
   };
   executiveSummary: string;
 }
