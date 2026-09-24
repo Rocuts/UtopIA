@@ -2,127 +2,128 @@
 // EL ESCUDO — Capa 4 (Agente Fiscal) — Módulo 6 · Devoluciones y Saldos a Favor
 // ---------------------------------------------------------------------------
 //
-// Elite Protocol 3 capas para análisis de devoluciones:
+// Valida lo que el módulo PUBLICA (fase 2 de la auditoría 2026-09-24,
+// pendiente #8). El contrato anterior exigía saldo a favor = |F04|; desde
+// tributario-modulos-02 F04 es una posición de referencia contable y el saldo
+// devolvible es el liquidado en la declaración (Formulario 110).
 //
-//   L1 — Aritmética
-//        L1.1 |F04| coincide con saldoFavorCents reportado
+//   L1 — Cifras
+//        L1.1 saldo publicado = saldo declarado (null sin declaración; 0 si
+//             la declaración no liquida saldo a favor)
+//        L1.2 viabilidad coherente con el saldo declarado
 //
-//   L2 — Lógica de negocio
-//        L2.1 origen retenciones → cita Art. 850 + 855 (NO rango 854-860)
-//        L2.2 origen IVA → cita Art. 815 (compensación) antes de devolución
-//        L2.3 cita Art. 854 (prescripción 2 años)
+//   L2 — Prosa y citas
+//        L2.1 la prosa no presenta |F04| como saldo a favor: cada mención del
+//             monto va rotulada como estimación / referencia contable
+//        L2.2 con saldo declarado: cita Arts. 850, 854 y 855 (no el rango
+//             854-860)
+//        L2.3 sin saldo devolvible: ningún paso de solicitud de devolución
 //
 //   L3 — Defensa tributaria
-//        L3.1 lista requisitos completos: MUISCA + cert. contador/RF +
-//             relación NIT + copia declaraciones
+//        L3.1 con saldo declarado: requisitos completos (MUISCA, certificación
+//             de contador/RF, relación de retenedores con NIT, copia de la
+//             declaración)
 //
 // Cero LLM. Cero red. Cero filesystem.
 // ---------------------------------------------------------------------------
 
-import type { Modulo6Devoluciones, ValidationCheck } from './types';
-import {
-  parseCents,
-  formatCentsCop,
-  TOLERANCE_CENTS,
-  citaArt850,
-  citaArt855,
-  citaArt815,
-  citaArt854,
-  citaRango854_860,
-} from './helpers';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+import type { Modulo6Devoluciones, Modulo6Viabilidad, ValidationCheck } from './types';
+import { citaArticulo, citaRango854_860, montosCopEnTexto } from './helpers';
 
-// ---------------------------------------------------------------------------
-// Requisitos obligatorios — lista canónica
-// ---------------------------------------------------------------------------
-//
-// El validator NO exige textualmente estos términos; en cambio aplica regex
-// tolerante para cada categoría. Esto permite redacción libre del agente
-// siempre que los conceptos centrales estén presentes.
-// ---------------------------------------------------------------------------
+const ZERO = BigInt(0);
 
 interface RequisitoSpec {
-  readonly id: string;
   readonly nombre: string;
-  /** Regex que valida presencia del requisito en alguno de los strings. */
   readonly patrones: readonly RegExp[];
 }
 
 const REQUISITOS: readonly RequisitoSpec[] = [
   {
-    id: 'muisca',
     nombre: 'Solicitud por MUISCA',
-    patrones: [/\bMUISCA\b/i, /\bservicio\s+inform[áa]tico\s+electr[óo]nico\b/i],
+    patrones: [/\bMUISCA\b/i, /\bservicio\s+inform[áa]tico\s+electr[óo]nico\b/i, /\bformulario\s+010\b/i],
   },
   {
-    id: 'cert_contador',
     nombre: 'Certificación de contador público o revisor fiscal',
     patrones: [
-      /\bcertificaci[óo]n\s+(?:del?\s+)?(?:contador|revisor)\b/i,
+      /\bcertificaci[óo]n\s+(?:firmada\s+)?(?:del?\s+|por\s+)?(?:contador|revisor)\b/i,
       /\bcontador\s+p[úu]blico\b/i,
       /\brevisor\s+fiscal\b/i,
     ],
   },
   {
-    id: 'relacion_nit',
     nombre: 'Relación de retenedores con NIT',
     patrones: [
-      /\brelaci[óo]n\s+(?:de\s+)?(?:retenedores|terceros)\b/i,
+      /\brelaci[óo]n\s+(?:de\s+)?(?:retenedores|terceros|retenciones)\b/i,
       /\b(?:listado|relaci[óo]n)\s+(?:de\s+)?NIT\b/i,
       /\bdiscriminaci[óo]n\s+(?:de\s+)?retenedores\b/i,
     ],
   },
   {
-    id: 'copia_declaraciones',
-    nombre: 'Copia de declaraciones',
+    nombre: 'Copia de la declaración',
     patrones: [
       /\bcopia\s+(?:de\s+)?(?:las?\s+)?declaraci[óo]n(?:es)?\b/i,
-      /\bdeclaraci[óo]n(?:es)?\s+(?:tributaria(?:s)?\s+)?presentada(?:s)?\b/i,
+      /\bdeclaraci[óo]n(?:es)?\s+(?:de\s+renta\s+|tributaria(?:s)?\s+)?presentada(?:s)?\b/i,
     ],
   },
 ];
 
-/**
- * Detecta requisitos presentes en cualquiera de los strings de la lista.
- */
-function requisitosPresentes(items: readonly string[]): {
-  presentes: readonly string[];
-  faltantes: readonly string[];
-} {
-  const concat = items.join(' \n ');
-  const presentes: string[] = [];
-  const faltantes: string[] = [];
-  for (const r of REQUISITOS) {
-    const ok = r.patrones.some((p) => p.test(concat));
-    if (ok) presentes.push(r.nombre);
-    else faltantes.push(r.nombre);
-  }
-  return { presentes, faltantes };
+function parseMoney(v: string | null): bigint | null {
+  return v !== null && /^-?\d+$/.test(v) ? BigInt(v) : null;
 }
 
+function saldoEsperado(declarado: bigint | null): bigint | null {
+  if (declarado === null) return null;
+  return declarado > ZERO ? declarado : ZERO;
+}
+
+function viabilidadesEsperadas(declarado: bigint | null): readonly Modulo6Viabilidad[] {
+  if (declarado === null) return ['no_determinable'];
+  if (declarado <= ZERO) return ['no_aplica'];
+  return ['alta', 'media', 'baja'];
+}
+
+const conSaldoDevolvible = (m6: Modulo6Devoluciones) =>
+  m6.viabilidad === 'alta' || m6.viabilidad === 'media' || m6.viabilidad === 'baja';
+
 // ---------------------------------------------------------------------------
-// CAPA 1 — Aritmética
+// CAPA 1 — Cifras
 // ---------------------------------------------------------------------------
 
 export function validateDevolucionesL1(m6: Modulo6Devoluciones): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
+  const declarado = parseMoney(m6.saldoDeclaradoCents);
+  const esperado = saldoEsperado(declarado);
+  const publicado = parseMoney(m6.saldoAFavorCents);
 
-  // -------------------------------------------------------------------
-  // L1.1 — |F04| coincide con saldoFavorCents
-  // -------------------------------------------------------------------
   {
-    const saldoFavor = parseCents(m6.saldoFavorCents);
-    const f04 = parseCents(m6.f04CitadoCents);
-    const f04Abs = Math.abs(f04);
-    const diff = Math.abs(saldoFavor - f04Abs);
-    const ok = diff <= TOLERANCE_CENTS;
+    const ok = esperado === null ? m6.saldoAFavorCents === null : publicado === esperado;
     checks.push({
-      name: 'M6.L1.1_saldo_favor_coincide_f04',
+      name: 'M6.L1.1_saldo_publicado_es_el_declarado',
       passed: ok,
       severity: 'error',
-      norma: 'INTERNAL — Bloque Âncora F04',
+      norma: 'Arts. 26, 807 y 850 E.T. — saldo liquidado en el Formulario 110',
       detail: ok
-        ? `Saldo a favor ${formatCentsCop(saldoFavor)} = |F04| ${formatCentsCop(f04Abs)} (tolerancia ${TOLERANCE_CENTS}ct).`
-        : `Saldo a favor reportado ${formatCentsCop(saldoFavor)} ≠ |F04| citado ${formatCentsCop(f04Abs)} (diff ${formatCentsCop(diff)}; tolerancia ${TOLERANCE_CENTS}ct).`,
+        ? esperado === null
+          ? 'Sin declaración el saldo a favor se publica N/D (F04 no es base de devolución).'
+          : `Saldo publicado ${formatCopFromCents(esperado)} = saldo declarado.`
+        : esperado === null
+          ? `Sin declaración se publicó un saldo a favor (${m6.saldoAFavorCents}); debe ser N/D.`
+          : `Saldo publicado ${m6.saldoAFavorCents ?? 'N/D'} ≠ saldo declarado ${formatCopFromCents(esperado)}.`,
+    });
+  }
+
+  {
+    const permitidas = viabilidadesEsperadas(declarado);
+    const ok = permitidas.includes(m6.viabilidad);
+    checks.push({
+      name: 'M6.L1.2_viabilidad_coherente',
+      passed: ok,
+      severity: 'error',
+      norma: 'INTERNAL — refund-analyzer',
+      detail: ok
+        ? `Viabilidad «${m6.viabilidad}» coherente con el saldo declarado.`
+        : `Viabilidad «${m6.viabilidad}» incoherente: se esperaba ${permitidas.join(' / ')}.`,
     });
   }
 
@@ -130,60 +131,68 @@ export function validateDevolucionesL1(m6: Modulo6Devoluciones): ValidationCheck
 }
 
 // ---------------------------------------------------------------------------
-// CAPA 2 — Lógica de negocio
+// CAPA 2 — Prosa y citas
 // ---------------------------------------------------------------------------
+
+const ROTULO_ESTIMACION =
+  /estimaci[óo]n|referencia|no\s+(?:es|constituye|equivale|determinable|liquidad)|no\s+es\s+(?:un\s+)?saldo/i;
+
+/** Oraciones (o líneas) del texto que mencionan el monto indicado. */
+function oracionesConMonto(texto: string, cents: bigint): string[] {
+  return texto
+    .split(/(?<=[.;!?])\s+|\n+/)
+    .filter((o) => montosCopEnTexto(o).some((m) => m === cents));
+}
 
 export function validateDevolucionesL2(m6: Modulo6Devoluciones): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
   const texto = m6.textoAnalisis;
+  const f04 = parseMoney(m6.f04Cents);
+  const declarado = parseMoney(m6.saldoDeclaradoCents);
 
-  // -------------------------------------------------------------------
-  // L2.1 — retenciones → cita Art. 850 + 855 (NO rango 854-860)
-  // -------------------------------------------------------------------
-  if (m6.origen === 'retenciones_fuente') {
-    const tieneCitas = citaArt850(texto) && citaArt855(texto);
-    const usaRangoMalo = citaRango854_860(texto);
-    const ok = tieneCitas && !usaRangoMalo;
+  // L2.1 — |F04| nunca como saldo a favor. Si el saldo declarado coincide con
+  // |F04| la cifra es legítima (viene de la declaración).
+  if (f04 !== null && f04 < ZERO && declarado !== -f04) {
+    const abs = -f04;
+    const sinRotulo = oracionesConMonto(texto, abs).filter((o) => !ROTULO_ESTIMACION.test(o));
+    const ok = sinRotulo.length === 0;
     checks.push({
-      name: 'M6.L2.1_retenciones_cita_850_855',
+      name: 'M6.L2.1_f04_no_presentado_como_saldo_a_favor',
       passed: ok,
       severity: 'error',
-      norma: 'Arts. 850 y 855 E.T.',
+      norma: 'Arts. 26, 807, 850 y 670 E.T.',
       detail: ok
-        ? 'Origen retenciones: cita Arts. 850 (derecho a devolución) y 855 (plazos 50/20 días hábiles) correctamente.'
-        : `Origen retenciones: Art. 850 ${citaArt850(texto) ? 'OK' : 'FALTA'}, Art. 855 ${citaArt855(texto) ? 'OK' : 'FALTA'}, rango 854-860 ${usaRangoMalo ? 'PRESENTE (INCORRECTO — usar Art. 855 puntual)' : 'no presente'}.`,
+        ? `La prosa no presenta |F04| = ${formatCopFromCents(abs)} como saldo a favor.`
+        : `La prosa presenta |F04| = ${formatCopFromCents(abs)} sin rotularlo como estimación contable: «${sinRotulo[0].trim().slice(0, 160)}». F04 no es el saldo a favor de la declaración (riesgo Art. 670 E.T.).`,
     });
   }
 
-  // -------------------------------------------------------------------
-  // L2.2 — IVA → cita Art. 815 (compensación antes de devolución)
-  // -------------------------------------------------------------------
-  if (m6.origen === 'iva') {
-    const ok = citaArt815(texto);
+  if (conSaldoDevolvible(m6)) {
+    const faltan = ['850', '854', '855'].filter((a) => !citaArticulo(texto, a));
+    const rango = citaRango854_860(texto);
+    const ok = faltan.length === 0 && !rango;
     checks.push({
-      name: 'M6.L2.2_iva_cita_815_compensacion',
+      name: 'M6.L2.2_citas_850_854_855',
       passed: ok,
       severity: 'error',
-      norma: 'Art. 815 E.T.',
+      norma: 'Arts. 850, 854 y 855 E.T.',
       detail: ok
-        ? 'Origen IVA: cita Art. 815 (compensación de saldos a favor) — orden de operaciones correcto.'
-        : 'Origen IVA: NO cita Art. 815 E.T. Antes de solicitar devolución debe explorarse compensación con otras obligaciones tributarias (Art. 815). Sin esta cita el análisis está incompleto.',
+        ? 'Cita Arts. 850 (derecho), 854 (término de 2 años) y 855 (plazo DIAN).'
+        : `Faltan citas: ${faltan.length ? faltan.map((a) => `Art. ${a}`).join(', ') : 'ninguna'}${rango ? '; usa el rango 854-860 en lugar del artículo puntual' : ''}.`,
     });
-  }
-
-  // -------------------------------------------------------------------
-  // L2.3 — prescripción 2 años → cita Art. 854
-  // -------------------------------------------------------------------
-  {
-    const ok = citaArt854(texto);
+  } else {
+    const pasoSolicitud = m6.pasosProcedimentales.find((p) =>
+      /\b(?:radicar|formulario\s+010|solicitud\s+de\s+devoluci[óo]n|solicitar\s+la\s+devoluci[óo]n)\b/i.test(p),
+    );
     checks.push({
-      name: 'M6.L2.3_prescripcion_cita_854',
-      passed: ok,
+      name: 'M6.L2.3_sin_pasos_de_solicitud',
+      passed: pasoSolicitud === undefined,
       severity: 'error',
-      norma: 'Art. 854 E.T.',
-      detail: ok
-        ? 'Cita Art. 854 E.T. — término de 2 años para solicitar devolución informado al cliente.'
-        : 'NO cita Art. 854 E.T. (término 2 años para solicitar devolución). Sin esta advertencia el cliente puede perder el derecho por prescripción.',
+      norma: 'Art. 670 E.T.',
+      detail:
+        pasoSolicitud === undefined
+          ? `Viabilidad «${m6.viabilidad}»: sin pasos de solicitud de devolución.`
+          : `Viabilidad «${m6.viabilidad}» y se publica un paso de solicitud: «${pasoSolicitud.slice(0, 160)}».`,
     });
   }
 
@@ -195,26 +204,22 @@ export function validateDevolucionesL2(m6: Modulo6Devoluciones): ValidationCheck
 // ---------------------------------------------------------------------------
 
 export function validateDevolucionesL3(m6: Modulo6Devoluciones): ValidationCheck[] {
-  const checks: ValidationCheck[] = [];
-
-  // -------------------------------------------------------------------
-  // L3.1 — lista requisitos completos
-  // -------------------------------------------------------------------
-  {
-    const { presentes, faltantes } = requisitosPresentes(m6.listaRequisitos);
-    const ok = faltantes.length === 0;
-    checks.push({
+  if (!conSaldoDevolvible(m6)) return [];
+  const concat = m6.documentosRequeridos.join(' \n ');
+  const presentes = REQUISITOS.filter((r) => r.patrones.some((p) => p.test(concat))).map((r) => r.nombre);
+  const faltantes = REQUISITOS.filter((r) => !presentes.includes(r.nombre)).map((r) => r.nombre);
+  const ok = faltantes.length === 0;
+  return [
+    {
       name: 'M6.L3.1_requisitos_completos',
       passed: ok,
       severity: 'error',
-      norma: 'Arts. 850-855 E.T. + Decreto 1625/2016',
+      norma: 'Arts. 850-857 E.T. + Decreto 1625/2016',
       detail: ok
         ? `Requisitos completos: ${presentes.join(', ')}.`
-        : `Requisitos FALTANTES: ${faltantes.join(', ')}. Presentes: ${presentes.length === 0 ? '(ninguno)' : presentes.join(', ')}. Sin requisitos completos DIAN rechaza la solicitud.`,
-    });
-  }
-
-  return checks;
+        : `Requisitos FALTANTES: ${faltantes.join(', ')}. Presentes: ${presentes.length ? presentes.join(', ') : '(ninguno)'}.`,
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------

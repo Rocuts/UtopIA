@@ -154,6 +154,45 @@ export function citaArt854(text: string): boolean {
 }
 
 /**
+ * True si el texto cita el artículo `numero` (p. ej. "707", "258-1"), también
+ * dentro de una enumeración: "Arts. 703 y 707", "artículos 684, 686 y 707".
+ */
+export function citaArticulo(text: string, numero: string): boolean {
+  const n = numero.replace(/[-]/g, '\\-');
+  const re = new RegExp(
+    `\\bArt(?:[íi]culos?|s)?\\.?\\s*(?:\\d{1,4}(?:-\\d+)?\\s*(?:,|y|e)\\s*)*${n}(?![\\d-])`,
+    'i',
+  );
+  return re.test(text);
+}
+
+/**
+ * Números de artículo citados en un texto normativo corto ("Art. 686 E.T. y
+ * Art. 261 Ley 223/1995" → ["686", "261"]; "Arts. 651 y 860" → ["651", "860"]).
+ */
+export function articulosCitados(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\bArt(?:[íi]culos?|s)?\.?\s*((?:\d{1,4}(?:-\d+)?\s*(?:,|y|e)\s*)*\d{1,4}(?:-\d+)?)/gi)) {
+    for (const n of m[1].split(/\s*(?:,|y|e)\s*/)) if (n) out.push(n);
+  }
+  return [...new Set(out)];
+}
+
+/**
+ * Montos en pesos citados en prosa con formato es-CO ("$37.300.000,00",
+ * "$ 37.300.000", "($37.300.000,00)"), en centavos absolutos.
+ */
+export function montosCopEnTexto(text: string): bigint[] {
+  const out: bigint[] = [];
+  for (const m of text.matchAll(/\$\s?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?(?![\d.,]*\d)/g)) {
+    const pesos = m[1].replace(/\./g, '');
+    const cts = (m[2] ?? '0').padEnd(2, '0');
+    out.push(BigInt(pesos) * BigInt(100) + BigInt(cts));
+  }
+  return out;
+}
+
+/**
  * True si el texto cita el rango 854-860 (incorrecto — debe usar 855 puntual).
  */
 export function citaRango854_860(text: string): boolean {

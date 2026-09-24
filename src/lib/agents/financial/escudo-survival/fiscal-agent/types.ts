@@ -365,12 +365,13 @@ export interface FiscalSynthesisResult {
 // ---------------------------------------------------------------------------
 
 export interface FiscalAgentReport {
-  /** Veredicto de los validadores deterministas conectados (Capa 2, M2, M7). */
+  /** Veredicto de los validadores deterministas conectados (Capa 2, M2, M3, M5, M6, M7). */
   validation: {
     veredicto: 'valida' | 'advertencia' | 'bloqueo';
     errores: number;
     advertencias: number;
     checks: Array<{ name: string; passed: boolean; severity: 'error' | 'warning'; detail?: string; norma?: string }>;
+    /** Módulos sin validador conectado (vacío desde la fase 2, pendiente #8). */
     modulosSinValidar: string[];
   };
   ccv: CcvModuleResult;

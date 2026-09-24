@@ -445,7 +445,25 @@ function factorCoberturaRetenciones(anchor: FiscalAnchorBlock): RiskFactorBreakd
 // Calculadora principal
 // ---------------------------------------------------------------------------
 
-function classifyNivel(score: number): RiskNivel {
+/**
+ * Puntaje máximo de cada factor que emite `computeRiskScore`. Fuente única
+ * para el validador M3 (fase 2 de la auditoría 2026-09-24): el factor de
+ * saldo a favor vale 0 porque F04 no es un saldo a favor determinable.
+ */
+export const RISK_FACTOR_MAX_PUNTOS: Readonly<Record<RiskFactorBreakdown['factor'], number>> = {
+  tet_baja: 30,
+  sin_provision_renta: 30,
+  margen_alto: 25,
+  costo_bajo: 20,
+  crecimiento_inusual: 15,
+  saldo_favor_sin_solicitar: 0,
+  cobertura_retenciones_baja: 5,
+};
+
+/** Umbral del Modo Supervivencia (Módulo 8): score publicable > 60. */
+export const RISK_SCORE_UMBRAL_SUPERVIVENCIA = 60;
+
+export function classifyRiskNivel(score: number): RiskNivel {
   if (score <= 20) return 'bajo';
   if (score <= 40) return 'medio';
   if (score <= 60) return 'alto';
@@ -479,7 +497,7 @@ export function computeRiskScore(input: RiskInput): RiskScorePrecomputedData {
 
   return {
     score,
-    nivel: classifyNivel(score),
+    nivel: classifyRiskNivel(score),
     factores,
     publicable,
     noPublicableMotivo: publicable

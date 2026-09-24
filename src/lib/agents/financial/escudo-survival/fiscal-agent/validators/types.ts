@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import type { CheckResult } from '../../validators/survival-validators';
+import type { DianRequirementKind } from '../types';
 
 // ---------------------------------------------------------------------------
 // Identificadores de Módulo (referencia: spec Capa 4 Mayo 2026)
@@ -99,70 +100,88 @@ export interface Modulo2Conciliacion {
 // Módulo 3 — Risk Score DIAN
 // ---------------------------------------------------------------------------
 //
-// Score 0-100 = suma exacta de 5 factores ponderados:
-//   factor1_tetVsSector      [0-30]  — TET < sector → riesgo cruce información.
-//   factor2_rentaPresuntiva  [0-25]  — UAI vs renta presuntiva (Art. 188).
-//   factor3_proporcionDeducciones [0-20] — % deducciones sobre ingresos.
-//   factor4_consistenciaIVA  [0-15]  — IVA generado vs ingresos declarados.
-//   factor5_historicoSanciones [0-10] — sanciones previas del NIT.
-//
-// Si score > 60 → debe activarse Modo Supervivencia (referencia Módulo 8).
+// Fase 2 de la auditoría 2026-09-24 (pendiente #8): el contrato anterior
+// describía otra fórmula (5 factores «TET vs sector», «renta presuntiva»,
+// «consistencia IVA»…) que el agente no produce. El Score publicado sale de
+// `computeRiskScore` (7 factores con código propio); el validador comprueba
+// sus invariantes y, sobre todo, que la prosa del modelo no publique otro
+// score ni convierta un score no publicable en «riesgo bajo».
 // ---------------------------------------------------------------------------
+
+export type Modulo3Nivel = 'bajo' | 'medio' | 'alto' | 'muy_alto' | 'critico';
+
+export interface Modulo3Factor {
+  /** Código del factor tal como lo emite `computeRiskScore`. */
+  readonly factor: string;
+  readonly puntos: number;
+}
 
 export interface Modulo3RiskScore {
   readonly score: number;
-  readonly factor1_tetVsSector: number;
-  readonly factor2_rentaPresuntiva: number;
-  readonly factor3_proporcionDeducciones: number;
-  readonly factor4_consistenciaIVA: number;
-  readonly factor5_historicoSanciones: number;
-  readonly interpretacion: 'BAJO' | 'MEDIO' | 'ALTO' | 'MUY_ALTO' | 'CRITICO';
-  /** True si el output declara explícitamente la activación del Modo Supervivencia. */
-  readonly modoSupervivenciaActivo: boolean;
-  /** Valor de TET de F09 (porcentaje) — necesario para validar Factor 1. */
-  readonly tetActualPct: number;
+  readonly nivel: Modulo3Nivel;
+  readonly factores: readonly Modulo3Factor[];
+  /** false ⇒ el score no se publica (sin base gravable). */
+  readonly publicable: boolean;
+  readonly noPublicableMotivo: string | null;
+  /** F01 del Bloque Âncora (MoneyCop): publicable ⇔ F01 ≠ 0. */
+  readonly f01Cents: string;
+  /** Prosa del modelo (markdown + interpretación). */
+  readonly narrativa: string;
+  readonly recomendaciones: readonly string[];
+  /**
+   * Estado del Modo Supervivencia (Módulo 8) en esta corrida; `null` cuando
+   * el modo del agente no ejecuta el Módulo 8.
+   */
+  readonly modoSupervivenciaActivo: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
 // Módulo 5 — Defensa DIAN
 // ---------------------------------------------------------------------------
 //
-// Carta-borrador con estructura fija (no se valida contenido jurídico
-// específico — sólo presencia de secciones obligatorias y citas correctas).
+// Misma taxonomía que el esqueleto determinista (`dian-letter-builder`): el
+// contrato anterior usaba otra («requerimiento_especial_685», pliego de
+// cargos a 3 meses) que contradecía los plazos corregidos del builder.
 // ---------------------------------------------------------------------------
 
-export type RequerimientoTipo =
-  | 'requerimiento_ordinario_752'
-  | 'requerimiento_especial_685'
-  | 'pliego_cargos_715'
-  | 'liquidacion_oficial_702';
+export type RequerimientoTipo = DianRequirementKind;
 
 export interface Modulo5DefensaDian {
   readonly tipoRequerimiento: RequerimientoTipo;
+  /** Plazo publicado en `data.plazoRespuesta`. */
+  readonly plazoRespuesta: string;
+  /** Norma del plazo publicada en `data.normaPlazo`. */
+  readonly normaPlazo: string;
   /** Texto completo de la carta. Las regex de validación corren sobre esto. */
   readonly cartaTexto: string;
-  /** Si la defensa invoca diferencia de criterio, validador exige Art. 647 par. */
-  readonly invocaDiferenciaCriterio: boolean;
-  /** ¿La carta menciona alguna reducción de sanción? */
-  readonly mencionaReduccion: boolean;
+  /** Defensa por diferencia de criterio; `null` = no se invoca. */
+  readonly defensaArt647: string | null;
 }
 
 // ---------------------------------------------------------------------------
-// Módulo 6 — Devoluciones y Saldos a Favor
+// Módulo 6 — Devoluciones y Saldos a Favor (renta)
+// ---------------------------------------------------------------------------
+//
+// El saldo a favor devolvible es el LIQUIDADO en la declaración (Formulario
+// 110). F04 = F02 − F03 es una posición de referencia contable: nunca es el
+// saldo a favor (Arts. 26, 807 y 850 E.T.). El contrato anterior exigía
+// saldo = |F04|, justo lo que el agente dejó de publicar.
 // ---------------------------------------------------------------------------
 
-export type OrigenSaldoFavor = 'retenciones_fuente' | 'iva' | 'anticipo' | 'pago_exceso';
+export type Modulo6Viabilidad = 'alta' | 'media' | 'baja' | 'no_aplica' | 'no_determinable';
 
 export interface Modulo6Devoluciones {
-  readonly origen: OrigenSaldoFavor;
-  /** Saldo a favor en centavos (string, MoneyCop). Coincide con |F04| del Âncora. */
-  readonly saldoFavorCents: string;
-  /** Cifra de F04 (Bloque Âncora) que se cita en el texto — para chequeo L1. */
-  readonly f04CitadoCents: string;
-  /** Texto completo del análisis — sobre éste corren regex de citación. */
+  /** Saldo a favor declarado que recibió el agente (MoneyCop); `null` = no provisto. */
+  readonly saldoDeclaradoCents: string | null;
+  /** Saldo a favor publicado por el módulo (MoneyCop); `null` = N/D. */
+  readonly saldoAFavorCents: string | null;
+  readonly viabilidad: Modulo6Viabilidad;
+  /** F04 del Bloque Âncora (MoneyCop con signo): posición de referencia contable. */
+  readonly f04Cents: string;
+  /** Prosa del modelo — sobre ésta corren las regex de citación. */
   readonly textoAnalisis: string;
-  /** ¿La response lista los requisitos completos para presentar solicitud? */
-  readonly listaRequisitos: readonly string[];
+  readonly documentosRequeridos: readonly string[];
+  readonly pasosProcedimentales: readonly string[];
 }
 
 // ---------------------------------------------------------------------------

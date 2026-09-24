@@ -102,7 +102,8 @@ export function classifyDianRequirement(
   };
 }
 
-function classificationFromKind(kind: DianRequirementKind): DianRequirementClassification {
+/** Clasificación (plazo y norma) de un tipo de actuación: fuente única para el validador M5. */
+export function classificationFromKind(kind: DianRequirementKind): DianRequirementClassification {
   const rule = RULES.find((r) => r.kind === kind);
   if (!rule) {
     return {
@@ -168,43 +169,75 @@ export interface DianLetterSkeleton {
   reduccionesDisponibles: string[];
 }
 
+export type DianLetterSectionId =
+  | 'antecedentes'
+  | 'posicion_juridica'
+  | 'soporte_documental'
+  | 'defensa_647'
+  | 'peticion'
+  | 'firmas';
+
+/**
+ * Secciones de la carta, en orden. `condicional` ⇒ sólo se exige cuando la
+ * carta invoca la defensa por diferencia de criterio (`defensaArt647`).
+ * Fuente única para el prompt y para el validador M5.
+ */
+export const DIAN_LETTER_SECTIONS: ReadonlyArray<{
+  id: DianLetterSectionId;
+  titulo: string;
+  instrucciones: string;
+  condicional: boolean;
+}> = [
+  {
+    id: 'antecedentes',
+    titulo: 'Antecedentes',
+    instrucciones:
+      'Síntesis del requerimiento DIAN: número, fecha de notificación, hechos imputados.',
+    condicional: false,
+  },
+  {
+    id: 'posicion_juridica',
+    titulo: 'Posición jurídica del contribuyente',
+    instrucciones:
+      'Tesis del contribuyente con sustento normativo (Estatuto Tributario, Conceptos DIAN whitelisted, jurisprudencia constitucional). Citar artículo exacto.',
+    condicional: false,
+  },
+  {
+    id: 'soporte_documental',
+    titulo: 'Soporte documental',
+    instrucciones:
+      'Listado de soportes que respaldan la tesis: contratos, facturas, soportes contables, certificaciones, dictámenes.',
+    condicional: false,
+  },
+  {
+    id: 'defensa_647',
+    titulo: 'Defensa diferencia de criterio (parágrafo Art. 647 E.T.)',
+    instrucciones:
+      'Solo si la posición del contribuyente puede entenderse como una interpretación razonable del derecho aplicable, citar TEXTUALMENTE el parágrafo del Art. 647 E.T. para neutralizar la sanción por inexactitud.',
+    condicional: true,
+  },
+  {
+    id: 'peticion',
+    titulo: 'Petición',
+    instrucciones:
+      'Solicitud expresa: archivo, modificación, no aplicación de sanción, levantamiento parcial, según corresponda.',
+    condicional: false,
+  },
+  {
+    id: 'firmas',
+    titulo: 'Firmas',
+    instrucciones:
+      'Representante legal + contador / RF con T.P. visible. Cierre con: "Esta respuesta es un borrador para revisión del contador y/o abogado tributarista antes de su envío."',
+    condicional: false,
+  },
+];
+
 export function buildDianLetterSkeleton(
   text: string | undefined,
   kindOverride?: DianRequirementKind,
 ): DianLetterSkeleton {
   const classification = classifyDianRequirement(text, kindOverride);
-  const secciones = [
-    {
-      titulo: 'Antecedentes',
-      instrucciones:
-        'Síntesis del requerimiento DIAN: número, fecha de notificación, hechos imputados.',
-    },
-    {
-      titulo: 'Posición jurídica del contribuyente',
-      instrucciones:
-        'Tesis del contribuyente con sustento normativo (Estatuto Tributario, Conceptos DIAN whitelisted, jurisprudencia constitucional). Citar artículo exacto.',
-    },
-    {
-      titulo: 'Soporte documental',
-      instrucciones:
-        'Listado de soportes que respaldan la tesis: contratos, facturas, soportes contables, certificaciones, dictámenes.',
-    },
-    {
-      titulo: 'Defensa diferencia de criterio (parágrafo Art. 647 E.T.)',
-      instrucciones:
-        'Solo si la posición del contribuyente puede entenderse como una interpretación razonable del derecho aplicable, citar TEXTUALMENTE el parágrafo del Art. 647 E.T. para neutralizar la sanción por inexactitud.',
-    },
-    {
-      titulo: 'Petición',
-      instrucciones:
-        'Solicitud expresa: archivo, modificación, no aplicación de sanción, levantamiento parcial, según corresponda.',
-    },
-    {
-      titulo: 'Firmas',
-      instrucciones:
-        'Representante legal + contador / RF con T.P. visible. Cierre con: "Esta respuesta es un borrador para revisión del contador y/o abogado tributarista antes de su envío."',
-    },
-  ];
+  const secciones = DIAN_LETTER_SECTIONS.map((s) => ({ titulo: s.titulo, instrucciones: s.instrucciones }));
   return {
     classification,
     secciones,
