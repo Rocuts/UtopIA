@@ -9,6 +9,13 @@
 // Orchestrator (entry point principal)
 export { orchestrateFiscalAgent } from './orchestrator';
 
+// Bloqueo del balance con motivo (misma lectura que /niif, P4 cross-dep): el
+// API handler puede responder 422 con `reasons` igual que /niif.
+export {
+  EscudoBalanceBloqueadoError,
+  ESCUDO_BALANCE_BLOQUEADO_CODE,
+} from '../lib/balance-ingesta';
+
 // Tipos públicos
 export type {
   FiscalAgentInput,
