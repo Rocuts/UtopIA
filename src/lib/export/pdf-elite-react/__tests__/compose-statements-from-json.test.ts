@@ -578,3 +578,31 @@ describe('niifJsonToCashFlowTable — Corrección v2.4 (ajuste no-cash)', () => 
     expect(result.errors.some((e) => e.includes('E10') && e.includes('financing'))).toBe(true);
   });
 });
+
+// ingesta-09 (W3-A): el comparativo que proviene de una columna de saldo
+// inicial/anterior (`saldosDeApertura`) tiene ESF de apertura válido, pero no
+// P&G del periodo anterior: el ERI comparativo se presenta N/D (no $0 ni las
+// cifras de apertura) y con la leyenda que lo explica.
+describe('niifJsonToIncomeTable — comparativo de saldos de apertura', () => {
+  it('todas las celdas comparativas del ERI salen N/D con leyenda', () => {
+    const t = niifJsonToIncomeTable(makeJson(), { comparativeSaldosDeApertura: true });
+    for (const row of t.rows) {
+      if (row.cells.length === 0) continue;
+      expect(row.cells).toHaveLength(2);
+      expect(row.cells[1]).toBe('N/D');
+    }
+    expect((t.footnotes ?? []).join(' ')).toMatch(/saldo inicial\/anterior/);
+  });
+
+  it('el ESF comparativo (apertura) conserva sus cifras', () => {
+    const t = niifJsonToBalanceTable(makeJson(), { comparativeSaldosDeApertura: true });
+    const totalRow = t.rows.find((r) => r.account === 'TOTAL ACTIVOS');
+    expect(totalRow!.cells[1]).toMatch(/\$/);
+  });
+
+  it('sin la marca el ERI comparativo no cambia', () => {
+    const t = niifJsonToIncomeTable(makeJson());
+    const netRow = t.rows.find((r) => r.account === 'UTILIDAD NETA DEL PERÍODO');
+    expect(netRow!.cells[1]).toMatch(/\$/);
+  });
+});

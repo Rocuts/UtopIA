@@ -35,6 +35,28 @@ import type { ParsedTable, ParsedTableRow } from './types';
 export interface StatementTableContext {
   primaryPeriodoTipo?: PeriodoTipo | null;
   comparativePeriodoTipo?: PeriodoTipo | null;
+  /**
+   * ingesta-09: el periodo comparativo proviene de una columna de saldo
+   * inicial/anterior del archivo (`PeriodSnapshot.saldosDeApertura`). Su ESF
+   * es el de apertura, pero no hay P&G del periodo anterior: el ERI
+   * comparativo se presenta N/D (no $0) y sin variaciones de resultados.
+   */
+  comparativeSaldosDeApertura?: boolean;
+}
+
+/** Celda del P&G comparativo cuando el comparativo es un saldo de apertura. */
+export const OPENING_PYG_PLACEHOLDER = 'N/D';
+
+/**
+ * Leyenda del ERI cuando el comparativo es un saldo de apertura (ingesta-09).
+ * La comparten el PDF y el Excel.
+ */
+export function openingBalancesPygLegend(comparativePeriod: string): string {
+  return (
+    `Resultados comparativos ${comparativePeriod}: N/D — la columna ${comparativePeriod} proviene de ` +
+    'una columna de saldo inicial/anterior del archivo (saldos de apertura), no de un cierre del ' +
+    'periodo anterior; no hay estado de resultados de ese periodo y no se calculan variaciones de resultados.'
+  );
 }
 
 function presentationMeta(
@@ -303,11 +325,24 @@ export function niifJsonToIncomeTable(
     });
   }
 
+  const meta = presentationMeta(json, 'period', ctx, p.notes);
+  // ingesta-09: comparativo de saldos de apertura → sin P&G del periodo
+  // anterior. La columna se conserva (alineación) con N/D en cada celda.
+  if (hasComparative && ctx?.comparativeSaldosDeApertura === true) {
+    for (const row of rows) {
+      if (row.cells.length === 2) row.cells[1] = OPENING_PYG_PLACEHOLDER;
+    }
+    meta.footnotes = [
+      ...(meta.footnotes ?? []),
+      openingBalancesPygLegend(json.company.comparativePeriod ?? ''),
+    ];
+  }
+
   return {
     caption: 'Estado de Resultados Integral',
     headers: buildHeaders(json, 'income'),
     rows,
-    ...presentationMeta(json, 'period', ctx, p.notes),
+    ...meta,
   };
 }
 

@@ -60,6 +60,7 @@ function companyInitials(name: string): string {
 export function CoverPage({ doc }: Props) {
   const isBlocked = doc.meta.watermark === 'BLOQUEADO';
   const isDraft = doc.meta.watermark === 'BORRADOR';
+  const isIncomplete = doc.meta.watermark === 'INCOMPLETO';
   const watermarkSubtitle = doc.meta.watermarkSubtitle;
 
   const LEFT_W = PAGE_W * 0.60;
@@ -159,6 +160,15 @@ export function CoverPage({ doc }: Props) {
             emphasisText="BLOQUEADO"
             emphasisStyle="box"
             areaAccent="escudo"
+            size="hero"
+            tone="light-on-dark"
+          />
+        ) : isIncomplete ? (
+          <EditorialTitle
+            leadText="Informe"
+            emphasisText="INCOMPLETO"
+            emphasisStyle="box"
+            areaAccent="valor"
             size="hero"
             tone="light-on-dark"
           />
