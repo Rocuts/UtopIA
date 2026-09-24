@@ -193,6 +193,9 @@ export async function generateLines(
         taxRuleId: rule.id,
         taxRuleCode: rule.code,
         taxType: rule.taxType,
+        // Base usada por el motor: validateLines la re-verifica sin inferirla
+        // del resto del asiento (tributario-calc-21).
+        baseAmountCop: input.subtotalCop,
       },
     };
     journalLines.push(journalLine);

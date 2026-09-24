@@ -1,13 +1,10 @@
 // integrity-validator.test.ts — Validador |tax = base × rate| ±1 centavo.
 //
-// IMPORTANTE: La implementación calcula la base como max(sumDebits, sumCredits)
-// de líneas SIN taxRuleId. Para tests de compras, la base son los débitos
-// (gasto + IVA descontable). Las líneas de crédito (CxP) también son "base"
-// si no tienen taxRuleId, por lo que deben excluirse o su crédito > débito
-// haría que el validador use el crédito como base.
-//
-// Estrategia: usamos solo líneas de débito para la base en tests de compra
-// (sin línea de CxP), o construimos estructuras donde el débito es la base.
+// Base de cada línea tributaria: `dimensions.baseAmountCop` o, sin ella, el
+// lado de la base de las líneas sin taxRuleId (débitos en compras, créditos en
+// ventas). Hasta la fase 2 de la auditoría 2026-09-24 (tributario-calc-21) se
+// tomaba max(Σ débitos, Σ créditos) y los tests evitaban la CxP para no
+// disparar violaciones falsas; el bloque final prueba el asiento completo.
 //
 // validateLines() llama getRules() del repositorio → mockeamos el módulo.
 
@@ -193,5 +190,77 @@ describe('validateLines — integridad tax = base × rate', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.violations.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── Fase 2 de la auditoría 2026-09-24 (tributario-calc-21) ──────────────────
+// La base era max(Σ débitos, Σ créditos) de TODAS las líneas sin taxRuleId: en
+// un asiento completo la CxP (crédito 1.150.000) pasaba a ser la base y el IVA
+// y la ReteFuente correctos salían como violaciones.
+describe('validateLines — asiento completo (base = subtotal, no la CxP)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const iva = makeRule({ id: 'rule-iva', code: 'IVA_19_PURCHASE', rate: '0.190000' });
+  const rtf = makeRule({ id: 'rule-rtf', code: 'RTF_SVC_4', taxType: 'RETEFUENTE', rate: '0.040000', accountSide: 'credit' });
+
+  it('compra con CxP: IVA 19% y ReteFuente 4% correctos ⇒ sin violaciones', async () => {
+    vi.mocked(repo.getRules).mockResolvedValue([iva, rtf]);
+    const result = await validateLines({
+      ...COMMON_INPUT,
+      transactionType: 'service_purchase',
+      lines: [
+        { accountId: 'acc-gasto', debit: '1000000.00', credit: '0' },
+        { accountId: 'acc-iva', debit: '190000.00', credit: '0', dimensions: { taxRuleId: 'rule-iva', taxRuleCode: 'IVA_19_PURCHASE' } },
+        { accountId: 'acc-rtf', debit: '0', credit: '40000.00', dimensions: { taxRuleId: 'rule-rtf', taxRuleCode: 'RTF_SVC_4' } },
+        { accountId: 'acc-cxp', debit: '0', credit: '1150000.00' },
+      ],
+    });
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('venta con CxC: IVA generado correcto ⇒ sin violaciones', async () => {
+    const ivaVenta = makeRule({ id: 'rule-iva-v', code: 'IVA_19_SALE', rate: '0.190000', accountSide: 'credit' });
+    vi.mocked(repo.getRules).mockResolvedValue([ivaVenta]);
+    const result = await validateLines({
+      ...COMMON_INPUT,
+      transactionType: 'sale',
+      lines: [
+        { accountId: 'acc-cxc', debit: '1190000.00', credit: '0' },
+        { accountId: 'acc-ingreso', debit: '0', credit: '1000000.00' },
+        { accountId: 'acc-iva', debit: '0', credit: '190000.00', dimensions: { taxRuleId: 'rule-iva-v', taxRuleCode: 'IVA_19_SALE' } },
+      ],
+    });
+    expect(result.violations).toEqual([]);
+  });
+
+  it('la base declarada en la línea (baseAmountCop del motor) manda sobre la inferencia', async () => {
+    vi.mocked(repo.getRules).mockResolvedValue([iva]);
+    const result = await validateLines({
+      ...COMMON_INPUT,
+      lines: [
+        { accountId: 'acc-gasto', debit: '1000000.00', credit: '0' },
+        { accountId: 'acc-otro', debit: '500000.00', credit: '0' },
+        { accountId: 'acc-iva', debit: '190000.00', credit: '0', dimensions: { taxRuleId: 'rule-iva', taxRuleCode: 'IVA_19_PURCHASE', baseAmountCop: '1000000.00' } },
+        { accountId: 'acc-cxp', debit: '0', credit: '1690000.00' },
+      ],
+    });
+    expect(result.violations).toEqual([]);
+  });
+
+  it('un IVA mal calculado sigue detectándose en el asiento completo', async () => {
+    vi.mocked(repo.getRules).mockResolvedValue([iva]);
+    const result = await validateLines({
+      ...COMMON_INPUT,
+      lines: [
+        { accountId: 'acc-gasto', debit: '1000000.00', credit: '0' },
+        { accountId: 'acc-iva', debit: '200000.00', credit: '0', dimensions: { taxRuleId: 'rule-iva', taxRuleCode: 'IVA_19_PURCHASE' } },
+        { accountId: 'acc-cxp', debit: '0', credit: '1200000.00' },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.violations[0]).toMatchObject({ ruleCode: 'IVA_19_PURCHASE', expectedAmountCop: '190000.00', actualAmountCop: '200000.00' });
   });
 });
