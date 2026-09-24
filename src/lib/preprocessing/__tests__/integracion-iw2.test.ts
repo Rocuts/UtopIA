@@ -12,6 +12,8 @@
 //     `pillars/ebitda.ts`), capital de trabajo y ciclo de conversión.
 //   - niif-preproceso-21: la clasificación corriente/no corriente por grupo
 //     PUC se declara como supuesto.
+//   - ingesta-09 (parcial): un comparativo que viene de la columna de saldo
+//     inicial se marca como apertura y sus KPIs de resultados son N/D.
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from 'vitest';
@@ -20,6 +22,7 @@ import {
   isDebitNaturePuc,
   mesesDelPeriodo,
   parseTrialBalanceCSV,
+  parseTrialBalanceCSVWithMeta,
   preprocessTrialBalance,
 } from '@/lib/preprocessing/trial-balance';
 import { computeEbitda } from '@/lib/pillars/ebitda';
@@ -181,5 +184,48 @@ describe('niif-preproceso-21 — la clasificación corriente/no corriente se dec
     const ct = pp('Saldo 2025').controlTotals;
     expect(ct.clasificacionSupuesta).toMatch(/grupo PUC/);
     expect(ct.clasificacionSupuesta).toMatch(/vencimiento/);
+  });
+});
+
+describe('ingesta-09 (parcial) — comparativo desde la columna de saldo inicial', () => {
+  const csv = [
+    'codigo,nombre,nivel,transaccional,Saldo Inicial 2025,Saldo Final 2025',
+    '110505,Caja,Auxiliar,1,300000000,450000000',
+    '130505,Clientes,Auxiliar,1,100000000,150000000',
+    '311505,Aportes,Auxiliar,1,400000000,400000000',
+    '370505,Utilidades acumuladas,Auxiliar,1,0,0',
+    '360505,Utilidad del ejercicio,Auxiliar,1,0,200000000',
+    '413505,Ventas,Auxiliar,1,0,500000000',
+    '510506,Sueldos,Auxiliar,1,0,300000000',
+  ].join('\n');
+
+  it('con openingPeriods el snapshot de apertura publica N/D (no $0 ni 0 %) en los KPIs de resultados', () => {
+    const meta = parseTrialBalanceCSVWithMeta(csv);
+    const openingPeriods = meta.balanceColumns.filter((c) => c.kind === 'opening').map((c) => c.period);
+    expect(openingPeriods).toEqual(['2024']);
+
+    const pre = preprocessTrialBalance(meta.rows, { openingPeriods });
+    const apertura = pre.comparative!;
+    expect(apertura.period).toBe('2024');
+    expect(apertura.saldosDeApertura).toBe(true);
+    const ct = apertura.controlTotals;
+    for (const k of ['margenOperativo', 'roe', 'roa', 'rotacionActivos', 'diasCartera'] as const) {
+      expect(ct[k]).toBeNull();
+      expect(ct.kpiNdMotivos?.[k]).toMatch(/saldo inicial\/anterior/);
+    }
+    expect(ct.margenNeto).toBeNull();
+    expect(ct.ebitda).toBeNull();
+    // El ESF de apertura sí vale.
+    expect(ct.razonCorriente).toBeNull(); // sin pasivo corriente
+    expect(ct.capitalTrabajo).toBe(400_000_000);
+
+    // El periodo actual no se ve afectado.
+    expect(pre.primary.saldosDeApertura).toBeUndefined();
+    expect(pre.primary.controlTotals.margenOperativo).toBeCloseTo((200 / 500) * 100, 6);
+  });
+
+  it('sin la opción el comportamiento previo se conserva (retrocompatible)', () => {
+    const pre = preprocessTrialBalance(parseTrialBalanceCSV(csv));
+    expect(pre.comparative!.saldosDeApertura).toBeUndefined();
   });
 });

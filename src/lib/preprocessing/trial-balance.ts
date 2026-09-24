@@ -527,6 +527,14 @@ export interface PeriodSnapshot {
   // popula con 'indeterminado' como fallback seguro.
   // -----------------------------------------------------------------------
   periodoTipo?: 'cerrado' | 'parcial' | 'indeterminado';
+  /**
+   * ingesta-09 (parcial): el snapshot proviene de una columna de SALDO INICIAL
+   * / ANTERIOR del archivo (`BalanceColumnKind` 'opening'), no de un cierre del
+   * periodo anterior. Su ESF es el de apertura, pero su P&G NO es un P&G
+   * comparativo: los KPIs de flujo salen N/D con motivo y los consumidores
+   * deben presentar el P&G comparativo como N/D (no $0). Ausente = cierre.
+   */
+  saldosDeApertura?: boolean;
   classes: PUCClass[];
   controlTotals: ControlTotals;
   equityBreakdown: EquityBreakdown;
@@ -1464,6 +1472,14 @@ export interface PreprocessTrialBalanceOptions {
    * el caller puede pasar `defaultPeriod` para etiquetar el snapshot.
    */
   defaultPeriod?: string;
+  /**
+   * ingesta-09 (parcial): periodos cuyos saldos provienen de una columna de
+   * saldo inicial / anterior (`parseTrialBalanceCSVWithMeta().balanceColumns`
+   * con `kind === 'opening'`). Esos snapshots se marcan `saldosDeApertura` y
+   * sus KPIs de flujo salen N/D: el P&G de una columna de apertura no es el
+   * P&G del periodo anterior.
+   */
+  openingPeriods?: readonly string[];
 }
 
 /**
@@ -1494,8 +1510,10 @@ export function preprocessTrialBalance(
   // 2. Construir un PeriodSnapshot por cada periodo + ejecutar Curator (R1–R4).
   // -------------------------------------------------------------------------
   const snapshots: PeriodSnapshot[] = [];
+  const openingPeriods = new Set(options.openingPeriods ?? []);
   for (let i = 0; i < periods.length; i++) {
     const snap = buildSnapshotForPeriod(rows, periods[i]);
+    if (openingPeriods.has(periods[i])) snap.saldosDeApertura = true;
     const prev = i > 0 ? snapshots[i - 1] : null;
     const curatorResult = runCurator(snap, prev);
     snap.curator = curatorResult;
@@ -2661,6 +2679,11 @@ interface DerivedKpiInputs {
   mesesPeriodo: number | null;
   /** Etiqueta del periodo, para la nota de base y los motivos. */
   periodo: string;
+  /**
+   * `false` cuando el snapshot es un saldo de apertura (ingesta-09): sin P&G
+   * del periodo, todo KPI que use flujos es N/D con motivo.
+   */
+  pygDisponible?: boolean;
 }
 
 interface DerivedKpis {
@@ -2715,6 +2738,9 @@ const MOTIVO_COSTOS_ANOMALOS =
   'N/D — base de costos insuficiente (clases 6 + 7 < 1 % de los ingresos): ciclo operativo no confiable';
 const MOTIVO_CICLO_INCOMPLETO =
   'N/D — el ciclo de conversión requiere días de cartera, inventario y proveedores calculables';
+const MOTIVO_PYG_APERTURA =
+  'N/D — el periodo proviene de una columna de saldo inicial/anterior: no hay P&G del periodo ' +
+  'para este indicador';
 
 function motivoPeriodoNoAnualizado(periodo: string): string {
   return (
@@ -2831,11 +2857,19 @@ export function refreshDerivedKpis(snap: PeriodSnapshot, prev: PeriodSnapshot | 
   ct.activoPromedio = activoPromedio;
   Object.assign(
     ct,
-    computeDerivedKpis(kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio)),
+    computeDerivedKpis({
+      ...kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio),
+      pygDisponible: snap.saldosDeApertura !== true,
+    }),
   );
   // EBITDA con la definición ÚNICA de `pillars/ebitda.ts` (ratios-kpis-05 /
   // ratios-kpis-24): EBIT + D&A sobre las hojas del snapshot, sin las cuentas
-  // virtuales del curator. Sin grupo 41 es N/D con motivo.
+  // virtuales del curator. Sin grupo 41 (o en un saldo de apertura) es N/D.
+  if (snap.saldosDeApertura === true) {
+    ct.ebitda = null;
+    ct.kpiNdMotivos = { ...ct.kpiNdMotivos, ebitda: MOTIVO_PYG_APERTURA };
+    return;
+  }
   const ebitda = computeEbitda(snap);
   ct.ebitda = ebitda.ebitda;
   if (ebitda.ebitda === null && ebitda.reason) {
@@ -2874,6 +2908,19 @@ function kpiInputsFromTotals(
     periodo,
   };
 }
+
+/** KPIs que dependen de un flujo del periodo (P&G). */
+const KPIS_DE_FLUJO = [
+  'margenBruto',
+  'margenOperativo',
+  'roe',
+  'roa',
+  'rotacionActivos',
+  'diasCartera',
+  'diasInventario',
+  'diasProveedores',
+  'cicloConversionEfectivo',
+] as const satisfies readonly KpiNdKey[];
 
 function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
   const safeDiv = (num: number, den: number): number | null => {
@@ -2981,7 +3028,7 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
         : `Base 365 días. Periodo ${inputs.periodo}: P&G de ${meses} meses; ROE, ROA, ` +
           `rotación de activos y días de cartera/inventario/proveedores anualizados × 12/${meses}.`;
 
-  return {
+  const out: DerivedKpis = {
     razonCorriente: safeDiv(inputs.activoCorriente, inputs.pasivoCorriente),
     pruebaAcida: safeDiv(
       inputs.activoCorriente - inputs.inventarios14,
@@ -3009,6 +3056,22 @@ function computeDerivedKpis(inputs: DerivedKpiInputs): DerivedKpis {
     kpiBaseNota,
     kpiNdMotivos,
   };
+
+  // ingesta-09 (parcial): un saldo de apertura no trae P&G del periodo. Los
+  // KPIs de flujo (y el margen neto y la cobertura, que también son P&G) se
+  // publican N/D con motivo; los de saldo (liquidez, endeudamiento) valen.
+  if (inputs.pygDisponible === false) {
+    for (const key of KPIS_DE_FLUJO) {
+      out[key] = null;
+      kpiNdMotivos[key] = MOTIVO_PYG_APERTURA;
+    }
+    out.margenNeto = null;
+    out.coberturaIntereses = null;
+    out.kpiBaseNota =
+      `Periodo ${inputs.periodo}: saldos de apertura (columna de saldo inicial/anterior); ` +
+      'sin P&G del periodo, los indicadores de resultados se publican N/D.';
+  }
+  return out;
 }
 
 /**
