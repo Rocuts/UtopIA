@@ -1228,10 +1228,10 @@ function buildStatements(
   if (json) {
     const ctx = statementContext(json.company.fiscalPeriod, json.company.comparativePeriod, preprocessed);
     return {
-      balance: niifJsonToBalanceTable(json, ctx),
-      income: niifJsonToIncomeTable(json, ctx),
+      balance: labelLlmStatementNotes(niifJsonToBalanceTable(json, ctx), json.balanceSheet?.notes),
+      income: labelLlmStatementNotes(niifJsonToIncomeTable(json, ctx), json.incomeStatement?.notes),
       cashFlow: niifJsonToCashFlowTable(json, ctx),
-      equity: niifJsonToEquityTable(json, ctx),
+      equity: labelLlmStatementNotes(niifJsonToEquityTable(json, ctx), json.equityChanges?.notes),
     };
   }
   return {
@@ -1240,6 +1240,22 @@ function buildStatements(
     cashFlow: parseStatementTable(report.niifAnalysis?.cashFlowStatement),
     equity: parseStatementTable(report.niifAnalysis?.equityChangesStatement),
   };
+}
+
+/**
+ * Las notas en prosa de cada estado (`balanceSheet/incomeStatement/equityChanges.notes`)
+ * las redacta el LLM y sus cifras no se contrastan con las anclas: se imprimían
+ * bajo el estado como si fueran parte del estado validado (e2e-niif-10). Si el
+ * estado trae alguna nota, la primera línea del pie es el aviso de narrativa no
+ * auditada (mismo texto que el resto de la narrativa del PDF y el Excel).
+ */
+function labelLlmStatementNotes<T extends { footnotes?: string[] }>(
+  table: T,
+  notes: ReadonlyArray<{ body: string }> | null | undefined,
+): T {
+  const hasLlmNotes = (notes ?? []).some((n) => typeof n?.body === 'string' && n.body.trim().length > 0);
+  if (!hasLlmNotes || !table) return table;
+  return { ...table, footnotes: [NARRATIVE_DISCLAIMER, ...(table.footnotes ?? [])] };
 }
 
 /**
@@ -1298,7 +1314,8 @@ function buildNotes(report: FinancialReport) {
     const body = technical.map((n) => `- ${n}`).join('\n');
     blocks.push({
       heading: 'Notas técnicas de los estados financieros',
-      bodyMarkdown: body,
+      // Prosa del Pass-3 del LLM: sus cifras no se anclan (e2e-niif-10).
+      bodyMarkdown: withNarrativeDisclaimer(body),
       citations: extractCitations(body),
     });
   }

@@ -18,6 +18,7 @@ import {
 import { composeEditorialReport } from '../compose';
 import { makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import { validateNiifReportJson } from '@/lib/agents/financial/validators/niif-json-validator';
+import { NARRATIVE_DISCLAIMER } from '../../statement-presentation';
 
 const line = (account: string | null, amountPrimary: string, extra: Partial<NiifReportJson['balanceSheet']['assets'][number]> = {}) => ({
   account, label: account ?? 'Ajuste', amountPrimary, amountComparative: null,
@@ -149,7 +150,11 @@ describe('reportes-export-13 / -14 — leyendas de comparativo, fecha y moneda',
     const pre = { primary: { period: '2025', periodoTipo: 'cerrado', controlTotals: null } } as never;
     const doc = composeEditorialReport({ report, preprocessed: pre, pillars: null, language: 'es' });
     expect(doc.statements.balance.subtitle).toBe('Al 31 de diciembre de 2025');
-    expect(doc.statements.balance.footnotes).toEqual(['Nota 3 — PPE al costo. (NIIF PYMES Secc. 17)']);
+    // e2e-niif-10: la nota en prosa del LLM va precedida del aviso de narrativa no auditada.
+    expect(doc.statements.balance.footnotes).toEqual([
+      NARRATIVE_DISCLAIMER,
+      'Nota 3 — PPE al costo. (NIIF PYMES Secc. 17)',
+    ]);
     expect(doc.notes.blocks.some((b) => b.bodyMarkdown.includes('Mapeo PUC → NIIF.'))).toBe(true);
   });
 });
