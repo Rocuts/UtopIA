@@ -1219,10 +1219,15 @@ function natureBalance(code: string, debit: number, credit: number): number {
   return value === 0 ? 0 : value;
 }
 
-function readBalanceCell(cols: string[], col: BalanceColumn, code: string, exponente = 0): AmountCell {
-  const first = parseAmountCell(cols[col.index], exponente);
+function readBalanceCell(
+  cols: string[],
+  col: BalanceColumn,
+  code: string,
+  unidad: LecturaUnidad = SIN_UNIDAD,
+): AmountCell {
+  const first = parseAmountCell(cols[col.index], unidad);
   if (col.creditIndex === undefined) return first;
-  const credit = parseAmountCell(cols[col.creditIndex], exponente);
+  const credit = parseAmountCell(cols[col.creditIndex], unidad);
   if (first.kind === 'unreadable') return first;
   if (credit.kind === 'unreadable') return credit;
   if (first.kind === 'empty' && credit.kind === 'empty') return first;
@@ -1233,6 +1238,14 @@ function readBalanceCell(cols: string[], col: BalanceColumn, code: string, expon
 
 function unreadableMessage(code: string, header: string, cell: UnreadableCell): string {
   const shown = cell.raw.length > 40 ? `${cell.raw.slice(0, 40)}…` : cell.raw;
+  if (cell.ambiguoEn) {
+    return (
+      `Cuenta ${code}: el saldo "${shown}" de la columna "${header}" es ambiguo con la unidad ` +
+      `confirmada (${cell.ambiguoEn} de pesos): con tres cifras tras el único separador puede ser ` +
+      'un decimal o una agrupación de miles, y el archivo no permite deducir su separador decimal. ' +
+      'Exporte los importes con separador de miles y decimal, o con un número de decimales distinto de tres.'
+    );
+  }
   if (cell.fueraDeRango) {
     return (
       `Cuenta ${code}: el saldo "${shown}" de la columna "${header}" está fuera del rango de ` +
@@ -1308,6 +1321,29 @@ export function parseTrialBalanceCSVWithMeta(
   const unidadDeclarada = detectUnidadDeclarada([...preambulo, ...lineasSinCuenta], rawHeaders);
   const unidadAplicada = options.unidadConfirmada ?? null;
   const exponente = unidadAplicada ? EXPONENTE_UNIDAD[unidadAplicada] : 0;
+  // Con la unidad confirmada, '848,123' (tres cifras tras el único separador)
+  // puede ser decimal (precisión al peso en miles) o agrupación: el separador
+  // decimal se decide por archivo (recalculo-final2-02 / ICU-02).
+  const lecturaUnidad: LecturaUnidad =
+    unidadAplicada && exponente > 0
+      ? {
+          exponente,
+          unidad: unidadAplicada,
+          separadorDecimal: separadorDecimalDelArchivo(
+            lines.slice(layout.lineIndex + 1).flatMap((line) => {
+              const cols = parseLine(line, separator);
+              const code = codeOf(cols);
+              if (!code || !/^\d/.test(code)) return [];
+              const idx = [
+                ...balanceColumns.flatMap((c) => (c.creditIndex === undefined ? [c.index] : [c.index, c.creditIndex])),
+                ...(balanceColumns.length === 0 ? [debitIdx, creditIdx] : []),
+              ];
+              return idx.filter((i) => i >= 0).map((i) => cols[i] ?? '');
+            }),
+            separator,
+          ),
+        }
+      : SIN_UNIDAD;
   const corteDeclarado = detectCorteDeclarado(preambulo);
 
   for (let i = layout.lineIndex + 1; i < lines.length; i++) {
@@ -1352,7 +1388,7 @@ export function parseTrialBalanceCSVWithMeta(
       // Caso normal: hay columnas de saldo identificadas. Cada columna
       // alimenta su periodo correspondiente.
       for (const col of balanceColumns) {
-        const cell = readBalanceCell(cols, col, code, exponente);
+        const cell = readBalanceCell(cols, col, code, lecturaUnidad);
         if (cell.kind === 'number') {
           balancesByPeriod[col.period] = cell.value;
           numericPeriods.add(col.period);
@@ -1363,8 +1399,8 @@ export function parseTrialBalanceCSVWithMeta(
     } else if (debitIdx !== -1 || creditIdx !== -1) {
       // Solo hay debito/credito: derivamos el balance segun naturaleza PUC.
       // Un débito o crédito ilegible NO se vuelve 0 (niif-preproceso-05).
-      const debit = debitIdx !== -1 ? parseAmountCell(cols[debitIdx], exponente) : EMPTY_CELL;
-      const credit = creditIdx !== -1 ? parseAmountCell(cols[creditIdx], exponente) : EMPTY_CELL;
+      const debit = debitIdx !== -1 ? parseAmountCell(cols[debitIdx], lecturaUnidad) : EMPTY_CELL;
+      const credit = creditIdx !== -1 ? parseAmountCell(cols[creditIdx], lecturaUnidad) : EMPTY_CELL;
       if (debit.kind === 'unreadable') {
         rowIssues.push({ period: dcPeriod, message: unreadableMessage(code, rawHeaders[debitIdx], debit) });
       }
@@ -3587,18 +3623,117 @@ function parseLine(line: string, separator: string): string[] {
 //     Excel → ilegible, nunca un importe aproximado.
 //   - U+2212 y los guiones tipográficos son signo menos; el guion solo ("-")
 //     es el cero del formato contable de Excel y cuenta como celda vacía.
-// Ambigüedad residual irreducible: String(1.234) === "1.234" (un valor < 1.000
-// con exactamente 3 decimales) se lee como mil doscientos treinta y cuatro. Se
-// resuelve en el PRODUCTOR del CSV (nunca más de 2 decimales), no aquí.
+// Ambigüedad residual irreducible EN PESOS: String(1.234) === "1.234" (un
+// valor < 1.000 con exactamente 3 decimales) se lee como mil doscientos
+// treinta y cuatro. Se resuelve en el PRODUCTOR del CSV (nunca más de 2
+// decimales), no aquí.
+// Con la unidad CONFIRMADA en miles / millones tres decimales son la precisión
+// al peso ('848,123' miles = $848.123): ahí esa forma se lee con el separador
+// decimal del archivo (`separadorDecimalDelArchivo`) y, sin evidencia, es un
+// importe ambiguo que bloquea con motivo (recalculo-final2-02 / ICU-02).
 // ---------------------------------------------------------------------------
 
-type UnreadableCell = { kind: 'unreadable'; raw: string; scientific: boolean; fueraDeRango?: boolean };
+type UnreadableCell = {
+  kind: 'unreadable';
+  raw: string;
+  scientific: boolean;
+  fueraDeRango?: boolean;
+  /** Unidad confirmada con la que el importe es ambiguo (recalculo-final2-02). */
+  ambiguoEn?: UnidadMonetaria;
+};
 type AmountCell = { kind: 'empty' } | { kind: 'number'; value: number } | UnreadableCell;
 
 const EMPTY_CELL: AmountCell = { kind: 'empty' };
 const SUB_CENT = 0.005;
 const GROUPED_DOT = /^[1-9]\d{0,2}(\.\d{3})+$/;
 const GROUPED_COMMA = /^[1-9]\d{0,2}(,\d{3})+$/;
+/** Un único separador seguido de exactamente 3 cifras: '848,123', '1.234'. */
+const UN_GRUPO_DE_TRES = /^[1-9]\d{0,2}[.,]\d{3}$/;
+
+type SeparadorDecimal = '.' | ',';
+
+/**
+ * Cómo leer los importes de un archivo: sin unidad (pesos, regla morfológica)
+ * o con la unidad confirmada (P4-a), su exponente y el separador decimal del
+ * archivo (`null` = el archivo no da evidencia).
+ */
+interface LecturaUnidad {
+  exponente: number;
+  unidad: UnidadMonetaria | null;
+  separadorDecimal: SeparadorDecimal | null;
+}
+const SIN_UNIDAD: LecturaUnidad = { exponente: 0, unidad: null, separadorDecimal: null };
+
+/**
+ * Separador decimal de un archivo con la unidad confirmada (recalculo-final2-02
+ * / ICU-02). En miles, la precisión al peso son tres decimales ('848,123' =
+ * $848.123), la misma forma que una agrupación de miles. Evidencia, por
+ * celda de importe: los dos separadores (el último es el decimal), un
+ * separador repetido con grupos de tres (es de miles: el decimal es el otro),
+ * o un único separador que no puede ser de miles ('5,5', '0,125',
+ * '1234,567'). Sin evidencia en las celdas, un archivo separado por ';' usa
+ * coma decimal (exportación es-CO de Excel). Evidencia contradictoria o
+ * ninguna: `null` (los importes '848,123' quedan ambiguos y bloquean).
+ */
+function separadorDecimalDelArchivo(celdas: string[], separadorDeCampos: string): SeparadorDecimal | null {
+  const votos = new Set<SeparadorDecimal>();
+  for (const celda of celdas) {
+    const limpia = limpiarCeldaImporte(celda);
+    if (limpia.kind !== 'text' || !/^[\d.,]+$/.test(limpia.s)) continue;
+    const s = limpia.s;
+    const dots = (s.match(/\./g) ?? []).length;
+    const commas = (s.match(/,/g) ?? []).length;
+    if (dots > 0 && commas > 0) {
+      votos.add(s.lastIndexOf(',') > s.lastIndexOf('.') ? ',' : '.');
+    } else if (dots + commas > 1) {
+      const sep: SeparadorDecimal = dots > 0 ? '.' : ',';
+      if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) votos.add(sep === '.' ? ',' : '.');
+    } else if (dots + commas === 1 && !UN_GRUPO_DE_TRES.test(s)) {
+      votos.add(dots > 0 ? '.' : ',');
+    }
+  }
+  if (votos.size === 1) return [...votos][0];
+  if (votos.size === 0 && separadorDeCampos === ';') return ',';
+  return null;
+}
+
+type CeldaLimpia = { kind: 'empty' } | { kind: 'text'; s: string; negative: boolean };
+
+/**
+ * Normaliza el texto de una celda de importe: moneda, espacios, prefijo de
+ * texto de Excel, apóstrofo de millones y signo (paréntesis, menos al inicio o
+ * al final, guiones tipográficos). El guion solo es el cero del formato
+ * contable (celda vacía).
+ */
+function limpiarCeldaImporte(original: string): CeldaLimpia {
+  let s = original
+    .replace(/[−‒–—﹣－]/g, '-')
+    .replace(/\b(COP|USD|EUR)\b/gi, '')
+    .replace(/[$€£"\s]/g, '')
+    // Apóstrofo inicial = prefijo de texto de Excel; interior = separador de
+    // millones latinoamericano ("1'234.567"), equivalente al punto de miles.
+    .replace(/^['’`´]/, '')
+    .replace(/['’`´]/g, '.');
+  if (s.length === 0 || /^-+$/.test(s)) return { kind: 'empty' };
+
+  let negative = false;
+  const paren = s.match(/^\((.*)\)$/);
+  if (paren) {
+    negative = true;
+    s = paren[1];
+  }
+  if (s.endsWith('-')) {
+    negative = !negative;
+    s = s.slice(0, -1);
+  }
+  if (s.startsWith('-')) {
+    negative = !negative;
+    s = s.slice(1);
+  }
+  if (s.startsWith('+')) s = s.slice(1);
+  if (s.length === 0) return { kind: 'empty' };
+  return { kind: 'text', s, negative };
+}
 
 /**
  * `true` si el importe (pesos) se representa al centavo en el contrato actual
@@ -3691,37 +3826,15 @@ export function reexpresarFilasPorUnidad(
   return { rows: out, errores };
 }
 
-function parseAmountCell(val: string | undefined | null, exponente = 0): AmountCell {
+function parseAmountCell(val: string | undefined | null, lectura: LecturaUnidad = SIN_UNIDAD): AmountCell {
   if (val === undefined || val === null) return EMPTY_CELL;
   const original = String(val).trim();
   const unreadable = (scientific = false): AmountCell => ({ kind: 'unreadable', raw: original, scientific });
+  const exponente = lectura.exponente;
 
-  let s = original
-    .replace(/[−‒–—﹣－]/g, '-')
-    .replace(/\b(COP|USD|EUR)\b/gi, '')
-    .replace(/[$€£"\s]/g, '')
-    // Apóstrofo inicial = prefijo de texto de Excel; interior = separador de
-    // millones latinoamericano ("1'234.567"), equivalente al punto de miles.
-    .replace(/^['’`´]/, '')
-    .replace(/['’`´]/g, '.');
-  if (s.length === 0 || /^-+$/.test(s)) return EMPTY_CELL;
-
-  let negative = false;
-  const paren = s.match(/^\((.*)\)$/);
-  if (paren) {
-    negative = true;
-    s = paren[1];
-  }
-  if (s.endsWith('-')) {
-    negative = !negative;
-    s = s.slice(0, -1);
-  }
-  if (s.startsWith('-')) {
-    negative = !negative;
-    s = s.slice(1);
-  }
-  if (s.startsWith('+')) s = s.slice(1);
-  if (s.length === 0) return EMPTY_CELL;
+  const limpia = limpiarCeldaImporte(original);
+  if (limpia.kind === 'empty') return EMPTY_CELL;
+  const { s, negative } = limpia;
 
   const sci = s.match(/^(\d+(?:[.,]\d+)?)[eE]([-+]?\d+)$/);
   if (sci) {
@@ -3748,7 +3861,14 @@ function parseAmountCell(val: string | undefined | null, exponente = 0): AmountC
     normalized = s;
   } else {
     const sep = dots > 0 ? '.' : ',';
-    if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) {
+    if (exponente > 0 && UN_GRUPO_DE_TRES.test(s)) {
+      // Unidad confirmada: '848,123' es decimal o agrupación según el
+      // separador decimal del archivo; sin evidencia es ambiguo (bloquea).
+      if (lectura.separadorDecimal === null) {
+        return { kind: 'unreadable', raw: original, scientific: false, ambiguoEn: lectura.unidad ?? undefined };
+      }
+      normalized = lectura.separadorDecimal === sep ? s.replace(sep, '.') : s.replace(sep, '');
+    } else if ((sep === '.' ? GROUPED_DOT : GROUPED_COMMA).test(s)) {
       normalized = s.split(sep).join('');
     } else if (dots + commas === 1) {
       normalized = s.replace(sep, '.');
@@ -3783,7 +3903,7 @@ function parseAmountCell(val: string | undefined | null, exponente = 0): AmountC
  * ilegibles como motivo de validación.
  */
 export function parseNumber(val: string | undefined): number {
-  const cell = parseAmountCell(val);
+  const cell = parseAmountCell(val, SIN_UNIDAD);
   return cell.kind === 'number' ? cell.value : NaN;
 }
 

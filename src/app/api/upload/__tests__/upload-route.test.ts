@@ -428,6 +428,22 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
   });
 
+  it("recalculo-final2-02: CSV ';' en miles con '848,123' confirmado desde la UI → $848.123, no × 1.000", async () => {
+    const csv = [
+      'codigo;nombre;saldo 2025 (miles de pesos)',
+      ...BASE.map(([c, n, v]) => `${c};${n};${v}`),
+      '11100502;Bancos cuenta corriente;848,123',
+      '23809501;Otras cuentas por pagar;848,123',
+    ].join('\n');
+    const { status, json } = await uploadWith(csv, 'balance.csv', '1000');
+    expect(status).toBe(200);
+    // A = 1.000.000 miles + $848.123 = P + K.
+    expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_848_123);
+    const reparsed = preprocessTrialBalance(parseUploadedTrialBalanceText(json.rawData!).rows);
+    expect(reparsed.primary.controlTotals.activo).toBe(1_000_848_123);
+    expect(reparsed.primary.validation.blocking).toBe(false);
+  });
+
   it('XLSX en millones: la confirmación conserva los decimales de cada celda (centavos exactos)', async () => {
     // Las celdas se serializaban a dos decimales de la unidad antes de
     // reexpresar: 4232,848882125 millones → "4232.85" → $4.232.850.000 y
