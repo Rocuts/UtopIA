@@ -3,6 +3,7 @@
 // silencio ante '1.234.567' o '(1.234,56)'.
 import { describe, expect, it } from 'vitest';
 import {
+  formatCOP,
   parseCOP,
   parseCOPStrict,
   parseCOPToCentavos,
@@ -86,5 +87,28 @@ describe('parseCOPToCentavos — BigInt exacto', () => {
 
   it('entrada no interpretable → null', () => {
     expect(parseCOPToCentavos('1,234,567')).toBeNull();
+  });
+});
+
+// reportes-export-19: formatCOP imprimía el formato de Intl ('$ 1.234,56' con
+// espacio y '-$ 1.234,56'), distinto de los estados, el Excel y los gráficos.
+describe('formatCOP — misma convención que formatCopFromCents', () => {
+  it('sin espacio tras el símbolo, punto de miles y coma decimal', () => {
+    expect(formatCOP(1234567.89)).toBe('$1.234.567,89');
+    expect(formatCOP('1500000.00')).toBe('$1.500.000,00');
+    expect(formatCOP(0)).toBe('$0,00');
+  });
+  it('negativos entre paréntesis', () => {
+    expect(formatCOP(-1234.56)).toBe('($1.234,56)');
+    expect(formatCOP('-1234.5')).toBe('($1.234,50)');
+  });
+  it('strings NUMERIC por encima de 2^53 centavos sin pérdida', () => {
+    expect(formatCOP('123456789012345678.91')).toBe('$123.456.789.012.345.678,91');
+  });
+  it('— para vacío o no numérico', () => {
+    expect(formatCOP(null)).toBe('—');
+    expect(formatCOP('')).toBe('—');
+    expect(formatCOP('abc')).toBe('—');
+    expect(formatCOP(Number.NaN)).toBe('—');
   });
 });

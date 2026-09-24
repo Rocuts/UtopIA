@@ -299,8 +299,13 @@ function selloTitle(type: QualityV21SelloType): string {
   }
 }
 
+/** Un decimal con coma es-CO (`7,5`), igual que la página PDF de la Parte V. */
+function dec1(n: number): string {
+  return n.toFixed(1).replace('.', ',');
+}
+
 function fmtScore10(score10: number | null): string {
-  return score10 === null ? 'N/D' : score10.toFixed(1);
+  return score10 === null ? 'N/D' : dec1(score10);
 }
 
 function selloBottomLine(
@@ -568,7 +573,7 @@ function buildCorrectiveActions(dims: QualityV21Dimension[]): QualityV21Correcti
     const firstPoint = d.points.find((p) => p && p.trim().length > 0);
     const action = firstPoint
       ? `Atender: ${firstPoint}`
-      : `Revisar la dimensión "${d.name}" — score actual ${d.score10.toFixed(1)}/10 por debajo del umbral 7.`;
+      : `Revisar la dimensión "${d.name}" — score actual ${dec1(d.score10)}/10 por debajo del umbral 7.`;
     actions.push({
       dimNum: d.num,
       dimName: d.name,
@@ -654,7 +659,7 @@ export function buildQualityV21View(
       selloBlockers.push('La integridad aritmética determinista del informe tiene bloqueantes.');
     }
     if (exactitud < EXACTITUD_BLOQUEANTE) {
-      selloBlockers.push(`Exactitud ${exactitud.toFixed(1)}/10 por debajo de ${EXACTITUD_BLOQUEANTE}/10 (dimensión bloqueante).`);
+      selloBlockers.push(`Exactitud ${dec1(exactitud)}/10 por debajo de ${EXACTITUD_BLOQUEANTE}/10 (dimensión bloqueante).`);
     }
     if (selloBlockers.length > 0) selloType = 'requiere_correccion';
   }

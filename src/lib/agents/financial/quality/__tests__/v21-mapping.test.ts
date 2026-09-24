@@ -159,7 +159,7 @@ describe('buildQualityV21View — sello thresholds', () => {
   it('sello bottomLine contains approvedCount/12 and score', () => {
     const v = buildQualityV21View(makeJson({ defaultScore: 100 }));
     expect(v.sello.bottomLine).toContain('12/12');
-    expect(v.sello.bottomLine).toContain('10.0');
+    expect(v.sello.bottomLine).toContain('Score 10,0/10');
   });
 });
 

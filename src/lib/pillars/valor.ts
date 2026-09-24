@@ -192,7 +192,7 @@ export function computeValorPillar(input: PillarsAggregateInput): PillarMetrics 
     severity: kpiSeverity(evaScore),
     descriptionEs:
       evaReasonEs ??
-      `NOPAT anual (EBIT × 12 / meses × (1 − tasa efectiva contable)) menos capital empleado × ${((costoCapital ?? 0) * 100).toFixed(1)}% declarado. EVA > 0 = crea valor.`,
+      `NOPAT anual (EBIT × 12 / meses × (1 − tasa efectiva contable)) menos capital empleado × ${((costoCapital ?? 0) * 100).toFixed(1).replace('.', ',')}% declarado. EVA > 0 = crea valor.`,
     descriptionEn:
       evaReasonEn ??
       `Annual NOPAT (EBIT × 12 / months × (1 − book effective tax rate)) minus capital employed × declared ${((costoCapital ?? 0) * 100).toFixed(1)}%. EVA > 0 = value-creating.`,

@@ -379,7 +379,7 @@ function renderMarkdown(
     lines.push('|------:|-----------|--------|------------------:|');
     for (const a of view.correctiveActions) {
       lines.push(
-        `| ${a.dimNum} | ${escapeCell(a.dimName)} | ${escapeCell(a.action)} | +${a.impactPoints.toFixed(1)} pts |`,
+        `| ${a.dimNum} | ${escapeCell(a.dimName)} | ${escapeCell(a.action)} | +${a.impactPoints.toFixed(1).replace('.', ',')} pts |`,
       );
     }
     lines.push('');
@@ -482,7 +482,8 @@ function renderDimensionBlock(dim: QualityV21Dimension): string[] {
 }
 
 function fmtDimScore(score10: number | null): string {
-  return score10 === null ? 'N/D' : `${score10.toFixed(1)}/10`;
+  // Coma decimal es-CO, como QualityMetaAuditPage (reportes-export-19).
+  return score10 === null ? 'N/D' : `${score10.toFixed(1).replace('.', ',')}/10`;
 }
 
 /**
