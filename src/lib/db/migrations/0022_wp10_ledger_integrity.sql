@@ -35,6 +35,9 @@
 --    existentes se liberan (se conserva el manual o el más antiguo) antes de
 --    crear el índice único parcial.
 --
+-- 6. CONCILIACIÓN (contab-nomina-09). bank_reconciliations.bank_balance y
+--    difference admiten NULL: sin extracto del período no hay diferencia.
+--
 -- Idempotente: CREATE OR REPLACE / IF NOT EXISTS / DROP TRIGGER IF EXISTS.
 -- ---------------------------------------------------------------------------
 
@@ -247,3 +250,10 @@ WHERE bt.id = d.id AND d.rn > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS bt_matched_line_uniq
   ON bank_transactions (matched_journal_line_id)
   WHERE matched_journal_line_id IS NOT NULL;
+--> statement-breakpoint
+
+-- 6. Conciliación sin extracto del período (contab-nomina-09): saldo bancario
+--    y diferencia pasan a ser NULL (no conciliable) en vez de 0.
+ALTER TABLE bank_reconciliations ALTER COLUMN bank_balance DROP NOT NULL;
+--> statement-breakpoint
+ALTER TABLE bank_reconciliations ALTER COLUMN difference DROP NOT NULL;

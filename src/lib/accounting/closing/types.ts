@@ -41,7 +41,8 @@ export interface HealthCheckResult {
     bankAccountLabel: string;
     differenceCop: string;
     ledgerBalanceCop: string;
-    bankBalanceCop: string;
+    /** null cuando no hay extracto del período (no conciliable). */
+    bankBalanceCop: string | null;
   }>;
   /** Documentos OCR/uploads pendientes de revisión. */
   pendingDocs: number;
