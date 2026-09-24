@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
+
 const DIR = join(__dirname, '..');
 const read = (f: string) => readFileSync(join(DIR, f), 'utf-8');
 
@@ -138,5 +140,90 @@ describe('decreto_2706_2012_grupo3_micro.md — topes con el SMMLV 2026 del repo
     expect(6_000 * 1_750_905).toBe(10_505_430_000);
     expect(t).toContain('$875.452.500');
     expect(t).toContain('$10.505.430.000');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 (NT-04): resúmenes curados que contradecían sus
+// fuentes primarias del corpus.
+//   · ley_2155_2021.md art. 7: «del treinta y cinco por ciento (35%), a partir
+//     del año gravable 2022»; ley_2010_2019.md art. 92: 32% (AG 2020), 31% (AG
+//     2021) y 30% «a partir del año gravable 2022» (nunca aplicó).
+//   · estatuto_tributario_completo.md Art. 206 num. 10 (mod. Ley 2277 art. 2):
+//     «limitada anualmente a setecientos noventa (790) UVT».
+//   · decreto_1474_2025_emergencia.md: sobretasa financiera de 15 puntos
+//     (tarifa total 50%); inexequible desde el 15-abr-2026.
+//   · estatuto_tributario_completo.md Art. 240-1 (mod. Ley 2277 art. 11): 20%
+//     sólo sobre la renta proporcional a exportaciones; Art. 240 par. 2
+//     (financieras), par. 4 (hídricas), par. 5 (hoteles).
+//   · MIN_SANCTION y resolucion_dian_238_2025_uvt_2026.md: sanción mínima
+//     10 UVT = $524.000 (aproximación del Art. 868 E.T.).
+// ---------------------------------------------------------------------------
+
+describe('fuentes primarias que respaldan las correcciones de NT-04', () => {
+  it('Ley 2155 art. 7, Ley 2010 art. 92, Art. 206 num. 10, Decreto 1474 y sanción mínima', () => {
+    expect(read('ley_2155_2021.md')).toMatch(/treinta y cinco por ciento \(35%\), a partir del año gravable 2022/);
+    expect(read('ley_2010_2019.md')).toMatch(/treinta y dos por ciento \(32%\) para el año gravable 2020, treinta y uno por ciento \(31%\) para\s+el año gravable 2021/);
+    expect(read('ley_2277_2022.md')).toMatch(/limitada anualmente a setecientos\s+noventa \(790\) UVT/);
+    const d1474 = read('decreto_1474_2025_emergencia.md');
+    expect(d1474).toMatch(/\*\*15 puntos porcentuales\*\* adicionales/);
+    expect(d1474).toMatch(/15 de abril de 2026\*\*, la Corte Constitucional declaró la \*\*inexequibilidad/);
+    expect(MIN_SANCTION).toBe(524_000);
+    expect(read('resolucion_dian_238_2025_uvt_2026.md')).toMatch(/Sanción mínima tributaria \| 10 UVT \| \$524\.000/);
+  });
+});
+
+describe('ley_2277_2022_reforma_tributaria.md — alineado con las fuentes primarias (NT-04)', () => {
+  const t = read('ley_2277_2022_reforma_tributaria.md');
+
+  it('tarifa 35% desde el AG 2022 (Ley 2155), no «subió de 33% en 2022» ni «ya no 33%»', () => {
+    expect(t).not.toMatch(/subió de 33%/);
+    expect(t).not.toMatch(/ya no 33%/);
+    expect(t).toMatch(/35% desde el año gravable 2022 \(Ley 2155 de 2021, art\. 7/);
+    expect(t).toMatch(/32% en el año gravable 2020 y 31% en el 2021 \(Ley 2010 de 2019, art\. 92\)/);
+  });
+
+  it('renta exenta laboral: 790 UVT anuales, no mensuales', () => {
+    expect(t).not.toMatch(/790 UVT al mes/);
+    expect(t).toMatch(/limitada anualmente a setecientos noventa \(790\) UVT/);
+    expect(Math.round(790 * 52_374)).toBe(41_375_460);
+    expect(t).toContain('$41.375.460');
+  });
+
+  it('Decreto 1474: 15 puntos e inexequible; no «50% adicional», «~50%», «en revisión» ni «5pp si la Corte ratifica»', () => {
+    expect(t).not.toMatch(/sobretasa adicional 50%/);
+    expect(t).not.toMatch(/~50%/);
+    expect(t).not.toMatch(/[Ee]n revisión/);
+    expect(t).not.toMatch(/si la Corte ratifica/);
+    expect(t).not.toMatch(/validando con Corte/);
+    expect(t).toMatch(/sobretasa de 15 puntos al sector financiero \(tarifa total 50%\) fue declarada INEXEQUIBLE por la Corte Constitucional el 15-abr-2026/);
+    expect(t).not.toMatch(/C-079/);
+  });
+});
+
+describe('estatuto_tributario_resumen_2026.md y procedimiento_dian_2026.md (NT-04)', () => {
+  const et = read('estatuto_tributario_resumen_2026.md');
+  const proc = read('procedimiento_dian_2026.md');
+
+  it('zona franca: 20% sólo sobre la renta proporcional a exportaciones; hoteles = par. 5', () => {
+    expect(et).not.toMatch(/\*\*Zonas francas\*\*: tarifa del 20% \(Art\. 240-1 E\.T\.\) para usuarios industriales que cumplan requisitos de inversión y empleo/);
+    expect(et).toMatch(/\*\*Zonas francas\*\*[^\n]*20% sólo a la renta líquida gravable proporcional a sus ingresos por exportación/);
+    expect(et).not.toMatch(/Hoteles[^\n]*parágrafo 7/);
+    expect(et).toMatch(/Hoteles[^\n]*Art\. 240, parágrafo 5/);
+    expect(et).toMatch(/Entidades financieras[^\n]*parágrafo 2/);
+    expect(et).toMatch(/recursos hídricos[^\n]*parágrafo 4/);
+  });
+
+  it('sanción mínima = $524.000 (MIN_SANCTION), no $523.740', () => {
+    const fmt = `$${new Intl.NumberFormat('es-CO').format(MIN_SANCTION)}`;
+    expect(et).not.toMatch(/10 UVT \(\$523\.740 en 2026\)/);
+    expect(proc).not.toMatch(/10 UVT\*\* \(\$523\.740 en 2026\)/);
+    expect(et).toContain(`**Sanción mínima** (Art. 639 E.T.): 10 UVT = ${fmt} en 2026`);
+    expect(proc).toContain(`inferior a **10 UVT** = ${fmt} en 2026`);
+  });
+
+  it('inexactitud: 100% (Art. 648) reducible a la cuarta parte (Art. 709), no «al 50%»', () => {
+    expect(et).not.toMatch(/Reducible al 50% si se corrige en respuesta al requerimiento especial/);
+    expect(et).toMatch(/cuarta parte[^\n]*Art\. 709 E\.T\./);
   });
 });
