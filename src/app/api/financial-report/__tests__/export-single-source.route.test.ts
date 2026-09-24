@@ -107,13 +107,68 @@ describe('export — el JSON y las superficies deterministas salen del mismo bal
       expect(pp?.primary.controlTotals.utilidadNeta).toBe(2000);
     });
 
-    it(`${format}: acepta el preprocesado que usó /niif (ya ajustado)`, async () => {
+    // niif-preproceso-33: antes el preprocesado del cliente se usaba tal cual
+    // (sin ledger ni cruce); ahora el servidor re-deriva el balance de la
+    // petición con el MISMO ledger y exige que coincida. La UI envía ambos.
+    it(`${format}: acepta el preprocesado que usó /niif (ya ajustado) con el mismo ledger`, async () => {
+      const original = preprocessTrialBalance(parseTrialBalanceCSV(CSV_SIN_AJUSTE));
+      const ajustado = applyAdjustments(original, LEDGER.adjustments).balance;
+      const res = await POST(
+        request({
+          report: makeExportableReport(),
+          preprocessed: toJsonSafe(ajustado),
+          adjustmentLedger: LEDGER,
+          rawData: CSV_SIN_AJUSTE,
+          format,
+        }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it(`${format}: niif-preproceso-33 — preprocesado ajustado sin su ledger no casa con el rawData re-derivado (422)`, async () => {
       const original = preprocessTrialBalance(parseTrialBalanceCSV(CSV_SIN_AJUSTE));
       const ajustado = applyAdjustments(original, LEDGER.adjustments).balance;
       const res = await POST(
         request({ report: makeExportableReport(), preprocessed: toJsonSafe(ajustado), rawData: CSV_SIN_AJUSTE, format }),
       );
+      expect(res.status).toBe(422);
+      expect(((await res.json()) as { details: string[] }).details.join(' ')).toMatch(/Fuentes incoherentes/);
+    });
+
+    it(`${format}: niif-preproceso-33 — totales de control alterados en el preprocesado + rawData → 422`, async () => {
+      const pp = toJsonSafe(preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)));
+      (pp.primary.controlTotals.cents as unknown as Record<string, string>).activo = '99999900';
+      const res = await POST(request({ report: makeExportableReport(), preprocessed: pp, rawData: CSV_COHERENTE, format }));
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { details: string[] };
+      expect(body.details.join(' ')).toMatch(/activo: enviado 99999900, recalculado 1000000/);
+      expect(generateFinancialExcel).not.toHaveBeenCalled();
+      expect(renderEditorialReportToStream).not.toHaveBeenCalled();
+    });
+
+    it(`${format}: niif-preproceso-33 — sin rawData, totales alterados frente a sus propias filas → 422`, async () => {
+      const pp = toJsonSafe(preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)));
+      (pp.primary.controlTotals.cents as unknown as Record<string, string>).utilidadNeta = '1';
+      const res = await POST(request({ report: makeExportableReport(), preprocessed: pp, format }));
+      expect(res.status).toBe(422);
+      expect(((await res.json()) as { details: string[] }).details.join(' ')).toMatch(/sus propias filas/);
+    });
+
+    it(`${format}: niif-preproceso-33 — sin rawData, preprocesado íntegro → se exporta el re-derivado desde sus filas`, async () => {
+      const pp = toJsonSafe(preprocessTrialBalance(parseTrialBalanceCSV(CSV_COHERENTE)));
+      // Una cuenta alterada sin tocar los totales no llega a las superficies.
+      const caja = pp.primary.classes.find((c) => c.code === 1)!.accounts.find((a) => a.code === '110505')!;
+      caja.balance = 123456;
+      const res = await POST(request({ report: makeExportableReport(), preprocessed: pp, format }));
       expect(res.status).toBe(200);
+      const used =
+        format === 'excel'
+          ? vi.mocked(generateFinancialExcel).mock.calls[0][0].preprocessed
+          : vi.mocked(composeEditorialReport).mock.calls[0][0].preprocessed;
+      const usedCaja = (used as ReturnType<typeof preprocessTrialBalance>).primary.classes
+        .find((c) => c.code === 1)!
+        .accounts.find((a) => a.code === '110505')!;
+      expect(usedCaja.balance).toBe(1700);
     });
 
     it(`${format}: rawData con el informe de validación antepuesto se recorta antes de parsear`, async () => {

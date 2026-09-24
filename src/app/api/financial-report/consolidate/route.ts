@@ -11,7 +11,17 @@ import {
 } from '@/lib/agents/financial/orchestrator';
 import { consolidateSplitReport } from '@/lib/agents/financial/split-consolidation';
 import type { AdjustmentLedger } from '@/lib/agents/repair/types';
+import type { FinancialReport } from '@/lib/agents/financial/types';
+import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import { toJsonSafe } from '@/lib/preprocessing/json-safe';
+import { foldReportQualifications } from '@/lib/reports/fold-qualifications';
+import { parseReportParts } from '@/lib/reports/report-parts';
+import { buildFinancialReportVersion } from '@/lib/reports/financial-report-version';
+import {
+  persistFinancialReportVersion,
+  resolveReportWorkspaceId,
+} from '@/lib/reports/financial-report-store';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/consolidate (pipeline-flujo-16)
@@ -27,6 +37,18 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 // pliega en el reporte: la descarga se bloquea si validation.ok === false o
 // emittability.kind === 'no-emitible' (y /export los ve vía
 // financialExportBlockers).
+//
+// Procedencia servidor (fase 2, P1): si además llegan las tres partes
+// completas (`reportParts`), el servidor ensambla el informe final —partes,
+// consolidado, veredictos plegados, snapshot fiscal y Âncora calculados AQUÍ
+// desde el balance re-derivado— y lo persiste como `reports.kind =
+// 'financial_report'` del workspace de la sesión, con la huella del informe,
+// la del balance preprocesado y la versión del contrato de reglas. Responde
+// además { report, reportRef, provenance }: la UI guarda la referencia y la
+// reenvía a /export, /html y /api/escudo/fiscal-anchor, que usan ESA versión.
+// Sin DB o sin workspace (modo anónimo sin almacenamiento) no hay referencia:
+// `provenance.status = 'not_persisted'` y las descargas se rotulan
+// "procedencia no verificada".
 //
 // No llama a ningún LLM: es determinista y rápido.
 // ---------------------------------------------------------------------------
@@ -50,10 +72,12 @@ const adjustmentLedgerSchema = z
   .object({ adjustments: z.array(adjustmentSchema).max(50) })
   .optional();
 
+// Los textos de las partes pueden omitirse cuando llegan `reportParts`: se
+// toman de su `fullContent` (si llegan ambos, deben coincidir).
 const partsSchema = z.object({
-  niifContent: z.string().min(1).max(HANDOFF_MAX_CHARS),
-  strategyContent: z.string().min(1).max(HANDOFF_MAX_CHARS),
-  governanceContent: z.string().min(1).max(HANDOFF_MAX_CHARS),
+  niifContent: z.string().min(1).max(HANDOFF_MAX_CHARS).optional(),
+  strategyContent: z.string().min(1).max(HANDOFF_MAX_CHARS).optional(),
+  governanceContent: z.string().min(1).max(HANDOFF_MAX_CHARS).optional(),
 });
 
 export async function POST(req: Request) {
@@ -72,7 +96,8 @@ export async function POST(req: Request) {
   const ledger = adjustmentLedgerSchema.safeParse(
     (body as { adjustmentLedger?: unknown } | null)?.adjustmentLedger,
   );
-  if (!base.success || !parts.success || !ledger.success) {
+  const reportParts = parseReportParts((body as { reportParts?: unknown } | null)?.reportParts);
+  if (!base.success || !parts.success || !ledger.success || reportParts.kind === 'invalid') {
     const issues = [
       ...(base.success ? [] : base.error.issues),
       ...(parts.success ? [] : parts.error.issues),
@@ -81,8 +106,37 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: 'Invalid request format.',
-        details: issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        details: [
+          ...issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+          ...(reportParts.kind === 'invalid' ? reportParts.details : []),
+        ],
       },
+      { status: 400 },
+    );
+  }
+
+  // Texto de cada parte: el campo suelto o el `fullContent` de `reportParts`.
+  const fromParts = reportParts.kind === 'ok' ? reportParts.parts : null;
+  const contents = {
+    niifContent: parts.data.niifContent ?? fromParts?.niifAnalysis.fullContent,
+    strategyContent: parts.data.strategyContent ?? fromParts?.strategicAnalysis.fullContent,
+    governanceContent: parts.data.governanceContent ?? fromParts?.governance.fullContent,
+  };
+  const contentErrors: string[] = [];
+  for (const [key, value] of Object.entries(contents)) {
+    if (typeof value !== 'string' || value.length === 0) contentErrors.push(`${key}: Required`);
+  }
+  if (
+    fromParts &&
+    (contents.niifContent !== fromParts.niifAnalysis.fullContent ||
+      contents.strategyContent !== fromParts.strategicAnalysis.fullContent ||
+      contents.governanceContent !== fromParts.governance.fullContent)
+  ) {
+    contentErrors.push('reportParts: el fullContent de cada parte debe coincidir con el texto enviado');
+  }
+  if (contentErrors.length > 0) {
+    return NextResponse.json(
+      { error: 'Invalid request format.', details: contentErrors },
       { status: 400 },
     );
   }
@@ -97,9 +151,9 @@ export async function POST(req: Request) {
       company: ctx.effectiveCompany,
       preprocessed: ctx.ppForAgents,
       rawData: ctx.effectiveRawData,
-      niifContent: parts.data.niifContent,
-      strategyContent: parts.data.strategyContent,
-      governanceContent: parts.data.governanceContent,
+      niifContent: contents.niifContent as string,
+      strategyContent: contents.strategyContent as string,
+      governanceContent: contents.governanceContent as string,
       language,
     });
     // Traza auditable de los ajustes confirmados del Doctor de Datos: la MISMA
@@ -114,7 +168,66 @@ export async function POST(req: Request) {
           language,
         );
     }
-    return NextResponse.json(result);
+    if (!fromParts) return NextResponse.json(result);
+
+    // ─── Versión persistida (procedencia servidor) ─────────────────────────
+    // El informe final lo ensambla el servidor: las salvedades de la Parte II y
+    // del acta se pliegan con la misma regla que la UI; el snapshot fiscal y el
+    // Âncora son los que `prepareFinancialContext` acaba de calcular desde el
+    // balance re-derivado (no los que el navegador recibió de /niif).
+    const ancora = ancoraOrNull(ctx.ancora);
+    const report: FinancialReport = {
+      company: ctx.effectiveCompany,
+      niifAnalysis: foldReportQualifications(
+        fromParts.niifAnalysis,
+        fromParts.strategicAnalysis,
+        fromParts.governance,
+      ),
+      strategicAnalysis: fromParts.strategicAnalysis,
+      governance: fromParts.governance,
+      consolidatedReport: result.consolidatedReport,
+      validation: result.validation,
+      ...(result.emittability ? { emittability: result.emittability } : {}),
+      generatedAt: new Date().toISOString(),
+      ...(ctx.fiscalSnapshot ? { fiscalSnapshot: ctx.fiscalSnapshot } : {}),
+      ...(ancora ? { ancora } : {}),
+    };
+    const version = buildFinancialReportVersion({
+      report,
+      preprocessed: ctx.ppForAgents,
+      rawData: ctx.effectiveRawData,
+    });
+    const workspaceId = await resolveReportWorkspaceId();
+    const persisted = await persistFinancialReportVersion({
+      workspaceId,
+      version,
+      controlTotals: ctx.ppForAgents?.primary?.controlTotals
+        ? toJsonSafe(ctx.ppForAgents.primary.controlTotals)
+        : null,
+    });
+    return NextResponse.json({
+      ...result,
+      // Forma canónica: exactamente lo persistido (o lo que se habría
+      // persistido), para que la UI conserve el mismo contenido que la huella.
+      report: version.report,
+      ...(persisted.status === 'persisted'
+        ? {
+            reportRef: {
+              reportId: persisted.provenance.reportId,
+              reportHash: persisted.provenance.reportHash,
+            },
+            provenance: { status: 'persisted' as const, ...persisted.provenance },
+          }
+        : {
+            provenance: {
+              status: 'not_persisted' as const,
+              reason: persisted.reason,
+              reportHash: version.reportHash,
+              sourceHash: version.sourceHash,
+              contractVersion: version.contractVersion,
+            },
+          }),
+    });
   } catch (error) {
     if (error instanceof BalanceValidationError) {
       return NextResponse.json(

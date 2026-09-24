@@ -8,7 +8,10 @@ import {
   preprocessUploadedTrialBalanceText,
   type UploadedTrialBalancePreprocess,
 } from '@/lib/preprocessing/raw-data';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import {
+  preprocessedAnchorMismatches,
+  revivePreprocessedBalance,
+} from '@/lib/preprocessing/json-safe';
 import {
   orchestrateFinancialReport,
   BalanceValidationError,
@@ -29,6 +32,17 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { QualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { OutputOptionsToggle } from '@/lib/export/pdf-elite-react/types';
 import { requireAuthSession } from '@/lib/auth/require-session';
+import {
+  resolvePersistedReport,
+  type PersistedReportResolution,
+} from '@/lib/reports/persisted-report-request';
+import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
+import {
+  appendPdfProvenance,
+  provenanceHeaders,
+  withExcelProvenance,
+  type ArtifactProvenance,
+} from '@/lib/reports/provenance-stamp';
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report/export
@@ -42,6 +56,15 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 //
 // Selection: body.format ∈ {'excel'|'pdf'|'pdf-elite'} (default 'excel').
 // `pdf` is the legacy jsPDF format and is deprecated — prefer `pdf-elite`.
+//
+// Procedencia servidor (fase 2, P1): con `reportRef: {reportId, reportHash}`
+// (la referencia que devuelve /consolidate) el informe y su balance se CARGAN
+// de la versión persistida del workspace de la sesión y se exporta ESA
+// versión; `report`, `rawData`, `preprocessed` y `adjustmentLedger` del cuerpo
+// se ignoran. Referencia inválida → 400; de otro workspace o inexistente → 404
+// (sin distinguir); huella distinta → 409. Sin referencia (informes históricos,
+// modo sin DB) se conserva el comportamiento anterior y el artefacto se rotula
+// "procedencia no verificada". Ver src/lib/reports/.
 // ---------------------------------------------------------------------------
 
 export const runtime = 'nodejs';
@@ -118,8 +141,17 @@ type ExportSource =
 /**
  * El preprocesado con el que se componen las superficies deterministas: el
  * mismo balance (ajustado) que usó /niif.
+ *
+ * niif-preproceso-33: el preprocesado que envía el cliente ya no se usa tal
+ * cual. El servidor lo RE-DERIVA con el mismo `adjustmentLedger` que aplicó
+ * /niif —desde el `rawData` de la petición o, si no hay `rawData` legible,
+ * desde las filas crudas (`rawRows`) que trae el propio preprocesado— y usa el
+ * re-derivado; si los totales de control del enviado no coinciden al centavo,
+ * la exportación se rechaza (422). La procedencia completa (que ese balance es
+ * el de la empresa) sólo la da la versión persistida (`reportRef`).
  */
 function resolveExportPreprocessed(body: Record<string, unknown>, label: string): ExportSource {
+  let claimed: PreprocessedBalance | undefined;
   if (body.preprocessed !== undefined && body.preprocessed !== null) {
     const revived = revivePreprocessedBalance(body.preprocessed);
     if (!revived) {
@@ -128,8 +160,7 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
         response: NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 }),
       };
     }
-    // `context.preprocessed` de /niif ya trae los ajustes del Doctor de Datos.
-    return { ok: true, preprocessed: revived };
+    claimed = revived;
   }
 
   const ledger = adjustmentLedgerSchema.safeParse(body.adjustmentLedger);
@@ -145,13 +176,27 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
       ),
     };
   }
+  const applied = ((ledger.data as AdjustmentLedger | undefined)?.adjustments ?? []).filter(
+    (a) => a.status === 'applied',
+  );
+
+  // Sin `rawData` legible: se re-deriva desde las filas del propio preprocesado.
+  const fromOwnRows = (): ExportSource => {
+    if (!claimed) return { ok: true, preprocessed: undefined };
+    const rederived = rederivePreprocessedFromRows(claimed, applied);
+    if (!rederived.ok) return { ok: false, response: incoherentSourcesResponse(rederived.details) };
+    return { ok: true, preprocessed: rederived.preprocessed };
+  };
 
   if (typeof body.rawData !== 'string' || body.rawData.trim().length === 0) {
-    return { ok: true, preprocessed: undefined };
+    return fromOwnRows();
   }
   const read = readRawData(body.rawData, label);
   if (read.kind === 'rejected') return { ok: false, response: ingestRejectedResponse(read.reasons) };
   if (read.kind === 'empty') {
+    // Mismo respaldo que /niif: sin filas legibles en `rawData` se usa el
+    // preprocesado que trae la petición (re-derivado desde sus filas).
+    if (claimed) return fromOwnRows();
     // El cliente envió un balance y no se pudo leer: sin preprocesado el gate
     // no puede cruzar el informe contra él. Conservador: no se exporta.
     return {
@@ -171,13 +216,81 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
       ),
     };
   }
-  const pp = read.preprocessed;
-  const applied = ((ledger.data as AdjustmentLedger | undefined)?.adjustments ?? []).filter(
-    (a) => a.status === 'applied',
-  );
-  if (applied.length === 0) return { ok: true, preprocessed: pp };
   // Mismo paso que Stage 0.4 de /niif (`prepareFinancialContext`).
-  return { ok: true, preprocessed: applyAdjustments(pp, applied).balance };
+  const derived =
+    applied.length === 0 ? read.preprocessed : applyAdjustments(read.preprocessed, applied).balance;
+  if (claimed) {
+    const mismatches = preprocessedAnchorMismatches(claimed, derived);
+    if (mismatches.length > 0) {
+      return {
+        ok: false,
+        response: incoherentSourcesResponse([
+          'Fuentes incoherentes — el balance preprocesado enviado no corresponde al balance de la ' +
+            'solicitud re-derivado por el servidor (con los ajustes confirmados).',
+          ...mismatches,
+        ]),
+      };
+    }
+  }
+  return { ok: true, preprocessed: derived };
+}
+
+function incoherentSourcesResponse(details: string[]): Response {
+  return NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 });
+}
+
+/** Sello de las exportaciones sin referencia persistida. */
+const UNVERIFIED: ArtifactProvenance = { kind: 'unverified' };
+
+/**
+ * Exportación desde la versión persistida (procedencia servidor). El gate
+ * común vuelve a correr sobre ESA versión y su balance (reglas vigentes); el
+ * cuerpo sólo aporta presentación (formato, idioma, entregables del PDF).
+ */
+async function exportPersisted(
+  persisted: Extract<PersistedReportResolution, { kind: 'ok' }>,
+  body: Record<string, unknown>,
+  format: 'excel' | 'pdf-elite',
+): Promise<Response> {
+  const { report, preprocessed, provenance } = persisted;
+  const blocked = rejectInvalidExport(report, preprocessed);
+  if (blocked) return blocked;
+  const stamp: ArtifactProvenance = { kind: 'verified', provenance };
+  const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+  const headers = provenanceHeaders(stamp);
+
+  if (format === 'pdf-elite') {
+    let pillars = null;
+    if (preprocessed?.primary) {
+      try {
+        pillars = aggregatePillars({
+          snapshot: preprocessed.primary,
+          comparative: preprocessed.comparative ?? null,
+        });
+      } catch (err) {
+        console.warn('[pdf-elite/persisted] aggregatePillars failed:', err);
+      }
+    }
+    const doc = composeEditorialReport({
+      report,
+      preprocessed: preprocessed ?? null,
+      pillars,
+      language,
+      auditReport: (body.auditReport as AuditReport | null | undefined) ?? null,
+      qualityReport: (body.qualityReport as QualityAssessment | null | undefined) ?? null,
+      outputOptions: (body.outputOptions as OutputOptionsToggle | null | undefined) ?? null,
+    });
+    appendPdfProvenance(doc, stamp, language);
+    const stream = await renderEditorialReportToStream(doc);
+    return pdfResponse(stream, report.company.name, headers);
+  }
+
+  const buffer = await generateFinancialExcel({
+    report: withExcelProvenance(report, stamp, language),
+    preprocessed,
+    language,
+  });
+  return createExcelResponse(buffer, report.company.name, headers);
 }
 
 export async function POST(req: Request) {
@@ -198,6 +311,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unsupported format. Use 'excel' or 'pdf-elite'." }, { status: 400 });
     }
     const format = formatParse.data;
+
+    // -----------------------------------------------------------------------
+    // Versión persistida (procedencia servidor) — prevalece sobre el cuerpo.
+    // -----------------------------------------------------------------------
+    const persisted = await resolvePersistedReport(body);
+    if (persisted.kind === 'error') return persisted.response;
+    if (persisted.kind === 'ok') return await exportPersisted(persisted, body, format);
 
     // -----------------------------------------------------------------------
     // EDITORIAL PDF branch
@@ -225,8 +345,12 @@ export async function POST(req: Request) {
       const blocked = rejectInvalidExport(report, preprocessed);
       if (blocked) return blocked;
       const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
-      const buffer = await generateFinancialExcel({ report, preprocessed, language: excelLanguage });
-      return createExcelResponse(buffer, report.company.name);
+      const buffer = await generateFinancialExcel({
+        report: withExcelProvenance(report, UNVERIFIED, excelLanguage),
+        preprocessed,
+        language: excelLanguage,
+      });
+      return createExcelResponse(buffer, report.company.name, provenanceHeaders(UNVERIFIED));
     }
 
     // -----------------------------------------------------------------------
@@ -296,8 +420,12 @@ export async function POST(req: Request) {
     const blocked = rejectInvalidExport(report, preprocessed);
     if (blocked) return blocked;
 
-    const buffer = await generateFinancialExcel({ report, preprocessed, language });
-    return createExcelResponse(buffer, effectiveCompany.name);
+    const buffer = await generateFinancialExcel({
+      report: withExcelProvenance(report, UNVERIFIED, language),
+      preprocessed,
+      language,
+    });
+    return createExcelResponse(buffer, effectiveCompany.name, provenanceHeaders(UNVERIFIED));
   } catch (error) {
     console.error('[financial-report/export] Error:', error instanceof Error ? error.message : error);
     return NextResponse.json(
@@ -377,8 +505,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       qualityReport: b.qualityReport ?? null,
       outputOptions: b.outputOptions ?? null,
     });
+    appendPdfProvenance(doc, UNVERIFIED, language);
     const stream = await renderEditorialReportToStream(doc);
-    return pdfResponse(stream, report.company.name);
+    return pdfResponse(stream, report.company.name, provenanceHeaders(UNVERIFIED));
   }
 
   // SLOW PATH: no pre-built report — re-run the full pipeline (used by callers
@@ -463,8 +592,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       language,
       emittable: { ok: false, blockers: blockerReasons },
     });
+    appendPdfProvenance(doc, UNVERIFIED, language);
     const stream = await renderEditorialReportToStream(doc);
-    return pdfResponse(stream, company.name);
+    return pdfResponse(stream, company.name, provenanceHeaders(UNVERIFIED));
   }
 
   const blocked = rejectInvalidExport(report, preprocessed);
@@ -489,9 +619,10 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     pillars,
     language,
   });
+  appendPdfProvenance(doc, UNVERIFIED, language);
 
   const stream = await renderEditorialReportToStream(doc);
-  return pdfResponse(stream, company.name);
+  return pdfResponse(stream, company.name, provenanceHeaders(UNVERIFIED));
 }
 
 function rejectInvalidExport(
@@ -518,12 +649,17 @@ function balanceValidationResponse(err: BalanceValidationError): Response {
   );
 }
 
-function pdfResponse(stream: Readable, companyName: string): Response {
+function pdfResponse(
+  stream: Readable,
+  companyName: string,
+  extraHeaders: Record<string, string> = {},
+): Response {
   const safeName = companyName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
   const filename = `Reporte_Editorial_${safeName}_${Date.now()}.pdf`;
   const web = Readable.toWeb(stream) as unknown as ReadableStream;
   return new Response(web, {
     headers: {
+      ...extraHeaders,
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Cache-Control': 'no-store',
@@ -531,12 +667,17 @@ function pdfResponse(stream: Readable, companyName: string): Response {
   });
 }
 
-function createExcelResponse(buffer: Buffer, companyName: string): Response {
+function createExcelResponse(
+  buffer: Buffer,
+  companyName: string,
+  extraHeaders: Record<string, string> = {},
+): Response {
   const safeName = companyName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
   const filename = `Reporte_Financiero_1mas1_${safeName}_${Date.now()}.xlsx`;
 
   return new Response(new Uint8Array(buffer), {
     headers: {
+      ...extraHeaders,
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': String(buffer.length),
