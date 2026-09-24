@@ -27,14 +27,23 @@ export interface PortraitSpec {
   areaAccent: AreaKey;
 }
 
+/**
+ * Categoría de un KPI por su NATURALEZA (reportes-export-18): la página agrupa
+ * por este campo, nunca por la posición en el array.
+ */
+export type KpiCategory = 'estructura' | 'resultados' | 'rentabilidad' | 'liquidez';
+
 export interface KpiCell {
   label: string;
-  /** Cifra ya formateada en COP ($1.234.567,89) o ratio (12,3%). */
+  /** Cifra ya formateada en COP ($1.234.567,89) o ratio (12,3%). "N/D" si no hay base verificada. */
   value: string;
   unit?: string;
   /** Variación porcentual vs comparativo (firmada). */
   deltaPct?: number;
   status?: 'positive' | 'warning' | 'critical' | 'neutral';
+  category?: KpiCategory;
+  /** Nota visible bajo el KPI (p. ej. "△ sobre patrimonio de cierre", motivo del N/D). */
+  note?: string;
 }
 
 export interface WaterfallItem {
@@ -46,7 +55,18 @@ export interface WaterfallItem {
 
 export interface DialGaugeSpec {
   label: string;
+  /** Posición de la AGUJA, recortada a [min, max]. No es la cifra que se imprime. */
   value: number;
+  /**
+   * Cifra real que se imprime (es-CO, sin recorte), p. ej. "10,00" o "10,0%".
+   * "N/D" cuando no hay base (reportes-export-05). Sin este campo el componente
+   * formatea `value` (compat con fixtures antiguos).
+   */
+  displayValue?: string;
+  /** Sin dato: no se dibuja aguja y se imprime `displayValue` ("N/D"). */
+  noData?: boolean;
+  /** La cifra real cae fuera de [min, max]: la aguja está recortada y se rotula. */
+  outOfScale?: boolean;
   min: number;
   max: number;
   /** [low, mid, high] — define las 3 zonas de color del arco. */
@@ -85,6 +105,17 @@ export interface ParsedTable {
   /** Encabezados de columna (primera = "Cuenta", restantes = periodos / variaciones). */
   headers: string[];
   rows: ParsedTableRow[];
+  /**
+   * Fecha de corte (ESF) o periodo cubierto (ERI/EFE/ECP) derivada de los datos
+   * — NIIF para las PYMES 3.23. Nunca supone el 31-dic sin evidencia.
+   */
+  subtitle?: string;
+  /** Moneda de presentación y grado de redondeo. */
+  currencyNote?: string;
+  /** Leyendas visibles (p. ej. comparativo no presentado en este estado). */
+  legends?: string[];
+  /** Notas estructuradas del estado (`*.notes` del JSON validado). */
+  footnotes?: string[];
 }
 
 export interface FinancialStatementsSpec {
@@ -165,7 +196,8 @@ export interface AuditorScoreCard {
  * activó `outputOptions.auditPipeline` o la corrida falló.
  */
 export interface AuditFindingsSpec {
-  overallScore: number;
+  /** `null` = sin puntaje entregado → "N/D" (nunca 0). */
+  overallScore: number | null;
   opinionType: AuditOpinionKind;
   opinionText: string;
   auditorCards: AuditorScoreCard[];
@@ -190,25 +222,26 @@ export interface QualityDimensionBar {
  * `QualityAssessment` (single-agent meta-auditor `/api/financial-quality`).
  * Renderizado por `QualityMetaAuditPage`. Si undefined, la página se omite.
  */
+/** `null` = el meta-auditor no entregó la cifra → la página imprime "N/D" (nunca 0 / 'F'). */
 export interface QualityScoresSpec {
-  overallScore: number;
-  grade: string;
+  overallScore: number | null;
+  grade: string | null;
   dimensions: QualityDimensionBar[];
-  ifrs18Ready: boolean;
-  ifrs18Score: number;
+  ifrs18Ready: boolean | null;
+  ifrs18Score: number | null;
   ifrs18Gaps: string[];
   dataQuality: {
-    completeness: number;
-    accuracy: number;
-    consistency: number;
-    timeliness: number;
-    validity: number;
+    completeness: number | null;
+    accuracy: number | null;
+    consistency: number | null;
+    timeliness: number | null;
+    validity: number | null;
   };
   aiGovernance: {
-    traceability: number;
-    explainability: number;
-    antiHallucination: number;
-    humanOversight: number;
+    traceability: number | null;
+    explainability: number | null;
+    antiHallucination: number | null;
+    humanOversight: number | null;
   };
   executiveSummary: string;
 }
@@ -233,6 +266,11 @@ export interface ReportMeta {
   entityType?: string;
   fiscalPeriod: string;
   comparativePeriod?: string;
+  /**
+   * Grupo NIIF declarado en el JSON validado (1 plenas, 2 PYMES, 3 micro).
+   * Decide las citas normativas de los estados; null = no declarado.
+   */
+  niifGroup?: 1 | 2 | 3 | null;
   generatedAt: string;
   language: 'es' | 'en';
   /** Si presente, modifica el CoverPage (BORRADOR amarillo, BLOQUEADO bordeaux). */
@@ -276,7 +314,7 @@ export interface DirectorLetterSpec {
 }
 
 export interface KpiGridSpec {
-  /** Máx 12 KPIs (4×3). */
+  /** Hasta 13 KPIs agrupados por `category` (4 grupos de 3-4). Nunca se recortan en silencio. */
   kpis: KpiCell[];
 }
 

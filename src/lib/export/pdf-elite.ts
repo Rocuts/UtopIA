@@ -3,15 +3,29 @@
 //
 // Páginas:
 //   1. Cover (logo, workspace, período, certificado de integridad)
-//   2. Balance General (Activo vs Pasivo + Patrimonio)
-//   3. Estado de Resultados (Ingresos vs Gastos/Costos)
+//   2. Estado de situación financiera a la fecha de corte
+//   3. Estado de resultados del período
 //   4. 4 KPIs por pilar (Resiliencia / Valor / Verdad / Futuro)
+//
+// Auditoría 2026-09 (contab-nomina-02, reportes-export-03). La versión anterior:
+//   - filtraba período y estado en el ON del segundo LEFT JOIN y sumaba sobre
+//     `journal_lines`, así que agregaba movimientos de TODOS los períodos, de
+//     borradores y de asientos reversados;
+//   - como el PDF se genera DESPUÉS del asiento de cierre, el P&G del mes
+//     quedaba en cero y lo que se veía eran saldos de otros meses;
+//   - descartaba activos con saldo ≤ 0 (correctoras 1592/1399), pasivos con
+//     saldo deudor, sumaba patrimonio y resultados con Math.abs y no verificaba
+//     Activo = Pasivo + Patrimonio, bajo la leyenda "valor probatorio".
+// Ahora los saldos salen de una consulta con filtros en WHERE/FILTER, en
+// centavos BigInt, firmados por naturaleza, y el documento se BLOQUEA (throw)
+// si el balance no cuadra.
 
 import { jsPDF } from 'jspdf';
 import type { AccountingPeriodRow } from '@/lib/db/schema';
 import { getDb } from '@/lib/db/client';
-import { accountingPeriods, chartOfAccounts, journalEntries, journalLines } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
+import { parseCOPToCentavos } from '@/lib/format/cop';
 
 // ─── Paleta élite ────────────────────────────────────────────────────────────
 const C = {
@@ -50,13 +64,9 @@ function setDrawColor(doc: jsPDF, hex: string) {
   doc.setDrawColor(r, g, b);
 }
 
-function formatCOP(amount: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+/** Centavos firmados → "$1.234.567,89" / "($1.234.567,89)" (convención NIIF). */
+function cop(cents: bigint): string {
+  return formatCopFromCents(cents, false);
 }
 
 // ─── Input ───────────────────────────────────────────────────────────────────
@@ -70,41 +80,206 @@ export interface GenerateElitePdfInput {
   override?: boolean;
 }
 
-// ─── Queries de datos ────────────────────────────────────────────────────────
+// ─── Consulta de saldos ──────────────────────────────────────────────────────
 
-interface AccountBalance {
+export interface MonthlyAccountRow {
   code: string;
   name: string;
   type: string;
-  balance: number;
+  /** Σ(débito − crédito) de todos los períodos con cierre ≤ corte (incluye el asiento de cierre). */
+  balanceToDateCents: bigint;
+  /** Σ(débito − crédito) del período, SIN el asiento de cierre (P&G del mes). */
+  periodMovementCents: bigint;
 }
 
-async function getAccountBalances(workspaceId: string, periodId: string): Promise<AccountBalance[]> {
-  const db = getDb();
-  const result = await db.execute(sql`
+/**
+ * Consulta de saldos del cierre mensual.
+ *
+ * - INNER JOIN con `journal_entries` y `accounting_periods`: sólo cuentan
+ *   líneas de asientos del workspace, nunca líneas huérfanas de otro período.
+ * - Estado `posted` y `reversed`: al reversar, el original pasa a `reversed` y
+ *   el asiento espejo (`source_type = 'reversal'`) queda `posted`; ambos deben
+ *   sumarse para que el efecto neto sea cero. Filtrar sólo `posted` dejaría el
+ *   reverso sin su original (efecto neto = −original). Los borradores (`draft`)
+ *   nunca cuentan.
+ * - Saldo a la fecha de corte: períodos cuyo `ends_at` ≤ el del período.
+ * - Movimiento del período: `period_id` = período y sin el asiento de cierre
+ *   (`source_type <> 'closing'`), que deja en cero las cuentas de resultado.
+ * - Sumas en NUMERIC y devueltas como texto (sin `parseFloat`).
+ */
+export function monthlyBalancesQuery(workspaceId: string, periodId: string) {
+  return sql`
     SELECT
       ca.code,
       ca.name,
       ca.type,
-      COALESCE(SUM(jl.functional_debit), 0) - COALESCE(SUM(jl.functional_credit), 0) AS balance
+      COALESCE(SUM(jl.functional_debit - jl.functional_credit)
+        FILTER (WHERE ap.ends_at <= cut.ends_at), 0)::text AS balance_to_date,
+      COALESCE(SUM(jl.functional_debit - jl.functional_credit)
+        FILTER (WHERE je.period_id = ${periodId} AND je.source_type <> 'closing'), 0)::text AS period_movement
     FROM chart_of_accounts ca
-    LEFT JOIN journal_lines jl ON jl.account_id = ca.id AND jl.workspace_id = ${workspaceId}
-    LEFT JOIN journal_entries je ON je.id = jl.entry_id AND je.period_id = ${periodId} AND je.status = 'posted'
+    JOIN journal_lines jl
+      ON jl.account_id = ca.id
+     AND jl.workspace_id = ${workspaceId}
+    JOIN journal_entries je
+      ON je.id = jl.entry_id
+     AND je.workspace_id = ${workspaceId}
+    JOIN accounting_periods ap
+      ON ap.id = je.period_id
+     AND ap.workspace_id = ${workspaceId}
+    CROSS JOIN (
+      SELECT ends_at FROM accounting_periods
+      WHERE id = ${periodId} AND workspace_id = ${workspaceId}
+    ) AS cut
     WHERE ca.workspace_id = ${workspaceId}
-      AND ca.active = true
       AND ca.is_postable = true
+      AND je.status IN ('posted', 'reversed')
+      AND ap.ends_at <= cut.ends_at
     GROUP BY ca.id, ca.code, ca.name, ca.type
-    HAVING COALESCE(SUM(jl.functional_debit), 0) - COALESCE(SUM(jl.functional_credit), 0) != 0
     ORDER BY ca.code
-  `);
+  `;
+}
 
-  const rows = (result as unknown as { rows?: Array<{ code: string; name: string; type: string; balance: string }> }).rows ?? [];
+function toCents(raw: unknown, what: string): bigint {
+  const cents = parseCOPToCentavos(typeof raw === 'number' ? String(raw) : (raw as string | null | undefined));
+  if (cents === null) {
+    throw new Error(`PDF de cierre: saldo no interpretable en ${what}.`);
+  }
+  return BigInt(cents);
+}
+
+async function getAccountBalances(workspaceId: string, periodId: string): Promise<MonthlyAccountRow[]> {
+  const db = getDb();
+  const result = await db.execute(monthlyBalancesQuery(workspaceId, periodId));
+  const rows = (result as unknown as {
+    rows?: Array<{ code: string; name: string; type: string; balance_to_date: string; period_movement: string }>;
+  }).rows ?? [];
   return rows.map((r) => ({
     code: r.code,
     name: r.name,
     type: r.type,
-    balance: parseFloat(r.balance),
+    balanceToDateCents: toCents(r.balance_to_date, r.code),
+    periodMovementCents: toCents(r.period_movement, r.code),
   }));
+}
+
+// ─── Estados (puro, testeable) ───────────────────────────────────────────────
+
+export interface MonthlyStatementLine {
+  code: string;
+  name: string;
+  /** Saldo firmado por naturaleza: positivo = saldo normal; negativo = contrario (p. ej. correctoras). */
+  amountCents: bigint;
+}
+
+export interface MonthlyStatements {
+  balance: {
+    activos: MonthlyStatementLine[];
+    pasivos: MonthlyStatementLine[];
+    patrimonio: MonthlyStatementLine[];
+    /** Resultado acumulado en cuentas de resultado aún no trasladado a patrimonio. */
+    resultadoNoTrasladadoCents: bigint;
+    totalActivosCents: bigint;
+    totalPasivosCents: bigint;
+    /** Incluye el resultado no trasladado. */
+    totalPatrimonioCents: bigint;
+    /** Activo − (Pasivo + Patrimonio). Debe ser 0. */
+    diferenciaCents: bigint;
+  };
+  pnl: {
+    ingresos: MonthlyStatementLine[];
+    costosGastos: MonthlyStatementLine[];
+    totalIngresosCents: bigint;
+    totalCostosGastosCents: bigint;
+    utilidadCents: bigint;
+  };
+}
+
+const ZERO = BigInt(0);
+const sum = (lines: MonthlyStatementLine[]) => lines.reduce((a, l) => a + l.amountCents, ZERO);
+
+/**
+ * Estados del cierre mensual con signo por naturaleza (sin filtros por signo ni
+ * `Math.abs`): las correctoras (1592, 1399) restan dentro del activo, un pasivo
+ * con saldo deudor resta del pasivo, las pérdidas acumuladas restan del
+ * patrimonio y una devolución 4175 resta de los ingresos.
+ */
+export function buildMonthlyStatements(rows: MonthlyAccountRow[]): MonthlyStatements {
+  const debitNature = (r: MonthlyAccountRow, v: bigint): MonthlyStatementLine => ({ code: r.code, name: r.name, amountCents: v });
+  const creditNature = (r: MonthlyAccountRow, v: bigint): MonthlyStatementLine => ({ code: r.code, name: r.name, amountCents: -v });
+
+  const activos: MonthlyStatementLine[] = [];
+  const pasivos: MonthlyStatementLine[] = [];
+  const patrimonio: MonthlyStatementLine[] = [];
+  const ingresos: MonthlyStatementLine[] = [];
+  const costosGastos: MonthlyStatementLine[] = [];
+  let resultadoAcumulado = ZERO; // ingresos (C−D) − gastos/costos (D−C), saldo a la fecha
+
+  for (const r of rows) {
+    const bal = r.balanceToDateCents;
+    const mov = r.periodMovementCents;
+    switch (r.type) {
+      case 'ACTIVO':
+        if (bal !== ZERO) activos.push(debitNature(r, bal));
+        break;
+      case 'PASIVO':
+        if (bal !== ZERO) pasivos.push(creditNature(r, bal));
+        break;
+      case 'PATRIMONIO':
+        if (bal !== ZERO) patrimonio.push(creditNature(r, bal));
+        break;
+      case 'INGRESO':
+        resultadoAcumulado += -bal;
+        if (mov !== ZERO) ingresos.push(creditNature(r, mov));
+        break;
+      case 'GASTO':
+      case 'COSTO':
+        resultadoAcumulado -= bal;
+        if (mov !== ZERO) costosGastos.push(debitNature(r, mov));
+        break;
+      default:
+        // Cuentas de orden: no forman parte de los estados. Si no se compensan
+        // entre sí, el descuadre aparece en la diferencia A − (P + C).
+        break;
+    }
+  }
+
+  const totalActivos = sum(activos);
+  const totalPasivos = sum(pasivos);
+  const totalPatrimonio = sum(patrimonio) + resultadoAcumulado;
+  const totalIngresos = sum(ingresos);
+  const totalCostosGastos = sum(costosGastos);
+  return {
+    balance: {
+      activos,
+      pasivos,
+      patrimonio,
+      resultadoNoTrasladadoCents: resultadoAcumulado,
+      totalActivosCents: totalActivos,
+      totalPasivosCents: totalPasivos,
+      totalPatrimonioCents: totalPatrimonio,
+      diferenciaCents: totalActivos - totalPasivos - totalPatrimonio,
+    },
+    pnl: {
+      ingresos,
+      costosGastos,
+      totalIngresosCents: totalIngresos,
+      totalCostosGastosCents: totalCostosGastos,
+      utilidadCents: totalIngresos - totalCostosGastos,
+    },
+  };
+}
+
+/**
+ * Recorta una lista para la página sin romper la suma: si hay más renglones que
+ * `max`, los restantes se agregan en "Otras cuentas (n)" con su suma, de modo
+ * que el total impreso sea siempre la suma de las líneas impresas.
+ */
+export function linesForPage(lines: MonthlyStatementLine[], max: number): MonthlyStatementLine[] {
+  if (lines.length <= max) return lines;
+  const shown = lines.slice(0, max - 1);
+  const rest = lines.slice(max - 1);
+  return [...shown, { code: '', name: `Otras cuentas (${rest.length})`, amountCents: sum(rest) }];
 }
 
 // ─── Páginas ─────────────────────────────────────────────────────────────────
@@ -117,6 +292,17 @@ function drawBackground(doc: jsPDF) {
 function drawGoldAccent(doc: jsPDF, y: number, width = 160, x = 25) {
   setFill(doc, C.GOLD);
   doc.rect(x, y, width, 0.5, 'F');
+}
+
+function periodLabel(period: AccountingPeriodRow): string {
+  return `${period.year}-${String(period.month).padStart(2, '0')}`;
+}
+
+function cutDateLabel(period: AccountingPeriodRow): string {
+  const d = period.endsAt instanceof Date ? period.endsAt : new Date(period.endsAt as unknown as string);
+  return Number.isNaN(d.getTime())
+    ? periodLabel(period)
+    : d.toLocaleDateString('es-CO', { dateStyle: 'long', timeZone: 'UTC' });
 }
 
 function drawCoverPage(
@@ -141,8 +327,7 @@ function drawCoverPage(
 
   doc.setFontSize(20);
   setTextColor(doc, C.WHITE);
-  const periodLabel = `${period.year}-${String(period.month).padStart(2, '0')}`;
-  doc.text(`Período ${periodLabel}`, 105, 58, { align: 'center' });
+  doc.text(`Período ${periodLabel(period)}`, 105, 58, { align: 'center' });
 
   drawGoldAccent(doc, 65);
 
@@ -154,13 +339,16 @@ function drawCoverPage(
   setTextColor(doc, C.WHITE);
   doc.text(workspaceId, 25, 87);
 
-  // Fecha de cierre
+  // Fecha de corte (fin del período) y fecha de generación: son cosas distintas.
   doc.setFontSize(11);
   setTextColor(doc, C.GRAY);
-  doc.text('Fecha de cierre', 25, 100);
+  doc.text('Fecha de corte', 25, 100);
   doc.setFontSize(13);
   setTextColor(doc, C.WHITE);
-  doc.text(new Date().toLocaleDateString('es-CO', { dateStyle: 'long' }), 25, 107);
+  doc.text(cutDateLabel(period), 25, 107);
+  doc.setFontSize(8);
+  setTextColor(doc, C.GRAY);
+  doc.text(`Generado el ${new Date().toLocaleDateString('es-CO', { dateStyle: 'long' })}`, 25, 113);
 
   // Certificado de integridad
   drawGoldAccent(doc, 120);
@@ -201,11 +389,49 @@ function drawCoverPage(
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   setTextColor(doc, C.GRAY);
-  doc.text('Generado por UtopIA — Plataforma Contable y Financiera Colombia 2026', 105, 285, { align: 'center' });
+  doc.text('Generado por UtopIA — Plataforma Contable y Financiera Colombia 2026', 105, 279, { align: 'center' });
+  doc.text('Cifras en pesos colombianos (COP). Negativos entre paréntesis.', 105, 285, { align: 'center' });
   doc.text('Este documento tiene valor probatorio. El hash encadenado garantiza integridad.', 105, 291, { align: 'center' });
 }
 
-function drawBalancePage(doc: jsPDF, balances: AccountBalance[], period: AccountingPeriodRow) {
+const LINE_H = 5.5;
+
+/** Sección de estado: título, renglones (código, nombre, cifra firmada) y total. */
+function drawSection(
+  doc: jsPDF,
+  y: number,
+  title: string,
+  lines: MonthlyStatementLine[],
+  totalLabel: string,
+  totalCents: bigint,
+  titleColor: string,
+): number {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  setTextColor(doc, titleColor);
+  doc.text(title, 25, y);
+  y += LINE_H + 1;
+
+  for (const l of lines) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    setTextColor(doc, C.WHITE);
+    doc.text(l.code ? `${l.code} ${l.name}` : l.name, 28, y, { maxWidth: 110 });
+    setTextColor(doc, l.amountCents < ZERO ? C.NEGATIVE : C.WHITE);
+    doc.text(cop(l.amountCents), 185, y, { align: 'right' });
+    y += LINE_H;
+  }
+
+  drawGoldAccent(doc, y - 3, 160, 25);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  setTextColor(doc, C.GOLD);
+  doc.text(totalLabel, 28, y + 1);
+  doc.text(cop(totalCents), 185, y + 1, { align: 'right' });
+  return y + LINE_H + 3;
+}
+
+function drawBalancePage(doc: jsPDF, st: MonthlyStatements, period: AccountingPeriodRow) {
   drawBackground(doc);
   setFill(doc, C.GOLD);
   doc.rect(0, 0, 210, 8, 'F');
@@ -213,77 +439,41 @@ function drawBalancePage(doc: jsPDF, balances: AccountBalance[], period: Account
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   setTextColor(doc, C.GOLD);
-  doc.text('BALANCE GENERAL', 105, 22, { align: 'center' });
+  doc.text('ESTADO DE SITUACIÓN FINANCIERA', 105, 22, { align: 'center' });
 
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   setTextColor(doc, C.GRAY);
-  const label = `Período ${period.year}-${String(period.month).padStart(2, '0')}`;
-  doc.text(label, 105, 30, { align: 'center' });
+  doc.text(`Al ${cutDateLabel(period)} · Cifras en pesos colombianos (COP)`, 105, 30, { align: 'center' });
 
   drawGoldAccent(doc, 35);
 
-  const activos = balances.filter((b) => b.type === 'ACTIVO' && b.balance > 0);
-  const pasivos = balances.filter((b) => b.type === 'PASIVO' && b.balance < 0);
-  const patrimonio = balances.filter((b) => b.type === 'PATRIMONIO');
-
-  const totalActivos = activos.reduce((s, b) => s + Math.abs(b.balance), 0);
-  const totalPasivos = pasivos.reduce((s, b) => s + Math.abs(b.balance), 0);
-  const totalPatrimonio = patrimonio.reduce((s, b) => s + Math.abs(b.balance), 0);
-
-  let y = 45;
-  const lineH = 7;
-
-  // Activos
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  setTextColor(doc, C.GOLD_LIGHT);
-  doc.text('ACTIVOS', 25, y);
-  y += lineH;
-
-  for (const a of activos.slice(0, 18)) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    setTextColor(doc, C.WHITE);
-    doc.text(`${a.code} ${a.name}`, 28, y, { maxWidth: 110 });
-    doc.text(formatCOP(Math.abs(a.balance)), 185, y, { align: 'right' });
-    y += lineH - 1;
+  const b = st.balance;
+  let y = 44;
+  y = drawSection(doc, y, 'ACTIVOS', linesForPage(b.activos, 12), 'Total Activos', b.totalActivosCents, C.GOLD_LIGHT);
+  y = drawSection(doc, y, 'PASIVOS', linesForPage(b.pasivos, 7), 'Total Pasivos', b.totalPasivosCents, C.GOLD_LIGHT);
+  const patrimonioLines = linesForPage(b.patrimonio, 7);
+  if (b.resultadoNoTrasladadoCents !== ZERO) {
+    patrimonioLines.push({
+      code: '',
+      name: 'Resultado del ejercicio no trasladado',
+      amountCents: b.resultadoNoTrasladadoCents,
+    });
   }
+  y = drawSection(doc, y, 'PATRIMONIO', patrimonioLines, 'Total Patrimonio', b.totalPatrimonioCents, C.GOLD_LIGHT);
 
-  drawGoldAccent(doc, y, 160, 25);
-  y += 3;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  setTextColor(doc, C.GOLD);
-  doc.text('Total Activos', 28, y);
-  doc.text(formatCOP(totalActivos), 185, y, { align: 'right' });
-  y += lineH + 2;
-
-  // Pasivos
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  setTextColor(doc, C.GOLD_LIGHT);
-  doc.text('PASIVOS', 25, y);
-  y += lineH;
-
-  for (const p of pasivos.slice(0, 8)) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    setTextColor(doc, C.WHITE);
-    doc.text(`${p.code} ${p.name}`, 28, y, { maxWidth: 110 });
-    doc.text(formatCOP(Math.abs(p.balance)), 185, y, { align: 'right' });
-    y += lineH - 1;
-  }
-
-  drawGoldAccent(doc, y, 80, 25);
-  y += 3;
+  // Verificación A = P + C
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   setTextColor(doc, C.GOLD);
   doc.text('Total Pasivos + Patrimonio', 28, y);
-  doc.text(formatCOP(totalPasivos + totalPatrimonio), 185, y, { align: 'right' });
+  doc.text(cop(b.totalPasivosCents + b.totalPatrimonioCents), 185, y, { align: 'right' });
+  y += LINE_H;
+  setTextColor(doc, b.diferenciaCents === ZERO ? C.POSITIVE : C.NEGATIVE);
+  doc.text('Diferencia Activo - (Pasivo + Patrimonio)', 28, y);
+  doc.text(cop(b.diferenciaCents), 185, y, { align: 'right' });
 }
 
-function drawPnLPage(doc: jsPDF, balances: AccountBalance[], period: AccountingPeriodRow) {
+function drawPnLPage(doc: jsPDF, st: MonthlyStatements, period: AccountingPeriodRow) {
   drawBackground(doc);
   setFill(doc, C.GOLD);
   doc.rect(0, 0, 210, 8, 'F');
@@ -293,80 +483,28 @@ function drawPnLPage(doc: jsPDF, balances: AccountBalance[], period: AccountingP
   setTextColor(doc, C.GOLD);
   doc.text('ESTADO DE RESULTADOS', 105, 22, { align: 'center' });
 
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   setTextColor(doc, C.GRAY);
-  doc.text(`Período ${period.year}-${String(period.month).padStart(2, '0')}`, 105, 30, { align: 'center' });
+  doc.text(
+    `Período ${periodLabel(period)} (antes del asiento de cierre) · Cifras en pesos colombianos (COP)`,
+    105, 30, { align: 'center' },
+  );
 
   drawGoldAccent(doc, 35);
 
-  const ingresos = balances.filter((b) => b.type === 'INGRESO');
-  const gastos = balances.filter((b) => b.type === 'GASTO' || b.type === 'COSTO');
+  const p = st.pnl;
+  let y = 44;
+  y = drawSection(doc, y, 'INGRESOS', linesForPage(p.ingresos, 14), 'Total Ingresos', p.totalIngresosCents, C.POSITIVE);
+  y = drawSection(doc, y, 'COSTOS Y GASTOS', linesForPage(p.costosGastos, 14), 'Total Costos y Gastos', p.totalCostosGastosCents, C.NEGATIVE);
 
-  const totalIngresos = ingresos.reduce((s, b) => s + Math.abs(b.balance), 0);
-  const totalGastos = gastos.reduce((s, b) => s + Math.abs(b.balance), 0);
-  const utilidad = totalIngresos - totalGastos;
-
-  let y = 45;
-  const lineH = 7;
-
-  // Ingresos
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  setTextColor(doc, C.POSITIVE);
-  doc.text('INGRESOS', 25, y);
-  y += lineH;
-
-  for (const i of ingresos.slice(0, 15)) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    setTextColor(doc, C.WHITE);
-    doc.text(`${i.code} ${i.name}`, 28, y, { maxWidth: 110 });
-    doc.text(formatCOP(Math.abs(i.balance)), 185, y, { align: 'right' });
-    y += lineH - 1;
-  }
-
-  drawGoldAccent(doc, y, 160, 25);
-  y += 3;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  setTextColor(doc, C.POSITIVE);
-  doc.text('Total Ingresos', 28, y);
-  doc.text(formatCOP(totalIngresos), 185, y, { align: 'right' });
-  y += lineH + 3;
-
-  // Gastos
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  setTextColor(doc, C.NEGATIVE);
-  doc.text('GASTOS Y COSTOS', 25, y);
-  y += lineH;
-
-  for (const g of gastos.slice(0, 12)) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    setTextColor(doc, C.WHITE);
-    doc.text(`${g.code} ${g.name}`, 28, y, { maxWidth: 110 });
-    doc.text(`(${formatCOP(Math.abs(g.balance))})`, 185, y, { align: 'right' });
-    y += lineH - 1;
-  }
-
-  drawGoldAccent(doc, y, 160, 25);
-  y += 3;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  setTextColor(doc, C.NEGATIVE);
-  doc.text('Total Gastos y Costos', 28, y);
-  doc.text(`(${formatCOP(totalGastos)})`, 185, y, { align: 'right' });
-  y += lineH + 3;
-
-  // Utilidad neta
+  // Utilidad neta con signo: una pérdida sale entre paréntesis y rotulada.
   drawGoldAccent(doc, y, 160, 25);
   y += 5;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  setTextColor(doc, utilidad >= 0 ? C.GOLD : C.NEGATIVE);
-  doc.text(utilidad >= 0 ? 'UTILIDAD NETA' : 'PÉRDIDA NETA', 28, y);
-  doc.text(formatCOP(Math.abs(utilidad)), 185, y, { align: 'right' });
+  setTextColor(doc, p.utilidadCents >= ZERO ? C.GOLD : C.NEGATIVE);
+  doc.text(p.utilidadCents >= ZERO ? 'UTILIDAD NETA' : 'PÉRDIDA NETA', 28, y);
+  doc.text(cop(p.utilidadCents), 185, y, { align: 'right' });
 }
 
 function drawKpiPage(doc: jsPDF) {
@@ -447,7 +585,15 @@ function drawKpiPage(doc: jsPDF) {
 export async function generateElitePdf(input: GenerateElitePdfInput): Promise<Buffer> {
   const { workspaceId, periodId, periodHash, period, previousPeriodHash = '0'.repeat(64), override = false } = input;
 
-  const balances = await getAccountBalances(workspaceId, periodId);
+  const statements = buildMonthlyStatements(await getAccountBalances(workspaceId, periodId));
+
+  // Un documento con "valor probatorio" no se emite descuadrado.
+  if (statements.balance.diferenciaCents !== ZERO) {
+    throw new Error(
+      `PDF de cierre bloqueado: Activo ≠ Pasivo + Patrimonio al corte del período ${periodLabel(period)} ` +
+        `(diferencia ${cop(statements.balance.diferenciaCents)}).`,
+    );
+  }
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -456,11 +602,11 @@ export async function generateElitePdf(input: GenerateElitePdfInput): Promise<Bu
 
   // Página 2: Balance
   doc.addPage();
-  drawBalancePage(doc, balances, period);
+  drawBalancePage(doc, statements, period);
 
   // Página 3: P&L
   doc.addPage();
-  drawPnLPage(doc, balances, period);
+  drawPnLPage(doc, statements, period);
 
   // Página 4: KPIs
   doc.addPage();

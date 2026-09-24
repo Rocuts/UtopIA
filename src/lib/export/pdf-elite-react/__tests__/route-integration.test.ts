@@ -32,11 +32,12 @@ const mockedOrchestrate = vi.mocked(orchestrateFinancialReport);
 
 function buildHappyReport(): FinancialReport {
   return {
+    // Identidad = la del JSON validado del fixture. Antes el encabezado decía
+    // 'Demo SAS' 2026 y los estados 'Empresa Prueba SAS' 2025; el gate ahora
+    // bloquea esa discrepancia (reportes-export-10).
     company: {
-      name: 'Demo SAS',
-      nit: '900123456-7',
+      ...makeExportableReport().company,
       entityType: 'SAS',
-      fiscalPeriod: '2026',
     },
     niifAnalysis: {
       ...makeExportableReport().niifAnalysis,

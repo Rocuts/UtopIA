@@ -11,6 +11,7 @@
 import React from 'react';
 import { Page, View, Text, Svg, Path } from '@react-pdf/renderer';
 import type { EditorialReport, ParsedTable, ParsedTableRow } from '../types';
+import { statementCitations, type StatementKind } from '../../statement-presentation';
 import {
   GoldRule,
   MixedWeightHeadline,
@@ -250,6 +251,55 @@ function LeftTable({
   );
 }
 
+// ─── Statement identification (date / currency) + legends / notes ─────────────
+// NIIF para las PYMES 3.23: fecha de cierre o periodo cubierto, moneda y
+// redondeo, de forma destacada (reportes-export-14). Las leyendas (comparativo
+// no presentado, reportes-export-13) y las notas estructuradas del JSON
+// (reportes-export-11) van al pie del estado.
+function StatementIdentification({ table }: { table: ParsedTable }) {
+  if (!table.subtitle && !table.currencyNote) return null;
+  return (
+    <View style={{ marginTop: S2 }}>
+      {table.subtitle ? (
+        <Text style={{ fontFamily: FONT_SANS, fontWeight: 'bold', fontSize: TYPE_SMALL, color: CHARCOAL_900 }}>
+          {table.subtitle}
+        </Text>
+      ) : null}
+      {table.currencyNote ? (
+        <Text style={{ fontFamily: FONT_SANS, fontSize: TYPE_CAPTION, color: CHARCOAL_700, marginTop: 2 }}>
+          {table.currencyNote}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function StatementFootnotes({ table }: { table: ParsedTable }) {
+  const legends = table.legends ?? [];
+  const notes = table.footnotes ?? [];
+  if (legends.length === 0 && notes.length === 0) return null;
+  return (
+    <View style={{ marginTop: S3 }}>
+      {legends.map((l, i) => (
+        <Text
+          key={`lg${i}`}
+          style={{ fontFamily: FONT_SANS, fontStyle: 'italic', fontSize: TYPE_CAPTION, color: '#722F37', marginBottom: 2 }}
+        >
+          {l}
+        </Text>
+      ))}
+      {notes.map((n, i) => (
+        <Text
+          key={`fn${i}`}
+          style={{ fontFamily: FONT_SANS, fontSize: TYPE_CAPTION, color: CHARCOAL_700, marginBottom: 2 }}
+        >
+          {n}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 // ─── Bracket SVG (right panel) ───────────────────────────────────────────────
 // Draws a square-cornered curly brace (} shape) on the right side of the
 // figure column, pointing right toward the group label.
@@ -281,10 +331,24 @@ function BracketSvg({ height, color }: { height: number; color: string }) {
 interface AbstractionGroup {
   groupLabel: string;
   groupTotal: string;
-  rows: string[]; // sign-prefixed figure strings, e.g. "+ 7.407.819.761"
+  rows: string[]; // figure strings exactly as the table prints them
 }
 
-function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
+/**
+ * Cifra del panel derecho: SIEMPRE la del periodo actual (`cells[0]`, el orden
+ * que usan compose-statements-from-json y el renderer Markdown), con el signo
+ * tal cual lo imprime la tabla (paréntesis para negativos).
+ *
+ * Auditoría 2026-09 (reportes-export-04): se tomaba `cells[cells.length - 1]`,
+ * que en informes comparativos es la columna del periodo ANTERIOR, y se
+ * anteponía "+ " a todo lo que no empezara por "-" — de modo que los negativos
+ * entre paréntesis salían "+ ($2.000,00)" y los costos "+ $2.000,00".
+ */
+export function panelFigure(row: ParsedTableRow): string {
+  return row.cells[0] ?? '';
+}
+
+export function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
   const groups: AbstractionGroup[] = [];
   let currentRows: string[] = [];
   let currentLabel = '';
@@ -304,8 +368,7 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
 
     if (row.emphasis === 'total') {
       // Close current group with this total
-      const val = row.cells[row.cells.length - 1] || '';
-      const signed = val.startsWith('-') ? val : `+ ${val}`;
+      const val = panelFigure(row);
       if (currentRows.length > 0 || currentLabel) {
         groups.push({ groupLabel: currentLabel || row.account, groupTotal: val, rows: currentRows });
         currentRows = [];
@@ -315,7 +378,7 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
     }
 
     if (row.emphasis === 'subtotal') {
-      const val = row.cells[row.cells.length - 1] || '';
+      const val = panelFigure(row);
       if (currentRows.length > 0 && currentLabel) {
         groups.push({ groupLabel: currentLabel, groupTotal: val, rows: currentRows });
         currentRows = [];
@@ -324,12 +387,10 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
       continue;
     }
 
-    // Regular row — take the last cell as the figure
-    const val = row.cells[row.cells.length - 1] || '';
-    if (val && val !== '-' && val !== '') {
-      const trimmed = val.replace(/^-/, '').trim();
-      const signed = val.startsWith('-') ? `- ${trimmed}` : `+ ${val}`;
-      currentRows.push(signed);
+    // Regular row — current-period figure, printed exactly as the table does.
+    const val = panelFigure(row);
+    if (val && val !== '-') {
+      currentRows.push(val);
     }
   }
 
@@ -342,8 +403,7 @@ function buildAbstractionGroups(table: ParsedTable): AbstractionGroup[] {
   if (groups.length === 0) {
     const totalRow = table.rows.find(r => r.emphasis === 'total');
     if (totalRow) {
-      const val = totalRow.cells[totalRow.cells.length - 1] || '';
-      groups.push({ groupLabel: totalRow.account, groupTotal: val, rows: [] });
+      groups.push({ groupLabel: totalRow.account, groupTotal: panelFigure(totalRow), rows: [] });
     }
   }
 
@@ -371,8 +431,11 @@ function RightPanel({
   // Derive finalTotal from last total row if not passed explicitly
   const derivedTotal = finalTotal ?? (() => {
     const r = [...table.rows].reverse().find(r => r.emphasis === 'total');
-    return r ? (r.cells[r.cells.length - 1] || '') : '';
+    return r ? panelFigure(r) : '';
   })();
+  // El panel resume SÓLO el periodo actual: se rotula para que en un informe
+  // comparativo no se lea como la columna del año anterior.
+  const periodLabel = table.headers[1] ? `Cifras del periodo ${table.headers[1]}` : '';
 
   return (
     <View
@@ -412,11 +475,24 @@ function RightPanel({
       </Text>
 
       {/* Pills */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: S5 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: periodLabel ? S2 : S5 }}>
         {pills.map((p, i) => (
           <NormativePill key={i} label={p.label} tone="sand-on-forest" />
         ))}
       </View>
+      {periodLabel ? (
+        <Text
+          style={{
+            fontFamily: FONT_SANS,
+            fontSize: TYPE_SMALL,
+            color: SAGE_300,
+            letterSpacing: 0.4,
+            marginBottom: S5,
+          }}
+        >
+          {periodLabel}
+        </Text>
+      ) : null}
 
       {/* Abstraction groups */}
       <View style={{ flexDirection: 'column', gap: 20, flex: 1 }}>
@@ -483,7 +559,7 @@ function RightPanel({
                       marginTop: 3,
                     }}
                   >
-                    {g.groupTotal.startsWith('-') ? g.groupTotal : `+ ${g.groupTotal}`}
+                    {g.groupTotal}
                   </Text>
                 ) : null}
               </View>
@@ -565,10 +641,12 @@ function SplitStatementPage({
           title={cfg.sectionHeaderTitle}
           bannerColor={FOREST_900}
         />
+        <StatementIdentification table={table} />
 
         {/* Table */}
         <View style={{ flex: 1, marginTop: S3 }} wrap>
           <LeftTable table={table} />
+          <StatementFootnotes table={table} />
         </View>
       </View>
 
@@ -647,15 +725,19 @@ function FullStatementPage({
       >
         {cfg.caption}
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: S4 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: S2 }}>
         {cfg.pills.map((p, i) => (
           <NormativePill key={i} label={p.label} tone="sage-on-cream" />
         ))}
+      </View>
+      <View style={{ marginBottom: S4 }}>
+        <StatementIdentification table={table} />
       </View>
 
       {/* Table */}
       <View wrap style={{ flex: 1 }}>
         <LeftTable table={table} containerWidth={fullContentW} />
+        <StatementFootnotes table={table} />
       </View>
 
       {/* Forest summary band at the bottom */}
@@ -724,6 +806,11 @@ interface Props {
  */
 export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactElement[] {
   const { balance, income, cashFlow, equity } = doc.statements;
+  // Citas según el grupo NIIF de la empresa (reportes-export-16): Secciones
+  // 4/5/7/6 de NIIF para las PYMES o NIC 1/NIC 7 para Grupo 1 — nunca NIIF 1,
+  // 5, 6 o 7, que regulan otras materias.
+  const pillsFor = (kind: StatementKind) =>
+    statementCitations(kind, doc.meta.niifGroup).map((label) => ({ label }));
 
   return [
     // ── Balance ──────────────────────────────────────────────────────────────
@@ -738,12 +825,8 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         sectionHeaderTitle: 'ESTADO DE SITUACIÓN FINANCIERA',
         titleLead: 'Estado de',
         titleEmphasis: 'situación financiera',
-        caption: 'Capital invertido en la operación',
-        pills: [
-          { label: 'NIIF 1.10' },
-          { label: 'IAS 1.54' },
-          { label: 'Art. 35 Ley 222/95' },
-        ],
+        caption: 'Activos, pasivos y patrimonio a la fecha de corte',
+        pills: [...pillsFor('balance'), { label: 'Art. 35 Ley 222/95' }],
       }}
     />,
 
@@ -759,11 +842,8 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         sectionHeaderTitle: 'ESTADO DE RESULTADOS INTEGRALES',
         titleLead: 'Estado de',
         titleEmphasis: 'resultados integrales',
-        caption: 'Utilidad Operativa después de impuestos (UODI)',
-        pills: [
-          { label: 'NIIF 5.36' },
-          { label: 'IAS 1.81' },
-        ],
+        caption: 'Resultado del periodo y otro resultado integral',
+        pills: pillsFor('income'),
       }}
     />,
 
@@ -775,11 +855,8 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
       cfg={{
         pageIndex: '03.',
         sectionHeaderTitle: 'ESTADO DE FLUJOS DE EFECTIVO',
-        caption: 'Flujo de caja libre del período',
-        pills: [
-          { label: 'NIIF 7' },
-          { label: 'IAS 7.10' },
-        ],
+        caption: 'Entradas y salidas de efectivo por actividades de operación, inversión y financiación',
+        pills: pillsFor('cashFlow'),
       }}
     />,
 
@@ -792,10 +869,7 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         pageIndex: '04.',
         sectionHeaderTitle: 'CAMBIOS EN EL PATRIMONIO',
         caption: 'Variación en el patrimonio neto',
-        pills: [
-          { label: 'NIIF 6.20' },
-          { label: 'IAS 1.106' },
-        ],
+        pills: pillsFor('equity'),
       }}
     />,
   ];

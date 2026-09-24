@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
 import type { FactDTO } from '@/lib/facts/dto';
 import type { FactFormState } from '@/lib/facts/panel-helpers';
-import { buildRegistrarInput, factToFormState, pesosToCentavos, versionHistoryFor } from '@/lib/facts/panel-helpers';
+import { buildRegistrarInput, factToFormState, pesosToCentavosStrict, versionHistoryFor } from '@/lib/facts/panel-helpers';
 import {
   registerManualFactAction,
   revokeFactAction,
@@ -74,13 +74,26 @@ export function ContextoPanel({ facts }: { facts: FactDTO[] }) {
   const submit = useCallback(
     (form: FactFormState) => {
       setFormError(null);
-      if (form.kind === 'donation' && pesosToCentavos(form.montoPesos) === '0') {
-        setFormError(
-          language === 'es'
-            ? 'El monto de la donación debe ser mayor a cero.'
-            : 'Donation amount must be greater than zero.',
-        );
-        return;
+      if (form.kind === 'donation') {
+        // Formato es-CO: punto de miles, coma decimal. Un texto no interpretable
+        // bloquea el envío con su propio mensaje en vez de convertirse en 0 o ×100.
+        const centavos = pesosToCentavosStrict(form.montoPesos);
+        if (centavos === null) {
+          setFormError(
+            language === 'es'
+              ? 'Monto con formato no válido. Escribe por ejemplo 1.500.000 o 1.500.000,50.'
+              : 'Invalid amount format. Use for example 1.500.000 or 1.500.000,50.',
+          );
+          return;
+        }
+        if (BigInt(centavos) <= BigInt(0)) {
+          setFormError(
+            language === 'es'
+              ? 'El monto de la donación debe ser mayor a cero.'
+              : 'Donation amount must be greater than zero.',
+          );
+          return;
+        }
       }
       startTransition(async () => {
         const res = await registerManualFactAction(
