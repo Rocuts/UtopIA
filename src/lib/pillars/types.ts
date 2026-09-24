@@ -211,10 +211,14 @@ export interface EscudoExecutiveCards {
 export interface VerdadExecutiveCardsAudit {
   /** Activo − Pasivo − Patrimonio (en COP, signo preservado). */
   equationGap: number;
-  /** Cuentas Clase 1 (Activo) con saldo crédito (negativo). */
-  saldosNegativosActivo: number;
-  /** Cuentas Clase 2 (Pasivo) con saldo débito (positivo natural inverso). */
-  saldosPositivosPasivo: number;
+  /** Cuentas de activo con saldo contrario a su naturaleza (activo con saldo
+   *  crédito, o correctora — 1592, 1399… — con saldo débito). */
+  saldosContrariosActivo: number;
+  /** Cuentas de pasivo con saldo débito (magnitud negativa). */
+  saldosContrariosPasivo: number;
+  /** Cuentas de patrimonio con saldo contrario (crédito negativo, o pérdidas /
+   *  capital por suscribir con saldo crédito). */
+  saldosContrariosPatrimonio: number;
   /** Total de cuentas analizadas en la integridad de saldos. */
   totalCuentasAnalizadas: number;
   /** Reclasificaciones aplicadas por R1 (Curator). */
@@ -233,7 +237,8 @@ export interface VerdadExecutiveCardsAudit {
   posibleOmisionCostos: boolean;
   /** Score forensic externo (si disponible). */
   forensicScore: number | null;
-  /** % terceros con NIT válido (si disponible). */
+  /** % terceros con NIT válido (0-1). null = sin dato ⇒ el índice de
+   *  consistencia excluye el componente. */
   integridadTerceros: number | null;
 }
 

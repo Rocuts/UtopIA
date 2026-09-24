@@ -173,8 +173,9 @@ function makeConsistentMetrics(ct: ControlTotals): PillarsResult {
     salud_contable: buildCard('salud_contable', 0),
     audit: {
       equationGap: ct.activo - ct.pasivo - ct.patrimonio,
-      saldosNegativosActivo: 0,
-      saldosPositivosPasivo: 0,
+      saldosContrariosActivo: 0,
+      saldosContrariosPasivo: 0,
+      saldosContrariosPatrimonio: 0,
       totalCuentasAnalizadas: 2,
       reclasificacionesR1: 0,
       discrepanciasPreprocessing: 0,
