@@ -254,8 +254,12 @@ const MONTO_EN_NOTA_I = new RegExp(
     '|(?<!\\bNIT\\.?\\s{0,2})(?<![\\d.,])\\d{1,3}(?:[.,]\\d{3}){2,}(?![\\d-])',
   'i',
 );
-/** Sufijos de escala pegados a la cifra («2,5M», «850K», «3B»); sensible a mayúsculas. */
-const MONTO_SUFIJO_ESCALA = /\d(?:M|B|K|k)\b/;
+/**
+ * Sufijos de escala pegados a la cifra («2,5M», «850K», «3B»); sensible a
+ * mayúsculas. La cifra no va pegada a una letra: «B2B» (operaciones entre
+ * empresas) no es un monto (revisión adversarial de NT-10).
+ */
+const MONTO_SUFIJO_ESCALA = /(?<![A-Za-z\d.,])\d+(?:[.,]\d+)?(?:M|B|K|k)\b/;
 const MONTO_EN_NOTA = {
   test: (t: string): boolean => MONTO_EN_NOTA_I.test(t) || MONTO_SUFIJO_ESCALA.test(t),
 };

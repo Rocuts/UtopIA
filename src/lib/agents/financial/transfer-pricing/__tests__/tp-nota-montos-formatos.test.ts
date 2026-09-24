@@ -98,4 +98,15 @@ describe('NT-10 — escalas y unidades del monto del ajuste', () => {
   ])('una frase del ajuste sin monto se conserva: «%s»', (t) => {
     expect(textoSinMontosDeAjuste(t, null, 'es')).toBe(t);
   });
+
+  // Revisión adversarial de NT-10: el sufijo de escala pegado a la cifra
+  // leía «B2B» como un monto y retiraba la nota honesta.
+  it('«B2B» no es un monto; «2,5M» y «850K» sí', () => {
+    const honesta = 'Ajuste por operaciones B2B con vinculados del exterior (Art. 260-4 E.T.).';
+    expect(notaSinMontosDelModelo(honesta, null, 'es')).toBe(honesta);
+    expect(textoSinMontosDeAjuste(honesta, null, 'es')).toBe(honesta);
+    for (const t of ['El ajuste estimado es de 2,5M sobre la base.', 'Adjustment of 850K to taxable income.', 'Ajuste de 3B.']) {
+      expect(notaSinMontosDelModelo(t, null, 'es'), t).toBe(TP_AJUSTE_COP_SIN_BASE_MOTIVO);
+    }
+  });
 });
