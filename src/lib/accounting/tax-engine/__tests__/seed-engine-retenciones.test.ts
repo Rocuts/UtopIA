@@ -211,3 +211,32 @@ describe('tributario-calc-09 — reglas sembradas de retención', () => {
     expect(con.journalLines.some((l) => l.dimensions?.taxType === 'ICA')).toBe(true);
   });
 });
+
+// tributario-calc-23: el año de la UVT se tomaba con getFullYear(), es decir en
+// la zona horaria del proceso (UTC en Vercel). Una operación del 31-dic
+// después de las 19:00 hora Colombia se evaluaba con la UVT del año siguiente
+// (y, si ésta no está publicada, el motor lanzaba). El año gravable se mide en
+// America/Bogota (Art. 868 E.T.: UVT por año gravable).
+describe('tributario-calc-23 — año de la UVT en hora de Colombia', () => {
+  it('anioColombia usa America/Bogota, no la zona del servidor', async () => {
+    const { anioColombia } = await import('@/lib/accounting/tax-engine/constants');
+    expect(anioColombia(new Date('2025-12-31T21:00:00-05:00'))).toBe(2025);
+    expect(anioColombia(new Date('2026-01-01T00:30:00-05:00'))).toBe(2026);
+    expect(anioColombia(new Date('2026-12-31T23:59:00-05:00'))).toBe(2026);
+  });
+
+  it('31-dic-2025 21:00 (COT) se evalúa con la UVT 2025: $100.000 supera 2 UVT ($99.598)', async () => {
+    const r = await taxEngine.evaluate(
+      input({ subtotalCop: '100000', transactionDate: new Date('2025-12-31T21:00:00-05:00') }),
+    );
+    // Con la UVT 2026 (2 UVT = $104.748) no habría retención.
+    expect(rtfDe(r)).toHaveLength(1);
+  });
+
+  it('31-dic-2026 21:00 (COT) no pide la UVT 2027 (no publicada)', async () => {
+    const r = await taxEngine.evaluate(
+      input({ subtotalCop: '1000000', transactionDate: new Date('2026-12-31T21:00:00-05:00') }),
+    );
+    expect(rtfDe(r).length).toBeGreaterThan(0);
+  });
+});

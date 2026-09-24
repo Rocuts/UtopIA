@@ -22,7 +22,7 @@
 import type { TaxRuleRow, ThirdPartyTaxProfileRow } from '@/lib/db/schema-tax';
 import type { TaxEvaluationInput } from './types';
 import { readTriggers } from './types';
-import { uvtToCopByYear } from './constants';
+import { anioColombia, uvtToCopByYear } from './constants';
 import { getRules, getTaxProfile } from './repository';
 
 // ---------------------------------------------------------------------------
@@ -66,8 +66,9 @@ export async function matchRules(
   const transactionDate = input.transactionDate ?? new Date();
   // La vigencia de las reglas la fija la fecha de la transacción; el UVT con
   // que se convierten las bases mínimas puede fijarlo el caller (`uvtYear`).
-  // Antes `uvtYear` se aceptaba en el contrato y se ignoraba.
-  const year = input.uvtYear ?? transactionDate.getFullYear();
+  // Antes `uvtYear` se aceptaba en el contrato y se ignoraba. Sin él, el año
+  // gravable se mide en hora de Colombia, no en la del servidor.
+  const year = input.uvtYear ?? anioColombia(transactionDate);
 
   // ── Paso 1: cargar reglas activas ─────────────────────────────────────────
   const allRules = await getRules(input.workspaceId, transactionDate);

@@ -169,7 +169,7 @@ export interface TaxEvaluationInput {
   subtotalCop: string;
   /**
    * Año del UVT con el que se convierten las bases mínimas en UVT
-   * (default: año de `transactionDate`). La vigencia de las reglas la sigue
+   * (default: año de `transactionDate` en hora de Colombia, America/Bogota). La vigencia de las reglas la sigue
    * fijando `transactionDate`.
    */
   uvtYear?: number;
