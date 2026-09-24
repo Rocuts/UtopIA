@@ -862,6 +862,14 @@ function describeOwnerFlowsForEfe(efe: DeterministicCashFlow): string {
       }
       break;
   }
+  if (efe.oriRevaluation) {
+    const where = efe.oriRevaluation.group
+      ? `registrada en el grupo ${efe.oriRevaluation.group}; ya está descontada de su variación en inversión`
+      : 'va descontada en el renglón de inversión "Revaluación de activos reconocida en el ORI"';
+    lines.push(
+      `- Revaluación reconocida en el ORI del periodo (grupo 38 sin contrapartida en el 19): ${formatCopFromCents(efe.oriRevaluation.cents)}, ${where}. Es una transacción no monetaria (NIC 7 ¶43 / NIIF para las PYMES Sección 7): NO la presentes en operación; revélala en methodNote.`,
+    );
+  }
   if (efe.nonCashEquityMovements.length > 0) {
     lines.push(
       `- Movimientos internos del patrimonio del periodo (transacciones no monetarias — NIC 7 ¶43 / NIIF PYMES 7.18: se revelan en methodNote, NO son renglones del EFE): ${efe.nonCashEquityMovements
@@ -1052,6 +1060,7 @@ ${ctx.niifDisclosures}
 - Activo = Pasivo + Patrimonio, tolerancia $0 (centavo).
 - Los subtotales corriente / no corriente del Balance ("Total activo corriente", "Total activo no corriente", "Total pasivo corriente", "Total pasivo no corriente") coinciden al centavo con Activo Corriente, Activo No Corriente, Pasivo Corriente y Pasivo No Corriente de TOTALES VINCULANTES en cada periodo (validador E27): cada cuenta va en el bloque en que el preprocesador la cuenta, incluidas las excepciones de vencimiento declaradas por el usuario.
 - Ingresos de actividades ordinarias del P&L = grupo 41 neto de devoluciones 4175. El grupo 42 (ingresos no operacionales) se presenta en renglón(es) propio(s) DEBAJO del resultado operacional, con su código PUC. Toda la clase 4 queda presentada: 41 arriba, 42 abajo.
+- Cada renglón con código lleva UN solo grupo PUC (2 dígitos) o una cuenta: dos grupos no comparten renglón ("51/52", "6/7" o "13 15" se presentan en renglones separados) y un código aparece en un solo renglón, salvo las porciones corriente y no corriente de un grupo partido por plazo; el código de una clase (1 dígito) no sustituye a sus grupos en el Balance. Cada renglón coincide al centavo con las cuentas de su código (validador E21).
 - grossProfitPrimary, operatingProfitPrimary y la UAI coinciden al centavo con el bloque "CASCADA VINCULANTE DEL P&G".
 - Utilidad Neta del P&L coincide al centavo con TOTALES VINCULANTES (será el anchor para el closing_balance del ECP en Pass-2).
 - Toda cifra global (totalAssetsPrimary, totalLiabilitiesPrimary, totalEquityPrimary, netIncomePrimary) coincide al centavo con TOTALES VINCULANTES.

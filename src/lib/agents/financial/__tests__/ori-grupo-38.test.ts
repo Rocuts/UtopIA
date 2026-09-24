@@ -269,3 +269,33 @@ function csvDosCortesDe(csv: string): string {
     })
     .join('\n');
 }
+
+// Integración de la re-auditoría 2 (cross-deps de F-contrato): el prompt pide un
+// código PUC por renglón (E21 ya no une renglones) y el bloque EFE VINCULANTE
+// revela la revaluación reconocida en el ORI como partida no monetaria.
+describe('prompt NIIF alineado con E21 y con la revaluación del EFE', () => {
+  it('el Pass-1 pide un solo grupo o cuenta por renglón', () => {
+    const pp = preprocesarTresCortes(csvTresCortesConValorizaciones([0, 3_000_000, 8_000_000]));
+    const p1 = buildNiifAnalystPass1Prompt(COMPANY, 'es', 'COMPARATIVO_COMPLETO', pp);
+    expect(p1).toContain('Cada renglón con código lleva UN solo grupo PUC');
+    expect(p1).toContain('validador E21');
+  });
+
+  it('con revaluación en el grupo 15 contra el 38, el bloque EFE la declara no monetaria', async () => {
+    const { csvTresCortesConRevaluacion } = await import('@/lib/agents/financial/__fixtures__/tres-cortes-comparativo');
+    const pp = preprocesarTresCortes(csvTresCortesConRevaluacion([5_000_000, 8_000_000, 6_000_000]));
+    const anchors = {
+      totalAssetsPrimary: '0', totalLiabilitiesPrimary: '0', totalEquityPrimary: '0', netIncomePrimary: '0',
+      oriPrimary: '0', totalAssetsComparative: null, totalLiabilitiesComparative: null,
+      totalEquityComparative: null, grossProfitComparative: null, operatingProfitComparative: null,
+      netIncomeComparative: null, oriComparative: null,
+      curatorFlags: {
+        equityConvergenceApplied: false, cashFlowClosureForced: false, negativeAssetReclassified: false,
+        presumedCostWarning: false, reclassifiedAmountCop: '0',
+      },
+    };
+    const p2 = buildNiifAnalystPass2Prompt(COMPANY, 'es', 'COMPARATIVO_COMPLETO', anchors, pp);
+    expect(p2).toMatch(/Revaluación reconocida en el ORI del periodo \(grupo 38 sin contrapartida en el 19\)/);
+    expect(p2).toContain('NO la presentes en operación');
+  });
+});

@@ -204,7 +204,7 @@ export const StatementLineSchema = z.object({
   account: z
     .string()
     .nullable()
-    .describe('Código PUC opcional (ej. "1105"). Null si es total/subtotal.'),
+    .describe('Código PUC opcional (ej. "1105"): un solo grupo o cuenta por renglón, sin combinar grupos. Null si es total/subtotal.'),
   label: z.string().min(1).describe('Etiqueta legible. Ej: "Efectivo y equivalentes"'),
   amountPrimary: MoneyCop.describe('Cifra del periodo actual en centavos'),
   amountComparative: MoneyCop.nullable().describe('Cifra del periodo comparativo en centavos. Null si N/A.'),
