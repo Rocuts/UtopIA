@@ -2008,6 +2008,22 @@ export interface PhaseHandoffInput {
 }
 
 /**
+ * Modo del reporte para Estrategia y Gobierno: el MISMO que el NIIF.
+ *
+ * Con preprocesado se deriva siempre en servidor (`deriveReportMode`, la
+ * función que usa `prepareFinancialContext`); el valor del caller sólo cuenta
+ * cuando no hay balance. Los endpoints partidos no enviaban `reportMode` y un
+ * balance de un solo periodo (LINEA_BASE en el NIIF y el HTML) corría Estrategia
+ * y Gobierno en 'COMPARATIVO_COMPLETO' (pipeline-flujo-11).
+ */
+function resolvePhaseReportMode(
+  preprocessed: PreprocessedBalance | undefined,
+  requested: ReportMode | undefined,
+): ReportMode | undefined {
+  return preprocessed ? deriveReportMode(preprocessed) : requested;
+}
+
+/**
  * Stage 2: Strategy Director. Consume el NIIF + bindingTotals y produce KPIs.
  * Emite SSE stage_start/stage_complete (stage=2).
  */
@@ -2033,7 +2049,7 @@ export async function runStrategyPhase(
     onProgress,
     elite,
     AbortSignal.timeout(720_000),
-    reportMode,
+    resolvePhaseReportMode(preprocessed, reportMode),
   );
 
   onProgress?.({ type: 'stage_complete', stage: 2, label: completeLabel });
@@ -2086,7 +2102,7 @@ export async function runGovernancePhase(
     onProgress,
     elite,
     AbortSignal.timeout(720_000),
-    reportMode,
+    resolvePhaseReportMode(preprocessed, reportMode),
   );
 
   // -------------------------------------------------------------------------
