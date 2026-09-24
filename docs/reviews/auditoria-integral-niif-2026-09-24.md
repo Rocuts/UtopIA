@@ -350,7 +350,7 @@ Sin servicios reales (LLM simulado, credenciales ficticias para la compilación)
 |---|---|---|---|
 | `npx vitest run` | 200 archivos, 2.355 pruebas, 3 omitidas | 397 archivos, 4.027 pruebas, 20 omitidas, 0 fallos | 535 archivos / 5.404 pruebas pasan; 6 archivos / 23 pruebas omitidas (requieren Postgres); 0 fallos |
 | `npx tsc --noEmit` | 0 errores | 0 errores | 0 errores |
-| `npm run lint` | 0 errores, 187 avisos | 0 errores, 160 avisos | 0 errores, 158 avisos preexistentes |
+| `npm run lint` | 0 errores, 187 avisos | 0 errores, 160 avisos | 0 errores, 158 avisos preexistentes (157 en el código versionado; 1 en `src/app/.well-known/workflow/`, generado por la compilación e ignorado por git) |
 | `npm run lint:strict-mode` | correcto | correcto (36 archivos) | correcto |
 | `npm run build` (credenciales ficticias) | no ejecutado en esta sesión (correcto en la revisión del 2026-09-05) | correcto | correcto |
 | Recálculo independiente por la ruta real | — | 738/750 cifras al centavo; 12 en balances descuadrados bloqueados con 422 | 879/900 (12 bloqueadas con 422 y 9 N/D por diseño en la columna "Saldo inicial"); 32 variantes nuevas: 3.401/3.401 |
