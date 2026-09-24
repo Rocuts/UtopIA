@@ -1800,6 +1800,10 @@ export const dict = {
         'Documento marcado BORRADOR: el HTML no superó la verificación numérica automática contra el informe (ver el aviso BORRADOR). No es un documento definitivo y no debe firmarse en este estado.',
       draftWatermarkLine:
         'Documento con la marca {mark}: no es un documento definitivo y no debe firmarse en este estado.',
+      userEditsDroppedLine:
+        'Las ediciones aplicadas en el navegador ("Aplicar al reporte") no se incluyen en este documento: el servidor produce el texto de las Partes desde sus cifras estructuradas.',
+      uiUserEdited:
+        'Este informe tiene ediciones aplicadas desde el chat. Se ven aquí, pero las descargas no las incluyen: el servidor produce el texto de las Partes desde sus cifras estructuradas.',
       scopeLine:
         'Alcance del sello: cubre las cifras de los estados financieros y las anclas que el código verifica contra el balance. La narrativa generada por IA (notas, acta, análisis) va rotulada "no auditada": el código sólo contrasta las cifras que puede anclar al balance y el resto no queda certificado por este sello.',
       adjustmentsLine:
@@ -3577,6 +3581,10 @@ export const dict = {
         'Document marked DRAFT: the HTML did not pass the automatic numeric verification against the report (see the DRAFT notice). It is not a final document and must not be signed in this state.',
       draftWatermarkLine:
         'Document marked {mark}: it is not a final document and must not be signed in this state.',
+      userEditsDroppedLine:
+        'Edits applied in the browser ("Apply to report") are not included in this document: the server produces the text of the Parts from their structured figures.',
+      uiUserEdited:
+        'This report has edits applied from the chat. They show here, but downloads do not include them: the server produces the text of the Parts from their structured figures.',
       scopeLine:
         'Seal scope: it covers the figures of the financial statements and the anchors the code verifies against the trial balance. The AI-generated narrative (notes, minutes, analysis) is labelled "not audited": the code only checks the figures it can anchor to the trial balance, and the rest is not certified by this seal.',
       adjustmentsLine:

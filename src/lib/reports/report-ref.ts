@@ -83,3 +83,28 @@ export function parseReportRef(value: unknown): ParsedReportRef {
   if (typeof v.reportHash !== 'string' || !SHA256_RE.test(v.reportHash)) return { kind: 'invalid' };
   return { kind: 'ok', ref: { reportId: v.reportId.toLowerCase(), reportHash: v.reportHash } };
 }
+
+// ---------------------------------------------------------------------------
+// Ediciones del navegador ("Aplicar al reporte", procedencia-R2-07)
+// ---------------------------------------------------------------------------
+// El chat de seguimiento reescribe el consolidado en el navegador. Las salidas
+// no pueden imprimir ese texto: el servidor produce el de las Partes desde sus
+// cifras estructuradas (I3) y reconstruye el consolidado. Antes la edición se
+// descartaba en silencio; ahora la UI marca el informe y el servidor lo declara
+// en el artefacto, en una cabecera y la UI lo avisa junto a las descargas.
+// ---------------------------------------------------------------------------
+
+/** Campo con el que la UI marca un informe editado en el navegador (ISO 8601). */
+export const USER_EDITED_FIELD = 'userEditedAt';
+
+/** Copia del informe marcada como editada en el navegador. */
+export function markUserEdited<T extends object>(report: T, at: string = new Date().toISOString()): T {
+  return { ...report, [USER_EDITED_FIELD]: at };
+}
+
+/** `true` si el informe lleva ediciones aplicadas en el navegador. */
+export function readUserEdited(report: unknown): boolean {
+  if (!report || typeof report !== 'object') return false;
+  const v = (report as Record<string, unknown>)[USER_EDITED_FIELD];
+  return typeof v === 'string' && v.length > 0;
+}

@@ -56,6 +56,11 @@ export type ArtifactProvenance =
        */
       adjustments?: AdjustmentsTrail | null;
       /**
+       * El informe recibido traía ediciones aplicadas en el navegador ("Aplicar
+       * al reporte") que el artefacto no incluye (procedencia-R2-07).
+       */
+      userEditsDropped?: boolean;
+      /**
        * Contrato de reglas con que el servidor RE-RENDERIZÓ la versión al
        * producir el artefacto (I5-5). /export y /html por referencia recalculan
        * el Markdown, los veredictos y los gates con las reglas vigentes: por
@@ -64,7 +69,13 @@ export type ArtifactProvenance =
        */
       renderedWith?: string;
     }
-  | { kind: 'unverified'; draft?: boolean; draftReasons?: DraftReason[]; adjustments?: AdjustmentsTrail | null };
+  | {
+      kind: 'unverified';
+      draft?: boolean;
+      draftReasons?: DraftReason[];
+      adjustments?: AdjustmentsTrail | null;
+      userEditsDropped?: boolean;
+    };
 
 /** Contrato del re-render de una procedencia verificada. */
 function renderedContract(p: Extract<ArtifactProvenance, { kind: 'verified' }>): string {
@@ -147,6 +158,7 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
       p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle,
       t.unverifiedBody,
       ...draft,
+      ...(p.userEditsDropped === true ? [t.userEditsDroppedLine] : []),
       t.scopeLine,
       ...adjustments,
     ];
@@ -176,7 +188,10 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
 
 /** Encabezados máquina-legibles (complemento, no sustituto, del sello impreso). */
 export function provenanceHeaders(p: ArtifactProvenance): Record<string, string> {
-  const draft: Record<string, string> = p.draft === true ? { 'X-Report-Draft': 'true' } : {};
+  const draft: Record<string, string> = {
+    ...(p.draft === true ? { 'X-Report-Draft': 'true' } : {}),
+    ...(p.userEditsDropped === true ? { 'X-Report-Edit-Dropped': 'true' } : {}),
+  };
   if (p.kind === 'unverified') return { 'X-Report-Provenance': 'unverified', ...draft };
   return {
     'X-Report-Provenance': 'verified',

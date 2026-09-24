@@ -84,6 +84,8 @@ import { isProvisionalDraft } from '@/lib/reports/provenance-stamp';
 import {
   attachServerVersion,
   detachServerVersion,
+  markUserEdited,
+  readUserEdited,
   readReportRef,
   readServerVersion,
   type ReportProvenance,
@@ -691,6 +693,22 @@ export function buildExportRequestBody(args: {
     ...args.presentation,
     ...exportSourceFields(args.preprocessed, args.adjustmentLedger),
   };
+}
+
+/**
+ * "Aplicar al reporte" (procedencia-R2-07): el informe editado en el navegador
+ * suelta la referencia a la versión persistida (el servidor no tiene ese
+ * contenido) y queda marcado como editado: las descargas no pueden imprimir
+ * ese texto —el servidor produce el de las Partes desde sus cifras
+ * estructuradas— y lo declaran en el artefacto; la UI lo avisa (`userEditNotice`).
+ */
+export function applyReportPatch(prev: BackendFinancialReport, newMd: string): BackendFinancialReport {
+  return { ...markUserEdited(detachServerVersion(prev)), consolidatedReport: newMd };
+}
+
+/** Aviso visible junto a las descargas cuando el informe lleva ediciones del chat. */
+export function userEditNotice(report: unknown, language: 'es' | 'en'): string | null {
+  return readUserEdited(report) ? dict[language].reportProvenance.uiUserEdited : null;
 }
 
 /**
@@ -2301,6 +2319,14 @@ function ReportViewer({
             })()}
           </p>
         )}
+        {(() => {
+          const notice = userEditNotice(report, language);
+          return notice ? (
+            <p className="mx-6 mt-1 text-xs text-n-800" data-user-edited="true">
+              {notice}
+            </p>
+          ) : null;
+        })()}
 
         {exportError && (
           <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
@@ -3422,11 +3448,11 @@ export function PipelineWorkspace() {
         if (!prev) return prev;
         // Editado en el navegador: ya no es la versión persistida. Se suelta la
         // referencia para que las descargas no digan "procedencia verificada"
-        // de un contenido que el servidor no tiene (salen "no verificada").
-        const next: BackendFinancialReport = {
-          ...detachServerVersion(prev),
-          consolidatedReport: newMd,
-        };
+        // de un contenido que el servidor no tiene (salen "no verificada") y se
+        // marca como editado: el servidor produce el texto desde las cifras
+        // estructuradas, así que la edición no llega a las descargas y éstas
+        // lo declaran (procedencia-R2-07; aviso visible abajo).
+        const next = applyReportPatch(prev, newMd);
         // Persistir el nuevo estado completo.
         if (companyInfo && conversationId) {
           setLastCompletedReport({

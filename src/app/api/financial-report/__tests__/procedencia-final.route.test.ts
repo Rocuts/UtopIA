@@ -11,6 +11,8 @@
 //     Doctor de Datos (anexo) y el sello nombra la huella de cada balance.
 //   - procedencia-R2-04: firmantes y Revisor Fiscal del acta salen del intake
 //     (o "a completar al firmar"), nunca del JSON de la Parte III.
+//   - procedencia-R2-07: las ediciones "Aplicar al reporte" no se descartan en
+//     silencio en /export sin referencia (aviso en el artefacto, cabecera y UI).
 //   - procedencia-R2-06: todo artefacto marcado BORRADOR (HTML no emitible,
 //     PDF con marca de agua) lleva la variante BORRADOR del sello y
 //     X-Report-Draft.
@@ -649,5 +651,71 @@ describe('e2e-niif2-05 — un informe en inglés pedido sin language sale en ing
     );
     expect(res.status).toBe(200);
     expect(vi.mocked(generateFinancialExcel).mock.calls[0][0].language).toBe('es');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// procedencia-R2-07 — "Aplicar al reporte" no se descarta en silencio
+// ---------------------------------------------------------------------------
+
+describe('R2-07 — ediciones del chat en /export sin referencia', () => {
+  beforeEach(() => {
+    delete process.env.DATABASE_URL;
+    state.workspace = null;
+  });
+  afterEach(() => {
+    process.env.DATABASE_URL = 'postgres://fake-for-tests';
+  });
+
+  const EDIT = '## Nota añadida por el usuario desde el chat\nTexto editado por el contador antes de exportar.';
+
+  it('Excel y PDF: el artefacto y las cabeceras declaran que la edición no se incluye; la UI lo avisa', async () => {
+    const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody()));
+    const { report } = (await res.json()) as { report: FinancialReport };
+    const { applyReportPatch, buildExportRequestBody, userEditNotice } = await import(
+      '@/components/workspace/PipelineWorkspace'
+    );
+    // Lo que hace handlePatchReport.
+    const edited = applyReportPatch(report as never, `${report.consolidatedReport}\n\n${EDIT}`);
+    expect(userEditNotice(edited, 'es')).toMatch(/no las incluyen/);
+    expect(userEditNotice(edited, 'en')).toMatch(/do not include them/);
+    expect(userEditNotice(report as never, 'es')).toBeNull();
+
+    const body = buildExportRequestBody({
+      report: edited,
+      rawData: PROVENANCE_CSV,
+      preprocessed: null,
+      adjustmentLedger: null,
+      presentation: { format: 'excel', language: 'es' },
+    });
+    expect(body.reportRef).toBeUndefined();
+    const ex = await exportReport(req('/api/financial-report/export', body));
+    expect(ex.status).toBe(200);
+    expect(ex.headers.get('X-Report-Provenance')).toBe('unverified');
+    expect(ex.headers.get('X-Report-Edit-Dropped')).toBe('true');
+    const excel = vi.mocked(generateFinancialExcel).mock.calls[0][0];
+    expect(excel.report.consolidatedReport).not.toContain('Nota añadida por el usuario');
+    expect(excel.report.consolidatedReport).toMatch(/ediciones aplicadas en el navegador .*no se incluyen/i);
+
+    const pdf = await exportReport(
+      req('/api/financial-report/export', { ...body, format: 'pdf-elite', language: 'en' }),
+    );
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get('X-Report-Edit-Dropped')).toBe('true');
+    const doc = vi.mocked(composeEditorialReport).mock.results[0].value as {
+      appendix: { validationWarnings?: string[] };
+    };
+    const stamp = (doc.appendix.validationWarnings ?? []).find((w) => w.startsWith('UNVERIFIED PROVENANCE'))!;
+    expect(stamp).toMatch(/edits applied in the browser .*are not included/i);
+  });
+
+  it('control: sin edición no hay aviso ni cabecera', async () => {
+    const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody()));
+    const { report } = (await res.json()) as { report: FinancialReport };
+    const ex = await exportReport(
+      req('/api/financial-report/export', { report, rawData: PROVENANCE_CSV, format: 'excel', language: 'es' }),
+    );
+    expect(ex.status).toBe(200);
+    expect(ex.headers.get('X-Report-Edit-Dropped')).toBeNull();
   });
 });

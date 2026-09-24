@@ -38,6 +38,7 @@ import {
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
 import { versionLanguage } from '@/lib/reports/financial-report-version';
+import { readUserEdited } from '@/lib/reports/report-ref';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
   withServerRenderedClientReport,
@@ -313,7 +314,12 @@ function unverified(
   report: FinancialReport | null | undefined,
   adjustments: ArtifactProvenance['adjustments'] = null,
 ): ArtifactProvenance {
-  const base: ArtifactProvenance = adjustments ? { kind: 'unverified', adjustments } : { kind: 'unverified' };
+  const base: ArtifactProvenance = {
+    kind: 'unverified',
+    ...(adjustments ? { adjustments } : {}),
+    // procedencia-R2-07: ediciones del navegador que el artefacto no incluye.
+    ...(readUserEdited(report) ? { userEditsDropped: true } : {}),
+  };
   return isProvisionalDraft(report) ? { ...base, draft: true } : base;
 }
 
