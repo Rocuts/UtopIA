@@ -72,7 +72,11 @@ import {
   MAX_FORWARDED_PREPROCESSED_CHARS,
 } from '@/lib/upload/preprocessed-handoff';
 import { dict } from '@/lib/i18n/dictionaries';
-import { resolveReportExportBlock, reportExportBlockCopy } from './report-export-gate';
+import {
+  resolveReportExportBlock,
+  reportExportBlockCopy,
+  reportExportDegradedNotice,
+} from './report-export-gate';
 import {
   CLIENT_REPORT_MODEL_ID,
   detectMissingPhases,
@@ -1840,6 +1844,11 @@ function ReportViewer({
           </div>
         )}
 
+        {/* pipeline-flujo-15 (cross-dep W3-A): Estrategia o Gobierno
+            completados con razonamiento reducido. Aviso junto a las
+            descargas, sin bloquearlas. */}
+        <DegradedExportNotice report={report} language={language} />
+
         {exportError && (
           <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1891,6 +1900,32 @@ function ReportViewer({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Aviso no bloqueante de pases degradados (pipeline-flujo-15): el informe se
+ * puede descargar, pero Estrategia o Gobierno se completaron con esfuerzo de
+ * razonamiento reducido y conviene revisarlos antes de emitir.
+ */
+export function DegradedExportNotice({
+  report,
+  language,
+}: {
+  report: unknown;
+  language: 'es' | 'en';
+}) {
+  const notice = reportExportDegradedNotice(report, language);
+  if (!notice) return null;
+  return (
+    <div
+      role="status"
+      data-testid="degraded-export-notice"
+      className="mx-6 my-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 flex items-start gap-2 text-xs text-n-800 no-print"
+    >
+      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-warning" aria-hidden="true" />
+      <span className="whitespace-pre-wrap break-words">{notice}</span>
     </div>
   );
 }
