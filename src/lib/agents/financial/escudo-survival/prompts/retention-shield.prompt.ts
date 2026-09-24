@@ -41,32 +41,28 @@ ${nitContext ? `\nContexto del cliente: ${nitContext}.` : ''}${useCase ? `\nCaso
 
 ${context2026}
 
-<task>Sumar el saldo de la cuenta 1355 (Anticipos), proyectar el saldo a favor frente al impuesto proyectado y sugerir acciones concretas para liberar capital de trabajo de la DIAN.</task>
+<task>Explicar el crédito imputable a renta (retenciones y anticipos de renta de la cuenta 1355, calculado por el sistema), compararlo con el impuesto causado en libros y sugerir acciones para evitar retenciones en exceso. El saldo a favor NO es determinable sin la declaración de renta.</task>
 
 <success_criteria>
-- data.retencionesAcumuladas = suma de subcuentas postables 1355.* del balance preprocesado. Si solo hay la cuenta padre 1355, usar su saldo y declarar el supuesto en warnings.
-- data.impuestoProyectado: si el user content lo entrega como hint (TET Calculator previo), usalo; si no, calcular UAI x 0.35.
-- data.saldoAFavorProyectado = retencionesAcumuladas - impuestoProyectado.
-- Si saldoAFavorProyectado > 0: data.acciones[] tiene >= 2 entradas con tipo, norma textual, dificultad, riesgo. Priorizar compensacion (baja dificultad) sobre devolucion (riesgo Art. 670).
-- Si saldoAFavorProyectado <= 0: data.acciones[] vacio y warnings declara explicitamente que no hay capital atrapado.
-- El markdown cita "Art. 369 E.T." en certif_no_retencion, "Forma 1502" en compensacion, "Forma 1503" o "Decreto 1625/2016" en devolucion, "Resolucion DIAN 5707/2019" en autorretenedor.
+- data.retencionesAcumuladas, data.impuestoProyectado (impuesto causado en libros, clase 54) y data.saldoAFavorProyectado (null) los fija el sistema en código; copia los del contexto. ReteIVA (135517), ReteICA/anticipo ICA (135518, 135510), impuestos descontables (135530) y demás subcuentas que no son de renta NO forman parte del crédito.
+- data.acciones[]: 0-3 entradas con tipo, norma textual, dificultad, riesgo, enfocadas en prevenir retenciones en exceso (certif_no_retencion, autorretenedor) o en compensación. No incluyas "devolucion" sin saldo a favor liquidado en la declaración (riesgo Art. 670 E.T.).
+- El markdown cita "Art. 369 E.T." en certif_no_retencion, "Forma 1502" en compensacion y "Resolucion DIAN 5707/2019" en autorretenedor.
 </success_criteria>
 
 <constraints>
 - ALWAYS cita norma textual en accion.norma (sin cita la accion falla la defensa Art. 647 E.T.).
-- ALWAYS verifica matematicamente: saldoAFavor = retenciones - impuesto (sin trucos).
-- NEVER recomiendes devolucion como primera opcion si hay impuesto proyectado del periodo siguiente — compensacion (Forma 1502) tiene menor riesgo Art. 670.
+- NEVER presentes retenciones − impuesto contable como saldo a favor: el saldo a favor sale de la declaración (Arts. 26, 807 y 850 E.T.).
 - NEVER ofrezcas autorretenedor sin advertir el requisito de RUT >= 3 anos y sin mora.
-- If retencionesAcumuladas = 0 then acciones vacio y warning "Cuenta 1355 no encontrada o saldo cero".
-- If saldoAFavor > 5x impuestoProyectado then declara warning de "exceso de retencion estructural" — la empresa probablemente califica para certif_no_retencion (Art. 369 E.T.).
+- If retencionesAcumuladas = 0 then acciones vacio y warning "sin crédito de renta identificado en 1355".
+- If retencionesAcumuladas > 5x impuestoProyectado then declara warning de "posible exceso de retención estructural" — la empresa podría calificar para certif_no_retencion (Art. 369 E.T.).
 - MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
-- MUST: emitir 'data.acciones: []' (array vacío) cuando saldoAFavorProyectado <= 0. OpenAI strict mode lo exige — NO omitir el campo.
+- MUST: emitir 'data.acciones: []' (array vacío) cuando no hay acciones. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (3 secciones):
-1. Saldo de la cuenta 1355 (detalle por subcuenta postable + total).
-2. Saldo a favor proyectado (comparativo retenciones vs impuesto proyectado; impacto flujo de caja).
-3. Acciones recomendadas (lista priorizada por dificultad/impacto; si saldo <= 0, indicar que no aplica).
+1. Crédito imputable a renta (135505, 135515 y 135595/1805 sólo con nombre de renta) frente a otras subcuentas de 1355 que no son de renta.
+2. Comparativo con el impuesto causado en libros; saldo a favor N/D sin declaración.
+3. Acciones recomendadas (lista priorizada por dificultad/impacto).
 
 ${langLine}`;
 }

@@ -66,13 +66,12 @@ ${context2026}
 <task>Detectar inconsistencias preventivas frente a la DIAN: bancarizacion (Art. 771-5 §1 y §2 E.T.) y cruces con informacion exogena 2026 sobre los anchors deterministicos del balance preprocesado.</task>
 
 <success_criteria>
-- data.pagosEfectivoTotal: saldo de la cuenta 1105 (Caja) como proxy de "movimiento de efectivo"; declarar la limitacion del proxy en warnings (el cruce real requiere mayor general por movimiento).
+- data.pagosEfectivoTotal = null: el saldo de la cuenta 1105 (Caja) al cierre es un stock, no el total de pagos en efectivo del año; sin auxiliar de caja o detalle de pagos no hay base (el sistema lo fija en null).
 - data.pagosNoDeduciblesIndividuales[]: listar cada PAGO individual en efectivo cuyo monto propio supere $5.237.400 (100 UVT). NUNCA agregues varios pagos al mismo NIT para superar el tope — el acumulado anual por beneficiario es irrelevante (Sent. C. de E. 26676/2023). Sin detalle transaccional, dejar el array vacio y declarar warning "requiere auxiliar de pagos por transaccion para cruce Art. 771-5 §2; el balance no permite identificar pagos individuales".
 - Cada CashPaymentViolation: norma = "Art. 771-5 §2 E.T." literal (z.literal en el schema fuerza la cita). monto = el pago individual; excesoUvt = (monto - 5237400) / 52374 cuando es positivo.
-- data.excesoNoDeducibleGeneral, regimen GENERAL (§1) = max(0, pagosEfectivoTotal - min(0.40 x pagosEfectivoTotal, 40000 x 52374, 0.35 x costosTotales)). costosTotales = suma de clases 5, 6, 7 disponibles en el balance.
-- data.excesoNoDeducibleGeneral, regimen ESPECIAL (§5: agro / comercializador SIMPLE / cooperativa de productores agricolas) = max(0, pagosEfectivoTotal - 0.70 x costosTotales). NO apliques el §1 ni el §2 a estos contribuyentes, y declara en warnings y en el markdown que se aplico el Art. 771-5 §5 E.T. y por que.
+- data.excesoNoDeducibleGeneral = null. Regla del Art. 771-5 §1 (texto Ley 1819/2016, desde 2021) para explicar en el markdown: se reconocen los pagos en efectivo hasta el MENOR entre (a) el 40% de LO PAGADO en el año por cualquier medio, sin superar 40.000 UVT, y (b) el 35% de los costos y deducciones totales; el exceso es no deducible. Sin el total pagado del año y los pagos en efectivo no se cuantifica.
 - data.crucesExogenaSospechosos[]: 2-3 entradas con cuenta (codigo PUC), terceroNit (omitir o "anonimo"), diferenciaEstimada COP, norma citando Resolucion DIAN 000227/2025 o 000233/2025.
-- data.mayorImpuestoEstimado = (excesoNoDeducibleGeneral + sum(pagosNoDeduciblesIndividuales.monto)) x 0.35. El validator reconcilia con tolerancia 1%.
+- data.mayorImpuestoEstimado = null mientras el exceso no sea determinable (el sistema lo fija).
 - El markdown cita "Art. 771-5" textualmente al menos una vez (defensa Art. 647 E.T.).
 </success_criteria>
 
@@ -80,20 +79,18 @@ ${context2026}
 - ALWAYS cita "Art. 771-5 §1 E.T." al hablar del tope general, "Art. 771-5 §2 E.T." al hablar del tope por pago individual y "Art. 771-5 §5 E.T." al aplicar el regimen especial. Sin paragrafo la cita es debil.
 - If el contribuyente pertenece al sector agropecuario, es comercializador del regimen SIMPLE o es cooperativa/asociacion de productores agricolas, Then aplica el Art. 771-5 §5 E.T. (tope unico del 70% de costos/deducciones/pasivos/impuestos descontables totales, sin limite de 100 UVT por pago) Otherwise aplica el regimen general de los §1 y §2.
 - If no puedes determinar con la evidencia disponible si el contribuyente califica al Art. 771-5 §5 E.T., Then aplica el regimen general Y declara warning "regimen de bancarizacion no determinado: si el contribuyente es agropecuario, comercializador SIMPLE o cooperativa de productores agricolas, aplica el Art. 771-5 §5 E.T. y este calculo sobreestima el exceso no deducible".
-- ALWAYS declara warning del proxy "saldo 1105 != movimiento de efectivo" — el calculo del Art. 771-5 §1 idealmente requiere el flujo, no el saldo final.
+- ALWAYS declara que el saldo de 1105 no mide los pagos en efectivo del año: el Art. 771-5 §1 requiere el flujo de pagos, no el saldo final.
 - NEVER inventes NITs ni nombres de terceros. Si no estan en los anchors, deja beneficiarioNit y beneficiarioNombre como undefined.
-- NEVER omitas el calculo del minimo en el tope general — el exceso es la diferencia respecto al MENOR de las tres condiciones, no a una sola.
-- If sumaIndividuales > pagosEfectivoTotal then hay inconsistencia logica — declarar warning y revisar (el listado individual es subconjunto del total).
-- If no hay cuenta 1105 en el balance then pagosEfectivoTotal = 0, excesoNoDeducibleGeneral = 0, mayorImpuestoEstimado = 0 y warning explicativo.
+- NEVER cuantifiques pagos no deducibles a partir del saldo de caja.
 - MUST: emitir 'warnings: []' (array vacío) cuando no hay advertencias. OpenAI strict mode lo exige — NO omitir el campo.
 - MUST: emitir 'data.pagosNoDeduciblesIndividuales: []' (array vacío) cuando no hay pagos individuales > 100 UVT identificables, y tambien siempre que aplique el Art. 771-5 §5 E.T. (ese regimen no esta sujeto al tope por pago). OpenAI strict mode lo exige — NO omitir el campo.
 - MUST: emitir 'data.crucesExogenaSospechosos: []' (array vacío) cuando no se detectan cruces sospechosos. OpenAI strict mode lo exige — NO omitir el campo.
 </constraints>
 
 Formato esperado del campo markdown (4 secciones):
-1. Pagos en efectivo totales (saldo cuenta 1105 + subcuentas; declarar limitacion del proxy).
+1. Pagos en efectivo del año: N/D con el balance de prueba (el saldo de 1105 no es un flujo); qué información se requiere.
 2. Pagos individuales > 100 UVT (Art. 771-5 §2 E.T.) — tabla con NIT, monto DEL PAGO, exceso; si no hay detalle transaccional declararlo. Advertir expresamente que el tope se mide por transaccion y no por acumulado anual por NIT (Sent. C. de E. 26676/2023).
-3. Exceso general — regimen aplicado: Art. 771-5 §1 E.T. (minimo entre 40% / 40.000 UVT / 35% costos) o Art. 771-5 §5 E.T. (70% de costos totales, sector agropecuario / comercializador SIMPLE / cooperativa de productores agricolas). Indica cual se aplico y por que.
+3. Exceso general — regla del Art. 771-5 §1 E.T. (menor entre 40% de lo pagado con máximo 40.000 UVT y 35% de costos y deducciones) o régimen especial si aplica; cuantía N/D sin flujo de pagos.
 4. Cruces sospechosos vs informacion exogena 2026 — 3 categorias de clase 22 + diferencia estimada + cita Resolucion DIAN 000227/2025.
 
 ${langLine}`;
