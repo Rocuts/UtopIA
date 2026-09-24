@@ -160,6 +160,30 @@ export interface StrategicAnalysisResult {
   fullContent: string;
   /** JSON-strict del Strategy Director (Fase 2 outcome-first). Ver `NiifAnalysisResult.json`. */
   json?: StrategyReportJson;
+  /**
+   * Veredicto determinista de la Parte II contra sus anclas (pipeline-flujo-05),
+   * análogo a `GovernanceResult.actaQualifications`. `clean === false` ⇒ la
+   * Parte II no es emitible: los gates servidor rechazan la exportación y la
+   * UI debe deshabilitar las descargas.
+   */
+  strategyQualifications?: StrategyQualifications;
+  /**
+   * `true` cuando el Director de Estrategia se completó con esfuerzo de
+   * razonamiento degradado tras un primer intento sin salida
+   * (pipeline-flujo-15). El aviso visible va en el cuerpo de la sección.
+   */
+  degraded?: boolean;
+}
+
+/**
+ * Veredicto que viaja con el resultado de Estrategia (análogo a
+ * `GovernanceResult.actaQualifications`).
+ */
+export interface StrategyQualifications {
+  clean: boolean;
+  motivos: string[];
+  /** Cifras sin ancla determinista: se declaran, no se validan. */
+  noVerificables: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +213,12 @@ export interface GovernanceResult {
    * descarga.
    */
   actaQualifications?: { clean: boolean; motivos: string[] };
+  /**
+   * `true` cuando el Especialista en Gobierno se completó con esfuerzo de
+   * razonamiento degradado tras un primer intento sin salida
+   * (pipeline-flujo-15). El aviso visible va en el cuerpo de la sección.
+   */
+  degraded?: boolean;
 }
 
 // ---------------------------------------------------------------------------

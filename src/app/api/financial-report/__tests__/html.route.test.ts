@@ -399,4 +399,27 @@ describe('POST /api/financial-report/html — gate aritmético servidor', () => 
     const res = await POST(makeNonStreamingRequest({ ...VALID_BODY, preprocessed: { periods: [] } }));
     expect(res.status).toBe(400);
   });
+
+  // pipeline-flujo-10 — /html usa el MISMO gate que /export
+  // (`niifArithmeticBlockers`); antes replicaba localmente sólo una parte.
+  it('renglón del ERI fuera de las clases 4–7 → 422 (igual que Excel/PDF)', async () => {
+    const niif = makeCoherentNiifReport();
+    niif.incomeStatement.lines.push({
+      ...niif.incomeStatement.lines[0], account: '8105', label: 'Ingreso extraordinario', amountPrimary: '500000000',
+    });
+    const res = await POST(makeNonStreamingRequest({ ...VALID_BODY, niifReport: niif }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { details: string[] };
+    expect(body.details.join(' ')).toMatch(/8105/);
+    expect(mockRunHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('ORI del ERI distinto de la variación del ECP (E6) → 422 (igual que Excel/PDF)', async () => {
+    const niif = makeCoherentNiifReport();
+    niif.incomeStatement.oriPrimary = '50000';
+    const res = await POST(makeNonStreamingRequest({ ...VALID_BODY, niifReport: niif }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { details: string[] };
+    expect(body.details.some((d) => d.startsWith('E6.'))).toBe(true);
+  });
 });

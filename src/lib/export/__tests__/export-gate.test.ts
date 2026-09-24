@@ -139,3 +139,23 @@ describe('pipeline-flujo-13 — procedencia contra el rawData de la petición', 
     expect(financialExportBlockers(makeExportableReport(), undefined)).toEqual([]);
   });
 });
+
+describe('pipeline-flujo-14 / -05 — completitud y veredicto de la Parte II', () => {
+  it('Parte II o III vacía → bloqueante INCOMPLETO (misma regla que detectMissingPhases)', () => {
+    for (const part of ['strategicAnalysis', 'governance'] as const) {
+      const report = makeExportableReport();
+      report[part].fullContent = '  \n ';
+      expect(financialExportBlockers(report)).toContain(
+        'Informe INCOMPLETO: faltan la Parte II (Estrategia) y/o la Parte III (Gobierno Corporativo).',
+      );
+    }
+  });
+
+  it('strategyQualifications.clean === false (tipado en StrategicAnalysisResult) bloquea', () => {
+    const report = makeExportableReport();
+    report.strategicAnalysis.strategyQualifications = { clean: false, motivos: ['Dashboard — Total Activo'], noVerificables: [] };
+    expect(financialExportBlockers(report)).toContain(
+      'El análisis estratégico (Parte II) contiene cifras sin respaldo en el balance.',
+    );
+  });
+});
