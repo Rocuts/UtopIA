@@ -134,6 +134,84 @@ describe('base determinista del comparativo — tres cortes', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Revisión adversarial P2: renglones del EFE 2025 con el MISMO importe y
+// comparativos distintos. Variante del fixture: en 2025 deudores (13) e
+// inventarios (14) consumen $5M cada uno; en 2024, $10M y $5M. El
+// emparejamiento sólo por importe (y por orden) asignaba al renglón de
+// inventarios el comparativo de deudores cuando el modelo los presentaba en
+// otro orden — cifras cruzadas que el validador no detectaba.
+// ---------------------------------------------------------------------------
+
+function csvEmpate2025(): string {
+  return csvTresCortes()
+    .replace(
+      '143505,Mercancias no fabricadas por la empresa,Auxiliar,1,25000000,30000000,28000000',
+      '143505,Mercancias no fabricadas por la empresa,Auxiliar,1,25000000,30000000,35000000',
+    )
+    .replace(
+      '210505,Bancos nacionales,Auxiliar,1,30000000,40000000,25000000',
+      '210505,Bancos nacionales,Auxiliar,1,30000000,40000000,32000000',
+    );
+}
+
+/** El informe honesto con la operación reescrita como la presentaría el modelo: inventarios antes que deudores. */
+function informeConEmpate(conCodigo: boolean) {
+  const pp = preprocesarTresCortes(csvEmpate2025());
+  const honest = informeTresCortes(pp);
+  const primary = buildDeterministicCashFlow(pp.primary, pp.comparative!)!;
+  const rows = primary.sections.find((s) => s.section === 'operating')!.rows;
+  const rotulo = (account: string, label: string) =>
+    account === '14' ? 'Aumento de inventarios' : account === '13' ? 'Aumento de deudores comerciales' : label;
+  type Linea = NiifReportJson['cashFlow']['sections'][number]['lines'][number];
+  const lines: Linea[] = rows.map((r) => ({
+    account: conCodigo ? r.account : null,
+    label: rotulo(r.account, r.label),
+    amountPrimary: r.cents.toString(),
+    amountComparative: null,
+    level: 2,
+    isAbsolute: false,
+    confidence: null,
+    anomalyFlag: null,
+  }));
+  const i13 = lines.findIndex((l) => l.label === 'Aumento de deudores comerciales');
+  const i14 = lines.findIndex((l) => l.label === 'Aumento de inventarios');
+  [lines[i13], lines[i14]] = [lines[i14], lines[i13]];
+  const json: NiifReportJson = {
+    ...honest,
+    cashFlow: {
+      ...honest.cashFlow,
+      sections: honest.cashFlow.sections.map((s) =>
+        s.section === 'operating' ? { ...s, lines } : { ...s, lines: s.lines.filter((l) => l.amountPrimary !== '0') },
+      ),
+    },
+  };
+  const out = attachComparativeStatements(json, buildComparativeStatementsBasis(pp), primary);
+  return { pp, out, op: seccion(out, 'operating') };
+}
+
+describe('revisión P2 — renglones del EFE con el mismo importe en el periodo actual', () => {
+  it('con el código PUC del bloque, cada renglón recibe el comparativo de su propio grupo', () => {
+    const { pp, out, op } = informeConEmpate(true);
+    expect(op.lines.find((l) => l.label === 'Aumento de inventarios')?.amountComparative).toBe(M(-5_000_000));
+    expect(op.lines.find((l) => l.label === 'Aumento de deudores comerciales')?.amountComparative).toBe(M(-10_000_000));
+    expect(validar(out, pp).errors).toEqual([]);
+  });
+
+  it('sin código PUC ni rótulo que los distinga, los renglones toman el rótulo de su partida (ninguna cifra cambia)', () => {
+    const { pp, out, op } = informeConEmpate(false);
+    const par = op.lines
+      .filter((l) => l.amountPrimary === M(-5_000_000))
+      .map((l) => [l.account, l.amountComparative, /inventarios/i.test(l.label) ? '14' : /deudores/i.test(l.label) ? '13' : '?']);
+    expect(par).toHaveLength(2);
+    for (const [account, comparative, rotulo] of par) {
+      expect(rotulo).toBe(account);
+      expect(comparative).toBe(account === '13' ? M(-10_000_000) : M(-5_000_000));
+    }
+    expect(validar(out, pp).errors).toEqual([]);
+  });
+});
+
 describe('dos cortes — comparativo impracticable, nota determinista', () => {
   it('sin el corte 2023 no hay cifras comparativas del EFE ni del ECP, sólo la nota 3.14/10.21', () => {
     const pp = preprocesarTresCortes(csvDosCortes());

@@ -2126,7 +2126,7 @@ function comparativeCashFlowView(cf: NiifReportJson['cashFlow']): CashFlowStatem
       section: s.section,
       lines: s.lines
         .filter((l) => (l.amountComparative ?? null) !== null)
-        .map((l) => ({ label: l.label, amountPrimary: l.amountComparative as string })),
+        .map((l) => ({ account: l.account, label: l.label, amountPrimary: l.amountComparative as string })),
       netFlow: s.netFlowComparative ?? '0',
     })),
     netChange: cf.netChangeComparative ?? '0',

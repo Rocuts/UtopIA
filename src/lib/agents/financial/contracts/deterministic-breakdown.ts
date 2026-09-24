@@ -774,6 +774,8 @@ export function buildDeterministicCashFlow(
 // ---------------------------------------------------------------------------
 
 export interface CashFlowLineLike {
+  /** Código PUC que el renglón declara (el bloque "EFE VINCULANTE" lo muestra como [PUC xx]). */
+  readonly account?: string | null;
   readonly label: string;
   readonly amountPrimary: string;
   /** Columna comparativa (pendiente #3); ausente en los EFE de un periodo. */
@@ -1122,45 +1124,100 @@ function sourceRowCategory(row: BreakdownRow): CashFlowFlowCategory | null {
 }
 
 /**
+ * Relación entre el código PUC que declara un renglón y la clave de una
+ * partida determinista: 'exact' (misma clave, p. ej. "13" o "31/32/33/37"),
+ * 'prefix' (subcuenta de un grupo de la clave, p. ej. "1305" → "13") o null.
+ */
+function lineAccountMatch(lineAccount: string | null | undefined, rowAccount: string): 'exact' | 'prefix' | null {
+  const acc = (lineAccount ?? '').trim();
+  if (acc === '') return null;
+  if (acc === rowAccount) return 'exact';
+  const digits = acc.replace(/\D/g, '');
+  if (digits === '') return null;
+  if (digits === rowAccount.replace(/\D/g, '')) return 'exact';
+  const parts = rowAccount.split('/').filter((p) => /^\d{2,}$/.test(p));
+  return parts.some((p) => digits.startsWith(p)) ? 'prefix' : null;
+}
+
+/** Emparejamiento de un renglón del EFE emitido con su partida determinista. */
+export interface CashFlowLineMatch {
+  /** Partida de origen; `null` = renglón en $0 (no se evalúa) o sin partida. */
+  row: BreakdownRow | null;
+  /**
+   * Otras partidas del mismo importe entre las que el renglón se asignó por
+   * orden: ni su código PUC, ni su rótulo, ni la categoría que el rótulo
+   * afirma las distinguían. Vacío = asignación inequívoca.
+   */
+  tiedWith: BreakdownRow[];
+}
+
+/**
+ * Empareja cada renglón con importe del EFE emitido con una partida del EFE
+ * determinista de la misma actividad (multiconjunto por importe, tolerancia
+ * $0). Entre partidas del mismo importe decide, en este orden, el código PUC
+ * que declara el renglón (el bloque "EFE VINCULANTE" lo muestra), el rótulo
+ * idéntico al determinista y la categoría que el rótulo afirma; primero se
+ * asignan todos los renglones así identificados y después, por orden, los
+ * demás (`tiedWith` dice cuándo ese orden eligió entre partidas distintas).
+ * Lo usan el cruce renglón a renglón (E23) y la columna comparativa del EFE,
+ * que así sabe qué grupo PUC representa cada renglón que el modelo rotuló.
+ */
+export function matchCashFlowLinesToDeterministicDetailed(
+  lines: readonly CashFlowLineLike[],
+  rows: readonly BreakdownRow[],
+): CashFlowLineMatch[] {
+  const pool = rows.filter((r) => r.cents !== ZERO).map((r) => ({ row: r, used: false }));
+  const out: CashFlowLineMatch[] = lines.map(() => ({ row: null, tiedWith: [] }));
+  const amounts = lines.map((l) => parseCents(l.amountPrimary));
+  const claimsOf = lines.map((l) => cashFlowLabelClaims(l.label ?? ''));
+  const pending = new Set(lines.map((_, i) => i).filter((i) => amounts[i] !== ZERO));
+
+  const identifying: Array<(i: number, row: BreakdownRow) => boolean> = [
+    (i, row) => lineAccountMatch(lines[i].account, row.account) === 'exact',
+    (i, row) => lineAccountMatch(lines[i].account, row.account) === 'prefix',
+    (i, row) => row.label === lines[i].label,
+    (i, row) => {
+      const cat = sourceRowCategory(row);
+      return cat !== null && claimsOf[i].includes(cat);
+    },
+  ];
+  for (const identifies of identifying) {
+    for (const i of [...pending]) {
+      const match = pool.find((p) => !p.used && p.row.cents === amounts[i] && identifies(i, p.row));
+      if (!match) continue;
+      match.used = true;
+      out[i] = { row: match.row, tiedWith: [] };
+      pending.delete(i);
+    }
+  }
+  for (const i of pending) {
+    const candidates = pool.filter((p) => !p.used && p.row.cents === amounts[i]);
+    const match =
+      candidates.find((p) => {
+        const cat = sourceRowCategory(p.row);
+        return claimsOf[i].length === 0 || (cat !== null && claimsOf[i].includes(cat));
+      }) ?? candidates[0];
+    if (!match) continue;
+    match.used = true;
+    out[i] = { row: match.row, tiedWith: candidates.filter((p) => p !== match).map((p) => p.row) };
+  }
+  return out;
+}
+
+/** `matchCashFlowLinesToDeterministicDetailed` sin el detalle de empates. */
+export function matchCashFlowLinesToDeterministic(
+  lines: readonly CashFlowLineLike[],
+  rows: readonly BreakdownRow[],
+): Array<BreakdownRow | null> {
+  return matchCashFlowLinesToDeterministicDetailed(lines, rows).map((m) => m.row);
+}
+
+/**
  * Cruza cada renglón del EFE emitido contra las partidas del EFE determinista
  * de su misma actividad. Sólo aplica con el determinista conciliado (si no
  * concilia, E18 ya bloquea). Los renglones en $0 no se evalúan: no imprimen
  * cifra.
  */
-/**
- * Empareja cada renglón con importe del EFE emitido con una partida del EFE
- * determinista de la misma actividad (multiconjunto por importe, tolerancia
- * $0). Entre partidas del mismo importe se prefiere la que el rótulo afirma.
- * `null` = renglón en $0 (no se evalúa) o sin partida de origen. Lo usan el
- * cruce renglón a renglón (E23) y la columna comparativa del EFE, que así
- * sabe qué grupo PUC representa cada renglón que el modelo rotuló.
- */
-export function matchCashFlowLinesToDeterministic(
-  lines: readonly CashFlowLineLike[],
-  rows: readonly BreakdownRow[],
-): Array<BreakdownRow | null> {
-  const pool = rows.filter((r) => r.cents !== ZERO).map((r) => ({ row: r, used: false }));
-  return lines.map((line) => {
-    const amount = parseCents(line.amountPrimary);
-    if (amount === ZERO) return null;
-    const claims = cashFlowLabelClaims(line.label ?? '');
-    const candidates = pool.filter((p) => !p.used && p.row.cents === amount);
-    const match =
-      candidates.find((p) => {
-        const cat = sourceRowCategory(p.row);
-        return cat !== null && claims.includes(cat);
-      }) ??
-      candidates.find((p) => {
-        const cat = sourceRowCategory(p.row);
-        return claims.length === 0 || (cat !== null && claims.includes(cat));
-      }) ??
-      candidates[0];
-    if (!match) return null;
-    match.used = true;
-    return match.row;
-  });
-}
-
 export function crossCheckCashFlowLinesAgainstDeterministic(
   cashFlow: CashFlowStatementLike,
   deterministic: DeterministicCashFlow,
@@ -1725,8 +1782,9 @@ const NET_INCOME_NEUTRAL_LABEL = 'Utilidad (pérdida) neta del ejercicio';
  * aquí; las que el modelo hubiera escrito se descartan.
  *
  * EFE: cada renglón que el analista rotuló se identifica con su partida del
- * EFE determinista del periodo actual (mismo emparejamiento que E23) y recibe
- * el importe de la MISMA partida en el periodo comparativo, o $0 si esa
+ * EFE determinista del periodo actual (mismo emparejamiento que E23: importe
+ * y, entre partidas del mismo importe, código PUC, rótulo o categoría) y
+ * recibe el importe de la MISMA partida en el periodo comparativo, o $0 si esa
  * partida no se movió. Las partidas que sólo se movieron en el periodo
  * comparativo se añaden al final de su actividad con $0 en el periodo actual.
  * Un renglón sin partida de origen queda sin cifra comparativa (`null`): el
@@ -1755,7 +1813,22 @@ export function attachComparativeStatements(
         if (unused.has(k)) extra.push(r);
         else unused.set(k, r);
       }
-      const matches = matchCashFlowLinesToDeterministic(section.lines, primaryRows);
+      const matches = matchCashFlowLinesToDeterministicDetailed(section.lines, primaryRows);
+      const comparativeOf = (row: BreakdownRow): bigint =>
+        compRows.find((r) => cashFlowPresentationKey(r) === cashFlowPresentationKey(row))?.cents ?? ZERO;
+      // Renglones del mismo importe que ni el código PUC, ni el rótulo, ni su
+      // categoría distinguen: el orden decidió cuál es cuál. Si sus partidas
+      // difieren en el periodo comparativo, el rótulo del modelo podría quedar
+      // junto a la cifra comparativa de OTRA partida; esos renglones toman el
+      // rótulo y el código de la partida determinista que representan (su
+      // importe del periodo actual es el mismo, así que ninguna cifra cambia).
+      const ambiguousRows = new Set<BreakdownRow>();
+      for (const m of matches) {
+        if (m.row && m.tiedWith.some((t) => comparativeOf(t) !== comparativeOf(m.row!))) {
+          ambiguousRows.add(m.row);
+          for (const t of m.tiedWith) ambiguousRows.add(t);
+        }
+      }
       const take = (key: string): string => {
         const row = unused.get(key);
         if (!row) return '0';
@@ -1763,7 +1836,7 @@ export function attachComparativeStatements(
         return row.cents.toString();
       };
       const lines: CashFlowLineJson[] = section.lines.map((line, i) => {
-        const source = matches[i];
+        const source = matches[i].row;
         if (source) {
           const amountComparative = take(cashFlowPresentationKey(source));
           const comparativeCents = BigInt(amountComparative);
@@ -1773,6 +1846,7 @@ export function attachComparativeStatements(
             parseCents(line.amountPrimary) < ZERO !== comparativeCents < ZERO;
           return {
             ...line,
+            ...(ambiguousRows.has(source) ? { account: source.account, label: source.label } : {}),
             ...(signsDiffer ? { label: NET_INCOME_NEUTRAL_LABEL } : {}),
             amountComparative,
           };
