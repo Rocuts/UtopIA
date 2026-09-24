@@ -11,6 +11,13 @@
  *
  * NOTA LENIS: NO se agrega overflow-y-auto interno — la página hereda
  * data-lenis-prevent del workspace shell.
+ *
+ * Tipo societario (tributario-calc-01, integración W3-B): la reserva legal es
+ * obligatoria en S.A. (Art. 452 C.Co.) y Ltda. (Art. 371 C.Co.); en la S.A.S.
+ * sólo si los estatutos la prevén (Supersociedades 220-069664/2017). El panel
+ * lo recibe por props (si quien lo monta lo conoce) o del formulario, y lo
+ * reenvía a ContingencyReserveCard y al análisis. Sin él no se afirma
+ * obligatoriedad.
  */
 
 import { useCallback, useState } from 'react';
@@ -105,7 +112,20 @@ function StageIndicator({
 // Main panel
 // ---------------------------------------------------------------------------
 
-export function SurvivalModePanel() {
+/** Tipos societarios que decide la reserva legal (Arts. 452 y 371 C.Co.). */
+const ENTITY_TYPES = ['SAS', 'S.A.', 'Ltda.'] as const;
+
+export interface SurvivalModePanelProps {
+  /** Tipo societario ya conocido (SAS, S.A., Ltda.). */
+  entityType?: string | null;
+  /** S.A.S.: `true` si los estatutos prevén la reserva legal. */
+  bylawsRequireLegalReserve?: boolean | null;
+}
+
+export function SurvivalModePanel({
+  entityType: entityTypeProp = null,
+  bylawsRequireLegalReserve: bylawsProp = null,
+}: SurvivalModePanelProps = {}) {
   const { t, language } = useLanguage();
   const reduced = useReducedMotion();
   const { state, start, cancel, reset } = useEscudoSurvival();
@@ -116,6 +136,16 @@ export function SurvivalModePanel() {
   const [rawData, setRawData] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyNit, setCompanyNit] = useState('');
+  const [entityType, setEntityType] = useState<string>(entityTypeProp ?? '');
+  const [bylawsRequireLegalReserve, setBylawsRequireLegalReserve] = useState<boolean>(
+    bylawsProp === true,
+  );
+  const isSas = entityType.toUpperCase().replace(/[^A-Z]/g, '') === 'SAS';
+  // Sólo se reenvía lo que se conoce: sin tipo societario → null (N/D).
+  const legalEntity = {
+    entityType: entityType || null,
+    bylawsRequireLegalReserve: isSas ? bylawsRequireLegalReserve : null,
+  };
 
   const handleFileUpload = useCallback(async (file: File) => {
     const text = await file.text();
@@ -129,10 +159,21 @@ export function SurvivalModePanel() {
       company: {
         name: companyName.trim() || undefined,
         nit: companyNit.trim() || undefined,
+        // `undefined` (no `null`) para que el transporte HTTP lo omita.
+        entityType: legalEntity.entityType ?? undefined,
+        bylawsRequireLegalReserve: legalEntity.bylawsRequireLegalReserve ?? undefined,
       },
       language,
     });
-  }, [rawData, companyName, companyNit, language, start]);
+  }, [
+    rawData,
+    companyName,
+    companyNit,
+    language,
+    start,
+    legalEntity.entityType,
+    legalEntity.bylawsRequireLegalReserve,
+  ]);
 
   const handleReset = useCallback(() => {
     reset();
@@ -245,6 +286,50 @@ export function SurvivalModePanel() {
                   )}
                 />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="survival-entity-type"
+                  className="text-xs uppercase tracking-eyebrow text-n-500 font-medium"
+                >
+                  {language === 'es' ? 'Tipo societario (opcional)' : 'Entity type (optional)'}
+                </label>
+                <select
+                  id="survival-entity-type"
+                  value={entityType}
+                  onChange={(e) => setEntityType(e.target.value)}
+                  className={cn(
+                    'h-10 px-3 rounded-md text-sm',
+                    'bg-n-50 dark:bg-[rgba(10,10,10,0.5)]',
+                    'border border-n-300/60 dark:border-n-700/60',
+                    'text-n-800 dark:text-n-700',
+                    'focus:outline-none focus:border-area-escudo focus:ring-1 focus:ring-area-escudo',
+                    'transition-[border-color,box-shadow]',
+                  )}
+                >
+                  <option value="">{language === 'es' ? 'No indicado' : 'Not specified'}</option>
+                  {ENTITY_TYPES.map((tipo) => (
+                    <option key={tipo} value={tipo}>
+                      {tipo === 'SAS' ? 'S.A.S.' : tipo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {isSas && (
+                <div className="flex items-center gap-2 sm:pt-6">
+                  <input
+                    id="survival-bylaws-legal-reserve"
+                    type="checkbox"
+                    checked={bylawsRequireLegalReserve}
+                    onChange={(e) => setBylawsRequireLegalReserve(e.target.checked)}
+                    className="h-4 w-4 accent-area-escudo"
+                  />
+                  <label htmlFor="survival-bylaws-legal-reserve" className="text-sm text-n-700">
+                    {language === 'es'
+                      ? 'Los estatutos prevén reserva legal'
+                      : 'The bylaws provide for a legal reserve'}
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Run button */}
@@ -450,6 +535,8 @@ export function SurvivalModePanel() {
             }
             t={survival.cards.reserve}
             language={language}
+            entityType={legalEntity.entityType}
+            bylawsRequireLegalReserve={legalEntity.bylawsRequireLegalReserve}
           />
 
           {/* 5. Dividend Optimizer — full width on its own row */}
