@@ -172,6 +172,7 @@ export function SectionDivider({
 
       {/* Oversized numeral — bottom-right anchor (~200pt) */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: S6 + 20,
@@ -212,7 +213,7 @@ export function SectionDivider({
         />
       </View>
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel={sectionTitle} />
+      <PaginationFooter sectionLabel={sectionTitle} />
     </Page>
   );
 }

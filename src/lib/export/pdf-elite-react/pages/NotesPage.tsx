@@ -14,6 +14,7 @@ import {
   PaginationFooter,
   MarkdownToPdf,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -31,9 +32,10 @@ import {
   R_SM,
 } from '../tokens';
 
-// Landscape A4: width = PAGE_H (842), height = PAGE_W (595)
-const LW = PAGE_H; // 842 pt
-const LH = PAGE_W; // 595 pt
+// Landscape A4 (tokens.ts): width = PAGE_W (842), height = PAGE_H (595). Antes
+// LW = PAGE_H: con los tokens ya en apaisado la página salía vertical (595×842).
+const LW = PAGE_W; // 842 pt
+const LH = PAGE_H; // 595 pt
 const MARGIN = 48;
 const CONTENT_W = LW - MARGIN * 2;
 const COL_GAP = 16;
@@ -181,8 +183,11 @@ function NoteBlockPage({ block, index }: NotePageProps) {
         position: 'relative',
       }}
     >
+      {/* La primera nota abre la sección en la tabla de contenido. */}
+      {index === 1 ? <TocAnchor id="notes" /> : null}
       {/* Topo ornament — bottom-left corner, very low opacity */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -194,7 +199,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
       >
         <TopoOrnament
           variant="lines"
-          opacity={1}
+          opacity={0.06}
           areaAccent="verdad"
           width={220}
           height={180}
@@ -211,7 +216,7 @@ function NoteBlockPage({ block, index }: NotePageProps) {
       {/* Two-column body — wrappable */}
       <TwoColumnBody markdown={block.bodyMarkdown} />
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Notas" />
+      <PaginationFooter sectionLabel="Notas" />
     </Page>
   );
 }

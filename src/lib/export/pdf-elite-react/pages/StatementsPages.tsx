@@ -19,6 +19,7 @@ import {
   NumberedSectionHeader,
   PageNumberBadge,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CHARCOAL_700,
@@ -30,7 +31,7 @@ import {
   FONT_SANS,
   FOREST_700,
   FOREST_900,
-  PAGE_H,
+  PAGE_BOTTOM_RESERVED,
   PAGE_MARGIN,
   PAGE_W,
   R_PILL,
@@ -51,6 +52,25 @@ import {
 } from '../tokens';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
+// Reserva inferior de las páginas de estados: GoldRule (14pt) + PageNumberBadge
+// (20pt + 24pt de diámetro) caben en PAGE_BOTTOM_RESERVED. Antes se reservaban
+// 104pt y un estado que casi llenaba la hoja dejaba sola su banda de totales (o
+// el total del panel derecho) en una página siguiente casi vacía
+// (reportes-export-21).
+const BOTTOM_PAD = PAGE_BOTTOM_RESERVED + S2;
+/**
+ * Máximo de cifras sueltas en el panel derecho. Con más, el panel muestra sólo
+ * los grupos y sus totales (la tabla de la izquierda tiene todas las cifras):
+ * las cifras sin tope desbordaban el panel a una página casi vacía.
+ */
+const PANEL_ROW_BUDGET = 8;
+/**
+ * La banda inferior de los estados de página completa repite totales que ya
+ * están en la tabla. Con más renglones no cabe en la hoja: se partía entre dos
+ * páginas o quedaba sola en una página casi vacía (reportes-export-21). Se
+ * omite entonces; `wrap={false}` impide que se parta.
+ */
+const BAND_MAX_ROWS = 10;
 // Total content width = PAGE_W (842). We use full-bleed for the forest panel so
 // there is no right margin on the forest side.
 const LEFT_W = Math.round(PAGE_W * 0.60);  // 505pt — cream side
@@ -426,7 +446,10 @@ function RightPanel({
   pills: Array<{ label: string }>;
   finalTotal?: string;
 }) {
-  const groups = buildAbstractionGroups(table);
+  const allGroups = buildAbstractionGroups(table);
+  const figureCount = allGroups.reduce((acc, g) => acc + g.rows.length, 0);
+  const groups =
+    figureCount > PANEL_ROW_BUDGET ? allGroups.map((g) => ({ ...g, rows: [] as string[] })) : allGroups;
 
   // Derive finalTotal from last total row if not passed explicitly
   const derivedTotal = finalTotal ?? (() => {
@@ -441,11 +464,8 @@ function RightPanel({
     <View
       style={{
         width: RIGHT_W,
-        minHeight: PAGE_H,
-        backgroundColor: FOREST_900,
         paddingHorizontal: RIGHT_PAD_H,
         paddingTop: PAGE_MARGIN,
-        paddingBottom: PAGE_MARGIN + 48,
         flexDirection: 'column',
       }}
     >
@@ -495,7 +515,7 @@ function RightPanel({
       ) : null}
 
       {/* Abstraction groups */}
-      <View style={{ flexDirection: 'column', gap: 20, flex: 1 }}>
+      <View style={{ flexDirection: 'column', gap: 20 }}>
         {groups.map((g, gi) => {
           const rowLineH = Math.round(TYPE_BODY * 1.6); // ≈16pt
           const bracketH = Math.max(rowLineH, g.rows.length * rowLineH);
@@ -611,26 +631,35 @@ interface SplitPageConfig {
 function SplitStatementPage({
   table,
   cfg,
-  pageNum,
+  opensSection = false,
 }: {
   table: ParsedTable;
   cfg: SplitPageConfig;
-  pageNum: number;
+  /** El primer estado abre la sección en la tabla de contenido. */
+  opensSection?: boolean;
 }) {
   return (
     <Page
       size="A4"
       orientation="landscape"
-      style={{ backgroundColor: CREAM_0, flexDirection: 'row' }}
+      // Los márgenes superior e inferior van en la página, no en el panel:
+      // con `minHeight: PAGE_H` y el relleno inferior dentro del panel, un
+      // estado que casi llenaba la hoja empujaba ese relleno a una página
+      // nueva en blanco (reportes-export-21). El relleno de la página se
+      // repite bien en cada página física si el estado se parte.
+      style={{
+        backgroundColor: CREAM_0,
+        flexDirection: 'row',
+        paddingTop: PAGE_MARGIN,
+        paddingBottom: BOTTOM_PAD,
+      }}
     >
+      {opensSection ? <TocAnchor id="statements" /> : null}
       {/* ── LEFT PANEL (cream) ───────────────────────────────────────────── */}
       <View
         style={{
           width: LEFT_W,
-          minHeight: PAGE_H,
           paddingLeft: LEFT_MARGIN,
-          paddingTop: PAGE_MARGIN,
-          paddingBottom: PAGE_MARGIN + 56,
           paddingRight: S4,
           flexDirection: 'column',
         }}
@@ -644,14 +673,21 @@ function SplitStatementPage({
         <StatementIdentification table={table} />
 
         {/* Table */}
-        <View style={{ flex: 1, marginTop: S3 }} wrap>
+        <View style={{ marginTop: S3 }} wrap>
           <LeftTable table={table} />
           <StatementFootnotes table={table} />
         </View>
       </View>
 
       {/* ── RIGHT PANEL (forest) — full height ──────────────────────────── */}
-      <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: RIGHT_W }}>
+      {/* Fondo `fixed` a toda la altura y contenido absoluto sin `bottom`: un
+          absoluto que llega al margen inferior hace que react-pdf parta la
+          página y emita otra casi en blanco (reportes-export-21). */}
+      <View
+        fixed
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: RIGHT_W, backgroundColor: FOREST_900 }}
+      />
+      <View style={{ position: 'absolute', top: 0, right: 0, width: RIGHT_W }}>
         <RightPanel
           table={table}
           titleLead={cfg.titleLead}
@@ -663,7 +699,7 @@ function SplitStatementPage({
 
       {/* ── FOOTER (spans full width, over the seam) ────────────────────── */}
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNum} />
+      <PageNumberBadge />
     </Page>
   );
 }
@@ -712,11 +748,9 @@ export function summaryBandRows(
 function FullStatementPage({
   table,
   cfg,
-  pageNum,
 }: {
   table: ParsedTable;
   cfg: FullPageConfig;
-  pageNum: number;
 }) {
   // Build a forest summary band from the current-period total rows
   const totalRows = summaryBandRows(table, cfg.bandCell);
@@ -735,7 +769,7 @@ function FullStatementPage({
         backgroundColor: CREAM_0,
         paddingHorizontal: PAGE_MARGIN,
         paddingTop: PAGE_MARGIN,
-        paddingBottom: PAGE_MARGIN + 56,
+        paddingBottom: BOTTOM_PAD,
       }}
     >
       {/* Section header */}
@@ -768,14 +802,15 @@ function FullStatementPage({
       </View>
 
       {/* Table */}
-      <View wrap style={{ flex: 1 }}>
+      <View wrap>
         <LeftTable table={table} containerWidth={fullContentW} />
         <StatementFootnotes table={table} />
       </View>
 
       {/* Forest summary band at the bottom */}
-      {totalRows.length > 0 && (
+      {totalRows.length > 0 && table.rows.length <= BAND_MAX_ROWS && (
         <View
+          wrap={false}
           style={{
             marginTop: S4,
             backgroundColor: FOREST_900,
@@ -815,7 +850,7 @@ function FullStatementPage({
       )}
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNum} />
+      <PageNumberBadge />
     </Page>
   );
 }
@@ -823,8 +858,6 @@ function FullStatementPage({
 // ─── Public API ──────────────────────────────────────────────────────────────
 interface Props {
   doc: EditorialReport;
-  /** Starting page number for the first statement page. Defaults to 1. */
-  startPage?: number;
 }
 
 /**
@@ -837,7 +870,7 @@ interface Props {
  * Spread into <Document> children:
  *   {StatementsPages({ doc })}
  */
-export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactElement[] {
+export function StatementsPages({ doc }: Props): React.ReactElement[] {
   const { balance, income, cashFlow, equity } = doc.statements;
   // Citas según el grupo NIIF de la empresa (reportes-export-16): Secciones
   // 4/5/7/6 de NIIF para las PYMES o NIC 1/NIC 7 para Grupo 1 — nunca NIIF 1,
@@ -850,7 +883,7 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <SplitStatementPage
       key="balance"
       table={balance}
-      pageNum={startPage}
+      opensSection
       cfg={{
         statementKey: 'balance',
         pageIndex: '01.',
@@ -867,7 +900,6 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <SplitStatementPage
       key="income"
       table={income}
-      pageNum={startPage + 1}
       cfg={{
         statementKey: 'income',
         pageIndex: '02.',
@@ -884,7 +916,6 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <FullStatementPage
       key="cashflow"
       table={cashFlow}
-      pageNum={startPage + 2}
       cfg={{
         pageIndex: '03.',
         sectionHeaderTitle: 'ESTADO DE FLUJOS DE EFECTIVO',
@@ -898,7 +929,6 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
     <FullStatementPage
       key="equity"
       table={equity}
-      pageNum={startPage + 3}
       cfg={{
         pageIndex: '04.',
         sectionHeaderTitle: 'CAMBIOS EN EL PATRIMONIO',

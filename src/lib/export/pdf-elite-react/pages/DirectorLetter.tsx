@@ -15,6 +15,7 @@ import {
   WatermarkWord,
   MarkdownToPdf,
   PaginationFooter,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -105,11 +106,13 @@ export function DirectorLetter({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="director" />
       {/* Background watermark */}
       <WatermarkWord text="Liderazgo" opacity={0.04} />
 
       {/* Bottom-left topo decoration */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -121,7 +124,7 @@ export function DirectorLetter({ doc }: Props) {
       >
         <TopoOrnament
           variant="lines"
-          opacity={1}
+          opacity={0.06}
           areaAccent="futuro"
           seed={55}
           width={PAGE_W * 0.35}
@@ -263,7 +266,7 @@ export function DirectorLetter({ doc }: Props) {
         </Text>
       </View>
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Liderazgo" />
+      <PaginationFooter sectionLabel="Liderazgo" />
     </Page>
   );
 }

@@ -9,6 +9,8 @@
 //   - Bottom sand pill with disclaimer text in small caps monospace.
 //   - Emphasis paragraphs (NIA 706 §A1) rendered above disclaimer when present.
 //   - GoldRule (via PaginationFooter) + PageNumberBadge.
+//   - Contenido centrado con márgenes `auto` (sin páginas en blanco si desborda)
+//     y crédito con el año del ejercicio (reportes-export-21).
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
 import type { EditorialReport } from '../types';
@@ -85,11 +87,39 @@ function buildSignatories(doc: EditorialReport): [SignatorySlot, SignatorySlot, 
 
 const DISC_SIZE = 40;
 
+/**
+ * Crédito de la contraportada con el año del ejercicio del informe
+ * (reportes-export-21): antes decía "Colombia 2026" fijo, también en un
+ * informe del ejercicio 2025. Sin año identificable no se afirma ninguno.
+ */
+export function closingCredit(fiscalPeriod: string | null | undefined): string {
+  const year = /(?:19|20)\d{2}/.exec(fiscalPeriod ?? '')?.[0];
+  const base = 'Generado por 1+1 — Plataforma Contable y Tributaria · Colombia';
+  return year ? `${base} · Ejercicio ${year}` : base;
+}
+
+/**
+ * Bloques de firma (Revisor Fiscal, Contador, Representante Legal) separados
+ * por líneas vacías en `signatureBlock.rendered`. Se presentan en columnas:
+ * apilados desbordaban la contraportada (reportes-export-21).
+ */
+function signatureColumns(rendered: string): string[][] {
+  const blocks: string[][] = [[]];
+  for (const line of rendered.split('\n')) {
+    if (line.trim().length === 0) {
+      if (blocks[blocks.length - 1].length > 0) blocks.push([]);
+    } else {
+      blocks[blocks.length - 1].push(line);
+    }
+  }
+  return blocks.filter((b) => b.length > 0);
+}
+
 export function ClosingPage({ doc }: Props) {
   const signatories = buildSignatories(doc);
   const emphasis = doc.emphasisParagraphs ?? [];
-  const signatureLines = (doc.signatureBlock?.rendered ?? '').split('\n');
-  const hasSignatureBlock = signatureLines.some(l => l.trim().length > 0);
+  const signatureBlocks = signatureColumns(doc.signatureBlock?.rendered ?? '');
+  const hasSignatureBlock = signatureBlocks.length > 0;
 
   return (
     <Page
@@ -118,7 +148,7 @@ export function ClosingPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="ribbons"
-          opacity={1}
+          opacity={0.08}
           areaAccent="valor"
           seed={21}
           width={PAGE_W * 0.45}
@@ -126,8 +156,11 @@ export function ClosingPage({ doc }: Props) {
         />
       </View>
 
-      {/* Topo corner-bl decoration */}
+      {/* Topo corner-bl decoration. `fixed`: un absoluto que invade el margen
+          inferior hace que react-pdf parta la página y emita una página
+          adicional sólo con el adorno (reportes-export-21). */}
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -139,7 +172,7 @@ export function ClosingPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="lines"
-          opacity={1}
+          opacity={0.08}
           areaAccent="futuro"
           seed={88}
           width={PAGE_W * 0.45}
@@ -147,13 +180,16 @@ export function ClosingPage({ doc }: Props) {
         />
       </View>
 
-      {/* Center layout column */}
+      {/* Center layout column. Márgenes verticales `auto` en lugar de
+          `flex: 1` + `justifyContent: 'center'`: con contenido más alto que la
+          hoja, el centrado lo desplazaba hacia arriba y react-pdf emitía
+          páginas en blanco antes de la contraportada (reportes-export-21). */}
       <View
         style={{
-          flex: 1,
+          marginTop: 'auto',
+          marginBottom: 'auto',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
           width: '100%',
         }}
       >
@@ -179,7 +215,7 @@ export function ClosingPage({ doc }: Props) {
               textAlign: 'center',
             }}
           >
-            Generado por 1+1 — Plataforma Contable y Tributaria Colombia 2026
+            {closingCredit(doc.meta.fiscalPeriod)}
           </Text>
         </View>
 
@@ -282,41 +318,52 @@ export function ClosingPage({ doc }: Props) {
           ))}
         </View>
 
-        {/* Dynamic signature block from fiscal-opinion signatories */}
+        {/* Dynamic signature block from fiscal-opinion signatories — una
+            columna por firmante. */}
         {hasSignatureBlock ? (
-          <View style={{ width: '100%', maxWidth: 460, alignItems: 'center', marginBottom: S5 }}>
-            {signatureLines.map((line, i) => {
-              const isUnderline = /^_{20,}$/.test(line.trim());
-              const isEmpty = line.trim().length === 0;
-              if (isEmpty) return <View key={`sl-${i}`} style={{ height: 6 }} />;
-              if (isUnderline) {
-                return (
-                  <View
-                    key={`sl-${i}`}
-                    style={{
-                      width: 200,
-                      borderTopWidth: 0.5,
-                      borderTopColor: N400,
-                      marginTop: S3,
-                    }}
-                  />
-                );
-              }
-              return (
-                <Text
-                  key={`sl-${i}`}
-                  style={{
-                    fontFamily: FONT_SANS,
-                    fontSize: 8,
-                    color: N300,
-                    textAlign: 'center',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {line}
-                </Text>
-              );
-            })}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: S5,
+              width: '100%',
+              marginBottom: S5,
+            }}
+          >
+            {signatureBlocks.map((block, bi) => (
+              <View key={`sb-${bi}`} style={{ width: 170, alignItems: 'center' }}>
+                {block.map((line, i) => {
+                  if (/^_{20,}$/.test(line.trim())) {
+                    return (
+                      <View
+                        key={`sl-${bi}-${i}`}
+                        style={{
+                          width: 150,
+                          borderTopWidth: 0.5,
+                          borderTopColor: N400,
+                          marginTop: S3,
+                          marginBottom: S1,
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <Text
+                      key={`sl-${bi}-${i}`}
+                      style={{
+                        fontFamily: FONT_SANS,
+                        fontSize: 8,
+                        color: N300,
+                        textAlign: 'center',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {line}
+                    </Text>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -363,7 +410,7 @@ export function ClosingPage({ doc }: Props) {
         </View>
       </View>
 
-      <PaginationFooter pageNumber={0} totalPages={0} sectionLabel="Cierre" />
+      <PaginationFooter sectionLabel="Cierre" />
     </Page>
   );
 }

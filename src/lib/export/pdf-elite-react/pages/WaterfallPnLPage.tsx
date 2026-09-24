@@ -13,6 +13,7 @@ import {
   NormativePill,
   PageNumberBadge,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import { WaterfallPnL } from '../charts/WaterfallPnL';
 import {
@@ -30,10 +31,9 @@ import {
 
 interface Props {
   doc: EditorialReport;
-  pageNumber?: number;
 }
 
-export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
+export function WaterfallPnLPage({ doc }: Props) {
   const items = doc.waterfall.items;
 
   const total = items.find((it) => it.sign === 'total');
@@ -61,8 +61,9 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="waterfall" />
       {/* Topo ornament — bottom-left, low opacity (spec §3.7) */}
-      <View style={{ position: 'absolute', bottom: 40, left: 0 }}>
+      <View fixed style={{ position: 'absolute', bottom: 40, left: 0 }}>
         <TopoOrnament variant="corner-bl" opacity={0.12} areaAccent="valor" seed={77} width={180} height={180} />
       </View>
 
@@ -110,7 +111,7 @@ export function WaterfallPnLPage({ doc, pageNumber = 1 }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={pageNumber} />
+      <PageNumberBadge />
     </Page>
   );
 }

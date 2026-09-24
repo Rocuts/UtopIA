@@ -21,12 +21,13 @@
 //   2. NormativeAppendix
 //   3. ClosingPage
 //
-// Pagination strategy: Each page calls <PaginationFooter /> internally. That
-// primitive uses React-PDF's `render` slot pattern via fixed positioning, so
-// it sees `pageNumber` / `totalPages` at render time. We do NOT thread page
-// numbers through component props — the primitive handles it. (Polishing the
-// numbering across multi-page wraps inside StatementsPages / NotesPage is a
-// follow-up; the count will already work for single-page sections.)
+// Pagination strategy: PaginationFooter / PageNumberBadge read the REAL page
+// number (and total) at layout time through React-PDF's `render` prop and are
+// `fixed`, so a section that wraps numbers every physical page. Page numbers
+// are never threaded through props (reportes-export-21: the pages passed 0 and
+// printed "00 / 00"). The table of contents is numbered by `render.ts`: a
+// first layout pass collects the page of each <TocAnchor> through
+// `onTocAnchor`, and the second pass prints them (`resolveTocEntries`).
 import React from 'react';
 import { Document } from '@react-pdf/renderer';
 import type { EditorialReport } from './types';
@@ -48,12 +49,15 @@ import { ProjectedCashFlowPage } from './pages/ProjectedCashFlowPage';
 import { ShareholderMinutesPage } from './pages/ShareholderMinutesPage';
 import { AuditFindingsPage } from './pages/AuditFindingsPage';
 import { QualityMetaAuditPage } from './pages/QualityMetaAuditPage';
+import { TocAnchorContext, type TocAnchorCollector } from './primitives/TocAnchor';
 
 interface Props {
   doc: EditorialReport;
+  /** Pasada de medición de `render.ts`: recibe la página de cada ancla. */
+  onTocAnchor?: TocAnchorCollector;
 }
 
-export function EditorialReportDoc({ doc }: Props) {
+export function EditorialReportDoc({ doc, onTocAnchor }: Props) {
   const isBlocked = doc.meta.watermark === 'BLOQUEADO';
 
   if (isBlocked) {
@@ -99,6 +103,7 @@ export function EditorialReportDoc({ doc }: Props) {
       author="1+1"
       subject="Informe NIIF Élite"
     >
+      <TocAnchorContext.Provider value={onTocAnchor ?? null}>
       <CoverPage doc={doc} />
       {hasDirectorBody && <DirectorLetter doc={doc} />}
       <TocPage doc={doc} />
@@ -143,6 +148,7 @@ export function EditorialReportDoc({ doc }: Props) {
       {showQuality && <QualityMetaAuditPage doc={doc} />}
       <NormativeAppendix doc={doc} />
       <ClosingPage doc={doc} />
+      </TocAnchorContext.Provider>
     </Document>
   );
 }

@@ -24,6 +24,7 @@ export function WatermarkWord(props: WatermarkWordProps): React.ReactElement {
 
   return (
     <View
+      fixed
       style={{
         position: 'absolute',
         bottom: -20,

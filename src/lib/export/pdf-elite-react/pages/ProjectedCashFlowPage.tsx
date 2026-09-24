@@ -18,6 +18,7 @@ import {
   GoldRule,
   MarkdownToPdf,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CREAM_50,
@@ -50,6 +51,7 @@ export function ProjectedCashFlowPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="projectedCashFlow" />
       <View
         style={{
           position: 'absolute',
@@ -62,7 +64,7 @@ export function ProjectedCashFlowPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="corner-tr"
-          opacity={1}
+          opacity={0.08}
           areaAccent="futuro"
           seed={91}
           width={PAGE_W * 0.28}
@@ -93,7 +95,7 @@ export function ProjectedCashFlowPage({ doc }: Props) {
       </View>
 
       <GoldRule />
-      <PageNumberBadge pageNumber={0} />
+      <PageNumberBadge />
     </Page>
   );
 }

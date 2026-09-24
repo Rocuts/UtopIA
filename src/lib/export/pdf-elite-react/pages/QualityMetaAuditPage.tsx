@@ -23,6 +23,7 @@ import {
   PageNumberBadge,
   GoldRule,
   TopoOrnament,
+  TocAnchor,
 } from '../primitives';
 import {
   CREAM_50,
@@ -184,7 +185,9 @@ export function QualityMetaAuditPage({ doc }: Props) {
         position: 'relative',
       }}
     >
+      <TocAnchor id="quality" />
       <View
+        fixed
         style={{
           position: 'absolute',
           bottom: 0,
@@ -196,7 +199,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
       >
         <TopoOrnament
           variant="corner-bl"
-          opacity={1}
+          opacity={0.07}
           areaAccent="verdad"
           seed={42}
           width={PAGE_W * 0.26}
@@ -388,7 +391,7 @@ export function QualityMetaAuditPage({ doc }: Props) {
       {q.sello ? <SelloBanner sello={q.sello} /> : null}
 
       <GoldRule />
-      <PageNumberBadge pageNumber={0} />
+      <PageNumberBadge />
     </Page>
   );
 }

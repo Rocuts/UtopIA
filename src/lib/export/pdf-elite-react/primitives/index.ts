@@ -50,6 +50,9 @@ export type { MarkdownToPdfProps, MarkdownTone } from './MarkdownToPdf';
 
 // ── Legacy — kept for backwards-compat; Team Z retires at final integration ─
 
+export { TocAnchor, TocAnchorContext } from './TocAnchor';
+export type { TocAnchorCollector, TocAnchorProps } from './TocAnchor';
+
 export { PaginationFooter } from './PaginationFooter';
 export type { PaginationFooterProps } from './PaginationFooter';
 

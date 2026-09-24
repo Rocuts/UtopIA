@@ -2,11 +2,10 @@
 // Matches the ESLOP reference: small circle ~24pt diameter, forest numeral
 // inside, positioned absolutely so it sits flush at the page bottom-right.
 //
-// Usage: place inside a <Page> component. The badge reads pageNumber and
-// totalPages from react-pdf's render-prop canvas context via the `render`
-// prop pattern — but since Page.render is not directly composable in JSX
-// children, callers should pass the page number explicitly after forwarding
-// it from their Page's render prop (see PaginationFooter pattern).
+// Usage: place inside a <Page> component. Without `pageNumber` the numeral is
+// the REAL page of the document, read at layout time through react-pdf's
+// `render` prop (auditoría 2026-09-24, reportes-export-21: the pages passed 0
+// or a per-section index and the PDF printed "0", "1", "1"...).
 // ───────────────────────────────────────────────────────────────────────────
 
 import * as React from 'react';
@@ -31,8 +30,11 @@ const BADGE_BG = GOLD_300;
 const BADGE_NUMERAL_COLOR = N1000;
 
 export interface PageNumberBadgeProps {
-  /** Current 1-based page number. Forward from Page render prop. */
-  pageNumber: number;
+  /**
+   * Número fijo, sólo para vistas aisladas. Omitido (todas las páginas del
+   * informe), el número real de la página en el documento.
+   */
+  pageNumber?: number;
   /**
    * Distance from right edge (defaults to PAGE_MARGIN / 2 so the badge
    * sits inside the margin column without overlapping body text).
@@ -49,24 +51,15 @@ export interface PageNumberBadgeProps {
  * Circular cream badge with a dark numeral. Absolute-positioned bottom-right.
  * Caller must place this inside a `<Page>` (or a full-bleed absolute wrapper).
  *
- * Pattern for pages using react-pdf's dynamic page numbers:
- *
- * ```tsx
- * <Page>
- *   {({ pageNumber }) => (
- *     <>
- *       <PageNumberBadge pageNumber={pageNumber} />
- *       ... page content ...
- *     </>
- *   )}
- * </Page>
- * ```
+ * `fixed`: se repite en cada página física de una `<Page>` que se parte.
  */
 export function PageNumberBadge(props: PageNumberBadgeProps): React.ReactElement {
   const { pageNumber, right = PAGE_MARGIN / 2, bottom = 20 } = props;
+  const staticPage = typeof pageNumber === 'number' && pageNumber > 0 ? pageNumber : null;
 
   return (
     <View
+      fixed
       style={{
         position: 'absolute',
         bottom,
@@ -85,10 +78,14 @@ export function PageNumberBadge(props: PageNumberBadgeProps): React.ReactElement
           fontWeight: 'bold',
           fontSize: TYPE_CAPTION,
           color: BADGE_NUMERAL_COLOR,
-          lineHeight: 1,
+          // Sin `lineHeight`: react-pdf no dibuja el texto dinámico
+          // (`render`) de un <Text> con interlineado explícito.
         }}
+        // Sin la clave `render` en modo fijo: react-pdf trata como dinámico todo
+        // nodo que la tenga, aunque valga undefined.
+        {...(staticPage === null ? { render: ({ pageNumber: n }: { pageNumber: number }) => String(n) } : {})}
       >
-        {String(pageNumber)}
+        {staticPage === null ? '' : String(staticPage)}
       </Text>
     </View>
   );
