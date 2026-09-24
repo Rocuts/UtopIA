@@ -22,7 +22,11 @@ export function makeCoherentNiifReport(overrides: Partial<NiifReportJson> = {}):
     balanceSheet: {
       assets: [line('11', '170000'), line('13', '830000')],
       liabilities: [line('22', '400000')],
-      equity: [line('31', '600000')],
+      // Desglose por grupo PUC coherente con el ECP (capital 31, reserva 33,
+      // resultado 36, acumulados 37). Auditoría 2026-09-24 (E21): un único
+      // renglón "31" por el patrimonio total imprimía un capital que no es el
+      // del balance de prueba.
+      equity: [line('31', '300000'), line('33', '50000'), line('36', '200000'), line('37', '50000')],
       totalAssetsPrimary: '1000000',
       totalAssetsComparative: null,
       totalLiabilitiesPrimary: '400000',

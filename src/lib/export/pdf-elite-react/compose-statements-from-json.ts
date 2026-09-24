@@ -20,7 +20,8 @@ import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financia
 import {
   CURRENCY_NOTE,
   comparativeNotPresentedLegend,
-  incomeStatementTotalRows,
+  incomeStatementPresentationRows,
+  normalizeNiifStatementLabels,
   presentedLineCents,
   statementDateLabel,
   type PeriodoTipo,
@@ -177,14 +178,26 @@ function totalCells(
   return cells;
 }
 
+/**
+ * Rótulos deterministas antes de imprimir (auditoría 2026-09-24, e2e-niif-09):
+ * grupos PUC con el rótulo del catálogo, filas de apertura/cierre/resultado
+ * del ECP con el periodo del informe y el calificativo del resultado según su
+ * signo. Idempotente: el orquestador ya lo aplicó; aquí protege el JSON que
+ * llega del cliente.
+ */
+function presentable(json: NiifReportJson, ctx: StatementTableContext | undefined): NiifReportJson {
+  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: ctx?.primaryPeriodoTipo }).json;
+}
+
 // ---------------------------------------------------------------------------
 // Tablas
 // ---------------------------------------------------------------------------
 
 export function niifJsonToBalanceTable(
-  json: NiifReportJson,
+  source: NiifReportJson,
   ctx?: StatementTableContext,
 ): ParsedTable {
+  const json = presentable(source, ctx);
   const b = json.balanceSheet;
   const hasComparative = json.company.comparativePeriod !== null;
   const rows: ParsedTableRow[] = [];
@@ -307,23 +320,36 @@ function buildEquationTrailer(
 }
 
 export function niifJsonToIncomeTable(
-  json: NiifReportJson,
+  source: NiifReportJson,
   ctx?: StatementTableContext,
 ): ParsedTable {
+  const json = presentable(source, ctx);
   const p = json.incomeStatement;
   const hasComparative = json.company.comparativePeriod !== null;
-  const rows: ParsedTableRow[] = p.lines.map((l) => lineToRow(l, hasComparative));
-  // Totales (UTILIDAD/PÉRDIDA según el signo, ORI y resultado integral total —
-  // NIIF para las PYMES 5.5 / NIC 1.81A, reportes-export-01/-15) con la regla
-  // compartida por el Markdown y el Excel: un total ya emitido como renglón no
-  // se duplica.
-  for (const t of incomeStatementTotalRows(p)) {
-    rows.push({
-      account: t.label,
-      cells: totalCells(t.primary, t.comparative, hasComparative),
-      emphasis: 'total',
-    });
-  }
+  // Regla compartida con el Markdown y el Excel (`incomeStatementPresentationRows`,
+  // auditoría 2026-09-24 e2e-niif-01): los escalones de la cascada (UB, EBIT,
+  // UAI, UN, ORI y resultado integral total — NIIF para las PYMES 5.5 / NIC
+  // 1.81A) se imprimen SIEMPRE desde los campos anclados del JSON, con el
+  // rótulo según el signo; un renglón del analista no los sustituye.
+  const rows: ParsedTableRow[] = incomeStatementPresentationRows(p).map((r) =>
+    r.total
+      ? {
+          account: r.label,
+          cells: totalCells(r.amountPrimary, r.amountComparative, hasComparative),
+          emphasis: 'total' as const,
+        }
+      : lineToRow(
+          {
+            account: r.account,
+            label: r.label,
+            amountPrimary: r.amountPrimary,
+            amountComparative: r.amountComparative,
+            level: r.level as StatementLineJson['level'],
+            isAbsolute: r.isAbsolute,
+          },
+          hasComparative,
+        ),
+  );
 
   const meta = presentationMeta(json, 'period', ctx, p.notes);
   // ingesta-09: comparativo de saldos de apertura → sin P&G del periodo
@@ -347,9 +373,10 @@ export function niifJsonToIncomeTable(
 }
 
 export function niifJsonToCashFlowTable(
-  json: NiifReportJson,
+  source: NiifReportJson,
   ctx?: StatementTableContext,
 ): ParsedTable {
+  const json = presentable(source, ctx);
   const cf = json.cashFlow;
   const sectionLabel = {
     operating: 'ACTIVIDADES DE OPERACIÓN',
@@ -394,9 +421,10 @@ export function niifJsonToCashFlowTable(
 }
 
 export function niifJsonToEquityTable(
-  json: NiifReportJson,
+  source: NiifReportJson,
   ctx?: StatementTableContext,
 ): ParsedTable {
+  const json = presentable(source, ctx);
   const ec = json.equityChanges;
   const headers = [
     'Movimiento',

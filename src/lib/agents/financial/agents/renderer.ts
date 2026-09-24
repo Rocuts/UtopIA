@@ -37,7 +37,9 @@
 
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import {
-  incomeStatementTotalRows,
+  incomeStatementPresentationRows,
+  normalizeNiifStatementLabels,
+  openingPygNotPresented,
   presentedLineCents,
 } from '@/lib/export/statement-presentation';
 import type { NiifReportJson } from '../contracts/niif-report';
@@ -377,26 +379,40 @@ export function renderIncomeStatement(json: NiifReportJson): string {
     '',
   ].join('\n');
 
+  // Comparativo de saldos de apertura (ingesta-09): sin P&G del periodo
+  // anterior la columna comparativa del ERI es N/D, como en el PDF y el Excel.
+  const pygNd = hasComparative && openingPygNotPresented(p);
   const rows: MarkdownTableRow[] = [];
-  for (const line of p.lines) {
-    rows.push(lineToTableRow(line, hasComparative));
-  }
-
-  // Totales canónicos del ERI — siempre en negrita. Misma lista, rótulos y
-  // orden que el PDF Élite y el Excel (`incomeStatementTotalRows`): PÉRDIDA
-  // cuando el total es negativo, ORI y RESULTADO INTEGRAL TOTAL = neto + ORI
-  // (reportes-export-01/-15); un total ya emitido como renglón no se duplica.
-  for (const t of incomeStatementTotalRows(p)) {
-    rows.push({
-      label: t.label,
-      values: hasComparative
-        ? [
-            fmtTotal(t.primary),
-            t.comparative !== null ? fmtTotal(t.comparative) : NO_COMPARATIVE_PLACEHOLDER,
-          ]
-        : [fmtTotal(t.primary)],
-      bold: true,
-    });
+  // Misma regla que el PDF Élite y el Excel (`incomeStatementPresentationRows`,
+  // auditoría 2026-09-24 e2e-niif-01): los escalones de la cascada se imprimen
+  // SIEMPRE desde los campos anclados del JSON (PÉRDIDA cuando el total es
+  // negativo, ORI y RESULTADO INTEGRAL TOTAL = neto + ORI); un renglón del
+  // analista con rótulo de total no los sustituye ni se duplica.
+  for (const r of incomeStatementPresentationRows(p)) {
+    const row = r.total
+      ? {
+          label: r.label,
+          values: hasComparative
+            ? [
+                fmtTotal(r.amountPrimary),
+                r.amountComparative !== null ? fmtTotal(r.amountComparative) : NO_COMPARATIVE_PLACEHOLDER,
+              ]
+            : [fmtTotal(r.amountPrimary)],
+          bold: true,
+        }
+      : lineToTableRow(
+          {
+            account: r.account,
+            label: r.label,
+            amountPrimary: r.amountPrimary,
+            amountComparative: r.amountComparative,
+            level: r.level as StatementLineJson['level'],
+            isAbsolute: r.isAbsolute,
+          },
+          hasComparative,
+        );
+    if (pygNd) row.values[1] = 'N/D';
+    rows.push(row);
   }
 
   const headers = hasComparative
@@ -407,8 +423,12 @@ export function renderIncomeStatement(json: NiifReportJson): string {
     : ['left', 'right'];
 
   const table = buildMarkdownTable({ headers, alignment, rows });
+  const legend = pygNd
+    ? `\n> Resultados comparativos ${comparativeLabel}: N/D — la columna ${comparativeLabel} es un saldo ` +
+      'de apertura, no un cierre del periodo anterior; no hay estado de resultados de ese periodo.'
+    : '';
 
-  return [header, table, renderNotes(p.notes)].join('\n');
+  return [header, table, legend, renderNotes(p.notes)].filter((s, i) => i !== 2 || s).join('\n');
 }
 
 export function renderCashFlowStatement(json: NiifReportJson): string {
@@ -547,7 +567,11 @@ export function renderTechnicalNotes(json: NiifReportJson): string {
  * que consumen Strategy Director, Governance Specialist, PDF Élite y Excel
  * mientras se completan las Fases 2 y 3. Adapter puro.
  */
-export function toNiifAnalysisResult(json: NiifReportJson): NiifAnalysisResult {
+export function toNiifAnalysisResult(source: NiifReportJson): NiifAnalysisResult {
+  // Rótulos deterministas (auditoría 2026-09-24, e2e-niif-09), los mismos que
+  // imprimen el PDF y el Excel. Sin tipo de periodo conocido se respetan las
+  // fechas canónicas que ya fijó el orquestador.
+  const json = normalizeNiifStatementLabels(source).json;
   const balanceSheet = renderBalanceSheet(json);
   const incomeStatement = renderIncomeStatement(json);
   const cashFlowStatement = renderCashFlowStatement(json);

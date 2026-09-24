@@ -25,7 +25,9 @@ import {
   CURRENCY_NOTE,
   NARRATIVE_DISCLAIMER,
   comparativeNotPresentedLegend,
-  incomeStatementTotalRows,
+  narrativeDisclaimer,
+  incomeStatementPresentationRows,
+  normalizeNiifStatementLabels,
   presentedLineCents,
   resolvePeriodoTipos,
   statementDateLabel,
@@ -178,12 +180,44 @@ interface PeriodLayout {
  * Construye un PeriodLayout consumible desde el contrato T1
  * (preprocessed.primary, preprocessed.comparative, preprocessed.periods[]).
  */
+/**
+ * Resumen del periodo POSTERIOR al curator (normativa-metricas NM-04).
+ *
+ * `snapshot.summary` se calcula antes del curator: R1 reclasifica un activo
+ * negativo (sobregiro) al pasivo y R8 cierra el resultado en el patrimonio,
+ * pero el resumen conservaba los totales previos. El .xlsx imprimía entonces
+ * Total Activo 1.150 M en KPIs y Resumen (y como total de la hoja Balance sin
+ * JSON) frente a 1.180 M en el balance, el PDF y las anclas, con un
+ * endeudamiento calculado sobre la otra base. Los totales del balance, la
+ * utilidad neta y la ecuación salen de `controlTotals` —la base de las anclas y
+ * de los ratios—; el resto del resumen (ingresos, gastos, costos) no lo altera
+ * el curator.
+ */
+function postCuratorSummary(p: PreprocessedBalance['primary']): PeriodView['summary'] {
+  const ct = p.controlTotals;
+  if (!ct) return p.summary;
+  const cents = (ct as { cents?: { activo?: bigint; pasivo?: bigint; patrimonio?: bigint } }).cents;
+  const diffCents =
+    typeof cents?.activo === 'bigint' && typeof cents.pasivo === 'bigint' && typeof cents.patrimonio === 'bigint'
+      ? cents.activo - cents.pasivo - cents.patrimonio
+      : BigInt(Math.round((ct.activo - ct.pasivo - ct.patrimonio) * 100));
+  return {
+    ...p.summary,
+    totalAssets: ct.activo,
+    totalLiabilities: ct.pasivo,
+    totalEquity: ct.patrimonio,
+    netIncome: ct.utilidadNeta,
+    equationBalance: Number(diffCents) / 100,
+    equationBalanced: diffCents === BigInt(0),
+  };
+}
+
 function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
   const all: PeriodView[] = prep.periods.map((p) => ({
     period: p.period,
     periodoTipo: p.periodoTipo,
     classes: p.classes,
-    summary: p.summary,
+    summary: postCuratorSummary(p),
     discrepancies: p.discrepancies,
     missingExpectedAccounts: p.missingExpectedAccounts,
     controlTotals: p.controlTotals,
@@ -194,7 +228,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
     period: prep.primary.period,
     periodoTipo: prep.primary.periodoTipo,
     classes: prep.primary.classes,
-    summary: prep.primary.summary,
+    summary: postCuratorSummary(prep.primary),
     discrepancies: prep.primary.discrepancies,
     missingExpectedAccounts: prep.primary.missingExpectedAccounts,
     controlTotals: prep.primary.controlTotals,
@@ -218,7 +252,7 @@ function buildPeriodLayout(prep: PreprocessedBalance): PeriodLayout {
         period: prep.comparative.period,
         periodoTipo: prep.comparative.periodoTipo,
         classes: prep.comparative.classes,
-        summary: prep.comparative.summary,
+        summary: postCuratorSummary(prep.comparative),
         discrepancies: prep.comparative.discrepancies,
         missingExpectedAccounts: prep.comparative.missingExpectedAccounts,
         controlTotals: prep.comparative.controlTotals,
@@ -293,6 +327,7 @@ export interface ExcelExportOptions {
  */
 export async function generateFinancialExcel(options: ExcelExportOptions): Promise<Buffer> {
   const { report, preprocessed } = options;
+  const language = options.language ?? 'es';
   const wb = new ExcelJS.Workbook();
 
   wb.creator = '1+1 Financial Orchestrator';
@@ -302,15 +337,15 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   const layout = preprocessed ? buildPeriodLayout(preprocessed) : null;
 
   // Tab 1: Balance / Estado de Situacion Financiera
-  addBalanceSheet(wb, report, layout);
+  addBalanceSheet(wb, report, layout, language);
 
   // Tab 2: P&L / Estado de Resultados
-  addIncomeStatement(wb, report, layout);
+  addIncomeStatement(wb, report, layout, language);
 
   // Complete the four structured statements from the same validated JSON.
   if (report.niifAnalysis.json) {
-    addCashFlowAndEquitySheets(wb, report, layout);
-    addTechnicalNotesSheet(wb, report);
+    addCashFlowAndEquitySheets(wb, report, layout, language);
+    addTechnicalNotesSheet(wb, report, language);
   }
 
   // Tab 3: KPIs / Indicadores
@@ -337,8 +372,9 @@ function addCashFlowAndEquitySheets(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
-  const json = report.niifAnalysis.json!;
+  const json = presentableJson(report, layout)!;
   const periodLine = `${statementDate('period', report, layout)} · ${CURRENCY_NOTE}`;
   // El contrato no trae el comparativo del EFE ni filas del ECP del año
   // anterior: se declara en el propio estado (reportes-export-13).
@@ -381,7 +417,15 @@ function addCashFlowAndEquitySheets(
     row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
     for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
   }
-  for (const n of json.equityChanges.notes.map(formatStatementNote).filter(Boolean)) {
+  // e2e-niif-10: las notas en prosa del ECP las redacta el LLM y sus cifras no
+  // se anclan; se rotulan como narrativa no auditada (mismo aviso del PDF).
+  const equityNotes = json.equityChanges.notes.map(formatStatementNote).filter(Boolean);
+  if (equityNotes.length > 0) {
+    equity.addRow([narrativeDisclaimer(language)]).font = {
+      name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange },
+    };
+  }
+  for (const n of equityNotes) {
     equity.addRow([n]).font = { name: FONT_MAIN, size: 8, italic: true };
   }
   for (const sheet of [cash, equity]) {
@@ -394,9 +438,15 @@ function addCashFlowAndEquitySheets(
 /**
  * Notas técnicas globales del JSON validado (mapeo PUC, reclasificaciones,
  * impracticabilidades). Son parte del contrato NIIF y no se exportaban en
- * ningún formato (reportes-export-11).
+ * ningún formato (reportes-export-11). El JSON valida su forma, no sus cifras:
+ * son prosa del Pass-3 y llevan el aviso de narrativa no auditada, igual que en
+ * el PDF (e2e-niif-10).
  */
-function addTechnicalNotesSheet(wb: ExcelJS.Workbook, report: FinancialReport): void {
+function addTechnicalNotesSheet(
+  wb: ExcelJS.Workbook,
+  report: FinancialReport,
+  language: 'es' | 'en' = 'es',
+): void {
   const notes = (report.niifAnalysis.json?.technicalNotes ?? [])
     .map(formatStatementNote)
     .filter((n) => n.length > 0);
@@ -406,6 +456,9 @@ function addTechnicalNotesSheet(wb: ExcelJS.Workbook, report: FinancialReport): 
   ws.addRow(['NOTAS TÉCNICAS DE LOS ESTADOS FINANCIEROS']).font = { name: FONT_MAIN, bold: true, size: 12 };
   const id = reportIdentity(report);
   ws.addRow([`${id.name} | NIT: ${id.nit} | Periodo: ${id.fiscalPeriod}`]).font = { name: FONT_MAIN, size: 9 };
+  ws.addRow([narrativeDisclaimer(language)]).font = {
+    name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange },
+  };
   for (const n of notes) ws.addRow([n]).font = { name: FONT_MAIN, size: 9 };
 }
 
@@ -430,6 +483,7 @@ function addBalanceSheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Balance NIIF', { properties: { tabColor: { argb: COLORS.gold } } });
   ws.properties.defaultColWidth = 18;
@@ -439,7 +493,7 @@ function addBalanceSheet(
 
   let row = 6;
 
-  const json = report.niifAnalysis.json;
+  const json = presentableJson(report, layout);
 
   if (json) {
     // ── Fuente canónica: JSON-strict validado del NIIF Analyst ──────────────
@@ -453,7 +507,7 @@ function addBalanceSheet(
     // rubro. El preprocesado sigue alimentando las pestañas de trazabilidad
     // (Validacion, Pulido Diamante) y los ratios de la pestaña KPIs.
     row = addBalanceSheetFromJson(ws, row, json);
-    row = addStatementNotes(ws, row, json.balanceSheet.notes);
+    row = addStatementNotes(ws, row, json.balanceSheet.notes, language);
   } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
@@ -840,16 +894,28 @@ function addIncomeStatementFromJson(
   row = addStatementColumnHeader(
     ws, row, json.company.fiscalPeriod, json.company.comparativePeriod,
   );
-  row = addJsonLines(ws, row, p.lines, hasComparative, comparativeText);
 
-  // Totales vinculantes del contrato (UTILIDAD/PÉRDIDA según el signo; ORI y
-  // resultado integral total). Regla única compartida con el PDF y el Markdown
-  // (`incomeStatementTotalRows`): un total ya emitido como renglón no se
-  // duplica y los tres entregables listan las mismas filas y rótulos.
-  for (const t of incomeStatementTotalRows(p)) {
-    row = addJsonStatementRow(
-      ws, row, null, t.label, t.primary, t.comparative, hasComparative, 'total', comparativeText,
-    );
+  // Regla única compartida con el PDF y el Markdown
+  // (`incomeStatementPresentationRows`, auditoría 2026-09-24 e2e-niif-01): los
+  // escalones de la cascada (UTILIDAD/PÉRDIDA bruta, operativa, antes de
+  // impuestos y neta; ORI y resultado integral total) se imprimen SIEMPRE desde
+  // los campos anclados del JSON; un renglón del analista no los sustituye.
+  for (const r of incomeStatementPresentationRows(p)) {
+    if (r.total) {
+      row = addJsonStatementRow(
+        ws, row, null, r.label, r.amountPrimary, r.amountComparative, hasComparative, 'total', comparativeText,
+      );
+    } else {
+      row = addJsonLines(
+        ws, row,
+        [{
+          account: r.account, label: r.label, amountPrimary: r.amountPrimary,
+          amountComparative: r.amountComparative, level: r.level as StatementLineJson['level'],
+          isAbsolute: r.isAbsolute,
+        }],
+        hasComparative, comparativeText,
+      );
+    }
   }
 
   if (comparativeText !== undefined) {
@@ -876,6 +942,7 @@ function addIncomeStatement(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Estado Resultados', { properties: { tabColor: { argb: COLORS.darkNavy } } });
   ws.properties.defaultColWidth = 18;
@@ -884,7 +951,7 @@ function addIncomeStatement(
 
   let row = 6;
 
-  const json = report.niifAnalysis.json;
+  const json = presentableJson(report, layout);
 
   // Banner de Advertencia R7 (costo presunto) — vive en el preprocesado y es
   // independiente de la fuente de las cifras, así que se pinta en ambas ramas.
@@ -921,7 +988,7 @@ function addIncomeStatement(
       layout?.comparative?.saldosDeApertura === true &&
       layout.comparative.period.includes(comparativePeriod);
     row = addIncomeStatementFromJson(ws, row, json, comparativeIsOpening);
-    row = addStatementNotes(ws, row, json.incomeStatement.notes);
+    row = addStatementNotes(ws, row, json.incomeStatement.notes, language);
   } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
@@ -1611,6 +1678,24 @@ function reportIdentity(report: FinancialReport): { name: string; nit: string; f
  * Fecha de corte / periodo cubierto de los estados (NIIF para las PYMES 3.23),
  * derivada del tipo de periodo que el preprocesador infirió — nunca supuesta.
  */
+/**
+ * JSON NIIF con los rótulos deterministas que imprimen todas las superficies
+ * (auditoría 2026-09-24, e2e-niif-09): grupos PUC con el rótulo del catálogo,
+ * filas del ECP con el periodo del informe y el calificativo del resultado
+ * según su signo. Misma función que el PDF y el orquestador.
+ */
+function presentableJson(report: FinancialReport, layout: PeriodLayout | null): NiifReportJson | undefined {
+  const json = report.niifAnalysis?.json;
+  if (!json) return undefined;
+  const tipos = resolvePeriodoTipos(
+    json.company.fiscalPeriod,
+    json.company.comparativePeriod,
+    layout?.primary ?? null,
+    layout?.comparative ?? null,
+  );
+  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: tipos.primaryPeriodoTipo }).json;
+}
+
 function statementDate(
   kind: 'position' | 'period',
   report: FinancialReport,
@@ -1659,12 +1744,17 @@ function addStatementNotes(
   ws: ExcelJS.Worksheet,
   startRow: number,
   notes: StatementNoteJson[] | undefined,
+  language: 'es' | 'en' = 'es',
 ): number {
   const lines = (notes ?? []).map(formatStatementNote).filter((n) => n.length > 0);
   if (lines.length === 0) return startRow;
   let row = startRow + 1;
   ws.getRow(row).getCell(2).value = 'Notas';
   ws.getRow(row).getCell(2).font = { name: FONT_MAIN, bold: true, size: 9 };
+  row++;
+  // e2e-niif-10: prosa del LLM cuyas cifras no se anclan — mismo aviso que el PDF.
+  ws.getRow(row).getCell(2).value = narrativeDisclaimer(language);
+  ws.getRow(row).getCell(2).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
   row++;
   for (const n of lines) {
     ws.getRow(row).getCell(2).value = n;
