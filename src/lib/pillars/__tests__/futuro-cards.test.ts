@@ -123,7 +123,7 @@ describe('computeFuturoExecutiveCards', () => {
     expect(cards.audit.cagrIngresos).toBeNull();
     // IW4 (ratios-kpis-10): sin diagnóstico UN × (1 + CAGR) × 35 %; el audit
     // expone la utilidad neta leída.
-    expect(cards.audit.utilidadProyectadaAnual).toBeUndefined();
+    expect('utilidadProyectadaAnual' in cards.audit).toBe(false);
     expect(cards.audit.utilidadNeta).toBe(300_000_000);
     expect(cards.provision_tributaria.value).toBeNull();
     expect(cards.audit.provisionTributariaFutura).toBeNull();

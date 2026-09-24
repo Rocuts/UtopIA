@@ -19,6 +19,16 @@ export {
 export { validateBalance, buildReversalLines, normalizeAmount } from './validate';
 
 export {
+  listLedgerLines,
+  LEDGER_DEFAULT_LIMIT,
+  LEDGER_MAX_LIMIT,
+  type LedgerLinesParams,
+  type LedgerLinesResult,
+  type LedgerLineView,
+  type LedgerOpeningBalance,
+} from './ledger';
+
+export {
   DoubleEntryError,
   ERR,
   type CreateEntryInput,

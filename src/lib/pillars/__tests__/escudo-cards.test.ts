@@ -172,8 +172,8 @@ describe('computeEscudoExecutiveCards', () => {
     // IW4 (ratios-kpis-10): el audit expone la utilidad neta leída; el
     // diagnóstico UN × 35 % (rentaTeorica/tasaRenta) se retiró.
     expect(cards.audit.utilidadNeta).toBe(500_000_000);
-    expect(cards.audit.rentaTeorica).toBeUndefined();
-    expect(cards.audit.tasaRenta).toBeUndefined();
+    expect('rentaTeorica' in cards.audit).toBe(false);
+    expect('tasaRenta' in cards.audit).toBe(false);
   });
 
   it('Brecha Escudo negativa (caja < proveedores 2205)', () => {

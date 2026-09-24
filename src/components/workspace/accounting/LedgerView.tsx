@@ -4,10 +4,12 @@
  * LedgerView — read-only general ledger.
  *
  * Renders journal lines with a running balance per account. The "balance"
- * column is computed client-side from the (debit - credit) cumulative
- * stream so the user can scroll through and see how each entry shifts the
- * account total without requiring the server to materialize a balances
- * table for this view.
+ * column comes from the server (`GET /api/accounting/journal?view=ledger`,
+ * `listLedgerLines`): saldo acumulado de LA cuenta de cada línea (débito −
+ * crédito) desde el saldo anterior al período, en centavos exactos. Antes se
+ * acumulaba en el cliente con Number() sobre todas las líneas mezclando
+ * cuentas (sin filtro de cuenta daba la suma de cuentas distintas) y sin
+ * saldo anterior (W3-C).
  *
  * Filters supported (server-side): account, period, third-party, cost
  * center. The component fires a fresh `GET /api/accounting/journal?…`
@@ -17,7 +19,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 import {
@@ -44,6 +45,8 @@ interface LedgerLine {
   costCenter: { id: string; code: string; name: string } | null;
   debit: string;
   credit: string;
+  /** Saldo acumulado de la cuenta tras la línea (servidor, centavos exactos). */
+  balance: string;
 }
 
 interface PeriodOption {
@@ -79,6 +82,7 @@ export function LedgerView() {
   const ac = t.accounting;
 
   const [lines, setLines] = useState<LedgerLine[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,7 +152,7 @@ export function LedgerView() {
       const res = await fetch(`/api/accounting/journal?${params.toString()}`);
       if (!res.ok) throw new Error('ledger_failed');
       const json = (await res.json()) as
-        | { ok: true; lines: LedgerLine[] }
+        | { lines: LedgerLine[]; truncated?: boolean }
         | LedgerLine[];
       const list: LedgerLine[] = Array.isArray(json)
         ? json
@@ -156,9 +160,11 @@ export function LedgerView() {
           ? json.lines
           : [];
       setLines(list);
+      setTruncated(!Array.isArray(json) && json.truncated === true);
     } catch {
       setError(ac.errorGeneric);
       setLines([]);
+      setTruncated(false);
     } finally {
       setLoading(false);
     }
@@ -172,15 +178,9 @@ export function LedgerView() {
   }, [fetchLedger]);
 
   // ─── Running balance ────────────────────────────────────────────────────
-  const linesWithBalance = useMemo(() => {
-    let running = 0;
-    return lines.map((l) => {
-      const d = Number(l.debit) || 0;
-      const c = Number(l.credit) || 0;
-      running += d - c;
-      return { ...l, balance: running.toFixed(2) };
-    });
-  }, [lines]);
+  // El saldo por cuenta lo calcula el servidor (centavos exactos, con saldo
+  // anterior). Una línea sin `balance` se muestra «—», nunca un saldo local.
+  const linesWithBalance = lines;
 
   return (
     <div className="flex flex-col gap-4">
@@ -330,6 +330,17 @@ export function LedgerView() {
           {ac.noEntries}
         </div>
       ) : (
+        <>
+        {truncated && (
+          <p
+            role="status"
+            className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-n-1000"
+          >
+            {language === 'es'
+              ? `Se muestran las primeras ${linesWithBalance.length} líneas; el mayor tiene más movimientos. Filtre por período o cuenta para verlo completo.`
+              : `Showing the first ${linesWithBalance.length} lines; the ledger has more movements. Filter by period or account to see it in full.`}
+          </p>
+        )}
         <div
           className={cn(
             'rounded-xl border border-gold-500/20 bg-n-0 overflow-hidden',
@@ -399,7 +410,7 @@ export function LedgerView() {
                     )}
                   >
                     <td className="px-3 py-2 text-n-1000 tabular-nums whitespace-nowrap">
-                      {new Date(l.entryDate).toLocaleDateString('es-CO')}
+                      {new Date(l.entryDate).toLocaleDateString('es-CO', { timeZone: 'UTC' })}
                     </td>
                     <td className="px-3 py-2 text-right text-n-700 tabular-nums">
                       <span className="font-mono">#{l.entryNumber}</span>
@@ -441,14 +452,9 @@ export function LedgerView() {
                     >
                       {formatPesos(l.credit)}
                     </td>
-                    <td
-                      className={cn(
-                        'px-3 py-2 text-right tabular-nums font-mono font-medium',
-                        Number(l.balance) >= 0
-                          ? 'text-success'
-                          : 'text-danger',
-                      )}
-                    >
+                    <td className="px-3 py-2 text-right tabular-nums font-mono font-medium text-n-1000">
+                      {/* Débito − crédito: un saldo crédito (pasivo, patrimonio,
+                          ingresos) es negativo por naturaleza, no una alerta. */}
                       {formatPesos(l.balance)}
                     </td>
                   </tr>
@@ -457,6 +463,7 @@ export function LedgerView() {
             </table>
           </div>
         </div>
+        </>
       )}
     </div>
   );

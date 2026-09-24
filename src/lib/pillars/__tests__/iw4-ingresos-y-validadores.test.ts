@@ -182,8 +182,11 @@ describe('single-source-validator — utilidad neta leída, no reconstruida (rat
     const futuro = computeFuturoExecutiveCards({ snapshot: SNAP });
     expect(escudo.audit.utilidadNeta).toBe(345_000_000);
     expect(futuro.audit.utilidadNeta).toBe(345_000_000);
-    expect(escudo.audit.rentaTeorica).toBeUndefined();
-    expect(futuro.audit.utilidadProyectadaAnual).toBeUndefined();
+    // W3-C: los campos @deprecated se retiraron del tipo; tampoco existen en runtime.
+    expect('rentaTeorica' in escudo.audit).toBe(false);
+    expect('tasaRenta' in escudo.audit).toBe(false);
+    expect('utilidadProyectadaAnual' in futuro.audit).toBe(false);
+    expect('tasaRenta' in futuro.audit).toBe(false);
   });
 
   it('los ingresos inter-pilar se comparan sobre la misma base (ingresos netos)', () => {

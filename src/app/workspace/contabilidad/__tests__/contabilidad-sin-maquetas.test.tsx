@@ -79,17 +79,38 @@ describe('páginas de contabilidad sin cifras de maqueta', () => {
     }
   }
 
-  it('libro mayor y listado de asientos se declaran «en preparación» con rótulo visible', () => {
+  it('el listado de asientos se declara «en preparación» con rótulo visible', () => {
     langRef.value = 'es';
-    for (const Page of [Mayor, Asientos]) {
-      expect(visibleText(renderToStaticMarkup(<Page />))).toContain(
-        'Módulo en preparación — sin datos de su empresa',
-      );
-    }
+    expect(visibleText(renderToStaticMarkup(<Asientos />))).toContain(
+      'Módulo en preparación — sin datos de su empresa',
+    );
     langRef.value = 'en';
-    expect(visibleText(renderToStaticMarkup(<Mayor />))).toContain(
+    expect(visibleText(renderToStaticMarkup(<Asientos />))).toContain(
       'Module in preparation — no data from your company',
     );
+  });
+
+  // W3-C: la API ya expone ?view=ledger (líneas con saldo por cuenta calculado
+  // en el servidor), así que el mayor monta el componente real. Antes esta
+  // prueba exigía «en preparación» porque la API sólo listaba asientos.
+  it('libro mayor monta LedgerView (vista de mayor de la API), sin rótulo de maqueta', () => {
+    langRef.value = 'es';
+    const text = visibleText(renderToStaticMarkup(<Mayor />));
+    expect(text).toContain('Libro mayor');
+    expect(text).not.toContain('Módulo en preparación');
+    const page = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/app/workspace/contabilidad/mayor/page.tsx'),
+      'utf8',
+    );
+    expect(page).toMatch(/<LedgerView \/>/);
+    const view = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/workspace/accounting/LedgerView.tsx'),
+      'utf8',
+    );
+    expect(view).toContain("params.set('view', 'ledger')");
+    // El saldo viene del servidor (por cuenta, centavos exactos): nada de
+    // acumular Number() en el cliente mezclando cuentas.
+    expect(view).not.toMatch(/running \+=/);
   });
 
   it('periodos monta el gestor real y ofrece el cierre anual del período 13', () => {

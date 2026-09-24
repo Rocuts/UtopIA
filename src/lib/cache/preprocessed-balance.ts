@@ -45,9 +45,16 @@ import { getCachedAccountsFlat, getLedgerTotalsByPeriods } from './ledger-querie
  * MENSUALES, T (2026-08) y T-1 (2026-07) colisionaban en '2026' y el
  * comparativo sobrescribía al actual. La etiqueta `YYYY-MM` también le dice a
  * los pilares (shared-metrics.monthsCovered) que los resultados son el
- * acumulado del año hasta ese mes. El mes 13 (periodo de cierre) se conserva.
+ * acumulado del año hasta ese mes.
+ *
+ * Período 13 (cierre anual, 31-dic) ⇒ `YYYY`: el ejercicio completo. El
+ * preprocesador no ordena `YYYY-13` como fecha (lo manda al final), así que
+ * con el comparativo de `findComparativePeriod` —el 13 del año anterior, si
+ * existe— el cierre 2025 quedaba como periodo PRINCIPAL y 2026-08 como
+ * comparativo. `YYYY` se ordena como diciembre de ese año y cubre 12 meses.
  */
 export function periodLabel(p: Pick<AccountingPeriodRow, 'year' | 'month'>): string {
+  if (p.month === 13) return String(p.year);
   return `${p.year}-${String(p.month).padStart(2, '0')}`;
 }
 
@@ -102,6 +109,16 @@ function inferLevel(code: string): RawAccountRow['level'] {
 //     de años < año(T)): se trasladan al patrimonio (3705 utilidades / 3710
 //     pérdidas acumuladas). Con asiento de cierre esa suma es 0. Sin este
 //     traslado la ecuación patrimonial no cuadraría.
+//   - Asientos de cierre (contab-nomina-04): los asientos source_type
+//     'closing' y los reversos de un cierre posteados en el MISMO año de T no
+//     cuentan para T. El cierre anual (período 13) deja las clases 4-6 en cero
+//     y, sumado, el P&G del ejercicio reportado (y su comparativo) saldría en
+//     0 — mismo criterio que pillar_kpis_view (migración 0022) y pillar-view.
+//     Se excluye el asiento COMPLETO, también su contrapartida 3605/3610: si
+//     quedara, el resultado estaría dos veces (clases 4-7 y grupo 36). Es el
+//     balance de prueba antes del cierre; el resultado del ejercicio lo lleva
+//     al patrimonio el cierre virtual del preprocesador (R8). En los años
+//     anteriores a T el cierre sí cuenta: es el traslado a patrimonio.
 // ---------------------------------------------------------------------------
 
 export interface LoadTrialBalanceInput {
@@ -131,8 +148,16 @@ export async function loadTrialBalanceRows(
   const compRowRaw = input.comparativePeriodId
     ? periodRows.find((p) => p.id === input.comparativePeriodId) ?? null
     : null;
-  // Un comparativo posterior al periodo principal no es un comparativo.
-  const compRow = compRowRaw && comparePeriods(compRowRaw, primaryRow) < 0 ? compRowRaw : null;
+  // Un comparativo posterior al periodo principal no es un comparativo. Con
+  // el principal en el 13, diciembre del mismo año tampoco: `YYYY` y
+  // `YYYY-12` son el mismo corte para el preprocesador (no hay orden entre
+  // ellos) y el P&G de ambos es el acumulado del mismo año.
+  const sameCutAsPrimary = (c: AccountingPeriodRow) =>
+    primaryRow.month === 13 && c.year === primaryRow.year && c.month === 12;
+  const compRow =
+    compRowRaw && comparePeriods(compRowRaw, primaryRow) < 0 && !sameCutAsPrimary(compRowRaw)
+      ? compRowRaw
+      : null;
 
   const primaryLabel = periodLabel(primaryRow);
   const comparativeLabel = compRow ? periodLabel(compRow) : null;
@@ -169,6 +194,8 @@ export async function loadTrialBalanceRows(
     for (const t of targets) {
       const label = periodLabel(t);
       if (comparePeriods(p, t) > 0) continue; // posterior a T
+      // Cierre (o su reverso) del ejercicio de T: fuera de T (ver cabecera).
+      if (row.closing === true && p.year === t.year) continue;
       if (result) {
         if (p.year === t.year) {
           const m = balances.get(label)!;
