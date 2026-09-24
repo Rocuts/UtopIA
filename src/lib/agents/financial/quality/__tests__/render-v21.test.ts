@@ -228,10 +228,10 @@ describe('renderMarkdown — conclusion and legacy 14-dim appendix coexist', () 
 // ---------------------------------------------------------------------------
 
 describe('renderMarkdown — output uses buildQualityV21View as single source of truth', () => {
-  it('global score in the table equals the view.globalScoreInt0to10', () => {
+  it('global score in the table equals the view.globalScore10', () => {
     const json = makeJson({ defaultScore: 80 });
     const view = buildQualityV21View(json);
     const md = __test_renderMarkdown(json);
-    expect(md).toContain(`**${view.globalScoreInt0to10.toFixed(1)}/10**`);
+    expect(md).toContain(`**${view.globalScore10!.toFixed(1)}/10**`);
   });
 });

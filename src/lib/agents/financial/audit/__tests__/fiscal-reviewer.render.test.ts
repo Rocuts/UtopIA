@@ -221,7 +221,9 @@ describe('renderFiscalReviewerMarkdown — v2.1 ASCII boxed + NIA-700 legacy coe
     expect(md).toContain('$3.800.000,00');
     expect(md).toContain('$1.200.000,00');
     expect(md).toContain('$8.356.862,96');
-    expect(md).toContain('Sancion potencial por mora          : N/D');
+    // auditoria-calidad-20: el Art. 641 E.T. es sanción por EXTEMPORANEIDAD;
+    // la mora en el pago genera intereses (Arts. 634-635), no esta sanción.
+    expect(md).toContain('Sancion por extemporaneidad (Art. 641 E.T.): N/D');
   });
 
   it('renderiza los 6 indicadores de riesgo DIAN con badges', () => {

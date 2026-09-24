@@ -59,7 +59,7 @@ export function buildOpinionDrafterPrompt(
   }
   if (hints?.comparativosImpracticables) {
     dynamicNiaRules.push(
-      'Comparativos impracticables (NIC 1 par. 38 + NIA 710): incluir otherMatterParagraph explicando que el dictamen se emite sobre estados financieros sin comparativo y citando NIC 1 par. 43 (excepcion por impracticabilidad).',
+      'Comparativos impracticables (NIC 1 par. 38 + NIA 710): incluir otherMatterParagraph explicando que el dictamen se emite sobre estados financieros sin comparativo y citando NIIF para PYMES §3.14 y §10.21 (impracticabilidad). NEVER citar NIC 1 par. 43 como excepcion que permite omitir comparativos: ese parrafo trata la impracticabilidad de reclasificar comparativos.',
     );
   }
   if (hints?.hasMaterialMeasurementBlocker) {
@@ -73,20 +73,21 @@ export function buildOpinionDrafterPrompt(
       : '';
 
   const guardrail = `Eres el Redactor Senior del Dictamen del Revisor Fiscal de 1+1.
-NEVER inventes parrafos, articulos, nombres ni numeros de Tarjeta Profesional. Cita SOLO normas reales: NIA 700/701/705/706/720, Art. 207-209 C.Co., Ley 43/1990 art. 10, Decreto 2420/2015, NIIF for SMEs §2.52, NIC 1 par. 38, NIC 8, NIA 710.
+NEVER inventes parrafos, articulos, nombres ni numeros de Tarjeta Profesional. Cita SOLO normas reales: NIA 570/700/701/705/706/720, Art. 207-209 C.Co., Ley 43/1990 art. 10, Decreto 2420/2015, NIIF for SMEs §2.52 / §3.14 / §10.21, NIC 1 par. 38, NIC 8, NIA 710.
 ALWAYS copia LITERAL el bloque de firma inyectado en <context>. Si trae placeholders ("____________"), conservalos — la firma humana se completa fuera del LLM.
 ALWAYS aplica el override de coherencia: si recibes hints de blockers materiales o reclasificaciones sin revelar, NUNCA emitas opinion = limpia.`;
 
   const context2026 = `Marco normativo Colombia 2026:
 - NIA 700 par. 10-15 / 20-21 / 23-27 (formacion de la opinion, opinion limpia, estructura del informe).
-- NIA 701 par. 8-10 (asuntos clave de auditoria — minimo 1, maximo 3).
+- NIA 570 revisada par. 16 (evaluacion de los planes de la administracion), 21 (base contable inadecuada → opinion desfavorable), 22 (incertidumbre material adecuadamente revelada → opinion NO modificada + seccion separada "Incertidumbre material relacionada con empresa en funcionamiento"), 23 (revelacion inadecuada → opinion modificada).
+- NIA 701 (asuntos clave de auditoria): obligatoria solo para entidades emisoras de valores (RNVE) o cuando la ley lo exija; en los demas casos su comunicacion es voluntaria.
 - NIA 705 par. 7-10 / 13-16 (opinion con_salvedades / adversa / abstencion + fundamento).
 - NIA 706 par. 6-9 (parrafo de enfasis y otras cuestiones).
 - NIA 720 (otra informacion).
 - Ley 43/1990 art. 10 (forma del dictamen: claro, preciso, cenido a la verdad).
 - Art. 207-209 C.Co. (responsabilidades estatutarias del Revisor Fiscal).
 - NIIF for SMEs §2.52 (no compensacion).
-- NIC 1 par. 38 / 43 (informacion comparativa e impracticabilidad).
+- NIC 1 par. 38 (informacion comparativa); NIIF para PYMES §3.14 y §10.21 (impracticabilidad).
 - UVT 2026 = $52.374 COP. Moneda en formato es-CO: $1.234.567,89.
 Empresa: ${company.name} (NIT ${company.nit}, ${company.entityType || 'tipo no especificado'}, sector ${company.sector || 'no especificado'}, ciudad ${company.city || 'no especificada'}). Periodo ${company.fiscalPeriod}${company.comparativePeriod ? ` (comparativo ${company.comparativePeriod})` : ''}. Fecha del dictamen: ${date}.
 
@@ -104,9 +105,10 @@ ${context2026}
 <task>Redactar el Dictamen del Revisor Fiscal formal en formato colombiano profesional (incluyendo todas las secciones obligatorias en dictamenText) y la Carta de Gerencia con recomendaciones priorizadas, integrando los hallazgos de los tres evaluadores recibidos en el user content.</task>
 
 <success_criteria>
-- opinionType refleja la logica: limpia solo si no hay incorrecciones materiales, sin dudas de empresa en marcha y cumplimiento satisfactorio; con_salvedades si hay incorrecciones materiales no generalizadas o incertidumbre revelada; adversa si efectos materiales generalizados; abstencion si no hay evidencia suficiente y efectos potenciales generalizados.
-- dictamenText incluye TODAS las secciones del formato colombiano: encabezado, destinatario, parrafo introductorio, OPINION, FUNDAMENTO DE LA OPINION (y "OPINION MODIFICADA" si aplica), ASUNTOS CLAVE, PARRAFO DE ENFASIS (si aplica), EMPRESA EN MARCHA, OTRA INFORMACION, RESPONSABILIDADES DE LA ADMINISTRACION, RESPONSABILIDADES DEL REVISOR FISCAL, CUMPLIMIENTO LEGAL, INFORME SOBRE OTROS REQUERIMIENTOS LEGALES, bloque de firma literal y ciudad/fecha.
-- keyAuditMatters tiene entre 1 y 3 entradas (NIA 701).
+- opinionType refleja la logica: limpia si no hay incorrecciones materiales y el cumplimiento es satisfactorio (una incertidumbre material de empresa en funcionamiento adecuadamente revelada NO modifica la opinion); con_salvedades si hay incorrecciones materiales no generalizadas o una incertidumbre material no revelada adecuadamente; adversa si efectos materiales generalizados o base contable de empresa en funcionamiento inadecuada; abstencion si no hay evidencia suficiente y efectos potenciales generalizados.
+- dictamenText incluye TODAS las secciones del formato colombiano: encabezado, destinatario, parrafo introductorio, OPINION, FUNDAMENTO DE LA OPINION (y "OPINION MODIFICADA" si aplica), INCERTIDUMBRE MATERIAL RELACIONADA CON EMPRESA EN FUNCIONAMIENTO (seccion separada, solo si aplica), ASUNTOS CLAVE (solo si aplican), PARRAFO DE ENFASIS (si aplica), OTRA INFORMACION, RESPONSABILIDADES DE LA ADMINISTRACION, RESPONSABILIDADES DEL REVISOR FISCAL, CUMPLIMIENTO LEGAL, INFORME SOBRE OTROS REQUERIMIENTOS LEGALES, bloque de firma literal y ciudad/fecha.
+- goingConcernSection contiene el texto de esa seccion separada cuando el evaluador concluyo incertidumbre material y esta revelada; null en otro caso.
+- keyAuditMatters = [] salvo que la entidad sea emisora de valores inscrita en el RNVE o el revisor decida comunicarlos; nunca mas de 3 (NIA 701).
 - emphasisParagraphs es array vacio cuando no hay enfasis; en caso contrario cada elemento es una frase autoportante.
 - otherMatterParagraphs analogo a emphasisParagraphs.
 - managementLetter sigue formato de carta formal con saludo, hallazgos no modificantes, debilidades de control interno, recomendaciones priorizadas (alta/media/baja) y despedida formal.
@@ -118,7 +120,7 @@ ${context2026}
 - NEVER omitas la cita de NIA 705 §7-§9 cuando opinionType != limpia.
 - NEVER uses formato distinto al colombiano profesional: nada de markdown extranjero, nada de bullets en el cuerpo del dictamen, todo en parrafos.
 - If hay blocker material y el resto de evaluadores son favorables then opinionType = con_salvedades (efecto no generalizado por default) otherwise eleva a adversa.
-- If hay incertidumbre de empresa en marcha CON revelacion adecuada then opinionType permanece y emphasisParagraph cita NIC 1 par. 25-26 otherwise opinionType = con_salvedades o adversa segun magnitud.
+- If hay incertidumbre material de empresa en funcionamiento CON revelacion adecuada then opinionType no se modifica por esa causa y el asunto va en goingConcernSection (NIA 570 par. 22), no en emphasisParagraphs otherwise opinionType = con_salvedades o adversa segun magnitud (NIA 570 par. 23).
 - ${multiperiodGuidance}
 </constraints>
 

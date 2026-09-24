@@ -14,6 +14,8 @@ import { runComplianceChecker } from './agents/compliance-checker';
 import { runOpinionDrafter } from './agents/opinion-drafter';
 import type { FinancialReport, CompanyInfo } from '../types';
 import type {
+  EvaluatorDomain,
+  FiscalOpinionDictamen,
   FiscalOpinionRequest,
   FiscalOpinionReport,
   FiscalOpinionProgressEvent,
@@ -32,6 +34,7 @@ const OPINION_LABELS: Record<OpinionType, string> = {
   con_salvedades: 'CON SALVEDADES',
   adversa: 'ADVERSA (Desfavorable)',
   abstencion: 'ABSTENCION DE OPINION',
+  no_emitida: 'NO EMITIDA — dictamen bloqueado (evaluador sin completar)',
 };
 
 /**
@@ -70,8 +73,9 @@ export async function orchestrateFiscalOpinion(
   const results = await Promise.allSettled([
     runGoingConcernEvaluator(reportContent, report.company, language, onProgress),
     runMisstatementReviewer(reportContent, report.company, language, onProgress),
-    runComplianceChecker(reportContent, report.company, language, onProgress),
+    runComplianceChecker(reportContent, report.company, language, onProgress, preprocessed),
   ]);
+  const evaluatorsFailed: EvaluatorDomain[] = [];
 
   // ---------------------------------------------------------------------------
   // Collect evaluator results (handle individual failures gracefully)
@@ -89,6 +93,7 @@ export async function orchestrateFiscalOpinion(
     console.error(`[fiscal-opinion] ${evaluatorNames[0]} failed:`, errorMsg);
     onProgress?.({ type: 'evaluator_failed', domain: 'empresa_en_marcha', name: evaluatorNames[0], error: errorMsg });
     goingConcern = buildFallbackGoingConcern(errorMsg);
+    evaluatorsFailed.push('empresa_en_marcha');
   }
 
   // Misstatement Reviewer
@@ -100,6 +105,7 @@ export async function orchestrateFiscalOpinion(
     console.error(`[fiscal-opinion] ${evaluatorNames[1]} failed:`, errorMsg);
     onProgress?.({ type: 'evaluator_failed', domain: 'incorrecciones', name: evaluatorNames[1], error: errorMsg });
     misstatementReview = buildFallbackMisstatement(errorMsg);
+    evaluatorsFailed.push('incorrecciones');
   }
 
   // Compliance Checker
@@ -111,25 +117,32 @@ export async function orchestrateFiscalOpinion(
     console.error(`[fiscal-opinion] ${evaluatorNames[2]} failed:`, errorMsg);
     onProgress?.({ type: 'evaluator_failed', domain: 'cumplimiento', name: evaluatorNames[2], error: errorMsg });
     complianceCheck = buildFallbackCompliance(errorMsg);
+    evaluatorsFailed.push('cumplimiento');
   }
 
   // ---------------------------------------------------------------------------
   // Stage 2: Opinion Drafter (sequential — needs all evaluator outputs)
   // ---------------------------------------------------------------------------
-  onProgress?.({ type: 'drafter_start', name: 'Redactor del Dictamen (NIA 700/705/706)' });
-
-  const dictamen = await runOpinionDrafter(
-    reportContent,
-    goingConcern,
-    misstatementReview,
-    complianceCheck,
-    report.company,
-    language,
-    onProgress,
-    { auditReport, preprocessed },
-  );
-
-  onProgress?.({ type: 'drafter_complete', name: 'Redactor del Dictamen (NIA 700/705/706)' });
+  // Si un evaluador no completó su análisis no hay evidencia para opinar: el
+  // dictamen se BLOQUEA (opinionType 'no_emitida') en vez de redactar una
+  // opinión sobre un fallback (tributario-modulos-11).
+  let dictamen: FiscalOpinionDictamen;
+  if (evaluatorsFailed.length > 0) {
+    dictamen = buildBlockedDictamen(evaluatorsFailed);
+  } else {
+    onProgress?.({ type: 'drafter_start', name: 'Redactor del Dictamen (NIA 700/705/706)' });
+    dictamen = await runOpinionDrafter(
+      reportContent,
+      goingConcern,
+      misstatementReview,
+      complianceCheck,
+      report.company,
+      language,
+      onProgress,
+      { auditReport, preprocessed },
+    );
+    onProgress?.({ type: 'drafter_complete', name: 'Redactor del Dictamen (NIA 700/705/706)' });
+  }
 
   // ---------------------------------------------------------------------------
   // Stage 3: Consolidation
@@ -146,6 +159,7 @@ export async function orchestrateFiscalOpinion(
     dictamen.managementLetter,
     dictamen.keyAuditMatters,
     language,
+    dictamen,
   );
 
   const fiscalOpinionReport: FiscalOpinionReport = {
@@ -156,6 +170,7 @@ export async function orchestrateFiscalOpinion(
     dictamen,
     consolidatedReport,
     generatedAt: new Date().toISOString(),
+    evaluatorsFailed,
   };
 
   onProgress?.({ type: 'done' });
@@ -188,37 +203,64 @@ function buildEvaluationContent(
 // ---------------------------------------------------------------------------
 // Fallback builders for failed evaluators
 // ---------------------------------------------------------------------------
+// Un evaluador fallido NUNCA declara una conclusión limpia: estado
+// 'no_evaluado' y cifras N/D (null), no "sin incertidumbre" ni "sin
+// incorrecciones materiales" con materialidad $0 (tributario-modulos-11).
 
-function buildFallbackGoingConcern(error: string): GoingConcernResult {
+const EVALUATOR_LABEL: Record<EvaluatorDomain, string> = {
+  empresa_en_marcha: 'Empresa en marcha (NIA 570)',
+  incorrecciones: 'Incorrecciones materiales (NIA 320/450)',
+  cumplimiento: 'Cumplimiento estatutario (Art. 207 C.Co.)',
+};
+
+export function buildBlockedDictamen(failed: EvaluatorDomain[]): FiscalOpinionDictamen {
+  const which = failed.map((d) => EVALUATOR_LABEL[d]).join('; ');
+  const reason =
+    `Dictamen no emitido: no se completó la evaluación de ${which}. ` +
+    'Sin esa evidencia no hay base para formar una opinión (NIA 700 par. 10-11; NIA 705). Repita la evaluación antes de emitir el dictamen.';
   return {
-    assessment: 'caution',
-    conclusion: 'sin_incertidumbre',
+    opinionType: 'no_emitida',
+    dictamenText: '',
+    keyAuditMatters: [],
+    emphasisParagraphs: [],
+    otherMatterParagraphs: [],
+    managementLetter: '',
+    goingConcernSection: null,
+    blockedReason: reason,
+    fullContent: `## TIPO DE OPINION\n\nno_emitida\n\n## DICTAMEN\n\n${reason}`,
+  };
+}
+
+export function buildFallbackGoingConcern(error: string): GoingConcernResult {
+  return {
+    assessment: 'no_evaluado',
+    conclusion: 'no_evaluado',
     indicators: [],
-    recommendedDisclosures: ['No fue posible completar la evaluacion de empresa en marcha debido a un error tecnico.'],
-    analysis: `El evaluador de empresa en marcha no pudo completar su analisis: ${error}. Se recomienda una evaluacion manual.`,
+    recommendedDisclosures: [],
+    analysis: `El evaluador de empresa en marcha no pudo completar su analisis: ${error}. No hay conclusion NIA 570; se requiere una evaluacion manual.`,
     fullContent: '',
   };
 }
 
-function buildFallbackMisstatement(error: string): MisstatementResult {
+export function buildFallbackMisstatement(error: string): MisstatementResult {
   return {
     materiality: {
       benchmark: 'No determinado (evaluador fallido)',
-      baseAmount: 0,
-      materialityThreshold: 0,
-      performanceMateriality: 0,
-      trivialThreshold: 0,
+      baseAmount: null,
+      materialityThreshold: null,
+      performanceMateriality: null,
+      trivialThreshold: null,
     },
     misstatements: [],
-    totalUncorrected: 0,
-    materialInAggregate: false,
-    assessment: 'immaterial',
-    analysis: `El revisor de incorrecciones no pudo completar su analisis: ${error}. Se recomienda una evaluacion manual de materialidad.`,
+    totalUncorrected: null,
+    materialInAggregate: null,
+    assessment: 'no_evaluado',
+    analysis: `El revisor de incorrecciones no pudo completar su analisis: ${error}. No hay evaluacion de materialidad; se requiere una evaluacion manual.`,
     fullContent: '',
   };
 }
 
-function buildFallbackCompliance(error: string): ComplianceResult {
+export function buildFallbackCompliance(error: string): ComplianceResult {
   return {
     statutoryFunctions: Array.from({ length: 10 }, (_, i) => ({
       number: i + 1,
@@ -229,7 +271,7 @@ function buildFallbackCompliance(error: string): ComplianceResult {
     regulatoryItems: [],
     independenceAssessment: 'No evaluada debido a error tecnico.',
     nonComplianceItems: [],
-    complianceScore: 0,
+    complianceScore: null,
     analysis: `El verificador de cumplimiento no pudo completar su analisis: ${error}. Se recomienda una evaluacion manual.`,
     fullContent: '',
   };
@@ -249,25 +291,32 @@ function buildConsolidatedReport(
   managementLetter: string,
   keyAuditMatters: { title: string; description: string; auditResponse: string }[],
   language: 'es' | 'en',
+  dictamen?: FiscalOpinionDictamen,
 ): string {
   const date = new Date().toLocaleDateString(
     language === 'es' ? 'es-CO' : 'en-US',
     { year: 'numeric', month: 'long', day: 'numeric' },
   );
 
-  const fmt = (n: number) =>
-    (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number | null) =>
+    n === null
+      ? 'N/D'
+      : (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const siNoNd = (b: boolean | null) => (b === null ? 'N/D' : b ? 'SI' : 'NO');
+  const score = compliance.complianceScore === null ? 'N/D (no evaluado)' : `${compliance.complianceScore}/100`;
 
   const gcAssessmentLabel: Record<string, string> = {
     pass: 'Sin dudas significativas',
     caution: 'Precaucion — indicadores a monitorear',
     doubt: 'Duda sustancial sobre empresa en marcha',
+    no_evaluado: 'NO EVALUADO — el evaluador no completo su analisis',
   };
 
   const misstatementLabel: Record<string, string> = {
     material: 'Incorrecciones MATERIALES identificadas',
     immaterial: 'Sin incorrecciones materiales',
     pervasive: 'Incorrecciones MATERIALES y GENERALIZADAS',
+    no_evaluado: 'NO EVALUADO — el evaluador no completo su analisis',
   };
 
   const statutoryTable = compliance.statutoryFunctions.length > 0
@@ -304,7 +353,7 @@ function buildConsolidatedReport(
 | **Tipo de Opinion** | **${OPINION_LABELS[opinionType]}** |
 | **Empresa en Marcha** | ${gcAssessmentLabel[goingConcern.assessment] || goingConcern.assessment} |
 | **Incorrecciones** | ${misstatementLabel[misstatement.assessment] || misstatement.assessment} |
-| **Cumplimiento Estatutario** | ${compliance.complianceScore}/100 |
+| **Cumplimiento Estatutario** | ${score} |
 | **Sistema** | 1+1 — Fiscal Opinion Pipeline (4 Agentes: 3 Evaluadores + 1 Redactor) |
 
 ---
@@ -315,15 +364,16 @@ function buildConsolidatedReport(
 - **Empresa en marcha (NIA 570):** ${gcAssessmentLabel[goingConcern.assessment]} — Conclusion: ${goingConcern.conclusion}
 - **Indicadores de riesgo:** ${goingConcern.indicators.length} encontrados (${goingConcern.indicators.filter((i) => i.severity === 'alto').length} altos)
 - **Materialidad global:** ${fmt(misstatement.materiality.materialityThreshold)} (Benchmark: ${misstatement.materiality.benchmark})
-- **Incorrecciones no corregidas:** ${fmt(misstatement.totalUncorrected)} — ${misstatement.materialInAggregate ? 'MATERIAL en conjunto' : 'No material en conjunto'}
-- **Cumplimiento Art. 207 C.Co.:** ${compliance.complianceScore}/100
+- **Incorrecciones no corregidas:** ${fmt(misstatement.totalUncorrected)} — ${misstatement.materialInAggregate === null ? 'N/D (no evaluado)' : misstatement.materialInAggregate ? 'MATERIAL en conjunto' : 'No material en conjunto'}
+- **Cumplimiento Art. 207 C.Co.:** ${score}
 - **Funciones con incumplimiento:** ${compliance.statutoryFunctions.filter((f) => f.status === 'no_cumple').length} de 10
 
 ---
 
 # DICTAMEN FORMAL
 
-${dictamenText || '*Dictamen no disponible.*'}
+${dictamenText || (dictamen?.blockedReason ? `**${dictamen.blockedReason}**` : '*Dictamen no disponible.*')}
+${dictamen?.goingConcernSection ? `\n## INCERTIDUMBRE MATERIAL RELACIONADA CON EMPRESA EN FUNCIONAMIENTO\n\n${dictamen.goingConcernSection}\n` : ''}
 
 ---
 
@@ -353,7 +403,7 @@ ${goingConcern.recommendedDisclosures.length > 0 ? '**Revelaciones recomendadas:
 | **Materialidad de ejecucion** | ${fmt(misstatement.materiality.performanceMateriality)} |
 | **Umbral de trivialidad** | ${fmt(misstatement.materiality.trivialThreshold)} |
 | **Total incorrecciones no corregidas** | ${fmt(misstatement.totalUncorrected)} |
-| **Material en conjunto** | ${misstatement.materialInAggregate ? 'SI' : 'NO'} |
+| **Material en conjunto** | ${siNoNd(misstatement.materialInAggregate)} |
 
 ${misstatement.misstatements.length > 0
     ? [
@@ -369,7 +419,7 @@ ${misstatement.misstatements.length > 0
 
 # CUMPLIMIENTO ESTATUTARIO (Art. 207 C.Co.)
 
-**Score de cumplimiento:** ${compliance.complianceScore}/100
+**Score de cumplimiento:** ${score}
 
 ## Matriz de 10 Funciones Estatutarias
 

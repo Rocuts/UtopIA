@@ -7,10 +7,12 @@
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
+import { evaluateSagrilaft, renderSagrilaftBlock, type SagrilaftEvaluation } from '../sagrilaft';
 
 export function buildComplianceCheckerPrompt(
   company: CompanyInfo,
   language: 'es' | 'en',
+  sagrilaft: SagrilaftEvaluation = evaluateSagrilaft({ activosCop: null, ingresosCop: null }),
 ): string {
   const langInstruction =
     language === 'en'
@@ -42,14 +44,13 @@ NEVER penalices a la entidad por falta de informacion: penaliza solo por evidenc
 - Art. 209 C.Co. — informe ampliado sobre contabilidad.
 - Ley 43/1990 art. 8 (principios eticos), art. 10 (forma del dictamen), art. 37 par. 1-5 (independencia mental).
 - Ley 222/1995 art. 38 (responsabilidad personal) y art. 43 (sanciones JCC).
-- Circular Externa 100-000016 SuperSociedades (SAGRILAFT/PTEE): umbral 160.000 UVT en activos o ingresos.
-  UVT 2026 = $52.374 COP, umbral SAGRILAFT 2026 = 160.000 × $52.374 = $8.379.840.000 COP.
+- SAGRILAFT/PTEE (Supersociedades): la obligatoriedad y el umbral se evaluan en codigo y llegan en <sagrilaft_determinista>; solo obliga a sociedades vigiladas por la Superintendencia de Sociedades.
 - E.T. Arts. 581, 597, 638 (firma de declaraciones tributarias por revisor fiscal).
 Empresa: ${company.name} (NIT ${company.nit}, ${company.entityType || 'tipo no especificado'}, sector ${company.sector || 'no especificado'}). Periodo ${company.fiscalPeriod}${company.comparativePeriod ? ` (comparativo ${company.comparativePeriod})` : ''}.
 ${company.legalRepresentative ? `Representante Legal declarado: ${company.legalRepresentative}.` : ''}`;
 
   const multiperiodGuidance = isMultiPeriod
-    ? 'Hay multiples periodos. If activos o ingresos cruzan 160.000 UVT entre periodos then evalua activacion/desactivacion del SAGRILAFT y registra como ComplianceItem en regulatoryItems[]. If patrimonio < 50% capital suscrito (Art. 457 C.Co.) en el periodo principal then incluyelo en nonComplianceItems[].'
+    ? 'Hay multiples periodos. If hay indicadores de deterioro patrimonial o riesgo de insolvencia (patrimonio negativo, resultado negativo o razon corriente < 1,0 en dos cierres consecutivos — Decreto 1074/2015 Art. 2.2.1.18.2) then registra un ComplianceItem sobre el deber de los administradores de informar al maximo organo social (Art. 4 Ley 2069/2020); la causal del num. 2 del Art. 457 C.Co. esta derogada.'
     : 'Solo un periodo. Evalua los umbrales contra el cierre disponible y declara en analysis que la tendencia historica queda pendiente con comparativo.';
 
   return `${guardrail}
@@ -57,6 +58,8 @@ ${company.legalRepresentative ? `Representante Legal declarado: ${company.legalR
 ${context2026}
 
 <task>Verificar las 10 funciones estatutarias del Art. 207 C.Co., el cumplimiento regulatorio (SuperSociedades, DIAN, UIAF, SAGRILAFT), la independencia del Revisor Fiscal (Ley 43/1990), e identificar incumplimientos reportables.</task>
+
+${renderSagrilaftBlock(sagrilaft)}
 
 <success_criteria>
 - statutoryFunctions[] tiene EXACTAMENTE 10 entradas (number 1 a 10) en orden ascendente.
@@ -69,9 +72,8 @@ ${context2026}
 
 <constraints>
 - ALWAYS cita la norma exacta en normReference por cada ComplianceItem. Sin cita = item invalido.
-- ALWAYS evalua si la entidad esta o no obligada a SAGRILAFT comparando activos/ingresos con el umbral 2026 ($8.379.840.000 COP). Si no hay datos suficientes, status = "no_evaluado".
+- ALWAYS el item SAGRILAFT/PTEE copia la evaluacion de <sagrilaft_determinista>: sin constancia de vigilancia por la Superintendencia de Sociedades su status es "no_evaluado" y NEVER "no_cumple"; la observation cita el umbral y la norma del bloque. NEVER calcules otro umbral.
 - NEVER reportes "cumple" sobre Funcion 7 (autorizar balance con firma) sin evidencia de firma del Revisor Fiscal — si no hay evidencia, "no_evaluado".
-- If la entidad supera el umbral SAGRILAFT pero no se evidencia el sistema then registra "no_cumple" con norma "Circular Externa 100-000016 SuperSociedades".
 - If Art. 207 numeral 10 (UIAF) aplica al sector (financiero, inmobiliario, comercio exterior, etc.) then evaluarlo con prioridad alta.
 - ${multiperiodGuidance}
 </constraints>

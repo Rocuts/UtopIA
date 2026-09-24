@@ -45,7 +45,12 @@ export type EvaluatorDomain = 'empresa_en_marcha' | 'incorrecciones' | 'cumplimi
 // Agent 1: Going Concern Evaluator Output
 // ---------------------------------------------------------------------------
 
-export type GoingConcernConclusion = 'sin_incertidumbre' | 'incertidumbre_material' | 'base_inadecuada';
+export type GoingConcernConclusion =
+  | 'sin_incertidumbre'
+  | 'incertidumbre_material'
+  | 'base_inadecuada'
+  /** El evaluador falló: no hay conclusión NIA 570 (nunca "sin incertidumbre"). */
+  | 'no_evaluado';
 
 export interface GoingConcernIndicator {
   /** Indicator category: financial, operational, regulatory */
@@ -54,13 +59,13 @@ export interface GoingConcernIndicator {
   description: string;
   /** Severity: alto, medio, bajo */
   severity: 'alto' | 'medio' | 'bajo';
-  /** Applicable norm (e.g., "NIA 570 par. 10", "Art. 457 C.Co.") */
+  /** Applicable norm (e.g., "NIA 570 par. 16", "Art. 4 Ley 2069/2020") */
   normReference: string;
 }
 
 export interface GoingConcernResult {
-  /** Overall assessment */
-  assessment: 'pass' | 'caution' | 'doubt';
+  /** Overall assessment ('no_evaluado' cuando el evaluador falló). */
+  assessment: 'pass' | 'caution' | 'doubt' | 'no_evaluado';
   /** NIA 570 conclusion type */
   conclusion: GoingConcernConclusion;
   /** Supporting indicators found */
@@ -82,14 +87,14 @@ export type MisstatementType = 'factual' | 'judgmental' | 'projected';
 export interface MaterialityCalculation {
   /** Benchmark used (e.g., "5% utilidad antes de impuestos") */
   benchmark: string;
-  /** Base amount in COP */
-  baseAmount: number;
-  /** Materiality threshold in COP */
-  materialityThreshold: number;
+  /** Base amount in COP (null = N/D, evaluador fallido) */
+  baseAmount: number | null;
+  /** Materiality threshold in COP (null = N/D) */
+  materialityThreshold: number | null;
   /** Performance materiality (typically 50-75% of materiality) */
-  performanceMateriality: number;
+  performanceMateriality: number | null;
   /** Trivial threshold (clearly trivial misstatements, typically 5% of materiality) */
-  trivialThreshold: number;
+  trivialThreshold: number | null;
 }
 
 export interface IdentifiedMisstatement {
@@ -114,12 +119,12 @@ export interface MisstatementResult {
   materiality: MaterialityCalculation;
   /** Identified misstatements */
   misstatements: IdentifiedMisstatement[];
-  /** Total uncorrected misstatements amount */
-  totalUncorrected: number;
-  /** Whether uncorrected misstatements are material individually or in aggregate */
-  materialInAggregate: boolean;
-  /** Overall assessment */
-  assessment: 'material' | 'immaterial' | 'pervasive';
+  /** Total uncorrected misstatements amount (null = N/D, evaluador fallido) */
+  totalUncorrected: number | null;
+  /** Whether uncorrected misstatements are material individually or in aggregate (null = N/D) */
+  materialInAggregate: boolean | null;
+  /** Overall assessment ('no_evaluado' cuando el evaluador falló — nunca "immaterial"). */
+  assessment: 'material' | 'immaterial' | 'pervasive' | 'no_evaluado';
   /** Detailed analysis narrative */
   analysis: string;
   /** Full raw Markdown content */
@@ -167,8 +172,8 @@ export interface ComplianceResult {
   independenceAssessment: string;
   /** Identified non-compliance items */
   nonComplianceItems: ComplianceItem[];
-  /** Overall compliance score 0-100 */
-  complianceScore: number;
+  /** Overall compliance score 0-100 (null = N/D, evaluador fallido) */
+  complianceScore: number | null;
   /** Detailed analysis narrative */
   analysis: string;
   /** Full raw Markdown content */
@@ -179,7 +184,17 @@ export interface ComplianceResult {
 // Agent 4: Opinion Drafter Output
 // ---------------------------------------------------------------------------
 
-export type OpinionType = 'limpia' | 'con_salvedades' | 'adversa' | 'abstencion';
+export type OpinionType =
+  | 'limpia'
+  | 'con_salvedades'
+  | 'adversa'
+  | 'abstencion'
+  /**
+   * Dictamen BLOQUEADO: algún evaluador (empresa en marcha, incorrecciones,
+   * cumplimiento) no completó su análisis. Sin esa evidencia no se emite
+   * opinión formal (tributario-modulos-11).
+   */
+  | 'no_emitida';
 
 export interface KeyAuditMatter {
   /** Title of the key audit matter */
@@ -203,6 +218,13 @@ export interface FiscalOpinionDictamen {
   otherMatterParagraphs: string[];
   /** Management letter (Carta de Gerencia) with recommendations */
   managementLetter: string;
+  /**
+   * Sección separada "Incertidumbre material relacionada con empresa en
+   * funcionamiento" (NIA 570 revisada par. 22). null si no aplica.
+   */
+  goingConcernSection?: string | null;
+  /** Motivo del bloqueo cuando opinionType = 'no_emitida'. */
+  blockedReason?: string | null;
   /** Full raw Markdown content */
   fullContent: string;
 }
@@ -222,6 +244,8 @@ export interface FiscalOpinionReport {
   complianceCheck: ComplianceResult;
   /** Final dictamen from Opinion Drafter */
   dictamen: FiscalOpinionDictamen;
+  /** Evaluadores que no completaron su análisis (dictamen bloqueado si hay alguno). */
+  evaluatorsFailed?: EvaluatorDomain[];
   /** Full consolidated Markdown report */
   consolidatedReport: string;
   /** Timestamp */
