@@ -88,6 +88,7 @@ describe('ValorExecutiveCards', () => {
     ratio: card('ratio', 'ratio', 1.254, 0.05),
     fcf: card('fcf', 'cop', -1_500_000, null),
     audit: {} as never,
+    generatedAt: '2026-09-24T00:00:00Z',
   };
 
   it('es: mil M, coma decimal y negativos entre paréntesis', () => {
@@ -121,6 +122,7 @@ describe('Verdad / Futuro / Escudo ExecutiveCards', () => {
       anomalias: card('anomalias', 'count', 2, null),
       salud_contable: card('salud_contable', 'count', 1, null),
       audit: {} as never,
+      generatedAt: '2026-09-24T00:00:00Z',
     };
     const t = text(<VerdadExecutiveCards cards={cards} language="es" />);
     expect(t).toContain('($3 mil M)');
@@ -135,6 +137,7 @@ describe('Verdad / Futuro / Escudo ExecutiveCards', () => {
       provision_tributaria: card('provision_tributaria', 'cop', 1_200_000_000, 150_000_000),
       capacidad_inversion: card('capacidad_inversion', 'ratio', 0.5, null),
       audit: {} as never,
+      generatedAt: '2026-09-24T00:00:00Z',
     };
     const t = text(<FuturoExecutiveCards cards={cards} language="es" />);
     expect(t).toContain('12,3%');
@@ -152,6 +155,7 @@ describe('Verdad / Futuro / Escudo ExecutiveCards', () => {
       reserva_fiscal: card('reserva_fiscal', 'cop', null, null),
       brecha_escudo: card('brecha_escudo', 'cop', -2_500_000_000, -500_000_000),
       audit: {} as never,
+      generatedAt: '2026-09-24T00:00:00Z',
     };
     const t = text(<EscudoExecutiveCards cards={cards} language="es" />);
     expect(t).toContain('45 días');
