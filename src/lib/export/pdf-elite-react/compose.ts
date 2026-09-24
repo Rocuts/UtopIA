@@ -820,8 +820,10 @@ function buildKpiGrid(
       'ROE',
       ratios.roePct === null ? ND : formatPct(ratios.roePct / 100),
       'rentabilidad',
+      // El motivo que publicó el preprocesador (p. ej. patrimonio promedio ≤ 0)
+      // viaja a la celda; no se recalcula el ROE (ratios-kpis-07).
       ratios.roePct === null
-        ? 'Patrimonio promedio nulo o anómalo'
+        ? totals.kpiNdMotivos?.roe ?? 'Patrimonio promedio nulo o anómalo'
         : ratios.roeOnClosingEquity
           ? '△ sobre patrimonio de cierre (sin promedio con el comparativo)'
           : undefined,

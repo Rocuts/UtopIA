@@ -1306,6 +1306,16 @@ function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRo
   };
   const roeMeta = basisNote('roe');
   const roaMeta = basisNote('roa');
+  // ROE N/D por base no interpretable (patrimonio promedio ≤ 0): la nota es el
+  // motivo que publicó el preprocesador, no la base de un cálculo que no se
+  // hizo (ratios-kpis-07). Mismo texto que la tarjeta del PDF.
+  const ndMotivo = (view: PeriodView | null) => view?.controlTotals?.kpiNdMotivos?.roe ?? null;
+  const roeNdNote =
+    roeP === null && ndMotivo(primary)
+      ? ndMotivo(primary)!
+      : comparative && roeC === null && ndMotivo(comparative)
+        ? `${comparative.period}: ${ndMotivo(comparative)}`
+        : null;
 
   return [
     kpiOf('Total Activo', p.totalAssets, c?.totalAssets ?? null, { isMoney: true }),
@@ -1316,7 +1326,7 @@ function computeKPIs(primary: PeriodView, comparative: PeriodView | null): KPIRo
     kpiOf('Margen Neto', margenNetoP, margenNetoC, { isPct: true }),
     kpiOf('Endeudamiento', endeudamientoP, endeudamientoC, { isPct: true }),
     { ...kpiOf('ROA', roaP, roaC, { isPct: true, comparable: roaMeta.comparable }), note: roaMeta.note },
-    { ...kpiOf('ROE', roeP, roeC, { isPct: true, comparable: roeMeta.comparable }), note: roeMeta.note },
+    { ...kpiOf('ROE', roeP, roeC, { isPct: true, comparable: roeMeta.comparable }), note: roeNdNote ?? roeMeta.note },
   ];
 }
 
