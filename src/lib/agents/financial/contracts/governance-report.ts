@@ -83,7 +83,7 @@ export const FinancialNoteNumberSchema = z.union([
 ]);
 
 export const FinancialNoteSchema = z.object({
-  number: FinancialNoteNumberSchema.describe('Número fijo 1..16 — Entidad, Políticas, Efectivo, Deudores, Inventarios, PPE, Obligaciones Financieras, CxP, Impuestos, Pasivos Laborales, Patrimonio, Ingresos, Contingencias, IFRS 18, Partes Vinculadas (NIC 24), Autorización Publicación (NIC 10 §17)'),
+  number: FinancialNoteNumberSchema.describe('Número secuencial sin saltos — Entidad, Políticas, Efectivo, Deudores, Inventarios, PPE, Obligaciones Financieras, CxP, Impuestos, Pasivos Laborales, Patrimonio, Ingresos, Contingencias, IFRS 18 (sólo Grupo 1), Partes Vinculadas (NIC 24), Autorización Publicación (NIC 10 §17)'),
   title: z.string().min(1).describe('Título de la nota'),
   body: z.string().min(1).describe('Cuerpo en prosa profesional — cifras con formato COP'),
   normReference: NormaRef.nullable().describe('Cita normativa principal cuando aplique'),
@@ -160,7 +160,7 @@ export const ResultDistributionLineSchema = z.object({
 });
 
 export const ResultDistributionSchema = z.object({
-  netIncomeCop: MoneyCop.describe('Utilidad Neta del Ejercicio — copia LITERAL del bindingTotals'),
+  netIncomeCop: MoneyCop.describe('Resultado neto del ejercicio CON SIGNO (negativo = pérdida) — copia LITERAL del bindingTotals'),
   applies: z.boolean().describe('True si se propone distribución; false si la entidad no constituye reserva legal por régimen SAS sin habilitación estatutaria'),
   lines: z.array(ResultDistributionLineSchema).describe('Líneas de la propuesta (legal/ocasional/distribuible). Vacío si applies=false'),
   neutralProposalText: z.string().nullable().describe('Texto neutral cuando applies=false: "Los accionistas decidirán la destinación..." Null cuando applies=true'),
@@ -170,7 +170,7 @@ export const CapitalizationProposalSchema = z.object({
   applies: z.boolean().describe('True cuando la utilidad neta del ejercicio aprobado es material y justifica capitalizar 40%'),
   retainedEarningsBaseCop: MoneyCop.describe('Base de la capitalización (v2.5 corrección #13): Utilidad Neta del Ejercicio del P&L (netIncomePrimary). El nombre del campo se conserva por retrocompat — el contenido pasó de "saldo acumulado PUC 36" a "utilidad neta del ejercicio" en v2.5 para alinear el acta con la utilidad efectivamente aprobada en la misma asamblea. El saldo acumulado de PUC 36 se referencia como contexto informativo en el body, NO como base del 40%.'),
   capitalizationAmountCop: MoneyCop.describe('40% × retainedEarningsBaseCop (i.e., 40% de la utilidad neta del ejercicio bajo v2.5)'),
-  legalReference: NormaRef.describe('Cita LITERAL. Ej: "Ley 1258/2008 art. 5 (SAS) + E.T. art. 36-3"'),
+  legalReference: NormaRef.describe('Cita LITERAL. Ej: "Ley 1258/2008 art. 29 (reforma estatutaria) + Art. 30 E.T. (dividendo en especie)"'),
   body: z.string().min(1).describe('Texto LITERAL de la proposición — palabras exactas para el acta'),
 });
 
@@ -190,8 +190,11 @@ export const FiscalReviewerOpinionSchema = z.object({
   applies: z.boolean().describe('True si la entidad tiene Revisor Fiscal obligado (Art. 203 C.Co. + Ley 43/1990 art. 13)'),
   reviewerName: z.string().nullable(),
   reviewerTp: z.string().nullable().describe('Formato "12345-T"'),
-  opinionType: z.enum(['favorable', 'con_salvedades', 'desfavorable', 'abstension']).nullable(),
-  opinionBody: z.string().nullable().describe('Síntesis del dictamen — NIA 700/705/706 + Art. 207-209 C.Co.'),
+  // El acta no anticipa la opinión del Revisor Fiscal (Arts. 207-209 C.Co.):
+  // el adapter fuerza null aunque el modelo emita un valor. El campo se
+  // conserva por retrocompatibilidad del contrato.
+  opinionType: z.enum(['favorable', 'con_salvedades', 'desfavorable', 'abstension']).nullable().describe('Siempre null: el dictamen lo emite el Revisor Fiscal; el acta lo referencia como pendiente de emisión'),
+  opinionBody: z.string().nullable().describe('Siempre null: el acta no resume ni anticipa el dictamen del Revisor Fiscal'),
   exemptionReason: z.string().nullable().describe('Justificación cuando applies=false. Ej: "Entidad no obligada por umbral Art. 203 C.Co."'),
 });
 
@@ -200,17 +203,17 @@ export const ShareholderMinutesSchema = z.object({
   entityRegimeCitation: NormaRef.describe('Régimen societario aplicable. Ej: "Ley 1258 de 2008 (SAS)"'),
   city: z.string().nullable().describe('Ciudad de la reunión. Null si no se conoce'),
   meetingDate: z.string().nullable().describe('Fecha de la reunión (libre formato). Null si no se conoce'),
-  // Why: Art. 424 C.Co. — sin verificación de convocatoria documentada, la
-  // asamblea es impugnable por defecto de convocatoria. Schema estructurado
-  // obliga al LLM a declarar modalidad + antelación, sin lo cual el acta no
-  // tiene valor probatorio.
-  convocationStatement: z.string().min(1).describe('Declaración LITERAL de verificación de convocatoria (Art. 424 C.Co.) — modalidad y antelación con que se citó'),
+  // Why: sin verificación de convocatoria documentada, la asamblea es
+  // impugnable por defecto de convocatoria. La norma depende del tipo
+  // societario (SAS: estatutos + Art. 20 Ley 1258/2008; S.A.: Art. 424
+  // C.Co.; Ltda.: estatutos + Arts. 181-186 C.Co.).
+  convocationStatement: z.string().min(1).describe('Declaración de verificación de convocatoria según la norma del tipo societario indicada en el prompt — modalidad y antelación con que se citó'),
   quorumStatement: z.string().min(1).describe('Afirmación de quorum — sin porcentajes inventados'),
-  // Why: orden del día canónico Art. 187 Ley 222/1995 — 8 puntos mínimos
-  // incluyendo gestión administradores (§3), designación cargos (§4) y
-  // verificación convocatoria (Art. 424 C.Co.). El min anterior (5) permitía
-  // omitir puntos legalmente obligatorios.
-  agenda: z.array(AgendaItemSchema).min(8).describe('Orden del día — mínimo 8 puntos canónicos (Art. 187 Ley 222/1995): convocatoria, quorum, aprobación EEFF, informe gestión, aprobación gestión administradores §3, distribución/reservas, designación cargos §4, varios+cierre'),
+  // Why: orden del día canónico — funciones de la asamblea del Art. 187
+  // C.Co. (el Art. 187 de la Ley 222/1995 fue derogado por la Ley 1116/2006
+  // y nunca reguló esta materia). 8 puntos mínimos. El min anterior (5)
+  // permitía omitir puntos legalmente obligatorios.
+  agenda: z.array(AgendaItemSchema).min(8).describe('Orden del día — mínimo 8 puntos canónicos (Art. 187 C.Co.): convocatoria, quorum, aprobación EEFF (num. 2), informe de gestión, aprobación gestión administradores, destinación de resultados (num. 3), designación cargos (num. 4), varios+cierre'),
   developments: z.array(AgendaDevelopmentSchema).describe('Desarrollo de cada punto del orden del día'),
   resultDistribution: ResultDistributionSchema,
   capitalizationProposal: CapitalizationProposalSchema,

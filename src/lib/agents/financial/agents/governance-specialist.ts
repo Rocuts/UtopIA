@@ -22,6 +22,8 @@ import {
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import {
   buildGovernancePrompt,
+  convocatoriaCitationFor,
+  normalizeTipoSocietario,
   type GovernanceEliteContext,
 } from '../prompts/governance-specialist.prompt';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
@@ -106,7 +108,7 @@ export async function runGovernanceSpecialist(
     signal,
   });
 
-  const result = toGovernanceResult(json);
+  const result = toGovernanceResult(json, company);
 
   // Validador anti-evasivo (post-generación) — Wave 2.F3 refactor.
   // Ahora opera sobre el JSON estructurado y exonera `disclaimers[]` por
@@ -132,11 +134,29 @@ export async function runGovernanceSpecialist(
 // Adapter local privado: GovernanceReportJson -> GovernanceResult legacy
 // ---------------------------------------------------------------------------
 
-function renderFinancialNotes(notes: readonly FinancialNote[]): string {
+/**
+ * Nota de preparación IFRS 18: sólo aplica al Grupo 1. Para Grupo 2/3 (o
+ * grupo no informado, que el pipeline trata como Grupo 2) la nota no se
+ * incluye (Corrección 6 v2.1 + Pass-3 NIIF "IFRS 18 NUNCA mencionada"); si
+ * el modelo la emite igual, se trata como omitida. Sin esta salvaguarda el
+ * gate V8 bloquea todo informe de Grupo 2 que obedezca al prompt anterior.
+ */
+const IFRS18_NOTE_TITLE_RX = /\b(?:IFRS|NIIF)\s*18\b/i;
+
+function isOmittedNote(n: FinancialNote, niifGroup: number | null | undefined): boolean {
+  if (n.materiality === 'omitted') return true;
+  if (niifGroup !== 1 && IFRS18_NOTE_TITLE_RX.test(n.title)) return true;
+  return false;
+}
+
+function renderFinancialNotes(
+  notes: readonly FinancialNote[],
+  niifGroup: number | null | undefined,
+): string {
   const lines: string[] = ['## 1. NOTAS A LOS ESTADOS FINANCIEROS'];
   const sorted = [...notes].sort((a, b) => a.number - b.number);
   for (const n of sorted) {
-    if (n.materiality === 'omitted') continue;
+    if (isOmittedNote(n, niifGroup)) continue;
     lines.push('', `### Nota ${n.number}: ${n.title}`);
     lines.push(n.body);
     if (n.normReference) lines.push(`_Norma:_ ${n.normReference}`);
@@ -144,7 +164,23 @@ function renderFinancialNotes(notes: readonly FinancialNote[]): string {
   return lines.join('\n');
 }
 
-function renderShareholderMinutes(minutes: ShareholderMinutes, company: GovernanceReportJson['company']): string {
+/** Rótulo con signo del resultado del ejercicio (NIIF: pérdida entre paréntesis). */
+function resultadoDelEjercicioLine(netIncomeCop: string): string {
+  const net = parseMoneyCop(netIncomeCop);
+  const label = net < BigInt(0) ? 'Pérdida neta del ejercicio' : 'Utilidad neta del ejercicio';
+  return `${label}: ${formatCopFromCents(net, false)}`;
+}
+
+/** Cifra con signo (paréntesis NIIF para negativos) — nunca valor absoluto. */
+function signedCop(value: string): string {
+  return formatCopFromCents(parseMoneyCop(value), false);
+}
+
+function renderShareholderMinutes(
+  minutes: ShareholderMinutes,
+  company: GovernanceReportJson['company'],
+  entityType: string | null | undefined,
+): string {
   const lines: string[] = [];
   lines.push(`## 2. ACTA DE ${minutes.assemblyType.toUpperCase()} ORDINARIA`);
   lines.push('');
@@ -153,10 +189,13 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
   if (minutes.city) lines.push(`Ciudad: ${minutes.city}`);
   if (minutes.meetingDate) lines.push(`Fecha: ${minutes.meetingDate}`);
 
-  // Why: Art. 424 C.Co. — declaración de convocatoria precede al quorum
-  // porque sin convocatoria válida la asamblea es impugnable.
+  // Why: la declaración de convocatoria precede al quorum porque sin
+  // convocatoria válida la asamblea es impugnable. La norma depende del tipo
+  // societario: SAS → estatutos + Art. 20 Ley 1258/2008; S.A. → Art. 424
+  // C.Co.; Ltda. → estatutos + Arts. 181-186 C.Co. (prompts-normativa-13).
+  const citation = convocatoriaCitationFor(normalizeTipoSocietario(entityType));
   lines.push('', '### Verificación de Convocatoria', minutes.convocationStatement);
-  lines.push('_Norma:_ Art. 424 Código de Comercio.');
+  lines.push(`_Norma:_ ${citation.charAt(0).toUpperCase()}${citation.slice(1)}.`);
 
   lines.push('', '### Quorum', minutes.quorumStatement);
 
@@ -173,16 +212,17 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
 
   lines.push('', '### Destinación del resultado del ejercicio');
   const dist = minutes.resultDistribution;
-  lines.push(
-    `Utilidad Neta del Ejercicio: ${formatCopFromCents(parseMoneyCop(dist.netIncomeCop), true)}`,
-  );
+  // El reconciliador exige que netIncomeCop sea la cifra FIRMADA de los
+  // totales vinculantes; imprimirla en valor absoluto convertía una pérdida
+  // en "utilidad" en un documento para firma (auditoria-calidad-01).
+  lines.push(resultadoDelEjercicioLine(dist.netIncomeCop));
   if (dist.applies && dist.lines.length > 0) {
     lines.push('');
     lines.push('| Concepto | Monto | Norma |');
     lines.push('|---|---:|---|');
     for (const ln of dist.lines) {
       lines.push(
-        `| ${ln.label} | ${formatCopFromCents(parseMoneyCop(ln.amountCop), true)} | ${ln.normReference} |`,
+        `| ${ln.label} | ${signedCop(ln.amountCop)} | ${ln.normReference} |`,
       );
     }
   } else if (dist.neutralProposalText) {
@@ -192,10 +232,12 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
   if (minutes.capitalizationProposal.applies) {
     lines.push(
       '',
-      '### Proposición — Capitalización 40% de utilidades retenidas acumuladas',
+      // v2.5 #13: la base es la utilidad neta del ejercicio, no el saldo
+      // acumulado del PUC 36 (pipeline-flujo-18).
+      '### Proposición — Capitalización del 40% de la utilidad neta del ejercicio',
       minutes.capitalizationProposal.body,
-      `_Base:_ ${formatCopFromCents(parseMoneyCop(minutes.capitalizationProposal.retainedEarningsBaseCop), true)}`,
-      `_Monto a capitalizar:_ ${formatCopFromCents(parseMoneyCop(minutes.capitalizationProposal.capitalizationAmountCop), true)}`,
+      `_Base (utilidad neta del ejercicio):_ ${signedCop(minutes.capitalizationProposal.retainedEarningsBaseCop)}`,
+      `_Monto a capitalizar:_ ${signedCop(minutes.capitalizationProposal.capitalizationAmountCop)}`,
       `_Fundamento:_ ${minutes.capitalizationProposal.legalReference}`,
     );
   }
@@ -222,17 +264,14 @@ function renderShareholderMinutes(minutes: ShareholderMinutes, company: Governan
   const op = minutes.fiscalReviewerOpinion;
   lines.push('', '### Dictamen del Revisor Fiscal');
   if (op.applies) {
-    const opTypeLabel = {
-      favorable: 'favorable',
-      con_salvedades: 'con salvedades',
-      desfavorable: 'desfavorable',
-      abstension: 'abstención',
-    } as const;
+    // El acta NO anticipa la opinión: el dictamen lo emite el Revisor Fiscal
+    // (Arts. 207-209 C.Co.) y la auditoría Parte IV lleva su propia opinión
+    // con salvaguardas. Publicar aquí el tipo que redactó el modelo de
+    // Governance producía dos "dictámenes" contradictorios (auditoria-calidad-18).
     lines.push(
-      `${op.reviewerName ?? '— (a completar al firmar)'}${op.reviewerTp ? ` — T.P. ${op.reviewerTp}` : ''}, Revisor Fiscal de ${company.name} (NIT ${company.nit}), emite dictamen ${op.opinionType ? opTypeLabel[op.opinionType] : 'pendiente'}.`,
+      `${op.reviewerName ?? '— (a completar al firmar)'}${op.reviewerTp ? ` — T.P. ${op.reviewerTp}` : ''}, Revisor Fiscal de ${company.name} (NIT ${company.nit}): dictamen pendiente de emisión por el Revisor Fiscal. El acta no anticipa ni califica su opinión.`,
     );
-    if (op.opinionBody) lines.push('', op.opinionBody);
-    lines.push('', '_Sustento normativo:_ Ley 43 de 1990, Art. 207-209 C.Co., NIA 700/705/706.');
+    lines.push('', '_Sustento normativo:_ Arts. 207-209 C.Co., Ley 43 de 1990, NIA 700/705/706.');
   } else {
     lines.push(op.exemptionReason ?? 'Entidad no obligada a Revisor Fiscal por umbral Art. 203 C.Co.');
   }
@@ -285,9 +324,31 @@ function renderDisclaimers(json: GovernanceReportJson): string {
   return lines.join('\n');
 }
 
-function toGovernanceResult(json: GovernanceReportJson): GovernanceResult {
-  const financialNotes = renderFinancialNotes(json.financialNotes);
-  const shareholderMinutes = renderShareholderMinutes(json.shareholderMinutes, json.company);
+/**
+ * El JSON expuesto a consumidores downstream tampoco lleva la opinión que el
+ * modelo de Governance haya redactado para el Revisor Fiscal.
+ */
+function withoutReviewerOpinion(json: GovernanceReportJson): GovernanceReportJson {
+  const op = json.shareholderMinutes.fiscalReviewerOpinion;
+  if (op.opinionType === null && op.opinionBody === null) return json;
+  return {
+    ...json,
+    shareholderMinutes: {
+      ...json.shareholderMinutes,
+      fiscalReviewerOpinion: { ...op, opinionType: null, opinionBody: null },
+    },
+  };
+}
+
+function toGovernanceResult(
+  rawJson: GovernanceReportJson,
+  company?: Pick<CompanyInfo, 'entityType' | 'niifGroup'>,
+): GovernanceResult {
+  const json = withoutReviewerOpinion(rawJson);
+  const niifGroup = company?.niifGroup ?? json.company.niifGroup;
+  const entityType = company?.entityType ?? json.company.entityType;
+  const financialNotes = renderFinancialNotes(json.financialNotes, niifGroup);
+  const shareholderMinutes = renderShareholderMinutes(json.shareholderMinutes, json.company, entityType);
   const complianceChecklist = renderComplianceChecklist(json);
   const disclaimers = renderDisclaimers(json);
   const preparerNotes = renderPreparerNotes(json);
@@ -437,3 +498,9 @@ function detectForbiddenPhrasesInJson(json: GovernanceReportJson): EvasiveHit[] 
   }
   return hits;
 }
+
+// ---------------------------------------------------------------------------
+// Test-only re-export — el adapter es interno; la superficie pública es
+// `runGovernanceSpecialist` (una llamada LLM). No importar fuera de tests.
+// ---------------------------------------------------------------------------
+export const __test_toGovernanceResult = toGovernanceResult;
