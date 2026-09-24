@@ -92,10 +92,14 @@ function makeJson(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [], netFlow: '0' },
-        { section: 'investing', lines: [], netFlow: '0' },
-        { section: 'financing', lines: [], netFlow: '0' },
+        { section: 'operating', lines: [], netFlow: '0', netFlowComparative: null },
+        { section: 'investing', lines: [], netFlow: '0', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '0', netFlowComparative: null },
       ],
       netChange: '0',
       cashOpening: '0',
@@ -103,7 +107,7 @@ function makeJson(overrides: Partial<NiifReportJson> = {}): NiifReportJson {
       methodNote: 'indirect',
       degeneracyFlag: null,
     },
-    equityChanges: { rows: [], notes: [] },
+    equityChanges: { comparativeRows: null, comparativeNote: null, rows: [], notes: [] },
     technicalNotes: [],
     curatorFlags: {
       equityConvergenceApplied: false,
@@ -373,6 +377,10 @@ describe('niifJsonToCashFlowTable — Corrección v2.4 (ajuste no-cash)', () => 
         modeBanner: null,
       },
       cashFlow: {
+        netChangeComparative: null,
+        cashOpeningComparative: null,
+        cashClosingComparative: null,
+        comparativeNote: null,
         sections: [
           {
             section: 'operating',
@@ -449,11 +457,13 @@ describe('niifJsonToCashFlowTable — Corrección v2.4 (ajuste no-cash)', () => 
               },
             ],
             netFlow: '85019233463',
+            netFlowComparative: null,
           },
           {
             section: 'investing',
             lines: [],
             netFlow: '0',
+            netFlowComparative: null,
           },
           {
             section: 'financing',
@@ -462,6 +472,7 @@ describe('niifJsonToCashFlowTable — Corrección v2.4 (ajuste no-cash)', () => 
             // real de pago en efectivo.
             lines: [],
             netFlow: '0',
+            netFlowComparative: null,
           },
         ],
         netChange: '85019233463',
@@ -471,6 +482,8 @@ describe('niifJsonToCashFlowTable — Corrección v2.4 (ajuste no-cash)', () => 
         degeneracyFlag: null,
       },
       equityChanges: {
+        comparativeRows: null,
+        comparativeNote: null,
         rows: [
           {
             kind: 'opening_balance',

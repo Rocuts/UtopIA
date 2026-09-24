@@ -181,6 +181,10 @@ function informeCorrecto(): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       // Auditoría 2026-09 (niif-contrato-02, E18): la corrida real clasificaba
       // en operación los −$2.916.666,00 que el EFE determinista del balance
       // asigna a inversión. Con E18 cableado en `buildNiifValidatorOptions` esa
@@ -191,9 +195,10 @@ function informeCorrecto(): NiifReportJson {
           section: 'operating',
           lines: [linea(null, 'Utilidad neta del periodo', '222849678973', 2)],
           netFlow: '85310900063',
+          netFlowComparative: null,
         },
-        { section: 'investing', lines: [], netFlow: '-291666600' },
-        { section: 'financing', lines: [], netFlow: '0' },
+        { section: 'investing', lines: [], netFlow: '-291666600', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '0', netFlowComparative: null },
       ],
       netChange: '85019233463',
       cashOpening: '156348555401',
@@ -202,6 +207,8 @@ function informeCorrecto(): NiifReportJson {
       degeneracyFlag: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       // Auditoría 2026-09 (niif-contrato-11, regla E19): la corrida real abría
       // el ECP en −$5.056.798,19 y escondía en el propio saldo inicial la
       // diferencia con el patrimonio 2024. Con el xlsx bien entrecomillado

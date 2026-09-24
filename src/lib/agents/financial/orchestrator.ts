@@ -40,10 +40,12 @@ import {
 } from './validators/niif-json-validator';
 import { moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
 import {
+  buildComparativeStatementsBasis,
   buildDeterministicCashFlow,
   buildLedgerLeaves,
   checkCashFlowInvariants,
   formatCashFlowViolations,
+  type ComparativeStatementsSource,
 } from './contracts/deterministic-breakdown';
 import {
   normalizeNiifStatementLabels,
@@ -437,6 +439,13 @@ export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValida
       primarySnap && comparativeSnap
         ? buildDeterministicCashFlow(primarySnap, comparativeSnap)
         : null,
+    // Comparativos del EFE y del ECP (auditoría 2026-09-24, pendiente #3):
+    // la columna comparativa del EFE y las filas del ECP del periodo
+    // comparativo se cruzan contra el cálculo desde el corte anterior al
+    // comparativo; sin ese corte, presentarlas es error (NIIF PYMES 3.14/10.21).
+    comparativeStatements: primarySnap
+      ? buildComparativeStatementsBasis(preprocessed as ComparativeStatementsSource)
+      : undefined,
   };
 }
 

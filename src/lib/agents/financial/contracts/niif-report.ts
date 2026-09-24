@@ -182,6 +182,62 @@ export const CashFlowStatementSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Columna comparativa del EFE y ECP del periodo comparativo (pendiente #3 de
+// la auditoría integral 2026-09-24)
+// ---------------------------------------------------------------------------
+// NIIF para las PYMES 3.14 exige información comparativa de TODOS los importes
+// de los estados del periodo, salvo impracticabilidad (3.14 / 10.21). El EFE y
+// el ECP del periodo comparativo sólo son calculables cuando el balance de
+// prueba trae el corte ANTERIOR al comparativo (tres cortes) o los saldos
+// iniciales del comparativo: sin ellos no hay saldo de apertura del periodo
+// comparativo contra el cual medir variaciones.
+//
+// Estos campos NO los emite el modelo: no están en `CashFlowAndEquitySubSchema`
+// (Pass-2). Los adjunta el código desde el balance de prueba
+// (`attachComparativeStatements`, contracts/deterministic-breakdown.ts) y los
+// cruza el validador contra el mismo cálculo determinista. Sin base
+// determinista viajan en `null` con la nota de impracticabilidad que redacta
+// el código (`comparativeNote`), nunca con cifras del modelo.
+// ---------------------------------------------------------------------------
+
+const CashFlowSectionReportSchema = CashFlowSectionSchema.extend({
+  netFlowComparative: MoneyCop.nullable().describe(
+    'Flujo neto de la sección en el periodo comparativo (determinista). Null = comparativo del EFE no presentado.',
+  ),
+});
+
+export const CashFlowStatementReportSchema = CashFlowStatementSchema.extend({
+  sections: z
+    .array(CashFlowSectionReportSchema)
+    .length(3, 'Las 3 secciones (operating, investing, financing) son obligatorias'),
+  netChangeComparative: MoneyCop.nullable().describe('Variación neta del efectivo en el periodo comparativo. Null = no presentado.'),
+  cashOpeningComparative: MoneyCop.nullable().describe('Efectivo al inicio del periodo comparativo. Null = no presentado.'),
+  cashClosingComparative: MoneyCop.nullable().describe(
+    'Efectivo al final del periodo comparativo (= efectivo al inicio del periodo actual). Null = no presentado.',
+  ),
+  comparativeNote: z
+    .string()
+    .nullable()
+    .describe('Nota determinista de impracticabilidad del comparativo del EFE (NIIF PYMES 3.14/10.21). Null = presentado o sin comparativo.'),
+});
+
+const EquityChangesPass2Schema = z.object({
+  rows: z.array(EquityChangeRowSchema).describe('Filas en orden cronológico: apertura → movimientos → cierre'),
+  notes: z.array(StatementNoteSchema),
+});
+
+const EquityChangesSchema = EquityChangesPass2Schema.extend({
+  comparativeRows: z
+    .array(EquityChangeRowSchema)
+    .nullable()
+    .describe('Filas del ECP del periodo comparativo (apertura → movimientos → cierre), deterministas. Null = no presentado.'),
+  comparativeNote: z
+    .string()
+    .nullable()
+    .describe('Nota determinista de impracticabilidad del ECP comparativo (NIIF PYMES 3.14/10.21). Null = presentado o sin comparativo.'),
+});
+
+// ---------------------------------------------------------------------------
 // Sub-objetos reutilizables (Fase 3 chunking)
 // ---------------------------------------------------------------------------
 // Estas constantes encapsulan la forma exacta de cada sub-sección del reporte
@@ -259,11 +315,6 @@ const IncomeStatementSchema = z.object({
     .describe('Banner explicativo del modo del reporte para P&L. v8.1 §1.7. Null = no banner.'),
 });
 
-const EquityChangesSchema = z.object({
-  rows: z.array(EquityChangeRowSchema).describe('Filas en orden cronológico: apertura → movimientos → cierre'),
-  notes: z.array(StatementNoteSchema),
-});
-
 const CuratorFlagsSchema = z.object({
   equityConvergenceApplied: z.boolean(),
   cashFlowClosureForced: z.boolean(),
@@ -276,7 +327,7 @@ const CuratorFlagsSchema = z.object({
 // Output completo del NIIF Analyst (monolítico — target de ensamblaje Fase 3)
 // ---------------------------------------------------------------------------
 
-export const NiifReportSchema = z.object({
+export const NiifReportObjectSchema = z.object({
   /** Eco de los datos de la empresa, validados — el modelo no debe inventar */
   company: CompanyInfoSchema,
 
@@ -286,8 +337,8 @@ export const NiifReportSchema = z.object({
   // -- 2. Estado de Resultados Integral (P&L) -------------------------------
   incomeStatement: IncomeStatementSchema,
 
-  // -- 3. Estado de Flujos de Efectivo --------------------------------------
-  cashFlow: CashFlowStatementSchema,
+  // -- 3. Estado de Flujos de Efectivo (+ columna comparativa determinista) --
+  cashFlow: CashFlowStatementReportSchema,
 
   // -- 4. Estado de Cambios en el Patrimonio --------------------------------
   equityChanges: EquityChangesSchema,
@@ -307,7 +358,70 @@ export const NiifReportSchema = z.object({
   ),
 });
 
-export type NiifReportJson = z.infer<typeof NiifReportSchema>;
+/**
+ * Informes serializados antes de que el contrato tuviera la columna
+ * comparativa del EFE y el ECP del periodo comparativo (auditoría 2026-09-24,
+ * pendiente #3). En esos informes el comparativo de esos dos estados NO se
+ * presentaba: la ausencia se lee como `null` (no presentado), nunca como cero.
+ * Las celdas `amountComparative` que el modelo escribía entonces en los
+ * renglones del EFE no las validaba nadie y no tenían total comparativo que
+ * las sostuviera: se descartan en lugar de imprimirse.
+ *
+ * Sólo actúa cuando faltan las claves nuevas; un informe con el contrato
+ * vigente pasa intacto.
+ */
+export function upgradeLegacyNiifReport(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  const report = value as Record<string, unknown>;
+  let next = report;
+  const cf = report.cashFlow;
+  if (cf !== null && typeof cf === 'object' && !Array.isArray(cf)) {
+    const cashFlow = cf as Record<string, unknown>;
+    const legacy = !('cashClosingComparative' in cashFlow);
+    if (legacy) {
+      const sections = Array.isArray(cashFlow.sections)
+        ? cashFlow.sections.map((s) => {
+            if (s === null || typeof s !== 'object' || Array.isArray(s)) return s;
+            const section = s as Record<string, unknown>;
+            const lines = Array.isArray(section.lines)
+              ? section.lines.map((l) =>
+                  l !== null && typeof l === 'object' && !Array.isArray(l)
+                    ? { ...(l as Record<string, unknown>), amountComparative: null }
+                    : l,
+                )
+              : section.lines;
+            return { ...section, lines, netFlowComparative: null };
+          })
+        : cashFlow.sections;
+      next = {
+        ...next,
+        cashFlow: {
+          ...cashFlow,
+          sections,
+          netChangeComparative: null,
+          cashOpeningComparative: null,
+          cashClosingComparative: null,
+          comparativeNote: null,
+        },
+      };
+    }
+  }
+  const ec = report.equityChanges;
+  if (ec !== null && typeof ec === 'object' && !Array.isArray(ec) && !('comparativeRows' in ec)) {
+    next = { ...next, equityChanges: { ...(ec as Record<string, unknown>), comparativeRows: null, comparativeNote: null } };
+  }
+  return next;
+}
+
+/**
+ * Contrato canónico del informe NIIF ensamblado. No viaja al modelo (los
+ * pases usan los sub-schemas de abajo); acepta informes serializados con el
+ * contrato anterior a la columna comparativa del EFE/ECP
+ * (`upgradeLegacyNiifReport`).
+ */
+export const NiifReportSchema = z.preprocess(upgradeLegacyNiifReport, NiifReportObjectSchema);
+
+export type NiifReportJson = z.infer<typeof NiifReportObjectSchema>;
 
 // ---------------------------------------------------------------------------
 // Sub-schemas chunked (Fase 3) — generación en 3 passes secuenciales
@@ -352,7 +466,7 @@ export type BalanceAndPnlSubJson = z.infer<typeof BalanceAndPnlSubSchema>;
  */
 export const CashFlowAndEquitySubSchema = z.object({
   cashFlow: CashFlowStatementSchema,
-  equityChanges: EquityChangesSchema,
+  equityChanges: EquityChangesPass2Schema,
 });
 
 export type CashFlowAndEquitySubJson = z.infer<typeof CashFlowAndEquitySubSchema>;
@@ -403,12 +517,29 @@ export function assembleNiifReport(
   // dejó de ser opcional — el schema lo exige presente (null válido). El
   // assembler propaga el valor literal desde Pass-1, que es quien lo recibe
   // del orchestrator vía `deriveReportMode()` (v8.1 §3).
+  //
+  // La columna comparativa del EFE y el ECP del periodo comparativo no los
+  // emite el modelo: el ensamblaje los deja en `null` (y descarta cualquier
+  // `amountComparative` que el modelo haya escrito en un renglón del EFE) y el
+  // analista los adjunta desde el balance de prueba
+  // (`attachComparativeStatements`).
   return {
     company: pass1.company,
     balanceSheet: pass1.balanceSheet,
     incomeStatement: pass1.incomeStatement,
-    cashFlow: pass2.cashFlow,
-    equityChanges: pass2.equityChanges,
+    cashFlow: {
+      ...pass2.cashFlow,
+      sections: pass2.cashFlow.sections.map((s) => ({
+        ...s,
+        lines: s.lines.map((l) => ({ ...l, amountComparative: null })),
+        netFlowComparative: null,
+      })),
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
+    },
+    equityChanges: { ...pass2.equityChanges, comparativeRows: null, comparativeNote: null },
     technicalNotes: pass3.technicalNotes,
     curatorFlags: pass1.curatorFlags,
     reportMode: pass1.reportMode,

@@ -212,10 +212,14 @@ function stubNiifJson(): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [], netFlow: '0' },
-        { section: 'investing', lines: [], netFlow: '0' },
-        { section: 'financing', lines: [], netFlow: '0' },
+        { section: 'operating', lines: [], netFlow: '0', netFlowComparative: null },
+        { section: 'investing', lines: [], netFlow: '0', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '0', netFlowComparative: null },
       ],
       netChange: '0',
       cashOpening: '0',
@@ -223,7 +227,7 @@ function stubNiifJson(): NiifReportJson {
       methodNote: 'indirect',
       degeneracyFlag: null,
     },
-    equityChanges: { rows: [], notes: [] },
+    equityChanges: { comparativeRows: null, comparativeNote: null, rows: [], notes: [] },
     technicalNotes: [],
     curatorFlags: {
       equityConvergenceApplied: false,

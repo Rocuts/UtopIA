@@ -77,10 +77,14 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       modeBanner: null,
     },
     cashFlow: {
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: null,
       sections: [
-        { section: 'operating', lines: [], netFlow: '150000' },
-        { section: 'investing', lines: [], netFlow: '-50000' },
-        { section: 'financing', lines: [], netFlow: '-30000' },
+        { section: 'operating', lines: [], netFlow: '150000', netFlowComparative: null },
+        { section: 'investing', lines: [], netFlow: '-50000', netFlowComparative: null },
+        { section: 'financing', lines: [], netFlow: '-30000', netFlowComparative: null },
       ],
       netChange: '70000',
       cashOpening: '100000',
@@ -89,6 +93,8 @@ function makeMinimalReport(overrides: Partial<NiifReportJson> = {}): NiifReportJ
       degeneracyFlag: null,
     },
     equityChanges: {
+      comparativeRows: null,
+      comparativeNote: null,
       rows: [
         {
           kind: 'opening_balance',

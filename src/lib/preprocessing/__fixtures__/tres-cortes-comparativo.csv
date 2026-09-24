@@ -1,0 +1,19 @@
+Razón social: DEMO TRES CORTES SAS
+NIT: 900.765.432-6
+codigo,nombre,nivel,transaccional,saldo 2023,saldo 2024,saldo 2025
+110505,Caja general,Auxiliar,1,20000000,35000000,30000000
+130505,Clientes nacionales,Auxiliar,1,30000000,40000000,45000000
+143505,Mercancias no fabricadas por la empresa,Auxiliar,1,25000000,30000000,28000000
+152405,Equipo de oficina,Auxiliar,1,60000000,80000000,80000000
+159205,Depreciacion acumulada equipo de oficina,Auxiliar,1,-12000000,-18000000,-25000000
+210505,Bancos nacionales,Auxiliar,1,30000000,40000000,25000000
+220505,Proveedores nacionales,Auxiliar,1,20000000,25000000,22000000
+311505,Capital suscrito y pagado,Auxiliar,1,50000000,70000000,70000000
+330505,Reserva legal,Auxiliar,1,3000000,4000000,5500000
+360505,Utilidad del ejercicio,Auxiliar,1,10000000,15000000,18000000
+370505,Utilidades acumuladas,Auxiliar,1,10000000,13000000,17500000
+413505,Venta de mercancias,Auxiliar,1,100000000,130000000,150000000
+510506,Sueldos,Auxiliar,1,20000000,22000000,25000000
+516015,Depreciacion equipo de oficina,Auxiliar,1,5000000,6000000,7000000
+530505,Intereses bancarios,Auxiliar,1,5000000,7000000,10000000
+613505,Costo de ventas mercancias,Auxiliar,1,60000000,80000000,90000000

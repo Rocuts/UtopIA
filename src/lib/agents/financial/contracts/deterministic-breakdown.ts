@@ -28,6 +28,7 @@ import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
 import { DIVIDEND_EVIDENCE_PREFIXES } from '@/lib/preprocessing/curator-rules/dividend-evidence';
 import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
+import type { EquityChangeRowJson, NiifReportJson } from './niif-report';
 
 const ZERO = BigInt(0);
 
@@ -775,12 +776,15 @@ export function buildDeterministicCashFlow(
 export interface CashFlowLineLike {
   readonly label: string;
   readonly amountPrimary: string;
+  /** Columna comparativa (pendiente #3); ausente en los EFE de un periodo. */
+  readonly amountComparative?: string | null;
 }
 
 export interface CashFlowSectionLike {
   readonly section: string;
   readonly lines: readonly CashFlowLineLike[];
   readonly netFlow: string;
+  readonly netFlowComparative?: string | null;
 }
 
 export interface CashFlowStatementLike {
@@ -788,7 +792,13 @@ export interface CashFlowStatementLike {
   readonly netChange: string;
   readonly cashOpening: string;
   readonly cashClosing: string;
+  readonly netChangeComparative?: string | null;
+  readonly cashOpeningComparative?: string | null;
+  readonly cashClosingComparative?: string | null;
 }
+
+/** Columna del EFE a la que se refiere una violación (ausente = periodo actual). */
+export type CashFlowColumn = 'primary' | 'comparative';
 
 export type CashFlowInvariantViolation =
   | {
@@ -798,12 +808,14 @@ export type CashFlowInvariantViolation =
       sumOfLinesCents: bigint;
       netFlowCents: bigint;
       gapCents: bigint;
+      column?: CashFlowColumn;
     }
   | {
       kind: 'net_change';
       sumOfSectionsCents: bigint;
       netChangeCents: bigint;
       gapCents: bigint;
+      column?: CashFlowColumn;
     }
   | {
       kind: 'closure';
@@ -811,6 +823,7 @@ export type CashFlowInvariantViolation =
       netChangeCents: bigint;
       cashClosingCents: bigint;
       gapCents: bigint;
+      column?: CashFlowColumn;
     };
 
 function parseCents(value: string): bigint {
@@ -826,11 +839,42 @@ function parseCents(value: string): bigint {
  *   2. Σ subtotales == variación neta declarada;
  *   3. apertura + variación neta == cierre.
  *
+ * Con columna comparativa presentada (todos sus subtotales y totales no
+ * nulos — pendiente #3 de la auditoría 2026-09-24) las mismas tres identidades
+ * se comprueban también sobre ella. Una celda comparativa ausente no aporta a
+ * la suma; el validador la declara aparte (E2), no se da por cero en silencio.
+ *
  * Devuelve la lista de violaciones (vacía = el EFE cierra).
  */
 export function checkCashFlowInvariants(
   cashFlow: CashFlowStatementLike,
 ): CashFlowInvariantViolation[] {
+  const violations = checkCashFlowColumnInvariants(cashFlow);
+  const cmpTotals = [
+    cashFlow.netChangeComparative,
+    cashFlow.cashOpeningComparative,
+    cashFlow.cashClosingComparative,
+    ...cashFlow.sections.map((s) => s.netFlowComparative),
+  ];
+  if (cmpTotals.every((v) => v !== null && v !== undefined)) {
+    const view: CashFlowStatementLike = {
+      sections: cashFlow.sections.map((s) => ({
+        section: s.section,
+        lines: s.lines
+          .filter((l) => l.amountComparative !== null && l.amountComparative !== undefined)
+          .map((l) => ({ label: l.label, amountPrimary: l.amountComparative as string })),
+        netFlow: s.netFlowComparative as string,
+      })),
+      netChange: cashFlow.netChangeComparative as string,
+      cashOpening: cashFlow.cashOpeningComparative as string,
+      cashClosing: cashFlow.cashClosingComparative as string,
+    };
+    for (const v of checkCashFlowColumnInvariants(view)) violations.push({ ...v, column: 'comparative' });
+  }
+  return violations;
+}
+
+function checkCashFlowColumnInvariants(cashFlow: CashFlowStatementLike): CashFlowInvariantViolation[] {
   const violations: CashFlowInvariantViolation[] = [];
   let sumOfSections = ZERO;
 
@@ -893,21 +937,22 @@ export function formatCashFlowViolations(
     financing: 'Financiación',
   };
   return violations.map((v) => {
+    const efe = v.column === 'comparative' ? 'EFE (columna comparativa)' : 'EFE';
     if (v.kind === 'section_sum') {
       return (
-        `EFE — Actividades de ${sectionName[v.section] ?? v.section}: los ${v.lineCount} ` +
+        `${efe} — Actividades de ${sectionName[v.section] ?? v.section}: los ${v.lineCount} ` +
         `renglones suman ${cop(v.sumOfLinesCents)} bajo un subtotal declarado de ` +
         `${cop(v.netFlowCents)} (brecha ${cop(v.gapCents)}). NIC 7 ¶10.`
       );
     }
     if (v.kind === 'net_change') {
       return (
-        `EFE — la suma de los tres subtotales (${cop(v.sumOfSectionsCents)}) no es la ` +
+        `${efe} — la suma de los tres subtotales (${cop(v.sumOfSectionsCents)}) no es la ` +
         `variación neta declarada (${cop(v.netChangeCents)}); brecha ${cop(v.gapCents)}.`
       );
     }
     return (
-      `EFE — efectivo de apertura ${cop(v.cashOpeningCents)} + variación neta ` +
+      `${efe} — efectivo de apertura ${cop(v.cashOpeningCents)} + variación neta ` +
       `${cop(v.netChangeCents)} no da el efectivo de cierre declarado ` +
       `${cop(v.cashClosingCents)}; brecha ${cop(v.gapCents)}. NIC 7 ¶45.`
     );
@@ -1082,6 +1127,40 @@ function sourceRowCategory(row: BreakdownRow): CashFlowFlowCategory | null {
  * concilia, E18 ya bloquea). Los renglones en $0 no se evalúan: no imprimen
  * cifra.
  */
+/**
+ * Empareja cada renglón con importe del EFE emitido con una partida del EFE
+ * determinista de la misma actividad (multiconjunto por importe, tolerancia
+ * $0). Entre partidas del mismo importe se prefiere la que el rótulo afirma.
+ * `null` = renglón en $0 (no se evalúa) o sin partida de origen. Lo usan el
+ * cruce renglón a renglón (E23) y la columna comparativa del EFE, que así
+ * sabe qué grupo PUC representa cada renglón que el modelo rotuló.
+ */
+export function matchCashFlowLinesToDeterministic(
+  lines: readonly CashFlowLineLike[],
+  rows: readonly BreakdownRow[],
+): Array<BreakdownRow | null> {
+  const pool = rows.filter((r) => r.cents !== ZERO).map((r) => ({ row: r, used: false }));
+  return lines.map((line) => {
+    const amount = parseCents(line.amountPrimary);
+    if (amount === ZERO) return null;
+    const claims = cashFlowLabelClaims(line.label ?? '');
+    const candidates = pool.filter((p) => !p.used && p.row.cents === amount);
+    const match =
+      candidates.find((p) => {
+        const cat = sourceRowCategory(p.row);
+        return cat !== null && claims.includes(cat);
+      }) ??
+      candidates.find((p) => {
+        const cat = sourceRowCategory(p.row);
+        return claims.length === 0 || (cat !== null && claims.includes(cat));
+      }) ??
+      candidates[0];
+    if (!match) return null;
+    match.used = true;
+    return match.row;
+  });
+}
+
 export function crossCheckCashFlowLinesAgainstDeterministic(
   cashFlow: CashFlowStatementLike,
   deterministic: DeterministicCashFlow,
@@ -1090,28 +1169,18 @@ export function crossCheckCashFlowLinesAgainstDeterministic(
   const out: CashFlowLineViolation[] = [];
   for (const expected of deterministic.sections) {
     const emitted = cashFlow.sections.find((s) => s.section === expected.section);
-    const pool = expected.rows.filter((r) => r.cents !== ZERO).map((r) => ({ row: r, used: false }));
-    for (const line of emitted?.lines ?? []) {
+    const lines = emitted?.lines ?? [];
+    const matches = matchCashFlowLinesToDeterministic(lines, expected.rows);
+    for (const [i, line] of lines.entries()) {
       const amount = parseCents(line.amountPrimary);
       if (amount === ZERO) continue;
       const claims = cashFlowLabelClaims(line.label ?? '');
-      const candidates = pool.filter((p) => !p.used && p.row.cents === amount);
-      // Entre partidas del mismo importe se prefiere la que el rótulo afirma.
-      const match =
-        candidates.find((p) => {
-          const cat = sourceRowCategory(p.row);
-          return cat !== null && claims.includes(cat);
-        }) ??
-        candidates.find((p) => {
-          const cat = sourceRowCategory(p.row);
-          return claims.length === 0 || (cat !== null && claims.includes(cat));
-        }) ??
-        candidates[0];
-      if (!match) {
+      const matched = matches[i];
+      if (!matched) {
         out.push({ kind: 'line_without_source', section: expected.section, label: line.label, amountCents: amount });
         continue;
       }
-      match.used = true;
+      const match = { row: matched };
       const category = sourceRowCategory(match.row);
       // Una partida de capital de trabajo rotulada como deuda (p. ej. cuentas
       // por pagar) es un matiz de presentación, no un cambio de naturaleza.
@@ -1220,4 +1289,507 @@ export function formatCashFlowCrossCheckViolations(
         );
     }
   });
+}
+
+// ===========================================================================
+// Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente #3)
+// ===========================================================================
+//
+// NIIF para las PYMES 3.14 exige información comparativa de todos los importes
+// de los estados del periodo, salvo impracticabilidad (3.14 / 10.21). El
+// informe presentaba el ESF y el ERI con su columna comparativa, pero el EFE y
+// el ECP sólo con el periodo actual y la leyenda "comparativo no presentado".
+//
+// El EFE y el ECP del periodo comparativo tienen la misma naturaleza que los
+// del periodo actual: son proyecciones del balance de prueba. Sólo que para
+// medir las variaciones del periodo comparativo hace falta su saldo de
+// APERTURA: el corte anterior al comparativo (tres cortes) o los saldos
+// iniciales del comparativo. Con ese corte, `buildDeterministicCashFlow` y el
+// ECP por grupo patrimonial se calculan igual que los del periodo actual; sin
+// él, el comparativo es impracticable y se dice con una nota determinista —
+// nunca con cifras del modelo.
+// ---------------------------------------------------------------------------
+
+/** Forma mínima del preprocesado que necesita la base comparativa. */
+export interface ComparativeStatementsSource {
+  periods?: readonly PeriodSnapshot[] | null;
+  comparative?: PeriodSnapshot | null;
+  comparativos_impracticables?: boolean;
+}
+
+/**
+ * Base determinista de los comparativos del EFE y del ECP. Cada estado trae
+ * sus cifras o, si no son calculables, la nota de impracticabilidad.
+ */
+export interface ComparativeStatementsBasis {
+  /** Año (o etiqueta) del periodo comparativo del informe. */
+  comparativePeriod: string;
+  /** Corte usado como apertura del periodo comparativo; `null` si no existe. */
+  openingPeriod: string | null;
+  cashFlow: DeterministicCashFlow | null;
+  /** Nota de impracticabilidad del EFE comparativo; `null` cuando se presenta. */
+  cashFlowNote: string | null;
+  equityRows: EquityChangeRowJson[] | null;
+  /** Nota de impracticabilidad del ECP comparativo; `null` cuando se presenta. */
+  equityNote: string | null;
+}
+
+function yearOfPeriodLabel(period: string | null | undefined): string | null {
+  const m = /(?:19|20)\d{2}/.exec(period ?? '');
+  return m ? m[0] : null;
+}
+
+function copOf(cents: bigint): string {
+  const negative = cents < ZERO;
+  const abs = (negative ? -cents : cents).toString().padStart(3, '0');
+  const whole = (abs.slice(0, -2) || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${negative ? '-' : ''}$${whole},${abs.slice(-2)}`;
+}
+
+/** Nota de impracticabilidad de un estado comparativo, redactada por el código. */
+export function comparativeImpracticabilityNote(
+  statement: 'cashFlow' | 'equity',
+  comparativePeriod: string,
+  reason: string,
+): string {
+  const name =
+    statement === 'cashFlow'
+      ? 'Estado de flujos de efectivo'
+      : 'Estado de cambios en el patrimonio';
+  return (
+    `${name} — información comparativa ${comparativePeriod} no presentada: ${reason}. ` +
+    'Impracticabilidad declarada (NIIF para las PYMES 3.14 y 10.21); no se sustituye por cifras estimadas.'
+  );
+}
+
+/**
+ * Motivo por el que el periodo comparativo no tiene saldo de apertura
+ * utilizable, o `null` si el corte anterior sirve de apertura.
+ */
+function comparativeOpeningReason(
+  comparative: PeriodSnapshot,
+  opening: PeriodSnapshot | null,
+  cy: string,
+  priorYear: string | null,
+): string | null {
+  if (comparative.saldosDeApertura === true) {
+    return (
+      `la columna ${cy} del archivo es de saldos de apertura: no hay estado de resultados ` +
+      `del periodo ${cy} con el cual explicar sus variaciones`
+    );
+  }
+  if (!opening) {
+    return (
+      `el balance de prueba no trae el corte anterior al periodo comparativo` +
+      `${priorYear ? ` (${priorYear})` : ''} ni los saldos iniciales de ${cy}: sin saldo de ` +
+      `apertura del periodo comparativo no hay variaciones que medir`
+    );
+  }
+  const oy = yearOfPeriodLabel(opening.period);
+  if (priorYear === null || oy !== priorYear) {
+    return (
+      `el corte anterior disponible (${opening.period}) no es el cierre inmediatamente anterior ` +
+      `al periodo comparativo${priorYear ? ` (${priorYear})` : ''}`
+    );
+  }
+  if (opening.periodoTipo === 'parcial' && opening.saldosDeApertura !== true) {
+    return `el corte anterior (${opening.period}) es un corte parcial, no el cierre del ejercicio ${priorYear}`;
+  }
+  return null;
+}
+
+type EquityColumnKey =
+  | 'capitalSocial'
+  | 'primaColocacion'
+  | 'reservaLegal'
+  | 'otrasReservas'
+  | 'resultadosAcumulados'
+  | 'resultadoEjercicio'
+  | 'ori';
+
+const EQUITY_ROW_KEYS: readonly EquityColumnKey[] = [
+  'capitalSocial',
+  'primaColocacion',
+  'reservaLegal',
+  'otrasReservas',
+  'resultadosAcumulados',
+  'resultadoEjercicio',
+  'ori',
+];
+
+/**
+ * Columnas del ECP desde las hojas de la clase 3 del snapshot: 31 capital,
+ * 32 prima, 3305 reserva legal, resto de 33 otras reservas, 37 acumulados,
+ * 36 resultado del ejercicio y 38 ORI / superávit por valorizaciones. Los
+ * grupos sin columna (34, 35 y códigos fuera de 31–38) se devuelven aparte:
+ * con saldo en ellos el ECP por columnas no es una proyección fiel.
+ */
+function equityColumnsOfSnapshot(snapshot: PeriodSnapshot): {
+  cols: Record<EquityColumnKey, bigint>;
+  unmappedGroups: string[];
+} {
+  const cols: Record<EquityColumnKey, bigint> = {
+    capitalSocial: ZERO,
+    primaColocacion: ZERO,
+    reservaLegal: ZERO,
+    otrasReservas: ZERO,
+    resultadosAcumulados: ZERO,
+    resultadoEjercicio: ZERO,
+    ori: ZERO,
+  };
+  const unmapped = new Map<string, bigint>();
+  for (const leaf of buildLedgerLeaves(snapshot)) {
+    if (leaf.classCode !== 3) continue;
+    const g = leaf.code.slice(0, 2);
+    if (g === '31') cols.capitalSocial += leaf.cents;
+    else if (g === '32') cols.primaColocacion += leaf.cents;
+    else if (g === '33') {
+      if (leaf.code.startsWith('3305')) cols.reservaLegal += leaf.cents;
+      else cols.otrasReservas += leaf.cents;
+    } else if (g === '36') cols.resultadoEjercicio += leaf.cents;
+    else if (g === '37') cols.resultadosAcumulados += leaf.cents;
+    else if (g === '38') cols.ori += leaf.cents;
+    else unmapped.set(g, (unmapped.get(g) ?? ZERO) + leaf.cents);
+  }
+  const unmappedGroups = [...unmapped.entries()]
+    .filter(([, v]) => v !== ZERO)
+    .map(([g]) => g)
+    .sort();
+  return { cols, unmappedGroups };
+}
+
+function equityRow(
+  kind: EquityChangeRowJson['kind'],
+  label: string,
+  cols: Partial<Record<EquityColumnKey, bigint>>,
+): EquityChangeRowJson {
+  let total = ZERO;
+  const values = {} as Record<EquityColumnKey, string>;
+  for (const k of EQUITY_ROW_KEYS) {
+    const v = cols[k] ?? ZERO;
+    values[k] = v.toString();
+    total += v;
+  }
+  return { kind, label, ...values, total: total.toString() };
+}
+
+/**
+ * ECP determinista de un periodo a partir de su corte de apertura y su corte
+ * de cierre (NIIF para las PYMES 6.3). Filas:
+ *   - saldo inicial = columnas del corte de apertura;
+ *   - traslado del resultado anterior (Dr 3605 / Cr 37, total $0) cuando la
+ *     apertura arrastra resultado del ejercicio;
+ *   - resultado del ejercicio = utilidad neta del periodo;
+ *   - ORI = variación del grupo 38, si la hubo;
+ *   - lo que el resultado no explica, en UNA fila cuyo tipo sale del signo
+ *     del flujo con los socios del EFE determinista (aportes, distribuciones
+ *     pendientes de soporte, partida no conciliada o traslados internos de
+ *     total $0);
+ *   - saldo final = columnas del corte de cierre.
+ * Por construcción, apertura + movimientos = cierre, columna a columna.
+ */
+export function buildDeterministicEquityChanges(
+  opening: PeriodSnapshot,
+  closing: PeriodSnapshot,
+): { rows: EquityChangeRowJson[] } | { reason: string } {
+  const o = equityColumnsOfSnapshot(opening);
+  const c = equityColumnsOfSnapshot(closing);
+  const unmapped = Array.from(new Set([...o.unmappedGroups, ...c.unmappedGroups])).sort();
+  if (unmapped.length > 0) {
+    return {
+      reason:
+        `el patrimonio registra saldos en grupos sin columna propia en el estado ` +
+        `(${unmapped.join(', ')}: revalorización del patrimonio, dividendos decretados en ` +
+        `acciones u otros de la clase 3), y el estado por columnas no los reflejaría`,
+    };
+  }
+  const cy = yearOfPeriodLabel(closing.period) ?? closing.period;
+  const oy = yearOfPeriodLabel(opening.period) ?? opening.period;
+  const closedYear = closing.periodoTipo === 'cerrado';
+  const netIncome = pesosToCents(closing.controlTotals.utilidadNeta);
+  const efe = buildDeterministicCashFlow(closing, opening);
+
+  const rows: EquityChangeRowJson[] = [
+    equityRow(
+      'opening_balance',
+      closedYear ? `Saldo al 1 de enero de ${cy}` : `Saldo al inicio del periodo ${cy}`,
+      o.cols,
+    ),
+  ];
+  const moved: Record<EquityColumnKey, bigint> = { ...o.cols };
+  const apply = (cols: Partial<Record<EquityColumnKey, bigint>>) => {
+    for (const k of EQUITY_ROW_KEYS) moved[k] += cols[k] ?? ZERO;
+  };
+
+  if (o.cols.resultadoEjercicio !== ZERO) {
+    const cancel = {
+      resultadoEjercicio: -o.cols.resultadoEjercicio,
+      resultadosAcumulados: o.cols.resultadoEjercicio,
+    };
+    rows.push(
+      equityRow('prior_period_result_cancellation', `Traslado del resultado ${oy} a resultados acumulados`, cancel),
+    );
+    apply(cancel);
+  }
+
+  rows.push(
+    equityRow(
+      'profit_for_period',
+      netIncome < ZERO
+        ? `Pérdida del ejercicio ${cy}`
+        : netIncome > ZERO
+          ? `Utilidad del ejercicio ${cy}`
+          : `Resultado del ejercicio ${cy}`,
+      { resultadoEjercicio: netIncome },
+    ),
+  );
+  apply({ resultadoEjercicio: netIncome });
+
+  const oriDelta = c.cols.ori - o.cols.ori;
+  if (oriDelta !== ZERO) {
+    rows.push(
+      equityRow(
+        'other_comprehensive_income',
+        `Otro resultado integral / superávit por valorizaciones del ejercicio ${cy}`,
+        { ori: oriDelta },
+      ),
+    );
+    apply({ ori: oriDelta });
+  }
+
+  const residual: Partial<Record<EquityColumnKey, bigint>> = {};
+  let residualTotal = ZERO;
+  let anyResidual = false;
+  for (const k of EQUITY_ROW_KEYS) {
+    const r = c.cols[k] - moved[k];
+    if (r === ZERO) continue;
+    residual[k] = r;
+    residualTotal += r;
+    anyResidual = true;
+  }
+  if (anyResidual) {
+    const classification = efe?.ownerFlows.classification ?? 'none';
+    if (residualTotal > ZERO) {
+      rows.push(
+        equityRow(
+          'capital_contribution',
+          `Aportes de socios y traslados internos del ejercicio ${cy} (aumento patrimonial no explicado ` +
+            'por el resultado; verificar soporte del aporte)',
+          residual,
+        ),
+      );
+    } else if (residualTotal < ZERO) {
+      rows.push(
+        equityRow(
+          'dividend_distribution',
+          classification === 'unreconciled'
+            ? `Partida patrimonial no conciliada ${cy} (resultado de ejercicios anteriores no trasladado ` +
+                'o distribución a socios) — requiere explicación del contador'
+            : `Distribuciones a socios del ejercicio ${cy} (disminución patrimonial no explicada por el ` +
+                'resultado) — pendiente de soporte: acta y comprobante de egreso',
+          residual,
+        ),
+      );
+    } else {
+      rows.push(
+        equityRow(
+          'reserve_appropriation',
+          `Traslados entre cuentas del patrimonio del ejercicio ${cy} (apropiación de reservas o ` +
+            'capitalización; sin efecto en el total)',
+          residual,
+        ),
+      );
+    }
+  }
+
+  rows.push(
+    equityRow(
+      'closing_balance',
+      closedYear ? `Saldo al 31 de diciembre de ${cy}` : `Saldo al cierre del periodo ${cy}`,
+      c.cols,
+    ),
+  );
+  return { rows };
+}
+
+/**
+ * Base determinista de los comparativos del EFE y del ECP a partir del
+ * preprocesado. `null` cuando el informe no tiene periodo comparativo (un solo
+ * corte, o comparativo impracticable según el preprocesador — el mismo
+ * criterio con que el orquestador fija `company.comparativePeriod`).
+ */
+export function buildComparativeStatementsBasis(
+  source: ComparativeStatementsSource | null | undefined,
+): ComparativeStatementsBasis | null {
+  const comparative = source?.comparative;
+  if (!comparative || typeof comparative !== 'object' || source?.comparativos_impracticables === true) {
+    return null;
+  }
+  const cy = yearOfPeriodLabel(comparative.period) ?? comparative.period;
+  const priorYear = /^\d{4}$/.test(cy) ? String(Number(cy) - 1) : null;
+  const periods: readonly PeriodSnapshot[] = Array.isArray(source?.periods) ? source.periods : [];
+  const idx = periods.findIndex((p) => p && p.period === comparative.period);
+  const opening = idx > 0 ? periods[idx - 1] : null;
+
+  const openingReason = comparativeOpeningReason(comparative, opening, cy, priorYear);
+  let cashFlow: DeterministicCashFlow | null = null;
+  let cashFlowReason = openingReason;
+  let equityRows: EquityChangeRowJson[] | null = null;
+  let equityReason = openingReason;
+  if (openingReason === null && opening) {
+    const efe = buildDeterministicCashFlow(comparative, opening);
+    if (efe && efe.reconciled) {
+      cashFlow = efe;
+    } else if (efe) {
+      cashFlowReason =
+        `el EFE determinista del periodo ${cy} no concilia con la variación del efectivo (PUC 11): ` +
+        `brecha ${copOf(efe.reconciliationGapCents)}`;
+    }
+    const ecp = buildDeterministicEquityChanges(opening, comparative);
+    if ('rows' in ecp) equityRows = ecp.rows;
+    else equityReason = ecp.reason;
+  }
+  return {
+    comparativePeriod: cy,
+    openingPeriod: opening?.period ?? null,
+    cashFlow,
+    cashFlowNote: cashFlow ? null : comparativeImpracticabilityNote('cashFlow', cy, cashFlowReason ?? ''),
+    equityRows,
+    equityNote: equityRows ? null : comparativeImpracticabilityNote('equity', cy, equityReason ?? ''),
+  };
+}
+
+/**
+ * Clave de presentación de una partida del EFE determinista para alinear los
+ * dos periodos en un mismo renglón: el grupo PUC (o la clave de agregación)
+ * y, para el gasto no monetario, una sola clave aunque las correctoras que lo
+ * componen difieran entre periodos (1592 en uno, 1592/1698 en otro).
+ */
+function cashFlowPresentationKey(row: BreakdownRow): string {
+  if (sourceRowCategory(row) === 'nonCash' && row.account !== '19/38') return 'nonCash:depreciation';
+  return row.account;
+}
+
+type CashFlowJson = NiifReportJson['cashFlow'];
+type CashFlowLineJson = CashFlowJson['sections'][number]['lines'][number];
+
+/** Rótulo del resultado del ejercicio cuando los dos periodos tienen signo distinto. */
+const NET_INCOME_NEUTRAL_LABEL = 'Utilidad (pérdida) neta del ejercicio';
+
+/**
+ * Adjunta al informe la columna comparativa del EFE y el ECP del periodo
+ * comparativo desde la base determinista (o la nota de impracticabilidad).
+ * Función pura: toda cifra comparativa que imprimen esos dos estados sale de
+ * aquí; las que el modelo hubiera escrito se descartan.
+ *
+ * EFE: cada renglón que el analista rotuló se identifica con su partida del
+ * EFE determinista del periodo actual (mismo emparejamiento que E23) y recibe
+ * el importe de la MISMA partida en el periodo comparativo, o $0 si esa
+ * partida no se movió. Las partidas que sólo se movieron en el periodo
+ * comparativo se añaden al final de su actividad con $0 en el periodo actual.
+ * Un renglón sin partida de origen queda sin cifra comparativa (`null`): el
+ * validador ya lo bloquea (E23). Así la columna comparativa suma, por
+ * construcción, el subtotal comparativo de cada actividad.
+ */
+export function attachComparativeStatements(
+  json: NiifReportJson,
+  basis: ComparativeStatementsBasis | null,
+  primaryCashFlow: DeterministicCashFlow | null,
+): NiifReportJson {
+  const cf = json.cashFlow;
+  const compEfe = basis?.cashFlow ?? null;
+  let cashFlow: CashFlowJson;
+  if (compEfe && primaryCashFlow) {
+    const sections = cf.sections.map((section) => {
+      const primaryRows = primaryCashFlow.sections.find((s) => s.section === section.section)?.rows ?? [];
+      const compSection = compEfe.sections.find((s) => s.section === section.section);
+      const compRows = (compSection?.rows ?? []).filter((r) => r.cents !== ZERO);
+      const unused = new Map<string, BreakdownRow>();
+      const extra: BreakdownRow[] = [];
+      for (const r of compRows) {
+        const k = cashFlowPresentationKey(r);
+        // Dos partidas con la misma clave no ocurren en el determinista; si
+        // ocurrieran, la segunda se presenta como renglón propio.
+        if (unused.has(k)) extra.push(r);
+        else unused.set(k, r);
+      }
+      const matches = matchCashFlowLinesToDeterministic(section.lines, primaryRows);
+      const take = (key: string): string => {
+        const row = unused.get(key);
+        if (!row) return '0';
+        unused.delete(key);
+        return row.cents.toString();
+      };
+      const lines: CashFlowLineJson[] = section.lines.map((line, i) => {
+        const source = matches[i];
+        if (source) {
+          const amountComparative = take(cashFlowPresentationKey(source));
+          const comparativeCents = BigInt(amountComparative);
+          const signsDiffer =
+            source.account === '36' &&
+            comparativeCents !== ZERO &&
+            parseCents(line.amountPrimary) < ZERO !== comparativeCents < ZERO;
+          return {
+            ...line,
+            ...(signsDiffer ? { label: NET_INCOME_NEUTRAL_LABEL } : {}),
+            amountComparative,
+          };
+        }
+        if (parseCents(line.amountPrimary) !== ZERO) return { ...line, amountComparative: null };
+        // Renglón en $0 del periodo actual: se alinea por su código si lo trae.
+        const key = (line.account ?? '').trim();
+        return { ...line, amountComparative: key && unused.has(key) ? take(key) : '0' };
+      });
+      for (const row of [...unused.values(), ...extra]) {
+        lines.push({
+          account: row.account,
+          label: row.label,
+          amountPrimary: '0',
+          amountComparative: row.cents.toString(),
+          level: 2,
+          isAbsolute: false,
+          confidence: null,
+          anomalyFlag: null,
+        });
+      }
+      return { ...section, lines, netFlowComparative: (compSection?.netFlowCents ?? ZERO).toString() };
+    });
+    cashFlow = {
+      ...cf,
+      sections,
+      netChangeComparative: compEfe.netChangeCents.toString(),
+      cashOpeningComparative: compEfe.cashOpeningCents.toString(),
+      cashClosingComparative: compEfe.cashClosingCents.toString(),
+      comparativeNote: null,
+    };
+  } else {
+    cashFlow = {
+      ...cf,
+      sections: cf.sections.map((s) => ({
+        ...s,
+        lines: s.lines.map((l) => ({ ...l, amountComparative: null })),
+        netFlowComparative: null,
+      })),
+      netChangeComparative: null,
+      cashOpeningComparative: null,
+      cashClosingComparative: null,
+      comparativeNote: basis
+        ? (basis.cashFlowNote ??
+          comparativeImpracticabilityNote(
+            'cashFlow',
+            basis.comparativePeriod,
+            'el EFE del periodo actual no es calculable y no hay partidas contra las cuales alinear el comparativo',
+          ))
+        : null,
+    };
+  }
+  return {
+    ...json,
+    cashFlow,
+    equityChanges: {
+      ...json.equityChanges,
+      comparativeRows: basis?.equityRows ?? null,
+      comparativeNote: basis && !basis.equityRows ? basis.equityNote : null,
+    },
+  };
 }

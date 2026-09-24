@@ -61,10 +61,14 @@ const L = (label: string, cents: string): Line => ({
 /** EFE copiado del determinista: op 800, inv 0, fin 100, apertura 1.000, cierre 1.900. */
 function efeCopiado(): NiifReportJson['cashFlow'] {
   return {
+    netChangeComparative: null,
+    cashOpeningComparative: null,
+    cashClosingComparative: null,
+    comparativeNote: null,
     sections: [
-      { section: 'operating', lines: [L('Utilidad neta del ejercicio', '60000'), L('Variación de deudores', '20000')], netFlow: '80000' },
-      { section: 'investing', lines: [], netFlow: '0' },
-      { section: 'financing', lines: [L('Obligaciones financieras', '10000')], netFlow: '10000' },
+      { section: 'operating', lines: [L('Utilidad neta del ejercicio', '60000'), L('Variación de deudores', '20000')], netFlow: '80000', netFlowComparative: null },
+      { section: 'investing', lines: [], netFlow: '0', netFlowComparative: null },
+      { section: 'financing', lines: [L('Obligaciones financieras', '10000')], netFlow: '10000', netFlowComparative: null },
     ],
     netChange: '90000',
     cashOpening: '100000',

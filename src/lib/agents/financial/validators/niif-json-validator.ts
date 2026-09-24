@@ -54,6 +54,8 @@ import {
   crossCheckCashFlowLinesAgainstDeterministic,
   formatCashFlowCrossCheckViolations,
   formatCashFlowLineViolations,
+  type CashFlowStatementLike,
+  type ComparativeStatementsBasis,
   type DeterministicCashFlow,
   type LedgerLeaf,
 } from '../contracts/deterministic-breakdown';
@@ -173,6 +175,18 @@ export interface NiifJsonValidatorOptions {
    * P&G comparativo (son N/D), y las reglas del ERI no evalúan esa columna.
    */
   comparativeIsOpening?: boolean;
+  /**
+   * Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente
+   * #3): base determinista del periodo comparativo
+   * (`buildComparativeStatementsBasis`).
+   *   - `undefined`: sin anclas; sólo la coherencia interna de lo presentado.
+   *   - `null`: el balance no tiene periodo comparativo; presentar un
+   *     comparativo del EFE o del ECP es error.
+   *   - base: lo presentado se cruza al centavo contra ella, y presentarlo
+   *     cuando la base lo declara impracticable es error (NIIF para las PYMES
+   *     3.14 / 10.21: sin corte de apertura no hay comparativo que calcular).
+   */
+  comparativeStatements?: ComparativeStatementsBasis | null;
 }
 
 /**
@@ -1378,6 +1392,17 @@ export function validateNiifReportJson(
     );
   }
 
+  // -- Comparativos del EFE y del ECP (pendiente #3, NIIF PYMES 3.14) --------
+  // Las mismas identidades del periodo actual sobre la columna comparativa del
+  // EFE (E2/E3/E11 internas; E18/E23 contra el determinista) y sobre las filas
+  // del ECP del periodo comparativo (E4/E7/E17/E19 internas; E24 contra el
+  // determinista). Presentarlos sin base determinista es error.
+  {
+    const cmp = comparativeStatementErrors(json, options, pygComparativeIsNd);
+    errors.push(...cmp.errors);
+    warnings.push(...cmp.warnings);
+  }
+
   // -- E25. Rótulos fechados en otro periodo (e2e-niif-09) --------------------
   errors.push(...labelYearErrors(json));
 
@@ -1990,6 +2015,10 @@ function labelYearErrors(json: NiifReportJson): string[] {
   const allowed = new Set([fp, String(Number(fp) - 1)]);
   const cp = json.company.comparativePeriod ? /\d{4}/.exec(json.company.comparativePeriod)?.[0] : undefined;
   if (cp) allowed.add(cp);
+  // El ECP del periodo comparativo abre con el cierre del año anterior al
+  // comparativo (traslado de su resultado).
+  const comparativeRows = json.equityChanges.comparativeRows ?? [];
+  if (cp && comparativeRows.length > 0) allowed.add(String(Number(cp) - 1));
   const labels: Array<[string, string]> = [];
   for (const [where, lines] of [
     ['Estado de Situación Financiera', [...json.balanceSheet.assets, ...json.balanceSheet.liabilities, ...json.balanceSheet.equity]],
@@ -1999,6 +2028,9 @@ function labelYearErrors(json: NiifReportJson): string[] {
     for (const l of lines) labels.push([where, l.label]);
   }
   for (const r of json.equityChanges.rows) labels.push(['Estado de Cambios en el Patrimonio', r.label]);
+  for (const r of comparativeRows) {
+    labels.push(['Estado de Cambios en el Patrimonio (periodo comparativo)', r.label]);
+  }
 
   const out: string[] = [];
   for (const [where, label] of labels) {
@@ -2015,6 +2047,331 @@ function labelYearErrors(json: NiifReportJson): string[] {
           `Un rótulo no puede fechar la cifra en otro periodo.`,
       );
       break;
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Comparativos del EFE y del ECP (auditoría integral 2026-09-24, pendiente #3)
+// ---------------------------------------------------------------------------
+
+const EQUITY_ROW_COLUMNS = [
+  'capitalSocial',
+  'primaColocacion',
+  'reservaLegal',
+  'otrasReservas',
+  'resultadosAcumulados',
+  'resultadoEjercicio',
+  'ori',
+  'total',
+] as const;
+
+/** El EFE declara columna comparativa (algún subtotal, total o celda no nulo). */
+function cashFlowComparativePresented(cf: NiifReportJson['cashFlow']): {
+  anyTotal: boolean;
+  allTotals: boolean;
+  anyCell: boolean;
+} {
+  const totals = [
+    cf.netChangeComparative,
+    cf.cashOpeningComparative,
+    cf.cashClosingComparative,
+    ...cf.sections.map((s) => s.netFlowComparative),
+  ];
+  return {
+    anyTotal: totals.some((v) => v !== null),
+    allTotals: totals.every((v) => v !== null),
+    anyCell: cf.sections.some((s) => s.lines.some((l) => l.amountComparative !== null)),
+  };
+}
+
+/** La columna comparativa del EFE vista como un EFE de un periodo. */
+function comparativeCashFlowView(cf: NiifReportJson['cashFlow']): CashFlowStatementLike {
+  return {
+    sections: cf.sections.map((s) => ({
+      section: s.section,
+      lines: s.lines
+        .filter((l) => l.amountComparative !== null)
+        .map((l) => ({ label: l.label, amountPrimary: l.amountComparative as string })),
+      netFlow: s.netFlowComparative ?? '0',
+    })),
+    netChange: cf.netChangeComparative ?? '0',
+    cashOpening: cf.cashOpeningComparative ?? '0',
+    cashClosing: cf.cashClosingComparative ?? '0',
+  };
+}
+
+function comparativeStatementErrors(
+  json: NiifReportJson,
+  options: NiifJsonValidatorOptions,
+  pygComparativeIsNd: boolean,
+): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const cp = json.company.comparativePeriod;
+  const etiqueta = `periodo comparativo ${cp ?? '(no declarado)'}`;
+  const basis = options.comparativeStatements;
+  const anchored = basis !== undefined;
+
+  // -- EFE -------------------------------------------------------------------
+  const cf = json.cashFlow;
+  const presence = cashFlowComparativePresented(cf);
+  const cfPresented = presence.anyTotal || presence.anyCell;
+  if (cfPresented && cp === null) {
+    errors.push(
+      `E2. EFE: se presenta una columna comparativa y el informe no declara periodo comparativo. ` +
+        `Una cifra comparativa sin periodo no se imprime.`,
+    );
+  } else if (presence.anyCell && !presence.anyTotal) {
+    errors.push(
+      `E2. EFE (${etiqueta}): renglones con cifra comparativa sin subtotales ni efectivo comparativos. ` +
+        `La columna comparativa del EFE la calcula el código desde el balance de prueba; una celda ` +
+        `suelta no tiene base determinista y no se imprime.`,
+    );
+  } else if (presence.anyTotal && !presence.allTotals) {
+    errors.push(
+      `E2. EFE (${etiqueta}): la columna comparativa está incompleta (subtotales o efectivo al ` +
+        `inicio/final en null). O se presenta completa o no se presenta (nota de impracticabilidad).`,
+    );
+  } else if (presence.allTotals && cp !== null) {
+    const netChange = parseMoneyCop(cf.netChangeComparative!);
+    const opening = parseMoneyCop(cf.cashOpeningComparative!);
+    const closing = parseMoneyCop(cf.cashClosingComparative!);
+    const sumSections = cf.sections.reduce((acc, s) => acc + parseMoneyCop(s.netFlowComparative!), ZERO);
+    if (sumSections !== netChange) {
+      errors.push(
+        `E2. EFE (${etiqueta}): netChange ≠ Σ(netFlow secciones). Brecha: ${fmtCop(netChange - sumSections)}.`,
+      );
+    }
+    if (opening + netChange !== closing) {
+      errors.push(
+        `E2. EFE (${etiqueta}): cashClosing ≠ cashOpening + netChange. Brecha: ` +
+          `${fmtCop(closing - opening - netChange)}.`,
+      );
+    }
+    // E3 del comparativo: su efectivo final ES el efectivo inicial del periodo.
+    const primaryOpening = parseMoneyCop(cf.cashOpening);
+    if (closing !== primaryOpening) {
+      errors.push(
+        `E3. EFE (${etiqueta}): el efectivo al final del periodo comparativo (${fmtCop(closing)}) ≠ ` +
+          `efectivo al inicio del periodo ${json.company.fiscalPeriod} (${fmtCop(primaryOpening)}). ` +
+          `Brecha: ${fmtCop(closing - primaryOpening)}. Es el mismo saldo (NIC 7 ¶45).`,
+      );
+    }
+    const missing = cf.sections.reduce(
+      (acc, s) =>
+        acc + s.lines.filter((l) => l.amountComparative === null && parseMoneyCop(l.amountPrimary) !== ZERO).length,
+      0,
+    );
+    if (missing > 0) {
+      errors.push(
+        `E2. EFE (${etiqueta}): ${missing} renglón(es) sin cifra comparativa bajo una columna comparativa ` +
+          `presentada; la columna no se puede verificar contra sus subtotales.`,
+      );
+    } else {
+      // Σ renglones comparativos == subtotal comparativo de cada actividad.
+      for (const s of cf.sections) {
+        const sum = s.lines.reduce(
+          (acc, l) => (l.amountComparative === null ? acc : acc + parseMoneyCop(l.amountComparative)),
+          ZERO,
+        );
+        const netFlow = parseMoneyCop(s.netFlowComparative!);
+        if (sum === netFlow) continue;
+        errors.push(
+          `E2. EFE (${etiqueta}) — actividades de ${s.section}: los renglones comparativos suman ` +
+            `${fmtCop(sum)} y el subtotal comparativo es ${fmtCop(netFlow)}. Brecha: ${fmtCop(sum - netFlow)}.`,
+        );
+      }
+    }
+    // E11 del comparativo: el método indirecto parte del resultado del periodo.
+    const operating = cf.sections.find((s) => s.section === 'operating');
+    const first = operating?.lines[0];
+    const netIncomeComparative = json.incomeStatement.netIncomeComparative;
+    if (first && first.amountComparative !== null && netIncomeComparative !== null && !pygComparativeIsNd) {
+      const firstCmp = parseMoneyCop(first.amountComparative);
+      const niCmp = parseMoneyCop(netIncomeComparative);
+      if (firstCmp !== niCmp) {
+        errors.push(
+          `E11. EFE (${etiqueta}): el primer renglón de operación (${fmtCop(firstCmp)}) ≠ utilidad neta ` +
+            `comparativa del P&G (${fmtCop(niCmp)}). Brecha: ${fmtCop(firstCmp - niCmp)}.`,
+        );
+      }
+    }
+  }
+
+  if (anchored) {
+    const detCf = basis?.cashFlow ?? null;
+    if (cfPresented && detCf === null) {
+      const reason = basis?.cashFlowNote ?? 'el balance de prueba no tiene periodo comparativo';
+      errors.push(
+        `E18. EFE (${etiqueta}): se presenta una columna comparativa sin base determinista — ${reason} ` +
+          `Un comparativo del EFE sin corte de apertura no se presenta (NIIF para las PYMES 3.14 / 10.21).`,
+      );
+    } else if (detCf !== null && presence.allTotals && cp !== null) {
+      const view = comparativeCashFlowView(cf);
+      for (const msg of formatCashFlowCrossCheckViolations(crossCheckCashFlowAgainstDeterministic(view, detCf))) {
+        errors.push(`E18. (${etiqueta}) ${msg}`);
+      }
+      for (const msg of formatCashFlowLineViolations(crossCheckCashFlowLinesAgainstDeterministic(view, detCf))) {
+        errors.push(`E23. (${etiqueta}) ${msg}`);
+      }
+    } else if (detCf !== null && !cfPresented && cp !== null) {
+      warnings.push(
+        `E18c. EFE: la columna comparativa ${cp} es calculable desde el balance de prueba y el informe ` +
+          `no la presenta (NIIF para las PYMES 3.14). Regenere el informe.`,
+      );
+    }
+  }
+
+  // -- ECP del periodo comparativo ---------------------------------------------
+  const rows = json.equityChanges.comparativeRows;
+  if (rows !== null) {
+    if (cp === null) {
+      errors.push(
+        `E4. ECP: se presentan filas del periodo comparativo y el informe no declara periodo comparativo.`,
+      );
+    } else {
+      for (const [index, row] of rows.entries()) {
+        const sum = EQUITY_ROW_COLUMNS.slice(0, 7).reduce((acc, k) => acc + parseMoneyCop(row[k]), ZERO);
+        const total = parseMoneyCop(row.total);
+        if (sum !== total) {
+          errors.push(
+            `E17. ECP (${etiqueta}) fila ${index + 1} (${row.kind}): suma de componentes ${fmtCop(sum)} ≠ ` +
+              `total ${fmtCop(total)}. Brecha: ${fmtCop(sum - total)}.`,
+          );
+        }
+      }
+      const opening = rows.find((r) => r.kind === 'opening_balance');
+      const closing = [...rows].reverse().find((r) => r.kind === 'closing_balance');
+      if (!opening || !closing) {
+        errors.push(`E7. ECP (${etiqueta}): debe incluir opening_balance y closing_balance.`);
+      } else {
+        for (const col of EQUITY_ROW_COLUMNS) {
+          const computed = rows.reduce<bigint>(
+            (acc, r) => (r.kind === 'closing_balance' ? acc : acc + parseMoneyCop(r[col])),
+            ZERO,
+          );
+          const closingVal = parseMoneyCop(closing[col]);
+          if (computed === closingVal) continue;
+          errors.push(
+            `E7c. ECP (${etiqueta}) columna "${col}" no cuadra: Σ filas (${fmtCop(computed)}) ≠ ` +
+              `closing_balance (${fmtCop(closingVal)}); brecha ${fmtCop(computed - closingVal)}.`,
+          );
+        }
+        const totalEquityComparative = json.balanceSheet.totalEquityComparative;
+        if (totalEquityComparative !== null && parseMoneyCop(closing.total) !== parseMoneyCop(totalEquityComparative)) {
+          errors.push(
+            `E4. ECP (${etiqueta}): saldo final ${fmtCop(parseMoneyCop(closing.total))} ≠ Total Patrimonio ` +
+              `comparativo del ESF ${fmtCop(parseMoneyCop(totalEquityComparative))}.`,
+          );
+        }
+        // E20 del comparativo: cada columna del saldo final del ECP
+        // comparativo == renglones de patrimonio del ESF comparativo.
+        if (totalEquityComparative !== null) {
+          errors.push(
+            ...equityRowVsBalanceLines(
+              closing,
+              json.balanceSheet.equity,
+              'comparative',
+              'E20c',
+              `(${etiqueta}) saldo final`,
+            ),
+          );
+        }
+        // E19 entre periodos: el saldo final del comparativo es el saldo
+        // inicial del periodo, columna a columna (NIIF para las PYMES 6.3).
+        const primaryOpening = json.equityChanges.rows.find((r) => r.kind === 'opening_balance');
+        if (primaryOpening) {
+          for (const col of EQUITY_ROW_COLUMNS) {
+            const a = parseMoneyCop(closing[col]);
+            const b = parseMoneyCop(primaryOpening[col]);
+            if (a === b) continue;
+            errors.push(
+              `E19. ECP: columna "${col}" — saldo final del periodo comparativo ${cp} (${fmtCop(a)}) ≠ saldo ` +
+                `inicial del periodo ${json.company.fiscalPeriod} (${fmtCop(b)}). Es el mismo saldo.`,
+            );
+          }
+        }
+      }
+      const profit = rows.find((r) => r.kind === 'profit_for_period');
+      const niCmp = json.incomeStatement.netIncomeComparative;
+      if (!pygComparativeIsNd && niCmp !== null) {
+        const expected = parseMoneyCop(niCmp);
+        const emitted = profit ? parseMoneyCop(profit.resultadoEjercicio) : null;
+        if (emitted !== expected) {
+          errors.push(
+            `E7a. ECP (${etiqueta}): resultado del ejercicio ${emitted === null ? 'ausente' : fmtCop(emitted)} ≠ ` +
+              `utilidad neta comparativa del P&G ${fmtCop(expected)}.`,
+          );
+        }
+      }
+      for (const r of rows) {
+        if (r.kind === 'prior_period_result_cancellation' && parseMoneyCop(r.total) !== ZERO) {
+          errors.push(
+            `E7b. ECP (${etiqueta}): el traslado del resultado anterior es interno del patrimonio y su total ` +
+              `es $0 (fila "${r.label}": ${fmtCop(parseMoneyCop(r.total))}).`,
+          );
+        }
+      }
+    }
+  }
+  if (anchored) {
+    const detRows = basis?.equityRows ?? null;
+    if (rows !== null && detRows === null) {
+      const reason = basis?.equityNote ?? 'el balance de prueba no tiene periodo comparativo';
+      errors.push(
+        `E24. ECP (${etiqueta}): se presentan filas del periodo comparativo sin base determinista — ${reason} ` +
+          `(NIIF para las PYMES 3.14 / 10.21).`,
+      );
+    } else if (rows !== null && detRows !== null) {
+      errors.push(...equityComparativeRowDiffs(rows, detRows, etiqueta));
+    } else if (rows === null && detRows !== null && cp !== null) {
+      warnings.push(
+        `E24c. ECP: el estado de cambios en el patrimonio del periodo comparativo ${cp} es calculable desde ` +
+          `el balance de prueba y el informe no lo presenta (NIIF para las PYMES 3.14). Regenere el informe.`,
+      );
+    }
+  }
+  return { errors, warnings };
+}
+
+/**
+ * E24 del ECP comparativo: sus filas son una proyección del balance de prueba
+ * (`buildDeterministicEquityChanges`), así que se exigen idénticas — tipo,
+ * rótulo y cada columna — a las que calcula el código.
+ */
+function equityComparativeRowDiffs(
+  rows: readonly EquityChangeRowJson[],
+  expected: readonly EquityChangeRowJson[],
+  etiqueta: string,
+): string[] {
+  const out: string[] = [];
+  if (rows.length !== expected.length) {
+    out.push(
+      `E24. ECP (${etiqueta}): ${rows.length} fila(s) presentadas y el cálculo desde el balance de prueba ` +
+        `tiene ${expected.length}. Las filas del comparativo no las redacta el analista.`,
+    );
+  }
+  const n = Math.min(rows.length, expected.length);
+  for (let i = 0; i < n; i++) {
+    const r = rows[i];
+    const e = expected[i];
+    if (r.kind !== e.kind || r.label !== e.label) {
+      out.push(
+        `E24. ECP (${etiqueta}) fila ${i + 1}: "${r.label}" (${r.kind}) y el cálculo desde el balance de ` +
+          `prueba es "${e.label}" (${e.kind}).`,
+      );
+      continue;
+    }
+    for (const col of EQUITY_ROW_COLUMNS) {
+      const a = parseMoneyCop(r[col]);
+      const b = parseMoneyCop(e[col]);
+      if (a === b) continue;
+      out.push(
+        `E24. ECP (${etiqueta}) fila "${r.label}" — columna "${col}": ${fmtCop(a)} y el balance de prueba ` +
+          `da ${fmtCop(b)} (brecha ${fmtCop(a - b)}).`,
+      );
     }
   }
   return out;
