@@ -160,6 +160,39 @@ describe('detectSignConvention', () => {
     expect(detection.convention).toBe('algebraica');
   });
 
+  // recalculo-07 (IW2): un export algebraico a nivel Cuenta (4 dígitos), sin
+  // columna "Transaccional", no tiene filas de 6+ dígitos. El detector sólo
+  // sumaba transaccionales o códigos de longitud ≥ 6, así que no evaluaba
+  // ningún periodo y el archivo quedaba como "natural" (pasivo e ingresos
+  // negativos). Las filas sumables son las hojas estructurales.
+  it('detecta ALGEBRAICA un export a nivel Cuenta (4 dígitos) sin columna transaccional', () => {
+    const csv = [
+      'codigo,nombre,Saldo 2025',
+      '1,Activo,1300000000',
+      '11,Disponible,1300000000',
+      '1105,Caja,1300000000',
+      '2,Pasivo,-500000000',
+      '22,Proveedores,-500000000',
+      '2205,Proveedores nacionales,-500000000',
+      '3,Patrimonio,-600000000',
+      '3105,Capital suscrito y pagado,-400000000',
+      '3605,Utilidad del ejercicio,-200000000',
+      '4135,Comercio al por mayor,-900000000',
+      '5135,Servicios,200000000',
+      '6135,Costo de ventas,500000000',
+    ].join('\n');
+    const detection = detectSignConvention(parseRaw(csv));
+    expect(detection.periodsEvaluated).toEqual(['2025']);
+    expect(detection.convention).toBe('algebraica');
+
+    const s = preprocessTrialBalance(parseTrialBalanceCSV(csv)).primary;
+    expect(s.controlTotals.pasivo).toBe(500_000_000);
+    // 400M capital + 200M del 3605 anterior (R8 → 3710VC) + 200M del periodo.
+    expect(s.controlTotals.patrimonio).toBe(800_000_000);
+    expect(s.controlTotals.ingresosNetos).toBe(900_000_000);
+    expect(s.summary.equationBalanced).toBe(true);
+  });
+
   it('no evalúa periodos cuyo activo es inmaterial — no toca balances de juguete', () => {
     const csv = [
       'codigo,nombre,nivel,transaccional,Saldo 2025',
