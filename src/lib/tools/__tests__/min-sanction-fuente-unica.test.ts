@@ -11,6 +11,7 @@ import { MIN_SANCTION } from '../sanction-calculator';
 import { buildTaxPrompt } from '@/lib/agents/prompts/tax-agent.prompt';
 import { SANCIONES } from '@/lib/agents/financial/escudo-survival/normative/catalog/sanciones';
 import { ARTICULOS_ET } from '@/lib/agents/financial/escudo-survival/normative/catalog/estatuto-tributario';
+import { SANCTION_TOOL_DESCRIPTION } from '../sanction-contract';
 
 const TXT = `$${MIN_SANCTION.toLocaleString('es-CO')}`;
 
@@ -28,5 +29,13 @@ describe('sanción mínima desde MIN_SANCTION', () => {
     const a = ARTICULOS_ET.find((x) => x.id === 'ART_639_ET');
     expect(a?.resumen).toContain(TXT);
     expect(a?.resumen).not.toContain('$523.740');
+  });
+
+  it('la descripción de la tool (chat y voz) deriva la cifra de MIN_SANCTION', async () => {
+    expect(SANCTION_TOOL_DESCRIPTION).toContain(`10 UVT = ${TXT}`);
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const src = readFileSync(resolve(__dirname, '../sanction-contract.ts'), 'utf8');
+    expect(src).not.toMatch(/\$52[34]\.\d{3}/); // $523.740 / $524.000 escritos a mano
   });
 });

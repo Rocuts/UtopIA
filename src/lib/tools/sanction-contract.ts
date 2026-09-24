@@ -20,6 +20,7 @@ import { z } from 'zod';
 import {
   CORRECCION_STAGES,
   INEXACTITUD_REDUCTIONS,
+  MIN_SANCTION,
   REDUCCIONES_640,
   SANCTION_TYPES,
   type SanctionCalculationInput,
@@ -35,7 +36,7 @@ export const SANCTION_TOOL_DESCRIPTION =
   'extemporaneidad (Art. 641 E.T.), extemporaneidad_post_emplazamiento (Art. 642 E.T.), ' +
   'correccion (Art. 644 E.T.), inexactitud (Art. 647 E.T. con reducciones Arts. 640/709/713), ' +
   'intereses_moratorios (Arts. 634-635 E.T., interés simple diario). ' +
-  'UVT 2026 = $52.374 (Res. DIAN 000238/2025). Sanción mínima = 10 UVT = $524.000 ' +
+  `UVT 2026 = $52.374 (Res. DIAN 000238/2025). Sanción mínima = 10 UVT = $${MIN_SANCTION.toLocaleString('es-CO')} ` +
   '(Arts. 639 y 868 E.T.). Usar cuando el usuario pregunte cuánto pagaría en sanciones o intereses.';
 
 export const SANCTION_FIELD_DESCRIPTIONS: Record<SanctionInputField, string> = {
