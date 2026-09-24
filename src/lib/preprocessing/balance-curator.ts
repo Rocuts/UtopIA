@@ -16,9 +16,10 @@
 //
 // Justificación del orden:
 //   1. R1 sanea Activos/Pasivos negativos (mutación de control totals).
-//   2. R12 detecta libros NO cerrados (utilidad transitoria sin trasladar).
-//      Si dispara `abortVirtualClose=true`, R8 NO ejecuta y el orquestador
-//      del pipeline financiero debe emitir dictamen "no emitible".
+//   2. R12 detecta libros NO cerrados (utilidad sin trasladar al grupo 36;
+//      cortes parciales sólo reciben nota) y un comparativo no cerrado (P&G
+//      posiblemente acumulado, bloqueante). La bandera `librosNoCerrados`
+//      la consume el gate (V12); R8 igual ejecuta.
 //   3. R8 aplica Cierre Virtual: traslada utilidad del ejercicio (Clase
 //      4-5-6-7) a Patrimonio (cuenta virtual 3605VC) y reclasifica un saldo
 //      histórico del grupo 36 a 3710VC. Cualquier otro residual de la
@@ -97,7 +98,7 @@ export function runCurator(
     abortVirtualClose: false,
   };
   try {
-    r12Out = runR12(snapshot);
+    r12Out = runR12(snapshot, prev);
     findings.push(...r12Out.findings);
   } catch (err) {
     errors['CUR-R12'] = err instanceof Error ? err.message : String(err);

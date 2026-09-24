@@ -408,25 +408,43 @@ export interface Class18ClassificationAudit {
 }
 
 // ---------------------------------------------------------------------------
-// R12 — Detector de cierre de libros (gate previo a R8)
+// R12 — Detector de cierre de libros
 // ---------------------------------------------------------------------------
-// Si saldoNeto(clase 4) − saldoNeto(clase 5) − saldoNeto(clase 6) − saldoNeto(clase 7)
-// ≠ 0 Y saldoNeto(grupo 36 + grupo 37) ≈ 0, los libros NO están cerrados:
-// la utilidad transitoria del P&L no fue trasladada al patrimonio.
-// Cuando se dispara, R8 (Cierre Virtual) NO ejecuta — el orchestrator emite
-// dictamen "no emitible" sin llegar al builder.
+// "Sin traslado": el P&G del periodo es material y el grupo 36 no lo contiene
+// (el grupo 37 son ejercicios anteriores y no cuenta). La bandera del gate
+// (`librosNoCerrados` → V12) se omite en cortes 'parcial'. Además detecta un
+// comparativo no cerrado (P&G del periodo posiblemente acumulado).
 // ---------------------------------------------------------------------------
+
+/** Evidencia de P&G acumulado por comparativo no cerrado (recalculo-03). */
+export interface PygAcumuladoAudit {
+  /** Periodo comparativo cuyo resultado no ingresó al patrimonio. */
+  comparativePeriod: string;
+  /** Resultado del comparativo (pesos). */
+  utilidadComparativo: number;
+  /** Resultado publicado del periodo principal (saldo final de clases 4-7). */
+  utilidadPublicada: number;
+  /** Cifra alternativa: resultado del ejercicio = publicado − comparativo (centavos exactos). */
+  utilidadMovimientoRaw: string;
+  /** Ingresos netos del ejercicio si el P&G es acumulado (centavos exactos). */
+  ingresosNetosMovimientoRaw: string;
+  /** Variación de resultados anteriores (patrimonio sin resultado del año, sin aportes). */
+  variacionResultadosAnterioresRaw: string;
+}
+
 export interface ClosingDetectorAudit {
-  /** Utilidad transitoria del P&L (clase 4 − 5 − 6 − 7). */
+  /** Resultado del P&L del periodo (= controlTotals.utilidadNeta). */
   utilidadTransitoriaCop: number;
-  /** Saldo neto del grupo 36 (resultados del ejercicio) en clase 3. */
+  /** Saldo neto REAL del grupo 36 (resultados del ejercicio) en clase 3. */
   grupo36SaldoCop: number;
-  /** Saldo neto del grupo 37 (resultados ejercicios anteriores) en clase 3. */
+  /** Saldo neto REAL del grupo 37 (resultados ejercicios anteriores) en clase 3. */
   grupo37SaldoCop: number;
-  /** True si los libros NO están cerrados (utilidad sin trasladar). */
+  /** True si los libros NO están cerrados y el corte no es parcial (o el comparativo no se cerró). */
   librosNoCerrados: boolean;
   /** Asientos sugeridos (NO aplicados) para cerrar el periodo. */
   suggestedClosingEntries: string[];
+  /** Presente si el P&G del periodo puede ser acumulado (comparativo sin cerrar). */
+  pygAcumulado?: PygAcumuladoAudit;
 }
 
 // ---------------------------------------------------------------------------

@@ -193,3 +193,130 @@ describe('niif-preproceso-12 — pérdida registrada en 3610 con P&G presente', 
     ).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// niif-preproceso-26 — R12 respeta periodoTipo
+// ---------------------------------------------------------------------------
+describe('niif-preproceso-26 — cortes parciales no se sellan por libros abiertos', () => {
+  it('corte 2025-06 de una empresa nueva: nota explicativa, sin V12', () => {
+    const s = pp(
+      [
+        'codigo,nombre,Saldo [2025-06]',
+        '110505,Caja,400000000',
+        '220505,Proveedores,100000000',
+        '310505,Capital,200000000',
+        '413505,Ventas,500000000',
+        '513505,Gastos,400000000',
+      ].join('\n'),
+    ).primary;
+    expect(s.periodoTipo).toBe('parcial');
+    expect(s.findings?.librosNoCerrados).toBe(false);
+    const r12 = (s.curator?.findings ?? []).filter((f) => f.code === 'CUR-R12');
+    expect(r12.map((f) => f.severity)).toEqual(['medio']);
+    expect(s.virtualCloseAdjustment?.justification).toMatch(/NOTA EXPLICATIVA/);
+  });
+
+  it('año 2025-12 sin 3605 pero con 3705 de años anteriores: SÍ marca libros no cerrados', () => {
+    const s = pp(
+      [
+        'codigo,nombre,Saldo [2025-12]',
+        '110505,Caja,900000000',
+        '220505,Proveedores,100000000',
+        '310505,Capital,200000000',
+        '370505,Utilidades acumuladas,500000000',
+        '413505,Ventas,500000000',
+        '513505,Gastos,400000000',
+      ].join('\n'),
+    ).primary;
+    expect(s.periodoTipo).toBe('cerrado');
+    expect(s.findings?.librosNoCerrados).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// recalculo-03 — P&G acumulado cuando el comparativo no se cerró
+// ---------------------------------------------------------------------------
+describe('recalculo-03 — P&G del periodo principal posiblemente acumulado', () => {
+  // 2024 nunca se cerró: las cuentas de resultado de 2025 traen el acumulado
+  // 2024 + 2025 y el patrimonio no recibió el resultado de 2024.
+  //   2024: ventas 800, gastos 300 → resultado 500; A 1.000 = P 400 + K 100 + 500
+  //   2025: ventas 1.500 (800 + 700), gastos 600 (300 + 300) → 900 acumulado
+  //         A 1.500 = P 500 + K 100 + 900. Movimiento del ejercicio = 400.
+  const CSV_ACUMULADO = [
+    'codigo,nombre,Saldo 2024,Saldo 2025',
+    '110505,Caja,1000000000,1500000000',
+    '220505,Proveedores,400000000,500000000',
+    '310505,Capital,100000000,100000000',
+    '413505,Ventas,800000000,1500000000',
+    '513505,Gastos,300000000,600000000',
+  ].join('\n');
+
+  it('no transforma cifras: detecta el caso, bloquea y ofrece la cifra alternativa', () => {
+    const res = pp(CSV_ACUMULADO);
+    const s = res.primary;
+
+    // Las cifras publicadas NO se reescriben automáticamente.
+    expect(s.controlTotals.utilidadNeta).toBe(900_000_000);
+    expect(s.controlTotals.ingresosNetos).toBe(1_500_000_000);
+
+    // Hallazgo explícito con el movimiento del ejercicio (variación).
+    const hallazgo = (s.curator?.findings ?? []).find(
+      (f) => f.code === 'CUR-R12' && /acumulad/i.test(f.title),
+    );
+    expect(hallazgo?.severity).toBe('critico');
+    expect(hallazgo?.description).toContain('400.000.000,00');
+    expect(hallazgo?.description).toContain('700.000.000,00');
+    expect(hallazgo?.description).toContain('2024');
+
+    // Bloqueo post-curator con la cifra alternativa + bandera del gate (V12).
+    const blocker = (s.validation.curatorBlockingReasons ?? []).find((r) =>
+      r.startsWith('[CUR-R12]'),
+    );
+    expect(blocker).toBeDefined();
+    expect(blocker).toContain('400.000.000,00');
+    expect(s.validation.blocking).toBe(true);
+    expect(s.findings?.librosNoCerrados).toBe(true);
+    expect(s.closingDetectorAudit?.pygAcumulado?.utilidadMovimientoRaw).toBe('400000000.00');
+  });
+
+  it('control: si 2024 se cerró (resultado en 3705) y el P&G 2025 es del ejercicio, no dispara', () => {
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2024,Saldo 2025',
+        '110505,Caja,1000000000,1500000000',
+        '220505,Proveedores,400000000,500000000',
+        '310505,Capital,100000000,100000000',
+        '370505,Utilidades acumuladas,0,500000000',
+        '413505,Ventas,800000000,700000000',
+        '513505,Gastos,300000000,300000000',
+      ].join('\n'),
+    ).primary;
+    expect(
+      (s.curator?.findings ?? []).some((f) => f.code === 'CUR-R12' && /acumulad/i.test(f.title)),
+    ).toBe(false);
+    expect(s.closingDetectorAudit?.pygAcumulado).toBeUndefined();
+  });
+
+  it('con evidencia de dividendos (2360) el caso es ambiguo: hallazgo explícito sin bloqueo', () => {
+    // 2024 cerrado y distribuido íntegramente (2360 pagado) produce el mismo
+    // patrimonio que un 2024 sin cerrar: se informa con ambas lecturas.
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2024,Saldo 2025',
+        '110505,Caja,1000000000,1000000000',
+        '220505,Proveedores,400000000,500000000',
+        '236005,Dividendos por pagar,0,0',
+        '310505,Capital,100000000,100000000',
+        '413505,Ventas,800000000,700000000',
+        '513505,Gastos,300000000,300000000',
+      ].join('\n'),
+    ).primary;
+    const hallazgo = (s.curator?.findings ?? []).find(
+      (f) => f.code === 'CUR-R12' && /acumulad/i.test(f.title),
+    );
+    expect(hallazgo?.severity).toBe('alto');
+    expect(
+      (s.validation.curatorBlockingReasons ?? []).some((r) => r.startsWith('[CUR-R12]')),
+    ).toBe(false);
+  });
+});
