@@ -460,6 +460,18 @@ export interface DeterministicCashFlow {
    * traslados internos que se presentan netos dentro del flujo con socios.
    */
   nonCashEquityMovements: BreakdownRow[];
+  /**
+   * ORI del periodo que no explican las valorizaciones del grupo 19
+   * (re-auditoría 2, recalculo-final2-03): Δ38 − Δ19, en signo de patrimonio.
+   * Es la revaluación registrada en el propio activo (modelo de revaluación,
+   * NIC 16 / NIIF para las PYMES Sección 17), una transacción no monetaria
+   * (NIC 7 ¶43 / Sección 7): no entra a operación y se descuenta de la
+   * variación del activo de inversión que la registra — `group` cuando el
+   * balance tiene un solo grupo de inversión (12, 15, 16, 18); `null` si tiene
+   * varios, y entonces el descuento va en un renglón propio de inversión
+   * (clave `38`). `null` sin grupo 38 o si Δ38 = Δ19. Se revela en methodNote.
+   */
+  oriRevaluation: { cents: bigint; group: string | null } | null;
 }
 
 /**
@@ -471,10 +483,13 @@ export interface DeterministicCashFlow {
  *   - inversión: activos de largo plazo e inversiones (¶16).
  *   - financiación: recursos de acreedores financieros y de los socios (¶17).
  *   - `nonCash`: partidas que NO son flujo de efectivo y que NIC 7 ¶43 manda
- *     excluir del estado y revelar aparte (valorizaciones, revalorización del
- *     patrimonio, dividendos decretados en acciones). Se agregan en UN solo
- *     renglón conciliatorio visible en operación en vez de disfrazarse de
- *     flujo de inversión o financiación.
+ *     excluir del estado y revelar aparte (valorizaciones 19 y su superávit
+ *     38). El 19 y el 38 se anulan entre sí; lo que el 19 no explica del 38
+ *     es revaluación registrada en el activo y se descuenta de su variación
+ *     en inversión (`oriRevaluation`, re-auditoría 2 recalculo-final2-03).
+ *     Sólo un 19 sin grupo 38 queda en el renglón conciliatorio de operación.
+ *     La revalorización del patrimonio (34) y los dividendos en acciones (35)
+ *     viajan con el bloque patrimonial (`isEquityBlockGroup`).
  *
  * El grupo 11 (disponible) no aparece: es el objetivo de la conciliación.
  */
@@ -547,6 +562,15 @@ const CASHFLOW_ROW_LABELS: Record<string, string> = {
   '2360': 'Dividendos pagados a socios (PUC 2360)',
 };
 
+/**
+ * Renglón de inversión que descuenta la revaluación reconocida en el ORI
+ * cuando el balance tiene varios grupos de inversión y no se puede atribuir a
+ * uno (ver `DeterministicCashFlow.oriRevaluation`).
+ */
+const ORI_REVALUATION_ROW_LABEL =
+  'Revaluación de activos reconocida en el ORI (partida no monetaria, NIC 7 ¶43): se descuenta de la ' +
+  'variación de los activos de inversión';
+
 /** Etiquetas de los grupos patrimoniales para la revelación no monetaria. */
 const EQUITY_MOVEMENT_LABELS: Record<string, string> = {
   '31': 'Capital social',
@@ -560,7 +584,8 @@ const EQUITY_MOVEMENT_LABELS: Record<string, string> = {
 /**
  * Grupos del bloque patrimonial cuyo movimiento interno se anula contra el
  * resultado (auditoría niif-contrato-03). El 38 (superávit por valorizaciones)
- * queda fuera: su contrapartida es el 19 y ambos son partida no monetaria.
+ * queda fuera: su contrapartida es el 19 o el activo revaluado, y ambos son
+ * partida no monetaria (ver `oriRevaluation`).
  */
 function isEquityBlockGroup(group: string): boolean {
   return group.startsWith('3') && group !== '38';
@@ -811,6 +836,26 @@ export function buildDeterministicCashFlow(
   const financingRows: BreakdownRow[] = [];
   let nonCashNet = ZERO;
 
+  // --- ORI por revaluación (re-auditoría 2, recalculo-final2-03) -------------
+  // El 38 y el 19 se agregan en el renglón no monetario y se anulan cuando se
+  // mueven juntos (valorizaciones, Decreto 2650/1993). Con el modelo de
+  // revaluación (NIC 16 / Sección 17) la contrapartida del 38 es el propio
+  // activo: la Δ38 sin 19 entraba a OPERACIÓN y la variación del activo, con
+  // la revaluación dentro, salía como adquisición o disposición en INVERSIÓN.
+  // La revaluación no es flujo (NIC 7 ¶43): Δ38 − Δ19 (en signo de caja,
+  // flujo del 38 + flujo del 19) se saca del renglón no monetario y se suma a
+  // la variación del activo de inversión que la registra. Un balance de saldos
+  // no distingue un traslado del superávit a resultados acumulados
+  // (realización): rige la misma lectura que el ORI (Δ38) del ERI y del ECP.
+  const oriRevaluationCents = flowByKey.has('38')
+    ? flowByKey.get('38')!.cents + (flowByKey.get('19')?.cents ?? ZERO)
+    : ZERO;
+  const investingAssetGroups = [...flowByKey.entries()]
+    .filter(([key, v]) => v.section === 'investing' && /^1\d$/.test(key))
+    .map(([key]) => key);
+  const oriRevaluationGroup =
+    oriRevaluationCents !== ZERO && investingAssetGroups.length === 1 ? investingAssetGroups[0] : null;
+
   for (const [key, { section, cents }] of [...flowByKey.entries()].sort(([a], [b]) =>
     a.localeCompare(b),
   )) {
@@ -819,8 +864,9 @@ export function buildDeterministicCashFlow(
       continue;
     }
     // La variación BRUTA se queda en su grupo; el gasto no monetario ya se
-    // devolvió a operación arriba.
-    const amount = cents - (nonCashAddBackByGroup.get(key) ?? ZERO);
+    // devolvió a operación arriba, y la revaluación del ORI se descuenta.
+    const amount =
+      cents - (nonCashAddBackByGroup.get(key) ?? ZERO) + (key === oriRevaluationGroup ? oriRevaluationCents : ZERO);
     if (amount === ZERO) continue;
     const label = labelForCashFlowRow(key);
     const row: BreakdownRow = {
@@ -832,12 +878,18 @@ export function buildDeterministicCashFlow(
     else if (section === 'investing') investingRows.push(row);
     else financingRows.push(row);
   }
+  if (oriRevaluationCents !== ZERO && oriRevaluationGroup === null) {
+    investingRows.push({ account: '38', label: ORI_REVALUATION_ROW_LABEL, cents: oriRevaluationCents });
+  }
+  nonCashNet -= oriRevaluationCents;
   financingRows.push(...ownerFinancingRows);
 
   if (nonCashNet !== ZERO) {
     // NIC 7 ¶43: las transacciones no monetarias se excluyen del EFE y se
     // revelan. Se dejan visibles en UN renglón conciliatorio en vez de
-    // repartirse como flujos falsos de inversión o financiación.
+    // repartirse como flujos falsos de inversión o financiación. Tras
+    // descontar la revaluación del ORI sólo llega aquí un 19 que se movió en
+    // un balance sin grupo 38.
     operatingRows.push({
       account: '19/38',
       label: 'Partidas no monetarias netas (valorizaciones)',
@@ -885,6 +937,8 @@ export function buildDeterministicCashFlow(
     unclassifiedGroups: [...unclassifiedGroups].sort(),
     ownerFlows: { residualCents: ownerResidual, classification: ownerClassification },
     nonCashEquityMovements,
+    oriRevaluation:
+      oriRevaluationCents === ZERO ? null : { cents: oriRevaluationCents, group: oriRevaluationGroup },
   };
 }
 
