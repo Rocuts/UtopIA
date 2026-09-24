@@ -36,7 +36,7 @@ import {
 const dialect = new PgDialect();
 const toSql = (c: unknown) => dialect.sqlToQuery(c as SQL).sql;
 
-const EXCLUYE_PARES = /"reversed_by_entry_id" IS NULL.*"source_type" <> 'reversal'/s;
+const EXCLUYE_PARES = /"reversed_by_entry_id" IS NULL[\s\S]*"source_type" <> 'reversal'/;
 
 describe('forensic repository — pares reversados', () => {
   it('las líneas para Benford / montos repetidos / redondos excluyen original y reverso', async () => {
