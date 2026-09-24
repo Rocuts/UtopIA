@@ -303,8 +303,12 @@ function incoherentSourcesResponse(details: string[]): Response {
  * Sello de las exportaciones sin referencia persistida; aclara BORRADOR si el
  * consolidado lleva el encabezado del override (pipeline-flujo-21).
  */
-function unverified(report: FinancialReport | null | undefined): ArtifactProvenance {
-  return isProvisionalDraft(report) ? { kind: 'unverified', draft: true } : { kind: 'unverified' };
+function unverified(
+  report: FinancialReport | null | undefined,
+  adjustments: ArtifactProvenance['adjustments'] = null,
+): ArtifactProvenance {
+  const base: ArtifactProvenance = adjustments ? { kind: 'unverified', adjustments } : { kind: 'unverified' };
+  return isProvisionalDraft(report) ? { ...base, draft: true } : base;
 }
 
 /**
@@ -324,9 +328,12 @@ async function exportPersisted(
   const report = withServerRenderedPersisted(persisted.report, preprocessed, language);
   const blocked = rejectInvalidExport(report, preprocessed);
   if (blocked) return blocked;
+  // procedencia-R2-02: las cifras de la versión incluyen los ajustes
+  // confirmados del Doctor de Datos; el sello los cuenta y el PDF los lista.
+  const adjustments = persisted.adjustments;
   const stamp: ArtifactProvenance = isProvisionalDraft(report)
-    ? { kind: 'verified', provenance, draft: true }
-    : { kind: 'verified', provenance };
+    ? { kind: 'verified', provenance, draft: true, adjustments }
+    : { kind: 'verified', provenance, adjustments };
 
   if (format === 'pdf-elite') {
     let pillars = null;
@@ -348,6 +355,7 @@ async function exportPersisted(
       auditReport: (body.auditReport as AuditReport | null | undefined) ?? null,
       qualityReport: (body.qualityReport as QualityAssessment | null | undefined) ?? null,
       outputOptions: (body.outputOptions as OutputOptionsToggle | null | undefined) ?? null,
+      appliedAdjustments: adjustments,
     });
     const pdfStamp = stampPdf(doc, stamp, language);
     const stream = await renderEditorialReportToStream(doc);
@@ -430,7 +438,7 @@ export async function POST(req: Request) {
       const report = clientReportWithServerMarkdown(body.report as FinancialReport, source, excelLanguage);
       const blocked = rejectInvalidExport(report, preprocessed);
       if (blocked) return blocked;
-      const stamp = unverified(report);
+      const stamp = unverified(report, source.adjustments);
       const buffer = await generateFinancialExcel({
         report: withExcelProvenance(report, stamp, excelLanguage),
         preprocessed,
@@ -594,8 +602,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       auditReport: b.auditReport ?? null,
       qualityReport: b.qualityReport ?? null,
       outputOptions: b.outputOptions ?? null,
+      appliedAdjustments: source.adjustments ?? null,
     });
-    const stamp = stampPdf(doc, unverified(report), language);
+    const stamp = stampPdf(doc, unverified(report, source.adjustments), language);
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, report.company.name, provenanceHeaders(stamp));
   }

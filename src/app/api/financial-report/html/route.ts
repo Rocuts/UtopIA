@@ -197,9 +197,15 @@ export async function POST(req: Request) {
       persisted.kind === 'ok'
         ? isProvisionalDraft(persisted.report)
         : (rawBody as { provisional?: { active?: unknown } } | null)?.provisional?.active === true;
-    const provenance: ArtifactProvenance =
+    let provenance: ArtifactProvenance =
       persisted.kind === 'ok'
-        ? { kind: 'verified', provenance: persisted.provenance, ...(draft ? { draft } : {}) }
+        ? {
+            kind: 'verified',
+            provenance: persisted.provenance,
+            ...(draft ? { draft } : {}),
+            // procedencia-R2-02: el aviso de procedencia lista los ajustes.
+            adjustments: persisted.adjustments,
+          }
         : { kind: 'unverified', ...(draft ? { draft } : {}) };
     const body: unknown =
       persisted.kind === 'ok' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
@@ -248,7 +254,10 @@ export async function POST(req: Request) {
           );
         }
         preprocessed = rederived.preprocessed;
-        if (applied.length > 0) adjustments = { applied, affected: rederived.affected };
+        if (applied.length > 0) {
+          adjustments = { applied, affected: rederived.affected };
+          provenance = { ...provenance, adjustments };
+        }
       }
     }
 

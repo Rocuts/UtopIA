@@ -7,6 +7,8 @@
 // composer REAL del PDF (sólo se sustituye el render a bytes):
 //   - e2e-niif2-02: una desviación que /niif ya corrigió en el JSON
 //     (`overwritten: true`, informe limpio) no sella la versión persistida.
+//   - procedencia-R2-02: el PDF y el HTML divulgan los ajustes confirmados del
+//     Doctor de Datos (anexo) y el sello nombra la huella de cada balance.
 //   - procedencia-R2-06: todo artefacto marcado BORRADOR (HTML no emitible,
 //     PDF con marca de agua) lleva la variante BORRADOR del sello y
 //     X-Report-Draft.
@@ -61,6 +63,7 @@ import type { StrategyReportJson } from '@/lib/agents/financial/contracts/strate
 import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
 import { canonicalHash } from '@/lib/reports/canonical';
+import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import {
   PROVENANCE_COMPANY,
   PROVENANCE_CSV,
@@ -432,5 +435,112 @@ describe('R2-05 — fila alterada con huellas recalculadas', () => {
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('X-Report-Provenance')).toBe('verified');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// procedencia-R2-02 — ajustes del Doctor de Datos en las salidas verificadas
+// ---------------------------------------------------------------------------
+
+describe('R2-02 — el PDF y el HTML divulgan los ajustes confirmados y el sello nombra ambas huellas', () => {
+  // Caja registrada $500 de menos (balance descuadrado) y ajuste confirmado +$500.
+  const CSV_DESCUADRADO = PROVENANCE_CSV.replace('110505,Caja,Auxiliar,1,1700', '110505,Caja,Auxiliar,1,1200');
+  const LEDGER = {
+    adjustments: [
+      {
+        id: 'adj-caja-arqueo-0001',
+        accountCode: '110505',
+        accountName: 'Caja',
+        amount: 500,
+        rationale: 'Arqueo de caja al cierre no registrado (confirmado por el usuario)',
+        status: 'applied',
+        proposedAt: '2026-09-24T00:00:00Z',
+        appliedAt: '2026-09-24T00:05:00Z',
+      },
+    ],
+  };
+
+  it('por referencia: anexo de ajustes en el PDF y en el HTML; sello con N ajustes y las dos huellas (es)', async () => {
+    const out = await consolidateWith(makeProvenanceParts(), { rawData: CSV_DESCUADRADO, adjustmentLedger: LEDGER });
+    expect(out.provenance.status).toBe('persisted');
+    expect(out.report.consolidatedReport).toMatch(/Ajustes contables aplicados/);
+
+    const pdf = await exportReport(
+      req('/api/financial-report/export', { reportRef: out.reportRef, format: 'pdf-elite', language: 'es' }),
+    );
+    expect(pdf.status).toBe(200);
+    const doc = vi.mocked(composeEditorialReport).mock.results[0].value as {
+      appendix: { adjustmentsTable?: Array<{ cuenta: string; descripcion: string; ajuste: number }>; validationWarnings?: string[] };
+    };
+    expect(doc.appendix.adjustmentsTable).toHaveLength(1);
+    const row = doc.appendix.adjustmentsTable![0];
+    expect(row.cuenta).toBe('110505');
+    expect(row.ajuste).toBe(500);
+    expect(row.descripcion).toContain('adj-caja');
+    expect(row.descripcion).toMatch(/Arqueo de caja/);
+    expect(row.descripcion).toMatch(/\$1\.200,00.*\$1\.700,00/);
+    const stamp = (doc.appendix.validationWarnings ?? []).find((w) => w.startsWith('PROCEDENCIA VERIFICADA'))!;
+    expect(stamp).toMatch(/1 ajuste\(s\) confirmado\(s\) por el usuario/);
+    expect(stamp).toMatch(/balance preprocesado \(con los ajustes confirmados\)/);
+    expect(stamp).toMatch(/balance recibido \(antes de los ajustes confirmados\)/);
+
+    const xlsx = await exportReport(req('/api/financial-report/export', { reportRef: out.reportRef, format: 'excel' }));
+    expect(xlsx.status).toBe(200);
+    const excel = vi.mocked(generateFinancialExcel).mock.calls[0][0];
+    expect(excel.report.consolidatedReport).toMatch(/1 ajuste\(s\) confirmado\(s\) por el usuario/);
+
+    const h = await html(req('/api/financial-report/html', { reportRef: out.reportRef, language: 'es' }));
+    expect(h.status).toBe(200);
+    const page = ((await h.json()) as { html: string }).html;
+    expect(page).toMatch(/Ajustes confirmados por el usuario/);
+    expect(page).toContain('adj-caja-arqueo-0001');
+    expect(page).toContain('110505');
+    expect(page).toMatch(/\$1\.200,00/);
+    expect(page).toMatch(/\$1\.700,00/);
+    expect(page).toMatch(/Arqueo de caja/);
+  });
+
+  it('sin referencia: el PDF lleva el anexo con el ledger de la petición; el HTML también', async () => {
+    const out = await consolidateWith(makeProvenanceParts(), { rawData: CSV_DESCUADRADO, adjustmentLedger: LEDGER });
+    const { serverVersion: _sv, ...report } = out.report as FinancialReport & { serverVersion?: unknown };
+    void _sv;
+    const pdf = await exportReport(
+      req('/api/financial-report/export', {
+        report,
+        rawData: CSV_DESCUADRADO,
+        adjustmentLedger: LEDGER,
+        format: 'pdf-elite',
+        language: 'en',
+      }),
+    );
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get('X-Report-Provenance')).toBe('unverified');
+    const doc = vi.mocked(composeEditorialReport).mock.results[0].value as {
+      appendix: { adjustmentsTable?: Array<{ descripcion: string }>; validationWarnings?: string[] };
+    };
+    expect(doc.appendix.adjustmentsTable).toHaveLength(1);
+    const stamp = (doc.appendix.validationWarnings ?? []).find((w) => w.startsWith('UNVERIFIED PROVENANCE'))!;
+    expect(stamp).toMatch(/1 adjustment\(s\) confirmed by the user/);
+
+    const read = preprocessUploadedTrialBalanceText(CSV_DESCUADRADO);
+    if (read.kind !== 'ok') throw new Error('fixture');
+    const h = await html(
+      req('/api/financial-report/html', {
+        niifReport: report.niifAnalysis.json,
+        strategyReport: report.strategicAnalysis.json,
+        governanceReport: report.governance.json,
+        company: PROVENANCE_COMPANY,
+        metadata: { reportMode: 'LINEA_BASE' },
+        // El que usó /niif (ya ajustado), como lo reenvía la UI.
+        preprocessed: toJsonSafe(applyAdjustments(read.preprocessed, LEDGER.adjustments as never).balance),
+        adjustmentLedger: LEDGER,
+        language: 'es',
+      }),
+    );
+    expect(h.status, await h.clone().text()).toBe(200);
+    const page = ((await h.json()) as { html: string }).html;
+    expect(page).toMatch(/PROCEDENCIA NO VERIFICADA/);
+    expect(page).toMatch(/Ajustes confirmados por el usuario/);
+    expect(page).toContain('adj-caja-arqueo-0001');
   });
 });

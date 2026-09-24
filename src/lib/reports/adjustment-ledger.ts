@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Adjustment } from '@/lib/agents/repair/types';
 import type { AdjustmentApplicationAffected } from '@/lib/agents/repair/adjustments';
+import { formatCopFromPesos } from '@/lib/agents/financial/contracts/money';
 
 // ---------------------------------------------------------------------------
 // Contrato único del ledger del Doctor de Datos en las rutas financieras
@@ -114,4 +115,51 @@ export function readAdjustmentsTrail(value: unknown): AdjustmentsTrail | null | 
     }
   }
   return v.applied.length === 0 ? null : (v as AdjustmentsTrail);
+}
+
+/** Renglón legible de un ajuste aplicado (anexo del PDF y del HTML). */
+export interface AdjustmentTrailRow {
+  id: string;
+  accountCode: string;
+  accountName: string;
+  period: string | null;
+  /** Saldo previo, monto y saldo nuevo ya formateados en COP; N/D sin detalle. */
+  previous: string;
+  amount: string;
+  amountPesos: number;
+  next: string;
+  isNewAccount: boolean;
+  rationale: string;
+}
+
+/**
+ * Renglones del anexo de ajustes con la MISMA información que la traza del
+ * consolidado (`buildAdjustmentsAuditSection`): id, cuenta, saldo previo, monto,
+ * saldo nuevo, cuenta nueva y razón.
+ */
+export function adjustmentTrailRows(trail: AdjustmentsTrail | null | undefined): AdjustmentTrailRow[] {
+  if (!trail) return [];
+  const byId = new Map(trail.affected.map((a) => [a.adjustmentId, a]));
+  return trail.applied
+    .filter((a) => a.status === 'applied')
+    .map((a) => {
+      const affected = byId.get(a.id);
+      return {
+        id: a.id,
+        accountCode: a.accountCode,
+        accountName: a.accountName || affected?.accountName || '',
+        period: affected?.period ?? a.period ?? null,
+        previous: affected ? formatCopFromPesos(affected.oldBalance) : 'N/D',
+        amount: formatCopFromPesos(a.amount),
+        amountPesos: a.amount,
+        next: affected ? formatCopFromPesos(affected.newBalance) : 'N/D',
+        isNewAccount: affected?.isNewAccount === true,
+        rationale: (a.rationale || '').replace(/\s+/g, ' ').slice(0, 200),
+      };
+    });
+}
+
+/** Número de ajustes confirmados aplicados de la traza. */
+export function appliedAdjustmentsCount(trail: AdjustmentsTrail | null | undefined): number {
+  return trail ? trail.applied.filter((a) => a.status === 'applied').length : 0;
 }

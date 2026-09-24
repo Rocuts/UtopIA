@@ -2,6 +2,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import { dict } from '@/lib/i18n/dictionaries';
 import type { ReportProvenance } from './report-ref';
 import { FINANCIAL_REPORT_CONTRACT_VERSION } from './financial-report-version';
+import { adjustmentTrailRows, appliedAdjustmentsCount, type AdjustmentsTrail } from './adjustment-ledger';
 
 // ---------------------------------------------------------------------------
 // Procedencia impresa DENTRO del artefacto (Excel, PDF, HTML)
@@ -49,6 +50,12 @@ export type ArtifactProvenance =
       draft?: boolean;
       draftReasons?: DraftReason[];
       /**
+       * Ajustes confirmados del Doctor de Datos incluidos en las cifras
+       * (procedencia-R2-02): el sello los cuenta y distingue la huella del
+       * balance ajustado de la del archivo recibido; el HTML los lista.
+       */
+      adjustments?: AdjustmentsTrail | null;
+      /**
        * Contrato de reglas con que el servidor RE-RENDERIZÓ la versión al
        * producir el artefacto (I5-5). /export y /html por referencia recalculan
        * el Markdown, los veredictos y los gates con las reglas vigentes: por
@@ -57,7 +64,7 @@ export type ArtifactProvenance =
        */
       renderedWith?: string;
     }
-  | { kind: 'unverified'; draft?: boolean; draftReasons?: DraftReason[] };
+  | { kind: 'unverified'; draft?: boolean; draftReasons?: DraftReason[]; adjustments?: AdjustmentsTrail | null };
 
 /** Contrato del re-render de una procedencia verificada. */
 function renderedContract(p: Extract<ArtifactProvenance, { kind: 'verified' }>): string {
@@ -131,18 +138,25 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
           (r) => draftReasonLine(r, language),
         )
       : [];
+  const adjusted = appliedAdjustmentsCount(p.adjustments);
+  const adjustments = adjusted > 0 ? [fill(t.adjustmentsLine, { count: String(adjusted) })] : [];
   if (p.kind === 'unverified') {
-    return [p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle, t.unverifiedBody, ...draft];
+    return [p.draft ? t.unverifiedDraftTitle : t.unverifiedTitle, t.unverifiedBody, ...draft, ...adjustments];
   }
   const v = p.provenance;
   return [
     p.draft ? t.verifiedDraftTitle : t.verifiedTitle,
     t.verifiedBody,
     ...draft,
+    ...adjustments,
     fill(t.versionLine, { reportId: v.reportId, createdAt: v.createdAt }),
     fill(t.reportHashLine, { hash: v.reportHash }),
-    v.sourceHash ? fill(t.sourceHashLine, { hash: v.sourceHash }) : t.sourceMissingLine,
-    ...(v.rawDataHash ? [fill(t.rawDataHashLine, { hash: v.rawDataHash })] : []),
+    v.sourceHash
+      ? fill(adjusted > 0 ? t.sourceHashAdjustedLine : t.sourceHashLine, { hash: v.sourceHash })
+      : t.sourceMissingLine,
+    ...(v.rawDataHash
+      ? [fill(adjusted > 0 ? t.rawDataHashBeforeAdjustmentsLine : t.rawDataHashLine, { hash: v.rawDataHash })]
+      : []),
     fill(t.contractRenderedLine, {
       contract: v.contractVersion,
       rendered: renderedContract(p),
@@ -204,6 +218,42 @@ function escapeHtml(s: string): string {
 }
 
 /**
+ * Anexo de ajustes confirmados dentro del aviso de procedencia del HTML
+ * (procedencia-R2-02): la misma información que la traza del consolidado. El
+ * Editor Jefe no recibe el ledger (su contrato de entrada no lo trae), así que
+ * el HTML lo divulga aquí, fuera del cuerpo que redacta el modelo.
+ */
+function adjustmentsAnnexHtml(trail: AdjustmentsTrail | null | undefined, language: Lang): string {
+  const rows = adjustmentTrailRows(trail);
+  if (rows.length === 0) return '';
+  const t = dict[language].reportProvenance;
+  const head = [t.adjId, t.adjAccount, t.adjPrevious, t.adjAmount, t.adjNew, t.adjRationale]
+    .map((h) => `<th>${escapeHtml(h)}</th>`)
+    .join('');
+  const body = rows
+    .map(
+      (r) =>
+        '<tr>' +
+        [
+          r.id,
+          `${r.accountCode} ${r.accountName}${r.period ? ` (${r.period})` : ''}`,
+          r.previous,
+          r.amount,
+          r.next,
+          r.rationale,
+        ]
+          .map((c) => `<td>${escapeHtml(c)}</td>`)
+          .join('') +
+        '</tr>',
+    )
+    .join('');
+  return (
+    `<div class="utopia-procedencia-ajustes"><strong>${escapeHtml(t.adjustmentsAnnexTitle)}</strong>` +
+    `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+  );
+}
+
+/**
  * Sella el HTML: comentario y <meta> máquina-legibles y un aviso visible tras
  * <body>. Misma inserción que el sello BORRADOR del Editor Jefe (si no hay
  * <body> se antepone: mejor un aviso desubicado que un artefacto sin rótulo).
@@ -225,13 +275,15 @@ export function stampHtmlProvenance(html: string, p: ArtifactProvenance, languag
   .utopia-procedencia{position:relative;z-index:9997;margin:0;padding:8px 16px;background:#FFFFFF;color:#1E3A5F;border-bottom:2px solid #1E3A5F;font-family:Inter,system-ui,sans-serif;font-size:11px;line-height:1.45}
   .utopia-procedencia strong{letter-spacing:.12em}
   .utopia-procedencia code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;word-break:break-all}
+  .utopia-procedencia table{border-collapse:collapse;margin-top:6px;font-size:10px}
+  .utopia-procedencia th,.utopia-procedencia td{border:1px solid #1E3A5F;padding:2px 6px;text-align:left;vertical-align:top}
 </style>`;
   const detailHtml = detail.length
     ? `<br>${detail.map((d) => `<code>${escapeHtml(d)}</code>`).join('<br>')}`
     : '';
   const banner =
     `<div class="utopia-procedencia" data-provenance="${status}"${p.draft === true ? ' data-draft="true"' : ''}><strong>${escapeHtml(title)}</strong> — ` +
-    `${escapeHtml(body)}${detailHtml}</div>`;
+    `${escapeHtml(body)}${detailHtml}${adjustmentsAnnexHtml(p.adjustments, language)}</div>`;
 
   let out = html;
   const headOpen = out.match(/<head[^>]*>/i);
