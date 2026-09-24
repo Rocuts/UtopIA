@@ -31,11 +31,15 @@ interface AlertMeta {
 // titulo/accion son labels ES que el payload del Insight preserva; la UI los
 // muestra directamente o los re-i18n por `mensaje` (i18n key).
 const ALERT_META: Record<FiscalAlerta['codigo'], AlertMeta> = {
+  // Utilidad contable sin gasto de renta (grupo 54): hallazgo informativo sin
+  // cifra. La UAI no es base fiscal y F02 (35 % × UAI) no es el impuesto; si
+  // hay renta por causar lo determina la depuración (Art. 26 E.T.), igual que
+  // CUR-R4 del curator (re-auditoría 2026-09, NM-05).
   A5_SIN_PROVISION: {
     triggerCode: 'ESC_A5',
-    severity: 'critico',
-    titulo: 'Utilidad sin impuesto causado',
-    accionLabel: 'Provisionar impuesto de renta',
+    severity: 'informativo',
+    titulo: 'Sin gasto de renta causado — requiere depuración fiscal',
+    accionLabel: 'Verificar con el contador la causación y la depuración de la renta',
   },
   // F04 < 0 es una estimación contable (UAI × 35% − F03), no el saldo a favor
   // de la declaración: sin impacto monetario ni acción de devolución
@@ -68,18 +72,16 @@ const ALERT_META: Record<FiscalAlerta['codigo'], AlertMeta> = {
 
 /**
  * Impacto monetario asociado a una alerta, en centavos string (MoneyCop), o
- * `undefined` si la alerta no tiene una cifra de impacto natural. Determinístico
- * — derivado del `anchor`, no de un LLM.
+ * `undefined` si la alerta no tiene una cifra de impacto anclada. Hoy ninguna
+ * la tiene:
+ *   - A5_SIN_PROVISION: F02 = 35 % × UAI es una referencia contable, no el
+ *     impuesto omitido (Art. 26 E.T.; re-auditoría 2026-09, NM-05).
+ *   - SALDO_A_FAVOR: |F04| no es un saldo a favor determinable.
+ * Una alerta futura sólo puede publicar impacto si la cifra sale del `anchor`
+ * con base verificada (nunca de un LLM ni de la UAI).
  */
-function impactoCentsForAlert(
-  codigo: FiscalAlerta['codigo'],
-  anchor: FiscalAnchorBlock,
-): string | undefined {
+function impactoCentsForAlert(codigo: FiscalAlerta['codigo']): string | undefined {
   switch (codigo) {
-    case 'A5_SIN_PROVISION':
-      // Impuesto de referencia no provisionado (F02).
-      return anchor.f02;
-    // SALDO_A_FAVOR: sin impacto. |F04| no es un saldo a favor determinable.
     default:
       return undefined;
   }
@@ -98,7 +100,7 @@ export function fiscalAlertaToInsight(
   generatedAt: string,
 ): Insight {
   const meta = ALERT_META[alerta.codigo];
-  const impacto = impactoCentsForAlert(alerta.codigo, anchor);
+  const impacto = impactoCentsForAlert(alerta.codigo);
   return {
     pillar: 'escudo',
     severity: meta.severity,

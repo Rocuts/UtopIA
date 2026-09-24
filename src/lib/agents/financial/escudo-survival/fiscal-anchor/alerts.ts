@@ -5,9 +5,14 @@
 // banderas para el UI / dictamen. NUNCA texto literal — sólo i18n keys.
 //
 // Reglas:
-//   A5_SIN_PROVISION  (error)   → impuestoCausado = 0 y F01 > 0 (la empresa
-//                                 reporta utilidad pero no causó impuesto;
-//                                 incumple Art. 240 E.T. + NIC 12 §46).
+//   A5_SIN_PROVISION  (info)    → impuestoCausado = 0 y F01 > 0: utilidad
+//                                 contable sin gasto de renta (grupo 54). La
+//                                 UAI no es base fiscal (Art. 26 E.T.): si hay
+//                                 impuesto por causar sólo lo dice la
+//                                 depuración, así que es un hallazgo
+//                                 informativo SIN cifra (mismo trato que
+//                                 CUR-R4 del curator; re-auditoría 2026-09,
+//                                 NM-05).
 //   SALDO_A_FAVOR     (info)    → F04 < 0: POSIBLE saldo a favor como
 //                                 estimación contable (UAI × 35% − F03). No es
 //                                 liquidación: sin renta líquida depurada
@@ -34,6 +39,13 @@ const F10_UMBRAL_BAJO_PCT = 10;
 export const NORMA_POSIBLE_SALDO_A_FAVOR =
   'Estimación contable (F02 − F03), no liquidación: el saldo a favor sale de la declaración (Arts. 26, 807 y 850 E.T.)';
 
+/**
+ * Sin gasto de renta (grupo 54) con UAI positiva: la causación depende de la
+ * renta líquida depurada, no de la utilidad contable (misma norma que CUR-R4).
+ */
+export const NORMA_SIN_GASTO_RENTA =
+  'Art. 26 E.T. (depuración de la renta) + NIIF para las PYMES Sección 29 / NIC 12';
+
 export interface EvaluateFiscalAlertsInput {
   metrics: FiscalDerivedMetrics;
   /** Impuesto causado del periodo (Clase 54), en centavos. */
@@ -46,13 +58,15 @@ export function evaluateFiscalAlerts(input: EvaluateFiscalAlertsInput): FiscalAl
   const { metrics, impuestoCausadoCents, calendario } = input;
   const alertas: FiscalAlerta[] = [];
 
-  // A5_SIN_PROVISION — utilidad sin impuesto causado.
+  // A5_SIN_PROVISION — utilidad contable sin gasto de renta causado. Se
+  // conserva el código (contrato UI / validador L3.1) pero es informativo y
+  // no ordena provisionar F02: 35 % × UAI no es el impuesto (Art. 26 E.T.).
   if (impuestoCausadoCents === ZERO && metrics.f01Cents > ZERO) {
     alertas.push({
       codigo: 'A5_SIN_PROVISION',
-      severidad: 'error',
+      severidad: 'info',
       mensaje: 'escudo.fiscal.alert.a5_sin_provision',
-      norma: 'Art. 240 E.T. + NIC 12 §46',
+      norma: NORMA_SIN_GASTO_RENTA,
     });
   }
 

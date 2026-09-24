@@ -535,7 +535,7 @@ export const dict = {
               vencido: 'Vencido',
             },
             alertas: {
-              A5_SIN_PROVISION: 'Impuesto de Renta sin provisionar — riesgo Art. 647 E.T.',
+              A5_SIN_PROVISION: 'Sin gasto de renta causado — requiere depuración fiscal (Art. 26 E.T.); informativo, sin cifra estimada',
               SALDO_A_FAVOR: 'Posible saldo a favor (estimación contable, no liquidación) — verificar contra la declaración',
               VENCIMIENTO_15D: 'Vencimiento próximo (≤15 días)',
               F10_BAJA: 'Eficiencia fiscal baja',
@@ -2227,7 +2227,7 @@ export const dict = {
               vencido: 'Overdue',
             },
             alertas: {
-              A5_SIN_PROVISION: 'Income Tax not provisioned — Art. 647 Tax Statute risk',
+              A5_SIN_PROVISION: 'No income tax expense recorded — requires tax reconciliation (Art. 26 Tax Statute); informational, no estimated figure',
               SALDO_A_FAVOR: 'Possible credit balance (accounting estimate, not an assessment) — verify against the tax return',
               VENCIMIENTO_15D: 'Deadline approaching (≤15 days)',
               F10_BAJA: 'Low fiscal efficiency',
