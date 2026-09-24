@@ -18,7 +18,7 @@ import { echarts } from '@/lib/charts/setup';
 import { getTokens } from '@/lib/charts/echarts-theme';
 import { useChartTheme } from '@/lib/charts/use-theme';
 import { formatBigCop, formatCop } from '@/lib/charts/format';
-import { RUNWAY_ESCENARIOS } from '@/lib/kpis/runway';
+import { RUNWAY_ESCENARIOS, RUNWAY_SERIE_BASE } from '@/lib/kpis/runway';
 import { ChartContainer } from './ChartContainer';
 
 export interface RunwayMonth {
@@ -38,14 +38,21 @@ export interface RunwayProjectionProps {
   subtitle?: string;
 }
 
-/** Textos del gráfico por idioma; los escenarios salen de RUNWAY_ESCENARIOS. */
+/**
+ * Textos del gráfico por idioma. Los nombres de las series (leyenda y
+ * tooltip) y los rótulos del subtítulo salen de RUNWAY_ESCENARIOS /
+ * RUNWAY_SERIE_BASE (I5-niif 7), la misma fuente que calcula la serie.
+ */
 export function runwayProjectionTexts(language: 'es' | 'en') {
   const { conservador, agresivo } = RUNWAY_ESCENARIOS;
+  const base = RUNWAY_SERIE_BASE;
   if (language === 'en') {
     return {
       title: 'Cash runway · 36 months',
-      subtitle: `Base: period trend · Conservative: ${conservador.rotuloEn} · Aggressive: ${agresivo.rotuloEn}`,
-      series: { base: 'Base', conservador: 'Conservative', agresivo: 'Aggressive' },
+      subtitle:
+        `${base.nombreEn}: ${base.rotuloEn} · ${conservador.nombreEn}: ${conservador.rotuloEn} · ` +
+        `${agresivo.nombreEn}: ${agresivo.rotuloEn}`,
+      series: { base: base.nombreEn, conservador: conservador.nombreEn, agresivo: agresivo.nombreEn },
       cashZero: 'Cash = 0',
       empty: 'No runway projection',
       ariaLabel: '36-month cash runway',
@@ -53,8 +60,10 @@ export function runwayProjectionTexts(language: 'es' | 'en') {
   }
   return {
     title: 'Runway de Caja · 36 meses',
-    subtitle: `Base: tendencia del periodo · Conservador: ${conservador.rotulo} · Agresivo: ${agresivo.rotulo}`,
-    series: { base: 'Base', conservador: 'Conservador', agresivo: 'Agresivo' },
+    subtitle:
+      `${base.nombre}: ${base.rotulo} · ${conservador.nombre}: ${conservador.rotulo} · ` +
+      `${agresivo.nombre}: ${agresivo.rotulo}`,
+    series: { base: base.nombre, conservador: conservador.nombre, agresivo: agresivo.nombre },
     cashZero: 'Caja = 0',
     empty: 'Sin proyección de runway',
     ariaLabel: 'Runway de caja 36 meses',
