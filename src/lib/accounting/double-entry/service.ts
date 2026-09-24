@@ -49,6 +49,7 @@ import {
   type VoidDraftInput,
 } from '../types';
 import { buildReversalLines, normalizeAmount, validateBalance } from './validate';
+import { pickPeriodForDate } from '@/lib/accounting/periods/ranges';
 
 // ---------------------------------------------------------------------------
 // Retry helper for SERIALIZABLE transactions.
@@ -558,6 +559,9 @@ export async function reverseEntry(
 
         // The reversal lives in whichever period currently contains
         // `reverseDate`. Find an OPEN period for the workspace that covers it.
+        // Varios pueden contenerla (el período 13 comparte el instante de
+        // fin de año con diciembre, contab-nomina-26): la elección es
+        // determinista y prefiere los meses 1–12.
         const periodRows = await tx
           .select()
           .from(accountingPeriods)
@@ -569,7 +573,7 @@ export async function reverseEntry(
             ),
           )
           .for('update');
-        const period = periodRows[0];
+        const period = pickPeriodForDate(periodRows, reverseDate);
         if (!period) {
           throw new DoubleEntryError(
             ERR.PERIOD_NOT_OPEN,

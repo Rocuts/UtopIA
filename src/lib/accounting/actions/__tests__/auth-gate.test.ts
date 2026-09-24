@@ -92,13 +92,16 @@ vi.mock('@/lib/accounting/opening-balance/import', () => ({
   importOpeningBalance: (...a: unknown[]) => importOpeningBalance(...(a as [])),
 }));
 
-// DB — period-actions usa getDb() directamente (insert + transaction).
+// DB — period-actions usa getDb() directamente (insert + transaction, y un
+// select de los períodos existentes para validar solapamientos —
+// contab-nomina-26; sin períodos previos no hay solapamiento).
 const dbInsert = vi.fn();
 const dbTransaction = vi.fn();
 vi.mock('@/lib/db/client', () => ({
   getDb: () => ({
     insert: (...a: unknown[]) => dbInsert(...(a as [])),
     transaction: (...a: unknown[]) => dbTransaction(...(a as [])),
+    select: () => ({ from: () => ({ where: async () => [] }) }),
   }),
 }));
 
