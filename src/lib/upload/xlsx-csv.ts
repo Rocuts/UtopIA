@@ -157,6 +157,20 @@ export function xlsxRowToCsvLine(
 }
 
 /**
+ * `true` si alguna celda numérica de la fila pierde decimales al serializarse
+ * a centavos (`cents`) frente a la precisión completa (`full`). Sin
+ * confirmación de unidad el upload lee a centavos; si hubo pérdida, confirmar
+ * después "miles/millones" sobre ese texto reexpresaría cifras redondeadas a
+ * 0,01 de la unidad (recalculo-final2-04).
+ */
+export function xlsxRowLosesDecimals(values: unknown[]): boolean {
+  for (let i = 1; i < values.length; i++) {
+    if (xlsxCellToText(values[i], 'cents') !== xlsxCellToText(values[i], 'full')) return true;
+  }
+  return false;
+}
+
+/**
  * Nombre de hoja seguro para la etiqueta `[period=…]`: sin corchetes ni saltos
  * de línea, que romperían el delimitador del bloque.
  */

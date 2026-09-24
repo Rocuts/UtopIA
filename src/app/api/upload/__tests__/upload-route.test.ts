@@ -485,6 +485,61 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(reparsed.primary.controlTotals.cents!.activo).toBe(BigInt(473438288213));
   });
 
+  it('recalculo-final2-04: confirmar la unidad fuera del upload sobre un XLSX leído a centavos → 422 que pide reenviar el archivo', async () => {
+    // El upload sin confirmar serializa cada celda a dos decimales de la unidad
+    // (30,00123511 millones → "30"): reexpresar ese texto con unitMultiplier en
+    // /niif publicaba $30.000.000 en vez de $30.001.235,11 y afirmaba
+    // "centavos exactos".
+    const filas: unknown[][] = [
+      ['11050501', 'Caja', 30.00123511],
+      ['15200101', 'PPE', 93],
+      ['22050101', 'Proveedores', 50.00123456],
+      ['31050501', 'Capital', 73.00000055],
+      // Filas en cero: el upload preprocesa balances de más de 10 filas.
+      ...['11100501', '13050501', '14350101', '23359501', '24080101', '25050101', '33050501'].map((c) => [c, 'Otra', 0]),
+    ];
+    const buf = await xlsxOf([{ name: 'Balance 2025', header: ['codigo', 'nombre', 'Saldo 2025 (millones de pesos)'], rows: filas }]);
+    const up = (await upload(buf, 'balance.xlsx')) as UploadJson & { unit?: { requiresConfirmation: boolean } };
+    expect(up.unit?.requiresConfirmation).toBe(true);
+    expect(() => parseUploadedTrialBalanceText(up.rawData!, { unidadConfirmada: 'millones' })).toThrow(
+      /vuelva a subir el archivo/,
+    );
+    const { escribirDirectivasIngesta } = await import('@/lib/upload/ingest-directives');
+    expect(() => parseUploadedTrialBalanceText(escribirDirectivasIngesta(up.rawData!, { unidadConfirmada: 'miles' }))).toThrow(
+      /vuelva a subir el archivo/,
+    );
+    const { applyRequestConfirmations } = await import('@/lib/reports/ingest-confirmations');
+    const viaCampo = applyRequestConfirmations({ unitMultiplier: '1000000' }, up.rawData!);
+    expect(viaCampo.ok).toBe(false);
+    if (!viaCampo.ok) expect(viaCampo.response.status).toBe(422);
+    // 'pesos' no reexpresa: el texto a centavos sirve.
+    expect(applyRequestConfirmations({ unitMultiplier: '1' }, up.rawData!).ok).toBe(true);
+
+    // El camino de la UI (reenviar el archivo con la unidad) es exacto.
+    const fd = new FormData();
+    fd.append('file', new File([new Blob([new Uint8Array(buf)])], 'balance.xlsx'));
+    fd.append('context', 'test');
+    fd.append('unitMultiplier', '1000000');
+    const res = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: fd }));
+    const json = (await res.json()) as UploadJson & {
+      preprocessed: { primary: { controlTotals: { cents: { activo: string } } } };
+    };
+    expect(String(json.preprocessed.primary.controlTotals.cents.activo)).toBe('12300123511');
+    const reparsed = preprocessTrialBalance(parseUploadedTrialBalanceText(json.rawData!).rows);
+    expect(reparsed.primary.controlTotals.cents!.activo).toBe(BigInt(12300123511));
+  });
+
+  it('XLSX sin decimales perdidos: el rawData no cambia y la unidad se puede confirmar como campo', async () => {
+    const buf = await xlsxOf([
+      { name: 'Balance 2025', header: ['codigo', 'nombre', 'Saldo 2025 (millones de pesos)'], rows: [['11050501', 'Caja', 30.25], ['31050501', 'Capital', 30.25]] },
+    ]);
+    const up = await upload(buf, 'balance.xlsx');
+    expect(up.rawData!.startsWith('[period=Balance 2025]')).toBe(true);
+    expect(up.rawData!.trimEnd().endsWith('[/period]')).toBe(true);
+    const parsed = parseUploadedTrialBalanceText(up.rawData!, { unidadConfirmada: 'millones' });
+    expect(parsed.rows.find((r) => r.code === '11050501')!.balancesByPeriod['2025']).toBe(30_250_000);
+  });
+
   it('unitMultiplier inválido o en un documento no tabular: 400 explícito', async () => {
     expect((await uploadWith(CSV_MILES, 'balance.csv', '100')).status).toBe(400);
     const txt = await uploadWith('Acta de asamblea', 'acta.txt', '1000');

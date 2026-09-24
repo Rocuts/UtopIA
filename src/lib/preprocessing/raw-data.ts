@@ -70,7 +70,19 @@ const DATA_SECTION_REGEX =
 
 const BLOCK_REGEX = /\[period=([^\]\r\n]+)\]\r?\n([\s\S]*?)\r?\n\[\/period\]/g;
 
-/** Error de ingesta con motivos legibles para el usuario (se sirve como 422). */
+/**
+ * Marca que /api/upload añade al final del texto de un XLSX leído SIN unidad
+ * confirmada cuando alguna celda perdió decimales al serializarse a centavos
+ * (recalculo-final2-04). Con esa marca, una confirmación posterior de "miles"
+ * o "millones" (campo `unitMultiplier` de /niif, /export, /consolidate o una
+ * directiva en el texto) reexpresaría cifras ya redondeadas a 0,01 de la
+ * unidad: se rechaza y se pide reenviar el archivo a /api/upload con la
+ * unidad, que lo lee a precisión completa.
+ */
+export const MARCA_XLSX_A_CENTAVOS = '[celdas-xlsx=centavos]';
+const MARCA_XLSX_A_CENTAVOS_RE = /^\[celdas-xlsx=centavos\][ \t]*\r?$/m;
+
+/** Error de ingesta con motivos legibles para el usuario (se sirve como 422). *//** Error de ingesta con motivos legibles para el usuario (se sirve como 422). */
 export class TrialBalanceIngestError extends Error {
   readonly reasons: string[];
 
@@ -504,6 +516,14 @@ function resolveConfirmations(
     } else {
       unidadConfirmada = options.unidadConfirmada;
     }
+  }
+  if ((unidadConfirmada === 'miles' || unidadConfirmada === 'millones') && MARCA_XLSX_A_CENTAVOS_RE.test(text ?? '')) {
+    errores.push(
+      `La unidad (${unidadConfirmada} de pesos) se confirmó sobre el texto de un XLSX que se leyó con sus ` +
+        'celdas redondeadas a dos decimales de la unidad: reexpresarlo publicaría cifras aproximadas. ' +
+        'Para confirmar la unidad vuelva a subir el archivo con la unidad (campo unitMultiplier de ' +
+        '/api/upload, como hace el formulario del informe), que lo lee a precisión completa.',
+    );
   }
   const vencimientos: Record<string, Vencimiento> = { ...(lectura.vencimientos ?? {}) };
   for (const [codigo, plazo] of Object.entries(options.vencimientos ?? {})) {

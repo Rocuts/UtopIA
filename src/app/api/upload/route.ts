@@ -12,10 +12,16 @@ import {
 } from '@/lib/preprocessing/trial-balance';
 import {
   descartarConfirmacionesDelArchivo,
+  MARCA_XLSX_A_CENTAVOS,
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
-import { sanitizeSheetLabel, xlsxRowToCsvLine, type XlsxNumberPrecision } from '@/lib/upload/xlsx-csv';
+import {
+  sanitizeSheetLabel,
+  xlsxRowLosesDecimals,
+  xlsxRowToCsvLine,
+  type XlsxNumberPrecision,
+} from '@/lib/upload/xlsx-csv';
 import {
   escribirDirectivasIngesta,
   leerCampoUnidad,
@@ -502,6 +508,10 @@ async function extractText(
       'XLSX',
     );
     const blocks: string[] = [];
+    // recalculo-final2-04: sin unidad confirmada las celdas se leen a
+    // centavos; si alguna perdió decimales, el texto lo declara para que una
+    // confirmación posterior de miles/millones no reexprese cifras redondeadas.
+    let perdioDecimales = false;
     workbook.eachSheet((worksheet) => {
       const rows: string[] = [];
       worksheet.eachRow((row) => {
@@ -514,6 +524,9 @@ async function extractText(
         // Filas sin ningún valor (sólo formato) no aportan: si quedaran
         // primeras, el parser las tomaría como encabezado.
         if (/^,*$/.test(line)) return;
+        if (xlsxPrecision === 'cents' && !perdioDecimales) {
+          perdioDecimales = xlsxRowLosesDecimals(row.values as unknown[]);
+        }
         rows.push(line);
       });
       if (rows.length === 0) return;
@@ -523,7 +536,8 @@ async function extractText(
       // distinguen hojas del mismo ejercicio.
       blocks.push(`[period=${sanitizeSheetLabel(worksheet.name)}]\n${rows.join('\n')}\n[/period]`);
     });
-    return blocks.join('\n\n');
+    const text = blocks.join('\n\n');
+    return perdioDecimales && text ? `${text}\n\n${MARCA_XLSX_A_CENTAVOS}` : text;
   }
 
   throw new Error('Unsupported file type.');
