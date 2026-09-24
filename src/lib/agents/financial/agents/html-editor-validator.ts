@@ -169,17 +169,29 @@ export function validateHtmlChecklist(
   // LINEA_BASE: "El ejercicio YYYY en cifras" o "Composición del Período".
   // TRANSICION: "Lo comparable y lo nuevo del período".
   // COMPARATIVO_COMPLETO: "Movimientos del año".
+  // Informes en inglés (fase 2, F-html): el Editor Jefe traduce los títulos;
+  // sin sus equivalentes, un HTML honesto en inglés quedaba BORRADOR.
   const titlesByMode: Record<string, string[]> = {
     LINEA_BASE: [
       'el ejercicio',
       'composición del período',
       'composicion del periodo',
+      'fiscal year in figures',
+      'the year in figures',
+      'composition of the period',
     ],
-    TRANSICION: ['lo comparable y lo nuevo', 'lo comparable y lo establecido'],
+    TRANSICION: [
+      'lo comparable y lo nuevo',
+      'lo comparable y lo establecido',
+      'what is comparable and what is new',
+      'comparable and new',
+    ],
     COMPARATIVO_COMPLETO: [
       'movimientos del año',
       'movimientos del ano',
       'tres movimientos clave',
+      'movements of the year',
+      'key movements',
     ],
   };
   const expectedTitles = titlesByMode[metadata.reportMode] ?? [];
@@ -659,6 +671,9 @@ function isTotalRow(row: Element): boolean {
     return true;
   }
   const label = (cells[0]?.textContent ?? '').trim().toLowerCase();
+  // "Total comprehensive income" / "Total resultado integral" es utilidad +
+  // ORI, no la suma de la columna: R4 lo concilia contra el JSON NIIF.
+  if (/^total\s+(?:comprehensive\s+income|(?:del\s+)?resultado\s+integral)\b/.test(label)) return false;
   return /^(sub)?total\b/.test(label) || label.startsWith('total ');
 }
 
@@ -851,6 +866,53 @@ export interface ReconciliationInput {
   preprocessed?: PreprocessedBalance | null;
 }
 
+const ZERO_CENTS = BigInt(0);
+
+function moneyCents(v: string | null | undefined): bigint | null {
+  if (typeof v !== 'string' || !/^-?\d+$/.test(v)) return null;
+  return BigInt(v);
+}
+
+function bindingFigure(path: string, label: string, cents: bigint): BindingFigure {
+  return {
+    path,
+    label,
+    cents: cents.toString(),
+    formatted: formatCopFromCents(cents < ZERO_CENTS ? -cents : cents, true),
+    isNegative: cents < ZERO_CENTS,
+  };
+}
+
+/**
+ * ORI y resultado integral total (utilidad + ORI) de cada periodo como cifras
+ * vinculantes, con signo (re-auditoría fase 2, e2e-niif2-03): el ERI del HTML
+ * imprimía el ORI sin conciliarlo contra el JSON NIIF, así que un ORI con el
+ * signo invertido o con otro importe salía emitible. Sin ORI (cero o nulo) no
+ * se añade nada: el resultado integral total es la utilidad neta, que ya es
+ * vinculante. El prompt del Editor Jefe las publica en `<cifras_vinculantes>`.
+ */
+export function comprehensiveIncomeFigures(niif: NiifReportJson | null | undefined): BindingFigure[] {
+  const is = niif?.incomeStatement;
+  if (!is) return [];
+  const out: BindingFigure[] = [];
+  const periods: Array<[string, string, string | null | undefined, string | null | undefined]> = [
+    ['Primary', 'período actual', is.oriPrimary, is.netIncomePrimary],
+    ['Comparative', 'período comparativo', is.oriComparative, is.netIncomeComparative],
+  ];
+  for (const [suffix, period, oriRaw, netRaw] of periods) {
+    const ori = moneyCents(oriRaw);
+    if (ori === null || ori === ZERO_CENTS) continue;
+    out.push(bindingFigure(`incomeStatement.ori${suffix}`, `Otro Resultado Integral — ${period}`, ori));
+    const net = moneyCents(netRaw);
+    if (net !== null && net + ori !== ZERO_CENTS) {
+      out.push(
+        bindingFigure(`incomeStatement.netIncome${suffix}+ori${suffix}`, `Resultado Integral Total — ${period}`, net + ori),
+      );
+    }
+  }
+  return out;
+}
+
 /**
  * Reconcilia el HTML emitido contra el JSON de origen.
  *
@@ -864,7 +926,10 @@ export function reconcileBindingFigures(
   const failures: ChecklistFailure[] = [];
   const { document } = parseHTML(html);
   const text = normalizedText(html, document);
-  const figures: BindingFigure[] = collectBindingFigures(input.niifReport);
+  const figures: BindingFigure[] = [
+    ...collectBindingFigures(input.niifReport),
+    ...comprehensiveIncomeFigures(input.niifReport),
+  ];
 
   // ── R1 · presencia literal de cada cifra vinculante ──────────────────────
   const HUNDRED = BigInt(100);
@@ -1105,54 +1170,111 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
   }
 
   // R4 — cifra bajo la columna de su periodo.
+  //
+  // Re-auditoría fase 2:
+  //   - e2e-niif2-04: la columna comparativa sólo se exige cuando trae una
+  //     cifra completa. Un EFE honesto a dos columnas con "—" en el
+  //     comparativo (EFE comparativo no presentado) bloqueaba la fila
+  //     "Utilidad neta del ejercicio" con un mensaje que nombraba la columna
+  //     del periodo actual, que sí cuadraba. El mensaje nombra ahora la
+  //     columna que falla.
+  //   - e2e-niif2-03: el ORI y el resultado integral total (utilidad + ORI)
+  //     se concilian con SIGNO en ambas columnas.
+  //   - narrativa-16: la columna del año se reconoce con el año en cualquier
+  //     posición del encabezado ("2024 (comparativo)", "Dic-2024"), salvo que
+  //     el encabezado cite los dos años (una variación).
   const bs = niif.balanceSheet;
   const is = niif.incomeStatement;
-  const concepts: Array<{ re: RegExp; label: string; primary: string | null; comparative: string | null }> = [
-    { re: /^total\s+(?:de\s+)?activos?$/i, label: 'Total Activo', primary: bs?.totalAssetsPrimary ?? null, comparative: bs?.totalAssetsComparative ?? null },
-    { re: /^total\s+(?:de\s+)?pasivos?$/i, label: 'Total Pasivo', primary: bs?.totalLiabilitiesPrimary ?? null, comparative: bs?.totalLiabilitiesComparative ?? null },
-    { re: /^total\s+(?:del?\s+)?patrimonio$/i, label: 'Total Patrimonio', primary: bs?.totalEquityPrimary ?? null, comparative: bs?.totalEquityComparative ?? null },
-    { re: /^(?:utilidad|resultado)\s+neto?a?(?:\s+del\s+ejercicio)?$/i, label: 'Utilidad Neta', primary: is?.netIncomePrimary ?? null, comparative: is?.netIncomeComparative ?? null },
+  const sumCents = (a: string | null | undefined, b: string | null | undefined): string | null => {
+    const x = moneyCents(a);
+    const y = moneyCents(b);
+    return x === null || y === null ? null : (x + y).toString();
+  };
+  const concepts: Array<{
+    re: RegExp;
+    label: string;
+    primary: string | null;
+    comparative: string | null;
+    signed?: boolean;
+  }> = [
+    { re: /^total\s+(?:de\s+)?activos?$|^total\s+assets$/i, label: 'Total Activo', primary: bs?.totalAssetsPrimary ?? null, comparative: bs?.totalAssetsComparative ?? null },
+    { re: /^total\s+(?:de\s+)?pasivos?$|^total\s+liabilities$/i, label: 'Total Pasivo', primary: bs?.totalLiabilitiesPrimary ?? null, comparative: bs?.totalLiabilitiesComparative ?? null },
+    { re: /^total\s+(?:del?\s+)?patrimonio$|^total\s+equity$/i, label: 'Total Patrimonio', primary: bs?.totalEquityPrimary ?? null, comparative: bs?.totalEquityComparative ?? null },
+    {
+      re: /^(?:utilidad|resultado|p[eé]rdida|ganancia)\s+net[oa](?:\s+del\s+(?:ejercicio|per[ií]odo))?$|^net\s+(?:income|profit|loss)(?:\s+for\s+the\s+(?:year|period))?$/i,
+      label: 'Utilidad Neta',
+      primary: is?.netIncomePrimary ?? null,
+      comparative: is?.netIncomeComparative ?? null,
+    },
+    {
+      re: /^(?:otro\s+resultado\s+integral|ori|other\s+comprehensive\s+income|oci)(?:\s+del\s+(?:ejercicio|per[ií]odo)|\s+for\s+the\s+(?:year|period))?$/i,
+      label: 'Otro Resultado Integral (ORI)',
+      primary: is?.oriPrimary ?? null,
+      comparative: is?.oriComparative ?? null,
+      signed: true,
+    },
+    {
+      re: /^(?:resultado\s+integral\s+total|total\s+(?:del\s+)?resultado\s+integral|total\s+comprehensive\s+income)(?:\s+del\s+(?:ejercicio|per[ií]odo)|\s+for\s+the\s+(?:year|period))?$/i,
+      label: 'Resultado Integral Total',
+      primary: sumCents(is?.netIncomePrimary, is?.oriPrimary),
+      comparative: sumCents(is?.netIncomeComparative, is?.oriComparative),
+      signed: true,
+    },
   ];
   const renders = (v: string | null): string[] => {
-    if (v === null) return [];
-    try {
-      const c = parseMoneyCop(v);
-      return acceptableRenderings(c < BigInt(0) ? -c : c);
-    } catch {
-      return [];
-    }
+    const c = moneyCents(v);
+    return c === null ? [] : acceptableRenderings(c < ZERO_CENTS ? -c : c);
+  };
+  /** La celda imprime la cifra (y, si el concepto lo exige, con su signo). */
+  const holds = (cell: string, value: string | null, signed: boolean | undefined): boolean => {
+    if (!renders(value).some((r) => containsFigure(cell, r))) return false;
+    if (!signed) return true;
+    const expected = moneyCents(value);
+    const printed = cellCents(cell);
+    if (expected === null || printed === null || expected === ZERO_CENTS) return true;
+    return (printed < ZERO_CENTS) === (expected < ZERO_CENTS);
+  };
+  const shown = (v: string | null): string => {
+    const c = moneyCents(v);
+    return c === null ? 'N/D' : formatCopFromCents(c, false);
   };
   for (const table of Array.from(document.querySelectorAll('table'))) {
     const headerRow = table.querySelector('tr');
     if (!headerRow) continue;
-    const headers = Array.from(headerRow.querySelectorAll('th, td')).map((c) => (c.textContent ?? '').trim());
-    const pIdx = headers.findIndex((h) => h === primaryYear || h.endsWith(` ${primaryYear}`));
-    const cIdx = comparativeYear
-      ? headers.findIndex((h) => h === comparativeYear || h.endsWith(` ${comparativeYear}`))
-      : -1;
+    const headers = cellTexts(headerRow);
+    const pIdx = yearColumn(headers, primaryYear, comparativeYear);
+    const cIdx = yearColumn(headers, comparativeYear, primaryYear);
     if (pIdx < 0) continue;
     for (const row of Array.from(table.querySelectorAll('tr')).slice(1)) {
-      const cells = Array.from(row.querySelectorAll('th, td')).map((c) =>
-        (c.textContent ?? '').replace(/ /g, ' ').replace(/\$\s+/g, '$').trim(),
-      );
+      const cells = cellTexts(row);
       if (cells.length !== headers.length) continue;
       const concept = concepts.find((k) => k.re.test(cells[0].replace(/\s+/g, ' ')));
-      if (!concept) continue;
+      if (!concept || concept.primary === null || renders(concept.primary).length === 0) continue;
       // Sólo celdas con la cifra completa: una tabla de resumen con montos
       // abreviados ($1.000 M, §1.9/L38) no es un estado financiero.
-      if (!/\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?(?![.,]?\d)/.test(cells[pIdx])) continue;
-      if (/\$[\d.,]+\s*(?:M{1,2}\b|mil(?:es)?\b|millones\b)/i.test(cells[pIdx])) continue;
-      const inPrimary = renders(concept.primary).some((r) => containsFigure(cells[pIdx], r));
-      const primaryHasComparative = renders(concept.comparative).some((r) => containsFigure(cells[pIdx], r));
-      const comparativeOk =
-        cIdx < 0 || concept.comparative === null || renders(concept.comparative).some((r) => containsFigure(cells[cIdx], r));
-      if (concept.primary !== null && renders(concept.primary).length > 0 && (!inPrimary || !comparativeOk)) {
+      const complete = (cell: string) => FULL_FIGURE.test(cell) && !ABBREVIATED.test(cell);
+      if (!complete(cells[pIdx])) continue;
+      if (!holds(cells[pIdx], concept.primary, concept.signed)) {
+        const swapped = renders(concept.comparative).some((r) => containsFigure(cells[pIdx], r));
         out.push({
           rule: '§1.1 · Periodo del reporte — columna',
           detail:
             `${concept.label}: la columna ${primaryYear} imprime "${cells[pIdx]}"` +
-            `${primaryHasComparative ? ', que es la cifra del periodo comparativo (columnas intercambiadas)' : ''}; ` +
-            `el reporte NIIF da ${renders(concept.primary)[0]} para ${primaryYear}.`,
+            `${swapped && !concept.signed ? ', que es la cifra del periodo comparativo (columnas intercambiadas)' : ''}; ` +
+            `el reporte NIIF da ${shown(concept.primary)} para ${primaryYear}.`,
+          severity: 'block',
+        });
+        continue;
+      }
+      // La columna comparativa sólo se juzga cuando imprime una cifra completa:
+      // "—" / "N/D" (comparativo no presentado) no contradice nada.
+      if (cIdx < 0 || !comparativeYear || concept.comparative === null || !complete(cells[cIdx])) continue;
+      if (!holds(cells[cIdx], concept.comparative, concept.signed)) {
+        out.push({
+          rule: '§1.1 · Periodo del reporte — columna',
+          detail:
+            `${concept.label}: la columna ${comparativeYear} imprime "${cells[cIdx]}"; ` +
+            `el reporte NIIF da ${shown(concept.comparative)} para ${comparativeYear}.`,
           severity: 'block',
         });
       }
@@ -1162,17 +1284,32 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
 }
 
 // ---------------------------------------------------------------------------
-// R8 — comparativos del EFE y del ECP (integración I2)
+// R8 — comparativos del EFE y del ECP (integración I2; fila por fila desde la
+// re-auditoría final de la fase 2)
 // ---------------------------------------------------------------------------
 // Desde el pendiente #3 la columna comparativa del EFE y las filas del ECP del
 // periodo comparativo las calcula el código (o las deja sin presentar con una
-// nota). El Editor Jefe las recibe preformateadas; aquí se exige que toda
-// cifra que el HTML imprima como comparativo de esos dos estados esté en el
-// JSON NIIF. Sin base determinista (dos cortes) el conjunto admitido es vacío:
-// cualquier cifra de la columna comparativa del EFE es inventada. En el ECP
-// se admiten además las cifras de sus filas del periodo actual, porque el
-// saldo inicial del periodo es el cierre del comparativo y puede rotularse
-// "Saldo al 31 de diciembre de <comparativo>".
+// nota). El Editor Jefe las recibe preformateadas; aquí se exige que el HTML
+// las COPIE. Sin base determinista (dos cortes) cualquier cifra de la columna
+// comparativa del EFE, o de una fila del ECP comparativo que no sea el saldo
+// de apertura del periodo actual, es inventada.
+//
+// Antes se validaba por PERTENENCIA a un conjunto de cifras en valor absoluto
+// (más las sumas de columnas de cada fila del ECP): dos renglones del EFE 2024
+// permutados, la inversión en positivo, el capital de apertura del ECP 2024
+// impreso con el del cierre o un total igual a la suma de dos columnas de la
+// misma fila salían emitibles (e2e-niif2-03, narrativa-16). Ahora:
+//   - EFE: cada fila con cifra en la columna comparativa debe ser UN elemento
+//     del EFE comparativo (renglón, flujo neto de sección, variación neta,
+//     efectivo inicial o final) con la MISMA pareja (actual, comparativo) y el
+//     mismo signo; si el rótulo nombra un agregado (flujo neto de operación,
+//     efectivo al inicio…), debe ser ese agregado.
+//   - ECP: cada fila del periodo comparativo debe ser UNA fila del JSON (según
+//     su rótulo: saldo de apertura, saldo de cierre o movimiento) con cada
+//     columna igual, con signo, a la clave que su encabezado nombra. Una
+//     columna agregada ("Reservas" = legal + otras) suma sólo lo que su
+//     encabezado agrega, más los componentes sin columna propia (prima, ORI),
+//     que la plantilla de 6 columnas presenta junto a otra.
 // ---------------------------------------------------------------------------
 
 const R8_RULE = '§1.1 · Comparativo del EFE/ECP — cifra fuera del JSON';
@@ -1184,7 +1321,35 @@ const CASH_FLOW_HEADING = /estado\s+de\s+flujos?\s+de\s+efectivo|statement\s+of\
 const EQUITY_HEADING = /estado\s+de\s+cambios\s+en\s+el\s+patrimonio|statement\s+of\s+changes\s+in\s+(?:shareholders['’]?\s+)?equity/i;
 /** Cifra monetaria completa (incluye montos < $1.000 y el $0). */
 const ANY_FIGURE = /\$\d{1,3}(?:\.\d{3})*(?:,\d{2})?(?![.,]?\d)/g;
+/** Cifra monetaria completa con separador de miles (la de un estado financiero). */
+const FULL_FIGURE = /\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?(?![.,]?\d)/;
 const ABBREVIATED = /\$[\d.,]+\s*(?:M{1,2}\b|mil(?:es)?\b|millones\b)/i;
+/** Rótulo que declara el signo por sí mismo: "(−) Distribuciones", "Menos: …". */
+const NEGATIVE_LABEL = /^\(\s*[-−–]\s*\)|^menos\b|^less\b/i;
+
+/**
+ * Índice (> 0) de la columna cuyo encabezado cita `year` en cualquier
+ * posición ("2024", "2024 (comparativo)", "Dic-2024", "Año 2024") y no cita
+ * `other` (un encabezado con los dos años es una variación).
+ */
+function yearColumn(headers: string[], year: string | null, other: string | null): number {
+  if (!year) return -1;
+  const cites = (h: string, y: string) => new RegExp(`(?<!\\d)${y}(?!\\d)`).test(h);
+  return headers.findIndex((h, i) => i > 0 && cites(h, year) && !(other !== null && cites(h, other)));
+}
+
+/** Primera cifra monetaria completa de la celda, con signo, en centavos. */
+function cellCents(cell: string): bigint | null {
+  if (ABBREVIATED.test(cell)) return null;
+  const m = /(\(\s*)?([-−]\s*)?\$\s*(\(\s*)?([-−]\s*)?(\d{1,3}(?:\.\d{3})*)(?:,(\d{1,2}))?(?![.,]?\d)(\s*\))?/.exec(cell);
+  if (!m) return null;
+  const [, open1, sign1, open2, sign2, int, dec, close] = m;
+  const cents = BigInt(int.replace(/\./g, '')) * BigInt(100) + BigInt((dec ?? '').padEnd(2, '0'));
+  const negative = Boolean(sign1 || sign2) || (Boolean(open1 || open2) && Boolean(close));
+  return negative ? -cents : cents;
+}
+
+const absCents = (v: bigint) => (v < ZERO_CENTS ? -v : v);
 
 /**
  * Tablas del documento con el título que las rotula: su caption o el último
@@ -1209,7 +1374,7 @@ function tablesWithHeading(document: ParsedDocument): Array<{ table: Element; he
 
 function cellTexts(row: Element): string[] {
   return Array.from(row.querySelectorAll('th, td')).map((c) =>
-    (c.textContent ?? '').replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').trim(),
+    (c.textContent ?? '').replace(/ /g, ' ').replace(/\$\s+/g, '$').trim(),
   );
 }
 
@@ -1233,6 +1398,195 @@ function foreignFigures(cell: string, allowed: Set<string>): string[] {
   return (cell.match(ANY_FIGURE) ?? []).filter((m) => !allowed.has(m));
 }
 
+const foldLabel = (t: string) =>
+  t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+// ── EFE ─────────────────────────────────────────────────────────────────────
+
+type CashFlowKind = 'line' | 'operating' | 'investing' | 'financing' | 'change' | 'opening' | 'closing';
+
+interface CashFlowElement {
+  kind: CashFlowKind;
+  primary: bigint | null;
+  comparative: bigint | null;
+}
+
+function cashFlowElements(cf: NiifReportJson['cashFlow']): CashFlowElement[] {
+  const out: CashFlowElement[] = [];
+  for (const s of cf.sections ?? []) {
+    for (const l of s.lines ?? []) {
+      out.push({ kind: 'line', primary: moneyCents(l.amountPrimary), comparative: moneyCents(l.amountComparative) });
+    }
+    const kind: CashFlowKind =
+      s.section === 'operating' ? 'operating' : s.section === 'investing' ? 'investing' : 'financing';
+    out.push({ kind, primary: moneyCents(s.netFlow), comparative: moneyCents(s.netFlowComparative) });
+  }
+  out.push({ kind: 'change', primary: moneyCents(cf.netChange), comparative: moneyCents(cf.netChangeComparative) });
+  out.push({ kind: 'opening', primary: moneyCents(cf.cashOpening), comparative: moneyCents(cf.cashOpeningComparative) });
+  out.push({ kind: 'closing', primary: moneyCents(cf.cashClosing), comparative: moneyCents(cf.cashClosingComparative) });
+  return out;
+}
+
+/**
+ * Agregado del EFE que nombra un rótulo, o `null` si es un renglón (el
+ * contenido entre paréntesis no cuenta: "Aportes de socios (aumento …
+ * en efectivo)" es un renglón, no la variación neta).
+ */
+function cashFlowLabelKind(label: string): CashFlowKind | null {
+  const t = foldLabel(label).replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ');
+  const cash = /\b(?:efectivo|caja|cash)\b/;
+  if (cash.test(t) && /\b(?:inicio|inicial|apertura|beginning|opening)\b/.test(t)) return 'opening';
+  if (cash.test(t) && /\b(?:final|cierre|end|closing)\b/.test(t)) return 'closing';
+  if (/\b(?:aumento|disminucion|incremento|variacion)\b.*\bnet[oa]?\b.*\b(?:efectivo|caja)\b|\bnet (?:increase|decrease|change)\b/.test(t)) {
+    return 'change';
+  }
+  if (/\b(?:flujos?|efectivo neto|net cash|total)\b/.test(t)) {
+    if (/\boperaci|\boperating\b/.test(t)) return 'operating';
+    if (/\binversi|\binvesting\b/.test(t)) return 'investing';
+    if (/\bfinanciaci|\bfinancing\b/.test(t)) return 'financing';
+  }
+  return null;
+}
+
+/** Motivo por el que una fila del EFE comparativo no es copia del JSON (o `null`). */
+function cashFlowRowIssue(
+  label: string,
+  primaryCell: string | null,
+  comparativeCell: string,
+  elements: CashFlowElement[],
+): string | null {
+  const vc = cellCents(comparativeCell);
+  if (vc === null) return null;
+  const vp = primaryCell === null ? null : cellCents(primaryCell);
+  const signFree = NEGATIVE_LABEL.test(label.trim());
+  const same = (a: bigint, b: bigint | null) => b !== null && (a === b || (signFree && absCents(a) === absCents(b)));
+  const kind = cashFlowLabelKind(label);
+  const pool = kind === null ? elements : elements.filter((e) => e.kind === kind);
+  if (pool.some((e) => same(vc, e.comparative) && (vp === null || same(vp, e.primary)))) return null;
+  const figure = comparativeCell.match(ANY_FIGURE)?.[0] ?? comparativeCell;
+  if (vc !== ZERO_CENTS && elements.some((e) => e.comparative === -vc)) return `${figure} (signo invertido)`;
+  if (elements.some((e) => e.comparative === vc)) return `${figure} (cifra de otro renglón del EFE comparativo)`;
+  return figure;
+}
+
+// ── ECP ─────────────────────────────────────────────────────────────────────
+
+type EquityRowJson = NiifReportJson['equityChanges']['rows'][number];
+type EquityKey = (typeof EQUITY_FIGURE_KEYS)[number];
+type EquityComponent = Exclude<EquityKey, 'total'>;
+type EquityRowKind = 'opening' | 'closing' | 'balance' | 'movement';
+
+/** Claves del JSON que agrega una columna del ECP según su encabezado (`null` = desconocida). */
+function equityColumnKeys(header: string): EquityKey[] | null {
+  const t = foldLabel(header.replace(/([a-z])([A-Z])/g, '$1 $2')).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  if (/\btotal\b/.test(t)) return ['total'];
+  const keys: EquityKey[] = [];
+  if (/\bsuperavit de capital\b|\bprima\b|\bshare premium\b/.test(t)) keys.push('primaColocacion');
+  if (/\bcapital\b/.test(t) && !/capitaliz|superavit de capital/.test(t)) keys.push('capitalSocial');
+  if (/\breservas?\b|\breserves?\b/.test(t)) {
+    if (/\blegal\b/.test(t)) keys.push('reservaLegal');
+    else if (/\b(?:otras|other|estatutari\w*|ocasional\w*)\b/.test(t)) keys.push('otrasReservas');
+    else keys.push('reservaLegal', 'otrasReservas');
+  }
+  if (/acumulad|ejercicios anteriores|retained/.test(t)) keys.push('resultadosAcumulados');
+  else if (/\b(?:resultados?|utilidad(?:es)?|perdidas?|ganancias?)\b.*\b(?:ejercicio|periodo)\b|\bprofit\b|\bnet income\b/.test(t)) {
+    keys.push('resultadoEjercicio');
+  }
+  if (/\bori\b|\boci\b|otro resultado integral|other comprehensive|valorizaci|superavit por/.test(t)) keys.push('ori');
+  return keys.length > 0 ? keys : null;
+}
+
+/** Saldo de apertura, de cierre (del comparativo), saldo sin más, o movimiento. */
+function equityRowKind(label: string, comparativeYear: string): EquityRowKind {
+  const t = foldLabel(label);
+  if (!/\bsaldos?\b|\bbalance\b/.test(t)) return 'movement';
+  const dated = /31 de diciembre (?:de|del) (\d{4})|december 31,? (\d{4})/.exec(t);
+  if (dated) return Number(dated[1] ?? dated[2]) < Number(comparativeYear) ? 'opening' : 'closing';
+  if (/\b(?:inicio|inicial|apertura|1 de enero|beginning|opening)\b/.test(t)) return 'opening';
+  if (/\b(?:cierre|final|closing|end)\b/.test(t)) return 'closing';
+  return 'balance';
+}
+
+const BALANCE_KINDS = new Set(['opening_balance', 'closing_balance']);
+
+/** Sumas de `base` con cada subconjunto de los componentes sin columna propia. */
+function withUnassigned(base: bigint, extras: bigint[]): bigint[] {
+  const out: bigint[] = [];
+  for (let mask = 0; mask < 1 << extras.length; mask++) {
+    let sum = base;
+    for (let i = 0; i < extras.length; i++) if (mask & (1 << i)) sum += extras[i];
+    out.push(sum);
+  }
+  return out;
+}
+
+/** Valores que la columna `keys` puede imprimir para la fila `r` del JSON. */
+function equityCellCandidates(
+  r: EquityRowJson,
+  keys: EquityKey[] | null,
+  unassigned: EquityComponent[],
+): bigint[] {
+  const value = (k: EquityKey) => moneyCents(r[k] as string) ?? ZERO_CENTS;
+  if (keys === null) {
+    // Encabezado no reconocido: cualquier celda o suma de columnas de la fila.
+    return [
+      ...EQUITY_FIGURE_KEYS.map(value),
+      ...equityRowColumnSums(r as unknown as Record<string, unknown>).map((s) => BigInt(s)),
+    ];
+  }
+  if (keys.includes('total')) return [value('total')];
+  const base = keys.reduce((acc, k) => acc + value(k), ZERO_CENTS);
+  const extras = unassigned.map(value).filter((v) => v !== ZERO_CENTS);
+  return withUnassigned(base, extras);
+}
+
+/**
+ * Motivo por el que una fila del ECP del periodo comparativo no es copia de
+ * una fila del JSON (o `null`). `candidates` ya viene filtrado por el rótulo.
+ */
+function equityRowIssue(
+  label: string,
+  cells: string[],
+  columnKeys: Array<EquityKey[] | null>,
+  candidates: EquityRowJson[],
+): string | null {
+  const signFree = NEGATIVE_LABEL.test(label.trim());
+  const assigned = new Set(columnKeys.flatMap((k) => k ?? []));
+  const unassigned = EQUITY_COMPONENT_KEYS.filter((k) => !assigned.has(k));
+  const printed = cells.map((c, i) => (i === 0 ? null : cellCents(c)));
+  let best: { misses: number[] } | null = null;
+  for (const r of candidates) {
+    const misses: number[] = [];
+    for (let i = 1; i < cells.length; i++) {
+      const v = printed[i];
+      if (v === null) continue;
+      const ok = equityCellCandidates(r, columnKeys[i] ?? null, unassigned).some(
+        (c) => c === v || (signFree && absCents(c) === absCents(v)),
+      );
+      if (!ok) misses.push(i);
+    }
+    if (misses.length === 0) return null;
+    if (best === null || misses.length < best.misses.length) best = { misses };
+  }
+  const shownCells = best
+    ? best.misses
+    : cells.map((_, i) => i).filter((i) => i > 0 && printed[i] !== null && printed[i] !== ZERO_CENTS);
+  if (shownCells.length === 0) return null;
+  // Pista para el reintento: la magnitud existe en la fila pero con el otro signo.
+  const flipped = (i: number) => {
+    const v = printed[i];
+    return (
+      v !== null &&
+      v !== ZERO_CENTS &&
+      candidates.some((r) => equityCellCandidates(r, columnKeys[i] ?? null, unassigned).some((c) => c === -v))
+    );
+  };
+  return shownCells
+    .map((i) => `${cells[i].match(ANY_FIGURE)?.[0] ?? cells[i]}${flipped(i) ? ' (signo invertido)' : ''}`)
+    .join(', ');
+}
+
 function checkComparativeStatements(
   document: ParsedDocument,
   text: string,
@@ -1249,30 +1603,40 @@ function checkComparativeStatements(
     [cf.netChangeComparative, cf.cashOpeningComparative, cf.cashClosingComparative].every(
       (v) => v !== null && v !== undefined,
     ) && cf.sections.every((s) => s.netFlowComparative !== null && s.netFlowComparative !== undefined);
-  const cfAllowed = cfHasComparative
-    ? renderingsOf([
-        ...cf.sections.flatMap((s) => [s.netFlowComparative, ...s.lines.map((l) => l.amountComparative)]),
-        cf.netChangeComparative,
-        cf.cashOpeningComparative,
-        cf.cashClosingComparative,
-      ])
-    : renderingsOf([]);
+  const cfElements = cfHasComparative ? cashFlowElements(cf) : [];
   const comparativeRows = eq.comparativeRows ?? null;
-  // Celdas de cada fila y, además, las sumas de sus columnas de componentes:
-  // la plantilla v10.1 (página 08) presenta el ECP en 6 columnas —"Reservas"
-  // agrega reserva legal y otras reservas, y la prima o el ORI pueden ir con
-  // otra columna—, así que una fila honesta imprime sumas que no son una celda
-  // del JSON (revisión I2). Sumas DENTRO de una misma fila del JSON: una
-  // cifra que no sale de ninguna fila sigue bloqueando.
-  const equityCells = (rows: ReadonlyArray<Record<string, unknown>>) =>
-    rows.flatMap((r) => [
+  const currentRows = eq.rows ?? [];
+  // ECP presentado a dos columnas por año (resumen): pertenencia a las celdas
+  // de sus filas, como antes (la plantilla v10.1 lo presenta por componentes).
+  const eqAllowed = renderingsOf(
+    [...(comparativeRows ?? []), ...currentRows].flatMap((r) => [
       ...EQUITY_FIGURE_KEYS.map((k) => (typeof r[k] === 'string' ? (r[k] as string) : null)),
-      ...equityRowColumnSums(r),
-    ]);
-  const eqAllowed = renderingsOf([
-    ...equityCells(comparativeRows ?? []),
-    ...equityCells(eq.rows ?? []),
-  ]);
+      ...equityRowColumnSums(r as unknown as Record<string, unknown>),
+    ]),
+  );
+
+  /** Filas del JSON contra las que se cruza una fila del ECP comparativo. */
+  const equityCandidates = (label: string, inComparativeBlock: boolean): EquityRowJson[] => {
+    const kind = equityRowKind(label, cy);
+    const cmp = comparativeRows ?? [];
+    const currentOpening = currentRows.filter((r) => r.kind === 'opening_balance');
+    switch (kind) {
+      case 'opening':
+        return cmp.filter((r) => r.kind === 'opening_balance');
+      case 'closing':
+        // El cierre del comparativo es la apertura del periodo actual.
+        return [...cmp.filter((r) => r.kind === 'closing_balance'), ...currentOpening];
+      case 'balance':
+        return [...cmp.filter((r) => BALANCE_KINDS.has(r.kind)), ...currentOpening];
+      default: {
+        const movements = cmp.filter((r) => !BALANCE_KINDS.has(r.kind));
+        // Fila identificada sólo por el año de su rótulo ("Traslado del
+        // resultado 2024" es un movimiento del periodo ACTUAL): se admiten
+        // también los movimientos del periodo actual.
+        return inComparativeBlock ? movements : [...movements, ...currentRows.filter((r) => !BALANCE_KINDS.has(r.kind))];
+      }
+    }
+  };
 
   const cfForeign: string[] = [];
   const eqForeign: string[] = [];
@@ -1285,10 +1649,10 @@ function checkComparativeStatements(
     const rows = Array.from(table.querySelectorAll('tr'));
     if (rows.length === 0) continue;
     const headers = cellTexts(rows[0]);
-    const cIdx = headers.findIndex((h, i) => i > 0 && (h === cy || h.endsWith(` ${cy}`)));
-    const allowed = isCashFlow ? cfAllowed : eqAllowed;
-    const sink = isCashFlow ? cfForeign : eqForeign;
-    let inComparativeBlock = false;
+    const cIdx = yearColumn(headers, cy, py);
+    const pIdx = yearColumn(headers, py, cy);
+    const columnKeys = headers.map((h, i) => (i === 0 ? null : equityColumnKeys(h)));
+    let block: 'none' | 'comparative' | 'current' = 'none';
     for (const row of rows.slice(1)) {
       const cells = cellTexts(row);
       if (cells.length === 0) continue;
@@ -1297,24 +1661,42 @@ function checkComparativeStatements(
       const isBlockHeader = rest.every((c) => c === '' || c === '—' || c === '-');
       if (isBlockHeader) {
         // "Periodo 2024" abre el bloque comparativo; "Periodo 2025" lo cierra.
-        if (label.includes(cy) && !(py && label.includes(py))) inComparativeBlock = true;
-        else if (py && label.includes(py)) inComparativeBlock = false;
+        if (label.includes(cy) && !(py && label.includes(py))) block = 'comparative';
+        else if (py && label.includes(py)) block = 'current';
         continue;
       }
       if (cIdx > 0 && cells.length === headers.length) {
-        const figs = foreignFigures(cells[cIdx], allowed);
-        if ((cells[cIdx].match(ANY_FIGURE) ?? []).length > 0) {
-          if (isCashFlow) cfColumnPrinted = true;
-          else eqRowsPrinted = true;
+        const comparativeCell = cells[cIdx];
+        if ((comparativeCell.match(ANY_FIGURE) ?? []).length === 0) continue;
+        if (isCashFlow) {
+          cfColumnPrinted = true;
+          if (!cfHasComparative) {
+            cfForeign.push(...foreignFigures(comparativeCell, renderingsOf([])).map((f) => `${label}: ${f}`));
+            continue;
+          }
+          const issue = cashFlowRowIssue(label, pIdx > 0 ? cells[pIdx] : null, comparativeCell, cfElements);
+          if (issue) cfForeign.push(`${label}: ${issue}`);
+        } else {
+          eqRowsPrinted = true;
+          eqForeign.push(...foreignFigures(comparativeCell, eqAllowed).map((f) => `${label}: ${f}`));
         }
-        sink.push(...figs.map((f) => `${label}: ${f}`));
         continue;
       }
-      if (isEquity && (inComparativeBlock || (label.includes(cy) && !(py && label.includes(py))))) {
-        const figs = rest.flatMap((c) => foreignFigures(c, allowed));
-        if (rest.some((c) => (c.match(ANY_FIGURE) ?? []).length > 0)) eqRowsPrinted = true;
-        sink.push(...figs.map((f) => `${label}: ${f}`));
-      }
+      // Rotulada con el año comparativo, o saldo rotulado con un corte anterior
+      // ("Saldo al 31 de diciembre de 2023", apertura del comparativo).
+      const labelledComparative =
+        (label.includes(cy) && !(py && label.includes(py))) ||
+        (/\bsaldos?\b|\bbalance\b/i.test(label) &&
+          [...label.matchAll(/(?<!\d)((?:19|20)\d{2})(?!\d)/g)].some((m) => Number(m[1]) < Number(cy)));
+      if (!isEquity || !(block === 'comparative' || labelledComparative)) continue;
+      if (!rest.some((c) => (c.match(ANY_FIGURE) ?? []).length > 0)) continue;
+      eqRowsPrinted = true;
+      const candidates = equityCandidates(label, block === 'comparative');
+      const issue =
+        cells.length === headers.length
+          ? equityRowIssue(label, cells, columnKeys, candidates)
+          : equityRowIssue(label, cells, cells.map(() => null), candidates);
+      if (issue) eqForeign.push(`${label}: ${issue}`);
     }
   }
 
@@ -1323,8 +1705,8 @@ function checkComparativeStatements(
     out.push({
       rule: R8_RULE,
       detail: cfHasComparative
-        ? `El EFE imprime en la columna ${cy} cifras que no están en el EFE comparativo del reporte NIIF ` +
-          `(${describe(cfForeign)}). El comparativo del EFE lo calcula el sistema: se copia, no se redacta.`
+        ? `El EFE imprime en la columna ${cy} cifras que no son las del EFE comparativo del reporte NIIF en esa ` +
+          `fila (${describe(cfForeign)}). El comparativo del EFE lo calcula el sistema: se copia, no se redacta.`
         : `El EFE imprime una columna ${cy} (${describe(cfForeign)}) y el reporte NIIF no presenta EFE ` +
           `comparativo: ${cf.comparativeNote ?? 'sin base determinista'}`,
       severity: 'block',
@@ -1334,7 +1716,7 @@ function checkComparativeStatements(
     out.push({
       rule: R8_RULE,
       detail: comparativeRows
-        ? `El ECP imprime para el periodo ${cy} cifras que no están en el ECP comparativo del reporte NIIF ` +
+        ? `El ECP imprime para el periodo ${cy} filas que no son las del ECP comparativo del reporte NIIF ` +
           `(${describe(eqForeign)}). El comparativo del ECP lo calcula el sistema: se copia, no se redacta.`
         : `El ECP imprime filas del periodo ${cy} (${describe(eqForeign)}) y el reporte NIIF no presenta ECP ` +
           `comparativo: ${eq.comparativeNote ?? 'sin base determinista'}`,
@@ -1373,13 +1755,12 @@ const EQUITY_FIGURE_KEYS = [
 ] as const;
 
 /** Columnas de componentes del ECP (sin el total), las que la plantilla puede agregar. */
-const EQUITY_COMPONENT_KEYS = EQUITY_FIGURE_KEYS.filter((k) => k !== 'total');
+const EQUITY_COMPONENT_KEYS = EQUITY_FIGURE_KEYS.filter((k): k is EquityComponent => k !== 'total');
 
 /**
  * Sumas (MoneyCop) de todo subconjunto de dos o más columnas de componentes
- * no nulas de UNA fila del ECP: lo que imprime una columna agregada de la
- * plantilla ("Reservas" = legal + otras). Siete componentes a lo sumo → ≤ 120
- * sumas por fila.
+ * no nulas de UNA fila del ECP: lo que puede imprimir una columna cuyo
+ * encabezado no se reconoce. Siete componentes a lo sumo → ≤ 120 sumas por fila.
  */
 function equityRowColumnSums(row: Record<string, unknown>): string[] {
   const values: bigint[] = [];

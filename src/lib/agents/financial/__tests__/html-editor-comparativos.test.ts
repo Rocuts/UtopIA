@@ -177,7 +177,9 @@ describe('Validador HTML — ECP en las 6 columnas de la plantilla v10.1 (revisi
           .replace('360505,', '331505,Reservas estatutarias,Auxiliar,1,2000000,2000000,2000000\n360505,'),
       ),
     );
-  const cop = (cents: bigint) => formatCopFromCents(cents < BigInt(0) ? -cents : cents, true);
+  // Con signo (re-auditoría fase 2, e2e-niif2-03): el ECP comparativo se cruza
+  // fila por fila y con signo; un movimiento negativo va entre paréntesis.
+  const cop = (cents: bigint) => formatCopFromCents(cents, false);
   type Row = NiifReportJson['equityChanges']['rows'][number];
   const filaPlantilla = (label: string, r: Row, reservas?: string) => [
     label,

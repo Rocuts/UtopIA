@@ -38,6 +38,7 @@ import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import type { NiifReportJson } from '../contracts/niif-report';
 import { cashFlowHasComparativeColumn, comparativeStatementLegend } from '@/lib/export/statement-presentation';
+import { comprehensiveIncomeFigures } from '../agents/html-editor-validator';
 
 /**
  * Memoización proceso-local del spec verbatim. Una sola I/O síncrona por
@@ -227,9 +228,12 @@ function strategyForPrompt(input: HtmlEditorInput): HtmlEditorInput['strategyRep
 
 export function buildHtmlEditorUserContent(input: HtmlEditorInput, hechosEmpresa?: string): string {
   // Las cifras del acta también viajan preformateadas (auditoría 2026-09,
-  // pipeline-flujo-09): el validador las exige literalmente.
+  // pipeline-flujo-09): el validador las exige literalmente. El ORI y el
+  // resultado integral total de cada periodo también (re-auditoría fase 2,
+  // e2e-niif2-03): el validador los concilia con su signo en el ERI.
   const bindingFigures = buildBindingFiguresBlock([
     ...collectBindingFigures(input.niifReport),
+    ...comprehensiveIncomeFigures(input.niifReport),
     ...collectActaBindingFigures(input.governanceReport),
   ]);
 
@@ -289,7 +293,7 @@ ${hechosEmpresa ?? ''}
 - ALWAYS: las cifras del bloque <cifras_vinculantes> se COPIAN literalmente en los estados financieros. Ya vienen en pesos: no se convierten desde los centavos del JSON, no se redondean, no se abrevian.
 - If una cifra del JSON no está en <cifras_vinculantes>, entonces conviértela dividiendo los centavos entre 100 y formatea $1.234.567,89; si además es una magnitud de contexto narrativo (no una línea de estado financiero), puedes abreviarla como $X.XXX M según §1.9/L38. If la magnitud llega a miles de millones then se escribe igual en millones ($2.429 M), otherwise $X,X M: la forma "$2,4 B" de §5 no se usa en español, porque un billón es un millón de millones (10^12).
 - NEVER: invent values not present in the JSON payloads; only cite numbers from niif_report / strategy_report / governance_report / metadata.
-- NEVER: calcular, redactar ni completar cifras comparativas del EFE o del ECP: sólo existen las del bloque <comparativos_efe_ecp> (el validador bloquea una cifra comparativa del EFE/ECP que no esté en el JSON).
+- NEVER: calcular, redactar ni completar cifras comparativas del EFE o del ECP: sólo existen las del bloque <comparativos_efe_ecp> (el validador cruza cada fila comparativa del EFE/ECP con la misma fila del JSON, columna por columna y con su signo).
 - If <comparativos_efe_ecp> trae el EFE del periodo comparativo then el EFE se presenta a dos columnas (periodo actual | comparativo) con esas cifras, otherwise el EFE va a una sola columna y su nota se copia literal debajo del estado.
 - If <comparativos_efe_ecp> trae filas del ECP del periodo comparativo then el ECP presenta primero esas filas y después las del periodo actual, otherwise el ECP presenta sólo el periodo actual y su nota se copia literal debajo del estado.
 - Las devoluciones en ventas (cuenta 4175) se restan de los ingresos (ingresos netos = 41 − 4175) y su cifra se revela en su propia línea "(−) Devoluciones y descuentos en ventas": es un criterio de presentación de UtopIA. NEVER atribuirlo a una norma (NIIF 15 u otra) en el HTML.
