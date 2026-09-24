@@ -44,9 +44,11 @@ import {
 import {
   aplicarVencimientosDeclarados,
   detectYearFromString,
+  findTrialBalanceHeaderLine,
   parseTrialBalanceCSVWithMeta,
   preprocessTrialBalance,
   type CorteDeclarado,
+  type NotaIngesta,
   type ParseTrialBalanceOptions,
   type PreprocessedBalance,
   type RawAccountRow,
@@ -196,11 +198,18 @@ function isBalanceLikeHeader(header: string): boolean {
  * `true` si el encabezado del CSV tiene al menos una columna de saldo con año
  * explícito ("Saldo 2025", "Saldo [2025-12]"). En ese caso el encabezado manda
  * sobre el nombre de la hoja.
+ *
+ * El encabezado es la línea que elige el parser, no la primera del bloque: un
+ * título "Balance de prueba a junio 30 de 2025" (o "Balance 2025") antes de un
+ * encabezado "codigo, nombre, saldo" no es una columna de saldo con año. Antes
+ * se leía la primera línea y la hoja perdía su periodo ("current").
  */
 export function headerHasExplicitPeriodBalanceColumn(csv: string): boolean {
-  const firstLine = csv.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
-  if (!firstLine) return false;
-  const headers = splitCsvLine(firstLine, detectSeparator(firstLine)).map((h) => h.trim());
+  const headerLine =
+    findTrialBalanceHeaderLine(csv) ??
+    csv.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+  if (!headerLine) return false;
+  const headers = splitCsvLine(headerLine, detectSeparator(headerLine)).map((h) => h.trim());
   return headers.some(
     (h) =>
       isBalanceLikeHeader(h) &&
@@ -327,6 +336,29 @@ function relabelBlock(block: ParsedBlock, year: string, label: string): void {
   for (const set of [block.openingPeriods, block.closingPeriods]) {
     if (set.delete(year)) set.add(label);
   }
+}
+
+/**
+ * Re-rotula la hoja al mes `month` (`AAAA-MM`). Si el mes salió de la fecha de
+ * corte del título (el nombre de la hoja sólo trae el año, P4-c) se deja la
+ * nota de ingesta con el corte: la nota de base de los KPIs cita el texto del
+ * archivo y el informe de validación explica por qué la hoja "2025" es un
+ * corte de `month` meses. Un corte a diciembre ya lo anota el parser.
+ */
+function relabelToMonth(block: ParsedBlock, year: string, month: number): void {
+  const label = `${year}-${String(month).padStart(2, '0')}`;
+  relabelBlock(block, year, label);
+  if (block.sheet.month !== null || !block.corte || block.corte.month !== month || month === 12) return;
+  if (block.rows.length === 0) return;
+  const nota: NotaIngesta = {
+    period: label,
+    message:
+      `Fecha de corte declarada en la hoja "${block.label}" («${block.corte.texto}»): la hoja del ` +
+      `año ${year} se trata como corte ${label} (P&G de ${month} meses).`,
+    corte: { tipo: 'parcial', meses: month, texto: block.corte.texto },
+  };
+  const [first, ...rest] = block.rows;
+  block.rows = [{ ...first, notasIngesta: [...(first.notasIngesta ?? []), nota] }, ...rest];
 }
 
 function fmtAmount(n: number): string {
@@ -532,7 +564,7 @@ export function parseUploadedTrialBalanceText(
     const only = parsed[0];
     const month = monthOf(only);
     if (only.forced && /^20\d{2}$/.test(only.forced) && month !== null && month !== 12) {
-      relabelBlock(only, only.forced, `${only.forced}-${String(month).padStart(2, '0')}`);
+      relabelToMonth(only, only.forced, month);
     }
     return finish(only.rows, [only], {
       blockCount: blocks.length,
@@ -556,7 +588,7 @@ export function parseUploadedTrialBalanceText(
     const distinct = new Set(months).size === months.length;
     if (!allHaveMonth || !distinct) continue; // se resuelve como conflicto abajo
     for (const g of group) {
-      relabelBlock(g, year, `${year}-${String(monthOf(g)).padStart(2, '0')}`);
+      relabelToMonth(g, year, monthOf(g)!);
     }
   }
 
@@ -573,7 +605,7 @@ export function parseUploadedTrialBalanceText(
     for (const p of parsed) {
       const m = monthOf(p);
       if (!p.forced || !/^20\d{2}$/.test(p.forced) || m === null) continue;
-      relabelBlock(p, p.forced, `${p.forced}-${String(m).padStart(2, '0')}`);
+      relabelToMonth(p, p.forced, m);
     }
   }
 

@@ -1179,6 +1179,23 @@ function isUsableHeader(layout: HeaderLayout): boolean {
   );
 }
 
+/**
+ * Línea de encabezado de columnas que usará `parseTrialBalanceCSVWithMeta`
+ * (mismo criterio: primera de las 30 primeras con columna de código y de
+ * saldo o débito/crédito), o `null` si ninguna califica. `raw-data` la usa
+ * para decidir si el encabezado trae el periodo: un título "Balance a junio
+ * 30 de 2025" antes del encabezado no es una columna de saldo (P4-c).
+ */
+export function findTrialBalanceHeaderLine(csvText: string): string | null {
+  const lines = csvText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const scanLimit = Math.min(lines.length - 1, MAX_HEADER_SCAN_LINES);
+  for (let i = 0; i < scanLimit; i++) {
+    const candidate = detectHeaderLayout(lines[i], i, {});
+    if (candidate && isUsableHeader(candidate)) return lines[i];
+  }
+  return null;
+}
+
 const CANONICAL_LEVELS = new Set(['Clase', 'Grupo', 'Cuenta', 'Subcuenta', 'Auxiliar']);
 
 /**
