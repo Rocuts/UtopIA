@@ -24,6 +24,13 @@
 //  - Si no, y el nombre de la hoja trae año, toda la hoja es de ese periodo.
 //  - Si no hay año en ninguno, decide el encabezado (igual que un CSV).
 //  - Dos hojas del mismo año con mes distinto se etiquetan `YYYY-MM`.
+//  - Una hoja cuyo nombre trae un mes distinto de diciembre ("Junio 2025") es
+//    un corte parcial y conserva `YYYY-MM` (su P&G cubre MM meses y los KPIs
+//    se anualizan, ratios-kpis-18). Si el libro tiene alguna hoja así, las
+//    demás hojas con mes también se rotulan `YYYY-MM` (orden cronológico
+//    explícito). Diciembre o sin mes: `YYYY` (convención de cierre anual).
+//  - Las columnas de saldo inicial/anterior se publican en `openingPeriods`
+//    (ingesta-09) para que el preprocesador marque `saldosDeApertura`.
 //  - Dos hojas que aportan saldos distintos a la misma cuenta y periodo son
 //    un conflicto explícito (`TrialBalanceIngestError`), nunca "gana la última".
 //  - Códigos repetidos dentro de una hoja se suman, como en un CSV, con aviso.
@@ -31,8 +38,9 @@
 
 import {
   detectYearFromString,
-  parseTrialBalanceCSV,
+  parseTrialBalanceCSVWithMeta,
   preprocessTrialBalance,
+  type ParseTrialBalanceOptions,
   type PreprocessedBalance,
   type RawAccountRow,
 } from './trial-balance';
@@ -200,6 +208,14 @@ export interface UploadedTrialBalanceParse {
   blockCount: number;
   /** Avisos no bloqueantes (códigos repetidos sumados, hojas duplicadas). */
   warnings: string[];
+  /**
+   * ingesta-09: periodos cuyos saldos provienen SÓLO de columnas de saldo
+   * inicial / anterior (`balanceColumns` con `kind === 'opening'`). Se pasan a
+   * `preprocessTrialBalance(rows, { openingPeriods })`, que marca esos
+   * snapshots `saldosDeApertura` (P&G comparativo N/D). Un periodo que alguna
+   * columna de cierre también aporta no se incluye.
+   */
+  openingPeriods: string[];
 }
 
 interface ParsedBlock {
@@ -208,6 +224,43 @@ interface ParsedBlock {
   /** Periodo forzado para toda la hoja; `null` = decide el encabezado. */
   forced: string | null;
   rows: RawAccountRow[];
+  /** Periodos de columnas de apertura / de cierre de la hoja (ingesta-09). */
+  openingPeriods: Set<string>;
+  closingPeriods: Set<string>;
+}
+
+/** Filas y periodos de apertura/cierre de un CSV (una hoja o el archivo plano). */
+function parseSheetCsv(
+  csv: string,
+  options: ParseTrialBalanceOptions = {},
+): { rows: RawAccountRow[]; openingPeriods: Set<string>; closingPeriods: Set<string> } {
+  const parsed = parseTrialBalanceCSVWithMeta(csv, options);
+  const openingPeriods = new Set<string>();
+  const closingPeriods = new Set<string>();
+  for (const col of parsed.balanceColumns) {
+    (col.kind === 'opening' ? openingPeriods : closingPeriods).add(col.period);
+  }
+  return { rows: parsed.rows, openingPeriods, closingPeriods };
+}
+
+/** Periodos sólo de apertura: los de cierre de cualquier hoja prevalecen. */
+function openingOnly(sheets: Array<{ openingPeriods: Set<string>; closingPeriods: Set<string> }>): string[] {
+  const closing = new Set(sheets.flatMap((s) => [...s.closingPeriods]));
+  const opening = new Set(sheets.flatMap((s) => [...s.openingPeriods]));
+  return [...opening].filter((p) => !closing.has(p)).sort();
+}
+
+/** Re-rotula el periodo forzado `year` de una hoja como `label` (filas y columnas). */
+function relabelBlock(block: ParsedBlock, year: string, label: string): void {
+  block.forced = label;
+  block.rows = block.rows.map((r) => {
+    if (!(year in r.balancesByPeriod)) return r;
+    const { [year]: value, ...rest } = r.balancesByPeriod;
+    return { ...r, balancesByPeriod: { ...rest, [label]: value } };
+  });
+  for (const set of [block.openingPeriods, block.closingPeriods]) {
+    if (set.delete(year)) set.add(label);
+  }
 }
 
 function fmtAmount(n: number): string {
@@ -278,13 +331,14 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
   const { blocks } = parseBlocks(data);
 
   if (blocks.length === 0) {
-    const rows = parseTrialBalanceCSV(data);
+    const sheet = parseSheetCsv(data);
     return {
-      rows,
+      rows: sheet.rows,
       dataText: data,
       hadValidationReport,
       blockCount: 0,
-      warnings: duplicateCodeWarnings(rows, 'Balance'),
+      warnings: duplicateCodeWarnings(sheet.rows, 'Balance'),
+      openingPeriods: openingOnly([sheet]),
     };
   }
 
@@ -294,27 +348,38 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
     const sheet = detectSheetPeriod(b.label);
     const headerDecides = headerHasExplicitPeriodBalanceColumn(b.csv);
     const forced = !headerDecides && sheet.year ? sheet.year : null;
-    const rows = forced
-      ? parseTrialBalanceCSV(b.csv, { forcePeriod: forced })
-      : parseTrialBalanceCSV(b.csv);
+    const read = forced ? parseSheetCsv(b.csv, { forcePeriod: forced }) : parseSheetCsv(b.csv);
     // Hojas sin filas contables (notas, portada) no participan.
-    if (rows.length > 0) parsed.push({ label: b.label, sheet, forced, rows });
+    if (read.rows.length > 0) parsed.push({ label: b.label, sheet, forced, ...read });
   }
 
   const warnings: string[] = [];
   if (parsed.length === 0) {
-    return { rows: [], dataText: data, hadValidationReport, blockCount: blocks.length, warnings };
+    return {
+      rows: [],
+      dataText: data,
+      hadValidationReport,
+      blockCount: blocks.length,
+      warnings,
+      openingPeriods: [],
+    };
   }
 
   if (parsed.length === 1) {
-    // Una sola hoja contable: mismas filas y semántica que un CSV.
+    // Una sola hoja contable: mismas filas y semántica que un CSV, salvo el
+    // mes de un corte parcial ("Junio 2025" → 2025-06, ratios-kpis-18).
     const only = parsed[0];
+    const month = only.sheet.month;
+    if (only.forced && /^20\d{2}$/.test(only.forced) && month !== null && month !== 12) {
+      relabelBlock(only, only.forced, `${only.forced}-${String(month).padStart(2, '0')}`);
+    }
     return {
       rows: only.rows,
       dataText: data,
       hadValidationReport,
       blockCount: blocks.length,
       warnings: duplicateCodeWarnings(only.rows, `Hoja "${only.label}"`),
+      openingPeriods: openingOnly([only]),
     };
   }
 
@@ -333,12 +398,22 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
     const distinct = new Set(months).size === months.length;
     if (!allHaveMonth || !distinct) continue; // se resuelve como conflicto abajo
     for (const g of group) {
-      const label = `${year}-${String(g.sheet.month).padStart(2, '0')}`;
-      g.forced = label;
-      g.rows = g.rows.map((r) => ({
-        ...r,
-        balancesByPeriod: { [label]: r.balancesByPeriod[year] },
-      }));
+      relabelBlock(g, year, `${year}-${String(g.sheet.month).padStart(2, '0')}`);
+    }
+  }
+
+  // ── Pasada 2b: corte parcial en años distintos ("Jun 2024", "Dic 2025") ──
+  // Una hoja con mes distinto de diciembre es un corte parcial: si se rotula
+  // sólo con el año, su P&G de MM meses se trata como anual (ratios-kpis-18).
+  // En ese caso todas las hojas con mes pasan a `YYYY-MM`; las que no traen
+  // mes conservan el año.
+  const hasPartialSheet = parsed.some(
+    (p) => p.forced && /^20\d{2}$/.test(p.forced) && p.sheet.month !== null && p.sheet.month !== 12,
+  );
+  if (hasPartialSheet) {
+    for (const p of parsed) {
+      if (!p.forced || !/^20\d{2}$/.test(p.forced) || p.sheet.month === null) continue;
+      relabelBlock(p, p.forced, `${p.forced}-${String(p.sheet.month).padStart(2, '0')}`);
     }
   }
 
@@ -434,6 +509,7 @@ export function parseUploadedTrialBalanceText(text: string): UploadedTrialBalanc
     hadValidationReport,
     blockCount: blocks.length,
     warnings,
+    openingPeriods: openingOnly(parsed),
   };
 }
 
@@ -504,16 +580,19 @@ export type UploadedTrialBalancePreprocess =
  * obtenían 0 filas para un XLSX (ingesta-01, pipeline-flujo-06/07).
  */
 export function preprocessUploadedTrialBalanceText(text: string): UploadedTrialBalancePreprocess {
-  let rows: RawAccountRow[];
-  let warnings: string[];
+  let parsed: UploadedTrialBalanceParse;
   try {
-    const parsed = parseUploadedTrialBalanceText(text);
-    rows = parsed.rows;
-    warnings = parsed.warnings;
+    parsed = parseUploadedTrialBalanceText(text);
   } catch (err) {
     if (err instanceof TrialBalanceIngestError) return { kind: 'rejected', reasons: err.reasons };
     throw err;
   }
-  if (rows.length === 0) return { kind: 'empty', tabular: looksLikeTabularTrialBalance(text) };
-  return { kind: 'ok', preprocessed: preprocessTrialBalance(rows), warnings };
+  if (parsed.rows.length === 0) return { kind: 'empty', tabular: looksLikeTabularTrialBalance(text) };
+  return {
+    kind: 'ok',
+    // ingesta-09: el comparativo leído de la columna de saldo inicial/anterior
+    // se marca `saldosDeApertura` (P&G comparativo N/D).
+    preprocessed: preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods }),
+    warnings: parsed.warnings,
+  };
 }

@@ -79,4 +79,24 @@ describe('ruta legacy — rawData leído como lo lee /upload', () => {
     expect(body.reasons.join(' ')).toMatch(/110505/);
     expect(orchestrateFinancialReport).not.toHaveBeenCalled();
   });
+
+  // ingesta-09 (W3-A): el comparativo leído de la columna de saldo inicial se
+  // marca como apertura (P&G comparativo N/D, KPIs de resultados N/D).
+  it('columna "saldo inicial 2025" → comparativo 2024 marcado saldosDeApertura', async () => {
+    const rawData = [
+      'codigo,nombre,nivel,transaccional,saldo inicial 2025,saldo final 2025',
+      '110505,Caja,Auxiliar,1,50000000,80000000',
+      '130505,Clientes,Auxiliar,1,40000000,60000000',
+      '220505,Proveedores,Auxiliar,1,30000000,40000000',
+      '311505,Capital,Auxiliar,1,40000000,40000000',
+      '360505,Utilidad del ejercicio,Auxiliar,1,0,40000000',
+      '370505,Utilidades acumuladas,Auxiliar,1,20000000,20000000',
+      '410505,Ventas,Auxiliar,1,0,150000000',
+      '510505,Sueldos,Auxiliar,1,0,110000000',
+    ].join('\n');
+    const res = await POST(request({ rawData, company, language: 'es' }));
+    expect(res.status).toBe(200);
+    expect(receivedPreprocessed()?.comparative?.period).toBe('2024');
+    expect(receivedPreprocessed()?.comparative?.saldosDeApertura).toBe(true);
+  });
 });
