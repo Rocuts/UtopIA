@@ -51,7 +51,7 @@ function dcfJson() {
     workingCapitalChangeCop: pesos(50_000_000), fcfCop: pesos(550_000_000),
   }));
   return {
-    company: coJson, projection: { rows, keyAssumptions: [] },
+    company: coJson, projection: { rows, keyAssumptions: [], cashFlowBasis: 'nominal' },
     wacc: {
       riskFreeBasis: 'TES_COP_ex_default', sovereignYieldPercent: 6.5, defaultSpreadPercent: 1.5, riskFreeRatePercent: 5,
       countryRiskPremiumPercent: 2, equityRiskPremiumPercent: 3, beta: 1, sizePremiumPercent: 0,

@@ -30,6 +30,18 @@
 //     Ley 222/1995 cuando son del Código de Comercio).
 //   - Firmas estructuradas: SignatoriesSchema garantiza T.P. en formato "12345-T".
 //   - Prohibición ABSOLUTA de frases evasivas (validador post-gen las detecta).
+//
+// Fuentes del corpus (auditoría 2026-09-24, fase 2):
+//   - Libros inscritos en el registro mercantil (prompts-normativa-25): el
+//     checklist nombra los de registro de socios o accionistas y los de actas,
+//     que es lo que dice src/data/tax_docs/decreto_1074_2015.md (art.
+//     2.2.2.39.4). El libro mayor se retiró de la enumeración porque ninguna
+//     fuente del corpus lo incluye (el Decreto 019/2012 art. 175 y el Art. 28
+//     C.Co. no están en el corpus); no se afirma lo contrario.
+//   - Umbrales del Revisor Fiscal (auditoria-calidad-31): el texto de la Ley
+//     43/1990 art. 13 par. 2 no está en src/data/tax_docs, así que el
+//     operador ('>') no se cambia. Si se incorpora la ley y dice "sean o
+//     excedan", el umbral pasa a '≥' aquí y en audit/prompts/legal-auditor.
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../types';
@@ -314,7 +326,7 @@ Bloque de firmas (signatures) — entradas obligatorias:
 2. Reserva Legal (Art. 452 C.Co. incluido su techo del 50% del capital suscrito, o Art. 45 Ley 1258/2008 según régimen; status="pendiente" cuando el régimen sea indeterminado por falta de estatutos)
 3. Distribución de Utilidades (Arts. 151, 154, 155 y 451-455 C.Co.; el Art. 155 fue modificado por el Art. 240 de la Ley 222/1995)
 4. Revisor Fiscal (Art. 203 C.Co. + Art. 13 Ley 43/1990 — obligatoriedad por umbrales)
-5. Libros Oficiales registrados (Art. 28 C.Co. — libro de actas, accionistas, mayor)
+5. Libros inscritos en el registro mercantil: registro de socios o accionistas y actas de asamblea o junta de socios (Decreto 1074/2015 art. 2.2.2.39.4)
 6. Informe de Gestión (Art. 46 Ley 222/1995 — presentado y aprobado)
 7. Partes Vinculadas (NIC 24 §13-22 / Sec. 33 PYMES — revelación en notas)
 8. Autorización para Publicación (NIC 10 §17 / Sec. 32.9 PYMES — fecha y órgano)

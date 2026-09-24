@@ -44,6 +44,22 @@ export const JURISPRUDENCIA: readonly JurisprudenceEntry[] = [
     urlOficial: null,
   },
   {
+    // Fase 2 (I2 6b): citada en el encabezado de los módulos del Agente Fiscal
+    // (tope individual del Art. 771-5 par. 2). Fuente del corpus:
+    // estatuto_tributario_completo.md (jurisprudencia concordante del Art.
+    // 771-5: Exp. 11001-03-27-000-2022-00041-00(26676) de 19 de julio de 2023)
+    // y escudo_normativa_supervivencia_co_2026.md (tesis).
+    id: 'SENTENCIA_26676_2023_CE',
+    cita: 'Sentencia 26676 de 2023',
+    tribunal: 'Consejo de Estado',
+    fecha: '2023-07-19',
+    tema: 'Art. 771-5 E.T. — tope de 100 UVT de los pagos en efectivo (Exp. 11001-03-27-000-2022-00041-00(26676))',
+    tesis:
+      'El tope de 100 UVT del parágrafo 2 del Art. 771-5 E.T. se mide por pago individual (cada transacción), no acumulado por beneficiario en el año.',
+    normasAfectadas: ['Art. 771-5 par. 2 E.T.'],
+    urlOficial: null,
+  },
+  {
     id: 'SENTENCIA_C_481_2019',
     cita: 'Sentencia C-481 de 2019',
     tribunal: 'Corte Constitucional',

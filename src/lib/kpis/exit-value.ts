@@ -23,6 +23,7 @@ import type {
   KpiResult,
 } from '@/types/kpis';
 import { KpiNoCalculableError } from './no-calculable';
+import { formatKpiCop, formatKpiMultiple, formatKpiRate, KPI_ND } from './format';
 
 /**
  * Múltiplos EBITDA de referencia internos (midpoints por industria). No tienen
@@ -39,14 +40,16 @@ export const INDUSTRY_MULTIPLES: Record<ExitValueIndustry, number> = {
 };
 
 /**
- * Formats a COP amount into a compact human string.
- * n >= 1e12 → $X.YYT COP
- * n >= 1e9  → $X.YYB COP
- * n >= 1e6  → $X.YYM COP
- * else      → $X COP (con separadores es-CO)
+ * Formateador COMPACTO heredado (`$X.YYM COP`). Sólo lo usa
+ * `components/workspace/areas/ValorArea.tsx`, cuya prueba fija ese texto;
+ * los KPIs de este módulo ya publican el formato es-CO de `./format`
+ * (ratios-kpis-27). Un valor no finito es `N/D`, nunca `$0 COP`.
+ *
+ * @deprecated Usar `formatBigCop` de `@/lib/charts/format` (coma decimal,
+ * `mil M`, paréntesis); pendiente migrar ValorArea (fuera de este paquete).
  */
 export function formatCop(n: number): string {
-  if (!Number.isFinite(n)) return '$0 COP';
+  if (!Number.isFinite(n)) return KPI_ND;
   const abs = Math.abs(n);
   const sign = n < 0 ? '-' : '';
   if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T COP`;
@@ -107,27 +110,27 @@ export function calculateExitValue(input: ExitValueInput): KpiResult {
     {
       label: 'EBITDA normalizado',
       value: ebitdaAdj,
-      formatted: formatCop(ebitdaAdj),
+      formatted: formatKpiCop(ebitdaAdj),
     },
     {
       label: 'Múltiplo aplicado',
       value: Number(adjMultiple.toFixed(2)),
-      formatted: `${adjMultiple.toFixed(2)}x`,
+      formatted: formatKpiMultiple(adjMultiple),
     },
     {
       label: 'Enterprise Value',
       value: enterpriseValue,
-      formatted: formatCop(enterpriseValue),
+      formatted: formatKpiCop(enterpriseValue),
     },
     {
       label: 'Deuda neta',
       value: netDebt,
-      formatted: formatCop(netDebt),
+      formatted: formatKpiCop(netDebt),
     },
     {
       label: 'Equity Value',
       value: equityValue,
-      formatted: formatCop(equityValue),
+      formatted: formatKpiCop(equityValue),
     },
   ];
 
@@ -135,17 +138,17 @@ export function calculateExitValue(input: ExitValueInput): KpiResult {
     breakdown.splice(1, 0, {
       label: 'Ajustes EBITDA',
       value: adjustmentsTotal,
-      formatted: formatCop(adjustmentsTotal),
+      formatted: formatKpiCop(adjustmentsTotal),
     });
   }
 
   const assumptions = [
     wacc === null
       ? 'WACC no declarado: el valor por múltiplos no usa tasa de descuento'
-      : `WACC declarado por el usuario (supuesto) = ${(wacc * 100).toFixed(1)}% — informativo: el valor por múltiplos no lo usa`,
+      : `WACC declarado por el usuario (supuesto) = ${formatKpiRate(wacc, 1)} — informativo: el valor por múltiplos no lo usa`,
     override === null
       ? 'Múltiplo de referencia interno por industria, sin fuente de mercado verificable (supuesto)'
-      : `Múltiplo declarado por el usuario (supuesto) = ${override}x`,
+      : `Múltiplo declarado por el usuario (supuesto) = ${formatKpiMultiple(override)}`,
     'El crecimiento esperado no ajusta el múltiplo; sólo informa la severidad',
     'Cifras expresadas en COP corrientes',
     'Equity Value = Enterprise Value - Deuda neta',
@@ -157,7 +160,7 @@ export function calculateExitValue(input: ExitValueInput): KpiResult {
   return {
     kind: 'exit_value',
     value: equityValue,
-    formatted: formatCop(equityValue),
+    formatted: formatKpiCop(equityValue),
     unit: 'COP',
     label: 'Exit Value (Equity)',
     severity: severityFor(growth, equityValue),

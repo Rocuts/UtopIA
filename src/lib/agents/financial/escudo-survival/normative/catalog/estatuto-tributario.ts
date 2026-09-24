@@ -388,6 +388,30 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     tags: ['renta', 'dividendos', 'PN', 'residente', 'tarifa', 'retencion'],
   },
   {
+    // Fase 2 (I2 6b): la norma determinista de dividendos del Módulo 8 y del
+    // Optimizador de dividendos cita el Art. 242-1 y Capa 2 lo bloqueaba por
+    // no estar catalogado. Fuente del corpus: estatuto_tributario_completo.md
+    // (ARTÍCULO 242-1, inciso mod. art. 12 Ley 2277/2022) y
+    // escudo_normativa_supervivencia_co_2026.md.
+    id: 'ART_242_1_ET',
+    cita: 'Art. 242-1 E.T.',
+    titulo: 'Tarifa especial para dividendos o participaciones recibidas por sociedades nacionales',
+    resumen:
+      'Los dividendos pagados o abonados en cuenta a sociedades nacionales, provenientes de utilidades consideradas INCRNGO (num. 3 Art. 49), están sujetos a retención en la fuente del 10%, trasladable e imputable a la persona natural residente o al inversionista residente en el exterior. La capitalización de utilidades sigue este régimen general de distribución (Art. 36-3 derogado).',
+    textoLiteral: null,
+    estado: 'MODIFICADO',
+    modificaciones: [
+      {
+        norma: 'Ley 2277 de 2022',
+        fecha: '2022-12-13',
+        cambio: 'Art. 12: la retención trasladable pasó del 7,5% (Ley 2010/2019) al 10%.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=242-1',
+    tags: ['renta', 'dividendos', 'PJ', 'sociedad_nacional', 'retencion', 'tarifa'],
+  },
+  {
     id: 'ART_245_ET',
     cita: 'Art. 245 E.T.',
     titulo: 'Tarifa especial dividendos — no residentes',
@@ -1179,6 +1203,49 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     textoLiteral: null,
     estado: 'VIGENTE_2026',
     modificaciones: [],
+    urlOficial:
+      'https://estatuto.co/?articulo=771-5',
+    tags: ['bancarizacion', 'efectivo', 'deduccion', 'DIAN', 'auditoria'],
+  },
+  // Fase 2 (I2 6b): el encabezado de todos los módulos del Agente Fiscal y el
+  // prompt del Módulo 8 citan (y exigen con ALWAYS) los parágrafos 1 y 2 del
+  // Art. 771-5; como sólo existía la entrada del artículo, Capa 2 los
+  // bloqueaba. Fuente: estatuto_tributario_completo.md (ARTÍCULO 771-5, par. 1
+  // y 2 mod. art. 307 Ley 1819/2016).
+  {
+    id: 'ART_771_5_PAR1_ET',
+    cita: 'Art. 771-5 par. 1 E.T.',
+    titulo: 'Bancarización — reconocimiento fiscal de los pagos en efectivo (tope general)',
+    resumen:
+      'A partir del año 2021 se reconocen como costo, deducción, pasivo o impuesto descontable los pagos en efectivo hasta el menor valor entre: a) el 40% de lo pagado, sin superar 40.000 UVT, y b) el 35% de los costos y deducciones totales, independientemente del número de pagos.',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 307: fijó la transición 2018-2021 y el tope permanente desde 2021.',
+      },
+    ],
+    urlOficial:
+      'https://estatuto.co/?articulo=771-5',
+    tags: ['bancarizacion', 'efectivo', 'deduccion', 'DIAN', 'auditoria'],
+  },
+  {
+    id: 'ART_771_5_PAR2_ET',
+    cita: 'Art. 771-5 par. 2 E.T.',
+    titulo: 'Bancarización — pagos individuales superiores a 100 UVT',
+    resumen:
+      'Los pagos individuales de personas jurídicas y de personas naturales con rentas no laborales que superen 100 UVT deben canalizarse por medios financieros, so pena de su desconocimiento fiscal como costo, deducción, pasivo o impuesto descontable. El tope se mide por pago individual, no acumulado por beneficiario (C.E. sentencia 26676 de 2023).',
+    textoLiteral: null,
+    estado: 'VIGENTE_2026',
+    modificaciones: [
+      {
+        norma: 'Ley 1819 de 2016',
+        fecha: '2016-12-29',
+        cambio: 'Art. 307: nuevo texto del parágrafo 2.',
+      },
+    ],
     urlOficial:
       'https://estatuto.co/?articulo=771-5',
     tags: ['bancarizacion', 'efectivo', 'deduccion', 'DIAN', 'auditoria'],

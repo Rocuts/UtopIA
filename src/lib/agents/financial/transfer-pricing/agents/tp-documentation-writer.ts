@@ -25,6 +25,7 @@ import type {
 import {
   notaSinMontosDelModelo,
   tpAjusteCopDeterminista,
+  tpMotivoRango,
   type TpRangeCheck,
 } from '../lib/deterministic';
 import {
@@ -86,7 +87,7 @@ export async function runTPDocumentationWriter(
   });
 
   return toTPDocumentationResult(
-    enforceTpDocumentation(enforceTpSanctions(json, sanctionYear), check),
+    enforceTpDocumentation(enforceTpSanctions(json, sanctionYear), check, language),
     check,
     sanctionYear,
     language,
@@ -101,9 +102,12 @@ export async function runTPDocumentationWriter(
 export function enforceTpDocumentation(
   json: TpDocumentationReportJson,
   check: TpRangeCheck,
+  language: 'es' | 'en' = 'es',
 ): TpDocumentationReportJson {
   const s = check.stats;
-  const ilustrativa = 'ILUSTRATIVA — no presentar: ' + (check.reason ?? '');
+  const ilustrativa =
+    (language === 'en' ? 'ILLUSTRATIVE — do not file: ' : 'ILUSTRATIVA — no presentar: ') +
+    (tpMotivoRango(check, language) ?? '');
   // Ajuste en COP: "0" dentro del rango; fuera de él N/D (el contrato no trae
   // la base del PLI en COP por operación — fase 2, pendiente #8).
   const ajusteCop = tpAjusteCopDeterminista(check);
@@ -114,7 +118,7 @@ export function enforceTpDocumentation(
       conclusionsByOperation: json.localFile.conclusionsByOperation.map((c) => ({
         ...c,
         requiredAdjustmentCop: ajusteCop,
-        fiscalImpactNote: notaSinMontosDelModelo(c.fiscalImpactNote, ajusteCop),
+        fiscalImpactNote: notaSinMontosDelModelo(c.fiscalImpactNote, ajusteCop, language),
       })),
     },
     formato1125Rows: json.formato1125Rows.map((r) => ({
@@ -155,7 +159,7 @@ function renderExecutiveSummary(
     `**${lang === 'en' ? 'Compliance conclusion' : 'Conclusión global'}:** ${
       check.conclusive
         ? conclusionLabel[e.overallComplianceConclusion]
-        : `${lang === 'en' ? 'NOT CONCLUSIVE (illustrative scenario)' : 'NO CONCLUYENTE (escenario ilustrativo)'} — ${check.reason}`
+        : `${lang === 'en' ? 'NOT CONCLUSIVE (illustrative scenario)' : 'NO CONCLUYENTE (escenario ilustrativo)'} — ${tpMotivoRango(check, lang)}`
     }`,
     '',
     e.transactionsOverview,

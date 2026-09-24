@@ -4,6 +4,11 @@
  * RunwayProjection — runway de caja a 36 meses con 3 escenarios.
  * Líneas: base (gold), conservador (warning), agresivo (success).
  * markLine horizontal en y=0 (línea wine punteada) para señalar el umbral.
+ *
+ * valoracion-24: conservador y agresivo son SUPUESTOS DE SENSIBILIDAD sobre
+ * los ingresos, no pronósticos. El subtítulo por defecto toma sus rótulos de
+ * RUNWAY_ESCENARIOS (src/lib/kpis/runway.ts), la misma fuente que calcula la
+ * serie, en es/en según `language`.
  */
 
 import { useMemo } from 'react';
@@ -13,6 +18,7 @@ import { echarts } from '@/lib/charts/setup';
 import { getTokens } from '@/lib/charts/echarts-theme';
 import { useChartTheme } from '@/lib/charts/use-theme';
 import { formatBigCop, formatCop } from '@/lib/charts/format';
+import { RUNWAY_ESCENARIOS } from '@/lib/kpis/runway';
 import { ChartContainer } from './ChartContainer';
 
 export interface RunwayMonth {
@@ -26,20 +32,47 @@ export interface RunwayProjectionProps {
   months: RunwayMonth[];
   height?: number;
   density?: 'comfortable' | 'compact';
+  /** Idioma de los rótulos por defecto (título, subtítulo, leyenda). */
+  language?: 'es' | 'en';
   title?: string;
   subtitle?: string;
+}
+
+/** Textos del gráfico por idioma; los escenarios salen de RUNWAY_ESCENARIOS. */
+export function runwayProjectionTexts(language: 'es' | 'en') {
+  const { conservador, agresivo } = RUNWAY_ESCENARIOS;
+  if (language === 'en') {
+    return {
+      title: 'Cash runway · 36 months',
+      subtitle: `Base: period trend · Conservative: ${conservador.rotuloEn} · Aggressive: ${agresivo.rotuloEn}`,
+      series: { base: 'Base', conservador: 'Conservative', agresivo: 'Aggressive' },
+      cashZero: 'Cash = 0',
+      empty: 'No runway projection',
+      ariaLabel: '36-month cash runway',
+    };
+  }
+  return {
+    title: 'Runway de Caja · 36 meses',
+    subtitle: `Base: tendencia del periodo · Conservador: ${conservador.rotulo} · Agresivo: ${agresivo.rotulo}`,
+    series: { base: 'Base', conservador: 'Conservador', agresivo: 'Agresivo' },
+    cashZero: 'Caja = 0',
+    empty: 'Sin proyección de runway',
+    ariaLabel: 'Runway de caja 36 meses',
+  };
 }
 
 export function RunwayProjection({
   months,
   height = 320,
   density,
-  title = 'Runway de Caja · 36 meses',
-  subtitle = 'Escenario base, conservador (−15%) y agresivo (+10%)',
+  language = 'es',
+  title,
+  subtitle,
 }: RunwayProjectionProps) {
   const theme = useChartTheme();
   const tokens = getTokens(theme);
   const empty = !months || months.length === 0;
+  const texts = useMemo(() => runwayProjectionTexts(language), [language]);
 
   const option = useMemo(() => {
     if (empty) return {};
@@ -62,7 +95,7 @@ export function RunwayProjection({
         top: 0,
         right: 0,
         textStyle: { color: tokens.textSecondary, fontSize: 11 },
-        data: ['Base', 'Conservador', 'Agresivo'],
+        data: [texts.series.base, texts.series.conservador, texts.series.agresivo],
       },
       grid: { top: 32, right: 16, bottom: 32, left: 56, containLabel: true },
       xAxis: {
@@ -81,7 +114,7 @@ export function RunwayProjection({
       },
       series: [
         {
-          name: 'Agresivo',
+          name: texts.series.agresivo,
           type: 'line',
           smooth: true,
           symbol: 'none',
@@ -96,7 +129,7 @@ export function RunwayProjection({
           },
         },
         {
-          name: 'Base',
+          name: texts.series.base,
           type: 'line',
           smooth: true,
           symbol: 'none',
@@ -117,13 +150,13 @@ export function RunwayProjection({
               color: tokens.danger,
               fontFamily: 'var(--font-mono), monospace',
               fontSize: 10,
-              formatter: 'Caja = 0',
+              formatter: texts.cashZero,
             },
             data: [{ yAxis: 0 }],
           },
         },
         {
-          name: 'Conservador',
+          name: texts.series.conservador,
           type: 'line',
           smooth: true,
           symbol: 'none',
@@ -139,16 +172,16 @@ export function RunwayProjection({
         },
       ],
     };
-  }, [months, empty, tokens]);
+  }, [months, empty, tokens, texts]);
 
   return (
     <ChartContainer
-      title={title}
-      subtitle={subtitle}
+      title={title ?? texts.title}
+      subtitle={subtitle ?? texts.subtitle}
       height={height}
       density={density}
       empty={empty}
-      emptyLabel="Sin proyección de runway"
+      emptyLabel={texts.empty}
     >
       <ReactECharts
         echarts={echarts}
@@ -158,7 +191,7 @@ export function RunwayProjection({
         notMerge
         lazyUpdate
         opts={{ renderer: 'canvas' }}
-        aria-label="Runway de caja 36 meses"
+        aria-label={texts.ariaLabel}
         data-testid="chart-runway"
       />
     </ChartContainer>

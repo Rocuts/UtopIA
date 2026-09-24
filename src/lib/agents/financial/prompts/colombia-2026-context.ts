@@ -28,6 +28,13 @@
 //    Decreto 1074/2015 Cap. 13 Tit. 1 Parte 2 Libro 2, adicionado por el
 //    Decreto 957 de 2019 — manufacturero <= 23.563 UVT, servicios
 //    <= 32.988 UVT, comercio <= 44.769 UVT.
+//  - Tarifa general del Art. 240 E.T. = 35% desde el año gravable 2022:
+//    src/data/tax_docs/ley_2155_2021.md, art. 7 ("será del treinta y cinco
+//    por ciento (35%), a partir del año gravable 2022"), recogido como
+//    "Legislación Anterior" en estatuto_tributario_completo.md; la Ley 2277
+//    de 2022 (art. 10) conserva el 35% sin la referencia al año
+//    (prompts-normativa-25). El resumen et_articulo_240_renta_juridica.md
+//    del corpus todavía atribuye el 35% a la Ley 2277 "desde 2023".
 //  - Cadena de modificatorios del DUR 2420/2015 confirmada contra MinCIT
 //    (normatividad vigente) + Diario Oficial: 2496/2015, 2483/2018,
 //    2270/2019, 938/2021, 1670/2021, 1611/2022, 1271/2024 (NIIF 17) y
@@ -89,7 +96,7 @@ Toda tu salida debe ser tecnicamente consistente con el marco vigente en Colombi
 
 ### 3. MARCO TRIBUTARIO 2026
 - **UVT 2026 = \`$52.374\` COP** (Unidad de Valor Tributario ajustada anualmente por la DIAN; usa este valor para conversiones a cifras absolutas).
-- **Art. 240 ET — Tarifa del impuesto sobre la renta personas juridicas: 35%** (vigente desde el ejercicio 2023 por Ley 2277 de 2022).
+- **Art. 240 ET — Tarifa del impuesto sobre la renta personas juridicas: 35%** (desde el año gravable 2022 por el art. 7 de la Ley 2155 de 2021; conservada por el art. 10 de la Ley 2277 de 2022).
 - **Ley 2277 de 2022 — Reforma Tributaria** incorpora, entre otras, estas reglas vigentes:
   - **Sobretasa de 5 puntos porcentuales** para entidades financieras (ciertos rangos de renta liquida), sumada a la tarifa general.
   - **Tasa de Tributacion Depurada (TTD, Art. 240 par. 6 E.T.)**: piso del 15% calculado como impuesto depurado / utilidad depurada (ID/UD); si resulta inferior se liquida un impuesto a adicionar. No es una tarifa sustituta y sin ID/UD verificados no se calcula.
@@ -180,7 +187,7 @@ Your entire output must be technically consistent with the framework in force in
 
 ### 3. 2026 TAX FRAMEWORK
 - **UVT 2026 = \`$52.374\` COP** (Tax Value Unit adjusted annually by DIAN; use this value for absolute conversions).
-- **Art. 240 ET — Corporate income tax rate: 35%** (in force since 2023 under Law 2277 of 2022).
+- **Art. 240 ET — Corporate income tax rate: 35%** (since tax year 2022 under Art. 7 of Law 2155 of 2021; kept by Art. 10 of Law 2277 of 2022).
 - **Law 2277 of 2022 — Tax Reform** incorporates, among others, these rules in force:
   - **5 percentage-point surcharge** for financial institutions (certain taxable income ranges), added to the general rate.
   - **Adjusted Taxation Rate (TTD, Art. 240 proviso 6 ET)**: a 15% floor computed as adjusted tax / adjusted profit (ID/UD); if lower, an additional tax is assessed. It is not a substitute rate and is not computed without verified ID/UD.

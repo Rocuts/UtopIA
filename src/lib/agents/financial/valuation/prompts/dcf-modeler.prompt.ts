@@ -11,6 +11,10 @@
 // valoracion-21: FCF, WACC y g en la misma base (COP nominales); el tope de g
 //   no se justifica con el PIB; la tarifa t contempla los puntos adicionales
 //   del Art. 240 E.T. (par. 2-4, estatuto_tributario_completo.md del corpus).
+// prompts-normativa-25: NIC 36.33(b) es un MÁXIMO de 5 años para proyecciones
+//   basadas en presupuestos (salvo justificación), no un mínimo. El texto de
+//   la NIC 36 no está en src/data/tax_docs (niif_colombia_2026.md sólo la
+//   lista); la cita sigue el hallazgo de la auditoría 2026-09-24.
 // ---------------------------------------------------------------------------
 
 import type { CompanyInfo } from '../../types';
@@ -57,7 +61,7 @@ Parámetros de mercado (TES, UST, diferencial soberano, CRP/EMBI, ERP, inflacion
 
 Marco normativo:
 - NIIF 13 — Medición del Valor Razonable. Jerarquía Niveles 1/2/3; el DCF típicamente es Nivel 3 (datos no observables).
-- NIC 36 — Deterioro del Valor de los Activos. Value-in-use basado en DCF para pruebas de deterioro (mínimo 5 años, §33).
+- NIC 36 — Deterioro del Valor de los Activos. Value-in-use basado en DCF para pruebas de deterioro: NIC 36.33(b) fija un máximo de 5 años para las proyecciones basadas en presupuestos o pronósticos, salvo que se justifique un plazo mayor.
 - Art. 90 E.T. — Valor comercial para efectos fiscales. La DIAN puede rechazar el valor asignado cuando difiere notoriamente (> 15%) del valor comercial; para acciones o cuotas no cotizadas se presume, salvo prueba en contrario, que el precio no puede ser inferior al valor intrínseco incrementado en un 30% (desvirtuable con métodos técnicos como flujos descontados o múltiplos de EBITDA).
 
 Fórmulas (el código las recalcula a partir de tus supuestos y publica el resultado recalculado):
@@ -80,7 +84,7 @@ Construir el modelo DCF: proyección de FCF a 5-10 años (mínimo 3) en años ca
 - WACC con riskFreeBasis declarado y cada componente cuantificado: TES bruto y diferencial soberano (base A) o inflaciones COP/USD (base B), CRP, ERP madura, Beta, size premium, Ke, Kd, t, E/V, D/V.
 - marketDataProvenance indica fuente y fecha de corte de cada parámetro de mercado.
 - g perpetuo ≤ 4% nominal y estrictamente menor que WACC; terminalValue.rationale declara g en COP nominales con su descomposición (crecimiento real + inflación de largo plazo), sin presentarlo como una cifra del PIB.
-- FCF, WACC y g en la misma base (COP nominales).
+- FCF, WACC y g en la misma base (COP nominales), declarada en cashFlowBasis.
 - Si VP(TV) supera el 75% del EV se declara la dependencia del TV como limitación.
 - Deuda financiera y efectivo reportados por separado cuando están en los datos; Equity = EV − Deuda Neta.
 </success_criteria>
@@ -90,6 +94,7 @@ Construir el modelo DCF: proyección de FCF a 5-10 años (mínimo 3) en años ca
 - NEVER sumes CRP sobre el TES completo: con riskFreeBasis = TES_COP_ex_default y CRP > 0 declara sovereignYieldPercent y defaultSpreadPercent.
 - MUST declarar la tarifa impositiva utilizada y justificar cualquier desviación del 35% (Zona Franca, ZOMAC, SIMPLE o puntos adicionales del Art. 240 par. 2-4 E.T. — citar artículo aplicable).
 - If la entidad está en un supuesto de puntos adicionales que vencen dentro del horizonte (par. 2 hasta 2027, par. 4 hasta 2026), then taxRatePercent es la tarifa que regirá en perpetuidad y los años con puntos adicionales se declaran en keyAssumptions y limitations; otherwise taxRatePercent incluye los puntos vigentes (par. 3: según el percentil de precios declarado).
+- If el propósito es una prueba de deterioro (valor en uso, NIC 36), then las proyecciones basadas en presupuestos cubren hasta 5 años y un horizonte mayor se justifica en keyAssumptions (NIC 36.33(b)); otherwise el horizonte de 5-10 años se justifica por la madurez del negocio.
 - If un supuesto de crecimiento (PIB, sector, ingresos) llega en términos reales, then conviértelo a nominal con la inflación de largo plazo declarada en marketDataProvenance antes de usarlo en las filas proyectadas o en g; otherwise úsalo como nominal y dilo en keyAssumptions.
 - If un parámetro de <macro_vigente> es N/D y el usuario no lo suministra, then úsalo sólo como supuesto explícito (valor, fuente y fecha de referencia) y regístralo en limitations; otherwise usa el valor de <macro_vigente> citando su fecha y fuente.
 - If solo existe un periodo histórico, then declara como supuesto crítico que la proyección se construye con un único año de ancla y usa supuestos conservadores; otherwise calcula tasas YoY observadas y úsalas como input principal.

@@ -22,10 +22,12 @@ export const RUNWAY_ESCENARIOS = {
   conservador: {
     factorIngresos: 0.85,
     rotulo: 'Supuesto de sensibilidad: ingresos −15 %, egresos sin cambio (no es un pronóstico)',
+    rotuloEn: 'Sensitivity assumption: revenue −15%, expenses unchanged (not a forecast)',
   },
   agresivo: {
     factorIngresos: 1.1,
     rotulo: 'Supuesto de sensibilidad: ingresos +10 %, egresos sin cambio (no es un pronóstico)',
+    rotuloEn: 'Sensitivity assumption: revenue +10%, expenses unchanged (not a forecast)',
   },
 } as const;
 

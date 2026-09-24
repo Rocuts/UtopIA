@@ -29,6 +29,12 @@ export function buildRepairSystemPrompt(
   ctx: RepairContext,
   preprocessed: PreprocessedBalance | null,
   adjustments: Adjustment[] = [],
+  /**
+   * Motivos por los que la lectura común del balance (la de /upload y /niif)
+   * rechazó el texto, p. ej. hojas del XLSX con saldos incompatibles. Son
+   * del preprocesador y se citan tal cual.
+   */
+  ingestReasons: string[] = [],
 ): string {
   const lang = ctx.language;
   const isEs = lang === 'es';
@@ -71,9 +77,24 @@ export function buildRepairSystemPrompt(
   // Resumen denso del preprocesado (cuando esta disponible) o fallback con
   // el contenido crudo del archivo cuando el parser CSV no aplico (PDF/OCR).
   // ---------------------------------------------------------------------------
-  const dataBlock = preprocessed
-    ? buildPreprocessedBlock(preprocessed, isEs)
-    : buildRawTextFallback(ctx.rawCsv, isEs);
+  const ingestBlock =
+    ingestReasons.length > 0
+      ? [
+          isEs ? '## Motivos de la lectura del balance' : '## Balance reading reasons',
+          '',
+          isEs
+            ? 'La lectura del balance (la misma que usa el informe) rechazo el archivo por estos motivos. Explicaselos al usuario tal cual; ningun ajuste de saldos los resuelve: debe corregir y volver a cargar el archivo.'
+            : 'The balance reading (the same one the report uses) rejected the file for these reasons. Explain them to the user as stated; no balance adjustment resolves them: the file must be corrected and uploaded again.',
+          '',
+          ...ingestReasons.map((r) => `- ${r}`),
+          '',
+        ].join('\n')
+      : '';
+  const dataBlock =
+    ingestBlock +
+    (preprocessed
+      ? buildPreprocessedBlock(preprocessed, isEs)
+      : buildRawTextFallback(ctx.rawCsv, isEs));
 
   // ---------------------------------------------------------------------------
   // Tools disponibles
@@ -100,7 +121,7 @@ Tienes cinco herramientas. Usalas con criterio:
    - Solo invoca esta tool cuando el usuario haya dicho explicitamente que quiere aplicar un ajuste especifico que ya fue propuesto.
    - El \`id\` debe coincidir con uno de la lista de ajustes que aparece arriba en el contexto. Si no estas seguro, primero llama propose_adjustment.
 
-5. **recheck_validation({})** — Re-corre la validacion aritmetica del balance con los ajustes ya APLICADOS (status === "applied"). Devuelve totales actualizados (activo, pasivo, patrimonio, utilidad) + estado de la ecuacion patrimonial. USALA despues de aplicar uno o varios ajustes para confirmar al usuario que la ecuacion ya cuadra y que puede regenerar el reporte.`
+5. **recheck_validation({})** — Re-corre la validacion aritmetica del balance con los ajustes ya APLICADOS (status === "applied"). Devuelve totales actualizados (activo, pasivo, patrimonio, utilidad) + estado de la ecuacion patrimonial + los motivos de lectura que ningun ajuste resuelve (por ejemplo, una unidad "en miles" sin confirmar). USALA despues de aplicar uno o varios ajustes; solo si devuelve \`ok: true\` puedes decirle al usuario que puede regenerar el reporte.`
     : `## Available tools
 
 You have five tools. Use them with judgment:
@@ -122,7 +143,7 @@ You have five tools. Use them with judgment:
    - Only call when the user has explicitly stated they want to apply a specific previously-proposed adjustment.
    - The \`id\` must match one in the adjustments list above. If unsure, call propose_adjustment first.
 
-5. **recheck_validation({})** — Re-runs arithmetic validation with already-APPLIED adjustments (status === "applied"). Returns updated totals (assets, liabilities, equity, net income) + accounting equation status. USE IT after applying one or more adjustments to confirm the equation balances and the user can regenerate the report.`;
+5. **recheck_validation({})** — Re-runs arithmetic validation with already-APPLIED adjustments (status === "applied"). Returns updated totals (assets, liabilities, equity, net income) + accounting equation status + the reading reasons no adjustment resolves (e.g. an unconfirmed "in thousands" unit). USE IT after applying one or more adjustments; only when it returns \`ok: true\` may you tell the user they can regenerate the report.`;
 
   // ---------------------------------------------------------------------------
   // Ledger de ajustes (Phase 2)
