@@ -32,8 +32,10 @@ export function runT3(
     language,
     vars: {
       empresario_nombre: ctx.empresarioNombre ?? 'empresario',
+      // El '%' viaja en la variable: T3 puede dispararse sólo por inventario
+      // con margen sin dato, y la plantilla imprimía "—%".
       margen_bruto_pct:
-        metrics.margenBruto !== null ? (metrics.margenBruto * 100).toFixed(0) : '—',
+        metrics.margenBruto !== null ? `${(metrics.margenBruto * 100).toFixed(0)}%` : sinDato,
       // Sin dato es N/D, nunca "0 días" (ratios-kpis-26): el KPI del
       // preprocesador (`controlTotals.diasInventario`) puede ser null con
       // motivo (costos < 1 %, periodo sin meses) y T3 puede dispararse sólo

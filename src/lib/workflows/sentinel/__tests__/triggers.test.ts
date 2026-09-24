@@ -117,6 +117,27 @@ describe('T3 — Value / Anomaly', () => {
     const out = runT3({ ...baseMetrics, diasInventario: 400.6 }, ctx);
     expect(out.insight?.hallazgo).toContain('son 401');
   });
+  // Integración fase 2: la plantilla escribía '{{margen_bruto_pct}}%' literal.
+  // Si T3 se dispara sólo por inventario con margen N/D, el correo decía
+  // "margen bruto reportado es —%".
+  it('margen bruto N/D se imprime N/D (N/A), sin "%" suelto', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: null, diasInventario: 400 }, ctx);
+    expect(out.fired).toBe(true);
+    expect(out.insight?.hallazgo).toContain('margen bruto reportado es N/D y');
+    expect(out.insight?.hallazgo).not.toMatch(/—%|N\/D%/);
+    const en = runT3(
+      { ...baseMetrics, margenBruto: null, diasInventario: 400 },
+      { ...ctx, language: 'en' },
+    );
+    expect(en.insight?.hallazgo).toContain('gross margin is N/A with');
+    expect(en.insight?.hallazgo).not.toMatch(/—%|N\/A%/);
+  });
+  it('con margen el porcentaje conserva el "%"', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95 }, ctx);
+    expect(out.insight?.hallazgo).toContain('margen bruto reportado es 95%');
+    const en = runT3({ ...baseMetrics, margenBruto: 0.95 }, { ...ctx, language: 'en' });
+    expect(en.insight?.hallazgo).toContain('gross margin is 95%');
+  });
 });
 
 // ─── T4 ─────────────────────────────────────────────────────────────────────
