@@ -620,9 +620,11 @@ export function statementDateLabel(kind: 'position' | 'period', ctx: StatementDa
 
 /**
  * Leyenda cuando el informe declara comparativo pero el estado sólo trae el
- * periodo actual (el contrato NIIF no tiene columnas comparativas para EFE ni
- * filas del ECP del año anterior). NIIF para las PYMES 3.14 exige comparativos
- * para todos los importes; no se presenta en silencio (reportes-export-13).
+ * periodo actual. NIIF para las PYMES 3.14 exige comparativos para todos los
+ * importes; no se presenta en silencio (reportes-export-13). Desde el
+ * contrato con comparativos del EFE y del ECP (auditoría 2026-09-24,
+ * pendiente #3) el motivo lo redacta el código (`comparativeNote`); esta
+ * leyenda genérica queda para los informes serializados antes de él.
  */
 export function comparativeNotPresentedLegend(comparativePeriod: string | null): string | null {
   if (!comparativePeriod) return null;
@@ -631,6 +633,76 @@ export function comparativeNotPresentedLegend(comparativePeriod: string | null):
     `no contiene las cifras del periodo anterior para este estado (NIIF para las PYMES 3.14). ` +
     `No debe leerse como un conjunto comparativo completo.`
   );
+}
+
+/** Forma mínima del EFE con su columna comparativa. */
+interface CashFlowComparativeLike {
+  sections: ReadonlyArray<{ netFlowComparative?: string | null }>;
+  netChangeComparative?: string | null;
+  cashOpeningComparative?: string | null;
+  cashClosingComparative?: string | null;
+  comparativeNote?: string | null;
+}
+
+/**
+ * El EFE trae su columna comparativa completa (subtotales, variación y
+ * efectivo al inicio y al final): sólo entonces se imprime la segunda columna.
+ */
+export function cashFlowHasComparativeColumn(cf: CashFlowComparativeLike): boolean {
+  const cells = [
+    cf.netChangeComparative,
+    cf.cashOpeningComparative,
+    cf.cashClosingComparative,
+    ...cf.sections.map((s) => s.netFlowComparative),
+  ];
+  return cells.every((v) => v !== null && v !== undefined);
+}
+
+/**
+ * Leyenda del EFE o del ECP cuando el informe declara comparativo y ese estado
+ * no lo presenta: la nota determinista del informe (impracticabilidad, NIIF
+ * para las PYMES 3.14 / 10.21) o, en informes anteriores a ella, la genérica.
+ * `null` cuando no hay comparativo o el estado sí lo presenta.
+ */
+export function comparativeStatementLegend(
+  statement: 'cashFlow' | 'equity',
+  json: {
+    company: { comparativePeriod: string | null };
+    cashFlow: CashFlowComparativeLike;
+    equityChanges: { comparativeRows?: readonly unknown[] | null; comparativeNote?: string | null };
+  },
+): string | null {
+  const cp = json.company.comparativePeriod;
+  if (!cp) return null;
+  if (statement === 'cashFlow') {
+    if (cashFlowHasComparativeColumn(json.cashFlow)) return null;
+    return json.cashFlow.comparativeNote?.trim() || comparativeNotPresentedLegend(cp);
+  }
+  const rows = json.equityChanges.comparativeRows;
+  if (rows && rows.length > 0) return null;
+  return json.equityChanges.comparativeNote?.trim() || comparativeNotPresentedLegend(cp);
+}
+
+/**
+ * Rótulo legible del método del EFE (reportes-export-21): el contrato guarda el
+ * literal `'indirect'` y el Excel lo imprimía crudo al pie de la hoja. Con el
+ * método indirecto degenerado (spec v8.1 §5 Slide 08) se añade la limitación.
+ */
+export function cashFlowMethodLabel(
+  methodNote: string,
+  degeneracyFlag: string | null | undefined,
+  language: 'es' | 'en' = 'es',
+): string {
+  const base =
+    methodNote === 'indirect'
+      ? language === 'en'
+        ? 'Indirect method (IAS 7 ¶18(b) / IFRS for SMEs Section 7)'
+        : 'Método indirecto (NIC 7 ¶18(b) / NIIF para las PYMES Secc. 7)'
+      : methodNote;
+  if (degeneracyFlag !== 'indirect_method_unreliable') return base;
+  return language === 'en'
+    ? `${base} — limited informative value: most working-capital lines are zero (no auxiliary detail).`
+    : `${base} — valor informativo limitado: la mayoría de los renglones de capital de trabajo están en cero (sin auxiliares).`;
 }
 
 export type StatementKind = 'balance' | 'income' | 'cashFlow' | 'equity';

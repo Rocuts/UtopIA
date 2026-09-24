@@ -24,7 +24,9 @@ import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financia
 import {
   CURRENCY_NOTE,
   NARRATIVE_DISCLAIMER,
-  comparativeNotPresentedLegend,
+  cashFlowHasComparativeColumn,
+  cashFlowMethodLabel,
+  comparativeStatementLegend,
   narrativeDisclaimer,
   incomeStatementPresentationRows,
   normalizeNiifStatementLabels,
@@ -375,48 +377,79 @@ function addCashFlowAndEquitySheets(
   language: 'es' | 'en' = 'es',
 ): void {
   const json = presentableJson(report, layout)!;
-  const periodLine = `${statementDate('period', report, layout)} · ${CURRENCY_NOTE}`;
-  // El contrato no trae el comparativo del EFE ni filas del ECP del año
-  // anterior: se declara en el propio estado (reportes-export-13).
-  const legend = comparativeNotPresentedLegend(json.company.comparativePeriod);
+  const fp = json.company.fiscalPeriod;
+  const cp = json.company.comparativePeriod;
+  // Columna comparativa del EFE y ECP del periodo comparativo (auditoría
+  // 2026-09-24, pendiente #3): los calcula el código desde el corte anterior
+  // al comparativo. Sin ellos, la nota determinista de impracticabilidad
+  // (NIIF para las PYMES 3.14 / 10.21) se declara en el propio estado
+  // (reportes-export-13). Orden de columnas: periodo actual | comparativo,
+  // igual que el PDF.
+  const cf = json.cashFlow;
+  const cfComparative = cp !== null && cashFlowHasComparativeColumn(cf);
+  const comparativeRows = cp !== null ? (json.equityChanges.comparativeRows ?? []) : [];
+  const ecComparative = comparativeRows.length > 0;
+  const periodLine = (shown: boolean) =>
+    `${statementDate('period', report, layout, shown)} · ${CURRENCY_NOTE}`;
+  const legendFont = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
+
   const cash = wb.addWorksheet('Flujos de Efectivo');
-  cash.columns = [{ width: 58 }, { width: 24 }];
-  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', json.company.fiscalPeriod]);
-  cash.addRow([json.company.name, 'COP']);
-  cash.addRow([periodLine]).font = { name: FONT_MAIN, size: 9, italic: true };
-  if (legend) cash.addRow([legend]).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
-  const addCash = (label: string, cents: string, bold = false) => {
-    const row = cash.addRow([label, centsToPesos(cents)]);
+  cash.columns = [{ width: 58 }, { width: 24 }, ...(cfComparative ? [{ width: 24 }] : [])];
+  cash.addRow(['ESTADO DE FLUJOS DE EFECTIVO', fp, ...(cfComparative ? [cp] : [])]);
+  cash.addRow([json.company.name, 'COP', ...(cfComparative ? ['COP'] : [])]);
+  cash.addRow([periodLine(cfComparative)]).font = { name: FONT_MAIN, size: 9, italic: true };
+  const cashLegend = comparativeStatementLegend('cashFlow', json);
+  if (cashLegend) cash.addRow([cashLegend]).font = legendFont;
+  const lastCashCol = cfComparative ? 3 : 2;
+  const addCash = (label: string, cents: string, comparative: string | null | undefined, bold = false) => {
+    const values: Array<string | number> = [label, centsToPesos(cents)];
+    if (cfComparative) values.push(comparative !== null && comparative !== undefined ? centsToPesos(comparative) : 'n/c');
+    const row = cash.addRow(values);
     row.font = { name: FONT_MAIN, bold };
-    row.getCell(2).numFmt = NUM_FMT_COP;
+    for (let col = 2; col <= lastCashCol; col++) {
+      if (typeof row.getCell(col).value === 'number') row.getCell(col).numFmt = NUM_FMT_COP;
+    }
   };
-  addCash('Efectivo al inicio', json.cashFlow.cashOpening, true);
+  addCash('Efectivo al inicio', cf.cashOpening, cf.cashOpeningComparative, true);
   const sectionNames = { operating: 'Operación', investing: 'Inversión', financing: 'Financiación' };
-  for (const section of json.cashFlow.sections) {
+  for (const section of cf.sections) {
     cash.addRow([sectionNames[section.section]]).font = { name: FONT_MAIN, bold: true };
-    for (const line of section.lines) addCash(line.label, line.amountPrimary);
-    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, true);
+    for (const line of section.lines) addCash(line.label, line.amountPrimary, line.amountComparative);
+    addCash(`Flujo neto de ${sectionNames[section.section]}`, section.netFlow, section.netFlowComparative, true);
   }
-  addCash('Variación neta del efectivo', json.cashFlow.netChange, true);
-  addCash('Efectivo al cierre', json.cashFlow.cashClosing, true);
-  cash.addRow([json.cashFlow.methodNote]);
+  addCash('Variación neta del efectivo', cf.netChange, cf.netChangeComparative, true);
+  addCash('Efectivo al cierre', cf.cashClosing, cf.cashClosingComparative, true);
+  cash.addRow([cashFlowMethodLabel(cf.methodNote, cf.degeneracyFlag, language)]).font = {
+    name: FONT_MAIN, size: 9, italic: true,
+  };
 
   const equity = wb.addWorksheet('Cambios en Patrimonio');
   equity.columns = [{ width: 46 }, ...Array.from({ length: 8 }, () => ({ width: 23 }))];
-  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', json.company.fiscalPeriod]);
+  equity.addRow(['ESTADO DE CAMBIOS EN EL PATRIMONIO', fp, ...(ecComparative ? [cp] : [])]);
   equity.addRow([json.company.name, 'COP']);
-  equity.addRow([periodLine]).font = { name: FONT_MAIN, size: 9, italic: true };
-  if (legend) equity.addRow([legend]).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
+  equity.addRow([periodLine(ecComparative)]).font = { name: FONT_MAIN, size: 9, italic: true };
+  const equityLegend = comparativeStatementLegend('equity', json);
+  if (equityLegend) equity.addRow([equityLegend]).font = legendFont;
   equity.addRow(['Movimiento', 'Capital social', 'Prima colocación', 'Reserva legal',
     'Otras reservas', 'Resultados acumulados', 'Resultado ejercicio', 'ORI', 'Total'])
     .font = { name: FONT_MAIN, bold: true };
   const keys = ['capitalSocial', 'primaColocacion', 'reservaLegal', 'otrasReservas',
     'resultadosAcumulados', 'resultadoEjercicio', 'ori', 'total'] as const;
-  for (const movement of json.equityChanges.rows) {
-    const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
-    row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
-    for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+  const addMovements = (rows: NiifReportJson['equityChanges']['rows']) => {
+    for (const movement of rows) {
+      const row = equity.addRow([movement.label, ...keys.map(key => centsToPesos(movement[key]))]);
+      row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
+      for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
+    }
+  };
+  if (ecComparative) {
+    // Los dos periodos apilados en orden cronológico (NIIF para las PYMES 6.3):
+    // el cierre del comparativo es la apertura del periodo actual.
+    equity.addRow([`Periodo ${cp}`]).font = { name: FONT_MAIN, bold: true, color: { argb: COLORS.darkNavy } };
+    addMovements(comparativeRows);
+    equity.addRow([`Periodo ${fp}`]).font = { name: FONT_MAIN, bold: true, color: { argb: COLORS.darkNavy } };
   }
+  addMovements(json.equityChanges.rows);
   // e2e-niif-10: las notas en prosa del ECP las redacta el LLM y sus cifras no
   // se anclan; se rotulan como narrativa no auditada (mismo aviso del PDF).
   const equityNotes = json.equityChanges.notes.map(formatStatementNote).filter(Boolean);
@@ -1700,11 +1733,14 @@ function statementDate(
   kind: 'position' | 'period',
   report: FinancialReport,
   layout: PeriodLayout | null,
+  /** El estado imprime el comparativo; si no, el rótulo no lo nombra. */
+  comparativeShown = true,
 ): string {
   const json = report.niifAnalysis?.json;
   const fiscalPeriod = json?.company.fiscalPeriod ?? report.company.fiscalPeriod;
-  const comparativePeriod =
-    json?.company.comparativePeriod ?? layout?.comparative?.period ?? report.company.comparativePeriod ?? null;
+  const comparativePeriod = comparativeShown
+    ? json?.company.comparativePeriod ?? layout?.comparative?.period ?? report.company.comparativePeriod ?? null
+    : null;
   const tipos = resolvePeriodoTipos(
     fiscalPeriod,
     comparativePeriod,

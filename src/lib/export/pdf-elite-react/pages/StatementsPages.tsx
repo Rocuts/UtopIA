@@ -674,6 +674,39 @@ interface FullPageConfig {
   sectionHeaderTitle: string;
   caption: string;
   pills: Array<{ label: string }>;
+  /**
+   * Celda que resume cada total en la banda inferior: `period` = la del
+   * periodo actual (`cells[0]`, EFE con columna comparativa); `rowTotal` = la
+   * última (columna TOTAL del ECP matricial).
+   */
+  bandCell: 'period' | 'rowTotal';
+}
+
+/**
+ * Totales de la banda inferior: los del periodo actual. En el ECP con
+ * comparativo los dos periodos van apilados bajo encabezados sin cifras; la
+ * banda toma sólo los totales del último bloque (el periodo actual), y en el
+ * EFE la cifra del periodo actual, no la columna comparativa (la misma regla
+ * del panel de los estados divididos, reportes-export-04).
+ */
+export function summaryBandRows(
+  table: ParsedTable,
+  bandCell: FullPageConfig['bandCell'],
+): Array<{ account: string; value: string }> {
+  const isPlainHeader = (r: ParsedTableRow) =>
+    !r.emphasis && (r.cells.length === 0 || r.cells.every((c) => !c || c === '-'));
+  let lastHeader = -1;
+  table.rows.forEach((r, i) => {
+    if (isPlainHeader(r)) lastHeader = i;
+  });
+  return table.rows
+    .slice(lastHeader + 1)
+    .filter((r) => r.emphasis === 'total')
+    .slice(0, 3)
+    .map((r) => ({
+      account: r.account,
+      value: (bandCell === 'period' ? r.cells[0] : r.cells[r.cells.length - 1]) || '—',
+    }));
 }
 
 function FullStatementPage({
@@ -685,8 +718,8 @@ function FullStatementPage({
   cfg: FullPageConfig;
   pageNum: number;
 }) {
-  // Build a forest summary band from total rows
-  const totalRows = table.rows.filter(r => r.emphasis === 'total').slice(0, 3);
+  // Build a forest summary band from the current-period total rows
+  const totalRows = summaryBandRows(table, cfg.bandCell);
 
   // Use the full landscape content width (≈746pt) instead of the split-layout
   // LEFT_CONTENT_W (≈441pt). The Equity statement has 8 columns and was
@@ -774,7 +807,7 @@ function FullStatementPage({
                   color: SAND_400,
                 }}
               >
-                {tr.cells[tr.cells.length - 1] || '—'}
+                {tr.value}
               </Text>
             </View>
           ))}
@@ -857,6 +890,7 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         sectionHeaderTitle: 'ESTADO DE FLUJOS DE EFECTIVO',
         caption: 'Entradas y salidas de efectivo por actividades de operación, inversión y financiación',
         pills: pillsFor('cashFlow'),
+        bandCell: 'period',
       }}
     />,
 
@@ -870,6 +904,7 @@ export function StatementsPages({ doc, startPage = 1 }: Props): React.ReactEleme
         sectionHeaderTitle: 'CAMBIOS EN EL PATRIMONIO',
         caption: 'Variación en el patrimonio neto',
         pills: pillsFor('equity'),
+        bandCell: 'rowTotal',
       }}
     />,
   ];

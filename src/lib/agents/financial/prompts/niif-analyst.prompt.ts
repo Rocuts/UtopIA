@@ -547,7 +547,7 @@ function renderReportModeBlock(ctx: SharedPromptContext): string {
 function renderComparativeModeBlock(ctx: SharedPromptContext): string {
   if (ctx.isComparative) {
     return `## MODO COMPARATIVO (${ctx.periodsCount} periodos detectados: ${ctx.periodsListed})
-Los datos vienen etiquetados con \`[period=YYYY]\` por bloque. Cada StatementLine debe llenar amountPrimary (${ctx.primaryPeriod}) y amountComparative (${ctx.comparativePeriod}). El ECP arranca con kind=opening_balance (cifras de \`preprocessed.comparative.equityBreakdown\`) → movimientos del periodo → kind=closing_balance (cifras de \`preprocessed.primary.equityBreakdown\`).`;
+Los datos vienen etiquetados con \`[period=YYYY]\` por bloque. Cada StatementLine del Balance y del P&L llena amountPrimary (${ctx.primaryPeriod}) y amountComparative (${ctx.comparativePeriod}). En el EFE amountComparative = null en todos los renglones: la columna comparativa del EFE y el ECP del periodo ${ctx.comparativePeriod} los calcula el código desde el balance de prueba o los declara impracticables con nota propia (NIIF para las PYMES 3.14 / 10.21). El ECP arranca con kind=opening_balance (cifras de \`preprocessed.comparative.equityBreakdown\`) → movimientos del periodo → kind=closing_balance (cifras de \`preprocessed.primary.equityBreakdown\`).`;
   }
   if (ctx.periodsCount === 1) {
     return `## MODO SINGLE-PERIOD (${ctx.primaryPeriod})
@@ -568,7 +568,7 @@ El preprocesador determinó que el comparativo del periodo ${ctx.comparativePeri
   }
   if (ctx.comparativosImpracticables === false) {
     return `## Comparativo disponible
-El Opening Balance del periodo ${ctx.comparativePeriod ?? '(anterior)'} está disponible — usar como columna comparativa en TODOS los estados.`;
+El Opening Balance del periodo ${ctx.comparativePeriod ?? '(anterior)'} está disponible — usar como columna comparativa del Balance y del P&L (la del EFE y el ECP del periodo comparativo la adjunta el código).`;
   }
   return '';
 }
@@ -1224,7 +1224,7 @@ ${ctx.niifDisclosures}
   (iii) cashOpening + netChange == cashClosing.
   Si el bloque "EFE VINCULANTE" está presente, las tres se cumplen copiándolo tal cual: sus renglones ya suman sus subtotales y sus subtotales ya suman la variación observada del PUC 11.
 - Los renglones y los subtotales del EFE se copian del bloque "EFE VINCULANTE" del \`<context>\` (cifras en MoneyCop ya calculadas). El modelo elige la etiqueta NIIF y el orden de presentación; NO elige los montos, no agrega renglones que no estén en el bloque, y no omite ninguno.
-${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}) donde aplique; cuando un saldo comparativo no exista, amountComparative = null.` : '- isComparative=false: amountComparative = null en TODAS las líneas.'}
+${ctx.isComparative ? `- El EFE y el ECP que emites son los del periodo ${ctx.primaryPeriod}: amountComparative = null en TODOS los renglones de cashFlow.sections y equityChanges.rows describe sólo ese periodo. La columna comparativa del EFE y el ECP del periodo ${ctx.comparativePeriod} los adjunta el código desde el balance de prueba (NIIF para las PYMES 3.14), o su nota de impracticabilidad (3.14 / 10.21) cuando el balance no trae el corte anterior al comparativo; methodNote y equityChanges.notes no los reemplazan ni los describen.` : '- isComparative=false: amountComparative = null en TODAS las líneas.'}
 - Cuando reportMode='LINEA_BASE': ni methodNote ni equityChanges.notes usan verbos comparativos (mejoró/creció/aumentó/se redujo/evolucionó).
 - If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (por ausencia de auxiliares de capital de trabajo) then \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y methodNote incluye literal de limitación al alcance.
 - Corrección v2.4: cashFlow.sections[].lines (en CUALQUIER sección, especialmente financing) NUNCA contiene ítems cuyo label encaje en las frases prohibidas v2.4 ("Distribución de utilidades de periodos anteriores", "Pagos a propietarios asociados con utilidades", "Cancelación resultado acumulado", "Traslado utilidad ejercicio a 3605"). El validator E10 rechaza el reporte si las detecta. El traslado del resultado anterior (3605 → 33/37/31) es un movimiento interno del patrimonio: no genera renglón en ninguna sección.
@@ -1242,7 +1242,7 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
 - MUST: $0 huérfanos en EFE/ECP (§1.2 spec v8.1). If una línea del EFE o ECP tiene \`amountPrimary="0"\` Y (\`amountComparative="0"\` O \`null\`) Y NO existe nota explicativa, OMITIR la línea. Else if el cero refleja un hecho material (ej. "Sin distribución de dividendos por decisión de asamblea") MANTENER + nota citando norma.
 
-- MUST: si reportMode != 'LINEA_BASE' Y \`comparativosImpracticables\` != true Y el bloque \`<previously_computed>\` (anchors Pass-1) expone cifras comparativas para los rubros relevantes (totalAssetsComparative, totalEquityComparative, netIncomeComparative, etc.), \`amountComparative\` en líneas del EFE y filas del ECP DEBE reflejar esa cifra (incluso si es "0"). \`amountComparative=null\` EXCLUSIVAMENTE cuando reportMode='LINEA_BASE' o la cuenta no existe en preprocessed.comparative. NUNCA null-ear silenciosamente.
+- NEVER escribir cifras del periodo comparativo en el EFE ni filas del ECP de ese periodo: \`amountComparative=null\` en todos los renglones de cashFlow.sections. Esas cifras son una proyección del balance de prueba que calcula el código (NIIF para las PYMES 3.14); una cifra comparativa del modelo en el EFE se descarta.
 
 - MUST: TODA política contable elegida, TODA presentación lleva cita normativa entre paréntesis (§1.4 spec v8.1: NIC 7, párrafo X / NIIF para PYMES, Sección 7.Y / NIC 1, párrafo Z). Sin cita, sin afirmación.
 
