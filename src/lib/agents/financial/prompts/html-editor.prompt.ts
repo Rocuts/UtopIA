@@ -35,6 +35,9 @@ import { resolve } from 'node:path';
 import { buildResilienceSection0 } from './resilience-section0';
 import { applyKpiAnchors, strategyAnchorSources } from '../validators/strategy-anchors';
 import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
+import type { NiifReportJson } from '../contracts/niif-report';
+import { cashFlowHasComparativeColumn, comparativeStatementLegend } from '@/lib/export/statement-presentation';
 
 /**
  * Memoización proceso-local del spec verbatim. Una sola I/O síncrona por
@@ -113,6 +116,95 @@ ${rows}
 </cifras_vinculantes>`;
 }
 
+/** Cifra de un MoneyCop en pesos COP, en valor absoluto y con la marca de signo del bloque vinculante. */
+function comparativeFigure(label: string, cents: string | null | undefined): string | null {
+  if (cents === null || cents === undefined) return null;
+  let value: bigint;
+  try {
+    value = parseMoneyCop(cents);
+  } catch {
+    return null;
+  }
+  const negative = value < BigInt(0);
+  return `${label}: ${formatCopFromCents(negative ? -value : value, true)}${negative ? '  (valor negativo — preséntalo entre paréntesis)' : ''}`;
+}
+
+const CASH_FLOW_SECTION_LABELS: Record<string, string> = {
+  operating: 'Flujo neto de actividades de operación',
+  investing: 'Flujo neto de actividades de inversión',
+  financing: 'Flujo neto de actividades de financiación',
+};
+
+const EQUITY_COLUMN_LABELS: Array<[keyof NiifReportJson['equityChanges']['rows'][number], string]> = [
+  ['capitalSocial', 'capital'],
+  ['primaColocacion', 'prima en colocación'],
+  ['reservaLegal', 'reserva legal'],
+  ['otrasReservas', 'otras reservas'],
+  ['resultadosAcumulados', 'resultados acumulados'],
+  ['resultadoEjercicio', 'resultado del ejercicio'],
+  ['ori', 'ORI'],
+  ['total', 'total'],
+];
+
+/**
+ * Comparativos del EFE y del ECP (pendiente #3; integración I2). Los calcula
+ * el código desde el corte anterior al comparativo o los deja sin presentar
+ * con una nota determinista (`cashFlow.comparativeNote`,
+ * `equityChanges.comparativeNote`). El Editor Jefe los COPIA: las cifras ya
+ * vienen en pesos y el validador (`reconcileBindingFigures`) bloquea una cifra
+ * comparativa del EFE/ECP que no esté en el JSON.
+ */
+function buildComparativeStatementsBlock(niif: NiifReportJson | null | undefined): string {
+  const cp = niif?.company?.comparativePeriod ?? null;
+  if (!niif || !cp || !niif.cashFlow || !niif.equityChanges) return '';
+  const lines: string[] = [];
+  const cf = niif.cashFlow;
+  if (cashFlowHasComparativeColumn(cf)) {
+    lines.push(`EFE ${cp} (segunda columna del EFE, después de la del periodo actual):`);
+    for (const section of cf.sections) {
+      for (const line of section.lines) {
+        const f = comparativeFigure(`- ${line.label} ${cp}`, line.amountComparative);
+        if (f) lines.push(f);
+      }
+      const subtotal = comparativeFigure(
+        `- ${CASH_FLOW_SECTION_LABELS[section.section] ?? section.section} ${cp}`,
+        section.netFlowComparative,
+      );
+      if (subtotal) lines.push(subtotal);
+    }
+    for (const f of [
+      comparativeFigure(`- Aumento (disminución) neto en efectivo ${cp}`, cf.netChangeComparative),
+      comparativeFigure(`- Efectivo al inicio del período ${cp}`, cf.cashOpeningComparative),
+      comparativeFigure(`- Efectivo al final del período ${cp}`, cf.cashClosingComparative),
+    ]) {
+      if (f) lines.push(f);
+    }
+  } else {
+    const note = comparativeStatementLegend('cashFlow', niif);
+    lines.push(`EFE ${cp}: no se presenta. Nota para copiar literal bajo el EFE:`, note ?? '');
+  }
+  lines.push('');
+  const rows = niif.equityChanges.comparativeRows ?? null;
+  if (rows && rows.length > 0) {
+    lines.push(`ECP ${cp} (filas del periodo ${cp}, antes de las del periodo actual):`);
+    for (const row of rows) {
+      const cells = EQUITY_COLUMN_LABELS.map(([key, label]) => {
+        const f = comparativeFigure(label, row[key] as string);
+        return f ? f.replace(': ', ' ').replace('  (valor negativo — preséntalo entre paréntesis)', ' (negativo)') : null;
+      }).filter((c): c is string => c !== null);
+      lines.push(`- ${row.label}: ${cells.join(' · ')}`);
+    }
+  } else {
+    const note = comparativeStatementLegend('equity', niif);
+    lines.push(`ECP ${cp}: no se presenta. Nota para copiar literal bajo el ECP:`, note ?? '');
+  }
+  return `<comparativos_efe_ecp>
+Comparativos del EFE y del ECP calculados por el código desde el balance de prueba, o la nota de comparativo no presentado. Las cifras ya están en pesos: se copian carácter por carácter.
+
+${lines.join('\n')}
+</comparativos_efe_ecp>`;
+}
+
 /**
  * KPIs de la Parte II tal como deben imprimirse (pendiente #2 de la auditoría
  * integral 2026-09-24): un KPI sin ancla determinista viaja como "ND" con su
@@ -141,6 +233,8 @@ export function buildHtmlEditorUserContent(input: HtmlEditorInput, hechosEmpresa
     ...collectActaBindingFigures(input.governanceReport),
   ]);
 
+  const comparativeStatements = buildComparativeStatementsBlock(input.niifReport);
+
   return `<task>Genera el HTML autocontenido v10.1 de 15 páginas A4 portrait según la plantilla maestra del system prompt (§13). Reemplaza los placeholders {{...}} con los valores del payload JSON. Estética: Berkshire Hathaway / Financial Times / Bloomberg Markets — austeridad como señal de autoridad.</task>
 
 <context>
@@ -149,6 +243,8 @@ ${JSON.stringify(input.metadata, null, 2)}
 </metadata>
 
 ${bindingFigures}
+
+${comparativeStatements}
 
 <niif_report>
 ${JSON.stringify(input.niifReport, null, 2)}
@@ -193,6 +289,10 @@ ${hechosEmpresa ?? ''}
 - ALWAYS: las cifras del bloque <cifras_vinculantes> se COPIAN literalmente en los estados financieros. Ya vienen en pesos: no se convierten desde los centavos del JSON, no se redondean, no se abrevian.
 - If una cifra del JSON no está en <cifras_vinculantes>, entonces conviértela dividiendo los centavos entre 100 y formatea $1.234.567,89; si además es una magnitud de contexto narrativo (no una línea de estado financiero), puedes abreviarla como $X.XXX M según §1.9/L38. If la magnitud llega a miles de millones then se escribe igual en millones ($2.429 M), otherwise $X,X M: la forma "$2,4 B" de §5 no se usa en español, porque un billón es un millón de millones (10^12).
 - NEVER: invent values not present in the JSON payloads; only cite numbers from niif_report / strategy_report / governance_report / metadata.
+- NEVER: calcular, redactar ni completar cifras comparativas del EFE o del ECP: sólo existen las del bloque <comparativos_efe_ecp> (el validador bloquea una cifra comparativa del EFE/ECP que no esté en el JSON).
+- If <comparativos_efe_ecp> trae el EFE del periodo comparativo then el EFE se presenta a dos columnas (periodo actual | comparativo) con esas cifras, otherwise el EFE va a una sola columna y su nota se copia literal debajo del estado.
+- If <comparativos_efe_ecp> trae filas del ECP del periodo comparativo then el ECP presenta primero esas filas y después las del periodo actual, otherwise el ECP presenta sólo el periodo actual y su nota se copia literal debajo del estado.
+- Las devoluciones en ventas (cuenta 4175) se restan de los ingresos (ingresos netos = 41 − 4175) y su cifra se revela en su propia línea "(−) Devoluciones y descuentos en ventas": es un criterio de presentación de UtopIA. NEVER atribuirlo a una norma (NIIF 15 u otra) en el HTML.
 - ALWAYS: cada nota en prosa tomada del JSON NIIF o de Gobierno (notas de los estados, notas técnicas, notas a los estados financieros del gobierno) lleva al inicio la leyenda visible "Narrativa generada por IA — no auditada" (misma leyenda que el PDF y el Excel).
 - NEVER: imprimir una cifra para un KPI cuyo resultPrimary/resultComparative sea "ND": se presenta "N/D" con el motivo de su diagnosis. If un KPI trae "ND" then la tarjeta, la tabla y la prosa dicen N/D, otherwise se copia el valor del JSON.
 - NEVER: citar montos en esas notas en prosa salvo las cifras de <cifras_vinculantes>. If una nota trae un monto que no está en <cifras_vinculantes> then remite al estado financiero correspondiente sin repetir la cifra, otherwise copia la cifra vinculante literal.
@@ -213,7 +313,8 @@ ${hechosEmpresa ?? ''}
 - EFE: efectivo inicial = saldo PUC 11 real (NO total activos); NUNCA Cta.3605 como comodín (§5 Página 07).
 - ROE consistente: KPIs, executiveDashboard, dupontAnalysis, trends, recommendations usan TODOS la fórmula única de controlTotals.roe.
 - Tablas HTML reales (<table class="ft"> según §6/§13) en estados financieros — NUNCA sintaxis Markdown ni texto pipe-separated dentro del HTML.
-- Devoluciones Cta.4175 en LÍNEA SEPARADA del P&L (NIIF 15 §47).
+- Ingresos netos de devoluciones con la cifra de la Cta. 4175 revelada en su propia línea del P&L (criterio de presentación de UtopIA, sin cita normativa).
+- EFE y ECP del periodo comparativo = las cifras de <comparativos_efe_ecp>, o su nota literal cuando no se presentan.
 - Criterios contables aplicados en UNA SOLA nota consolidada al final de Notas Parte 2 (Corrección 9 v2.1); el Art. 647 E.T. sólo se menciona respecto de declaraciones tributarias, sin afirmar que una diferencia de criterio "anula" la sanción.
 - Numeración de notas secuencial 1..N sin saltos.
 - Toda nota en prosa del JSON NIIF / Gobierno lleva la leyenda "Narrativa generada por IA — no auditada" y sólo cita montos que están en <cifras_vinculantes>.

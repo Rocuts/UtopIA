@@ -921,6 +921,9 @@ export function reconcileBindingFigures(
   // ── R4/R5 · columna y periodo (auditoría pipeline-flujo-08) ──────────────
   failures.push(...checkPeriodColumns(document, input.niifReport));
 
+  // ── R8 · comparativos del EFE y del ECP (integración I2, pendiente #3) ────
+  failures.push(...checkComparativeStatements(document, text, input.niifReport));
+
   // ── R6 · conceptos anclados citados en prosa o abreviados (e2e-niif-11) ──
   failures.push(...checkAnchoredConceptsInText(document, input));
 
@@ -1154,6 +1157,210 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// R8 — comparativos del EFE y del ECP (integración I2)
+// ---------------------------------------------------------------------------
+// Desde el pendiente #3 la columna comparativa del EFE y las filas del ECP del
+// periodo comparativo las calcula el código (o las deja sin presentar con una
+// nota). El Editor Jefe las recibe preformateadas; aquí se exige que toda
+// cifra que el HTML imprima como comparativo de esos dos estados esté en el
+// JSON NIIF. Sin base determinista (dos cortes) el conjunto admitido es vacío:
+// cualquier cifra de la columna comparativa del EFE es inventada. En el ECP
+// se admiten además las cifras de sus filas del periodo actual, porque el
+// saldo inicial del periodo es el cierre del comparativo y puede rotularse
+// "Saldo al 31 de diciembre de <comparativo>".
+// ---------------------------------------------------------------------------
+
+const R8_RULE = '§1.1 · Comparativo del EFE/ECP — cifra fuera del JSON';
+const R8_NOTE_RULE = '§1.1 · Comparativo del EFE/ECP — nota de comparativo no presentado';
+// Títulos de los estados (spec v10.1 §4: "Estado de Flujos de Efectivo",
+// "Estado de Cambios en el Patrimonio"). Estrictos a propósito: un análisis de
+// "flujo de caja" o una proyección de la Parte II no es el EFE.
+const CASH_FLOW_HEADING = /estado\s+de\s+flujos?\s+de\s+efectivo|statement\s+of\s+cash\s+flows?/i;
+const EQUITY_HEADING = /estado\s+de\s+cambios\s+en\s+el\s+patrimonio|statement\s+of\s+changes\s+in\s+(?:shareholders['’]?\s+)?equity/i;
+/** Cifra monetaria completa (incluye montos < $1.000 y el $0). */
+const ANY_FIGURE = /\$\d{1,3}(?:\.\d{3})*(?:,\d{2})?(?![.,]?\d)/g;
+const ABBREVIATED = /\$[\d.,]+\s*(?:M{1,2}\b|mil(?:es)?\b|millones\b)/i;
+
+/**
+ * Tablas del documento con el título que las rotula: su caption o el último
+ * encabezado de sección (h1/h2) — un h3-h5 intermedio ("Actividades de
+ * operación") no cambia de estado salvo que sea él mismo el título de uno.
+ */
+function tablesWithHeading(document: ParsedDocument): Array<{ table: Element; heading: string }> {
+  const out: Array<{ table: Element; heading: string }> = [];
+  let last = '';
+  for (const el of Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, table'))) {
+    const tag = el.tagName.toLowerCase();
+    if (tag !== 'table') {
+      const t = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (tag === 'h1' || tag === 'h2' || CASH_FLOW_HEADING.test(t) || EQUITY_HEADING.test(t)) last = t;
+      continue;
+    }
+    const caption = (el.querySelector('caption')?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    out.push({ table: el, heading: caption || last });
+  }
+  return out;
+}
+
+function cellTexts(row: Element): string[] {
+  return Array.from(row.querySelectorAll('th, td')).map((c) =>
+    (c.textContent ?? '').replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').trim(),
+  );
+}
+
+/** Renderizaciones admitidas para un conjunto de MoneyCop (valor absoluto). */
+function renderingsOf(values: Array<string | null | undefined>): Set<string> {
+  const out = new Set<string>(['$0', '$0,00']);
+  for (const v of values) {
+    if (v === null || v === undefined) continue;
+    try {
+      const c = parseMoneyCop(v);
+      for (const r of acceptableRenderings(c < BigInt(0) ? -c : c)) out.add(r);
+    } catch {
+      /* no es MoneyCop */
+    }
+  }
+  return out;
+}
+
+function foreignFigures(cell: string, allowed: Set<string>): string[] {
+  if (ABBREVIATED.test(cell)) return [];
+  return (cell.match(ANY_FIGURE) ?? []).filter((m) => !allowed.has(m));
+}
+
+function checkComparativeStatements(
+  document: ParsedDocument,
+  text: string,
+  niif: NiifReportJson,
+): ChecklistFailure[] {
+  const out: ChecklistFailure[] = [];
+  const cy = yearOf(niif?.company?.comparativePeriod ?? null);
+  const py = yearOf(niif?.company?.fiscalPeriod ?? null);
+  const cf = niif?.cashFlow;
+  const eq = niif?.equityChanges;
+  if (!cy || !cf || !eq) return out;
+
+  const cfHasComparative =
+    [cf.netChangeComparative, cf.cashOpeningComparative, cf.cashClosingComparative].every(
+      (v) => v !== null && v !== undefined,
+    ) && cf.sections.every((s) => s.netFlowComparative !== null && s.netFlowComparative !== undefined);
+  const cfAllowed = cfHasComparative
+    ? renderingsOf([
+        ...cf.sections.flatMap((s) => [s.netFlowComparative, ...s.lines.map((l) => l.amountComparative)]),
+        cf.netChangeComparative,
+        cf.cashOpeningComparative,
+        cf.cashClosingComparative,
+      ])
+    : renderingsOf([]);
+  const comparativeRows = eq.comparativeRows ?? null;
+  const equityCells = (rows: ReadonlyArray<Record<string, unknown>>) =>
+    rows.flatMap((r) =>
+      EQUITY_FIGURE_KEYS.map((k) => (typeof r[k] === 'string' ? (r[k] as string) : null)),
+    );
+  const eqAllowed = renderingsOf([
+    ...equityCells(comparativeRows ?? []),
+    ...equityCells(eq.rows ?? []),
+  ]);
+
+  const cfForeign: string[] = [];
+  const eqForeign: string[] = [];
+  let cfColumnPrinted = false;
+  let eqRowsPrinted = false;
+  for (const { table, heading } of tablesWithHeading(document)) {
+    const isCashFlow = CASH_FLOW_HEADING.test(heading);
+    const isEquity = !isCashFlow && EQUITY_HEADING.test(heading);
+    if (!isCashFlow && !isEquity) continue;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length === 0) continue;
+    const headers = cellTexts(rows[0]);
+    const cIdx = headers.findIndex((h, i) => i > 0 && (h === cy || h.endsWith(` ${cy}`)));
+    const allowed = isCashFlow ? cfAllowed : eqAllowed;
+    const sink = isCashFlow ? cfForeign : eqForeign;
+    let inComparativeBlock = false;
+    for (const row of rows.slice(1)) {
+      const cells = cellTexts(row);
+      if (cells.length === 0) continue;
+      const label = cells[0];
+      const rest = cells.slice(1);
+      const isBlockHeader = rest.every((c) => c === '' || c === '—' || c === '-');
+      if (isBlockHeader) {
+        // "Periodo 2024" abre el bloque comparativo; "Periodo 2025" lo cierra.
+        if (label.includes(cy) && !(py && label.includes(py))) inComparativeBlock = true;
+        else if (py && label.includes(py)) inComparativeBlock = false;
+        continue;
+      }
+      if (cIdx > 0 && cells.length === headers.length) {
+        const figs = foreignFigures(cells[cIdx], allowed);
+        if ((cells[cIdx].match(ANY_FIGURE) ?? []).length > 0) {
+          if (isCashFlow) cfColumnPrinted = true;
+          else eqRowsPrinted = true;
+        }
+        sink.push(...figs.map((f) => `${label}: ${f}`));
+        continue;
+      }
+      if (isEquity && (inComparativeBlock || (label.includes(cy) && !(py && label.includes(py))))) {
+        const figs = rest.flatMap((c) => foreignFigures(c, allowed));
+        if (rest.some((c) => (c.match(ANY_FIGURE) ?? []).length > 0)) eqRowsPrinted = true;
+        sink.push(...figs.map((f) => `${label}: ${f}`));
+      }
+    }
+  }
+
+  const describe = (items: string[]) => `${items.slice(0, 5).join('; ')}${items.length > 5 ? ' …' : ''}`;
+  if (cfForeign.length > 0) {
+    out.push({
+      rule: R8_RULE,
+      detail: cfHasComparative
+        ? `El EFE imprime en la columna ${cy} cifras que no están en el EFE comparativo del reporte NIIF ` +
+          `(${describe(cfForeign)}). El comparativo del EFE lo calcula el sistema: se copia, no se redacta.`
+        : `El EFE imprime una columna ${cy} (${describe(cfForeign)}) y el reporte NIIF no presenta EFE ` +
+          `comparativo: ${cf.comparativeNote ?? 'sin base determinista'}`,
+      severity: 'block',
+    });
+  }
+  if (eqForeign.length > 0) {
+    out.push({
+      rule: R8_RULE,
+      detail: comparativeRows
+        ? `El ECP imprime para el periodo ${cy} cifras que no están en el ECP comparativo del reporte NIIF ` +
+          `(${describe(eqForeign)}). El comparativo del ECP lo calcula el sistema: se copia, no se redacta.`
+        : `El ECP imprime filas del periodo ${cy} (${describe(eqForeign)}) y el reporte NIIF no presenta ECP ` +
+          `comparativo: ${eq.comparativeNote ?? 'sin base determinista'}`,
+      severity: 'block',
+    });
+  }
+
+  // Sin comparativo del estado, su nota determinista debe quedar a la vista.
+  const flat = text.replace(/\s+/g, ' ');
+  for (const [statement, note, printed] of [
+    ['EFE', cfHasComparative ? null : cf.comparativeNote ?? null, cfColumnPrinted],
+    ['ECP', comparativeRows ? null : eq.comparativeNote ?? null, eqRowsPrinted],
+  ] as const) {
+    if (!note || printed) continue;
+    if (flat.includes(note.replace(/\s+/g, ' ').replace(/\$\s+/g, '$'))) continue;
+    out.push({
+      rule: R8_NOTE_RULE,
+      detail:
+        `El ${statement} no presenta el periodo ${cy} y el HTML no copia la nota determinista que lo explica: ` +
+        `"${note}".`,
+      severity: 'warn',
+    });
+  }
+  return out;
+}
+
+const EQUITY_FIGURE_KEYS = [
+  'capitalSocial',
+  'primaColocacion',
+  'reservaLegal',
+  'otrasReservas',
+  'resultadosAcumulados',
+  'resultadoEjercicio',
+  'ori',
+  'total',
+] as const;
 
 // ---------------------------------------------------------------------------
 // R6 — conceptos anclados en prosa, resúmenes y cifras abreviadas (e2e-niif-11)
