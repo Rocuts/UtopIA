@@ -25,11 +25,14 @@ Las Normas Internacionales de Información Financiera (NIIF), conocidas internac
 **Norma aplicable:** Anexo Técnico Compilatorio No. 1 del Decreto 2420 de 2015.
 
 **Criterios de clasificación:**
-- Emisores de valores (entidades listadas en bolsa).
-- Entidades de interés público autorizadas por el Estado para captar, manejar o administrar recursos del público.
-- Entidades con activos totales iguales o superiores a **30.000 SMMLV** y más de **200 empleados**.
-- Subordinadas o matrices de empresas nacionales que apliquen NIIF Plenas.
-- Subordinadas o matrices de empresas extranjeras que apliquen IFRS.
+- Emisores de valores inscritos en el RNVE.
+- Entidades de interés público autorizadas para captar, manejar o administrar recursos del público.
+- Entidades que no estén en los literales anteriores, con **planta de personal mayor a 200 trabajadores o activos totales superiores a 30.000 SMMLV** que **además** cumplan cualquiera de estos parámetros:
+  - Ser subordinada o sucursal de una compañía extranjera que aplique NIIF plenas;
+  - Ser subordinada o matriz de una compañía nacional que deba aplicar NIIF plenas;
+  - Ser matriz, asociada o negocio conjunto de una o más entidades extranjeras que apliquen NIIF plenas;
+  - Realizar importaciones o exportaciones que representen más del 50 % de las compras o de las ventas del año inmediatamente anterior.
+- Los ingresos **no** son criterio del Grupo 1.
 
 **Obligaciones principales:**
 - Presentar estados financieros completos según NIC 1: Estado de situación financiera, Estado de resultados y otro resultado integral, Estado de cambios en el patrimonio, Estado de flujos de efectivo y Notas.
@@ -41,9 +44,8 @@ Las Normas Internacionales de Información Financiera (NIIF), conocidas internac
 **Norma aplicable:** Anexo Técnico Compilatorio No. 2 del Decreto 2420 de 2015 (NIIF para PYMES emitido por el IASB).
 
 **Criterios de clasificación:**
-- Entidades que NO cotizan en bolsa ni captan recursos del público.
-- Activos totales entre **500 y 30.000 SMMLV** o entre **11 y 200 empleados**.
-- Microempresas con activos superiores a 500 SMMLV que voluntariamente opten por este grupo.
+- Entidades que no cumplen los criterios del Grupo 1 ni los del Grupo 3 (grupo residual, Art. 1.1.2.1 DUR 2420/2015 mod. Decreto 1670/2021).
+- Entidades del Grupo 3 que voluntariamente opten por la NIIF para las PYMES.
 
 **Obligaciones principales:**
 - Aplicar la NIIF para PYMES (35 secciones simplificadas).
@@ -54,10 +56,16 @@ Las Normas Internacionales de Información Financiera (NIIF), conocidas internac
 
 **Norma aplicable:** Anexo Técnico Compilatorio No. 3 del Decreto 2420 de 2015.
 
-**Criterios de clasificación (microempresas):**
-- Activos totales inferiores a **500 SMMLV**.
-- 10 o menos empleados.
-- Ingresos brutos anuales inferiores a **6.000 SMMLV**.
+**Criterios de clasificación:**
+Criterios del **Art. 1.1.3.1 del DUR 2420/2015 modificado por el Decreto 1670 de 2021** (vigente desde el 01-ene-2023). Deben cumplirse **todos**:
+- Ingresos por actividades ordinarias del año inmediatamente anterior dentro de los topes de **microempresa** del Decreto 1074 de 2015 (adicionado por el Decreto 957 de 2019), por macrosector: **manufacturero ≤ 23.563 UVT; servicios ≤ 32.988 UVT; comercio ≤ 44.769 UVT**.
+- Sin inversiones en instrumentos de patrimonio en subsidiarias, negocios conjuntos ni asociadas.
+- Sin obligación de presentar estados financieros consolidados, combinados o separados.
+- Sin transacciones con pagos basados en acciones.
+- Sin planes de beneficios post-empleo de beneficios definidos.
+- No ser cooperativa de ahorro y crédito.
+
+> Los criterios de tamaño del Decreto 2706 de 2012 (10 trabajadores, activos < 500 SMMLV, ingresos < 6.000 SMMLV) fueron reemplazados por el Decreto 1670 de 2021 y **no** deben usarse para clasificar. (Corrección auditoría 2026-09.)
 
 **Obligaciones principales:**
 - Contabilidad simplificada con base en causación.

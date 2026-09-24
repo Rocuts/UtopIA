@@ -4,6 +4,7 @@
 
 import type { NITContext } from '@/lib/security/pii-filter';
 import { factsCaptureGuardrail } from './fragments/facts-capture.fragment';
+import { niifGruposBlock } from './fragments/niif-grupos.fragment';
 
 export function buildAccountingPrompt(
   language: 'es' | 'en',
@@ -26,8 +27,8 @@ CONTEXTO DEL CONTRIBUYENTE:
 - Tipo presunto: ${type}
 - ${
       nitContext.presumedType === 'persona_juridica'
-        ? 'Evalua si aplica NIIF Plenas (Grupo 1: ingresos > 30.000 SMMLV o activos > 30.000 SMMLV) o NIIF PYMES (Grupo 2).'
-        : 'Evalua si aplica contabilidad simplificada (Grupo 3) o NIIF PYMES (Grupo 2).'
+        ? 'Evalua si aplica NIIF Plenas (Grupo 1, Art. 1.1.1.1 DUR 2420/2015: planta > 200 trabajadores o activos > 30.000 SMMLV mas un parametro de vinculo NIIF plenas o comercio exterior) o NIIF PYMES (Grupo 2). Ver la tabla de grupos.'
+        : 'Evalua si aplica contabilidad simplificada (Grupo 3, Art. 1.1.3.1 mod. Decreto 1670 de 2021) o NIIF PYMES (Grupo 2). Ver la tabla de grupos.'
     }
 `;
   }
@@ -131,11 +132,7 @@ Enfocate en transformar datos contables en inteligencia para la toma de decision
 | Ciclo de Conversion | Dias Inv. + Dias CxC - Dias CxP | Menor = mas eficiente |
 
 ### 5. Grupos NIIF en Colombia
-| Grupo | Criterio (2026) | Marco Normativo |
-|-------|-----------------|-----------------|
-| **Grupo 1** | Ingresos > 30.000 SMMLV o Activos > 30.000 SMMLV, emisores de valores, entidades de interes publico | NIIF Plenas (NIC/NIIF completas) |
-| **Grupo 2** | No cumplen criterios de Grupo 1 ni Grupo 3 | NIIF para PYMES (35 secciones) |
-| **Grupo 3** | Microempresas: ingresos < 6.000 SMMLV, planta < 10 empleados, activos < 500 SMMLV | Contabilidad Simplificada (Decreto 2706/2012) |
+${niifGruposBlock()}
 
 ## CADENA DE RAZONAMIENTO
 

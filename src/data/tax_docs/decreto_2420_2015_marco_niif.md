@@ -31,10 +31,12 @@ El decreto ha sido **modificado y adicionado en múltiples ocasiones** (entre la
 **Criterios (Art. 1.1.1.1):**
 - Emisores de valores inscritos en el RNVE.
 - Entidades de interés público autorizadas para captar, manejar o administrar recursos del público.
-- Entidades con **activos totales ≥ 30.000 SMMLV** y **>200 empleados** que adicionalmente:
-  - Sean subordinadas o matrices de empresas extranjeras que apliquen IFRS, o
-  - Realicen importaciones/exportaciones que representen ≥ 50% de sus compras o ventas, o
-  - Sean subordinadas o matrices de empresas nacionales que apliquen NIIF Plenas.
+- Entidades que no estén en los literales anteriores, con **planta de personal mayor a 200 trabajadores o activos totales superiores a 30.000 SMMLV** que **además** cumplan cualquiera de estos parámetros:
+  - Ser subordinada o sucursal de una compañía extranjera que aplique NIIF plenas;
+  - Ser subordinada o matriz de una compañía nacional que deba aplicar NIIF plenas;
+  - Ser matriz, asociada o negocio conjunto de una o más entidades extranjeras que apliquen NIIF plenas;
+  - Realizar importaciones o exportaciones que representen más del 50 % de las compras o de las ventas del año inmediatamente anterior.
+- Los ingresos **no** son criterio del Grupo 1.
 
 **Marco técnico (Art. 1.1.1.2):** Aplican íntegramente las NIIF/NIC, CINIIF/SIC y el Marco Conceptual del IASB tal como se incorporan en el **Anexo 1**. Estados financieros completos según NIC 1 (Balance, Resultados e Integral, Cambios en Patrimonio, Flujos de Efectivo, Notas).
 
@@ -51,13 +53,16 @@ El decreto ha sido **modificado y adicionado en múltiples ocasiones** (entre la
 
 ### Grupo 3 — Microempresas (Anexo 3 — Contabilidad simplificada)
 
-**Criterios (Art. 1.1.3.1, modificado Decreto 1670/2021):**
-- Sin inversiones en subsidiarias.
-- Sin estados financieros consolidados.
-- Sin pagos basados en acciones.
-- Sin planes de beneficios posempleo.
-- No son cooperativas de ahorro y crédito.
-- Ingresos no superen los topes de microempresa (≤ 10 trabajadores; activos < 500 SMMLV; ingresos brutos anuales < 6.000 SMMLV — coherente con Decreto 2706/2012 y Ley 590/2000).
+**Criterios:**
+Criterios del **Art. 1.1.3.1 del DUR 2420/2015 modificado por el Decreto 1670 de 2021** (vigente desde el 01-ene-2023). Deben cumplirse **todos**:
+- Ingresos por actividades ordinarias del año inmediatamente anterior dentro de los topes de **microempresa** del Decreto 1074 de 2015 (adicionado por el Decreto 957 de 2019), por macrosector: **manufacturero ≤ 23.563 UVT; servicios ≤ 32.988 UVT; comercio ≤ 44.769 UVT**.
+- Sin inversiones en instrumentos de patrimonio en subsidiarias, negocios conjuntos ni asociadas.
+- Sin obligación de presentar estados financieros consolidados, combinados o separados.
+- Sin transacciones con pagos basados en acciones.
+- Sin planes de beneficios post-empleo de beneficios definidos.
+- No ser cooperativa de ahorro y crédito.
+
+> Los criterios de tamaño del Decreto 2706 de 2012 (10 trabajadores, activos < 500 SMMLV, ingresos < 6.000 SMMLV) fueron reemplazados por el Decreto 1670 de 2021 y **no** deben usarse para clasificar. (Corrección auditoría 2026-09.)
 
 **Marco técnico:** Norma de Información Financiera del **Anexo 3**, basada conceptualmente en NIIF para PYMES pero simplificada. No requiere estado de cambios en el patrimonio independiente. Permite contabilidad de causación simplificada.
 
@@ -75,7 +80,7 @@ El decreto ha sido **modificado y adicionado en múltiples ocasiones** (entre la
 
 #### Título 1: Grupo 1
 
-**Artículo 1.1.1.1 — Ámbito de aplicación.** El presente Título será aplicable a los preparadores de información financiera del Grupo 1, conformado por: (i) emisores de valores inscritos en el RNVE; (ii) entidades de interés público; (iii) entidades con activos ≥ 30.000 SMMLV y >200 trabajadores que cumplan los requisitos adicionales de inversión extranjera, comercio internacional o subordinación.
+**Artículo 1.1.1.1 — Ámbito de aplicación.** El presente Título será aplicable a los preparadores de información financiera del Grupo 1, conformado por: (i) emisores de valores inscritos en el RNVE; (ii) entidades de interés público; (iii) entidades con planta de personal > 200 trabajadores o activos > 30.000 SMMLV que además cumplan alguno de los parámetros de vínculo con NIIF plenas o de comercio exterior (> 50 %).
 
 **Artículo 1.1.1.2 — Marco técnico normativo.** Establece un régimen para preparadores Grupo 1, que deberán aplicar los marcos regulatorios vigentes, incluyendo NIIF, NIC, CINIIF, SIC y el Marco Conceptual del IASB conforme al Anexo 1.
 
