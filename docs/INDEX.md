@@ -27,6 +27,13 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 | [PYME_MODULE_SPEC.md](PYME_MODULE_SPEC.md) | Módulo Contabilidad Pyme — libros, entries, OCR-promote |
 | [D5_3_FORENSIC_AUDIT.md](D5_3_FORENSIC_AUDIT.md) | Dictamen D5.3 Auditoría Forense — spec funcional |
 
+## Auditoría integral vigente (2026-09-24)
+
+| Documento | Qué encontrarás |
+|-----------|----------------|
+| [reviews/auditoria-integral-niif-2026-09-24.md](reviews/auditoria-integral-niif-2026-09-24.md) | **Empieza aquí.** Auditoría multiagente con verificación adversarial y re-auditoría: qué estaba mal en `dea0329`, qué se corrigió, decisiones normativas, límites y pendientes |
+| [reviews/auditoria-integral-niif-2026-09-24-anexo.md](reviews/auditoria-integral-niif-2026-09-24-anexo.md) | Índice de los 269 hallazgos confirmados con severidad y estado |
+
 ## Auditorías (2026-08)
 
 > Estado medido del producto. Todas midieron **ejecutando**, no leyendo, y sus hallazgos pasaron por
@@ -34,7 +41,7 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 
 | Documento | Qué encontrarás |
 |-----------|----------------|
-| [AUDITORIA_CALCULOS_2026-08.md](AUDITORIA_CALCULOS_2026-08.md) | **Empieza aquí.** ¿Los cálculos dan los números reales? Veredicto por superficie, nota 3/10 global, lista priorizada |
+| [AUDITORIA_CALCULOS_2026-08.md](AUDITORIA_CALCULOS_2026-08.md) | Histórico. ¿Los cálculos dan los números reales? Veredicto por superficie, nota 3/10 global, lista priorizada |
 | [AUDITORIA_CALCULOS_2026-08_ANEXO.md](AUDITORIA_CALCULOS_2026-08_ANEXO.md) | Inventario cifra por cifra (DETERMINISTA / ANCLADA / LIBRE) y los 91 hallazgos con su escenario numérico |
 | [INSUMOS_REQUERIDOS_2026-08.md](INSUMOS_REQUERIDOS_2026-08.md) | Qué hace falta de fuera del repo: balances reales, 3 decisiones de negocio, 3 de infraestructura |
 | [SESION_EXACTITUD_2026-08.md](SESION_EXACTITUD_2026-08.md) | La ola que hizo determinista el Balance primario: convención de signos, reconciliador, desglose, sello |

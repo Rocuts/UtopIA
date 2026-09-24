@@ -45,7 +45,7 @@ Optional model overrides live in `src/lib/config/models.ts` (`OPENAI_MODEL_CHAT`
 
 **`docs/spec/financial-report-v10.1.md`** is authoritative for the Editor Jefe HTML output (15-page editorial A4 template). It supersedes `financial-report-v8.1.md` (12 slides — deprecated).
 
-**Histórico de exactitud (2026-08-08).** La auditoría de agosto documentó brechas que motivaron correcciones posteriores. No utilizar sus reproducciones como descripción del checkout actual. El [handoff](docs/agents/HANDOFF.md) identifica el commit comprobado; la [revisión de septiembre](docs/reviews/main-financial-integrity-2026-09-05.md) distingue correcciones, evidencia y pendientes. La especificación continúa definiendo el contrato esperado y debe contrastarse con el código.
+**Histórico de exactitud (2026-08-08).** La auditoría de agosto documentó brechas que motivaron correcciones posteriores. No utilizar sus reproducciones como descripción del checkout actual. El [handoff](docs/agents/HANDOFF.md) identifica el commit comprobado; la [auditoría integral del 2026-09-24](docs/reviews/auditoria-integral-niif-2026-09-24.md) (vigente; sustituye como referencia a la [revisión del 2026-09-05](docs/reviews/main-financial-integrity-2026-09-05.md)) distingue correcciones, evidencia y pendientes. La especificación continúa definiendo el contrato esperado y debe contrastarse con el código.
 
 Every financial agent calls `callFinancialAgent({ agentName, model, schema, system, userContent, ...MODELS_CONFIG[slot] })` from `src/lib/agents/financial/agents/runtime.ts`. Returns `{ json, meta }` (Zod-validated + reasoning/cache telemetry). When a file calls `generateText` directly it is **legacy / pending migration**.
 
