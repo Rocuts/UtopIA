@@ -1050,6 +1050,7 @@ ${ctx.niifDisclosures}
 
 <success_criteria>
 - Activo = Pasivo + Patrimonio, tolerancia $0 (centavo).
+- Los subtotales corriente / no corriente del Balance ("Total activo corriente", "Total activo no corriente", "Total pasivo corriente", "Total pasivo no corriente") coinciden al centavo con Activo Corriente, Activo No Corriente, Pasivo Corriente y Pasivo No Corriente de TOTALES VINCULANTES en cada periodo (validador E27): cada cuenta va en el bloque en que el preprocesador la cuenta, incluidas las excepciones de vencimiento declaradas por el usuario.
 - Ingresos de actividades ordinarias del P&L = grupo 41 neto de devoluciones 4175. El grupo 42 (ingresos no operacionales) se presenta en renglón(es) propio(s) DEBAJO del resultado operacional, con su código PUC. Toda la clase 4 queda presentada: 41 arriba, 42 abajo.
 - grossProfitPrimary, operatingProfitPrimary y la UAI coinciden al centavo con el bloque "CASCADA VINCULANTE DEL P&G".
 - Utilidad Neta del P&L coincide al centavo con TOTALES VINCULANTES (será el anchor para el closing_balance del ECP en Pass-2).

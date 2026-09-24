@@ -35,6 +35,8 @@
 //       ajustes son partidas no monetarias y cambios en WC, no transferencias
 //       contables internas). Defensa Art. 647 E.T.: la salida ficticia
 //       distorsiona el flujo informado a la DIAN sin sustento documental.
+//  E27. Subtotales corriente / no corriente del ESF == controlTotals
+//       (activo/pasivo corriente y no corriente, ambos periodos; integración I4)
 //
 // El validator legacy `validateConsolidatedReport` queda en uso para reglas
 // que tocan estructura Markdown (placeholders, secciones PARTE I/II/III) que
@@ -1331,6 +1333,30 @@ export function validateNiifReportJson(
     }
   }
 
+  // -- E27. Subtotales corriente / no corriente del ESF == controlTotals ------
+  // Integración I4: los subtotales de plazo que imprime un ESF escrito por el
+  // modelo son las cifras de liquidez de los KPIs, el gate y X03, en ambos
+  // periodos (ver `termSubtotalErrors`).
+  if (options.ledgers) {
+    const termPeriods: Array<[StatementPeriod, readonly LedgerLeaf[] | null, string]> = [
+      ['primary', options.ledgers.primary, `periodo ${json.company.fiscalPeriod}`],
+    ];
+    if (hasComparative) {
+      termPeriods.push([
+        'comparative',
+        options.ledgers.comparative,
+        `periodo comparativo ${json.company.comparativePeriod}`,
+      ]);
+    }
+    for (const [period, leaves, etiqueta] of termPeriods) {
+      if (!leaves) continue;
+      errors.push(
+        ...termSubtotalErrors('Activo', 'assets', bs.assets, leaves, period, etiqueta),
+        ...termSubtotalErrors('Pasivo', 'liabilities', bs.liabilities, leaves, period, etiqueta),
+      );
+    }
+  }
+
   // -- E21. Renglones con código PUC anclados al balance de prueba ------------
   // Auditoría 2026-09-24 (e2e-niif-02/-05/-06). E14/E9 anclaban los TOTALES y
   // E3b sólo el renglón 11: el modelo podía mover $1.000.000 de deudores (13)
@@ -1627,6 +1653,94 @@ function uncodedIncomeRowErrors(
         `que no es ningún escalón de la cascada (Utilidad Bruta ${fmtCop(casc.gross)}, EBIT ${fmtCop(casc.op)}, ` +
         `UAI ${fmtCop(casc.uai)}, Utilidad Neta ${fmtCop(casc.net)}) ni la suma de un bloque de renglones ` +
         `listados. Una cifra que el lector no puede reconstruir no se imprime en el estado.`,
+    );
+  }
+  return out;
+}
+
+/** Clasifica un rótulo sin código del ESF como subtotal (o encabezado) de un plazo. */
+function termOfSubtotalLabel(
+  section: 'assets' | 'liabilities',
+  label: string,
+): { term: 'current' | 'nonCurrent'; header: boolean } | null {
+  const t = label
+    .replace(/\([^)]*\)/g, ' ')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const es = section === 'assets' ? 'activos?' : 'pasivos?';
+  const en = section === 'assets' ? 'assets' : 'liabilities';
+  const m =
+    new RegExp(`^((?:sub)?total(?:es)? (?:(?:de|del|de los) )?)?${es} (no )?corrientes?$`).exec(t) ??
+    new RegExp(`^(total )?(non-? ?current |noncurrent |current )${en}$`).exec(t);
+  if (!m) return null;
+  const nonCurrent = m[0].includes('no corriente') || /non-? ?current|noncurrent/.test(m[0]);
+  return { term: nonCurrent ? 'nonCurrent' : 'current', header: !m[1] };
+}
+
+const TERM_CONTROL_TOTAL: Record<'assets' | 'liabilities', Record<'current' | 'nonCurrent', [string, string]>> = {
+  assets: {
+    current: ['activo corriente', 'activoCorriente'],
+    nonCurrent: ['activo no corriente', 'activoNoCorriente'],
+  },
+  liabilities: {
+    current: ['pasivo corriente', 'pasivoCorriente'],
+    nonCurrent: ['pasivo no corriente', 'pasivoNoCorriente'],
+  },
+};
+
+/**
+ * E27 — subtotales corriente / no corriente del ESF contra la partición del
+ * preprocesador (integración I4). `controlTotals.activoCorriente` /
+ * `activoNoCorriente` / `pasivoCorriente` / `pasivoNoCorriente` son las cifras
+ * de los KPIs de liquidez, el gate y X03; aquí se reconstruyen al centavo
+ * desde las hojas del periodo con su plazo (`LedgerLeaf.term`: excepción de
+ * vencimiento declarada, virtual de R1 por su origen, grupo PUC). E21 ancla
+ * cada grupo y E22 exige que el subtotal sume su bloque, así que un grupo en el
+ * bloque equivocado imprimía subtotales coherentes consigo mismos y distintos
+ * de los KPIs cuando el ESF lo escribía el modelo (sin completado determinista).
+ * Tolerancia $0. Una celda `null` no se contrasta (no es $0); un encabezado sin
+ * "total" sólo si imprime monto; una sección con hojas de plazo no
+ * determinable, tampoco.
+ */
+function termSubtotalErrors(
+  nombre: string,
+  section: 'assets' | 'liabilities',
+  lines: readonly BalanceLine[],
+  leaves: readonly LedgerLeaf[],
+  period: StatementPeriod,
+  etiqueta: string,
+): string[] {
+  const classCode = section === 'assets' ? 1 : 2;
+  const expected = { current: ZERO, nonCurrent: ZERO };
+  for (const leaf of leaves) {
+    if (leaf.classCode !== classCode) continue;
+    if (leaf.term === undefined || leaf.term === null) {
+      if (leaf.cents !== ZERO) return [];
+      continue;
+    }
+    expected[leaf.term] += leaf.cents;
+  }
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.account !== null && line.account.trim() !== '') continue;
+    const kind = termOfSubtotalLabel(section, line.label);
+    if (!kind) continue;
+    const raw = periodCell(line, period);
+    if (raw === null) continue;
+    const v = parseMoneyCop(raw);
+    if (kind.header && v === ZERO) continue;
+    const e = expected[kind.term];
+    if (v === e) continue;
+    const [noun, key] = TERM_CONTROL_TOTAL[section][kind.term];
+    out.push(
+      `E27. Estado de Situación Financiera — ${nombre} (${etiqueta}): "${line.label}" imprime ${fmtCop(v)} ` +
+        `y el ${noun} del balance de prueba (controlTotals.${key}: la cifra de los KPIs de liquidez, ` +
+        `el gate y X03) es ${fmtCop(e)}. Brecha: ${fmtCop(v - e)}. La clasificación corriente / no corriente ` +
+        `del ESF es la del preprocesador, con los vencimientos declarados (NIIF para las PYMES 4.4).`,
     );
   }
   return out;

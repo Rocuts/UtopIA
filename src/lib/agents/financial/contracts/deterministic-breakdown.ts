@@ -187,6 +187,15 @@ export interface LedgerLeaf {
   /** Clase PUC bajo la que el snapshot publica la cuenta (1..7). */
   classCode: number;
   cents: bigint;
+  /**
+   * Clases 1 y 2: plazo con el que el preprocesador cuenta la hoja en
+   * `controlTotals.activoCorriente` / `pasivoCorriente` (excepción de
+   * vencimiento declarada, virtual de R1 por su origen, grupo PUC); `null` si
+   * no es determinable. Ausente en el resto de clases y en hojas construidas a
+   * mano. Con él, E27 contrasta los subtotales corriente / no corriente del ESF
+   * contra esas anclas (integración I4).
+   */
+  term?: BalanceTerm | null;
 }
 
 /**
@@ -196,13 +205,23 @@ export interface LedgerLeaf {
  */
 export function buildLedgerLeaves(snapshot: PeriodSnapshot): LedgerLeaf[] {
   const out: LedgerLeaf[] = [];
+  const declared = {
+    assets: declaredTermsOf(snapshot, 'assets'),
+    liabilities: declaredTermsOf(snapshot, 'liabilities'),
+  };
   for (const puc of snapshot.classes ?? []) {
     if (puc.code < 1 || puc.code > 7) continue;
+    const section = puc.code === 1 ? 'assets' : puc.code === 2 ? 'liabilities' : null;
     for (const account of puc.accounts) {
       if (!account.isLeaf) continue;
-      const code = String(account.code).replace(/\D/g, '');
+      const rawCode = String(account.code).trim();
+      const code = rawCode.replace(/\D/g, '');
       if (code.length === 0) continue;
-      out.push({ code, classCode: puc.code, cents: pesosToCents(account.balance) });
+      const leaf: LedgerLeaf = { code, classCode: puc.code, cents: pesosToCents(account.balance) };
+      if (section) {
+        leaf.term = code.length < 2 ? null : termOfAccount(section, rawCode, code.slice(0, 2), declared[section]);
+      }
+      out.push(leaf);
     }
   }
   return out;
