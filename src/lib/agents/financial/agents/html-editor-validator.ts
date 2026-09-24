@@ -1027,8 +1027,13 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
     const t = (th.textContent ?? '').trim();
     if (/^(?:19|20)\d{2}$/.test(t)) thYears.add(t);
   }
-  const foreignCutoff = [...cutoffYears].filter((y) => !allowed.has(y));
-  if (foreignCutoff.length > 0 || (cutoffYears.size > 0 && !cutoffYears.has(primaryYear))) {
+  // Un año posterior al del reporte es un rótulo de proyección, no un corte
+  // equivocado; lo que se bloquea es un corte ANTERIOR ajeno al comparativo.
+  const foreignCutoff = [...cutoffYears].filter(
+    (y) => !allowed.has(y) && Number(y) < Number(primaryYear),
+  );
+  const historicalCutoffs = [...cutoffYears].filter((y) => Number(y) <= Number(primaryYear));
+  if (foreignCutoff.length > 0 || (historicalCutoffs.length > 0 && !cutoffYears.has(primaryYear))) {
     out.push({
       rule: '§1.1 · Periodo del reporte — fecha de corte',
       detail:
@@ -1082,6 +1087,10 @@ function checkPeriodColumns(document: ParsedDocument, niif: NiifReportJson): Che
       if (cells.length !== headers.length) continue;
       const concept = concepts.find((k) => k.re.test(cells[0].replace(/\s+/g, ' ')));
       if (!concept) continue;
+      // Sólo celdas con la cifra completa: una tabla de resumen con montos
+      // abreviados ($1.000 M, §1.9/L38) no es un estado financiero.
+      if (!/\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?(?![.,]?\d)/.test(cells[pIdx])) continue;
+      if (/\$[\d.,]+\s*(?:M{1,2}\b|mil(?:es)?\b|millones\b)/i.test(cells[pIdx])) continue;
       const inPrimary = renders(concept.primary).some((r) => containsFigure(cells[pIdx], r));
       const primaryHasComparative = renders(concept.comparative).some((r) => containsFigure(cells[pIdx], r));
       const comparativeOk =

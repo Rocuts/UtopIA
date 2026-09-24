@@ -78,6 +78,14 @@ describe('reconcileBindingFigures — periodo y columna (pipeline-flujo-08)', ()
     expect(b.some((f) => f.rule.includes('columna'))).toBe(true);
   });
 
+  it('una proyección rotulada con un año posterior y un resumen abreviado no bloquean', () => {
+    const extra =
+      `<article><h2>Proyección al 31 de diciembre de 2026</h2>` +
+      tbl(['Concepto', '2025', '2026'], [['TOTAL ACTIVO', '$1.000 M', '$1.100 M']]) +
+      `</article>`;
+    expect(blocks(statements().replace('</body>', `${extra}</body>`))).toEqual([]);
+  });
+
   it('rótulos y fecha de corte de 2024 para un fiscalPeriod 2025 bloquean', () => {
     const b = blocks(statements({ year: '2024', prev: '2023' }));
     expect(b.some((f) => f.rule.includes('fecha de corte'))).toBe(true);
