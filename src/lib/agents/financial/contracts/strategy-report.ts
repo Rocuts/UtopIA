@@ -159,7 +159,12 @@ export const BreakEvenAnalysisSchema = z.object({
   fixedCostsCop: MoneyCop.describe('Costos fijos identificados (arriendos, nómina admin, depreciación, etc.)'),
   variableCostsCop: MoneyCop.describe('Costos variables identificados'),
   revenueCop: MoneyCop.describe('Ingresos operacionales del periodo'),
-  breakEvenPointCop: MoneyCop.describe('PE = CF / (1 − CV/Ingresos)'),
+  // null = el punto de equilibrio NO existe (sin ingresos, margen de
+  // contribución ≤ 0 o costos fijos negativos). El post-procesador determinista
+  // lo recalcula siempre en centavos (valoracion-12).
+  breakEvenPointCop: MoneyCop.nullable().describe(
+    'PE = CF / (1 − CV/Ingresos). null cuando no existe (sin ingresos o margen de contribución ≤ 0).',
+  ),
   marginOfSafetyPct: z.string().describe('Margen de Seguridad = (Ventas − PE) / Ventas × 100. String decimal.'),
   classificationNote: z.string().min(1).describe('Cómo se clasificaron costos fijos vs variables; supuestos aplicados'),
 });
