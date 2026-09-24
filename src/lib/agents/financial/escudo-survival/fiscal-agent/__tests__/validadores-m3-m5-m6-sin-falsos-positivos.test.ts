@@ -36,9 +36,10 @@ import { orchestrateFiscalAgent } from '../orchestrator';
 import { computeRiskScore } from '../tools/risk-score-calculator';
 import { analyzeRefund } from '../tools/refund-analyzer';
 import { classificationFromKind } from '../tools/dian-letter-builder';
-import { validateDevolucionesL2 } from '../validators/devoluciones.validator';
+import { validateDevoluciones, validateDevolucionesL2 } from '../validators/devoluciones.validator';
 import { validateDefensaDian } from '../validators/defensa-dian.validator';
 import { scoresCitadosEnProsa, validateRiskScore, validateRiskScoreL3 } from '../validators/risk-score.validator';
+import { articulosCitados, citaArticulo } from '../validators/helpers';
 import type { Modulo3RiskScore, Modulo5DefensaDian, Modulo6Devoluciones } from '../validators/types';
 
 // UAI = 1.240M − 760M − 158M = 322M → F02 = 112,7M; F03 = 150M → F04 = −37,3M.
@@ -316,5 +317,34 @@ describe('NT-07 — M3.L2.3: umbral, rango y aporte de un factor no son el score
       'M3.L2.3_narrativa_cita_score_determinista',
     );
     expect(scoresCitadosEnProsa('Score 72/100 (umbral 60/100); el puntaje real es 45/100.')).toEqual([72, 45]);
+  });
+});
+
+describe('NT-08 — M6.L2.2: enumeraciones en inglés («and», «Article»)', () => {
+  it('helpers: «Arts. 850, 854 and 855» y «Article 850» cuentan', () => {
+    const t = 'Refund rights, the 2-year limitation and the 50-business-day term are governed by Arts. 850, 854 and 855 E.T.';
+    expect(['850', '854', '855'].every((a) => citaArticulo(t, a))).toBe(true);
+    expect(articulosCitados(t)).toEqual(['850', '854', '855']);
+    expect(citaArticulo('Under Article 850 E.T. the taxpayer may request the refund.', '850')).toBe(true);
+    expect(articulosCitados('Arts. 850, 854, and 855')).toEqual(['850', '854', '855']);
+    // Español sin cambios.
+    expect(articulosCitados('Arts. 850, 854 y 855 E.T.')).toEqual(['850', '854', '855']);
+    expect(citaArticulo('Art. 8550 E.T.', '855')).toBe(false);
+  });
+
+  it('el análisis honesto en inglés no bloquea; sin el 855 sigue fallando', () => {
+    const m6: Modulo6Devoluciones = {
+      saldoDeclaradoCents: '5000000000', saldoAFavorCents: '5000000000', viabilidad: 'alta', f04Cents: '-3000000000',
+      documentosRequeridos: [
+        'Solicitud por MUISCA (formulario 010)', 'Certificación del contador público o revisor fiscal',
+        'Relación de agentes retenedores con NIT', 'Copia de la declaración de renta (Formulario 110)',
+      ],
+      pasosProcedimentales: ['Radicar la solicitud'],
+      textoAnalisis: 'Refund rights, the 2-year limitation and the 50-business-day term are governed by Arts. 850, 854 and 855 E.T.',
+    };
+    expect(erroresDe(validateDevoluciones(m6))).toEqual([]);
+    expect(erroresDe(validateDevoluciones({ ...m6, textoAnalisis: 'Refund rights are governed by Arts. 850 and 854 E.T.' }))).toContain(
+      'M6.L2.2_citas_850_854_855',
+    );
   });
 });
