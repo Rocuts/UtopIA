@@ -94,8 +94,11 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
     cita: 'Ley 2010 de 2019',
     titulo: 'Ley de crecimiento económico — reemplaza Ley 1943/2018',
     resumen:
-      'Reemplazó la Ley 1943/2018 declarada inexequible. Ratificó la eliminación del periodo IVA anual (solo bimestral y cuatrimestral); estableció descuento 100% IVA activos fijos (Art. 258-1); fijó la tarifa de renta PJ en descenso: 32% (2020), 31% (2021) y 30% proyectado desde 2022 — este último nunca aplicó porque la Ley 2155/2021 la elevó al 35% a partir de 2022.',
-    articulosClave: ['Art. 258-1 E.T.', 'Art. 600 E.T.'],
+      'Reemplazó la Ley 1943/2018 declarada inexequible. Estableció descuento 100% IVA activos fijos (Art. 258-1, art. 95); fijó la tarifa de renta PJ en descenso (Art. 240, art. 92): 32% (2020), 31% (2021) y 30% proyectado desde 2022 — este último nunca aplicó porque la Ley 2155/2021 la elevó al 35% a partir de 2022.',
+    // I5-niif 5: no «ratificó la eliminación del periodo IVA anual» ni toca el
+    // Art. 600 (ley_2010_2019.md); esa redacción es del art. 196 de la Ley 1819
+    // de 2016. Arts. 92 (Art. 240) y 95 (Art. 258-1) verificados en el corpus.
+    articulosClave: ['Art. 240 E.T.', 'Art. 258-1 E.T.'],
     estado: 'VIGENTE_2026',
     sentenciaCorte: null,
     urlOficial:
@@ -106,8 +109,10 @@ export const LEYES_REFORMAS: readonly LawReformEntry[] = [
     cita: 'Ley 1943 de 2018',
     titulo: 'Ley de financiamiento — parcialmente reemplazada',
     resumen:
-      'Eliminó el periodo IVA anual (<15.000 UVT). Declarada inexequible por la Corte Constitucional por vicios de forma; sus disposiciones se mantuvieron hasta 31-dic-2019 y fueron reproducidas por Ley 2010/2019.',
-    articulosClave: ['Art. 600 E.T.'],
+      'Declarada inexequible por la Corte Constitucional por vicios de forma; sus disposiciones se mantuvieron hasta 31-dic-2019 y fueron reproducidas por Ley 2010/2019.',
+    // I5-niif 5: el período IVA anual lo eliminó el art. 196 de la Ley 1819 de
+    // 2016 (ley_1819_2016.md), no esta ley; su texto no está en el corpus.
+    articulosClave: [],
     estado: 'INEXEQUIBLE',
     sentenciaCorte: 'Sentencia C-481 de 2019',
     urlOficial:

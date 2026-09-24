@@ -297,7 +297,7 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 240 par. 5 E.T.',
     titulo: 'Tarifa del 15% para servicios hoteleros, parques temáticos de ecoturismo y agroturismo',
     resumen:
-      'Par. 5 Art. 240: las rentas provenientes de servicios prestados en nuevos hoteles, en hoteles remodelados y/o ampliados, y en nuevos parques temáticos de ecoturismo y/o agroturismo, se gravan a la tarifa del 15% por un término de 10 años contados desde el inicio de las operaciones. Requisitos: municipio de hasta 200.000 habitantes (censo DANE 2022) o municipio PDET; construcción/remodelación dentro de los 5 años siguientes a la Ley 2277/2022; inscripción en el Registro Nacional de Turismo; no puede pactarse rendimiento garantizado. Excluye moteles y residencias. La tarifa del 9% NO es la tarifa vigente del sector: solo subsiste como derecho adquirido para quienes consolidaron el beneficio bajo el régimen anterior (Ley 1943/2018 – Ley 2010/2019), condición que debe acreditarse caso por caso.',
+      'Par. 5 Art. 240: las rentas provenientes de servicios prestados en nuevos hoteles, en hoteles remodelados y/o ampliados, y en nuevos parques temáticos de ecoturismo y/o agroturismo, se gravan a la tarifa del 15% por un término de 10 años contados desde el inicio de las operaciones. Requisitos: municipio de hasta 200.000 habitantes (censo DANE 2022) o municipio PDET; construcción/remodelación dentro de los 5 años siguientes a la Ley 2277/2022; inscripción en el Registro Nacional de Turismo; no puede pactarse rendimiento garantizado. Excluye moteles y residencias. La tarifa del 9% NO es la tarifa vigente del sector: solo subsiste como derecho adquirido para quienes consolidaron el beneficio bajo el régimen anterior (par. 5 en la redacción del art. 92 de la Ley 2010 de 2019), condición que debe acreditarse caso por caso.',
     textoLiteral: null,
     estado: 'MODIFICADO',
     modificaciones: [
@@ -893,19 +893,19 @@ export const ARTICULOS_ET: readonly NormativeArticleEntry[] = [
     cita: 'Art. 600 E.T.',
     titulo: 'Periodicidad del IVA — bimestral y cuatrimestral',
     resumen:
-      'Periodos gravables IVA 2026. Numeral 1 — declaración y pago BIMESTRAL para: (a) los grandes contribuyentes; (b) las personas jurídicas y naturales cuyos ingresos brutos a 31-dic del año gravable anterior sean iguales o superiores a 92.000 UVT; y (c) los responsables de que tratan los Arts. 477 (bienes exentos) y 481 (bienes y servicios exentos con derecho a devolución bimestral, incl. exportadores) de este Estatuto, SIN IMPORTAR EL MONTO DE SUS INGRESOS. Numeral 2 — declaración y pago CUATRIMESTRAL solo para los demás responsables, personas jurídicas y naturales, cuyos ingresos brutos a 31-dic del año anterior sean inferiores a 92.000 UVT. El período ANUAL fue ELIMINADO por Ley 1943/2018 (ratificado por Ley 2010/2019).',
+      'Periodos gravables IVA 2026. Numeral 1 — declaración y pago BIMESTRAL para: (a) los grandes contribuyentes; (b) las personas jurídicas y naturales cuyos ingresos brutos a 31-dic del año gravable anterior sean iguales o superiores a 92.000 UVT; y (c) los responsables de que tratan los Arts. 477 (bienes exentos) y 481 (bienes y servicios exentos con derecho a devolución bimestral, incl. exportadores) de este Estatuto, SIN IMPORTAR EL MONTO DE SUS INGRESOS. Numeral 2 — declaración y pago CUATRIMESTRAL solo para los demás responsables, personas jurídicas y naturales, cuyos ingresos brutos a 31-dic del año anterior sean inferiores a 92.000 UVT. No existe otra periodicidad: el artículo 196 de la Ley 1819 de 2016 sustituyó este artículo y dejó solo los períodos bimestral y cuatrimestral.',
     textoLiteral: null,
     estado: 'MODIFICADO',
+    // I5-niif 5: la eliminación del período anual se atribuía a la Ley 1943 de
+    // 2018 (INEXEQUIBLE) «ratificada» por la Ley 2010 de 2019, que no toca este
+    // artículo. Corpus: ley_1819_2016.md (art. 196) y la nota del editor del
+    // DUR 1625 de 2016 (decreto_1625_2016.md).
     modificaciones: [
       {
-        norma: 'Ley 1943 de 2018',
-        fecha: '2018-12-28',
-        cambio: 'Eliminó el período IVA anual; estableció solo bimestral y cuatrimestral.',
-      },
-      {
-        norma: 'Ley 2010 de 2019',
-        fecha: '2019-12-27',
-        cambio: 'Ratificó la eliminación del período anual.',
+        norma: 'Ley 1819 de 2016, art. 196',
+        fecha: '2016-12-29',
+        cambio:
+          'Sustituyó el artículo: bimestral (grandes contribuyentes, ingresos ≥ 92.000 UVT y responsables de los Arts. 477 y 481) y cuatrimestral (resto); eliminó la declaración anual.',
       },
     ],
     urlOficial:

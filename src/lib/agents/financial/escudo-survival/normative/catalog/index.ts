@@ -151,7 +151,7 @@ const BLACKLIST: readonly BlacklistEntry[] = [
       'periodo.*iva.*anual',
     ],
     razon:
-      'El período IVA anual fue eliminado por Ley 1943/2018 (ratificado por Ley 2010/2019). Solo existen períodos bimestral y cuatrimestral en 2026. Citar el período anual puede generar presentación en fecha incorrecta.',
+      'El período IVA anual fue eliminado por el artículo 196 de la Ley 1819 de 2016, que sustituyó el Art. 600 E.T. Solo existen períodos bimestral y cuatrimestral en 2026. Citar el período anual puede generar presentación en fecha incorrecta.',
     alternativaCorrecta:
       'Art. 600 E.T.: bimestral (≥92.000 UVT ingresos) o cuatrimestral (resto).',
     severidad: 'ALTA',
