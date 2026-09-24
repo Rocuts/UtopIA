@@ -110,3 +110,24 @@ describe('anti-drift rutas ↔ contrato', () => {
     }
   });
 });
+
+// P4 (auditoría integral 2026-09-24, pendiente #4): parámetros opcionales de la
+// remisión y campos nuevos del recurso, documentados desde los mismos schemas.
+describe('TrialBalance — unit y maturity_overrides (tb-2026-09-24.3)', () => {
+  type Json = Record<string, unknown> & { properties?: Record<string, Json>; description?: string; enum?: unknown[] };
+  const schemas = (doc as unknown as { components: { schemas: Record<string, Json & { allOf?: Json[] }> } }).components
+    .schemas;
+
+  it('el request documenta `unit` (pesos | miles | millones) y `maturity_overrides`', () => {
+    const create = schemas.TrialBalanceCreate;
+    expect(create.properties!.unit.enum).toEqual(['pesos', 'miles', 'millones']);
+    expect(create.properties!.unit.description).toMatch(/centavos exactos/);
+    expect(create.properties!.maturity_overrides.description).toMatch(/corriente/);
+  });
+
+  it('el recurso declara `unit` y el detalle validation_notes y classification_note', () => {
+    expect(schemas.TrialBalance.properties!.unit.properties).toHaveProperty('requires_confirmation');
+    const extra = schemas.TrialBalanceDetail.allOf!.find((s) => s.properties?.validation_notes);
+    expect(extra?.properties).toHaveProperty('classification_note');
+  });
+});

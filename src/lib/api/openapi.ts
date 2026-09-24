@@ -87,12 +87,28 @@ const TRIAL_BALANCE_SCHEMA = {
         'aunque la ecuación cuadre, los motivos persistentes: integridad de la lectura (importes ' +
         'ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos que no son cuentas PUC), ' +
         'importes fuera del rango de precisión monetaria, unidad declarada ("en miles" / "en ' +
-        'millones") sin confirmar y bloqueos del curador posteriores al Cierre Virtual (R8), p. ej. ' +
-        'CUR-R12. El detalle los lista en validation_reasons. El riesgo de liquidez (activo ' +
-        'corriente < pasivo corriente) no cambia el status. Contrato tb-2026-09-24.2.',
+        'millones") sin confirmar (envíe `unit` para confirmarla) y bloqueos del curador ' +
+        'posteriores al Cierre Virtual (R8), p. ej. CUR-R12. El detalle los lista en ' +
+        'validation_reasons. El riesgo de liquidez (activo corriente < pasivo corriente) no cambia ' +
+        'el status. Contrato tb-2026-09-24.3.',
     },
     period_label: { type: 'string' },
     row_count: { type: 'integer' },
+    unit: {
+      type: ['object', 'null'],
+      description:
+        'Unidad de los importes (tb-2026-09-24.3). declared: unidad distinta de pesos que declara ' +
+        'el CSV ("en miles de pesos") con el texto donde se leyó; confirmed: la del parámetro ' +
+        '`unit`. requires_confirmation = true ⇒ la remisión queda unbalanced hasta reenviarla con ' +
+        '`unit`. null en remisiones anteriores a tb-2026-09-24.3.',
+      properties: {
+        declared: { type: ['string', 'null'], enum: ['miles', 'millones', null] },
+        declared_text: { type: ['string', 'null'] },
+        confirmed: { type: ['string', 'null'], enum: ['pesos', 'miles', 'millones', null] },
+        requires_confirmation: { type: 'boolean' },
+      },
+      required: ['declared', 'declared_text', 'confirmed', 'requires_confirmation'],
+    },
     sign_convention: {
       type: ['string', 'null'],
       enum: ['natural', 'algebraica', null],
@@ -176,6 +192,20 @@ const TRIAL_BALANCE_DETAIL_SCHEMA = {
             'ilegibles, columnas ambiguas, códigos que no son cuentas PUC, precisión monetaria, ' +
             'unidad declarada sin confirmar, bloqueos del curador post-R8). Vacío si no hay.',
         },
+        validation_notes: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Notas informativas, no bloqueantes: cifras reexpresadas a pesos por la unidad ' +
+            'confirmada (`unit`), excepciones de vencimiento aplicadas (`maturity_overrides`), ' +
+            'fecha de corte declarada en el archivo, riesgo de liquidez.',
+        },
+        classification_note: {
+          type: ['string', 'null'],
+          description:
+            'Supuesto de clasificación corriente / no corriente por grupo PUC y, si se enviaron ' +
+            '`maturity_overrides`, las excepciones aplicadas con su monto.',
+        },
         discrepancies: {
           type: 'array',
           items: {
@@ -204,7 +234,13 @@ const TRIAL_BALANCE_DETAIL_SCHEMA = {
           },
         },
       },
-      required: ['validation_reasons', 'discrepancies', 'curator_findings'],
+      required: [
+        'validation_reasons',
+        'validation_notes',
+        'classification_note',
+        'discrepancies',
+        'curator_findings',
+      ],
     },
   ],
 } as const;

@@ -252,8 +252,24 @@ niif-preproceso-07):
 - El riesgo de liquidez (activo corriente < pasivo corriente) no es motivo persistente: no
   bloquea ni cambia el `status`.
 
-`GET /api/v1/trial-balances/{id}` añade `validation_reasons[]`, `discrepancies[]` y
-`curator_findings[]` completos (recomputados). El CSV acepta los mismos alias de columnas del parser interno
+Parámetros opcionales de la remisión (contrato `tb-2026-09-24.3`, pendiente #4 de la
+auditoría integral 2026-09-24):
+
+- `unit`: `pesos` | `miles` | `millones` — unidad **confirmada** de los importes. Decisión: una
+  unidad declarada por el archivo ("en miles de pesos") nunca se aplica en silencio; sin `unit`
+  la remisión es `unbalanced` con el motivo (recalculo-final-03) y el recurso expone
+  `unit: {declared, declared_text, confirmed, requires_confirmation}`. Con `unit` cada importe
+  se reexpresa desde su texto decimal a centavos exactos (aritmética entera, no
+  `valor × 1000` en coma flotante) y el detalle lo revela en `validation_notes[]`. En `rows[]`
+  un importe reexpresado fuera de 2^53 centavos es `400 validation_failed` con puntero.
+- `maturity_overrides`: `{código: "corriente" | "no_corriente"}` (clases 1 y 2, máximo 500, el
+  código más específico prevalece). Decisión: la clasificación por grupo PUC sigue siendo el
+  supuesto por defecto (NIC 1 párr. 66-76 / NIIF PYMES 4.5-4.8); las excepciones se aplican de
+  forma determinista, viajan en las filas persistidas y se revelan con su monto en
+  `classification_note`. Sin excepciones las cifras son idénticas.
+
+`GET /api/v1/trial-balances/{id}` añade `validation_reasons[]`, `validation_notes[]`,
+`classification_note`, `discrepancies[]` y `curator_findings[]` completos (recomputados). El CSV acepta los mismos alias de columnas del parser interno
 (codigo/cuenta/débito/crédito/saldo por año). 422 `empty_trial_balance` si no se reconoce
 ninguna fila válida.
 
