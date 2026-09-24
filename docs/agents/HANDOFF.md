@@ -13,8 +13,8 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
   #1–#4, #8 y #9 de la fase 1 atendidos por los paquetes P1–P6 y las integraciones I1–I5 (sus remanentes siguen en
   *Pendientes* del informe); re-auditoría final, 55 hallazgos: 54 corregidos y 1 residual documentado. Índice en el
   [anexo](../reviews/auditoria-integral-niif-2026-09-24-anexo.md).
-- Verificación final en `54802609`: vitest 535 archivos / 5.404 pruebas (6 archivos / 23 pruebas omitidas: requieren
-  Postgres), `tsc` sin errores, eslint 0 errores (158 avisos preexistentes, 1 de ellos en un archivo generado por la
+- Verificación final en `54802609`: vitest 535 archivos / 5.404 pruebas (23 omitidas: 20 en los 6 archivos
+  que requieren Postgres y 3 marcadores `describe.skip` preexistentes), `tsc` sin errores, eslint 0 errores (158 avisos preexistentes, 1 de ellos en un archivo generado por la
   compilación), strict-mode y `npm run build`
   (credenciales ficticias) correctos. Re-auditoría final: 879/900 cifras al centavo por la ruta real (12 en balances
   descuadrados bloqueados con 422 y 9 N/D por diseño), 3.401/3.401 en 32 variantes honestas nuevas, 814/814 mutaciones

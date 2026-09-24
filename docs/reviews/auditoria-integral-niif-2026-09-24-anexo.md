@@ -8,7 +8,7 @@ Los títulos son los del auditor (abreviados); los hallazgos de seguridad se des
 
 La fase 2 (código final `54802609`) actualizó el estado de los 10 hallazgos que la fase 1 dejó "en parte" (columna
 Estado de la tabla principal) y añade dos secciones al final: los hallazgos de la fase 1 que no figuraban en este
-índice y se cerraron en la fase 2, y los 55 hallazgos de la re-auditoría final con su commit.
+índice y se atendieron en la fase 2 (tres quedan en parte), y los 55 hallazgos de la re-auditoría final con su commit.
 
 Resumen de estado de la tabla principal: al cierre de la fase 1, Corregido 259 y Corregido en parte 10; tras la fase 2,
 Corregido 264 y En parte 5 (ver *Pendientes* del informe).
@@ -160,7 +160,7 @@ Corregido 264 y En parte 5 (ver *Pendientes* del informe).
 | niif-preproceso-14 | niif-preproceso | media | R18 invoca la 'causal de disolución por pérdidas (Art. 459 C.Co.)', derogada por la Ley 2069 de 2020, y además con la fórmula invertida | Corregido |
 | niif-preproceso-16 | niif-preproceso | media | EFE (R2) sólo modela los grupos 13/14/15/21-25/31-33/36-37: inversiones (12), intangibles (16), diferidos (17), otros activos (18) y pasivos 26-29 se cierran… | Corregido |
 | niif-preproceso-19 | niif-preproceso | media | El detector de 'saldo a favor de renta' usa 1805 (Bienes de arte y cultura en el PUC), todo 1355 (incluye ICA, IVA retenido e impuestos descontables) y 5404… | Corregido |
-| niif-preproceso-21 | niif-preproceso | media | Corriente/no corriente fijado sólo por grupo PUC, sin vencimientos: 21 siempre corriente, 28 siempre no corriente (anticipos de clientes), 12/13 siempre corr… | Corregido en la fase 2 (P4, I2, I4, I5): excepciones de vencimiento declaradas por cuenta, ESF partido por plazo y E27; el grupo PUC sigue como supuesto revelado |
+| niif-preproceso-21 | niif-preproceso | media | Corriente/no corriente fijado sólo por grupo PUC, sin vencimientos: 21 siempre corriente, 28 siempre no corriente (anticipos de clientes), 12/13 siempre corr… | Corregido en la fase 2 (P4, I2, I4, I5): excepciones de vencimiento declaradas por cuenta, ESF partido por plazo y E27; el grupo PUC sigue como supuesto revelado (excepciones por defecto: decisión de negocio, Pendientes #18) |
 | niif-preproceso-22 | niif-preproceso | media | R1 lleva sobregiros y anticipos con saldo contrario a '2810ZZ' (grupo 28 → pasivo NO corriente) y no recalcula efectivoCuenta11 ni deudoresCuenta13 | Corregido |
 | niif-preproceso-24 | niif-preproceso | media | EBIT, margen operativo y cobertura de intereses incluyen ingresos NO operacionales (grupo 42); el gasto financiero cae a todo el grupo 53 cuando falta 5305 | Corregido |
 | niif-preproceso-25 | niif-preproceso | media | Días de cartera sobre todo el grupo 13 (incluye 1355 anticipos de impuestos, 1330 y 1365) y 365 días fijos incluso en cortes parciales | Corregido |
@@ -285,7 +285,7 @@ Corregido 264 y En parte 5 (ver *Pendientes* del informe).
 | valoracion-16 | valoracion | baja | Citas normativas erróneas en valoración: Circular 115-000011/2008 (es de Revisoría Fiscal) y Art. 90 E.T. mal resumido | Corregido |
 | valoracion-19 | valoracion | baja | Analista de Mercado: clasificación MIPYME por activos (500 SMMLV) derogada y cifra calculada con el SMMLV 2025 | Corregido |
 
-## Hallazgos de la fase 1 fuera de este índice, cerrados en la fase 2
+## Hallazgos de la fase 1 fuera de este índice, atendidos en la fase 2
 
 Hallazgos de severidad baja (o residuales) que la fase 1 dejó "no procesados" y los paquetes de la fase 2 verificaron
 contra el código antes de corregirlos. "Ya corregido" significa que el paquete comprobó que el defecto no reproducía en
@@ -332,7 +332,7 @@ la base `e631415` y lo dejó registrado con prueba.
 | valoracion-24 | P5, I2, I3, I5 | Runway de Comando con salidas fiscales de 35 % × UN | Corregido: función pura con escenarios rotulados es/en |
 | valoracion-25 | P5 | KPIs de valoración con N/D convertido en 0 | Corregido |
 | valoracion-26 | P5 | Payback, TIR no única e IR con I0 = 0 | Corregido |
-| valoracion-27 | P5 | Pruebas de valoración y factibilidad faltantes | En parte: P5 no añadió pruebas de las páginas `/workspace/valor` y de macroeconomía |
+| valoracion-27 | P5 | Pruebas de valoración y factibilidad faltantes | En parte: P5 no añadió pruebas de las páginas `/workspace/valor` y de macroeconomía (Pendientes #24) |
 | auditoria-calidad-24 | P6 | Benford sin control de tamaño muestral | Corregido: MAD de Nigrini; monto sólo de los dígitos desviados |
 | auditoria-calidad-25 | P6 | Expectativa errónea de números redondos | Corregido |
 | auditoria-calidad-26 | P6 | Fin de semana en UTC y festivos sólo de 2026 | Corregido |

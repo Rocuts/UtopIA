@@ -33,7 +33,7 @@ Guía de navegación rápida. **Fuente de verdad es el código** — cuando este
 | Documento | Qué encontrarás |
 |-----------|----------------|
 | [reviews/auditoria-integral-niif-2026-09-24.md](reviews/auditoria-integral-niif-2026-09-24.md) | **Empieza aquí.** Auditoría multiagente con verificación adversarial y re-auditorías: qué estaba mal en `dea0329`, qué se corrigió en las fases 1 y 2 (código final `54802609`), decisiones normativas, límites, pendientes con dueño y operación antes de desplegar |
-| [reviews/auditoria-integral-niif-2026-09-24-anexo.md](reviews/auditoria-integral-niif-2026-09-24-anexo.md) | Índice de los 269 hallazgos de la fase 1 (estado tras la fase 2), los hallazgos bajos cerrados en la fase 2 y los 55 de la re-auditoría final con su commit |
+| [reviews/auditoria-integral-niif-2026-09-24-anexo.md](reviews/auditoria-integral-niif-2026-09-24-anexo.md) | Índice de los 269 hallazgos de la fase 1 (estado tras la fase 2), los hallazgos bajos atendidos en la fase 2 y los 55 de la re-auditoría final con su commit |
 | [agents/HANDOFF.md](agents/HANDOFF.md) | Continuidad: estado verificado, operación pendiente y próxima tarea |
 | [agents/MAP.md](agents/MAP.md) | Mapa de lectura por tarea: puntos de entrada y pruebas dirigidas |
 
