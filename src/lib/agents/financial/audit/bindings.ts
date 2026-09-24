@@ -6,10 +6,13 @@
 // naturaleza distinta. Aquí se calcula en código, desde el preprocesador,
 // y sin inventar: una cifra que no se puede soportar sale `null` con motivo.
 //
-//   - Posición de renta (auditoria-calidad-22): (1355 de renta + 1805 sólo si
-//     su NOMBRE es fiscal) − 2404. No suma IVA/ICA ni el grupo 24 completo ni
-//     impuesto diferido. En el PUC (D. 2650/1993) la 1805 es "Bienes de arte
-//     y cultura"; 135510/135517/135518/135520... son IVA/ICA/otros.
+//   - Posición de renta (auditoria-calidad-22): créditos de renta de 1355/1805
+//     − 2404, con la regla ÚNICA de `@/lib/accounting/renta-credit` (la misma
+//     del preprocesador, el curator R4/R10/R16 y el Âncora Fiscal F03;
+//     re-auditoría 2026-09, NM-06). No suma IVA/ICA ni el grupo 24 completo
+//     ni impuesto diferido. En el PUC (D. 2650/1993) la 1805 es "Bienes de
+//     arte y cultura": sólo cuenta con nombre de renta; 135510/135517/135518/
+//     135520... son ICA/IVA/otros.
 //   - Indicadores de riesgo DIAN (auditoria-calidad-23): los 6 del spec v2.1
 //     Parte IV Dictamen 4 §4, con UNA regla de agregación.
 // ---------------------------------------------------------------------------
@@ -19,6 +22,7 @@ import type {
   PreprocessedBalance,
   ValidatedAccount,
 } from '@/lib/preprocessing/trial-balance';
+import { filtrarCreditoRenta } from '@/lib/accounting/renta-credit';
 import type { DianRiskLevelJson, FiscalAuditOpinionTypeJson } from '../contracts/audit-report';
 import { serializeMoneyCop } from '../contracts/money';
 
@@ -41,31 +45,12 @@ function sumCents(accounts: ValidatedAccount[]): bigint {
 // Posición de renta
 // ---------------------------------------------------------------------------
 
-const NON_RENTA_NAME_RX = /\b(?:iva|ica|industria|comercio|ventas|consumo|timbre|cree)\b/i;
-const RENTA_NAME_RX = /\brenta\b/i;
-const FISCAL_1805_NAME_RX = /impuesto|anticipo|retenci|saldo\s+a\s+favor|sobrante/i;
-
-/** Subcuentas de la 1355 que son crédito del impuesto de RENTA. */
-export function isRenta1355(account: Pick<ValidatedAccount, 'code' | 'name'>): boolean {
-  const code = account.code;
-  if (code.startsWith('135505') || code.startsWith('135515')) return true;
-  if (code.startsWith('135595')) {
-    return RENTA_NAME_RX.test(account.name) && !NON_RENTA_NAME_RX.test(account.name);
-  }
-  return false;
-}
-
-/** La 1805 sólo es saldo fiscal cuando su NOMBRE lo indica. */
-export function isFiscal1805(account: Pick<ValidatedAccount, 'code' | 'name'>): boolean {
-  return account.code.startsWith('1805') && FISCAL_1805_NAME_RX.test(account.name);
-}
-
 export interface RentaPositionBinding {
   saldo1355RentaCop: string | null;
-  /** null cuando ninguna 1805 tiene nombre fiscal (no suma). */
+  /** null cuando ninguna 1805 es crédito de renta (nombre de renta) — no suma. */
   saldo1805FiscalCop: string | null;
   saldo2404Cop: string | null;
-  /** (1355 renta + 1805 fiscal) − 2404. + = saldo a favor; − = saldo a pagar. */
+  /** (1355 renta + 1805 renta) − 2404. + = saldo a favor; − = saldo a pagar. */
   posicionFiscalNetaCop: string | null;
   /** Motivo cuando la posición no es determinable. */
   motivo: string | null;
@@ -87,8 +72,10 @@ export function computeRentaPosition(snap: PeriodSnapshot | null | undefined): R
   const class2 = leafAccounts(snap, 2);
   if (class1.length === 0 || class2.length === 0) return nd;
 
-  const renta1355 = sumCents(class1.filter(isRenta1355));
-  const fiscal1805Accounts = class1.filter(isFiscal1805);
+  // Regla única sobre la lista completa (nombres de cuentas padre incluidos).
+  const creditos = filtrarCreditoRenta(class1);
+  const renta1355 = sumCents(creditos.filter((a) => a.code.startsWith('1355')));
+  const fiscal1805Accounts = creditos.filter((a) => a.code.startsWith('1805'));
   const fiscal1805 = fiscal1805Accounts.length > 0 ? sumCents(fiscal1805Accounts) : null;
   // Pasivos con naturaleza crédito se reportan en positivo (mismo convenio que R16).
   const renta2404 = sumCents(class2.filter((a) => a.code.startsWith('2404')));

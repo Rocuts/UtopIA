@@ -27,7 +27,7 @@ export type FiscalAnchorBlock = {
   f07: string;
   /** F08 — Total Pasivos Fiscales (abs Grupo 24 completo) en centavos. */
   f08: string;
-  /** F09 — % Carga Impuesto sobre Utilidad Neta (Clase 54 / F01 × 100, 1 decimal). */
+  /** F09 — Tasa efectiva contable: gasto de renta (grupo 54) / F01 (UAI) × 100, 1 decimal. No es la TTD. */
   f09: number;
   /** F10 — % Cobertura Retenciones (F03 / F02 × 100, 1 decimal). */
   f10: number;

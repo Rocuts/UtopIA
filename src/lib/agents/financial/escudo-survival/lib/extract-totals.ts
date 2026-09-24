@@ -52,8 +52,13 @@ export interface SurvivalAnchorTotals {
   creditoRenta: number;
   /** Saldo cuenta 3305 (Reserva legal). Opcional. */
   saldoCuenta3305: number;
-  /** Saldo cuenta 3115 (Capital suscrito y pagado). Opcional. */
-  saldoCuenta3115: number;
+  /**
+   * Capital social = grupo 31 completo (3105 capital suscrito y pagado en S.A.
+   * y S.A.S., 3115 aportes sociales en la Ltda., …). Base del tope del 50 % de
+   * la reserva legal (Art. 452 C.Co.). Antes sólo se leía la 3115 rotulada
+   * como capital suscrito (re-auditoría 2026-09, NM-08).
+   */
+  capitalGrupo31: number;
   /** Subcuentas postables de la clase 22 (Cuentas por pagar) con monto > 0. */
   cuentasPorPagarClase22: Array<{ code: string; name: string; balance: number }>;
 }
@@ -132,7 +137,7 @@ export function extractSurvivalAnchors(
   const saldoCuenta1355 = findAccountBalance(classes, '1355');
   const subcuentas1355 = listPostablesUnderPrefix(classes, '1355');
   const saldoCuenta3305 = findAccountBalance(classes, '3305');
-  const saldoCuenta3115 = findAccountBalance(classes, '3115');
+  const capitalGrupo31 = sumPostablesUnderPrefix(classes, '31').total;
   const cuentasPorPagarClase22 = listPostablesUnderPrefix(classes, '22').slice(0, 10);
 
   return {
@@ -151,7 +156,7 @@ export function extractSurvivalAnchors(
     subcuentas1355,
     creditoRenta,
     saldoCuenta3305,
-    saldoCuenta3115,
+    capitalGrupo31,
     cuentasPorPagarClase22,
   };
 }
@@ -204,7 +209,7 @@ export function buildAnchorBlock(anchors: SurvivalAnchorTotals): string {
 ${sub1355}
 - Crédito imputable a renta (135505 + 135515; 135595/1805 sólo con nombre de renta): ${fmtCOP(anchors.creditoRenta)}
 - 3305 Reserva legal: ${fmtCOP(anchors.saldoCuenta3305)}
-- 3115 Capital suscrito y pagado: ${fmtCOP(anchors.saldoCuenta3115)}
+- Capital social (grupo 31: 3105 capital suscrito y pagado, 3115 aportes sociales…): ${fmtCOP(anchors.capitalGrupo31)}
 
 ### CUENTAS POR PAGAR (clase 22, top 10 por monto)
 ${cxp22}

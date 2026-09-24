@@ -67,7 +67,7 @@ export function buildFiscalAnchorBlockMarkdown(block: FiscalAnchorBlock): string
   lines.push(`- F06 · Retefuente por declarar (|Cta.2365|): ${formatCopFromCents(BigInt(block.f06))}`);
   lines.push(`- F07 · ICA por pagar (|Cta.2368|): ${formatCopFromCents(BigInt(block.f07))}`);
   lines.push(`- F08 · Total pasivos fiscales (|Grupo 24|): ${formatCopFromCents(BigInt(block.f08))}`);
-  lines.push(`- F09 · Tasa efectiva tributación (Clase54 / F01): ${fmtPct(block.f09)}`);
+  lines.push(`- F09 · Tasa efectiva contable (grupo 54 / F01 UAI; no es la TTD del Art. 240 par. 6): ${fmtPct(block.f09)}`);
   lines.push(`- F10 · Eficiencia fiscal (F03 / F02): ${fmtPct(block.f10)}`);
   lines.push('');
   lines.push('### Calendario DIAN');

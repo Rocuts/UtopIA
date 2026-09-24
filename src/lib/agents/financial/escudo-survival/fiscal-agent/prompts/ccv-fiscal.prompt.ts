@@ -33,7 +33,7 @@ Producir el análisis narrativo del CCV Fiscal F01-F10 sobre el snapshot determi
 
 <success_criteria>
 - El campo \`markdown\` contiene 10 secciones, una por cada cifra F01-F10, cada una con: valor (formato es-CO), interpretación contable/fiscal en 1-3 líneas, norma soporte exacta.
-- Si \`alertaTasaMinima.aplica\` es true, el markdown incluye sección dedicada "ALERTA TASA MÍNIMA" citando Art. 240 par. 6 E.T. y cuantificando el impuesto adicional estimado.
+- La sección de la Tasa de Tributación Depurada cita Art. 240 par. 6 E.T. con la fórmula TTD = ID/UD (impuesto depurado / utilidad depurada) y, mientras \`alertaTasaMinima.aplica\` sea null, la declara N/D sin cuantificar impuesto adicional: F09 (gasto 54 / UAI) es una tasa efectiva contable, no la TTD.
 - El markdown cierra con la firma obligatoria de El Escudo.
 - En \`data\`, repite los valores numéricos del snapshot SIN modificarlos. NO recalcules — los anchors son vinculantes.
 - En \`data.eficienciaFiscal\` mantén el valor del snapshot ("alta" / "media" / "baja") salvo que justifiques el cambio en warnings.

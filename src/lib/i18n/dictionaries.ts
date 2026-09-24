@@ -282,6 +282,41 @@ export const dict = {
         'La mayoría de las empresas operan mirando el retrovisor: ven lo que gastaron, lo que pagaron y lo que quedó. Con 1+1, cambiamos la perspectiva 180°. Hemos estructurado su ecosistema empresarial en cuatro pilares de alto impacto. No hablamos de contabilidad o impuestos; hablamos de Resiliencia, Valor, Integridad y Futuro.',
       niifEliteCTA: 'Informe NIIF Elite',
       niifEliteCTALong: 'Informe NIIF Elite en determinado periodo',
+      // Centro de Alertas (/workspace/alertas). Re-auditoría e2e-niif-15
+      // (2026-09): sólo alertas reales del Centinela; nada de maquetas.
+      alertCenter: {
+        eyebrow: 'Sentinel · Centro de Alertas',
+        title: 'Centro de Alertas',
+        subtitle:
+          'Alertas activas registradas por el Centinela y El Escudo para su empresa (pendientes, pospuestas y escaladas), filtradas por área.',
+        filters: {
+          todas: 'Todas',
+          escudo: 'Escudo',
+          valor: 'Valor',
+          verdad: 'Verdad',
+          futuro: 'Futuro',
+        },
+        inboxTitle: 'Alertas activas',
+        criticalCount: '{n} críticas',
+        loading: 'Cargando alertas…',
+        empty: 'Sin alertas activas',
+        emptyBody:
+          'Las alertas aparecen cuando el Centinela o El Escudo detectan hallazgos en los informes de su empresa. No mostramos alertas de ejemplo.',
+        emptyFilter: 'No hay alertas activas en esta área.',
+        error: 'No fue posible cargar las alertas. Intente de nuevo más tarde.',
+        severity: {
+          critico: 'Crítica',
+          advertencia: 'Advertencia',
+          informativo: 'Informativa',
+        },
+        status: {
+          pending: 'Pendiente',
+          snoozed: 'Pospuesta',
+          escalated: 'Escalada',
+          resolved: 'Resuelta',
+        },
+        subscriptionsTitle: 'Suscripciones',
+      },
       // Auditoría WP07 (2026-09): estados honestos de dato. Ninguna cifra
       // literal se presenta como dato del cliente.
       dataStatus: {
@@ -367,7 +402,7 @@ export const dict = {
           dianRiskLabel: 'Riesgo DIAN',
           riskNotDeterminable: 'No determinable',
           riskNotDeterminableReason:
-            'Sin base gravable en el periodo (F01 = $0): el score de riesgo no tiene qué medir.',
+            'Sin utilidad antes de impuestos en el periodo (F01, UAI contable = $0; no es base fiscal): el score de riesgo no tiene qué medir.',
           period: 'Periodo',
         },
       },
@@ -477,8 +512,8 @@ export const dict = {
             disclaimer: 'Referencia antes de depuraciones fiscales. El valor mostrado es una proyección bruta UAI × tarifa nominal (Art. 240 E.T.) y NO constituye liquidación oficial del Impuesto de Renta. El impuesto definitivo requiere conciliación contable→fiscal (Art. 26 E.T.), aplicación de descuentos (Arts. 254-260 E.T.), verificación de la Tasa de Tributación Depurada del 15% (parágrafo 6 Art. 240 E.T., Ley 2277/2022) y validación del régimen tarifario aplicable. Determinación final requiere intervención de contador público y/o revisor fiscal.',
             f01: {
               title: 'UAI Contable',
-              description: 'Base del impuesto de renta',
-              norma: 'Art. 240 E.T.',
+              description: 'Utilidad contable antes de impuestos — no es base fiscal (requiere depuración)',
+              norma: 'Art. 26 E.T.',
             },
             f02: {
               title: 'Impuesto Referencia (35%)',
@@ -516,9 +551,9 @@ export const dict = {
               norma: 'Cta. 24XX',
             },
             f09: {
-              title: 'Carga sobre Utilidad Neta',
-              description: 'Clase 54 / F01 × 100',
-              norma: 'Art. 240 E.T.',
+              title: 'Tasa efectiva contable',
+              description: 'Gasto de renta (grupo 54) / UAI × 100 — no es la TTD (Art. 240 par. 6 E.T.)',
+              norma: 'Razón contable (impuesto/UAI)',
             },
             f10: {
               title: 'Cobertura de Retenciones',
@@ -535,7 +570,7 @@ export const dict = {
               vencido: 'Vencido',
             },
             alertas: {
-              A5_SIN_PROVISION: 'Impuesto de Renta sin provisionar — riesgo Art. 647 E.T.',
+              A5_SIN_PROVISION: 'Sin gasto de renta causado — requiere depuración fiscal (Art. 26 E.T.); informativo, sin cifra estimada',
               SALDO_A_FAVOR: 'Posible saldo a favor (estimación contable, no liquidación) — verificar contra la declaración',
               VENCIMIENTO_15D: 'Vencimiento próximo (≤15 días)',
               F10_BAJA: 'Eficiencia fiscal baja',
@@ -582,7 +617,7 @@ export const dict = {
               f06: 'F06 Retefuente por Declarar',
               f07: 'F07 ICA Retenido',
               f08: 'F08 Total Pasivos Fiscales',
-              f09: 'F09 Carga sobre Utilidad Neta',
+              f09: 'F09 Tasa efectiva contable (grupo 54 / UAI)',
               f10: 'F10 Cobertura de Retenciones',
               score: 'Score DIAN',
               alertasLabel: 'Alertas',
@@ -594,6 +629,12 @@ export const dict = {
             intro: 'Siete módulos de análisis fiscal sobre tu balance bajo la normativa tributaria colombiana 2026. Selecciona el modo según tu necesidad.',
             selectMode: 'Modo de análisis',
             uploadLabel: 'Cargar balance de prueba',
+            saldoDeclarado: {
+              label: 'Saldo a favor declarado — Formulario 110 (opcional)',
+              help: 'Saldo a favor liquidado en su declaración de renta. Sin él, la devolución queda N/D: la posición contable (F04) no es la declaración.',
+              placeholder: 'Ej. 12.345.678,90',
+              invalid: 'Monto no válido: use pesos colombianos (ej. 12.345.678,90), sin signo negativo.',
+            },
             runButton: 'Ejecutar análisis',
             analyzing: 'Analizando...',
             cancel: 'Cancelar',
@@ -630,13 +671,13 @@ export const dict = {
                 f06: 'Retefuente por Declarar',
                 f07: 'ICA Retenido',
                 f08: 'Total Pasivos Fiscales',
-                f09: 'Carga sobre Utilidad',
+                f09: 'Tasa efectiva contable',
                 f10: 'Cobertura de Retenciones',
                 colConcepto: 'Concepto',
                 colValor: 'Valor',
                 colNorma: 'Norma',
                 tableLabel: 'Cuadro de control de variables fiscales F01-F10',
-                alertaTasaMinima: 'Alerta tasa mínima (Art. 10 Ley 2277/2022):',
+                alertaTasaMinima: 'Tasa de Tributación Depurada (Art. 240 par. 6 E.T.):',
                 eficiencia: 'Eficiencia fiscal',
               },
               riskScore: {
@@ -1974,6 +2015,41 @@ export const dict = {
         'Most companies operate looking in the rear-view mirror: what was spent, what was paid, what remained. With 1+1, we flip the perspective 180°. We have structured your business ecosystem into four high-impact pillars. We do not talk about accounting or taxes; we talk about Resilience, Value, Integrity, and the Future.',
       niifEliteCTA: 'IFRS Elite Report',
       niifEliteCTALong: 'IFRS Elite Report for a specific period',
+      // Alert Center (/workspace/alertas). Re-audit e2e-niif-15 (2026-09):
+      // only real Sentinel alerts; no mock-ups.
+      alertCenter: {
+        eyebrow: 'Sentinel · Alert Center',
+        title: 'Alert Center',
+        subtitle:
+          'Active alerts recorded by the Sentinel and the Shield for your company (pending, snoozed and escalated), filtered by area.',
+        filters: {
+          todas: 'All',
+          escudo: 'Shield',
+          valor: 'Value',
+          verdad: 'Truth',
+          futuro: 'Future',
+        },
+        inboxTitle: 'Active alerts',
+        criticalCount: '{n} critical',
+        loading: 'Loading alerts…',
+        empty: 'No active alerts',
+        emptyBody:
+          'Alerts appear when the Sentinel or the Shield detect findings in your company reports. We do not show sample alerts.',
+        emptyFilter: 'No active alerts in this area.',
+        error: 'Alerts could not be loaded. Please try again later.',
+        severity: {
+          critico: 'Critical',
+          advertencia: 'Warning',
+          informativo: 'Informational',
+        },
+        status: {
+          pending: 'Pending',
+          snoozed: 'Snoozed',
+          escalated: 'Escalated',
+          resolved: 'Resolved',
+        },
+        subscriptionsTitle: 'Subscriptions',
+      },
       // WP07 audit (2026-09): honest data states. No literal figure is shown
       // as client data.
       dataStatus: {
@@ -2059,7 +2135,7 @@ export const dict = {
           dianRiskLabel: 'DIAN risk',
           riskNotDeterminable: 'Not determinable',
           riskNotDeterminableReason:
-            'No taxable base for the period (F01 = $0): the risk score has nothing to measure.',
+            'No pre-tax income for the period (F01, book PBT = $0; not the tax base): the risk score has nothing to measure.',
           period: 'Period',
         },
       },
@@ -2169,8 +2245,8 @@ export const dict = {
             disclaimer: 'Reference figures before tax adjustments. The value shown is a gross projection (Pre-tax Income × nominal rate, Art. 240 Tax Statute) and does NOT constitute an official Income Tax liquidation. Final tax liability requires book-to-tax reconciliation (Art. 26), application of tax credits (Arts. 254-260), verification of the 15% Depurated Tax Rate (Art. 240 par. 6, Law 2277/2022), and validation of the applicable tariff regime. Final determination requires intervention by a certified public accountant and/or statutory auditor.',
             f01: {
               title: 'Pre-tax Income',
-              description: 'Income tax base',
-              norma: 'Art. 240 E.T.',
+              description: 'Book pre-tax income — not the tax base (requires tax reconciliation)',
+              norma: 'Art. 26 E.T.',
             },
             f02: {
               title: 'Reference Tax (35%)',
@@ -2208,9 +2284,9 @@ export const dict = {
               norma: 'Acct. 24XX',
             },
             f09: {
-              title: 'Tax Burden on Net Income',
-              description: 'Class 54 / F01 × 100',
-              norma: 'Art. 240 E.T.',
+              title: 'Accounting effective tax rate',
+              description: 'Income tax expense (group 54) / pre-tax income × 100 — not the TTD (Art. 240 par. 6 Tax Statute)',
+              norma: 'Accounting ratio (tax/PBT)',
             },
             f10: {
               title: 'Withholding Coverage',
@@ -2227,7 +2303,7 @@ export const dict = {
               vencido: 'Overdue',
             },
             alertas: {
-              A5_SIN_PROVISION: 'Income Tax not provisioned — Art. 647 Tax Statute risk',
+              A5_SIN_PROVISION: 'No income tax expense recorded — requires tax reconciliation (Art. 26 Tax Statute); informational, no estimated figure',
               SALDO_A_FAVOR: 'Possible credit balance (accounting estimate, not an assessment) — verify against the tax return',
               VENCIMIENTO_15D: 'Deadline approaching (≤15 days)',
               F10_BAJA: 'Low fiscal efficiency',
@@ -2274,7 +2350,7 @@ export const dict = {
               f06: 'F06 Withholding Tax to File',
               f07: 'F07 ICA Withheld',
               f08: 'F08 Total Tax Liabilities',
-              f09: 'F09 Tax Burden on Net Income',
+              f09: 'F09 Accounting effective tax rate (group 54 / PBT)',
               f10: 'F10 Withholding Coverage',
               score: 'DIAN Score',
               alertasLabel: 'Alerts',
@@ -2286,6 +2362,12 @@ export const dict = {
             intro: 'Seven fiscal analysis modules over your balance sheet under 2026 Colombian tax regulations. Select a mode based on your needs.',
             selectMode: 'Analysis mode',
             uploadLabel: 'Upload trial balance',
+            saldoDeclarado: {
+              label: 'Declared refund balance — Form 110 (optional)',
+              help: 'Refund balance assessed in your income tax return. Without it the refund stays N/A: the accounting position (F04) is not the return.',
+              placeholder: 'E.g. 12.345.678,90',
+              invalid: 'Invalid amount: use Colombian pesos (e.g. 12.345.678,90), no negative sign.',
+            },
             runButton: 'Run analysis',
             analyzing: 'Analyzing...',
             cancel: 'Cancel',
@@ -2319,16 +2401,16 @@ export const dict = {
                 f03: 'Income-Tax Credit',
                 f04: 'Accounting Reference Position (estimate)',
                 f05: 'VAT Provision',
-                f06: 'ICA Provision',
-                f07: 'Property / Vehicles',
+                f06: 'Withholding Tax to File',
+                f07: 'ICA Withheld',
                 f08: 'Total Tax Liabilities',
-                f09: 'Tax Burden on Income',
+                f09: 'Accounting effective tax rate',
                 f10: 'Withholding Coverage',
                 colConcepto: 'Item',
                 colValor: 'Value',
                 colNorma: 'Norm',
                 tableLabel: 'Fiscal variable control table F01-F10',
-                alertaTasaMinima: 'Minimum rate alert (Art. 10 Law 2277/2022):',
+                alertaTasaMinima: 'Adjusted Tax Rate (TTD, Art. 240 par. 6 Tax Statute):',
                 eficiencia: 'Fiscal efficiency',
               },
               riskScore: {

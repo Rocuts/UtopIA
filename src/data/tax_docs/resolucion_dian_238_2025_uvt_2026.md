@@ -9,7 +9,7 @@ normUrl: https://www.dian.gov.co/normatividad/Paginas/Resoluciones.aspx
 status: vigente
 effectiveFrom: 2026-01-01
 effectiveUntil: 2026-12-31
-lastVerified: 2026-05-02
+lastVerified: 2026-09-24
 tags: [uvt, dian, valores, 2026, base-tributaria, art-868]
 keyValues:
   uvt_2026: 52374
@@ -87,21 +87,25 @@ El artículo 868 del Estatuto Tributario establece la Unidad de Valor Tributario
 
 ### 5.3 Bases de retención en la fuente (renta)
 
+> **Nota de vigencia (corrección auditoría 2026-09).** El **Decreto 0572 de 2025** (texto primario en `decreto_0572_2025.md`) redujo las bases mínimas generales: **servicios 2 UVT** (art. 2 → DUR 1625/2016 Art. 1.2.4.4.1; antes 4 UVT) y **compras y demás otros ingresos tributarios 10 UVT** (art. 6 → DUR 1625/2016 Art. 1.2.4.9.1 lit. i; antes 27 UVT). Entre el 08-may y el 30-jun-2026 rigieron de nuevo las bases anteriores (4 / 27 UVT) por suspensión provisional del Consejo de Estado; las bases reducidas rigen desde el **01-jul-2026** (ver `decreto_572_2025_autorretenciones.md` y `matriz_retenciones_2026.md`). Las filas con 4 UVT reflejan bases especiales o la base general anterior: confirme la base de cada concepto antes de aplicarla.
+
 | Concepto | Tarifa | Base mínima UVT | Base mínima COP 2026 |
 |----------|--------|-----------------|----------------------|
-| Compras a declarantes | 2,5% | 27 UVT | $1.414.000 |
-| Compras a no declarantes | 3,5% | 27 UVT | $1.414.000 |
-| Servicios generales (declarantes) | 4% | 4 UVT | $209.000 |
-| Servicios generales (no declarantes) | 6% | 4 UVT | $209.000 |
+| Compras a declarantes | 2,5% | 10 UVT | $524.000 |
+| Compras a no declarantes | 3,5% | 10 UVT | $524.000 |
+| Servicios generales (declarantes) | 4% | 2 UVT | $105.000 |
+| Servicios generales (no declarantes) | 6% | 2 UVT | $105.000 |
 | Honorarios y comisiones (PJ) | 11% | Sin mínimo | — |
-| Honorarios y comisiones (PN declarante) | 10% | Sin mínimo | — |
-| Honorarios y comisiones (PN no declarante) | 11% | Sin mínimo | — |
-| Arrendamiento de bienes inmuebles | 3,5% | 27 UVT | $1.414.000 |
+| Honorarios y comisiones (PN con contratos o pagos del año > 3.300 UVT) | 11% | Sin mínimo | — |
+| Honorarios y comisiones (PN con contratos y pagos del año ≤ 3.300 UVT) | 10% | Sin mínimo | — |
+| Arrendamiento de bienes inmuebles | 3,5% | 10 UVT | $524.000 |
 | Arrendamiento de bienes muebles | 4% | Sin mínimo | — |
 | Rendimientos financieros | 7% | Sin mínimo | — |
-| Servicios de transporte de carga | 1% | 4 UVT | $209.000 |
-| Servicios de restaurante, hotel y hospedaje | 3,5% | 4 UVT | $209.000 |
-| Servicios de aseo y vigilancia | 2% sobre AIU | 4 UVT | $209.000 |
+| Servicios de transporte de carga | 1% | 4 UVT (confirmar) | $209.000 |
+| Servicios de restaurante, hotel y hospedaje | 3,5% | 4 UVT (confirmar) | $209.000 |
+| Servicios de aseo y vigilancia | 2% sobre AIU | 4 UVT (confirmar) | $209.000 |
+
+Conversión con la aproximación del Art. 868 E.T.: 10 × $52.374 = $523.740 → $524.000; 2 × $52.374 = $104.748 → $105.000. Honorarios de personas naturales: la tarifa del 10 % o 11 % depende del umbral de 3.300 UVT de contratos y pagos del año (DUR 1625/2016 Art. 1.2.4.3.1), no de la condición de declarante.
 
 ### 5.4 Obligación de declarar renta — Personas Naturales año gravable 2025 (presentación 2026)
 
@@ -115,10 +119,11 @@ El artículo 868 del Estatuto Tributario establece la Unidad de Valor Tributario
 
 (Nota: estos topes se calculan con el UVT del año gravable que se declara, no con el UVT 2026.)
 
-### 5.5 Beneficio neto laboral exento (Art. 206-10 ET)
+### 5.5 Renta exenta laboral (Art. 206 num. 10 ET, mod. art. 2 Ley 2277 de 2022)
 
-- 25% de los pagos laborales mensuales hasta el equivalente a **240 UVT mensuales** = $12.570.000.
-- Renta exenta acumulada del año gravable 2026 hasta 2.880 UVT = $150.838.000.
+- 25 % del valor total de los pagos laborales (una vez detraídos ingresos no constitutivos, deducciones y demás rentas exentas), **limitada anualmente a 790 UVT anuales** = $41.375.460 en 2026 (texto primario: `ley_2277_2022.md`, «limitada anualmente a setecientos noventa (790) UVT»). En la retención mensual el tope se prorratea (790 / 12 ≈ 65,83 UVT/mes).
+- **Límite global** (Art. 336 num. 3, mod. art. 7 Ley 2277 de 2022): la suma de rentas exentas y deducciones no puede exceder el **40 %** del ingreso depurado ni **1.340 UVT anuales** = $70.181.160 en 2026; los 72 UVT por dependiente (hasta 4) se restan por fuera de ese límite.
+- Corrección auditoría 2026-09: la versión anterior citaba los topes mensual y anual previos a la Ley 2277 de 2022, ya no vigentes.
 
 ### 5.6 Procedimiento 2 de retención en la fuente sobre salarios — Tabla Art. 383 ET
 
@@ -142,7 +147,7 @@ El propio artículo 868 ET ordena redondear las conversiones UVT → pesos así:
 - Cifras hasta 10.000 UVT: al **múltiplo de mil** más cercano.
 - Cifras > 10.000 UVT: al **múltiplo de cien mil** más cercano.
 
-Ejemplo: 27 UVT × $52.374 = $1.414.098 → se redondea a **$1.414.000**.
+Ejemplo: 10 UVT × $52.374 = $523.740 → se redondea a **$524.000**.
 
 ### 6.2 Áreas afectadas por el cambio de UVT
 

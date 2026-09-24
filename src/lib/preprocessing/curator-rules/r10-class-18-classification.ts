@@ -20,6 +20,8 @@
 // en `snapshot.findings` y emite findings cualitativos.
 // ---------------------------------------------------------------------------
 
+import { filtrarCreditoRenta } from '@/lib/accounting/renta-credit';
+
 import type { PUCClass, PeriodSnapshot } from '../trial-balance';
 import type { Class18ClassificationAudit, CuratorFinding } from './types';
 
@@ -32,13 +34,6 @@ const TAX_PAYABLE_TOLERANCE = 1_000; // $1K COP
  * cubrir para explicar un pasivo 2404 en cero por compensación.
  */
 const RENTA_CREDIT_COVERAGE = 0.5;
-
-/** Subcuentas 1355 que son crédito de RENTA (decisión de negocio 2026-09). */
-function isRentaCreditAccount(code: string, name: string): boolean {
-  if (code.startsWith('135505') || code.startsWith('135515')) return true;
-  if (code.startsWith('135595')) return /renta/i.test(name);
-  return false;
-}
 
 export interface R10Result {
   audit: Class18ClassificationAudit;
@@ -77,17 +72,19 @@ export function runR10(snapshot: PeriodSnapshot): R10Result {
   const taxPayable = taxPayableAccounts.reduce((s, a) => s + a.balance, 0);
 
   // -------------------------------------------------------------------------
-  // 3.b Anticipos y retenciones de RENTA (1355). Auditoría 2026-09
+  // 3.b Anticipos y retenciones de RENTA (1355/1805). Auditoría 2026-09
   //     (niif-preproceso-18): con la liquidación privada, el pasivo 2404 puede
   //     quedar en 0 porque las retenciones y anticipos superan o igualan el
-  //     impuesto (Art. 850 E.T.; compensación NIC 12 ¶71). Sólo cuentan las
-  //     subcuentas de renta: 135505 (anticipo de renta), 135515 (retención en
-  //     la fuente) y 135595 cuando su nombre es de renta. 135510/135517/
-  //     135518/135520… (ICA, IVA, sobrantes) no.
+  //     impuesto (Art. 850 E.T.; compensación NIC 12 ¶71). Sólo cuentan los
+  //     créditos de renta de la regla ÚNICA (`@/lib/accounting/renta-credit`,
+  //     re-auditoría NM-06): 135505/135515 salvo nombre de otro tributo;
+  //     135595 y 1805 sólo con nombre de renta (incluida la autorretención).
+  //     135510/135517/135518/135520… (ICA, IVA, sobrantes) no.
   // -------------------------------------------------------------------------
-  const rentaCredits = (class1?.accounts ?? [])
-    .filter((a) => isRentaCreditAccount(a.code, a.name))
-    .reduce((s, a) => s + a.balance, 0);
+  const rentaCredits = filtrarCreditoRenta(class1?.accounts ?? []).reduce(
+    (s, a) => s + a.balance,
+    0,
+  );
   const compensacionExplicada =
     taxExpense > 0 && rentaCredits >= taxExpense * RENTA_CREDIT_COVERAGE;
 
@@ -171,7 +168,7 @@ export function runR10(snapshot: PeriodSnapshot): R10Result {
       title: 'Impuesto de renta causado y compensado con anticipos/retenciones',
       description:
         `Grupo 54xx reporta $${formatCOP(taxExpense)} de gasto de renta y el grupo 24xx está en ` +
-        `$${formatCOP(taxPayable)}; los anticipos y retenciones de renta (1355) suman ` +
+        `$${formatCOP(taxPayable)}; los anticipos y retenciones de renta (1355/1805) suman ` +
         `$${formatCOP(rentaCredits)}, lo que explica la compensación del pasivo.`,
       normReference: 'Art. 850 E.T. + NIC 12 párr. 71 (compensación de activos y pasivos corrientes)',
       recommendation:

@@ -17,13 +17,17 @@
 //   - Sólo se leen cuentas de RENTA según el PUC D. 2650/1993:
 //       grupo 54 "Impuesto de renta y complementarios" (gasto),
 //       2404 "De renta y complementarios" (pasivo),
-//       1355 anticipos/retenciones de renta (135505, 135515 y 135595 sólo si
-//       su nombre es de renta).
+//       créditos de renta de 1355/1805 según la regla ÚNICA de
+//       `@/lib/accounting/renta-credit` (135505/135515 salvo nombre de otro
+//       tributo; 135595 y 1805 sólo con nombre de renta — re-auditoría
+//       2026-09, NM-06).
 //   - Si hay UAI positiva material y NO hay gasto de renta causado (54 = 0),
 //     se emite un hallazgo INFORMATIVO sin monto: requiere depuración fiscal.
 //   - Nunca se calcula "renta teórica" ni "brecha" (sin `taxProvisionRisk`).
 //   - La coherencia gasto 54 ↔ pasivo 24 la evalúa R10.
 // ---------------------------------------------------------------------------
+
+import { filtrarCreditoRenta } from '@/lib/accounting/renta-credit';
 
 import type { PeriodSnapshot } from '../trial-balance';
 
@@ -41,13 +45,6 @@ export interface R4Result {
   findings: CuratorFinding[];
 }
 
-/** Subcuentas 1355 que son crédito de RENTA (decisión de negocio 2026-09). */
-function isRentaCredit(code: string, name: string): boolean {
-  if (code.startsWith('135505') || code.startsWith('135515')) return true;
-  if (code.startsWith('135595')) return /renta/i.test(name);
-  return false;
-}
-
 export function runR4(snapshot: PeriodSnapshot): R4Result {
   const classes = snapshot.classes ?? [];
   const accountsOf = (cls: number) => classes.find((c) => c.code === cls)?.accounts ?? [];
@@ -58,9 +55,7 @@ export function runR4(snapshot: PeriodSnapshot): R4Result {
   const pasivoRenta2404 = accountsOf(2)
     .filter((a) => a.code.startsWith('2404'))
     .reduce((s, a) => s + a.balance, 0);
-  const creditosRenta1355 = accountsOf(1)
-    .filter((a) => isRentaCredit(a.code, a.name))
-    .reduce((s, a) => s + a.balance, 0);
+  const creditosRenta = filtrarCreditoRenta(accountsOf(1)).reduce((s, a) => s + a.balance, 0);
 
   const cents = snapshot.controlTotals.cents;
   const uai = cents
@@ -79,8 +74,8 @@ export function runR4(snapshot: PeriodSnapshot): R4Result {
     description:
       `El periodo tiene utilidad contable antes de impuestos de $${formatCOP(uai)} y no registra ` +
       `gasto de impuesto de renta (grupo 54). Cuentas de renta del balance: pasivo 2404 ` +
-      `$${formatCOP(pasivoRenta2404)}; anticipos y retenciones de renta (1355) ` +
-      `$${formatCOP(creditosRenta1355)}. La utilidad contable no es base fiscal: determinar ` +
+      `$${formatCOP(pasivoRenta2404)}; anticipos, retenciones y autorretenciones de renta ` +
+      `(1355/1805) $${formatCOP(creditosRenta)}. La utilidad contable no es base fiscal: determinar ` +
       `si existe impuesto por pagar exige la depuración de la renta líquida. El sistema no ` +
       `estima el impuesto ni una brecha sin esa base.`,
     normReference:

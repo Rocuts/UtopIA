@@ -109,3 +109,24 @@ export function nombresConAncestros(
   }
   return nombres;
 }
+
+/**
+ * Hojas de una lista de cuentas (1355/1805 y demás) que son crédito de renta
+ * según la regla única, resolviendo los nombres de las cuentas padre con la
+ * misma lista (como el Âncora Fiscal). La usan el curator (R4, R10, R16) y la
+ * posición de renta del Dictamen 2 (`audit/bindings.ts`) para que el mismo
+ * balance dé la misma posición en todas las superficies (re-auditoría
+ * 2026-09, NM-06).
+ */
+export function filtrarCreditoRenta<T extends { code: string; name?: string | null }>(
+  cuentas: readonly T[],
+): T[] {
+  const nombrePorCodigo = new Map<string, string>();
+  for (const c of cuentas) nombrePorCodigo.set(c.code, c.name ?? '');
+  return cuentas.filter((c) =>
+    esCreditoRenta(
+      c.code,
+      nombresConAncestros(c.code, c.name ?? '', (codigo) => nombrePorCodigo.get(codigo)),
+    ),
+  );
+}

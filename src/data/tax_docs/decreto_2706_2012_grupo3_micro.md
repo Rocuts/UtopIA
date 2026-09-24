@@ -22,7 +22,7 @@ El **Decreto 2706 de 2012** (27 de diciembre de 2012), expedido por el Ministeri
 
 A partir del **Decreto 2420 de 2015**, este marco técnico fue **compilado como Anexo 3 del DUR-NIIF** y el Decreto 2706/2012 perdió vigencia autónoma. Sin embargo, su contenido normativo sigue plenamente vigente como cuerpo del Anexo 3 y mantiene la doctrina técnica original. El **Decreto 1670 de 2021** modificó los criterios de pertenencia al Grupo 3 y el alcance del Anexo 3.
 
-Las microempresas que aplican este marco son entidades que (i) tienen ≤ 10 empleados, (ii) poseen activos totales (excluyendo vivienda) inferiores a **500 SMMLV**, y (iii) tienen ingresos brutos anuales inferiores a **6.000 SMMLV**. Para 2026, con SMMLV = $1.300.000, los topes equivalen aproximadamente a $650 millones de activos y $7.800 millones de ingresos anuales. El IASB no emite norma específica para microempresas, por lo que el marco colombiano toma como referencia la NIIF para PYMES y la simplifica al modelo de costo histórico.
+Las microempresas que aplican este marco son entidades que (i) tienen ≤ 10 empleados, (ii) poseen activos totales (excluyendo vivienda) inferiores a **500 SMMLV**, y (iii) tienen ingresos brutos anuales inferiores a **6.000 SMMLV**. Para 2026, con SMMLV = $1.750.905 (Decreto 1469 de 2025), los topes equivalen a $875.452.500 de activos y $10.505.430.000 de ingresos anuales. El IASB no emite norma específica para microempresas, por lo que el marco colombiano toma como referencia la NIIF para PYMES y la simplifica al modelo de costo histórico.
 
 ## Aplicación del marco
 
@@ -124,7 +124,7 @@ El Anexo del Decreto 2706/2012 (luego Anexo 3 del Decreto 2420/2015) contiene 15
 
 Cómo aplica esto al producto UtopIA:
 
-- **Detección de microempresa**: combinar el campo NIT con el `tamano_empresa` del workspace; si activos ≤ $650M (500 SMMLV 2026) Y empleados ≤ 10 Y ingresos anuales ≤ $7.800M (6.000 SMMLV 2026), proponer Grupo 3.
+- **Detección de microempresa**: combinar el campo NIT con el `tamano_empresa` del workspace; si activos < $875.452.500 (500 SMMLV 2026) Y empleados ≤ 10 Y ingresos anuales < $10.505.430.000 (6.000 SMMLV 2026), proponer Grupo 3.
 - **Plantilla simplificada de EEFF**: el módulo PYME debe ofrecer plantilla de Grupo 3 con solo ESF + ER + Notas mínimas. No exigir EFE ni ECP separado.
 - **PUC permitido**: el cliente puede seguir usando el PUC del Decreto 2650/1993 con codificación tradicional, mapeado a las cuentas del Anexo 3 mediante tabla de equivalencia. Esta es la realidad práctica del mercado colombiano (siigo, world office, alegra).
 - **Causación simplificada**: una sola registro por transacción; no requiere ORI ni reclasificaciones por moneda funcional.

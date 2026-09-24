@@ -403,6 +403,7 @@ export const fiscalAuditOpinionRequestSchema = z.object({
 });
 
 // ---- Escudo Survival (Modo Supervivencia Elite) route ----
+// Transporte HTTP de /api/escudo-survival (no viaja al LLM: admite `.optional()`).
 export const escudoSurvivalRequestSchema = z.object({
   rawData: z.string().min(1, 'Financial data is required').max(2_000_000, 'Data too large'),
   company: z
@@ -411,6 +412,15 @@ export const escudoSurvivalRequestSchema = z.object({
       nit: z.string().optional(),
       sector: z.string().optional(),
       ciiu: z.string().optional(),
+      /**
+       * Tipo societario declarado («SAS», «S.A.», «Ltda.»…). Decide si la
+       * reserva legal es obligatoria (Arts. 452 y 371 C.Co.; S.A.S. sólo por
+       * estatutos). Sin declararlo zod lo descartaba y el agente de reserva
+       * nunca lo recibía (cross-dep W3-B, tributario-calc-01).
+       */
+      entityType: z.string().max(50).nullable().optional(),
+      /** S.A.S.: `true` si los estatutos prevén la reserva legal; `null` si no consta. */
+      bylawsRequireLegalReserve: z.boolean().nullable().optional(),
     })
     .optional(),
   language: z.enum(['es', 'en']).default('es'),
