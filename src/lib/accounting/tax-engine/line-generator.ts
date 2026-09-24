@@ -31,7 +31,7 @@ import { getAccountByCode } from './repository';
 
 const SCALE = BigInt(100); // centavos
 
-function parseCentavos(raw: string): bigint {
+export function parseCentavos(raw: string): bigint {
   const trimmed = raw.trim();
   const dot = trimmed.indexOf('.');
   let intPart: string;
@@ -47,7 +47,7 @@ function parseCentavos(raw: string): bigint {
   return BigInt(intPart || '0') * SCALE + BigInt(fracPart || '0');
 }
 
-function centavosToString(c: bigint): string {
+export function centavosToString(c: bigint): string {
   const neg = c < BigInt(0);
   const abs = neg ? -c : c;
   const intPart = abs / SCALE;
@@ -91,7 +91,7 @@ export async function generateLines(
   // ReteFuente/ICA (resta, porque el comprador retiene antes de pagar).
   let totalPayableCentavos = subtotalCentavos;
 
-  for (const { rule, warnings: ruleWarnings, ambiguous } of matched) {
+  for (const { rule, warnings: ruleWarnings, ambiguous, manualReview } of matched) {
     warnings.push(...ruleWarnings);
     matchedRuleIds.push(rule.id);
 
@@ -134,7 +134,10 @@ export async function generateLines(
     // Regla en conflicto sin resolver dentro de su grupo de exclusión mutua:
     // se muestra al usuario para que decida, pero NO se contabiliza ni afecta
     // el total a pagar. Ver resolveExclusionGroups() en rules-engine.ts.
-    if (ambiguous) {
+    // Lo mismo para una regla que exige revisión manual (`manualReview`): p. ej.
+    // honorarios que van por la tabla del Art. 383 E.T., o ReteICA sin
+    // confirmar que el comprador es agente retenedor del municipio.
+    if (ambiguous || manualReview) {
       proposal.confidence = 0;
       proposals.push(proposal);
       continue;
