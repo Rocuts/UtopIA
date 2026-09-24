@@ -124,6 +124,11 @@ export function enforceTpDocumentation(
       keyRisks: textosSinMontosDeAjuste(json.executiveSummary.keyRisks, ajusteCop, language),
       keyRecommendations: textosSinMontosDeAjuste(json.executiveSummary.keyRecommendations, ajusteCop, language),
     },
+    // Las posiciones fiscales del grupo también pueden cuantificar el ajuste.
+    masterFile: {
+      ...json.masterFile,
+      groupFinancialAndTaxPositions: sinMontos(json.masterFile.groupFinancialAndTaxPositions),
+    },
     localFile: {
       ...json.localFile,
       economicAnalysisDetail: sinMontos(json.localFile.economicAnalysisDetail),
