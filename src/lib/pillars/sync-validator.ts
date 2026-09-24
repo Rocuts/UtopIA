@@ -10,8 +10,11 @@
 // Principios de diseño:
 //   - DETERMINÍSTICO: misma entrada → mismo output (no LLM).
 //   - NO DESTRUCTIVO: sólo lectura. NO muta `metrics` ni `snapshot`.
-//   - TOLERANCIA CALIBRADA: $1.000 COP absolutos para cifras grandes;
-//     0,1 puntos porcentuales para ratios. Por debajo, asumimos redondeo.
+//   - TOLERANCIA CALIBRADA: $1.000 COP absolutos para cifras grandes de las
+//     tarjetas; 0,1 puntos porcentuales para ratios. La ecuación patrimonial y
+//     el patrimonio se comparan en centavos con tolerancia 0, igual que el
+//     gate de emisión (auditoria-calidad-29).
+//   - `info` es informativo: no rompe `inSync`.
 //   - RAÍZ ÚNICA DE VERDAD: el PeriodSnapshot post-Curator (R8 garantiza
 //     `controlTotals.utilidadNeta` sincronizada con P&L de clases 4-7).
 //   - MISMAS FUNCIONES QUE LAS TARJETAS (ratios-kpis-05/10/15): el valor
@@ -21,6 +24,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 
 import { computeEbitda, computeEbitdaMargin } from './ebitda';
 import {
@@ -55,11 +59,14 @@ export interface SyncFinding {
 }
 
 export interface SyncReport {
-  /** True si TODOS los chequeos pasaron dentro de tolerancia. */
+  /**
+   * True si ningún chequeo produjo un hallazgo `warning` o `critical`. Los
+   * hallazgos `info` se listan pero no desincronizan el tablero.
+   */
   inSync: boolean;
   /** Severidad agregada (peor de los hallazgos). */
   severity: SyncSeverity;
-  /** Hallazgos por campo (vacío si inSync=true). */
+  /** Hallazgos por campo (sólo `info` si inSync=true). */
   findings: SyncFinding[];
   /** Acción sugerida cuando NO está en sync. */
   recommendedActionEs: string;
@@ -121,7 +128,7 @@ export function validateDashboardIntegrity(
   findings.push(...checkEquityCoherence(snapshot));
 
   const severity = aggregateSeverity(findings);
-  const inSync = severity === 'ok';
+  const inSync = severity === 'ok' || severity === 'info';
 
   return {
     inSync,
@@ -538,11 +545,30 @@ function checkValorKpis(
   return findings;
 }
 
+// ---------------------------------------------------------------------------
+// Ecuación patrimonial y patrimonio — misma regla que el gate de emisión
+// ---------------------------------------------------------------------------
+// auditoria-calidad-29: estos dos chequeos toleraban max(0,01 % del activo;
+// $1.000) y $1.000, mientras V1/V4 de `auditReportEmittable` exigen 0
+// centavos. Un descuadre de $999.999 salía "inSync" en el tablero y bloqueado
+// en la emisión. Ahora comparan en centavos BigInt con tolerancia 0, con las
+// mismas fuentes que V1 (`controlTotals.cents`) y V4 (summary.totalEquity
+// redondeado al centavo).
+
+const ZERO_CENTS = BigInt(0);
+
+function pesosToCents(value: number): bigint {
+  return BigInt(Math.round(value * 100));
+}
+
 function checkAccountingEquation(snapshot: PeriodSnapshot): SyncFinding[] {
   const ct = snapshot.controlTotals;
-  const gap = ct.activo - ct.pasivo - ct.patrimonio;
-  const tolerance = Math.max(Math.abs(ct.activo) * 0.0001, COP_TOLERANCE);
-  if (Math.abs(gap) <= tolerance) return [];
+  const cents = ct.cents;
+  const gapCents = cents
+    ? cents.activo - cents.pasivo - cents.patrimonio
+    : pesosToCents(ct.activo) - pesosToCents(ct.pasivo) - pesosToCents(ct.patrimonio);
+  if (gapCents === ZERO_CENTS) return [];
+  const gap = Number(gapCents) / 100;
 
   return [
     {
@@ -554,17 +580,20 @@ function checkAccountingEquation(snapshot: PeriodSnapshot): SyncFinding[] {
       drift: gap,
       messageEs:
         `Ecuación contable descuadrada post-Curator: Activo ($${formatCop(ct.activo)}) ≠ Pasivo + Patrimonio ` +
-        `($${formatCop(ct.pasivo + ct.patrimonio)}). Diferencia: $${formatCop(gap)}. R8 Cierre Virtual debió cuadrar al centavo.`,
+        `($${formatCop(ct.pasivo + ct.patrimonio)}). Diferencia: ${formatCopFromCents(gapCents)}. R8 Cierre Virtual debió cuadrar al centavo.`,
       messageEn:
         `Accounting equation off post-Curator: Assets ($${formatCop(ct.activo)}) ≠ Liabilities + Equity ` +
-        `($${formatCop(ct.pasivo + ct.patrimonio)}). Difference: $${formatCop(gap)}.`,
+        `($${formatCop(ct.pasivo + ct.patrimonio)}). Difference: ${formatCopFromCents(gapCents)}.`,
     },
   ];
 }
 
 function checkEquityCoherence(snapshot: PeriodSnapshot): SyncFinding[] {
-  const drift = snapshot.controlTotals.patrimonio - snapshot.summary.totalEquity;
-  if (Math.abs(drift) <= COP_TOLERANCE) return [];
+  const ct = snapshot.controlTotals;
+  const patrimonioCents = ct.cents ? ct.cents.patrimonio : pesosToCents(ct.patrimonio);
+  const driftCents = patrimonioCents - pesosToCents(snapshot.summary.totalEquity);
+  if (driftCents === ZERO_CENTS) return [];
+  const drift = Number(driftCents) / 100;
 
   return [
     {

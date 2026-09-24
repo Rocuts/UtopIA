@@ -15,8 +15,10 @@
 // PARAMETRIZABLE (FUTURO v2):
 //   - growthOverride: el usuario ajusta el "Crecimiento Estimado" desde la UI
 //     (-5%, 0%, +5%, +10%, custom). Sustituye al factor base 1.0.
-//   - ipcRate: indexa los GASTOS FIJOS (PUC 5105/5120/5135) anualmente
-//     (default 4.5% IPC Colombia 2026).
+//   - ipcRate: indexa los GASTOS FIJOS (PUC 5105/5120/5135) anualmente.
+//     Sin valor del usuario se usa un SUPUESTO DE ESCENARIO del 4,5 % anual:
+//     no es un dato del DANE ni la meta del BanRep, y la UI debe rotularlo
+//     con `describeIpcAssumption` (ratios-kpis-29).
 //   - capexEvents: el usuario añade "Eventos de Futuro" (compra de maquinaria,
 //     pago extra, etc.) que se restan a la caja en el mes correspondiente
 //     bajo TODOS los escenarios.
@@ -63,7 +65,8 @@ export interface BuildFuturoBarSeriesOptions {
    *  Se aplica como `(1 + growthOverride)` sobre el ingreso del escenario base.
    *  Si `null` o `undefined`, usa `FACTOR_BASE = 1.0` sin modificación. */
   growthOverride?: number | null;
-  /** Tasa IPC anual aplicada a gastos fijos (default 0.045 = 4,5% Colombia 2026).
+  /** Tasa anual de indexación de gastos fijos. Sin valor → `IPC_DEFAULT`
+   *  (supuesto de escenario, ver `describeIpcAssumption`).
    *  Se aplica progresivamente mes a mes (rampa lineal) sobre el saldo de
    *  gastos fijos identificados (PUC 5105/5120/5135/5145/5155). */
   ipcRate?: number;
@@ -81,6 +84,49 @@ const FACTOR_AGRESIVO = 1.10;
 /** Supuesto de ESCENARIO para indexar gastos fijos (4,5 % anual). No es un dato
  *  oficial ni la meta del BanRep; el usuario puede cambiarlo en la UI. */
 export const IPC_DEFAULT = 0.045;
+
+/** Rótulo del supuesto de indexación que usa la proyección. */
+export interface IpcAssumption {
+  rate: number;
+  /** 'supuesto_escenario' = valor por defecto sin fuente; 'usuario' = lo fijó el usuario. */
+  origen: 'supuesto_escenario' | 'usuario';
+  labelEs: string;
+  labelEn: string;
+}
+
+function pctLabel(rate: number, locale: 'es' | 'en'): string {
+  const pct = Math.round(rate * 1000) / 10;
+  const s = locale === 'es' ? String(pct).replace('.', ',') : String(pct);
+  return locale === 'es' ? `${s} %` : `${s}%`;
+}
+
+/**
+ * Describe el supuesto de indexación de gastos fijos de la proyección para
+ * que la UI lo rotule (ratios-kpis-29): el valor por defecto es un supuesto
+ * de escenario sin fuente ni fecha, nunca "IPC Colombia" ni "meta BanRep".
+ */
+export function describeIpcAssumption(
+  opts: Pick<BuildFuturoBarSeriesOptions, 'ipcRate'> = {},
+): IpcAssumption {
+  if (typeof opts.ipcRate === 'number' && Number.isFinite(opts.ipcRate)) {
+    return {
+      rate: opts.ipcRate,
+      origen: 'usuario',
+      labelEs: `Gastos fijos indexados al ${pctLabel(opts.ipcRate, 'es')} anual (valor definido por el usuario).`,
+      labelEn: `Fixed expenses indexed at ${pctLabel(opts.ipcRate, 'en')} per year (user-defined value).`,
+    };
+  }
+  return {
+    rate: IPC_DEFAULT,
+    origen: 'supuesto_escenario',
+    labelEs:
+      `Gastos fijos indexados al ${pctLabel(IPC_DEFAULT, 'es')} anual: supuesto de escenario, ` +
+      'no es un dato del DANE ni la meta del Banco de la República.',
+    labelEn:
+      `Fixed expenses indexed at ${pctLabel(IPC_DEFAULT, 'en')} per year: scenario assumption, ` +
+      'not a DANE figure nor the Banco de la República target.',
+  };
+}
 
 /** Prefijos PUC de gastos identificados como FIJOS (sujetos a indexación IPC).
  *  Decreto 2650/1993:
@@ -152,7 +198,7 @@ export function buildFuturoBarSeries(
   const gastosVariablesMes = Math.max(0, egresoMes - gastosFijosMes);
 
   const factorBase = FACTOR_BASE + (opts.growthOverride ?? 0);
-  const ipcRate = opts.ipcRate ?? IPC_DEFAULT;
+  const ipcRate = describeIpcAssumption(opts).rate;
 
   // Mapa rápido para localizar capex events por mes.
   const capexByMonth = new Map<number, number>();

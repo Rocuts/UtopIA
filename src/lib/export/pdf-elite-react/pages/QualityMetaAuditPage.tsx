@@ -6,12 +6,13 @@
 // omitted when the field is undefined.
 //
 // Layout:
-//   - Sello de calidad v2.1 (veredicto de la Spec v2.1 Parte V) en una franja.
 //   - Hero grade letter (A+, A, B, C, D, F) rotulado "GRADE INTERNO": se deriva
 //     del score global v2.1 en código (auditoria-calidad-10), no del LLM.
 //   - Three metric blocks side-by-side: IFRS 18 readiness · ISO 25012 data
 //     quality (5 bars) · ISO 42001 AI governance (4 bars).
-//   - Bottom: 12 dimensions as horizontal bars showing score / framework.
+//   - Detalle interno D1–D14 as horizontal bars showing score / framework.
+//   - Sello de calidad v2.1 (veredicto de la Spec v2.1 Parte V) en una franja,
+//     DESPUÉS de la meta-auditoría (spec v2.1, reglas de integración).
 //   - GoldRule + PageNumberBadge.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
@@ -222,8 +223,6 @@ export function QualityMetaAuditPage({ doc }: Props) {
         <NormativePill label="IASB CF" tone="sage-on-cream" />
       </View>
 
-      {q.sello ? <SelloBanner sello={q.sello} /> : null}
-
       {/* Top row — grade hero + 3 metric blocks */}
       <View style={{ flexDirection: 'row', gap: S4, marginBottom: S5 }}>
         {/* Hero grade circle */}
@@ -382,6 +381,11 @@ export function QualityMetaAuditPage({ doc }: Props) {
           </View>
         </View>
       ) : null}
+
+      {/* Sello v2.1 al final de la meta-auditoría (spec v2.1, "REGLAS DE
+          INTEGRACIÓN": el sello va después de la meta-auditoría;
+          auditoria-calidad-30). */}
+      {q.sello ? <SelloBanner sello={q.sello} /> : null}
 
       <GoldRule />
       <PageNumberBadge pageNumber={0} />

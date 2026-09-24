@@ -315,7 +315,8 @@ function selloBottomLine(
   const why = blockers.length > 0 ? ` Motivo: ${blockers.join(' ')}` : '';
   switch (type) {
     case 'certificada':
-      return `${head} Listo para revisión del contador y firma del representante legal.`;
+      // Texto de la spec v2.1 Parte V: el sello no anticipa firmas (auditoria-calidad-30).
+      return `${head} Listo para revisión del contador.`;
     case 'con_observaciones':
       return `${head} Atender las acciones correctivas antes de la presentación oficial.${why}`;
     case 'requiere_correccion':

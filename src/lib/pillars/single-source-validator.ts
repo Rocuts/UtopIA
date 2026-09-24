@@ -10,7 +10,8 @@
 // Principios:
 //   - DETERMINÍSTICO: mismo input → mismo output. Sin LLM, sin Math.random.
 //   - NO DESTRUCTIVO: sólo lectura.
-//   - TOLERANCIA: $1.000 COP (redondeo aceptable en balances PUC).
+//   - TOLERANCIA: $1.000 COP entre pilares; el patrimonio (controlTotals vs
+//     summary) se compara al centavo, igual que V4 del gate de emisión.
 //   - HASH CANÓNICO: md5 del string "utilidadNeta|ingresos|activo|pasivo|patrimonio"
 //     sirve como session-id del balance procesado para audit log.
 // ---------------------------------------------------------------------------
@@ -169,11 +170,17 @@ export function validateCrossPillarCoherence(
   // ── 4. Patrimonio post-R8 ────────────────────────────────────────────────
   // controlTotals.patrimonio === summary.totalEquity
   // VERDAD: equationGap === activo − pasivo − patrimonio del snapshot
+  // Al centavo, como V4 del gate de emisión (auditoria-calidad-29).
   const patrimonioSnapshot = ct.patrimonio;
   const patrimonioSummary = snapshot.summary.totalEquity;
-  const spreadPatrimonio = Math.abs(patrimonioSnapshot - patrimonioSummary);
+  const patrimonioCents = ct.cents
+    ? ct.cents.patrimonio
+    : BigInt(Math.round(patrimonioSnapshot * 100));
+  const spreadPatrimonioCents =
+    patrimonioCents - BigInt(Math.round(patrimonioSummary * 100));
+  const spreadPatrimonio = Math.abs(Number(spreadPatrimonioCents) / 100);
 
-  if (spreadPatrimonio > COP_TOLERANCE) {
+  if (spreadPatrimonioCents !== BigInt(0)) {
     findings.push({
       code: 'PATRIMONIO_DESYNC',
       severity: 'warning',
