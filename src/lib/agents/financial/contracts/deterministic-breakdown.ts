@@ -28,6 +28,11 @@ import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
 import { DIVIDEND_EVIDENCE_PREFIXES } from '@/lib/preprocessing/curator-rules/dividend-evidence';
 import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
+import {
+  isCurrentLiabilityCode,
+  isNonCurrentLiabilityCode,
+  r1OriginGroup,
+} from '@/lib/preprocessing/curator-rules/balance-groups';
 import type { EquityChangeRowJson, NiifReportJson } from './niif-report';
 
 const ZERO = BigInt(0);
@@ -232,6 +237,108 @@ export function termOfGroup(
   if (section === 'equity') return null;
   const map = TERM_BY_GROUP[section];
   return Object.prototype.hasOwnProperty.call(map, group) ? map[group] : null;
+}
+
+export type BalanceTerm = 'current' | 'nonCurrent';
+
+/** Renglón del desglose del ESF con el plazo con el que el preprocesador lo cuenta. */
+export interface TermBreakdownRow extends BreakdownRow {
+  /** `null` en patrimonio o si el plazo no es determinable desde el código. */
+  term: BalanceTerm | null;
+}
+
+/**
+ * Plazo con el que el preprocesador cuenta UNA cuenta del snapshot en
+ * `controlTotals.activoCorriente` / `pasivoCorriente` (integración P4-b):
+ *
+ *   1. la excepción de vencimiento declarada por el usuario que el
+ *      preprocesador aplicó (`snapshot.vencimientosAplicados`, por código);
+ *   2. las virtuales de R1 (`2810ZZ-130505`) siguen al grupo de su cuenta de
+ *      ORIGEN (`isCurrentLiabilityCode`, niif-preproceso-22), no al prefijo 28;
+ *   3. el resto, por grupo PUC (`termOfGroup`).
+ *
+ * `declared` es el mapa código → plazo de la sección (ver `declaredTermsOf`).
+ */
+function termOfAccount(
+  section: BreakdownSection,
+  rawCode: string,
+  group: string,
+  declared: ReadonlyMap<string, BalanceTerm>,
+): BalanceTerm | null {
+  if (section === 'equity') return null;
+  const override = declared.get(rawCode);
+  if (override) return override;
+  if (section === 'liabilities' && r1OriginGroup(rawCode) !== null) {
+    if (isCurrentLiabilityCode(rawCode)) return 'current';
+    if (isNonCurrentLiabilityCode(rawCode)) return 'nonCurrent';
+    return null;
+  }
+  return termOfGroup(section, group);
+}
+
+/** Excepciones de vencimiento aplicadas por el preprocesador a una sección, por código de cuenta. */
+function declaredTermsOf(snapshot: PeriodSnapshot, section: BreakdownSection): Map<string, BalanceTerm> {
+  const seccion = section === 'assets' ? 'activo' : section === 'liabilities' ? 'pasivo' : null;
+  const out = new Map<string, BalanceTerm>();
+  if (seccion === null) return out;
+  for (const a of snapshot.vencimientosAplicados ?? []) {
+    if (a.seccion !== seccion) continue;
+    out.set(a.codigo, a.vencimiento === 'corriente' ? 'current' : 'nonCurrent');
+  }
+  return out;
+}
+
+/**
+ * Desglose por grupo PUC PARTIDO por plazo (integración P4-b, auditoría
+ * 2026-09-24). `buildDeterministicBreakdown` agrega por grupo de dos dígitos y
+ * el completado del ESF ubicaba cada grupo por `termOfGroup`; con excepciones
+ * de vencimiento declaradas (1205 → no corriente) o con virtuales de R1
+ * (`2810ZZ-13xxxx`, pasivo corriente por su origen) el subtotal impreso del ESF
+ * no era `controlTotals.activoCorriente` / `pasivoCorriente`, las cifras de los
+ * KPIs de liquidez, del gate y del PDF.
+ *
+ * Cada hoja se clasifica con `termOfAccount` (la misma regla del preprocesador)
+ * y se agrega por (grupo, plazo): un grupo con cuentas de los dos plazos da
+ * DOS renglones con el mismo código de grupo, uno en cada bloque. Σ renglones
+ * de un plazo = subtotal del preprocesador al centavo; Σ de los renglones de
+ * un grupo = el renglón de `buildDeterministicBreakdown`. Sin excepciones ni
+ * virtuales de R1 devuelve exactamente los renglones de
+ * `buildDeterministicBreakdown` con `term = termOfGroup(grupo)`.
+ */
+export function buildDeterministicBreakdownByTerm(
+  snapshot: PeriodSnapshot,
+  section: BreakdownSection,
+): TermBreakdownRow[] {
+  const classCode = CLASS_BY_SECTION[section];
+  const puc = snapshot.classes.find((c) => c.code === classCode);
+  if (!puc) return [];
+  const declared = declaredTermsOf(snapshot, section);
+
+  const byKey = new Map<string, { group: string; term: BalanceTerm | null; cents: bigint }>();
+  for (const account of puc.accounts) {
+    if (!account.isLeaf) continue;
+    const rawCode = String(account.code).trim();
+    const code = rawCode.replace(/\D/g, '');
+    if (code.length < 2) continue;
+    const group = code.slice(0, 2);
+    const term = termOfAccount(section, rawCode, group, declared);
+    const key = `${group}|${term ?? ''}`;
+    const prev = byKey.get(key);
+    const cents = pesosToCents(account.balance);
+    if (prev) prev.cents += cents;
+    else byKey.set(key, { group, term, cents });
+  }
+
+  const order = (t: BalanceTerm | null) => (t === 'current' ? 0 : t === 'nonCurrent' ? 1 : 2);
+  return [...byKey.values()]
+    .filter((r) => r.cents !== ZERO)
+    .sort((a, b) => a.group.localeCompare(b.group) || order(a.term) - order(b.term))
+    .map((r) => ({
+      account: r.group,
+      label: GROUP_LABELS[r.group] ?? `Grupo ${r.group}`,
+      cents: r.cents,
+      term: r.term,
+    }));
 }
 
 // ===========================================================================
