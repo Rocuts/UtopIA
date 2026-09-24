@@ -6,21 +6,43 @@
 // efectivo por método indirecto a partir de la VARIACIÓN de saldos entre el
 // periodo T y T-1.
 //
-// Estructura NIC 7 ajustada al PUC colombiano (Decreto 2650/1993):
-//   - Operativas: Utilidad Neta + Depreciación ± Δ AC operativos ± Δ PC operativos
-//   - Inversión:  Δ Clase 15 (PPE bruto)
-//   - Financiación: Δ Clase 21 (oblig fin) + Δ Clases 31/32/33 (capital+reservas)
-//                   - dividendos estimados (Δ utilidades acumuladas − utilidad T)
+// Estructura NIC 7 ajustada al PUC colombiano (Decreto 2650/1993). Auditoría
+// 2026-09 (niif-preproceso-16): TODA cuenta de las clases 1-3 cae en un
+// renglón, de modo que la suma del EFE es por construcción la variación de la
+// caja (grupo 11) cuando ambos balances cuadran. Antes sólo se modelaban
+// 13/14/15/21-25/31-33/36-37 y R6 escondía el resto en "capital de trabajo".
 //
-// La reconciliación se cruza con el Δ saldo PUC 11 (efectivo y equivalentes)
-// observado entre T y T-1 — si el cuadre falla, marcamos `reconciled=false`
-// pero igual exponemos el flujo (los agentes deciden cómo presentarlo).
+//   Operación : utilidad neta
+//               + D&A y deterioros no monetarios (Δ correctoras de 15-18:
+//                 1592, 1597, 1598, 1599, 1698, 1699, 1798, 1899 …)
+//               − Δ13 deudores − Δ14 inventarios
+//               + Δ22 proveedores + Δ23 cuentas por pagar (sin 2360)
+//               + Δ24 impuestos + Δ25 laborales
+//               + Δ26 pasivos estimados, Δ27 diferidos, Δ28 otros pasivos
+//   Inversión : − Δ15 PPE bruto
+//               − Δ12 inversiones − Δ16/17/18 brutos − Δ19 + Δ38
+//                 (valorizaciones y su superávit son no monetarias: se netean)
+//   Financiación: Δ21 obligaciones financieras + Δ29 bonos
+//               + Δ31-35 capital, superávit, reservas, revalorización
+//               + movimiento de resultados acumulados sin el resultado del año
+//               − dividendos pagados (sólo con evidencia 2360/35)
+//
+// Dividendos (auditoría 2026-09, niif-preproceso-15): con las cuentas
+// virtuales de R8 (3605VC = resultado del año, 3710VC = resultado anterior
+// reclasificado) incluidas, Δ(36+37) − utilidad del año = traslado del
+// resultado anterior − dividendos decretados … y como el traslado ya está
+// dentro de 36+37, esa diferencia ES −(dividendos decretados). La fórmula
+// anterior excluía las virtuales y restaba la utilidad del AÑO en vez de
+// sumar la del año anterior. Los dividendos PAGADOS = decretados − Δ2360:
+// Δ2360 sale de la operación y entra a financiación (NIC 7 ¶34).
 // ---------------------------------------------------------------------------
 
-import type { PUCClass, PeriodSnapshot } from '../trial-balance';
+import type { PeriodSnapshot } from '../trial-balance';
 
-import type { CashFlowStatement, CuratorFinding } from './types';
+import { r1OriginGroup } from './balance-groups';
+import { isContraAsset } from './contra-asset-registry';
 import { hasDividendEvidenceAccounts } from './dividend-evidence';
+import type { CashFlowStatement, CuratorFinding } from './types';
 
 export interface R2Result {
   cashFlowIndirecto?: CashFlowStatement;
@@ -29,6 +51,9 @@ export interface R2Result {
 
 const RECONCILIATION_TOLERANCE_PCT = 0.05; // 5% del Δ efectivo
 const MIN_RECONCILIATION_TOLERANCE = 100_000; // o $100k mínimo
+
+/** Grupos de activo no corriente cuyas correctoras son D&A / deterioro. */
+const LONG_LIVED_GROUPS = ['15', '16', '17', '18'];
 
 export function runR2(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): R2Result {
   // Bug 3 fix (2026-05-08): cuando NO hay periodo comparativo, R2 igual emite
@@ -43,76 +68,13 @@ export function runR2(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): R2
     return runR2SinglePeriod(snapshot);
   }
 
-  // Δ saldos por grupo PUC (T − T-1).
-  const deltaByGroup = computeDeltaByGroup(snapshot, prev);
-
-  // Bloque operativo
+  const d = computeDeltas(snapshot, prev);
   const utilidadNeta = snapshot.controlTotals.utilidadNeta;
-  // Depreciación acumulada — usamos los grupos 1592/1595/1598 (Δ saldos negativos).
-  const depreciacion =
-    deltaByGroup.subaccount('1592') +
-    deltaByGroup.subaccount('1595') +
-    deltaByGroup.subaccount('1598');
-  // Estos saldos suelen ser créditos (negativos); el aumento ABSOLUTO es lo que
-  // sumamos a la utilidad neta para reversar el gasto no monetario.
-  const depreciacionAmortizacion = -depreciacion;
+  const flows = classifyFlows(d, utilidadNeta, hasDividendEvidenceAccounts(snapshot), true);
 
-  // ΔAC operativos: aumento de activo → uso de efectivo (resta).
-  const deltaCxC = deltaByGroup.classGroup('1', '13');
-  const deltaInv = deltaByGroup.classGroup('1', '14');
-
-  // ΔPC operativos: aumento de pasivo → fuente de efectivo (suma).
-  const deltaProv = deltaByGroup.classGroup('2', '22');
-  const deltaCxP = deltaByGroup.classGroup('2', '23');
-  const deltaImp = deltaByGroup.classGroup('2', '24');
-  const deltaLab = deltaByGroup.classGroup('2', '25');
-
-  const operatingTotal =
-    utilidadNeta +
-    depreciacionAmortizacion +
-    -deltaCxC +
-    -deltaInv +
-    deltaProv +
-    deltaCxP +
-    deltaImp +
-    deltaLab;
-
-  // Inversión
-  const deltaPPE_bruto = deltaByGroup.classGroup('1', '15') - depreciacion;
-  // Aumento PPE bruto → uso (resta).
-  const investingTotal = -deltaPPE_bruto;
-
-  // Financiación
-  const deltaOblFin = deltaByGroup.classGroup('2', '21');
-  const deltaCapital =
-    deltaByGroup.classGroup('3', '31') +
-    deltaByGroup.classGroup('3', '32') +
-    deltaByGroup.classGroup('3', '33');
-  // Dividendos: SÓLO con evidencia real en el balance, y sobre saldos REALES.
-  //
-  // Este bloque fabricaba dividendos por -$1.570.997.737,30 sobre el balance
-  // testigo — 2,09× la facturación del año y el 64,9% del flujo operativo — a
-  // partir de las cuentas virtuales 3605VC/3710VC que inyecta R8. La cifra
-  // viajaba luego al modelo marcada como VINCULANTE y salía impresa en la Nota
-  // 6 del informe entregado, con cita normativa de respaldo y la tabla de
-  // financiación vacía. En ese balance la cuenta 2360 no existe.
-  //
-  // Dos condiciones, y hacen falta las dos: excluir las virtuales POR SÍ SOLO
-  // empeora el número (se midió: -$2.228.496.789,73), porque el tapa-huecos
-  // sigue siendo un tapa-huecos. NIC 7 ¶43: una partida que no movió caja no se
-  // presenta como flujo.
-  const hayEvidenciaDividendos = hasDividendEvidenceAccounts(snapshot);
-  const deltaUtilAcum =
-    deltaByGroup.classGroupReal('3', '36') + deltaByGroup.classGroupReal('3', '37');
-  const dividendosEstimados = hayEvidenciaDividendos
-    ? Math.min(0, deltaUtilAcum - utilidadNeta)
-    : 0;
-  const financingTotal = deltaOblFin + deltaCapital + dividendosEstimados;
-
-  const netChangeInCash = operatingTotal + investingTotal + financingTotal;
   const observedChangeInCash =
     snapshot.controlTotals.efectivoCuenta11 - prev.controlTotals.efectivoCuenta11;
-  const reconciliationGap = netChangeInCash - observedChangeInCash;
+  const reconciliationGap = flows.netChangeInCash - observedChangeInCash;
 
   const tolerance = Math.max(
     Math.abs(observedChangeInCash) * RECONCILIATION_TOLERANCE_PCT,
@@ -123,29 +85,10 @@ export function runR2(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): R2
   const cashFlowIndirecto: CashFlowStatement = {
     period: snapshot.period,
     comparativePeriod: prev.period,
-    operating: {
-      utilidadNeta,
-      depreciacionAmortizacion,
-      varCuentasPorCobrar: -deltaCxC,
-      varInventarios: -deltaInv,
-      varProveedores: deltaProv,
-      varCuentasPorPagar: deltaCxP,
-      varImpuestosPorPagar: deltaImp,
-      varObligacionesLaborales: deltaLab,
-      total: operatingTotal,
-    },
-    investing: {
-      varPPE: -deltaPPE_bruto,
-      otros: 0,
-      total: investingTotal,
-    },
-    financing: {
-      varObligacionesFinancieras: deltaOblFin,
-      varCapitalReservas: deltaCapital,
-      dividendosEstimados,
-      total: financingTotal,
-    },
-    netChangeInCash,
+    operating: flows.operating,
+    investing: flows.investing,
+    financing: flows.financing,
+    netChangeInCash: flows.netChangeInCash,
     observedChangeInCash,
     reconciliationGap,
     reconciled,
@@ -159,13 +102,14 @@ export function runR2(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): R2
     description:
       `Se construyó el Estado de Flujos de Efectivo (NIC 7) por método indirecto a partir de la ` +
       `variación de saldos entre ${prev.period} y ${snapshot.period}, dado que no se recibieron datos ` +
-      `operativos directos. Variación neta de efectivo calculada: $${formatCOP(netChangeInCash)}. ` +
+      `operativos directos. Variación neta de efectivo calculada: $${formatCOP(flows.netChangeInCash)}. ` +
       `Variación observada en cuenta 11: $${formatCOP(observedChangeInCash)}. ` +
       `Brecha: $${formatCOP(reconciliationGap)} (${reconciled ? 'cuadra' : 'NO cuadra'} dentro de tolerancia $${formatCOP(tolerance)}).`,
     normReference: 'NIC 7 — Estado de Flujos de Efectivo',
     recommendation: reconciled
       ? 'Validar el flujo con el módulo de tesorería si está disponible. La inferencia es razonable.'
-      : 'La reconciliación contra el cambio observado en caja falla. Revisar movimientos atípicos en cuentas 15 (PPE), 21 (oblig. financieras) o partidas extraordinarias que el método indirecto no captura.',
+      : 'La reconciliación contra el cambio observado en caja falla. Una brecha con todos los grupos ' +
+        'PUC clasificados indica que alguno de los dos balances no cuadra (ver hallazgos de R8).',
     impact: reconciled
       ? 'Permite presentar el ECE oficial sin requerir un libro de tesorería separado.'
       : 'Sin reconciliación, el ECE oficial requiere ajuste manual antes de la firma del Contador.',
@@ -176,66 +120,179 @@ export function runR2(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): R2
 }
 
 // ---------------------------------------------------------------------------
-// Helpers de variación de saldos por grupo PUC
+// Variaciones por cuenta con grupo efectivo
 // ---------------------------------------------------------------------------
 
-interface DeltaByGroup {
-  /** Variación total para cuentas que empiezan con `classDigit` y grupo de 2 dígitos. */
-  classGroup(classDigit: string, group: string): number;
-  /** Variación total para cuentas que empiezan con `subaccountPrefix` (4 dígitos). */
-  subaccount(prefix: string): number;
-  /**
-   * Igual que `classGroup`, pero EXCLUYE las cuentas virtuales que inyecta R8
-   * (código con sufijo `VC`). Existen para cuadrar la ecuación patrimonial en
-   * el cierre virtual; no representan movimiento real de caja, y colarlas en la
-   * variación de utilidades acumuladas es lo que convirtió un tapa-huecos en un
-   * "dividendo" de -$1.570.997.737,30.
-   */
-  classGroupReal(classDigit: string, group: string): number;
+interface AccountDelta {
+  /** Clase PUC efectiva ('1', '2', '3'). */
+  cls: string;
+  /** Grupo PUC efectivo (2 dígitos). */
+  group: string;
+  /** Código real de la cuenta (para prefijos de 4/6 dígitos). */
+  code: string;
+  delta: number;
+  contra: boolean;
 }
 
-function computeDeltaByGroup(snapshot: PeriodSnapshot, prev: PeriodSnapshot): DeltaByGroup {
-  // Construimos un mapa code → balance para T y T-1, sumando hojas.
-  const balanceMap = (snap: PeriodSnapshot) => {
+/**
+ * Variación T − T-1 por cuenta de las clases 1-3. Las cuentas virtuales de R1
+ * (`2105ZZ-111005`, `2805ZZ-130505`, `2895VC-120505`, …) son un saldo
+ * crédito de ACTIVO presentado como pasivo: en el EFE se clasifican con el
+ * grupo de su origen. Una virtual de origen 11 es un sobregiro y se presenta
+ * en financiación (el efectivo del EFE es el del balance, sin sobregiros).
+ */
+function computeDeltas(snapshot: PeriodSnapshot, prev: PeriodSnapshot | null): AccountDelta[] {
+  const balanceMap = (snap: PeriodSnapshot | null) => {
     const map = new Map<string, number>();
+    if (!snap) return map;
     for (const cl of snap.classes) {
-      for (const acc of cl.accounts) map.set(acc.code, acc.balance);
+      if (cl.code < 1 || cl.code > 3) continue;
+      for (const acc of cl.accounts) map.set(acc.code, (map.get(acc.code) ?? 0) + acc.balance);
     }
     return map;
   };
   const t = balanceMap(snapshot);
   const tMinus1 = balanceMap(prev);
-  const allCodes = new Set<string>([...t.keys(), ...tMinus1.keys()]);
-  const deltas = new Map<string, number>();
-  for (const code of allCodes) {
-    deltas.set(code, (t.get(code) ?? 0) - (tMinus1.get(code) ?? 0));
+  const out: AccountDelta[] = [];
+  for (const code of new Set<string>([...t.keys(), ...tMinus1.keys()])) {
+    const delta = (t.get(code) ?? 0) - (tMinus1.get(code) ?? 0);
+    const origin = r1OriginGroup(code);
+    if (origin !== null) {
+      // Virtual de R1: pasivo que representa un activo con saldo crédito.
+      out.push(
+        origin === '11'
+          ? { cls: '2', group: '21', code, delta, contra: false } // sobregiro → financiación
+          : { cls: '1', group: origin, code, delta: -delta, contra: false },
+      );
+      continue;
+    }
+    out.push({
+      cls: code.charAt(0),
+      group: code.slice(0, 2),
+      code,
+      delta,
+      contra: code.startsWith('1') && isContraAsset(code),
+    });
   }
+  return out;
+}
+
+interface ClassifiedFlows {
+  operating: CashFlowStatement['operating'];
+  investing: CashFlowStatement['investing'];
+  financing: CashFlowStatement['financing'];
+  netChangeInCash: number;
+}
+
+function classifyFlows(
+  deltas: AccountDelta[],
+  utilidadNeta: number,
+  hayEvidenciaDividendos: boolean,
+  dividendsInferable: boolean,
+): ClassifiedFlows {
+  const sum = (pred: (a: AccountDelta) => boolean) =>
+    deltas.filter(pred).reduce((s, a) => s + a.delta, 0);
+  const inGroups = (cls: string, groups: string[]) => (a: AccountDelta) =>
+    a.cls === cls && groups.includes(a.group);
+
+  // --- Operación ---------------------------------------------------------
+  // D&A y deterioros: aumento de las correctoras de activos de largo plazo.
+  // Son saldos crédito (negativos): el aumento ABSOLUTO se suma a la utilidad.
+  const deltaContraLargoPlazo = sum(
+    (a) => a.cls === '1' && a.contra && LONG_LIVED_GROUPS.includes(a.group),
+  );
+  const depreciacionAmortizacion = -deltaContraLargoPlazo;
+  const deltaCxC = sum(inGroups('1', ['13']));
+  const deltaInv = sum(inGroups('1', ['14']));
+  const deltaProv = sum(inGroups('2', ['22']));
+  const delta2360 = sum((a) => a.cls === '2' && a.code.startsWith('2360'));
+  const deltaCxP = sum(inGroups('2', ['23'])) - delta2360;
+  const deltaImp = sum(inGroups('2', ['24']));
+  const deltaLab = sum(inGroups('2', ['25']));
+  const deltaOtrosPasivosOp = sum(
+    (a) =>
+      a.cls === '2' &&
+      !['21', '22', '23', '24', '25', '29'].includes(a.group),
+  );
+
+  const operatingTotal =
+    utilidadNeta +
+    depreciacionAmortizacion -
+    deltaCxC -
+    deltaInv +
+    deltaProv +
+    deltaCxP +
+    deltaImp +
+    deltaLab +
+    deltaOtrosPasivosOp;
+
+  // --- Inversión ---------------------------------------------------------
+  // Grupo 15 bruto (sin correctoras, que ya entraron como D&A).
+  const deltaPPEBruto = sum((a) => a.cls === '1' && a.group === '15' && !a.contra);
+  // Resto del activo no corriente / inversiones (brutos) y valorizaciones.
+  const deltaOtrosActivos = sum(
+    (a) =>
+      a.cls === '1' &&
+      !['11', '13', '14', '15'].includes(a.group) &&
+      !(a.contra && LONG_LIVED_GROUPS.includes(a.group)),
+  );
+  // Superávit por valorizaciones (38) es la contrapartida no monetaria de 19.
+  const deltaSuperavitValorizaciones = sum(inGroups('3', ['38']));
+  const investingOtros = -deltaOtrosActivos + deltaSuperavitValorizaciones;
+  const investingTotal = -deltaPPEBruto + investingOtros;
+
+  // --- Financiación ------------------------------------------------------
+  const deltaOblFin = sum(inGroups('2', ['21', '29']));
+  const deltaCapital = sum(
+    (a) => a.cls === '3' && !['36', '37', '38'].includes(a.group),
+  );
+  // Resultados acumulados sin el resultado del año, INCLUIDAS las virtuales de
+  // R8: 3605VC (= utilidad del año) y 3710VC (resultado anterior
+  // reclasificado). Δ(36+37) − utilidad = −(dividendos decretados) ± otros
+  // movimientos de resultados acumulados.
+  const movimientoResultadosAcumulados = sum(inGroups('3', ['36', '37'])) - utilidadNeta;
+
+  let dividendosEstimados = 0;
+  let varCapitalReservas = deltaCapital + movimientoResultadosAcumulados;
+  if (dividendsInferable && hayEvidenciaDividendos) {
+    // Pagados = decretados − Δ2360 (NIC 7 ¶34: financiación).
+    const candidato = movimientoResultadosAcumulados + delta2360;
+    dividendosEstimados = Math.min(0, candidato);
+    varCapitalReservas = deltaCapital + (candidato - dividendosEstimados);
+  } else {
+    // Sin evidencia de distribución no hay renglón de dividendos (NIC 7 ¶43):
+    // el movimiento de resultados acumulados (p. ej. apropiación a reservas,
+    // que se netea con Δ33) queda en capital y reservas. Δ2360 = 0 aquí salvo
+    // en modo sin comparativo, donde tampoco se infieren dividendos.
+    varCapitalReservas += delta2360;
+  }
+  const financingTotal = deltaOblFin + varCapitalReservas + dividendosEstimados;
 
   return {
-    classGroup(classDigit, group) {
-      let total = 0;
-      for (const [code, delta] of deltas) {
-        if (!code.startsWith(classDigit)) continue;
-        if (code.length >= 2 && code.slice(0, 2) === group) total += delta;
-      }
-      return total;
+    operating: {
+      utilidadNeta,
+      depreciacionAmortizacion,
+      varCuentasPorCobrar: -deltaCxC,
+      varInventarios: -deltaInv,
+      varProveedores: deltaProv,
+      varCuentasPorPagar: deltaCxP,
+      varImpuestosPorPagar: deltaImp,
+      varObligacionesLaborales: deltaLab,
+      varOtrosPasivosOperativos: deltaOtrosPasivosOp,
+      total: operatingTotal,
     },
-    subaccount(prefix) {
-      let total = 0;
-      for (const [code, delta] of deltas) {
-        if (code.startsWith(prefix)) total += delta;
-      }
-      return total;
+    investing: {
+      varPPE: -deltaPPEBruto,
+      otros: investingOtros,
+      total: investingTotal,
     },
-    classGroupReal(classDigit, group) {
-      let total = 0;
-      for (const [code, delta] of deltas) {
-        if (code.toUpperCase().includes('VC')) continue;
-        if (!code.startsWith(classDigit)) continue;
-        if (code.length >= 2 && code.slice(0, 2) === group) total += delta;
-      }
-      return total;
+    financing: {
+      varObligacionesFinancieras: deltaOblFin,
+      varCapitalReservas,
+      dividendosEstimados,
+      total: financingTotal,
     },
+    netChangeInCash: operatingTotal + investingTotal + financingTotal,
   };
 }
 
@@ -257,6 +314,10 @@ function formatCOP(amount: number): string {
 // como EFE oficial — pero permite al renderer downstream presentar las
 // líneas de capital de trabajo en lugar de omitirlas silenciosamente.
 //
+// Sin comparativo NO se infieren dividendos (NIC 7 ¶43): con prev = 0, el
+// "movimiento" de resultados acumulados es el saldo completo (p. ej. pérdidas
+// acumuladas), no una distribución.
+//
 // El finding marca explícitamente:
 //   - severity: 'medio' (NO 'alto') — falta de comparativo es dato faltante,
 //     no error contable.
@@ -264,97 +325,23 @@ function formatCOP(amount: number): string {
 //   - inferred: true.
 // ---------------------------------------------------------------------------
 function runR2SinglePeriod(snapshot: PeriodSnapshot): R2Result {
-  // Mapa code → balance del periodo actual.
-  const balances = new Map<string, number>();
-  for (const cl of snapshot.classes) {
-    for (const acc of cl.accounts) balances.set(acc.code, acc.balance);
-  }
-
-  // Suma por (clase, grupo) o subcuenta, asumiendo prev = 0 (Δ = balance final).
-  const sumByClassGroup = (classDigit: string, group: string): number => {
-    let total = 0;
-    for (const [code, bal] of balances) {
-      if (!code.startsWith(classDigit)) continue;
-      if (code.length >= 2 && code.slice(0, 2) === group) total += bal;
-    }
-    return total;
-  };
-  const sumBySubaccount = (prefix: string): number => {
-    let total = 0;
-    for (const [code, bal] of balances) {
-      if (code.startsWith(prefix)) total += bal;
-    }
-    return total;
-  };
-
+  const d = computeDeltas(snapshot, null);
   const utilidadNeta = snapshot.controlTotals.utilidadNeta;
-  const depreciacion =
-    sumBySubaccount('1592') + sumBySubaccount('1595') + sumBySubaccount('1598');
-  const depreciacionAmortizacion = -depreciacion;
+  const flows = classifyFlows(d, utilidadNeta, false, false);
 
-  const deltaCxC = sumByClassGroup('1', '13');
-  const deltaInv = sumByClassGroup('1', '14');
-  const deltaProv = sumByClassGroup('2', '22');
-  const deltaCxP = sumByClassGroup('2', '23');
-  const deltaImp = sumByClassGroup('2', '24');
-  const deltaLab = sumByClassGroup('2', '25');
-
-  const operatingTotal =
-    utilidadNeta +
-    depreciacionAmortizacion +
-    -deltaCxC +
-    -deltaInv +
-    deltaProv +
-    deltaCxP +
-    deltaImp +
-    deltaLab;
-
-  const deltaPPE_bruto = sumByClassGroup('1', '15') - depreciacion;
-  const investingTotal = -deltaPPE_bruto;
-
-  const deltaOblFin = sumByClassGroup('2', '21');
-  const deltaCapital =
-    sumByClassGroup('3', '31') +
-    sumByClassGroup('3', '32') +
-    sumByClassGroup('3', '33');
-  const deltaUtilAcum =
-    sumByClassGroup('3', '36') + sumByClassGroup('3', '37');
-  const dividendosEstimados = Math.min(0, deltaUtilAcum - utilidadNeta);
-  const financingTotal = deltaOblFin + deltaCapital + dividendosEstimados;
-
-  const netChangeInCash = operatingTotal + investingTotal + financingTotal;
   const observedChangeInCash = snapshot.controlTotals.efectivoCuenta11; // prev = 0
-  const reconciliationGap = netChangeInCash - observedChangeInCash;
+  const reconciliationGap = flows.netChangeInCash - observedChangeInCash;
 
   const cashFlowIndirecto: CashFlowStatement = {
     period: snapshot.period,
     comparativePeriod: '(sin_comparativo)',
-    operating: {
-      utilidadNeta,
-      depreciacionAmortizacion,
-      varCuentasPorCobrar: -deltaCxC,
-      varInventarios: -deltaInv,
-      varProveedores: deltaProv,
-      varCuentasPorPagar: deltaCxP,
-      varImpuestosPorPagar: deltaImp,
-      varObligacionesLaborales: deltaLab,
-      total: operatingTotal,
-    },
-    investing: {
-      varPPE: -deltaPPE_bruto,
-      otros: 0,
-      total: investingTotal,
-    },
-    financing: {
-      varObligacionesFinancieras: deltaOblFin,
-      varCapitalReservas: deltaCapital,
-      dividendosEstimados,
-      total: financingTotal,
-    },
-    netChangeInCash,
+    operating: flows.operating,
+    investing: flows.investing,
+    financing: flows.financing,
+    netChangeInCash: flows.netChangeInCash,
     observedChangeInCash,
     reconciliationGap,
-    reconciled: false, // por construcción: prev=0 nunca cuadra con un balance real
+    reconciled: false, // por construcción: prev=0 no es un EFE oficial
     inferred: true,
   };
 
@@ -369,7 +356,7 @@ function runR2SinglePeriod(snapshot: PeriodSnapshot): R2Result {
       `finales completos del periodo ${snapshot.period}. Esto NO es un EFE oficial NIIF — sirve ` +
       `solo para que el renderer pueda presentar las líneas de capital de trabajo (ΔInventario, ` +
       `ΔProveedores, etc.) con un valor de partida en lugar de omitirlas. ` +
-      `Variación neta calculada: $${formatCOP(netChangeInCash)}; saldo cierre PUC 11: ` +
+      `Variación neta calculada: $${formatCOP(flows.netChangeInCash)}; saldo cierre PUC 11: ` +
       `$${formatCOP(snapshot.controlTotals.efectivoCuenta11)}.`,
     normReference: 'NIC 7 — Estado de Flujos de Efectivo (método indirecto)',
     recommendation:

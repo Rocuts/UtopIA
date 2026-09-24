@@ -258,7 +258,12 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
     expect(f.varObligacionesFinancieras + f.varCapitalReservas + f.dividendosEstimados).toBe(f.total);
   });
 
-  it('las cuentas virtuales de R8 (sufijo VC) no alimentan el cálculo de dividendos', () => {
+  it('3605VC (resultado del año que inyecta R8) no se lee como distribución', () => {
+    // Auditoría 2026-09 (niif-preproceso-15): la versión anterior excluía las
+    // virtuales de R8 y calculaba min(0, Δ(36+37) − utilidad del AÑO): con la
+    // utilidad del año en 3605VC eso fabricaba −$500M de "dividendos" aunque
+    // ni la caja ni 2360 se movieron. Con las virtuales incluidas,
+    // Δ(36+37) − utilidad = −dividendos decretados = 0.
     const prev = makeSnapshot({
       period: '2025',
       controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 0 }),
@@ -268,9 +273,8 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
         makeClass(3, [{ code: '360505', name: 'Utilidades acumuladas', balance: 0 }]),
       ],
     });
-    // CON evidencia (2360 presente) el plug sí aplica — pero debe ignorar la
-    // cuenta virtual 3605VC, que es el cierre contable que inyecta R8 y no
-    // representa movimiento real de caja.
+    // CON evidencia (2360 presente) se calculan dividendos, pero la cuenta
+    // virtual 3605VC es el resultado del año: no hay distribución.
     const curr = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 500_000_000 }),
@@ -284,9 +288,37 @@ describe('R2 — Flujo Efectivo Método Indirecto', () => {
       ],
     });
     const out = runR2(curr, prev);
-    // Sin la exclusión, 3605VC haría deltaUtilAcum = 500M y el plug daría $0.
-    // Con ella, deltaUtilAcum = 0 y el plug refleja la distribución real.
-    expect(out.cashFlowIndirecto!.financing.dividendosEstimados).toBe(-500_000_000);
+    expect(out.cashFlowIndirecto!.financing.dividendosEstimados).toBe(0);
+  });
+
+  it('dividendos pagados = traslado de la utilidad ANTERIOR − aumento de resultados acumulados', () => {
+    // T-1: utilidad 100M en 3605VC. T: 3705 recibe el traslado (100M) menos
+    // dividendos pagados (60M) → 3705 = 40M; utilidad del año 150M en 3605VC.
+    const prev = makeSnapshot({
+      period: '2025',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 100_000_000, utilidadNeta: 100_000_000 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 100_000_000 }]),
+        makeClass(2, [{ code: '236005', name: 'Dividendos por pagar', balance: 0 }]),
+        makeClass(3, [{ code: '3605VC', name: 'Cierre virtual R8', balance: 100_000_000 }]),
+      ],
+    });
+    const curr = makeSnapshot({
+      period: '2026',
+      controlTotals: makeControlTotals({ efectivoCuenta11: 190_000_000, utilidadNeta: 150_000_000 }),
+      classes: [
+        makeClass(1, [{ code: '110505', name: 'Caja', balance: 190_000_000 }]),
+        makeClass(2, [{ code: '236005', name: 'Dividendos por pagar', balance: 0 }]),
+        makeClass(3, [
+          { code: '370505', name: 'Utilidades acumuladas', balance: 40_000_000 },
+          { code: '3605VC', name: 'Cierre virtual R8', balance: 150_000_000 },
+        ]),
+      ],
+    });
+    const efe = runR2(curr, prev).cashFlowIndirecto!;
+    expect(efe.financing.dividendosEstimados).toBe(-60_000_000);
+    expect(efe.operating.total).toBe(150_000_000);
+    expect(efe.netChangeInCash).toBe(90_000_000);
   });
 
   it('marca reconciled=false si la brecha excede tolerancia', () => {

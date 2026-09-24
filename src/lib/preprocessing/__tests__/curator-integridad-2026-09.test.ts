@@ -195,6 +195,163 @@ describe('niif-preproceso-12 — pérdida registrada en 3610 con P&G presente', 
 });
 
 // ---------------------------------------------------------------------------
+// niif-preproceso-15 / -16 — EFE indirecto (R2) completo; R6 sólo redondeo
+// ---------------------------------------------------------------------------
+describe('niif-preproceso-15 — dividendos del EFE con traslado de la utilidad previa', () => {
+  it('2024 con utilidad 100M trasladada en 2025 y dividendos de 60M: EFE exacto sin cierre forzado', () => {
+    // 2024: NI 100 (P&L abierto). 2025: 3705 pasa de 100 a 140 (traslado de
+    // 100 − dividendos pagados de 60), NI 2025 = 150, caja 500 → 590.
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2024,Saldo 2025',
+        '110505,Caja,500000000,590000000',
+        '236005,Dividendos por pagar,0,0',
+        '310505,Capital,300000000,300000000',
+        '370505,Utilidades acumuladas,100000000,140000000',
+        '413505,Ventas,400000000,500000000',
+        '513505,Gastos,300000000,350000000',
+      ].join('\n'),
+    ).primary;
+    const efe = s.cashFlowIndirecto!;
+    expect(efe.financing.dividendosEstimados).toBe(-60_000_000);
+    expect(efe.operating.total).toBe(150_000_000);
+    expect(efe.netChangeInCash).toBe(90_000_000);
+    expect(efe.reconciled).toBe(true);
+    // Nada se cerró "a la fuerza" en una línea operativa.
+    expect(s.cashFlowClosureAdjustment).toBeUndefined();
+    expect(s.curator?.cashFlowClosureAdjustment).toBeUndefined();
+  });
+
+  it('dividendos decretados y NO pagados (Δ2360): no son flujo operativo ni salida de caja', () => {
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2024,Saldo 2025',
+        '110505,Caja,500000000,650000000',
+        '236005,Dividendos por pagar,0,60000000',
+        '310505,Capital,300000000,300000000',
+        '370505,Utilidades acumuladas,100000000,140000000',
+        '413505,Ventas,400000000,500000000',
+        '513505,Gastos,300000000,350000000',
+      ].join('\n'),
+    ).primary;
+    const efe = s.cashFlowIndirecto!;
+    expect(efe.financing.dividendosEstimados).toBe(0);
+    expect(efe.operating.varCuentasPorPagar).toBe(0);
+    expect(efe.operating.total).toBe(150_000_000);
+    expect(efe.netChangeInCash).toBe(150_000_000);
+    expect(efe.reconciled).toBe(true);
+  });
+});
+
+describe('niif-preproceso-16 — todos los grupos PUC entran al EFE', () => {
+  it('compra de software (16), amortización 1698, provisión 26 y anticipos 28 quedan en su actividad', () => {
+    // 2025: compra de intangible 100M (menos amortización 10M), provisión de
+    // 5M (26) y anticipo recibido de 20M (28). Utilidad = −10 −5 = −15M.
+    // Caja: 500 − 100 (compra) + 20 (anticipo) = 420.
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2024,Saldo 2025',
+        '110505,Caja,500000000,420000000',
+        '130505,Clientes,200000000,200000000',
+        '160505,Software (intangible),0,100000000',
+        '169805,Amortizacion acumulada intangibles,0,-10000000',
+        '220505,Proveedores,100000000,100000000',
+        '261005,Provision garantias,0,5000000',
+        '280505,Anticipos recibidos,0,20000000',
+        '310505,Capital,600000000,600000000',
+        '413505,Ventas,0,0',
+        '516505,Amortizacion,0,10000000',
+        '519505,Provisiones,0,5000000',
+      ].join('\n'),
+    ).primary;
+    const efe = s.cashFlowIndirecto!;
+    expect(s.controlTotals.utilidadNeta).toBe(-15_000_000);
+    expect(efe.operating.depreciacionAmortizacion).toBe(10_000_000);
+    expect(efe.operating.varOtrosPasivosOperativos).toBe(25_000_000);
+    expect(efe.operating.total).toBe(20_000_000);
+    expect(efe.investing.otros).toBe(-100_000_000);
+    expect(efe.investing.total).toBe(-100_000_000);
+    expect(efe.netChangeInCash).toBe(-80_000_000);
+    expect(efe.observedChangeInCash).toBe(-80_000_000);
+    expect(efe.reconciled).toBe(true);
+    expect(s.cashFlowClosureAdjustment).toBeUndefined();
+  });
+
+  it('R6 no esconde una brecha material en capital de trabajo: queda visible', () => {
+    // El 2025 viene descuadrado en 30M (bloqueado por R8): el EFE no concilia
+    // y R6 NO mueve la diferencia a una línea operativa.
+    const s = pp(
+      [
+        'codigo,nombre,Saldo 2024,Saldo 2025',
+        '110505,Caja,500000000,530000000',
+        '130505,Clientes,200000000,260000000',
+        '220505,Proveedores,100000000,100000000',
+        '310505,Capital,600000000,600000000',
+        '413505,Ventas,0,100000000',
+        '513505,Gastos,0,40000000',
+      ].join('\n'),
+    ).primary;
+    const efe = s.cashFlowIndirecto!;
+    expect(s.virtualCloseAdjustment?.blocking).toBe(true);
+    expect(efe.reconciled).toBe(false);
+    expect(Math.abs(efe.reconciliationGap)).toBe(30_000_000);
+    expect(s.cashFlowClosureAdjustment).toBeUndefined();
+    expect(efe.operating.varCuentasPorCobrar).toBe(-60_000_000);
+    const r6 = (s.curator?.findings ?? []).find((f) => f.code === 'CUR-R6');
+    expect(r6?.severity).toBe('alto');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// niif-preproceso-22 — R1: sobregiros y anticipos son pasivo CORRIENTE
+// ---------------------------------------------------------------------------
+describe('niif-preproceso-22 — reclasificación de saldos crédito de activo corriente', () => {
+  it('sobregiro (1110 crédito): pasivo corriente, destino PUC 2105 y ancla de efectivo recalculada', () => {
+    const res = pp(
+      [
+        'codigo,nombre,Saldo 2025',
+        '110505,Caja,100000000',
+        '111005,Bancos (sobregiro),-50000000',
+        '130505,Clientes,200000000',
+        '220505,Proveedores,100000000',
+        '310505,Capital,150000000',
+        '413505,Ventas,100000000',
+        '513505,Gastos,100000000',
+      ].join('\n'),
+    );
+    const ct = res.primary.controlTotals;
+    expect(ct.pasivoCorriente).toBe(150_000_000);
+    expect(ct.pasivoNoCorriente).toBe(0);
+    // Las cuentas 11 que quedan en el activo suman 100M (el sobregiro es pasivo).
+    expect(ct.efectivoCuenta11).toBe(100_000_000);
+    expect(ct.cents!.efectivoCuenta11).toBe(BigInt(10_000_000_000));
+    expect(ct.raw!.efectivoCuenta11).toBe('100000000.00');
+    expect(ct.razonCorriente).toBeCloseTo(2, 5);
+    expect(res.reclasificacionesNoCompensacion.map((r) => r.cuenta_destino_pasivo)).toEqual([
+      '2105',
+    ]);
+  });
+
+  it('anticipo de cliente en 1305 con saldo crédito: pasivo corriente y destino PUC 2805', () => {
+    const res = pp(
+      [
+        'codigo,nombre,Saldo 2025',
+        '110505,Caja,300000000',
+        '130505,Clientes,100000000',
+        '130510,Clientes con anticipo,-40000000',
+        '220505,Proveedores,100000000',
+        '310505,Capital,260000000',
+      ].join('\n'),
+    );
+    const ct = res.primary.controlTotals;
+    expect(ct.pasivoCorriente).toBe(140_000_000);
+    expect(ct.pasivoNoCorriente).toBe(0);
+    expect(ct.deudoresCuenta13).toBe(100_000_000);
+    expect(res.reclasificacionesNoCompensacion[0]?.cuenta_destino_pasivo).toBe('2805');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // niif-preproceso-26 — R12 respeta periodoTipo
 // ---------------------------------------------------------------------------
 describe('niif-preproceso-26 — cortes parciales no se sellan por libros abiertos', () => {

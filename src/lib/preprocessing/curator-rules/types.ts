@@ -105,7 +105,11 @@ export interface Reclassification {
 
 export interface CashFlowOperatingSection {
   utilidadNeta: number;
-  /** + Depreciación / Amortización (Δ saldos PUC 1592, 1595, 1598). */
+  /**
+   * + Depreciación, amortización y deterioros no monetarios: aumento de las
+   * correctoras de los grupos 15-18 (1592, 1597, 1598, 1599, 1698, 1699,
+   * 1798, 1899 … ver `contra-asset-registry.ts`).
+   */
   depreciacionAmortizacion: number;
   /** ± Variación Cuentas por Cobrar (Δ Clase 13). Activos ↑ → flujo ↓. */
   varCuentasPorCobrar: number;
@@ -113,30 +117,47 @@ export interface CashFlowOperatingSection {
   varInventarios: number;
   /** ± Variación Proveedores (Δ Clase 22). */
   varProveedores: number;
-  /** ± Variación Cuentas por Pagar comerciales (Δ Clase 23). */
+  /** ± Variación Cuentas por Pagar (Δ Clase 23, sin 2360 dividendos por pagar). */
   varCuentasPorPagar: number;
   /** ± Variación Impuestos por Pagar (Δ Clase 24). */
   varImpuestosPorPagar: number;
   /** ± Variación Obligaciones Laborales (Δ Clase 25). */
   varObligacionesLaborales: number;
+  /**
+   * ± Variación de otros pasivos operativos: 26 pasivos estimados y
+   * provisiones, 27 diferidos, 28 otros pasivos (anticipos recibidos …).
+   * Opcional por compatibilidad con literales previos; R2 siempre lo emite.
+   */
+  varOtrosPasivosOperativos?: number;
   /** Total flujo de actividades operativas. */
   total: number;
 }
 
 export interface CashFlowInvestingSection {
-  /** Δ Propiedad Planta y Equipo bruto (Clase 15 sin depreciación). */
+  /** Δ Propiedad Planta y Equipo bruto (Clase 15 sin correctoras). */
   varPPE: number;
-  /** ± Otros movimientos de inversión. */
+  /**
+   * ± Otros movimientos de inversión: −Δ12 inversiones, −Δ16/17/18 brutos,
+   * −Δ19 valorizaciones + Δ38 superávit por valorizaciones (no monetarios,
+   * se netean entre sí).
+   */
   otros: number;
   total: number;
 }
 
 export interface CashFlowFinancingSection {
-  /** Δ Obligaciones financieras (Clase 21). */
+  /** Δ Obligaciones financieras (21) y bonos (29), incluidos sobregiros reclasificados. */
   varObligacionesFinancieras: number;
-  /** Δ Capital + reservas (Clases 31, 32, 33 excluyendo utilidad del ejercicio). */
+  /**
+   * Δ capital, superávit, reservas y revalorización (31-35) más el
+   * movimiento de resultados acumulados que no es resultado del año ni
+   * dividendo identificado.
+   */
   varCapitalReservas: number;
-  /** Dividendos / distribuciones aproximadas (Δ Utilidades acumuladas — Utilidad neta T). */
+  /**
+   * Dividendos pagados (≤ 0), SÓLO con evidencia (2360/35):
+   * Δ(36+37, incl. virtuales de R8) − utilidad del año + Δ2360.
+   */
   dividendosEstimados: number;
   total: number;
 }

@@ -163,26 +163,17 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
   });
 
   // -------------------------------------------------------------------------
-  // ASERCIÓN 3 — R6: cierre del EFE contra la caja PUC 11.
+  // ASERCIÓN 3 — R6: el EFE no se cierra a la fuerza.
   // -------------------------------------------------------------------------
-  // PREMISA CORREGIDA (auditoría 2026-08). Este test afirmaba antes que R6
-  // rechazaba el cierre porque la brecha era ≈ $312,5M, superior al 50 % de
-  // todos los buckets operativos. Esa brecha era un ARTEFACTO de un defecto de
-  // R1: la regla reclasificaba la depreciación acumulada (159205, −$130M) a
-  // pasivo, con lo cual (a) inflaba Activo y Pasivo en $130M cada uno y
-  // (b) anulaba la cuenta 1592 en Clase 1, dejando a R2 sin el ajuste no-cash
-  // de D&A del método indirecto. El EFE quedaba descuadrado por construcción.
-  //
-  // Con las cuentas correctoras preservadas en el activo (NIC 1 párr. 33), R2
-  // recupera la D&A del periodo (Δ 1592 = $30M) y la brecha real cae a $80M
-  // —absorbible por varInventarios ($170M) sin superar el tope del 50 %—, por
-  // lo que el guardrail SÍ autoriza el cierre y el EFE queda reconciliado
-  // contra PUC 11 al centavo, que es el contrato de R6 (NIC 7 párr. 45).
-  //
-  // El caso "guardrail rechaza el cierre" sigue siendo comportamiento válido de
-  // R6, pero necesita un fixture cuya brecha sea genuinamente inabsorbible.
+  // Auditoría 2026-09 (niif-preproceso-15/-16): R2 clasifica TODA cuenta de
+  // las clases 1-3, así que el EFE suma exactamente la variación de caja
+  // cuando ambos balances cuadran. Este fixture NO cuadra en ninguno de los
+  // dos periodos (379505), y la brecha del EFE es exactamente la variación del
+  // descuadre: 1.574,5M (2025) − 1.752M (2024) = −177,5M ⇒ brecha +$177,5M.
+  // Antes R6 absorbía $80M en varInventarios (y la diferencia quedaba
+  // escondida en capital de trabajo); ahora la brecha queda visible.
   // -------------------------------------------------------------------------
-  it('Cuadratura 3 — R6 cierra el EFE contra PUC 11 cuando la brecha es absorbible por un bucket operativo', () => {
+  it('Cuadratura 3 — R6 no absorbe la brecha material del EFE en capital de trabajo', () => {
     const result = loadSnapshot();
     const snap = result.primary;
 
@@ -190,43 +181,28 @@ describe('ELITE Pulido Diamante — Curator E2E sobre fixture sintético', () =>
     expect(efe, 'cashFlowIndirecto (EFE por R2) ausente — R6 no pudo correr').toBeDefined();
 
     // R6 ancla cashOpen / cashClose SIEMPRE, decida o no aplicar el cierre.
-    expect(snap.controlTotals.cashClose).toBeDefined();
-    expect(snap.controlTotals.cashOpen).toBeDefined();
     expect(snap.controlTotals.cashClose).toBe(snap.controlTotals.efectivoCuenta11);
     expect(snap.controlTotals.cashOpen).toBe(
       result.comparative?.controlTotals.efectivoCuenta11 ?? 0,
     );
 
-    // La brecha es absorbible ⇒ el cierre se aplica y queda documentado.
-    const closure = snap.curator!.cashFlowClosureAdjustment;
-    expect(
-      closure,
-      'R6 debería aplicar el cierre: con las correctoras preservadas la brecha ' +
-        'es de $80M, por debajo del 50 % de varInventarios ($170M).',
-    ).toBeDefined();
+    // Sin cierre forzado ni línea de ajuste.
+    expect(snap.curator!.cashFlowClosureAdjustment).toBeUndefined();
+    expect(snap.cashFlowClosureAdjustment).toBeUndefined();
+    expect((efe!.operating as { varCapitalTrabajoAjuste?: number }).varCapitalTrabajoAjuste).toBeUndefined();
 
-    // El efectivo final reconciliado DEBE ser el saldo PUC 11 al cierre — es el
-    // ancla dura de todo el EFE.
-    expect(closure!.reconciledClosingCash).toBe(snap.controlTotals.efectivoCuenta11);
-    expect(closure!.openingCash).toBe(
-      result.comparative?.controlTotals.efectivoCuenta11 ?? 0,
-    );
+    // La brecha es la variación del descuadre del archivo entre periodos.
+    const residualPrev = result.comparative!.virtualCloseAdjustment!.unexplainedResidual!;
+    const residualNow = snap.virtualCloseAdjustment!.unexplainedResidual!;
+    expect(efe!.reconciliationGap).toBeCloseTo(-(residualNow - residualPrev), 2);
+    expect(efe!.reconciliationGap).toBeCloseTo(177_500_000, 2);
+    expect(efe!.reconciled).toBe(false);
 
-    // La brecha cerrada es exactamente la diferencia entre la variación
-    // observada en caja y la que arrojaba el EFE indirecto antes del ajuste.
-    expect(closure!.gapCop).toBe(
-      closure!.efeNetChangeBefore - closure!.observedChangeInCash,
-    );
+    // D&A del periodo recuperada de la correctora 1592 (Δ = $30M).
+    expect(efe!.operating.depreciacionAmortizacion).toBe(30_000_000);
 
-    // El ajuste va con etiqueta LITERAL y justificación normativa: un plug
-    // silencioso sería indefendible ante la DIAN (Art. 647 E.T.).
-    expect(closure!.adjustmentLineLabel).toBe(
-      'Variaciones en Capital de Trabajo (ajuste de cierre)',
-    );
-    expect(closure!.justification).toContain('NIC 7');
-
-    // Consecuencia del cierre: el EFE queda reconciliado.
-    expect(efe!.reconciled).toBe(true);
+    const r6 = snap.curator!.findings.find((f) => f.code === 'CUR-R6');
+    expect(r6?.severity).toBe('alto');
   });
 
   // -------------------------------------------------------------------------

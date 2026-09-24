@@ -6,14 +6,14 @@
 // que el LLM consume) emite las 4 secciones Curator esperadas cuando se le
 // pasa el snapshot 2025 del fixture Pulido Diamante.
 //
-// Las 4 secciones:
-//   - "## Reclasificaciones aplicadas (Curator R1)" — porque el fixture tiene
-//     saldos negativos materiales en 120505 y 159205.
-//   - "## Anclaje patrimonial aplicado (Curator R5)" — porque hay gap ECP↔Balance
-//     de $1.572M.
-//   - "## Cierre de Flujo de Efectivo aplicado (Curator R6)" — POST re-calibracion
-//     del fixture (gap dentro de guardrail al 50%).
-//   - "## Advertencia de Valoracion (Curator R7)" — porque margen bruto > 85%.
+// Secciones (auditoría 2026-09):
+//   - "## Reclasificaciones aplicadas (Curator R1)" — el fixture tiene un
+//     saldo crédito material en 120505.
+//   - "## Cierre Virtual aplicado (Curator R8)" — hay actividad P&L.
+//   - "## Advertencia de Valoracion (Curator R7)" — margen bruto > 85%.
+//   - NO "Anclaje patrimonial (R5)" ni "Cierre de Flujo de Efectivo (R6)":
+//     R5 ya no reescribe el patrimonio y R6 sólo absorbe redondeos; el
+//     descuadre deliberado del fixture (379505) bloquea en vez de maquillarse.
 //
 // Si alguna seccion falta, el LLM no veria el campo Curator correspondiente
 // y el reporte final se generaria sin el ajuste — la regresion mas peligrosa
@@ -51,25 +51,18 @@ function loadPrimarySnapshot() {
 
 describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', () => {
   // -------------------------------------------------------------------------
-  // Notas de la nueva arquitectura (post-R8, mayo 2026):
+  // Notas (auditoría 2026-09, niif-preproceso-06/-15/-16, recalculo-08):
   //
-  // (a) R8 (Cierre Virtual) reemplaza a R5 como absorbedor del gap del fixture:
-  //     el residual de la cuenta 379505 (-$1,572B) + el gap 3605 viejo vs
-  //     utilidad dinámica ($147,5M) terminan en la cuenta virtual 3710VC. R5
-  //     solo ve la ecuación contable ya cuadrada y NO actúa, así que la
-  //     sección "## Anclaje patrimonial aplicado (Curator R5)" NO aparece en
-  //     el bloque vinculante. En su lugar aparece la sección R8.
+  // (a) R8 ya no absorbe el descuadre del fixture (379505, −$1.572M) en
+  //     3710VC: sólo reclasifica el 3605 anterior ($145M). El residual queda
+  //     bloqueante y R5 no ancla el patrimonio, así que la sección
+  //     "## Anclaje patrimonial aplicado (Curator R5)" NO aparece.
   //
-  // (b) R6 (Cierre EFE): PREMISA CORREGIDA en la auditoría 2026-08. Este
-  //     comentario afirmaba que la brecha era ≈ $312,5M y que el guardrail
-  //     rechazaba el cierre. Esa brecha era un artefacto del defecto de R1 que
-  //     reclasificaba la depreciación acumulada (159205) a pasivo y dejaba a R2
-  //     sin el ajuste no-cash de D&A. Con las correctoras preservadas
-  //     (NIC 1 párr. 33), la brecha real es de $80M —absorbible— y R6 SÍ
-  //     aplica el cierre, por lo que la sección R6 aparece en el bloque, tal
-  //     como anticipaba la cabecera de este archivo.
+  // (b) R6 sólo absorbe redondeos (≤ $1). La brecha del EFE de este fixture
+  //     es la variación del descuadre entre periodos ($177,5M) y queda
+  //     visible: la sección R6 NO aparece y el EFE se declara no reconciliado.
   // -------------------------------------------------------------------------
-  it('renderSnapshotLines emite R1 + R6 + R8 + R7 (R5 inactivo por la nueva arquitectura)', () => {
+  it('renderSnapshotLines emite R1 + R8 + R7 (R5 y R6 no maquillan el descuadre)', () => {
     const snap = loadPrimarySnapshot();
     const lines = renderSnapshotLines(snap);
     const text = lines.join('\n');
@@ -101,16 +94,15 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
         text,
     ).not.toContain('## Anclaje patrimonial aplicado (Curator R5)');
 
-    // Sub-string 4: R6 (cierre EFE) — DEBE aparecer. Si el curator ajustó el
-    // EFE para cuadrarlo contra PUC 11 y el LLM no ve ese ajuste, redacta el
-    // estado de flujos como si cerrara solo: el ajuste queda sin revelar y el
-    // informe pierde su defensa ante el Art. 647 E.T.
+    // Sub-string 4: R6 (cierre EFE) — NO debe aparecer. Auditoría 2026-09:
+    // R6 sólo absorbe redondeos (≤ $1). Este fixture no cuadra (379505), el
+    // EFE queda con brecha visible y el bloque lo declara "Reconciliado: no"
+    // en lugar de presentar un ajuste de capital de trabajo inventado.
     expect(
       text,
-      'Falta seccion R6 — el LLM no veria el ajuste de cierre del EFE y no lo revelaria. ' +
-        'Output recibido:\n' +
-        text,
-    ).toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+      'La seccion R6 NO deberia emitirse: no hubo cierre forzado. Output recibido:\n' + text,
+    ).not.toContain('## Cierre de Flujo de Efectivo aplicado (Curator R6)');
+    expect(text).toContain('Reconciliado: no');
 
     // Sub-string 5: R7 (costo presunto) — DEBE aparecer
     expect(

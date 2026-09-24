@@ -533,7 +533,8 @@ export interface ActividadInferida {
  *
  *   - `cuenta_destino_pasivo='2895'` para clase 12 (Inversiones, NIC 28).
  *   - `cuenta_destino_pasivo='2105'` para clase 11 (sobregiros bancarios).
- *   - `cuenta_destino_pasivo='2810'` para el resto del activo (default).
+ *   - `cuenta_destino_pasivo='2805'` para clases 13/14 (anticipos recibidos).
+ *   - `cuenta_destino_pasivo='2895'` para el resto del activo (diversos).
  *
  * Why: el LLM en producción debe citar códigos PUC reales, no códigos
  * virtuales internos. Este mapeo aísla el contrato externo del detalle de
@@ -543,7 +544,7 @@ export interface ReclasificacionNoCompensacion {
   cuenta_origen: string;
   /** Magnitud absoluta del saldo invertido (en centavos, BigInt). */
   saldo_invertido_centavos: bigint;
-  /** Cuenta PUC de destino: '2895' | '2810' | '2105'. */
+  /** Cuenta PUC de destino: '2105' | '2805' | '2895'. */
   cuenta_destino_pasivo: string;
   /** Norma + justificación legible. */
   motivo_norma: string;
@@ -1253,10 +1254,14 @@ function inferActividadFromSnapshot(
 /**
  * Mapea las reclasificaciones internas R1 al contrato externo PUC-aware.
  *
- * Reglas de mapeo:
- *   - Origen clase 11 (códigos `11xx`) → destino '2105' (sobregiros).
- *   - Origen clase 12 (códigos `12xx`) → destino '2895' (NIC 28).
- *   - Resto del activo → destino '2810' (otros pasivos diversos).
+ * Reglas de mapeo (PUC D. 2650/1993):
+ *   - Origen 11 (sobregiros)                 → '2105' Bancos nacionales (corriente).
+ *   - Origen 12 (reajustes de inversiones)   → '2895' Diversos.
+ *   - Origen 13/14 (anticipos recibidos …)   → '2805' Anticipos y avances recibidos.
+ *   - Resto del activo                       → '2895' Diversos.
+ *
+ * Auditoría 2026-09 (niif-preproceso-22): el resto iba a '2810', que en el PUC
+ * es "Depósitos recibidos", no "otros pasivos diversos".
  *
  * Why: el contrato externo cita códigos PUC reales que el LLM puede
  * referenciar. R1 internamente usa códigos virtuales `2810ZZ-*` / `2895VC-*`
@@ -1270,9 +1275,9 @@ function buildReclasificacionesNoCompensacion(
   for (const r of reclas) {
     if (!r.applied) continue;
     const origin = r.accountCode;
-    let destino = '2810';
+    let destino = '2895';
     if (origin.startsWith('11')) destino = '2105';
-    else if (origin.startsWith('12')) destino = '2895';
+    else if (origin.startsWith('13') || origin.startsWith('14')) destino = '2805';
 
     const amountCents = BigInt(
       Math.round(Math.abs(r.effectiveTransferCop ?? r.amountCop) * 100),
