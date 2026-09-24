@@ -1,6 +1,5 @@
 {
   "__testCase": "Caso borde: F04 < 0 (saldo a favor). Empresa con retenciones > impuesto referencia. NIT dígito 0. F01=50.000.000,00 → F02=17.500.000,00 → F03=25.000.000,00 → F04=−7.500.000,00 (negativo = saldo a favor). Alert SALDO_A_FAVOR presente. L1 check L1.6 y L3 check L3.4 deben pasar porque la alerta existe. L2 check L2.3 debe fallar (F10 = 142.9% > 100%).",
-
   "f01": "5000000000",
   "f02": "1750000000",
   "f03": "2500000000",
@@ -11,7 +10,6 @@
   "f08": "650000000",
   "f09": 0.0,
   "f10": 142.9,
-
   "calendarioDian": {
     "nit": "800123456-0",
     "ultimoDigito": 6,
@@ -20,27 +18,26 @@
       {
         "obligacion": "Retención en la fuente",
         "frecuencia": "mensual",
-        "proximoVencimiento": "2026-02-08",
+        "proximoVencimiento": "2026-02-17",
         "diasRestantes": 40,
         "estado": "pendiente",
         "baseCcv": "F03",
         "valorEstimado": "2500000000",
-        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 0"
+        "norma": "Arts. 376 y 382 E.T.; plazo del 7º al 16º día hábil del mes siguiente según el último dígito del NIT sin DV (Decreto 2229 de 2023)."
       },
       {
-        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "obligacion": "Declaración de Renta PJ — Declaración y 1ª cuota",
         "frecuencia": "anual",
-        "proximoVencimiento": "2026-04-09",
+        "proximoVencimiento": "2026-05-20",
         "diasRestantes": 130,
         "estado": "pendiente",
         "baseCcv": "F04",
         "valorEstimado": "0",
-        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 0. SALDO A FAVOR: gestionar devolución Art. 850 E.T."
+        "norma": "Art. 1.6.1.13.2.12 del DUR 1625 de 2016 (modif. Decreto 2229 de 2023); art. 591 E.T. Declaración y 1ª cuota en mayo, 2ª cuota en julio. SALDO A FAVOR: gestionar devolución Art. 850 E.T."
       }
     ],
     "alertaAnticipacionDias": 15
   },
-
   "alertas": [
     {
       "codigo": "SALDO_A_FAVOR",
@@ -49,7 +46,6 @@
       "norma": "Art. 850 E.T. — devolución saldos a favor; Art. 815 E.T. — compensación"
     }
   ],
-
   "fuente": {
     "periodo": "2025",
     "balanceHash": "sha256-saldo-a-favor-test-2025"

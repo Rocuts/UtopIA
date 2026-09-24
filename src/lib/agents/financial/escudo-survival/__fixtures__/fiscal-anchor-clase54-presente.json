@@ -1,6 +1,5 @@
 {
   "__testCase": "Caso borde: F09 > 0 — empresa que SÍ provisionó impuesto de renta (Clase 54 presente). NIT dígito 9. F09 = Clase54/F01×100 = 35.0%. Validator L3 check L3.1 debe pasar porque clase54Cents > 0. F10 = 22.4% (razonable, sin doble conteo). Todo L1+L2+L3 debe pasar con este fixture + clase54Cents=7000000000n.",
-
   "f01": "2000000000",
   "f02": "700000000",
   "f03": "157000000",
@@ -11,7 +10,6 @@
   "f08": "250000000",
   "f09": 35.0,
   "f10": 22.4,
-
   "calendarioDian": {
     "nit": "900987654-9",
     "ultimoDigito": 4,
@@ -20,12 +18,12 @@
       {
         "obligacion": "Retención en la fuente",
         "frecuencia": "mensual",
-        "proximoVencimiento": "2026-02-17",
+        "proximoVencimiento": "2026-02-13",
         "diasRestantes": 49,
         "estado": "pendiente",
         "baseCcv": "F03",
         "valorEstimado": "157000000",
-        "norma": "Art. 376 E.T. — plazo consignación retefuente, último dígito 9"
+        "norma": "Arts. 376 y 382 E.T.; plazo del 7º al 16º día hábil del mes siguiente según el último dígito del NIT sin DV (Decreto 2229 de 2023)."
       },
       {
         "obligacion": "IVA bimestral",
@@ -38,21 +36,19 @@
         "norma": "Art. 600 E.T. — períodos gravables IVA bimestral, último dígito 9"
       },
       {
-        "obligacion": "Impuesto de renta persona jurídica 2025",
+        "obligacion": "Declaración de Renta PJ — Declaración y 1ª cuota",
         "frecuencia": "anual",
-        "proximoVencimiento": "2026-04-22",
+        "proximoVencimiento": "2026-05-15",
         "diasRestantes": 143,
         "estado": "pendiente",
         "baseCcv": "F04",
         "valorEstimado": "543000000",
-        "norma": "Resolución DIAN 2026 — plazos declaración renta PJ 2025, último dígito 9"
+        "norma": "Art. 1.6.1.13.2.12 del DUR 1625 de 2016 (modif. Decreto 2229 de 2023); art. 591 E.T. Declaración y 1ª cuota en mayo, 2ª cuota en julio."
       }
     ],
     "alertaAnticipacionDias": 15
   },
-
   "alertas": [],
-
   "fuente": {
     "periodo": "2025",
     "balanceHash": "sha256-clase54-presente-test-2025"

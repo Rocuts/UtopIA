@@ -52,22 +52,19 @@ const CUARENTENA: Record<string, string> = {
   'src/lib/agents/financial/validators/report-validator.ts::detectMissingControlKPIs':
     'Proyección Big Four — pendiente de cablear junto con el resto de la superficie 7. ' +
     'Sin medición de falsos positivos todavía.',
+  // validateFiscalAnchorAll salió de la cuarentena en la integración W3-B
+  // (auditoría 2026-09, tributario-modulos-03): corregidas L3.5/L3.6 (plazos
+  // del Decreto 2229/2023), L3.7 (lista blanca de crédito de renta), las normas
+  // de L1.2/L3.1 y los falsos positivos de L1.3/L1.5/L1.7, `validateSurvivalReport`
+  // lo corre sobre el ancla que publica /api/escudo-survival. Las capas sueltas
+  // siguen exportadas sólo para sus pruebas unitarias.
   'src/lib/agents/financial/escudo-survival/validators/fiscal-anchor-validators.ts::validateFiscalAnchorL1':
-    'El Escudo (superficie 6): los paneles que consumían estos veredictos están huérfanos desde ' +
-    'cd6e202d. Cablear sin remontar los paneles no cambia nada de lo que ve el cliente.',
+    'Se ejecuta en producción dentro de validateFiscalAnchorAll (survival-validators.ts); ' +
+    'el export por capa existe sólo para las pruebas unitarias de L1.',
   'src/lib/agents/financial/escudo-survival/validators/fiscal-anchor-validators.ts::validateFiscalAnchorL2':
-    'El Escudo (superficie 6) — mismo motivo que L1.',
+    'Se ejecuta en producción dentro de validateFiscalAnchorAll — mismo motivo que L1.',
   'src/lib/agents/financial/escudo-survival/validators/fiscal-anchor-validators.ts::validateFiscalAnchorL3':
-    'El Escudo (superficie 6) — mismo motivo que L1.',
-  'src/lib/agents/financial/escudo-survival/validators/fiscal-anchor-validators.ts::validateFiscalAnchorAll':
-    'El Escudo (superficie 6) — mismo motivo que L1. Revisado en la integración IW5b ' +
-    '(2026-09-24): el shape permitiría adjuntarlo a `validation` del reporte, pero sus reglas ' +
-    'normativas contradicen el ancla vigente y producirían errores falsos: L3.6 exige la renta PJ ' +
-    'AG 2025 entre el 9 y el 22 de abril de 2026 y el calendario del ancla (Decreto 2229/2023) la ' +
-    'publica en mayo (12-26) y julio; L3.5 fija la retención en días 8-17 sin fuente; L3.7 ancla ' +
-    'F03 en Σ(1355+1805) − 135517 − 135518, contrario a la lista blanca de crédito de renta ' +
-    '(1805 sólo por nombre); L1.2/L3.1 citan el Art. 850 y la «diferencia de criterio». Cablear ' +
-    'exige primero corregir esas reglas con fuente y vigencia.',
+    'Se ejecuta en producción dentro de validateFiscalAnchorAll — mismo motivo que L1.',
   'src/lib/pillars/single-source-validator.ts::validateCrossPillarCoherence':
     'Coherencia entre pilares — pendiente de decidir por qué canal sella. Hoy no hay ninguno.',
   'src/lib/pillars/sync-validator.ts::validateDashboardIntegrity':

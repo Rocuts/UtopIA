@@ -165,12 +165,15 @@ describe('Test 2 — Saldo a favor', () => {
 // ---------------------------------------------------------------------------
 // Test 3 — Sin provision (clase54 = 0 y F01 > 0 sin alerta A5)
 // Fixture: golden record (F01 > 0) + clase54Cents = 0
-// Cubre: L3.1 -> 1 error con cita Art. 647 E.T.
+// Cubre: L3.1 -> 1 error. Norma: NIIF para las PYMES Sección 29 / NIC 12
+// (reconocer el impuesto corriente). Integración W3-B (auditoría 2026-09): antes
+// citaba el Art. 647 E.T. («diferencia de criterio») y ordenaba provisionar F02
+// (UAI × 35 %), que no es base fiscal.
 // ---------------------------------------------------------------------------
-describe('Test 3 — Sin provision renta (L3.1 Art. 647 E.T.)', () => {
+describe('Test 3 — Sin provision renta (L3.1 Sección 29 / NIC 12)', () => {
   const block = asBlock(goldenRecord);
 
-  it('L3.1: clase54=0 sin alerta A5 genera 1 error Art. 647', () => {
+  it('L3.1: clase54=0 sin alerta A5 genera 1 error (NIIF Sección 29 / NIC 12)', () => {
     const ctx = makeL3Ctx({
       clase54Cents: 0,
       markdownBlock: MARKDOWN_OK,
@@ -180,9 +183,10 @@ describe('Test 3 — Sin provision renta (L3.1 Art. 647 E.T.)', () => {
     expect(check).toBeDefined();
     expect(check!.passed).toBe(false);
     expect(check!.severity).toBe('error');
-    expect(check!.norma).toContain('Art. 647 E.T.');
-    expect(check!.detail).toContain('Provisionar impuesto renta');
-    expect(check!.detail).toContain('Defensa Art. 647 E.T.');
+    expect(check!.norma).toContain('Sección 29');
+    expect(check!.detail).toContain('no la provisión');
+    expect(check!.detail).toContain('Art. 26 E.T.');
+    expect(check!.detail).not.toMatch(/diferencia de criterio/i);
   });
 
   it('L3.1: clase54=0 CON alerta A5_SIN_PROVISION pasa', () => {
@@ -192,8 +196,8 @@ describe('Test 3 — Sin provision renta (L3.1 Art. 647 E.T.)', () => {
         {
           codigo: 'A5_SIN_PROVISION',
           severidad: 'warning',
-          mensaje: 'Provisionar impuesto renta: $779.973.876,41. Defensa Art. 647 E.T. — diferencia de criterio.',
-          norma: 'Art. 647 E.T.',
+          mensaje: 'escudo.fiscal.alert.a5_sin_provision',
+          norma: 'Art. 240 E.T. + NIC 12 §46',
         },
       ],
     };
@@ -247,62 +251,74 @@ describe('Test 4 — F01 = 0 (division por cero)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 5 — NIT calendario: retefuente mensual en dias 8-17
-// Cubre todos los 10 digitos posibles
+// Test 5 — NIT calendario: retención mensual en el día hábil del dígito
+// Cubre los 10 dígitos. Integración W3-B (auditoría 2026-09): la tabla anterior
+// («días 8–17», «Resolución DIAN 2026») no tenía fuente; el Decreto 2229/2023
+// (DUR 1625/2016 art. 1.6.1.13.2.33) fija el 7º al 16º día hábil según el
+// último dígito del NIT sin DV (1 = 7º … 0 = 16º). Fechas de febrero de 2026.
 // ---------------------------------------------------------------------------
-describe('Test 5 — NIT calendario retefuente en rango [8..17]', () => {
-  // Tabla de vencimientos retefuente por digito NIT (Art. 376 E.T.)
-  // Fuente: Resolucion DIAN 2026 (dias para el mes siguiente)
-  const TABLA: Record<number, number> = {
-    0: 8, 1: 9, 2: 10, 3: 11, 4: 12,
-    5: 12, 6: 13, 7: 14, 8: 15, 9: 17,
+describe('Test 5 — NIT calendario retención en el día hábil del dígito', () => {
+  const FEBRERO_2026: Record<number, string> = {
+    0: '2026-02-23', 1: '2026-02-10', 2: '2026-02-11', 3: '2026-02-12', 4: '2026-02-13',
+    5: '2026-02-16', 6: '2026-02-17', 7: '2026-02-18', 8: '2026-02-19', 9: '2026-02-20',
   };
 
-  for (const [digito, dia] of Object.entries(TABLA)) {
-    const d = parseInt(digito, 10);
-    it(`digito ${d}: vencimiento dia ${dia} en [8..17]`, () => {
-      const diaStr = dia.toString().padStart(2, '0');
-      const block: FiscalAnchorBlock = {
-        f01: '100000000',
-        f02: '35000050',
-        f03: '10000000',
-        f04: '25000050',
-        f05: '8000000',
-        f06: '2000000',
-        f07: '500000',
-        f08: '15000000',
-        f09: 0,
-        f10: 28.6,
-        calendarioDian: {
-          nit: `90012345${d}-${d}`,
-          ultimoDigito: d,
-          periodo: '2025',
-          vencimientos: [
-            {
-              obligacion: 'Retencion en la fuente',
-              frecuencia: 'mensual',
-              proximoVencimiento: `2026-02-${diaStr}`,
-              diasRestantes: 30 + dia,
-              estado: 'pendiente',
-              baseCcv: 'F03',
-              valorEstimado: '10000000',
-              norma: `Art. 376 E.T. — ultimo digito ${d}`,
-            },
-          ],
-          alertaAnticipacionDias: 15,
-        },
-        alertas: [],
-        fuente: { periodo: '2025', balanceHash: `test-digito-${d}` },
-      };
+  function blockRetencion(d: number, fecha: string): FiscalAnchorBlock {
+    return {
+      f01: '100000000',
+      f02: '35000000',
+      f03: '10000000',
+      f04: '25000000',
+      f05: '8000000',
+      f06: '2000000',
+      f07: '500000',
+      f08: '15000000',
+      f09: 0,
+      f10: 28.6,
+      calendarioDian: {
+        nit: `90012345${d}-${d}`,
+        ultimoDigito: d,
+        periodo: '2025',
+        vencimientos: [
+          {
+            obligacion: 'Retención en la fuente',
+            frecuencia: 'mensual',
+            proximoVencimiento: fecha,
+            diasRestantes: 30,
+            estado: 'pendiente',
+            baseCcv: 'F06',
+            valorEstimado: '2000000',
+            norma: 'Decreto 2229 de 2023',
+          },
+        ],
+        alertaAnticipacionDias: 15,
+      },
+      alertas: [],
+      fuente: { periodo: '2025', balanceHash: `test-digito-${d}` },
+    };
+  }
 
+  for (const [digito, fecha] of Object.entries(FEBRERO_2026)) {
+    const d = parseInt(digito, 10);
+    it(`digito ${d}: vencimiento ${fecha} = día hábil del dígito`, () => {
       const ctx = makeL3Ctx({ clase54Cents: 1000000, markdownBlock: MARKDOWN_OK });
-      const checks = validateFiscalAnchorL3(block, ctx);
-      const check = checks.find((c) => c.name === 'L3.5_retefuente_rango_dias');
+      const check = validateFiscalAnchorL3(blockRetencion(d, fecha), ctx).find(
+        (c) => c.name === 'L3.5_retefuente_rango_dias',
+      );
       expect(check).toBeDefined();
       expect(check!.passed).toBe(true);
-      expect(check!.detail).toContain('[8..17]');
+      expect(check!.detail).toContain('día hábil del dígito');
+      expect(check!.norma).toContain('Decreto 2229');
     });
   }
+
+  it('dígito 4 con la fecha del dígito 3 (12-feb) se señala', () => {
+    const ctx = makeL3Ctx({ clase54Cents: 1000000, markdownBlock: MARKDOWN_OK });
+    const check = validateFiscalAnchorL3(blockRetencion(4, '2026-02-12'), ctx).find(
+      (c) => c.name === 'L3.5_retefuente_rango_dias',
+    );
+    expect(check!.passed).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -417,7 +433,7 @@ describe('Test adicional — Clase 54 presente (F09 > 0)', () => {
     const check = checks.find((c) => c.name === 'L3.1_sin_provision_renta');
     expect(check).toBeDefined();
     expect(check!.passed).toBe(true);
-    expect(check!.detail).toContain('Provisión de renta registrada');
+    expect(check!.detail).toContain('Gasto por impuesto de renta registrado');
   });
 
   it('L1: todos los checks de severity error pasan', () => {
