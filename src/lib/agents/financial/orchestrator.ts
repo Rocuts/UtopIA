@@ -1530,7 +1530,9 @@ function buildBindingTotalsBlock(preprocessed: unknown): string {
       lines.push(
         `REGLA SALDOS DE APERTURA: el comparativo ${comparative.period} proviene de la columna de saldo inicial/anterior. ` +
           'Presenta su estado de situación financiera (apertura), pero su estado de resultados comparativo, ' +
-          'sus KPIs de resultados y las variaciones de resultados son N/D — nunca $0,00 ni una variación calculada.',
+          'sus KPIs de resultados y las variaciones de resultados son N/D — nunca $0,00 ni una variación calculada. ' +
+          'En el JSON: grossProfitComparative, operatingProfitComparative, netIncomeComparative, oriComparative y ' +
+          'amountComparative de cada renglón del estado de resultados = null.',
       );
     }
   } else {
