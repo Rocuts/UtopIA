@@ -355,6 +355,8 @@ export const pymeEmpleados = pgTable(
     arl: text('arl'),
     /** Clase de riesgo ARL I..V (Decreto 1772/1994). Solo empleados. */
     arlClase: integer('arl_clase').default(1),
+    /** Salario integral (CST art. 132): aportes sobre el 70 %, sin prima ni cesantías. */
+    salarioIntegral: boolean('salario_integral').notNull().default(false),
     activo: boolean('activo').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

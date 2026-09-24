@@ -21,10 +21,14 @@
 --
 -- También agrega workspaces.empleador_beneficiario_114_1 (contab-nomina-07 /
 -- -19): condición del empleador frente al Art. 114-1 E.T.; null = no
--- declarada (nómina y provisiones no asumen la exoneración).
+-- declarada (nómina y provisiones no asumen la exoneración), y
+-- pyme_empleados.salario_integral (contab-nomina-19).
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS empleador_beneficiario_114_1 boolean;
+--> statement-breakpoint
+-- contab-nomina-19: salario integral (aportes sobre el 70 %, sin prima/cesantías).
+ALTER TABLE pyme_empleados ADD COLUMN IF NOT EXISTS salario_integral boolean NOT NULL DEFAULT false;
 --> statement-breakpoint
 
 -- Workspaces sembrados con el PUC anterior (marcador inequívoco: 2404 = IVA).

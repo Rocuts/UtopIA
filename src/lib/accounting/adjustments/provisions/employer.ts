@@ -9,22 +9,12 @@
 
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
-
-import { getDb } from '@/lib/db/client';
-import { workspaces } from '@/lib/db/schema';
+import { getEmpleador114_1 } from '@/lib/db/workspace-empleador';
 import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
 
 /** true beneficiario · false no beneficiario · null no declarado. */
-export async function getEmployer114_1(workspaceId: string): Promise<boolean | null> {
-  const db = getDb();
-  const rows = await db
-    .select({ v: workspaces.empleadorBeneficiario114_1 })
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
-    .limit(1);
-  const v = rows[0]?.v;
-  return v === true || v === false ? v : null;
+export function getEmployer114_1(workspaceId: string): Promise<boolean | null> {
+  return getEmpleador114_1(workspaceId);
 }
 
 /**
