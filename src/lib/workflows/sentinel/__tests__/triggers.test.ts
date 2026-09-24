@@ -231,3 +231,36 @@ describe('Relevance Learning — evaluateEscalation', () => {
     expect(evaluateEscalation(a).kind).toBe('noop');
   });
 });
+
+// Re-auditoría 2026-09-24 (ICU-06): T3 disparado sólo por días de inventario
+// decía «Margen inusualmente alto detectado» y «tu rentabilidad podría estar
+// inflada», aun con margen 35 % o N/D.
+describe('T3 — asunto e impacto según el disparador (ICU-06)', () => {
+  it('sólo inventario (margen N/D o 35 %): no habla de margen alto', () => {
+    for (const margenBruto of [null, 0.35]) {
+      for (const language of ['es', 'en'] as const) {
+        const out = runT3({ ...baseMetrics, margenBruto, diasInventario: 412.6 }, { ...ctx, language });
+        expect(out.fired).toBe(true);
+        expect(out.insight?.subject).not.toMatch(/margen inusualmente alto|unusually high margin/i);
+        expect(out.insight?.impacto).not.toMatch(/rentabilidad podría estar inflada|profitability may be inflated/i);
+        expect(out.insight?.subject).toMatch(language === 'es' ? /Inventario sin rotación/ : /Inventory not turning over/);
+      }
+    }
+  });
+
+  it('sólo margen: conserva el asunto de margen alto', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95 }, ctx);
+    expect(out.insight?.subject).toMatch(/Margen inusualmente alto/);
+    expect(out.insight?.impacto).toMatch(/rentabilidad podría estar inflada/);
+  });
+
+  it('ambos disparadores: el asunto nombra los dos', () => {
+    const out = runT3({ ...baseMetrics, margenBruto: 0.95, diasInventario: 400 }, ctx);
+    expect(out.insight?.subject).toMatch(/Margen inusualmente alto e inventario sin rotación/);
+  });
+
+  it('margen 90,4 % se imprime con un decimal (umbral > 90 %)', () => {
+    expect(runT3({ ...baseMetrics, margenBruto: 0.904 }, ctx).insight?.hallazgo).toContain('margen bruto reportado es 90,4%');
+    expect(runT3({ ...baseMetrics, margenBruto: 0.904 }, { ...ctx, language: 'en' }).insight?.hallazgo).toContain('gross margin is 90.4%');
+  });
+});
