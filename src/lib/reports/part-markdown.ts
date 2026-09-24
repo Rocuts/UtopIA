@@ -25,9 +25,11 @@ import {
 } from '@/lib/agents/financial/agents/governance-specialist';
 import {
   buildAdjustmentsAuditSection,
+  deriveReportSidecars,
   sellarConSalvedades,
   sellarProsaNiif,
 } from '@/lib/agents/financial/orchestrator';
+import { ancoraOrNull } from '@/lib/agents/financial/ancora/build-ancora';
 import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import type { Adjustment } from '@/lib/agents/repair/types';
 import { sealGovernanceNarrative } from '@/lib/agents/financial/validators/narrative-anchors';
@@ -627,11 +629,12 @@ export interface ServerReportTextSource {
  * en el servidor.
  */
 export function withServerRenderedClientReport(
-  report: FinancialReport,
+  input: FinancialReport,
   source: ServerReportTextSource,
   language: 'es' | 'en',
 ): FinancialReport | null {
-  if (!report?.niifAnalysis || !report.strategicAnalysis || !report.governance) return null;
+  if (!input?.niifAnalysis || !input.strategicAnalysis || !input.governance) return null;
+  const report = withServerSidecars(input, source);
   const rendered = withServerRenderedParts(report, source.preprocessed, language);
   const rebuilt = buildServerConsolidatedReport({
     report: rendered,
@@ -650,7 +653,46 @@ export function withServerRenderedClientReport(
   return {
     ...rendered,
     consolidatedReport: rebuilt.consolidatedReport,
-    ...foldServerEmittability(report, rebuilt, source.preprocessed),
+    // I5-4: un informe recibido pliega TODOS los bloqueantes del gate
+    // recalculado sobre el balance re-derivado (V1–V15), no sólo los de texto.
+    ...foldServerEmittability(report, rebuilt, source.preprocessed, {
+      scope: 'all',
+      hasRawData: typeof source.rawData === 'string' && source.rawData.trim().length > 0,
+    }),
+  };
+}
+
+/**
+ * Campos del informe que no son Partes y que el cliente reenvía (I5-4):
+ *   - `fiscalSnapshot` y `ancora` se recalculan desde el balance re-derivado
+ *     con la misma función que /niif y /consolidate (`deriveReportSidecars`);
+ *     sin balance no se conservan los del cuerpo;
+ *   - `generatedAt` inválido o futuro (fecha del encabezado del consolidado)
+ *     se sustituye por la hora del servidor.
+ * `company` se cruza con el JSON NIIF en el gate (`identityBlockers`) y la
+ * identidad de las Partes II/III en `serverPartChecks` (I5-2).
+ */
+function withServerSidecars(report: FinancialReport, source: ServerReportTextSource): FinancialReport {
+  const { fiscalSnapshot: _clientSnapshot, ancora: _clientAncora, ...rest } = report;
+  void _clientSnapshot;
+  void _clientAncora;
+  const now = new Date();
+  const generated = new Date(typeof report.generatedAt === 'string' ? report.generatedAt : NaN);
+  const generatedAt =
+    Number.isNaN(generated.getTime()) || generated.getTime() > now.getTime() ? now.toISOString() : report.generatedAt;
+  if (!source.preprocessed?.primary) return { ...rest, generatedAt };
+  const sidecars = deriveReportSidecars({
+    preprocessed: source.preprocessed,
+    company: report.company,
+    rawData: source.rawData ?? null,
+    hoy: now,
+  });
+  const ancora = ancoraOrNull(sidecars.ancora);
+  return {
+    ...rest,
+    generatedAt,
+    ...(sidecars.fiscalSnapshot ? { fiscalSnapshot: sidecars.fiscalSnapshot } : {}),
+    ...(ancora ? { ancora } : {}),
   };
 }
 
@@ -713,6 +755,27 @@ export function buildServerConsolidatedReport(input: {
 const TEXT_GATE_CODES = new Set(['V8', 'V9', 'V10', 'V15']);
 
 /**
+ * Bloqueantes que dependen de la identidad leída del ARCHIVO del balance
+ * (`rawData`): V5 (razón social y NIT extraídos del encabezado) y V6 (DV del
+ * NIT del archivo). Sin `rawData` en la petición el gate no puede evaluarlos
+ * (los daría por ausentes): no se pliegan.
+ */
+const FILE_IDENTITY_GATE_CODES = new Set(['V5', 'V6']);
+
+export interface FoldEmittabilityOptions {
+  /**
+   * `'text'` (default; versión persistida, cuya emitibilidad calculó el
+   * servidor en /consolidate): sólo V8/V9/V10/V15, que cambian con el
+   * re-render. `'all'` (informe RECIBIDO de un cliente, I5-4): todos los
+   * bloqueantes del gate recalculado sobre el balance re-derivado —V1–V7 y
+   * V11–V14 además de los de texto—; V5/V6 sólo si hay `rawData`.
+   */
+  scope?: 'text' | 'all';
+  /** La petición trae el `rawData` del que se re-derivó el balance. */
+  hasRawData?: boolean;
+}
+
+/**
  * Validación y emitibilidad de una exportación SIN referencia, plegadas con
  * las del texto que el servidor acaba de reconstruir
  * (`buildServerConsolidatedReport`, el mismo gate que /consolidate). Las del
@@ -730,7 +793,12 @@ export function foldServerEmittability(
   report: FinancialReport,
   server: SplitConsolidationResult,
   preprocessed: PreprocessedBalance | null | undefined,
+  options: FoldEmittabilityOptions = {},
 ): Pick<FinancialReport, 'validation' | 'emittability'> {
+  const folds = (code: string): boolean =>
+    options.scope === 'all'
+      ? !FILE_IDENTITY_GATE_CODES.has(code) || options.hasRawData === true
+      : TEXT_GATE_CODES.has(code);
   const client = report.emittability;
   const sanitized =
     client?.kind === 'emittable' ? { ...client, blockers: [], suggestedAdjustments: [] } : client;
@@ -744,7 +812,7 @@ export function foldServerEmittability(
   const received = client?.kind === 'no-emitible' ? client.blockers : [];
   const seen = new Set(received.map((b) => `${b.code}\u0000${b.message}`));
   const textBlockers = server.emittability.blockers.filter(
-    (b) => TEXT_GATE_CODES.has(b.code) && !seen.has(`${b.code}\u0000${b.message}`),
+    (b) => folds(b.code) && !seen.has(`${b.code}\u0000${b.message}`),
   );
   if (textBlockers.length === 0) return { validation, ...(sanitized ? { emittability: sanitized } : {}) };
   return {

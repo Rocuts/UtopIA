@@ -302,6 +302,39 @@ export function sellarConSalvedades(
 }
 
 /**
+ * Âncora y snapshot fiscal deterministas de un informe, desde el balance
+ * preprocesado y la empresa. La usan `prepareFinancialContext` (de ahí salen
+ * los de /niif y /consolidate) y /export sin referencia (I5-4), que ya no
+ * reenvía los que trae el cuerpo.
+ *
+ *   - Âncora: `buildNiifAncora` nunca lanza; sin preprocesado devuelve el
+ *     sentinela "empty" (el llamador lo filtra con `ancoraOrNull`).
+ *   - Snapshot fiscal (Capa 5 El Escudo): sólo con un balance bien formado;
+ *     `buildFiscalSnapshot` devuelve `undefined` ante fallo. El NIT del archivo
+ *     sale del `rawData` cuando lo hay.
+ */
+export function deriveReportSidecars(input: {
+  preprocessed: PreprocessedBalance | undefined;
+  company: CompanyInfo;
+  rawData?: string | null;
+  hoy?: Date;
+}): { ancora: NiifAncora; fiscalSnapshot: FiscalSnapshot | undefined } {
+  const { preprocessed, company } = input;
+  const ancora: NiifAncora = buildNiifAncora(preprocessed, company);
+  let fiscalSnapshot: FiscalSnapshot | undefined;
+  if (preprocessed) {
+    const nitFromFile = input.rawData ? extractCompanyMetadata(input.rawData).nitFromFile : null;
+    fiscalSnapshot = buildFiscalSnapshot({
+      preprocessed,
+      company: { name: company.name, nit: company.nit, sector: company.sector },
+      hoy: input.hoy ?? new Date(),
+      nitFromFile,
+    });
+  }
+  return { ancora, fiscalSnapshot };
+}
+
+/**
  * Sella la Parte I por cifras citadas en las notas de los estados o en las
  * notas técnicas que contradicen los estados o el balance (I5-3,
  * `checkNiifNarrative`). Mismo canal que `sellarConSalvedades`: reconciliación
@@ -2126,30 +2159,13 @@ export async function prepareFinancialContext(
     ? deriveReportMode(ppForAgents)
     : 'COMPARATIVO_COMPLETO';
 
-  // Bloque Âncora — cálculo determinístico desde el preprocesado. No
-  // depende del LLM y nunca lanza; cuando `ppForAgents` es undefined,
-  // buildNiifAncora devuelve un Âncora "empty" coherente.
-  const ancora: NiifAncora = buildNiifAncora(ppForAgents, effectiveCompany);
-
-  // Capa El Escudo (Capa 5) — snapshot fiscal determinístico. Solo posible con
-  // un `PreprocessedBalance` bien formado; `buildFiscalSnapshot` nunca lanza
-  // (devuelve undefined ante fallo) — el pipeline NIIF no aborta.
-  let fiscalSnapshot: FiscalSnapshot | undefined;
-  if (ppForAgents) {
-    const nitFromFile = effectiveRawData
-      ? extractCompanyMetadata(effectiveRawData).nitFromFile
-      : null;
-    fiscalSnapshot = buildFiscalSnapshot({
-      preprocessed: ppForAgents,
-      company: {
-        name: effectiveCompany.name,
-        nit: effectiveCompany.nit,
-        sector: effectiveCompany.sector,
-      },
-      hoy: new Date(),
-      nitFromFile,
-    });
-  }
+  // Âncora y snapshot fiscal (Capa 5): una sola función para /niif,
+  // /consolidate y /export sin referencia (I5-4).
+  const { ancora, fiscalSnapshot } = deriveReportSidecars({
+    preprocessed: ppForAgents,
+    company: effectiveCompany,
+    rawData: effectiveRawData,
+  });
 
   // ---------------------------------------------------------------------------
   // Pre-vuelo del gate de emitibilidad.
