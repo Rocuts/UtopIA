@@ -2320,8 +2320,16 @@ function comparativeStatementErrors(
         // (Δ grupo 38), igual que en el periodo actual (NIIF para las PYMES
         // 6.3). Un ORI comparativo no presentado (null) o un P&G comparativo
         // N/D (saldos de apertura) no se cruzan.
+        //
+        // Tampoco bajo el régimen de E6b (sin componentes ORI mapeados): E6b
+        // ya fija el ORI comparativo del ERI en $0, y las filas del ECP
+        // comparativo son deterministas (Δ grupo 38 en la columna ORI). Con un
+        // grupo 38 que se movió en el periodo comparativo ninguna cifra del
+        // ERI satisfaría a la vez E6b y este cruce: bloquearía un informe
+        // honesto sin detectar nada que E6b no detecte ya (revisión I2).
         const oriCmp = json.incomeStatement.oriComparative;
-        if (!pygComparativeIsNd && oriCmp !== null) {
+        const e6bRegime = !!options.presentationV3 && options.presentationV3.oriComponents.length === 0;
+        if (!pygComparativeIsNd && oriCmp !== null && !e6bRegime) {
           const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(opening.ori);
           const oriPnlCmp = parseMoneyCop(oriCmp);
           if (oriDelta !== oriPnlCmp) {
