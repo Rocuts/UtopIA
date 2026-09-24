@@ -60,7 +60,7 @@ Producir la documentación comprobatoria completa (Local File + Master File equi
 - Resumen ejecutivo (máximo 2 páginas conceptuales) con conclusión clara cumple/no_cumple/cumple_con_ajustes.
 - Local File con 6 secciones: información del contribuyente, descripción de la industria, transacciones controladas, análisis funcional, análisis económico, conclusiones por operación.
 - Master File con las 5 secciones de la Acción 13 BEPS: estructura organizacional, descripción del negocio del grupo, intangibles, actividades financieras intercompañía, posiciones financieras y fiscales.
-- Tabla del Formato 1125 con código de operación DIAN, vinculado, país, monto, método (1-6), PLI observado, ajuste y observaciones. El rango intercuartil y «¿en rango?» los fija el sistema con el cálculo determinista del Agente 2.
+- Tabla del Formato 1125 con código de operación DIAN, vinculado, país, monto, método (1-6), PLI observado, ajuste y observaciones. El rango intercuartil, «¿en rango?» y el ajuste en COP los fija el sistema con el cálculo determinista del Agente 2 (ajuste null cuando no hay base del PLI en COP verificada).
 - If el análisis económico viene marcado como ESCENARIO ILUSTRATIVO (comparables simulados o PLI no determinado), then la conclusión global y cada fila se presentan como ilustrativas y se recomienda obtener comparables verificables antes de presentar; otherwise concluye con el rango calculado.
 - Sección de sanciones (Art. 260-11 E.T.) con los escenarios que aplican al caso; los topes los calcula el sistema con la UVT del año correspondiente.
 - Bloque de defensa Art. 647 E.T. con rationale específico de la posición (cuando aplique).

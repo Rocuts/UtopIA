@@ -183,10 +183,12 @@ function renderArmLengthConclusion(
       ? (lang === 'en' ? 'COMPLIES' : 'CUMPLE')
       : (lang === 'en' ? 'DOES NOT COMPLY' : 'NO CUMPLE');
   const adjPct = check.requiredAdjustmentPercent === null ? 'N/D' : `${check.requiredAdjustmentPercent.toFixed(2)} pp`;
+  // Fase 2 de la auditoría 2026-09-24 (pendiente #8): el ajuste en COP sólo
+  // se publica si el código lo determinó; nunca la cifra del modelo.
   const adjCop =
-    check.isWithinRange === true
-      ? formatCopFromCents(BigInt(0), true)
-      : `${formatCopFromCents(parseMoneyCop(c.requiredAdjustmentCop), true)} (${lang === 'en' ? 'model estimate, unverified base' : 'estimación del modelo, base no verificada'})`;
+    c.requiredAdjustmentCop === null
+      ? (lang === 'en' ? 'N/A in COP (no verified PLI base)' : 'N/D en COP (sin base del PLI verificada)')
+      : formatCopFromCents(parseMoneyCop(c.requiredAdjustmentCop), true);
   return [
     `**${lang === 'en' ? 'Arm\'s length compliance' : 'Cumplimiento plena competencia'}:** ${status}`,
     `**${lang === 'en' ? 'Required adjustment to median' : 'Ajuste requerido a la mediana'}:** ${adjPct} — ${adjCop}`,
