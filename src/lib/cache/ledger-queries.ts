@@ -28,6 +28,7 @@
 
 import 'server-only';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 // import { cacheLife, cacheTag } from 'next/cache'; // re-enable when cacheComponents flips
 
 import { getDb } from '@/lib/db/client';
@@ -109,9 +110,17 @@ export async function getCachedLedgerByPeriod(
 // construir saldos ACUMULADOS (clases 1-3) y resultados del año (clases 4-7)
 // sin traer línea por línea (auditoría ratios-kpis-03).
 //
-// Estados: 'posted' y 'reversed'. Una reversión marca el original como
-// 'reversed' y postea el asiento inverso como 'posted'; incluir sólo 'posted'
-// dejaría el inverso sin su original y el saldo quedaría con signo contrario.
+// Estados: 'posted' y 'reversed'. Desde la migración 0022 el original de un
+// reverso conserva 'posted' (con reversed_by_entry_id); 'reversed' queda por
+// las filas históricas. Original y reverso se suman y netean a cero.
+//
+// Asientos de cierre (contab-nomina-04): las sumas salen SEPARADAS por
+// `closing` — asiento source_type 'closing' o reverso de un cierre
+// (reversal_of_entry_id → asiento de cierre). El cierre anual (período 13)
+// lleva las clases 4-6 a cero contra 3605/3610; el compositor del balance
+// lo excluye del ejercicio que reporta (mismo criterio que pillar_kpis_view,
+// migración 0022, y src/lib/kpis/pillar-view.ts) y lo conserva para los
+// ejercicios anteriores, donde sí es el traslado del resultado a patrimonio.
 // ---------------------------------------------------------------------------
 
 export interface LedgerPeriodTotal {
@@ -121,23 +130,48 @@ export interface LedgerPeriodTotal {
   debit: string;
   /** Σ créditos (string numeric exacto de Postgres). */
   credit: string;
+  /**
+   * true ⇒ estas sumas vienen de asientos de cierre (source_type 'closing')
+   * o de reversos de un cierre. Una misma (periodo, cuenta) puede traer una
+   * fila con `closing: false` y otra con `closing: true`.
+   */
+  closing: boolean;
 }
 
-export async function getLedgerTotalsByPeriods(
+/** Asiento original de un reverso, sólo cuando ese original es un cierre. */
+const closingOrigin = alias(journalEntries, 'closing_origin');
+
+/**
+ * Marca de cierre. El literal va en el texto SQL (no como parámetro) para que
+ * la expresión del SELECT y la del GROUP BY sean idénticas para Postgres.
+ */
+const isClosingEntry = sql<boolean>`(${journalEntries.sourceType} = 'closing' OR ${closingOrigin.id} IS NOT NULL)`;
+
+type Db = ReturnType<typeof getDb>;
+
+/** Consulta de `getLedgerTotalsByPeriods` (expuesta para probar el SQL). */
+export function ledgerTotalsByPeriodsQuery(
+  db: Db,
   workspaceId: string,
   periodIds: string[],
-): Promise<LedgerPeriodTotal[]> {
-  if (periodIds.length === 0) return [];
-  const db = getDb();
-  const rows = await db
+) {
+  return db
     .select({
       periodId: journalEntries.periodId,
       accountId: journalLines.accountId,
       debit: sql<string>`coalesce(sum(${journalLines.debit}), 0)`,
       credit: sql<string>`coalesce(sum(${journalLines.credit}), 0)`,
+      closing: isClosingEntry,
     })
     .from(journalEntries)
     .innerJoin(journalLines, eq(journalLines.entryId, journalEntries.id))
+    .leftJoin(
+      closingOrigin,
+      and(
+        eq(closingOrigin.id, journalEntries.reversalOfEntryId),
+        eq(closingOrigin.sourceType, 'closing'),
+      ),
+    )
     .where(
       and(
         eq(journalEntries.workspaceId, workspaceId),
@@ -145,12 +179,22 @@ export async function getLedgerTotalsByPeriods(
         inArray(journalEntries.status, ['posted', 'reversed']),
       ),
     )
-    .groupBy(journalEntries.periodId, journalLines.accountId);
+    .groupBy(journalEntries.periodId, journalLines.accountId, isClosingEntry);
+}
+
+export async function getLedgerTotalsByPeriods(
+  workspaceId: string,
+  periodIds: string[],
+): Promise<LedgerPeriodTotal[]> {
+  if (periodIds.length === 0) return [];
+  const rows = await ledgerTotalsByPeriodsQuery(getDb(), workspaceId, periodIds);
   return rows.map((r) => ({
     periodId: r.periodId,
     accountId: r.accountId,
     debit: String(r.debit ?? '0'),
     credit: String(r.credit ?? '0'),
+    // node-postgres devuelve boolean; se normaliza por si llega 't'/'f'.
+    closing: r.closing === true || (r.closing as unknown) === 't',
   }));
 }
 
