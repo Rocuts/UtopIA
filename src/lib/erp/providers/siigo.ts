@@ -26,6 +26,8 @@ import type {
 
 const SIIGO_BASE_URL = 'https://services.siigo.com/alliances/api';
 const SIIGO_SIGN_IN_URL = `${SIIGO_BASE_URL}/siigoapi-users/v1/sign-in`;
+/** Tope de páginas por listado: evita un ciclo sin fin si el API ignora `page`. */
+const SIIGO_MAX_PAGES = 1000;
 
 // ─── Siigo API response shapes ──────────────────────────────────────────────
 
@@ -154,6 +156,12 @@ export class SiigoConnector extends BaseERPConnector {
   /**
    * Fetch all pages from a Siigo paginated endpoint.
    * Siigo uses `page` and `page_size` query params.
+   *
+   * ingesta-22: se cuentan los registros REALMENTE recibidos. Sin
+   * `pagination.total_results` se itera hasta una página vacía (antes el total
+   * valía 0 y sólo se leía la primera página); con el total, el conteo final
+   * debe coincidir o se lanza error: un listado incompleto nunca se usa como si
+   * estuviera completo.
    */
   private async fetchAllPages<T>(
     path: string,
@@ -162,12 +170,16 @@ export class SiigoConnector extends BaseERPConnector {
   ): Promise<T[]> {
     const results: T[] = [];
     const pageSize = 100;
-    let page = 1;
+    let expectedTotal: number | null = null;
 
     const headers = await this.getAuthHeaders(credentials);
 
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (let page = 1; ; page++) {
+      if (page > SIIGO_MAX_PAGES) {
+        throw new Error(
+          `Siigo ${path}: más de ${SIIGO_MAX_PAGES} páginas sin terminar la paginación; los datos no se usan.`,
+        );
+      }
       const qs = new URLSearchParams({
         ...params,
         page: String(page),
@@ -175,15 +187,20 @@ export class SiigoConnector extends BaseERPConnector {
       });
       const url = this.buildUrl(`${path}?${qs.toString()}`);
       const response = await this.fetchJSON<SiigoPaginatedResponse<T>>(url, { headers });
+      const total = response.pagination?.total_results;
+      if (typeof total === 'number' && Number.isFinite(total)) expectedTotal = total;
 
-      if (!response.results || response.results.length === 0) break;
-      results.push(...response.results);
-
-      const totalResults = response.pagination?.total_results ?? 0;
-      if (results.length >= totalResults) break;
-      page++;
+      const pageResults = response.results ?? [];
+      if (pageResults.length === 0) break;
+      results.push(...pageResults);
+      if (expectedTotal !== null && results.length >= expectedTotal) break;
     }
 
+    if (expectedTotal !== null && results.length !== expectedTotal) {
+      throw new Error(
+        `Siigo ${path}: paginación incompleta (${results.length} de ${expectedTotal} registros).`,
+      );
+    }
     return results;
   }
 
