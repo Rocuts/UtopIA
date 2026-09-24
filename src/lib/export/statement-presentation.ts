@@ -573,7 +573,12 @@ export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
     section: 'assets' | 'liabilities' | 'equity',
   ): L[] => {
     const labels = lines.map((l) => {
-      const label = presentedAccountLabel('balance', l.account, l.label.replace(SPLIT_GROUP_SUFFIX_RE, ''));
+      // El sufijo de porción sólo lo pone `disambiguateSplitGroupLabels` en
+      // renglones de grupo de dos dígitos: se quita ahí (idempotencia) y en
+      // ningún otro renglón, cuyo rótulo es del analista.
+      const isGroupRow = /^\d{2}$/.test((l.account ?? '').trim());
+      const own = isGroupRow ? l.label.replace(SPLIT_GROUP_SUFFIX_RE, '') : l.label;
+      const label = presentedAccountLabel('balance', l.account, own);
       // "3605 — Utilidad del ejercicio" con saldo negativo es una pérdida.
       return cashFlowLabelClaims(label).includes('netIncome')
         ? resultWordingForSign(label, parseMoneyCop(l.amountPrimary))

@@ -135,6 +135,18 @@ describe('grupo partido por plazo — un rótulo por bloque', () => {
     ]);
   });
 
+  it('revisión I4: el sufijo sólo se quita de los renglones de grupo; un rótulo propio de cuenta lo conserva', () => {
+    // El sufijo sólo lo añade la desambiguación a renglones de grupo de dos
+    // dígitos; quitarlo de cualquier renglón borraba el rótulo que el modelo
+    // escribió para una cuenta de detalle ("CDT a 18 meses — porción no
+    // corriente" pasaba a "CDT a 18 meses").
+    const json = esfPartido();
+    const rotulo = 'CDT a 18 meses — porción no corriente';
+    json.balanceSheet.assets.push({ ...json.balanceSheet.assets[0], account: '120505', label: rotulo });
+    const { json: out } = normalizeNiifStatementLabels(json);
+    expect(out.balanceSheet.assets.find((l) => l.account === '120505')?.label).toBe(rotulo);
+  });
+
   it('Markdown, PDF y Excel imprimen el rótulo de cada porción', async () => {
     const json = esfPartido();
     const md = toNiifAnalysisResult(json).balanceSheet;
