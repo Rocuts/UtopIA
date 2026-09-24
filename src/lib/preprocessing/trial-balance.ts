@@ -1941,6 +1941,43 @@ function explicitPeriodOf(header: string): string | null {
   return detectYearFromString(header);
 }
 
+/** Mes anterior a `c` (enero → diciembre del año anterior). */
+function mesAnterior(c: { year: number; month: number }): { year: number; month: number } {
+  return c.month === 1 ? { year: c.year - 1, month: 12 } : { year: c.year, month: c.month - 1 };
+}
+
+/**
+ * Columna de APERTURA con fecha de día 1 en el encabezado ("Saldo inicial
+ * 01/06/2025", "Saldo inicial al 1 de junio de 2025"): su saldo es el cierre
+ * del mes anterior (2025-05; el 1 de enero, el cierre del año anterior).
+ * `null` si el encabezado no trae una fecha de día 1.
+ */
+function aperturaDeDiaUno(header: string): string | null {
+  const t = normalizeHeaderText(header)
+    .replace(/[,;\t"'()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  let fecha: { dia: number; year: number; month: number | null } | null = null;
+  const num = ENC_FECHA_NUM_RE.exec(t);
+  if (num) {
+    const [, d1, m1, y1, y2, m2, d2] = num;
+    fecha = { dia: parseInt(d1 ?? d2, 10), year: parseInt(y1 ?? y2, 10), month: parseInt(m1 ?? m2, 10) };
+  } else {
+    const dma = ENC_DIA_MES_ANIO_RE.exec(t);
+    const mda = dma ? null : ENC_MES_DIA_ANIO_RE.exec(t);
+    if (dma) fecha = { dia: parseInt(dma[1], 10), year: parseInt(dma[3], 10), month: mesDeNombre(dma[2]) };
+    else if (mda) fecha = { dia: parseInt(mda[2], 10), year: parseInt(mda[3], 10), month: mesDeNombre(mda[1]) };
+  }
+  if (!fecha || fecha.dia !== 1 || fecha.month === null || fecha.month < 1 || fecha.month > 12) return null;
+  return etiquetaDeCorte(mesAnterior({ year: fecha.year, month: fecha.month }));
+}
+
+/** Año de una etiqueta `AAAA`, `AAAA-MM` o `AAAA-Qn`; `null` para otras. */
+function anioDeEtiqueta(period: string | null | undefined): number | null {
+  const m = (period ?? '').match(/^(\d{4})(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?$/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 const BALANCE_KIND_PRIORITY: Record<BalanceColumnKind, number> = {
   closing: 0,
   neutral: 1,
@@ -1954,15 +1991,19 @@ const BALANCE_KIND_PRIORITY: Record<BalanceColumnKind, number> = {
  * Reglas (ingesta-06, ingesta-07, niif-preproceso-02):
  *  1. "Saldo débito / saldo crédito" (o deudor / acreedor) con el mismo resto
  *     de encabezado forman UNA columna neta por naturaleza PUC.
- *  2. Un encabezado con año (`20\d{2}`, "Dic-24", `saldo [2025-06]`) es de ese
+ *  2. Un encabezado con año (`20\d{2}`, "Dic-24", `saldo [2025-06]`) o con
+ *     fecha de corte ("Saldo a 30/06/2025" → 2025-06, ICU-03) es de ese
  *     periodo, también bajo `forcePeriod`. Si la apertura y el cierre traen el
- *     mismo año ("Saldo Inicial 2025 | Saldo Final 2025"), la apertura es el
- *     cierre del año anterior.
+ *     mismo año ("Saldo Inicial 2025 | Saldo Final 2025", o "Saldo final
+ *     30/06/2025"), la apertura es el cierre del año anterior; si traen el
+ *     mismo mes ("Saldo inicial junio 2025 | Saldo final junio 2025"), el del
+ *     mes anterior. Una apertura fechada el día 1 ("Saldo inicial 01/06/2025")
+ *     es el cierre del mes anterior (2025-05).
  *  3. Sin año, el cierre ("saldo final", "nuevo saldo", "saldo actual") o el
  *     saldo neutro ("saldo") es el periodo actual (`forcePeriod`,
  *     `currentYear` o `DEFAULT_PERIOD`); la apertura ("saldo inicial", "saldo
- *     anterior") o el comparativo es el periodo previo (año − 1 o
- *     `current_anterior`). Bajo `forcePeriod` (una hoja = un periodo) la
+ *     anterior") o el comparativo es el periodo previo (año − 1, con el año
+ *     de las columnas `AAAA` o `AAAA-MM`, o `current_anterior`). Bajo `forcePeriod` (una hoja = un periodo) la
  *     apertura sin año no crea un periodo nuevo.
  *  4. Dos columnas que caen en el mismo periodo NO se deduplican en silencio:
  *     se conserva la de cierre y se reporta un problema bloqueante. Ya no hay
@@ -1978,9 +2019,15 @@ function detectBalanceColumns(
     header: string;
     kind: BalanceColumnKind;
     year: string | null;
+    /** Mes y año de corte que declara el encabezado (ICU-03), si lo trae. */
+    corte: { year: number; month: number } | null;
   };
   const candidates: Candidate[] = [];
   const pairIndices = new Set<number>();
+  // Periodo del encabezado según el tipo de columna: una apertura fechada el
+  // día 1 es el cierre del mes anterior.
+  const periodoDeEncabezado = (header: string, kind: BalanceColumnKind): string | null =>
+    (kind === 'opening' ? aperturaDeDiaUno(header) : null) ?? explicitPeriodOf(header);
 
   // 1. Pares "saldo débito / saldo crédito".
   const debitSide = new Map<string, number>();
@@ -2002,23 +2049,27 @@ function detectBalanceColumns(
     if (creditIndex === undefined) continue;
     pairIndices.add(debitIndex);
     pairIndices.add(creditIndex);
+    const kind = classifyBalanceHeader(key);
     candidates.push({
       index: debitIndex,
       creditIndex,
       header: `${rawHeaders[debitIndex]} / ${rawHeaders[creditIndex]}`,
-      kind: classifyBalanceHeader(key),
-      year: explicitPeriodOf(rawHeaders[debitIndex]) ?? explicitPeriodOf(rawHeaders[creditIndex]),
+      kind,
+      year: periodoDeEncabezado(rawHeaders[debitIndex], kind) ?? periodoDeEncabezado(rawHeaders[creditIndex], kind),
+      corte: corteDeEncabezado(rawHeaders[debitIndex]) ?? corteDeEncabezado(rawHeaders[creditIndex]),
     });
   }
 
   // 2. Columnas de saldo simples.
   rawHeaders.forEach((raw, index) => {
     if (pairIndices.has(index) || !isBalanceHeader(raw)) return;
+    const kind = classifyBalanceHeader(raw);
     candidates.push({
       index,
       header: raw,
-      kind: classifyBalanceHeader(raw),
-      year: explicitPeriodOf(raw),
+      kind,
+      year: periodoDeEncabezado(raw, kind),
+      corte: corteDeEncabezado(raw),
     });
   });
   candidates.sort((a, b) => a.index - b.index);
@@ -2028,9 +2079,13 @@ function detectBalanceColumns(
   const forced = options.forcePeriod;
   const isYear = (p: string | null | undefined): p is string => !!p && /^\d{4}$/.test(p);
   const isOpeningKind = (k: BalanceColumnKind) => k === 'opening' || k === 'prior';
+  // Año de las columnas de cierre con año o con corte `AAAA-MM` ("Saldo a
+  // 30/06/2025"): sin él la apertura sin año quedaba "current_anterior" y, como
+  // las etiquetas sin fecha se ordenan al final, pasaba a ser el primario.
   const explicitCurrentYears = candidates
-    .filter((c) => isYear(c.year) && !isOpeningKind(c.kind))
-    .map((c) => parseInt(c.year!, 10));
+    .filter((c) => !isOpeningKind(c.kind))
+    .map((c) => anioDeEtiqueta(c.year))
+    .filter((y): y is number => y !== null);
   const contextYear = parseInt(forced ?? options.currentYear ?? '', 10);
   const baseYear = !Number.isNaN(contextYear)
     ? contextYear
@@ -2054,13 +2109,27 @@ function detectBalanceColumns(
     resolved.push({ index: c.index, creditIndex: c.creditIndex, period, kind: c.kind, header: c.header });
   }
 
-  // "Saldo Inicial 2025 | Saldo Final 2025": la apertura de 2025 es el cierre 2024.
+  // Apertura y cierre del mismo periodo: la apertura es el cierre del periodo
+  // anterior. "Saldo Inicial 2025 | Saldo Final 2025" (o "| Saldo final
+  // 30/06/2025", corte del mismo año) → 2024; "Saldo inicial junio 2025 |
+  // Saldo final junio 2025" (el mes del encabezado) → 2025-05. Sin esto la
+  // apertura "2025" (= diciembre) se ordenaba después del corte 2025-06 y
+  // pasaba a ser el periodo primario.
+  const cortePorIndice = new Map(candidates.map((c) => [c.index, c.corte]));
   for (const r of resolved) {
-    if (r.kind !== 'opening' || !isYear(r.period)) continue;
-    const clash = resolved.some(
-      (o) => o !== r && o.period === r.period && !isOpeningKind(o.kind),
-    );
-    if (clash) r.period = String(parseInt(r.period, 10) - 1);
+    if (r.kind !== 'opening') continue;
+    const cierres = resolved.filter((o) => o !== r && !isOpeningKind(o.kind));
+    const corte = cortePorIndice.get(r.index) ?? null;
+    if (corte && cierres.some((o) => o.period === r.period)) {
+      r.period = etiquetaDeCorte(mesAnterior(corte));
+    } else if (
+      isYear(r.period) &&
+      cierres.some(
+        (o) => o.period === r.period || (o.period.startsWith(`${r.period}-`) && anioDeEtiqueta(o.period) !== null),
+      )
+    ) {
+      r.period = String(parseInt(r.period, 10) - 1);
+    }
   }
 
   // 4. Colisiones: una columna por periodo, y la ambigüedad se reporta.
