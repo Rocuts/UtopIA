@@ -22,6 +22,8 @@ import {
 import { deriveReportMode, type ReportMode } from '@/lib/preprocessing/v8-helpers';
 import {
   auditReportEmittable,
+  checkComparativosImpracticablesDeclaration,
+  checkDeterministicCashFlowV3,
   type AuditReportEmittableResult,
   type AuditCompanyContext,
 } from '@/lib/pillars/audit-report-emittable';
@@ -47,6 +49,7 @@ import {
   buildQualificationSeal,
 } from './agents/reconcile-anchors';
 import { toNiifAnalysisResult } from './agents/renderer';
+import type { NiifReportJson } from './contracts/niif-report';
 
 /** Serializa centavos a MoneyCop, o `undefined` si el ancla no existe. */
 function centsOrUndefined(cents: bigint | undefined): string | undefined {
@@ -243,6 +246,81 @@ export function sellarConSalvedades(
   ].join('\n');
   niif.fullContent = `${seal}\n${niif.fullContent}`;
   niif.balanceSheet = `${seal}\n${niif.balanceSheet}`;
+}
+
+// ---------------------------------------------------------------------------
+// Periodo del informe — una sola fuente determinista (pipeline-flujo-17)
+// ---------------------------------------------------------------------------
+
+/** Año `YYYY` contenido en una etiqueta de periodo, o `null` si no trae año. */
+export function fiscalYearOf(period: string | null | undefined): string | null {
+  const m = /(?:^|\D)(\d{4})(?:\D|$)/.exec(period ?? '');
+  return m ? m[1] : null;
+}
+
+/**
+ * Fija `company` del JSON NIIF desde fuentes deterministas: el periodo del
+ * balance preprocesado (o, sin él, el del intake) y la identidad del intake.
+ *
+ * El LLM emitía `fiscalPeriod`/`comparativePeriod` libremente y E9 sólo cruzaba
+ * el comparativo si el propio LLM declaraba uno: un comparativo inventado o un
+ * año equivocado pasaban sin error y llegaban a los rótulos del Excel. Sin
+ * preprocesado no hay comparativo verificado: se toma el del intake (o null).
+ */
+export function alignReportCompanyPeriods(
+  json: NiifReportJson,
+  company: CompanyInfo,
+  pp: PreprocessedBalance | undefined,
+): { json: NiifReportJson; changed: string[] } {
+  const current = json.company;
+  const fiscalPeriod =
+    (pp ? fiscalYearOf(pp.primary?.period) : null) ??
+    fiscalYearOf(company.fiscalPeriod) ??
+    current.fiscalPeriod;
+  const comparativePeriod = pp
+    ? pp.comparative
+      ? fiscalYearOf(pp.comparative.period)
+      : null
+    : fiscalYearOf(company.comparativePeriod);
+  const name = company.name?.trim() ? company.name : current.name;
+  const nit = company.nit?.trim() ? company.nit : current.nit;
+
+  const changed: string[] = [];
+  if (fiscalPeriod !== current.fiscalPeriod) {
+    changed.push(`periodo ${current.fiscalPeriod} → ${fiscalPeriod}`);
+  }
+  if (comparativePeriod !== current.comparativePeriod) {
+    changed.push(
+      `comparativo ${current.comparativePeriod ?? 'ninguno'} → ${comparativePeriod ?? 'ninguno'}`,
+    );
+  }
+  if (name !== current.name) changed.push('razón social');
+  if (nit !== current.nit) changed.push('NIT');
+  if (changed.length === 0) return { json, changed };
+  return {
+    json: { ...json, company: { ...current, fiscalPeriod, comparativePeriod, name, nit } },
+    changed,
+  };
+}
+
+/**
+ * Bloqueante cuando el periodo declarado en el intake no es el del balance.
+ * Con balance 2024 e intake 2025 los totales decían "Periodo actual (2024)" y
+ * la portada "2025": el informe firmaba un año con las cifras de otro.
+ */
+export function periodMismatchMessage(
+  company: CompanyInfo,
+  pp: PreprocessedBalance | undefined,
+  language: 'es' | 'en',
+): string | null {
+  const balanceYear = pp ? fiscalYearOf(pp.primary?.period) : null;
+  const intakeYear = fiscalYearOf(company.fiscalPeriod);
+  if (!balanceYear || !intakeYear || balanceYear === intakeYear) return null;
+  return language === 'es'
+    ? `Periodo: el formulario declara el ejercicio ${intakeYear}, pero el balance de prueba corresponde a ${balanceYear}. ` +
+        `El informe se presenta con las cifras y el periodo del balance (${balanceYear}); confirme el periodo antes de emitir.`
+    : `Period: the intake declares fiscal year ${intakeYear}, but the trial balance is for ${balanceYear}. ` +
+        `The report uses the trial-balance figures and period (${balanceYear}); confirm the period before issuing.`;
 }
 
 /**
@@ -1685,36 +1763,43 @@ export async function runNiifPhase(
   }
 
   // ---------------------------------------------------------------------------
-  // La columna comparativa del Balance, antes de validar nada.
+  // Periodo y columna comparativa del Balance, antes de validar nada.
   // ---------------------------------------------------------------------------
-  // El completado determinista del desglose (dentro del analista) reemplaza la
-  // sección con la proyección del periodo actual y deja `amountComparative` en
-  // null. Aquí se le pone al lado la proyección del año anterior, que es la
-  // misma función sobre el otro snapshot. Va ANTES del validador porque E9
-  // cruza precisamente esa columna, y antes del sello porque el re-render tiene
-  // que salir con la tabla ya completa. NIIF para las PYMES §3.14.
+  // Periodo (pipeline-flujo-17): `company.fiscalPeriod`/`comparativePeriod` del
+  // JSON los emitía el LLM sin validación, y el Excel los usa como rótulos y
+  // para decidir si hay columna comparativa. Se fijan de forma determinista
+  // desde el preprocesado (o, sin él, desde el intake) ANTES del validador:
+  // E9 sólo cruza el comparativo cuando `comparativePeriod` no es null.
+  //
+  // Columna comparativa: el completado determinista del desglose (dentro del
+  // analista) reemplaza la sección con la proyección del periodo actual y deja
+  // `amountComparative` en null. Aquí se le pone al lado la proyección del año
+  // anterior, que es la misma función sobre el otro snapshot. Va ANTES del
+  // validador porque E9 cruza precisamente esa columna, y antes del sello
+  // porque el re-render tiene que salir con la tabla ya completa. NIIF para las
+  // PYMES §3.14.
   if (niif.json) {
+    let json = niif.json;
+
+    const alignment = alignReportCompanyPeriods(json, context.effectiveCompany, context.ppForAgents);
+    if (alignment.changed.length > 0) {
+      json = alignment.json;
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail:
+          'Datos de la empresa y periodos del informe fijados desde el balance/intake: ' +
+          alignment.changed.join('; ') + '.',
+      });
+    }
+
     const comparativeSnap = getComparativeSnapshot(context.preprocessed);
     const { json: conComparativo, filled } = fillComparativeBreakdownFromSnapshot(
-      niif.json,
+      json,
       comparativeSnap ?? undefined,
     );
     if (filled.length > 0) {
-      const rerendered = toNiifAnalysisResult(conComparativo);
-      // El sello del analista vive en el CUERPO del Markdown, así que un
-      // re-render lo borraría y dejaría un informe con salvedades sin la
-      // portada que las declara. Se reconstruye desde la misma reconciliación
-      // que lo produjo — es una función pura de ese veredicto.
-      const sello = niif.reconciliation
-        ? buildQualificationSeal(niif.reconciliation, language)
-        : '';
-      niif.json = conComparativo;
-      niif.balanceSheet = sello ? `${sello}\n${rerendered.balanceSheet}` : rerendered.balanceSheet;
-      niif.incomeStatement = rerendered.incomeStatement;
-      niif.cashFlowStatement = rerendered.cashFlowStatement;
-      niif.equityChangesStatement = rerendered.equityChangesStatement;
-      niif.technicalNotes = rerendered.technicalNotes;
-      niif.fullContent = sello ? `${sello}\n${rerendered.fullContent}` : rerendered.fullContent;
+      json = conComparativo;
       onProgress?.({
         type: 'stage_progress',
         stage: 1,
@@ -1722,6 +1807,24 @@ export async function runNiifPhase(
           `Columna comparativa (${comparativeSnap?.period}) completada desde el balance ` +
           `preprocesado en: ${filled.join(', ')}.`,
       });
+    }
+
+    if (json !== niif.json) {
+      const rerendered = toNiifAnalysisResult(json);
+      // El sello del analista vive en el CUERPO del Markdown, así que un
+      // re-render lo borraría y dejaría un informe con salvedades sin la
+      // portada que las declara. Se reconstruye desde la misma reconciliación
+      // que lo produjo — es una función pura de ese veredicto.
+      const sello = niif.reconciliation
+        ? buildQualificationSeal(niif.reconciliation, language)
+        : '';
+      niif.json = json;
+      niif.balanceSheet = sello ? `${sello}\n${rerendered.balanceSheet}` : rerendered.balanceSheet;
+      niif.incomeStatement = rerendered.incomeStatement;
+      niif.cashFlowStatement = rerendered.cashFlowStatement;
+      niif.equityChangesStatement = rerendered.equityChangesStatement;
+      niif.technicalNotes = rerendered.technicalNotes;
+      niif.fullContent = sello ? `${sello}\n${rerendered.fullContent}` : rerendered.fullContent;
     }
   }
 
@@ -1813,7 +1916,14 @@ export async function runNiifPhase(
   // produce estados financieros que cuadran y aun así no son firmables. Antes
   // esa señal moría en el gate del camino legacy; ahora sella el entregable por
   // el mismo canal que el descuadre de renglones.
-  if (context.preflight && !context.preflight.emittable) {
+  //
+  // El pre-vuelo corre sin texto de informe. Los checks que dependen de ese
+  // texto (V15) o del periodo comparativo (V3 sobre el EFE determinista) se
+  // evalúan AQUÍ, con el informe del analista y los dos snapshots, y reemplazan
+  // cualquier resultado de esos códigos que el pre-vuelo hubiera producido
+  // sobre un texto vacío (pipeline-flujo-02, recalculo-11).
+  const gateMessages = collectNiifGateMessages(niif, context, language);
+  if (gateMessages.length > 0) {
     const previous = niif.reconciliation;
     niif.reconciliation = {
       deviations: previous?.deviations ?? [],
@@ -1826,7 +1936,7 @@ export async function runNiifPhase(
         ? '> ## REPORTE CON SALVEDADES — GATE DE EMISIÓN'
         : '> ## REPORT WITH QUALIFICATIONS — ISSUANCE GATE',
       '>',
-      ...context.preflight.blockers.map((b) => `> - ${b.message}`),
+      ...gateMessages.map((m) => `> - ${m}`),
       '',
     ].join('\n');
     // Sólo si el analista no puso ya su propio sello, para no duplicar portada.
@@ -1849,6 +1959,45 @@ export async function runNiifPhase(
     fiscalSnapshot: context.fiscalSnapshot,
     context,
   };
+}
+
+/**
+ * Bloqueantes del gate de emisión para la fase NIIF: los del pre-vuelo de
+ * Stage 0 más los que sólo pueden evaluarse con el informe del analista y los
+ * dos snapshots.
+ *
+ * - V15 (declaración de impracticabilidad) sobre `niif.fullContent`: en el
+ *   pre-vuelo no hay texto y evaluarla sobre '' sellaba todo balance de un
+ *   solo periodo.
+ * - V3 sobre el EFE determinista (`buildDeterministicCashFlow`), nunca sobre el
+ *   EFE del curator R2.
+ * - Periodo del intake ≠ periodo del balance.
+ */
+function collectNiifGateMessages(
+  niif: NiifAnalysisResult,
+  context: FinancialPipelineContext,
+  language: 'es' | 'en',
+): string[] {
+  const deferred = new Set(['V3', 'V15']);
+  const messages = (context.preflight?.blockers ?? [])
+    .filter((b) => !deferred.has(b.code))
+    .map((b) => b.message);
+
+  const pp = context.ppForAgents;
+  if (pp?.primary) {
+    const v3 = checkDeterministicCashFlowV3(pp.primary, pp.comparative);
+    if (v3) messages.push(v3.message);
+    const v15 = checkComparativosImpracticablesDeclaration(
+      niif.fullContent,
+      { comparativos_impracticables: pp.comparativos_impracticables },
+      pp.primary.period,
+    );
+    if (v15) messages.push(v15.message);
+  }
+
+  const period = periodMismatchMessage(context.effectiveCompany, pp, language);
+  if (period) messages.push(period);
+  return messages;
 }
 
 /**
@@ -2244,6 +2393,8 @@ export async function orchestrateFinancialReport(
         actividadInferida: eliteCtx?.actividadInferida,
         reclasificacionesNoCompensacion: eliteCtx?.reclasificacionesNoCompensacion,
       },
+      // V3 sobre el EFE determinista (recalculo-11): requiere el comparativo.
+      { comparativeSnapshot: getComparativeSnapshot(preprocessed) },
     );
     report.emittability = {
       kind: emittableResult.emittable ? 'emittable' : 'no-emitible',

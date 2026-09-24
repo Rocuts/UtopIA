@@ -23,6 +23,7 @@
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { ExtractedCompanyMetadata, PeriodSnapshot, ActividadInferida, ReclasificacionNoCompensacion } from '@/lib/preprocessing/trial-balance';
 import { validateNITCheckDigit } from '@/lib/validation/nit-validator';
+import { buildDeterministicCashFlow } from '@/lib/agents/financial/contracts/deterministic-breakdown';
 
 /**
  * Metadata de la empresa que el gate consume. Combina la metadata extraída
@@ -97,15 +98,92 @@ const CENTS_TOLERANCE_ZERO = BigInt(0);
 export interface AuditReportEmittableOptions {
   /**
    * Omite los checks que dependen del TEXTO del informe consolidado (V8, V9,
-   * V10). Se usa en el modo PRE-VUELO, que corre en `prepareFinancialContext`
-   * —Stage 0, antes de que exista informe alguno— para bloquear de entrada los
-   * balances que nunca van a producir un informe emitible.
+   * V10, V15). Se usa en el modo PRE-VUELO, que corre en
+   * `prepareFinancialContext` —Stage 0, antes de que exista informe alguno—
+   * para bloquear de entrada los balances que nunca van a producir un informe
+   * emitible.
    *
    * Sin esta opción el pre-vuelo dispararía V10 siempre (la TMT la calcula el
-   * Strategy Director, que aún no ha corrido) y el gate perdería toda
-   * credibilidad justo donde más falta hace.
+   * Strategy Director, que aún no ha corrido) y V15 en todo balance de un solo
+   * periodo (la declaración de impracticabilidad la redacta el Analista NIIF),
+   * y el gate perdería toda credibilidad justo donde más falta hace. Quien usa
+   * el pre-vuelo evalúa esos checks después, sobre el texto real (ver
+   * `checkComparativosImpracticablesDeclaration`).
    */
   skipReportTextChecks?: boolean;
+  /**
+   * Snapshot del periodo comparativo. Habilita V3 sobre el EFE DETERMINISTA
+   * (`buildDeterministicCashFlow`), la única fuente vinculante del EFE.
+   *
+   * Sin comparativo V3 no se evalúa: no hay saldo de apertura contra el cual
+   * medir variaciones (NIC 7 ¶1). El EFE del curator R2
+   * (`snapshot.cashFlowIndirecto`) NO se usa como sustituto — arranca de la
+   * utilidad acumulada y produce bloqueantes falsos (recalculo-11).
+   */
+  comparativeSnapshot?: PeriodSnapshot | null;
+}
+
+/**
+ * V3 — el EFE determinista concilia con la variación del PUC 11 al centavo.
+ *
+ * Exportada para que el orquestador la evalúe tras Stage 0 con los dos
+ * snapshots, la misma función que usa el gate completo.
+ */
+export function checkDeterministicCashFlowV3(
+  primary: PeriodSnapshot,
+  comparative: PeriodSnapshot | null | undefined,
+): AuditBlocker | null {
+  if (!comparative) return null;
+  const efe = buildDeterministicCashFlow(primary, comparative);
+  if (!efe || efe.reconciled) return null;
+  return {
+    code: 'V3',
+    message:
+      `V3: el EFE determinista (${efe.comparativePeriod} → ${efe.primaryPeriod}) no concilia con la ` +
+      `variación de la cuenta 11 (diferencia = ${formatBigCents(efe.reconciliationGapCents)}). ` +
+      'Revisar la ecuación patrimonial de ambos periodos (NIC 7 ¶45).',
+  };
+}
+
+/** Año del periodo anterior al que se firma, o `null` si el periodo no trae año. */
+function priorPeriodLabel(primaryPeriod: string | undefined): string | null {
+  const year = /(\d{4})/.exec(primaryPeriod ?? '')?.[1];
+  return year ? String(Number(year) - 1) : null;
+}
+
+/**
+ * V15 — el informe declara la impracticabilidad de los comparativos (NIIF para
+ * las PYMES §3.14 / §10.21) cuando el preprocesador la detectó.
+ *
+ * Depende del TEXTO del informe: sólo tiene sentido evaluarla cuando ese texto
+ * existe. Exportada para que el orquestador la corra después del Analista
+ * NIIF sobre el contenido real, no en el pre-vuelo de Stage 0.
+ */
+export function checkComparativosImpracticablesDeclaration(
+  reportText: string,
+  elite: EmittableEliteContext | undefined,
+  primaryPeriod: string | undefined,
+): AuditBlocker | null {
+  if (elite?.comparativos_impracticables !== true) return null;
+  const text = reportText ?? '';
+  const declaresImpracticabilidad =
+    /\bimpracticabl[ei]\b/i.test(text) ||
+    /§\s*3\.14/i.test(text) ||
+    /§\s*10\.21/i.test(text) ||
+    /sin\s+comparativos\s+del\s+periodo\s+(\d{4}|anterior)/i.test(text);
+  if (declaresImpracticabilidad) return null;
+
+  const prior = priorPeriodLabel(primaryPeriod);
+  const priorBooks = prior ? `los libros del periodo ${prior}` : 'los libros del periodo anterior';
+  return {
+    code: 'V15',
+    message:
+      'V15: el preprocesador detectó que no hay comparativos materiales del periodo ' +
+      'anterior, pero el informe NO declara impracticabilidad NIIF for SMEs §3.14 / §10.21. ' +
+      'Reconstruir cuentas individuales desde Utilidades Retenidas viola §10.19 (es ' +
+      'manipulación). Declarar la impracticabilidad explícitamente en notas, o presentar ' +
+      `comparativos reales obtenidos de ${priorBooks}.`,
+  };
 }
 
 export function auditReportEmittable(
@@ -174,20 +252,14 @@ export function auditReportEmittable(
 
   // -------------------------------------------------------------------------
   // V3 — EFE concilia con caja PUC 11 al cierre.
-  // R6 ya cierra el EFE contra PUC 11. Si el ajuste residual de R6 está
-  // cerrado al centavo, V3 pasa. Si R6 no se ejecutó (no hubo comparativo),
-  // saltamos V3 (no aplicable).
+  // Se evalúa sobre el EFE DETERMINISTA (la misma fuente que el prompt declara
+  // vinculante), nunca sobre el EFE del curator R2: R2 arranca de la utilidad
+  // acumulada y, en el balance real de la auditoría, dejaba una brecha de
+  // $1.559.097.749,11 que el determinista no tiene (recalculo-11). Sin
+  // comparativo V3 no aplica (NIC 7 ¶1: sin saldo de apertura no hay EFE).
   // -------------------------------------------------------------------------
-  if (snapshot.cashFlowIndirecto) {
-    const efeNetCents = BigInt(Math.round(snapshot.cashFlowIndirecto.netChangeInCash * 100));
-    const observedCents = BigInt(Math.round(snapshot.cashFlowIndirecto.observedChangeInCash * 100));
-    if (efeNetCents !== observedCents) {
-      blockers.push({
-        code: 'V3',
-        message: `V3: EFE no concilia con cuenta 11 (diferencia = ${formatBigCents(efeNetCents - observedCents)}).`,
-      });
-    }
-  }
+  const v3 = checkDeterministicCashFlowV3(snapshot, options.comparativeSnapshot);
+  if (v3) blockers.push(v3);
 
   // -------------------------------------------------------------------------
   // V4 — ECP === patrimonio del balance (post-R5/R8 al centavo).
@@ -369,28 +441,18 @@ export function auditReportEmittable(
   // Si el preprocesador detectó que NO hay periodo comparativo material
   // (`comparativos_impracticables===true`), el reporte DEBE declarar la
   // impracticabilidad NIIF for SMEs §3.14 / §10.21 explícitamente en notas.
-  // Si el reporte presenta una columna 2024 con números sin esta declaración,
-  // es manipulación contable: §10.19 prohíbe reconstruir cuentas individuales
-  // desde Utilidades Retenidas.
+  // Si el reporte presenta una columna comparativa con números sin esta
+  // declaración, es manipulación contable: §10.19 prohíbe reconstruir cuentas
+  // individuales desde Utilidades Retenidas.
+  //
+  // Depende del TEXTO: en el pre-vuelo (`skipReportTextChecks`) todavía no hay
+  // informe y evaluarla sobre '' sellaba todo balance de un solo periodo
+  // (pipeline-flujo-02). Quien corre el pre-vuelo la evalúa después, sobre el
+  // texto del Analista NIIF.
   // -------------------------------------------------------------------------
-  if (elite?.comparativos_impracticables === true) {
-    const declaresImpracticabilidad =
-      /\bimpracticabl[ei]\b/i.test(reportText) ||
-      /§\s*3\.14/i.test(reportText) ||
-      /§\s*10\.21/i.test(reportText) ||
-      /sin\s+comparativos\s+del\s+periodo\s+(2024|anterior)/i.test(reportText);
-
-    if (!declaresImpracticabilidad) {
-      blockers.push({
-        code: 'V15',
-        message:
-          'V15: el preprocesador detectó que no hay comparativos materiales del periodo ' +
-          'anterior, pero el informe NO declara impracticabilidad NIIF for SMEs §3.14 / §10.21. ' +
-          'Reconstruir cuentas individuales desde Utilidades Retenidas viola §10.19 (es ' +
-          'manipulación). Declarar la impracticabilidad explícitamente en notas, o presentar ' +
-          'comparativos reales obtenidos de los libros de 2024.',
-      });
-    }
+  if (!options.skipReportTextChecks) {
+    const v15 = checkComparativosImpracticablesDeclaration(reportText, elite, snapshot.period);
+    if (v15) blockers.push(v15);
   }
 
   return {
