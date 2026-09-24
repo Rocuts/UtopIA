@@ -10,6 +10,7 @@
 
 import type { PreprocessedBalance, PeriodSnapshot, PUCClass } from '@/lib/preprocessing/trial-balance';
 import type { CompanyInfo } from '../types';
+import { componerActivosImpuesto } from '../escudo-survival/fiscal-anchor/credito-renta';
 import {
   type NiifAncora,
   type CcvNiif,
@@ -31,20 +32,6 @@ function toCentsString(pesos: number | undefined): string {
   // no exacto. Tolerancia centavo: aceptable porque controlTotals.cents es la
   // fuente real cuando precisión absoluta importa.
   return String(Math.round(pesos * 100));
-}
-
-/**
- * Suma saldos de cuentas leaf (transactional) cuyo código comienza con el
- * prefijo dado. Usa Math.abs para casos donde el preprocesador presenta
- * pasivos como negativos (PUC clase 2 saldo crédito ≡ valor positivo del
- * pasivo). Específico para la lectura del Âncora — para presentación
- * estándar usar los totales pre-calculados del controlTotals.
- */
-function sumAccountsByPrefix(klass: PUCClass | undefined, prefix: string): number {
-  if (!klass) return 0;
-  return klass.accounts
-    .filter((a) => a.isLeaf && a.code.startsWith(prefix))
-    .reduce((sum, a) => sum + a.balance, 0);
 }
 
 /**
@@ -177,11 +164,12 @@ function buildCcvFiscal(actual: PeriodSnapshot): {
   // F02 — impuesto referencial 35% (Art. 240 E.T. 2026).
   const f02 = uai * 0.35;
 
-  // F03 — retenciones a favor: PUC 1355 (anticipo impuesto) + PUC 1805
-  // (anticipos y retenciones pagadas).
-  const cta1355 = sumAccountsByPrefix(cls1, '1355');
-  const cta1805 = sumAccountsByPrefix(cls1, '1805');
-  const f03 = cta1355 + cta1805;
+  // F03 — sólo crédito imputable al impuesto de RENTA (Art. 373 E.T.). Misma
+  // lista blanca que el Âncora Fiscal (fiscal-anchor/credito-renta.ts):
+  // 135505, 135515 y 135595/1805 sólo si el nombre lo indica. ReteIVA,
+  // ReteICA/anticipo ICA, 135520/135525/135530 y 1805 «Bienes de arte y
+  // cultura» no netean F02 (auditoría 2026-09, tributario-modulos-01).
+  const f03 = Number(componerActivosImpuesto(cls1?.accounts ?? []).creditoRentaCents) / 100;
 
   // F04 — saldo neto a pagar = F02 − F03. Puede ser negativo (saldo a favor).
   const f04 = f02 - f03;

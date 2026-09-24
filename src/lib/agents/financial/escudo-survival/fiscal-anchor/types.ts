@@ -15,7 +15,7 @@ export type FiscalAnchorBlock = {
   f01: string;
   /** F02 — Impuesto Referencia = round(F01 × 35 / 100) en centavos. Art. 240 E.T. */
   f02: string;
-  /** F03 — Retenciones Acumuladas (Cta. 1355.*) en centavos. Crédito fiscal contra F02. */
+  /** F03 — Crédito imputable a renta (135505, 135515; 135595/1805 sólo si el nombre lo indica) en centavos. */
   f03: string;
   /** F04 — Neto a Pagar / Saldo a Favor = F02 − F03 en centavos (negativo = saldo a favor). Art. 850 E.T. */
   f04: string;
