@@ -504,29 +504,33 @@ function checkValorKpis(
   const findings: SyncFinding[] = [];
   const ct = snapshot.controlTotals;
 
-  // Margen Neto Real (KPI 1) — recalculo simple. Reclass impact se ignora aquí
-  // por simplicidad: si difiere de forma material, es desync; si difiere por
-  // R1 reclassifications, lo tolera (el dashboard respeta el Curator).
+  // Margen Neto (KPI 1) — el mismo KPI del preprocesador (controlTotals.
+  // margenNeto = UN / ingresos netos). Desde NM-03 el pilar no ajusta por
+  // reclasificaciones R1 (no tocan el P&G): cualquier diferencia es desync.
   const margenKpi = valor.kpis.find((k) => k.key === 'margen_neto_real');
   const ingresosNetos = ingresosNetosPeriodo(ct);
-  if (margenKpi && ingresosNetos > 0) {
-    const expectedMargen = ct.utilidadNeta / ingresosNetos;
+  const expectedMargen =
+    typeof ct.margenNeto === 'number' && Number.isFinite(ct.margenNeto)
+      ? ct.margenNeto / 100
+      : ct.margenNeto === undefined && ingresosNetos > 0
+        ? ct.utilidadNeta / ingresosNetos
+        : null;
+  if (margenKpi && expectedMargen !== null) {
     const drift = safeDelta(margenKpi.value, expectedMargen);
-    // Tolerancia más laxa (1pp) para acomodar reclass impact de R1.
-    if (drift !== null && Math.abs(drift) > 0.01) {
+    if (drift !== null && Math.abs(drift) > 1e-9) {
       findings.push({
         code: 'MARGEN_NIIF_DRIFT',
         severity: 'info',
-        field: 'Margen Neto Real (NIIF)',
+        field: 'Margen Neto (NIIF)',
         displayed: margenKpi.value,
         expected: expectedMargen,
         drift,
         messageEs:
-          `Margen Neto NIIF mostrado (${formatPct(margenKpi.value)}) difiere del crudo ` +
-          `(${formatPct(expectedMargen)}). Probable ajuste por reclasificaciones del Curator (R1).`,
+          `Margen Neto mostrado (${formatPct(margenKpi.value)}) difiere del margen neto del ` +
+          `preprocesador (${formatPct(expectedMargen)}).`,
         messageEn:
-          `Displayed NIIF Net Margin (${formatPct(margenKpi.value)}) differs from raw ` +
-          `(${formatPct(expectedMargen)}). Likely Curator R1 reclassification adjustment.`,
+          `Displayed Net Margin (${formatPct(margenKpi.value)}) differs from the preprocessor ` +
+          `net margin (${formatPct(expectedMargen)}).`,
       });
     }
   }

@@ -8,8 +8,10 @@
 //   3. Punto de Inflexión (mes índice donde escenario conservador < 0)
 //
 // Flujos mensuales = ingresos netos (4175) y egresos del periodo divididos por
-// los MESES CUBIERTOS por el snapshot (YYYY-MM ⇒ acumulado del año), no por 12
-// fijo (ratios-kpis-03).
+// los MESES CUBIERTOS por el snapshot (shared-metrics.mesesCubiertos, la misma
+// regla del preprocesador: 'AAAA-MM', 'AAAA-Qn', rangos), no por 12 fijo
+// (ratios-kpis-03, NM-01). Sin duración derivable, runway y punto de
+// inflexión son N/D con motivo (sin score).
 //
 // Score Futuro = weighted (Runway 40%, CapEx 30%, distancia PI 30%) sobre los
 // KPIs con dato. HARD CAP: si Punto Inflexión < 12 meses → score ≤ 30.
@@ -24,7 +26,12 @@ import {
   scoreToStatus,
   weightedScore,
 } from './health-score';
-import { capacidadInversion, ingresosNetosPeriodo, monthsCovered } from './shared-metrics';
+import {
+  capacidadInversion,
+  ingresosNetosPeriodo,
+  mesesCubiertos,
+  motivoSinMeses,
+} from './shared-metrics';
 import type {
   PillarAlert,
   PillarKpi,
@@ -61,22 +68,26 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
   const { snapshot } = input;
   const ct = snapshot.controlTotals;
 
-  const meses = monthsCovered(snapshot);
-  const ingresoMes = ingresosNetosPeriodo(ct) / meses;
-  const egresoMes = ct.gastos / meses;
+  const meses = mesesCubiertos(snapshot);
+  const sinMeses = meses === null ? motivoSinMeses(snapshot) : null;
 
   // ─── Proyección por escenarios ──────────────────────────────────────────
-  const baseProj = projectRunway(ct.efectivoCuenta11, ingresoMes, egresoMes, SCENARIO_BASE_FACTOR);
-  const conservadorProj = projectRunway(
-    ct.efectivoCuenta11,
-    ingresoMes,
-    egresoMes,
-    SCENARIO_CONSERVATIVE_FACTOR,
-  );
+  // Sin meses derivables no hay flujo mensual: ninguna proyección.
+  const proyectar = (factor: number): RunwayProjection | null =>
+    meses === null
+      ? null
+      : projectRunway(
+          ct.efectivoCuenta11,
+          ingresosNetosPeriodo(ct) / meses,
+          ct.gastos / meses,
+          factor,
+        );
+  const baseProj = proyectar(SCENARIO_BASE_FACTOR);
+  const conservadorProj = proyectar(SCENARIO_CONSERVATIVE_FACTOR);
 
   // ─── KPI 1 — Runway base ────────────────────────────────────────────────
   // Si nunca cae bajo 0 → "más de 36 meses" (representamos con 36).
-  const runway = Math.min(baseProj.monthsToZero, HORIZON_MONTHS);
+  const runway = baseProj === null ? null : Math.min(baseProj.monthsToZero, HORIZON_MONTHS);
   const runwayScore = kpiToScore(
     runway,
     { healthy: 24, watch: 12, warning: 6 },
@@ -92,8 +103,12 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
     score: runwayScore,
     status: kpiStatus(runwayScore),
     severity: kpiSeverity(runwayScore),
-    descriptionEs: `Meses hasta que la caja llegue a 0 al ritmo actual (horizonte ${HORIZON_MONTHS} meses).`,
-    descriptionEn: `Months until cash hits zero at current pace (${HORIZON_MONTHS}-month horizon).`,
+    descriptionEs:
+      sinMeses?.es ??
+      `Meses hasta que la caja llegue a 0 al ritmo actual (horizonte ${HORIZON_MONTHS} meses).`,
+    descriptionEn:
+      sinMeses?.en ??
+      `Months until cash hits zero at current pace (${HORIZON_MONTHS}-month horizon).`,
   };
 
   // ─── KPI 2 — Capacidad de Inversión (CapEx) ────────────────────────────
@@ -124,10 +139,15 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
 
   // ─── KPI 3 — Punto de Inflexión (escenario conservador) ────────────────
   const puntoInflexion =
-    conservadorProj.monthsToZero <= HORIZON_MONTHS ? conservadorProj.monthsToZero : null;
-  // Score: distancia. null (>36 meses) → 95. Cerca → bajo.
+    conservadorProj !== null && conservadorProj.monthsToZero <= HORIZON_MONTHS
+      ? conservadorProj.monthsToZero
+      : null;
+  // Score: distancia. null (>36 meses) → 95. Cerca → bajo. Sin proyección
+  // (meses no derivables) no hay score: N/D no suma puntos.
   let piScore: number | null;
-  if (puntoInflexion === null) {
+  if (conservadorProj === null) {
+    piScore = null;
+  } else if (puntoInflexion === null) {
     piScore = 95;
   } else {
     piScore = kpiToScore(
@@ -147,13 +167,15 @@ export function computeFuturoPillar(input: PillarsAggregateInput): PillarMetrics
     status: kpiStatus(piScore),
     severity: kpiSeverity(piScore),
     descriptionEs:
-      puntoInflexion === null
+      sinMeses?.es ??
+      (puntoInflexion === null
         ? `Sin punto de inflexión en los próximos ${HORIZON_MONTHS} meses bajo escenario conservador.`
-        : `Bajo escenario conservador (−15%), la caja entraría en negativo en el mes ${puntoInflexion}.`,
+        : `Bajo escenario conservador (−15%), la caja entraría en negativo en el mes ${puntoInflexion}.`),
     descriptionEn:
-      puntoInflexion === null
+      sinMeses?.en ??
+      (puntoInflexion === null
         ? `No inflection point in the next ${HORIZON_MONTHS} months under conservative scenario.`
-        : `Under conservative scenario (−15%), cash goes negative at month ${puntoInflexion}.`,
+        : `Under conservative scenario (−15%), cash goes negative at month ${puntoInflexion}.`),
   };
 
   // ─── Alertas ───────────────────────────────────────────────────────────

@@ -25,7 +25,7 @@ import {
   FISCAL_ND_REASON_EN,
   FISCAL_ND_REASON_ES,
   diasAutonomia,
-  monthsCovered,
+  mesesCubiertos,
   pruebaAcida,
 } from './shared-metrics';
 import type {
@@ -125,7 +125,12 @@ function buildEscudoAudit(
     efectivoCuenta11: ct.efectivoCuenta11,
     inversionesTemporales12: sumClassByPrefixes(clase1, ['12']),
     totalEgresosPeriodo: ct.gastos,
-    promedioEgresosMensuales: ct.gastos / monthsCovered(snapshot),
+    // Misma base de meses que el preprocesador (NM-01); sin duración
+    // derivable el promedio mensual es N/D, no Σ/12.
+    promedioEgresosMensuales: (() => {
+      const meses = mesesCubiertos(snapshot);
+      return meses === null ? null : ct.gastos / meses;
+    })(),
     activoCorriente: ct.activoCorriente,
     pasivoCorriente: ct.pasivoCorriente,
     inventarios14: ct.inventarios14 ?? 0,
