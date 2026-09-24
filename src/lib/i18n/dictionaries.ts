@@ -282,6 +282,62 @@ export const dict = {
         'La mayoría de las empresas operan mirando el retrovisor: ven lo que gastaron, lo que pagaron y lo que quedó. Con 1+1, cambiamos la perspectiva 180°. Hemos estructurado su ecosistema empresarial en cuatro pilares de alto impacto. No hablamos de contabilidad o impuestos; hablamos de Resiliencia, Valor, Integridad y Futuro.',
       niifEliteCTA: 'Informe NIIF Elite',
       niifEliteCTALong: 'Informe NIIF Elite en determinado periodo',
+      // Auditoría WP07 (2026-09): estados honestos de dato. Ninguna cifra
+      // literal se presenta como dato del cliente.
+      dataStatus: {
+        notAvailable: 'N/D',
+        reason: 'Motivo',
+        demoBadge: 'Demostración',
+        moduleInPreparation: 'Módulo en preparación',
+        moduleInPreparationNotice: 'Módulo en preparación — sin datos de su empresa',
+        moduleInPreparationBody:
+          'Esta sección todavía no está conectada a datos de su empresa. No mostramos cifras, casos ni estados hasta que exista una fuente verificada.',
+        startAnalysis: 'Iniciar análisis con sus datos',
+        openModule: 'Abrir',
+        backTo: 'Volver a',
+        noCompanyData: 'Sin datos de su empresa — genere un Informe NIIF para ver cifras reales.',
+        generateReport: 'Generar Informe',
+        goToCommandCenter: 'Ver en el Centro de Mando',
+        valor: {
+          exitValueLabel: 'Valor de salida (patrimonio)',
+          exitValueReason:
+            'Requiere deuda financiera neta y supuestos de valoración confirmados. Un múltiplo sin restar la deuda neta no es valor del patrimonio, y no hay DCF ejecutado.',
+          evEbitLabel: 'Valor empresa · EV/EBIT 6× (heurístico)',
+          evEbitReason: 'Requiere EBIT operacional positivo.',
+          ebitLabel: 'EBIT operacional',
+          equityBookLabel: 'Patrimonio contable',
+          waccLabel: 'WACC',
+          waccReason: 'No capturado',
+          assumptionsNote:
+            'Referencias por método, no una valoración: el múltiplo 6× es un supuesto heurístico (PYME servicios, rango 4–8×) y el patrimonio contable no es valor de mercado.',
+        },
+        verdad: {
+          scoreNiifLabel: 'Score de calidad NIIF (rúbrica de controles)',
+          complianceLabel: 'Score de cumplimiento (auditoría completa)',
+          scoreReason:
+            'Requiere un Informe NIIF o una auditoría completa con puntuaciones, hallazgos y dictamen.',
+          opinionsTitle: 'Dictámenes',
+          opinionsEmpty:
+            'No hay dictámenes emitidos para su empresa. Los dictámenes se generan desde el flujo de Dictamen de Revisoría Fiscal.',
+        },
+        futuro: {
+          runwayLabel: 'Runway de caja · escenario base',
+          runwayReason:
+            'Se calcula desde el libro mayor en el Centro de Mando; esta vista no tiene una proyección de su empresa.',
+          monteCarloTitle: 'Simulación Monte Carlo',
+          monteCarloEmpty:
+            'Sin simulación ejecutada sobre sus datos. El escenario simulado se calcula en el Centro de Mando con su balance.',
+        },
+        escudo: {
+          effectiveRateLabel: 'Tasa efectiva contable (gasto 54 / UAI)',
+          effectiveRateReason: 'Requiere utilidad antes de impuestos positiva.',
+          taxCreditsLabel: 'Saldos a favor',
+          taxCreditsReason: 'Requiere liquidación fiscal verificada',
+          upcomingDeadlinesLabel: 'Vencimientos próximos',
+          dianRiskLabel: 'Riesgo DIAN',
+          period: 'Periodo',
+        },
+      },
       areas: {
         escudo: {
           concept: 'El Escudo',
@@ -1783,6 +1839,62 @@ export const dict = {
         'Most companies operate looking in the rear-view mirror: what was spent, what was paid, what remained. With 1+1, we flip the perspective 180°. We have structured your business ecosystem into four high-impact pillars. We do not talk about accounting or taxes; we talk about Resilience, Value, Integrity, and the Future.',
       niifEliteCTA: 'IFRS Elite Report',
       niifEliteCTALong: 'IFRS Elite Report for a specific period',
+      // WP07 audit (2026-09): honest data states. No literal figure is shown
+      // as client data.
+      dataStatus: {
+        notAvailable: 'N/A',
+        reason: 'Reason',
+        demoBadge: 'Demo',
+        moduleInPreparation: 'Module in preparation',
+        moduleInPreparationNotice: 'Module in preparation — no data from your company',
+        moduleInPreparationBody:
+          'This section is not yet connected to your company data. We show no figures, cases or statuses until a verified source exists.',
+        startAnalysis: 'Start analysis with your data',
+        openModule: 'Open',
+        backTo: 'Back to',
+        noCompanyData: 'No data from your company — generate an IFRS Report to see real figures.',
+        generateReport: 'Generate Report',
+        goToCommandCenter: 'View in the Command Center',
+        valor: {
+          exitValueLabel: 'Exit value (equity)',
+          exitValueReason:
+            'Requires net financial debt and confirmed valuation assumptions. A multiple without subtracting net debt is not equity value, and no DCF has been run.',
+          evEbitLabel: 'Enterprise value · EV/EBIT 6× (heuristic)',
+          evEbitReason: 'Requires positive operating EBIT.',
+          ebitLabel: 'Operating EBIT',
+          equityBookLabel: 'Book equity',
+          waccLabel: 'WACC',
+          waccReason: 'Not captured',
+          assumptionsNote:
+            'Per-method references, not a valuation: the 6× multiple is a heuristic assumption (SME services, 4–8× range) and book equity is not market value.',
+        },
+        verdad: {
+          scoreNiifLabel: 'IFRS quality score (controls rubric)',
+          complianceLabel: 'Compliance score (complete audit)',
+          scoreReason:
+            'Requires an IFRS Report or a complete audit with scores, findings and opinion.',
+          opinionsTitle: 'Opinions',
+          opinionsEmpty:
+            'No opinions have been issued for your company. Opinions are generated from the Statutory Audit Opinion flow.',
+        },
+        futuro: {
+          runwayLabel: 'Cash runway · base scenario',
+          runwayReason:
+            'It is computed from the ledger in the Command Center; this view has no projection for your company.',
+          monteCarloTitle: 'Monte Carlo simulation',
+          monteCarloEmpty:
+            'No simulation has been run on your data. The simulated scenario is computed in the Command Center from your trial balance.',
+        },
+        escudo: {
+          effectiveRateLabel: 'Book effective tax rate (expense 54 / EBT)',
+          effectiveRateReason: 'Requires positive earnings before taxes.',
+          taxCreditsLabel: 'Tax credits',
+          taxCreditsReason: 'Requires a verified tax computation',
+          upcomingDeadlinesLabel: 'Upcoming deadlines',
+          dianRiskLabel: 'DIAN risk',
+          period: 'Period',
+        },
+      },
       areas: {
         escudo: {
           concept: 'The Shield',
