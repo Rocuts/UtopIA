@@ -2333,6 +2333,12 @@ function buildSnapshotForPeriod(
   // y `equityBreakdown.utilidadEjercicio` (ambos sincronizados por R8).
   // -------------------------------------------------------------------------
   const adjustments: string[] = [...notasIngesta.mensajes];
+  // niif-preproceso-32: la clase 7 se resta ÍNTEGRA del resultado (4 − 5 − 6
+  // − 7). Es un supuesto: el PUC la acumula "para luego trasladar a
+  // inventarios y costo de ventas"; lo que quedó en productos en proceso o
+  // terminados no es gasto del periodo. Se revela; las cifras no cambian.
+  const notaClase7 = notaSupuestoClase7(totalProduction, leafRows);
+  if (notaClase7) adjustments.push(`[${period}] ${notaClase7}`);
   const integrityReasons = [
     ...leafSelection.reasons,
     ...collectParseIssueReasons(allRows, period),
@@ -3958,6 +3964,36 @@ function collectParseIssueReasons(rows: RawAccountRow[], period: string): string
     );
   }
   return reasons;
+}
+
+/**
+ * Supuesto revelado de la clase 7 (niif-preproceso-32), o `null` sin saldo de
+ * clase 7. Cita los inventarios de producción del periodo (1405 materias
+ * primas, 1410 productos en proceso, 1430 productos terminados) cuando existen:
+ * son el destino alternativo del traslado.
+ */
+function notaSupuestoClase7(
+  totalProduction: number,
+  leafRows: ReadonlyArray<{ code: string; balance: number }>,
+): string | null {
+  if (toCents(totalProduction) === BigInt(0)) return null;
+  const inventarios = ['1405', '1410', '1430']
+    .map((prefijo) => {
+      let cents = BigInt(0);
+      for (const r of leafRows) if (r.code.startsWith(prefijo)) cents += toCents(r.balance);
+      return { prefijo, cents };
+    })
+    .filter((i) => i.cents !== BigInt(0))
+    .map((i) => `${i.prefijo} $${formatCOP(Number(i.cents) / 100)}`);
+  return (
+    `Supuesto de la clase 7 (costos de producción u operación, $${formatCOP(totalProduction)}): se ` +
+    'resta íntegra del resultado del periodo, como si todo se hubiera trasladado al costo de ventas ' +
+    '(grupo 61). El PUC la acumula para luego trasladarla a inventarios y costo de ventas ' +
+    '(src/data/tax_docs/puc_pymes_2026.json, clase 7; referencia Decreto 2650 de 1993): si parte ' +
+    'quedó en materias primas, productos en proceso o terminados sin vender (1405 / 1410 / 1430), la ' +
+    'utilidad del periodo queda subestimada y el traslado requiere el asiento de cierre del contador.' +
+    (inventarios.length > 0 ? ` Inventarios de producción en el balance: ${inventarios.join('; ')}.` : '')
+  );
 }
 
 /**
