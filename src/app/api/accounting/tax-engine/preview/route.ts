@@ -56,7 +56,7 @@ const previewBodySchema = z.object({
   subtotalCop: z
     .string()
     .regex(/^\d+(\.\d{1,2})?$/, 'subtotalCop debe ser numérico con máximo 2 decimales'),
-  /** Año del UVT (default: año actual). */
+  /** Año del UVT (default: año de transactionDate en hora de Colombia, lo mide el motor). */
   uvtYear: z.number().int().min(2020).max(2030).optional(),
   /** ISO 8601 date string. Default: hoy. */
   transactionDate: z.string().datetime().optional(),
@@ -125,7 +125,10 @@ export async function POST(req: NextRequest) {
       workspaceId: workspace.id,
       transactionType: body.transactionType,
       subtotalCop: body.subtotalCop,
-      uvtYear: body.uvtYear ?? transactionDate.getFullYear(),
+      // Sin uvtYear el motor mide el año gravable en hora de Colombia
+      // (anioColombia); getFullYear() usaba la zona del servidor
+      // (tributario-calc-23).
+      uvtYear: body.uvtYear,
       transactionDate,
       thirdPartyId: body.thirdPartyId,
       baseAccountCode: body.baseAccountCode,
