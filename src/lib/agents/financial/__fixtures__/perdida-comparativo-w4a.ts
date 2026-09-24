@@ -20,6 +20,8 @@ import { buildReportAnchors } from '../contracts/anchors';
 import {
   buildDeterministicBreakdown,
   buildDeterministicCashFlow,
+  buildOriAnchors,
+  type OriAnchor,
 } from '../contracts/deterministic-breakdown';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { FinancialReport } from '../types';
@@ -128,9 +130,18 @@ export function filaEcp(
 }
 
 /**
+ * ORI que el ERI copia de su ancla (enmienda 12, spec v2.1): Δ grupo 38 si es
+ * medible, $0 sin grupo 38, N/D (null) si no es medible.
+ */
+export function oriDelAncla(a: OriAnchor | null): string | null {
+  if (a === null || a.kind === 'notMeasurable') return null;
+  return a.cents.toString();
+}
+
+/**
  * Informe NIIF que un analista honesto emitiría: anclas copiadas, ESF por
- * grupo PUC en ambas columnas, P&G por grupo, EFE = determinista y ECP desde
- * los dos cortes.
+ * grupo PUC en ambas columnas, P&G por grupo, ORI = Δ grupo 38, EFE =
+ * determinista y ECP desde los dos cortes.
  */
 export function informeHonesto(pp: PreprocessedBalance): NiifReportJson {
   const anchors = buildReportAnchors(pp.primary, pp.comparative ?? undefined);
@@ -144,6 +155,7 @@ export function informeHonesto(pp: PreprocessedBalance): NiifReportJson {
   const efe = buildDeterministicCashFlow(P, C)!;
   const open = equityColumns(C);
   const close = equityColumns(P);
+  const ori = buildOriAnchors(pp);
   return {
     company: {
       name: 'Demo Perdidas SAS',
@@ -182,8 +194,8 @@ export function informeHonesto(pp: PreprocessedBalance): NiifReportJson {
       operatingProfitComparative: s(c?.ebit),
       netIncomePrimary: s(a.utilidadNeta)!,
       netIncomeComparative: s(c?.utilidadNeta),
-      oriPrimary: '0',
-      oriComparative: '0',
+      oriPrimary: oriDelAncla(ori.primary) ?? '0',
+      oriComparative: oriDelAncla(ori.comparative),
       notes: [],
       modeBanner: null,
     },
@@ -214,6 +226,9 @@ export function informeHonesto(pp: PreprocessedBalance): NiifReportJson {
           resultadosAcumulados: open.resultadoEjercicio,
         }),
         filaEcp('profit_for_period', 'Resultado del ejercicio 2025', { resultadoEjercicio: close.resultadoEjercicio }),
+        ...(close.ori !== open.ori
+          ? [filaEcp('other_comprehensive_income', 'Otro resultado integral del ejercicio 2025', { ori: close.ori - open.ori })]
+          : []),
         filaEcp('closing_balance', 'Saldo al 31 de diciembre de 2025', close),
       ],
       notes: [],
