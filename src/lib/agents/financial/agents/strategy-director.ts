@@ -92,7 +92,161 @@ export async function runStrategyDirector(
     signal,
   });
 
-  return toStrategicAnalysisResult(json);
+  const verified = reconcileStrategyReport(json, strategyAnchorsFrom(preprocessed));
+  return toStrategicAnalysisResult(verified.json, verified.checks);
+}
+
+// ---------------------------------------------------------------------------
+// Post-procesador determinista (auditoría 2026-09, valoracion-12)
+// ---------------------------------------------------------------------------
+// La puerta de liquidez (AC < PC ⇒ sin escenarios), el punto de equilibrio y la
+// aritmética de los escenarios vivían sólo en el prompt: con triggered=false y
+// AC 100M < PC 300M se publicaba "AC ≥ PC: proyección habilitada", y con costos
+// variables mayores que los ingresos se publicaba un PE "positivo" con margen
+// de seguridad de 300 %. Aquí se recalculan en centavos (BigInt) desde los
+// totales vinculantes; el LLM conserva el juicio (clasificación CF/CV,
+// supuestos), no la aritmética.
+// ---------------------------------------------------------------------------
+
+const ZERO = BigInt(0);
+
+interface StrategyAnchors {
+  activoCorrienteCents: bigint | null;
+  pasivoCorrienteCents: bigint | null;
+  efectivoCuenta11Cents: bigint | null;
+}
+
+export interface StrategyChecks {
+  /** Motivo por el que el punto de equilibrio no existe; null si se calculó. */
+  breakEvenUndefinedReason: string | null;
+  /** Observaciones visibles por escenario (conciliación de la tabla). */
+  scenarioIssues: Record<string, string[]>;
+}
+
+function pesosToCents(v: unknown): bigint | null {
+  return typeof v === 'number' && Number.isFinite(v) ? BigInt(Math.round(v * 100)) : null;
+}
+
+function strategyAnchorsFrom(preprocessed: PreprocessedBalance | undefined): StrategyAnchors | null {
+  const ct = preprocessed?.primary?.controlTotals;
+  if (!ct) return null;
+  return {
+    activoCorrienteCents: pesosToCents(ct.activoCorriente),
+    pasivoCorrienteCents: pesosToCents(ct.pasivoCorriente),
+    efectivoCuenta11Cents: ct.cents?.efectivoCuenta11 ?? pesosToCents(ct.efectivoCuenta11),
+  };
+}
+
+/** División BigInt redondeada al entero más cercano (mitad hacia afuera). */
+function divRound(num: bigint, den: bigint): bigint {
+  const neg = (num < ZERO) !== (den < ZERO);
+  const n = num < ZERO ? -num : num;
+  const d = den < ZERO ? -den : den;
+  const q = (n * BigInt(2) + d) / (BigInt(2) * d);
+  return neg ? -q : q;
+}
+
+function fmtSigned(cents: bigint): string {
+  return formatCopFromCents(cents, false);
+}
+
+export function reconcileStrategyReport(
+  input: StrategyReportJson,
+  anchors: StrategyAnchors | null,
+): { json: StrategyReportJson; checks: StrategyChecks } {
+  const json: StrategyReportJson = structuredClone(input);
+  const checks: StrategyChecks = { breakEvenUndefinedReason: null, scenarioIssues: {} };
+  const pcf = json.projectedCashFlow;
+
+  // -- Puerta de liquidez: AC y PC vinculantes → triggered, brecha, mensaje --
+  const ac = anchors?.activoCorrienteCents ?? parseMoneyCop(pcf.liquidityGate.currentAssetsCop);
+  const pc = anchors?.pasivoCorrienteCents ?? parseMoneyCop(pcf.liquidityGate.currentLiabilitiesCop);
+  const gap = ac - pc;
+  const triggered = ac < pc;
+  pcf.liquidityGate = {
+    triggered,
+    currentAssetsCop: ac.toString(10),
+    currentLiabilitiesCop: pc.toString(10),
+    gapCop: gap.toString(10),
+    message: triggered
+      ? `ALERTA DE LIQUIDEZ: AC (${fmtSigned(ac)}) < PC (${fmtSigned(pc)}). Brecha: ${fmtSigned(gap)}. ` +
+        'NO se proyecta flujo hasta resolver esta inconsistencia.'
+      : null,
+  };
+  if (triggered) {
+    pcf.scenarios = [];
+    pcf.controlKpis = [];
+  }
+  if (anchors?.efectivoCuenta11Cents !== null && anchors?.efectivoCuenta11Cents !== undefined) {
+    pcf.initialCashBalanceCop = anchors.efectivoCuenta11Cents.toString(10);
+  }
+
+  // -- Punto de equilibrio: PE = CF / (1 − CV/I) = CF · I / (I − CV) ---------
+  const be = json.breakEven;
+  const cf = parseMoneyCop(be.fixedCostsCop);
+  const cv = parseMoneyCop(be.variableCostsCop);
+  const ing = parseMoneyCop(be.revenueCop);
+  const contribution = ing - cv;
+  if (ing <= ZERO || contribution <= ZERO || cf < ZERO) {
+    checks.breakEvenUndefinedReason =
+      ing <= ZERO
+        ? 'sin ingresos del periodo no hay punto de equilibrio'
+        : contribution <= ZERO
+          ? 'los costos variables igualan o superan los ingresos (margen de contribución ≤ 0): ningún nivel de ventas cubre los costos fijos'
+          : 'costos fijos negativos: la clasificación de costos no es válida';
+    be.marginOfSafetyPct = 'ND';
+    be.classificationNote = `Punto de equilibrio N/D: ${checks.breakEvenUndefinedReason}. ${be.classificationNote}`;
+  } else {
+    const pe = divRound(cf * ing, contribution);
+    be.breakEvenPointCop = pe.toString(10);
+    // Margen de seguridad = (I − PE) / I × 100, en centésimas de punto.
+    const bps = divRound((ing - pe) * BigInt(10000), ing);
+    be.marginOfSafetyPct = (Number(bps) / 100).toFixed(2);
+  }
+
+  // -- Escenarios: resumen = tabla; saldo final = anterior + flujo neto -------
+  for (const sc of pcf.scenarios) {
+    const issues: string[] = [];
+    const saldo = sc.lines.find((l) => /saldo\s+final/i.test(l.concept));
+    const flujo = sc.lines.find((l) => /flujo\s+(de\s+caja\s+)?neto/i.test(l.concept));
+    if (saldo) {
+      const tableY3 = saldo.yearPlus3;
+      if (tableY3 !== sc.finalCashBalanceYear3) {
+        issues.push(
+          `El saldo final del año +3 del resumen (${fmtSigned(parseMoneyCop(sc.finalCashBalanceYear3))}) ` +
+            `difería de la tabla; se presenta el de la tabla.`,
+        );
+        sc.finalCashBalanceYear3 = tableY3;
+      }
+      if (flujo) {
+        const s = [saldo.currentYear, saldo.yearPlus1, saldo.yearPlus2, saldo.yearPlus3].map(parseMoneyCop);
+        const f = [flujo.currentYear, flujo.yearPlus1, flujo.yearPlus2, flujo.yearPlus3].map(parseMoneyCop);
+        for (let y = 1; y <= 3; y++) {
+          const expected = s[y - 1] + f[y];
+          if (s[y] !== expected) {
+            issues.push(
+              `La tabla no concilia en el Año +${y}: saldo final ${fmtSigned(s[y])} ≠ saldo anterior ` +
+                `${fmtSigned(s[y - 1])} + flujo neto ${fmtSigned(f[y])} (brecha ${fmtSigned(s[y] - expected)}).`,
+            );
+          }
+        }
+      } else {
+        issues.push('Sin renglón de flujo neto: no se pudo verificar la conciliación de saldos.');
+      }
+      const initial = parseMoneyCop(pcf.initialCashBalanceCop);
+      if (parseMoneyCop(saldo.currentYear) !== initial) {
+        issues.push(
+          `El saldo de caja actual de la tabla (${fmtSigned(parseMoneyCop(saldo.currentYear))}) no coincide ` +
+            `con el efectivo PUC 11 (${fmtSigned(initial)}).`,
+        );
+      }
+    } else {
+      issues.push('Sin renglón de saldo final de caja: el escenario no se pudo conciliar.');
+    }
+    if (issues.length > 0) checks.scenarioIssues[sc.scenario] = issues;
+  }
+
+  return { json, checks };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +260,8 @@ export async function runStrategyDirector(
 function fmt(value: string, unit: KpiJson['unit'] = 'cop'): string {
   // Sentinel "ND" (Parte 6 spec v2.0): KPI no confiable — preservar literal.
   if (value === 'ND') return 'ND';
-  if (unit === 'cop') return formatCopFromCents(parseMoneyCop(value), true);
+  // Con signo (valoracion-11): un capital de trabajo negativo no es positivo.
+  if (unit === 'cop') return formatCopFromCents(parseMoneyCop(value), false);
   if (unit === 'percent') return `${value}%`;
   if (unit === 'days') return `${value} días`;
   if (unit === 'times') return `${value} veces`;
@@ -192,7 +347,15 @@ function renderKpis(json: StrategyReportJson): string {
   return [header, rows, dupont].filter(Boolean).join('\n');
 }
 
-function renderTrendsAndBreakEven(json: StrategyReportJson): string {
+/** Porcentaje decimal ("12.5") → es-CO ("12,50%"); 'ND' → 'N/D'. */
+function fmtPctField(v: string): string {
+  if (v === 'ND') return 'N/D';
+  const n = Number(v.replace(',', '.'));
+  if (!Number.isFinite(n)) return `${v}%`;
+  return `${n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+function renderTrendsAndBreakEven(json: StrategyReportJson, checks?: StrategyChecks): string {
   const lines: string[] = ['## 3. ANÁLISIS DE TENDENCIAS'];
   if (json.trends) {
     lines.push('');
@@ -209,18 +372,22 @@ function renderTrendsAndBreakEven(json: StrategyReportJson): string {
   lines.push(
     '',
     '### Punto de Equilibrio (Break-Even)',
-    `- Costos Fijos: ${formatCopFromCents(parseMoneyCop(be.fixedCostsCop), true)}`,
-    `- Costos Variables: ${formatCopFromCents(parseMoneyCop(be.variableCostsCop), true)}`,
-    `- Ingresos: ${formatCopFromCents(parseMoneyCop(be.revenueCop), true)}`,
-    `- **Punto de Equilibrio**: ${formatCopFromCents(parseMoneyCop(be.breakEvenPointCop), true)}`,
-    `- **Margen de Seguridad**: ${be.marginOfSafetyPct}%`,
+    `- Costos Fijos: ${formatCopFromCents(parseMoneyCop(be.fixedCostsCop), false)}`,
+    `- Costos Variables: ${formatCopFromCents(parseMoneyCop(be.variableCostsCop), false)}`,
+    `- Ingresos: ${formatCopFromCents(parseMoneyCop(be.revenueCop), false)}`,
+    `- **Punto de Equilibrio**: ${
+      checks?.breakEvenUndefinedReason
+        ? `N/D (${checks.breakEvenUndefinedReason})`
+        : formatCopFromCents(parseMoneyCop(be.breakEvenPointCop), false)
+    }`,
+    `- **Margen de Seguridad**: ${fmtPctField(be.marginOfSafetyPct)}`,
     '',
     be.classificationNote,
   );
   return lines.join('\n');
 }
 
-function renderProjections(json: StrategyReportJson): string {
+function renderProjections(json: StrategyReportJson, checks?: StrategyChecks): string {
   const { projectedCashFlow: pcf } = json;
   const lines: string[] = ['## 4. PROYECCIONES'];
   lines.push('', '### 4.1 Gate de Liquidez');
@@ -242,7 +409,7 @@ function renderProjections(json: StrategyReportJson): string {
   lines.push(
     '',
     '### 4.2 Saldo Inicial Depurado (PUC 11)',
-    `- Saldo Inicial Caja: ${formatCopFromCents(parseMoneyCop(pcf.initialCashBalanceCop), true)}`,
+    `- Saldo Inicial Caja: ${formatCopFromCents(parseMoneyCop(pcf.initialCashBalanceCop), false)}`,
     `- DSO usado: ${pcf.dsoDays} días`,
     `- Inflación aplicada: ${pcf.inflationIndexPct}%`,
   );
@@ -260,7 +427,10 @@ function renderProjections(json: StrategyReportJson): string {
         .join(' | ');
       lines.push(`| ${label} | ${cells} |`);
     }
-    lines.push(`- Saldo Final Año +3: ${formatCopFromCents(parseMoneyCop(sc.finalCashBalanceYear3), true)}`);
+    lines.push(`- Saldo Final Año +3: ${formatCopFromCents(parseMoneyCop(sc.finalCashBalanceYear3), false)}`);
+    for (const issue of checks?.scenarioIssues[sc.scenario] ?? []) {
+      lines.push(`> ⚠ ${issue}`);
+    }
   }
 
   lines.push('', '### 4.7 Análisis de Solvencia y Capacidad de Inversión', '', pcf.solvencyNarrative);
@@ -313,8 +483,8 @@ function renderPresumedCostWarning(json: StrategyReportJson): string {
     '> ⚠️ **Advertencia interna de Valoración — Costo de Mercancía Vendida**',
     '>',
     `> Margen bruto observado: ${w.observedGrossMarginPct}% — Benchmark sector: ${w.sectorBenchmarkPct}%.`,
-    `> Costo de Ventas: ${formatCopFromCents(parseMoneyCop(w.costOfSalesCop), true)} vs Ingresos: ${formatCopFromCents(parseMoneyCop(w.revenueCop), true)}.`,
-    `> Inventario al cierre: ${formatCopFromCents(parseMoneyCop(w.inventoryClosingCop), true)}.`,
+    `> Costo de Ventas: ${formatCopFromCents(parseMoneyCop(w.costOfSalesCop), false)} vs Ingresos: ${formatCopFromCents(parseMoneyCop(w.revenueCop), false)}.`,
+    `> Inventario al cierre: ${formatCopFromCents(parseMoneyCop(w.inventoryClosingCop), false)}.`,
     '>',
     '> **Acciones requeridas antes de firmar EEFF:**',
     ...w.recommendedActions.map((a) => `> - ${a}`),
@@ -331,10 +501,13 @@ function renderPreparerNotes(json: StrategyReportJson): string {
   ].join('\n');
 }
 
-function toStrategicAnalysisResult(json: StrategyReportJson): StrategicAnalysisResult {
+function toStrategicAnalysisResult(
+  json: StrategyReportJson,
+  checks?: StrategyChecks,
+): StrategicAnalysisResult {
   const kpiDashboard = [renderDashboard(json), '', renderKpis(json)].join('\n');
-  const trendsAndBreakEven = renderTrendsAndBreakEven(json);
-  const projectedCashFlow = renderProjections(json);
+  const trendsAndBreakEven = renderTrendsAndBreakEven(json, checks);
+  const projectedCashFlow = renderProjections(json, checks);
   const strategicRecommendations = renderRecommendations(json);
   const warning = renderPresumedCostWarning(json);
   const preparerNotes = renderPreparerNotes(json);
