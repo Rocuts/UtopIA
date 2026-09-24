@@ -268,7 +268,7 @@ describe('contrato: el componente usa estas fuentes (no el intake vigente)', () 
   });
 
   it('el checkpoint guarda y rehidrata su propio ledger', () => {
-    expect(src).toContain('saveCheckpointLedger(nextConvId, adjustmentLedger)');
+    expect(src).toContain('saveCheckpointLedger(nextConvId, adjustmentLedger, undefined, runOptions)');
     expect(src).toContain('adjustmentLedger: resolveResumeLedger(lastCompletedReport.conversationId)');
     expect(src.match(/clearCheckpointLedger\(\);/g)?.length).toBeGreaterThanOrEqual(2);
   });
