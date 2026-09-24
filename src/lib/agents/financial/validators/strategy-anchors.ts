@@ -966,6 +966,50 @@ export function applyKpiAnchors(
   return { json, neutralized, recomputed };
 }
 
+/** Cifra del modelo que `applyKpiAnchors` no publica (KPI N/D o recalculado). */
+export interface DiscardedKpiFigure {
+  name: string;
+  unit: KpiJson['unit'];
+  /** Valor tal como lo emitió el modelo (MoneyCop en 'cop'; decimal en el resto). */
+  value: string;
+  /** Banda sectorial del KPI: sus cotas no son la cifra descartada. */
+  band: string;
+}
+
+/**
+ * Cifras que el modelo emitió para un KPI y que el sistema no publica: el KPI
+ * quedó N/D o se recalculó con otro valor. El validador del HTML (R7) exige
+ * que no reaparezcan junto al nombre del KPI.
+ */
+export function discardedKpiFigures(
+  original: StrategyReportJson,
+  anchored: StrategyReportJson,
+): DiscardedKpiFigure[] {
+  const out: DiscardedKpiFigure[] = [];
+  (original.kpis ?? []).forEach((kpi, i) => {
+    const published = anchored.kpis?.[i];
+    if (!published || published.name !== kpi.name) return;
+    const pairs: Array<[string | null, string | null]> = [
+      [kpi.resultPrimary, published.resultPrimary],
+      [kpi.resultComparative, published.resultComparative],
+    ];
+    for (const [emitted, shown] of pairs) {
+      if (emitted === null || isNd(emitted) || emitted === shown) continue;
+      const money = kpi.unit === 'cop' ? moneyOrUndefined(emitted) : undefined;
+      const printed = kpi.unit === 'cop' ? [] : parsePrinted(emitted);
+      if (money === undefined && printed.length === 0) continue;
+      // Mismo valor con otra escritura ("62.5" frente a "62,5"): no se descartó nada.
+      if (shown !== null && !isNd(shown)) {
+        if (money !== undefined && moneyOrUndefined(shown) === money) continue;
+        const shownValue = parsePrinted(shown)[0]?.value;
+        if (shownValue !== undefined && matchesAtPrintedPrecision(printed, shownValue)) continue;
+      }
+      out.push({ name: kpi.name, unit: kpi.unit, value: emitted, band: kpi.benchmarkBand?.description ?? '' });
+    }
+  });
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Tendencias deterministas (e2e-niif-14 / e2e-niif-17)
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ import {
   strategyAnchorSources,
 } from '@/lib/agents/financial/validators/strategy-anchors';
 import { buildHtmlEditorUserContent } from '@/lib/agents/financial/prompts/html-editor.prompt';
+import { reconcileBindingFigures } from '@/lib/agents/financial/agents/html-editor-validator';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
 import { makeCoherentNiifReport, makeExportableReport } from '@/lib/agents/financial/__fixtures__/coherent-niif-report';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
@@ -250,5 +251,61 @@ describe('superficies: fase, Excel y HTML', () => {
     expect(block).not.toMatch(/23,7|99,0/);
     expect(block).toContain('"resultPrimary": "62,5"');
     expect(block).toContain('"resultPrimary": "ND"');
+  });
+
+  describe('R7 del validador HTML: la cifra descartada del modelo no reaparece', () => {
+    const html = (rows: string, prose = '') =>
+      `<html><body><p>${prose}</p><table>${rows}</table></body></html>`;
+    const r7 = (h: string, preprocessed: typeof pp | null = pp) =>
+      reconcileBindingFigures(h, {
+        niifReport: makeCoherentNiifReport(),
+        strategyReport: strategy(),
+        governanceReport: {},
+        preprocessed,
+      }).filter((f) => /KPI sin ancla con la cifra del modelo/.test(f.rule));
+
+    it('KPI N/D y recalculados impresos por el sistema: sin hallazgo', () => {
+      const h = html(
+        '<tr><td>Margen EBITDA ajustado</td><td>N/D</td><td>&gt; 15%</td></tr>' +
+          '<tr><td>Margen bruto</td><td>62,5%</td><td>&gt; 15%</td></tr>' +
+          `<tr><td>Capital de trabajo neto</td><td>$70.000.000,00</td><td>&gt; 15%</td></tr>`,
+        'El margen EBITDA ajustado se publica N/D: no tiene ancla determinista.',
+      );
+      expect(r7(h)).toEqual([]);
+    });
+
+    it('la cifra del modelo de un KPI N/D en la tabla o en la prosa bloquea', () => {
+      const tabla = r7(html('<tr><td>Margen EBITDA ajustado</td><td>23,7%</td><td>&gt; 15%</td></tr>'));
+      expect(tabla).toHaveLength(1);
+      expect(tabla[0].severity).toBe('block');
+      expect(tabla[0].detail).toMatch(/"Margen EBITDA ajustado".*\(23,7\)/);
+      const prosa = r7(html('', 'El margen EBITDA ajustado de 23.7 % supera al sector.'));
+      expect(prosa).toHaveLength(1);
+    });
+
+    it('el valor del modelo de un KPI recalculado (margen bruto 99,0 frente a 62,5) bloquea', () => {
+      const out = r7(html('<tr><td>Margen bruto</td><td>99,0%</td><td>&gt; 15%</td></tr>'));
+      expect(out.map((f) => f.detail).join(' ')).toMatch(/Margen bruto/);
+    });
+
+    it('la banda sectorial del KPI no se confunde con la cifra descartada', () => {
+      const j = strategy();
+      j.kpis[1] = { ...j.kpis[1], resultPrimary: '15', benchmarkBand: { description: '> 15%', lowerBound: '15', upperBound: null } };
+      const out = reconcileBindingFigures(
+        html('<tr><td>Margen EBITDA ajustado</td><td>N/D</td><td>&gt; 15%</td></tr>'),
+        { niifReport: makeCoherentNiifReport(), strategyReport: j, governanceReport: {}, preprocessed: pp },
+      ).filter((f) => /KPI sin ancla/.test(f.rule));
+      expect(out).toEqual([]);
+    });
+
+    it('R2 ya no admite la cifra COP que el modelo dio a un KPI recalculado', () => {
+      const j = strategy();
+      j.kpis[3] = { ...j.kpis[3], resultPrimary: cents(55_555_555) };
+      const warn = reconcileBindingFigures(
+        html('<tr><td>Rubro</td><td>$55.555.555,00</td></tr>'),
+        { niifReport: makeCoherentNiifReport(), strategyReport: j, governanceReport: {}, preprocessed: pp },
+      ).filter((f) => /cifra no rastreable/.test(f.rule));
+      expect(warn.map((f) => f.detail).join(' ')).toContain('$55.555.555,00');
+    });
   });
 });

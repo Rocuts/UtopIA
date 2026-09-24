@@ -46,7 +46,12 @@ import {
   narrativeSourcesFromPreprocessed,
   type NarrativeUnit,
 } from '../validators/narrative-anchors';
-import { applyKpiAnchors, strategyAnchorSources } from '../validators/strategy-anchors';
+import {
+  applyKpiAnchors,
+  discardedKpiFigures,
+  strategyAnchorSources,
+  type DiscardedKpiFigure,
+} from '../validators/strategy-anchors';
 import { StrategyReportSchema } from '../contracts/strategy-report';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
@@ -918,19 +923,28 @@ export function reconcileBindingFigures(
   // ── R6 · conceptos anclados citados en prosa o abreviados (e2e-niif-11) ──
   failures.push(...checkAnchoredConceptsInText(document, input));
 
-  // ── R2 · cifras del HTML que no se rastrean al payload ───────────────────
-  const allowed = collectPayloadRenderings(input);
-  // El Editor Jefe recibe los KPIs de la Parte II ya anclados (recomputados por
-  // el sistema o N/D): esas cifras también son rastreables al payload.
+  // El Editor Jefe recibe los KPIs de la Parte II ya anclados (recalculados
+  // por el sistema o N/D, pendiente #2 de la auditoría integral 2026-09-24).
   const strategy = StrategyReportSchema.safeParse(input.strategyReport);
-  if (strategy.success) {
-    const anchored = applyKpiAnchors(
-      strategy.data,
-      strategyAnchorSources(input.preprocessed ?? undefined, input.niifReport),
-      { keepWhenNoSource: true },
-    );
-    for (const r of collectPayloadRenderings(anchored.json)) allowed.add(r);
+  const anchoredStrategy = strategy.success
+    ? applyKpiAnchors(
+        strategy.data,
+        strategyAnchorSources(input.preprocessed ?? undefined, input.niifReport),
+        { keepWhenNoSource: true },
+      ).json
+    : null;
+
+  // ── R7 · KPI publicado N/D (o recalculado) con la cifra del modelo ───────
+  if (strategy.success && anchoredStrategy) {
+    failures.push(...checkDiscardedKpiFigures(document, discardedKpiFigures(strategy.data, anchoredStrategy)));
   }
+
+  // ── R2 · cifras del HTML que no se rastrean al payload ───────────────────
+  // Sobre el payload tal como lo recibió el Editor Jefe: la cifra del modelo de
+  // un KPI publicado N/D o recalculado ya no es rastreable.
+  const allowed = collectPayloadRenderings(
+    anchoredStrategy ? { ...input, strategyReport: anchoredStrategy } : input,
+  );
   const figurePattern = /\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?/g;
   const untraceable: string[] = [];
   const seenUntraceable = new Set<string>();
@@ -1178,6 +1192,76 @@ function textUnits(document: ParsedDocument): NarrativeUnit[] {
     const cells = Array.from(row.querySelectorAll('th, td')).map((c) => clean(c.textContent ?? ''));
     if (cells.length < 2) continue;
     out.push({ text: cells.join(' | '), firstCell: cells[0] });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// R7 — KPI de la Parte II publicado N/D (o recalculado) con la cifra del modelo
+// ---------------------------------------------------------------------------
+// Pendiente #2 de la auditoría integral 2026-09-24: un KPI sin ancla
+// determinista se publica N/D y uno recomputable con el valor del sistema. El
+// Editor Jefe ya recibe el JSON anclado, pero la cifra del modelo puede seguir
+// viva en otra prosa del payload: si reaparece junto al nombre del KPI (fila,
+// tarjeta o frase), el HTML imprime una cifra sin base.
+
+const R7_RULE = '§1.1 · Reconciliación JSON↔HTML — KPI sin ancla con la cifra del modelo';
+
+const foldText = (t: string) =>
+  t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
+
+/** Formas impresas de la cifra descartada (regex sobre texto plegado). */
+function discardedPatterns(d: DiscardedKpiFigure): RegExp[] {
+  if (d.unit === 'cop') {
+    let cents: bigint;
+    try {
+      cents = parseMoneyCop(d.value);
+    } catch {
+      return [];
+    }
+    return acceptableRenderings(cents).map((r) => new RegExp(`${escapeRegExp(r)}(?![.,]?\\d)`));
+  }
+  const m = /^[-+−]?\s*(\d+)(?:[.,](\d+))?/.exec(d.value.trim());
+  if (!m) return [];
+  const [, int, dec] = m;
+  // "23,7" / "23.7" / "23,70"; un entero de un dígito es demasiado ambiguo.
+  if (!dec && int.length < 2) return [];
+  const decimals = dec ? `[.,]${escapeRegExp(dec)}0*` : '(?:[.,]0+)?';
+  return [new RegExp(`(?<![\\d.,])${escapeRegExp(int)}${decimals}(?![\\d]|[.,]\\d)`)];
+}
+
+function checkDiscardedKpiFigures(
+  document: ParsedDocument,
+  discarded: DiscardedKpiFigure[],
+): ChecklistFailure[] {
+  if (discarded.length === 0) return [];
+  const units = textUnits(document).map((u) => foldText(u.text));
+  const out: ChecklistFailure[] = [];
+  const seen = new Set<string>();
+  for (const d of discarded) {
+    const name = foldText(d.name).trim();
+    if (name.length < 3) continue;
+    const band = foldText(d.band).trim();
+    const patterns = discardedPatterns(d);
+    if (patterns.length === 0) continue;
+    for (const text of units) {
+      const at = text.indexOf(name);
+      if (at < 0) continue;
+      // Lo que sigue al nombre en la misma fila o frase, sin la banda sectorial.
+      let tail = text.slice(at + name.length, at + name.length + 240);
+      if (band) tail = tail.split(band).join(' ');
+      if (!patterns.some((re) => re.test(tail))) continue;
+      const key = `${d.name}|${d.value}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        rule: R7_RULE,
+        detail:
+          `El KPI "${d.name}" se publica N/D o recalculado por el sistema, pero el HTML imprime la cifra ` +
+          `que estimó el modelo (${d.unit === 'cop' ? formatCopFromCents(parseMoneyCop(d.value), false) : d.value}).`,
+        severity: 'block',
+      });
+    }
   }
   return out;
 }
