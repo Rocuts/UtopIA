@@ -25,6 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
+import { deriveValidation } from '@/lib/agents/financial/orchestrator';
 import {
   preprocessTrialBalance,
   type PreprocessedBalance,
@@ -109,8 +110,9 @@ const MOTIVO_SIN_FILAS: Record<'es' | 'en', string> = {
 
 /**
  * Motivos por los que el balance NO sirve de base para cifras fiscales, con la
- * MISMA política que el gate de /niif (Stage 0.5 de `prepareFinancialContext`,
- * `deriveValidation` en orchestrator.ts), periodo por periodo (I4-escudo 2):
+ * MISMA política que el gate de /niif (Stage 0.5 de `prepareFinancialContext`):
+ * es `deriveValidation` de orchestrator.ts (I5-7; antes era una copia).
+ * Periodo por periodo (I4-escudo 2):
  *
  *   - motivos persistentes, que ningún cierre virtual levanta: integridad de
  *     la lectura (`integrityReasons`: unidad sin confirmar, importes
@@ -130,35 +132,8 @@ const MOTIVO_SIN_FILAS: Record<'es' | 'en', string> = {
  * esta función con el gate real de /niif sobre balances honestos y bloqueados.
  */
 export function motivosBloqueoBalance(preprocessed: PreprocessedBalance): string[] {
-  const textos = (arr: unknown): string[] =>
-    Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
-  let bloquea = false;
-  const motivos: string[] = [];
-  for (const snap of preprocessed.periods ?? []) {
-    const v = snap.validation;
-    if (!v) continue;
-    const tag = `[${snap.period}] `;
-    const persistentes = [
-      ...new Set([...textos(v.integrityReasons), ...textos(v.curatorBlockingReasons)]),
-    ];
-    const razones = textos(v.reasons);
-    const todas = [...razones, ...persistentes.filter((r) => !razones.includes(r))];
-
-    const vca = snap.virtualCloseAdjustment;
-    const umbralMaterial = Math.max(Math.abs(snap.controlTotals?.activo ?? 0) * 0.01, 1_000_000);
-    const bridge =
-      snap.summary?.equationBalanced === true &&
-      vca !== undefined &&
-      Math.abs(vca.centsAdjustment ?? 0) <= umbralMaterial;
-
-    if ((v.blocking && !bridge) || persistentes.length > 0) bloquea = true;
-    if (bridge && v.blocking) {
-      for (const r of todas) if (persistentes.includes(r)) motivos.push(`${tag}${r}`);
-    } else {
-      for (const r of todas) motivos.push(`${tag}${r}`);
-    }
-  }
-  return bloquea ? motivos : [];
+  const validation = deriveValidation(preprocessed);
+  return validation.blocking ? validation.reasons : [];
 }
 
 /**

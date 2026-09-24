@@ -493,8 +493,11 @@ function deriveDiscrepanciesFromSnapshot(snap: PeriodSnapshot | null): string[] 
  * unifica las validaciones de TODOS los PeriodSnapshots — si CUALQUIER periodo
  * tiene blocking=true, el conjunto bloquea, y los reasons/suggestedAccounts se
  * concatenan con prefijo de periodo para que el usuario sepa donde corregir.
+ *
+ * Exportada (I5-7): el Escudo (`motivosBloqueoBalance`, balance-ingesta.ts)
+ * aplica la MISMA política que el gate de /niif en vez de una copia.
  */
-function deriveValidation(preprocessed: unknown): {
+export function deriveValidation(preprocessed: unknown): {
   blocking: boolean;
   reasons: string[];
   suggestedAccounts: string[];
