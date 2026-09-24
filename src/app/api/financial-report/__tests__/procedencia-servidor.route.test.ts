@@ -330,6 +330,25 @@ describe('/html usa la versión persistida referenciada', () => {
     expect(out.html).toContain(reportRef!.reportHash);
   });
 
+  it('mismo gate que /export: una versión persistida no emitible no sale en HTML "verificado"', async () => {
+    // Texto de la Parte I sin la declaración de impracticabilidad de los
+    // comparativos: /consolidate la persiste con emittability 'no-emitible'.
+    const parts = partsWithJson();
+    parts.niifAnalysis.fullContent = 'Estado de Situación Financiera.';
+    state.workspace = W1;
+    const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody({ reportParts: parts })));
+    const { reportRef, report } = (await res.json()) as ConsolidateJson;
+    expect(report.emittability?.kind).toBe('no-emitible');
+    const byExport = await exportReport(req('/api/financial-report/export', { reportRef, format: 'excel' }));
+    expect(byExport.status).toBe(422);
+    const byHtml = await html(req('/api/financial-report/html', { reportRef, language: 'es' }));
+    expect(byHtml.status).toBe(422);
+    expect(((await byHtml.json()) as { details: string[] }).details).toContain(
+      'El informe contiene salvedades o validaciones bloqueantes.',
+    );
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+
   it('referencia de otro workspace → 404 sin pagar el Editor Jefe', async () => {
     const { reportRef } = await consolidateIn(W1);
     state.workspace = W2;

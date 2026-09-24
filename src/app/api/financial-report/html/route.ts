@@ -50,7 +50,10 @@ import {
   resolveOwnedReportId,
   type TelemetryContext,
 } from '@/lib/db/telemetry';
-import { niifArithmeticBlockers } from '@/lib/export/financial-export-validation';
+import {
+  financialExportBlockers,
+  niifArithmeticBlockers,
+} from '@/lib/export/financial-export-validation';
 import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import {
@@ -248,10 +251,19 @@ export async function POST(req: Request) {
     // Con el preprocesado que usó /niif, además los cruces contra sus anclas.
     // Antes /html sólo validaba la forma: un JSON NIIF con Activo ≠ Pasivo +
     // Patrimonio producía un HTML "emitible".
-    const blockers = niifArithmeticBlockers(parsed.data.niifReport, {
-      strategyJson: parsed.data.strategyReport,
-      preprocessed,
-    });
+    //
+    // Con versión persistida el servidor tiene el informe completo: se aplica
+    // el MISMO gate que /export sobre ESA versión (`financialExportBlockers`:
+    // validación post-render, emitibilidad, salvedades, completitud, identidad
+    // y el gate aritmético). Sin esto una versión que /export rechaza salía en
+    // HTML sellado "procedencia verificada".
+    const blockers =
+      persisted.kind === 'ok'
+        ? financialExportBlockers(persisted.report, preprocessed)
+        : niifArithmeticBlockers(parsed.data.niifReport, {
+            strategyJson: parsed.data.strategyReport,
+            preprocessed,
+          });
     // Veredictos de las Partes II y III (auditoría 2026-09-24, e2e-niif-16):
     // /export ya bloqueaba con `actaQualifications`/`strategyQualifications`
     // en `clean: false`, pero /html no los miraba y el HTML salía "emitible"
