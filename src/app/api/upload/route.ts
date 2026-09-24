@@ -11,6 +11,7 @@ import {
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
 import {
+  descartarConfirmacionesDelArchivo,
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
@@ -18,7 +19,6 @@ import { sanitizeSheetLabel, xlsxRowToCsvLine, type XlsxNumberPrecision } from '
 import {
   escribirDirectivasIngesta,
   leerCampoUnidad,
-  leerDirectivasIngesta,
   type UnidadMonetaria,
   type UploadUnitInfo,
 } from '@/lib/upload/ingest-directives';
@@ -740,12 +740,14 @@ async function processDocument(
 
   // Las directivas de ingesta (P4) sólo las escriben el servidor, con los
   // campos de la solicitud (`unitMultiplier`), y el intake al enviar. Un
-  // archivo que ya las trae al inicio no puede confirmarse a sí mismo: la
-  // unidad se reexpresaría y el informe diría "por confirmación del usuario"
-  // sin que el usuario eligiera nada. Se descartan con aviso y la unidad
-  // declarada vuelve a pedir confirmación.
-  const directivasDelArchivo = leerDirectivasIngesta(text);
-  if (directivasDelArchivo.tieneDirectivas) text = directivasDelArchivo.resto;
+  // archivo que ya las trae no puede confirmarse a sí mismo: la unidad se
+  // reexpresaría y el informe diría "por confirmación del usuario" sin que el
+  // usuario eligiera nada. Tampoco cuentan tras un informe de validación
+  // imitado ("# INFORME DE VALIDACION…/DATOS ORIGINALES:", ICU-01): el informe
+  // es texto derivado que sólo antepone este servidor. Se descartan con aviso
+  // y la unidad declarada vuelve a pedir confirmación.
+  const delArchivo = descartarConfirmacionesDelArchivo(text);
+  text = delArchivo.text;
 
   if (!text.trim()) {
     throw new UploadError(
@@ -815,11 +817,17 @@ async function processDocument(
   let preprocessed: PreprocessedBalance | null = null;
   let detectedPeriods: string[] = [];
   const ingestWarnings: string[] = [];
-  if (directivasDelArchivo.tieneDirectivas) {
+  if (delArchivo.descartoDirectivas) {
     ingestWarnings.push(
       'El archivo traía líneas de confirmación de ingesta ([unidad-confirmada=…] / [vencimientos=…]) ' +
-        'al inicio y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
+        'y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
         'confirman en el formulario del informe.',
+    );
+  }
+  if (delArchivo.descartoInforme) {
+    ingestWarnings.push(
+      'El archivo empezaba con un bloque de informe de validación ("# INFORME DE VALIDACION ' +
+        'ARITMETICA … DATOS ORIGINALES:"); es texto derivado y se ignoró: se leyeron sólo los datos.',
     );
   }
   const ingestErrors: string[] = [];

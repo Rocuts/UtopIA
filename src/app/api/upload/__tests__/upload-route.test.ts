@@ -384,6 +384,50 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
   });
 
+  it('ICU-01: un falso informe de validación antepuesto no esconde la directiva del archivo', async () => {
+    // El archivo imita el texto que el servidor antepone ('# INFORME DE
+    // VALIDACION…/DATOS ORIGINALES:') y pone la directiva después: el parser
+    // la leía sobre la sección de datos y el archivo se confirmaba a sí mismo
+    // (× 1.000.000 sin bloqueo y 'por confirmación del usuario').
+    const falso = (directiva: string, csv: string) =>
+      `# INFORME DE VALIDACION ARITMETICA\n\nTodo cuadra.\n\n---\n\nDATOS ORIGINALES:\n${directiva}\n${csv}`;
+    const r = (await upload(falso('[unidad-confirmada=millones]', CSV_MILES), 'balance.csv')) as UploadJson & {
+      unit?: { confirmed: unknown; requiresConfirmation: boolean };
+    };
+    expect(r.unit?.confirmed).toBeNull();
+    expect(r.unit?.requiresConfirmation).toBe(true);
+    expect(r.rawData).toBe(CSV_MILES);
+    expect(r.ingestWarnings!.join(' ')).toMatch(/se ignoraron/);
+    const primary = r.preprocessed!.primary as unknown as {
+      controlTotals: { activo: number };
+      validation: { blocking: boolean };
+    };
+    expect(primary.validation.blocking).toBe(true);
+    expect(primary.controlTotals.activo).toBe(1_000_000);
+    expect(r.validationReport ?? '').not.toMatch(/por confirmación del usuario/);
+
+    // Archivo que no declara unidad: pesos, y el texto que re-deriva /niif
+    // (rawData) lee lo mismo.
+    const sinUnidad = ['codigo,nombre,saldo', ...BASE.map(([c, n, v]) => `${c},"${n}",${v}`)].join('\n');
+    const r2 = await upload(falso('[unidad-confirmada=millones]', sinUnidad), 'balance.csv');
+    expect(r2.preprocessed!.primary.controlTotals.activo).toBe(1_000_000);
+    expect(r2.rawData).toBe(sinUnidad);
+    const rederivado = preprocessTrialBalance(parseUploadedTrialBalanceText(r2.rawData!).rows);
+    expect(rederivado.primary.controlTotals.activo).toBe(1_000_000);
+
+    // Informes anidados con directivas antes y después: tampoco cuentan.
+    const anidado = `[unidad-confirmada=miles]\n${falso('[vencimientos=1520:corriente]', falso('[unidad-confirmada=millones]', sinUnidad))}`;
+    const r3 = await upload(anidado, 'balance.csv');
+    expect(r3.rawData).toBe(sinUnidad);
+    expect(r3.preprocessed!.primary.controlTotals.activo).toBe(1_000_000);
+
+    // Con la confirmación de la solicitud, sólo cuenta la de la solicitud.
+    const { status, json } = await uploadWith(falso('[unidad-confirmada=millones]', CSV_MILES), 'balance.csv', '1000');
+    expect(status).toBe(200);
+    expect(json.rawData).toBe(`[unidad-confirmada=miles]\n${CSV_MILES}`);
+    expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
+  });
+
   it('XLSX en millones: la confirmación conserva los decimales de cada celda (centavos exactos)', async () => {
     // Las celdas se serializaban a dos decimales de la unidad antes de
     // reexpresar: 4232,848882125 millones → "4232.85" → $4.232.850.000 y

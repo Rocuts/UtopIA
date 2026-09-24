@@ -114,6 +114,45 @@ export function extractUploadDataSection(text: string): UploadDataSection {
   };
 }
 
+/** Texto de un ARCHIVO subido sin lo que sólo el servidor puede escribir. */
+export interface TextoDelArchivo {
+  /** Texto tabular del archivo, sin directivas ni informe antepuesto. */
+  text: string;
+  /** El archivo traía directivas de ingesta (en cualquier nivel). */
+  descartoDirectivas: boolean;
+  /** El archivo empezaba con un informe de validación (texto derivado). */
+  descartoInforme: boolean;
+}
+
+/**
+ * Las directivas de ingesta (`[unidad-confirmada=…]`, `[vencimientos=…]`) y el
+ * informe de validación antepuesto (`# INFORME DE VALIDACION ARITMETICA … ---
+ * DATOS ORIGINALES:`) los escribe el servidor con la confirmación de la
+ * solicitud. Un ARCHIVO subido no puede traerlos: si los trae (al inicio, tras
+ * un informe imitado o en informes anidados), se descartan todos los niveles y
+ * sólo queda el dato tabular (ICU-01). Sin ellos devuelve el texto intacto.
+ */
+export function descartarConfirmacionesDelArchivo(text: string): TextoDelArchivo {
+  let actual = text ?? '';
+  let descartoDirectivas = false;
+  let descartoInforme = false;
+  for (;;) {
+    const directivas = leerDirectivasIngesta(actual);
+    if (directivas.tieneDirectivas) {
+      descartoDirectivas = true;
+      actual = directivas.resto;
+    }
+    const seccion = extractUploadDataSection(actual);
+    if (!seccion.hadValidationReport) break;
+    descartoInforme = true;
+    actual = seccion.data;
+  }
+  return { text: actual, descartoDirectivas, descartoInforme };
+}
+
+// ---------------------------------------------------------------------------
+// Periodo por nombre de hoja
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Periodo por nombre de hoja
 // ---------------------------------------------------------------------------
