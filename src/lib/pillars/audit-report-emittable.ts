@@ -24,6 +24,7 @@ import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { ExtractedCompanyMetadata, PeriodSnapshot, ActividadInferida, ReclasificacionNoCompensacion } from '@/lib/preprocessing/trial-balance';
 import { validateNITCheckDigit } from '@/lib/validation/nit-validator';
 import { buildDeterministicCashFlow } from '@/lib/agents/financial/contracts/deterministic-breakdown';
+import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 
 /**
  * Metadata de la empresa que el gate consume. Combina la metadata extraída
@@ -166,10 +167,15 @@ export function checkComparativosImpracticablesDeclaration(
 ): AuditBlocker | null {
   if (elite?.comparativos_impracticables !== true) return null;
   const text = reportText ?? '';
+  // "Sección 3.14" / "párrafo 10.21" sin "§" también son declaración
+  // (prompts-normativa-23). "10.21" sólo cuenta como número aislado: dentro de
+  // una cifra ("$10.210.000") no es una cita.
   const declaresImpracticabilidad =
     /\bimpracticabl[ei]\b/i.test(text) ||
     /§\s*3\.14/i.test(text) ||
     /§\s*10\.21/i.test(text) ||
+    /Secci[oó]n(?:es)?\s*3\.14(?![\d.]\d)/i.test(text) ||
+    /(?<![\d.])10\.21(?![\d.]?\d)/.test(text) ||
     /sin\s+comparativos\s+del\s+periodo\s+(\d{4}|anterior)/i.test(text);
   if (declaresImpracticabilidad) return null;
 
@@ -206,11 +212,19 @@ export function auditReportEmittable(
   // engañoso (la utilidad no está trasladada al patrimonio).
   // -------------------------------------------------------------------------
   if (snapshot.findings?.librosNoCerrados === true) {
+    // recalculo-03: con el comparativo sin cerrar (R12 `pygAcumulado`) la causa
+    // no es un traslado pendiente del año sino un P&G posiblemente ACUMULADO;
+    // el mensaje nombra el periodo no cerrado y el resultado alternativo.
+    const pyg = snapshot.closingDetectorAudit?.pygAcumulado;
     blockers.push({
       code: 'V12',
-      message:
-        'V12: libros no cerrados — utilidad del ejercicio sin trasladar al patrimonio. ' +
-        'Pasar el asiento de cierre antes de re-procesar.',
+      message: pyg
+        ? `V12: P&G posiblemente acumulado: el periodo ${pyg.comparativePeriod} no se cerró; ` +
+          `resultado del ejercicio alternativo ${formatCanonicalCop(pyg.utilidadMovimientoRaw)} ` +
+          `(saldo final − saldo ${pyg.comparativePeriod}). Pasar el asiento de cierre de ` +
+          `${pyg.comparativePeriod} o cargar el balance con el P&G del ejercicio antes de re-procesar.`
+        : 'V12: libros no cerrados — utilidad del ejercicio sin trasladar al patrimonio. ' +
+          'Pasar el asiento de cierre antes de re-procesar.',
       detail: snapshot.closingDetectorAudit?.suggestedClosingEntries.join(' | '),
     });
     if (snapshot.closingDetectorAudit?.suggestedClosingEntries) {
@@ -499,6 +513,14 @@ export function reportIncluyeTMTCalculada(reportText: string): boolean {
 // ---------------------------------------------------------------------------
 // Helpers internos
 // ---------------------------------------------------------------------------
+
+/** Cifra canónica de centavos exactos (`-?\d+\.\d{2}`) en formato COP; N/D si no lo es. */
+function formatCanonicalCop(raw: string): string {
+  const m = /^(-?)(\d+)\.(\d{2})$/.exec(raw ?? '');
+  if (!m) return 'N/D';
+  const cents = BigInt(`${m[1]}${m[2]}${m[3]}`);
+  return formatCopFromCents(cents, false);
+}
 
 function formatBigCents(cents: bigint): string {
   const ZERO = BigInt(0);
