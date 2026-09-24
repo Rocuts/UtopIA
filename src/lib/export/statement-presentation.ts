@@ -584,6 +584,16 @@ export const NARRATIVE_DISCLAIMER =
   'Narrativa generada por IA — no auditada: sus cifras no se contrastan automáticamente con los ' +
   'estados financieros validados. Las cifras vinculantes son las de los estados.';
 
+/** Versión en inglés de `NARRATIVE_DISCLAIMER` (mismo contenido). */
+export const NARRATIVE_DISCLAIMER_EN =
+  'AI-generated narrative — not audited: its figures are not automatically checked against the ' +
+  'validated financial statements. The binding figures are those of the statements.';
+
+/** Aviso de narrativa no auditada en el idioma del entregable (español por defecto). */
+export function narrativeDisclaimer(language: 'es' | 'en' = 'es'): string {
+  return language === 'en' ? NARRATIVE_DISCLAIMER_EN : NARRATIVE_DISCLAIMER;
+}
+
 /**
  * Fecha de corte (ESF) o periodo cubierto (ERI/EFE/ECP), derivada de los datos.
  * NIIF para las PYMES 3.23 exige mostrar de forma destacada la fecha de cierre y

@@ -25,6 +25,7 @@ import {
   CURRENCY_NOTE,
   NARRATIVE_DISCLAIMER,
   comparativeNotPresentedLegend,
+  narrativeDisclaimer,
   incomeStatementPresentationRows,
   normalizeNiifStatementLabels,
   presentedLineCents,
@@ -326,6 +327,7 @@ export interface ExcelExportOptions {
  */
 export async function generateFinancialExcel(options: ExcelExportOptions): Promise<Buffer> {
   const { report, preprocessed } = options;
+  const language = options.language ?? 'es';
   const wb = new ExcelJS.Workbook();
 
   wb.creator = '1+1 Financial Orchestrator';
@@ -335,15 +337,15 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   const layout = preprocessed ? buildPeriodLayout(preprocessed) : null;
 
   // Tab 1: Balance / Estado de Situacion Financiera
-  addBalanceSheet(wb, report, layout);
+  addBalanceSheet(wb, report, layout, language);
 
   // Tab 2: P&L / Estado de Resultados
-  addIncomeStatement(wb, report, layout);
+  addIncomeStatement(wb, report, layout, language);
 
   // Complete the four structured statements from the same validated JSON.
   if (report.niifAnalysis.json) {
-    addCashFlowAndEquitySheets(wb, report, layout);
-    addTechnicalNotesSheet(wb, report);
+    addCashFlowAndEquitySheets(wb, report, layout, language);
+    addTechnicalNotesSheet(wb, report, language);
   }
 
   // Tab 3: KPIs / Indicadores
@@ -370,6 +372,7 @@ function addCashFlowAndEquitySheets(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const json = presentableJson(report, layout)!;
   const periodLine = `${statementDate('period', report, layout)} · ${CURRENCY_NOTE}`;
@@ -414,7 +417,15 @@ function addCashFlowAndEquitySheets(
     row.font = { name: FONT_MAIN, bold: ['opening_balance', 'closing_balance'].includes(movement.kind) };
     for (let col = 2; col <= 9; col++) row.getCell(col).numFmt = NUM_FMT_COP;
   }
-  for (const n of json.equityChanges.notes.map(formatStatementNote).filter(Boolean)) {
+  // e2e-niif-10: las notas en prosa del ECP las redacta el LLM y sus cifras no
+  // se anclan; se rotulan como narrativa no auditada (mismo aviso del PDF).
+  const equityNotes = json.equityChanges.notes.map(formatStatementNote).filter(Boolean);
+  if (equityNotes.length > 0) {
+    equity.addRow([narrativeDisclaimer(language)]).font = {
+      name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange },
+    };
+  }
+  for (const n of equityNotes) {
     equity.addRow([n]).font = { name: FONT_MAIN, size: 8, italic: true };
   }
   for (const sheet of [cash, equity]) {
@@ -427,9 +438,15 @@ function addCashFlowAndEquitySheets(
 /**
  * Notas técnicas globales del JSON validado (mapeo PUC, reclasificaciones,
  * impracticabilidades). Son parte del contrato NIIF y no se exportaban en
- * ningún formato (reportes-export-11).
+ * ningún formato (reportes-export-11). El JSON valida su forma, no sus cifras:
+ * son prosa del Pass-3 y llevan el aviso de narrativa no auditada, igual que en
+ * el PDF (e2e-niif-10).
  */
-function addTechnicalNotesSheet(wb: ExcelJS.Workbook, report: FinancialReport): void {
+function addTechnicalNotesSheet(
+  wb: ExcelJS.Workbook,
+  report: FinancialReport,
+  language: 'es' | 'en' = 'es',
+): void {
   const notes = (report.niifAnalysis.json?.technicalNotes ?? [])
     .map(formatStatementNote)
     .filter((n) => n.length > 0);
@@ -439,6 +456,9 @@ function addTechnicalNotesSheet(wb: ExcelJS.Workbook, report: FinancialReport): 
   ws.addRow(['NOTAS TÉCNICAS DE LOS ESTADOS FINANCIEROS']).font = { name: FONT_MAIN, bold: true, size: 12 };
   const id = reportIdentity(report);
   ws.addRow([`${id.name} | NIT: ${id.nit} | Periodo: ${id.fiscalPeriod}`]).font = { name: FONT_MAIN, size: 9 };
+  ws.addRow([narrativeDisclaimer(language)]).font = {
+    name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange },
+  };
   for (const n of notes) ws.addRow([n]).font = { name: FONT_MAIN, size: 9 };
 }
 
@@ -463,6 +483,7 @@ function addBalanceSheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Balance NIIF', { properties: { tabColor: { argb: COLORS.gold } } });
   ws.properties.defaultColWidth = 18;
@@ -486,7 +507,7 @@ function addBalanceSheet(
     // rubro. El preprocesado sigue alimentando las pestañas de trazabilidad
     // (Validacion, Pulido Diamante) y los ratios de la pestaña KPIs.
     row = addBalanceSheetFromJson(ws, row, json);
-    row = addStatementNotes(ws, row, json.balanceSheet.notes);
+    row = addStatementNotes(ws, row, json.balanceSheet.notes, language);
   } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
@@ -921,6 +942,7 @@ function addIncomeStatement(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Estado Resultados', { properties: { tabColor: { argb: COLORS.darkNavy } } });
   ws.properties.defaultColWidth = 18;
@@ -966,7 +988,7 @@ function addIncomeStatement(
       layout?.comparative?.saldosDeApertura === true &&
       layout.comparative.period.includes(comparativePeriod);
     row = addIncomeStatementFromJson(ws, row, json, comparativeIsOpening);
-    row = addStatementNotes(ws, row, json.incomeStatement.notes);
+    row = addStatementNotes(ws, row, json.incomeStatement.notes, language);
   } else if (layout) {
     const { primary, comparative, isMultiPeriod } = layout;
 
@@ -1722,12 +1744,17 @@ function addStatementNotes(
   ws: ExcelJS.Worksheet,
   startRow: number,
   notes: StatementNoteJson[] | undefined,
+  language: 'es' | 'en' = 'es',
 ): number {
   const lines = (notes ?? []).map(formatStatementNote).filter((n) => n.length > 0);
   if (lines.length === 0) return startRow;
   let row = startRow + 1;
   ws.getRow(row).getCell(2).value = 'Notas';
   ws.getRow(row).getCell(2).font = { name: FONT_MAIN, bold: true, size: 9 };
+  row++;
+  // e2e-niif-10: prosa del LLM cuyas cifras no se anclan — mismo aviso que el PDF.
+  ws.getRow(row).getCell(2).value = narrativeDisclaimer(language);
+  ws.getRow(row).getCell(2).font = { name: FONT_MAIN, size: 8, italic: true, color: { argb: COLORS.orange } };
   row++;
   for (const n of lines) {
     ws.getRow(row).getCell(2).value = n;
