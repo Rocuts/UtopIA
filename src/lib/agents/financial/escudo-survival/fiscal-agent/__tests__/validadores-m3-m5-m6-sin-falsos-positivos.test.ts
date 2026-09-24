@@ -278,6 +278,8 @@ describe('NT-06 — M5.L2.4: reducir la adición o el mayor impuesto no es reduc
     'Solicitamos reducir la adición de ingresos propuesta a los valores efectivamente soportados.',
     'Se solicita reducir el mayor impuesto propuesto, pues la glosa no tiene soporte.',
     'We request that the proposed income adjustment be reduced to the supported amounts.',
+    'Solicitamos que se reduzca la adición de ingresos a los valores soportados.',
+    'Pedimos disminuir la glosa de costos, que carece de soporte.',
   ])('sin error: %s', (p) => {
     expect(erroresDe(validateDefensaDian(m5e(p)))).toEqual([]);
   });
@@ -286,6 +288,12 @@ describe('NT-06 — M5.L2.4: reducir la adición o el mayor impuesto no es reduc
     'Solicitamos la reducción de la sanción por inexactitud propuesta.',
     'We request that the inaccuracy penalty be reduced.',
     'Nos acogemos a la reducción prevista para quien acepta los hechos.',
+    // Revisión adversarial: subjuntivo y sinónimos.
+    'Solicitamos que se reduzca la sanción por inexactitud.',
+    'Pedimos que la sanción se reduzca a la cuarta parte.',
+    'Solicitamos disminuir la sanción a la cuarta parte.',
+    'Solicitamos rebajar la sanción propuesta.',
+    'We request that the penalty be lowered to one quarter.',
   ])('la reducción de la sanción sin norma sigue fallando: %s', (p) => {
     expect(erroresDe(validateDefensaDian(m5e(p)))).toContain('M5.L2.4_reduccion_cita_norma');
   });

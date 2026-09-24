@@ -93,7 +93,11 @@ function declaraBorrador(texto: string): boolean {
  * documentado: una oración que pide reducir la glosa y, lejos en la misma
  * oración, menciona la sanción no se juzga (se prefiere no bloquear).
  */
-const RE_REDUCCION = /\breduc(?:ci[óo]n(?:es)?|ida|ido|ir|e|en)\b|\breduction\b|\breduced?\b/gi;
+// Revisión adversarial de NT-06: el subjuntivo («que se reduzca la
+// sanción») y los sinónimos «disminuir / rebajar / lowered» no contaban como
+// reducción y la carta que la pedía sin norma pasaba sin error.
+const RE_REDUCCION =
+  /\breduc(?:ci[óo]n(?:es)?|idas?|idos?|ir|e|en|imos)\b|\breduzc(?:a|an|amos)\b|\bdisminu(?:ir|ya|yan|ci[óo]n)\b|\brebaj(?:ar|a|e|en|ada|ado)\b|\breduction\b|\breduced?\b|\blowered\b/gi;
 const RE_CONTEXTO_SANCION =
   /\bsanci[óo]n(?:es)?\b|\bpenalt(?:y|ies)\b|\bcuarta\s+parte\b|\ba\s+la\s+mitad\b|\bone[-\s](?:quarter|half)\b|\bgradualidad\b|\bproporcionalidad\b|\bacog\w*\s+a\s+la\s+reducci[óo]n\b|\bArt(?:[íi]culos?|s)?\.?\s*(?:640|644|709|713|716)\b/gi;
 /** Distancia máxima (caracteres) entre la reducción y su objeto sancionatorio. */
