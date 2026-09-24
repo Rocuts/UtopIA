@@ -35,8 +35,15 @@ export const FINANCIAL_REPORT_VERSION_FORMAT = 'utopia.financial-report-version.
  * `.2` (I3): el Markdown de las Partes I–III de la versión lo re-renderizó el
  * servidor desde el JSON de cada Parte (el del navegador se descarta), y una
  * Parte II/III sin JSON válido queda sellada.
+ *
+ * `.3` (I5): la identidad (nombre, NIT, periodo) de las Partes II/III se cruza
+ * con la de los estados y las cifras de las notas de los estados y de las
+ * notas técnicas de la Parte I con sus anclas; la Parte que no coincide queda
+ * sellada. /export y /html por referencia re-renderizan una versión anterior
+ * con estas reglas y el sello de procedencia nombra ambos contratos
+ * ("persistida con .2, re-renderizada con .3").
  */
-export const FINANCIAL_REPORT_CONTRACT_VERSION = 'informe-niif-2026-09-24.2';
+export const FINANCIAL_REPORT_CONTRACT_VERSION = 'informe-niif-2026-09-24.3';
 
 /**
  * Contrato del preprocesador con el que se derivó el balance persistido.

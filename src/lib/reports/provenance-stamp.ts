@@ -1,14 +1,16 @@
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { dict } from '@/lib/i18n/dictionaries';
 import type { ReportProvenance } from './report-ref';
+import { FINANCIAL_REPORT_CONTRACT_VERSION } from './financial-report-version';
 
 // ---------------------------------------------------------------------------
 // Procedencia impresa DENTRO del artefacto (Excel, PDF, HTML)
 // ---------------------------------------------------------------------------
 // Un encabezado HTTP no sobrevive a la descarga; el rótulo tiene que viajar en
 // el archivo. Con referencia verificada se imprime la versión persistida, la
-// huella del informe, la del balance preprocesado y el contrato de reglas; sin
-// ella, "procedencia no verificada" con el motivo.
+// huella del informe, la del balance preprocesado, el contrato de reglas con
+// que se persistió y aquel con que se re-renderizó al producir el artefacto
+// (I5-5); sin ella, "procedencia no verificada" con el motivo.
 //
 // Las superficies (excel-export, pdf-elite-react, html-editor) no tienen hoy un
 // campo dedicado a la procedencia, así que el sello se aplica en la frontera de
@@ -26,8 +28,25 @@ import type { ReportProvenance } from './report-ref';
  * persistida y su balance, no que el documento sea definitivo.
  */
 export type ArtifactProvenance =
-  | { kind: 'verified'; provenance: ReportProvenance; draft?: boolean }
+  | {
+      kind: 'verified';
+      provenance: ReportProvenance;
+      draft?: boolean;
+      /**
+       * Contrato de reglas con que el servidor RE-RENDERIZÓ la versión al
+       * producir el artefacto (I5-5). /export y /html por referencia recalculan
+       * el Markdown, los veredictos y los gates con las reglas vigentes: por
+       * defecto `FINANCIAL_REPORT_CONTRACT_VERSION`. `provenance.contractVersion`
+       * es el contrato con que se PERSISTIÓ.
+       */
+      renderedWith?: string;
+    }
   | { kind: 'unverified'; draft?: boolean };
+
+/** Contrato del re-render de una procedencia verificada. */
+function renderedContract(p: Extract<ArtifactProvenance, { kind: 'verified' }>): string {
+  return p.renderedWith ?? FINANCIAL_REPORT_CONTRACT_VERSION;
+}
 
 type Lang = 'es' | 'en';
 
@@ -63,7 +82,11 @@ export function provenanceLines(p: ArtifactProvenance, language: Lang): string[]
     fill(t.reportHashLine, { hash: v.reportHash }),
     v.sourceHash ? fill(t.sourceHashLine, { hash: v.sourceHash }) : t.sourceMissingLine,
     ...(v.rawDataHash ? [fill(t.rawDataHashLine, { hash: v.rawDataHash })] : []),
-    fill(t.contractLine, { contract: v.contractVersion, preprocessor: v.preprocessorVersion }),
+    fill(t.contractRenderedLine, {
+      contract: v.contractVersion,
+      rendered: renderedContract(p),
+      preprocessor: v.preprocessorVersion,
+    }),
   ];
 }
 
@@ -75,6 +98,8 @@ export function provenanceHeaders(p: ArtifactProvenance): Record<string, string>
     'X-Report-Provenance': 'verified',
     'X-Report-Id': p.provenance.reportId,
     'X-Report-Hash': p.provenance.reportHash,
+    'X-Report-Contract': p.provenance.contractVersion,
+    'X-Report-Rendered-Contract': renderedContract(p),
     ...draft,
   };
 }
@@ -130,7 +155,8 @@ export function stampHtmlProvenance(html: string, p: ArtifactProvenance, languag
   const machine =
     (p.kind === 'verified'
       ? `status=${status}; report=${p.provenance.reportId}; hash=${p.provenance.reportHash}; ` +
-        `source=${p.provenance.sourceHash ?? 'none'}; contract=${p.provenance.contractVersion}`
+        `source=${p.provenance.sourceHash ?? 'none'}; contract=${p.provenance.contractVersion}; ` +
+        `rendered=${renderedContract(p)}`
       : `status=${status}`) + draft;
   const comment = `<!-- REPORT_PROVENANCE: ${machine.replace(/--/g, '- -')} -->`;
   const meta = `<meta name="utopia-report-provenance" content="${escapeHtml(machine)}">`;
