@@ -1568,6 +1568,17 @@ function addValidationSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): void {
       ws.getRow(row).getCell(1).value = `DISCREPANCIAS DETECTADAS — ${p.period}`;
       ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 11, color: { argb: COLORS.red } };
       row++;
+      // reportes-export-21: estas discrepancias se miden sobre el balance de
+      // prueba recibido, ANTES del Curator; listarlas junto a totales "OK" sin
+      // decirlo confundía al cliente. Se declara la base y el estado posterior.
+      ws.getRow(row).getCell(1).value =
+        'Medidas sobre el balance de prueba recibido, antes de los ajustes del Curator (cierre virtual del ' +
+        'resultado, reclasificaciones). Estado posterior al Curator, base de los estados financieros: ' +
+        (p.summary.equationBalanced
+          ? 'ecuación patrimonial A = P + C cuadra.'
+          : `ecuación patrimonial descuadrada por ${fmtCopPesos(p.summary.equationBalance)}.`);
+      ws.getRow(row).getCell(1).font = { name: FONT_MAIN, size: 9, italic: true };
+      row++;
 
       for (const d of p.discrepancies) {
         ws.getRow(row).getCell(1).value = d.location;

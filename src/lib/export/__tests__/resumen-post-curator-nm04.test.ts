@@ -95,6 +95,20 @@ describe('NM-04 — Excel y apéndice del PDF con el resumen posterior al curato
     expect(resumen['Total Pasivo']).toBe(500_000_000);
   });
 
+  it('reportes-export-21: la hoja Validación dice que sus discrepancias son previas al Curator y da el estado posterior', async () => {
+    expect(r1.primary.discrepancies.length).toBeGreaterThan(0);
+    const wb = await hojas(stub(), r1);
+    const text: string[] = [];
+    wb.getWorksheet('Validacion')!.eachRow((row) => {
+      const v = row.getCell(1).value;
+      if (typeof v === 'string') text.push(v);
+    });
+    const i = text.findIndex((t) => t === 'DISCREPANCIAS DETECTADAS — 2025');
+    expect(i).toBeGreaterThan(-1);
+    expect(text[i + 1]).toMatch(/antes de los ajustes del Curator/);
+    expect(text[i + 1]).toMatch(/ecuación patrimonial A = P \+ C cuadra/);
+  });
+
   it('la hoja Balance sin JSON suma sus renglones al total impreso', async () => {
     const wb = await hojas(stub(), r1);
     let sec = '';

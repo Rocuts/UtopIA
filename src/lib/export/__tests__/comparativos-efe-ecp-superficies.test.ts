@@ -34,6 +34,7 @@ import {
   niifJsonToEquityTable,
 } from '../pdf-elite-react/compose-statements-from-json';
 import { summaryBandRows } from '../pdf-elite-react/pages/StatementsPages';
+import { coverEyebrow } from '../pdf-elite-react/pages/CoverPage';
 import { cashFlowMethodLabel } from '../statement-presentation';
 
 const COMPANY: CompanyInfo = {
@@ -173,6 +174,14 @@ describe('reportes-export-20 — orden de columnas y color de la variación', ()
     expect(signs).toContain(1);
     expect(signs).toContain(-1);
     expect(colors.size).toBe(1);
+  });
+});
+
+describe('reportes-export-21 — portada con el año del periodo', () => {
+  it('la portada nombra el ejercicio del informe, no "2026" fijo', () => {
+    expect(coverEyebrow('2025')).toBe('Informe Financiero NIIF · Colombia · Ejercicio 2025');
+    expect(coverEyebrow('Enero-junio 2024')).toBe('Informe Financiero NIIF · Colombia · Ejercicio 2024');
+    expect(coverEyebrow('')).toBe('Informe Financiero NIIF · Colombia');
   });
 });
 
