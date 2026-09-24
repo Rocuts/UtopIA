@@ -2,8 +2,17 @@
 // Genera el PDF élite gold/black del período cerrado y lo sube a Vercel Blob.
 // Si BLOB_READ_WRITE_TOKEN no está configurado, loggea warning y retorna null.
 
+import { randomUUID } from 'node:crypto';
 import type { CloseMonthInput } from '@/lib/accounting/closing/types';
 import { getPeriodById } from '../repository';
+
+/**
+ * Clave del PDF de cierre en Blob: sin workspaceId ni ruta determinística.
+ * Sólo el periodo (año-mes) queda legible para operación.
+ */
+export function closingReportBlobKey(year: number, month: number): string {
+  return `closing-reports/${randomUUID()}/informe-cierre-${year}-${String(month).padStart(2, '0')}.pdf`;
+}
 
 export async function generatePdfReport(
   input: CloseMonthInput & { runId: string; hash: string },
@@ -37,10 +46,18 @@ export async function generatePdfReport(
     }
 
     const { put } = await import('@vercel/blob');
-    const filename = `closing-reports/${workspaceId}/${period.year}-${String(period.month).padStart(2, '0')}/informe-cierre-elite.pdf`;
+    const filename = closingReportBlobKey(period.year, period.month);
 
+    // reportes-export-23: el blob es `public` (el enlace viaja en la
+    // notificación de cierre), así que su ruta no puede ser adivinable ni
+    // llevar identificadores del tenant: prefijo aleatorio + `addRandomSuffix`
+    // (mismo criterio que /api/pyme/uploads). Cada recierre produce un blob
+    // nuevo en vez de chocar con el anterior (`allowOverwrite` es false por
+    // defecto y el `put` fallaba). La relación PDF → workspace vive en
+    // `monthly_close_runs.pdf_report_url`.
     const { url } = await put(filename, pdfBuffer, {
       access: 'public',
+      addRandomSuffix: true,
       contentType: 'application/pdf',
     });
 
