@@ -236,8 +236,14 @@ export function tpAjusteCopDeterminista(check: TpRangeCheck): string | null {
   return check.isWithinRange === true ? '0' : null;
 }
 
-/** Montos en pesos escritos por el modelo (es/en): `$…`, `COP …`, "millones", "million". */
-const MONTO_EN_NOTA = /\$\s?\d|\bCOP\s?\d|\d\s?(?:millones|mil\s+millones|million|billion)\b/i;
+/**
+ * Montos escritos por el modelo (es/en), con la moneda antes o después de la
+ * cifra: `$…`, `COP …`, `USD …`, `EUR …`, `€…`, "… COP", "… pesos",
+ * "… dólares", "… MM", "millones", "million". Sin la base del PLI ningún
+ * monto de la nota lo calculó el código, esté en pesos o en otra moneda.
+ */
+const MONTO_EN_NOTA =
+  /(?:\$|€|\bCOP|\bUSD|\bEUR)\s?\d|\d\s?(?:COP|USD|EUR|pesos|d[oó]lares|dollars|euros?|MM|millones|mil\s+millones|million|billion)\b/i;
 
 /**
  * Nota del modelo con montos en pesos ⇒ se sustituye por el motivo (en el
