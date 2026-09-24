@@ -147,6 +147,15 @@ export interface ControlTotalsCents {
   /** Ingresos netos = |ingresos bruto Clase 4| − totalDevoluciones, en cents. */
   ingresosNetos: bigint;
   /**
+   * Ingresos operacionales netos (grupo 41 salvo 4175 − devoluciones 4175)
+   * en cents, exactos desde las hojas: misma cifra que
+   * `ControlTotals.ingresosOperacionalesNetos` sin pasar por `number`. El
+   * grupo 42 queda fuera (va debajo de la utilidad operacional). Opcional:
+   * los constructores anteriores de ControlTotalsCents no lo traen y los
+   * lectores caen al ancla en pesos.
+   */
+  ingresosOperacionalesNetos?: bigint;
+  /**
    * Saldo a favor del impuesto de renta (niif-preproceso-19).
    * Créditos de renta − pasivo 2404, sólo si el resultado es positivo:
    *   - 1355: sólo 135505 (anticipo de renta), 135515 (retención en la
@@ -2095,6 +2104,7 @@ function buildSnapshotForPeriod(
     // Directo desde el BigInt: `toCents(ingresosNetos)` volvía a pasar por
     // `number` un valor que ya era exacto en centavos.
     ingresosNetos: ingresosNetosCents,
+    ingresosOperacionalesNetos: ingresosOperacionalesNetosCents,
   };
 
   const raw: ControlTotalsRaw = {

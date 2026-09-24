@@ -68,7 +68,11 @@ export function buildPnlBridge(snapshot: PeriodSnapshot): PnlBridge | null {
   const ingresosNetosC =
     ct.cents?.ingresosNetos ?? toCents(ct.ingresosNetos ?? ct.ingresos);
   const ingresosOp = ingresosOperacionalesNetosPeriodo(snapshot);
-  const ingresosC = ingresosOp === null ? ingresosNetosC : toCents(ingresosOp);
+  // Centavos exactos del preprocesador cuando existen; si no, desde pesos.
+  const ingresosC =
+    ingresosOp === null
+      ? ingresosNetosC
+      : ct.cents?.ingresosOperacionalesNetos ?? toCents(ingresosOp);
   const otrosIngresosC = ingresosOp === null ? null : ingresosNetosC - ingresosC;
   const costosC = sumClass(c6, () => true) + sumClass(c7, () => true);
   const opC = sumClass(c5, (code) => code.startsWith('51') || code.startsWith('52'));
