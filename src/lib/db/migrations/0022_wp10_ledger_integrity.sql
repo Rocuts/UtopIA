@@ -193,6 +193,10 @@ INNER JOIN journal_lines jl ON jl.entry_id = je.id
 INNER JOIN chart_of_accounts coa ON coa.id = jl.account_id
 WHERE je.status = 'posted'
   AND je.source_type <> 'closing'
+  AND NOT EXISTS (
+    SELECT 1 FROM journal_entries o
+    WHERE o.id = je.reversal_of_entry_id AND o.source_type = 'closing'
+  )
 GROUP BY je.workspace_id, je.period_id;
 --> statement-breakpoint
 

@@ -132,8 +132,13 @@ export const fixedAssetCreateSchema = z.object({
   acquisitionCost: z.string().regex(/^\d+(\.\d{1,2})?$/, 'NUMERIC string requerido'),
   salvageValue: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().default('0'),
   usefulLifeMonths: z.number().int().min(1).max(1200),
+  // Sólo línea recta está implementada (auditoría contab-nomina-14): aceptar
+  // 'accelerated' / 'units_of_production' hacía que el calculador aplicara
+  // línea recta rotulada 'straight_line' sin aviso.
   depreciationMethod: z
-    .enum(['straight_line', 'units_of_production', 'accelerated'])
+    .enum(['straight_line'], {
+      message: 'Sólo se admite depreciación en línea recta (straight_line).',
+    })
     .optional()
     .default('straight_line'),
   notes: z.string().optional().nullable(),

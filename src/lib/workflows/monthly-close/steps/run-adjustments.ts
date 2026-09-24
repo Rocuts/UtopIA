@@ -1,19 +1,38 @@
 // ─── WS5 — Step: run-adjustments ─────────────────────────────────────────────
-// Llama a AdjustmentsPort (WS4) para obtener los previews y postea los asientos
-// via createEntry del double-entry service.
+// Llama a AdjustmentsPort (WS4) para obtener los previews y los postea con el
+// MISMO servicio que las rutas /api/accounting/adjustments/* (posting.ts):
 //
-// Si WS4 no está activo (feature flag), retorna ids nulos gracefully.
+//   - Depreciación y amortización actualizan el activo/diferido en la misma
+//     transacción que el asiento (auditoría contab-nomina-05: antes el cierre
+//     nunca actualizaba accumulated/last_period y se depreciaba para siempre).
+//   - Idempotente por período: un reintento del paso, o un POST previo al
+//     API, no duplica asientos (createEntry idempotentBySource).
+//   - Las fallas de posteo son ERRORES del paso (FatalError con detalle), no
+//     console.warn: antes una provisión mal configurada se omitía en silencio.
+//   - El período 13 (cierre anual) no recibe ajustes mensuales.
+//
+// Si WS4 no está activo (feature flag), retorna ids nulos.
+
+import { FatalError } from 'workflow';
 
 import type { CloseMonthInput } from '@/lib/accounting/closing/types';
 import type { AdjustmentsPort } from '@/lib/accounting/adjustments/types';
-import { createEntry } from '@/lib/accounting/double-entry/service';
 import { getPeriodById } from '../repository';
 
 export interface AdjustmentsResult {
   depreciationEntryId: string | null;
   amortizationEntryId: string | null;
   provisionEntryIds: string[];
+  /** Provisiones omitidas con su motivo (N/D explícito, no error). */
+  provisionsSkipped: Array<{ provisionType: string; reason: string }>;
 }
+
+const EMPTY: AdjustmentsResult = {
+  depreciationEntryId: null,
+  amortizationEntryId: null,
+  provisionEntryIds: [],
+  provisionsSkipped: [],
+};
 
 export async function runAdjustments(
   input: CloseMonthInput & { runId: string },
@@ -26,77 +45,67 @@ export async function runAdjustments(
   const adjEnabled = process.env.UTOPIA_ENABLE_AUTO_ADJUSTMENTS === 'true';
   if (!adjEnabled) {
     console.warn('[monthly-close] UTOPIA_ENABLE_AUTO_ADJUSTMENTS no activo — ajustes omitidos.');
-    return { depreciationEntryId: null, amortizationEntryId: null, provisionEntryIds: [] };
+    return EMPTY;
   }
+
+  const period = await getPeriodById(workspaceId, periodId);
+  if (!period) throw new FatalError(`Período ${periodId} no encontrado`);
+  if (period.month === 13) return EMPTY;
 
   // Cargar el servicio de ajustes dinámicamente
   let adjustmentsPort: AdjustmentsPort;
+  let posting: typeof import('@/lib/accounting/adjustments/posting');
   try {
     const mod = await import('@/lib/accounting/adjustments');
     adjustmentsPort = mod.adjustmentsPort as AdjustmentsPort;
     if (!adjustmentsPort) throw new Error('adjustmentsPort no exportado');
+    posting = await import('@/lib/accounting/adjustments/posting');
   } catch (err) {
-    console.warn('[monthly-close] No se pudo cargar AdjustmentsPort:', err);
-    return { depreciationEntryId: null, amortizationEntryId: null, provisionEntryIds: [] };
+    throw new FatalError(
+      `No se pudo cargar el servicio de ajustes: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Fecha de cierre = último día del período
-  const period = await getPeriodById(workspaceId, periodId);
-  if (!period) throw new Error(`Período ${periodId} no encontrado`);
-  const entryDate = period.endsAt;
+  const previewBase = { workspaceId, periodId, entryDate: period.endsAt };
+  const postedBy = input.triggeredBy ?? null;
+  const failures: string[] = [];
 
-  const previewBase = { workspaceId, periodId, entryDate };
-
-  // Depreciation
   let depreciationEntryId: string | null = null;
   try {
     const depPreview = await adjustmentsPort.previewDepreciation(previewBase);
-    if (depPreview.proposedEntry) {
-      const created = await createEntry({
-        ...depPreview.proposedEntry,
-        status: 'posted',
-        sourceType: 'depreciation',
-        sourceRef: `period:${periodId}:depreciation`,
-      });
-      depreciationEntryId = created.entry.id;
-    }
+    const r = await posting.postDepreciation(depPreview, periodId, postedBy);
+    depreciationEntryId = r.entryId;
   } catch (err) {
-    console.warn('[monthly-close] Depreciation omitida:', err);
+    failures.push(`depreciación: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Amortization
   let amortizationEntryId: string | null = null;
   try {
     const amortPreview = await adjustmentsPort.previewAmortization(previewBase);
-    if (amortPreview.proposedEntry) {
-      const created = await createEntry({
-        ...amortPreview.proposedEntry,
-        status: 'posted',
-        sourceType: 'adjustment',
-        sourceRef: `period:${periodId}:amortization`,
-      });
-      amortizationEntryId = created.entry.id;
-    }
+    const r = await posting.postAmortization(amortPreview, periodId, postedBy);
+    amortizationEntryId = r.entryId;
   } catch (err) {
-    console.warn('[monthly-close] Amortización omitida:', err);
+    failures.push(`amortización: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Provisions
   const provisionEntryIds: string[] = [];
+  let provisionsSkipped: AdjustmentsResult['provisionsSkipped'] = [];
   try {
     const provPreview = await adjustmentsPort.previewProvisions(previewBase);
-    for (const entry of provPreview.proposedEntries) {
-      const created = await createEntry({
-        ...entry,
-        status: 'posted',
-        sourceType: 'adjustment',
-        sourceRef: `period:${periodId}:provisions`,
-      });
-      provisionEntryIds.push(created.entry.id);
-    }
+    provisionsSkipped = provPreview.skipped;
+    const r = await posting.postProvisions(provPreview, postedBy);
+    provisionEntryIds.push(...r.postedEntryIds);
+    for (const e of r.errors) failures.push(`provisión ${e.provisionType}: ${e.message}`);
   } catch (err) {
-    console.warn('[monthly-close] Provisiones omitidas:', err);
+    failures.push(`provisiones: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  return { depreciationEntryId, amortizationEntryId, provisionEntryIds };
+  if (failures.length > 0) {
+    // Lo posteado queda (es idempotente); corregida la causa, el reintento
+    // sólo crea lo que falta.
+    throw new FatalError(`Ajustes de cierre con errores: ${failures.join(' | ')}`);
+  }
+
+  return { depreciationEntryId, amortizationEntryId, provisionEntryIds, provisionsSkipped };
 }
