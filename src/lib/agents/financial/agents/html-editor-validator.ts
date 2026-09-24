@@ -1900,13 +1900,34 @@ const STATEMENT_VERB =
  * recomendaciones: lo que la Parte II redacta en `action` / `expectedImpact`
  * ("Mayor utilidad neta en $3M", "Impacto esperado: …", "ahorro de $X", "la
  * utilidad neta llegaría a $X"). Sin ella, la frase es diagnóstico y se juzga.
+ *
+ * `PROPOSAL_MARK` cuenta en toda la frase (meta, impacto, proyección); los
+ * comparativos y los verbos de `PROPOSAL_CUE` sólo ANTES de la primera cifra:
+ * en "La utilidad neta de $4M es menor a la esperada" el "menor" califica un
+ * saldo del periodo, que se juzga.
  */
+const PROPOSAL_MARK =
+  /\b(?:impacto|metas?|objetivos?|potencial(?:es)?|impact|target|goal)\b|proyect|estim|previst|presupuest|escenario|forecast|projected/i;
 const PROPOSAL_CUE = new RegExp(
-  String.raw`\b(?:impacto|efecto|ahorros?|adicional(?:es)?|metas?|objetivos?|esperad[oa]s?|potencial(?:es)?|mayor(?:es)?|menor(?:es)?|mejora|aumento|incremento|reducci[oó]n|disminuci[oó]n|liberaci[oó]n|recuperaci[oó]n|impact|expected|target|additional|savings|increase|decrease|higher|lower)\b` +
-    String.raw`|proyect|estim|previst|presupuest|escenario` +
+  String.raw`\b(?:efecto|ahorros?|adicional(?:es)?|esperad[oa]s?|mayor(?:es)?|menor(?:es)?|mejora|aumento|incremento|reducci[oó]n|disminuci[oó]n|liberaci[oó]n|recuperaci[oó]n|expected|additional|savings|increase|decrease|higher|lower)\b` +
     String.raw`|(?<![\p{L}])(?:aumentar|elevar|subir|incrementar|mejorar|reducir|disminuir|bajar|pasar|quedar|ubicar|situar|generar|liberar|cerrar|ascender|llevar|crecer|representar|alcanzar|lograr|permitir|llegar|ser|estar|tendr|habr|podr|deber|saldr|valdr|har)(?:[ií]an?|[áÁ]n?)(?![\p{L}])`,
   'iu',
 );
+/** Primera cifra de la frase ("$4.000.000,00", "$ 30 M", "4.000.000"). */
+const FIRST_FIGURE = /\$\s*[(−-]?\s*\d|(?<![\d.,])\d{1,3}(?:\.\d{3})+(?![\d])/;
+
+/** ¿La frase de una sección de recomendaciones es propuesta o impacto? */
+function isProposalSentence(sentence: string, primaryYear: string | null): boolean {
+  if (PROPOSAL_MARK.test(sentence)) return true;
+  if (
+    primaryYear &&
+    [...sentence.matchAll(/(?<!\d)((?:19|20)\d{2})(?!\d)/g)].some((m) => Number(m[1]) > Number(primaryYear))
+  ) {
+    return true;
+  }
+  const at = FIRST_FIGURE.exec(sentence)?.index ?? sentence.length;
+  return PROPOSAL_CUE.test(sentence.slice(0, at));
+}
 
 /**
  * Separa las propuestas del resto de la unidad: toda frase de una sección de
@@ -1916,12 +1937,13 @@ const PROPOSAL_CUE = new RegExp(
 function splitProposals(
   text: string,
   section: { proposal: boolean; projection: boolean; english: boolean },
+  primaryYear: string | null,
 ): NarrativeUnit[] {
   const sentences = text.split(/(?<=[.;!?])\s+/);
   const isProposal = (s: string) =>
     (section.projection ||
       startsWithInfinitive(s) ||
-      (section.proposal && (section.english || PROPOSAL_CUE.test(s)))) &&
+      (section.proposal && (section.english || isProposalSentence(s, primaryYear)))) &&
     !STATEMENT_VERB.test(s);
   const proposals = sentences.filter(isProposal);
   if (proposals.length === 0) return [{ text, firstCell: null }];
@@ -1990,7 +2012,7 @@ function textUnits(document: ParsedDocument, primaryYear: string | null = null):
     if (el.querySelector('p, li')) continue;
     const text = clean(el.textContent ?? '');
     if (!text) continue;
-    out.push(...splitProposals(text, { proposal, projection, english }));
+    out.push(...splitProposals(text, { proposal, projection, english }, primaryYear));
   }
   return out;
 }

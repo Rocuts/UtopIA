@@ -163,6 +163,9 @@ describe('revisión F-html — el diagnóstico dentro de la sección de recomend
     'La utilidad neta registra $4.000.000,00 y no cubre la reserva.',
     'El patrimonio al cierre, de $66.000.000,00, respalda el plan.',
     'Con una utilidad neta del ejercicio de $4.000.000,00, la empresa debe reducir costos.',
+    // Un comparativo DESPUÉS de la cifra califica el saldo del periodo, no es un impacto.
+    'La utilidad neta de $4.000.000,00 es menor a la esperada.',
+    'La utilidad neta de $4.000.000,00 refleja una reducción de márgenes.',
   ]) {
     it(`bloquea: "${p}"`, () => {
       expect(r6(reco(`<p>${p}</p>`))).toHaveLength(1);
@@ -179,7 +182,8 @@ describe('revisión F-html — el diagnóstico dentro de la sección de recomend
         reco(
           '<p>La utilidad neta de $20.000.000,00 cubre la reserva legal. Elevar la utilidad neta a $30 M con la revisión de precios.</p>' +
             '<p>Impacto esperado: utilidad neta de $30.000.000,00.</p><p>Ahorro de $3.000.000,00 en la utilidad neta por menores provisiones.</p>' +
-            '<p>Menor utilidad neta, de $18.000.000,00, si no se ajustan precios.</p><p>La utilidad neta subiría a $25.000.000,00.</p>',
+            '<p>Menor utilidad neta, de $18.000.000,00, si no se ajustan precios.</p><p>La utilidad neta subiría a $25.000.000,00.</p>' +
+            '<p>Utilidad neta de $30.000.000,00 en 2026.</p><p>Utilidad neta de $30.000.000,00 (meta).</p>',
         ),
       ),
     ).toEqual([]);
