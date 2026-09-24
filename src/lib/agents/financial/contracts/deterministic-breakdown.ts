@@ -27,6 +27,7 @@
 import type { PeriodSnapshot } from '@/lib/preprocessing/trial-balance';
 import { pesosToCents } from '@/lib/preprocessing/curator-rules/sync-control-totals';
 import { DIVIDEND_EVIDENCE_PREFIXES } from '@/lib/preprocessing/curator-rules/dividend-evidence';
+import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 
 const ZERO = BigInt(0);
 
@@ -226,6 +227,32 @@ export interface DeterministicCashFlow {
   };
   /** Grupos PUC que no estaban en el mapa y cayeron al default de su clase. */
   unclassifiedGroups: string[];
+  /**
+   * Flujo con los socios deducido del patrimonio (auditoría 2026-09,
+   * niif-contrato-03/04): Δ(patrimonio salvo 38) − utilidad neta. Los traslados
+   * internos (apropiación de reservas, capitalización, 3605 → 37) se anulan
+   * dentro del bloque y NO son flujo (NIC 7 ¶43).
+   *   - `none`: el patrimonio sólo cambió por el resultado del ejercicio.
+   *   - `contribution`: aumento no explicado por el resultado → aportes
+   *     (financiación), a verificar con soporte.
+   *   - `distribution_pending_support`: disminución no explicada por el
+   *     resultado → distribuciones a socios en financiación (NIC 7 ¶34),
+   *     pendiente de acta y comprobante de egreso.
+   *   - `unreconciled`: disminución con el comparativo SIN cierre contable
+   *     (utilidad del periodo posiblemente acumulada): se declara como partida
+   *     no conciliada que el contador debe explicar; no se presume ni
+   *     distribución ni partida no monetaria.
+   */
+  ownerFlows: {
+    residualCents: bigint;
+    classification: 'none' | 'contribution' | 'distribution_pending_support' | 'unreconciled';
+  };
+  /**
+   * Variación de cada grupo patrimonial (31, 32, 33, 34, 35, 37) en signo de
+   * patrimonio. Revelación de transacciones no monetarias (NIC 7 ¶43): son
+   * traslados internos que se presentan netos dentro del flujo con socios.
+   */
+  nonCashEquityMovements: BreakdownRow[];
 }
 
 /**
@@ -310,14 +337,40 @@ const CASHFLOW_ROW_LABELS: Record<string, string> = {
   '27': 'Variación de pasivos diferidos',
   '28': 'Variación de otros pasivos',
   '29': 'Emisión y redención de bonos y papeles comerciales',
-  '31': 'Aportes y reembolsos de capital social',
-  '32': 'Movimientos de superávit de capital',
-  '33': 'Constitución y liberación de reservas',
   '2360': 'Dividendos pagados a socios (PUC 2360)',
 };
 
-/** Cuentas de depreciación / amortización acumulada dentro del grupo 15. */
-const ACCUMULATED_DEPRECIATION_PREFIXES = ['1592', '1595', '1598'];
+/** Etiquetas de los grupos patrimoniales para la revelación no monetaria. */
+const EQUITY_MOVEMENT_LABELS: Record<string, string> = {
+  '31': 'Capital social',
+  '32': 'Superávit de capital',
+  '33': 'Reservas',
+  '34': 'Revalorización del patrimonio',
+  '35': 'Dividendos o participaciones decretados en acciones',
+  '37': 'Resultados de ejercicios anteriores',
+};
+
+/**
+ * Grupos del bloque patrimonial cuyo movimiento interno se anula contra el
+ * resultado (auditoría niif-contrato-03). El 38 (superávit por valorizaciones)
+ * queda fuera: su contrapartida es el 19 y ambos son partida no monetaria.
+ */
+function isEquityBlockGroup(group: string): boolean {
+  return group.startsWith('3') && group !== '38';
+}
+
+/**
+ * Correctoras cuyo movimiento es gasto no monetario del periodo (depreciación,
+ * amortización, agotamiento, deterioro). Registro canónico del repo
+ * (`contra-asset-registry`). Las provisiones de cartera (1399) e inventarios
+ * (1499) se quedan dentro del capital de trabajo, que ya se presenta neto.
+ */
+function isNonCashContraAccount(code: string): boolean {
+  if (!isContraAsset(code)) return false;
+  const c = code.replace(/\D/g, '');
+  return !c.startsWith('1399') && !c.startsWith('1499');
+}
+
 
 /**
  * Cuentas que prueban una distribución a socios. `2360` es la obligación
@@ -407,8 +460,15 @@ export function buildDeterministicCashFlow(
   // efectivo; un pasivo o patrimonio que sube lo aporta.
   const flowByKey = new Map<string, { section: CashFlowSectionKey | 'nonCash'; cents: bigint }>();
   const unclassifiedGroups = new Set<string>();
-  let accumulatedDepreciationDelta = ZERO;
-  let resultsDelta = ZERO; // Δ grupos 36 + 37 (se presenta desagregado abajo)
+  // Gasto no monetario por grupo de activo (12, 15, 16, 17, 18): Δ de sus
+  // correctoras. NIC 7 ¶18(b) lo devuelve a operación y deja en el grupo la
+  // variación BRUTA (auditoría niif-contrato-05: antes sólo 1592/1598 y un
+  // inexistente '1595'; la 1698 salía como ENTRADA de inversión).
+  const nonCashAddBackByGroup = new Map<string, bigint>();
+  const addBackAccounts = new Set<string>();
+  // Bloque patrimonial (clase 3 salvo 38) en signo de caja = signo de patrimonio.
+  let equityBlockDelta = ZERO;
+  const equityDeltaByGroup = new Map<string, bigint>();
   let dividendCashFlow = ZERO;
   const dividendAccounts: string[] = [];
 
@@ -422,15 +482,27 @@ export function buildDeterministicCashFlow(
     const cents = classCode === 1 ? -delta : delta;
     const group = pucGroupOf(code);
 
-    if (ACCUMULATED_DEPRECIATION_PREFIXES.some((p) => code.startsWith(p))) {
-      // La depreciación acumulada es crédito: su Δ es negativo y su reverso
-      // (gasto no monetario) se devuelve a operación. NIC 7 ¶18(b).
-      accumulatedDepreciationDelta += delta;
+    if (classCode === 1 && isNonCashContraAccount(code)) {
+      // La correctora es crédito: su Δ es negativo cuando se reconoce el gasto
+      // del periodo, y su reverso se devuelve a operación. NIC 7 ¶18(b).
+      nonCashAddBackByGroup.set(group, (nonCashAddBackByGroup.get(group) ?? ZERO) - delta);
+      if (delta !== ZERO) addBackAccounts.add(subaccountOf(code));
     }
 
     const subaccount = subaccountOf(code);
     if (DIVIDEND_EVIDENCE_PREFIXES.some((p) => code.startsWith(p)) && delta !== ZERO) {
       dividendAccounts.push(code);
+    }
+
+    if (classCode === 3 && group.length === 2 && isEquityBlockGroup(group)) {
+      // Todo el bloque patrimonial se trata como UNA partida: su variación es
+      // resultado del ejercicio + flujo con socios. Los traslados internos
+      // (3605 → 3305/3705/3105) se anulan dentro del bloque.
+      equityBlockDelta += cents;
+      if (group !== '36') {
+        equityDeltaByGroup.set(group, (equityDeltaByGroup.get(group) ?? ZERO) + cents);
+      }
+      continue;
     }
 
     const override = sectionForSubaccount(subaccount);
@@ -453,12 +525,12 @@ export function buildDeterministicCashFlow(
       // Cae al default de su clase y queda declarado para la nota técnica.
       key = group.length === 2 ? group : `clase ${classCode || '?'}`;
       unclassifiedGroups.add(key);
-      section = classCode === 3 ? 'financing' : 'operating';
-    }
-
-    if (group === '36' || group === '37') {
-      resultsDelta += cents;
-      continue; // se presenta como utilidad + conciliación, más abajo.
+      if (classCode === 3) {
+        // Sin grupo utilizable: dentro del bloque patrimonial.
+        equityBlockDelta += cents;
+        continue;
+      }
+      section = 'operating';
     }
 
     const prev = flowByKey.get(key);
@@ -466,53 +538,61 @@ export function buildDeterministicCashFlow(
     else flowByKey.set(key, { section, cents });
   }
 
-  // --- Operación: utilidad neta + conciliación de resultados acumulados -----
-  // `resultsDelta` es la variación de los grupos 36/37. Su parte "utilidad del
-  // ejercicio" es el ancla del P&G; el resto NO es flujo: es el resultado de
-  // periodos anteriores arrastrado en el patrimonio de apertura (PUC 3605 sin
-  // asiento de cierre, situación normal en SAS colombianas) más el residuo del
-  // cierre virtual R8. Presentarlo como "dividendos estimados" en financiación
-  // es lo que la auditoría encontró y lo que NIC 7 ¶43 prohíbe.
+  // --- Operación: utilidad neta + gasto no monetario -------------------------
   const netIncomeCents = pesosToCents(primary.controlTotals.utilidadNeta);
-  let openingResult3605 = ZERO;
-  for (const [code, balance] of opening) {
-    if (code.startsWith('3605')) openingResult3605 += balance.cents;
-  }
-  const priorResultAdjustment = -openingResult3605;
-  const retainedEarningsRemainder = resultsDelta - netIncomeCents - priorResultAdjustment;
-
-  // La depreciación acumulada vive dentro del grupo 15 (inversión). NIC 7
-  // ¶18(b) la devuelve a operación como gasto no monetario y deja en inversión
-  // la compra BRUTA. El traslado no altera la variación neta de caja.
-  const depreciationAddBack = -accumulatedDepreciationDelta;
+  const depreciationAddBack = [...nonCashAddBackByGroup.values()].reduce((a, v) => a + v, ZERO);
 
   const operatingRows: BreakdownRow[] = [
     { account: '36', label: 'Utilidad neta del ejercicio', cents: netIncomeCents },
   ];
   if (depreciationAddBack !== ZERO) {
     operatingRows.push({
-      account: '1592/1595/1598',
-      label: 'Depreciación y amortización del ejercicio (partida no monetaria)',
+      account: [...addBackAccounts].sort().join('/') || '1592',
+      label: 'Depreciación, amortización y deterioro del ejercicio (partida no monetaria)',
       cents: depreciationAddBack,
     });
   }
-  if (priorResultAdjustment !== ZERO) {
-    operatingRows.push({
-      account: '3605',
+
+  // --- Flujo con los socios: residuo del bloque patrimonial -------------------
+  // Δ(patrimonio salvo 38) = utilidad neta + aportes − distribuciones. Lo que
+  // no explica el resultado es flujo con los socios. Una disminución NO se
+  // presume no monetaria (auditoría niif-contrato-04): si el balance no la
+  // explica, se presenta como distribución pendiente de soporte, o —cuando el
+  // comparativo no tiene cierre contable y la utilidad publicada puede ser
+  // acumulada— como partida no conciliada que el contador debe explicar.
+  const ownerResidual = equityBlockDelta - netIncomeCents;
+  const comparativeWithoutClosing = comparative.findings?.librosNoCerrados === true;
+  let ownerClassification: DeterministicCashFlow['ownerFlows']['classification'] = 'none';
+  const ownerFinancingRows: BreakdownRow[] = [];
+  if (ownerResidual > ZERO) {
+    ownerClassification = 'contribution';
+    ownerFinancingRows.push({
+      account: '31/32/33/37',
       label:
-        'Resultado de periodos anteriores reconocido en patrimonio de apertura ' +
-        '(ajuste de conciliación — no representa flujo de efectivo del período)',
-      cents: priorResultAdjustment,
+        'Aportes de socios (aumento patrimonial no explicado por el resultado del ejercicio; ' +
+        'verificar soporte del aporte en efectivo)',
+      cents: ownerResidual,
     });
-  }
-  if (retainedEarningsRemainder !== ZERO) {
-    operatingRows.push({
-      account: '36/37',
-      label:
-        'Variación de resultados de ejercicios anteriores y ajuste de cierre virtual ' +
-        '(partida no monetaria)',
-      cents: retainedEarningsRemainder,
-    });
+  } else if (ownerResidual < ZERO) {
+    if (comparativeWithoutClosing) {
+      ownerClassification = 'unreconciled';
+      operatingRows.push({
+        account: '36/37',
+        label:
+          'Partida patrimonial no conciliada: resultado de ejercicios anteriores no trasladado ' +
+          '(utilidad posiblemente acumulada) o distribución a socios — requiere explicación del contador',
+        cents: ownerResidual,
+      });
+    } else {
+      ownerClassification = 'distribution_pending_support';
+      ownerFinancingRows.push({
+        account: '36/37',
+        label:
+          'Distribuciones a socios (disminución patrimonial no explicada por el resultado del ' +
+          'ejercicio) — pendiente de soporte: acta y comprobante de egreso',
+        cents: ownerResidual,
+      });
+    }
   }
 
   const investingRows: BreakdownRow[] = [];
@@ -526,8 +606,9 @@ export function buildDeterministicCashFlow(
       nonCashNet += cents;
       continue;
     }
-    let amount = cents;
-    if (key === '15') amount -= depreciationAddBack; // la compra bruta se queda aquí
+    // La variación BRUTA se queda en su grupo; el gasto no monetario ya se
+    // devolvió a operación arriba.
+    const amount = cents - (nonCashAddBackByGroup.get(key) ?? ZERO);
     if (amount === ZERO) continue;
     const label = labelForCashFlowRow(key);
     const row: BreakdownRow = {
@@ -539,17 +620,27 @@ export function buildDeterministicCashFlow(
     else if (section === 'investing') investingRows.push(row);
     else financingRows.push(row);
   }
+  financingRows.push(...ownerFinancingRows);
 
   if (nonCashNet !== ZERO) {
     // NIC 7 ¶43: las transacciones no monetarias se excluyen del EFE y se
     // revelan. Se dejan visibles en UN renglón conciliatorio en vez de
     // repartirse como flujos falsos de inversión o financiación.
     operatingRows.push({
-      account: '19/34/35/38',
-      label: 'Partidas no monetarias netas (valorizaciones, revalorización, dividendos en acciones)',
+      account: '19/38',
+      label: 'Partidas no monetarias netas (valorizaciones)',
       cents: nonCashNet,
     });
   }
+
+  const nonCashEquityMovements: BreakdownRow[] = [...equityDeltaByGroup.entries()]
+    .filter(([, v]) => v !== ZERO)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([group, v]) => ({
+      account: group,
+      label: EQUITY_MOVEMENT_LABELS[group] ?? `Grupo ${group}`,
+      cents: v,
+    }));
 
   const sumRows = (rows: BreakdownRow[]): bigint => rows.reduce((acc, r) => acc + r.cents, ZERO);
   const sections: DeterministicCashFlowSection[] = [
@@ -580,6 +671,8 @@ export function buildDeterministicCashFlow(
       cashFlowCents: dividendCashFlow,
     },
     unclassifiedGroups: [...unclassifiedGroups].sort(),
+    ownerFlows: { residualCents: ownerResidual, classification: ownerClassification },
+    nonCashEquityMovements,
   };
 }
 
@@ -733,5 +826,152 @@ export function formatCashFlowViolations(
       `${cop(v.netChangeCents)} no da el efectivo de cierre declarado ` +
       `${cop(v.cashClosingCents)}; brecha ${cop(v.gapCents)}. NIC 7 ¶45.`
     );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cruce del EFE emitido por el modelo contra el EFE determinista
+// ---------------------------------------------------------------------------
+// Auditoría 2026-09 (niif-contrato-02): sobre el EFE sólo corrían invariantes
+// de coherencia INTERNA (Σ renglones = subtotal, apertura + variación =
+// cierre). Una reclasificación entre secciones que cuadra consigo misma, un
+// efectivo de apertura inventado compensado en inversión o un "dividendo"
+// compensado en operación salían limpios, aunque el EFE determinista —la
+// identidad del Balance— estaba calculado y sólo se inyectaba en el prompt.
+// Este cruce lo convierte en la autoridad: subtotal por actividad, efectivo
+// inicial, variación neta y efectivo final, tolerancia $0 al centavo.
+// ---------------------------------------------------------------------------
+
+export type CashFlowCrossCheckViolation =
+  | {
+      kind: 'section_net_flow';
+      section: CashFlowSectionKey;
+      emittedCents: bigint | null;
+      expectedCents: bigint;
+      gapCents: bigint;
+    }
+  | {
+      kind: 'cash_opening' | 'cash_closing' | 'net_change';
+      emittedCents: bigint;
+      expectedCents: bigint;
+      gapCents: bigint;
+    }
+  | { kind: 'distribution_without_support'; section: string; label: string; amountCents: bigint }
+  | { kind: 'deterministic_unreconciled'; gapCents: bigint };
+
+/** Renglones que afirman un pago o distribución a los socios. */
+const DISTRIBUTION_LABEL_RE =
+  /dividend|distribuci[oó]n(?:es)?\s+(?:a|de|entre)\s+(?:los\s+)?(?:socios|accionistas|utilidades|propietarios)|pagos?\s+(?:de\s+)?(?:utilidades|participaciones)|pagos?\s+a\s+(?:los\s+)?(?:socios|accionistas|propietarios)|participaciones\s+pagadas/i;
+
+/**
+ * Compara el EFE del modelo con el determinista. Devuelve la lista de
+ * discrepancias (vacía = el EFE emitido es el del balance de prueba).
+ */
+export function crossCheckCashFlowAgainstDeterministic(
+  cashFlow: CashFlowStatementLike,
+  deterministic: DeterministicCashFlow,
+): CashFlowCrossCheckViolation[] {
+  const out: CashFlowCrossCheckViolation[] = [];
+
+  if (!deterministic.reconciled) {
+    out.push({ kind: 'deterministic_unreconciled', gapCents: deterministic.reconciliationGapCents });
+  }
+
+  for (const expected of deterministic.sections) {
+    const emitted = cashFlow.sections.find((s) => s.section === expected.section);
+    const emittedCents = emitted ? parseCents(emitted.netFlow) : null;
+    if (emittedCents === expected.netFlowCents) continue;
+    out.push({
+      kind: 'section_net_flow',
+      section: expected.section,
+      emittedCents,
+      expectedCents: expected.netFlowCents,
+      gapCents: (emittedCents ?? ZERO) - expected.netFlowCents,
+    });
+  }
+
+  const totals: Array<['cash_opening' | 'cash_closing' | 'net_change', string, bigint]> = [
+    ['cash_opening', cashFlow.cashOpening, deterministic.cashOpeningCents],
+    ['net_change', cashFlow.netChange, deterministic.netChangeCents],
+    ['cash_closing', cashFlow.cashClosing, deterministic.cashClosingCents],
+  ];
+  for (const [kind, emittedRaw, expectedCents] of totals) {
+    const emittedCents = parseCents(emittedRaw);
+    if (emittedCents === expectedCents) continue;
+    out.push({ kind, emittedCents, expectedCents, gapCents: emittedCents - expectedCents });
+  }
+
+  // Una línea de dividendos/distribución sólo cabe si el balance la sostiene:
+  // movimiento en 2360/35 o un flujo con socios deducido del patrimonio.
+  const distributionSupported =
+    deterministic.dividendEvidence.found ||
+    deterministic.ownerFlows.classification === 'distribution_pending_support' ||
+    deterministic.ownerFlows.classification === 'unreconciled';
+  if (!distributionSupported) {
+    for (const section of cashFlow.sections) {
+      for (const line of section.lines) {
+        const amount = parseCents(line.amountPrimary);
+        if (amount === ZERO || !DISTRIBUTION_LABEL_RE.test(line.label ?? '')) continue;
+        out.push({
+          kind: 'distribution_without_support',
+          section: section.section,
+          label: line.label,
+          amountCents: amount,
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+/** Mensajes en español del cruce, listos para el sello / las salvedades. */
+export function formatCashFlowCrossCheckViolations(
+  violations: readonly CashFlowCrossCheckViolation[],
+): string[] {
+  const cop = (cents: bigint): string => {
+    const negative = cents < ZERO;
+    const abs = (negative ? -cents : cents).toString().padStart(3, '0');
+    const whole = (abs.slice(0, -2) || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${negative ? '-' : ''}$${whole},${abs.slice(-2)}`;
+  };
+  const sectionName: Record<string, string> = {
+    operating: 'operación',
+    investing: 'inversión',
+    financing: 'financiación',
+  };
+  const totalName: Record<string, string> = {
+    cash_opening: 'efectivo al inicio del periodo',
+    net_change: 'variación neta del efectivo',
+    cash_closing: 'efectivo al final del periodo',
+  };
+  return violations.map((v) => {
+    switch (v.kind) {
+      case 'section_net_flow':
+        return (
+          `EFE — actividades de ${sectionName[v.section] ?? v.section}: el estado emitido declara ` +
+          `${v.emittedCents === null ? 'la sección ausente' : cop(v.emittedCents)} y el EFE ` +
+          `determinista del balance de prueba da ${cop(v.expectedCents)} (brecha ${cop(v.gapCents)}). ` +
+          `NIC 7 ¶10 / NIIF PYMES 7.3.`
+        );
+      case 'cash_opening':
+      case 'net_change':
+      case 'cash_closing':
+        return (
+          `EFE — ${totalName[v.kind]}: el estado emitido declara ${cop(v.emittedCents)} y el ` +
+          `balance de prueba da ${cop(v.expectedCents)} (brecha ${cop(v.gapCents)}). NIC 7 ¶45.`
+        );
+      case 'distribution_without_support':
+        return (
+          `EFE — el renglón "${v.label}" (${cop(v.amountCents)}, ${sectionName[v.section] ?? v.section}) ` +
+          `presenta una distribución a socios que el balance de prueba no sostiene ` +
+          `(sin movimiento en 2360/35 ni disminución patrimonial no explicada). NIC 7 ¶43.`
+        );
+      case 'deterministic_unreconciled':
+        return (
+          `EFE — el EFE determinista no concilia con la variación del PUC 11 ` +
+          `(brecha ${cop(v.gapCents)}): el estado no puede certificarse. NIC 7 ¶45.`
+        );
+    }
   });
 }

@@ -42,6 +42,11 @@
 // ---------------------------------------------------------------------------
 
 import { sumStatementDetail } from '../contracts/statement-lines';
+import {
+  crossCheckCashFlowAgainstDeterministic,
+  formatCashFlowCrossCheckViolations,
+  type DeterministicCashFlow,
+} from '../contracts/deterministic-breakdown';
 import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/money';
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
@@ -130,6 +135,13 @@ export interface NiifJsonValidatorOptions {
     impuestoCausado?: string;
   };
   presentationV3?: import('@/lib/agents/financial/prompts/presentation-v3').PresentationV3Data;
+  /**
+   * E18 — EFE determinista (`buildDeterministicCashFlow(primary, comparative)`).
+   * Cuando existe, el EFE emitido se cruza contra él: subtotal por actividad,
+   * efectivo inicial, variación neta y efectivo final, tolerancia $0; y una
+   * línea de dividendos sin sustento en el balance es error (niif-contrato-02).
+   */
+  deterministicCashFlow?: DeterministicCashFlow | null;
 }
 
 /**
@@ -241,6 +253,20 @@ export function validateNiifReportJson(
       errors.push(
         `E3. EFE cashClosing ≠ PUC 11 (Efectivo y Equivalentes) del Balance. Brecha: ${fmtCop(gap)}.`,
       );
+    }
+  }
+
+  // -- E18. EFE emitido == EFE determinista (auditoría niif-contrato-02) -----
+  // E2/E3 son coherencia interna y cierre contra el PUC 11; no ven una
+  // reclasificación entre actividades, un efectivo inicial inventado
+  // compensado en otra sección ni un dividendo fabricado compensado en
+  // operación. El EFE determinista es la identidad del Balance: se exige al
+  // centavo por actividad y en los tres totales.
+  if (options.deterministicCashFlow) {
+    for (const msg of formatCashFlowCrossCheckViolations(
+      crossCheckCashFlowAgainstDeterministic(cf, options.deterministicCashFlow),
+    )) {
+      errors.push(`E18. ${msg}`);
     }
   }
 

@@ -101,6 +101,17 @@ export interface ReconciliationOutcome {
   repairAttempted: boolean;
   /** `true` sólo si NO quedó ninguna discrepancia tras la reparación. */
   clean: boolean;
+  /**
+   * Discrepancias del EFE emitido contra el EFE determinista (auditoría
+   * niif-contrato-02), ya redactadas. Opcional por compatibilidad con los
+   * consumidores que reconstruyen el objeto (UI, orquestador).
+   */
+  cashFlowDiscrepancies?: string[];
+  /**
+   * Pases del analista que se completaron con esfuerzo de razonamiento
+   * degradado tras un primer intento fallido (auditoría pipeline-flujo-15).
+   */
+  degradedPasses?: string[];
 }
 
 /**
@@ -128,7 +139,37 @@ export function describeQualifications(outcome: ReconciliationOutcome): string[]
         `${fmtCop(parseMoneyCop(g.gapCents))}.`,
     );
   }
+  for (const msg of outcome.cashFlowDiscrepancies ?? []) out.push(msg);
   return out;
+}
+
+/**
+ * Aviso visible de sección degradada (auditoría pipeline-flujo-15). No es una
+ * salvedad aritmética —las cifras siguen pasando los cruces deterministas—,
+ * pero la redacción se generó con razonamiento reducido y el cliente debe
+ * saberlo en el cuerpo del entregable, no sólo por un evento SSE.
+ */
+export function buildDegradationNotice(
+  degradedPasses: readonly string[],
+  language: 'es' | 'en' = 'es',
+): string {
+  if (degradedPasses.length === 0) return '';
+  if (language === 'en') {
+    return [
+      '> **SECTION GENERATED WITH REDUCED REASONING**',
+      '>',
+      `> ${degradedPasses.join(', ')}: the first attempt produced no output and the section was ` +
+        'regenerated with reduced reasoning effort. Review it before signing.',
+      '',
+    ].join('\n');
+  }
+  return [
+    '> **SECCIÓN GENERADA CON RAZONAMIENTO REDUCIDO**',
+    '>',
+    `> ${degradedPasses.join(', ')}: el primer intento no produjo salida y la sección se ` +
+      'regeneró con esfuerzo de razonamiento reducido. Revísela antes de firmar.',
+    '',
+  ].join('\n');
 }
 
 export interface ReconcileResult<T extends ReconcilableReport = NiifReportJson> {

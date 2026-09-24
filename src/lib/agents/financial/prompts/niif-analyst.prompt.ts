@@ -741,9 +741,7 @@ No hay periodo comparativo, así que no hay saldo de apertura contra el cual med
     );
   }
 
-  const dividendLine = efe.dividendEvidence.found
-    ? `- Distribución a socios: hay evidencia en el balance (${efe.dividendEvidence.accounts.join(', ')}). El flujo de caja a socios ya está incluido arriba como ${formatCopFromCents(efe.dividendEvidence.cashFlowCents)}; NO lo dupliques ni lo re-estimes.`
-    : `- Distribución a socios: NO hay evidencia en el balance — la cuenta 2360 (Dividendos o participaciones por pagar, Decreto 2650/1993) no registra movimiento y no hay dividendos decretados en acciones (grupo 35). Por lo tanto NO existe ninguna línea de dividendos en este EFE, ni "estimados", ni "presuntos", ni "inferidos". Si el bloque TOTALES VINCULANTES trae "Dividendos estimados", esa cifra está DEROGADA: proviene de las cuentas virtuales 3605VC/3710VC que inyecta el curator, no de una distribución (NIC 7 ¶43).`;
+  const dividendLine = describeOwnerFlowsForEfe(efe);
 
   const gapLine =
     efe.reconciliationGapCents === BigInt(0)
@@ -781,12 +779,60 @@ ${dividendLine}${unclassified}`;
 function renderDividendEvidenceBlockForNotes(ctx: SharedPromptContext): string {
   const efe = ctx.deterministicCashFlow;
   if (!efe) return '';
+  return `## Distribución a socios — lo que el balance de prueba permite afirmar
+${describeOwnerFlowsForEfe(efe)}
+- Cualquier nota que hable de dividendos, distribuciones o aportes cita EXCLUSIVAMENTE las cifras de este bloque. PROHIBIDO citar la línea "Dividendos estimados" del bloque "EFE INDIRECTO PRECALCULADO (Curator R2)" de TOTALES VINCULANTES: sale de cuentas virtuales que inyecta el propio curator (NIC 7 ¶43).`;
+}
+
+/**
+ * Qué puede decir el informe sobre los flujos con los socios, según el EFE
+ * determinista (auditoría 2026-09, niif-contrato-03/04).
+ *
+ * El texto anterior afirmaba "en el período NO hubo distribución" siempre que
+ * la 2360 no se moviera, y prohibía mencionar dividendos pagados. Un dividendo
+ * decretado y pagado dentro del mismo año deja la 2360 en cero: esa regla
+ * negaba un pago real. Ahora la afirmación sale del residuo patrimonial.
+ */
+function describeOwnerFlowsForEfe(efe: DeterministicCashFlow): string {
+  const lines: string[] = [];
+  const residual = efe.ownerFlows.residualCents;
   if (efe.dividendEvidence.found) {
-    return `## Distribución a socios — evidencia del balance
-Cuentas con movimiento: ${efe.dividendEvidence.accounts.join(', ')}. Flujo de caja a socios del período: ${formatCopFromCents(efe.dividendEvidence.cashFlowCents)}. Cualquier nota que hable de dividendos cita ESTA cifra y ninguna otra.`;
+    lines.push(
+      `- Evidencia contable de distribución: cuentas ${efe.dividendEvidence.accounts.join(', ')} con movimiento. El flujo por la 2360 ya está en el EFE como ${formatCopFromCents(efe.dividendEvidence.cashFlowCents)}; NO lo dupliques ni lo re-estimes.`,
+    );
   }
-  return `## Distribución a socios — SIN evidencia en el balance
-La cuenta 2360 (Dividendos o participaciones por pagar, Decreto 2650/1993) no registra movimiento y no hay dividendos decretados en acciones (grupo 35): en el período NO hubo distribución. PROHIBIDO que cualquier nota técnica mencione dividendos pagados, decretados, estimados o presuntos, y PROHIBIDO citar la línea "Dividendos estimados" del bloque "EFE INDIRECTO PRECALCULADO (Curator R2)" de TOTALES VINCULANTES: esa cifra sale de cuentas virtuales que inyecta el propio curator y su publicación viola NIC 7 ¶43.`;
+  switch (efe.ownerFlows.classification) {
+    case 'distribution_pending_support':
+      lines.push(
+        `- El patrimonio disminuyó ${formatCopFromCents(-residual)} más de lo que explica el resultado del ejercicio. Se presenta en actividades de FINANCIACIÓN como distribuciones a socios (NIC 7 ¶34 / NIIF PYMES 7.14 — política de la entidad: dividendos pagados en financiación), pendiente de soporte (acta de asamblea y comprobante de egreso). methodNote y las notas declaran que el soporte debe verificarse; NO afirmes que no hubo distribución ni inventes una cifra distinta.`,
+      );
+      break;
+    case 'unreconciled':
+      lines.push(
+        `- El patrimonio disminuyó ${formatCopFromCents(-residual)} más de lo que explica la utilidad publicada, y el periodo comparativo no tiene cierre contable: la utilidad del periodo puede incluir resultados de ejercicios anteriores. La diferencia va como PARTIDA NO CONCILIADA que el contador debe explicar (renglón del bloque). NO la presentes como partida no monetaria ni como dividendo; emite \`degeneracyFlag='indirect_method_unreliable'\` y decláralo en methodNote como limitación al alcance (NIC 7 ¶18 + NIA 705).`,
+      );
+      break;
+    case 'contribution':
+      lines.push(
+        `- El patrimonio aumentó ${formatCopFromCents(residual)} más de lo que explica el resultado del ejercicio: se presenta en FINANCIACIÓN como aportes de socios, a verificar con el soporte del aporte en efectivo.`,
+      );
+      break;
+    case 'none':
+      if (!efe.dividendEvidence.found) {
+        lines.push(
+          `- No hay evidencia contable de distribución distinta de la variación de resultados acumulados: la 2360 (Dividendos o participaciones por pagar, Decreto 2650/1993) no registra movimiento y el patrimonio sólo varió por el resultado del ejercicio y traslados internos. El EFE no lleva línea de dividendos, ni "estimados", ni "presuntos", ni "inferidos".`,
+        );
+      }
+      break;
+  }
+  if (efe.nonCashEquityMovements.length > 0) {
+    lines.push(
+      `- Movimientos internos del patrimonio del periodo (transacciones no monetarias — NIC 7 ¶43 / NIIF PYMES 7.18: se revelan en methodNote, NO son renglones del EFE): ${efe.nonCashEquityMovements
+        .map((r) => `${r.label} (PUC ${r.account}) ${formatCopFromCents(r.cents)}`)
+        .join('; ')}. La apropiación de reservas y la capitalización de utilidades son traslados entre cuentas de patrimonio, no flujos de efectivo.`,
+    );
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -1180,7 +1226,8 @@ ${ctx.niifDisclosures}
 ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}) Y amountComparative (${ctx.comparativePeriod}) donde aplique; cuando un saldo comparativo no exista, amountComparative = null.` : '- isComparative=false: amountComparative = null en TODAS las líneas.'}
 - Cuando reportMode='LINEA_BASE': ni methodNote ni equityChanges.notes usan verbos comparativos (mejoró/creció/aumentó/se redujo/evolucionó).
 - If el EFE Indirecto produciría >=6 líneas con monto "0" en cashFlow.sections[].lines (por ausencia de auxiliares de capital de trabajo) then \`cashFlow.degeneracyFlag = 'indirect_method_unreliable'\` y methodNote incluye literal de limitación al alcance.
-- Corrección v2.4: cashFlow.sections[].lines (en CUALQUIER sección, especialmente financing) NUNCA contiene ítems cuyo label encaje en las frases prohibidas v2.4 ("Distribución de utilidades de periodos anteriores", "Pagos a propietarios asociados con utilidades", "Cancelación resultado acumulado", "Traslado utilidad ejercicio a 3605"). El validator E10 rechaza el reporte si las detecta. Si existe saldo inicial Cta.3605 material en TOTALES VINCULANTES → la línea va en operating con signo negativo como ajuste no-cash, NUNCA en financing.
+- Corrección v2.4: cashFlow.sections[].lines (en CUALQUIER sección, especialmente financing) NUNCA contiene ítems cuyo label encaje en las frases prohibidas v2.4 ("Distribución de utilidades de periodos anteriores", "Pagos a propietarios asociados con utilidades", "Cancelación resultado acumulado", "Traslado utilidad ejercicio a 3605"). El validator E10 rechaza el reporte si las detecta. El traslado del resultado anterior (3605 → 33/37/31) es un movimiento interno del patrimonio: no genera renglón en ninguna sección.
+- El EFE emitido coincide al centavo con el bloque "EFE VINCULANTE": subtotal de cada actividad, cashOpening, netChange y cashClosing (el validador E18 lo contrasta; cualquier diferencia sella el informe).
 </success_criteria>
 
 <constraints>
@@ -1223,13 +1270,13 @@ ${ctx.isComparative ? `- EFE y ECP presentan amountPrimary (${ctx.primaryPeriod}
 
   REMEDIACIÓN — si el EFE NO cuadra (cashClosing != cashOpening + netChange):
 
-    1. If el bloque "EFE VINCULANTE" está en el \`<context>\` then el EFE cuadra copiándolo: sus renglones ya incluyen TODA partida conciliatoria (el resultado de periodos anteriores del patrimonio de apertura, el ajuste de cierre virtual, las partidas no monetarias del NIC 7 ¶43). No falta nada por añadir y no sobra nada por quitar. Si al copiarlo no cuadra, el error está en la copia — revísala contra el bloque, cifra por cifra.
+    1. If el bloque "EFE VINCULANTE" está en el \`<context>\` then el EFE cuadra copiándolo: sus renglones ya incluyen TODA partida del periodo (utilidad neta, gasto no monetario, capital de trabajo, inversión, obligaciones financieras y el flujo con socios que deduce el patrimonio; los traslados internos del patrimonio ya están neteados). No falta nada por añadir y no sobra nada por quitar. Si al copiarlo no cuadra, el error está en la copia — revísala contra el bloque, cifra por cifra.
 
     2. Else (no hay bloque vinculante) emitir cashFlow.degeneracyFlag = 'indirect_method_unreliable' con methodNote literal de limitación al alcance (NIC 7 §18 + NIA 705 §7).
 
   PROHIBIDO ajustar las variaciones de capital de trabajo —ni su magnitud ni su signo— para hacer cuadrar el EFE. Esas cifras salen del balance de prueba: moverlas para forzar un cuadre es fabricar un estado financiero. Un EFE que no cuadra se declara; no se acomoda.
 
-  NEVER usar el asiento 3605 como "comodín" en financing para hacer cuadrar el EFE. NEVER crear flujos ficticios de financiación. La sección financing solo acepta lo que el balance prueba: obligaciones financieras del grupo 21 que variaron, aportes o reembolsos de capital (grupos 31/32/33) y dividendos con movimiento REAL en la cuenta 2360. Sin movimiento en 2360 no hay línea de dividendos — ni "estimados", ni "presuntos", ni "inferidos" (NIC 7 ¶43).
+  NEVER usar el asiento 3605 como "comodín" en financing para hacer cuadrar el EFE. NEVER crear flujos ficticios de financiación. La sección financing solo acepta lo que el balance prueba y el bloque "EFE VINCULANTE" trae: obligaciones financieras (grupos 21/29), el movimiento de la 2360 y el flujo con socios deducido del patrimonio (aportes, o distribuciones pendientes de soporte). La apropiación de reservas y la capitalización de utilidades NO son flujos (NIC 7 ¶43): se revelan en methodNote. Sin sustento en el bloque no hay línea de dividendos — ni "estimados", ni "presuntos", ni "inferidos".
 
 - MUST: la PRIMERA línea de cashFlow.sections.find(s => s.section==='operating').lines DEBE tener amountPrimary === netIncomePrimary (anchor Pass-1) al centavo. Label aceptado: "Utilidad neta del ejercicio" / "Resultado neto del período" / "Utilidad neta del período" (anclado al P&L). PROHIBIDO usar como primer ítem cualquiera de: "Δ 3605", "Movimiento 3605", "Variación utilidades acumuladas", "3605-movimiento-periodo", "Incremento utilidades retenidas".
 
@@ -1433,7 +1480,7 @@ ${ctx.actividadInferida && ctx.actividadInferida.sectorCIIU.startsWith('G') ? '-
 
 - NEVER emitir las frases "no se suministró información", "información no detallada", "datos no disponibles". Si un dato falta, citar la norma de impracticabilidad correspondiente (NIIF for SMEs §3.14, §10.21, §29.27).
 
-- NEVER citar en una nota cifras de dividendos, distribuciones o pagos a socios que no estén respaldadas por el bloque "Distribución a socios" del \`<context>\`. Si ese bloque declara que NO hay evidencia, entonces en el período no hubo distribución y ninguna nota puede afirmar lo contrario — tampoco con las palabras "estimados", "presuntos", "inferidos" o "implícitos". Publicar una distribución que el balance no prueba viola NIC 7 ¶43 y expone el informe al Art. 647 E.T.
+- NEVER citar en una nota cifras de dividendos, distribuciones o pagos a socios que no estén en el bloque "Distribución a socios" del \`<context>\`. Si ese bloque indica que no hay evidencia contable de distribución, las notas dicen exactamente eso ("no hay evidencia contable de distribución distinta de la variación de resultados acumulados") sin afirmar ni negar pagos que el balance no muestra, y sin cifras "estimadas", "presuntas", "inferidas" o "implícitas" (NIC 7 ¶43). Si el bloque indica una distribución pendiente de soporte o una partida no conciliada, la nota la revela con esa cifra y el soporte que falta.
 
 - NEVER en notas, labels ni body: "Élite", "Excelencia", "Premium", "Excepcional", "Único", "Mejor", "Sólido", "Robusto", "Extraordinario", "Sin precedentes", "De clase mundial" (§1.6 spec v8.1 — prohibición vocabulario marketing). El registro narrativo es technico-contable, no comercial.
 
