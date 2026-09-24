@@ -72,7 +72,8 @@ export function VerdadMicroDashboard({ metrics, gapAttribution, density, verdadT
         density={density}
       />
 
-      {verdadTrend && verdadTrend.length > 0 && (
+      {/* Una tendencia necesita ≥ 2 periodos reales (ratios-kpis-20). */}
+      {verdadTrend && verdadTrend.length >= 2 && (
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <VerdadTrendBars series={verdadTrend} language={language} density={density} />
         </Card>

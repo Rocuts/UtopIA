@@ -5,16 +5,18 @@
 // renderizar en recharts. Lógica determinística, sin LLM.
 //
 // Granularidades:
-//   'annual'    → 1 período en el balance  → interpolar 12 meses provisionales
+//   'annual'    → 1 período en el balance  → un único punto real (sin interpolar)
 //   'quarterly' → 2-3 períodos             → mostrar cada período (T-n…T-0)
 //   'monthly'   → >= 4 períodos            → mostrar cada período directamente
 //
-// El campo `isInterpolated` marca si el punto es real o estimado linealmente.
+// `isInterpolated` se conserva en el contrato pero siempre es false: ya no se
+// generan puntos sintéticos (auditoría ratios-kpis-20).
 // ---------------------------------------------------------------------------
 
 import type { PeriodSnapshot, PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 import { computeEbitda } from './ebitda';
+import { ingresosNetosPeriodo } from './shared-metrics';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────────────
 
@@ -27,7 +29,7 @@ export interface ValorBarSeries {
   ebitda: number | null;
   /** Free Cash Flow; null si no hay EFE (sin periodo comparativo). */
   fcf: number | null;
-  /** Ingresos totales (Clase 4). */
+  /** Ingresos netos de devoluciones 4175. */
   ingresos: number;
   /** Identificador interno del periodo (ej. "2023", "2024-Q1"). */
   period: string;
@@ -106,55 +108,23 @@ export function detectGranularity(periods: PeriodSnapshot[]): ValorGranularity {
 /**
  * Construye la serie `ValorBarSeries[]` a partir del balance preprocesado.
  *
- * - 1 período anual → interpola 12 meses linealmente (isInterpolated=true).
+ * - 1 período → un único punto real (la UI oculta la tendencia).
  * - Múltiples períodos → un punto por período (T-n … T-0).
  */
 export function buildValorBarSeries(balance: PreprocessedBalance): ValorBarSeries[] {
   const { periods } = balance;
   if (periods.length === 0) return [];
 
-  const granularity = detectGranularity(periods);
+  // Un punto por periodo REAL. Con un solo periodo se devuelve ese único punto
+  // (la UI oculta la tendencia): antes se fabricaban 12 meses (saldos de cierre
+  // ÷ 12, tendencias descendentes o estacionalidad senoidal) — ratios-kpis-20.
 
-  if (granularity === 'annual' && periods.length === 1) {
-    return buildInterpolatedMonths(periods[0]);
-  }
-
-  // Múltiples períodos → serie directa.
   return periods.map((snap, idx) => ({
     label: labelFromPeriod(snap.period, idx, periods.length),
     ebitda: extractEbitda(snap),
     fcf: extractFcf(snap),
-    ingresos: snap.controlTotals.ingresos,
+    ingresos: ingresosNetosPeriodo(snap.controlTotals),
     period: snap.period,
     isInterpolated: false,
   }));
-}
-
-/**
- * Interpola 12 meses cuando sólo hay 1 período anual.
- * Distribuye linealmente EBITDA e ingresos. FCF se divide en 12.
- */
-function buildInterpolatedMonths(snap: PeriodSnapshot): ValorBarSeries[] {
-  const ebitdaAnual = extractEbitda(snap);
-  const ingresosAnual = snap.controlTotals.ingresos;
-  const fcfAnual = extractFcf(snap);
-
-  // Año base del período.
-  const yearMatch = snap.period.match(/(\d{4})/);
-  const year = yearMatch ? yearMatch[1].slice(2) : '??';
-
-  return MESES_ES.map((mes, i) => {
-    // Distribución lineal con pequeña variación estacional sintética (±5%)
-    // para que las barras no sean todas idénticas → más legible visualmente.
-    const seasonal = 1 + (Math.sin((i * Math.PI) / 6) * 0.05);
-    const weight = seasonal / 12;
-    return {
-      label: `${mes} ${year}`,
-      ebitda: ebitdaAnual === null ? null : Math.round(ebitdaAnual * weight),
-      fcf: fcfAnual !== null ? Math.round(fcfAnual * weight) : null,
-      ingresos: Math.round(ingresosAnual * weight),
-      period: `${snap.period}-${String(i + 1).padStart(2, '0')}`,
-      isInterpolated: true,
-    };
-  });
 }

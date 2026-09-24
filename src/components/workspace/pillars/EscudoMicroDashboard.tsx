@@ -69,7 +69,8 @@ export function EscudoMicroDashboard({ metrics, liquidity, escudoTrend, density 
         density={density}
       />
 
-      {escudoTrend && escudoTrend.length > 0 && (
+      {/* Una tendencia necesita ≥ 2 periodos reales (ratios-kpis-20). */}
+      {escudoTrend && escudoTrend.length >= 2 && (
         <Card variant="glass" padding={density === 'compact' ? 'sm' : 'md'}>
           <EscudoTrendBars series={escudoTrend} language={language} density={density} />
         </Card>
