@@ -46,6 +46,8 @@ import {
   narrativeSourcesFromPreprocessed,
   type NarrativeUnit,
 } from '../validators/narrative-anchors';
+import { applyKpiAnchors, strategyAnchorSources } from '../validators/strategy-anchors';
+import { StrategyReportSchema } from '../contracts/strategy-report';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 type ParsedDocument = ReturnType<typeof parseHTML>['document'];
@@ -918,6 +920,17 @@ export function reconcileBindingFigures(
 
   // ── R2 · cifras del HTML que no se rastrean al payload ───────────────────
   const allowed = collectPayloadRenderings(input);
+  // El Editor Jefe recibe los KPIs de la Parte II ya anclados (recomputados por
+  // el sistema o N/D): esas cifras también son rastreables al payload.
+  const strategy = StrategyReportSchema.safeParse(input.strategyReport);
+  if (strategy.success) {
+    const anchored = applyKpiAnchors(
+      strategy.data,
+      strategyAnchorSources(input.preprocessed ?? undefined, input.niifReport),
+      { keepWhenNoSource: true },
+    );
+    for (const r of collectPayloadRenderings(anchored.json)) allowed.add(r);
+  }
   const figurePattern = /\$\d{1,3}(?:\.\d{3})+(?:,\d{2})?/g;
   const untraceable: string[] = [];
   const seenUntraceable = new Set<string>();

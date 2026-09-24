@@ -61,7 +61,23 @@ describe('valoracion-11 — signos en el Markdown del Strategy Director', () => 
     queue.push(strategyJson());
     const res = await run();
     expect(res.projectedCashFlow).toContain('- Saldo Final Año +3: ($250.000.000,00)');
-    expect(res.kpiDashboard).toContain('| liquidity | Capital de trabajo | AC − PC | ($250.000.000,00) |');
+    // Pendiente #2 (auditoría integral 2026-09-24): sin preprocesado el KPI no
+    // tiene base determinista y se publica N/D, no la cifra del modelo.
+    expect(res.kpiDashboard).toContain('| liquidity | Capital de trabajo | Capital de trabajo: sin fórmula determinista | ND |');
+    expect(res.kpiDashboard).not.toContain('($250.000.000,00)');
+
+    // Con preprocesado el capital de trabajo se recalcula (AC − PC) y conserva el signo.
+    queue.push(strategyJson());
+    const pre = {
+      primary: {
+        period: '2025',
+        controlTotals: { activoCorriente: 50 * M, pasivoCorriente: 300 * M, capitalTrabajo: -250 * M, efectivoCuenta11: 50 * M },
+      },
+    } as unknown as PreprocessedBalance;
+    const withPre = await run(pre);
+    expect(withPre.kpiDashboard).toContain(
+      '| liquidity | Capital de trabajo | Activo corriente − Pasivo corriente — calculado por el sistema | ($250.000.000,00) |',
+    );
   });
 });
 

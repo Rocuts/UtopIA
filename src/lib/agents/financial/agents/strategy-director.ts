@@ -18,6 +18,7 @@ import {
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import { buildDegradationNotice } from './reconcile-anchors';
 import {
+  applyKpiAnchors,
   deterministicTrends,
   fmtTrendPct,
   strategyAnchorSources,
@@ -104,6 +105,17 @@ export async function runStrategyDirector(
 
   const verified = reconcileStrategyReport(result.json, strategyAnchorsFrom(preprocessed));
   applyDeterministicTrends(verified, preprocessed);
+  // KPIs sin ancla → N/D con motivo; recomputables → valor del preprocesador
+  // (pendiente #2 de la auditoría integral 2026-09-24). El JSON que viaja al
+  // visor, al Excel y al Editor Jefe HTML ya no lleva la cifra del modelo.
+  const kpiAnchors = applyKpiAnchors(
+    verified.json,
+    strategyAnchorSources(preprocessed, niifOutput.json ?? null),
+    { language },
+  );
+  verified.json = kpiAnchors.json;
+  verified.checks.kpisNeutralized = kpiAnchors.neutralized;
+  verified.checks.kpisRecomputed = kpiAnchors.recomputed;
   const strategic = toStrategicAnalysisResult(verified.json, verified.checks);
   if (result.meta?.degraded === true) {
     const notice = buildDegradationNotice(
@@ -151,6 +163,10 @@ export interface StrategyChecks {
   trendsNdMotivo?: string | null;
   /** Por qué no hay tendencias (sin comparativo / comparativo impracticable). */
   noTrendsReason?: string | null;
+  /** KPIs publicados N/D por falta de ancla determinista (`applyKpiAnchors`). */
+  kpisNeutralized?: string[];
+  /** KPIs recalculados por el sistema desde el preprocesado. */
+  kpisRecomputed?: string[];
 }
 
 function pesosToCents(v: unknown): bigint | null {
@@ -390,7 +406,20 @@ function renderDashboard(json: StrategyReportJson): string {
   return [header, rows, '', `> ${dash.executiveCommentary}`].join('\n');
 }
 
-function renderKpis(json: StrategyReportJson): string {
+/** Campo de DuPont: 'ND' → 'N/D' (sin unidad). */
+function dupontField(v: string, suffix = ''): string {
+  return v === 'ND' ? 'N/D' : `${v}${suffix}`;
+}
+
+/**
+ * Sección "## 2. KPIs FINANCIEROS" en Markdown. Exportada para que el Excel
+ * re-renderice la tabla desde el JSON con `applyKpiAnchors` re-aplicado
+ * (informes persistidos antes del cambio).
+ */
+export function renderStrategyKpisMarkdown(
+  json: StrategyReportJson,
+  checks?: Pick<StrategyChecks, 'kpisNeutralized' | 'kpisRecomputed'>,
+): string {
   const header = [
     '## 2. KPIs FINANCIEROS',
     '',
@@ -409,19 +438,32 @@ function renderKpis(json: StrategyReportJson): string {
     })
     .join('\n');
 
+  const provenance: string[] = [];
+  if (checks?.kpisRecomputed && checks.kpisRecomputed.length > 0) {
+    provenance.push(`Recalculados por el sistema desde el balance preprocesado: ${checks.kpisRecomputed.join(', ')}.`);
+  }
+  const ndKpis = (checks?.kpisNeutralized ?? []).filter((n) => n !== 'DuPont');
+  if (ndKpis.length > 0) {
+    provenance.push(
+      `Publicados N/D por no tener ancla determinista (no se imprime la cifra estimada por el modelo): ${ndKpis.join(', ')}.`,
+    );
+  }
+
   const dupont = json.dupontAnalysis
     ? [
         '',
         '### Análisis DuPont',
-        `- ROE: ${json.dupontAnalysis.roe}%`,
-        `- Margen Neto: ${json.dupontAnalysis.netMargin}%`,
-        `- Rotación de Activos: ${json.dupontAnalysis.assetTurnover}`,
-        `- Apalancamiento Financiero: ${json.dupontAnalysis.financialLeverage}`,
+        `- ROE: ${dupontField(json.dupontAnalysis.roe, '%')}`,
+        `- Margen Neto: ${dupontField(json.dupontAnalysis.netMargin, '%')}`,
+        `- Rotación de Activos: ${dupontField(json.dupontAnalysis.assetTurnover)}`,
+        `- Apalancamiento Financiero: ${dupontField(json.dupontAnalysis.financialLeverage)}`,
         `- Driver dominante: ${json.dupontAnalysis.drivingFactor}`,
       ].join('\n')
     : '';
 
-  return [header, rows, dupont].filter(Boolean).join('\n');
+  return [header, rows, provenance.length > 0 ? `\n_${provenance.join(' ')}_` : '', dupont]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /** Porcentaje decimal ("12.5") → es-CO ("12,50%"); 'ND' → 'N/D'. */
@@ -592,7 +634,7 @@ function toStrategicAnalysisResult(
   json: StrategyReportJson,
   checks?: StrategyChecks,
 ): StrategicAnalysisResult {
-  const kpiDashboard = [renderDashboard(json), '', renderKpis(json)].join('\n');
+  const kpiDashboard = [renderDashboard(json), '', renderStrategyKpisMarkdown(json, checks)].join('\n');
   const trendsAndBreakEven = renderTrendsAndBreakEven(json, checks);
   const projectedCashFlow = renderProjections(json, checks);
   const strategicRecommendations = renderRecommendations(json);

@@ -20,6 +20,9 @@ import ExcelJS from 'exceljs';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { formatCopFromCents, parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
+import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
+import { applyKpiAnchors } from '@/lib/agents/financial/validators/strategy-anchors';
+import { renderStrategyKpisMarkdown } from '@/lib/agents/financial/agents/strategy-director';
 import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financial/contracts/base';
 import {
   CURRENCY_NOTE,
@@ -1130,7 +1133,12 @@ function addKPISheet(
   row = addNarrativeDisclaimer(ws, row);
   row += 1;
 
-  const content = report.strategicAnalysis.fullContent;
+  // Pendiente #2 (auditoría integral 2026-09-24): la tabla de KPIs se
+  // re-renderiza desde el JSON con `applyKpiAnchors` re-aplicado, de modo que un
+  // informe persistido antes del cambio tampoco imprime la cifra del modelo de
+  // un KPI sin ancla determinista (N/D con motivo). Sin JSON válido se conserva
+  // el Markdown tal cual.
+  const content = strategyContentWithAnchoredKpis(report);
   const sections = content.split('\n');
 
   for (const line of sections) {
@@ -1153,6 +1161,27 @@ function addKPISheet(
   ws.getColumn(3).width = 22;
   ws.getColumn(4).width = 18;
   ws.getColumn(5).width = 14;
+}
+
+/**
+ * `fullContent` de la Parte II con la sección "## 2. KPIs FINANCIEROS"
+ * reconstruida desde el JSON validado tras `applyKpiAnchors` (idempotente).
+ */
+function strategyContentWithAnchoredKpis(report: FinancialReport): string {
+  const content = report.strategicAnalysis.fullContent;
+  const parsed = StrategyReportSchema.safeParse(report.strategicAnalysis.json);
+  if (!parsed.success) return content;
+  const lines = content.split('\n');
+  const start = lines.findIndex((l) => /^##\s+2\.\s+KPIs FINANCIEROS/i.test(l.trim()));
+  if (start < 0) return content;
+  const next = lines.findIndex((l, i) => i > start && /^##\s/.test(l.trim()));
+  const end = next < 0 ? lines.length : next;
+  const anchored = applyKpiAnchors(parsed.data, {}, { keepWhenNoSource: true });
+  const section = renderStrategyKpisMarkdown(anchored.json, {
+    kpisNeutralized: anchored.neutralized,
+    kpisRecomputed: anchored.recomputed,
+  });
+  return [...lines.slice(0, start), ...section.split('\n'), '', ...lines.slice(end)].join('\n');
 }
 
 /** Escribe una cifra de KPI: número con formato, o "N/D" como TEXTO (nunca 0). */
