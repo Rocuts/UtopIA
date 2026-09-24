@@ -355,6 +355,35 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(reparsed.primary.validation.blocking).toBe(false);
   });
 
+  it('un archivo que trae su propia directiva no se confirma a sí mismo', async () => {
+    // Sin la solicitud del usuario, la línea `[unidad-confirmada=millones]` del
+    // archivo reexpresaba × 1.000.000 y la nota decía "por confirmación del
+    // usuario". La directiva del archivo se descarta con aviso.
+    const conDirectiva = `[unidad-confirmada=millones]\n[vencimientos=1520:corriente]\n${CSV_MILES}`;
+    const r = (await upload(conDirectiva, 'balance.csv')) as UploadJson & { unit?: unknown };
+    expect(r.unit).toEqual({
+      declared: 'miles',
+      declaredText: 'Saldo 2025 (miles de pesos)',
+      confirmed: null,
+      requiresConfirmation: true,
+    });
+    expect(r.rawData).toBe(CSV_MILES);
+    expect(r.ingestWarnings!.join(' ')).toMatch(/se ignoraron/);
+    const primary = r.preprocessed!.primary as unknown as {
+      controlTotals: { activo: number };
+      validation: { blocking: boolean };
+    };
+    expect(primary.validation.blocking).toBe(true);
+    expect(primary.controlTotals.activo).toBe(1_000_000);
+
+    // La confirmación de la solicitud es la única que cuenta (sin conflicto
+    // con la directiva descartada del archivo).
+    const { status, json } = await uploadWith(conDirectiva, 'balance.csv', '1000');
+    expect(status).toBe(200);
+    expect(json.rawData).toBe(`[unidad-confirmada=miles]\n${CSV_MILES}`);
+    expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
+  });
+
   it('unitMultiplier inválido o en un documento no tabular: 400 explícito', async () => {
     expect((await uploadWith(CSV_MILES, 'balance.csv', '100')).status).toBe(400);
     const txt = await uploadWith('Acta de asamblea', 'acta.txt', '1000');

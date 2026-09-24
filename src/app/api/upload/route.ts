@@ -18,6 +18,7 @@ import { sanitizeSheetLabel, xlsxRowToCsvLine } from '@/lib/upload/xlsx-csv';
 import {
   escribirDirectivasIngesta,
   leerCampoUnidad,
+  leerDirectivasIngesta,
   type UnidadMonetaria,
   type UploadUnitInfo,
 } from '@/lib/upload/ingest-directives';
@@ -726,6 +727,15 @@ async function processDocument(
     throw new UploadError(message);
   }
 
+  // Las directivas de ingesta (P4) sólo las escriben el servidor, con los
+  // campos de la solicitud (`unitMultiplier`), y el intake al enviar. Un
+  // archivo que ya las trae al inicio no puede confirmarse a sí mismo: la
+  // unidad se reexpresaría y el informe diría "por confirmación del usuario"
+  // sin que el usuario eligiera nada. Se descartan con aviso y la unidad
+  // declarada vuelve a pedir confirmación.
+  const directivasDelArchivo = leerDirectivasIngesta(text);
+  if (directivasDelArchivo.tieneDirectivas) text = directivasDelArchivo.resto;
+
   if (!text.trim()) {
     throw new UploadError(
       `File "${filename}" is empty or could not be read. Verify the file contains readable content.`,
@@ -794,6 +804,13 @@ async function processDocument(
   let preprocessed: PreprocessedBalance | null = null;
   let detectedPeriods: string[] = [];
   const ingestWarnings: string[] = [];
+  if (directivasDelArchivo.tieneDirectivas) {
+    ingestWarnings.push(
+      'El archivo traía líneas de confirmación de ingesta ([unidad-confirmada=…] / [vencimientos=…]) ' +
+        'al inicio y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
+        'confirman en el formulario del informe.',
+    );
+  }
   const ingestErrors: string[] = [];
   let unit: UploadUnitInfo | null = null;
   // Con la unidad confirmada, `rawData` lleva la directiva: /niif, Stage 0 y
