@@ -294,6 +294,56 @@ describe('R2-03 / e2e-niif2-06 — /html sin referencia con el gate de /export s
     expect(runHtmlEditor).not.toHaveBeenCalled();
   });
 
+  it('V5/V6 (identidad del ARCHIVO): los bloqueantes que /consolidate calculó con el archivo viajan en el cuerpo de la UI y /html responde 422 como /export', async () => {
+    // /html no recibe `rawData`: sin la emitibilidad de /consolidate un NIT del
+    // encabezado con DV inválido (V6) salía en HTML mientras /export (que sí
+    // lleva el archivo) respondía 422.
+    const CSV_V6 = PROVENANCE_CSV.replace('NIT: 900.123.456-8', 'NIT: 900.123.456-1');
+    const res = await consolidate(req('/api/financial-report/consolidate', consolidateBody({ rawData: CSV_V6 })));
+    const { report } = (await res.json()) as { report: FinancialReport };
+    expect(report.emittability?.kind).toBe('no-emitible');
+    const ex = await exportReport(
+      req('/api/financial-report/export', { report, rawData: CSV_V6, format: 'excel', language: 'es' }),
+    );
+    expect(ex.status).toBe(422);
+
+    const { htmlReportVerdicts } = await import('@/components/workspace/PipelineWorkspace');
+    const read6 = preprocessUploadedTrialBalanceText(CSV_V6);
+    if (read6.kind !== 'ok') throw new Error('fixture');
+    const h = await html(
+      req('/api/financial-report/html', {
+        ...htmlBody(report),
+        preprocessed: toJsonSafe(read6.preprocessed),
+        ...htmlReportVerdicts(report),
+      }),
+    );
+    expect(h.status).toBe(422);
+    expect(((await h.json()) as { details: string[] }).details.join('\n')).toMatch(/salvedades o validaciones bloqueantes/);
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('emitibilidad y validación reenviadas sólo endurecen: "emittable" o formas inválidas no levantan ni revientan', async () => {
+    const report = await honestReport();
+    const { htmlReportVerdicts } = await import('@/components/workspace/PipelineWorkspace');
+    const ok = await html(req('/api/financial-report/html', { ...htmlBody(report), ...htmlReportVerdicts(report) }));
+    expect(ok.status).toBe(200);
+    const lifted = await html(
+      req('/api/financial-report/html', {
+        ...htmlBody(report),
+        emittability: { kind: 'emittable', blockers: 'x', suggestedAdjustments: 7 },
+        validation: { ok: 'sí' },
+      }),
+    );
+    expect(lifted.status).toBe(200);
+    for (const hardening of [
+      { emittability: { kind: 'no-emitible', blockers: 'x' } },
+      { validation: { ok: false, errors: [1, 'E1. descuadre'] } },
+    ]) {
+      const res = await html(req('/api/financial-report/html', { ...htmlBody(report), ...hardening }));
+      expect(res.status).toBe(422);
+    }
+  });
+
   it('punto de equilibrio alterado en el JSON de la Parte II: el Editor Jefe recibe el derivado por el código', async () => {
     const report = structuredClone(await honestReport());
     const s = report.strategicAnalysis.json as StrategyReportJson;

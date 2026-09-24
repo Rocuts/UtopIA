@@ -118,11 +118,43 @@ export function htmlInputFromPersisted(
 // JSON de la Parte II sin post-procesar. Aquí se arma el MISMO `FinancialReport`
 // que /export recibiría: las Partes con su JSON y sin texto (el servidor lo
 // produce desde el JSON) y los veredictos que reenvía el cliente (sólo pueden
-// endurecer).
+// endurecer): reconciliación NIIF, acta, Parte II y, como /html no recibe el
+// archivo del balance, la emitibilidad `no-emitible` y la validación negativa
+// que /consolidate calculó con él (V5/V6).
 // ---------------------------------------------------------------------------
 
 function objectOrNull(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+function strings(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
+}
+
+/**
+ * Emitibilidad `no-emitible` que reenvía el cliente (la que /consolidate
+ * calculó CON el archivo del balance). /html no recibe `rawData`, así que los
+ * bloqueantes que dependen de la identidad leída del ARCHIVO (V5 razón social
+ * y NIT del encabezado, V6 DV del NIT) no se pueden recalcular aquí; sin esto
+ * un informe que /export sin referencia rechaza por V5/V6 salía en HTML. Sólo
+ * endurece: una emitibilidad "emittable" no se toma (el gate recalculado
+ * decide) y una forma inválida se descarta.
+ */
+function receivedNotEmittable(v: unknown): FinancialReport['emittability'] | null {
+  const o = objectOrNull(v);
+  if (!o || o.kind !== 'no-emitible') return null;
+  const blockers = (Array.isArray(o.blockers) ? o.blockers : [])
+    .map(objectOrNull)
+    .filter((b): b is Record<string, unknown> => !!b && typeof b.code === 'string' && typeof b.message === 'string')
+    .map((b) => ({ code: b.code as string, message: b.message as string }));
+  return { kind: 'no-emitible', blockers, suggestedAdjustments: strings(o.suggestedAdjustments) };
+}
+
+/** Validación post-render negativa que reenvía el cliente (sólo endurece). */
+function receivedFailedValidation(v: unknown): FinancialReport['validation'] | null {
+  const o = objectOrNull(v);
+  if (!o || o.ok !== false) return null;
+  return { ok: false, errors: strings(o.errors), warnings: strings(o.warnings) };
 }
 
 export function htmlClientReport(
@@ -148,8 +180,12 @@ export function htmlClientReport(
   const acta = objectOrNull(body.actaQualifications);
   const strategy = objectOrNull(body.strategyQualifications);
   const reconciliation = objectOrNull(body.niifReconciliation);
+  const emittability = receivedNotEmittable(body.emittability);
+  const validation = receivedFailedValidation(body.validation);
   return {
     company,
+    ...(emittability ? { emittability } : {}),
+    ...(validation ? { validation } : {}),
     niifAnalysis: {
       balanceSheet: '',
       incomeStatement: '',

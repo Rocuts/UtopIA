@@ -737,6 +737,28 @@ export function htmlLedgerField(
   return applied.length > 0 ? { adjustmentLedger: { adjustments: applied } } : {};
 }
 
+/**
+ * Veredictos del informe que viajan en el cuerpo de /html. Sin referencia el
+ * servidor pasa el informe por el gate de /export sin referencia y estos sólo
+ * pueden endurecerlo:
+ *   - acta y Parte II con `clean: false` bloquean (e2e-niif-16);
+ *   - la reconciliación del analista, como en /export (procedencia-R2-03);
+ *   - la emitibilidad y la validación post-render de /consolidate: se
+ *     calcularon con el archivo del balance, que /html no recibe, y son las
+ *     únicas que llevan los bloqueantes de su identidad (V5 razón social y NIT
+ *     del encabezado, V6 DV del NIT). Sin ellas un informe que /export rechaza
+ *     por V5/V6 salía en HTML.
+ */
+export function htmlReportVerdicts(report: BackendFinancialReport): Record<string, unknown> {
+  return {
+    actaQualifications: report.governance?.actaQualifications ?? null,
+    strategyQualifications: report.strategicAnalysis?.strategyQualifications ?? null,
+    niifReconciliation: report.niifAnalysis?.reconciliation ?? null,
+    emittability: report.emittability ?? null,
+    validation: report.validation ?? null,
+  };
+}
+
 // Módulos compartidos con el servidor (/consolidate y /html aplican la misma
 // regla); se re-exportan para los consumidores y pruebas de este componente.
 export { derivePeriodBounds, foldReportQualifications };
@@ -3722,14 +3744,10 @@ export function PipelineWorkspace() {
         // niif-preproceso-33: /html re-deriva ese preprocesado desde sus filas
         // con los mismos ajustes confirmados del Doctor de Datos.
         ...htmlLedgerField(effectiveAdjustmentLedger),
-        // e2e-niif-16: /html bloquea con los veredictos del acta y de la Parte II
-        // (clean === false), igual que Excel/PDF.
-        actaQualifications: backendReport.governance?.actaQualifications ?? null,
-        strategyQualifications: backendReport.strategicAnalysis?.strategyQualifications ?? null,
-        // procedencia-R2-03: sin referencia, /html pasa el informe por el gate
-        // de /export sin referencia; la reconciliación del analista viaja como
-        // en /export (un `clean: false` sólo puede endurecer).
-        niifReconciliation: backendReport.niifAnalysis?.reconciliation ?? null,
+        // Veredictos del informe (sólo endurecen): acta y Parte II
+        // (e2e-niif-16), reconciliación NIIF y gates de /consolidate
+        // (procedencia-R2-03).
+        ...htmlReportVerdicts(backendReport),
         // pipeline-flujo-21: un consolidado BORRADOR (override del Doctor de
         // Datos) hace que el sello de procedencia del HTML lo aclare.
         ...(isProvisionalDraft(backendReport) ? { provisional: { active: true } } : {}),
