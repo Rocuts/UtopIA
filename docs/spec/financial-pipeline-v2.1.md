@@ -20,6 +20,10 @@
 > 9. **Auditoría (Parte IV) y meta-auditoría (Parte V).** La opinión y el sello quedan condicionados a la integridad aritmética determinista; sin dictamen del Revisor Fiscal la opinión es "no emitida" (nunca derivada del score de otros dominios). TTD = ID/UD o N/D. Reserva legal: obligatoria en S.A. (Art. 452 C.Co.) y Ltda. (Art. 371); en SAS sólo por estatutos. Capitalización: Art. 29 Ley 1258/2008 y tratamiento de los Arts. 30, 48-49 y 242 E.T.; el Art. 36-3 E.T. está derogado (Ley 2277/2022 art. 96). Empresa en marcha según Ley 2069/2020 art. 4 (los Arts. 457 num. 2, 458 y 459 C.Co. fueron derogados). Parte V: dimensiones sin fuente N/D fuera del promedio, umbrales sin redondeo previo, Exactitud bloqueante.
 > 10. **Defensa Art. 647 (Corrección 9).** Una sola nota de criterios contables y soporte; el Art. 647 sólo se menciona respecto de declaraciones tributarias (interpretación razonable con hechos y cifras completos y verdaderos), sin afirmar que "anula la sanción".
 > 11. **Exportación y emisión.** Excel, PDF y HTML se construyen desde el mismo JSON validado y el mismo balance preprocesado que usó /niif; informe sin balance verificado, con Partes II/III vacías o con salvedades en el acta o la Estrategia no se descarga. NIIF 18 no se cita como base (no incorporada al marco colombiano vigente).
+>
+> **Enmienda del 2026-09-24 (fase 2 de la auditoría integral; integración I1).** Numerada 13 para no chocar con la enmienda de otro paquete de la misma fase.
+>
+> 13. **Parte V — Transparencia (dimensión v2.1 #6).** En la tabla "MAPEO 14 → 12 DIMENSIONES", la fuente de la fila 6 es la **ponderación 90/10** que fija su nota: `round(0,9 × D9 Anti-alucinación + 0,1 × D6 Análisis estratégico)`, no el promedio simple `promedio(D9, D6)`. Si falta una de las dos, se usa la otra con aviso de mapeo de respaldo; si faltan ambas, las métricas `aiGovernance.antiHallucination` / `explainability` con la misma ponderación, o N/D fuera del promedio. Implementado en `quality/v21-mapping.ts` (`resolveTransparencyComposite`). El mapeo de D5, D7 y D13 (hoy sin dimensión v2.1) no cambia con esta enmienda.
 
 ---
 
@@ -885,6 +889,8 @@ La subvista v2.1 expone 12 dimensiones agrupadas en bloques A/B/C, derivadas det
 | 12 | C · IASB 2018 | Comparabilidad (Comparability) | D14 (Cobertura multiperiodo) + D12 (IFRS 18) |
 
 \* "Transparencia" es D9 dominante con D6 como ponderación secundaria (90/10) porque la transparencia del informe se evalúa principalmente como ausencia de alucinaciones + divulgación de supuestos del análisis.
+
+> **Enmendada el 2026-09-24:** la fila 6 de la tabla se lee con la ponderación 90/10 de esta nota, no como promedio simple. Ver la enmienda 13 al inicio de este documento.
 
 **Escala de score:** las dimensiones internas D1..D14 puntúan 0-100; la subvista v2.1 las normaliza a 0-10 (`scoreV21 = Math.round(scoreInterno / 10)`).
 

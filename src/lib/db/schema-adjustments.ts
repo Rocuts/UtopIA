@@ -176,7 +176,9 @@ export const deferredAssets = pgTable(
  * `provision_type`:
  *   - 'prima' (8.33% sobre salarios)
  *   - 'cesantias' (8.33%)
- *   - 'intereses_cesantias' (1% anual sobre cesantías acumuladas)
+ *   - 'intereses_cesantias' (12% anual sobre las cesantías acumuladas, Ley
+ *     52/1975 — PUC 2515 del corpus; sobre la base salarial equivale a
+ *     8,33% × 12% ≈ 1%, la tasa que usa provisions/calculator.ts)
  *   - 'vacaciones' (4.17%)
  *   - 'salud' (8.5% empleador)
  *   - 'pension' (12% empleador)

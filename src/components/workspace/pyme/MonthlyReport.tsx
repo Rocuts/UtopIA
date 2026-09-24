@@ -31,7 +31,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
-import { generateMonthlyReportPDF } from '@/lib/pyme/reportPDF';
+import { formatPymeMargin, generateMonthlyReportPDF } from '@/lib/pyme/reportPDF';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -251,7 +251,13 @@ export function MonthlyReport({ bookId, currency = 'COP' }: MonthlyReportProps) 
       )}
 
       {payload && (
-        <ReportView payload={payload} fmt={fmt} tt={tt} reviewT={t.pyme.review} />
+        <ReportView
+          payload={payload}
+          fmt={fmt}
+          tt={tt}
+          reviewT={t.pyme.review}
+          language={language === 'en' ? 'en' : 'es'}
+        />
       )}
     </div>
   );
@@ -264,13 +270,17 @@ interface ReportViewProps {
   fmt: Intl.NumberFormat;
   tt: ReturnType<typeof useLanguage>['t']['pyme']['report'];
   reviewT: ReturnType<typeof useLanguage>['t']['pyme']['review'];
+  language: 'es' | 'en';
 }
 
-function ReportView({ payload, fmt, tt, reviewT }: ReportViewProps) {
+function ReportView({ payload, fmt, tt, reviewT, language }: ReportViewProps) {
   const { totals, topIngresoCategories, topEgresoCategories, previous } =
     payload.summary;
 
-  const marginPctStr = `${(totals.margenPct * 100).toFixed(1)}%`;
+  // Sin ingresos el margen % no existe: N/D (N/A), nunca "0.0%". Los informes
+  // persistidos antes del cambio traen margenPct = 0; el helper decide por
+  // los ingresos. Coma decimal en español ("12,5%").
+  const marginPct = formatPymeMargin(totals, language);
 
   return (
     <div className="space-y-6">
@@ -301,8 +311,8 @@ function ReportView({ payload, fmt, tt, reviewT }: ReportViewProps) {
         />
         <KpiCard
           label={tt.margin_pct}
-          value={marginPctStr}
-          tone={totals.margenPct >= 0 ? 'success' : 'wine'}
+          value={marginPct.text}
+          tone={marginPct.tone === 'negative' ? 'wine' : 'success'}
         />
       </div>
 

@@ -136,8 +136,11 @@ const COP_TOKEN_SOURCE =
   String.raw`(\s*\))?` + // 7: paréntesis que cierra
   String.raw`(\s*%|\s*(?:MM|M|B|mil\s+millones|millones|billones|mil(?:es)?)(?![\p{L}\d]))?`; // 8: sufijo
 
-// "B" es la escala que imprime el dashboard de la Parte II (miles de
-// millones, `formatCopAsMillions`); "billones" es la escala colombiana (10^12).
+// "B" se sigue leyendo como miles de millones (10^9) sólo por compatibilidad
+// con textos ya generados o redactados por el LLM: el dashboard de la Parte II
+// imprime hoy siempre millones ("$2.000 M", `formatCopAsMillions`,
+// pipeline-flujo-20) y la spec v10.1 prohíbe "B". "billones" es la escala
+// colombiana (10^12).
 const ABBREVIATION_SCALE: Array<[RegExp, number]> = [
   [/^mil\s+millones$/, 1e9],
   [/^(?:MM|M|millones)$/, 1e6],

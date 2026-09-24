@@ -462,7 +462,7 @@ Mantén estos tokens y nombres de clase. El agente debe respetarlos para que el 
 - Eyebrow (ew): 8pt / sans / weight 600 / tracked 0.15em / uppercase / accent
 
 **Formato numérico estricto:**
-- KPIs / portada / análisis editorial: abreviado · `$2.429 M` o `$2,4 B`.
+- KPIs / portada / análisis editorial: abreviado en millones · `$2.429 M` (o `$2.429,1 M`). NUNCA `B` ni "billones" para miles de millones: en español un billón es 10^12 y `$2,4 B` se lee como dos billones. *(Corrección 2026-09-24, pipeline-flujo-20: la versión anterior ofrecía `$2,4 B`; alinea la spec con `formatCopAsMillions` del dashboard ejecutivo.)*
 - Estados financieros completos: cifra completa con punto de miles · `$2.429.105.532`.
 - Notas: abreviado con detalle entre paréntesis donde aporte · `$108,8 M ($108.766.861)`.
 - Porcentajes: un decimal · `91,7%`; dos solo si significativo · `0,52%`.

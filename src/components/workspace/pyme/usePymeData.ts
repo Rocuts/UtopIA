@@ -38,7 +38,8 @@ export interface PymeMonthTotals {
   ingresos: number;
   egresos: number;
   margen: number;
-  margenPct: number;
+  /** Fracción margen / ingresos; `null` (N/D) si el mes no tiene ingresos. */
+  margenPct: number | null;
 }
 
 export interface PymeSummaryData {

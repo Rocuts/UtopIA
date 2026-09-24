@@ -16,9 +16,11 @@
 //   - growthOverride: el usuario ajusta el "Crecimiento Estimado" desde la UI
 //     (-5%, 0%, +5%, +10%, custom). Sustituye al factor base 1.0.
 //   - ipcRate: indexa los GASTOS FIJOS (PUC 5105/5120/5135) anualmente.
-//     Sin valor del usuario se usa un SUPUESTO DE ESCENARIO del 4,5 % anual:
-//     no es un dato del DANE ni la meta del BanRep, y la UI debe rotularlo
-//     con `describeIpcAssumption` (ratios-kpis-29).
+//     Sólo un llamador programático puede fijarlo: la UI NO expone hoy un
+//     control para esa tasa, y ningún llamador la pasa. Sin valor se usa un
+//     SUPUESTO DE ESCENARIO del 4,5 % anual (no es un dato del DANE ni la
+//     meta del BanRep) que FuturoTrendBars rotula con `describeIpcAssumption`
+//     (ratios-kpis-29).
 //   - capexEvents: el usuario añade "Eventos de Futuro" (compra de maquinaria,
 //     pago extra, etc.) que se restan a la caja en el mes correspondiente
 //     bajo TODOS los escenarios.
@@ -82,13 +84,15 @@ const FACTOR_CONSERVADOR = 0.85;
 const FACTOR_AGRESIVO = 1.10;
 
 /** Supuesto de ESCENARIO para indexar gastos fijos (4,5 % anual). No es un dato
- *  oficial ni la meta del BanRep; el usuario puede cambiarlo en la UI. */
+ *  oficial ni la meta del BanRep. La UI no permite cambiarlo: sólo lo rotula
+ *  (FuturoTrendBars, vía `describeIpcAssumption`). */
 export const IPC_DEFAULT = 0.045;
 
 /** Rótulo del supuesto de indexación que usa la proyección. */
 export interface IpcAssumption {
   rate: number;
-  /** 'supuesto_escenario' = valor por defecto sin fuente; 'usuario' = lo fijó el usuario. */
+  /** 'supuesto_escenario' = valor por defecto sin fuente; 'usuario' = lo fijó
+   *  el llamador con `ipcRate` (hoy ninguna vista lo hace). */
   origen: 'supuesto_escenario' | 'usuario';
   labelEs: string;
   labelEn: string;

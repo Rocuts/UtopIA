@@ -286,7 +286,7 @@ export const RetencionesAnalysisSchema = z.object({
     .nullable()
     .describe('Posicion de renta = (1355 renta + 1805 fiscal) - 2404. Positivo=saldo a favor, negativo=saldo a pagar.'),
   evaluacion: z.string().min(1).describe('Conclusion breve sobre la posicion fiscal'),
-  reference: NormaRef.describe('Norma de respaldo (Art. 850 E.T., Decreto 2235/2017, etc.)'),
+  reference: NormaRef.describe('Norma de respaldo (Art. 850 E.T.; DUR 1625/2016 Arts. 1.6.1.21.1 y ss., devoluciones y compensaciones; etc.)'),
 });
 export type RetencionesAnalysisJson = z.infer<typeof RetencionesAnalysisSchema>;
 
@@ -716,7 +716,8 @@ export type FiscalReviewGoingConcernJson = z.infer<typeof FiscalReviewGoingConce
 //   3.  Variacion de proveedores anormal
 //   4.  Saldo retenciones a favor (Cta. 1355) creciente
 //   5.  Cumplimiento Formato 2516 / Conciliacion fiscal
-//   6.  Cumplimiento Beneficiario Final UIAF
+//   6.  Cumplimiento Beneficiario Final — RUB DIAN (Art. 631-6 E.T., mod. Ley
+//       2155/2021; el registro lo administra la DIAN, no la UIAF)
 //
 // Auditoría 2026-09 (auditoria-calidad-23): esos 6 indicadores no eran los
 // del spec v2.1 Parte IV Dictamen 4 §4 y exigían bandas sectoriales no

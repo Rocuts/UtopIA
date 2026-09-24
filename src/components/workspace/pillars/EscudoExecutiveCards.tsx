@@ -19,6 +19,7 @@ import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
 
 import { CountUp } from '@/components/ui/ParallaxWrapper';
 import { Card } from '@/components/ui/Card';
+import { formatBigCop, formatDecimal, formatPct } from '@/lib/charts/format';
 import type {
   ExecutiveCard,
   ExecutiveCardColor,
@@ -194,9 +195,9 @@ function formatCardValue(
 ): string {
   if (value === null) return '—';
   if (key === 'autonomia') return formatDays(value, isEs);
-  if (unit === 'cop') return formatCopAbbr(value);
-  if (unit === 'pct') return `${(value * 100).toFixed(1)}%`;
-  if (unit === 'ratio') return value.toFixed(2);
+  if (unit === 'cop') return formatBigCop(value, isEs ? 'es' : 'en');
+  if (unit === 'pct') return formatPct(value, 1, isEs ? 'es' : 'en');
+  if (unit === 'ratio') return formatDecimal(value, 2, isEs ? 'es' : 'en');
   return String(value);
 }
 
@@ -215,15 +216,15 @@ function formatDelta(
   }
   if (unit === 'cop') {
     const sign = value > 0 ? '+' : '−';
-    return `${sign}${formatCopAbbr(abs).replace(/^\$/, '$')}`;
+    return `${sign}${formatBigCop(abs, isEs ? 'es' : 'en')}`;
   }
   if (unit === 'pct') {
     const sign = value > 0 ? '+' : '−';
-    return `${sign}${(abs * 100).toFixed(1)} pp`;
+    return `${sign}${formatDecimal(abs * 100, 1, isEs ? 'es' : 'en')} pp`;
   }
   if (unit === 'ratio') {
     const sign = value > 0 ? '+' : '−';
-    return `${sign}${abs.toFixed(2)}`;
+    return `${sign}${formatDecimal(abs, 2, isEs ? 'es' : 'en')}`;
   }
   return null;
 }
@@ -233,25 +234,6 @@ function formatDays(value: number, isEs: boolean): string {
   if (value > 365) return isEs ? '∞ días' : '∞ days';
   const label = isEs ? 'días' : 'days';
   return `${Math.round(value)} ${label}`;
-}
-
-/** Formato COP abreviado: $X,XB / $X,XM / $X.XXX. Negativo se prefija con −. */
-function formatCopAbbr(amount: number): string {
-  const abs = Math.abs(amount);
-  const sign = amount < 0 ? '−' : '';
-  if (abs >= 1_000_000_000) {
-    const v = (amount / 1_000_000_000).toFixed(1).replace('.', ',');
-    return `${sign}$${v.replace(/^-/, '')}B`;
-  }
-  if (abs >= 1_000_000) {
-    const v = (amount / 1_000_000).toFixed(0);
-    return `${sign}$${v.replace(/^-/, '')}M`;
-  }
-  if (abs >= 1_000) {
-    const v = (amount / 1_000).toFixed(0);
-    return `${sign}$${v.replace(/^-/, '')}K`;
-  }
-  return `${sign}$${Math.abs(amount).toFixed(0)}`;
 }
 
 // ---------------------------------------------------------------------------

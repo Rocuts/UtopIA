@@ -1,6 +1,7 @@
 // reportes-export-22 — informe mensual Pyme (reportPDF.ts).
 //   - El margen se imprimía '12.5%' (punto decimal) y, sin ingresos, '0.0%' en
-//     verde: la API entrega margenPct = 0 cuando ingresos = 0.
+//     verde: la API entregaba margenPct = 0 cuando ingresos = 0 (ahora null;
+//     los informes persistidos antes del cambio siguen trayendo 0).
 //   - Las alertas sólo imprimían la primera línea y el ícono '⚠' no existe en
 //     helvetica (WinAnsi).
 //   - Con jspdf-autotable v5 `doc.autoTable` no existe (el import por efecto
@@ -62,6 +63,18 @@ describe('formatPymeMargin', () => {
       tone: 'neutral',
     });
   });
+  // Integración fase 2: la API entrega margenPct = null sin ingresos.
+  it('margenPct null (API actual) → N/D; en inglés N/A y punto decimal', () => {
+    expect(formatPymeMargin({ ingresos: 0, margen: -500_000, margenPct: null })).toEqual({
+      text: 'N/D',
+      tone: 'neutral',
+    });
+    expect(formatPymeMargin({ ingresos: 0, margen: -500_000, margenPct: null }, 'en').text).toBe('N/A');
+    expect(formatPymeMargin({ ingresos: 8_000_000, margen: 1_000_000, margenPct: 0.125 }, 'en')).toEqual({
+      text: '12.5%',
+      tone: 'positive',
+    });
+  });
 });
 
 describe('formatPymeCop', () => {
@@ -83,12 +96,14 @@ describe('generateMonthlyReportPDF', () => {
   });
 
   it('sin ingresos imprime N/D en el margen', () => {
-    const texts = pdfTexts(payload({ ingresos: 0, egresos: 500_000, margen: -500_000, margenPct: 0 }));
-    const i = texts.indexOf('MARGEN');
-    expect(i).toBeGreaterThanOrEqual(0);
-    expect(texts[i + 1]).toBe('N/D');
-    expect(texts).not.toContain('0.0%');
-    expect(texts).not.toContain('0,0%');
+    for (const margenPct of [0, null]) {
+      const texts = pdfTexts(payload({ ingresos: 0, egresos: 500_000, margen: -500_000, margenPct }));
+      const i = texts.indexOf('MARGEN');
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(texts[i + 1]).toBe('N/D');
+      expect(texts).not.toContain('0.0%');
+      expect(texts).not.toContain('0,0%');
+    }
   });
 
   it('imprime el mensaje completo de cada alerta y sin el glifo ⚠', () => {

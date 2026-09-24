@@ -164,7 +164,7 @@ const TEMPLATES: TemplateDict = {
       es: {
         subjectTpl: '💰 Anomalía de Valor: Margen inusualmente alto detectado.',
         hallazgoTpl:
-          'Tu margen bruto reportado es {{margen_bruto_pct}}% y los días de inventario son {{dias_inventario}}.',
+          'Tu margen bruto reportado es {{margen_bruto_pct}} y los días de inventario son {{dias_inventario}}.',
         impactoTpl: 'Tu rentabilidad podría estar inflada por falta de registro de costos.',
         accionLabelTpl: 'Revisar registro de costos',
         accionHrefTpl: '/workspace/contabilidad/mayor',
@@ -172,7 +172,7 @@ const TEMPLATES: TemplateDict = {
       en: {
         subjectTpl: '💰 Value Anomaly: Unusually high margin detected.',
         hallazgoTpl:
-          'Reported gross margin is {{margen_bruto_pct}}% with {{dias_inventario}} inventory days.',
+          'Reported gross margin is {{margen_bruto_pct}} with {{dias_inventario}} inventory days.',
         impactoTpl: 'Profitability may be inflated by missing cost entries.',
         accionLabelTpl: 'Review cost entries',
         accionHrefTpl: '/workspace/contabilidad/mayor',
