@@ -1045,6 +1045,20 @@ export const dict = {
           'Tiene aportes a pensión que se descuentan del SIMPLE y falta el componente de ICA consolidado de su municipio (Art. 903 par. 4 E.T.). Consúltelo con su contador.',
         saveDisabled: 'Para guardar la comparación complete el margen y la tarifa de ICA.',
       },
+      // ICU-08 (re-auditoría 2026-09-24): MiHistoricoView estaba sólo en español.
+      historico: {
+        title: 'Histórico',
+        locale: 'es-CO',
+        ingresos6m: 'Ingresos 6 meses',
+        egresos6m: 'Egresos 6 meses',
+        margenAcumulado: 'Margen acumulado',
+        ultimos6: 'Últimos 6 meses',
+        actualizar: 'Actualizar',
+        ingresos: 'Ingresos',
+        egresos: 'Egresos',
+        cargando: 'Cargando…',
+        sinDatos: 'Sin datos',
+      },
     },
     settings: {
       title: 'Configuración',
@@ -2848,6 +2862,19 @@ export const dict = {
         noRecomendacionPension:
           'You have pension contributions deductible from the SIMPLE tax and the consolidated municipal ICA component is missing (Art. 903 par. 4 Tax Code). Check with your accountant.',
         saveDisabled: 'To save the comparison, fill in the margin and the ICA rate.',
+      },
+      historico: {
+        title: 'History',
+        locale: 'en-US',
+        ingresos6m: 'Income, 6 months',
+        egresos6m: 'Expenses, 6 months',
+        margenAcumulado: 'Cumulative margin',
+        ultimos6: 'Last 6 months',
+        actualizar: 'Refresh',
+        ingresos: 'Income',
+        egresos: 'Expenses',
+        cargando: 'Loading…',
+        sinDatos: 'No data',
       },
     },
     settings: {
