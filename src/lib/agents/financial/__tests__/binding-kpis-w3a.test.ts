@@ -136,7 +136,7 @@ describe('bloque vinculante — comparativo de saldos de apertura (ingesta-09)',
     const comparativeSection = block.slice(block.indexOf('=== Periodo comparativo (2024)'));
     expect(comparativeSection).toMatch(/saldos de apertura/i);
     expect(lineOf(block, '- Utilidad Neta:')).toMatch(/^- Utilidad Neta: ND/);
-    expect(lineOf(block, '- Ingresos:')).toMatch(/^- Ingresos: ND/);
+    expect(lineOf(block, '- Ingresos netos')).toMatch(/^- Ingresos netos \(neto de devoluciones 4175\): ND/);
     // Los saldos del ESF de apertura sí son comparables.
     expect(lineOf(block, '- Activo:')).not.toMatch(/ND/);
   });

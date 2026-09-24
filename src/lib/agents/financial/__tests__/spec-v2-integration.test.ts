@@ -9,7 +9,7 @@
 //   Test 5 — R17 proveedores Cta 22 saldo débito dispara finding informativo.
 //   Test 6 — periodoTipo='parcial' produce NOTA EXPLICATIVA (no OBLIGATORIA).
 //   Test 7 — 14 KPIs determinísticos presentes en controlTotals.
-//   Test 8 — renderSnapshotLines emite ingresos BRUTO y NETO de devoluciones.
+//   Test 8 — renderSnapshotLines emite ingresos operacionales y NETOS de devoluciones (W5-2).
 //
 // Sin OpenAI key — fixtures CSV determinísticos; sin mocks de LLM.
 // Refs: docs/spec/financial-pipeline-v2.md — Partes 1.3, 2, 3, 5, 6.
@@ -782,12 +782,12 @@ describe('Wave 2.F7 — Test 7 — 14 KPIs determinísticos en controlTotals', (
 });
 
 // ---------------------------------------------------------------------------
-// Test 8 — renderSnapshotLines emite ingresos BRUTO y NETO de devoluciones
+// Test 8 — renderSnapshotLines emite ingresos operacionales y NETOS de devoluciones (W5-2)
 // Spec v2.0 Parte 1.3 — Devoluciones 4175 deben salir explícitamente en el
 // bloque de totales vinculantes para que el LLM no confunda qué cifra usar.
 // ---------------------------------------------------------------------------
-describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + neto', () => {
-  it('preprocessed con devoluciones → bloque contiene etiqueta bruto Y etiqueta neto 4175', () => {
+describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos operacionales + neto', () => {
+  it('preprocessed con devoluciones → bloque contiene ingresos operacionales netos Y etiqueta neto 4175', () => {
     // El bloque de totales vinculantes que el orchestrator inyecta a los agentes
     // (via renderSnapshotLines) DEBE emitir AMBAS cifras con etiquetas inequívocas.
     // Spec Parte 1.3: el LLM debe usar ingresosNetos para el P&L, pero siempre
@@ -809,8 +809,10 @@ describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + ne
     const lines = renderSnapshotLines(snap);
     const block = lines.join('\n');
 
-    // Debe contener la línea de ingresos BRUTOS (Clase 4).
-    expect(block).toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    // W5-2 (recalculo-final-01): ya no se publica la Σ firmada de la clase 4
+    // como «bruto»; los ingresos operacionales netos (41 − 4175) van aparte.
+    expect(block).not.toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    expect(block).toMatch(/Ingresos operacionales netos \(grupo 41 − devoluciones 4175\): \$185\.000\.000,00/);
 
     // Debe contener la línea de ingresos NETOS con la etiqueta 4175.
     expect(block).toMatch(/Total Ingresos Netos \(neto de devoluciones 4175\)/);
@@ -819,7 +821,7 @@ describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + ne
     expect(block).toMatch(/devoluciones 4175 detectadas/);
   });
 
-  it('preprocessed sin devoluciones → brutos presentes, línea neta muestra $0 en devoluciones', () => {
+  it('preprocessed sin devoluciones → operacionales presentes, línea neta muestra $0 en devoluciones', () => {
     // Sin cuentas 4175, ingresosNetos = ingresos brutos y totalDevoluciones = 0.
     // renderSnapshotLines emite la línea neta siempre que ingresosNetos esté
     // definido (sea igual al bruto o menor); en este caso muestra "$0,00" como
@@ -836,8 +838,9 @@ describe('Wave 2.F7 — Test 8 — renderSnapshotLines emite ingresos bruto + ne
     const lines = renderSnapshotLines(pre.primary);
     const block = lines.join('\n');
 
-    // Brutos siempre presentes.
-    expect(block).toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    // Ingresos operacionales netos siempre presentes (W5-2: sin la Σ firmada «bruto»).
+    expect(block).not.toMatch(/Total Ingresos \(bruto Clase 4\)/);
+    expect(block).toMatch(/Ingresos operacionales netos \(grupo 41 − devoluciones 4175\): \$50\.000\.000,00/);
     // La línea neta se emite con devoluciones = $0.
     expect(block).toMatch(/Total Ingresos Netos \(neto de devoluciones 4175\)/);
     // La cantidad de devoluciones detectadas debe ser $0,00.

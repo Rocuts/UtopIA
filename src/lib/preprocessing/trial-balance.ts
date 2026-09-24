@@ -196,27 +196,34 @@ export interface ControlTotalsRaw {
 /**
  * ITEM 2 — Sincronización Impuesto Renta (Elite Protocol Layer 2 + 3).
  * Resultado de la R16 (`r16-tax-anticipo-netting`): bruto del pasivo
- * (PUC 2404) − anticipo en activo (PUC 135515) = neto a pagar a la DIAN.
+ * (PUC 2404) − suma de créditos de renta (retenciones y anticipos de renta
+ * 1355/1805, regla única de `@/lib/accounting/renta-credit`) = neto a pagar
+ * a la DIAN.
  *
  * Sustento NIIF + fiscal:
  *   - NIC 12 §71 — compensación de impuestos corrientes cuando la entidad
  *     tiene derecho legal exigible.
+ *   - Arts. 365, 373 y 807 E.T. — retenciones y anticipo imputables a renta.
  *   - Art. 850 E.T. — devolución / aplicación de saldos a favor.
  *   - Práctica revisoría fiscal Ley 43/1990 — el "Neto a Pagar" es la
  *     exposición real al fisco, no el bruto.
  *
- * Why: si la cuenta 2404 reporta $10M y la 135515 reporta $3.8M de anticipo,
+ * Why: si la cuenta 2404 reporta $10M y los créditos de renta suman $3.8M,
  * el revisor fiscal espera ver "Impuesto Renta — Neto a Pagar = $6.2M" en
  * el Balance. Presentar sólo el bruto sobre-expone la posición fiscal del
- * usuario y desinforma al órgano social. R16 NO muta 2404 ni 135515
+ * usuario y desinforma al órgano social. R16 NO muta 2404 ni 1355/1805
  * (siguen en el detalle); sólo expone el neto como ancla vinculante.
  */
 export interface ImpuestoRentaNeto {
   /** Saldo bruto del pasivo PUC 2404 (Impuesto de Renta por Pagar). */
   brutoPasivo2404: number;
-  /** Saldo del anticipo PUC 135515 (Anticipos del Impuesto de Renta). */
+  /**
+   * Suma de créditos de renta (regla única): retenciones y anticipos de renta
+   * en 1355/1805 según `filtrarCreditoRenta`. Conserva el nombre histórico
+   * por contrato; NO es sólo la subcuenta 135515.
+   */
   anticipoActivo135515: number;
-  /** Neto = bruto − anticipo, presentación NIIF/NIC 12 §71. */
+  /** Neto = bruto − créditos de renta, presentación NIIF/NIC 12 §71. */
   netoAPagar: number;
   /** True si hay material netting (ambos saldos > 0 con tolerancia $1k). */
   applicable: boolean;

@@ -21,6 +21,10 @@ export async function runPlaneacionAgent(
   const pp = input.preprocessed.primary;
 
   const system = buildPlaneacionPrompt(input.language, input.company.nit);
+  // Ingresos NETOS de devoluciones 4175, no la Σ firmada de la clase 4
+  // (`cents.ingresos` cambia con la convención de signos del ERP;
+  // recalculo-final-01). Sin el ancla ⇒ N/D, nunca $0.
+  const ingresosNetosCents = pp.controlTotals.cents?.ingresosNetos;
 
   const userContent = `<context>
 ANCLAS_FISCALES_VINCULANTES (Bloque Âncora Capa 1 — no recalcular):
@@ -40,7 +44,7 @@ RESUMEN_BALANCE (controlTotals):
   Activo total: ${formatCopFromCents(BigInt(pp.controlTotals.cents?.activo ?? BigInt(0)))}
   Pasivo total: ${formatCopFromCents(BigInt(pp.controlTotals.cents?.pasivo ?? BigInt(0)))}
   Patrimonio: ${formatCopFromCents(BigInt(pp.controlTotals.cents?.patrimonio ?? BigInt(0)))}
-  Ingresos: ${formatCopFromCents(BigInt(pp.controlTotals.cents?.ingresos ?? BigInt(0)))}
+  Ingresos netos (neto de devoluciones 4175): ${ingresosNetosCents === undefined ? 'N/D' : formatCopFromCents(BigInt(ingresosNetosCents))}
   Utilidad neta: ${formatCopFromCents(BigInt(pp.controlTotals.cents?.utilidadNeta ?? BigInt(0)))}
 
 PERIODO: ${anchor.fuente.periodo}

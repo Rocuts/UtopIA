@@ -361,15 +361,15 @@ function renderMarkdown(json: TaxAuditReportJson, findings: AuditFinding[]): str
   lines.push(`- Referencia: ${iva.reference}`);
   lines.push('');
 
-  // 5. TMT
+  // 5. TTD — Tasa de Tributación Depurada (Art. 240 par. 6 E.T.)
   const tmt = json.tmtAnalysis!;
-  lines.push('## 5. TASA MINIMA DE TRIBUTACION (TMT)');
+  lines.push('## 5. TASA DE TRIBUTACION DEPURADA (TTD, ART. 240 PAR. 6 E.T.)');
   lines.push('');
   lines.push(`- Tasa minima exigida: ${tmt.tasaMinimaExigidaPct}%`);
   if (tmt.status === 'no_determinable') {
     lines.push(`- Tasa de tributacion depurada (TTD = ID / UD): N/D — ${TTD_NO_DETERMINABLE_REASON}`);
   } else {
-    lines.push(`- Tasa efectiva calculada: ${fmtPctOrNa(tmt.tasaEfectivaPct)}`);
+    lines.push(`- Tasa de tributacion depurada (TTD = ID / UD): ${fmtPctOrNa(tmt.tasaEfectivaPct)}`);
   }
   lines.push(`- Estado: ${tmtIcon(tmt.status)} ${tmt.status.replace(/_/g, ' ').toUpperCase()}`);
   lines.push(`- Referencia: ${tmt.reference}`);

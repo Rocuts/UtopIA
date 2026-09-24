@@ -127,8 +127,8 @@ function renderRiskAssessment(json: ComplianceValidationReportJson): string {
   return json.riskAssessments
     .map((r) => {
       const defense = r.art647DefenseAvailable
-        ? `\n- **Defensa Art. 647 E.T. (Diferencia de Criterio):** disponible.\n  - **Sustento:** ${r.art647DefenseRationale ?? '— (sustento doctrinal a confirmar)'}`
-        : '\n- **Defensa Art. 647 E.T.:** no aplicable a esta estrategia.';
+        ? `\n- **Interpretación razonable (Art. 647 par. 2 E.T.; exige hechos y cifras completos y verdaderos):** disponible.\n  - **Sustento:** ${r.art647DefenseRationale ?? '— (sustento doctrinal a confirmar)'}`
+        : '\n- **Interpretación razonable (Art. 647 par. 2 E.T.):** no aplicable a esta estrategia.';
       return [
         `### Estrategia ${r.recommendationId}`,
         `- **Riesgo:** ${r.riskLevel.toUpperCase()}`,

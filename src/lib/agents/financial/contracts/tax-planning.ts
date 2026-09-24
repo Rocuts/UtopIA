@@ -21,7 +21,8 @@ import { CompanyInfoSchema, MoneyCop, NormaRef } from './base';
 // ---------------------------------------------------------------------------
 // El optimizador produce el diagnóstico tributario actual, las estrategias
 // rankeadas con ahorro proyectado en COP, la proyección consolidada y la hoja
-// de ruta de implementación. El cálculo dual TMT (parág. 6 Art. 240 E.T.) es
+// de ruta de implementación. El cálculo dual de la Tasa de Tributación Depurada
+// (TTD, Art. 240 par. 6 E.T.) es
 // invariante crítico — vive en `currentDiagnosis.dualCalculation`.
 // ---------------------------------------------------------------------------
 
@@ -70,7 +71,7 @@ export const CurrentDiagnosisSchema = z.object({
     .nullable()
     .describe('Tasa efectiva actual = Impuesto a cargo / UAI × 100. null si UAI no es positiva o el impuesto a cargo es N/D.'),
   taxableIncomeCents: MoneyCop.describe('Renta líquida gravable depurada del periodo'),
-  accountingProfitBeforeTaxCents: MoneyCop.describe('Utilidad contable antes de impuestos (UAI) — base de la TMT'),
+  accountingProfitBeforeTaxCents: MoneyCop.describe('UAI contable — punto de partida de la utilidad depurada; no es base fiscal ni la TTD'),
   dualCalculation: DualCalculationSchema,
   currentBenefitsUsed: z
     .array(

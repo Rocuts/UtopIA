@@ -122,7 +122,7 @@ describe('renderTaxDictamenMarkdown — v2.1', () => {
     expect(md).toContain('## 2. IMPUESTO DE RENTA — CASCADA TEORICA');
     expect(md).toContain('## 3. RETENCIONES, ANTICIPOS Y POSICION FISCAL NETA');
     expect(md).toContain('## 4. IVA / ICA / IMPUESTOS TERRITORIALES');
-    expect(md).toContain('## 5. TASA MINIMA DE TRIBUTACION (TMT)');
+    expect(md).toContain('## 5. TASA DE TRIBUTACION DEPURADA (TTD, ART. 240 PAR. 6 E.T.)');
     expect(md).toContain('## 6. RIESGOS TRIBUTARIOS PRIORIZADOS');
     expect(md).toContain('## 7. CALENDARIO TRIBUTARIO 2026');
     expect(md).toContain('## 8. OPINION TRIBUTARIA FORMAL');

@@ -37,21 +37,26 @@ const RAIZ = path.resolve(process.cwd(), 'src');
 /**
  * Cuarentena declarada. Clave: `<ruta relativa>::<función>`.
  *
- * Las razones salen de la propia auditoría, que además REFUTÓ dos correcciones
- * que parecían obvias: conectar `detectInflatedCash` tal cual tumbaría el 100%
- * de los informes.
+ * Las razones salen de la propia auditoría. Una entrada puede describir un
+ * validador que SÍ corre en producción pero sólo dentro de otra función de su
+ * mismo fichero (el inventario cuenta llamadores en otros ficheros): el export
+ * suelto existe para sus pruebas unitarias.
  */
 const CUARENTENA: Record<string, string> = {
+  // Corregido en e2e-niif-03 (re-auditoría 2026-09-24); antes leía «4.2» del
+  // encabezado «### 4.2 Saldo Inicial Depurado» y tumbaba el 100 % de los informes.
   'src/lib/agents/financial/validators/report-validator.ts::detectInflatedCash':
-    'ROTO: lee "4.2" del encabezado "### 4.2 Saldo Inicial Depurado" y emite hard-fail idéntico ' +
-    'en el informe correcto y en el inflado. Conectarlo tal cual tumba el 100% de los informes ' +
-    '(clasifica tier C → el camino legacy lanza). Arreglar el parser ANTES de cablear.',
+    'Corregido (e2e-niif-03): ignora encabezados y sólo lee el primer monto tras el rótulo del ' +
+    'saldo inicial. Se ejecuta en producción dentro de validateConsolidatedReport (/consolidate ' +
+    'y camino legacy); el export suelto existe sólo para sus pruebas unitarias.',
   'src/lib/agents/financial/validators/report-validator.ts::detectMissingWorkingCapital':
-    'Proyección Big Four — pendiente de cablear junto con el resto de la superficie 7. ' +
-    'Sin medición de falsos positivos todavía.',
+    'Se ejecuta en producción como aviso dentro de validateConsolidatedReport (/consolidate y ' +
+    'camino legacy); no avisa cuando la Parte II declara la proyección bloqueada por la puerta ' +
+    'de liquidez. El export suelto existe sólo para sus pruebas unitarias.',
   'src/lib/agents/financial/validators/report-validator.ts::detectMissingControlKPIs':
-    'Proyección Big Four — pendiente de cablear junto con el resto de la superficie 7. ' +
-    'Sin medición de falsos positivos todavía.',
+    'Se ejecuta en producción como aviso dentro de validateConsolidatedReport (/consolidate y ' +
+    'camino legacy); no avisa cuando la Parte II declara la proyección bloqueada por la puerta ' +
+    'de liquidez. El export suelto existe sólo para sus pruebas unitarias.',
   // validateFiscalAnchorAll salió de la cuarentena en la integración W3-B
   // (auditoría 2026-09, tributario-modulos-03): corregidas L3.5/L3.6 (plazos
   // del Decreto 2229/2023), L3.7 (lista blanca de crédito de renta), las normas

@@ -116,12 +116,12 @@ function ingresosComparativoCents(
 //     (UAI −$460.000.000): el factor publicaba 30/100 "medio" con el texto
 //     "tasa efectiva nula sobre utilidad" para una empresa sin utilidad.
 //
-//   · UAI > 0 pero SIN grupo 54 en el balance — el impuesto no está causado.
-//     Es un defecto de CIERRE contable (NIC 12 §46 exige reconocer el gasto
-//     por impuesto corriente), no evidencia de que la empresa tribute poco:
-//     no se puede afirmar cuánto tributa quien todavía no registró la
-//     provisión. El motor YA denuncia este hecho por su propio canal —
-//     `A5_SIN_PROVISION`, severidad `error`, en `alerts.ts` — así que sumarle
+//   · UAI > 0 pero SIN grupo 54 en el balance — no hay gasto de renta
+//     causado. No es evidencia de que la empresa tribute poco: la UAI no es
+//     base fiscal (Art. 26 E.T.) y si hay impuesto por causar sólo lo dice la
+//     depuración de la renta. El motor YA reporta este hecho por su propio
+//     canal — `A5_SIN_PROVISION`, severidad `info`, en `alerts.ts` (Art. 26
+//     E.T. + NIIF PYMES Secc. 29 / NIC 12; re-auditoría 2026-09, NM-05) — así que sumarle
 //     además 30 puntos de riesgo cuenta el mismo hecho dos veces y, sobre el
 //     balance del cliente real, era el 43% de un score de 70/100 que enciende
 //     Modo Supervivencia (`score > 60`).
@@ -156,9 +156,9 @@ function factorTet(
     };
   }
 
-  // Rama 2 — hay base gravable pero el impuesto no está causado: es un
-  // hallazgo de cierre contable, no de tasa efectiva. Cero puntos de riesgo;
-  // el hecho viaja por `A5_SIN_PROVISION` (severidad `error`).
+  // Rama 2 — UAI positiva sin gasto de renta causado (grupo 54 = $0): no es
+  // un hallazgo de tasa efectiva. Cero puntos de riesgo; el hecho viaja por
+  // `A5_SIN_PROVISION` (severidad `info`).
   const sinProvision =
     impuestoCausadoCents === ZERO ||
     anchor.alertas.some((a) => a.codigo === 'A5_SIN_PROVISION');
@@ -168,11 +168,11 @@ function factorTet(
       descripcion,
       puntos: 0,
       detalle:
-        `Utilidad antes de impuestos de ${formatCopFromCents(f01Cents)} SIN provisión de renta ` +
-        'registrada (Clase 54 = $0): los libros no están cerrados y la tasa efectiva todavía no ' +
-        'es medible. AVISO — se reporta por la alerta A5_SIN_PROVISION (Art. 240 E.T. + NIC 12 ' +
-        '§46), no como puntaje de riesgo: causar el impuesto es un ajuste de cierre, no un ' +
-        'indicio de elusión.',
+        `Utilidad antes de impuestos de ${formatCopFromCents(f01Cents)} sin gasto de renta ` +
+        'causado (grupo 54 = $0): la tasa efectiva contable no es medible. AVISO — se reporta por ' +
+        'la alerta informativa A5_SIN_PROVISION (Art. 26 E.T. + NIIF PYMES Secc. 29 / NIC 12), no ' +
+        'como puntaje de riesgo: si hay impuesto por causar lo determina la depuración de la ' +
+        'renta, no la UAI.',
     };
   }
 

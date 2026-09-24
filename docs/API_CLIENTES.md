@@ -127,10 +127,14 @@ curl -X POST $BASE/api/v1/trial-balances \
   da los mismos totales y el mismo `status`. `period_label` opcional cuando el archivo no trae año.
 - Responde `201` con `status: balanced|unbalanced`, `control_totals` en centavos-string
   (activo, pasivo, patrimonio, ingresos_netos, `equation_delta`) y conteo de findings.
-  `balanced` exige `equation_delta = 0` **y** ningún motivo de integridad; `unbalanced` cubre
-  el descuadre del archivo de origen y también los motivos de integridad aunque la ecuación
-  cuadre (importes ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos que no son
-  cuentas PUC), que el detalle lista en `validation_reasons[]` (spec `api-clientes-v1` §7).
+  `balanced` exige `equation_delta = 0` **y** ningún motivo persistente en ningún periodo del
+  archivo; `unbalanced` cubre el descuadre del archivo de origen y también, aunque la ecuación
+  cuadre, los motivos persistentes: integridad de la lectura (importes ilegibles, columnas de
+  saldo ambiguas, filas desplazadas, códigos que no son cuentas PUC), importes fuera del rango
+  de precisión monetaria, unidad declarada ("en miles/millones") sin confirmar y bloqueos del
+  curador posteriores al Cierre Virtual R8 (p. ej. CUR-R12). El detalle los lista en
+  `validation_reasons[]` (spec `api-clientes-v1` §7). El riesgo de liquidez (activo corriente
+  < pasivo corriente) **no** bloquea ni cambia el `status` (contrato `tb-2026-09-24.2`).
   **Un balance descuadrado NO es error**: el propósito del recurso es reportarlo.
 - `GET /v1/trial-balances/{id}` **recomputa** desde las filas crudas con el preprocesador
   vigente (filosofía anti-desync del repo: no se persiste el `PreprocessedBalance`) y añade

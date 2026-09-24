@@ -35,7 +35,7 @@
 //     12 meses de resultados) no compara sus ingresos contra el umbral.
 // ---------------------------------------------------------------------------
 
-import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
+import { smmlvVerificado } from '@/lib/tax/taxCalculator';
 
 export const SAGRILAFT_UMBRAL_SMMLV = 40_000;
 
@@ -46,18 +46,12 @@ export const SAGRILAFT_NOTA_VIGENCIA =
   'Vigencia por confirmar: la Circular Externa 100-000020 de 2026 (umbral en UVB, transición hasta el 31-05-2027) no está en el corpus normativo verificado; se aplica el umbral de la CE 100-000016/2020.';
 
 /**
- * SMMLV por año con fuente verificada en el repo (2026: Decreto 1469/2025,
- * `SMMLV_2026` de `@/lib/tax/taxCalculator`). Un año que no esté aquí no se
- * sustituye por otro.
+ * SMMLV del año, o `null` si el repo no tiene la constante verificada. Lee la
+ * constante única `SMMLV_POR_ANIO` de `@/lib/tax/taxCalculator` (2026:
+ * Decreto 1469/2025); un año que no esté allí no se sustituye por otro.
  */
-const SMMLV_POR_ANIO: Readonly<Record<number, number>> = {
-  2026: SMMLV_2026,
-};
-
-/** SMMLV del año, o `null` si el repo no tiene la constante verificada. */
 export function smmlvDelAnio(anio: number | null | undefined): number | null {
-  if (typeof anio !== 'number') return null;
-  return SMMLV_POR_ANIO[anio] ?? null;
+  return smmlvVerificado(anio);
 }
 
 export interface SagrilaftInputs {

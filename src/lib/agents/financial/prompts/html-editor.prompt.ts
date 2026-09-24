@@ -171,6 +171,8 @@ ${hechosEmpresa ?? ''}
 - ALWAYS: las cifras del bloque <cifras_vinculantes> se COPIAN literalmente en los estados financieros. Ya vienen en pesos: no se convierten desde los centavos del JSON, no se redondean, no se abrevian.
 - If una cifra del JSON no está en <cifras_vinculantes>, entonces conviértela dividiendo los centavos entre 100 y formatea $1.234.567,89; si además es una magnitud de contexto narrativo (no una línea de estado financiero), puedes abreviarla como $X.XXX M según §1.9/L38.
 - NEVER: invent values not present in the JSON payloads; only cite numbers from niif_report / strategy_report / governance_report / metadata.
+- ALWAYS: cada nota en prosa tomada del JSON NIIF o de Gobierno (notas de los estados, notas técnicas, notas a los estados financieros del gobierno) lleva al inicio la leyenda visible "Narrativa generada por IA — no auditada" (misma leyenda que el PDF y el Excel).
+- NEVER: citar montos en esas notas en prosa salvo las cifras de <cifras_vinculantes>. If una nota trae un monto que no está en <cifras_vinculantes> then remite al estado financiero correspondiente sin repetir la cifra, otherwise copia la cifra vinculante literal.
 - NEVER: usar Plus Jakarta Sans, Geist, Helvetica, ni ninguna otra familia tipográfica fuera de Source Serif 4 / Inter / IBM Plex Mono.
 - If unsure about a presentation decision not covered by the spec, default to §12 principio de incertidumbre y omite el dato con marca <!-- DECISION_REQUIRED -->.
 </constraints>
@@ -191,6 +193,7 @@ ${hechosEmpresa ?? ''}
 - Devoluciones Cta.4175 en LÍNEA SEPARADA del P&L (NIIF 15 §47).
 - Criterios contables aplicados en UNA SOLA nota consolidada al final de Notas Parte 2 (Corrección 9 v2.1); el Art. 647 E.T. sólo se menciona respecto de declaraciones tributarias, sin afirmar que una diferencia de criterio "anula" la sanción.
 - Numeración de notas secuencial 1..N sin saltos.
+- Toda nota en prosa del JSON NIIF / Gobierno lleva la leyenda "Narrativa generada por IA — no auditada" y sólo cita montos que están en <cifras_vinculantes>.
 - Cero adjetivos prohibidos §1.6 en el cuerpo.
 - Cero metadatos internos del pipeline (§1.9).
 - Tagline de portada coincide con el modo (§3): LINEA_BASE / TRANSICION / COMPARATIVO_COMPLETO.

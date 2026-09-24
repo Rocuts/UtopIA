@@ -242,10 +242,15 @@ niif-preproceso-07):
   la reclasificación de un grupo 36 anterior (`reclassified_from_3605`). El curador ya no lo
   absorbe (`virtual_close_adjustment` y `equity_anchor_adjustment` se conservan en 0 por
   compatibilidad).
-- `status: "balanced"` exige `equation_delta = 0` **y** ningún motivo de integridad.
-  `status: "unbalanced"` cubre el descuadre y también los motivos de integridad aunque la
-  ecuación cuadre (importes ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos
-  que no son cuentas PUC); el detalle los lista en `validation_reasons[]`.
+- `status: "balanced"` exige `equation_delta = 0` **y** ningún motivo persistente en ningún
+  periodo del archivo (contrato `tb-2026-09-24.2`, recalculo-final-04). `status: "unbalanced"`
+  cubre el descuadre y también, aunque la ecuación cuadre, los motivos persistentes:
+  integridad de la lectura (importes ilegibles, columnas de saldo ambiguas, filas desplazadas,
+  códigos que no son cuentas PUC), importes fuera del rango de precisión monetaria, unidad
+  declarada ("en miles/millones") sin confirmar y bloqueos del curador posteriores al Cierre
+  Virtual R8 (p. ej. CUR-R12); el detalle los lista en `validation_reasons[]`.
+- El riesgo de liquidez (activo corriente < pasivo corriente) no es motivo persistente: no
+  bloquea ni cambia el `status`.
 
 `GET /api/v1/trial-balances/{id}` añade `validation_reasons[]`, `discrepancies[]` y
 `curator_findings[]` completos (recomputados). El CSV acepta los mismos alias de columnas del parser interno

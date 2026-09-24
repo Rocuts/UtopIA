@@ -10,7 +10,7 @@
 import 'server-only';
 
 import { getEmpleador114_1 } from '@/lib/db/workspace-empleador';
-import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
+import { smmlvVerificado } from '@/lib/tax/taxCalculator';
 
 /** true beneficiario · false no beneficiario · null no declarado. */
 export function getEmployer114_1(workspaceId: string): Promise<boolean | null> {
@@ -18,15 +18,12 @@ export function getEmployer114_1(workspaceId: string): Promise<boolean | null> {
 }
 
 /**
- * SMMLV por año con fuente verificada en el repo (Decreto 1469/2025 para
- * 2026). Otros años → null: la exoneración por trabajador queda N/D en vez de
- * compararse contra un salario mínimo de otro año.
+ * SMMLV del año en pesos con dos decimales, de la constante única
+ * `SMMLV_POR_ANIO` (`@/lib/tax/taxCalculator`). Año sin SMMLV verificado →
+ * null: la exoneración por trabajador queda N/D en vez de compararse contra
+ * un salario mínimo de otro año.
  */
-const SMMLV_POR_ANIO: Record<number, number> = {
-  2026: SMMLV_2026,
-};
-
 export function smmlvForYear(year: number): string | null {
-  const v = SMMLV_POR_ANIO[year];
-  return v === undefined ? null : v.toFixed(2);
+  const v = smmlvVerificado(year);
+  return v === null ? null : v.toFixed(2);
 }
