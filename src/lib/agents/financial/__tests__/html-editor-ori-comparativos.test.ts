@@ -384,3 +384,28 @@ describe('Maqueta de la re-auditoría (buildHtmlFull): H4 y H3', () => {
     expect(blocks(total, s).some((f) => /Comparativo del EFE\/ECP/.test(f.rule) && f.detail.includes('$88.000.000,00'))).toBe(true);
   });
 });
+
+describe('revisión F-html — encabezado "Total <componente>" del ECP', () => {
+  it('"Total reservas" es la columna de reservas, no el total del patrimonio: el ECP honesto no bloquea', () => {
+    const s = tresOri();
+    const h = buildHonestHtml(s.niif, { tweak: (x) => x.replace('<th>Reservas</th>', '<th>Total reservas</th>') });
+    expect(h).toContain('<th>Total reservas</th>');
+    expect(blocks(h, s).filter((f) => /Comparativo del EFE\/ECP/.test(f.rule))).toEqual([]);
+  });
+
+  it('"Total reservas" con la reserva de otra fila sigue bloqueando', () => {
+    const s = tresOri();
+    const open = s.niif.equityChanges.comparativeRows![0];
+    const reservas = BigInt(open.reservaLegal) + BigInt(open.otrasReservas);
+    const h = buildHonestHtml(s.niif, {
+      tweak: (x) => {
+        const y = x.replace('<th>Reservas</th>', '<th>Total reservas</th>');
+        const i = y.indexOf(`<td>${open.label}</td>`);
+        const end = y.indexOf('</tr>', i);
+        return y.slice(0, i) + y.slice(i, end).replace(`<td>${cop(reservas.toString())}</td>`, '<td>$9.000.000,00</td>') + y.slice(end);
+      },
+    });
+    expect(h).toContain('$9.000.000,00');
+    expect(blocks(h, s).some((f) => /Comparativo del EFE\/ECP/.test(f.rule) && f.detail.includes('$9.000.000,00'))).toBe(true);
+  });
+});

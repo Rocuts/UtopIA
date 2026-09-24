@@ -150,3 +150,49 @@ describe('narrativa-08 — las cifras del periodo afirmadas fuera de una propues
     expect(b).toHaveLength(1);
   });
 });
+
+// Revisión adversarial F-html: en la sección de recomendaciones la tarjeta
+// mezcla el diagnóstico (que la Parte II juzga) con la acción y el impacto
+// (que exime). Eximir TODA su prosa dejaba pasar cifras falsas del periodo.
+describe('revisión F-html — el diagnóstico dentro de la sección de recomendaciones se juzga', () => {
+  const reco = (inner: string) => page('Recomendaciones y plan de acción', `<h3>Prioridad alta · Sección 3</h3>${inner}`);
+
+  for (const p of [
+    'La utilidad neta de $4.000.000,00 limita el reparto de dividendos.',
+    'Utilidad neta: $4.000.000,00.',
+    'La utilidad neta registra $4.000.000,00 y no cubre la reserva.',
+    'El patrimonio al cierre, de $66.000.000,00, respalda el plan.',
+    'Con una utilidad neta del ejercicio de $4.000.000,00, la empresa debe reducir costos.',
+  ]) {
+    it(`bloquea: "${p}"`, () => {
+      expect(r6(reco(`<p>${p}</p>`))).toHaveLength(1);
+    });
+  }
+
+  it('el mismo diagnóstico en la tarjeta "El próximo cierre" bloquea', () => {
+    expect(r6(page('Análisis editorial', '<h2>El próximo cierre</h2><p>La utilidad neta de $4.000.000,00 limita el reparto.</p>'))).toHaveLength(1);
+  });
+
+  it('el diagnóstico honesto, la acción y el impacto de la misma tarjeta no bloquean', () => {
+    expect(
+      r6(
+        reco(
+          '<p>La utilidad neta de $20.000.000,00 cubre la reserva legal. Elevar la utilidad neta a $30 M con la revisión de precios.</p>' +
+            '<p>Impacto esperado: utilidad neta de $30.000.000,00.</p><p>Ahorro de $3.000.000,00 en la utilidad neta por menores provisiones.</p>' +
+            '<p>Menor utilidad neta, de $18.000.000,00, si no se ajustan precios.</p><p>La utilidad neta subiría a $25.000.000,00.</p>',
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('una sección de recomendaciones en inglés (imperativo no reconocible por su forma) sigue exenta', () => {
+    expect(r6(page('Recommendations and action plan', '<p>Raise EBITDA by $12 M.</p>'))).toEqual([]);
+    expect(r6(page('Three urgent actions', '<ol><li>Raise EBITDA by $12 M.</li></ol>'))).toEqual([]);
+    // Documento en inglés con un encabezado que no nombra la sección en inglés.
+    const en = reconcileBindingFigures(
+      `<html lang="en"><body>${BASE}${page('Recomendaciones', '<p>Raise EBITDA by $12 M.</p>')}</body></html>`,
+      { niifReport: NIIF, preprocessed: pp },
+    ).filter((f) => f.severity === 'block' && /concepto anclado/.test(f.rule));
+    expect(en).toEqual([]);
+  });
+});

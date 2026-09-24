@@ -1374,7 +1374,7 @@ function tablesWithHeading(document: ParsedDocument): Array<{ table: Element; he
 
 function cellTexts(row: Element): string[] {
   return Array.from(row.querySelectorAll('th, td')).map((c) =>
-    (c.textContent ?? '').replace(/ /g, ' ').replace(/\$\s+/g, '$').trim(),
+    (c.textContent ?? '').replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').trim(),
   );
 }
 
@@ -1399,7 +1399,7 @@ function foreignFigures(cell: string, allowed: Set<string>): string[] {
 }
 
 const foldLabel = (t: string) =>
-  t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 // ── EFE ─────────────────────────────────────────────────────────────────────
 
@@ -1480,7 +1480,6 @@ type EquityRowKind = 'opening' | 'closing' | 'balance' | 'movement';
 function equityColumnKeys(header: string): EquityKey[] | null {
   const t = foldLabel(header.replace(/([a-z])([A-Z])/g, '$1 $2')).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return null;
-  if (/\btotal\b/.test(t)) return ['total'];
   const keys: EquityKey[] = [];
   if (/\bsuperavit de capital\b|\bprima\b|\bshare premium\b/.test(t)) keys.push('primaColocacion');
   if (/\bcapital\b/.test(t) && !/capitaliz|superavit de capital/.test(t)) keys.push('capitalSocial');
@@ -1494,6 +1493,9 @@ function equityColumnKeys(header: string): EquityKey[] | null {
     keys.push('resultadoEjercicio');
   }
   if (/\bori\b|\boci\b|otro resultado integral|other comprehensive|valorizaci|superavit por/.test(t)) keys.push('ori');
+  // "Total patrimonio" es el total; "Total reservas" es la columna de reservas
+  // (revisión F-html: se tomaba por el total del patrimonio y la fila honesta bloqueaba).
+  if (keys.length === 0 && /\btotal\b/.test(t)) return ['total'];
   return keys.length > 0 ? keys : null;
 }
 
@@ -1820,12 +1822,26 @@ function equityRowColumnSums(row: Record<string, unknown>): string[] {
 // en una tabla de proyección. Límite documentado: una cifra sin verbo de saldo
 // dentro de esas secciones ("Mantener la utilidad neta de $X") no la cruza R6;
 // R1/R3 siguen exigiendo las cifras vinculantes con su signo.
+//
+// Revisión adversarial F-html: en una sección de recomendaciones, plan de
+// acción o próximo cierre la exención ya no cubre TODA la prosa. La tarjeta de
+// la página 13 mezcla el diagnóstico (que la Parte II sí juzga) con la acción y
+// el impacto (que exime): "La utilidad neta de $4M limita el reparto" o
+// "Utilidad neta: $4M" salían sin cruce. Ahora, dentro de esas secciones, sólo
+// es propuesta la frase en infinitivo o la que trae una marca de propuesta o
+// de impacto ("impacto", "mayor", "ahorro", "adicional", "meta", un futuro o
+// condicional…); el resto se juzga como el diagnóstico de la Parte II. Una
+// sección de PROYECCIÓN sigue exenta por completo, y también una sección de
+// recomendaciones en inglés (encabezado en inglés o `<html lang="en">`): el
+// imperativo inglés ("Raise EBITDA by $12 M") no se reconoce por su forma.
 
 const R6_RULE = '§1.1 · Reconciliación JSON↔HTML — concepto anclado con otra cifra';
 
 /** Encabezados de sección cuya prosa es propuesta, meta o impacto esperado. */
 const PROPOSAL_SECTION =
   /recomendaci|plan\s+de\s+acci[oó]n|acciones?\s+(?:urgentes|prioritarias|recomendadas|propuestas|sugeridas|inmediatas)|pr[oó]ximo\s+cierre|pr[oó]ximos\s+pasos|recommendation|action\s+plan|next\s+steps|next\s+close|urgent\s+actions/i;
+/** Encabezado de propuestas en inglés (el imperativo inglés no se reconoce por su forma). */
+const PROPOSAL_SECTION_EN = /recommendation|action\s+plan|next\s+steps|next\s+close|urgent\s+actions/i;
 /** Encabezados (o captions/cabeceras de tabla) de una proyección. */
 const PROJECTION_SECTION = /proyecci[oó]n|proyectad[oa]s?|escenarios?\b|presupuest|projection|projected|scenarios?\b|forecast|budget/i;
 
@@ -1849,7 +1865,7 @@ function startsWithInfinitive(sentence: string): boolean {
     .replace(/^(?:acci[oó]n|recomendaci[oó]n|propuesta|paso)\s*\d*\s*[:.—–-]\s*/i, '');
   const word = /^[\p{L}]+/u.exec(head)?.[0];
   if (!word || word.length < 4) return false;
-  const folded = word.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const folded = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (NOT_INFINITIVE.has(folded)) return false;
   return /(?:ar|er|ir)(?:se|lo|la|los|las|le|les|nos)?$/.test(folded);
 }
@@ -1861,15 +1877,36 @@ function startsWithInfinitive(sentence: string): boolean {
  * de $X"), y se juzga.
  */
 const STATEMENT_VERB =
-  /\b(?:fue|fueron|es|son|era|eran)\s+de\b|\b(?:asciende|ascendi[oó]|ascendieron|totaliza|totaliz[oó]|suma|sum[oó]|cerr[oó]|registr[oó]|alcanz[oó]|report[oó])\b|\bse\s+ubic[oó]\b/i;
+  /\b(?:fue|fueron|es|son|era|eran)\s+de\b|\b(?:asciende|ascendi[oó]|ascendieron|totaliza|totaliz[oó]|suma|sum[oó]|cerr[oó]|registra|registr[oó]|alcanz[oó]|reporta|report[oó]|arroja|arroj[oó]|muestra|mostr[oó]|obtuvo|present[oó]|termin[oó])\b|\bse\s+(?:ubic[oó]|situ[oó])\b|\b(?:qued[oó]|cerr[oó])\s+en\b|\blleg[oó]\s+a\b/i;
 
 /**
- * Separa las propuestas (toda frase de una sección de propuestas, o una frase
- * en infinitivo) del resto de la unidad, salvo las que afirman un saldo.
+ * Marca de propuesta o de impacto esperado dentro de una sección de
+ * recomendaciones: lo que la Parte II redacta en `action` / `expectedImpact`
+ * ("Mayor utilidad neta en $3M", "Impacto esperado: …", "ahorro de $X", "la
+ * utilidad neta llegaría a $X"). Sin ella, la frase es diagnóstico y se juzga.
  */
-function splitProposals(text: string, inProposalSection: boolean): NarrativeUnit[] {
+const PROPOSAL_CUE = new RegExp(
+  String.raw`\b(?:impacto|efecto|ahorros?|adicional(?:es)?|metas?|objetivos?|esperad[oa]s?|potencial(?:es)?|mayor(?:es)?|menor(?:es)?|mejora|aumento|incremento|reducci[oó]n|disminuci[oó]n|liberaci[oó]n|recuperaci[oó]n|impact|expected|target|additional|savings|increase|decrease|higher|lower)\b` +
+    String.raw`|proyect|estim|previst|presupuest|escenario` +
+    String.raw`|(?<![\p{L}])(?:aumentar|elevar|subir|incrementar|mejorar|reducir|disminuir|bajar|pasar|quedar|ubicar|situar|generar|liberar|cerrar|ascender|llevar|crecer|representar|alcanzar|lograr|permitir|llegar|ser|estar|tendr|habr|podr|deber|saldr|valdr|har)(?:[ií]an?|[áÁ]n?)(?![\p{L}])`,
+  'iu',
+);
+
+/**
+ * Separa las propuestas del resto de la unidad: toda frase de una sección de
+ * proyección, la frase en infinitivo y, en una sección de recomendaciones, la
+ * que trae una marca de propuesta o de impacto. Nunca la que afirma un saldo.
+ */
+function splitProposals(
+  text: string,
+  section: { proposal: boolean; projection: boolean; english: boolean },
+): NarrativeUnit[] {
   const sentences = text.split(/(?<=[.;!?])\s+/);
-  const isProposal = (s: string) => (inProposalSection || startsWithInfinitive(s)) && !STATEMENT_VERB.test(s);
+  const isProposal = (s: string) =>
+    (section.projection ||
+      startsWithInfinitive(s) ||
+      (section.proposal && (section.english || PROPOSAL_CUE.test(s)))) &&
+    !STATEMENT_VERB.test(s);
   const proposals = sentences.filter(isProposal);
   if (proposals.length === 0) return [{ text, firstCell: null }];
   const rest = sentences.filter((s) => !isProposal(s)).join(' ');
@@ -1894,13 +1931,14 @@ function isProjectionTable(table: Element | null, primaryYear: string | null): b
 /** Texto de las unidades que el lector ve como una frase o una fila. */
 function textUnits(document: ParsedDocument, primaryYear: string | null = null): NarrativeUnit[] {
   const clean = (t: string) =>
-    t.replace(/ /g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
+    t.replace(/\u00a0/g, ' ').replace(/\$\s+/g, '$').replace(/\s+/g, ' ').trim();
   const out: NarrativeUnit[] = [];
   let article: Element | null = null;
   // Encabezados vigentes (por nivel) dentro de la página: una sección de
   // recomendaciones o de proyección rige hasta un encabezado de igual o mayor
   // rango, o hasta la página siguiente.
-  let stack: Array<{ level: number; proposal: boolean; projection: boolean }> = [];
+  let stack: Array<{ level: number; proposal: boolean; english: boolean; projection: boolean }> = [];
+  const htmlEnglish = /^en\b/i.test(document.documentElement?.getAttribute('lang') ?? '');
   const nodes = document.querySelectorAll(
     'h1, h2, h3, h4, h5, h6, p, li, caption, figcaption, blockquote, dd, dt, tr',
   );
@@ -1915,10 +1953,16 @@ function textUnits(document: ParsedDocument, primaryYear: string | null = null):
       const level = Number(tag[1]);
       const t = clean(el.textContent ?? '');
       stack = stack.filter((h) => h.level < level);
-      stack.push({ level, proposal: PROPOSAL_SECTION.test(t), projection: PROJECTION_SECTION.test(t) });
+      stack.push({
+        level,
+        proposal: PROPOSAL_SECTION.test(t),
+        english: PROPOSAL_SECTION_EN.test(t),
+        projection: PROJECTION_SECTION.test(t),
+      });
     }
     const projection = stack.some((h) => h.projection);
-    const proposal = projection || stack.some((h) => h.proposal);
+    const proposal = stack.some((h) => h.proposal);
+    const english = htmlEnglish || stack.some((h) => h.proposal && h.english);
     if (tag === 'tr') {
       const cells = Array.from(el.querySelectorAll('th, td')).map((c) => clean(c.textContent ?? ''));
       if (cells.length < 2) continue;
@@ -1930,7 +1974,7 @@ function textUnits(document: ParsedDocument, primaryYear: string | null = null):
     if (el.querySelector('p, li')) continue;
     const text = clean(el.textContent ?? '');
     if (!text) continue;
-    out.push(...splitProposals(text, proposal));
+    out.push(...splitProposals(text, { proposal, projection, english }));
   }
   return out;
 }
