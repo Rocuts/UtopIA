@@ -88,15 +88,16 @@ describe('ORI no medible con un solo corte — nota determinista', () => {
       norma: 'NIIF para las PYMES, Sección 5',
       body:
         'Otro resultado integral (ORI) del periodo 2025: no medible sin el corte de apertura. El balance de ' +
-        'prueba registra saldo en el grupo 38 (superávit por valorizaciones / ORI), pero con un solo corte su ' +
-        'variación del periodo no se puede determinar; el ORI del periodo se presenta en $0 y esa cifra no es ' +
-        'una medición. Para medirlo se requiere el balance de prueba del corte anterior.',
+        'prueba registra saldo en el grupo 38 (superávit por valorizaciones / ORI), pero sin un corte de ' +
+        'apertura utilizable su variación del periodo no se puede determinar; el ORI del periodo se presenta en ' +
+        '$0 y esa cifra no es una medición. Para medirlo se requiere un balance de prueba utilizable del corte ' +
+        'anterior.',
     });
     expect(oriNotMeasurableNote(anchor, 'en')?.body).toBe(
       'Other comprehensive income (OCI) for 2025: not measurable without the opening cut-off. The trial ' +
-        'balance shows a balance in PUC group 38 (revaluation surplus / OCI), but with a single cut-off its ' +
-        'movement for the period cannot be determined; OCI for the period is presented as $0 and that figure ' +
-        'is not a measurement. Measuring it requires the trial balance of the previous cut-off.',
+        'balance shows a balance in PUC group 38 (revaluation surplus / OCI), but without a usable opening ' +
+        'cut-off its movement for the period cannot be determined; OCI for the period is presented as $0 and ' +
+        'that figure is not a measurement. Measuring it requires a usable trial balance of the previous cut-off.',
     );
     expect(oriNotMeasurableNote(anchor, 'en')?.norma).toBe('IFRS for SMEs, Section 5');
     expect(oriNotMeasurableNote(buildOriAnchors(pp([0], ['2025'])).primary, 'es')).toBeNull();
@@ -124,6 +125,20 @@ describe('ORI no medible con un solo corte — nota determinista', () => {
     expect(sinGrupo.json!.incomeStatement.notes.some((n) => /no medible sin el corte de apertura/.test(n.body))).toBe(false);
     const dosCortes = await analizar(pp([3_000_000, 5_000_000], ['2024', '2025']), 'es');
     expect(dosCortes.json!.incomeStatement.notes.some((n) => /no medible sin el corte de apertura/.test(n.body))).toBe(false);
+  });
+
+  // Revisión I5-niif: con dos cortes y el comparativo impracticable tampoco
+  // hay apertura utilizable (el ancla es notMeasurable); la nota no puede
+  // afirmar que el balance trae "un solo corte".
+  it('con el comparativo impracticable la nota no afirma que hay un solo corte', async () => {
+    const p = { ...pp([3_000_000, 5_000_000], ['2024', '2025']), comparativos_impracticables: true };
+    expect(buildOriAnchors(p).primary?.kind).toBe('notMeasurable');
+    for (const language of ['es', 'en'] as const) {
+      const result = await analizar(p, language);
+      const nota = result.json!.incomeStatement.notes.find((n) => /\(ORI\)|\(OCI\)/.test(n.body));
+      expect(nota?.body).toMatch(language === 'es' ? /sin un corte de apertura utilizable/ : /without a usable opening cut-off/);
+      expect(nota?.body).not.toMatch(/un solo corte|single cut-off/);
+    }
   });
 
   it('el prompt ya no le pide al modelo declarar la limitación: la declara el código', () => {
