@@ -1,10 +1,16 @@
 'use client';
 
 /**
- * ClosePeriodConfirmDialog — confirma el cierre de un periodo y dispara
- * `POST /api/accounting/periods/close`. El server lanza el workflow durable
- * WS5 (health check + asientos de cierre + hash de integridad), que puede
- * tardar entre 5–30s — mostramos loading state explícito.
+ * ClosePeriodConfirmDialog — confirma el cierre de un periodo.
+ *
+ * Auditoría 2026-09 (contab-nomina-04):
+ *   - Períodos 1-12 → `POST /api/accounting/periods/close`: marca el período
+ *     como cerrado y bloquea nuevos asientos. NO genera asiento de cierre ni
+ *     traslada resultados a patrimonio (antes el texto lo prometía).
+ *   - Período 13 (cierre anual, 31-dic) → `POST /api/accounting/close/start`:
+ *     corre el workflow durable (health check, asiento de cierre contra
+ *     360505 / 361005, bloqueo y hash). El período debe estar ABIERTO para que
+ *     el workflow pueda contabilizar el asiento de cierre.
  */
 
 import { useState } from 'react';
@@ -15,15 +21,7 @@ import { useToast } from '@/design-system/components/Toast';
 import { cn } from '@/lib/utils';
 
 import type { AccountingPeriod } from './PeriodsManagementView';
-
-const MONTHS_ES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
-const MONTHS_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+import { closeRequestFor, periodMonthLabel } from './period-close';
 
 interface Props {
   period: AccountingPeriod | null;
@@ -32,10 +30,10 @@ interface Props {
 }
 
 export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { toast } = useToast();
   const isEs = language === 'es';
-  const months = isEs ? MONTHS_ES : MONTHS_EN;
+  const pt = t.accounting.periods;
 
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -48,37 +46,52 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
     );
   }
 
-  const monthLabel = months[Math.max(0, Math.min(11, period.month - 1))];
+  const request = closeRequestFor(period);
+  const annual = request.kind === 'annual_workflow';
+  const periodText = `${periodMonthLabel(period.month, isEs ? 'es' : 'en')} ${period.year}`;
 
   async function handleClose() {
     if (!period || !confirmed) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/accounting/periods/close', {
+      const res = await fetch(request.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodId: period.id }),
+        body: JSON.stringify(request.body),
       });
       const json = (await res.json().catch(() => ({}))) as {
-        ok?: true;
-        period?: AccountingPeriod;
         alreadyClosed?: boolean;
-        error?: string;
+        status?: string;
+        error?: unknown;
+        message?: string;
       };
       if (res.ok) {
-        toast(
-          'success',
-          json.alreadyClosed
-            ? isEs ? 'El periodo ya estaba cerrado.' : 'Period was already closed.'
-            : isEs ? `Periodo ${monthLabel} ${period.year} cerrado` : `Period ${monthLabel} ${period.year} closed`,
-        );
+        if (annual) {
+          toast(
+            'success',
+            res.status === 202
+              ? pt.annualCloseStarted.replace('{year}', String(period.year))
+              : pt.annualCloseAlreadyRunning,
+            8000,
+          );
+        } else {
+          toast(
+            'success',
+            json.alreadyClosed ? pt.alreadyClosed : pt.closed.replace('{period}', periodText),
+          );
+        }
         onClosed?.();
         return;
       }
-      const code = json.error ?? 'close_failed';
-      toast('error', isEs ? `Error: ${code.replace(/_/g, ' ')}` : `Error: ${code.replace(/_/g, ' ')}`, 6000);
+      const code =
+        typeof json.error === 'string'
+          ? json.error
+          : typeof json.message === 'string'
+            ? json.message
+            : 'close_failed';
+      toast('error', `${pt.errorPrefix}: ${code.replace(/_/g, ' ')}`, 8000);
     } catch {
-      toast('error', isEs ? 'Falla de red.' : 'Network failure.', 6000);
+      toast('error', pt.networkError, 6000);
     } finally {
       setSubmitting(false);
       setConfirmed(false);
@@ -95,11 +108,11 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
     <GlassModal
       open={!!period}
       onClose={handleClose_}
-      title={isEs ? 'Cerrar periodo contable' : 'Close accounting period'}
+      title={annual ? pt.annualCloseTitle : pt.monthlyCloseTitle}
       description={
-        isEs
-          ? `Vas a cerrar ${monthLabel} ${period.year}. Esta acción ejecuta el workflow durable de cierre mensual.`
-          : `You are about to close ${monthLabel} ${period.year}. This action triggers the durable monthly close workflow.`
+        annual
+          ? pt.annualCloseDescription.replace('{year}', String(period.year))
+          : pt.monthlyCloseDescription.replace('{period}', periodText)
       }
       size="lg"
       dismissOnBackdrop={!submitting}
@@ -115,7 +128,7 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
               'text-sm disabled:opacity-50',
             )}
           >
-            {isEs ? 'Cancelar' : 'Cancel'}
+            {pt.cancel}
           </button>
           <button
             type="button"
@@ -131,12 +144,12 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                {isEs ? 'Ejecutando workflow…' : 'Running workflow…'}
+                {pt.running}
               </>
             ) : (
               <>
                 <XCircle className="h-4 w-4" aria-hidden="true" />
-                {isEs ? 'Cerrar periodo' : 'Close period'}
+                {annual ? pt.annualCloseRun : pt.closeRun}
               </>
             )}
           </button>
@@ -147,15 +160,13 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
         <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 flex items-start gap-3">
           <ShieldAlert className="h-5 w-5 text-warning shrink-0 mt-0.5" aria-hidden="true" />
           <div className="text-sm text-n-800 leading-relaxed">
-            {isEs
-              ? 'El cierre ejecuta health check (cuadratura, conciliación bancaria, drafts pendientes), genera asientos de cierre, calcula hash SHA-256 encadenado al periodo anterior y bloquea el registro de nuevos asientos. Es reversible vía Reabrir hasta que se Bloquee.'
-              : 'Closing runs health check (balance, bank reconciliation, pending drafts), generates closing entries, computes SHA-256 hash chained to the previous period, and blocks new entries. Reversible via Reopen until Locked.'}
+            {annual ? pt.annualCloseBody : pt.monthlyCloseBody}
           </div>
         </div>
 
         <div className="rounded-md border border-gold-500/20 p-4 grid grid-cols-2 gap-3 text-sm">
-          <Stat label={isEs ? 'Periodo' : 'Period'} value={`${monthLabel} ${period.year}`} />
-          <Stat label={isEs ? 'Estado actual' : 'Current status'} value={period.status} />
+          <Stat label={pt.periodLabel} value={periodText} />
+          <Stat label={pt.currentStatus} value={period.status} />
         </div>
 
         <label className="flex items-start gap-2.5 cursor-pointer select-none">
@@ -167,9 +178,7 @@ export function ClosePeriodConfirmDialog({ period, onClose, onClosed }: Props) {
             className="mt-1 h-4 w-4 rounded border-gold-500/40 bg-n-1000/60 text-gold-500 focus:ring-gold-500"
           />
           <span className="text-sm text-n-800">
-            {isEs
-              ? 'Acepto que este cierre ejecutará un workflow durable y bloqueará nuevos asientos en el periodo.'
-              : 'I accept this close will run a durable workflow and block new entries in the period.'}
+            {annual ? pt.annualCloseConfirm : pt.monthlyCloseConfirm}
           </span>
         </label>
       </div>

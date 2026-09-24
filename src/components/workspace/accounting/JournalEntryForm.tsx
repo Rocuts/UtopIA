@@ -48,9 +48,9 @@ import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
 import {
   formatCOP,
-  parseCOP,
   sumCOPStrings,
 } from '@/lib/format/cop';
+import { amountForTotals, findAmountIssues, parseLineAmount } from './journal-amounts';
 import {
   AccountAutocomplete,
   type AccountSuggestion,
@@ -140,10 +140,22 @@ export function JournalEntryForm({
   const [submitting, setSubmitting] = useState<null | 'draft' | 'posted'>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ─── Montos: parseCOPStrict (auditoría reportes-export-06) ────────────────
+  // Una entrada no interpretable NO se convierte en "0": se muestra el error y
+  // se bloquean los dos envíos (borrador y posteo).
+  const amountIssues = useMemo(() => findAmountIssues(lines), [lines]);
+  const amountIssueMessage = useMemo(() => {
+    const first = amountIssues[0];
+    if (!first) return null;
+    const template =
+      first.kind === 'negative' ? ac.validationAmountNegative : ac.validationAmountInvalid;
+    return template.replace('{n}', String(first.line));
+  }, [amountIssues, ac]);
+
   // ─── Totals (live, in centavos via BigInt to avoid float drift) ───────────
   const totals = useMemo(() => {
-    const debitStr = sumCOPStrings(lines.map((l) => parseCOP(l.debit)));
-    const creditStr = sumCOPStrings(lines.map((l) => parseCOP(l.credit)));
+    const debitStr = sumCOPStrings(lines.map((l) => amountForTotals(l.debit)));
+    const creditStr = sumCOPStrings(lines.map((l) => amountForTotals(l.credit)));
     const diffStr = sumCOPStrings([debitStr, '-' + creditStr.replace(/^-/, '')]);
     const isBalanced = Number(debitStr) === Number(creditStr);
     return {
@@ -160,10 +172,12 @@ export function JournalEntryForm({
     if (!description.trim()) errors.push(ac.validationDescriptionRequired);
     if (!periodId) errors.push(language === 'es' ? 'Seleccione un periodo' : 'Select a period');
 
+    if (amountIssueMessage) errors.push(amountIssueMessage);
+
     let nonEmptyLines = 0;
     for (const ln of lines) {
-      const d = Number(parseCOP(ln.debit));
-      const c = Number(parseCOP(ln.credit));
+      const d = Number(amountForTotals(ln.debit));
+      const c = Number(amountForTotals(ln.credit));
       const hasAmount = d > 0 || c > 0;
       if (!hasAmount && !ln.account) continue; // empty draft row, skip
       nonEmptyLines += 1;
@@ -188,7 +202,7 @@ export function JournalEntryForm({
       errors.push(ac.validationUnbalanced);
     }
     return { errors, ok: errors.length === 0 };
-  }, [lines, description, periodId, totals.isBalanced, ac, language]);
+  }, [lines, description, periodId, totals.isBalanced, ac, language, amountIssueMessage]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const updateLine = useCallback(
@@ -239,6 +253,10 @@ export function JournalEntryForm({
   const submit = useCallback(
     async (status: 'draft' | 'posted') => {
       setError(null);
+      if (amountIssueMessage) {
+        setError(amountIssueMessage);
+        return;
+      }
       if (status === 'posted' && !validation.ok) {
         setError(validation.errors[0] ?? ac.errorGeneric);
         return;
@@ -251,8 +269,8 @@ export function JournalEntryForm({
       try {
         const payloadLines = lines
           .filter((l) => {
-            const d = Number(parseCOP(l.debit));
-            const c = Number(parseCOP(l.credit));
+            const d = Number(amountForTotals(l.debit));
+            const c = Number(amountForTotals(l.credit));
             return l.account && (d > 0 || c > 0);
           })
           .map((l) => ({
@@ -260,8 +278,9 @@ export function JournalEntryForm({
             thirdPartyId: l.thirdPartyId,
             costCenterId: l.costCenterId,
             description: l.description.trim() || null,
-            debit: parseCOP(l.debit),
-            credit: parseCOP(l.credit),
+            // Ya validados por findAmountIssues: nunca null aquí.
+            debit: parseLineAmount(l.debit) ?? '0',
+            credit: parseLineAmount(l.credit) ?? '0',
           }));
 
         const res = await fetch('/api/accounting/journal', {
@@ -299,7 +318,7 @@ export function JournalEntryForm({
         setSubmitting(null);
       }
     },
-    [validation, description, lines, periodId, entryDate, ac, router],
+    [validation, description, lines, periodId, entryDate, ac, router, amountIssueMessage],
   );
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -534,9 +553,12 @@ export function JournalEntryForm({
                       onChange={(e) => handleDebitChange(ln.id, e.target.value)}
                       placeholder="0,00"
                       aria-label={`${ac.debit} línea ${idx + 1}`}
+                      aria-invalid={parseLineAmount(ln.debit) === null}
                       className={cn(
                         'w-full h-8 px-2 rounded border bg-n-0 text-xs text-right',
-                        'border-gold-500/15 focus:border-gold-500/45 outline-none',
+                        parseLineAmount(ln.debit) === null
+                          ? 'border-danger/60 focus:border-danger outline-none'
+                          : 'border-gold-500/15 focus:border-gold-500/45 outline-none',
                         'text-n-1000 placeholder:text-n-500 tabular-nums',
                         'focus-visible:ring-2 focus-visible:ring-gold-500',
                       )}
@@ -550,9 +572,12 @@ export function JournalEntryForm({
                       onChange={(e) => handleCreditChange(ln.id, e.target.value)}
                       placeholder="0,00"
                       aria-label={`${ac.credit} línea ${idx + 1}`}
+                      aria-invalid={parseLineAmount(ln.credit) === null}
                       className={cn(
                         'w-full h-8 px-2 rounded border bg-n-0 text-xs text-right',
-                        'border-gold-500/15 focus:border-gold-500/45 outline-none',
+                        parseLineAmount(ln.credit) === null
+                          ? 'border-danger/60 focus:border-danger outline-none'
+                          : 'border-gold-500/15 focus:border-gold-500/45 outline-none',
                         'text-n-1000 placeholder:text-n-500 tabular-nums',
                         'focus-visible:ring-2 focus-visible:ring-gold-500',
                       )}
@@ -665,7 +690,7 @@ export function JournalEntryForm({
           <button
             type="button"
             onClick={() => submit('draft')}
-            disabled={submitting !== null}
+            disabled={submitting !== null || amountIssues.length > 0}
             className={cn(
               'inline-flex items-center gap-1.5 px-4 py-2 rounded-md',
               'border border-gold-500/30 text-n-1000 bg-n-0',
@@ -683,7 +708,7 @@ export function JournalEntryForm({
           <button
             type="button"
             onClick={() => submit('posted')}
-            disabled={submitting !== null || !validation.ok}
+            disabled={submitting !== null || !validation.ok || amountIssues.length > 0}
             className={cn(
               'inline-flex items-center gap-1.5 px-4 py-2 rounded-md',
               'bg-gold-500 text-n-0 hover:bg-gold-600 transition-colors',
@@ -702,6 +727,19 @@ export function JournalEntryForm({
           </button>
         </div>
       </section>
+
+      {amountIssueMessage && amountIssueMessage !== error && (
+        <div
+          role="alert"
+          className={cn(
+            'rounded-md border border-danger/30 bg-danger/8 px-3 py-2',
+            'text-sm text-danger flex items-center gap-2',
+          )}
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{amountIssueMessage}</span>
+        </div>
+      )}
 
       {error && (
         <div

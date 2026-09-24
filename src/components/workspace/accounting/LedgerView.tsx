@@ -28,13 +28,16 @@ import {
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
 import { formatPesos } from '@/lib/format/cop';
+import { displayEntryStatus, type EntryStatus } from './entry-status';
 
 interface LedgerLine {
   id: string;
   entryId: string;
   entryNumber: number;
   entryDate: string;
-  status: 'draft' | 'posted' | 'reversed' | 'voided';
+  status: EntryStatus;
+  /** Asiento de reverso que anula este original (contab-nomina-01). */
+  reversedByEntryId?: string | null;
   description: string | null;
   account: { id: string; code: string; name: string };
   thirdParty: { id: string; legalName: string } | null;
@@ -58,7 +61,7 @@ interface AccountOption {
   isPostable: boolean;
 }
 
-const STATUS_BADGE: Record<LedgerLine['status'], string> = {
+const STATUS_BADGE: Record<EntryStatus, string> = {
   draft: 'bg-n-100 text-n-700 border-n-300',
   posted: 'bg-success/10 text-success border-success/30',
   reversed: 'bg-warning/10 text-warning border-warning/30',
@@ -404,10 +407,10 @@ export function LedgerView() {
                         className={cn(
                           'ml-1 inline-block text-[10px] font-mono uppercase tracking-eyebrow',
                           'rounded border px-1 py-0.5 align-middle',
-                          STATUS_BADGE[l.status],
+                          STATUS_BADGE[displayEntryStatus(l)],
                         )}
                       >
-                        {l.status}
+                        {ac.status[displayEntryStatus(l)]}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-n-1000">

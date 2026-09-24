@@ -17,6 +17,7 @@ import { useToast } from '@/design-system/components/Toast';
 import { cn } from '@/lib/utils';
 
 import type { AccountingPeriod } from './PeriodsManagementView';
+import { periodMonthLabel, periodMonthOptions } from './period-close';
 
 interface Props {
   open: boolean;
@@ -25,15 +26,6 @@ interface Props {
   defaultYear: number;
   onPeriodOpened?: (period: AccountingPeriod) => void;
 }
-
-const MONTHS_ES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
-const MONTHS_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
 
 export function OpenPeriodModal({
   open,
@@ -45,7 +37,9 @@ export function OpenPeriodModal({
   const { language } = useLanguage();
   const { toast } = useToast();
   const isEs = language === 'es';
-  const months = isEs ? MONTHS_ES : MONTHS_EN;
+  // Meses 1-12 + período 13 (cierre anual, 31-dic). Auditoría contab-nomina-04.
+  const monthOptions = periodMonthOptions(isEs ? 'es' : 'en');
+  const monthName = (m: number) => periodMonthLabel(m, isEs ? 'es' : 'en');
 
   const now = new Date();
   const [year, setYear] = useState<number>(defaultYear);
@@ -89,8 +83,8 @@ export function OpenPeriodModal({
         toast(
           'success',
           isEs
-            ? `Periodo ${months[month - 1]} ${year} creado`
-            : `Period ${months[month - 1]} ${year} created`,
+            ? `Periodo ${monthName(month)} ${year} creado`
+            : `Period ${monthName(month)} ${year} created`,
         );
         onPeriodOpened?.(json.period);
         return;
@@ -100,8 +94,8 @@ export function OpenPeriodModal({
         toast(
           'error',
           isEs
-            ? `Ya existe un periodo en ${months[month - 1]} ${year}`
-            : `A period already exists for ${months[month - 1]} ${year}`,
+            ? `Ya existe un periodo en ${monthName(month)} ${year}`
+            : `A period already exists for ${monthName(month)} ${year}`,
           6000,
         );
         return;
@@ -133,7 +127,7 @@ export function OpenPeriodModal({
             onClick={onClose}
             className={cn(
               'inline-flex items-center px-4 py-2 rounded-md',
-              'border border-gold-500/30 text-n-100 hover:bg-gold-500/10 transition-colors',
+              'border border-gold-500/30 text-n-800 hover:text-n-1000 hover:bg-gold-500/10 transition-colors',
               'text-sm',
             )}
           >
@@ -170,8 +164,8 @@ export function OpenPeriodModal({
               className={selectClass}
               data-testid="month-select"
             >
-              {months.map((m, i) => (
-                <option key={m} value={i + 1}>{`${m} (${i + 1})`}</option>
+              {monthOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>
@@ -192,8 +186,8 @@ export function OpenPeriodModal({
         {overlap && (
           <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
             {isEs
-              ? `Ya existe un periodo en ${months[month - 1]} ${year}.`
-              : `A period already exists for ${months[month - 1]} ${year}.`}
+              ? `Ya existe un periodo en ${monthName(month)} ${year}.`
+              : `A period already exists for ${monthName(month)} ${year}.`}
           </div>
         )}
       </form>
@@ -202,7 +196,7 @@ export function OpenPeriodModal({
 }
 
 const selectClass = cn(
-  'w-full rounded-md border border-gold-500/25 bg-n-1000/60 px-3 py-2',
+  'w-full rounded-md border border-gold-500/25 bg-n-0 px-3 py-2',
   'text-sm text-n-1000 font-mono',
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
   'disabled:opacity-50',
