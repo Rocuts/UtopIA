@@ -760,16 +760,29 @@ function sessionStorageOrNull(): Storage | null {
   }
 }
 
+/**
+ * Guarda el preprocesado de la corrida para reanudar tras una recarga. Con él
+ * viaja el ledger del Doctor de Datos (sólo los ajustes confirmados): el
+ * preprocesado de /niif ya los trae aplicados y /export y /html lo re-derivan
+ * con ESE ledger (niif-preproceso-33). Sin el ledger, un informe con ajustes
+ * recuperado tras la recarga se rechazaba (422 "Fuentes incoherentes").
+ */
 export function persistPreprocessedForResume(
   conversationId: string,
   preprocessed: unknown,
   storage: Storage | null = sessionStorageOrNull(),
+  adjustmentLedger: AdjustmentLedger | null | undefined = null,
 ): boolean {
   if (!storage || !conversationId || preprocessed === null || preprocessed === undefined) {
     return false;
   }
   try {
-    const serialized = JSON.stringify({ conversationId, preprocessed });
+    const applied = adjustmentLedger?.adjustments?.filter((a) => a.status === 'applied') ?? [];
+    const serialized = JSON.stringify({
+      conversationId,
+      preprocessed,
+      ...(applied.length > 0 ? { adjustmentLedger: { adjustments: applied } } : {}),
+    });
     if (serialized.length > MAX_FORWARDED_PREPROCESSED_CHARS) {
       storage.removeItem(PREPROCESSED_RESUME_KEY);
       return false;
@@ -795,6 +808,42 @@ export function recallPreprocessedForResume(
   } catch {
     return null;
   }
+}
+
+/**
+ * Ledger (ajustes confirmados) guardado junto al preprocesado de la misma
+ * conversación; `null` si no hubo ajustes o no hay registro.
+ */
+export function recallAdjustmentLedgerForResume(
+  conversationId: string,
+  storage: Storage | null = sessionStorageOrNull(),
+): AdjustmentLedger | null {
+  if (!storage || !conversationId) return null;
+  try {
+    const raw = storage.getItem(PREPROCESSED_RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { conversationId?: unknown; adjustmentLedger?: unknown };
+    if (parsed?.conversationId !== conversationId) return null;
+    const list = (parsed.adjustmentLedger as { adjustments?: unknown } | undefined)?.adjustments;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    return { adjustments: list as AdjustmentLedger['adjustments'] };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ledger con el que se piden /export y /html. El de la corrida en memoria
+ * (o de la corrida pendiente persistida) manda aunque no tenga ajustes; sólo
+ * sin corrida —informe recuperado tras una recarga— se usa el guardado junto
+ * al preprocesado de esa conversación.
+ */
+export function resolveEffectiveAdjustmentLedger(
+  runInput: { adjustmentLedger?: AdjustmentLedger | null } | null | undefined,
+  resumed: AdjustmentLedger | null,
+): AdjustmentLedger | null {
+  if (runInput) return runInput.adjustmentLedger ?? null;
+  return resumed;
 }
 
 export function clearPreprocessedForResume(
@@ -2048,6 +2097,10 @@ export function PipelineWorkspace() {
   // para que `clientSummarizeCoverage` corra al solicitar el HTML. Se llena en el
   // checkpoint NIIF.
   const [cachedPreprocessed, setCachedPreprocessed] = useState<unknown>(null);
+  // Ledger del Doctor de Datos recuperado junto a `cachedPreprocessed` tras una
+  // recarga (la corrida en memoria ya no existe): /export y /html re-derivan
+  // ese preprocesado con él (niif-preproceso-33).
+  const [resumedAdjustmentLedger, setResumedAdjustmentLedger] = useState<AdjustmentLedger | null>(null);
   // Capa 5 — FiscalSnapshot capturado durante Phase 1 SSE (evento fiscal_snapshot
   // o campo fiscalSnapshot en niif_phase). Se asigna a report.fiscalSnapshot en
   // los 3 checkpoints setLastCompletedReport y se envía a El Escudo vía POST.
@@ -2173,7 +2226,12 @@ export function PipelineWorkspace() {
       // necesita para verificar el acta (sin él la sella, pipeline-flujo-03) y
       // /export y /html para cruzar contra el mismo balance que usó /niif.
       const storedPreprocessed = recallPreprocessedForResume(lastCompletedReport.conversationId);
-      if (storedPreprocessed) setCachedPreprocessed(storedPreprocessed);
+      if (storedPreprocessed) {
+        setCachedPreprocessed(storedPreprocessed);
+        setResumedAdjustmentLedger(
+          recallAdjustmentLedgerForResume(lastCompletedReport.conversationId),
+        );
+      }
       // Reconstruimos el checkpoint NIIF para poder reanudar la sub-fase
       // faltante. `bindingTotals` es obligatorio en /strategy y /governance y
       // es lo único que persistimos en localStorage aparte del reporte.
@@ -2470,6 +2528,9 @@ export function PipelineWorkspace() {
         // pueda calcular `summarizeCoverage` / `auxiliariesProcessed` /
         // `sectorCIIU` sin necesidad de re-disparar Phase 1.
         setCachedPreprocessed(niifContext.preprocessed);
+        // El ledger de esta corrida vive en su intake; el recuperado de una
+        // conversación anterior deja de aplicar.
+        setResumedAdjustmentLedger(null);
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
         const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -2506,7 +2567,7 @@ export function PipelineWorkspace() {
           savedAt: new Date().toISOString(),
         });
         // Best-effort: sessionStorage con tope de tamaño (pipeline-flujo-03).
-        persistPreprocessedForResume(nextConvId, niifContext.preprocessed);
+        persistPreprocessedForResume(nextConvId, niifContext.preprocessed, undefined, adjustmentLedger);
       }
 
       if (start === 'niif') {
@@ -2972,6 +3033,7 @@ export function PipelineWorkspace() {
     setShowHtmlViewer(false);
     setIsGeneratingHtml(false);
     setCachedPreprocessed(null);
+    setResumedAdjustmentLedger(null);
     clearPreprocessedForResume();
     runtimeRun.startedInput = null;
     setPipelineInput(null);
@@ -3128,6 +3190,16 @@ export function PipelineWorkspace() {
   // Diseño no-bloqueante: si el endpoint falla, NO destruye el reporte
   // existente — sólo se muestra `htmlError` y el viewer Markdown queda
   // intacto. Permite reintentar haciendo click otra vez.
+  //
+  // Ledger del Doctor de Datos con el que se piden /export y /html: el de la
+  // corrida vigente (o pendiente persistida) y, tras una recarga sin corrida,
+  // el guardado junto al preprocesado (pipeline-flujo-07, niif-preproceso-33).
+  const effectiveAdjustmentLedger = resolveEffectiveAdjustmentLedger(
+    (pipelineInput ?? pendingRun?.input ?? null) as
+      | (NiifReportIntake & { adjustmentLedger?: AdjustmentLedger })
+      | null,
+    resumedAdjustmentLedger,
+  );
   const handleGenerateHtml = useCallback(async () => {
     if (!backendReport || !companyInfo || isGeneratingHtml) return;
     // Mismo gate que Excel y PDF: el HTML editorial de 15 páginas es el
@@ -3293,10 +3365,7 @@ export function PipelineWorkspace() {
         preprocessed: cachedPreprocessed ?? null,
         // niif-preproceso-33: /html re-deriva ese preprocesado desde sus filas
         // con los mismos ajustes confirmados del Doctor de Datos.
-        ...htmlLedgerField(
-          (pipelineInput as (NiifReportIntake & { adjustmentLedger?: AdjustmentLedger }) | null)
-            ?.adjustmentLedger,
-        ),
+        ...htmlLedgerField(effectiveAdjustmentLedger),
         // e2e-niif-16: /html bloquea con los veredictos del acta y de la Parte II
         // (clean === false), igual que Excel/PDF.
         actaQualifications: backendReport.governance?.actaQualifications ?? null,
@@ -3354,6 +3423,7 @@ export function PipelineWorkspace() {
     auditReport,
     language,
     pipelineInput,
+    effectiveAdjustmentLedger,
   ]);
 
   // ─── "Continuar de todas formas" shortcut ────────────────────────────────
@@ -3379,12 +3449,6 @@ export function PipelineWorkspace() {
   // no exportar un PDF con páginas que el usuario había destildado.
   const effectiveOutputOptions =
     pipelineInput?.outputOptions ?? pendingRun?.input.outputOptions ?? null;
-  // Ledger del Doctor de Datos de la corrida vigente: respaldo de /export
-  // cuando no hay `preprocessed` en memoria (pipeline-flujo-07).
-  const effectiveAdjustmentLedger =
-    ((pipelineInput ?? pendingRun?.input ?? null) as
-      | (NiifReportIntake & { adjustmentLedger?: AdjustmentLedger })
-      | null)?.adjustmentLedger ?? null;
 
   if (isComplete && report) {
     const hasWarnings = Boolean(pipelineState.phase2Error || pipelineState.phase3Error);

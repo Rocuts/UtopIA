@@ -12,6 +12,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildConsolidationRequestBody,
   buildExportRequestBody,
+  persistPreprocessedForResume,
+  recallAdjustmentLedgerForResume,
+  recallPreprocessedForResume,
+  resolveEffectiveAdjustmentLedger,
   resolveHtmlSource,
 } from '../PipelineWorkspace';
 import { attachServerVersion, detachServerVersion, type ReportProvenance } from '@/lib/reports/report-ref';
@@ -106,5 +110,70 @@ describe('buildConsolidationRequestBody', () => {
       adjustmentLedger: { adjustments: [] },
     });
     expect('adjustmentLedger' in sinLedger).toBe(false);
+  });
+});
+
+// niif-preproceso-33 × recarga: /export y /html re-derivan el preprocesado de
+// la sesión con el ledger del Doctor de Datos y rechazan (422) si no casa. El
+// ledger vivía sólo en el intake en memoria: tras recargar un informe ya
+// terminado, el preprocesado ajustado se recuperaba de sessionStorage pero sin
+// su ledger, y un informe honesto con ajustes quedaba sin descargas.
+describe('ledger del Doctor de Datos tras una recarga', () => {
+  function memoryStorage(): Storage {
+    const m = new Map<string, string>();
+    return {
+      get length() {
+        return m.size;
+      },
+      clear: () => m.clear(),
+      key: (i: number) => Array.from(m.keys())[i] ?? null,
+      getItem: (k: string) => m.get(k) ?? null,
+      removeItem: (k: string) => {
+        m.delete(k);
+      },
+      setItem: (k: string, v: string) => {
+        m.set(k, v);
+      },
+    };
+  }
+  const pp = { primary: { period: '2025' } };
+  const withProposed = {
+    adjustments: [
+      ...LEDGER.adjustments,
+      { ...LEDGER.adjustments[0], id: 'a2', status: 'proposed' as const },
+    ],
+  };
+
+  it('se guarda junto al preprocesado (sólo los confirmados) y se recupera por conversación', () => {
+    const s = memoryStorage();
+    expect(persistPreprocessedForResume('report-1', pp, s, withProposed)).toBe(true);
+    expect(recallPreprocessedForResume('report-1', s)).toEqual(pp);
+    expect(recallAdjustmentLedgerForResume('report-1', s)).toEqual(LEDGER);
+    expect(recallAdjustmentLedgerForResume('report-2', s)).toBeNull();
+    expect(persistPreprocessedForResume('report-3', pp, s)).toBe(true);
+    expect(recallAdjustmentLedgerForResume('report-3', s)).toBeNull();
+  });
+
+  it('el ledger de la corrida vigente manda; sin corrida se usa el recuperado', () => {
+    expect(resolveEffectiveAdjustmentLedger({ adjustmentLedger: LEDGER }, null)).toBe(LEDGER);
+    // Una corrida nueva sin ajustes no hereda el ledger de otra conversación.
+    expect(resolveEffectiveAdjustmentLedger({}, LEDGER)).toBeNull();
+    expect(resolveEffectiveAdjustmentLedger(null, LEDGER)).toBe(LEDGER);
+    expect(resolveEffectiveAdjustmentLedger(null, null)).toBeNull();
+  });
+
+  it('el cuerpo de /export sin referencia lleva el ledger recuperado junto al preprocesado', () => {
+    const s = memoryStorage();
+    persistPreprocessedForResume('report-1', pp, s, LEDGER);
+    const ledger = resolveEffectiveAdjustmentLedger(null, recallAdjustmentLedgerForResume('report-1', s));
+    const body = buildExportRequestBody({
+      report: makeExportableReport(),
+      rawData: 'csv',
+      preprocessed: recallPreprocessedForResume('report-1', s),
+      adjustmentLedger: ledger,
+      presentation: {},
+    });
+    expect(body.preprocessed).toEqual(pp);
+    expect(body.adjustmentLedger).toEqual(LEDGER);
   });
 });
