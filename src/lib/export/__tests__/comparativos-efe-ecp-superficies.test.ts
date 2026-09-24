@@ -29,6 +29,7 @@ import { prepareFinancialContext } from '@/lib/agents/financial/orchestrator';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
 import { generateFinancialExcel } from '../excel-export';
 import {
+  niifJsonToBalanceTable,
   niifJsonToCashFlowTable,
   niifJsonToEquityTable,
 } from '../pdf-elite-react/compose-statements-from-json';
@@ -144,6 +145,34 @@ describe('Excel (excel-export.ts)', () => {
     expect(cash.flat()).toContain(json.cashFlow.comparativeNote);
     const equity = await sheetRows(json, 'Cambios en Patrimonio');
     expect(equity.flat()).toContain(json.equityChanges.comparativeNote);
+  });
+});
+
+describe('reportes-export-20 — orden de columnas y color de la variación', () => {
+  it('Excel y PDF presentan periodo actual | comparativo; la variación va en color neutro', async () => {
+    const pp = preprocesarTresCortes();
+    const json = informeTresCortes(pp);
+    const buf = await generateFinancialExcel({ report: informeExportable(json), preprocessed: pp });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet('Balance NIIF')!;
+    let header: unknown[] | null = null;
+    const colors = new Map<string, number[]>();
+    ws.eachRow((row) => {
+      if (row.getCell(1).value === 'Codigo') header = [row.getCell(3).value, row.getCell(4).value];
+      const v = row.getCell(5).value;
+      if (typeof v === 'number' && v !== 0) {
+        const argb = row.getCell(5).font?.color?.argb ?? 'none';
+        colors.set(argb, [...(colors.get(argb) ?? []), Math.sign(v)]);
+      }
+    });
+    expect(header).toEqual(['Saldo 2025', 'Saldo 2024']);
+    expect(niifJsonToBalanceTable(json).headers.slice(1)).toEqual(['2025', '2024']);
+    // Aumentos y disminuciones con el mismo color: el signo no dice si es favorable.
+    const signs = [...colors.values()].flat();
+    expect(signs).toContain(1);
+    expect(signs).toContain(-1);
+    expect(colors.size).toBe(1);
   });
 });
 

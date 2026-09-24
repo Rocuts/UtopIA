@@ -175,7 +175,10 @@ async function excelSheets(report: FinancialReport) {
   return wb;
 }
 
-/** Hojas de estados (con comparativo): col1 código, col2 rótulo, col3 comparativo, col4 actual. */
+/**
+ * Hojas de estados (con comparativo): col1 código, col2 rótulo, col3 actual,
+ * col4 comparativo — el orden del PDF (reportes-export-20).
+ */
 function excelStatementRows(ws: ExcelJS.Worksheet): Row[] {
   const out: Row[] = [];
   ws.eachRow((row) => {
@@ -184,7 +187,7 @@ function excelStatementRows(ws: ExcelJS.Worksheet): Row[] {
     const account = row.getCell(1).value;
     if (account === 'Codigo') return; // fila de encabezados de columna
     const full = typeof account === 'string' && account.trim() ? `${account} — ${label}` : label;
-    out.push([full.trim(), excelCell(row.getCell(4).value), excelCell(row.getCell(3).value)]);
+    out.push([full.trim(), excelCell(row.getCell(3).value), excelCell(row.getCell(4).value)]);
   });
   return out;
 }

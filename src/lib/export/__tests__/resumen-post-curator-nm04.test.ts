@@ -78,17 +78,18 @@ describe('NM-04 — Excel y apéndice del PDF con el resumen posterior al curato
 
   it('KPIs y Resumen del Excel publican Total Activo 1.180 M y Total Pasivo 500 M', async () => {
     const wb = await hojas(stub(), r1);
+    // reportes-export-20: periodo actual en la columna 2 (antes, la 3).
     const kpis: Record<string, unknown> = {};
     wb.getWorksheet('KPIs')!.eachRow((row) => {
       const label = row.getCell(1).value;
-      if (typeof label === 'string') kpis[label] = row.getCell(3).value;
+      if (typeof label === 'string') kpis[label] = row.getCell(2).value;
     });
     expect(kpis['Total Activo']).toBe(1_180_000_000);
     expect(kpis['Total Pasivo']).toBe(500_000_000);
     const resumen: Record<string, unknown> = {};
     wb.getWorksheet('Resumen')!.eachRow((row) => {
       const label = row.getCell(1).value;
-      if (typeof label === 'string') resumen[label] = row.getCell(3).value;
+      if (typeof label === 'string') resumen[label] = row.getCell(2).value;
     });
     expect(resumen['Total Activo']).toBe(1_180_000_000);
     expect(resumen['Total Pasivo']).toBe(500_000_000);
@@ -104,11 +105,12 @@ describe('NM-04 — Excel y apéndice del PDF con el resumen posterior al curato
     wb.getWorksheet('Balance NIIF')!.eachRow((r) => {
       const b = String(r.getCell(2).value ?? '');
       if (b === 'ACTIVO' || b === 'PASIVO' || b === 'PATRIMONIO') sec = b;
-      if (b === 'TOTAL ACTIVO') totAct = r.getCell(4).value;
-      if (b === 'TOTAL PASIVO') totPas = r.getCell(4).value;
-      if (r.getCell(1).value && typeof r.getCell(4).value === 'number') {
-        if (sec === 'ACTIVO') sumAct += r.getCell(4).value as number;
-        if (sec === 'PASIVO') sumPas += r.getCell(4).value as number;
+      // reportes-export-20: periodo actual en la columna 3 (antes, la 4).
+      if (b === 'TOTAL ACTIVO') totAct = r.getCell(3).value;
+      if (b === 'TOTAL PASIVO') totPas = r.getCell(3).value;
+      if (r.getCell(1).value && typeof r.getCell(3).value === 'number') {
+        if (sec === 'ACTIVO') sumAct += r.getCell(3).value as number;
+        if (sec === 'PASIVO') sumPas += r.getCell(3).value as number;
       }
     });
     expect(totAct).toBe(1_180_000_000);

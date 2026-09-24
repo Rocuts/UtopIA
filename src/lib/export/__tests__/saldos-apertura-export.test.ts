@@ -74,13 +74,16 @@ function sheetText(ws: ExcelJS.Worksheet): string {
   return out.join('\n');
 }
 
+// reportes-export-20: el Excel presenta periodo actual | comparativo (el orden
+// del PDF). En los estados el comparativo pasó de la columna 3 a la 4; en KPIs
+// y Resumen, de la 2 a la 3.
 describe('Excel — P&G comparativo de saldos de apertura', () => {
   it('ERI desde el JSON: comparativo N/D, sin variaciones y con leyenda', async () => {
     const wb = await workbook(reportWithComparative(), openingPreprocessed());
     const ws = wb.getWorksheet('Estado Resultados')!;
     const net = findRow(ws, 2, /^(UTILIDAD|PÉRDIDA) NETA/);
     expect(net).toBeDefined();
-    expect(net!.getCell(3).value).toBe('N/D');
+    expect(net!.getCell(4).value).toBe('N/D');
     expect(net!.getCell(5).value ?? null).toBeNull();
     expect(net!.getCell(6).value ?? null).toBeNull();
     expect(sheetText(ws)).toMatch(/saldo inicial\/anterior/);
@@ -95,31 +98,31 @@ describe('Excel — P&G comparativo de saldos de apertura', () => {
     const wb = await workbook(withoutJson, openingPreprocessed());
     const ws = wb.getWorksheet('Estado Resultados')!;
     const ventas = findRow(ws, 2, /^Ventas$/);
-    expect(ventas!.getCell(3).value).toBe('N/D');
+    expect(ventas!.getCell(4).value).toBe('N/D');
     expect(ventas!.getCell(5).value ?? null).toBeNull();
     const net = findRow(ws, 2, /^UTILIDAD NETA$/);
-    expect(net!.getCell(3).value).toBe('N/D');
+    expect(net!.getCell(4).value).toBe('N/D');
     expect(net!.getCell(5).value ?? null).toBeNull();
     // El ESF de apertura sí es comparable.
     const balance = wb.getWorksheet('Balance NIIF')!;
     const caja = findRow(balance, 2, /^Caja$/);
-    expect(caja!.getCell(3).value).toBe(50_000_000);
+    expect(caja!.getCell(4).value).toBe(50_000_000);
   });
 
   it('KPIs y resumen: resultados del comparativo N/D, saldos sí', async () => {
     const wb = await workbook(reportWithComparative(), openingPreprocessed());
     const kpis = wb.getWorksheet('KPIs')!;
     const utilidad = findRow(kpis, 1, /^Utilidad Neta$/);
-    expect(utilidad!.getCell(2).value).toBe('N/D');
+    expect(utilidad!.getCell(3).value).toBe('N/D');
     expect(utilidad!.getCell(4).value).toBe('N/D');
     const ingresos = findRow(kpis, 1, /^Ingresos operacionales netos$/);
-    expect(ingresos!.getCell(2).value).toBe('N/D');
+    expect(ingresos!.getCell(3).value).toBe('N/D');
     const activo = findRow(kpis, 1, /^Total Activo$/);
-    expect(activo!.getCell(2).value).toBe(90_000_000);
+    expect(activo!.getCell(3).value).toBe(90_000_000);
 
     const resumen = wb.getWorksheet('Resumen')!;
     const util = findRow(resumen, 1, /^Utilidad Neta$/);
-    expect(util!.getCell(2).value).toBe('N/D');
+    expect(util!.getCell(3).value).toBe('N/D');
     expect(util!.getCell(4).value).toBe('N/D');
   });
 });
