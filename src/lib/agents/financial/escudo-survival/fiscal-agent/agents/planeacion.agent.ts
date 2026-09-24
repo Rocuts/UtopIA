@@ -6,7 +6,7 @@ import { formatCopFromCents } from '@/lib/agents/financial/contracts/money';
 import { buildPlaneacionPrompt } from '../prompts/planeacion.prompt';
 import { planeacionModuleSchema } from '../schemas';
 import { callFiscalAgent } from '../runtime';
-import { aplicarTope258Escenario } from '../tools/planeacion-tope-258';
+import { aplicarTope258Escenario, escenarioCitaDescuentosTopeables } from '../tools/planeacion-tope-258';
 import type { FiscalAgentInput, PlaneacionEscenario, PlaneacionModuleResult } from '../types';
 
 export interface PlaneacionAgentOptions {
@@ -70,8 +70,13 @@ ${input.instructions ?? '(sin instrucciones adicionales)'}
   const base = BigInt(anchor.f02);
   const avisos: string[] = [];
   const fix = (e: PlaneacionEscenario): PlaneacionEscenario => {
-    const tope = aplicarTope258Escenario(e.impuestoAntesDescuentos ?? null, e.descuentos, e.impuestoEscenario);
+    // Un escenario que invoca los Arts. 255/256/257 sin desglose no evita el
+    // tope (re-auditoría 2026-09-24, NT-01).
+    const tope = aplicarTope258Escenario(e.impuestoAntesDescuentos ?? null, e.descuentos, e.impuestoEscenario, {
+      citaDescuentosTopeables: escenarioCitaDescuentosTopeables(e),
+    });
     if (tope.motivo) avisos.push(`Escenario ${e.nombre}: ${tope.motivo}`);
+    if (tope.aviso) avisos.push(`Escenario ${e.nombre}: ${tope.aviso}`);
     if (tope.excesoTope258 !== null && BigInt(tope.excesoTope258) > BigInt(0)) {
       avisos.push(
         `Escenario ${e.nombre}: los descuentos de los Arts. 255, 256 y 257 exceden el tope conjunto del 25% del Art. 258 E.T. en ${formatCopFromCents(BigInt(tope.excesoTope258))}; el impuesto del escenario se recalculó con el tope.`,

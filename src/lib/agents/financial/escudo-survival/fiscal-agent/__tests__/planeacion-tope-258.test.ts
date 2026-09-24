@@ -26,7 +26,11 @@ import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessin
 import { buildFiscalAnchor } from '../../fiscal-anchor';
 import { runPlaneacionAgent } from '../agents/planeacion.agent';
 import { planeacionModuleSchema } from '../schemas';
-import { aplicarTope258Escenario } from '../tools/planeacion-tope-258';
+import {
+  TOPE_258_SIN_DESGLOSE_MOTIVO,
+  aplicarTope258Escenario,
+  escenarioCitaDescuentosTopeables,
+} from '../tools/planeacion-tope-258';
 import type { FiscalAgentInput } from '../types';
 
 // UAI 322M → F02 = 112,7M.
@@ -136,5 +140,77 @@ describe('runPlaneacionAgent — el tope del Art. 258 se aplica en código', () 
     };
     const r = await runPlaneacionAgent({ input });
     expect(r.data.escenarios.agresivo).toMatchObject({ impuestoEscenario: null, ahorroEstimado: null, ahorroPct: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Re-auditoría 2026-09-24 (NT-01): el escenario que invoca descuentos de los
+// Arts. 256/257 pero deja el desglose y el impuesto antes de descuentos en null
+// evitaba el tope y publicaba el ahorro del modelo (53,24% de F02).
+// ---------------------------------------------------------------------------
+
+function escCita(
+  nombre: 'conservador' | 'base' | 'agresivo',
+  impuestoEscenario: string | null,
+  impuestoAntesDescuentos: string | null,
+  articulosAplicables: string[],
+  justificacion: string,
+) {
+  return { ...esc(nombre, impuestoEscenario, impuestoAntesDescuentos), articulosAplicables, justificacion };
+}
+
+describe('NT-01 — descuentos topeables sin desglose', () => {
+  it('detecta la cita de los Arts. 255/256/257 (no la del 258 ni la del 258-1)', () => {
+    expect(escenarioCitaDescuentosTopeables({ articulosAplicables: ['Art. 256 E.T.'], justificacion: 'x' })).toBe(true);
+    expect(escenarioCitaDescuentosTopeables({ articulosAplicables: [], justificacion: 'Donaciones (artículos 255 y 257 E.T.)' })).toBe(true);
+    expect(escenarioCitaDescuentosTopeables({ articulosAplicables: ['Art. 258 E.T.', 'Art. 258-1 E.T.', 'Art. 107 E.T.'], justificacion: 'x' })).toBe(false);
+  });
+
+  it('agresivo que cita 256/257 sin desglose ni impuesto antes de descuentos ⇒ impuesto y ahorro N/D con motivo', async () => {
+    // F02 = $112.700.000; tope 25% = $28.175.000. El «modelo» restó $60.000.000.
+    llm['escudo-fiscal:planeacion'] = {
+      markdown: 'm', warnings: [],
+      data: {
+        escenarios: {
+          conservador: escCita('conservador', anchor.f02, null, ['Art. 107 E.T.'], 'x'),
+          base: escCita('base', null, null, ['Art. 107 E.T.'], 'x'),
+          agresivo: escCita('agresivo', '5270000000', null, ['Art. 256 E.T.', 'Art. 257 E.T.', 'Art. 258 E.T.'],
+            'Descuento del 30% por inversión en CTeI (Art. 256 E.T.) por $50.000.000 y donaciones (Art. 257 E.T.) por $10.000.000.'),
+        },
+        recomendacion: 'agresivo', razonRecomendacion: 'x',
+      },
+    };
+    const r = await runPlaneacionAgent({ input });
+    expect(anchor.f02).toBe('11270000000');
+    expect(r.data.escenarios.agresivo).toMatchObject({ impuestoEscenario: null, ahorroEstimado: null, ahorroPct: null, tope258: null });
+    expect(r.warnings).toContain(`Escenario agresivo: ${TOPE_258_SIN_DESGLOSE_MOTIVO}`);
+    // Un escenario sin descuentos topeables conserva el impuesto del modelo.
+    expect(r.data.escenarios.conservador.impuestoEscenario).toBe(anchor.f02);
+  });
+
+  it('con impuesto antes de descuentos pero sin desglose ⇒ el impuesto se toma sin descuentos (regla conservadora)', async () => {
+    llm['escudo-fiscal:planeacion'] = {
+      markdown: 'm', warnings: [],
+      data: {
+        escenarios: {
+          conservador: escCita('conservador', anchor.f02, anchor.f02, ['Art. 107 E.T.'], 'x'),
+          base: escCita('base', null, null, ['Art. 107 E.T.'], 'x'),
+          agresivo: escCita('agresivo', '5270000000', '10000000000', ['Art. 256 E.T.'], 'CTeI (Art. 256 E.T.)'),
+        },
+        recomendacion: 'agresivo', razonRecomendacion: 'x',
+      },
+    };
+    const r = await runPlaneacionAgent({ input });
+    // Impuesto = antes de descuentos ($100.000.000); ahorro = $12.700.000 (≤ tope).
+    expect(r.data.escenarios.agresivo.impuestoEscenario).toBe('10000000000');
+    expect(r.data.escenarios.agresivo.ahorroEstimado).toBe('1270000000');
+    expect(r.warnings.some((w) => /agresivo/.test(w) && /sin desglose/.test(w))).toBe(true);
+  });
+
+  it('aplicarTope258Escenario: la cita sin montos exige el impuesto antes de descuentos', () => {
+    const nd = aplicarTope258Escenario(null, SIN_DESCUENTOS, '100', { citaDescuentosTopeables: true });
+    expect(nd).toMatchObject({ impuestoEscenario: null, motivo: TOPE_258_SIN_DESGLOSE_MOTIVO });
+    // Sin la cita, el escenario sin descuentos conserva el impuesto del modelo.
+    expect(aplicarTope258Escenario(null, SIN_DESCUENTOS, '100').impuestoEscenario).toBe('100');
   });
 });
