@@ -434,6 +434,16 @@ export function SurvivalModePanel({
                 <p className="text-sm text-n-700 dark:text-n-600">
                   {state.status === 'error' ? state.error : ''}
                 </p>
+                {state.status === 'error' && (state.reasons?.length ?? 0) > 0 && (
+                  <div className="mt-3">
+                    <p className="text-sm font-medium text-n-1000">{survival.blockedReasonsTitle}</p>
+                    <ul className="mt-1 list-disc pl-5 space-y-1 text-sm text-n-800">
+                      {state.reasons!.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
             <div className="mt-4 flex gap-3">

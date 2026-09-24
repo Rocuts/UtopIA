@@ -51,6 +51,38 @@ export class EscudoBalanceBloqueadoError extends Error {
   }
 }
 
+/** Cuerpo del 422 (JSON) y del evento SSE `error` de las rutas del Escudo. */
+export interface EscudoBalanceBloqueadoPayload {
+  /** Encabezado legible en el idioma de la petición. */
+  error: string;
+  /** Encabezado + razones en viñetas (lo que muestra un consumidor que sólo lee `detail`). */
+  detail: string;
+  code: typeof ESCUDO_BALANCE_BLOQUEADO_CODE;
+  reasons: string[];
+}
+
+/**
+ * Respuesta de /api/escudo/fiscal y /api/escudo-survival ante un balance
+ * bloqueado: el mismo contrato que el 422 de /niif (`code` + `reasons`), para
+ * que la UI muestre por qué no hay cifras fiscales (I4-escudo 1).
+ */
+export function escudoBalanceBloqueadoPayload(
+  error: EscudoBalanceBloqueadoError,
+  language: 'es' | 'en' = 'es',
+): EscudoBalanceBloqueadoPayload {
+  const intro =
+    language === 'en'
+      ? 'The trial balance cannot be used as the basis for tax figures. Fix the file and try again.'
+      : 'El balance de prueba no se puede usar como base de las cifras fiscales. Corrija el archivo y vuelva a intentarlo.';
+  const reasons = [...error.reasons];
+  return {
+    error: intro,
+    detail: `${intro}\n\n${reasons.map((r) => `• ${r}`).join('\n')}`,
+    code: ESCUDO_BALANCE_BLOQUEADO_CODE,
+    reasons,
+  };
+}
+
 /** Motivos propios de este módulo, en el idioma del informe (los del preprocesador van tal cual). */
 const MOTIVO_TABULAR_SIN_FILAS: Record<'es' | 'en', string> = {
   es:
