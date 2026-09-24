@@ -2,6 +2,9 @@
 // Feasibility Study Orchestrator — sequential pipeline coordinator
 // ---------------------------------------------------------------------------
 // Pipeline: Project Data -> Agent 1 (Market) -> Agent 2 (Financial) -> Agent 3 (Risk) -> Consolidation
+//
+// valoracion-09: los datos del usuario (projectData) y sus instrucciones
+// llegan a los TRES agentes; las métricas de evaluación se calculan en código.
 // ---------------------------------------------------------------------------
 
 import { runMarketAnalyst } from './agents/market-analyst';
@@ -16,6 +19,8 @@ import type {
 
 export interface OrchestrateFeasibilityOptions {
   onProgress?: (event: FeasibilityProgressEvent) => void;
+  /** Fecha de evaluación (calendario ZOMAC); inyectable en pruebas */
+  now?: Date;
 }
 
 /**
@@ -31,8 +36,8 @@ export async function orchestrateFeasibilityStudy(
   request: FeasibilityStudyRequest,
   options: OrchestrateFeasibilityOptions = {},
 ): Promise<FeasibilityReport> {
-  const { projectData, project, language, instructions } = request;
-  const { onProgress } = options;
+  const { projectData, project, language, instructions, macro } = request;
+  const { onProgress, now } = options;
 
   // ---------------------------------------------------------------------------
   // Stage 1: Market Analyst
@@ -60,7 +65,16 @@ export async function orchestrateFeasibilityStudy(
     label: 'Modelador Financiero — Construyendo proyecciones y evaluacion de proyecto',
   });
 
-  const financialResult = await runFinancialModeler(marketResult, project, language, onProgress);
+  const financialResult = await runFinancialModeler({
+    marketOutput: marketResult,
+    project,
+    language,
+    projectData,
+    instructions,
+    macro,
+    onProgress,
+    now,
+  });
 
   onProgress?.({
     type: 'stage_complete',
@@ -77,13 +91,15 @@ export async function orchestrateFeasibilityStudy(
     label: 'Evaluador de Riesgos — Analizando riesgos y recomendacion go/no-go',
   });
 
-  const riskResult = await runRiskAssessor(
-    marketResult,
-    financialResult,
+  const riskResult = await runRiskAssessor({
+    marketOutput: marketResult,
+    financialOutput: financialResult,
     project,
     language,
+    projectData,
+    instructions,
     onProgress,
-  );
+  });
 
   onProgress?.({
     type: 'stage_complete',
