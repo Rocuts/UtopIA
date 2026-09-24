@@ -283,18 +283,23 @@ export const RegulatoryRiskAssessmentSchema = z.object({
     .describe('true si supera el test de propósito comercial razonable del Art. 869 E.T.'),
   rationale: z.string().min(1).describe('Argumento que sustenta el nivel de riesgo'),
   /**
-   * Defensa Art. 647 E.T. — diferencia de criterio. Si la estrategia se
-   * cuestiona por la DIAN, este es el argumento para anular la sanción de
-   * inexactitud (100%). DEBE invocarse cuando hay base doctrinal o
-   * jurisprudencial razonable.
+   * Art. 647 E.T. (parágrafo) — no se configura inexactitud cuando el menor
+   * valor a pagar o el mayor saldo a favor de la declaración proviene de una
+   * interpretación razonable en la apreciación o interpretación del derecho
+   * aplicable, SIEMPRE que los hechos y cifras declarados sean completos y
+   * verdaderos. Sólo aplica a declaraciones tributarias; no anula la sanción
+   * por hechos omitidos o cifras inexactas, ni el mayor impuesto ni los
+   * intereses. `true` sólo con sustento doctrinal o jurisprudencial razonable.
    */
   art647DefenseAvailable: z
     .boolean()
-    .describe('true si la diferencia de criterio (Art. 647 E.T.) es invocable en caso de requerimiento'),
+    .describe(
+      'true sólo si el menor impuesto de la declaración resultaría de una interpretación razonable del derecho aplicable (Art. 647 E.T.) y los hechos y cifras declarados son completos y verdaderos',
+    ),
   art647DefenseRationale: z
     .string()
     .nullable()
-    .describe('Sustento doctrinal/jurisprudencial para la diferencia de criterio. Null si no aplica.'),
+    .describe('Sustento doctrinal/jurisprudencial de la interpretación razonable (Art. 647 E.T.). Null si no aplica.'),
   checklist: z.array(ComplianceCheckItemSchema),
 });
 
