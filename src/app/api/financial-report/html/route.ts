@@ -59,6 +59,7 @@ import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
 import { serverActaVerdict } from '@/lib/reports/part-verdicts';
+import { withServerRenderedParts } from '@/lib/reports/part-markdown';
 import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
 import { htmlInputFromPersisted } from '@/lib/reports/html-input';
 import {
@@ -156,9 +157,26 @@ export async function POST(req: Request) {
 
   try {
     const rawBody: unknown = await req.json();
-    // Versión persistida: prevalece sobre las cifras del cuerpo.
-    const persisted = await resolvePersistedReport(rawBody);
-    if (persisted.kind === 'error') return persisted.response;
+    // Versión persistida: prevalece sobre las cifras del cuerpo. Sus Partes
+    // pasan por el MISMO recálculo que /export por referencia
+    // (`withServerRenderedParts`): veredictos con las reglas vigentes
+    // (invariantes del JSON NIIF, Parte II/III sin JSON válido sellada) y la
+    // Parte II con sus cifras derivadas fijadas por el código. Sin esto una
+    // versión que /export rechaza (o con reglas anteriores) salía en HTML
+    // "procedencia verificada" (revisión I3).
+    const resolved = await resolvePersistedReport(rawBody);
+    if (resolved.kind === 'error') return resolved.response;
+    const persisted =
+      resolved.kind === 'ok'
+        ? {
+            ...resolved,
+            report: withServerRenderedParts(
+              resolved.report,
+              resolved.preprocessed,
+              (rawBody as { language?: unknown } | null)?.language === 'en' ? 'en' : 'es',
+            ),
+          }
+        : resolved;
     // BORRADOR (pipeline-flujo-21): con versión persistida lo dice su
     // consolidado; sin ella, el override que reenvía el cliente (sólo puede
     // añadir la aclaración, nunca quitarla).

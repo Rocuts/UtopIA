@@ -581,3 +581,41 @@ describe('revisión I3 — cifras derivadas de la Parte II alteradas en el JSON'
     expect(c.report.strategicAnalysis.json).toEqual(f.strategicAnalysis.json);
   });
 });
+
+describe('revisión I3 — /html por referencia aplica el mismo recálculo que /export', () => {
+  async function persistLegacy(report: FinancialReport) {
+    const version = buildFinancialReportVersion({ report, preprocessed: pp, rawData: CSV_PERDIDA_COMPARATIVO });
+    const persisted = await persistFinancialReportVersion({ workspaceId: W1, version, controlTotals: null });
+    if (persisted.status !== 'persisted') throw new Error('no persistió');
+    return { reportId: persisted.provenance.reportId, reportHash: persisted.provenance.reportHash };
+  }
+
+  it('versión con reconciliación "limpia" y brechas de desglose: /export y /html la rechazan', async () => {
+    const f = await fases();
+    const c = await consolidar(f, f.context.company);
+    const reportRef = await persistLegacy({
+      ...c.report,
+      niifAnalysis: {
+        ...c.report.niifAnalysis,
+        reconciliation: { clean: true, deviations: [], lineGaps: ['Brecha de desglose'], repairAttempted: false } as never,
+      },
+    });
+    const excel = await exportReport(req('/api/financial-report/export', { reportRef, format: 'excel' }));
+    expect(excel.status).toBe(422);
+    const page = await html(req('/api/financial-report/html', { reportRef, language: 'es' }));
+    expect(page.status).toBe(422);
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('versión con un punto de equilibrio alterado en el JSON: el Editor Jefe recibe el derivado', async () => {
+    const f = await fases();
+    const c = await consolidar(f, f.context.company);
+    const sj = structuredClone(c.report.strategicAnalysis.json!) as StrategyReportJson;
+    sj.breakEven.breakEvenPointCop = '98765432100';
+    const reportRef = await persistLegacy({ ...c.report, strategicAnalysis: { ...c.report.strategicAnalysis, json: sj } });
+    const page = await html(req('/api/financial-report/html', { reportRef, language: 'es' }));
+    expect(page.status).toBe(200);
+    const input = vi.mocked(runHtmlEditor).mock.calls[0][0] as unknown as { strategyReport: StrategyReportJson };
+    expect(input.strategyReport.breakEven.breakEvenPointCop).toBe(f.strategicAnalysis.json!.breakEven.breakEvenPointCop);
+  });
+});
