@@ -291,10 +291,13 @@ const DASHBOARD_ANCHORS: ReadonlyArray<{ keys: MoneyKey[]; re: RegExp }> = [
   // perímetros que publica el preprocesador —operacionales netos (41 − 4175),
   // netos y brutos de Clase 4—, igual que la prosa: vale cualquiera, así que el
   // perímetro que el modelo eligió no produce un falso sello. "Ventas brutas"
-  // (41 antes de devoluciones) no es ninguno de ellos y sigue sin ancla.
+  // (41 antes de devoluciones) no es ninguno de ellos y sigue sin ancla; y
+  // también "Ventas" o "Ventas totales" sin "netas" (revisión F-html): suelen
+  // ser las ventas antes de devoluciones (4135), que no es un perímetro del
+  // preprocesador, y anclarlas sellaba un dashboard honesto.
   {
     keys: ['ingresosOperacionales', 'ingresosNetos', 'ingresos'],
-    re: /^(total )?(ingresos|ventas)( (operacionales|ordinarios|de actividades ordinarias))?( netos| netas| totales)?$/,
+    re: /^(total )?ingresos( (operacionales|ordinarios|de actividades ordinarias))?( netos| totales)?$|^ventas( (operacionales|ordinarias|de actividades ordinarias))? netas$/,
   },
   { keys: ['utilidadBruta'], re: /^(utilidad|ganancia) bruta$/ },
   { keys: ['ebit'], re: /^((utilidad|ganancia|resultado) (operacional|operativa|operativo)|ebit)$/ },
@@ -488,6 +491,32 @@ function fmtNumber(n: number): string {
 
 function fmtPct(n: number): string {
   return `${n.toFixed(1).replace('.', ',')} %`;
+}
+
+/**
+ * Variaciones interanuales admitidas para un KPI anclado: en puntos y relativa
+ * (% sobre |comparativo|), desde los valores exactos del preprocesador (los
+ * dos primeros: el mensaje los cita), desde esos valores redondeados a 0, 1 y
+ * 2 decimales (la precisión de TOTALES VINCULANTES) y desde los que imprimió
+ * el modelo si cuadran con el ancla a su precisión.
+ */
+function yoyCandidates(cur: number, prev: number, printedCur: string | null, printedPrev: string | null): number[] {
+  const pairs: Array<[number, number]> = [[cur, prev]];
+  for (const d of [0, 1, 2]) {
+    const f = 10 ** d;
+    pairs.push([Math.round(cur * f) / f, Math.round(prev * f) / f]);
+  }
+  const shown = (raw: string | null, anchor: number) =>
+    raw === null || isNd(raw) ? [] : parsePrinted(raw).filter((p) => matchesAtPrintedPrecision([p], anchor)).map((p) => p.value);
+  for (const a of shown(printedCur, cur)) for (const b of shown(printedPrev, prev)) pairs.push([a, b]);
+  const out: number[] = [];
+  for (const [a, b] of pairs) {
+    out.push(a - b);
+    if (b !== 0) out.push(((a - b) / Math.abs(b)) * 100);
+  }
+  // out[0] (puntos) y, con comparativo distinto de cero, out[1] (relativa)
+  // son los exactos: el mensaje los cita.
+  return out;
 }
 
 /**
@@ -765,6 +794,10 @@ export function reconcileStrategyAnchors(
     // Variación interanual del KPI anclado (narrativa-14: "+999,0 pp" en el ROE
     // salía verificado). Se admite en puntos (actual − comparativo) o relativa
     // (% sobre |comparativo|): el modelo usa una u otra según el indicador.
+    // Revisión F-html: también la calculada desde los valores REDONDEADOS que
+    // el modelo recibe en TOTALES VINCULANTES (1 decimal en %, 2 en razones,
+    // enteros en días) o que imprimió y cuadran con el ancla: ROE 15,26 → 12,14
+    // se publica 15,3 / 12,1 y "+3,2 pp" es honesto aunque 15,26 − 12,14 = 3,12.
     if (hasComparative && sources.comparative && kpi.yoyVariation !== null && !isNd(kpi.yoyVariation)) {
       const cur = kpiValue(sources.primary, field);
       const prev = kpiValue(sources.comparative, field);
@@ -772,8 +805,11 @@ export function reconcileStrategyAnchors(
         unverifiable.push(`${where} — ${t('variación interanual', 'year-over-year change')}`);
       } else {
         const candidates =
-          cur === null || prev === null ? [] : [cur - prev, ...(prev === 0 ? [] : [((cur - prev) / Math.abs(prev)) * 100])];
+          cur === null || prev === null
+            ? []
+            : yoyCandidates(cur, prev, kpi.resultPrimary, kpi.resultComparative);
         const issue = variationIssue(kpi.yoyVariation, candidates);
+        const prevExact = prev ?? 0;
         if (issue !== 'unparsable') verifiedCount += 1;
         if (issue === 'base') {
           deviations.push(
@@ -785,8 +821,8 @@ export function reconcileStrategyAnchors(
         } else if (issue === 'mismatch') {
           deviations.push(
             t(
-              `${where}: la variación interanual ${kpi.yoyVariation} no es la del preprocesador (${fmtNumber(candidates[0])} puntos${candidates[1] !== undefined ? ` o ${fmtPct(candidates[1])}` : ''}).`,
-              `${where}: the year-over-year change ${kpi.yoyVariation} is not the preprocessor's (${fmtNumber(candidates[0])} points${candidates[1] !== undefined ? ` or ${fmtPct(candidates[1])}` : ''}).`,
+              `${where}: la variación interanual ${kpi.yoyVariation} no es la del preprocesador (${fmtNumber(candidates[0])} ${kpi.unit === 'days' ? 'días' : 'puntos'}${prevExact !== 0 ? ` o ${fmtPct(candidates[1])}` : ''}).`,
+              `${where}: the year-over-year change ${kpi.yoyVariation} is not the preprocessor's (${fmtNumber(candidates[0])} ${kpi.unit === 'days' ? 'days' : 'points'}${prevExact !== 0 ? ` or ${fmtPct(candidates[1])}` : ''}).`,
             ),
           );
         } else if (issue === 'unparsable') {
@@ -1224,6 +1260,7 @@ export function discardedFigureHits(tail: string, d: DiscardedKpiFigure): Array<
   const hits: Array<{ index: number; length: number }> = [];
   const cop = d.unit === 'cop';
   const discardedPesos = cop ? Number(moneyOrUndefined(d.value) ?? NaN) / 100 : parsePrinted(d.value)[0]?.value;
+  const discardedDecimals = cop ? 0 : (parsePrinted(d.value)[0]?.decimals ?? 0);
   if (discardedPesos === undefined || !Number.isFinite(discardedPesos)) return hits;
   const publishedPesos =
     d.published === null || isNd(d.published)
@@ -1246,7 +1283,14 @@ export function discardedFigureHits(tail: string, d: DiscardedKpiFigure): Array<
       candidates = [{ value: value * scale, tolerance: Math.max(0.005, 0.5 * 10 ** -decimals * scale) }];
     } else {
       if (dollar || scale !== 1) continue;
-      candidates = parsePrinted(digits).map((p) => ({ value: p.value, tolerance: 0.5 * 10 ** -p.decimals }));
+      // Una cifra REDONDEADA (menos decimales que la descartada) sin unidad
+      // ("24 meses", "24 empresas" tras un 23,7 %) no se reconoce: sólo con su
+      // unidad ("24 %") es la misma cifra (revisión F-html; el saneamiento la
+      // sustituiría y corrompería la frase).
+      const bare = suffix === '';
+      candidates = parsePrinted(digits)
+        .filter((p) => !(bare && p.decimals < discardedDecimals))
+        .map((p) => ({ value: p.value, tolerance: 0.5 * 10 ** -p.decimals }));
       // Un entero de un dígito ("3 acciones", "5 veces") es demasiado ambiguo.
       candidates = candidates.filter((c) => !(Number.isInteger(c.value) && c.tolerance === 0.5 && Math.abs(c.value) < 10));
     }

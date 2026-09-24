@@ -136,6 +136,15 @@ describe('narrativa-14 — filas de ingresos del dashboard ancladas', () => {
     expect(r.deviations).toEqual([]);
   });
 
+  it('"Ventas" y "Ventas totales" sin "netas" (ventas antes de devoluciones, $105M) no sellan: no verificables (revisión F-html)', () => {
+    const j = strategy({
+      executiveDashboard: { rows: [row('Ventas', cents(105_000_000)), row('Ventas totales', cents(105_000_000))], executiveCommentary: 'Cierre.' },
+    });
+    const r = reconcileStrategyAnchors(j, sources);
+    expect(r.deviations).toEqual([]);
+    expect(r.unverifiable).toEqual(expect.arrayContaining(['Dashboard — Ventas', 'Dashboard — Ventas totales']));
+  });
+
   it('"Ventas brutas" (41 antes de devoluciones) sigue sin ancla: no verificable, no sella', () => {
     const j = strategy({ executiveDashboard: { rows: [row('Ventas brutas', cents(105_000_000))], executiveCommentary: 'Cierre.' } });
     const r = reconcileStrategyAnchors(j, sources);
@@ -326,5 +335,49 @@ describe('narrativa-15 — R7 del HTML: nombre plegado y cifra redondeada', () =
     expect(r7('<p>El margen bruto fue de 70 %.</p>')).toEqual([]);
     expect(r7('<p>El margen bruto fue de 64,5 %.</p>')).toHaveLength(1);
     expect(r7('<p>El margen bruto fue de 65 %.</p>')).toHaveLength(1);
+  });
+});
+
+// Revisión adversarial F-html: el modelo recibe los KPI redondeados en
+// TOTALES VINCULANTES (1 decimal en %, enteros en días) y calcula la variación
+// desde esos valores. Exigirla desde los valores exactos sellaba un informe
+// honesto; y el saneamiento sustituía un entero redondeado sin unidad
+// ("24 meses") que no es la cifra del KPI.
+describe('revisión F-html — variación interanual desde los valores redondeados', () => {
+  const withKpi = (field: 'roe' | 'diasCartera', cur: number, prev: number) => {
+    const p = preprocessTrialBalance(parseTrialBalanceCSV(CSV));
+    (p.primary.controlTotals as unknown as Record<string, number>)[field] = cur;
+    (p.comparative!.controlTotals as unknown as Record<string, number>)[field] = prev;
+    return strategyAnchorSources(p, null);
+  };
+
+  it('ROE 15,26 → 12,14 publicado 15,3 / 12,1: "+3,2 pp" y "+26,4 %" pasan; "+4,0 pp" sella', () => {
+    const s = withKpi('roe', 15.26, 12.14);
+    const j = (yoy: string) => strategy({ kpis: [kpi({ resultPrimary: '15,3', resultComparative: '12,1', yoyVariation: yoy })] });
+    for (const ok of ['+3,2 pp', '+3,12 pp', '+26,4 %', '+25,7 %']) {
+      expect(reconcileStrategyAnchors(j(ok), s).deviations).toEqual([]);
+    }
+    expect(reconcileStrategyAnchors(j('+4,0 pp'), s).deviations.join('\n')).toMatch(/KPI ROE: la variación interanual \+4,0 pp no es la del preprocesador \(3,12 puntos o 25,7 %\)/);
+  });
+
+  it('días de cartera 45,4 → 30,6 publicados 45 / 31: "+14" pasa; "+30" sella y el mensaje habla en días', () => {
+    const s = withKpi('diasCartera', 45.4, 30.6);
+    const j = (yoy: string) =>
+      strategy({ kpis: [kpi({ name: 'Días de cartera', unit: 'days', resultPrimary: '45', resultComparative: '31', yoyVariation: yoy })] });
+    expect(reconcileStrategyAnchors(j('+14'), s).deviations).toEqual([]);
+    expect(reconcileStrategyAnchors(j('+30'), s).deviations.join('\n')).toMatch(/\+30 no es la del preprocesador \(14,8 días o 48,4 %\)/);
+  });
+
+  it('el saneamiento no toca un entero redondeado sin unidad ("24 meses") y sí "24 %"', () => {
+    const j = strategy({
+      executiveDashboard: {
+        rows: [row('Total Activo', cents(pp.primary.controlTotals.activo))],
+        executiveCommentary: 'El margen EBITDA ajustado se calculó sobre 24 meses de datos. El margen EBITDA ajustado de 24 % es holgado.',
+      },
+      kpis: [kpi({}), kpi({ name: 'Margen EBITDA ajustado', resultPrimary: '23,7' })],
+    } as Partial<StrategyReportJson>);
+    expect(applyKpiAnchors(j, sources).json.executiveDashboard.executiveCommentary).toBe(
+      'El margen EBITDA ajustado se calculó sobre 24 meses de datos. El margen EBITDA ajustado de N/D es holgado.',
+    );
   });
 });
