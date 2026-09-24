@@ -7,11 +7,12 @@
 //   - PaginationFooter (gold rule + page badge) at very bottom.
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
-import type { AreaKey } from '../types';
+import type { AreaKey, TocAnchorId } from '../types';
 import {
   EditorialTitle,
   TopoOrnament,
   PaginationFooter,
+  TocAnchor,
 } from '../primitives';
 import {
   N0,
@@ -40,6 +41,12 @@ interface Props {
   ornamentSeed?: number;
   /** Optional two-digit section index string (e.g. "01", "02"). Derived from areaAccent order if not provided. */
   sectionIndex?: string;
+  /**
+   * Sección de la tabla de contenido que abre este separador (integración I4):
+   * la entrada del índice apunta al separador, no a la primera página de la
+   * sección que le sigue.
+   */
+  tocAnchor?: TocAnchorId;
 }
 
 const AREA_ORDER: Record<AreaKey, string> = {
@@ -71,6 +78,7 @@ export function SectionDivider({
   sectionEmphasis,
   ornamentSeed,
   sectionIndex,
+  tocAnchor,
 }: Props) {
   const bg = darken(areaHex(areaAccent), 0.35);
   const numeral = sectionIndex ?? AREA_ORDER[areaAccent];
@@ -86,6 +94,7 @@ export function SectionDivider({
         padding: 0,
       }}
     >
+      {tocAnchor ? <TocAnchor id={tocAnchor} /> : null}
       {/* Full-bleed topo ribbons — 5% opacity sand contours covering whole page */}
       <View
         style={{

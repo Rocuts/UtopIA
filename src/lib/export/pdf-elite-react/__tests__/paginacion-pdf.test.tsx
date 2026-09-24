@@ -113,7 +113,9 @@ describe('PDF Élite renderizado — paginación y páginas en blanco (reportes-
     const checks: Array<[RegExp, RegExp]> = [
       [/Carta del director/i, /Mensaje del Socio Director/],
       [/INDICADORES CLAVE/i, /Indicadores clave del período/],
-      [/ESTADOS FINANCIEROS/i, /ESTADO DE SITUACIÓN FINANCIERA/],
+      // Integración I4: la entrada apunta al separador "Estados financieros",
+      // no a la página del ESF que le sigue.
+      [/ESTADOS FINANCIEROS/i, /^(?![\s\S]*ESTADO DE SITUACIÓN FINANCIERA)[\s\S]*Estados\s+financieros/],
       [/CASCADA DE UTILIDAD/i, /Composición del Resultado Neto/],
       [/DIALES DE SALUD/i, /Indicadores de salud financiera/],
       [/RECOMENDACIONES/i, /H\s*O\s*J\s*A\s+D\s*E\s+R\s*U\s*T\s*A/],
