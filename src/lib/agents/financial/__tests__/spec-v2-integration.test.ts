@@ -421,26 +421,25 @@ describe('Wave 2.F7 — Test 3 — R18 patrimonio negativo', () => {
     expect(r18Finding!.normReference).toMatch(/NIA 570/);
   });
 
-  it('patrimonio = -$150M con capital suscrito $100M → cita Art. 459 C.Co. (causal de disolución)', () => {
-    // Art. 459 C.Co.: pérdidas > 50% del capital suscrito activan la obligación
-    // de convocar asamblea. R18 es la regla de negocio que detecta esta condición.
-    // Usamos runR18 directamente (mismo patrón de wave2-f4.test.ts) para aislar
-    // la lógica de la regla sin que R5 interfiera en el patrimonio del snapshot.
+  it('patrimonio = -$150M con capital suscrito $100M → negocio en marcha (Ley 2069/2020 art. 4), sin Art. 459 C.Co.', () => {
+    // Auditoría 2026-09 (niif-preproceso-14): el Art. 459 C.Co. (causal de
+    // disolución por pérdidas) fue derogado por la Ley 2069 de 2020 (art. 4
+    // par. 2) y su par. 1 remite esa causal a la de negocio en marcha. R18
+    // alerta y pide la evaluación de la administración; no configura la
+    // causal automáticamente.
     const snap = buildSnapshot({
       patrimonio: -150_000_000,
       capitalSuscritoPagado: 100_000_000,
     });
 
-    // Usar runR18 directamente: evalúa la regla pura sin el pipeline completo.
-    // |patrimonio| = 150M > 100M * 0.5 = 50M → triggers Art. 459 C.Co.
     const r18Out = runR18(snap);
     expect(r18Out.patrimonioNegativo).toBe(true);
     expect(r18Out.findings.length).toBe(1);
     expect(r18Out.findings[0].code).toBe('CUR-R18');
     expect(r18Out.findings[0].severity).toBe('critico');
-    // La descripción debe mencionar Art. 459 C.Co. cuando |patrimonio| > 50% capital.
-    expect(r18Out.findings[0].description).toContain('Art. 459 C.Co.');
-    expect(r18Out.findings[0].normReference).toContain('Art. 459');
+    expect(r18Out.findings[0].description).not.toMatch(/459/);
+    expect(r18Out.findings[0].normReference).not.toMatch(/459/);
+    expect(r18Out.findings[0].normReference).toContain('Ley 2069 de 2020 art. 4');
   });
 
   it('patrimonio positivo → R18 no dispara', () => {
