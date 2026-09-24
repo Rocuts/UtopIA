@@ -10,6 +10,7 @@
 import type { CompanyInfo } from '../../types';
 import { buildAntiHallucinationGuardrail } from '../../prompts/anti-hallucination';
 import { buildColombia2026Context } from '../../prompts/colombia-2026-context';
+import { SMMLV_2026 } from '@/lib/tax/taxCalculator';
 
 export function buildComplianceValidatorPrompt(
   company: CompanyInfo,
@@ -44,7 +45,7 @@ Validar que cada estrategia de optimización tributaria propuesta cumpla con la 
 - Soporte de interpretación razonable (Art. 647 E.T.) documentado para TODA estrategia con riskLevel ∈ {medio, alto} que se refleje en una declaración tributaria, cuando exista doctrina DIAN, jurisprudencia del Consejo de Estado o concepto CTCP que sustente la posición del contribuyente. El Art. 647 excluye la inexactitud sólo si el menor valor proviene de una interpretación razonable del derecho aplicable y los hechos y cifras declarados son completos y verdaderos; no "anula" la sanción ni sustituye la corrección de cifras.
 - Checklist por estrategia DEBE incluir mínimo: propósito comercial, formalidad del régimen invocado, sustancia económica vs forma jurídica, soporte documental, Art. 118-1 (subcapitalización si aplica), Arts. 260-1..11 (precios de transferencia si aplica), Art. 631-5 (RUB), Art. 869 (anti-abuso).
 - Sanciones citadas con cuantía EXACTA: Arts. 647 y 648 (inexactitud 100% del mayor valor; reducible a la cuarta parte si se acepta en la respuesta al requerimiento especial — Art. 709 — o a la mitad si se acepta en el recurso contra la liquidación de revisión — Art. 713 —, además de la gradualidad del Art. 640); Art. 641 (extemporaneidad 5% por mes o fracción, máximo 100% del impuesto); Art. 651 (información no suministrada 1%, con errores 0,7%, extemporánea 0,5% de las sumas; tope 7.500 UVT, con las reducciones del mismo artículo); RUB Arts. 631-5/631-6 con sanciones del Art. 658-3 E.T. (1 UVT por día de retraso; 100 UVT si información errónea o incompleta); Art. 869 (recaracterización + 200% si dolo); Art. 434A C.P. (prisión 48-108 meses si omisión de activos / pasivos inexistentes > 1.000 SMLMV, Ley 2277/2022).
-- UVT del año gravable analizado (2026 = $52.374 COP; 2025 = $49.799 COP). Salario mínimo 2026 = $1.750.905 COP referencial (Decreto 1469/2025).
+- UVT del año gravable analizado (2026 = $52.374 COP; 2025 = $49.799 COP). Salario mínimo 2026 = $${SMMLV_2026.toLocaleString('es-CO')} COP referencial (Decreto 1469/2025, suspendido provisionalmente por el Consejo de Estado; cifra ratificada por el Decreto transitorio 0159 del 19-feb-2026).
 - blockers contiene solo recomendaciones con (riskLevel="alto" AND businessPurposeTestPasses=false). Estrategias con riesgo alto que pasan el test de propósito comercial NO bloquean — entran en "con_salvedades".
 - overallVerdict consolidado: "favorable" si no hay blockers y ninguna alta; "con_salvedades" si hay altas sin blockers o medias múltiples; "desfavorable" si hay blockers no resolubles.
 </success_criteria>
@@ -76,7 +77,7 @@ ${detectedPeriods && detectedPeriods.length > 0 ? `- Períodos detectados: ${det
 ${
   isMultiPeriod
     ? `<multiperiod_context>
-Datos con múltiples periodos. Evaluar la TRAYECTORIA de la tasa efectiva entre periodos: una caída abrupta sin sustento técnico es bandera roja Art. 869 E.T. Verificar patrimonio líquido al cierre del año anterior para Art. 118-1 (subcapitalización 2:1). Verificar umbrales recurrentes (RUB Art. 631-5, precios de transferencia Art. 260-1, exógena Art. 631) sobre la serie histórica.
+Datos con múltiples periodos. Evaluar la TRAYECTORIA de la tasa efectiva entre periodos: una caída abrupta sin sustento técnico es bandera roja Art. 869 E.T. Verificar patrimonio líquido al cierre del año anterior para Art. 118-1 (subcapitalización 2:1). Verificar umbrales recurrentes (RUB Art. 631-5, precios de transferencia Arts. 260-5 y 260-9, exógena Art. 631) sobre la serie histórica.
 </multiperiod_context>`
     : `<multiperiod_context>
 Datos de un solo periodo. Declarar en preparerNotes que la verificación de subcapitalización (Art. 118-1 E.T.) requiere patrimonio líquido al 31-dic del año anterior; sin el comparativo este chequeo queda condicionado.

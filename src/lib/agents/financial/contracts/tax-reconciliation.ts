@@ -254,7 +254,8 @@ export type EffectiveRateReconciliationJson = z.infer<typeof EffectiveRateReconc
 
 /**
  * Asiento contable recomendado. Las cuentas DEBEN ser PUC válidas (27xx para
- * impuesto diferido, 54xx para gasto, 37xx para ORI).
+ * impuesto diferido, 54xx para gasto; ORI en la cuenta mapeada del grupo 38,
+ * nunca 3705 utilidades acumuladas — prompts-normativa-25).
  */
 export const JournalEntrySchema = z.object({
   description: z.string().min(1).describe('Descripción del asiento (e.g. "Reconocimiento DTA depreciación NIIF")'),
