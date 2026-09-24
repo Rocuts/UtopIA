@@ -284,6 +284,8 @@ const HONEST: Phrase[] = [
   { id: 'H62', scope: 'estados', text: (s) => `La utilidad del ejercicio ${s.year} antes de impuestos fue de $22.000.000,00.` },
   { id: 'H63', scope: 'estados', text: () => 'El total de activos por impuestos diferidos asciende a $1.234.567,00.' },
   { id: 'H64', scope: 'estados', text: () => 'El total de activos supera 5.000 SMMLV (7.117.500.000), por lo que la sociedad está obligada a tener revisor fiscal.' },
+  { id: 'H65', scope: 'estados', text: () => 'La utilidad del ejercicio se destinará a reservas por $2.500.000,00.' },
+  { id: 'H66', scope: 'estados', text: () => 'El resultado del ejercicio se vio afectado por gastos financieros de $10.000.000,00.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -332,6 +334,7 @@ const FALSE: Phrase[] = [
   { id: 'F39', scope: 'estados', text: (s) => `La ${res(s.un)} neta del ejercicio, neta del impuesto de renta, fue de ${wrong(s.un)}.` },
   { id: 'F40', scope: 'estados', text: (s) => `El total de pasivos, que incluye obligaciones financieras de $25.000.000,00, asciende a ${wrong(s.pasivo)}.` },
   { id: 'F41', scope: 'estados', text: (s) => `Se registró un total de activos por ${wrong(s.activo)}.` },
+  { id: 'F42', scope: 'estados', text: (s) => `La ${res(s.un)} del ejercicio, neta de reservas, fue de ${wrong(s.un)}.` },
 ];
 
 // ---------------------------------------------------------------------------

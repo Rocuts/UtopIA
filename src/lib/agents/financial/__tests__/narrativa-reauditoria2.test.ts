@@ -158,6 +158,14 @@ describe('narrativa-04 — tres cortes: saldos 2023 y distribuciones 2024 del co
     expect(fake.motivos.join('\n')).toMatch(/Dividendos: la narrativa imprime \$7\.000\.000,00/);
   });
 
+  it('el resultado 2023 que imprime la columna "Result. Ejercicio" de la apertura del ECP comparativo es ancla', () => {
+    const t = 'La utilidad del ejercicio 2023 fue de $10.000.000,00.';
+    expect(checkGovernanceNarrative(govJson({ notes: [t], acta: null }), narrativeSourcesFromPreprocessed(pp, niif)).motivos).toEqual([]);
+    expect(checkNiifNarrative({ ...niif, technicalNotes: [{ ref: 'N', norma: null, body: t }] }, narrativeSourcesFromPreprocessed(pp, niif)).motivos).toEqual([]);
+    const fake = 'La utilidad del ejercicio 2023 fue de $11.000.000,00.';
+    expect(checkGovernanceNarrative(govJson({ notes: [fake], acta: null }), narrativeSourcesFromPreprocessed(pp, niif)).motivos).toHaveLength(1);
+  });
+
   it('un saldo de 2023 que no imprime ningún estado sigue sellando en la Parte III', () => {
     const r = checkGovernanceNarrative(govJson({ notes: ['El patrimonio al cierre de 2023 fue de $74.000.000,00.'], acta: null }), narrativeSourcesFromPreprocessed(pp, niif));
     expect(r.motivos.join('\n')).toMatch(/Total Patrimonio: la narrativa imprime \$74\.000\.000,00/);

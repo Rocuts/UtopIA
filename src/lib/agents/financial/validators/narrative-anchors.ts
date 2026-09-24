@@ -298,17 +298,20 @@ const ND_ACTA = {
  * cualquier Parte. Esos saldos los calcula el código y el validador del JSON
  * NIIF los cruza contra el balance (E2/E3/E18/E23 del EFE; E4/E7 del ECP).
  */
-function statementValues(niif: NiifReportJson | null): { efectivo: number[]; patrimonio: number[] } {
-  if (!niif) return { efectivo: [], patrimonio: [] };
+function statementValues(niif: NiifReportJson | null): { efectivo: number[]; patrimonio: number[]; resultado: number[] } {
+  if (!niif) return { efectivo: [], patrimonio: [], resultado: [] };
   const cf = niif.cashFlow;
   const ec = niif.equityChanges;
+  const balances = [...(ec?.rows ?? []), ...(ec?.comparativeRows ?? [])].filter(
+    (r) => r.kind === 'opening_balance' || r.kind === 'closing_balance',
+  );
   return {
     efectivo: vals(centsToPesos(cf?.cashOpeningComparative), centsToPesos(cf?.cashClosingComparative)),
-    patrimonio: vals(
-      ...[...(ec?.rows ?? []), ...(ec?.comparativeRows ?? [])]
-        .filter((r) => r.kind === 'opening_balance' || r.kind === 'closing_balance')
-        .map((r) => centsToPesos(r.total)),
-    ),
+    patrimonio: vals(...balances.map((r) => centsToPesos(r.total))),
+    // La columna "Result. Ejercicio" de los saldos del ECP: con tres cortes,
+    // la apertura del comparativo imprime el resultado del corte anterior
+    // (p. ej. 2023), que una nota puede citar.
+    resultado: vals(...balances.map((r) => centsToPesos(r.resultadoEjercicio))).filter((v) => v !== 0),
   };
 }
 
@@ -330,6 +333,7 @@ export function buildNarrativeConcepts(sources: NarrativeAnchorSources): Narrati
     centsToPesos(is?.netIncomeComparative),
     snapshotPesos(primary, 'utilidadNeta'),
     snapshotPesos(comparative, 'utilidadNeta'),
+    ...statements.resultado,
   );
   const concepts: NarrativeConcept[] = [
     {
@@ -741,7 +745,7 @@ const IDENTIFIER_BEFORE =
  * que un verbo de saldo vuelva al concepto ("…, neta del impuesto, fue de $X").
  */
 const OTHER_QUANTITY =
-  /(?<![\p{L}])(?:impuestos?|provisi[oó]n|provisiones|retenci[oó]n|retenciones|costos?|gastos?|obligaci[oó]n|obligaciones|pagos?|pag[oó]|pagaron|compras?|inversi[oó]n|inversiones|pr[eé]stamos?|cr[eé]ditos?|deudas?|anticipos?|sanci[oó]n|sanciones|multas?|intereses)(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:impuestos?|provisi[oó]n|provisiones|retenci[oó]n|retenciones|costos?|gastos?|obligaci[oó]n|obligaciones|pagos?|pag[oó]|pagaron|compras?|inversi[oó]n|inversiones|pr[eé]stamos?|cr[eé]ditos?|deudas?|anticipos?|sanci[oó]n|sanciones|multas?|intereses|reservas?)(?![\p{L}])/iu;
 /** "Del total de activos, $X son corrientes": partitivo, la cifra es una parte. */
 const PARTITIVE_PREFIX = /^\s*(?:del|de\s+(?:la|las|los|el))\s*$/i;
 /** "1.200.000 unidades", "USD 4.000.000": la cifra no está en pesos. */
