@@ -172,6 +172,26 @@ describe('applyKpiAnchors', () => {
     expect(exported.json.dupontAnalysis?.roe).toBe('40,0');
   });
 
+  it('los nombres que pide el prompt (MARGEN_OPERATIVO, MARGEN_NETO) conservan su ancla; "de efectivo" se recalcula', () => {
+    // Revisión adversarial P3: el prompt del Director nombra estos KPIs con
+    // guion bajo; sin normalizarlo, un KPI anclado salía N/D y sin verificar.
+    const j = strategy();
+    j.kpis = [
+      kpi({ name: 'MARGEN_OPERATIVO', resultPrimary: pct1(ct.margenOperativo!) }),
+      kpi({ name: 'MARGEN_NETO', resultPrimary: '99,9' }),
+      kpi({ category: 'efficiency', name: 'Ciclo de conversión de efectivo', unit: 'days', resultPrimary: '999' }),
+    ];
+    const out = applyKpiAnchors(j, strategyAnchorSources(pp, null));
+    expect(out.neutralized).toEqual([]);
+    expect(byName(out.json, 'MARGEN_OPERATIVO').resultPrimary).toBe(pct1(ct.margenOperativo!));
+    expect(out.recomputed).toEqual(['Ciclo de conversión de efectivo']);
+    expect(byName(out.json, 'Ciclo de conversión de efectivo').resultPrimary).not.toBe('999');
+    // El anclado se cruza: un margen neto ajeno sella la Parte II.
+    const r = reconcileStrategyAnchors(out.json, strategyAnchorSources(pp, null));
+    expect(r.deviations.join(' ')).toMatch(/KPI MARGEN_NETO: el Director de Estrategia emitió 99,9%/);
+    expect(r.deviations.join(' ')).not.toMatch(/MARGEN_OPERATIVO/);
+  });
+
   it('es idempotente', () => {
     const once = applyKpiAnchors(strategy(), strategyAnchorSources(pp, null));
     const twice = applyKpiAnchors(once.json, strategyAnchorSources(pp, null));

@@ -218,7 +218,9 @@ function normalizeLabel(label: string): string {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/\([^)]*\)/g, ' ')
-    .replace(/[:.;,]/g, ' ')
+    // "MARGEN_OPERATIVO" / "MARGEN_NETO" son los nombres que el propio prompt
+    // del Director pide para los KPIs anclados: el guion bajo es un espacio.
+    .replace(/[:.;,_]/g, ' ')
     // e2e-niif-14: "Utilidad neta 2025" es el mismo rubro que "Utilidad neta";
     // el año del rótulo no lo saca del ancla.
     .replace(/\b(?:19|20)\d{2}\b/g, ' ')
@@ -314,7 +316,7 @@ const RECOMPUTED_KPIS: ReadonlyArray<{
   },
   {
     field: 'cicloConversionEfectivo',
-    re: /^ciclo (de )?(conversion (del )?efectivo|caja|efectivo)$/,
+    re: /^ciclo (de )?(conversion (del? )?efectivo|caja|efectivo)$/,
     unit: 'days',
     formula: {
       es: 'Días de cartera + días de inventario − días de proveedores — calculado por el sistema',
