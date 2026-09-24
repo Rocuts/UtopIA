@@ -8,6 +8,9 @@
 
 // --- Nacional ---
 
+/** Tipo de contribuyente que consulta el calendario (contrato de la tool). */
+export type CalendarTaxpayerType = 'persona_juridica' | 'persona_natural' | 'gran_contribuyente';
+
 export interface NationalDeadline {
   /** Nombre de la obligación ("Declaración de Renta PJ", "IVA Bimestral B1") */
   obligation: string;
@@ -27,6 +30,12 @@ export interface NationalDeadline {
    * Cualquier respuesta al usuario DEBE incluir disclaimer cuando verified=false.
    */
   verified?: boolean;
+  /**
+   * Tipos de contribuyente a los que aplica la obligación. Ausente = se infiere
+   * del nombre de la obligación (ver `aplicaATipoContribuyente` en ./index.ts);
+   * si el nombre no indica tipo, aplica a todos.
+   */
+  taxpayerTypes?: CalendarTaxpayerType[];
 }
 
 // --- Municipal ---

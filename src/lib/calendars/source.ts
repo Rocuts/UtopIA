@@ -4,7 +4,10 @@
  * Estrategia de fallback (orden de preferencia):
  *   1. `postgres-verified` — última row en `verified_calendars` (escrita por
  *     el cron diario o por `npm run db:seed-calendar`). Es la fuente de
- *     verdad cuando existe.
+ *     verdad cuando existe. OJO: el nombre describe la TABLA, no las fechas:
+ *     el cron guarda `buildDeadlines2026()`, cuyas filas son calculadas y
+ *     llevan `verified: false`. Quien presente las fechas debe mirar el flag
+ *     de cada fila (ver src/lib/tools/tax-calendar.ts).
  *   2. `static-fallback` — `NACIONAL_2026` en `src/data/calendars/`,
  *     marcado `verified=false`. Garantiza que el tool LLM siempre tenga
  *     algo que devolver, aun antes del primer cron run.

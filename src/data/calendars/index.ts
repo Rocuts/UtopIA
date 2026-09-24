@@ -7,11 +7,25 @@
  * 3. Ejecutar `npm run db:ingest` para actualizar RAG
  */
 
-import type { YearCalendar, NationalDeadline, CityCalendar } from './types';
+import type {
+  YearCalendar,
+  NationalDeadline,
+  CityCalendar,
+  CalendarTaxpayerType,
+} from './types';
 import { NACIONAL_2026 } from './nacional-2026';
 import { MUNICIPAL_2026 } from './municipal-2026';
 
-export type { YearCalendar, NationalDeadline, CityCalendar } from './types';
+export type {
+  YearCalendar,
+  NationalDeadline,
+  CityCalendar,
+  CalendarTaxpayerType,
+} from './types';
+export {
+  OBLIGACIONES_NACIONALES_NO_CUBIERTAS_2026,
+  FAMILIAS_SOLO_ESTATICAS_2026,
+} from './nacional-2026';
 
 /** Año vigente del calendario. Actualizar al crear archivos del nuevo año. */
 export const CURRENT_YEAR = 2026;
@@ -68,4 +82,30 @@ export function getMunicipalCalendar(
 export function getAvailableCities(year: number = CURRENT_YEAR): string[] {
   if (year !== CURRENT_YEAR) return [];
   return MUNICIPAL_2026.map(c => c.city);
+}
+
+/**
+ * ¿Aplica la obligación al tipo de contribuyente consultado?
+ * Usa `taxpayerTypes` cuando la fila lo trae; las filas del snapshot del cron
+ * (src/lib/scrapers/dian-scraper.ts) no lo traen, así que se infiere del
+ * nombre. Sin indicio de tipo, aplica a todos.
+ */
+export function aplicaATipoContribuyente(
+  d: NationalDeadline,
+  tipo: CalendarTaxpayerType,
+): boolean {
+  const tipos = d.taxpayerTypes ?? inferirTiposPorNombre(d.obligation);
+  return tipos === null || tipos.includes(tipo);
+}
+
+function inferirTiposPorNombre(obligation: string): CalendarTaxpayerType[] | null {
+  if (/grandes contribuyentes/i.test(obligation)) return ['gran_contribuyente'];
+  if (/personas jur[ií]dicas y naturales/i.test(obligation)) {
+    return ['persona_juridica', 'persona_natural'];
+  }
+  if (/personas jur[ií]dicas/i.test(obligation)) return ['persona_juridica'];
+  if (/personas naturales/i.test(obligation)) return ['persona_natural'];
+  // Art. 292-3 E.T.: sujetos pasivos personas naturales y sucesiones ilíquidas.
+  if (/impuesto al patrimonio/i.test(obligation)) return ['persona_natural'];
+  return null;
 }

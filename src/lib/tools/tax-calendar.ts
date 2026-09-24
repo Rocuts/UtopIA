@@ -9,10 +9,16 @@
  *         • 'static-fallback'     — heuristic dataset in src/data/calendars
  *         • 'none'                — no data available for the year
  *   2. Pull municipal deadlines from the static city dataset (unchanged).
- *   3. Tavily web search ONLY when the verified source is NOT 'edge-config'
- *      or 'postgres-verified'. This saves latency + tokens once the cron
- *      has populated the DB, and preserves the safety net for years where
- *      we still rely on heuristics.
+ *   3. Tavily web search ONLY when the dates are verified. A snapshot from
+ *      'edge-config' / 'postgres-verified' counts as verified ONLY if every row
+ *      shown carries `verified === true`: the cron stores buildDeadlines2026(),
+ *      whose rows are CALCULATED with the 7th-16th business-day rule and are
+ *      all `verified: false` (auditoría 2026-09, tributario-calc-06). Those
+ *      rows are labelled 'CALCULADO_NO_VERIFICADO' and keep the web search.
+ *   4. Rows are filtered by taxpayer type (GC / PJ / PN) and the families the
+ *      cron does not produce (SIMPLE, INC, precios de transferencia, activos en
+ *      el exterior) are completed from the static dataset. Obligations that no
+ *      source models are listed explicitly as NOT covered.
  *
  * The tool's contract with the LLM (TaxCalendarResult shape, function
  * signature) is unchanged for required fields. Three new optional fields —
@@ -25,13 +31,18 @@ import { getVerifiedNational } from '@/lib/calendars/source';
 import {
   getMunicipalCalendar,
   getAvailableCities,
+  aplicaATipoContribuyente,
+  OBLIGACIONES_NACIONALES_NO_CUBIERTAS_2026,
+  FAMILIAS_SOLO_ESTATICAS_2026,
+  CURRENT_YEAR,
   type NationalDeadline,
   type CityCalendar,
 } from '@/data/calendars';
 
 /** Provenance tag exposed to the LLM so it can cite the source band correctly. */
 export type TaxCalendarDataSource =
-  | 'OFICIAL_DIAN_VERIFICADO'   // edge-config or postgres-verified
+  | 'OFICIAL_DIAN_VERIFICADO'   // edge-config / postgres AND every row verified === true
+  | 'CALCULADO_NO_VERIFICADO'   // edge-config / postgres snapshot with calculated rows
   | 'HEURISTICA_FALLBACK'       // static-fallback dataset
   | 'SIN_DATOS';                // 'none' from the source helper
 
@@ -146,16 +157,36 @@ export async function getTaxCalendar(
 
   // ── Step 1: Verified source (edge-config → postgres-verified → static-fallback → none) ──
   const verifiedSource = await getVerifiedNational(year);
-  const localNational = verifiedSource.deadlines.filter((d) => d.nitDigit === nitLastDigit);
-
-  const isVerified =
+  const fromSnapshot =
     verifiedSource.source === 'edge-config' || verifiedSource.source === 'postgres-verified';
+
+  // El snapshot del cron no produce todas las familias: se completan desde el
+  // dataset estático (verified:false) sólo cuando la fuente no trae ninguna fila.
+  let nationalRows = verifiedSource.deadlines;
+  if (fromSnapshot && year === CURRENT_YEAR) {
+    for (const { familia, filas } of FAMILIAS_SOLO_ESTATICAS_2026) {
+      if (!nationalRows.some((d) => familia.test(d.obligation))) {
+        nationalRows = [...nationalRows, ...filas()];
+      }
+    }
+  }
+
+  const localNational = nationalRows.filter(
+    (d) => d.nitDigit === nitLastDigit && aplicaATipoContribuyente(d, taxpayerType),
+  );
+
+  // "Verificado" es una propiedad de las FILAS, no de la fuente: el cron
+  // persiste fechas calculadas (verified:false) en Postgres.
+  const isVerified =
+    fromSnapshot && localNational.length > 0 && localNational.every((d) => d.verified === true);
   const dataSource: TaxCalendarDataSource =
     verifiedSource.source === 'none'
       ? 'SIN_DATOS'
       : isVerified
         ? 'OFICIAL_DIAN_VERIFICADO'
-        : 'HEURISTICA_FALLBACK';
+        : fromSnapshot
+          ? 'CALCULADO_NO_VERIFICADO'
+          : 'HEURISTICA_FALLBACK';
 
   // ── Step 2: Municipal (still static — separate work item) ──
   const localMunicipal = city ? getMunicipalCalendar(city, year) : null;
@@ -163,8 +194,7 @@ export async function getTaxCalendar(
   const hasLocalMunicipal = localMunicipal !== null;
 
   // ── Step 3: Web supplement — only when verified data is unavailable ──
-  // Once the cron populates Postgres / Edge Config, we skip Tavily entirely
-  // for the national calendar (saves ~600ms + 5 Tavily credits per call).
+  // Only a fully verified snapshot skips Tavily for the national calendar.
   const useWebSupplement = !isVerified;
   const searches: Promise<{ results: unknown[] }>[] = [];
 
@@ -225,15 +255,24 @@ export async function getTaxCalendar(
       (verifiedSource.source === 'edge-config'
         ? ' [Edge Config snapshot]'
         : ' [Postgres]')
-    : verifiedSource.source === 'static-fallback'
-      ? 'DATOS LOCALES HEURÍSTICOS (fechas inferidas por patrón, NO oficiales) + búsqueda web de respaldo'
-      : 'BÚSQUEDA WEB (no hay datos locales para este año)';
+    : fromSnapshot
+      ? `FECHAS CALCULADAS con la regla de días hábiles de ${decreeRef}` +
+        (verifiedAtIso ? ` (snapshot del ${verifiedAtIso})` : '') +
+        ', NO confrontadas una a una con la tabla oficial + búsqueda web de respaldo'
+      : verifiedSource.source === 'static-fallback'
+        ? 'DATOS LOCALES HEURÍSTICOS (fechas inferidas por patrón, NO oficiales) + búsqueda web de respaldo'
+        : 'BÚSQUEDA WEB (no hay datos locales para este año)';
 
   const verifiedInstruction = isVerified
     ? `✅ FECHAS VERIFICADAS: estas fechas están confirmadas contra ${decreeRef}` +
       (verifiedAtIso ? ` (snapshot tomado el ${verifiedAtIso})` : '') +
       `. CITA la fuente al usuario en tu respuesta (ej. "Según ${decreeRef}…"). Puedes presentarlas como definitivas.`
-    : `⚠️ FECHAS HEURÍSTICAS: estas fechas son inferencias por patrón histórico y NO provienen del decreto oficial. DEBES advertir al usuario "Fecha estimada — confirmar con DIAN antes de comprometer al cliente" y recomendar verificar en https://www.dian.gov.co antes de presentar declaraciones.`;
+    : `⚠️ FECHAS NO VERIFICADAS: estas fechas se calculan con la regla de días hábiles del decreto o por patrón histórico y NO fueron confrontadas con la tabla oficial. DEBES advertir al usuario "Fecha estimada — confirmar con DIAN antes de comprometer al cliente" y recomendar verificar en https://www.dian.gov.co antes de presentar declaraciones. No las presentes como fechas oficiales del decreto.`;
+
+  const noCubiertas =
+    year === CURRENT_YEAR
+      ? OBLIGACIONES_NACIONALES_NO_CUBIERTAS_2026.map((o) => `- ${o}`).join('\n')
+      : '';
 
   return {
     nitLastDigit,
@@ -241,9 +280,12 @@ export async function getTaxCalendar(
     year,
     city: city || null,
     localNational:
-      localNational.length > 0
+      (localNational.length > 0
         ? formatNationalDeadlines(localNational, isVerified)
-        : `No hay datos nacionales locales para el año ${year} (último dígito NIT ${nitLastDigit}). Usar resultados web.`,
+        : `No hay datos nacionales locales para el año ${year} (último dígito NIT ${nitLastDigit}). Usar resultados web.`) +
+      (noCubiertas
+        ? `\n\n### Obligaciones nacionales NO CUBIERTAS por este calendario\n${noCubiertas}\n`
+        : ''),
     localMunicipal: hasLocalMunicipal
       ? formatMunicipalCalendar(localMunicipal)
       : city
@@ -258,11 +300,16 @@ export async function getTaxCalendar(
       `Ciudad: ${cityLabel}.\n\n` +
       `PRIORIDAD DE DATOS:\n` +
       (isVerified
-        ? `1. Usa los DATOS OFICIALES VERIFICADOS como única fuente para el calendario nacional — están confirmados contra el decreto.\n` +
+        ? `1. Usa los DATOS OFICIALES VERIFICADOS como fuente para el calendario nacional — están confirmados contra el decreto.\n` +
           `2. Para datos municipales, usa la sección local si existe; complementa con búsqueda web cuando falte.\n`
         : `1. La BÚSQUEDA WEB con fuente oficial DIAN tiene PRIORIDAD sobre los datos heurísticos.\n` +
           `2. Usa los datos locales solo como referencia secundaria y SIEMPRE marca la advertencia "fecha estimada".\n`) +
       `3. Si hay conflicto entre local y web, menciona ambos y recomienda verificar en dian.gov.co.\n\n` +
+      (noCubiertas
+        ? `OBLIGACIONES NO CUBIERTAS: este calendario no incluye las obligaciones listadas al final de la sección nacional. ` +
+          `If alguna podría aplicarle al contribuyente then díselo y recomienda confirmarla en dian.gov.co otherwise no la menciones. ` +
+          `Nunca afirmes que el contribuyente no tiene una obligación sólo porque no aparece aquí.\n\n`
+        : '') +
       `FORMATO: Presenta DOS tablas separadas:\n` +
       `1. **OBLIGACIONES NACIONALES (DIAN)**: Columnas: Mes | Obligación | Fecha Límite | Base Legal\n` +
       `2. **OBLIGACIONES MUNICIPALES${city ? ' — ' + city : ''}**: Columnas: Mes | Obligación | Fecha Límite | Régimen | Observaciones\n\n` +

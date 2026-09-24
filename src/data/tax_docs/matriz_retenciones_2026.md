@@ -40,9 +40,9 @@ fetch_failed: false
 
 | Concepto | Tarifa | Base mínima UVT | Base mínima COP 2026 |
 |----------|--------|-----------------|----------------------|
-| Compras generales — declarantes | 2,5% | 27 UVT | $1.414.000 |
-| Compras generales — no declarantes | 3,5% | 27 UVT | $1.414.000 |
-| Compras a no obligados a facturar | 2,5% / 3,5% | 27 UVT | $1.414.000 |
+| Compras generales — declarantes | 2,5% | 10 UVT | $523.740 |
+| Compras generales — no declarantes | 3,5% | 10 UVT | $523.740 |
+| Compras a no obligados a facturar | 2,5% / 3,5% | 10 UVT | $523.740 |
 | Productos agrícolas o pecuarios sin procesamiento | 1,5% | 92 UVT | $4.818.000 |
 | Café pergamino tipo federación | 0,5% | 160 UVT | $8.380.000 |
 | Combustibles derivados del petróleo | 0,1% | Sin mínimo | — |
@@ -54,8 +54,8 @@ fetch_failed: false
 
 | Concepto | Tarifa | Base mínima UVT | Base mínima COP 2026 |
 |----------|--------|-----------------|----------------------|
-| Servicios generales — declarantes | 4% | 4 UVT | $209.000 |
-| Servicios generales — no declarantes | 6% | 4 UVT | $209.000 |
+| Servicios generales — declarantes | 4% | 2 UVT | $104.748 |
+| Servicios generales — no declarantes | 6% | 2 UVT | $104.748 |
 | Servicios temporales (Empresas Servicios Temporales) | 1% sobre AIU | 4 UVT | $209.000 |
 | Servicios de aseo y vigilancia | 2% sobre AIU | 4 UVT | $209.000 |
 | Servicios de hotel, restaurante y hospedaje | 3,5% | 4 UVT | $209.000 |
@@ -68,14 +68,18 @@ fetch_failed: false
 | Servicios prestados por personas no residentes | 15% | Sin mínimo | — |
 | Servicios técnicos y de asistencia técnica prestados desde el exterior | 20% | Sin mínimo | — |
 
+> Bases generales vigentes desde el 01-jul-2026 (Decreto 0572 de 2025: art. 2 → DUR 1.2.4.4.1, servicios 2 UVT; art. 6 → DUR 1.2.4.9.1 lit. i, compras y otros ingresos 10 UVT). Entre el 08-may y el 30-jun-2026 rigieron las bases anteriores (4 / 27 UVT) por suspensión provisional del Consejo de Estado. Las demás filas de servicios con 4 UVT reflejan la base general anterior: confirme la base especial de cada concepto antes de aplicarla.
+
 ### 2.3 Honorarios y Comisiones
 
 | Concepto | Tarifa | Base mínima UVT | Base mínima COP 2026 |
 |----------|--------|-----------------|----------------------|
 | Honorarios — Personas Jurídicas | 11% | Sin mínimo | — |
-| Honorarios — Personas Naturales declarantes | 10% | Sin mínimo | — |
-| Honorarios — Personas Naturales no declarantes (con contrato > 3.300 UVT) | 11% | Sin mínimo | — |
-| Honorarios — Personas Naturales no declarantes (contrato ≤ 3.300 UVT) | 10% | Sin mínimo | — |
+| Honorarios — Personas Naturales con contrato o pagos del año > 3.300 UVT | 11% | Sin mínimo | — |
+| Honorarios — Personas Naturales (contrato y pagos ≤ 3.300 UVT) | 10% | Sin mínimo | — |
+| Rentas de trabajo no laborales de PN sin solicitud de costos y deducciones | Tabla Art. 383 | — | — |
+
+> DUR 1625/2016 Art. 1.2.4.3.1: el criterio para 10 % / 11 % es el umbral de 3.300 UVT, no la condición de declarante. Tabla del Art. 383: par. 2 mod. art. 8 Ley 2277/2022 y DUR 1.2.4.1.17 par. 4 mod. Decreto 2231/2023.
 | Comisiones — Personas Jurídicas | 11% | Sin mínimo | — |
 | Comisiones — Personas Naturales | 10% / 11% | Sin mínimo | — |
 | Comisiones bursátiles (operaciones de bolsa) | 3% | Sin mínimo | — |
@@ -84,7 +88,7 @@ fetch_failed: false
 
 | Concepto | Tarifa | Base mínima UVT | Base mínima COP 2026 |
 |----------|--------|-----------------|----------------------|
-| Arrendamiento de bienes inmuebles | 3,5% | 27 UVT | $1.414.000 |
+| Arrendamiento de bienes inmuebles | 3,5% | 10 UVT | $523.740 |
 | Arrendamiento de bienes muebles | 4% | Sin mínimo | — |
 | Arrendamiento financiero (leasing) | 4% | Sin mínimo | — |
 
