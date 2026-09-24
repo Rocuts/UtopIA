@@ -25,7 +25,8 @@ import {
   CURRENCY_NOTE,
   NARRATIVE_DISCLAIMER,
   comparativeNotPresentedLegend,
-  incomeStatementTotalRows,
+  incomeStatementPresentationRows,
+  normalizeNiifStatementLabels,
   presentedLineCents,
   resolvePeriodoTipos,
   statementDateLabel,
@@ -338,7 +339,7 @@ function addCashFlowAndEquitySheets(
   report: FinancialReport,
   layout: PeriodLayout | null,
 ): void {
-  const json = report.niifAnalysis.json!;
+  const json = presentableJson(report, layout)!;
   const periodLine = `${statementDate('period', report, layout)} · ${CURRENCY_NOTE}`;
   // El contrato no trae el comparativo del EFE ni filas del ECP del año
   // anterior: se declara en el propio estado (reportes-export-13).
@@ -439,7 +440,7 @@ function addBalanceSheet(
 
   let row = 6;
 
-  const json = report.niifAnalysis.json;
+  const json = presentableJson(report, layout);
 
   if (json) {
     // ── Fuente canónica: JSON-strict validado del NIIF Analyst ──────────────
@@ -840,16 +841,28 @@ function addIncomeStatementFromJson(
   row = addStatementColumnHeader(
     ws, row, json.company.fiscalPeriod, json.company.comparativePeriod,
   );
-  row = addJsonLines(ws, row, p.lines, hasComparative, comparativeText);
 
-  // Totales vinculantes del contrato (UTILIDAD/PÉRDIDA según el signo; ORI y
-  // resultado integral total). Regla única compartida con el PDF y el Markdown
-  // (`incomeStatementTotalRows`): un total ya emitido como renglón no se
-  // duplica y los tres entregables listan las mismas filas y rótulos.
-  for (const t of incomeStatementTotalRows(p)) {
-    row = addJsonStatementRow(
-      ws, row, null, t.label, t.primary, t.comparative, hasComparative, 'total', comparativeText,
-    );
+  // Regla única compartida con el PDF y el Markdown
+  // (`incomeStatementPresentationRows`, auditoría 2026-09-24 e2e-niif-01): los
+  // escalones de la cascada (UTILIDAD/PÉRDIDA bruta, operativa, antes de
+  // impuestos y neta; ORI y resultado integral total) se imprimen SIEMPRE desde
+  // los campos anclados del JSON; un renglón del analista no los sustituye.
+  for (const r of incomeStatementPresentationRows(p)) {
+    if (r.total) {
+      row = addJsonStatementRow(
+        ws, row, null, r.label, r.amountPrimary, r.amountComparative, hasComparative, 'total', comparativeText,
+      );
+    } else {
+      row = addJsonLines(
+        ws, row,
+        [{
+          account: r.account, label: r.label, amountPrimary: r.amountPrimary,
+          amountComparative: r.amountComparative, level: r.level as StatementLineJson['level'],
+          isAbsolute: r.isAbsolute,
+        }],
+        hasComparative, comparativeText,
+      );
+    }
   }
 
   if (comparativeText !== undefined) {
@@ -884,7 +897,7 @@ function addIncomeStatement(
 
   let row = 6;
 
-  const json = report.niifAnalysis.json;
+  const json = presentableJson(report, layout);
 
   // Banner de Advertencia R7 (costo presunto) — vive en el preprocesado y es
   // independiente de la fuente de las cifras, así que se pinta en ambas ramas.
@@ -1611,6 +1624,24 @@ function reportIdentity(report: FinancialReport): { name: string; nit: string; f
  * Fecha de corte / periodo cubierto de los estados (NIIF para las PYMES 3.23),
  * derivada del tipo de periodo que el preprocesador infirió — nunca supuesta.
  */
+/**
+ * JSON NIIF con los rótulos deterministas que imprimen todas las superficies
+ * (auditoría 2026-09-24, e2e-niif-09): grupos PUC con el rótulo del catálogo,
+ * filas del ECP con el periodo del informe y el calificativo del resultado
+ * según su signo. Misma función que el PDF y el orquestador.
+ */
+function presentableJson(report: FinancialReport, layout: PeriodLayout | null): NiifReportJson | undefined {
+  const json = report.niifAnalysis?.json;
+  if (!json) return undefined;
+  const tipos = resolvePeriodoTipos(
+    json.company.fiscalPeriod,
+    json.company.comparativePeriod,
+    layout?.primary ?? null,
+    layout?.comparative ?? null,
+  );
+  return normalizeNiifStatementLabels(json, { primaryPeriodoTipo: tipos.primaryPeriodoTipo }).json;
+}
+
 function statementDate(
   kind: 'position' | 'period',
   report: FinancialReport,

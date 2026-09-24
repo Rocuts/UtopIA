@@ -67,8 +67,11 @@ export function niifArithmeticBlockers(
   const json = parsed.data;
   const preprocessed = options.preprocessed ?? undefined;
   const blockers: string[] = [];
+  // ingesta-09: con un comparativo de saldos de apertura el P&G comparativo
+  // es N/D; la coherencia interna no lo exige (E9) ni lo proyecta.
+  const comparativeIsOpening = preprocessed?.comparative?.saldosDeApertura === true;
 
-  const internal = validateNiifReportJson(json);
+  const internal = validateNiifReportJson(json, { comparativeIsOpening });
   blockers.push(...internal.errors);
   let warnings = internal.warnings;
 
@@ -109,7 +112,7 @@ export function niifArithmeticBlockers(
   blockers.push(...warnings.filter((w) => w.startsWith('E15.') || w.startsWith('E6.')));
   blockers.push(...formatCashFlowViolations(checkCashFlowInvariants(json.cashFlow)));
 
-  blockers.push(...comparativeDetailBlockers(json));
+  blockers.push(...comparativeDetailBlockers(json, comparativeIsOpening));
   blockers.push(...balanceSubtotalBlockers(json, 'primary'));
   if (json.company.comparativePeriod !== null) {
     blockers.push(...balanceSubtotalBlockers(json, 'comparative'));
@@ -241,7 +244,7 @@ function identityBlockers(report: FinancialReport, json: NiifReportJson): string
  * E15/E16: el resto de invariantes (EFE, ECP) no tiene columna comparativa en
  * el contrato y ya se validan sobre el periodo actual.
  */
-function comparativeDetailBlockers(json: NiifReportJson): string[] {
+function comparativeDetailBlockers(json: NiifReportJson, comparativeIsOpening = false): string[] {
   const cp = json.company.comparativePeriod;
   if (cp === null) return [];
   const bs = json.balanceSheet;
@@ -249,8 +252,18 @@ function comparativeDetailBlockers(json: NiifReportJson): string[] {
   // Sin totales comparativos E9 ya bloquea; aquí no hay contra qué sumar.
   if (
     bs.totalAssetsComparative === null || bs.totalLiabilitiesComparative === null ||
-    bs.totalEquityComparative === null || is.grossProfitComparative === null ||
-    is.operatingProfitComparative === null || is.netIncomeComparative === null
+    bs.totalEquityComparative === null
+  ) {
+    return [];
+  }
+  // Comparativo de saldos de apertura (ingesta-09): sólo se proyecta el ESF;
+  // el P&G comparativo es N/D y no hay cascada que sumar.
+  const projectIncome = !comparativeIsOpening;
+  if (
+    projectIncome &&
+    (is.grossProfitComparative === null ||
+      is.operatingProfitComparative === null ||
+      is.netIncomeComparative === null)
   ) {
     return [];
   }
@@ -274,18 +287,31 @@ function comparativeDetailBlockers(json: NiifReportJson): string[] {
       totalLiabilitiesComparative: null,
       totalEquityComparative: null,
     },
-    incomeStatement: {
-      ...is,
-      lines: asPrimary(is.lines),
-      grossProfitPrimary: is.grossProfitComparative,
-      operatingProfitPrimary: is.operatingProfitComparative,
-      netIncomePrimary: is.netIncomeComparative,
-      oriPrimary: is.oriComparative ?? '0',
-      grossProfitComparative: null,
-      operatingProfitComparative: null,
-      netIncomeComparative: null,
-      oriComparative: null,
-    },
+    incomeStatement: projectIncome
+      ? {
+          ...is,
+          lines: asPrimary(is.lines),
+          grossProfitPrimary: is.grossProfitComparative!,
+          operatingProfitPrimary: is.operatingProfitComparative!,
+          netIncomePrimary: is.netIncomeComparative!,
+          oriPrimary: is.oriComparative ?? '0',
+          grossProfitComparative: null,
+          operatingProfitComparative: null,
+          netIncomeComparative: null,
+          oriComparative: null,
+        }
+      : {
+          ...is,
+          lines: [],
+          grossProfitPrimary: '0',
+          operatingProfitPrimary: '0',
+          netIncomePrimary: '0',
+          oriPrimary: '0',
+          grossProfitComparative: null,
+          operatingProfitComparative: null,
+          netIncomeComparative: null,
+          oriComparative: null,
+        },
   };
   const v = validateNiifReportJson(projected);
   for (const msg of [...v.errors, ...v.warnings]) {
@@ -342,7 +368,11 @@ function balanceSubtotalBlockers(json: NiifReportJson, period: 'primary' | 'comp
         suffix += detail[i];
         admissible.add(suffix.toString());
       }
-      if (admissible.has(v.toString()) || admissible.has((-v).toString())) continue;
+      // Con signo (auditoría 2026-09-24, e2e-niif-12): "Resultado neto del
+      // período +$40.000.000" bajo un renglón 36 de −$40.000.000 pasaba al
+      // comparar el valor absoluto. Las correctoras ya restan por su código
+      // (`presentedLineCents`), así que el bloque impreso lleva su signo real.
+      if (admissible.has(v.toString())) continue;
       out.push(
         `Balance ${label ?? ''}: el subtotal "${line.label}" (${name}) imprime ${fmt(v)}, que no es la suma ` +
           `de ningún bloque de renglones que lo preceden ni el total de la sección. El lector no puede reconstruirlo.`,
@@ -385,8 +415,8 @@ function incomeStatementCodeBlockers(json: NiifReportJson): string[] {
   }
   if (hasClass3) {
     const ori = parseMoneyCop(is.oriPrimary);
-    const abs = (v: bigint) => (v < ZERO ? -v : v);
-    if (abs(class3) !== abs(ori)) {
+    // Con signo (e2e-niif-12): un ORI negativo no se sostiene con renglones positivos.
+    if (class3 !== ori) {
       out.push(
         `ERI: los renglones de la clase 3 suman ${fmt(class3)} y el ORI declarado es ${fmt(ori)}; ` +
           `la clase 3 sólo se admite en el ERI como desglose del otro resultado integral.`,

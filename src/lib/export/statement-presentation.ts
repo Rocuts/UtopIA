@@ -8,6 +8,10 @@
 // ---------------------------------------------------------------------------
 
 import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
+import {
+  balanceGroupLabel,
+  cashFlowLabelClaims,
+} from '@/lib/agents/financial/contracts/deterministic-breakdown';
 import { isContraAsset } from '@/lib/preprocessing/curator-rules/contra-asset-registry';
 
 const ZERO = BigInt(0);
@@ -34,14 +38,18 @@ export function presentedLineCents(
 
 export type IncomeTotalKind = 'gross' | 'operating' | 'net';
 
-const INCOME_TOTAL_LABELS: Record<IncomeTotalKind, { profit: string; loss: string }> = {
+/** Escalones de la cascada del ERI que un renglón sin código puede rotular. */
+export type IncomeCascadeKind = IncomeTotalKind | 'pretax' | 'ori' | 'comprehensive';
+
+const INCOME_TOTAL_LABELS: Record<IncomeTotalKind | 'pretax', { profit: string; loss: string }> = {
   gross: { profit: 'UTILIDAD BRUTA', loss: 'PÉRDIDA BRUTA' },
   operating: { profit: 'UTILIDAD OPERATIVA (EBIT)', loss: 'PÉRDIDA OPERATIVA (EBIT)' },
+  pretax: { profit: 'UTILIDAD ANTES DE IMPUESTOS', loss: 'PÉRDIDA ANTES DE IMPUESTOS' },
   net: { profit: 'UTILIDAD NETA DEL PERÍODO', loss: 'PÉRDIDA NETA DEL PERÍODO' },
 };
 
 /** Rótulo de un total del ERI según el signo del periodo actual. */
-export function incomeTotalLabel(kind: IncomeTotalKind, primaryCents: bigint): string {
+export function incomeTotalLabel(kind: IncomeTotalKind | 'pretax', primaryCents: bigint): string {
   const l = INCOME_TOTAL_LABELS[kind];
   return primaryCents < ZERO ? l.loss : l.profit;
 }
@@ -50,6 +58,93 @@ export function incomeTotalLabel(kind: IncomeTotalKind, primaryCents: bigint): s
 export function incomeTotalLabelVariants(kind: IncomeTotalKind): string[] {
   const l = INCOME_TOTAL_LABELS[kind];
   return [l.profit, l.loss];
+}
+
+/**
+ * Qué escalón de la cascada del ERI afirma el rótulo de un renglón SIN código
+ * (auditoría 2026-09-24, e2e-niif-01/-02). `null` = el rótulo no es un total.
+ *
+ * El orden importa: "RESULTADO INTEGRAL TOTAL" antes que "OTRO RESULTADO
+ * INTEGRAL", y "ANTES DE IMPUESTOS" antes que el resultado neto. EBITDA no es
+ * un escalón del ERI (NIIF para las PYMES 5.5): no se reconoce como total.
+ */
+export function incomeCascadeKindOfLabel(label: string): IncomeCascadeKind | null {
+  // Sin puntuación: "UTILIDAD (PÉRDIDA) NETA", "RESULTADO OPERACIONAL — EBIT".
+  const l = normalizeStatementLabel(label.replace(/[()[\]{}\-—–:;,.=+/*|]/g, ' '));
+  const RESULT = '(?:UTILIDAD|UTILIDADES|PERDIDA|PERDIDAS|GANANCIA|GANANCIAS|RESULTADO|RESULTADOS|EXCEDENTE|DEFICIT)';
+  if (/RESULTADO INTEGRAL TOTAL|TOTAL (?:DEL )?RESULTADO INTEGRAL/.test(l)) return 'comprehensive';
+  if (/OTRO(?:S)? RESULTADO(?:S)? INTEGRAL(?:ES)?|\bORI\b/.test(l)) return 'ori';
+  if (
+    (new RegExp(`\\b${RESULT}\\b`).test(l) && /\bANTES DE(?: LOS)? IMPUESTOS?\b/.test(l)) ||
+    /\bUAI\b/.test(l)
+  ) {
+    return 'pretax';
+  }
+  if (new RegExp(`${RESULT}\\s+BRUT[AO]S?`).test(l)) return 'gross';
+  if (
+    new RegExp(`${RESULT}\\s+(?:OPERACIONAL|OPERACIONALES|OPERATIV[AO]S?|DE\\s+(?:LA\\s+)?OPERACION(?:ES)?)`).test(l) ||
+    /\bEBIT\b/.test(l)
+  ) {
+    return 'operating';
+  }
+  if (
+    new RegExp(`${RESULT}\\s+(?:NET[AO]S?|DEL\\s+(?:EJERCICIO|PERIODO|ANO)|LIQUID[AO]S?)`).test(l) ||
+    new RegExp(`^${RESULT}$`).test(l)
+  ) {
+    return 'net';
+  }
+  return null;
+}
+
+/** Campos anclados del ERI de los que salen los totales impresos. */
+export interface IncomeStatementAnchoredFields {
+  grossProfitPrimary: string;
+  grossProfitComparative: string | null;
+  operatingProfitPrimary: string;
+  operatingProfitComparative: string | null;
+  netIncomePrimary: string;
+  netIncomeComparative: string | null;
+  oriPrimary: string;
+  oriComparative: string | null;
+}
+
+/**
+ * Importe anclado de un escalón de la cascada en el JSON. `undefined` = el
+ * escalón no tiene campo propio (UAI: la valida E14/E22 contra la cascada).
+ */
+export function anchoredCascadeValue(
+  p: IncomeStatementAnchoredFields,
+  kind: IncomeCascadeKind,
+  period: 'primary' | 'comparative',
+): string | null | undefined {
+  const primary = period === 'primary';
+  switch (kind) {
+    case 'gross':
+      return primary ? p.grossProfitPrimary : p.grossProfitComparative;
+    case 'operating':
+      return primary ? p.operatingProfitPrimary : p.operatingProfitComparative;
+    case 'net':
+      return primary ? p.netIncomePrimary : p.netIncomeComparative;
+    case 'ori':
+      return primary ? p.oriPrimary : p.oriComparative;
+    case 'comprehensive':
+      return primary
+        ? addCents(p.netIncomePrimary, p.oriPrimary) ?? p.netIncomePrimary
+        : addCents(p.netIncomeComparative, p.oriComparative);
+    case 'pretax':
+      return undefined;
+  }
+}
+
+const CANONICAL_CASCADE_LABEL: Record<'ori' | 'comprehensive', string> = {
+  ori: 'OTRO RESULTADO INTEGRAL',
+  comprehensive: 'RESULTADO INTEGRAL TOTAL',
+};
+
+/** Rótulo canónico de un escalón, según el signo del periodo actual. */
+export function canonicalCascadeLabel(kind: IncomeCascadeKind, primaryCents: bigint): string {
+  if (kind === 'ori' || kind === 'comprehensive') return CANONICAL_CASCADE_LABEL[kind];
+  return incomeTotalLabel(kind, primaryCents);
 }
 
 /** Rótulo normalizado (sin tildes, espacios colapsados, mayúsculas) para comparar filas. */
@@ -62,64 +157,383 @@ export function normalizeStatementLabel(label: string): string {
     .toUpperCase();
 }
 
-export interface IncomeTotalRow {
-  label: string;
-  /** MoneyCop firmado del periodo actual. */
-  primary: string;
-  /** MoneyCop firmado del comparativo; `null` = sin cifra comparativa. */
-  comparative: string | null;
-}
-
-interface IncomeStatementTotalsInput {
-  lines: ReadonlyArray<{ label: string }>;
-  grossProfitPrimary: string;
-  grossProfitComparative: string | null;
-  operatingProfitPrimary: string;
-  operatingProfitComparative: string | null;
-  netIncomePrimary: string;
-  netIncomeComparative: string | null;
-  oriPrimary: string;
-  oriComparative: string | null;
-}
-
 const addCents = (a: string | null, b: string | null): string | null =>
   a !== null && b !== null ? (parseMoneyCop(a) + parseMoneyCop(b)).toString(10) : null;
 
 /**
- * Totales del Estado de Resultados Integral que se anexan tras los renglones
- * del analista, con la MISMA regla en Markdown/HTML, PDF y Excel (antes cada
- * superficie tenía su lista y el Markdown rotulaba "UTILIDAD" una pérdida y
- * omitía el resultado integral total — reportes-export-01/-15):
- *   - UTILIDAD / PÉRDIDA bruta, operativa y neta según el signo del periodo actual;
- *   - OTRO RESULTADO INTEGRAL y RESULTADO INTEGRAL TOTAL (neto + ORI), enfoque
- *     de un único estado (NIIF para las PYMES 5.5 / NIC 1.81A).
- * Un total que el analista ya emitió como renglón (con cualquiera de los dos
- * rótulos) no se duplica.
+ * Rótulos PUC (Decreto 2650/1993) de los grupos de resultados de dos dígitos,
+ * en su denominación NIIF. Auditoría 2026-09-24 (e2e-niif-09): el rótulo de un
+ * grupo PUC es dato del catálogo, no redacción del modelo.
  */
-export function incomeStatementTotalRows(p: IncomeStatementTotalsInput): IncomeTotalRow[] {
-  const emitted = new Set(p.lines.map((l) => normalizeStatementLabel(l.label)));
-  const out: IncomeTotalRow[] = [];
-  const push = (label: string, variants: string[], primary: string, comparative: string | null) => {
-    if (variants.some((v) => emitted.has(normalizeStatementLabel(v)))) return;
-    out.push({ label, primary, comparative });
+const INCOME_GROUP_LABELS: Record<string, string> = {
+  '41': 'Ingresos de actividades ordinarias',
+  '42': 'Otros ingresos (no operacionales)',
+  '51': 'Gastos de administración',
+  '52': 'Gastos de ventas',
+  '53': 'Otros gastos (no operacionales)',
+  '54': 'Impuesto de renta y complementarios',
+  '61': 'Costo de ventas y de prestación de servicios',
+  '62': 'Compras',
+  '71': 'Costo de producción — materia prima',
+  '72': 'Costo de producción — mano de obra directa',
+  '73': 'Costos indirectos de producción',
+  '74': 'Costo de producción — contratos de servicios',
+};
+
+/**
+ * Términos que identifican cada grupo PUC de dos dígitos (Decreto 2650/1993)
+ * en un rótulo, sobre el texto sin tildes y en minúsculas. Un rótulo del
+ * analista que no contiene ninguno de los términos de su propio grupo describe
+ * otra cosa ("13 — Inventarios de mercancía") y se reemplaza por el del
+ * catálogo; uno que sí los contiene ("37 — Pérdidas acumuladas") se conserva.
+ */
+const GROUP_LABEL_TERMS: Record<string, RegExp> = {
+  // Activo
+  '11': /efectivo|caja|banco|disponible|equivalente/,
+  '12': /inversion/,
+  '13': /deudor|por cobrar|cartera|cliente|anticipo|avance|prestamos? a/,
+  '14': /inventario|mercancia|materia prima|producto|existencia/,
+  '15': /propiedad|planta|equipo|maquinaria|edificio|construccion|terreno|vehiculo|flota|mueble|activos? fijos?|ppe/,
+  '16': /intangible|marca|licencia|software|patente|derecho|credito mercantil|plusvalia|goodwill/,
+  '17': /diferido|anticipado|pagados? por anticipado/,
+  '18': /otros? activos?|arte|cultura/,
+  '19': /valorizacion/,
+  // Pasivo
+  '21': /obligaci[a-z]* financier|prestamo|banco|bancari|credito|sobregiro|financier|leasing|pagare/,
+  '22': /proveedor/,
+  '23': /por pagar|acreedor|retencion|dividendo/,
+  '24': /impuesto|gravamen|tasas?\b|iva\b|renta|\bica\b|tributari/,
+  '25': /laboral|empleado|salario|prestacion|cesantia|nomina|vacacion|trabajador/,
+  '26': /estimad|provision/,
+  '27': /diferido|anticipad/,
+  '28': /otros? pasivos?|anticipo|deposito|avance|terceros/,
+  '29': /bono|papel(?:es)? comercial/,
+  // Patrimonio
+  '31': /capital|aporte|cuota|accion/,
+  '32': /superavit|prima|donacion/,
+  '33': /reserva/,
+  '34': /revalorizacion/,
+  '35': /dividendo|participacion/,
+  '36': /resultado|utilidad|perdida|ganancia|excedente|ejercicio/,
+  '37': /anterior|acumulad|retenid/,
+  '38': /valorizacion|resultado integral|\bori\b|superavit|revaluacion/,
+  // Resultados
+  '41': /ingreso|venta|operacional|actividades ordinarias|servicio/,
+  '42': /ingreso|no operacional|financier|interes|dividendo|arrendamiento|recuperacion|diverso|otros/,
+  '51': /administraci|administrativ|personal|honorario|general/,
+  '52': /venta|comercializ|distribucion|mercadeo/,
+  '53': /no operacional|financier|interes|otros gastos|diverso|extraordinari|bancari|comision/,
+  '54': /impuesto|renta/,
+  '61': /costo/,
+  '62': /compra/,
+  '71': /costo|produccion|materia prima/,
+  '72': /costo|produccion|mano de obra/,
+  '73': /costo|produccion|indirecto/,
+  '74': /costo|produccion|contrato/,
+};
+
+/**
+ * Rótulo con que se imprime un renglón CON código de un estado (auditoría
+ * 2026-09-24, e2e-niif-09). Para un grupo PUC de dos dígitos con rótulo de
+ * catálogo: el del analista si nombra su grupo, el del catálogo si no. En los
+ * demás códigos, el del analista.
+ */
+export function presentedAccountLabel(
+  statement: 'balance' | 'income',
+  account: string | null,
+  label: string,
+): string {
+  const code = (account ?? '').trim();
+  if (!/^\d{2}$/.test(code)) return label;
+  const catalog =
+    statement === 'balance'
+      ? balanceGroupLabel(code)
+      : Object.prototype.hasOwnProperty.call(INCOME_GROUP_LABELS, code)
+        ? INCOME_GROUP_LABELS[code]
+        : null;
+  if (catalog === null) return label;
+  const terms = Object.prototype.hasOwnProperty.call(GROUP_LABEL_TERMS, code) ? GROUP_LABEL_TERMS[code] : null;
+  const plain = label.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return terms !== null && terms.test(plain) ? label : catalog;
+}
+
+/** Renglón del ERI tal como se imprime (PDF, Excel y Markdown). */
+export interface IncomePresentationRow {
+  account: string | null;
+  label: string;
+  /** MoneyCop del periodo actual (renglón: tal cual; total: campo anclado). */
+  amountPrimary: string;
+  /** MoneyCop del comparativo; `null` = sin cifra comparativa. */
+  amountComparative: string | null;
+  level: number;
+  isAbsolute: boolean;
+  /** Escalón de la cascada: se imprime como total, desde el campo anclado. */
+  total: boolean;
+}
+
+interface IncomeStatementPresentationInput extends IncomeStatementAnchoredFields {
+  lines: ReadonlyArray<{
+    account: string | null;
+    label: string;
+    amountPrimary: string;
+    amountComparative: string | null;
+    level: number;
+    isAbsolute: boolean;
+  }>;
+}
+
+const CASCADE_ORDER: IncomeCascadeKind[] = ['gross', 'operating', 'net', 'ori', 'comprehensive'];
+
+/**
+ * Filas del Estado de Resultados Integral con la MISMA regla en Markdown/HTML,
+ * PDF y Excel.
+ *
+ * Auditoría 2026-09-24 (e2e-niif-01): un renglón del analista rotulado
+ * "UTILIDAD NETA DEL PERÍODO" por +$40.000.000 SUSTITUÍA al total determinista
+ * (una pérdida de −$40.000.000): la regla anterior omitía el total anclado si
+ * el analista ya había emitido un renglón con ese rótulo. Ahora:
+ *   - un renglón sin código cuyo rótulo es un escalón de la cascada (UB, EBIT,
+ *     UAI, UN, ORI, resultado integral total) se imprime con el importe del
+ *     CAMPO ANCLADO del JSON y el rótulo canónico según el signo; su importe
+ *     propio, si difiere, es un error del validador (E22) que bloquea;
+ *   - la UAI no tiene campo propio: conserva su importe (E22 lo exige igual a
+ *     la cascada, E14 al preprocesador) y sólo se normaliza el rótulo;
+ *   - un escalón se imprime una sola vez; los que el analista no emitió se
+ *     añaden al final (UTILIDAD/PÉRDIDA bruta, operativa y neta, ORI y
+ *     RESULTADO INTEGRAL TOTAL — NIIF para las PYMES 5.5 / NIC 1.81A);
+ *   - un renglón con código de grupo PUC de dos dígitos lleva el rótulo del
+ *     catálogo.
+ */
+export function incomeStatementPresentationRows(
+  p: IncomeStatementPresentationInput,
+): IncomePresentationRow[] {
+  const rows: IncomePresentationRow[] = [];
+  const seen = new Set<IncomeCascadeKind>();
+  const cascadeRow = (
+    kind: IncomeCascadeKind,
+    ownPrimary: string,
+    ownComparative: string | null,
+  ): IncomePresentationRow => {
+    const anchoredPrimary = anchoredCascadeValue(p, kind, 'primary');
+    const anchoredComparative = anchoredCascadeValue(p, kind, 'comparative');
+    const primary =
+      anchoredPrimary === undefined || anchoredPrimary === null ? ownPrimary : anchoredPrimary;
+    const comparative = anchoredComparative === undefined ? ownComparative : anchoredComparative;
+    return {
+      account: null,
+      label: canonicalCascadeLabel(kind, parseMoneyCop(primary)),
+      amountPrimary: primary,
+      amountComparative: comparative,
+      level: 4,
+      isAbsolute: false,
+      total: true,
+    };
   };
-  for (const [kind, primary, comparative] of [
-    ['gross', p.grossProfitPrimary, p.grossProfitComparative],
-    ['operating', p.operatingProfitPrimary, p.operatingProfitComparative],
-    ['net', p.netIncomePrimary, p.netIncomeComparative],
-  ] as const) {
-    push(incomeTotalLabel(kind, parseMoneyCop(primary)), incomeTotalLabelVariants(kind), primary, comparative);
+  for (const line of p.lines) {
+    const coded = line.account !== null && line.account.trim() !== '';
+    if (coded) {
+      rows.push({ ...line, label: presentedAccountLabel('income', line.account, line.label), total: false });
+      continue;
+    }
+    const kind = incomeCascadeKindOfLabel(line.label);
+    if (kind === null) {
+      rows.push({ ...line, total: false });
+      continue;
+    }
+    if (seen.has(kind)) continue;
+    seen.add(kind);
+    rows.push(cascadeRow(kind, line.amountPrimary, line.amountComparative));
   }
-  push('OTRO RESULTADO INTEGRAL', ['OTRO RESULTADO INTEGRAL'], p.oriPrimary, p.oriComparative);
-  const hasTotalIntegral = [...emitted].some((l) => l.startsWith('RESULTADO INTEGRAL TOTAL'));
-  if (!hasTotalIntegral) {
-    out.push({
-      label: 'RESULTADO INTEGRAL TOTAL',
-      primary: addCents(p.netIncomePrimary, p.oriPrimary) ?? p.netIncomePrimary,
-      comparative: addCents(p.netIncomeComparative, p.oriComparative),
+  for (const kind of CASCADE_ORDER) {
+    if (seen.has(kind)) continue;
+    rows.push(cascadeRow(kind, '0', null));
+  }
+  return rows;
+}
+
+/**
+ * El ERI no trae P&G comparativo (los tres totales comparativos en `null`):
+ * caso del comparativo de saldos de apertura (ingesta-09), cuyo P&G es N/D.
+ */
+export function openingPygNotPresented(p: {
+  grossProfitComparative: string | null;
+  operatingProfitComparative: string | null;
+  netIncomeComparative: string | null;
+}): boolean {
+  return (
+    p.grossProfitComparative === null &&
+    p.operatingProfitComparative === null &&
+    p.netIncomeComparative === null
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rótulos deterministas (auditoría 2026-09-24, e2e-niif-09)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ajusta el calificativo de un rótulo de resultado al signo del importe: una
+ * pérdida no se rotula "utilidad"/"ganancia" ni una utilidad "pérdida". Sólo
+ * toca rótulos que afirman un resultado del ejercicio.
+ */
+export function resultWordingForSign(label: string, cents: bigint): string {
+  if (cents === ZERO) return label;
+  const saysProfit = /(?<![\p{L}])(?:utilidad|utilidades|ganancia|ganancias)(?![\p{L}])/iu.test(label);
+  const saysLoss = /(?<![\p{L}])p[eé]rdidas?(?![\p{L}])/iu.test(label);
+  if (cents < ZERO && saysProfit && !saysLoss) {
+    return label
+      .replace(/\s*\((?:ganancia|utilidad)\)/giu, '')
+      .replace(/(?<![\p{L}])(?:UTILIDADES|GANANCIAS)(?![\p{L}])/gu, 'PÉRDIDAS')
+      .replace(/(?<![\p{L}])(?:UTILIDAD|GANANCIA)(?![\p{L}])/gu, 'PÉRDIDA')
+      .replace(/(?<![\p{L}])(?:Utilidades|Ganancias)(?![\p{L}])/gu, 'Pérdidas')
+      .replace(/(?<![\p{L}])(?:Utilidad|Ganancia)(?![\p{L}])/gu, 'Pérdida')
+      .replace(/(?<![\p{L}])(?:utilidades|ganancias)(?![\p{L}])/gu, 'pérdidas')
+      .replace(/(?<![\p{L}])(?:utilidad|ganancia)(?![\p{L}])/gu, 'pérdida');
+  }
+  if (cents > ZERO && saysLoss && !saysProfit) {
+    return label
+      .replace(/\s*\(p[eé]rdida\)/giu, '')
+      .replace(/(?<![\p{L}])P[EÉ]RDIDAS(?![\p{L}])/gu, 'UTILIDADES')
+      .replace(/(?<![\p{L}])P[EÉ]RDIDA(?![\p{L}])/gu, 'UTILIDAD')
+      .replace(/(?<![\p{L}])P[eé]rdidas(?![\p{L}])/gu, 'Utilidades')
+      .replace(/(?<![\p{L}])P[eé]rdida(?![\p{L}])/gu, 'Utilidad')
+      .replace(/(?<![\p{L}])p[eé]rdidas(?![\p{L}])/gu, 'utilidades')
+      .replace(/(?<![\p{L}])p[eé]rdida(?![\p{L}])/gu, 'utilidad');
+  }
+  return label;
+}
+
+export interface StatementLabelContext {
+  /** Tipo del periodo actual; sólo `cerrado` permite afirmar 1-ene / 31-dic. */
+  primaryPeriodoTipo?: PeriodoTipo | null;
+}
+
+/** Rótulo determinista de las filas del ECP cuyo contenido fija el contrato. */
+export function equityRowLabel(
+  kind: string,
+  fiscalPeriod: string,
+  comparativePeriod: string | null,
+  resultCents: bigint,
+  ctx: StatementLabelContext = {},
+): string | null {
+  const closed = ctx.primaryPeriodoTipo === 'cerrado';
+  const year = /^\d{4}$/.test(fiscalPeriod) ? Number(fiscalPeriod) : null;
+  switch (kind) {
+    case 'opening_balance':
+      return closed ? `Saldo al 1 de enero de ${fiscalPeriod}` : `Saldo al inicio del periodo ${fiscalPeriod}`;
+    case 'closing_balance':
+      return closed
+        ? `Saldo al 31 de diciembre de ${fiscalPeriod}`
+        : `Saldo al cierre del periodo ${fiscalPeriod}`;
+    case 'profit_for_period':
+      return resultCents < ZERO
+        ? `Pérdida del ejercicio ${fiscalPeriod}`
+        : resultCents > ZERO
+          ? `Utilidad del ejercicio ${fiscalPeriod}`
+          : `Resultado del ejercicio ${fiscalPeriod}`;
+    case 'prior_period_result_cancellation': {
+      const prior = comparativePeriod ?? (year !== null ? String(year - 1) : 'del periodo anterior');
+      return `Traslado del resultado ${prior} a resultados acumulados`;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Forma mínima del JSON NIIF que la normalización de rótulos necesita. */
+interface LabelledStatementLine {
+  account: string | null;
+  label: string;
+  amountPrimary: string;
+}
+interface LabelledNiifJson {
+  company: { fiscalPeriod: string; comparativePeriod: string | null };
+  balanceSheet: {
+    assets: LabelledStatementLine[];
+    liabilities: LabelledStatementLine[];
+    equity: LabelledStatementLine[];
+  };
+  incomeStatement: { lines: LabelledStatementLine[] };
+  cashFlow: { sections: Array<{ lines: LabelledStatementLine[] }> };
+  equityChanges: { rows: Array<{ kind: string; label: string; resultadoEjercicio: string }> };
+}
+
+/**
+ * Normaliza de forma determinista los rótulos cuyo contenido fija el contrato
+ * (auditoría 2026-09-24, e2e-niif-09): grupos PUC de dos dígitos del ESF y del
+ * ERI con el rótulo del catálogo; filas de apertura, cierre, resultado del
+ * ejercicio y traslado del ECP con el periodo del informe; y el calificativo
+ * de los renglones de resultado del EFE según su signo. Función pura e
+ * idempotente: la aplican el orquestador sobre el JSON y cada superficie de
+ * exportación sobre el JSON que recibe.
+ */
+export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
+  json: T,
+  ctx: StatementLabelContext = {},
+): { json: T; changed: number } {
+  let changed = 0;
+  const relabel = <L extends LabelledStatementLine>(line: L, next: string): L => {
+    if (next === line.label) return line;
+    changed++;
+    return { ...line, label: next };
+  };
+  const bs = json.balanceSheet;
+  const balance = <L extends LabelledStatementLine>(lines: L[]): L[] =>
+    lines.map((l) => {
+      const label = presentedAccountLabel('balance', l.account, l.label);
+      // "3605 — Utilidad del ejercicio" con saldo negativo es una pérdida.
+      const worded = cashFlowLabelClaims(label).includes('netIncome')
+        ? resultWordingForSign(label, parseMoneyCop(l.amountPrimary))
+        : label;
+      return relabel(l, worded);
     });
-  }
-  return out;
+  const income = json.incomeStatement.lines.map((l) =>
+    relabel(l, presentedAccountLabel('income', l.account, l.label)),
+  );
+  const sections = json.cashFlow.sections.map((s) => ({
+    ...s,
+    lines: s.lines.map((l) =>
+      cashFlowLabelClaims(l.label).includes('netIncome')
+        ? relabel(l, resultWordingForSign(l.label, parseMoneyCop(l.amountPrimary)))
+        : l,
+    ),
+  }));
+  const rows = json.equityChanges.rows.map((r) => {
+    const label = (tipo: PeriodoTipo | null) =>
+      equityRowLabel(
+        r.kind,
+        json.company.fiscalPeriod,
+        json.company.comparativePeriod,
+        parseMoneyCop(r.resultadoEjercicio),
+        { primaryPeriodoTipo: tipo },
+      );
+    // Sin tipo de periodo conocido (`undefined`, p. ej. el renderer Markdown)
+    // se respeta cualquiera de las dos formas canónicas ya fijadas por quien
+    // sí lo conocía; si no es canónica, se usa la que no afirma 1-ene/31-dic.
+    if (ctx.primaryPeriodoTipo === undefined && (r.label === label('cerrado') || r.label === label(null))) {
+      return r;
+    }
+    const next = label(ctx.primaryPeriodoTipo ?? null);
+    if (next === null || next === r.label) return r;
+    changed++;
+    return { ...r, label: next };
+  });
+  if (changed === 0) return { json, changed: 0 };
+  return {
+    json: {
+      ...json,
+      balanceSheet: {
+        ...bs,
+        assets: balance(bs.assets),
+        liabilities: balance(bs.liabilities),
+        equity: balance(bs.equity),
+      },
+      incomeStatement: { ...json.incomeStatement, lines: income },
+      cashFlow: { ...json.cashFlow, sections },
+      equityChanges: { ...json.equityChanges, rows },
+    },
+    changed,
+  };
 }
 
 export type PeriodoTipo = 'cerrado' | 'parcial' | 'indeterminado';

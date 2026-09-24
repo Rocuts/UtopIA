@@ -41,9 +41,14 @@ import {
 import { moneyCopEquals, parseMoneyCop, formatCopFromCents } from './contracts/money';
 import {
   buildDeterministicCashFlow,
+  buildLedgerLeaves,
   checkCashFlowInvariants,
   formatCashFlowViolations,
 } from './contracts/deterministic-breakdown';
+import {
+  normalizeNiifStatementLabels,
+  resolvePeriodoTipos,
+} from '@/lib/export/statement-presentation';
 import {
   reconcileActaArithmetic,
   describeActaQualifications,
@@ -370,9 +375,34 @@ export function buildNiifValidatorOptions(preprocessed: unknown): NiifJsonValida
   const comparativeSnap = getComparativeSnapshot(preprocessed);
   const primaryAnchors = buildPeriodAnchors(primarySnap ?? undefined);
   const c = primaryAnchors?.cents;
+  // ingesta-09: un comparativo de saldos de apertura no tiene P&G del periodo
+  // anterior; E9 no exige ni cruza sus totales de resultados (N/D).
+  const comparativeIsOpening = comparativeSnap?.saldosDeApertura === true;
+  const comparativeAnchors = buildComparativeAnchorsForValidator(comparativeSnap);
 
   return {
-    bindingComparativeTotalsCents: buildComparativeAnchorsForValidator(comparativeSnap),
+    bindingComparativeTotalsCents:
+      comparativeAnchors && comparativeIsOpening
+        ? {
+            totalAssets: comparativeAnchors.totalAssets,
+            totalLiabilities: comparativeAnchors.totalLiabilities,
+            totalEquity: comparativeAnchors.totalEquity,
+          }
+        : comparativeAnchors,
+    comparativeIsOpening,
+    // E21/E24 (auditoría 2026-09-24, e2e-niif-02/05/06/08): las hojas del
+    // balance de prueba de cada periodo, para anclar renglón a renglón el ESF,
+    // el ERI y las columnas del ECP. Sin snapshot no hay libro que cruzar.
+    ledgers:
+      primarySnap && Array.isArray(primarySnap.classes)
+        ? {
+            primary: buildLedgerLeaves(primarySnap),
+            comparative:
+              comparativeSnap && Array.isArray(comparativeSnap.classes)
+                ? buildLedgerLeaves(comparativeSnap)
+                : null,
+          }
+        : undefined,
     // E14 — anclas del periodo PRIMARIO. Hasta la auditoría 2026-08 sólo se
     // cruzaba el comparativo: del año que el cliente firma, el único control
     // era E1 (coherencia interna del balance consigo mismo). Con las anclas
@@ -2083,6 +2113,56 @@ export async function runNiifPhase(
           `Columna comparativa (${comparativeSnap?.period}) completada desde el balance ` +
           `preprocesado en: ${filled.join(', ')}.`,
       });
+    }
+
+    // Comparativo de saldos de apertura (ingesta-09, cross-dep de W3-A): no
+    // hay P&G del periodo anterior. Las cifras de resultados que el modelo
+    // copió "sólo por contrato" no se presentan como P&G comparativo: se
+    // vacían (N/D) antes de validar y de renderizar, igual que en Excel y PDF.
+    if (comparativeSnap?.saldosDeApertura === true && json.company.comparativePeriod !== null) {
+      const is = json.incomeStatement;
+      const hadPyg =
+        is.grossProfitComparative !== null ||
+        is.operatingProfitComparative !== null ||
+        is.netIncomeComparative !== null ||
+        is.oriComparative !== null ||
+        is.lines.some((l) => l.amountComparative !== null);
+      if (hadPyg) {
+        json = {
+          ...json,
+          incomeStatement: {
+            ...is,
+            lines: is.lines.map((l) => ({ ...l, amountComparative: null })),
+            grossProfitComparative: null,
+            operatingProfitComparative: null,
+            netIncomeComparative: null,
+            oriComparative: null,
+          },
+        };
+        onProgress?.({
+          type: 'stage_progress',
+          stage: 1,
+          detail:
+            `El comparativo ${json.company.comparativePeriod} es de saldos de apertura: el estado de ` +
+            `resultados comparativo se presenta N/D.`,
+        });
+      }
+    }
+
+    // Rótulos deterministas (auditoría 2026-09-24, e2e-niif-09): grupos PUC con
+    // el rótulo del catálogo, filas de apertura/cierre/resultado del ECP con el
+    // periodo del informe y el calificativo del resultado según su signo.
+    {
+      const tipos = resolvePeriodoTipos(
+        json.company.fiscalPeriod,
+        json.company.comparativePeriod,
+        getPrimarySnapshot(context.preprocessed),
+        comparativeSnap,
+      );
+      const { json: rotulado, changed } = normalizeNiifStatementLabels(json, {
+        primaryPeriodoTipo: tipos.primaryPeriodoTipo,
+      });
+      if (changed > 0) json = rotulado;
     }
 
     if (json !== niif.json) {

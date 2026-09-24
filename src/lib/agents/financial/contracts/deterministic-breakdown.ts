@@ -154,6 +154,55 @@ export function isNonCurrentGroup(section: BreakdownSection, group: string): boo
 }
 
 /**
+ * Rótulo NIIF del grupo PUC de dos dígitos del Estado de Situación Financiera,
+ * o `null` si el grupo no tiene rótulo propio. Auditoría 2026-09-24
+ * (e2e-niif-09): el renglón "13" salía rotulado "Inventarios de mercancía";
+ * el rótulo de un grupo PUC es un dato del catálogo (Decreto 2650/1993), no
+ * redacción del modelo.
+ */
+export function balanceGroupLabel(group: string): string | null {
+  return Object.prototype.hasOwnProperty.call(GROUP_LABELS, group) ? GROUP_LABELS[group] : null;
+}
+
+// ---------------------------------------------------------------------------
+// Libro de hojas del balance de prueba (auditoría 2026-09-24, e2e-niif-02/05/06/08)
+// ---------------------------------------------------------------------------
+// El validador ancla cada renglón con código PUC de los cuatro estados a la
+// suma de las hojas del balance de prueba que ese código agrupa. Es la misma
+// proyección que `buildDeterministicBreakdown` (hojas, centavos exactos, clase
+// por pertenencia en el snapshot), expuesta como lista para que el validador
+// no dependa del shape del preprocesador.
+// ---------------------------------------------------------------------------
+
+/** Una cuenta hoja del balance de prueba, en centavos exactos (convención natural del snapshot). */
+export interface LedgerLeaf {
+  /** Sólo dígitos del código PUC (`2895VC` → `2895`). */
+  code: string;
+  /** Clase PUC bajo la que el snapshot publica la cuenta (1..7). */
+  classCode: number;
+  cents: bigint;
+}
+
+/**
+ * Hojas de las clases 1 a 7 de un snapshot ya curado. La clase es la de
+ * pertenencia en el snapshot (R1 publica un activo negativo en la clase 2),
+ * igual que el desglose determinista del ESF.
+ */
+export function buildLedgerLeaves(snapshot: PeriodSnapshot): LedgerLeaf[] {
+  const out: LedgerLeaf[] = [];
+  for (const puc of snapshot.classes ?? []) {
+    if (puc.code < 1 || puc.code > 7) continue;
+    for (const account of puc.accounts) {
+      if (!account.isLeaf) continue;
+      const code = String(account.code).replace(/\D/g, '');
+      if (code.length === 0) continue;
+      out.push({ code, classCode: puc.code, cents: pesosToCents(account.balance) });
+    }
+  }
+  return out;
+}
+
+/**
  * Clasificación corriente / no corriente por grupo PUC que usa el
  * preprocesador para `controlTotals.activoCorriente` / `pasivoCorriente`
  * (`trial-balance.ts`: activo 11-14 / 15-19; pasivo 21-26 / 27-29). Es la
@@ -573,8 +622,13 @@ export function buildDeterministicCashFlow(
   const netIncomeCents = pesosToCents(primary.controlTotals.utilidadNeta);
   const depreciationAddBack = [...nonCashAddBackByGroup.values()].reduce((a, v) => a + v, ZERO);
 
+  // Rótulo según el signo (e2e-niif-09): una pérdida no se rotula "utilidad".
   const operatingRows: BreakdownRow[] = [
-    { account: '36', label: 'Utilidad neta del ejercicio', cents: netIncomeCents },
+    {
+      account: '36',
+      label: netIncomeCents < ZERO ? 'Pérdida neta del ejercicio' : 'Utilidad neta del ejercicio',
+      cents: netIncomeCents,
+    },
   ];
   if (depreciationAddBack !== ZERO) {
     operatingRows.push({
@@ -890,9 +944,14 @@ export type CashFlowCrossCheckViolation =
   | { kind: 'distribution_without_support'; section: string; label: string; amountCents: bigint }
   | { kind: 'deterministic_unreconciled'; gapCents: bigint };
 
-/** Renglones que afirman un pago o distribución a los socios. */
+/**
+ * Renglones que afirman un pago o distribución a los socios. Auditoría
+ * 2026-09-24 (e2e-niif-07): "Utilidades giradas a los accionistas" quedaba
+ * fuera de la expresión; se cubren giros, retiros y utilidades pagadas,
+ * distribuidas, decretadas o repartidas.
+ */
 const DISTRIBUTION_LABEL_RE =
-  /dividend|distribuci[oó]n(?:es)?\s+(?:a|de|entre)\s+(?:los\s+)?(?:socios|accionistas|utilidades|propietarios)|pagos?\s+(?:de\s+)?(?:utilidades|participaciones)|pagos?\s+a\s+(?:los\s+)?(?:socios|accionistas|propietarios)|participaciones\s+pagadas/i;
+  /dividend|distribuci[oó]n(?:es)?\s+(?:a|de|entre)\s+(?:los\s+)?(?:socios|accionistas|utilidades|propietarios)|pagos?\s+(?:de\s+)?(?:utilidades|participaciones)|pagos?\s+a\s+(?:los\s+)?(?:socios|accionistas|propietarios)|participaciones\s+pagadas|utilidades\s+(?:giradas|pagadas|distribuidas|decretadas|repartidas|retiradas)|giros?\s+(?:de\s+)?(?:utilidades|excedentes)|retiros?\s+(?:de\s+)?(?:los\s+)?(?:socios|accionistas|propietarios|utilidades)/i;
 
 /**
  * Compara el EFE del modelo con el determinista. Devuelve la lista de
@@ -954,6 +1013,162 @@ export function crossCheckCashFlowAgainstDeterministic(
   }
 
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Renglón a renglón: el EFE emitido contra las partidas del determinista
+// ---------------------------------------------------------------------------
+// Auditoría 2026-09-24 (e2e-niif-07): E18 cruza subtotales y totales, no
+// renglones ni rótulos. Dentro de una actividad que cuadra, el modelo podía
+// inflar la depreciación compensándola en deudores, partir la financiación en
+// un préstamo y un "giro de utilidades" inventados, o rotular la deuda como
+// aportes de los socios. Con el EFE determinista conciliado, cada renglón con
+// monto del EFE emitido debe ser una partida del determinista en la MISMA
+// actividad (multiconjunto por importe, tolerancia $0) y su rótulo no puede
+// afirmar una categoría distinta (resultado, partidas no monetarias, socios,
+// deuda financiera) de la de esa partida.
+// ---------------------------------------------------------------------------
+
+export type CashFlowFlowCategory = 'netIncome' | 'nonCash' | 'owners' | 'debt';
+
+export type CashFlowLineViolation =
+  | { kind: 'line_without_source'; section: CashFlowSectionKey; label: string; amountCents: bigint }
+  | {
+      kind: 'label_category';
+      section: CashFlowSectionKey;
+      label: string;
+      amountCents: bigint;
+      claimed: CashFlowFlowCategory[];
+      sourceLabel: string;
+    };
+
+const NET_INCOME_LABEL_RE =
+  /\b(?:utilidad|p[eé]rdida|resultado|ganancia|excedente|d[eé]ficit)(?:es)?\s+(?:neta|neto|del\s+(?:ejercicio|periodo|per[ií]odo|a[nñ]o))/i;
+const NON_CASH_LABEL_RE = /deprecia|amortiza|agotamiento|deterioro/i;
+// Sólo términos que afirman un FLUJO con los socios; "socios" a secas no (una
+// cuenta por pagar a socios, 2355, es capital de trabajo).
+const OWNERS_LABEL_RE =
+  /aporte|capitaliza|dividend|participaciones\s+(?:pagadas|decretadas|distribuidas)|distribuci[oó]n|utilidades\s+(?:giradas|pagadas|distribuidas|decretadas|repartidas|retiradas)|giros?\s+(?:de\s+)?(?:utilidades|excedentes)|retiros?\s+(?:de\s+)?(?:los\s+)?(?:socios|accionistas|propietarios|utilidades)|pagos?\s+a\s+(?:los\s+)?(?:socios|accionistas|propietarios)/i;
+const DEBT_LABEL_RE =
+  /obligaci[oó]n(?:es)?\s+financiera|pr[eé]stamo|cr[eé]dito(?:s)?\s+(?:bancario|financiero)|sobregiro|bonos|papeles\s+comerciales|leasing|arrendamiento\s+financiero|deuda\s+financiera/i;
+
+/** Categorías que el rótulo de un renglón del EFE afirma (vacío = rótulo neutro). */
+export function cashFlowLabelClaims(label: string): CashFlowFlowCategory[] {
+  const out: CashFlowFlowCategory[] = [];
+  if (NET_INCOME_LABEL_RE.test(label)) out.push('netIncome');
+  if (NON_CASH_LABEL_RE.test(label)) out.push('nonCash');
+  if (OWNERS_LABEL_RE.test(label)) out.push('owners');
+  if (DEBT_LABEL_RE.test(label)) out.push('debt');
+  return out;
+}
+
+/** Categoría de una partida del EFE determinista, por su clave de agregación. */
+function sourceRowCategory(row: BreakdownRow): CashFlowFlowCategory | null {
+  const acc = row.account;
+  if (acc === '36') return 'netIncome';
+  if (acc === '2360' || acc === '31/32/33/37' || acc === '36/37') return 'owners';
+  if (acc === '21' || acc === '29') return 'debt';
+  if (acc === '19/38') return 'nonCash';
+  const parts = acc.split('/');
+  if (parts.length > 0 && parts.every((p) => /^\d{4,}$/.test(p) && isNonCashContraAccount(p))) {
+    return 'nonCash';
+  }
+  return null;
+}
+
+/**
+ * Cruza cada renglón del EFE emitido contra las partidas del EFE determinista
+ * de su misma actividad. Sólo aplica con el determinista conciliado (si no
+ * concilia, E18 ya bloquea). Los renglones en $0 no se evalúan: no imprimen
+ * cifra.
+ */
+export function crossCheckCashFlowLinesAgainstDeterministic(
+  cashFlow: CashFlowStatementLike,
+  deterministic: DeterministicCashFlow,
+): CashFlowLineViolation[] {
+  if (!deterministic.reconciled) return [];
+  const out: CashFlowLineViolation[] = [];
+  for (const expected of deterministic.sections) {
+    const emitted = cashFlow.sections.find((s) => s.section === expected.section);
+    const pool = expected.rows.filter((r) => r.cents !== ZERO).map((r) => ({ row: r, used: false }));
+    for (const line of emitted?.lines ?? []) {
+      const amount = parseCents(line.amountPrimary);
+      if (amount === ZERO) continue;
+      const claims = cashFlowLabelClaims(line.label ?? '');
+      const candidates = pool.filter((p) => !p.used && p.row.cents === amount);
+      // Entre partidas del mismo importe se prefiere la que el rótulo afirma.
+      const match =
+        candidates.find((p) => {
+          const cat = sourceRowCategory(p.row);
+          return cat !== null && claims.includes(cat);
+        }) ??
+        candidates.find((p) => {
+          const cat = sourceRowCategory(p.row);
+          return claims.length === 0 || (cat !== null && claims.includes(cat));
+        }) ??
+        candidates[0];
+      if (!match) {
+        out.push({ kind: 'line_without_source', section: expected.section, label: line.label, amountCents: amount });
+        continue;
+      }
+      match.used = true;
+      const category = sourceRowCategory(match.row);
+      // Una partida de capital de trabajo rotulada como deuda (p. ej. cuentas
+      // por pagar) es un matiz de presentación, no un cambio de naturaleza.
+      const effective = category === null ? claims.filter((c) => c !== 'debt') : claims;
+      if (effective.length > 0 && (category === null || !claims.includes(category))) {
+        out.push({
+          kind: 'label_category',
+          section: expected.section,
+          label: line.label,
+          amountCents: amount,
+          claimed: claims,
+          sourceLabel: match.row.label,
+        });
+      }
+    }
+    // Una partida del determinista que no aparece no se reporta aquí: con el
+    // subtotal anclado (E18), su ausencia rompe Σ renglones = subtotal y la
+    // bloquean los invariantes del EFE (`checkCashFlowInvariants`).
+  }
+  return out;
+}
+
+/** Mensajes del cruce renglón a renglón (E23), listos para el sello. */
+export function formatCashFlowLineViolations(violations: readonly CashFlowLineViolation[]): string[] {
+  const cop = (cents: bigint): string => {
+    const negative = cents < ZERO;
+    const abs = (negative ? -cents : cents).toString().padStart(3, '0');
+    const whole = (abs.slice(0, -2) || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${negative ? '-' : ''}$${whole},${abs.slice(-2)}`;
+  };
+  const sectionName: Record<CashFlowSectionKey, string> = {
+    operating: 'operación',
+    investing: 'inversión',
+    financing: 'financiación',
+  };
+  const categoryName: Record<CashFlowFlowCategory, string> = {
+    netIncome: 'resultado del ejercicio',
+    nonCash: 'partida no monetaria',
+    owners: 'flujo con los socios',
+    debt: 'deuda financiera',
+  };
+  return violations.map((v) => {
+    switch (v.kind) {
+      case 'line_without_source':
+        return (
+          `EFE — actividades de ${sectionName[v.section]}: el renglón "${v.label}" (${cop(v.amountCents)}) ` +
+          `no es ninguna partida del EFE determinista del balance de prueba. Un renglón del EFE es la ` +
+          `variación de un grupo PUC; una cifra que no lo es no puede imprimirse (NIC 7 ¶10, ¶43).`
+        );
+      case 'label_category':
+        return (
+          `EFE — actividades de ${sectionName[v.section]}: el renglón "${v.label}" (${cop(v.amountCents)}) ` +
+          `se rotula como ${v.claimed.map((c) => categoryName[c]).join(' / ')} y la partida del balance ` +
+          `de prueba es "${v.sourceLabel}". El rótulo no puede cambiar la naturaleza del flujo (NIC 7 ¶17, ¶43).`
+        );
+    }
+  });
 }
 
 /** Mensajes en español del cruce, listos para el sello / las salvedades. */
