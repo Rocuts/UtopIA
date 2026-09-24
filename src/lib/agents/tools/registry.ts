@@ -225,7 +225,10 @@ const QUERY_ERP = tool({
     'Consulta datos contables en tiempo real desde el ERP conectado del usuario. ' +
     'Usa esta herramienta cuando el usuario pregunte sobre datos financieros reales de su empresa: ' +
     'balances, facturas, movimientos contables, terceros, o plan de cuentas. ' +
-    'NO la uses para preguntas teoricas o normativas — solo para datos reales de la empresa.',
+    'NO la uses para preguntas teoricas o normativas — solo para datos reales de la empresa. ' +
+    'Para algunos ERP `trial_balance` devuelve solo los movimientos del periodo (no son saldos ' +
+    'finales ni un balance de prueba): la respuesta lo indica y en ese caso no presentes esas ' +
+    'cifras como saldos.',
   inputSchema: z.object({
     type: z
       .enum(['trial_balance', 'invoices', 'journal_entries', 'contacts', 'chart_of_accounts'])
@@ -238,8 +241,9 @@ const QUERY_ERP = tool({
       .string()
       .optional()
       .describe(
-        'Periodo fiscal: "2025" (año completo), "2025-Q1" (trimestre), "2025-06" (mes). ' +
-          'Usar para trial_balance y chart_of_accounts.',
+        'Periodo fiscal: AAAA ("2025", año completo), AAAA-Qn ("2025-Q1", trimestre) o ' +
+          'AAAA-MM ("2025-06", mes); alternativamente dateFrom/dateTo. Otros formatos se ' +
+          'rechazan. Usar para trial_balance y chart_of_accounts.',
       ),
     dateFrom: z
       .string()
