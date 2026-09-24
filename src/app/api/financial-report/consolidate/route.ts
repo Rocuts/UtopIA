@@ -233,6 +233,13 @@ export async function POST(req: Request) {
       report,
       preprocessed: ctx.ppForAgents,
       rawData: ctx.effectiveRawData,
+      // procedencia-R2-02: el ledger aplicado con su detalle viaja en la
+      // versión (atado por su huella) para el anexo de ajustes del PDF/HTML.
+      adjustments:
+        ctx.adjustmentsApplicationDetail && ctx.appliedAdjustments.length > 0
+          ? { applied: ctx.appliedAdjustments, affected: ctx.adjustmentsApplicationDetail.affected }
+          : null,
+      language,
     });
     const workspaceId = await resolveReportWorkspaceId();
     const persisted = await persistFinancialReportVersion({

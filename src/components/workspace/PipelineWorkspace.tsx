@@ -84,6 +84,8 @@ import { isProvisionalDraft } from '@/lib/reports/provenance-stamp';
 import {
   attachServerVersion,
   detachServerVersion,
+  markUserEdited,
+  readUserEdited,
   readReportRef,
   readServerVersion,
   type ReportProvenance,
@@ -694,6 +696,22 @@ export function buildExportRequestBody(args: {
 }
 
 /**
+ * "Aplicar al reporte" (procedencia-R2-07): el informe editado en el navegador
+ * suelta la referencia a la versión persistida (el servidor no tiene ese
+ * contenido) y queda marcado como editado: las descargas no pueden imprimir
+ * ese texto —el servidor produce el de las Partes desde sus cifras
+ * estructuradas— y lo declaran en el artefacto; la UI lo avisa (`userEditNotice`).
+ */
+export function applyReportPatch(prev: BackendFinancialReport, newMd: string): BackendFinancialReport {
+  return { ...markUserEdited(detachServerVersion(prev)), consolidatedReport: newMd };
+}
+
+/** Aviso visible junto a las descargas cuando el informe lleva ediciones del chat. */
+export function userEditNotice(report: unknown, language: 'es' | 'en'): string | null {
+  return readUserEdited(report) ? dict[language].reportProvenance.uiUserEdited : null;
+}
+
+/**
  * Fuente del HTML (pipeline-flujo-19): la versión persistida si la hay (el
  * servidor toma de ella el preprocesado), si no el preprocesado de la sesión;
  * sin ninguna, `missing` (la UI lo explica en vez de no hacer nada).
@@ -717,6 +735,28 @@ export function htmlLedgerField(
 ): { adjustmentLedger?: AdjustmentLedger } {
   const applied = adjustmentLedger?.adjustments?.filter((a) => a.status === 'applied') ?? [];
   return applied.length > 0 ? { adjustmentLedger: { adjustments: applied } } : {};
+}
+
+/**
+ * Veredictos del informe que viajan en el cuerpo de /html. Sin referencia el
+ * servidor pasa el informe por el gate de /export sin referencia y estos sólo
+ * pueden endurecerlo:
+ *   - acta y Parte II con `clean: false` bloquean (e2e-niif-16);
+ *   - la reconciliación del analista, como en /export (procedencia-R2-03);
+ *   - la emitibilidad y la validación post-render de /consolidate: se
+ *     calcularon con el archivo del balance, que /html no recibe, y son las
+ *     únicas que llevan los bloqueantes de su identidad (V5 razón social y NIT
+ *     del encabezado, V6 DV del NIT). Sin ellas un informe que /export rechaza
+ *     por V5/V6 salía en HTML.
+ */
+export function htmlReportVerdicts(report: BackendFinancialReport): Record<string, unknown> {
+  return {
+    actaQualifications: report.governance?.actaQualifications ?? null,
+    strategyQualifications: report.strategicAnalysis?.strategyQualifications ?? null,
+    niifReconciliation: report.niifAnalysis?.reconciliation ?? null,
+    emittability: report.emittability ?? null,
+    validation: report.validation ?? null,
+  };
 }
 
 // Módulos compartidos con el servidor (/consolidate y /html aplican la misma
@@ -1873,7 +1913,9 @@ function ReportViewer({
             rawData,
             preprocessed,
             adjustmentLedger,
-            presentation: {},
+            // e2e-niif2-05: el idioma viaja como en el PDF (sin él el
+            // servidor usa el de la versión persistida).
+            presentation: { language },
           }),
         ),
       });
@@ -2299,6 +2341,14 @@ function ReportViewer({
             })()}
           </p>
         )}
+        {(() => {
+          const notice = userEditNotice(report, language);
+          return notice ? (
+            <p className="mx-6 mt-1 text-xs text-n-800" data-user-edited="true">
+              {notice}
+            </p>
+          ) : null;
+        })()}
 
         {exportError && (
           <div className="mx-6 my-3 rounded border border-danger bg-danger/10 px-3 py-2 flex items-start gap-2 text-xs text-danger">
@@ -3420,11 +3470,11 @@ export function PipelineWorkspace() {
         if (!prev) return prev;
         // Editado en el navegador: ya no es la versión persistida. Se suelta la
         // referencia para que las descargas no digan "procedencia verificada"
-        // de un contenido que el servidor no tiene (salen "no verificada").
-        const next: BackendFinancialReport = {
-          ...detachServerVersion(prev),
-          consolidatedReport: newMd,
-        };
+        // de un contenido que el servidor no tiene (salen "no verificada") y se
+        // marca como editado: el servidor produce el texto desde las cifras
+        // estructuradas, así que la edición no llega a las descargas y éstas
+        // lo declaran (procedencia-R2-07; aviso visible abajo).
+        const next = applyReportPatch(prev, newMd);
         // Persistir el nuevo estado completo.
         if (companyInfo && conversationId) {
           setLastCompletedReport({
@@ -3694,10 +3744,10 @@ export function PipelineWorkspace() {
         // niif-preproceso-33: /html re-deriva ese preprocesado desde sus filas
         // con los mismos ajustes confirmados del Doctor de Datos.
         ...htmlLedgerField(effectiveAdjustmentLedger),
-        // e2e-niif-16: /html bloquea con los veredictos del acta y de la Parte II
-        // (clean === false), igual que Excel/PDF.
-        actaQualifications: backendReport.governance?.actaQualifications ?? null,
-        strategyQualifications: backendReport.strategicAnalysis?.strategyQualifications ?? null,
+        // Veredictos del informe (sólo endurecen): acta y Parte II
+        // (e2e-niif-16), reconciliación NIIF y gates de /consolidate
+        // (procedencia-R2-03).
+        ...htmlReportVerdicts(backendReport),
         // pipeline-flujo-21: un consolidado BORRADOR (override del Doctor de
         // Datos) hace que el sello de procedencia del HTML lo aclare.
         ...(isProvisionalDraft(backendReport) ? { provisional: { active: true } } : {}),

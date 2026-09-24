@@ -29,7 +29,6 @@ import { renderStrategyKpisMarkdown } from '@/lib/agents/financial/agents/strate
 import type { StatementLineJson, StatementNoteJson } from '@/lib/agents/financial/contracts/base';
 import {
   CURRENCY_NOTE,
-  NARRATIVE_DISCLAIMER,
   cashFlowHasComparativeColumn,
   cashFlowMethodLabel,
   comparativeStatementLegend,
@@ -363,7 +362,7 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   }
 
   // Tab 3: KPIs / Indicadores
-  addKPISheet(wb, report, layout);
+  addKPISheet(wb, report, layout, language);
 
   // Tab 4: Validated Data (if preprocessed data available)
   if (layout) {
@@ -371,7 +370,7 @@ export async function generateFinancialExcel(options: ExcelExportOptions): Promi
   }
 
   // Tab 5: Report Summary
-  addSummarySheet(wb, report, layout);
+  addSummarySheet(wb, report, layout, language);
 
   // Tab 6: Ajustes Pulido Diamante (only when at least one mutation is present)
   if (layout && hasPulidoDiamanteData(layout)) {
@@ -1162,6 +1161,7 @@ function addKPISheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('KPIs', { properties: { tabColor: { argb: COLORS.green } } });
 
@@ -1182,7 +1182,7 @@ function addKPISheet(
   ws.getRow(row).getCell(1).value = 'KPIs del Analisis Estrategico (narrativa)';
   ws.getRow(row).getCell(1).font = { name: FONT_MAIN, bold: true, size: 12, color: { argb: COLORS.darkNavy } };
   row += 1;
-  row = addNarrativeDisclaimer(ws, row);
+  row = addNarrativeDisclaimer(ws, row, language);
   row += 1;
 
   // Pendiente #2 (auditoría integral 2026-09-24): la tabla de KPIs se
@@ -1645,10 +1645,14 @@ function addValidationSheet(wb: ExcelJS.Workbook, layout: PeriodLayout): void {
 // Tab 5: Full Report Summary
 // ---------------------------------------------------------------------------
 
+/** Encabezado de Parte I–III del consolidado (`# PARTE I: …`). */
+const CONSOLIDATED_PART_HEADING_RE = /^#\s*PART(?:E)?\s+I{1,3}\b/i;
+
 function addSummarySheet(
   wb: ExcelJS.Workbook,
   report: FinancialReport,
   layout: PeriodLayout | null,
+  language: 'es' | 'en' = 'es',
 ): void {
   const ws = wb.addWorksheet('Resumen', { properties: { tabColor: { argb: COLORS.gold } } });
 
@@ -1662,11 +1666,19 @@ function addSummarySheet(
     row += 2;
   }
 
-  row = addNarrativeDisclaimer(ws, row);
-  row++;
-
+  // procedencia-R2-01: el aviso de narrativa IA no auditada va debajo de
+  // cada encabezado de Parte I–III —junto a su prosa (notas, acta, análisis),
+  // como en el PDF— y en el idioma del informe; antes era un único renglón en
+  // español al inicio de la hoja, por encima del sello de procedencia.
+  // Un consolidado sin encabezados de Parte (histórico) conserva el aviso al
+  // inicio: toda su prosa queda cubierta.
   const content = report.consolidatedReport;
   const lines = content.split('\n');
+  const partHeadings = lines.some((l) => CONSOLIDATED_PART_HEADING_RE.test(l.trim()));
+  if (!partHeadings) {
+    row = addNarrativeDisclaimer(ws, row, language);
+    row++;
+  }
 
   for (const line of lines) {
     if (line.trim()) {
@@ -1679,6 +1691,7 @@ function addSummarySheet(
         size: isHeader ? 11 : 9,
       };
       row++;
+      if (CONSOLIDATED_PART_HEADING_RE.test(line.trim())) row = addNarrativeDisclaimer(ws, row, language);
     }
   }
 
@@ -1865,9 +1878,9 @@ function addStatementNotes(
 }
 
 /** Rótulo visible sobre la narrativa del LLM (Resumen / KPIs narrativos). */
-function addNarrativeDisclaimer(ws: ExcelJS.Worksheet, row: number): number {
+function addNarrativeDisclaimer(ws: ExcelJS.Worksheet, row: number, language: 'es' | 'en' = 'es'): number {
   const r = ws.getRow(row);
-  r.getCell(1).value = NARRATIVE_DISCLAIMER;
+  r.getCell(1).value = narrativeDisclaimer(language);
   r.getCell(1).font = { name: FONT_MAIN, size: 9, italic: true, color: { argb: COLORS.orange } };
   return row + 1;
 }

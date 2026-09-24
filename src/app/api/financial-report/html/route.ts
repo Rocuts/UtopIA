@@ -50,18 +50,21 @@ import {
   resolveOwnedReportId,
   type TelemetryContext,
 } from '@/lib/db/telemetry';
-import {
-  financialExportBlockers,
-  niifArithmeticBlockers,
-} from '@/lib/export/financial-export-validation';
+import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { GovernanceReportJson } from '@/lib/agents/financial/contracts/governance-report';
 import type { CompanyInfo } from '@/lib/agents/financial/types';
+import type { FinancialReport } from '@/lib/agents/financial/types';
+import type { Adjustment } from '@/lib/agents/repair/types';
+import type { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import { serverActaVerdict } from '@/lib/reports/part-verdicts';
-import { withServerRenderedPersisted } from '@/lib/reports/part-markdown';
+import {
+  withServerRenderedClientReport,
+  withServerRenderedPersisted,
+} from '@/lib/reports/part-markdown';
 import { resolvePersistedReport } from '@/lib/reports/persisted-report-request';
-import { htmlInputFromPersisted } from '@/lib/reports/html-input';
+import { htmlClientReport, htmlInputFromPersisted } from '@/lib/reports/html-input';
 import {
   readAppliedAdjustments,
   rederivePreprocessedFromRows,
@@ -70,8 +73,27 @@ import {
   isProvisionalDraft,
   provenanceHeaders,
   stampHtmlProvenance,
+  withDraftReasons,
   type ArtifactProvenance,
 } from '@/lib/reports/provenance-stamp';
+
+/**
+ * Idioma del HTML: el `language` explícito del cuerpo o, con versión
+ * persistida, el de esa versión (e2e-niif2-05); sin ninguno, español.
+ */
+function htmlLanguage(body: unknown, persisted: 'es' | 'en' | null): 'es' | 'en' {
+  const requested = (body as { language?: unknown } | null)?.language;
+  return requested === 'en' || requested === 'es' ? requested : (persisted ?? 'es');
+}
+
+/**
+ * Procedencia del HTML generado (procedencia-R2-06): un HTML que el Editor
+ * Jefe declaró no emitible sale estampado BORRADOR por `runHtmlEditor`; el
+ * sello de procedencia lo aclara en vez de decir "verificada" a secas.
+ */
+function generatedProvenance(provenance: ArtifactProvenance, generated: HtmlEditorOutput): ArtifactProvenance {
+  return generated.emittable === false ? withDraftReasons(provenance, [{ kind: 'not-emittable' }]) : provenance;
+}
 
 export const runtime = 'nodejs';
 export const maxDuration = 800;
@@ -173,7 +195,7 @@ export async function POST(req: Request) {
             report: withServerRenderedPersisted(
               resolved.report,
               resolved.preprocessed,
-              (rawBody as { language?: unknown } | null)?.language === 'en' ? 'en' : 'es',
+              htmlLanguage(rawBody, resolved.language),
             ),
           }
         : resolved;
@@ -184,13 +206,22 @@ export async function POST(req: Request) {
       persisted.kind === 'ok'
         ? isProvisionalDraft(persisted.report)
         : (rawBody as { provisional?: { active?: unknown } } | null)?.provisional?.active === true;
-    const provenance: ArtifactProvenance =
+    let provenance: ArtifactProvenance =
       persisted.kind === 'ok'
-        ? { kind: 'verified', provenance: persisted.provenance, ...(draft ? { draft } : {}) }
+        ? {
+            kind: 'verified',
+            provenance: persisted.provenance,
+            ...(draft ? { draft } : {}),
+            // procedencia-R2-02: el aviso de procedencia lista los ajustes.
+            adjustments: persisted.adjustments,
+          }
         : { kind: 'unverified', ...(draft ? { draft } : {}) };
     const body: unknown =
       persisted.kind === 'ok' && rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
-        ? htmlInputFromPersisted(rawBody as Record<string, unknown>, persisted)
+        ? {
+            ...htmlInputFromPersisted(rawBody as Record<string, unknown>, persisted),
+            language: htmlLanguage(rawBody, persisted.language),
+          }
         : rawBody;
     const parsed = HtmlEditorInputSchema.safeParse(body);
 
@@ -210,22 +241,24 @@ export async function POST(req: Request) {
     // filas con los ajustes confirmados que reenvía (`adjustmentLedger`) y se
     // usa el re-derivado; si sus totales de control difieren → 422.
     let preprocessed: PreprocessedBalance | undefined;
+    let adjustments: { applied: Adjustment[]; affected: ReturnType<typeof applyAdjustments>['affected'] } | null =
+      null;
     if (persisted.kind === 'ok') {
       preprocessed = persisted.preprocessed;
     } else {
       const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
       if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
         const revived = revivePreprocessedBalance(bodyPreprocessed);
-        const adjustments = readAppliedAdjustments(
+        const applied = readAppliedAdjustments(
           (body as { adjustmentLedger?: unknown }).adjustmentLedger,
         );
-        if (!revived || !adjustments) {
+        if (!revived || !applied) {
           return NextResponse.json(
             { error: revived ? 'Invalid adjustmentLedger format.' : 'Invalid preprocessed format.' },
             { status: 400 },
           );
         }
-        const rederived = rederivePreprocessedFromRows(revived, adjustments);
+        const rederived = rederivePreprocessedFromRows(revived, applied);
         if (!rederived.ok) {
           return NextResponse.json(
             { error: 'Report is not exportable.', details: rederived.details },
@@ -233,33 +266,41 @@ export async function POST(req: Request) {
           );
         }
         preprocessed = rederived.preprocessed;
+        if (applied.length > 0) {
+          adjustments = { applied, affected: rederived.affected };
+          provenance = { ...provenance, adjustments };
+        }
       }
     }
 
-    // Gate aritmético ANTES de pagar el Editor Jefe (32-48K tokens): la MISMA
-    // función que Excel/PDF (`niifArithmeticBlockers`, pipeline-flujo-10):
-    // validador JSON NIIF con E15/E6 promovidos, invariantes del EFE, columna
-    // comparativa, subtotales, códigos del ERI y Parte II contra sus anclas.
-    // Con el preprocesado que usó /niif, además los cruces contra sus anclas.
-    // Antes /html sólo validaba la forma: un JSON NIIF con Activo ≠ Pasivo +
-    // Patrimonio producía un HTML "emitible".
-    //
-    // Con versión persistida el servidor tiene el informe completo: se aplica
-    // el MISMO gate que /export sobre ESA versión (`financialExportBlockers`:
-    // validación post-render, emitibilidad, salvedades, completitud, identidad
-    // y el gate aritmético). Sin esto una versión que /export rechaza salía en
-    // HTML sellado "procedencia verificada".
-    const blockers =
-      persisted.kind === 'ok'
-        ? financialExportBlockers(persisted.report, preprocessed)
-        : niifArithmeticBlockers(parsed.data.niifReport, {
-            strategyJson: parsed.data.strategyReport,
-            preprocessed,
-          });
-    // Veredictos de las Partes II y III (auditoría 2026-09-24, e2e-niif-16):
-    // /export ya bloqueaba con `actaQualifications`/`strategyQualifications`
-    // en `clean: false`, pero /html no los miraba y el HTML salía "emitible"
-    // con un acta cuya utilidad neta contradecía el P&G.
+    // Gate ANTES de pagar el Editor Jefe (32-48K tokens): el MISMO que
+    // Excel/PDF (`financialExportBlockers`: validación post-render,
+    // emitibilidad, salvedades, completitud, identidad y el gate aritmético
+    // `niifArithmeticBlockers` —validador JSON NIIF con E15/E6 promovidos,
+    // invariantes del EFE, columna comparativa, subtotales, códigos del ERI y
+    // Parte II contra sus anclas—), sobre un informe cuyas Partes ya pasaron
+    // por el recálculo del servidor:
+    //   - con versión persistida, ESA versión (`withServerRenderedPersisted`,
+    //     arriba);
+    //   - sin ella (procedencia-R2-03, e2e-niif2-06), el MISMO camino que
+    //     /export sin referencia (`withServerRenderedClientReport`):
+    //     veredictos de las tres Partes recalculados contra el balance
+    //     re-derivado (invariantes y prosa de la Parte I, anclas y prosa de la
+    //     Parte II, aritmética y prosa del acta, identidad de las Partes II/III),
+    //     post-proceso de la Parte II y gate de emisión V1–V15 sobre el texto
+    //     que produce el servidor. Antes sólo corrían el gate aritmético y el
+    //     acta: un informe que /export rechaza salía en HTML y el Editor Jefe
+    //     recibía el JSON de la Parte II sin post-procesar.
+    let serverReport: FinancialReport;
+    if (persisted.kind === 'ok') {
+      serverReport = persisted.report;
+    } else {
+      const received = htmlClientReport(body as Record<string, unknown>, parsed.data);
+      serverReport =
+        withServerRenderedClientReport(received, { preprocessed, adjustments, rawData: null }, parsed.data.language) ??
+        received;
+    }
+    const blockers = financialExportBlockers(serverReport, preprocessed);
     blockers.push(...partQualificationBlockers(body, parsed.data, preprocessed));
     if (blockers.length > 0) {
       return NextResponse.json(
@@ -269,7 +310,20 @@ export async function POST(req: Request) {
     }
     // El Editor Jefe (reconciliación §1.1 y contexto) usa el MISMO preprocesado
     // con que se acaba de validar: el re-derivado o el de la versión persistida.
-    const editorInput = { ...parsed.data, preprocessed: preprocessed ? toJsonSafe(preprocessed) : null };
+    // Sin referencia, los JSON que ve el Editor Jefe son los que el servidor
+    // acaba de verificar (la Parte II con sus cifras derivadas fijadas por el
+    // código), no los recibidos.
+    const editorInput = {
+      ...parsed.data,
+      ...(persisted.kind === 'ok'
+        ? {}
+        : {
+            niifReport: serverReport.niifAnalysis.json ?? parsed.data.niifReport,
+            strategyReport: serverReport.strategicAnalysis.json ?? parsed.data.strategyReport,
+            governanceReport: serverReport.governance.json ?? parsed.data.governanceReport,
+          }),
+      preprocessed: preprocessed ? toJsonSafe(preprocessed) : null,
+    };
 
     // Hechos del negocio (Ola 2) — resueltos SERVER-SIDE, nunca desde el body
     // del cliente (tenancy). El bloque <hechos_empresa> viaja al <context> del
@@ -322,9 +376,10 @@ export async function POST(req: Request) {
         runHtmlEditor(editorInput, undefined, undefined, hechosEmpresa),
       );
       logIfNotEmittable(generated);
+      const stamp = generatedProvenance(provenance, generated);
       const result = {
         ...generated,
-        html: stampHtmlProvenance(generated.html, provenance, parsed.data.language),
+        html: stampHtmlProvenance(generated.html, stamp, parsed.data.language),
       };
       return NextResponse.json(result, {
         // El payload sigue viajando con 200 aunque no sea emitible: el HTML ya
@@ -334,7 +389,7 @@ export async function POST(req: Request) {
         // cabecera son la señal máquina-legible para gatear la descarga.
         headers: {
           'X-Report-Emittable': result.emittable ? 'true' : 'false',
-          ...provenanceHeaders(provenance),
+          ...provenanceHeaders(stamp),
         },
       });
     }
@@ -360,9 +415,11 @@ export async function POST(req: Request) {
 
           const generated = await runHtmlEditor(editorInput, onProgress, req.signal, hechosEmpresa);
           logIfNotEmittable(generated);
+          // Las cabeceras del stream ya salieron: el BORRADOR del HTML no
+          // emitible viaja en el sello impreso y en su <meta> (draft=true).
           const result = {
             ...generated,
-            html: stampHtmlProvenance(generated.html, provenance, language),
+            html: stampHtmlProvenance(generated.html, generatedProvenance(provenance, generated), language),
           };
 
           send('html_phase', result);

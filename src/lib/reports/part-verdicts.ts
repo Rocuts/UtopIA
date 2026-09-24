@@ -487,9 +487,27 @@ export function serverNiifIntegrity(
 }
 
 /**
+ * Desviaciones que el código NO corrigió en el JSON (`overwritten !== true`).
+ * Una desviación con `overwritten: true` es traza: `reconcileAnchors` ya
+ * escribió el ancla en el JSON y `runNiifAnalyst` la excluye de su veredicto
+ * (`clean` sólo mira las desviaciones del cruce final). Que el JSON final
+ * cuadre con las anclas lo recalcula el servidor aparte (`validateNiifReportJson`
+ * en `serverNiifIntegrity`), así que la bandera no puede levantar un JSON que
+ * no cuadre (e2e-niif2-02).
+ */
+function uncorrectedDeviations(rec: NiifAnalysisResult['reconciliation']): number {
+  const deviations: unknown[] = Array.isArray(rec?.deviations) ? rec.deviations : [];
+  return deviations.filter(
+    (d) => !(d && typeof d === 'object' && (d as { overwritten?: unknown }).overwritten === true),
+  ).length;
+}
+
+/**
  * Reconciliación de la Parte I endurecida: `clean: true` sólo si el JSON es
- * válido, no hay desviaciones, brechas de desglose ni discrepancias del EFE
- * declaradas, y los invariantes recalculados no fallan.
+ * válido, no hay desviaciones sin corregir, brechas de desglose ni
+ * discrepancias del EFE declaradas, y los invariantes recalculados no fallan.
+ * Sólo endurece: un `clean: false` recibido (p. ej. del analista, cuyo cruce
+ * final encontró una desviación aunque la sobrescribiera) se conserva.
  */
 function hardenedReconciliation(
   niif: NiifAnalysisResult,
@@ -501,7 +519,7 @@ function hardenedReconciliation(
     integrity.jsonErrors.length > 0 ||
     integrity.efeViolations.length > 0 ||
     integrity.narrative.length > 0 ||
-    (rec?.deviations?.length ?? 0) > 0 ||
+    uncorrectedDeviations(rec) > 0 ||
     (rec?.lineGaps?.length ?? 0) > 0 ||
     (rec?.cashFlowDiscrepancies?.length ?? 0) > 0;
   if (!qualified) return rec;

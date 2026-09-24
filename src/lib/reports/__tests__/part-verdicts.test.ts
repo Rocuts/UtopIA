@@ -367,3 +367,56 @@ describe('informe coherente — sin falsos positivos y reglas de endurecimiento'
     expect(verdict?.motivos.join(' ')).toMatch(/no pudo cruzarse/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// e2e-niif2-02 (re-auditoría final): desviación ya sobrescrita por el código
+// ---------------------------------------------------------------------------
+// `runNiifAnalyst` corrige en el JSON un total del ESF que el modelo emitió
+// distinto del ancla (`overwritten: true`) y declara el informe limpio
+// (`clean = finalReconciled.deviations.length === 0`). La reconciliación
+// persistida conserva esa desviación como traza. El endurecimiento del
+// servidor la contaba como salvedad y sellaba "NO es firmable" un informe cuyo
+// JSON final es idéntico al honesto.
+describe('e2e-niif2-02 — una desviación sobrescrita por el código no es salvedad', () => {
+  const read = preprocessUploadedTrialBalanceText(PROVENANCE_CSV);
+  if (read.kind !== 'ok') throw new Error('fixture sin balance');
+  const pp = read.preprocessed;
+  const company: CompanyInfo = { ...PROVENANCE_COMPANY, niifGroup: 2 };
+  const deviation = (overwritten: boolean) => ({
+    period: 'primary' as const,
+    field: 'balanceSheet.totalAssetsPrimary',
+    label: 'Total Activo',
+    key: 'totalAssets' as never,
+    emitted: '1000001',
+    expected: '1000000',
+    gapCents: '1',
+    overwritten,
+  });
+  function report(overwritten: boolean, clean: boolean): FinancialReport {
+    const r = withCoherentParts({ ...makeExportableReport(), company }, pp);
+    return {
+      ...r,
+      niifAnalysis: {
+        ...r.niifAnalysis,
+        reconciliation: { deviations: [deviation(overwritten)], lineGaps: [], repairAttempted: false, clean },
+      },
+    };
+  }
+
+  it('JSON final honesto y desviación corregida (overwritten) → limpio y exportable', () => {
+    const checked = withServerPartVerdicts(report(true, true), pp);
+    expect(checked.niifAnalysis.reconciliation?.clean).toBe(true);
+    expect(financialExportBlockers(checked, pp)).toEqual([]);
+  });
+
+  it('una desviación NO corregida sigue sellando aunque el cliente declare `clean: true`', () => {
+    const checked = withServerPartVerdicts(report(false, true), pp);
+    expect(checked.niifAnalysis.reconciliation?.clean).toBe(false);
+    expect(financialExportBlockers(checked, pp)).toContain('El informe contiene salvedades o validaciones bloqueantes.');
+  });
+
+  it('un `clean: false` del analista se conserva aunque la desviación figure como corregida', () => {
+    const checked = withServerPartVerdicts(report(true, false), pp);
+    expect(checked.niifAnalysis.reconciliation?.clean).toBe(false);
+  });
+});

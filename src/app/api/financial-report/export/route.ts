@@ -37,6 +37,8 @@ import {
   type PersistedReportResolution,
 } from '@/lib/reports/persisted-report-request';
 import { rederivePreprocessedFromRows } from '@/lib/reports/preprocessed-integrity';
+import { versionLanguage } from '@/lib/reports/financial-report-version';
+import { readUserEdited } from '@/lib/reports/report-ref';
 import { withServerPartVerdicts } from '@/lib/reports/part-verdicts';
 import {
   withServerRenderedClientReport,
@@ -46,7 +48,9 @@ import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import {
   appendPdfProvenance,
   isProvisionalDraft,
+  pdfDraftReasons,
   provenanceHeaders,
+  withDraftReasons,
   withExcelProvenance,
   type ArtifactProvenance,
 } from '@/lib/reports/provenance-stamp';
@@ -293,6 +297,11 @@ function serverGeneratedVerdicts(
   return withServerPartVerdicts(report, preprocessed, language, { sealUnstructuredParts: false });
 }
 
+/** `language` explícito del cuerpo (presentación), si es válido. */
+function requestedLanguage(body: Record<string, unknown>): 'es' | 'en' | null {
+  return body.language === 'en' || body.language === 'es' ? body.language : null;
+}
+
 function incoherentSourcesResponse(details: string[]): Response {
   return NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 });
 }
@@ -301,8 +310,17 @@ function incoherentSourcesResponse(details: string[]): Response {
  * Sello de las exportaciones sin referencia persistida; aclara BORRADOR si el
  * consolidado lleva el encabezado del override (pipeline-flujo-21).
  */
-function unverified(report: FinancialReport | null | undefined): ArtifactProvenance {
-  return isProvisionalDraft(report) ? { kind: 'unverified', draft: true } : { kind: 'unverified' };
+function unverified(
+  report: FinancialReport | null | undefined,
+  adjustments: ArtifactProvenance['adjustments'] = null,
+): ArtifactProvenance {
+  const base: ArtifactProvenance = {
+    kind: 'unverified',
+    ...(adjustments ? { adjustments } : {}),
+    // procedencia-R2-07: ediciones del navegador que el artefacto no incluye.
+    ...(readUserEdited(report) ? { userEditsDropped: true } : {}),
+  };
+  return isProvisionalDraft(report) ? { ...base, draft: true } : base;
 }
 
 /**
@@ -316,16 +334,21 @@ async function exportPersisted(
   format: 'excel' | 'pdf-elite',
 ): Promise<Response> {
   const { preprocessed, provenance } = persisted;
-  const language: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+  // e2e-niif2-05: sin `language` en el cuerpo (el Excel de la UI no lo
+  // enviaba) el artefacto sale en el idioma de la versión persistida, no en
+  // español por defecto.
+  const language: 'es' | 'en' = requestedLanguage(body) ?? persisted.language;
   // Veredictos con las reglas vigentes y Markdown re-renderizado desde el JSON
   // persistido (una versión anterior a I3 pudo guardar el texto del cliente).
   const report = withServerRenderedPersisted(persisted.report, preprocessed, language);
   const blocked = rejectInvalidExport(report, preprocessed);
   if (blocked) return blocked;
+  // procedencia-R2-02: las cifras de la versión incluyen los ajustes
+  // confirmados del Doctor de Datos; el sello los cuenta y el PDF los lista.
+  const adjustments = persisted.adjustments;
   const stamp: ArtifactProvenance = isProvisionalDraft(report)
-    ? { kind: 'verified', provenance, draft: true }
-    : { kind: 'verified', provenance };
-  const headers = provenanceHeaders(stamp);
+    ? { kind: 'verified', provenance, draft: true, adjustments }
+    : { kind: 'verified', provenance, adjustments };
 
   if (format === 'pdf-elite') {
     let pillars = null;
@@ -347,10 +370,11 @@ async function exportPersisted(
       auditReport: (body.auditReport as AuditReport | null | undefined) ?? null,
       qualityReport: (body.qualityReport as QualityAssessment | null | undefined) ?? null,
       outputOptions: (body.outputOptions as OutputOptionsToggle | null | undefined) ?? null,
+      appliedAdjustments: adjustments,
     });
-    appendPdfProvenance(doc, stamp, language);
+    const pdfStamp = stampPdf(doc, stamp, language);
     const stream = await renderEditorialReportToStream(doc);
-    return pdfResponse(stream, report.company.name, headers);
+    return pdfResponse(stream, report.company.name, provenanceHeaders(pdfStamp));
   }
 
   const buffer = await generateFinancialExcel({
@@ -358,7 +382,23 @@ async function exportPersisted(
     preprocessed,
     language,
   });
-  return createExcelResponse(buffer, report.company.name, headers);
+  return createExcelResponse(buffer, report.company.name, provenanceHeaders(stamp));
+}
+
+/**
+ * Sella el PDF compuesto (procedencia-R2-06): si el composer le puso marca de
+ * agua (BORRADOR por comparativos impracticables, INCOMPLETO, BLOQUEADO), el
+ * sello y las cabeceras dicen BORRADOR con el motivo, como con el override.
+ * Devuelve la procedencia efectiva para las cabeceras.
+ */
+function stampPdf(
+  doc: ReturnType<typeof composeEditorialReport>,
+  stamp: ArtifactProvenance,
+  language: 'es' | 'en',
+): ArtifactProvenance {
+  const effective = withDraftReasons(stamp, pdfDraftReasons(doc));
+  appendPdfProvenance(doc, effective, language);
+  return effective;
 }
 
 export async function POST(req: Request) {
@@ -409,11 +449,12 @@ export async function POST(req: Request) {
       const source = resolveExportPreprocessed(body, 'export/excel');
       if (!source.ok) return source.response;
       const { preprocessed } = source;
-      const excelLanguage: 'es' | 'en' = body.language === 'en' ? 'en' : 'es';
+      // Sin `language`, el idioma del consolidado recibido (presentación).
+      const excelLanguage: 'es' | 'en' = requestedLanguage(body) ?? versionLanguage({ report: body.report });
       const report = clientReportWithServerMarkdown(body.report as FinancialReport, source, excelLanguage);
       const blocked = rejectInvalidExport(report, preprocessed);
       if (blocked) return blocked;
-      const stamp = unverified(report);
+      const stamp = unverified(report, source.adjustments);
       const buffer = await generateFinancialExcel({
         report: withExcelProvenance(report, stamp, excelLanguage),
         preprocessed,
@@ -552,7 +593,8 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     const source = resolveExportPreprocessed(b as Record<string, unknown>, 'pdf-elite/fast');
     if (!source.ok) return source.response;
     const { preprocessed } = source;
-    const language: 'es' | 'en' = b.language === 'en' ? 'en' : 'es';
+    const language: 'es' | 'en' =
+      requestedLanguage(b as Record<string, unknown>) ?? versionLanguage({ report: b.report });
     const report = clientReportWithServerMarkdown(b.report, source, language);
     const blocked = rejectInvalidExport(report, preprocessed);
     if (blocked) return blocked;
@@ -577,9 +619,9 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       auditReport: b.auditReport ?? null,
       qualityReport: b.qualityReport ?? null,
       outputOptions: b.outputOptions ?? null,
+      appliedAdjustments: source.adjustments ?? null,
     });
-    const stamp = unverified(report);
-    appendPdfProvenance(doc, stamp, language);
+    const stamp = stampPdf(doc, unverified(report, source.adjustments), language);
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, report.company.name, provenanceHeaders(stamp));
   }
@@ -669,8 +711,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
       language,
       emittable: { ok: false, blockers: blockerReasons },
     });
-    const stamp = unverified(stub);
-    appendPdfProvenance(doc, stamp, language);
+    const stamp = stampPdf(doc, unverified(stub), language);
     const stream = await renderEditorialReportToStream(doc);
     return pdfResponse(stream, company.name, provenanceHeaders(stamp));
   }
@@ -697,8 +738,7 @@ async function handlePdfElite(body: unknown): Promise<Response> {
     pillars,
     language,
   });
-  const stamp = unverified(report);
-  appendPdfProvenance(doc, stamp, language);
+  const stamp = stampPdf(doc, unverified(report), language);
 
   const stream = await renderEditorialReportToStream(doc);
   return pdfResponse(stream, company.name, provenanceHeaders(stamp));

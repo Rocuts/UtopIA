@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import type { Adjustment } from '@/lib/agents/repair/types';
+import type { AdjustmentApplicationAffected } from '@/lib/agents/repair/adjustments';
+import { formatCopFromPesos } from '@/lib/agents/financial/contracts/money';
 
 // ---------------------------------------------------------------------------
 // Contrato único del ledger del Doctor de Datos en las rutas financieras
@@ -64,4 +67,99 @@ export function unknownAdjustmentPeriodReasons(
     );
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Traza de ajustes aplicados (procedencia-R2-02)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ajustes confirmados que el servidor aplicó al balance y su detalle por
+ * cuenta (saldo previo y nuevo, periodo). La versión persistida la guarda y
+ * los artefactos la divulgan: consolidado (traza), anexo del PDF y del HTML, y
+ * el sello de procedencia.
+ */
+export interface AdjustmentsTrail {
+  applied: Adjustment[];
+  affected: AdjustmentApplicationAffected[];
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * Traza leída de una versión persistida: `null` si no hay ajustes, `undefined`
+ * si la forma es inválida (la versión no se usa: su integridad ya la ata la
+ * huella del sobre, así que una forma inválida es un defecto del almacenamiento).
+ */
+export function readAdjustmentsTrail(value: unknown): AdjustmentsTrail | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const v = value as { applied?: unknown; affected?: unknown };
+  if (!Array.isArray(v.applied) || !Array.isArray(v.affected)) return undefined;
+  for (const a of v.applied) {
+    const r = a as Record<string, unknown> | null;
+    if (!r || typeof r.id !== 'string' || typeof r.accountCode !== 'string' || !isFiniteNumber(r.amount)) return undefined;
+  }
+  for (const a of v.affected) {
+    const r = a as Record<string, unknown> | null;
+    if (
+      !r ||
+      typeof r.adjustmentId !== 'string' ||
+      typeof r.accountCode !== 'string' ||
+      !isFiniteNumber(r.oldBalance) ||
+      !isFiniteNumber(r.newBalance)
+    ) {
+      return undefined;
+    }
+  }
+  return v.applied.length === 0 ? null : (v as AdjustmentsTrail);
+}
+
+/** Renglón legible de un ajuste aplicado (anexo del PDF y del HTML). */
+export interface AdjustmentTrailRow {
+  id: string;
+  accountCode: string;
+  accountName: string;
+  period: string | null;
+  /** Saldo previo, monto y saldo nuevo ya formateados en COP; N/D sin detalle. */
+  previous: string;
+  amount: string;
+  amountPesos: number;
+  next: string;
+  isNewAccount: boolean;
+  rationale: string;
+}
+
+/**
+ * Renglones del anexo de ajustes con la MISMA información que la traza del
+ * consolidado (`buildAdjustmentsAuditSection`): id, cuenta, saldo previo, monto,
+ * saldo nuevo, cuenta nueva y razón.
+ */
+export function adjustmentTrailRows(trail: AdjustmentsTrail | null | undefined): AdjustmentTrailRow[] {
+  if (!trail) return [];
+  const byId = new Map(trail.affected.map((a) => [a.adjustmentId, a]));
+  return trail.applied
+    .filter((a) => a.status === 'applied')
+    .map((a) => {
+      const affected = byId.get(a.id);
+      return {
+        id: a.id,
+        accountCode: a.accountCode,
+        accountName: a.accountName || affected?.accountName || '',
+        period: affected?.period ?? a.period ?? null,
+        previous: affected ? formatCopFromPesos(affected.oldBalance) : 'N/D',
+        amount: formatCopFromPesos(a.amount),
+        amountPesos: a.amount,
+        next: affected ? formatCopFromPesos(affected.newBalance) : 'N/D',
+        isNewAccount: affected?.isNewAccount === true,
+        rationale: (a.rationale || '').replace(/\s+/g, ' ').slice(0, 200),
+      };
+    });
+}
+
+/** Número de ajustes confirmados aplicados de la traza. */
+export function appliedAdjustmentsCount(trail: AdjustmentsTrail | null | undefined): number {
+  return trail ? trail.applied.filter((a) => a.status === 'applied').length : 0;
 }

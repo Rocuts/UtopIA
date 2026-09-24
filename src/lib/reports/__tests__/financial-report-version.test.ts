@@ -95,7 +95,45 @@ describe('versión persistida', () => {
     const stored = jsonb(version());
     stored.report.niifAnalysis.json!.balanceSheet.totalAssetsPrimary = '99999900';
     const out = verifyFinancialReportVersion(stored);
-    expect(out).toEqual({ ok: false, reason: 'el informe persistido no coincide con su huella' });
+    // v2: la huella es la del sobre completo (el informe incluido).
+    expect(out).toEqual({ ok: false, reason: 'la versión persistida no coincide con su huella' });
+  });
+
+  it('R2-05: contrato, fecha, huella del archivo, ajustes o idioma alterados → la huella del sobre no coincide', () => {
+    const alter: Array<(d: Record<string, unknown>) => void> = [
+      (d) => void (d.contractVersion = 'contrato-inventado-9.9'),
+      (d) => void (d.preprocessorVersion = 'tb-0'),
+      (d) => void (d.createdAt = '1999-01-01T00:00:00.000Z'),
+      (d) => void (d.rawDataHash = 'd'.repeat(64)),
+      (d) => void (d.language = 'en'),
+      (d) => void (d.adjustments = { applied: [{ id: 'x', accountCode: '110505', amount: 1 }], affected: [] }),
+    ];
+    for (const change of alter) {
+      const stored = jsonb(version()) as unknown as Record<string, unknown>;
+      change(stored);
+      expect(verifyFinancialReportVersion(stored)).toEqual({
+        ok: false,
+        reason: 'la versión persistida no coincide con su huella',
+      });
+    }
+    // Balance alterado con su `sourceHash` recalculado: la huella del sobre lo ata.
+    const stored = jsonb(version()) as unknown as { preprocessed: { auxiliaryCount: number }; sourceHash: string };
+    stored.preprocessed.auxiliaryCount = 4242;
+    stored.sourceHash = canonicalHash(stored.preprocessed);
+    expect(verifyFinancialReportVersion(stored).ok).toBe(false);
+  });
+
+  it('R2-05: una versión v1 (huella sólo del informe) se sigue leyendo', () => {
+    const v = jsonb(version()) as unknown as Record<string, unknown> & { report: unknown };
+    const legacy: Record<string, unknown> = { ...v, format: 'utopia.financial-report-version.v1', reportHash: canonicalHash(v.report) };
+    delete legacy.adjustments;
+    delete legacy.language;
+    const out = verifyFinancialReportVersion(legacy);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.adjustments).toBeNull();
+      expect(out.language).toBe('es');
+    }
   });
 
   it('un balance alterado dentro de la fila no pasa la verificación de integridad', () => {
@@ -335,5 +373,42 @@ describe('sello "procedencia no verificada"', () => {
       // Sin `preprocessed` ni `rawData` el gate sólo prueba coherencia interna.
       expect(body).toMatch(lang === 'es' ? /si lo traía/ : /if it included one/);
     }
+  });
+});
+
+describe('R2-06 — motivos BORRADOR del sello', () => {
+  it('HTML no emitible y marca de agua del PDF: título BORRADOR, motivo y cabecera (es/en)', async () => {
+    const { withDraftReasons, pdfDraftReasons } = await import('../provenance-stamp');
+    const notEmittable = withDraftReasons(VERIFIED, [{ kind: 'not-emittable' }]);
+    expect(provenanceLines(notEmittable, 'es')[0]).toBe('PROCEDENCIA VERIFICADA — BORRADOR (VALIDACIÓN PENDIENTE)');
+    expect(provenanceLines(notEmittable, 'es').join('\n')).toMatch(/no superó la verificación numérica automática/);
+    expect(provenanceLines(notEmittable, 'es').join('\n')).not.toMatch(/Continuar de todas formas/);
+    expect(provenanceHeaders(notEmittable)['X-Report-Draft']).toBe('true');
+
+    const wm = pdfDraftReasons({ meta: { watermark: 'BORRADOR', watermarkSubtitle: 'COMPARATIVES IMPRACTICABLE' } });
+    const en = provenanceLines(withDraftReasons(VERIFIED, wm), 'en').join('\n');
+    expect(en).toContain('VERIFIED PROVENANCE — DRAFT');
+    expect(en).toContain('Document marked DRAFT (COMPARATIVES IMPRACTICABLE)');
+    // Un BORRADOR sin subtítulo es el del override: no se duplica.
+    const override = withDraftReasons({ ...VERIFIED, draft: true }, pdfDraftReasons({ meta: { watermark: 'BORRADOR' } }));
+    expect(override.draftReasons).toEqual([{ kind: 'override' }]);
+    expect(pdfDraftReasons({ meta: {} })).toEqual([]);
+    expect(withDraftReasons(VERIFIED, [])).toBe(VERIFIED);
+  });
+});
+
+describe('R2-01 — el sello precisa su alcance', () => {
+  it('verificada y no verificada: cubre cifras de los estados y anclas; la narrativa IA va rotulada no auditada (es/en)', () => {
+    for (const p of [VERIFIED, UNVERIFIED]) {
+      const es = provenanceLines(p, 'es').join('\n');
+      expect(es).toMatch(/Alcance del sello: cubre las cifras de los estados financieros y las anclas/);
+      expect(es).toMatch(/narrativa generada por IA .*"no auditada"/);
+      const en = provenanceLines(p, 'en').join('\n');
+      expect(en).toMatch(/Seal scope: it covers the figures of the financial statements and the anchors/);
+      expect(en).toMatch(/AI-generated narrative .*"not audited"/);
+    }
+    // El título y el cuerpo siguen siendo los dos primeros renglones.
+    expect(provenanceLines(VERIFIED, 'es')[0]).toBe('PROCEDENCIA VERIFICADA');
+    expect(provenanceLines(UNVERIFIED, 'es')[1]).toMatch(/si lo traía/);
   });
 });

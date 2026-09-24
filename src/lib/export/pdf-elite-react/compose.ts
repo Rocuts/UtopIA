@@ -67,6 +67,7 @@ import {
   type StatementTableContext,
 } from './compose-statements-from-json';
 import { formatCopFromPesos } from '@/lib/agents/financial/contracts/money';
+import { adjustmentTrailRows, type AdjustmentsTrail } from '@/lib/reports/adjustment-ledger';
 import { narrativeDisclaimer, resolvePeriodoTipos } from '../statement-presentation';
 import { revenueBreakdown, type RevenueBreakdown } from '../revenue';
 
@@ -174,6 +175,14 @@ export interface ComposeInput {
    * el cliente no pueden salir con la marca del informe.
    */
   assuranceProvenance?: 'server-persisted' | null;
+  /**
+   * Ajustes confirmados del Doctor de Datos que el servidor aplicó al balance
+   * (procedencia-R2-02): los de la versión persistida o, sin ella, los del
+   * ledger de la petición. Alimentan la tabla "Ajustes Aplicados" del anexo
+   * con la misma información que la traza del consolidado; antes el PDF
+   * imprimía las cifras ajustadas sin divulgar los ajustes.
+   */
+  appliedAdjustments?: AdjustmentsTrail | null;
 }
 
 const UNVERIFIED_ASSURANCE_NOTE =
@@ -198,6 +207,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
     qualityReport: qualityReportInput,
     outputOptions,
     assuranceProvenance,
+    appliedAdjustments,
   } = input;
   const assuranceVerified = assuranceProvenance === 'server-persisted';
   const auditReport = assuranceVerified ? auditReportInput : null;
@@ -223,7 +233,7 @@ export function composeEditorialReport(input: ComposeInput): EditorialReport {
   const notes = { blocks: buildNotes(report, language) };
   const recommendations = { items: buildRecommendations(report, language) };
   const shareholderMinutes = buildShareholderMinutes(report, language);
-  const appendix = buildAppendix(report, preprocessed, totals, emittable);
+  const appendix = buildAppendix(report, preprocessed, totals, emittable, appliedAdjustments ?? null, language);
   if (assuranceOmitted) {
     appendix.validationWarnings = [...(appendix.validationWarnings ?? []), UNVERIFIED_ASSURANCE_NOTE];
   }
@@ -1437,13 +1447,17 @@ function buildAppendix(
   preprocessed: PreprocessedBalance | null | undefined,
   totals: ControlTotals | null,
   emittable: EmittableGate | undefined,
+  appliedAdjustments: AdjustmentsTrail | null = null,
+  language: 'es' | 'en' = 'es',
 ) {
-  // adjustmentsTable from a possible governance.adjustmentsLedger field
-  // (defensive — the type may not surface it yet).
+  // Ajustes confirmados que aplicó el servidor (procedencia-R2-02). Sin ellos,
+  // el campo defensivo `governance.adjustmentsLedger` (histórico: ninguna fase
+  // lo produce y el re-render del servidor lo recorta del cuerpo).
+  const serverRows = appliedAdjustmentsTable(appliedAdjustments, language);
   const ledger = (report.governance as unknown as {
     adjustmentsLedger?: unknown;
   }).adjustmentsLedger;
-  const adjustmentsTable = parseAdjustmentsLedger(ledger);
+  const adjustmentsTable = serverRows.length > 0 ? serverRows : parseAdjustmentsLedger(ledger);
 
   // Validation warnings: snapshot.validation.* (defensive optional chain on
   // the in-flight preprocessor shape).
@@ -1506,6 +1520,23 @@ export function parseCopAmount(raw: unknown): number | null {
   const n = Number(normalized);
   if (!Number.isFinite(n)) return null;
   return negative ? -n : n;
+}
+
+/**
+ * Renglones "Ajustes Aplicados" desde la traza del servidor: cuenta y monto en
+ * sus columnas; id, periodo, saldo previo → saldo nuevo y razón en la
+ * descripción (la misma información que la traza del consolidado).
+ */
+function appliedAdjustmentsTable(trail: AdjustmentsTrail | null, language: 'es' | 'en'): AdjustmentRow[] {
+  const en = language === 'en';
+  return adjustmentTrailRows(trail).map((r) => ({
+    cuenta: r.accountCode,
+    descripcion:
+      `${r.accountName}${r.period ? ` (${r.period})` : ''} — ${r.rationale} ` +
+      `[id ${r.id}; ${en ? 'previous balance' : 'saldo previo'} ${r.previous} → ` +
+      `${en ? 'new balance' : 'saldo nuevo'} ${r.next}${r.isNewAccount ? (en ? '; new account' : '; cuenta nueva') : ''}]`,
+    ajuste: r.amountPesos,
+  }));
 }
 
 function parseAdjustmentsLedger(ledger: unknown): AdjustmentRow[] {

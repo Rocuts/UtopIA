@@ -214,10 +214,135 @@ export function governanceDegradationNotice(language: 'es' | 'en'): string {
  */
 export function renderGovernanceResult(
   json: GovernanceReportJson,
-  company: Pick<CompanyInfo, 'entityType' | 'niifGroup'> | undefined,
+  company: Partial<CompanyInfo> | undefined,
   capitalizationApplies: boolean | null,
 ): GovernanceResult {
   return toGovernanceResult(json, company, { capitalizationApplies });
+}
+
+// ---------------------------------------------------------------------------
+// Firmantes del acta desde el intake (procedencia-R2-04)
+// ---------------------------------------------------------------------------
+// El acta imprimía nombre, identificación y T.P. de los firmantes y del Revisor
+// Fiscal tal como los escribía el modelo en el JSON de la Parte III, sin
+// cruzarlos con los de la empresa: un PDF "procedencia verificada" podía
+// nombrar como Representante Legal y Revisor Fiscal a personas ajenas al
+// intake mientras su propio bloque de firmas imprimía las del intake. La
+// identidad de un firmante no es un juicio del modelo: sale del intake
+// (`company.signatories` o los campos legacy) y, si el intake no la trae, se
+// imprime "a completar al firmar". Presidente y Secretario de la asamblea no
+// tienen campo en el intake: siempre "a completar al firmar".
+// ---------------------------------------------------------------------------
+
+/** Identidad de un firmante según el intake (`null` = sin dato). */
+interface IntakeSignatory {
+  name: string;
+  /** C.C. del Representante Legal (sin prefijo). */
+  cedula: string | null;
+  /** T.P. del Revisor Fiscal / Contador (`12345-T`). */
+  tp: string | null;
+}
+
+interface IntakeSignatories {
+  representanteLegal: IntakeSignatory | null;
+  revisorFiscal: IntakeSignatory | null;
+  contadorPublico: IntakeSignatory | null;
+}
+
+function nonEmpty(v: unknown): string | null {
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+}
+
+/**
+ * Firmantes declarados en el intake: forma canónica `signatories` primero y
+ * los campos legacy (`legalRepresentative`, `fiscalAuditor`, `accountant` y sus
+ * identificaciones) como respaldo — misma precedencia que el bloque de firmas
+ * del PDF (`signatoriesFromCompany`). Un nombre sin T.P. se conserva: la T.P.
+ * sale "a completar".
+ */
+export function intakeSignatories(company: Partial<CompanyInfo> | undefined): IntakeSignatories {
+  const c = company ?? {};
+  const s = c.signatories;
+  const rlName = nonEmpty(s?.representanteLegal?.nombre) ?? nonEmpty(c.legalRepresentative);
+  const rfName = nonEmpty(s?.revisorFiscal?.nombre) ?? nonEmpty(c.fiscalAuditor);
+  const cpName = nonEmpty(s?.contadorPublico?.nombre) ?? nonEmpty(c.accountant);
+  return {
+    representanteLegal: rlName
+      ? { name: rlName, cedula: nonEmpty(s?.representanteLegal?.cedula) ?? nonEmpty(c.legalRepresentativeId), tp: null }
+      : null,
+    revisorFiscal: rfName
+      ? { name: rfName, cedula: null, tp: nonEmpty(s?.revisorFiscal?.tp) ?? nonEmpty(c.fiscalAuditorTp) }
+      : null,
+    contadorPublico: cpName
+      ? { name: cpName, cedula: null, tp: nonEmpty(s?.contadorPublico?.tp) ?? nonEmpty(c.accountantTp) }
+      : null,
+  };
+}
+
+const TP_RE = /^\d+-T$/i;
+
+/**
+ * JSON de la Parte III con la identidad de los firmantes tomada del intake:
+ * `shareholderMinutes.signatures`, `fiscalReviewerOpinion.reviewerName/Tp` y
+ * los espejos `signatories` / `company.signatories`. Lo que el intake no trae
+ * queda en `null` (el render imprime "a completar al firmar"). El resto del
+ * JSON no cambia.
+ */
+export function withIntakeSignatories(
+  json: GovernanceReportJson,
+  company: Partial<CompanyInfo> | undefined,
+): GovernanceReportJson {
+  const intake = intakeSignatories(company);
+  const minutes = json.shareholderMinutes;
+  const signatures = minutes.signatures.map((sig) => {
+    switch (sig.role) {
+      case 'representante_legal':
+        return {
+          ...sig,
+          name: intake.representanteLegal?.name ?? null,
+          identification: intake.representanteLegal?.cedula ? `C.C. ${intake.representanteLegal.cedula}` : null,
+        };
+      case 'revisor_fiscal':
+        return {
+          ...sig,
+          name: intake.revisorFiscal?.name ?? null,
+          identification: intake.revisorFiscal?.tp ? `T.P. ${intake.revisorFiscal.tp}` : null,
+        };
+      case 'contador_publico':
+        return {
+          ...sig,
+          name: intake.contadorPublico?.name ?? null,
+          identification: intake.contadorPublico?.tp ? `T.P. ${intake.contadorPublico.tp}` : null,
+        };
+      default:
+        // Presidente y Secretario de la asamblea: sin campo en el intake.
+        return { ...sig, name: null, identification: null };
+    }
+  });
+  // Espejo del contrato (`SignatoriesSchema`): la T.P. debe tener el formato
+  // de la Junta Central; sin él el slot queda en null (nunca un JSON inválido).
+  const withTp = (p: IntakeSignatory | null) =>
+    p && p.tp && TP_RE.test(p.tp) ? { nombre: p.name, tp: p.tp } : null;
+  const mirror = {
+    representanteLegal: intake.representanteLegal ? { nombre: intake.representanteLegal.name } : null,
+    revisorFiscal: withTp(intake.revisorFiscal),
+    contadorPublico: withTp(intake.contadorPublico),
+  };
+  const hasMirror = mirror.representanteLegal !== null || mirror.revisorFiscal !== null || mirror.contadorPublico !== null;
+  return {
+    ...json,
+    signatories: hasMirror ? mirror : null,
+    company: { ...json.company, signatories: hasMirror ? mirror : null },
+    shareholderMinutes: {
+      ...minutes,
+      signatures,
+      fiscalReviewerOpinion: {
+        ...minutes.fiscalReviewerOpinion,
+        reviewerName: intake.revisorFiscal?.name ?? null,
+        reviewerTp: intake.revisorFiscal?.tp ?? null,
+      },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -435,13 +560,15 @@ function withoutReviewerOpinion(json: GovernanceReportJson): GovernanceReportJso
 
 function toGovernanceResult(
   rawJson: GovernanceReportJson,
-  company?: Pick<CompanyInfo, 'entityType' | 'niifGroup'>,
+  company?: Partial<CompanyInfo>,
   options: {
     /** `capitalizationApplies` de la aritmética determinista del acta; `null` = sin ancla. */
     capitalizationApplies?: boolean | null;
   } = {},
 ): GovernanceResult {
-  const json = withoutReviewerOpinion(rawJson);
+  // Firmantes del intake (R2-04): el acta y el JSON expuesto no llevan la
+  // identidad que escribió el modelo.
+  const json = withIntakeSignatories(withoutReviewerOpinion(rawJson), company);
   const niifGroup = company?.niifGroup ?? json.company.niifGroup;
   const entityType = company?.entityType ?? json.company.entityType;
   const financialNotes = renderFinancialNotes(json.financialNotes, niifGroup);
