@@ -1223,7 +1223,7 @@ function kpiNumFmt(k: KPIRow): string {
 
 /**
  * Tabla comparativa de KPIs deterministicos derivados del preprocessed.
- * Layout: KPI | <comparative.period> | <primary.period> | Variacion $ | Variacion %
+ * Layout: KPI | <primary.period> | <comparative.period> | Variacion $ | Variacion % (reportes-export-20)
  */
 function addKPIComparativeBlock(
   ws: ExcelJS.Worksheet,
