@@ -47,8 +47,15 @@ import { TrialBalanceCreateSchema, type RawRowInput } from './schemas';
  * importes en miles / millones se reexpresan en centavos exactos) y
  * `maturity_overrides` (excepciones de vencimiento por cuenta); el recurso
  * expone `unit` y el detalle `validation_notes` y `classification_note`.
+ * tb-2026-09-24.4 (re-auditoría final de la fase 2): con la unidad confirmada,
+ * un importe con tres cifras tras su único separador y sin evidencia del
+ * separador decimal del archivo es ambiguo (status `unbalanced` con motivo, no
+ * ×1000); una fecha de corte en el encabezado de la columna de saldo fija el
+ * period_label AAAA-MM; una columna de saldo inicial del ejercicio con el P&G
+ * sin cerrar se detecta como P&G acumulado (CUR-R12); las directivas de unidad
+ * del texto del archivo no cuentan.
  */
-export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24.3';
+export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24.4';
 
 /**
  * Unidad de los importes de la remisión (P4-a). `declared` es la unidad

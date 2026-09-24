@@ -71,7 +71,7 @@ export const FINANCIAL_REPORT_CONTRACT_VERSION = 'informe-niif-2026-09-24.4';
  * una prueba de deriva los mantiene iguales sin arrastrar el módulo del API v1
  * a las rutas financieras.
  */
-export const REPORT_PREPROCESSOR_VERSION = 'tb-2026-09-24.3';
+export const REPORT_PREPROCESSOR_VERSION = 'tb-2026-09-24.4';
 
 export interface FinancialReportVersionData {
   format: typeof FINANCIAL_REPORT_VERSION_FORMAT | typeof FINANCIAL_REPORT_VERSION_FORMAT_V1;
