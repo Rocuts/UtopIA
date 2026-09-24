@@ -151,8 +151,9 @@ export default function FactibilidadPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   // Ajuste por tasa de impuestos (simplificación didáctica): los flujos que el
-  // usuario captura se consideran "antes de impuestos" y se multiplican por
-  // (1 − t); el endpoint hace el análisis completo con depreciación, etc.
+  // usuario captura se consideran "antes de impuestos"; los positivos se
+  // multiplican por (1 − t) y los negativos quedan sin escudo fiscal (Art. 147
+  // E.T. no modelado). El endpoint hace el análisis completo con depreciación.
   // Las métricas salen de computeProjectMetrics (centavos, TIR N/D con flujos
   // no convencionales) — la misma función del pipeline de factibilidad.
   const calc = useMemo(
@@ -379,7 +380,11 @@ export default function FactibilidadPage() {
                 step={1}
                 min={0}
                 max={50}
-                helperText={isEs ? 'Art. 240 E.T.: 35%' : 'Art. 240 TS: 35%'}
+                helperText={
+                  isEs
+                    ? 'Art. 240 E.T.: 35%. Simplificación: sólo los flujos positivos × (1 − t); los negativos sin escudo fiscal (compensación de pérdidas del Art. 147 E.T. no modelada).'
+                    : 'Art. 240 TS: 35%. Simplification: only positive flows × (1 − t); negative flows get no tax shield (Art. 147 TS loss carry-forward not modeled).'
+                }
               />
             </div>
 

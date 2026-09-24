@@ -23,7 +23,12 @@ export interface CalculatorInput {
   investmentCop: number;
   /** Flujos antes de impuestos por año (t = 1..n), en pesos. */
   cashflowsCop: number[];
-  /** Tasa de impuestos (0-1) para el ajuste didáctico flujo × (1 − t). */
+  /**
+   * Tasa de impuestos (0-1) para el ajuste didáctico flujo × (1 − t) de los
+   * flujos POSITIVOS. Los negativos no generan escudo fiscal inmediato: las
+   * pérdidas fiscales se compensan con rentas futuras (Art. 147 E.T.), que
+   * esta calculadora no modela (valoracion-26).
+   */
   taxRate: number;
   /** Tasa de descuento declarada por el usuario, en %. null = no declarada. */
   discountRatePercent: number | null;
@@ -56,7 +61,10 @@ const toCentsString = (pesos: number): string =>
 
 export function computeCalculator(input: CalculatorInput): CalculatorResult {
   const tax = Number.isFinite(input.taxRate) ? input.taxRate : 0;
-  const effective = input.cashflowsCop.map((cf) => (Number.isFinite(cf) ? cf : 0) * (1 - tax));
+  const effective = input.cashflowsCop.map((cf) => {
+    const v = Number.isFinite(cf) ? cf : 0;
+    return v > 0 ? v * (1 - tax) : v;
+  });
   const rateDeclared =
     input.discountRatePercent !== null && Number.isFinite(input.discountRatePercent);
 

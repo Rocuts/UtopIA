@@ -63,3 +63,24 @@ describe('calculadora de factibilidad — misma función determinista del pipeli
     expect(src).toMatch(/computeCalculator/);
   });
 });
+
+// valoracion-26 — el ajuste (1 − t) se aplicaba también a los flujos
+// negativos, como si toda pérdida diera un crédito fiscal inmediato. Las
+// pérdidas fiscales se compensan con rentas futuras (Art. 147 E.T.), que esta
+// calculadora no modela: los flujos negativos quedan sin escudo fiscal.
+describe('valoracion-26 — tratamiento fiscal de los flujos negativos', () => {
+  it('sólo los flujos positivos se ajustan por (1 − t)', () => {
+    const r = computeCalculator({
+      investmentCop: 1_000_000,
+      cashflowsCop: [800_000, -200_000, 900_000],
+      taxRate: 0.35,
+      discountRatePercent: 10,
+    });
+    expect(r.effectiveCashflowsCop).toEqual([520_000, -200_000, 585_000]);
+  });
+
+  it('la página rotula la simplificación fiscal', () => {
+    const src = readFileSync(resolve(__dirname, '../page.tsx'), 'utf8');
+    expect(src).toMatch(/Art\. 147/);
+  });
+});

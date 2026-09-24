@@ -59,3 +59,28 @@ describe('computeBreakEven', () => {
     expect(computeBreakEven(null, pesos(1), pesos(1)).status).toBe('unavailable');
   });
 });
+
+// valoracion-26 — el payback tomaba la PRIMERA recuperación aunque flujos
+// negativos posteriores devolvieran el acumulado por debajo de la inversión
+// (I0 = 100, [230, −132]: 0,43 años con el acumulado final en −2).
+describe('valoracion-26 — payback sobre el acumulado que se sostiene', () => {
+  it('I0 = 100, [230, −132]: acumulado final −2 ⇒ payback N/D', () => {
+    const r = computeProjectMetrics(pesos(100), flows([230, -132]), 10);
+    if (r.status !== 'ok') throw new Error('esperaba ok');
+    expect(r.metrics.paybackYears).toBeNull();
+  });
+
+  it('recupera, recae y vuelve a recuperar ⇒ payback en la última recuperación', () => {
+    // acumulado: −100 → +20 → −30 → +20  ⇒ recupera en el año 3 (2 + 30/50 = 2,6)
+    const r = computeProjectMetrics(pesos(100), flows([120, -50, 50]), 10);
+    if (r.status !== 'ok') throw new Error('esperaba ok');
+    expect(r.metrics.paybackYears).toBe(2.6);
+  });
+
+  it('flujos no convencionales: la nota de la TIR remite a la TIRM', () => {
+    const r = computeProjectMetrics(pesos(100), flows([230, -132]), 10);
+    if (r.status !== 'ok') throw new Error('esperaba ok');
+    expect(r.metrics.irrNote?.es).toMatch(/TIRM/);
+    expect(r.metrics.irrNote?.en).toMatch(/MIRR/);
+  });
+});
