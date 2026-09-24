@@ -92,7 +92,14 @@ const TRIAL_BALANCE_SCHEMA = {
         'validation_reasons. El riesgo de liquidez (activo corriente < pasivo corriente) no cambia ' +
         'el status. Contrato tb-2026-09-24.3.',
     },
-    period_label: { type: 'string' },
+    period_label: {
+      type: 'string',
+      description:
+        'Periodo primario. Si el CSV declara la fecha de corte en su título ("Balance a junio 30 ' +
+        'de 2025") y la columna de saldo sólo trae el año, el periodo es el corte AAAA-MM ' +
+        '(2025-06) aunque se haya enviado period_label "2025"; el detalle lo explica en ' +
+        'validation_notes (tb-2026-09-24.3).',
+    },
     row_count: { type: 'integer' },
     unit: {
       type: ['object', 'null'],

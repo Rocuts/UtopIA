@@ -267,6 +267,11 @@ auditoría integral 2026-09-24):
   supuesto por defecto (NIC 1 párr. 66-76 / NIIF PYMES 4.5-4.8); las excepciones se aplican de
   forma determinista, viajan en las filas persistidas y se revelan con su monto en
   `classification_note`. Sin excepciones las cifras son idénticas.
+- Fecha de corte declarada en el título del CSV (P4-c): con una columna de saldo que sólo
+  trae el año, el periodo primario pasa a `AAAA-MM` (p. ej. `2025-06`) aunque el cliente haya
+  enviado `period_label: "2025"`. Decisión: el archivo prevalece sobre la etiqueta porque la
+  duración del P&G decide la anualización de los KPIs; la nota en `validation_notes[]` cita el
+  texto del archivo.
 
 `GET /api/v1/trial-balances/{id}` añade `validation_reasons[]`, `validation_notes[]`,
 `classification_note`, `discrepancies[]` y `curator_findings[]` completos (recomputados). El CSV acepta los mismos alias de columnas del parser interno

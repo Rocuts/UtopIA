@@ -156,6 +156,11 @@ curl -X POST $BASE/api/v1/trial-balances \
   determinista, se persisten con las filas (el `GET` las recomputa igual) y el detalle las
   revela con su monto en `classification_note`. No cambian los totales de sección ni el
   `status`.
+- **Fecha de corte en el título del CSV (`tb-2026-09-24.3`)**: si el CSV declara el corte en
+  una fila de título ("Balance de prueba a junio 30 de 2025", "Corte: 30/06/2025") y la
+  columna de saldo sólo trae el año, el `period_label` de la respuesta es el corte `AAAA-MM`
+  (`2025-06`, P&G de 6 meses y KPIs anualizados) aunque se haya enviado `period_label: "2025"`;
+  `validation_notes[]` cita el texto del archivo. Un corte a diciembre deja el año.
 - `GET /v1/trial-balances/{id}` **recomputa** desde las filas crudas con el preprocesador
   vigente (filosofía anti-desync del repo: no se persiste el `PreprocessedBalance`) y añade
   `validation_reasons[]` + `validation_notes[]` (notas no bloqueantes: unidad reexpresada,

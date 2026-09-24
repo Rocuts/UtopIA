@@ -138,3 +138,23 @@ describe('ingesta-30 — rango seguro de centavos también en `rows`', () => {
     ).toBe(false);
   });
 });
+
+describe('API v1 — fecha de corte declarada en el título (P4-c, contrato documentado)', () => {
+  it('con period_label "2025" y título "a junio 30 de 2025", el periodo es 2025-06 y la nota cita el archivo', () => {
+    const csv = [
+      'Balance de prueba a junio 30 de 2025',
+      'codigo;nombre;saldo 2025',
+      '110505;Caja general;1000',
+      '310505;Capital suscrito;1000',
+    ].join('\n');
+    const { summary, pre } = summaryOf({ csv, period_label: '2025' });
+    expect(summary.period_label).toBe('2025-06');
+    const detail = serializeTrialBalanceDetail(
+      serializeTrialBalance('tb_x', { createdAt: new Date(0), summary, preprocessorVersion: 'x' }),
+      pre,
+    );
+    expect(
+      (detail.validation_notes as string[]).some((n) => /Fecha de corte declarada.*a junio 30 de 2025/.test(n)),
+    ).toBe(true);
+  });
+});
