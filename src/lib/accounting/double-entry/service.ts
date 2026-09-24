@@ -14,13 +14,18 @@
 // - Posting `draft → posted` is a separate operation (`postEntry`). Callers
 //   that want immediate posting pass `status: 'posted'` to `createEntry`,
 //   which performs both inserts in the same TX.
-// - Reversal: the original is mutated to status='reversed' AND its
-//   `reversedByEntryId` is set. The reversing entry has
-//   `sourceType='reversal'` and `reversalOfEntryId=original.id`. Both the
-//   original update and the new entry insert happen in the same TX. The
-//   schema's DB triggers (Ola 1.A) likely also enforce immutability on
-//   posted entries; we coordinate by using a SELECT FOR UPDATE on the
-//   original and ensuring the trigger sees a consistent transition.
+// - Reversal (auditoría contab-nomina-01): the original KEEPS
+//   status='posted' and only gets `reversedByEntryId` (+ version). The
+//   reversing entry has `sourceType='reversal'`, `reversalOfEntryId` and is
+//   also 'posted'. Every ledger reader filters `status = 'posted'`, so both
+//   count and net to zero in every surface (pillar view, ledger queries,
+//   close, bank reconciliation, forensic, period hash). Before, the original
+//   was flipped to 'reversed' and dropped out of those filters while the
+//   reversal stayed: each reversal subtracted the entry twice, and an
+//   original in a locked period changed its figures/hash retroactively.
+//   "Reversado" is a presentation state derived from `reversedByEntryId`.
+//   Migration 0022 backfills legacy 'reversed' rows and restricts the DB
+//   trigger to exactly this transition.
 // ---------------------------------------------------------------------------
 
 import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
@@ -43,7 +48,7 @@ import {
   type ReverseEntryInput,
   type VoidDraftInput,
 } from '../types';
-import { buildReversalLines, validateBalance } from './validate';
+import { buildReversalLines, normalizeAmount, validateBalance } from './validate';
 
 // ---------------------------------------------------------------------------
 // Retry helper for SERIALIZABLE transactions.
@@ -95,6 +100,51 @@ async function retryOnSerialization<T>(fn: () => Promise<T>): Promise<T> {
     ERR.CONCURRENCY,
     `Serialization conflict after ${MAX_RETRIES} retries`,
   );
+}
+
+/** Transaction handle used by the service (and by `CreateEntryOptions`). */
+export type JournalTx = Parameters<
+  Parameters<ReturnType<typeof getDb>['transaction']>[0]
+>[0];
+
+export interface CreateEntryOptions {
+  /**
+   * Idempotencia por origen: si ya existe un asiento POSTEADO y no reversado
+   * del workspace con el mismo (`sourceType`, `sourceRef`), no se crea otro y
+   * se lanza `DoubleEntryError(DUPLICATE_SOURCE)` con el id existente en
+   * `details.existingEntryId`. Se evalúa dentro de la transacción
+   * serializable, así que dos corridas concurrentes no pueden duplicar.
+   */
+  idempotentBySource?: boolean;
+  /**
+   * Trabajo adicional en la MISMA transacción, después de insertar el asiento
+   * y sus líneas (p. ej. actualizar la depreciación acumulada del activo). Si
+   * lanza, el asiento tampoco se crea.
+   */
+  inTransaction?: (tx: JournalTx, created: EntryWithLines) => Promise<void>;
+}
+
+/** Asiento "vivo" con el mismo origen (posted y sin reverso), si existe. */
+async function findLiveEntryBySource(
+  tx: JournalTx,
+  workspaceId: string,
+  sourceType: string,
+  sourceRef: string,
+): Promise<{ id: string; entryNumber: number } | null> {
+  const rows = await tx
+    .select({ id: journalEntries.id, entryNumber: journalEntries.entryNumber })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.workspaceId, workspaceId),
+        sql`${journalEntries.sourceType} = ${sourceType}`,
+        eq(journalEntries.sourceRef, sourceRef),
+        eq(journalEntries.status, 'posted'),
+        sql`${journalEntries.reversedByEntryId} IS NULL`,
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,9 +284,16 @@ async function nextEntryNumber(
 
 export async function createEntry(
   input: CreateEntryInput,
+  options: CreateEntryOptions = {},
 ): Promise<EntryWithLines> {
   // 1. Pure validation FIRST — fail fast without a TX.
   const { totalDebit, totalCredit } = validateBalance(input.lines);
+  if (options.idempotentBySource && !input.sourceRef) {
+    throw new DoubleEntryError(
+      ERR.INVALID_LINES,
+      'idempotentBySource requiere sourceRef',
+    );
+  }
 
   if (!input.workspaceId) {
     throw new DoubleEntryError(
@@ -284,6 +341,23 @@ export async function createEntry(
 
         await validateAccounts(tx, input.workspaceId, input.lines);
 
+        if (options.idempotentBySource && input.sourceRef) {
+          const existing = await findLiveEntryBySource(
+            tx,
+            input.workspaceId,
+            input.sourceType ?? 'manual',
+            input.sourceRef,
+          );
+          if (existing) {
+            throw new DoubleEntryError(
+              ERR.DUPLICATE_SOURCE,
+              `Ya existe el asiento #${existing.entryNumber} con origen ` +
+                `${input.sourceType ?? 'manual'}:${input.sourceRef}`,
+              { existingEntryId: existing.id },
+            );
+          }
+        }
+
         const entryNumber = await nextEntryNumber(
           tx,
           input.workspaceId,
@@ -314,29 +388,39 @@ export async function createEntry(
           })
           .returning();
 
-        const linesToInsert = input.lines.map((l, idx) => ({
-          workspaceId: input.workspaceId,
-          entryId: entry.id,
-          lineNumber: idx + 1,
-          accountId: l.accountId,
-          thirdPartyId: l.thirdPartyId ?? null,
-          costCenterId: l.costCenterId ?? null,
-          debit: l.debit,
-          credit: l.credit,
-          currency: l.currency ?? 'COP',
-          exchangeRate: l.exchangeRate ?? '1',
-          // COP-only in Ola 1: functional == nominal.
-          functionalDebit: l.debit,
-          functionalCredit: l.credit,
-          description: l.description ?? null,
-          dimensions: l.dimensions ?? null,
-        }));
+        const linesToInsert = input.lines.map((l, idx) => {
+          // Persist EXACTLY the validated centavos (contab-nomina-12): the raw
+          // string could carry extra decimals that NUMERIC(20,2) would round.
+          const debit = normalizeAmount(l.debit, `linea ${idx + 1}.debit`);
+          const credit = normalizeAmount(l.credit, `linea ${idx + 1}.credit`);
+          return {
+            workspaceId: input.workspaceId,
+            entryId: entry.id,
+            lineNumber: idx + 1,
+            accountId: l.accountId,
+            thirdPartyId: l.thirdPartyId ?? null,
+            costCenterId: l.costCenterId ?? null,
+            debit,
+            credit,
+            currency: l.currency ?? 'COP',
+            exchangeRate: l.exchangeRate ?? '1',
+            // COP-only in Ola 1: functional == nominal.
+            functionalDebit: debit,
+            functionalCredit: credit,
+            description: l.description ?? null,
+            dimensions: l.dimensions ?? null,
+          };
+        });
         const inserted = await tx
           .insert(journalLines)
           .values(linesToInsert)
           .returning();
 
-        return { entry, lines: inserted };
+        const created = { entry, lines: inserted };
+        if (options.inTransaction) {
+          await options.inTransaction(tx, created);
+        }
+        return created;
       },
       { isolationLevel: 'serializable' },
     ),
@@ -418,7 +502,11 @@ export async function postEntry(
 
 // ---------------------------------------------------------------------------
 // reverseEntry — create a new posted entry that mirrors the original, and
-// mark the original `status='reversed'` + `reversedByEntryId=newEntry.id`.
+// link the original via `reversedByEntryId=newEntry.id`. The original stays
+// 'posted' so original + reversal net to zero under every `status='posted'`
+// filter. The reversal goes to the OPEN period that contains `entryDate`; an
+// original in a closed/locked period keeps its figures (only the link is
+// written, which the DB trigger allows and the period hash does not cover).
 // ---------------------------------------------------------------------------
 
 export async function reverseEntry(
@@ -577,15 +665,26 @@ export async function reverseEntry(
           .values(linesToInsert)
           .returning();
 
-        // Mark original as reversed.
+        // Link the original to its reversal. It stays 'posted' on purpose:
+        // original + reversal must net to zero in every ledger reader.
         await tx
           .update(journalEntries)
           .set({
-            status: 'reversed',
             reversedByEntryId: reversal.id,
             version: (original.version ?? 1) + 1,
           })
           .where(eq(journalEntries.id, original.id));
+
+        // Invalida caché de pilares del período del reverso y del original.
+        try {
+          const { invalidatePillarKpis } = await import('@/lib/kpis/cache');
+          await invalidatePillarKpis(input.workspaceId, period.id);
+          if (original.periodId !== period.id) {
+            await invalidatePillarKpis(input.workspaceId, original.periodId);
+          }
+        } catch (err) {
+          console.warn('[ws6/cache] pillar invalidation failed', err);
+        }
 
         return { entry: reversal, lines: insertedLines };
       },
@@ -684,6 +783,11 @@ export async function getEntryWithLines(
 export interface ListEntriesParams {
   workspaceId: string;
   periodId?: string;
+  /**
+   * 'reversed' is a presentation state: posted entries that have a
+   * reversal (`reversedByEntryId IS NOT NULL`). Their DB status stays
+   * 'posted' (see reverseEntry).
+   */
   status?: 'draft' | 'posted' | 'reversed';
   limit?: number;
   offset?: number;
@@ -696,7 +800,12 @@ export async function listEntries(params: ListEntriesParams) {
 
   const conditions: SQL[] = [eq(journalEntries.workspaceId, params.workspaceId)];
   if (params.periodId) conditions.push(eq(journalEntries.periodId, params.periodId));
-  if (params.status) conditions.push(eq(journalEntries.status, params.status));
+  if (params.status === 'reversed') {
+    conditions.push(eq(journalEntries.status, 'posted'));
+    conditions.push(sql`${journalEntries.reversedByEntryId} IS NOT NULL`);
+  } else if (params.status) {
+    conditions.push(eq(journalEntries.status, params.status));
+  }
 
   const rows = await db
     .select()

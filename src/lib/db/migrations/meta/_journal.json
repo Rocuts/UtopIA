@@ -150,6 +150,14 @@
       "when": 1787189359037,
       "tag": "0021_smart_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790208000000,
+      "tag": "0022_wp10_ledger_integrity",
+      "breakpoints": true,
+      "hash": "wp10-ledger-integrity-manual"
     }
   ]
 }

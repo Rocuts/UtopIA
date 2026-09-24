@@ -11,10 +11,12 @@ export {
   postEntry,
   reverseEntry,
   voidDraft,
+  type CreateEntryOptions,
+  type JournalTx,
   type ListEntriesParams,
 } from './service';
 
-export { validateBalance, buildReversalLines } from './validate';
+export { validateBalance, buildReversalLines, normalizeAmount } from './validate';
 
 export {
   DoubleEntryError,

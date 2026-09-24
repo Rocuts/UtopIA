@@ -19,11 +19,15 @@ import { z } from 'zod';
 // We forbid scientific notation and signs at the schema layer; the
 // validator double-checks at the service layer.
 const NUMERIC_RE = /^\d+(\.\d{1,8})?$|^\.\d{1,8}$/;
+// Montos: como máximo 2 decimales. Las columnas son NUMERIC(20,2) y Postgres
+// REDONDEA el exceso; aceptar 8 decimales dejaba líneas persistidas que no
+// sumaban la cabecera validada (auditoría contab-nomina-12).
+const AMOUNT_RE = /^\d+(\.\d{1,2})?$|^\.\d{1,2}$/;
 const UNSIGNED_NUMERIC = z
   .string()
   .min(1, 'amount required')
   .max(28, 'amount too long')
-  .regex(NUMERIC_RE, 'amount must be a non-negative decimal');
+  .regex(AMOUNT_RE, 'amount must be a non-negative decimal with at most 2 decimals');
 
 const EXCHANGE_RATE = z
   .string()

@@ -35,6 +35,7 @@ export function statusForCode(code: string): number {
     case ERR.ENTRY_NOT_DRAFT:
     case ERR.ENTRY_NOT_POSTED:
     case ERR.CONCURRENCY:
+    case ERR.DUPLICATE_SOURCE:
       return 409;
     case ERR.PERIOD_NOT_OPEN:
     case ERR.ACCOUNT_NOT_POSTABLE:
