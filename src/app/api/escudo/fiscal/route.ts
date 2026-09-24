@@ -56,6 +56,7 @@ export async function POST(req: Request) {
       instructions,
       dianRequirementText,
       dianRequirementKind,
+      saldoAFavorDeclaradoCents,
     } = parsed.data;
 
     const wantsStream =
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
         instructions,
         dianRequirementText,
         dianRequirementKind,
+        saldoAFavorDeclaradoCents,
         startedAt,
       });
     }
@@ -83,6 +85,7 @@ export async function POST(req: Request) {
       instructions,
       dianRequirementText,
       dianRequirementKind,
+      saldoAFavorDeclaradoCents,
     });
 
     void logActivity({
@@ -133,14 +136,11 @@ function handleStreaming(args: {
   mode: z.infer<typeof fiscalAgentRequestSchema>['mode'];
   instructions: string | undefined;
   dianRequirementText: string | undefined;
-  dianRequirementKind:
-    | 'requerimiento_ordinario'
-    | 'emplazamiento_corregir'
-    | 'emplazamiento_no_declarar'
-    | 'pliego_cargos'
-    | 'liquidacion_oficial_revision'
-    | 'desconocido'
-    | undefined;
+  // Derivado del schema: una lista escrita a mano dejó por fuera el
+  // requerimiento especial (Art. 703 E.T.) — auditoría tributario-modulos-13.
+  dianRequirementKind: z.infer<typeof fiscalAgentRequestSchema>['dianRequirementKind'];
+  /** Saldo a favor del Formulario 110 (MoneyCop) — tributario-modulos-02. */
+  saldoAFavorDeclaradoCents: string | undefined;
   startedAt: number;
 }) {
   const {
@@ -151,6 +151,7 @@ function handleStreaming(args: {
     instructions,
     dianRequirementText,
     dianRequirementKind,
+    saldoAFavorDeclaradoCents,
     startedAt,
   } = args;
   const encoder = new TextEncoder();
@@ -173,6 +174,7 @@ function handleStreaming(args: {
             instructions,
             dianRequirementText,
             dianRequirementKind,
+            saldoAFavorDeclaradoCents,
           },
           {
             onProgress: (event: FiscalAgentProgressEvent) => {

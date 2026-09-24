@@ -192,6 +192,7 @@ export async function orchestrateFiscalAgent(
     instructions: inp.instructions,
     dianRequirementText: inp.dianRequirementText,
     dianRequirementKind: inp.dianRequirementKind,
+    saldoAFavorDeclaradoCents: inp.saldoAFavorDeclaradoCents ?? null,
   };
 
   const modules = selectModules(mode);

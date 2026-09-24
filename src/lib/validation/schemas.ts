@@ -64,21 +64,11 @@ export const taxCalendarRequestSchema = z.object({
 });
 
 // ---- Sanction calculator route ----
-export const sanctionRequestSchema = z.object({
-  type: z.enum(['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios']),
-  taxDue: z.number().nonnegative().optional(),
-  grossIncome: z.number().nonnegative().optional(),
-  difference: z.number().nonnegative().optional(),
-  delayMonths: z.number().int().nonnegative().max(240).optional(),
-  /** Sólo para correccion: voluntaria (10%) vs provocada (20%). */
-  isVoluntary: z.boolean().optional(),
-  /** Sólo para inexactitud: reducciones Arts. 640, 709 y 713 ET. */
-  inexactitudReduction: z.enum(['none', 'art_713_half', 'art_709_quarter', 'art_640_50', 'art_640_75']).optional(),
-  principal: z.number().nonnegative().optional(),
-  /** Tasa efectiva anual (%): tasa de usura vigente - 2 pp. Art. 635 ET. */
-  annualRate: z.number().min(0).max(100).optional(),
-  days: z.number().int().nonnegative().max(3_650).optional(),
-});
+// Contrato único (auditoría 2026-09, tributario-calc-02): la copia local quedó
+// sin saldoAFavor, netEquityPriorYear, correccionStage, reduccion640,
+// mesesExtemporaneidadInicial ni el tipo extemporaneidad_post_emplazamiento.
+// /api/tools/sanction, la tool del chat y la voz leen el mismo schema.
+export { sanctionRequestSchema } from '@/lib/tools/sanction-contract';
 
 // ---- Upload route (metadata only, file validated separately) ----
 export const uploadContextSchema = z
@@ -358,6 +348,12 @@ export const projectInfoSchema = z.object({
   department: z.string().max(100).optional(),
   estimatedInvestment: z.number().nonnegative().optional(),
   evaluationHorizon: z.number().int().min(1).max(30).optional(),
+  /**
+   * Año calendario de inicio de operaciones (año gravable 1 del proyecto). Lo
+   * usa el calendario ZOMAC (Art. 237 Ley 1819/2016); sin él el prompt rotula
+   * el supuesto «año siguiente a la evaluación» (auditoría valoracion-17).
+   */
+  startYear: z.number().int().min(2017).max(2100).optional(),
   companySize: z.enum(['micro', 'pequena', 'mediana', 'grande']).optional(),
   promoterName: z.string().max(200).optional(),
   nit: z.string().max(20).optional(),
@@ -451,11 +447,22 @@ export const fiscalAgentRequestSchema = z.object({
   dianRequirementKind: z
     .enum([
       'requerimiento_ordinario',
+      'requerimiento_especial',
       'emplazamiento_corregir',
       'emplazamiento_no_declarar',
       'pliego_cargos',
       'liquidacion_oficial_revision',
       'desconocido',
     ])
+    .optional(),
+  /**
+   * Módulo 6 — saldo a favor LIQUIDADO en la declaración de renta (Formulario
+   * 110), MoneyCop: centavos enteros no negativos en string. Sin él la
+   * devolución queda N/D (F04 es una estimación contable, no la declaración).
+   * Auditoría 2026-09, tributario-modulos-02.
+   */
+  saldoAFavorDeclaradoCents: z
+    .string()
+    .regex(/^\d{1,20}$/, 'saldoAFavorDeclaradoCents: centavos enteros no negativos (MoneyCop)')
     .optional(),
 });
