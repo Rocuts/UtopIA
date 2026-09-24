@@ -191,11 +191,11 @@ curl -X POST $BASE/api/v1/trial-balances \
   remisión queda `unbalanced` con el motivo `CUR-R12` en `validation_reasons[]`. Si la columna
   es la apertura de un mes y no del ejercicio, fecharla en el encabezado ("Saldo inicial
   01/12/2025") evita el bloqueo.
-- **Versión del preprocesador**: los tres comportamientos anteriores de la fase 2 (importes
-  ambiguos, fecha del encabezado y P&G acumulado en la columna de saldo inicial) se publicaron
-  con el mismo `preprocessor_version` `tb-2026-09-24.3`. La regla de evolución de esta guía pide
-  subirlo cuando el preprocesador cambia de forma observable; queda registrado como pendiente
-  en la auditoría.
+- **Versión del preprocesador `tb-2026-09-24.4`**: los tres comportamientos anteriores
+  (importes ambiguos, fecha del encabezado y P&G acumulado en la columna de saldo inicial) y el
+  descarte de directivas de unidad escritas dentro del archivo son observables para un
+  cliente, por eso `preprocessor_version` pasa de `tb-2026-09-24.3` a `tb-2026-09-24.4`
+  (re-auditoría final de la fase 2, 2026-09-24).
 - `GET /v1/trial-balances/{id}` **recomputa** desde las filas crudas con el preprocesador
   vigente (filosofía anti-desync del repo: no se persiste el `PreprocessedBalance`) y añade
   `validation_reasons[]` + `validation_notes[]` (notas no bloqueantes: unidad reexpresada,

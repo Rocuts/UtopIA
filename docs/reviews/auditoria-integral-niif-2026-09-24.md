@@ -2,7 +2,7 @@
 
 Base auditada: `main` @ `dea0329` (PR #14 fusionada). Rama de correcciones: `claude/auditoria-proyecto-niif-sdr3ia`.
 Fase 1: verificación final sobre `776ca97` (base de la fase 2: `e631415`). Fase 2 (cierre de pendientes y
-re-auditoría final, también del 2026-09-24): código final verificado en `54802609`; después sólo documentación.
+re-auditoría final, también del 2026-09-24): código final verificado en `4bbbd377` (contrato del API v1 `tb-2026-09-24.4` sobre `54802609`); después sólo documentación.
 Foco pedido: el módulo NIIF (balance de prueba → estados → informe → exportaciones), además de métricas, cálculos
 tributarios, laborales, valoración, reportes y la normativa colombiana aplicable.
 
@@ -223,7 +223,7 @@ dependencias cruzadas que quedaron fuera de su propiedad:
 | F-narrativa | narrativa-01..07, -09..13; procedencia-R2-01 (validador); e2e-niif2-07 | El validador de prosa deja de sellar prosa honesta y cruza la terminología habitual ("utilidad/resultado del ejercicio", "los activos ascienden", "distribuir … la suma de", montos "900 millones de pesos"); corpus de 89 frases honestas y 58 falsas sobre cinco balances y todas las Partes | `74908d7e` |
 | F-html | narrativa-08, -14 (en parte), -15, -16; e2e-niif2-03, -04 | R6 del HTML con las exenciones de la prosa de la Parte II; filas de ingresos del dashboard ancladas y variaciones verificadas; la cifra de un KPI publicado N/D sale de toda la prosa de la Parte II; ORI y resultado integral total conciliados con signo; comparativos del EFE/ECP fila por fila | `dfec788e` |
 | F-procedencia | e2e-niif2-02, -05, -06; procedencia-R2-01 (artefacto), -02..07 | Una desviación ya sobrescrita por `/niif` no sella; `/html` sin referencia pasa por el gate de `/export` sin referencia; PDF y HTML divulgan los ajustes del Doctor y el sello nombra las dos huellas; firmantes y Revisor Fiscal del acta desde el intake; formato de versión v2 con huella del sobre completo (contrato `informe-niif-2026-09-24.4`); variante BORRADOR del sello; ediciones "Aplicar al reporte" declaradas; idioma del informe persistido; narrativa IA rotulada por Parte en el Excel y alcance del sello | `ed763f90` |
-| Integrador | recalculo-final2-05, ICU-05, ICU-07, NT-02; dependencias de F-contrato | `98fe207b` (alerta DEV del Âncora sobre ingresos netos más devoluciones, `createPeriodAction` con el rango del mes, Nota 9 del SIMPLE en Gobierno, montos de tooltips por idioma), `34ddb769` (runway), `54802609` (el Pass-1 pide un código PUC por renglón y el bloque EFE VINCULANTE revela la revaluación) | — |
+| Integrador | recalculo-final2-05, ICU-05, ICU-07, NT-02; dependencias de F-contrato | `98fe207b` (alerta DEV del Âncora sobre ingresos netos más devoluciones, `createPeriodAction` con el rango del mes, Nota 9 del SIMPLE en Gobierno, montos de tooltips por idioma), `34ddb769` (runway), `54802609` (el Pass-1 pide un código PUC por renglón y el bloque EFE VINCULANTE revela la revaluación), `4bbbd377` (contrato del preprocesador del API v1 `tb-2026-09-24.4`) | — |
 
 Resultado: 54 de los 55 hallazgos corregidos con prueba de regresión; narrativa-14 queda como residual documentado (filas
 de dinero del dashboard sin ancla distinta de ingresos). NT-04 está corregido en el repositorio y requiere reingestar
@@ -261,7 +261,7 @@ Sólo lo que sigue abierto tras la fase 2, agrupado por naturaleza. Lo cerrado d
 | 9 | Aislamiento entre tenants probado con la sesión simulada y con Postgres real y la resolución real del workspace, pero con el almacén de cookies simulado | Sin sesión BetterAuth real en el entorno | Seguridad |
 | 10 | Informes en inglés: títulos y rótulos de los estados, rótulos de catálogo, subtotales deterministas, filas del ECP, mensajes de las reglas E, motivos del preprocesador y el acta siguen en español | Los catálogos y renderizadores no reciben el idioma | i18n |
 | 11 | Doctor de Datos: un ajuste aplicado en una sesión anterior viaja con cada regeneración hasta "Nuevo Reporte" y no se puede rechazar en la UI. Un checkpoint anterior a I3 sin registro de ledger y con un preprocesado que no cabía en sessionStorage se reanuda sin ledger (descargas bloqueadas: regenerar). El botón de periodo rápido muestra un 409 `period_overlap` como "ya existe — listo para registrar" | Decisión de UI pendiente; transición | UI del workspace |
-| 12 | Ingesta (heurísticas documentadas): "Reporte generado a 31/07/2025" en el preámbulo se toma como corte de julio; "Hasta: 30/06/2025" y "31 dic 2025" no se detectan (queda el supuesto anual revelado); un CSV separado por ";" con configuración inglesa e importes "848.123" con unidad confirmada se lee como agrupación de miles; un corte parcial con apertura explícita al 1 de enero y el año anterior sin cerrar no se detecta; un balance mensual sin fecha con P&G del año corrido da 422 CUR-R12 (política conservadora); un archivo que traiga la marca interna de celdas XLSX bloquea su propia confirmación de unidad fuera del upload (sin cifras erróneas). El `preprocessor_version` del API v1 sigue en `tb-2026-09-24.3` aunque la ronda final cambió de forma observable la lectura de importes ambiguos, la fecha del encabezado y R12 con columna de saldo inicial | Heurísticas de texto; las alternativas producían bloqueos de archivos honestos. La guía del API pide subir la versión cuando el preprocesador cambia de forma observable | Ingesta / API v1 |
+| 12 | Ingesta (heurísticas documentadas): "Reporte generado a 31/07/2025" en el preámbulo se toma como corte de julio; "Hasta: 30/06/2025" y "31 dic 2025" no se detectan (queda el supuesto anual revelado); un CSV separado por ";" con configuración inglesa e importes "848.123" con unidad confirmada se lee como agrupación de miles; un corte parcial con apertura explícita al 1 de enero y el año anterior sin cerrar no se detecta; un balance mensual sin fecha con P&G del año corrido da 422 CUR-R12 (política conservadora); un archivo que traiga la marca interna de celdas XLSX bloquea su propia confirmación de unidad fuera del upload (sin cifras erróneas). | Heurísticas de texto; las alternativas producían bloqueos de archivos honestos | Ingesta / API v1 |
 | 13 | Tributario/Escudo: un escenario que baja el impuesto con descuentos sin citar los Arts. 255-257 ni traer desglose publica el ahorro del modelo; Capa 2 bloquea frases honestas que mencionan como derogadas o inexequibles normas de su lista negra (Art. 158-3, Decreto 1474/2025) y menciones negadas del periodo anual de IVA; una derogación de otra norma en la misma frase deja el Art. 36-3 en advertencia y, a la inversa, una frase honesta que junto a la derogación del Art. 36-3 dice que otra norma "sigue siendo aplicable" se bloquea; la regla de M5 sobre reducción de sanciones mira una ventana corta de texto y puede no reconocer una frase larga; con el ajuste de precios de transferencia N/D, una nota que cita umbrales en UVT se sustituye por el motivo (se pierde la nota, no hay cifra errónea); en salidas en inglés, M7 y la Capa 2 exigen el cierre y las citas en español y no se reconoce "Article N E.T." de artículos vigentes; los filtros de montos del modelo en precios de transferencia y planeación son heurísticos; el Dictamen del SIMPLE aún imprime la línea "Tasa minima exigida" (15 %) junto a la TTD que no aplica (cosmético); los umbrales del motor tributario no aplican la aproximación del Art. 868 (10 UVT = $523.740 frente a $524.000; 2 UVT = $104.748 frente a $105.000) | Heurísticas; política de la lista negra por decidir | Tributario / Escudo |
 
 ### Sin cambio en la fase 2 (hallazgos en parte de la fase 1)
@@ -308,7 +308,7 @@ Los hallazgos bajos de la fase 1 que no se procesaron siguen listados en la evid
    `estatuto_tributario_resumen_2026.md`, `et_articulo_240_renta_juridica.md`,
    `et_articulo_772_1_conciliacion_contable_fiscal.md`, `ley_2277_2022_reforma_tributaria.md`,
    `procedimiento_dian_2026.md` (además de los de la fase 1).
-3. **Clientes del API v1** (contrato `tb-2026-09-24.3`; ver [API_CLIENTES.md](../API_CLIENTES.md)): parámetros
+3. **Clientes del API v1** (contrato `tb-2026-09-24.4`; ver [API_CLIENTES.md](../API_CLIENTES.md)): parámetros
    opcionales `unit` y `maturity_overrides`; campos `unit`, `validation_notes[]` y `classification_note`; un CSV que
    declara "en miles/millones" queda `unbalanced` hasta confirmar la unidad; con la unidad confirmada, un importe
    ambiguo de tres decimales queda `unbalanced` con su motivo (nunca ×1.000); el `period_label` puede ser `AAAA-MM`
@@ -347,7 +347,7 @@ Los hallazgos bajos de la fase 1 que no se procesaron siguen listados en la evid
 
 Sin servicios reales (LLM simulado, credenciales ficticias para la compilación):
 
-| Comprobación | `dea0329` (antes) | Fase 1 (`776ca97`) | Final fase 2 (`54802609`) |
+| Comprobación | `dea0329` (antes) | Fase 1 (`776ca97`) | Final fase 2 (`4bbbd377`) |
 |---|---|---|---|
 | `npx vitest run` | 200 archivos, 2.355 pruebas, 3 omitidas | 397 archivos, 4.027 pruebas, 20 omitidas, 0 fallos | 535 archivos / 5.404 pruebas pasan; 23 omitidas (20 en los 6 archivos que requieren Postgres y 3 marcadores `describe.skip` preexistentes de `buildFiscalAnchor-grupo2tres.test.ts`); 0 fallos |
 | `npx tsc --noEmit` | 0 errores | 0 errores | 0 errores |
@@ -366,4 +366,4 @@ local efímero con las migraciones del repositorio; en la fase 2 se corrió así
 Postgres 16 local. Cada corrección se acompañó de una prueba de regresión
 que falla contra el código anterior; las pruebas existentes que codificaban el comportamiento defectuoso se
 actualizaron con la razón en el commit correspondiente. Las cifras de la re-auditoría final corresponden a la rama con
-toda la fase 2 antes de la ronda final; las de vitest, tsc, lint, strict-mode y build, al commit final `54802609`.
+toda la fase 2 antes de la ronda final; las de vitest, tsc, lint, strict-mode y build, al commit final `4bbbd377` (mismas cifras que en `54802609`).

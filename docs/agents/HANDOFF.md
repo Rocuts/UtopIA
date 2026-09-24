@@ -7,13 +7,13 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
 
 ## Referencias
 
-- Repo: `Rocuts/UtopIA`. Rama: `claude/auditoria-proyecto-niif-sdr3ia`; código final verificado en `54802609` (después
+- Repo: `Rocuts/UtopIA`. Rama: `claude/auditoria-proyecto-niif-sdr3ia`; código final verificado en `4bbbd377` (después
   sólo documentación). No está fusionada en `main` ni desplegada.
 - Resultado: fase 1, 269 hallazgos confirmados (264 corregidos y 5 en parte tras la fase 2); fase 2, los pendientes
   #1–#4, #8 y #9 de la fase 1 atendidos por los paquetes P1–P6 y las integraciones I1–I5 (sus remanentes siguen en
   *Pendientes* del informe); re-auditoría final, 55 hallazgos: 54 corregidos y 1 residual documentado. Índice en el
   [anexo](../reviews/auditoria-integral-niif-2026-09-24-anexo.md).
-- Verificación final en `54802609`: vitest 535 archivos / 5.404 pruebas (23 omitidas: 20 en los 6 archivos
+- Verificación final en `4bbbd377`: vitest 535 archivos / 5.404 pruebas (23 omitidas: 20 en los 6 archivos
   que requieren Postgres y 3 marcadores `describe.skip` preexistentes), `tsc` sin errores, eslint 0 errores (158 avisos preexistentes, 1 de ellos en un archivo generado por la
   compilación), strict-mode y `npm run build`
   (credenciales ficticias) correctos. Re-auditoría final: 879/900 cifras al centavo por la ruta real (12 en balances
@@ -51,7 +51,7 @@ normativa; fase 1 (hallazgos y correcciones) y fase 2 (cierre de pendientes y re
 
 1. `npm run db:migrate` (0022 y 0023 de la fase 1; la fase 2 no añadió migraciones).
 2. `npm run db:ingest` para reindexar el corpus RAG corregido (6 archivos de `src/data/tax_docs` en la fase 2).
-3. Avisar a consumidores del API v1 (`tb-2026-09-24.3`) y de las rutas internas (`reportRef`, 422 nuevos, contrato
+3. Avisar a consumidores del API v1 (`tb-2026-09-24.4`) y de las rutas internas (`reportRef`, 422 nuevos, contrato
    `informe-niif-2026-09-24.4`, versión v2): lista en *Operación* del informe.
 4. Registrar cada mes la usura certificada en `TASA_USURA_CERTIFICADA` (hoy sólo 2026-08; sin ella la mora es N/D).
 5. Revisión visual de un PDF y un Excel reales.
