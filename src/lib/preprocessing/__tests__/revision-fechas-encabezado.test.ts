@@ -105,3 +105,38 @@ describe('fecha del encabezado con columna de apertura (revisión F-preproceso)'
     expect(motivo).toMatch(/1 de enero/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ICU-03 (nota de base): la fecha que se cita como "no interpretada" debe ser
+// del año del periodo. La fecha de impresión del reporte del ERP (enero del
+// año siguiente) no es un corte del ejercicio, y la fecha de un periodo no se
+// cita en la nota del comparativo.
+// ---------------------------------------------------------------------------
+describe('ICU-03 — fecha no interpretada del año del periodo (revisión F-preproceso)', () => {
+  const CUERPO = [
+    '11050501,Caja,1000000,900000',
+    '22050101,Proveedores,400000,400000',
+    '31050501,Capital,500000,500000',
+    '41350501,Ventas,600000,500000',
+    '51050601,Sueldos,500000,500000',
+  ];
+  const conPreambulo = (...preambulo: string[]) =>
+    leer([...preambulo, 'codigo,nombre,Saldo 2025,Saldo 2024', ...CUERPO].join('\n'));
+
+  it('la fecha de impresión del año siguiente no se cita: la nota dice que el archivo no declara la fecha', () => {
+    const pp = conPreambulo('EMPRESA SAS,,,', 'Fecha de impresión: 15/01/2026,,,');
+    expect(pp.primary.period).toBe('2025');
+    expect(pp.primary.controlTotals.kpiBaseNota).toMatch(/no declara la fecha de corte/);
+    expect(pp.primary.controlTotals.kpiBaseNota).not.toMatch(/impresi/);
+    expect(pp.primary.fechaSinInterpretar).toBeUndefined();
+  });
+
+  it('una fecha a mitad de mes de 2025 se cita en 2025 y no en el comparativo 2024', () => {
+    const pp = conPreambulo('Corte 15/06/2025,,,');
+    expect(pp.primary.fechaSinInterpretar).toBe('Corte 15/06/2025');
+    expect(pp.primary.controlTotals.kpiBaseNota).toMatch(/«Corte 15\/06\/2025» no se interpretó/);
+    expect(pp.comparative?.period).toBe('2024');
+    expect(pp.comparative?.fechaSinInterpretar).toBeUndefined();
+    expect(pp.comparative?.controlTotals.kpiBaseNota ?? '').not.toMatch(/15\/06\/2025/);
+  });
+});

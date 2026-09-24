@@ -1545,22 +1545,25 @@ export function parseTrialBalanceCSVWithMeta(
     (c) => c.kind !== 'opening' && /^\d{4}$/.test(c.period) && !periodosConCorte.has(c.period) && numericPeriods.has(c.period),
   );
   if (soloAnioSinCorte.length > 0) {
-    const fechaSinInterpretar =
-      tituloSinAplicar ??
-      [...preambulo, ...soloAnioSinCorte.map((c) => c.header)]
+    const candidatas = [
+      ...(tituloSinAplicar ? [tituloSinAplicar] : []),
+      ...[...preambulo, ...soloAnioSinCorte.map((c) => c.header)]
         .filter((t) => tieneFecha(t) && corteDeLinea(t) === null && corteDeEncabezado(t) === null)
-        .map(textoDeLinea)[0] ??
-      null;
-    if (fechaSinInterpretar) {
-      for (const period of new Set(soloAnioSinCorte.map((c) => c.period))) {
-        notas.push({
-          period,
-          message:
-            `El archivo trae la fecha «${fechaSinInterpretar}», que no se interpretó como fecha de corte ` +
-            `del periodo ${period} (sólo se leen cortes a fin de mes o rangos desde enero del año de la columna).`,
-          fechaSinInterpretar,
-        });
-      }
+        .map(textoDeLinea),
+    ];
+    for (const period of new Set(soloAnioSinCorte.map((c) => c.period))) {
+      // Sólo una fecha del año del periodo puede ser su corte: la fecha de
+      // impresión del reporte (enero del año siguiente) o la de otro periodo
+      // no se cita en la nota de base de éste.
+      const fechaSinInterpretar = candidatas.find((t) => t.includes(period));
+      if (!fechaSinInterpretar) continue;
+      notas.push({
+        period,
+        message:
+          `El archivo trae la fecha «${fechaSinInterpretar}», que no se interpretó como fecha de corte ` +
+          `del periodo ${period} (sólo se leen cortes a fin de mes o rangos desde enero del año de la columna).`,
+        fechaSinInterpretar,
+      });
     }
   }
   if (notas.length > 0 && rows.length > 0) {
