@@ -33,6 +33,7 @@ import type {
   ReportEmittabilityState,
   ReportValidationResult,
 } from './types';
+import type { ProvisionalFlag } from '@/lib/agents/repair/types';
 
 /** Código del bloqueante cuando no hubo balance preprocesado que verificar. */
 export const NO_VERIFIED_BALANCE_BLOCKER = 'SIN_BALANCE_VERIFICADO';
@@ -48,6 +49,15 @@ export interface SplitConsolidationInput {
   governanceContent: string;
   language: 'es' | 'en';
   now?: Date;
+  /**
+   * Override del Doctor de Datos ("Continuar de todas formas" →
+   * `mark_provisional`). Con `active`, el consolidado se entrega como
+   * BORRADOR con la razón declarada y los errores de la validación
+   * post-render (pipeline-flujo-21): el PDF lo estampa y nadie lo lee como
+   * definitivo. No levanta ningún gate: `validation` y `emittability` son
+   * los mismos que sin override.
+   */
+  provisional?: ProvisionalFlag | null;
 }
 
 export interface SplitConsolidationResult {
@@ -81,7 +91,64 @@ function estatutosFlag(company: CompanyInfo): boolean | undefined {
     : undefined;
 }
 
+/**
+ * Encabezado BORRADOR del override del Doctor de Datos (pipeline-flujo-21).
+ * Mismo texto que el orquestador legacy (`buildProvisionalWatermark`): el
+ * composer del PDF lo reconoce ("BORRADOR — VALIDACION PENDIENTE") y estampa
+ * la marca de agua.
+ */
+export function buildProvisionalDraftBanner(
+  reason: string,
+  errors: string[],
+  language: 'es' | 'en',
+): string {
+  const safeReason =
+    (reason || '').trim() || (language === 'en' ? '(no reason provided)' : '(razon no declarada)');
+  const errLines =
+    errors.length > 0
+      ? errors.map((e) => `> - ${e}`).join('\n')
+      : language === 'en'
+        ? '> - (post-render validation reported no errors)'
+        : '> - (la validacion post-render no reporto errores)';
+  if (language === 'en') {
+    return [
+      '> ⚠️ **DRAFT — VALIDATION PENDING**',
+      '> This report was generated with a user override. Automatic validation detected:',
+      errLines,
+      `> User-stated reason: "${safeReason}"`,
+      '> Must NOT be signed by the statutory auditor in this state.',
+    ].join('\n');
+  }
+  return [
+    '> ⚠️ **BORRADOR — VALIDACION PENDIENTE**',
+    '> Este reporte fue generado con override del usuario. La validacion automatica detecto:',
+    errLines,
+    `> Razon declarada: "${safeReason}"`,
+    '> NO debe firmarse por revisor fiscal en este estado.',
+  ].join('\n');
+}
+
+/** Antepone el encabezado BORRADOR cuando el override está activo. */
+function withProvisionalBanner(
+  result: SplitConsolidationResult,
+  provisional: ProvisionalFlag | null | undefined,
+  language: 'es' | 'en',
+): SplitConsolidationResult {
+  if (!provisional?.active) return result;
+  return {
+    ...result,
+    consolidatedReport:
+      buildProvisionalDraftBanner(provisional.reason, result.validation.errors, language) +
+      '\n\n' +
+      result.consolidatedReport,
+  };
+}
+
 export function consolidateSplitReport(input: SplitConsolidationInput): SplitConsolidationResult {
+  return withProvisionalBanner(consolidateUnmarked(input), input.provisional, input.language);
+}
+
+function consolidateUnmarked(input: SplitConsolidationInput): SplitConsolidationResult {
   const { company, preprocessed, language } = input;
 
   const consolidatedReport = buildConsolidatedReportMarkdown(
