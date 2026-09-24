@@ -181,13 +181,18 @@ function informeCorrecto(): NiifReportJson {
       modeBanner: null,
     },
     cashFlow: {
+      // Auditoría 2026-09 (niif-contrato-02, E18): la corrida real clasificaba
+      // en operación los −$2.916.666,00 que el EFE determinista del balance
+      // asigna a inversión. Con E18 cableado en `buildNiifValidatorOptions` esa
+      // reclasificación es un error; el informe correcto presenta las
+      // actividades del determinista (misma variación neta).
       sections: [
         {
           section: 'operating',
           lines: [linea(null, 'Utilidad neta del periodo', '222849678973', 2)],
-          netFlow: '85019233463',
+          netFlow: '85310900063',
         },
-        { section: 'investing', lines: [], netFlow: '0' },
+        { section: 'investing', lines: [], netFlow: '-291666600' },
         { section: 'financing', lines: [], netFlow: '0' },
       ],
       netChange: '85019233463',

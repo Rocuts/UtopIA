@@ -1,29 +1,137 @@
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import { NiifReportSchema, type NiifReportJson } from '@/lib/agents/financial/contracts/niif-report';
+import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
 import type { StatementLineJson } from '@/lib/agents/financial/contracts/base';
 import { parseMoneyCop } from '@/lib/agents/financial/contracts/money';
 import { validateNiifReportJson } from '@/lib/agents/financial/validators/niif-json-validator';
+import {
+  readStrategyQualifications,
+  reconcileStrategyAnchors,
+  strategyAnchorSources,
+} from '@/lib/agents/financial/validators/strategy-anchors';
 import { checkCashFlowInvariants, formatCashFlowViolations } from '@/lib/agents/financial/contracts/deterministic-breakdown';
-import { buildNiifValidatorOptions } from '@/lib/agents/financial/orchestrator';
+import { buildNiifValidatorOptions, fiscalYearOf } from '@/lib/agents/financial/orchestrator';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { presentedLineCents } from './statement-presentation';
 
 const ZERO = BigInt(0);
 
+/** Bloqueante del informe con Partes II/III vacías (misma regla que `detectMissingPhases`). */
+export const INCOMPLETE_REPORT_BLOCKER =
+  'Informe INCOMPLETO: faltan la Parte II (Estrategia) y/o la Parte III (Gobierno Corporativo).';
+
+/** Bloqueante del veredicto del Director de Estrategia (`strategyQualifications.clean === false`). */
+export const STRATEGY_QUALIFIED_BLOCKER =
+  'El análisis estratégico (Parte II) contiene cifras sin respaldo en el balance.';
+
+const MISSING_STRUCTURED_FIGURES =
+  'Faltan cifras estructuradas válidas. Regenera el informe antes de exportar.';
+
+function isEmptyPart(part: { fullContent?: unknown } | null | undefined): boolean {
+  const content = part?.fullContent;
+  return typeof content !== 'string' || content.trim().length === 0;
+}
+
+export interface NiifArithmeticGateOptions {
+  /** JSON de la Parte II; si es válido se cruza contra sus anclas. */
+  strategyJson?: unknown;
+  /**
+   * Preprocesado del balance de la misma petición (el que usó /niif). Con él el
+   * JSON NIIF se cruza además contra sus anclas (`buildNiifValidatorOptions`:
+   * E3/E8/E9/E14/E18) y contra el periodo del balance.
+   */
+  preprocessed?: PreprocessedBalance | null;
+}
+
+/**
+ * Gate aritmético común sobre el JSON NIIF — la MISMA regla para Excel, PDF y
+ * HTML (pipeline-flujo-10 / -13). Antes /html replicaba una versión reducida
+ * (`htmlArithmeticBlockers`) y /export cruzaba las anclas en otra función
+ * (`sourceCoherenceBlockers`), de modo que las tres superficies podían divergir.
+ *
+ * Comprueba:
+ *   - Coherencia interna (validador E1–E19) con E15 y E6 promovidos a bloqueo e
+ *     invariantes del EFE.
+ *   - Con `preprocessed`: los cruces contra las anclas del balance (sólo los que
+ *     la coherencia interna no explica se declaran "Fuentes incoherentes") y el
+ *     periodo del informe contra el del balance.
+ *   - Columna comparativa, subtotales sin código del Balance y códigos del ERI.
+ *   - Parte II contra sus anclas (dashboard, KPIs, DuPont, gate de liquidez).
+ */
+export function niifArithmeticBlockers(
+  niifJson: unknown,
+  options: NiifArithmeticGateOptions = {},
+): string[] {
+  const parsed = NiifReportSchema.safeParse(niifJson);
+  if (!parsed.success) return [MISSING_STRUCTURED_FIGURES];
+  const json = parsed.data;
+  const preprocessed = options.preprocessed ?? undefined;
+  const blockers: string[] = [];
+
+  const internal = validateNiifReportJson(json);
+  blockers.push(...internal.errors);
+  let warnings = internal.warnings;
+
+  if (preprocessed) {
+    let validatorOptions: ReturnType<typeof buildNiifValidatorOptions> | undefined;
+    try {
+      validatorOptions = buildNiifValidatorOptions(preprocessed);
+    } catch {
+      blockers.push(
+        'No se pudieron obtener las anclas de la balanza enviada para cruzarlas con el informe.',
+      );
+    }
+    if (validatorOptions) {
+      // Las anclas sólo AÑADEN cruces: lo que no aparece sin ellas es un
+      // desacuerdo entre el informe y el balance de la petición.
+      const anchored = validateNiifReportJson(json, validatorOptions);
+      const internalErrors = new Set(internal.errors);
+      const provenance = anchored.errors.filter((e) => !internalErrors.has(e));
+      if (provenance.length > 0) {
+        blockers.push(
+          `Fuentes incoherentes — el informe no coincide con el balance de la exportación ` +
+            `(${provenance.length} cruce(s) contra las anclas del balance fallaron).`,
+          ...provenance,
+        );
+      }
+      warnings = anchored.warnings;
+    }
+    const balanceYear = fiscalYearOf(preprocessed.primary?.period);
+    if (balanceYear && json.company.fiscalPeriod !== balanceYear) {
+      blockers.push(
+        `Fuentes incoherentes — el informe es del periodo ${json.company.fiscalPeriod} y el balance de la exportación de ${balanceYear}.`,
+      );
+    }
+  }
+
+  // A printed balance without supporting detail must not be downloadable, and
+  // the ORI printed in the P&G must be the one the ECP moves (E6).
+  blockers.push(...warnings.filter((w) => w.startsWith('E15.') || w.startsWith('E6.')));
+  blockers.push(...formatCashFlowViolations(checkCashFlowInvariants(json.cashFlow)));
+
+  blockers.push(...comparativeDetailBlockers(json));
+  blockers.push(...balanceSubtotalBlockers(json, 'primary'));
+  if (json.company.comparativePeriod !== null) {
+    blockers.push(...balanceSubtotalBlockers(json, 'comparative'));
+  }
+  blockers.push(...incomeStatementCodeBlockers(json));
+
+  const strategy = StrategyReportSchema.safeParse(options.strategyJson);
+  if (strategy.success) {
+    const check = reconcileStrategyAnchors(strategy.data, strategyAnchorSources(preprocessed, json));
+    blockers.push(...check.deviations.map((d) => `Parte II — ${d}`));
+  }
+  return Array.from(new Set(blockers));
+}
+
 /**
  * Server-side output gate. Client flags never substitute for arithmetic checks.
  *
  * Qué comprueba (auditoría de exportes 2026-09):
- *   - Coherencia interna del JSON NIIF (validador E1–E17), con E15 y E6
- *     promovidos a bloqueo: toda cifra impresa debe reconstruirse.
- *   - Procedencia contra la balanza enviada (pipeline-flujo-13): si el llamador
- *     entrega el `preprocessed` del `rawData` de la misma petición, el JSON se
- *     cruza contra sus anclas (E3/E9/E14). Un informe coherente pero AJENO al
- *     balance enviado deja de exportarse.
- *   - Columna comparativa (reportes-export-07): E15/E16 también sobre
- *     `amountComparative`; subtotales sin código PUC del Balance deben ser una
- *     suma de renglones; el ERI sólo admite códigos de las clases 4–7 (y 3 sólo
- *     como desglose del ORI).
+ *   - Flags del informe: salvedades NIIF/acta, emitibilidad, validación
+ *     post-render y el veredicto de la Parte II (`strategyQualifications`).
+ *   - Completitud (pipeline-flujo-14): Partes II y III con contenido.
+ *   - El gate aritmético común `niifArithmeticBlockers` (mismo que /html).
  *   - Identidad (reportes-export-10): nombre, NIT y periodos de `report.company`
  *     deben coincidir con `json.company`.
  *
@@ -42,39 +150,29 @@ export function financialExportBlockers(
       report.governance?.actaQualifications?.clean === false || report.validation?.ok === false) {
     blockers.push('El informe contiene salvedades o validaciones bloqueantes.');
   }
+  if (isEmptyPart(report.strategicAnalysis) || isEmptyPart(report.governance)) {
+    blockers.push(INCOMPLETE_REPORT_BLOCKER);
+  }
+  // Veredicto de la Parte II (pipeline-flujo-05): el flag del cliente no
+  // sustituye al cruce aritmético, pero un `clean: false` explícito bloquea.
+  if (readStrategyQualifications(report.strategicAnalysis)?.clean === false) {
+    blockers.push(STRATEGY_QUALIFIED_BLOCKER);
+  }
   const parsed = NiifReportSchema.safeParse(report.niifAnalysis?.json);
   if (!parsed.success) {
-    blockers.push('Faltan cifras estructuradas válidas. Regenera el informe antes de exportar.');
+    blockers.push(MISSING_STRUCTURED_FIGURES);
     return blockers;
   }
   const json = parsed.data;
 
-  let options: ReturnType<typeof buildNiifValidatorOptions> | undefined;
-  if (preprocessed) {
-    try {
-      options = buildNiifValidatorOptions(preprocessed);
-    } catch {
-      blockers.push(
-        'No se pudieron obtener las anclas de la balanza enviada para cruzarlas con el informe.',
-      );
-    }
-  }
-
-  const validation = validateNiifReportJson(json, options);
-  blockers.push(...validation.errors);
-  // A printed balance without supporting detail must not be downloadable, and
-  // the ORI printed in the P&G must be the one the ECP moves (E6).
-  blockers.push(...validation.warnings.filter(w => w.startsWith('E15.') || w.startsWith('E6.')));
-  blockers.push(...formatCashFlowViolations(checkCashFlowInvariants(json.cashFlow)));
-
+  blockers.push(
+    ...niifArithmeticBlockers(json, {
+      strategyJson: report.strategicAnalysis?.json,
+      preprocessed,
+    }),
+  );
   blockers.push(...identityBlockers(report, json));
-  blockers.push(...comparativeDetailBlockers(json));
-  blockers.push(...balanceSubtotalBlockers(json, 'primary'));
-  if (json.company.comparativePeriod !== null) {
-    blockers.push(...balanceSubtotalBlockers(json, 'comparative'));
-  }
-  blockers.push(...incomeStatementCodeBlockers(json));
-  return blockers;
+  return Array.from(new Set(blockers));
 }
 
 // ---------------------------------------------------------------------------

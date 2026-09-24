@@ -21,11 +21,13 @@ import {
 } from '../contracts/governance-report';
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
 import {
+  buildActaExpectedArithmetic,
   buildGovernancePrompt,
   convocatoriaCitationFor,
   normalizeTipoSocietario,
   type GovernanceEliteContext,
 } from '../prompts/governance-specialist.prompt';
+import { buildDegradationNotice } from './reconcile-anchors';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { ReportMode } from '../contracts/base';
 import type { z } from 'zod';
@@ -96,7 +98,10 @@ export async function runGovernanceSpecialist(
     detail: 'Redactando notas contables y acta de asamblea...',
   });
 
-  const { json } = await callFinancialAgent({
+  // Degradación visible (pipeline-flujo-15): mismo patrón que el Analista
+  // NIIF — el aviso de `callFinancialAgent` se reenvía como progreso y la
+  // sección viaja marcada en el cuerpo.
+  const agentResult = await callFinancialAgent({
     agentName: 'governance-specialist',
     // PREMIUM (gpt-5.5): produce notas a EEFF (14 secciones) + acta — schema
     // muy rico, amerita el techo de 128K output del modelo premium.
@@ -106,9 +111,29 @@ export async function runGovernanceSpecialist(
     userContent,
     ...MODELS_CONFIG.governanceSpecialist,
     signal,
+    onDegraded: (info) => onProgress?.({ type: 'stage_progress', stage: 3, detail: info.message }),
   });
+  const json = agentResult.json;
 
-  const result = toGovernanceResult(json, company);
+  // La MISMA aritmética del acta que viajó al prompt y contra la que el
+  // orquestador reconcilia: si dice que la capitalización no aplica, el acta
+  // no imprime un monto a capitalizar aunque el modelo emita applies=true
+  // (pipeline-flujo-12). El JSON conserva lo emitido para que el reconciliador
+  // selle la desviación.
+  const actaEsperada = buildActaExpectedArithmetic(company, preprocessed);
+  const result = toGovernanceResult(json, company, {
+    capitalizationApplies: actaEsperada ? actaEsperada.capitalizationApplies : null,
+  });
+  if (agentResult.meta?.degraded === true) {
+    const notice = buildDegradationNotice(
+      [language === 'es' ? 'Gobierno corporativo (Parte III)' : 'Corporate governance (Part III)'],
+      language,
+    );
+    result.degraded = true;
+    result.financialNotes = `${notice}\n${result.financialNotes}`;
+    result.shareholderMinutes = `${notice}\n${result.shareholderMinutes}`;
+    result.fullContent = `${notice}\n${result.fullContent}`;
+  }
 
   // Validador anti-evasivo (post-generación) — Wave 2.F3 refactor.
   // Ahora opera sobre el JSON estructurado y exonera `disclaimers[]` por
@@ -180,6 +205,7 @@ function renderShareholderMinutes(
   minutes: ShareholderMinutes,
   company: GovernanceReportJson['company'],
   entityType: string | null | undefined,
+  expectedCapitalizationApplies: boolean | null = null,
 ): string {
   const lines: string[] = [];
   lines.push(`## 2. ACTA DE ${minutes.assemblyType.toUpperCase()} ORDINARIA`);
@@ -229,7 +255,9 @@ function renderShareholderMinutes(
     lines.push('', dist.neutralProposalText);
   }
 
-  if (minutes.capitalizationProposal.applies) {
+  // Sin ancla (`null`) se respeta lo emitido: el orquestador lo sella como
+  // cifra sin verificar. Con ancla que dice "no aplica", no se imprime.
+  if (minutes.capitalizationProposal.applies && expectedCapitalizationApplies !== false) {
     lines.push(
       '',
       // v2.5 #13: la base es la utilidad neta del ejercicio, no el saldo
@@ -343,12 +371,21 @@ function withoutReviewerOpinion(json: GovernanceReportJson): GovernanceReportJso
 function toGovernanceResult(
   rawJson: GovernanceReportJson,
   company?: Pick<CompanyInfo, 'entityType' | 'niifGroup'>,
+  options: {
+    /** `capitalizationApplies` de la aritmética determinista del acta; `null` = sin ancla. */
+    capitalizationApplies?: boolean | null;
+  } = {},
 ): GovernanceResult {
   const json = withoutReviewerOpinion(rawJson);
   const niifGroup = company?.niifGroup ?? json.company.niifGroup;
   const entityType = company?.entityType ?? json.company.entityType;
   const financialNotes = renderFinancialNotes(json.financialNotes, niifGroup);
-  const shareholderMinutes = renderShareholderMinutes(json.shareholderMinutes, json.company, entityType);
+  const shareholderMinutes = renderShareholderMinutes(
+    json.shareholderMinutes,
+    json.company,
+    entityType,
+    options.capitalizationApplies ?? null,
+  );
   const complianceChecklist = renderComplianceChecklist(json);
   const disclaimers = renderDisclaimers(json);
   const preparerNotes = renderPreparerNotes(json);

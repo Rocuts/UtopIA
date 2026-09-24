@@ -3,26 +3,16 @@ import { z } from 'zod';
 import { financialExportBlockers } from '@/lib/export/financial-export-validation';
 import { Readable } from 'node:stream';
 import { generateFinancialExcel } from '@/lib/export/excel-export';
+import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import {
-  parseTrialBalanceCSV,
-  preprocessTrialBalance,
-  type PreprocessedBalance,
-} from '@/lib/preprocessing/trial-balance';
+  preprocessUploadedTrialBalanceText,
+  type UploadedTrialBalancePreprocess,
+} from '@/lib/preprocessing/raw-data';
 import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 import {
   orchestrateFinancialReport,
   BalanceValidationError,
-  buildNiifValidatorOptions,
-  fiscalYearOf,
 } from '@/lib/agents/financial/orchestrator';
-import { NiifReportSchema } from '@/lib/agents/financial/contracts/niif-report';
-import { StrategyReportSchema } from '@/lib/agents/financial/contracts/strategy-report';
-import { validateNiifReportJson } from '@/lib/agents/financial/validators/niif-json-validator';
-import {
-  reconcileStrategyAnchors,
-  readStrategyQualifications,
-  strategyAnchorSources,
-} from '@/lib/agents/financial/validators/strategy-anchors';
 import { applyAdjustments } from '@/lib/agents/repair/adjustments';
 import type { AdjustmentLedger } from '@/lib/agents/repair/types';
 import {
@@ -73,38 +63,39 @@ export const maxDuration = 800;
 //      cliente (`preprocessed`, ya ajustado) o el re-derivado de `rawData` con
 //      el MISMO `adjustmentLedger` aplicado.
 //   2. El JSON NIIF se cruza contra las anclas de ese preprocesado con el mismo
-//      validador de /niif; si difieren, la exportación se rechaza (422).
+//      validador de /niif (`financialExportBlockers`, gate común con /html);
+//      si difieren, la exportación se rechaza (422).
+//   3. El `rawData` se lee con el helper compartido de /upload y /niif
+//      (`preprocessUploadedTrialBalanceText`): CSV, bloques XLSX `[period=…]`
+//      y texto con el informe de validación antepuesto (ingesta-01). Hojas en
+//      conflicto o un rawData que no produce balance → 422, nunca una
+//      exportación sin procedencia (pipeline-flujo-13).
 // ---------------------------------------------------------------------------
 
 /**
- * Separador con el que /api/upload antepone el informe de validación al texto
- * del balance. TODO(cross-dep ingesta-01): sustituir por el helper compartido
- * `src/lib/preprocessing/raw-data.ts` cuando esté disponible (también debe
- * resolver los bloques `[period=…]` de XLSX, que aquí no se re-parsean).
+ * Lee el balance recibido como texto con la misma regla que /upload y /niif.
+ * Un fallo inesperado del parser se trata como balance ilegible.
  */
-const VALIDATION_REPORT_SEPARATOR = '\n\n---\n\nDATOS ORIGINALES:\n';
-
-/** El texto del balance sin el informe de validación antepuesto por /upload. */
-function stripValidationReportPrefix(rawData: string): string {
-  const idx = rawData.indexOf(VALIDATION_REPORT_SEPARATOR);
-  return idx >= 0 ? rawData.slice(idx + VALIDATION_REPORT_SEPARATOR.length) : rawData;
-}
-
-/** Preprocesa el balance recibido como texto. `undefined` si no es parseable. */
-function preprocessRawData(rawData: string, label: string): PreprocessedBalance | undefined {
-  const text = stripValidationReportPrefix(rawData);
-  // Bloques XLSX `[period=…]`: su parseo depende del periodo forzado por hoja
-  // que hace /upload. Re-parsearlos aquí con otra regla produciría un balance
-  // distinto del que vio /niif; sin preprocesado, todas las cifras salen del
-  // JSON NIIF (una sola fuente).
-  if (/^\[period=[^\]]+\]/m.test(text)) return undefined;
+function readRawData(rawData: string, label: string): UploadedTrialBalancePreprocess {
   try {
-    const rows = parseTrialBalanceCSV(text);
-    return rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+    return preprocessUploadedTrialBalanceText(rawData);
   } catch (err) {
     console.warn(`[${label}] preprocess failed:`, err instanceof Error ? err.message : err);
-    return undefined;
+    return { kind: 'empty', tabular: true };
   }
+}
+
+/** 422 con los motivos de ingesta (hojas/periodos incompatibles). */
+function ingestRejectedResponse(reasons: string[]): Response {
+  return NextResponse.json(
+    {
+      error: 'El balance de prueba tiene inconsistencias criticas.',
+      code: 'BALANCE_VALIDATION_FAILED',
+      reasons,
+      suggestedAccounts: [],
+    },
+    { status: 422 },
+  );
 }
 
 const adjustmentSchema = z.object({
@@ -155,60 +146,38 @@ function resolveExportPreprocessed(body: Record<string, unknown>, label: string)
     };
   }
 
-  if (typeof body.rawData !== 'string' || body.rawData.length === 0) {
+  if (typeof body.rawData !== 'string' || body.rawData.trim().length === 0) {
     return { ok: true, preprocessed: undefined };
   }
-  const pp = preprocessRawData(body.rawData, label);
+  const read = readRawData(body.rawData, label);
+  if (read.kind === 'rejected') return { ok: false, response: ingestRejectedResponse(read.reasons) };
+  if (read.kind === 'empty') {
+    // El cliente envió un balance y no se pudo leer: sin preprocesado el gate
+    // no puede cruzar el informe contra él. Conservador: no se exporta.
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: 'Report is not exportable.',
+          details: [
+            read.tabular
+              ? 'El balance de prueba enviado no produjo filas legibles (encabezado no reconocible o ' +
+                'cifras ilegibles): no se puede verificar que el informe corresponda a ese balance.'
+              : 'El texto enviado como balance de prueba no es un balance tabular: no se puede ' +
+                'verificar que las cifras del informe correspondan a ese balance.',
+          ],
+        },
+        { status: 422 },
+      ),
+    };
+  }
+  const pp = read.preprocessed;
   const applied = ((ledger.data as AdjustmentLedger | undefined)?.adjustments ?? []).filter(
     (a) => a.status === 'applied',
   );
-  if (!pp || applied.length === 0) return { ok: true, preprocessed: pp };
+  if (applied.length === 0) return { ok: true, preprocessed: pp };
   // Mismo paso que Stage 0.4 de /niif (`prepareFinancialContext`).
   return { ok: true, preprocessed: applyAdjustments(pp, applied).balance };
-}
-
-/**
- * Bloqueantes de coherencia entre fuentes: el JSON NIIF contra las anclas del
- * preprocesado de exportación (mismo validador y mismas anclas que /niif), el
- * periodo del informe contra el del balance, y la Parte II contra sus anclas.
- */
-function sourceCoherenceBlockers(
-  report: FinancialReport,
-  preprocessed: PreprocessedBalance | undefined,
-): string[] {
-  const out: string[] = [];
-
-  // Veredicto de la Parte II (pipeline-flujo-05) + re-verificación servidor:
-  // el flag del cliente no sustituye al cruce aritmético.
-  if (readStrategyQualifications(report.strategicAnalysis)?.clean === false) {
-    out.push('El análisis estratégico (Parte II) contiene cifras sin respaldo en el balance.');
-  }
-  const niifParsed = NiifReportSchema.safeParse(report.niifAnalysis?.json);
-  const niif = niifParsed.success ? niifParsed.data : null;
-  const strategyParsed = StrategyReportSchema.safeParse(report.strategicAnalysis?.json);
-  if (strategyParsed.success) {
-    const check = reconcileStrategyAnchors(
-      strategyParsed.data,
-      strategyAnchorSources(preprocessed, niif),
-    );
-    out.push(...check.deviations.map((d) => `Parte II — ${d}`));
-  }
-
-  if (!preprocessed || !niif) return out;
-
-  const anchored = validateNiifReportJson(niif, buildNiifValidatorOptions(preprocessed));
-  out.push(
-    ...anchored.errors.map(
-      (e) => `Fuentes incoherentes — el informe no coincide con el balance de la exportación: ${e}`,
-    ),
-  );
-  const balanceYear = fiscalYearOf(preprocessed.primary?.period);
-  if (balanceYear && niif.company.fiscalPeriod !== balanceYear) {
-    out.push(
-      `Fuentes incoherentes — el informe es del periodo ${niif.company.fiscalPeriod} y el balance de la exportación de ${balanceYear}.`,
-    );
-  }
-  return out;
 }
 
 export async function POST(req: Request) {
@@ -270,7 +239,11 @@ export async function POST(req: Request) {
 
     const { rawData, company, language, instructions } = parsed.data;
 
-    const preprocessed = preprocessRawData(rawData, 'export/full');
+    const read = readRawData(rawData, 'export/full');
+    if (read.kind === 'rejected') return ingestRejectedResponse(read.reasons);
+    // Sin filas: el orquestador decide (balance tabular ilegible → 422; texto
+    // no tabular, p. ej. OCR, sigue sin totales vinculantes declarados).
+    const preprocessed = read.kind === 'ok' ? read.preprocessed : undefined;
 
     const enhancedData = preprocessed
       ? `${preprocessed.validationReport}\n\n---\n\nDATOS LIMPIOS (auxiliares validados):\n${preprocessed.cleanData}`
@@ -471,26 +444,33 @@ async function handlePdfElite(body: unknown): Promise<Response> {
   // Preprocess up front so we can reuse the snapshot for both pillars and the
   // BLOQUEADO degenerate path. El orquestador recibe el MISMO preprocesado: una
   // sola fuente para estados, KPI grid y anexo (pipeline-flujo-06/07).
-  const preprocessed = preprocessRawData(rawData, 'pdf-elite');
+  const read = readRawData(rawData, 'pdf-elite');
+  const preprocessed = read.kind === 'ok' ? read.preprocessed : undefined;
 
   let report: FinancialReport | null = null;
   let blockerReasons: string[] = [];
 
-  try {
-    report = await orchestrateFinancialReport(
-      {
-        rawData,
-        company,
-        language,
-        instructions,
-      },
-      { preprocessed },
-    );
-  } catch (err) {
-    if (err instanceof BalanceValidationError) {
-      blockerReasons = err.reasons;
-    } else {
-      throw err;
+  if (read.kind === 'rejected') {
+    // Hojas/periodos incompatibles: el mismo PDF BLOQUEADO que un balance
+    // descuadrado, sin pagar el pipeline.
+    blockerReasons = read.reasons;
+  } else {
+    try {
+      report = await orchestrateFinancialReport(
+        {
+          rawData,
+          company,
+          language,
+          instructions,
+        },
+        { preprocessed },
+      );
+    } catch (err) {
+      if (err instanceof BalanceValidationError) {
+        blockerReasons = err.reasons;
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -568,9 +548,9 @@ function rejectInvalidExport(
   report: FinancialReport,
   preprocessed: PreprocessedBalance | undefined,
 ): Response | null {
-  const details = Array.from(
-    new Set([...financialExportBlockers(report), ...sourceCoherenceBlockers(report, preprocessed)]),
-  );
+  // Un solo gate (mismo que /html): coherencia interna, procedencia contra el
+  // preprocesado de la petición, Parte II, completitud e identidad.
+  const details = financialExportBlockers(report, preprocessed);
   return details.length > 0
     ? NextResponse.json({ error: 'Report is not exportable.', details }, { status: 422 })
     : null;

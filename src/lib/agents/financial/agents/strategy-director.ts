@@ -16,6 +16,7 @@ import {
   type ExecutiveDashboardRowJson,
 } from '../contracts/strategy-report';
 import { formatCopFromCents, parseMoneyCop } from '../contracts/money';
+import { buildDegradationNotice } from './reconcile-anchors';
 import {
   buildStrategyDirectorPrompt,
   type StrategyDirectorEliteContext,
@@ -80,7 +81,10 @@ export async function runStrategyDirector(
     detail: 'Calculando KPIs y punto de equilibrio...',
   });
 
-  const { json } = await callFinancialAgent({
+  // Degradación visible (pipeline-flujo-15): `callFinancialAgent` baja el
+  // esfuerzo de razonamiento cuando el primer intento no produce salida. El
+  // aviso se reenvía como progreso y la sección viaja marcada en el cuerpo.
+  const result = await callFinancialAgent({
     agentName: 'strategy-director',
     // PREMIUM (gpt-5.5): consume el JSON del NIIF Analyst y produce
     // KPIs + proyecciones — schema rico, amerita el techo amplio.
@@ -90,10 +94,21 @@ export async function runStrategyDirector(
     userContent,
     ...MODELS_CONFIG.strategyDirector,
     signal,
+    onDegraded: (info) => onProgress?.({ type: 'stage_progress', stage: 2, detail: info.message }),
   });
 
-  const verified = reconcileStrategyReport(json, strategyAnchorsFrom(preprocessed));
-  return toStrategicAnalysisResult(verified.json, verified.checks);
+  const verified = reconcileStrategyReport(result.json, strategyAnchorsFrom(preprocessed));
+  const strategic = toStrategicAnalysisResult(verified.json, verified.checks);
+  if (result.meta?.degraded === true) {
+    const notice = buildDegradationNotice(
+      [language === 'es' ? 'Análisis estratégico (Parte II)' : 'Strategic analysis (Part II)'],
+      language,
+    );
+    strategic.degraded = true;
+    strategic.kpiDashboard = `${notice}\n${strategic.kpiDashboard}`;
+    strategic.fullContent = `${notice}\n${strategic.fullContent}`;
+  }
+  return strategic;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +209,8 @@ export function reconcileStrategyReport(
         : contribution <= ZERO
           ? 'los costos variables igualan o superan los ingresos (margen de contribución ≤ 0): ningún nivel de ventas cubre los costos fijos'
           : 'costos fijos negativos: la clasificación de costos no es válida';
+    // El PE no existe: no se conserva la cifra que emitió el LLM (valoracion-12).
+    be.breakEvenPointCop = null;
     be.marginOfSafetyPct = 'ND';
     be.classificationNote = `Punto de equilibrio N/D: ${checks.breakEvenUndefinedReason}. ${be.classificationNote}`;
   } else {
@@ -378,7 +395,9 @@ function renderTrendsAndBreakEven(json: StrategyReportJson, checks?: StrategyChe
     `- **Punto de Equilibrio**: ${
       checks?.breakEvenUndefinedReason
         ? `N/D (${checks.breakEvenUndefinedReason})`
-        : formatCopFromCents(parseMoneyCop(be.breakEvenPointCop), false)
+        : be.breakEvenPointCop === null
+          ? 'N/D'
+          : formatCopFromCents(parseMoneyCop(be.breakEvenPointCop), false)
     }`,
     `- **Margen de Seguridad**: ${fmtPctField(be.marginOfSafetyPct)}`,
     '',

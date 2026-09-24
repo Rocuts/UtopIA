@@ -11,6 +11,7 @@ vi.mock('@/lib/agents/financial/agents/runtime', () => ({
 }));
 
 import { runStrategyDirector } from '../strategy-director';
+import { callFinancialAgent } from '@/lib/agents/financial/agents/runtime';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 const c = (pesos: number) => String(Math.round(pesos * 100));
@@ -96,6 +97,17 @@ describe('valoracion-12 — gate, punto de equilibrio y conciliación determinis
     expect(res.breakEvenAnalysis).toContain('**Margen de Seguridad**: N/D');
     expect(res.breakEvenAnalysis).not.toContain('300%');
     expect(res.json?.breakEven.marginOfSafetyPct).toBe('ND');
+    // El JSON tampoco conserva la cifra del LLM: "el PE no existe" es null.
+    expect(res.json?.breakEven.breakEvenPointCop).toBeNull();
+  });
+
+  it('sin ingresos el PE es null en el JSON (no la cifra que emitió el LLM)', async () => {
+    const json = strategyJson();
+    json.breakEven = { ...json.breakEven, revenueCop: c(0), breakEvenPointCop: c(123 * M) };
+    queue.push(json);
+    const res = await run();
+    expect(res.json?.breakEven.breakEvenPointCop).toBeNull();
+    expect(res.breakEvenAnalysis).toContain('**Punto de Equilibrio**: N/D (sin ingresos del periodo');
   });
 
   it('PE = CF / (1 − CV/I) se recalcula en código y sobrescribe la cifra del LLM', async () => {
@@ -116,5 +128,34 @@ describe('valoracion-12 — gate, punto de equilibrio y conciliación determinis
     expect(res.json?.projectedCashFlow.scenarios[0].finalCashBalanceYear3).toBe(c(-250 * M));
     expect(res.projectedCashFlow).toContain('- Saldo Final Año +3: ($250.000.000,00)');
     expect(res.projectedCashFlow).toMatch(/⚠ .*no concilia.*Año \+2/);
+  });
+});
+
+describe('pipeline-flujo-15 — degradación visible del Director de Estrategia', () => {
+  it('onDegraded se registra: aviso en el cuerpo, campo degraded y progreso visible', async () => {
+    const json = strategyJson();
+    vi.mocked(callFinancialAgent).mockImplementationOnce((async (opts: {
+      agentName: string;
+      onDegraded?: (i: { agentName: string; requestedEffort: string; message: string }) => void;
+    }) => {
+      opts.onDegraded?.({ agentName: opts.agentName, requestedEffort: 'medium', message: 'Estrategia regenerada con esfuerzo bajo.' });
+      return { json, meta: { degraded: true } };
+    }) as never);
+    const events: unknown[] = [];
+    const res = await runStrategyDirector(
+      { fullContent: 'niif' } as never, { name: 'ACME', nit: '900', fiscalPeriod: '2025' } as never,
+      'es', undefined, 'TOTALES', undefined, (e) => events.push(e),
+    );
+    expect(res.degraded).toBe(true);
+    expect(res.fullContent.startsWith('> **SECCIÓN GENERADA CON RAZONAMIENTO REDUCIDO**')).toBe(true);
+    expect(res.kpiDashboard).toContain('RAZONAMIENTO REDUCIDO');
+    expect(events).toContainEqual({ type: 'stage_progress', stage: 2, detail: 'Estrategia regenerada con esfuerzo bajo.' });
+  });
+
+  it('sin degradación no hay aviso ni campo degraded', async () => {
+    queue.push(strategyJson());
+    const res = await run();
+    expect(res.degraded).toBeUndefined();
+    expect(res.fullContent).not.toContain('RAZONAMIENTO REDUCIDO');
   });
 });

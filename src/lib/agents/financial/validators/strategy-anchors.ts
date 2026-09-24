@@ -34,7 +34,7 @@ import { buildPeriodAnchors } from '../contracts/anchors';
 import { formatCopFromCents } from '../contracts/money';
 import type { NiifReportJson } from '../contracts/niif-report';
 import type { StrategyReportJson } from '../contracts/strategy-report';
-import type { StrategicAnalysisResult } from '../types';
+import type { StrategicAnalysisResult, StrategyQualifications } from '../types';
 
 // ---------------------------------------------------------------------------
 // Contratos
@@ -59,19 +59,15 @@ export interface StrategyAnchorCheck {
 }
 
 /**
- * Veredicto que viaja con el resultado de Estrategia (análogo a
- * `GovernanceResult.actaQualifications`). `clean === false` ⇒ la Parte II no
- * es emitible y los gates servidor rechazan la exportación.
+ * Veredicto que viaja con el resultado de Estrategia. El tipo vive en
+ * `types.ts` (campo `StrategicAnalysisResult.strategyQualifications`) para que
+ * la UI y los exportadores lo consuman tipado; se re-exporta aquí por
+ * compatibilidad.
  */
-export interface StrategyQualifications {
-  clean: boolean;
-  motivos: string[];
-  noVerificables: string[];
-}
+export type { StrategyQualifications };
 
-export type QualifiedStrategicAnalysisResult = StrategicAnalysisResult & {
-  strategyQualifications?: StrategyQualifications;
-};
+/** Alias histórico: `StrategicAnalysisResult` ya declara `strategyQualifications`. */
+export type QualifiedStrategicAnalysisResult = StrategicAnalysisResult;
 
 /**
  * Fuentes de anclas desde el preprocesado (y el JSON NIIF de respaldo). Un
