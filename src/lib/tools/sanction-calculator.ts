@@ -4,8 +4,16 @@
  * Implementa los cálculos del Estatuto Tributario colombiano:
  * - Sanción por extemporaneidad (Art. 641 E.T., incisos 1º/2º/3º — con los
  *   topes de 5% ingresos / 10% patrimonio / doble saldo a favor / 2.500 UVT)
+ * - Sanción por extemporaneidad posterior al emplazamiento (Art. 642 E.T. —
+ *   10% mensual, tope 200%; 1% ingresos / 2% patrimonio; 4× saldo a favor /
+ *   5.000 UVT)
  * - Sanción por corrección (Art. 644 E.T. nums. 1 y 2 — el hito 10%→20% es el
- *   EMPLAZAMIENTO PARA CORREGIR del Art. 685 E.T., no el requerimiento especial)
+ *   EMPLAZAMIENTO PARA CORREGIR del Art. 685 E.T., no el requerimiento especial;
+ *   antes del vencimiento del plazo no hay sanción; par. 1 suma 5% por mes de
+ *   extemporaneidad de la declaración inicial)
+ * - Gradualidad de las sanciones que liquida el propio contribuyente
+ *   (Art. 640 nums. 1 y 2 E.T.: reducción al 50% / 75%), con el mínimo del
+ *   Art. 639 aplicado DESPUÉS de reducir ("incluidas las sanciones reducidas").
  * - Sanción por inexactitud (Art. 647 E.T.) con reducciones Arts. 640, 709 y 713 E.T.
  * - Intereses moratorios (Arts. 634 y 635 E.T.) — INTERÉS SIMPLE liquidado día a día
  *   (Art. 635 E.T. mod. Art. 279 Ley 1819/2016; Concepto DIAN 013463 de 2023).
@@ -66,7 +74,7 @@ export function aproximarValorDeclaracion(valor: number): number {
  * UVT 2026: Resolución DIAN 000238 del 15-dic-2025.
  */
 const MIN_SANCTION_UVT = 10;
-const MIN_SANCTION = aproximarValorAbsolutoUvt(MIN_SANCTION_UVT * UVT_2026); // $524.000 COP
+export const MIN_SANCTION = aproximarValorAbsolutoUvt(MIN_SANCTION_UVT * UVT_2026); // $524.000 COP
 
 /**
  * Tope absoluto de la sanción por extemporaneidad cuando NO existe saldo a
@@ -75,6 +83,16 @@ const MIN_SANCTION = aproximarValorAbsolutoUvt(MIN_SANCTION_UVT * UVT_2026); // 
  */
 const TOPE_EXTEMPORANEIDAD_UVT = 2_500;
 const TOPE_EXTEMPORANEIDAD = aproximarValorAbsolutoUvt(TOPE_EXTEMPORANEIDAD_UVT * UVT_2026); // $130.935.000
+
+/**
+ * Tope absoluto de la sanción por extemporaneidad POSTERIOR al emplazamiento
+ * cuando NO existe saldo a favor — Art. 642 E.T., inciso 2º: 5.000 UVT.
+ * 5.000 × $52.374 = $261.870.000 (2026).
+ */
+const TOPE_EXTEMPORANEIDAD_POST_EMPLAZAMIENTO_UVT = 5_000;
+const TOPE_EXTEMPORANEIDAD_POST_EMPLAZAMIENTO = aproximarValorAbsolutoUvt(
+  TOPE_EXTEMPORANEIDAD_POST_EMPLAZAMIENTO_UVT * UVT_2026,
+); // $261.870.000
 
 /**
  * Fallback de la tasa de interés moratorio. NO es "la tasa legal del período":
@@ -92,25 +110,55 @@ const DEFAULT_ANNUAL_RATE_EA = 27.66;
 const DEFAULT_ANNUAL_RATE_VIGENCIA =
   'agosto de 2026 (usura 29,66% − 2 pp; Res. Superfinanciera 1139 del 31-jul-2026)';
 
-export type InexactitudReduction =
-  | 'none'            // Liquidación oficial firme — sanción plena 100%
-  | 'art_713_half'    // Art. 713 E.T.: reducción a la mitad por aceptación frente a la liquidación de revisión
-  | 'art_709_quarter' // Art. 709 E.T.: reducción a la cuarta parte por aceptación en respuesta al requerimiento especial
-  | 'art_640_50'      // Art. 640 E.T.: sanción reducida AL 50% por gradualidad (sin antecedentes 4 años)
-  | 'art_640_75';     // Art. 640 E.T.: sanción reducida AL 75% por gradualidad (sin antecedentes 2 años)
+/** Tipos de sanción soportados. Fuente única para los contratos de entrada. */
+export const SANCTION_TYPES = [
+  'extemporaneidad',                    // Art. 641 E.T.
+  'extemporaneidad_post_emplazamiento', // Art. 642 E.T.
+  'correccion',                         // Art. 644 E.T.
+  'inexactitud',                        // Art. 647 E.T.
+  'intereses_moratorios',               // Arts. 634 y 635 E.T.
+] as const;
+export type SanctionType = (typeof SANCTION_TYPES)[number];
+
+export const INEXACTITUD_REDUCTIONS = [
+  'none',            // Liquidación oficial firme — sanción plena 100%
+  'art_713_half',    // Art. 713 E.T.: reducción a la mitad por aceptación frente a la liquidación de revisión
+  'art_709_quarter', // Art. 709 E.T.: reducción a la cuarta parte por aceptación en respuesta al requerimiento especial
+  'art_640_50',      // Art. 640 num. 3 E.T.: sanción reducida AL 50% por gradualidad (sin antecedentes 4 años)
+  'art_640_75',      // Art. 640 num. 4 E.T.: sanción reducida AL 75% por gradualidad (sin antecedentes 2 años)
+] as const;
+export type InexactitudReduction = (typeof INEXACTITUD_REDUCTIONS)[number];
 
 /**
  * Hito procesal que determina la tarifa de la sanción por corrección —
  * Art. 644 E.T., numerales 1 y 2 (en concordancia con el Art. 685 E.T.).
  * El hito NO es el requerimiento especial: es el EMPLAZAMIENTO PARA CORREGIR
- * (o el auto que ordene visita de inspección tributaria).
+ * (o el auto que ordene visita de inspección tributaria). Antes del
+ * vencimiento del plazo para declarar la corrección no genera la sanción del
+ * Art. 644: el num. 1 sólo grava la corrección "después del vencimiento del
+ * plazo para declarar" (mod. art. 285 Ley 1819/2016).
  */
-export type CorreccionStage =
-  | 'antes_emplazamiento'    // Art. 644 num. 1 E.T. — 10%
-  | 'despues_emplazamiento'; // Art. 644 num. 2 E.T. — 20%
+export const CORRECCION_STAGES = [
+  'antes_vencimiento',     // Antes del vencimiento del plazo — sin sanción Art. 644
+  'antes_emplazamiento',   // Art. 644 num. 1 E.T. — 10%
+  'despues_emplazamiento', // Art. 644 num. 2 E.T. — 20%
+] as const;
+export type CorreccionStage = (typeof CORRECCION_STAGES)[number];
+
+/**
+ * Gradualidad de las sanciones que liquida el propio contribuyente —
+ * Art. 640 E.T. (mod. art. 282 Ley 1819/2016):
+ *   '50' — num. 1: sin la misma conducta en los 2 años anteriores;
+ *   '75' — num. 2: sin la misma conducta en el año anterior;
+ * en ambos casos siempre que la DIAN no haya proferido pliego de cargos,
+ * requerimiento especial o emplazamiento previo por no declarar (lit. b).
+ * Sólo el usuario puede afirmar esos hechos: sin ellos la sanción es plena.
+ */
+export const REDUCCIONES_640 = ['50', '75'] as const;
+export type Reduccion640 = (typeof REDUCCIONES_640)[number];
 
 export interface SanctionCalculation {
-  type: 'extemporaneidad' | 'correccion' | 'inexactitud' | 'intereses_moratorios';
+  type: SanctionType;
   taxDue?: number;
   grossIncome?: number;
   /** Patrimonio líquido del año inmediatamente anterior — Art. 641 inciso 3º E.T. */
@@ -130,12 +178,66 @@ export interface SanctionCalculation {
    * (20%) — Art. 644 nums. 1 y 2 E.T. Se ignora si viene `correccionStage`.
    */
   isVoluntary?: boolean;
+  /**
+   * Meses o fracción de mes entre el vencimiento del plazo y la presentación
+   * de la declaración INICIAL, cuando ésta fue extemporánea — Art. 644 par. 1
+   * E.T. (+5% del mayor valor por mes, total ≤ 100%). Sólo para corrección.
+   */
+  mesesExtemporaneidadInicial?: number;
+  /** Gradualidad del Art. 640 nums. 1-2 E.T. — extemporaneidad (Art. 641) y corrección. */
+  reduccion640?: Reduccion640;
   /** Reducciones aplicables Art. 647 — Arts. 640 / 709 ET. */
   inexactitudReduction?: InexactitudReduction;
   principal?: number;
   /** Tasa de usura - 2pp vigente (efectiva anual, %). Ver Art. 635 ET. */
   annualRate?: number;
   days?: number;
+}
+
+/**
+ * Lista de campos de entrada. Los contratos (tool LLM, API REST, Realtime)
+ * se construyen y se prueban contra ella: un campo que la función usa pero un
+ * contrato no transmite es un tope o una rama del E.T. que nunca se activa.
+ */
+export const SANCTION_INPUT_FIELDS = [
+  'type',
+  'taxDue',
+  'grossIncome',
+  'netEquityPriorYear',
+  'saldoAFavor',
+  'difference',
+  'delayMonths',
+  'correccionStage',
+  'isVoluntary',
+  'mesesExtemporaneidadInicial',
+  'reduccion640',
+  'inexactitudReduction',
+  'principal',
+  'annualRate',
+  'days',
+] as const satisfies ReadonlyArray<keyof SanctionCalculation>;
+export type SanctionInputField = (typeof SANCTION_INPUT_FIELDS)[number];
+
+/** Falla la compilación si `SanctionCalculation` gana un campo que la lista no tiene. */
+type AssertNever<T extends never> = T;
+export type SanctionInputFieldsExhaustive = AssertNever<
+  Exclude<keyof SanctionCalculation, SanctionInputField>
+>;
+
+/**
+ * Entrada tolerante: los contratos hacia el LLM usan `null` para "no aplica"
+ * (strict mode). `calculateSanction` normaliza `null` a ausente.
+ */
+export type SanctionCalculationInput = { type: SanctionType } & {
+  [K in Exclude<SanctionInputField, 'type'>]?: SanctionCalculation[K] | null;
+};
+
+/** Entrada contradictoria (p. ej. corrección "antes del vencimiento" de una declaración extemporánea). */
+export class SanctionInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SanctionInputError';
+  }
 }
 
 export interface SanctionResult {
@@ -159,28 +261,130 @@ function formatCOP(amount: number): string {
 }
 
 /**
- * Sancion por extemporaneidad — Art. 641 E.T. (tres ramas excluyentes).
+ * Parámetros de la sanción por extemporaneidad. Los Arts. 641 y 642 E.T.
+ * comparten estructura (tres ramas excluyentes) y difieren sólo en tarifas y
+ * topes; el Art. 642 aplica cuando la declaración se presenta DESPUÉS del
+ * emplazamiento previo por no declarar (Art. 715 E.T.).
+ */
+interface ReglaExtemporaneidad {
+  articulo: string;
+  tipo: string;
+  tasaImpuesto: number;
+  topeImpuesto: number;
+  tasaIngresos: number;
+  topeIngresos: number;
+  tasaPatrimonio: number;
+  topePatrimonio: number;
+  multiploSaldoAFavor: number;
+  topeUvt: number;
+  topeUvtCop: number;
+  /** Art. 640 nums. 1-2 lit. b): no hay gradualidad si ya hubo emplazamiento. */
+  admiteReduccion640: boolean;
+}
+
+const REGLA_ART_641: ReglaExtemporaneidad = {
+  articulo: 'Art. 641 E.T.',
+  tipo: 'Sancion por Extemporaneidad',
+  tasaImpuesto: 0.05,
+  topeImpuesto: 1,
+  tasaIngresos: 0.005,
+  topeIngresos: 0.05,
+  tasaPatrimonio: 0.01,
+  topePatrimonio: 0.1,
+  multiploSaldoAFavor: 2,
+  topeUvt: TOPE_EXTEMPORANEIDAD_UVT,
+  topeUvtCop: TOPE_EXTEMPORANEIDAD,
+  admiteReduccion640: true,
+};
+
+const REGLA_ART_642: ReglaExtemporaneidad = {
+  articulo: 'Art. 642 E.T.',
+  tipo: 'Sancion por Extemporaneidad posterior al Emplazamiento',
+  tasaImpuesto: 0.1,
+  topeImpuesto: 2,
+  tasaIngresos: 0.01,
+  topeIngresos: 0.1,
+  tasaPatrimonio: 0.02,
+  topePatrimonio: 0.2,
+  multiploSaldoAFavor: 4,
+  topeUvt: TOPE_EXTEMPORANEIDAD_POST_EMPLAZAMIENTO_UVT,
+  topeUvtCop: TOPE_EXTEMPORANEIDAD_POST_EMPLAZAMIENTO,
+  admiteReduccion640: false,
+};
+
+const FACTOR_REDUCCION_640: Record<Reduccion640, number> = { '50': 0.5, '75': 0.75 };
+
+const pct = (n: number) => `${Number((n * 100).toFixed(2))}%`;
+
+/**
+ * Gradualidad del Art. 640 nums. 1-2 E.T. sobre una sanción que liquida el
+ * contribuyente. Devuelve el monto reducido y el texto explicativo; el mínimo
+ * del Art. 639 se aplica después, sobre el monto reducido.
+ */
+function aplicarReduccion640(
+  amount: number,
+  reduccion: Reduccion640 | undefined,
+  admite: boolean,
+): { amount: number; nota: string; aplicada: Reduccion640 | 'none' } {
+  if (!reduccion) return { amount, nota: '', aplicada: 'none' };
+  if (!admite) {
+    return {
+      amount,
+      aplicada: 'none',
+      nota:
+        ' No se aplica la reducción del Art. 640 E.T. solicitada: sus numerales 1 y 2 ' +
+        'exigen que la Administración no haya proferido pliego de cargos, requerimiento ' +
+        'especial o emplazamiento previo por no declarar (lit. b), y esta sanción parte ' +
+        'precisamente de un emplazamiento.',
+    };
+  }
+  const factor = FACTOR_REDUCCION_640[reduccion];
+  const reducida = amount * factor;
+  const numeral = reduccion === '50' ? '1' : '2';
+  const periodo = reduccion === '50' ? 'los dos (2) años anteriores' : 'el año (1) anterior';
+  return {
+    amount: reducida,
+    aplicada: reduccion,
+    nota:
+      ` Gradualidad Art. 640 num. ${numeral} E.T.: la sanción se reduce al ${reduccion}% ` +
+      `(${formatCOP(amount)} → ${formatCOP(reducida)}), condicionada a que el contribuyente no ` +
+      `haya cometido la misma conducta en ${periodo} y a que la DIAN no haya proferido pliego ` +
+      `de cargos, requerimiento especial ni emplazamiento previo por no declarar.`,
+  };
+}
+
+/**
+ * Sancion por extemporaneidad — Art. 641 E.T. (tres ramas excluyentes) y
+ * Art. 642 E.T. (misma estructura, posterior al emplazamiento).
  *
- * Inciso 1º — con impuesto a cargo:
+ * Art. 641 inciso 1º — con impuesto a cargo:
  *   5% del impuesto a cargo por mes o fraccion de mes, sin exceder el 100%
  *   del impuesto a cargo.
  *
- * Inciso 2º — sin impuesto a cargo pero con ingresos brutos:
+ * Art. 641 inciso 2º — sin impuesto a cargo pero con ingresos brutos:
  *   0,5% de los ingresos brutos por mes o fraccion, "sin exceder la cifra
  *   MENOR resultante de aplicar el 5% a dichos ingresos, o del doble del
  *   saldo a favor si lo hubiere, o de la suma de 2.500 UVT cuando no
  *   existiere saldo a favor".
  *
- * Inciso 3º — sin ingresos en el periodo:
+ * Art. 641 inciso 3º — sin ingresos en el periodo:
  *   1% del patrimonio liquido del ano inmediatamente anterior por mes o
  *   fraccion, sin exceder la cifra MENOR entre el 10% de dicho patrimonio,
  *   el doble del saldo a favor si lo hubiere, o 2.500 UVT cuando no
  *   existiere saldo a favor.
  *
- * Topes 2026: 2.500 UVT = $130.935.000 (UVT $52.374, Res. DIAN 000238/2025).
- * Sancion minima: 10 UVT = $524.000 (Arts. 639 y 868 lit. c] E.T.).
+ * Art. 642: 10% (tope 200%) / 1% de ingresos (tope 10%, 4× saldo a favor o
+ * 5.000 UVT) / 2% del patrimonio (tope 20%, 4× saldo a favor o 5.000 UVT).
+ *
+ * Topes 2026: 2.500 UVT = $130.935.000; 5.000 UVT = $261.870.000
+ * (UVT $52.374, Res. DIAN 000238/2025).
+ * Sancion minima: 10 UVT = $524.000 (Arts. 639 y 868 lit. c] E.T.), aplicada
+ * despues de la gradualidad del Art. 640.
  */
-function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
+function calcExtemporaneidad(
+  params: SanctionCalculation,
+  regla: ReglaExtemporaneidad = REGLA_ART_641,
+): SanctionResult {
   const {
     taxDue = 0,
     grossIncome = 0,
@@ -189,6 +393,7 @@ function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
     delayMonths = 1,
   } = params;
   const months = Math.max(1, Math.ceil(delayMonths));
+  const art = regla.articulo;
 
   let amount: number;
   let formula: string;
@@ -197,71 +402,73 @@ function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
   let capLabel = '';
 
   /**
-   * Tope alterno del Art. 641 incisos 2º y 3º: el doble del saldo a favor si
-   * lo hubiere; 2.500 UVT cuando NO existiere saldo a favor.
+   * Tope alterno de las ramas sin impuesto a cargo: el doble (Art. 641) o
+   * cuatro veces (Art. 642) el saldo a favor si lo hubiere; 2.500 / 5.000 UVT
+   * cuando NO existiere saldo a favor.
    */
-  const topeAlterno = saldoAFavor > 0 ? saldoAFavor * 2 : TOPE_EXTEMPORANEIDAD;
+  const topeSaldo = saldoAFavor * regla.multiploSaldoAFavor;
+  const topeAlterno = saldoAFavor > 0 ? topeSaldo : regla.topeUvtCop;
   const topeAlternoLabel =
     saldoAFavor > 0
-      ? `2 x saldo a favor (${formatCOP(saldoAFavor * 2)})`
-      : `2.500 UVT (${formatCOP(TOPE_EXTEMPORANEIDAD)})`;
+      ? `${regla.multiploSaldoAFavor} x saldo a favor (${formatCOP(topeSaldo)})`
+      : `${new Intl.NumberFormat('es-CO').format(regla.topeUvt)} UVT (${formatCOP(regla.topeUvtCop)})`;
 
   if (taxDue > 0) {
-    const rawAmount = taxDue * 0.05 * months;
-    const maxAmount = taxDue; // tope 100% del impuesto a cargo — Art. 641 inciso 1º
+    const rawAmount = taxDue * regla.tasaImpuesto * months;
+    const maxAmount = taxDue * regla.topeImpuesto;
     capApplied = maxAmount;
-    capLabel = `100% del impuesto a cargo (${formatCOP(maxAmount)})`;
+    capLabel = `${pct(regla.topeImpuesto)} del impuesto a cargo (${formatCOP(maxAmount)})`;
     amount = Math.min(rawAmount, maxAmount);
-    formula = `min(${formatCOP(taxDue)} x 5% x ${months} meses, ${formatCOP(taxDue)} [tope 100%])`;
+    formula =
+      `min(${formatCOP(taxDue)} x ${pct(regla.tasaImpuesto)} x ${months} meses, ` +
+      `${formatCOP(maxAmount)} [tope ${pct(regla.topeImpuesto)}])`;
     explanation =
       `Con un impuesto a cargo de ${formatCOP(taxDue)} y ${months} mes(es) de retraso, ` +
-      `la sancion se calcula al 5% mensual sobre el impuesto a cargo (Art. 641 inciso 1º E.T.). ` +
+      `la sancion se calcula al ${pct(regla.tasaImpuesto)} mensual sobre el impuesto a cargo (${art}). ` +
       (rawAmount > maxAmount
-        ? `El calculo bruto (${formatCOP(rawAmount)}) excede el tope del 100%, por lo que se aplica el maximo de ${formatCOP(maxAmount)}.`
+        ? `El calculo bruto (${formatCOP(rawAmount)}) excede el tope del ${pct(regla.topeImpuesto)}, por lo que se aplica el maximo de ${formatCOP(maxAmount)}.`
         : `El resultado es ${formatCOP(amount)}.`);
   } else if (grossIncome > 0) {
-    const rawAmount = grossIncome * 0.005 * months;
-    // Tope = MENOR entre 5% de ingresos brutos y el tope alterno (2x saldo a
-    // favor, o 2.500 UVT si no hay saldo a favor) — Art. 641 inciso 2º E.T.
-    const cap5pct = grossIncome * 0.05;
-    const maxAmount = Math.min(cap5pct, topeAlterno);
+    const rawAmount = grossIncome * regla.tasaIngresos * months;
+    const capPct = grossIncome * regla.topeIngresos;
+    const maxAmount = Math.min(capPct, topeAlterno);
     capApplied = maxAmount;
     capLabel =
-      maxAmount === cap5pct
-        ? `5% de los ingresos brutos (${formatCOP(cap5pct)})`
+      maxAmount === capPct
+        ? `${pct(regla.topeIngresos)} de los ingresos brutos (${formatCOP(capPct)})`
         : topeAlternoLabel;
     amount = Math.min(rawAmount, maxAmount);
     formula =
-      `min(${formatCOP(grossIncome)} x 0.5% x ${months} meses, ` +
-      `min[5% ingresos = ${formatCOP(cap5pct)}, ${topeAlternoLabel}])`;
+      `min(${formatCOP(grossIncome)} x ${pct(regla.tasaIngresos)} x ${months} meses, ` +
+      `min[${pct(regla.topeIngresos)} ingresos = ${formatCOP(capPct)}, ${topeAlternoLabel}])`;
     explanation =
-      `Sin impuesto a cargo, se aplica el 0.5% mensual sobre los ingresos brutos de ${formatCOP(grossIncome)} ` +
-      `(Art. 641 inciso 2º E.T.). Con ${months} mes(es) de retraso el calculo bruto es ${formatCOP(rawAmount)}. ` +
-      `El tope legal es la cifra MENOR entre el 5% de los ingresos (${formatCOP(cap5pct)}) y ${topeAlternoLabel}, ` +
+      `Sin impuesto a cargo, se aplica el ${pct(regla.tasaIngresos)} mensual sobre los ingresos brutos de ${formatCOP(grossIncome)} ` +
+      `(${art}, rama sin impuesto a cargo). Con ${months} mes(es) de retraso el calculo bruto es ${formatCOP(rawAmount)}. ` +
+      `El tope legal es la cifra MENOR entre el ${pct(regla.topeIngresos)} de los ingresos (${formatCOP(capPct)}) y ${topeAlternoLabel}, ` +
       `es decir ${formatCOP(maxAmount)}. ` +
       (rawAmount > maxAmount
         ? `El calculo bruto excede ese tope, por lo que la sancion queda en ${formatCOP(maxAmount)}.`
         : `El resultado es ${formatCOP(amount)}.`);
   } else if (netEquityPriorYear > 0) {
-    // Art. 641 inciso 3º E.T. — sin ingresos en el periodo.
-    const rawAmount = netEquityPriorYear * 0.01 * months;
-    const cap10pct = netEquityPriorYear * 0.10;
-    const maxAmount = Math.min(cap10pct, topeAlterno);
+    // Rama sin ingresos en el periodo.
+    const rawAmount = netEquityPriorYear * regla.tasaPatrimonio * months;
+    const capPct = netEquityPriorYear * regla.topePatrimonio;
+    const maxAmount = Math.min(capPct, topeAlterno);
     capApplied = maxAmount;
     capLabel =
-      maxAmount === cap10pct
-        ? `10% del patrimonio liquido (${formatCOP(cap10pct)})`
+      maxAmount === capPct
+        ? `${pct(regla.topePatrimonio)} del patrimonio liquido (${formatCOP(capPct)})`
         : topeAlternoLabel;
     amount = Math.min(rawAmount, maxAmount);
     formula =
-      `min(${formatCOP(netEquityPriorYear)} x 1% x ${months} meses, ` +
-      `min[10% patrimonio = ${formatCOP(cap10pct)}, ${topeAlternoLabel}])`;
+      `min(${formatCOP(netEquityPriorYear)} x ${pct(regla.tasaPatrimonio)} x ${months} meses, ` +
+      `min[${pct(regla.topePatrimonio)} patrimonio = ${formatCOP(capPct)}, ${topeAlternoLabel}])`;
     explanation =
-      `Sin impuesto a cargo y sin ingresos en el periodo, la sancion es del 1% mensual sobre el ` +
+      `Sin impuesto a cargo y sin ingresos en el periodo, la sancion es del ${pct(regla.tasaPatrimonio)} mensual sobre el ` +
       `patrimonio liquido del ano inmediatamente anterior (${formatCOP(netEquityPriorYear)}), ` +
-      `conforme al Art. 641 inciso 3º E.T. Con ${months} mes(es) de retraso el calculo bruto es ` +
-      `${formatCOP(rawAmount)}. El tope legal es la cifra MENOR entre el 10% del patrimonio ` +
-      `(${formatCOP(cap10pct)}) y ${topeAlternoLabel}, es decir ${formatCOP(maxAmount)}. ` +
+      `conforme al ${art} (rama sin ingresos). Con ${months} mes(es) de retraso el calculo bruto es ` +
+      `${formatCOP(rawAmount)}. El tope legal es la cifra MENOR entre el ${pct(regla.topePatrimonio)} del patrimonio ` +
+      `(${formatCOP(capPct)}) y ${topeAlternoLabel}, es decir ${formatCOP(maxAmount)}. ` +
       (rawAmount > maxAmount
         ? `El calculo bruto excede ese tope, por lo que la sancion queda en ${formatCOP(maxAmount)}.`
         : `El resultado es ${formatCOP(amount)}.`);
@@ -271,35 +478,58 @@ function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
     explanation =
       'Sin impuesto a cargo, sin ingresos brutos y sin patrimonio liquido del ano anterior ' +
       'reportados, se aplica la sancion minima de 10 UVT (Art. 639 E.T.). Si la empresa si ' +
-      'tuvo patrimonio liquido en el ano anterior, suministre `netEquityPriorYear`: la rama del ' +
-      'Art. 641 inciso 3º puede arrojar una sancion muy superior a la minima.';
+      'tuvo patrimonio liquido en el ano anterior, suministre `netEquityPriorYear`: la rama ' +
+      `sin ingresos del ${art} puede arrojar una sancion muy superior a la minima.`;
   }
 
-  // Sancion minima — Art. 639 E.T.
+  // Gradualidad del Art. 640 nums. 1-2 (sanción liquidada por el contribuyente).
+  const sancionPlena = amount;
+  const reduccion = aplicarReduccion640(amount, params.reduccion640, regla.admiteReduccion640);
+  amount = reduccion.amount;
+  explanation += reduccion.nota;
+  if (reduccion.aplicada !== 'none') {
+    formula += ` x ${reduccion.aplicada}% [Art. 640 E.T.]`;
+  }
+
+  // Sancion minima — Art. 639 E.T. ("incluidas las sanciones reducidas").
   if (amount < MIN_SANCTION) {
     amount = MIN_SANCTION;
     formula += ` -> Ajustado a sancion minima: 10 UVT = ${formatCOP(MIN_SANCTION)}`;
-    explanation += ` Nota: El valor calculado es inferior a la sancion minima de 10 UVT (${formatCOP(MIN_SANCTION)}), por lo que se aplica el minimo.`;
+    explanation += ` Nota: El valor calculado es inferior a la sancion minima de 10 UVT (${formatCOP(MIN_SANCTION)}), por lo que se aplica el minimo (Art. 639 E.T., incluidas las sanciones reducidas).`;
   }
 
   // Art. 577 E.T. — los valores de las declaraciones se aproximan al mil.
   const amountRaw = amount;
   amount = aproximarValorDeclaracion(amount);
 
+  const recommendations =
+    regla === REGLA_ART_641
+      ? [
+          'Presente la declaracion lo antes posible para minimizar la sancion.',
+          'Si el contribuyente no cometio la misma conducta en los 2 anos anteriores (o en el ano anterior) y la DIAN no ha proferido pliego de cargos, requerimiento especial ni emplazamiento previo por no declarar, la sancion se reduce al 50% (o al 75%) — Art. 640 nums. 1 y 2 E.T. Confirme esos hechos antes de aplicar la reduccion.',
+          'Considere solicitar facilidades de pago si el monto es significativo (Art. 814 E.T.).',
+          'Recuerde que la sancion se liquida por cada mes o fraccion de mes calendario de retardo.',
+          'Sin impuesto a cargo, la sancion nunca excede la cifra MENOR entre el porcentaje de la base, el doble del saldo a favor y 2.500 UVT ($130.935.000 en 2026) — Art. 641 incisos 2º y 3º E.T.',
+        ]
+      : [
+          'Con emplazamiento previo por no declarar ya notificado, la sancion es la del Art. 642 E.T. (10% mensual, tope 200%). Presente la declaracion dentro del plazo del emplazamiento para evitar la sancion por no declarar (Art. 643 E.T.).',
+          'La gradualidad del Art. 640 nums. 1 y 2 no procede cuando ya existe emplazamiento previo por no declarar (lit. b).',
+          'Considere solicitar facilidades de pago si el monto es significativo (Art. 814 E.T.).',
+          'Sin impuesto a cargo, la sancion nunca excede la cifra MENOR entre el porcentaje de la base, cuatro veces el saldo a favor y 5.000 UVT ($261.870.000 en 2026) — Art. 642 E.T.',
+        ];
+
   return {
-    type: 'Sancion por Extemporaneidad',
+    type: regla.tipo,
     amount,
     amountFormatted: formatCOP(amount),
     formula,
-    article: 'Art. 641 del Estatuto Tributario (incisos 1º, 2º y 3º)',
+    article:
+      regla === REGLA_ART_641
+        ? 'Art. 641 del Estatuto Tributario (incisos 1º, 2º y 3º)' +
+          (reduccion.aplicada !== 'none' ? '; gradualidad Art. 640 E.T.' : '')
+        : 'Art. 642 del Estatuto Tributario (extemporaneidad posterior al emplazamiento)',
     explanation,
-    recommendations: [
-      'Presente la declaracion lo antes posible para minimizar la sancion.',
-      'Verifique si aplica alguna reduccion del Art. 640 E.T. por ausencia de antecedentes.',
-      'Considere solicitar facilidades de pago si el monto es significativo (Art. 814 E.T.).',
-      'Recuerde que la sancion se liquida por cada mes o fraccion de mes calendario de retardo.',
-      'Sin impuesto a cargo, la sancion nunca excede la cifra MENOR entre el porcentaje de la base, el doble del saldo a favor y 2.500 UVT ($130.935.000 en 2026) — Art. 641 incisos 2º y 3º E.T.',
-    ],
+    recommendations,
     details: {
       taxDue,
       grossIncome,
@@ -308,7 +538,10 @@ function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
       delayMonths: months,
       capApplied: capApplied ?? 0,
       capLabel,
+      topeUvtCop: regla.topeUvtCop,
       tope2500Uvt: TOPE_EXTEMPORANEIDAD,
+      sancionPlena,
+      reduccion640: reduccion.aplicada,
       amountBeforeRounding: amountRaw,
       minSanction: MIN_SANCTION,
       uvt2026: UVT_2026,
@@ -318,6 +551,10 @@ function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
 
 /**
  * Sancion por correccion — Art. 644 E.T., numerales 1 y 2.
+ *
+ * Antes del vencimiento del plazo para declarar — sin sanción: el num. 1
+ *   (mod. art. 285 Ley 1819/2016) sólo grava la corrección realizada
+ *   "después del vencimiento del plazo para declarar".
  *
  * num. 1 — 10% del mayor valor a pagar o del menor saldo a favor: cuando la
  *   correccion se realiza DESPUES del vencimiento del plazo para declarar y
@@ -331,39 +568,99 @@ function calcExtemporaneidad(params: SanctionCalculation): SanctionResult {
  * El hito que dispara el 20% es el EMPLAZAMIENTO, NO el requerimiento
  * especial: entre uno y otro existe una ventana real en la que la tarifa ya
  * es del 20%. Liquidar 10% en esa ventana hace rechazable la correccion.
- * Vigencia: sin cambios para 2026.
  *
- * La base excluye la propia sancion del Art. 644 (paragrafo 1º).
- * Sancion minima: 10 UVT (Art. 639 E.T.).
+ * Par. 1 — si la declaración inicial fue extemporánea, la sanción aumenta en
+ *   5% del mayor valor por cada mes o fracción entre el vencimiento del plazo
+ *   y la presentación de la declaración inicial, sin exceder el 100%.
+ * Par. 3 — la base NO incluye la propia sanción por corrección.
+ * Gradualidad: Art. 640 nums. 1-2 E.T. (sanción liquidada por el contribuyente).
+ * Sancion minima: 10 UVT (Art. 639 E.T.), aplicada después de reducir.
  */
 function calcCorreccion(params: SanctionCalculation): SanctionResult {
   const { difference = 0, correccionStage, isVoluntary = true } = params;
+  const mesesInicial = Math.max(0, Math.ceil(params.mesesExtemporaneidadInicial ?? 0));
 
   // `correccionStage` es autoritativo; `isVoluntary` es el legado binario.
   const stage: CorreccionStage =
     correccionStage ?? (isVoluntary ? 'antes_emplazamiento' : 'despues_emplazamiento');
+
+  if (stage === 'antes_vencimiento') {
+    if (mesesInicial > 0) {
+      throw new SanctionInputError(
+        'Entrada contradictoria: una declaración inicial extemporánea no puede corregirse ' +
+          'antes del vencimiento del plazo para declarar. Indique el hito de la corrección ' +
+          '(antes_emplazamiento / despues_emplazamiento).',
+      );
+    }
+    return {
+      type: 'Sancion por Correccion',
+      amount: 0,
+      amountFormatted: formatCOP(0),
+      formula: 'Correccion antes del vencimiento del plazo para declarar: sin sancion (Art. 644 num. 1 E.T.)',
+      article: 'Art. 644 del Estatuto Tributario (num. 1, mod. art. 285 Ley 1819/2016)',
+      explanation:
+        'La sancion por correccion del Art. 644 E.T. solo se causa cuando la correccion se realiza ' +
+        'DESPUES del vencimiento del plazo para declarar (num. 1). Una correccion presentada antes ' +
+        'de ese vencimiento no genera sancion por correccion, y la sancion minima del Art. 639 no ' +
+        'aplica porque no hay sancion que liquidar. Si la correccion aumenta el valor a pagar, el ' +
+        'pago debe hacerse dentro del plazo para evitar intereses moratorios.',
+      recommendations: [
+        'Confirme la fecha de vencimiento del plazo para declarar segun el ultimo digito del NIT (sin DV).',
+        'Si la correccion se presenta despues del vencimiento, la sancion es del 10% del mayor valor (Art. 644 num. 1 E.T.).',
+      ],
+      details: {
+        difference,
+        correccionStage: stage,
+        hito: 'antes del vencimiento del plazo para declarar',
+        rate: '0%',
+        amountBeforeRounding: 0,
+        minSanction: MIN_SANCTION,
+      },
+    };
+  }
+
   const antesEmplazamiento = stage === 'antes_emplazamiento';
 
   const rate = antesEmplazamiento ? 0.10 : 0.20;
   const rateLabel = antesEmplazamiento ? '10%' : '20%';
   const context = antesEmplazamiento
-    ? 'correccion presentada ANTES de que se notifique el emplazamiento para corregir (Art. 685 E.T.) o el auto que ordene visita de inspeccion tributaria — Art. 644 num. 1 E.T.'
+    ? 'correccion presentada DESPUES del vencimiento del plazo y ANTES de que se notifique el emplazamiento para corregir (Art. 685 E.T.) o el auto que ordene visita de inspeccion tributaria — Art. 644 num. 1 E.T.'
     : 'correccion presentada DESPUES de notificado el emplazamiento para corregir o el auto de inspeccion tributaria, y antes del requerimiento especial o pliego de cargos — Art. 644 num. 2 E.T.';
 
-  const rawAmount = Math.round(difference * rate);
+  // Par. 1 — incremento por extemporaneidad de la declaración inicial.
+  const incremento = 0.05 * mesesInicial;
+  const tasaTotal = Math.min(rate + incremento, 1);
+  const rawAmount = Math.round(difference * tasaTotal);
   let amount = rawAmount;
-  const formula = `${formatCOP(difference)} x ${rateLabel} = ${formatCOP(rawAmount)}`;
+  let formula =
+    mesesInicial > 0
+      ? `${formatCOP(difference)} x min(${rateLabel} + 5% x ${mesesInicial} meses [Art. 644 par. 1], 100%) = ${formatCOP(rawAmount)}`
+      : `${formatCOP(difference)} x ${rateLabel} = ${formatCOP(rawAmount)}`;
 
   let explanation =
     `Para una ${context}, la sancion es del ${rateLabel} sobre la mayor diferencia ` +
-    `a pagar (o menor saldo a favor) de ${formatCOP(difference)}, resultando en ${formatCOP(rawAmount)}. ` +
-    `La base NO incluye la propia sancion por correccion (Art. 644 paragrafo 1º E.T.).`;
+    `a pagar (o menor saldo a favor) de ${formatCOP(difference)}` +
+    (mesesInicial > 0
+      ? `, aumentada en 5% por cada uno de los ${mesesInicial} mes(es) de extemporaneidad de la declaracion inicial ` +
+        `(Art. 644 par. 1 E.T.), sin exceder el 100% del mayor valor`
+      : '') +
+    `: ${formatCOP(rawAmount)}. ` +
+    `La base NO incluye la propia sancion por correccion (Art. 644 paragrafo 3 E.T.).`;
+
+  // Gradualidad del Art. 640 nums. 1-2 (sanción liquidada por el contribuyente).
+  const sancionPlena = amount;
+  const reduccion = aplicarReduccion640(amount, params.reduccion640, true);
+  amount = Math.round(reduccion.amount);
+  explanation += reduccion.nota;
+  if (reduccion.aplicada !== 'none') {
+    formula += ` x ${reduccion.aplicada}% [Art. 640 E.T.] = ${formatCOP(amount)}`;
+  }
 
   let minApplied = false;
   if (amount < MIN_SANCTION) {
     amount = MIN_SANCTION;
     minApplied = true;
-    explanation += ` Ajustado a la sancion minima de 10 UVT (${formatCOP(MIN_SANCTION)}).`;
+    explanation += ` Ajustado a la sancion minima de 10 UVT (${formatCOP(MIN_SANCTION)}) — Art. 639 E.T., incluidas las sanciones reducidas.`;
   }
 
   // Art. 577 E.T. — aproximacion al multiplo de mil mas cercano.
@@ -377,7 +674,9 @@ function calcCorreccion(params: SanctionCalculation): SanctionResult {
     formula: minApplied
       ? `${formula} -> Ajustado a sancion minima: ${formatCOP(MIN_SANCTION)}`
       : formula,
-    article: 'Art. 644 del Estatuto Tributario (nums. 1 y 2, en concordancia con el Art. 685 E.T.)',
+    article:
+      'Art. 644 del Estatuto Tributario (nums. 1 y 2, en concordancia con el Art. 685 E.T.)' +
+      (reduccion.aplicada !== 'none' ? '; gradualidad Art. 640 E.T.' : ''),
     explanation,
     recommendations: antesEmplazamiento
       ? [
@@ -385,7 +684,7 @@ function calcCorreccion(params: SanctionCalculation): SanctionResult {
           'Verifique en el buzon electronico / notificaciones DIAN que no exista emplazamiento ni auto de inspeccion ya notificado antes de liquidar al 10%.',
           'Asegurese de corregir TODOS los errores identificados para evitar un requerimiento especial posterior.',
           'Conserve copia de la declaracion original y de la correccion como soporte.',
-          'Considere la reduccion de sanciones del Art. 640 E.T. si aplica.',
+          'Si no cometio la misma conducta en los 2 anos anteriores (o en el ano anterior) y la DIAN no ha proferido pliego de cargos ni requerimiento especial, la sancion se reduce al 50% (o al 75%) — Art. 640 nums. 1 y 2 E.T.',
         ]
       : [
           'Con emplazamiento para corregir o auto de inspeccion ya notificado, la tarifa es del 20% (Art. 644 num. 2 E.T.) — liquidar el 10% hace rechazable la correccion.',
@@ -401,6 +700,10 @@ function calcCorreccion(params: SanctionCalculation): SanctionResult {
         ? 'antes del emplazamiento para corregir (Art. 685 E.T.) o auto de inspeccion'
         : 'despues del emplazamiento para corregir o auto de inspeccion, antes del requerimiento especial',
       rate: rateLabel,
+      mesesExtemporaneidadInicial: mesesInicial,
+      tasaTotal: pct(tasaTotal),
+      sancionPlena,
+      reduccion640: reduccion.aplicada,
       amountBeforeRounding,
       minSanction: MIN_SANCTION,
     },
@@ -582,13 +885,26 @@ function calcInteresesMoratorios(params: SanctionCalculation): SanctionResult {
   };
 }
 
+/** Normaliza `null` (contratos strict hacia el LLM) a ausente. */
+function sinNulos(params: SanctionCalculationInput): SanctionCalculation {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== null && v !== undefined) out[k] = v;
+  }
+  return out as unknown as SanctionCalculation;
+}
+
 /**
  * Main entry point — routes to the appropriate calculator based on type.
+ * Acepta `null` en cualquier campo opcional (se trata como ausente).
  */
-export function calculateSanction(params: SanctionCalculation): SanctionResult {
+export function calculateSanction(input: SanctionCalculationInput): SanctionResult {
+  const params = sinNulos(input);
   switch (params.type) {
     case 'extemporaneidad':
-      return calcExtemporaneidad(params);
+      return calcExtemporaneidad(params, REGLA_ART_641);
+    case 'extemporaneidad_post_emplazamiento':
+      return calcExtemporaneidad(params, REGLA_ART_642);
     case 'correccion':
       return calcCorreccion(params);
     case 'inexactitud':
@@ -596,9 +912,9 @@ export function calculateSanction(params: SanctionCalculation): SanctionResult {
     case 'intereses_moratorios':
       return calcInteresesMoratorios(params);
     default:
-      throw new Error(
+      throw new SanctionInputError(
         `Tipo de sancion no reconocido: "${(params as unknown as Record<string, unknown>).type}". ` +
-        `Tipos validos: extemporaneidad, correccion, inexactitud, intereses_moratorios.`
+        `Tipos validos: ${SANCTION_TYPES.join(', ')}.`
       );
   }
 }

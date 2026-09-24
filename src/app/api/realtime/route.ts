@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { MODEL_IDS } from '@/lib/config/models';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { requireWorkspace } from '@/lib/db/workspace';
+import { SANCTION_REALTIME_TOOL } from '@/lib/tools/sanction-contract';
 
 export async function GET() {
   const gate = await requireAuthSession();
@@ -48,26 +49,9 @@ export async function GET() {
               required: ['query']
             }
           },
-          {
-            type: 'function',
-            name: 'calculate_sanction',
-            description: 'Calcula sanciones tributarias colombianas: extemporaneidad (Art. 641 E.T.), corrección (Art. 644), inexactitud (Art. 647), e intereses moratorios (Art. 634). Usar cuando el usuario pregunte cuánto tendría que pagar en sanciones, multas, o intereses.',
-            parameters: {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['extemporaneidad', 'correccion', 'inexactitud', 'intereses_moratorios'], description: 'Tipo de sanción a calcular' },
-                taxDue: { type: 'number', description: 'Impuesto a cargo en COP' },
-                grossIncome: { type: 'number', description: 'Ingresos brutos en COP' },
-                difference: { type: 'number', description: 'Mayor valor a pagar (para corrección/inexactitud)' },
-                delayMonths: { type: 'number', description: 'Meses de retraso' },
-                isVoluntary: { type: 'boolean', description: '¿Corrección voluntaria?' },
-                principal: { type: 'number', description: 'Capital para intereses moratorios' },
-                annualRate: { type: 'number', description: 'Tasa de interés anual (default 27.44%)' },
-                days: { type: 'number', description: 'Días de mora' }
-              },
-              required: ['type']
-            }
-          },
+          // Definición compartida con la tool LLM y la API REST (todos los campos
+          // de calculateSanction). Ver src/lib/tools/sanction-contract.ts.
+          SANCTION_REALTIME_TOOL,
           {
             type: 'function',
             name: 'get_platform_info',
