@@ -403,6 +403,96 @@ export function resultWordingForSign(label: string, cents: bigint): string {
   return label;
 }
 
+/** Plazo al que se refiere un rótulo sin código del ESF (subtotal o encabezado). */
+export interface BalanceTermLabel {
+  term: 'current' | 'nonCurrent';
+  /** `true` = encabezado ("Activo corriente"); `false` = subtotal ("Total …"). */
+  header: boolean;
+}
+
+/**
+ * Clasifica un rótulo sin código del ESF como subtotal ("Total activo
+ * corriente", "Total pasivos no corrientes", "Total current assets") o
+ * encabezado ("ACTIVO CORRIENTE") de un plazo, en español o inglés. Lo usan
+ * E27 (validador) y la desambiguación de grupos partidos por plazo.
+ */
+export function balanceTermOfLabel(
+  section: 'assets' | 'liabilities',
+  label: string,
+): BalanceTermLabel | null {
+  const t = label
+    .replace(/\([^)]*\)/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const es = section === 'assets' ? 'activos?' : 'pasivos?';
+  const en = section === 'assets' ? 'assets' : 'liabilities';
+  const m =
+    new RegExp(`^((?:sub)?total(?:es)? (?:(?:de|del|de los) )?)?${es} (no )?corrientes?$`).exec(t) ??
+    new RegExp(`^(total )?(non-? ?current |noncurrent |current )${en}$`).exec(t);
+  if (!m) return null;
+  const nonCurrent = m[0].includes('no corriente') || /non-? ?current|noncurrent/.test(m[0]);
+  return { term: nonCurrent ? 'nonCurrent' : 'current', header: !m[1] };
+}
+
+const SPLIT_GROUP_SUFFIX: Record<BalanceTermLabel['term'], string> = {
+  current: ' — porción corriente',
+  nonCurrent: ' — porción no corriente',
+};
+const SPLIT_GROUP_SUFFIX_RE = / — porción (?:no )?corriente$/;
+
+/**
+ * Grupo PUC partido por plazo (integración P4-b: excepción de vencimiento
+ * declarada o virtual de R1) con el mismo rótulo en los dos bloques del ESF:
+ * "12 — Inversiones" aparecía dos veces, una bajo "Total activo corriente" y
+ * otra bajo "Total activo no corriente". Cada renglón recibe el sufijo de su
+ * bloque ("— porción corriente" / "— porción no corriente"). El bloque es el
+ * del subtotal de plazo que lo cierra o, sin él, el del encabezado que lo
+ * abre. Rótulos distintos dentro del grupo (el modelo ya los distinguió) no se
+ * tocan. Idempotente: el sufijo se quita antes de comparar.
+ */
+function disambiguateSplitGroupLabels(section: 'assets' | 'liabilities', lines: readonly LabelledStatementLine[], labels: string[]): string[] {
+  const terms: Array<BalanceTermLabel['term'] | null> = lines.map(() => null);
+  let header: BalanceTermLabel['term'] | null = null;
+  let pending: number[] = [];
+  lines.forEach((l, i) => {
+    if (l.account !== null && l.account.trim() !== '') {
+      terms[i] = header;
+      pending.push(i);
+      return;
+    }
+    const kind = balanceTermOfLabel(section, l.label);
+    if (!kind) return;
+    if (kind.header) {
+      header = kind.term;
+      pending = [];
+      return;
+    }
+    for (const j of pending) terms[j] = kind.term;
+    pending = [];
+    header = null;
+  });
+  const byCode = new Map<string, number[]>();
+  lines.forEach((l, i) => {
+    const code = (l.account ?? '').trim();
+    if (!/^\d{2}$/.test(code)) return;
+    byCode.set(code, [...(byCode.get(code) ?? []), i]);
+  });
+  const out = [...labels];
+  for (const idx of byCode.values()) {
+    if (idx.length < 2) continue;
+    const bases = new Set(idx.map((i) => labels[i].replace(SPLIT_GROUP_SUFFIX_RE, '')));
+    const blockTerms = new Set(idx.map((i) => terms[i]));
+    if (bases.size !== 1 || blockTerms.has(null) || blockTerms.size < 2) continue;
+    const [base] = [...bases];
+    for (const i of idx) out[i] = `${base}${SPLIT_GROUP_SUFFIX[terms[i]!]}`;
+  }
+  return out;
+}
+
 export interface StatementLabelContext {
   /** Tipo del periodo actual; sólo `cerrado` permite afirmar 1-ene / 31-dic. */
   primaryPeriodoTipo?: PeriodoTipo | null;
@@ -478,15 +568,26 @@ export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
     return { ...line, label: next };
   };
   const bs = json.balanceSheet;
-  const balance = <L extends LabelledStatementLine>(lines: L[]): L[] =>
-    lines.map((l) => {
-      const label = presentedAccountLabel('balance', l.account, l.label);
+  const balance = <L extends LabelledStatementLine>(
+    lines: L[],
+    section: 'assets' | 'liabilities' | 'equity',
+  ): L[] => {
+    const labels = lines.map((l) => {
+      const label = presentedAccountLabel('balance', l.account, l.label.replace(SPLIT_GROUP_SUFFIX_RE, ''));
       // "3605 — Utilidad del ejercicio" con saldo negativo es una pérdida.
-      const worded = cashFlowLabelClaims(label).includes('netIncome')
+      return cashFlowLabelClaims(label).includes('netIncome')
         ? resultWordingForSign(label, parseMoneyCop(l.amountPrimary))
         : label;
-      return relabel(l, worded);
     });
+    const finals = section === 'equity' ? labels : disambiguateSplitGroupLabels(section, lines, labels);
+    return lines.map((l, i) => relabel(l, finals[i]));
+  };
+  // Se calculan ANTES del corte `changed === 0` (integración I4): antes el ESF
+  // se reescribía dentro del `return`, así que sus rótulos sólo se normalizaban
+  // cuando algún rótulo del ERI, del EFE o del ECP también cambiaba.
+  const assets = balance(bs.assets, 'assets');
+  const liabilities = balance(bs.liabilities, 'liabilities');
+  const equity = balance(bs.equity, 'equity');
   const income = json.incomeStatement.lines.map((l) =>
     relabel(l, presentedAccountLabel('income', l.account, l.label)),
   );
@@ -524,9 +625,9 @@ export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
       ...json,
       balanceSheet: {
         ...bs,
-        assets: balance(bs.assets),
-        liabilities: balance(bs.liabilities),
-        equity: balance(bs.equity),
+        assets,
+        liabilities,
+        equity,
       },
       incomeStatement: { ...json.incomeStatement, lines: income },
       cashFlow: { ...json.cashFlow, sections },

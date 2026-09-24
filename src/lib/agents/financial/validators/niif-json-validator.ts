@@ -68,6 +68,7 @@ import { moneyCopEquals, parseMoneyCop, serializeMoneyCop } from '../contracts/m
 import type { NiifReportJson, EquityChangeRowJson } from '../contracts/niif-report';
 import type { ReportValidationResult } from '../types';
 import {
+  balanceTermOfLabel,
   incomeCascadeKindOfLabel,
   type IncomeCascadeKind,
 } from '@/lib/export/statement-presentation';
@@ -1658,29 +1659,6 @@ function uncodedIncomeRowErrors(
   return out;
 }
 
-/** Clasifica un rótulo sin código del ESF como subtotal (o encabezado) de un plazo. */
-function termOfSubtotalLabel(
-  section: 'assets' | 'liabilities',
-  label: string,
-): { term: 'current' | 'nonCurrent'; header: boolean } | null {
-  const t = label
-    .replace(/\([^)]*\)/g, ' ')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z\s-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const es = section === 'assets' ? 'activos?' : 'pasivos?';
-  const en = section === 'assets' ? 'assets' : 'liabilities';
-  const m =
-    new RegExp(`^((?:sub)?total(?:es)? (?:(?:de|del|de los) )?)?${es} (no )?corrientes?$`).exec(t) ??
-    new RegExp(`^(total )?(non-? ?current |noncurrent |current )${en}$`).exec(t);
-  if (!m) return null;
-  const nonCurrent = m[0].includes('no corriente') || /non-? ?current|noncurrent/.test(m[0]);
-  return { term: nonCurrent ? 'nonCurrent' : 'current', header: !m[1] };
-}
-
 const TERM_CONTROL_TOTAL: Record<'assets' | 'liabilities', Record<'current' | 'nonCurrent', [string, string]>> = {
   assets: {
     current: ['activo corriente', 'activoCorriente'],
@@ -1727,7 +1705,7 @@ function termSubtotalErrors(
   const out: string[] = [];
   for (const line of lines) {
     if (line.account !== null && line.account.trim() !== '') continue;
-    const kind = termOfSubtotalLabel(section, line.label);
+    const kind = balanceTermOfLabel(section, line.label);
     if (!kind) continue;
     const raw = periodCell(line, period);
     if (raw === null) continue;
