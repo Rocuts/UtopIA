@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useLanguage } from '@/context/LanguageContext';
 import type { ERPProvider } from '@/lib/erp/types';
 import { ERPLogo } from './ERPLogo';
 
@@ -228,6 +229,7 @@ interface ConnectFormProps {
 }
 
 function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -324,7 +326,7 @@ function ConnectForm({ provider, onClose, onConnected }: ConnectFormProps) {
             type="button"
             onClick={onClose}
             className="p-1 text-n-700 hover:text-n-1000 transition-colors"
-            aria-label="Cerrar"
+            aria-label={t.erp.close}
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -498,6 +500,7 @@ interface SyncOutcome {
 }
 
 function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
+  const { t } = useLanguage();
   const [syncOptions, setSyncOptions] = useState({
     trialBalance: true,
     chartOfAccounts: false,
@@ -585,7 +588,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
             type="button"
             onClick={onClose}
             className="p-1 text-n-700 hover:text-n-1000 transition-colors"
-            aria-label="Cerrar"
+            aria-label={t.erp.close}
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -597,13 +600,12 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
               <CheckCircle className="w-10 h-10 text-success mx-auto" />
               <div>
                 <p className="text-sm font-semibold text-success">
-                  {result.recordCount} registros leídos desde {provider.name}
+                  {t.erp.recordsRead
+                    .replace('{n}', String(result.recordCount))
+                    .replace('{provider}', provider.name)}
                 </p>
                 {/* Honestidad: la lectura no se guarda ni alimenta reportes. */}
-                <p className="text-xs text-n-700 mt-1">
-                  La conexión funciona, pero estos datos todavía no se guardan ni se usan en reportes.
-                  Para un reporte NIIF, cargue el balance de prueba desde el formulario del reporte.
-                </p>
+                <p className="text-xs text-n-700 mt-1">{t.erp.notPersistedNote}</p>
               </div>
               {result.trialBalanceNote && (
                 <div className="flex items-start gap-2 text-left text-xs text-n-800 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2">
@@ -616,7 +618,7 @@ function SyncModal({ provider, onClose, onSyncComplete }: SyncModalProps) {
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-lg text-xs font-semibold border border-n-200 text-n-800 hover:text-n-1000 hover:bg-n-50 transition-colors"
               >
-                Cerrar
+                {t.erp.close}
               </button>
             </div>
           ) : (
@@ -721,6 +723,7 @@ interface ProviderCardViewProps {
 }
 
 function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnect }: ProviderCardViewProps) {
+  const { t } = useLanguage();
   const isConnected = !!connection;
 
   return (
@@ -764,7 +767,7 @@ function ProviderCardView({ provider, connection, onConnect, onSync, onDisconnec
       {isConnected && connection.lastSync && (
         <div className="flex items-center gap-1.5 mt-2 text-2xs text-success">
           <RefreshCw className="w-3 h-3" />
-          Última lectura: {formatSyncDate(connection.lastSync)}
+          {t.erp.lastRead}: {formatSyncDate(connection.lastSync)}
         </div>
       )}
 
