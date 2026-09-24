@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { runR12 } from '../curator-rules/r12-closing-detector';
+import { parseUploadedTrialBalanceText } from '../raw-data';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '../trial-balance';
 import type { PeriodSnapshot } from '../trial-balance';
 
@@ -251,9 +252,14 @@ describe('R12 — asientos de cierre con devoluciones 4175 (recalculo-final-05)'
 });
 
 // ---------------------------------------------------------------------------
-// Cross-dep W3-A (ingesta-09 / recalculo-03): un comparativo de SALDOS DE
-// APERTURA trae el P&G acumulado a esa fecha, que por definición no está en el
-// patrimonio: no es un "periodo anterior sin cerrar".
+// Cross-dep W3-A (ingesta-09 / recalculo-03) y recalculo-final2-01: una
+// columna de SALDOS DE APERTURA intermedia (saldo inicial del mes) trae el P&G
+// acumulado del año a esa fecha, que no está en el patrimonio y no es "un
+// periodo anterior sin cerrar". Pero la apertura del EJERCICIO (1 de enero:
+// columna 'Saldo inicial 2025' de un balance anual) debe traer las clases 4-7
+// en cero: si trae resultado y ese resultado no entró al patrimonio, el saldo
+// final lo incluye por identidad (final = inicial + movimientos) y el P&G del
+// periodo es ACUMULADO, igual que con 'Saldo 2024 | Saldo 2025'.
 // ---------------------------------------------------------------------------
 describe('R12 — P&G acumulado y comparativo de saldos de apertura', () => {
   // Misma forma que el caso acumulado de recalculo-03 (2024 sin cerrar).
@@ -265,18 +271,81 @@ describe('R12 — P&G acumulado y comparativo de saldos de apertura', () => {
     '413505,Ventas,800000000,1500000000',
     '513505,Gastos,300000000,600000000',
   ].join('\n');
+  const r12Blocker = (pp: ReturnType<typeof preprocessTrialBalance>) =>
+    (pp.primary.validation.curatorBlockingReasons ?? []).find((r) => r.startsWith('[CUR-R12]'));
 
   it('control: con comparativo de cierre sí se marca P&G acumulado', () => {
     const pp = preprocessTrialBalance(parseTrialBalanceCSV(CSV));
     expect(pp.primary.closingDetectorAudit?.pygAcumulado).toBeDefined();
   });
 
-  it('con el comparativo marcado como saldos de apertura no se marca ni se bloquea', () => {
+  it('apertura del ejercicio (primario anual) con P&G sin cerrar: se marca y bloquea como el comparativo de cierre', () => {
+    // Antes (c82ec708) la apertura se omitía y el P&G acumulado ($900M) salía
+    // como resultado del ejercicio; el del ejercicio 2025 es $900M − $500M.
     const pp = preprocessTrialBalance(parseTrialBalanceCSV(CSV), { openingPeriods: ['2024'] });
     expect(pp.comparative?.saldosDeApertura).toBe(true);
+    const pyg = pp.primary.closingDetectorAudit?.pygAcumulado;
+    expect(pyg?.utilidadMovimientoRaw).toBe('400000000.00');
+    expect(pp.primary.findings?.librosNoCerrados).toBe(true);
+    expect(r12Blocker(pp)).toContain('$400.000.000,00');
+    expect(r12Blocker(pp)).toContain('saldo inicial');
+  });
+
+  it("recalculo-final2-01: 'Saldo inicial 2025 | Saldo final 2025' con 3605 dinámico → CUR-R12 con el resultado del ejercicio", () => {
+    const raw = [
+      'Razón social: DEMO TRES CORTES SAS',
+      'NIT: 900.765.432-6',
+      'codigo,nombre,nivel,Saldo inicial 2025,Saldo final 2025',
+      '110505,Caja general,Auxiliar,100000000,150000000',
+      '310505,Capital suscrito y pagado,Auxiliar,60000000,60000000',
+      '360505,Utilidad del ejercicio,Auxiliar,40000000,90000000',
+      '413505,Venta de mercancias,Auxiliar,50000000,120000000',
+      '510506,Sueldos,Auxiliar,10000000,30000000',
+    ].join('\n');
+    const parsed = parseUploadedTrialBalanceText(raw);
+    expect(parsed.openingPeriods).toEqual(['2024']);
+    const pp = preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods });
+    expect(pp.primary.period).toBe('2025');
+    // Resultado del ejercicio 2025 = (120 − 50) − (30 − 10) = $50.000.000.
+    expect(pp.primary.closingDetectorAudit?.pygAcumulado?.utilidadMovimientoRaw).toBe('50000000.00');
+    expect(pp.primary.findings?.librosNoCerrados).toBe(true);
+    expect(r12Blocker(pp)).toContain('$50.000.000,00');
+    // Mismo balance rotulado 'Saldo 2024 | Saldo 2025': mismo motivo y misma cifra.
+    const cierre = parseUploadedTrialBalanceText(raw.replace('Saldo inicial 2025,Saldo final 2025', 'Saldo 2024,Saldo 2025'));
+    const ppCierre = preprocessTrialBalance(cierre.rows, { openingPeriods: cierre.openingPeriods });
+    expect(ppCierre.primary.closingDetectorAudit?.pygAcumulado?.utilidadMovimientoRaw).toBe('50000000.00');
+  });
+
+  it('apertura del ejercicio con P&G en cero (año anterior cerrado): sin hallazgo', () => {
+    const raw = [
+      'codigo,nombre,nivel,Saldo inicial 2025,Saldo final 2025',
+      '110505,Caja general,Auxiliar,100000000,150000000',
+      '310505,Capital suscrito y pagado,Auxiliar,60000000,60000000',
+      '370505,Utilidades acumuladas,Auxiliar,40000000,40000000',
+      '360505,Utilidad del ejercicio,Auxiliar,0,50000000',
+      '413505,Venta de mercancias,Auxiliar,0,70000000',
+      '510506,Sueldos,Auxiliar,0,20000000',
+    ].join('\n');
+    const parsed = parseUploadedTrialBalanceText(raw);
+    const pp = preprocessTrialBalance(parsed.rows, { openingPeriods: parsed.openingPeriods });
     expect(pp.primary.closingDetectorAudit?.pygAcumulado).toBeUndefined();
-    expect(
-      (pp.primary.validation.curatorBlockingReasons ?? []).some((r) => r.startsWith('[CUR-R12]')),
-    ).toBe(false);
+    expect(r12Blocker(pp)).toBeUndefined();
+  });
+
+  it('saldo inicial de un MES (corte parcial 2025-06): el P&G acumulado del año es el del corte, no se bloquea', () => {
+    // Saldo inicial de junio = P&G enero-mayo; saldo final = enero-junio (NIC 34, año corrido).
+    const csv = [
+      'codigo,nombre,saldo [2025-05],saldo [2025-06]',
+      '110505,Caja,1000000000,1100000000',
+      '220505,Proveedores,400000000,400000000',
+      '310505,Capital,100000000,100000000',
+      '413505,Ventas,800000000,950000000',
+      '513505,Gastos,300000000,350000000',
+    ].join('\n');
+    const pp = preprocessTrialBalance(parseTrialBalanceCSV(csv), { openingPeriods: ['2025-05'] });
+    expect(pp.primary.period).toBe('2025-06');
+    expect(pp.primary.periodoTipo).toBe('parcial');
+    expect(pp.primary.closingDetectorAudit?.pygAcumulado).toBeUndefined();
+    expect(r12Blocker(pp)).toBeUndefined();
   });
 });

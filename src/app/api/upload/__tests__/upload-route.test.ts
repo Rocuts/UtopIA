@@ -439,3 +439,30 @@ describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
     expect(r.unit).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// recalculo-final2-01: el XLSX real trae 'Saldo inicial 2024 | Saldo final
+// 2025' con P&G de apertura ($1.572.721.472,96) sin cerrar. Con la apertura
+// omitida por R12 el P&G acumulado ($2.228.496.789,73) llegaba al LLM como
+// utilidad del ejercicio; el bloqueo CUR-R12 nombra el resultado del ejercicio.
+// ---------------------------------------------------------------------------
+describe('/api/upload — XLSX real con saldo inicial sin cerrar (recalculo-final2-01)', () => {
+  it('el rawData re-derivado (el de /niif) queda bloqueado por CUR-R12 con saldo final − saldo inicial', async () => {
+    const fsMod = await import('node:fs');
+    const pathMod = await import('node:path');
+    const buf = fsMod.readFileSync(
+      pathMod.join(process.cwd(), 'src/lib/preprocessing/__fixtures__/grupo-empresarial-2tres-sas.xlsx'),
+    );
+    const up = await upload(buf, 'grupo.xlsx');
+    const { preprocessUploadedTrialBalanceText } = await import('@/lib/preprocessing/raw-data');
+    const r = preprocessUploadedTrialBalanceText(up.rawData ?? '');
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    const primary = r.preprocessed.primary;
+    expect(primary.period).toBe('2025');
+    expect(r.preprocessed.comparative?.saldosDeApertura).toBe(true);
+    const cur12 = (primary.validation.curatorBlockingReasons ?? []).find((m) => m.startsWith('[CUR-R12]'));
+    expect(cur12).toContain('$655.775.316,77');
+    expect(primary.validation.blocking).toBe(true);
+  });
+});
