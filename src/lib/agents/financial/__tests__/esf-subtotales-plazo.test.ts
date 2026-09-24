@@ -233,14 +233,75 @@ describe('ruta real — runNiifPhase con el LLM simulado', () => {
     expect(phase.niif.reconciliation?.clean).toBe(true);
   });
 
-  it('un ESF del modelo con subtotales distintos de los KPIs sale sellado sólo por E27', async () => {
+  // I5-niif 2: antes este ESF salía sellado sólo por E27. La partición por
+  // plazo es la del preprocesador, no juicio del modelo: como con `lineGaps`,
+  // la sección se sustituye por la proyección determinista (con la columna
+  // comparativa del orquestador) y el validador la vuelve a contrastar.
+  it('un ESF del modelo con subtotales distintos de los KPIs se sustituye por la proyección por plazo y sale limpio', async () => {
     const pp = preprocess({ '1205': 'no_corriente', '2105': 'no_corriente' });
+    const progress: string[] = [];
     mockPasses(esfDelModelo(pp));
+    const phase = await runNiifPhase(
+      {
+        rawData: CSV_DOS_CORTES,
+        company: { name: 'Demo Perdidas SAS', nit: '900123456-8', entityType: 'SAS', fiscalPeriod: '2025', niifGroup: 2 },
+        language: 'es',
+      },
+      {
+        preprocessed: pp,
+        onProgress: (e) => {
+          if (e.type === 'stage_progress' && typeof e.detail === 'string') progress.push(e.detail);
+        },
+      },
+    );
+    expect(phase.niif.fullContent).not.toMatch(/E27\.|\[NIIF JSON validator\]|REPORTE CON SALVEDADES/);
+    expect(phase.niif.reconciliation?.clean).toBe(true);
+    expect(progress.some((d) => /Clasificación corriente \/ no corriente del Activo y del Pasivo/.test(d))).toBe(true);
+    const bs = phase.niif.json!.balanceSheet;
+    const fila = (lines: typeof bs.assets, label: string) => {
+      const l = lines.find((x) => x.label === label)!;
+      return [l.amountPrimary, l.amountComparative];
+    };
+    // Subtotales = controlTotals de cada periodo (1205 y 2105 no corrientes).
+    expect(fila(bs.assets, 'Total activo corriente')).toEqual([c(140000), c(100000)]);
+    expect(fila(bs.assets, 'Total activo no corriente')).toEqual([c(250000), c(175000)]);
+    expect(fila(bs.liabilities, 'Total pasivo corriente')).toEqual([c(70000), c(25000)]);
+    expect(fila(bs.liabilities, 'Total pasivo no corriente')).toEqual([c(80000), c(50000)]);
+    // 1205 (120505 y 120510) declarado no corriente: el grupo 12 va entero al bloque no corriente.
+    expect(bs.assets.map((l) => [l.account, l.amountPrimary])).toEqual([
+      ['11', c(140000)],
+      [null, c(140000)],
+      ['12', c(50000)],
+      ['15', c(200000)],
+      [null, c(250000)],
+    ]);
+  });
+
+  it('la sustitución toca sólo la sección con E27 y el validador sigue sellando lo demás', async () => {
+    const pp = preprocess({ '2105': 'no_corriente' });
+    const json = esfDelModelo(pp);
+    // Activo correcto (sin excepciones en el activo): se respeta tal cual.
+    const activoDelModelo = json.balanceSheet.assets;
+    // Patrimonio con $1.000 movidos de capital (31) a resultados (36): el total
+    // cuadra (sin lineGap) y E21 lo ve; no es de plazo y no se sustituye.
+    const mover = BigInt(c(1000));
+    json.balanceSheet.equity = json.balanceSheet.equity.map((l) =>
+      l.account === '31'
+        ? { ...l, amountPrimary: String(BigInt(l.amountPrimary) - mover) }
+        : l.account === '36'
+          ? { ...l, amountPrimary: String(BigInt(l.amountPrimary) + mover) }
+          : l,
+    );
+    expect(json.balanceSheet.equity.map((l) => l.account)).toEqual(['31', '36']);
+    mockPasses(json);
     const phase = await fase(pp);
+    const bs = phase.niif.json!.balanceSheet;
+    expect(bs.assets.map((l) => [l.account, l.label, l.amountPrimary])).toEqual(
+      activoDelModelo.map((l) => [l.account, l.label, l.amountPrimary]),
+    );
+    expect(bs.liabilities.find((l) => l.label === 'Total pasivo corriente')?.amountPrimary).toBe(c(70000));
     expect(phase.niif.reconciliation?.clean).toBe(false);
-    const reasons = phase.niif.fullContent.match(/E\d+[a-z]?\. [^\n]*/g) ?? [];
-    expect(reasons.length).toBeGreaterThan(0);
-    expect(reasons.every((r) => r.startsWith('E27.'))).toBe(true);
-    expect(phase.niif.fullContent).toMatch(/E27\. Estado de Situación Financiera — Activo \(periodo 2025\): "Total activo corriente"/);
+    expect(phase.niif.fullContent).not.toMatch(/E27\./);
+    expect(phase.niif.fullContent).toMatch(/E21\. Estado de Situación Financiera — Patrimonio/);
   });
 });

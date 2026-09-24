@@ -21,14 +21,27 @@ export interface RunwayMes {
 export const RUNWAY_ESCENARIOS = {
   conservador: {
     factorIngresos: 0.85,
+    /** Nombre de la serie (leyenda del gráfico), por idioma. */
+    nombre: 'Conservador',
+    nombreEn: 'Conservative',
     rotulo: 'Supuesto de sensibilidad: ingresos −15 %, egresos sin cambio (no es un pronóstico)',
     rotuloEn: 'Sensitivity assumption: revenue −15%, expenses unchanged (not a forecast)',
   },
   agresivo: {
     factorIngresos: 1.1,
+    nombre: 'Agresivo',
+    nombreEn: 'Aggressive',
     rotulo: 'Supuesto de sensibilidad: ingresos +10 %, egresos sin cambio (no es un pronóstico)',
     rotuloEn: 'Sensitivity assumption: revenue +10%, expenses unchanged (not a forecast)',
   },
+} as const;
+
+/** Serie base del runway (sin factor de sensibilidad): nombre y rótulo por idioma. */
+export const RUNWAY_SERIE_BASE = {
+  nombre: 'Base',
+  nombreEn: 'Base',
+  rotulo: 'tendencia del periodo',
+  rotuloEn: 'period trend',
 } as const;
 
 export interface RunwayInput {

@@ -600,14 +600,23 @@ export function renderTechnicalNotes(json: NiifReportJson): string {
  * que consumen Strategy Director, Governance Specialist, PDF Élite y Excel
  * mientras se completan las Fases 2 y 3. Adapter puro.
  */
-export function toNiifAnalysisResult(source: NiifReportJson): NiifAnalysisResult {
+export function toNiifAnalysisResult(
+  source: NiifReportJson,
+  /**
+   * Idioma del informe (I5-niif 4): hoy sólo gobierna el sufijo de porción de
+   * un grupo partido por plazo. Sin él se conserva el que ya traiga el JSON.
+   */
+  opts: { language?: 'es' | 'en' } = {},
+): NiifAnalysisResult {
   // Rótulos deterministas (auditoría 2026-09-24, e2e-niif-09), los mismos que
   // imprimen el PDF y el Excel. Sin tipo de periodo conocido se respetan las
   // fechas canónicas que ya fijó el orquestador. Las notas se numeran de forma
   // global y secuencial (spec v2.1 Corrección 6, niif-contrato-19); el JSON
   // devuelto las lleva numeradas, así el PDF y el Excel imprimen los mismos
   // números.
-  const json = numberStatementNotes(normalizeNiifStatementLabels(source).json).json;
+  const json = numberStatementNotes(
+    normalizeNiifStatementLabels(source, opts.language ? { language: opts.language } : {}).json,
+  ).json;
   const balanceSheet = renderBalanceSheet(json);
   const incomeStatement = renderIncomeStatement(json);
   const cashFlowStatement = renderCashFlowStatement(json);

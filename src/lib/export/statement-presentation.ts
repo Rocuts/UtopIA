@@ -438,11 +438,15 @@ export function balanceTermOfLabel(
   return { term: nonCurrent ? 'nonCurrent' : 'current', header: !m[1] };
 }
 
-const SPLIT_GROUP_SUFFIX: Record<BalanceTermLabel['term'], string> = {
-  current: ' — porción corriente',
-  nonCurrent: ' — porción no corriente',
+type LabelLanguage = 'es' | 'en';
+
+const SPLIT_GROUP_SUFFIX: Record<LabelLanguage, Record<BalanceTermLabel['term'], string>> = {
+  es: { current: ' — porción corriente', nonCurrent: ' — porción no corriente' },
+  en: { current: ' — current portion', nonCurrent: ' — non-current portion' },
 };
-const SPLIT_GROUP_SUFFIX_RE = / — porción (?:no )?corriente$/;
+/** Sufijo de porción en cualquiera de los dos idiomas (idempotencia entre idiomas). */
+const SPLIT_GROUP_SUFFIX_RE = / — (?:porción (?:no )?corriente|(?:non-)?current portion)$/;
+const SPLIT_GROUP_SUFFIX_EN_RE = / — (?:non-)?current portion$/;
 
 /**
  * Grupo PUC partido por plazo (integración P4-b: excepción de vencimiento
@@ -454,7 +458,12 @@ const SPLIT_GROUP_SUFFIX_RE = / — porción (?:no )?corriente$/;
  * abre. Rótulos distintos dentro del grupo (el modelo ya los distinguió) no se
  * tocan. Idempotente: el sufijo se quita antes de comparar.
  */
-function disambiguateSplitGroupLabels(section: 'assets' | 'liabilities', lines: readonly LabelledStatementLine[], labels: string[]): string[] {
+function disambiguateSplitGroupLabels(
+  section: 'assets' | 'liabilities',
+  lines: readonly LabelledStatementLine[],
+  labels: string[],
+  language: LabelLanguage | undefined,
+): string[] {
   const terms: Array<BalanceTermLabel['term'] | null> = lines.map(() => null);
   let header: BalanceTermLabel['term'] | null = null;
   let pending: number[] = [];
@@ -488,7 +497,11 @@ function disambiguateSplitGroupLabels(section: 'assets' | 'liabilities', lines: 
     const blockTerms = new Set(idx.map((i) => terms[i]));
     if (bases.size !== 1 || blockTerms.has(null) || blockTerms.size < 2) continue;
     const [base] = [...bases];
-    for (const i of idx) out[i] = `${base}${SPLIT_GROUP_SUFFIX[terms[i]!]}`;
+    // Sin idioma explícito se conserva el del sufijo que ya trae el grupo (lo
+    // fijó quien conocía el idioma del informe); si no trae, español.
+    const lang: LabelLanguage =
+      language ?? (idx.some((i) => SPLIT_GROUP_SUFFIX_EN_RE.test(lines[i].label)) ? 'en' : 'es');
+    for (const i of idx) out[i] = `${base}${SPLIT_GROUP_SUFFIX[lang][terms[i]!]}`;
   }
   return out;
 }
@@ -496,6 +509,14 @@ function disambiguateSplitGroupLabels(section: 'assets' | 'liabilities', lines: 
 export interface StatementLabelContext {
   /** Tipo del periodo actual; sólo `cerrado` permite afirmar 1-ene / 31-dic. */
   primaryPeriodoTipo?: PeriodoTipo | null;
+  /**
+   * Idioma del informe para el sufijo de porción de un grupo partido por plazo
+   * ("— porción corriente" / "— current portion"; I5-niif 4). Sin él se
+   * conserva el idioma del sufijo que el grupo ya trae y, si no trae, español.
+   * El resto de rótulos que normaliza esta función (catálogo PUC, filas del
+   * ECP) sigue en español.
+   */
+  language?: LabelLanguage;
 }
 
 /** Rótulo determinista de las filas del ECP cuyo contenido fija el contrato. */
@@ -584,7 +605,7 @@ export function normalizeNiifStatementLabels<T extends LabelledNiifJson>(
         ? resultWordingForSign(label, parseMoneyCop(l.amountPrimary))
         : label;
     });
-    const finals = section === 'equity' ? labels : disambiguateSplitGroupLabels(section, lines, labels);
+    const finals = section === 'equity' ? labels : disambiguateSplitGroupLabels(section, lines, labels, ctx.language);
     return lines.map((l, i) => relabel(l, finals[i]));
   };
   // Se calculan ANTES del corte `changed === 0` (integración I4): antes el ESF

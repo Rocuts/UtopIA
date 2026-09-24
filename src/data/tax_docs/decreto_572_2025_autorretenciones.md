@@ -10,7 +10,7 @@ status: vigente
 effectiveFrom: 2025-06-01
 lastVerified: 2026-05-02
 tags: [autorretencion, renta, dian, retenciones, 2025, 2026]
-relatedNorms: ["Ley 2277 de 2022", "Decreto 1625 de 2016", "ET Art. 365"]
+relatedNorms: ["Ley 2155 de 2021", "Ley 2277 de 2022", "Decreto 1625 de 2016", "ET Art. 365"]
 fetch_failed: false
 ---
 
@@ -18,7 +18,7 @@ fetch_failed: false
 
 ## Resumen ejecutivo
 
-El Decreto 572 del 28 de mayo de 2025 modifica las tarifas de autorretención de renta del impuesto sobre la renta de personas jurídicas y ajusta las bases mínimas para la práctica de retención en la fuente. Entró en vigor el **1 de junio de 2025** y aplica para todo el ejercicio gravable 2025 en adelante. Se enmarca dentro de las medidas para acercar el recaudo anticipado del impuesto al 35% efectivo dispuesto por la Ley 2277/2022 (Art. 240 ET).
+El Decreto 572 del 28 de mayo de 2025 modifica las tarifas de autorretención de renta del impuesto sobre la renta de personas jurídicas y ajusta las bases mínimas para la práctica de retención en la fuente. Entró en vigor el **1 de junio de 2025** y aplica para todo el ejercicio gravable 2025 en adelante. Se enmarca dentro de las medidas para acercar el recaudo anticipado al impuesto a cargo, liquidado con la tarifa general del 35 % del Art. 240 E.T. (fijada por el art. 7 de la Ley 2155 de 2021 a partir del año gravable 2022 y conservada por el art. 10 de la Ley 2277 de 2022).
 
 ## Cambios principales
 

@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { calculateExitValue, formatCop } from '../exit-value';
+import { calculateExitValue } from '../exit-value';
 import { calculateRoiProbabilistic } from '../roi-probabilistic';
 import { calculateTef } from '../tax-efficiency';
 import { KpiNoCalculableError } from '../no-calculable';
@@ -52,9 +52,15 @@ describe('ratios-kpis-27 — Exit Value', () => {
     expect(neg.formatted).toBe('($400 M)');
   });
 
-  it('el formateador exportado ya no publica $0 COP para un valor no finito', () => {
-    expect(formatCop(Number.NaN)).toBe('N/D');
-    expect(formatCop(Number.POSITIVE_INFINITY)).toBe('N/D');
+  // I5-niif 6: el formateador compacto heredado `formatCop` (deprecado en
+  // I4-escudo 6, sin consumidores) se retiró del módulo y del barrel. Su
+  // aserción de N/D ya no tiene sujeto: el formato es-CO de los KPIs lo cubre
+  // el resto de este archivo.
+  it('exit-value y el barrel ya no exportan el formateador heredado formatCop', async () => {
+    const modulo = await import('../exit-value');
+    expect('formatCop' in modulo).toBe(false);
+    const barrel = await import('../index');
+    expect('formatCop' in barrel).toBe(false);
   });
 
   it('sin deuda neta declarada sigue N/D (valoracion-25)', () => {

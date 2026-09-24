@@ -1339,23 +1339,11 @@ export function validateNiifReportJson(
   // modelo son las cifras de liquidez de los KPIs, el gate y X03, en ambos
   // periodos (ver `termSubtotalErrors`).
   if (options.ledgers) {
-    const termPeriods: Array<[StatementPeriod, readonly LedgerLeaf[] | null, string]> = [
-      ['primary', options.ledgers.primary, `periodo ${json.company.fiscalPeriod}`],
-    ];
-    if (hasComparative) {
-      termPeriods.push([
-        'comparative',
-        options.ledgers.comparative,
-        `periodo comparativo ${json.company.comparativePeriod}`,
-      ]);
-    }
-    for (const [period, leaves, etiqueta] of termPeriods) {
-      if (!leaves) continue;
-      errors.push(
-        ...termSubtotalErrors('Activo', 'assets', bs.assets, leaves, period, etiqueta),
-        ...termSubtotalErrors('Pasivo', 'liabilities', bs.liabilities, leaves, period, etiqueta),
-      );
-    }
+    errors.push(
+      ...esfTermSubtotalMismatches(json, options.ledgers, { includeComparative: hasComparative }).map(
+        (m) => m.message,
+      ),
+    );
   }
 
   // -- E21. Renglones con código PUC anclados al balance de prueba ------------
@@ -1720,6 +1708,50 @@ function termSubtotalErrors(
         `el gate y X03) es ${fmtCop(e)}. Brecha: ${fmtCop(v - e)}. La clasificación corriente / no corriente ` +
         `del ESF es la del preprocesador, con los vencimientos declarados (NIIF para las PYMES 4.4).`,
     );
+  }
+  return out;
+}
+
+/** Un subtotal de plazo del ESF que no coincide con la partición del preprocesador (E27). */
+export interface EsfTermSubtotalMismatch {
+  section: 'assets' | 'liabilities';
+  period: StatementPeriod;
+  /** Mensaje E27 tal como lo publica el validador. */
+  message: string;
+}
+
+/**
+ * E27 sobre el ESF, por sección y periodo. Es la regla que publica
+ * `validateNiifReportJson` y la que usa el analista (I5-niif 2) para decidir
+ * si sustituye una sección escrita por el modelo por la proyección
+ * determinista antes de validar: una sola implementación, sin copias.
+ *
+ * `includeComparative` replica el `hasComparative` del validador (el informe
+ * presenta columna comparativa); una celda `null` no se contrasta.
+ */
+export function esfTermSubtotalMismatches(
+  json: Pick<NiifReportJson, 'company' | 'balanceSheet'>,
+  ledgers: { primary: readonly LedgerLeaf[] | null; comparative: readonly LedgerLeaf[] | null },
+  opts: { includeComparative: boolean },
+): EsfTermSubtotalMismatch[] {
+  const bs = json.balanceSheet;
+  const periods: Array<[StatementPeriod, readonly LedgerLeaf[] | null, string]> = [
+    ['primary', ledgers.primary, `periodo ${json.company.fiscalPeriod}`],
+  ];
+  if (opts.includeComparative) {
+    periods.push(['comparative', ledgers.comparative, `periodo comparativo ${json.company.comparativePeriod}`]);
+  }
+  const out: EsfTermSubtotalMismatch[] = [];
+  for (const [period, leaves, etiqueta] of periods) {
+    if (!leaves) continue;
+    for (const [nombre, section, lines] of [
+      ['Activo', 'assets', bs.assets],
+      ['Pasivo', 'liabilities', bs.liabilities],
+    ] as const) {
+      for (const message of termSubtotalErrors(nombre, section, lines, leaves, period, etiqueta)) {
+        out.push({ section, period, message });
+      }
+    }
   }
   return out;
 }
