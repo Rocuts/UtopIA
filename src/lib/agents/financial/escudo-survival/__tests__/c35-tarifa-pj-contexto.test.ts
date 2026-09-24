@@ -24,6 +24,29 @@ import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessin
 import { orchestrateEscudoSurvival } from '../orchestrator';
 import { validateSurvivalReport } from '../validators/survival-validators';
 import { detectarTarifasPjAnteriores } from '../validators/tarifa-pj-anterior';
+import { buildTetCalculatorPrompt } from '../prompts/tet-calculator.prompt';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// Re-auditoría 2026-09-24 (NT-05): el prompt TET decía «tarifas derogadas: 33%
+// (2018), 32% (2022), 30% (previa)» y atribuía al AG 2022 una tarifa del 32%.
+// Corpus: ley_2010_2019.md art. 92 (32% AG 2020, 31% AG 2021, 30% desde 2022)
+// y ley_2155_2021.md art. 7 (35% a partir del AG 2022).
+describe('prompt TET — historia de la tarifa general (NT-05)', () => {
+  const corpus = (f: string) => readFileSync(join(process.cwd(), 'src/data/tax_docs', f), 'utf-8');
+
+  it.each(['es', 'en'] as const)('%s: 32%/31% en los AG 2020/2021 y 35% desde el AG 2022', (lang) => {
+    const p = buildTetCalculatorPrompt(lang);
+    expect(p).not.toMatch(/32% \(2022\)/);
+    expect(p).toMatch(/32% \(año gravable 2020\) y 31% \(año gravable 2021\) \(Ley 2010 de 2019, art\. 92\)/);
+    expect(p).toMatch(/35% desde el año gravable 2022 \(Ley 2155 de 2021, art\. 7\)/);
+  });
+
+  it('fuentes del corpus', () => {
+    expect(corpus('ley_2010_2019.md')).toMatch(/treinta y dos por ciento \(32%\) para el año gravable 2020, treinta y uno por ciento \(31%\) para\s+el año gravable 2021/);
+    expect(corpus('ley_2155_2021.md')).toMatch(/treinta y cinco por ciento \(35%\), a partir del año gravable 2022/);
+  });
+});
 
 describe('detectarTarifasPjAnteriores', () => {
   it.each([
