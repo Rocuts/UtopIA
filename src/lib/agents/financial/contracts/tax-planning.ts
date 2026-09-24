@@ -43,16 +43,18 @@ export const TaxRegimeSchema = z.enum([
 ]);
 
 /**
- * Cálculo dual Tarifa General 35% (Art. 240) vs Tarifa Mínima de Tributación
- * 15% (parág. 6 Art. 240 — Ley 2277/2022). El impuesto a cargo del periodo es
- * MAX(ordinaria, tmt). Si la entidad cae en una excepción (RTE, SIMPLE, ZESE,
- * ZOMAC), `tmtAplicable=false` y `tmtExemptionReason` debe citar la base.
+ * Impuesto básico ordinario (Art. 240) y Tasa de Tributación Depurada (parág.
+ * 6 Art. 240 — Ley 2277/2022). La TTD es ID/UD: impuesto depurado sobre
+ * utilidad depurada, NO utilidad contable × 15%. Sin ID/UD verificados el
+ * impuesto adicional, la aplicabilidad y el impuesto a cargo final son N/D
+ * (`null`). El sistema recalcula el impuesto básico y fuerza esos `null`
+ * después del LLM (auditoría 2026-09, tributario-modulos-08).
  */
 export const DualCalculationSchema = z.object({
-  rentaOrdinaria35Cents: MoneyCop.describe('Renta líquida gravable × 35% (Art. 240 E.T.)'),
-  tributacionMinima15Cents: MoneyCop.describe('Utilidad contable depurada × 15% (parág. 6 Art. 240 E.T.)'),
-  impuestoACargoCents: MoneyCop.describe('MAX(ordinaria, TMT) — el mayor de los dos'),
-  tmtAplicable: z.boolean().describe('false si la entidad cae en alguna excepción del parág. 6 Art. 240'),
+  rentaOrdinaria35Cents: MoneyCop.describe('Renta líquida gravable × 35% (Art. 240 E.T.) — impuesto básico ordinario'),
+  tributacionMinima15Cents: MoneyCop.nullable().describe('Impuesto adicional por TTD = UD × 15% − ID (parág. 6 Art. 240). null sin ID/UD verificados'),
+  impuestoACargoCents: MoneyCop.nullable().describe('Impuesto a cargo final. null si la TTD no es determinable'),
+  tmtAplicable: z.boolean().nullable().describe('Aplicabilidad del parág. 6 Art. 240. null si no se puede establecer con los datos'),
   tmtExemptionReason: z
     .string()
     .nullable()
@@ -65,7 +67,8 @@ export const CurrentDiagnosisSchema = z.object({
   currentRegime: TaxRegimeSchema.describe('Régimen tributario actual identificado'),
   effectiveTaxRatePct: z
     .number()
-    .describe('Tasa efectiva actual = Impuesto a cargo / UAI × 100. Usa null si UAI no es positiva.'),
+    .nullable()
+    .describe('Tasa efectiva actual = Impuesto a cargo / UAI × 100. null si UAI no es positiva o el impuesto a cargo es N/D.'),
   taxableIncomeCents: MoneyCop.describe('Renta líquida gravable depurada del periodo'),
   accountingProfitBeforeTaxCents: MoneyCop.describe('Utilidad contable antes de impuestos (UAI) — base de la TMT'),
   dualCalculation: DualCalculationSchema,
@@ -115,16 +118,16 @@ export const TaxRecommendationSchema = z.object({
 export type TaxRecommendationJson = z.infer<typeof TaxRecommendationSchema>;
 
 /**
- * Comparación escenario actual vs optimizado. Es una invariante: el ahorro
- * proyectado total debe coincidir con la suma de `estimatedSavingsCents` de
- * las recomendaciones (el orchestrator valida esto post-LLM).
+ * Comparación escenario actual vs optimizado. El ahorro total y el impuesto
+ * optimizado se recalculan en código (Σ estimatedSavingsCents; actual −
+ * ahorro) — tax-planning/lib/deterministic.ts.
  */
 export const SavingsProjectionSchema = z.object({
   currentScenarioTaxCents: MoneyCop.describe('Impuesto a cargo actual estimado'),
   optimizedScenarioTaxCents: MoneyCop.describe('Impuesto a cargo proyectado tras estrategias'),
   totalAnnualSavingsCents: MoneyCop.describe('Suma de ahorros de las recomendaciones — invariante'),
-  effectiveRateBeforePct: z.number().describe('Tasa efectiva ANTES de optimización'),
-  effectiveRateAfterPct: z.number().describe('Tasa efectiva DESPUÉS de optimización'),
+  effectiveRateBeforePct: z.number().nullable().describe('Tasa ANTES de optimización (impuesto actual / UAI). null si UAI ≤ 0'),
+  effectiveRateAfterPct: z.number().nullable().describe('Tasa DESPUÉS de optimización (impuesto optimizado / UAI). null si UAI ≤ 0'),
   assumptions: z.array(z.string().min(1)).describe('Supuestos del modelo de proyección (macro, sectoriales)'),
 });
 

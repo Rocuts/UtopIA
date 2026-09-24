@@ -43,9 +43,12 @@ export interface TaxOptimizerResult {
   implementationRoadmap: string;
   /** Raw content as a single Markdown block for downstream agents */
   fullContent: string;
-  /** Impuesto a cargo del período (MAX ordinaria/TMT), en centavos MoneyCop.
-   *  Base determinista para el neteo del descuento por donaciones (Art. 257). */
-  impuestoACargoCents: string;
+  /** Impuesto a cargo del período en centavos MoneyCop. `null` mientras la TTD
+   *  (ID/UD) no sea determinable — nunca MAX(35%, 15% × UAI). */
+  impuestoACargoCents: string | null;
+  /** Impuesto básico ordinario = renta líquida estimada × 35% (recalculado en
+   *  código). Base ESTIMADA (no verificada) para el escenario del Art. 257. */
+  impuestoBasicoOrdinarioCents: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,11 +95,19 @@ export interface DonationDiscountBlock {
   ruleVersion: string;
   montoDonadoCents: string;
   creditoCents: string;
+  /** Tope del Art. 258: 25% del impuesto, CONJUNTO para 255 + 256 + 257. */
   limiteCents: string;
+  /** Descuentos 255/256 que ya consumen el tope conjunto (0 si no hay datos). */
+  otrosDescuentos255_256Cents: string;
   descuentoCents: string;
+  /** Crédito no descontado en el año: trasladable al periodo siguiente (Art. 258 num. 3). */
+  excedenteTrasladableCents: string;
+  /** Base usada: impuesto básico ordinario estimado por el optimizador. */
   impuestoACargoCents: string;
-  /** TOTAL VINCULANTE: impuesto a cargo − descuento aplicado. */
   impuestoNetoCents: string;
+  /** false ⇒ la base no está verificada: el bloque es una ESTIMACIÓN, no un total vinculante. */
+  baseVerificada: boolean;
+  baseFuente: string;
 }
 
 export interface TaxPlanningReport {

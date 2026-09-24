@@ -39,13 +39,12 @@ Diagnosticar la estructura tributaria actual de la empresa, identificar oportuni
 </task>
 
 <success_criteria>
-- Cálculo dual Renta Ordinaria 35% (Art. 240 E.T.) vs Tarifa Mínima de Tributación 15% (parág. 6 Art. 240 E.T., Ley 2277/2022) presentado SIEMPRE, con identificación explícita del mayor como impuesto a cargo del periodo.
-- Si la entidad cae en alguna excepción del parág. 6 Art. 240 (RTE Art. 19, SIMPLE Arts. 903-916, ZESE Ley 1955/2019 Art. 268, ZOMAC en periodo de beneficio, hoteles parág. 5, FNCER Art. 11 Ley 1715/2014), citar la base legal y marcar tmtAplicable=false. En cualquier otro caso, tmtAplicable=true.
+- Impuesto básico ordinario = renta líquida gravable estimada × 35% (Art. 240 E.T.); el sistema lo recalcula en código desde taxableIncomeCents.
+- Tasa de Tributación Depurada (parág. 6 Art. 240 E.T., Ley 2277/2022): TTD = impuesto depurado (ID) / utilidad depurada (UD); impuesto adicional = UD × 15% − ID si TTD < 15%. La utilidad contable × 15% NO es la TTD. Sin ID y UD verificados en los datos, tributacionMinima15Cents, impuestoACargoCents y tmtAplicable son null (N/D) y se declara el motivo en preparerNotes. If la entidad parece caer en una excepción del parág. 6 (RTE Art. 19, SIMPLE Arts. 903-916, ZESE, ZOMAC en periodo de beneficio, hoteles parág. 5) then cítala en tmtExemptionReason como posible excepción a verificar.
 - Citas normativas EXCLUSIVAMENTE de normas vigentes 2026. Megainversiones (Arts. 235-3/235-4), Economía Naranja (Art. 235-2 Num. 1) y Renta Exenta Campo (Art. 235-2 Num. 2) están DEROGADAS por Ley 2277/2022 — solo invocables como derecho adquirido con calificación pre-derogatoria documentada.
 - Tarifas y umbrales vigentes 2026: Art. 240 = 35%; SIMPLE 1,2%-14,5% por grupo (Arts. 903-916 — servicios profesionales/consultoría 5,9%-14,5%, estructura Ley 2155/2021 revivida por Sentencia C-540/2023); Zona Franca dual 20% (renta exportadora con plan internacionalización) / 35% (renta no exportadora) (Art. 240-1 mod. Ley 2277/2022); Art. 256 I+D+i = 30%; Art. 255 ambiental = 25%; Art. 257 donaciones ESAL = 25%; Art. 258-1 IVA bienes de capital = 100%; Art. 242 dividendos = integración a cédula general + retención 15% sobre exceso 1.090 UVT; Art. 245 no residentes = 20%.
-- UVT 2026 = $52.374 COP. Toda conversión UVT→COP usa ESTE valor.
-- Σ estimatedSavingsCents de las recomendaciones = totalAnnualSavingsCents de la proyección. Identidad invariante.
-- recommendations ordenadas DESCENDENTE por estimatedSavingsCents.
+- Toda conversión UVT→COP usa la UVT del año gravable analizado (2026 = $52.374; 2025 = $49.799) y declara cuál usa.
+- El sistema recalcula Σ estimatedSavingsCents = totalAnnualSavingsCents, el impuesto optimizado (actual − ahorro) y el orden DESCENDENTE de recommendations por estimatedSavingsCents.
 - implementationRoadmap ordenado ASCENDENTE por dueDaysFromKickoff.
 - Cuando un dato falte, declararlo en preparerNotes — NUNCA inventar cifras.
 </success_criteria>
@@ -60,9 +59,9 @@ Diagnosticar la estructura tributaria actual de la empresa, identificar oportuni
 - If grossRevenue es conocido y > 100.000 UVT (≈ $5.237.400.000 COP en 2026) then SIMPLE NO es elegible — recomendar régimen ordinario con descuentos otherwise evaluar SIMPLE por grupo de actividad.
 - If la entidad pertenece a sector financiero (establecimientos de crédito, aseguradoras, reaseguradoras, comisionistas) AND renta gravable ≥ 120.000 UVT then aplicar 5 pp adicionales del Art. 240 parág. 2 (40% total) otherwise tarifa general 35%.
 - If una recomendación migra el régimen tributario aplicable (e.g. ordinario→ZF, ordinario→SIMPLE) then regimeTarget debe poblarse explícitamente otherwise null.
-- If la utilidad contable depurada es positiva y la entidad NO cae en excepción del parág. 6 Art. 240 then calcular TMT 15% obligatorio y comparar con renta ordinaria otherwise omitir TMT con justificación citada.
+- If los datos traen impuesto depurado (ID) y utilidad depurada (UD) verificados then explica la TTD en diagnosticNotes con esas cifras otherwise deja la TTD como N/D y no la aproximes con la utilidad contable.
 - If roi no es cuantificable por falta de costo de implementación claro then roiPct = null otherwise calcular ahorro/costo × 100.
-- El descuento por donaciones a ESAL (Art. 257 E.T.) lo cuantifica un bloque DETERMINISTA fuera de tu output (TOTAL VINCULANTE, netea el crédito y su tope sobre el impuesto). If el negocio realiza donaciones then descríbelas cualitativamente como oportunidad y cita la tasa/tope normativos, NEVER emitas una CIFRA de descuento 257 en recommendations ni la sumes en estimatedSavingsCents/totalAnnualSavingsCents — se duplicaría con el bloque determinista. La cifra de ese descuento no es tuya.
+- El descuento por donaciones a ESAL (Art. 257 E.T.) lo cuantifica un bloque DETERMINISTA fuera de tu output (crédito, tope CONJUNTO del Art. 258 con 255/256 y excedente trasladable; sólo es TOTAL VINCULANTE cuando el impuesto base está verificado — hoy se rotula ESTIMACIÓN). If el negocio realiza donaciones then descríbelas cualitativamente como oportunidad y cita la tasa/tope normativos, NEVER emitas una CIFRA de descuento 257 en recommendations ni la sumes en estimatedSavingsCents/totalAnnualSavingsCents — se duplicaría con el bloque determinista. La cifra de ese descuento no es tuya.
 </constraints>
 
 ## DATOS DE LA EMPRESA
