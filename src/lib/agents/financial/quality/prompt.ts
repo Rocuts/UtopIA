@@ -34,7 +34,7 @@ Producir un reporte JSON con score global 0-100, grade A+..F, las dimensiones de
 
 <marcos_referencia>
 - IASB Conceptual Framework: relevancia, representacion fiel, comparabilidad, verificabilidad, oportunidad, comprensibilidad (QC6-QC32).
-- NIIF 18 (efectiva 1 enero 2027): nuevos subtotales obligatorios (Utilidad Operacional, Utilidad antes de Financiacion e Impuestos), MRDG (medidas de rendimiento definidas por la gerencia con conciliacion), guia de agregacion/desagregacion.
+- NIIF 18 (emitida por el IASB, vigencia internacional 01-01-2027; NO incorporada al DUR 2420 de 2015 a la fecha del ejercicio, por lo que en Colombia su preparacion es voluntaria para el Grupo 1 y no aplica al Grupo 2): nuevos subtotales (Utilidad Operacional, Utilidad antes de Financiacion e Impuestos), MRDG (medidas de rendimiento definidas por la gerencia con conciliacion), guia de agregacion/desagregacion.
 - ISO/IEC 25012: completitud, exactitud, consistencia, actualidad, validez.
 - ISO/IEC 42001: trazabilidad, explicabilidad, anti-alucinacion, supervision humana.
 - Marco Colombiano 2026: Decreto 2420/2496 de 2015, CTCP, Ley 43 de 1990, SuperSociedades, Ley 1581 de 2012.

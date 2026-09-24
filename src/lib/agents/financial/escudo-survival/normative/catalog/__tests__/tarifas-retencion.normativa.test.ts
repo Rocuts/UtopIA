@@ -15,39 +15,54 @@ function entry(id: string) {
   return found;
 }
 
-describe('RTF_HONORARIOS_PN — Art. 392 inc. 2 E.T. (mod. Art. 75 Ley 1819/2016)', () => {
+describe('RTF_HONORARIOS_PN — DUR 1625/2016 Art. 1.2.4.3.1 y Art. 392 E.T.', () => {
   const e = entry('RTF_HONORARIOS_PN');
 
-  it('el declarante retiene 11%, no 10%', () => {
-    // El catálogo traía las tarifas INVERTIDAS. Retener 10% a un contratista
-    // declarante deja de retener por defecto y activa la responsabilidad
-    // solidaria del agente retenedor (Art. 370 E.T.).
-    expect(e.tarifaDeclarante).toBe('11%');
-  });
-
-  it('el NO declarante retiene 10% como tarifa base', () => {
-    // Art. 392 inc. 2 E.T.: "para los contribuyentes no obligados a presentar
-    // declaración de renta y complementarios, es el diez por ciento (10%)".
-    // Retener 11% es retención en exceso → reintegro y reproceso.
-    expect(e.tarifaNoDeclarante).toMatch(/^10%/);
-  });
-
-  it('las dos tarifas no están invertidas entre sí', () => {
-    expect(e.tarifaDeclarante).not.toMatch(/^10%/);
-    expect(e.tarifaNoDeclarante).not.toMatch(/^11%/);
-  });
-
-  it('documenta el salto al 11% por acumulado de 3.300 UVT (DUR 1625/2016 Art. 1.2.4.3.1)', () => {
-    expect(e.tarifaNoDeclarante).toMatch(/3\.300 UVT/);
-    expect(e.tarifaNoDeclarante).toMatch(/11%/);
-    expect(e.normaRef).toMatch(/1\.2\.4\.3\.1/);
+  // Auditoría 2026-09 (tributario-calc-09): la versión anterior de estas
+  // pruebas exigía "declarante 11 % / no declarante 10 %". El DUR 1.2.4.3.1
+  // distingue a las personas naturales por el MONTO (contrato o pagos del año
+  // > 3.300 UVT ⇒ 11 %; demás, 10 %), no por la condición de declarante: un
+  // declarante con contrato pequeño retiene 10 %.
+  it('la tarifa general de la persona natural es 10 % y sube a 11 % por el umbral de 3.300 UVT', () => {
+    expect(e.tarifaDeclarante).toMatch(/^10%/);
+    expect(e.tarifaDeclarante).toMatch(/11%/);
+    expect(e.tarifaDeclarante).toMatch(/3\.300 UVT/);
     // 3.300 UVT x $52.374 (UVT 2026) = $172.834.200.
     expect(3300 * 52_374).toBe(172_834_200);
-    expect(e.tarifaNoDeclarante).toMatch(/172\.834\.200/);
+    expect(e.tarifaDeclarante).toMatch(/172\.834\.200/);
+    expect(e.tarifaDeclarante).toMatch(/contrato/);
   });
 
-  it('cita el Art. 392 E.T. como fundamento legal', () => {
+  it('no usa la condición de declarante como criterio del 10 % / 11 %', () => {
+    expect(e.tarifaDeclarante).not.toMatch(/^11%/);
+    expect(e.tarifaDeclarante).toMatch(/declarante no define la tarifa/);
+  });
+
+  it('el no obligado a declarar retiene 10 % (Art. 392 E.T.)', () => {
+    expect(e.tarifaNoDeclarante).toMatch(/^10%/);
+    expect(e.tarifaNoDeclarante).toMatch(/392/);
+  });
+
+  it('advierte la tabla del Art. 383 para rentas de trabajo no laborales (Decreto 2231/2023)', () => {
+    expect(e.tarifaDeclarante).toMatch(/Art\. 383/);
+    expect(e.normaRef).toMatch(/1\.2\.4\.1\.17/);
+    expect(e.normaRef).toMatch(/2231\/2023/);
+  });
+
+  it('cita el Art. 392 E.T. y el DUR 1.2.4.3.1 como fundamento', () => {
     expect(e.normaRef).toMatch(/392/);
+    expect(e.normaRef).toMatch(/1\.2\.4\.3\.1/);
+  });
+});
+
+describe('RTF_HONORARIOS — personas jurídicas (DUR 1.2.4.3.1 inc. 1)', () => {
+  const e = entry('RTF_HONORARIOS');
+
+  it('11 % para personas jurídicas, sin distinguir declarante', () => {
+    expect(e.tarifaDeclarante).toBe('11%');
+    expect(e.tarifaNoDeclarante).toBeNull();
+    expect(e.concepto).not.toMatch(/declarantes/);
+    expect(e.normaRef).toMatch(/1\.2\.4\.3\.1/);
   });
 });
 

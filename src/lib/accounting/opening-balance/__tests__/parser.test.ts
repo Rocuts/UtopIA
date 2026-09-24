@@ -52,3 +52,50 @@ describe('naturaleza PUC por clase/grupo (ingesta-29)', () => {
     expect(l8).toMatchObject({ debitBalance: '5000.00', creditBalance: '0' });
   });
 });
+
+// ingesta-02 (IW2): el XLSX de apertura usa el MISMO serializador que /api/upload
+// (src/lib/upload/xlsx-csv.ts) y los problemas de lectura bloquean.
+describe('parseOpeningBalanceFile — serialización XLSX y problemas de lectura (ingesta-02)', () => {
+  it('una celda no entera se redondea a centavos antes de serializar (no se lee como miles)', async () => {
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Balance');
+    ws.addRow(['codigo', 'nombre', 'saldo']);
+    // Resultado de fórmula con tres decimales: String(234.567) = "234.567",
+    // que el parser de texto lee como 234.567 pesos (punto de miles).
+    ws.addRow(['11050501', 'Caja', 234.567]);
+    ws.addRow(['31050501', 'Capital', 234.57]);
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    const r = await parseOpeningBalanceFile(buf, 'apertura.xlsx');
+    expect(r.lines.find((l) => l.accountCode === '11050501')).toMatchObject({
+      debitBalance: '234.57',
+      creditBalance: '0',
+    });
+  });
+
+  it('un ";" en una celda del encabezado no cambia el separador de la hoja', async () => {
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Balance');
+    ws.addRow(['codigo', 'nombre; descripción', 'saldo']);
+    ws.addRow(['11050501', 'Caja; menor', 2500]);
+    ws.addRow(['31050501', 'Capital', 2500]);
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    const r = await parseOpeningBalanceFile(buf, 'apertura.xlsx');
+    expect(r.lines.map((l) => [l.accountCode, l.debitBalance, l.creditBalance])).toEqual([
+      ['11050501', '2500.00', '0'],
+      ['31050501', '0', '2500.00'],
+    ]);
+  });
+
+  it('un saldo ilegible bloquea la importación con la cuenta en el mensaje (no queda en $0)', async () => {
+    const csv = [
+      'codigo,nombre,saldo',
+      '11050501,Caja,#DIV/0!',
+      '11100501,Bancos,1000',
+      '31050501,Capital,1000',
+    ].join('\n');
+    await expect(parseOpeningBalanceFile(csv, 'apertura.csv')).rejects.toMatchObject({
+      code: 'PARSE_FAILED',
+      message: expect.stringContaining('11050501'),
+    });
+  });
+});

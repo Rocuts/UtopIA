@@ -69,14 +69,33 @@ const PROBLEM_SCHEMA = {
   required: ['type', 'title', 'status', 'code', 'request_id'],
 } as const;
 
+// Contrato tb-2026-09-24 (niif-preproceso-07): los campos de abajo son los que
+// `summarize` / `serializeTrialBalance` (trial-balances.ts) ya emiten. Los
+// añadidos en esa versión no son `required`: los summaries persistidos antes
+// de ella no los traen en el listado (el detalle los recalcula).
 const TRIAL_BALANCE_SCHEMA = {
   type: 'object',
   properties: {
     id: { type: 'string', examples: ['tb_0698fq7yv7f7btkdjq8x2xz3ec'] },
     object: { type: 'string', const: 'trial_balance' },
-    status: { type: 'string', enum: ['balanced', 'unbalanced'] },
+    status: {
+      type: 'string',
+      enum: ['balanced', 'unbalanced'],
+      description:
+        'balanced sólo si equation_delta = 0 y no hay motivos de integridad. unbalanced cubre el ' +
+        'descuadre del archivo (equation_delta ≠ 0) y también los motivos de integridad aunque la ' +
+        'ecuación cuadre: importes ilegibles, columnas de saldo ambiguas, filas desplazadas o ' +
+        'códigos que no son cuentas PUC (el detalle los lista en validation_reasons).',
+    },
     period_label: { type: 'string' },
     row_count: { type: 'integer' },
+    sign_convention: {
+      type: ['string', 'null'],
+      enum: ['natural', 'algebraica', null],
+      description:
+        'Convención de signos detectada en la entrada (csv y rows se normalizan igual a la ' +
+        'convención natural). null si no se conoce (remisiones anteriores a tb-2026-09-24).',
+    },
     control_totals: {
       type: 'object',
       properties: {
@@ -84,7 +103,32 @@ const TRIAL_BALANCE_SCHEMA = {
         pasivo: MONEY_SCHEMA,
         patrimonio: MONEY_SCHEMA,
         ingresos_netos: MONEY_SCHEMA,
-        equation_delta: MONEY_SCHEMA,
+        equation_delta: {
+          ...MONEY_SCHEMA,
+          description:
+            'Descuadre del archivo de origen (Activo − Pasivo − Patrimonio) antes del Cierre ' +
+            'Virtual: no incluye el traslado del resultado del ejercicio (3605VC) ni la ' +
+            'reclasificación de un grupo 36 anterior (reclassified_from_3605). El curador no lo ' +
+            'absorbe; ≠ 0 ⇒ status = unbalanced.',
+        },
+        virtual_close_adjustment: {
+          ...MONEY_SCHEMA,
+          description:
+            'Histórico: monto que el Cierre Virtual (R8) absorbía en 3710VC. Desde tb-2026-09-24 ' +
+            'vale 0 (el residual está en equation_delta); se conserva por compatibilidad.',
+        },
+        reclassified_from_3605: {
+          ...MONEY_SCHEMA,
+          description:
+            'Resultado de un ejercicio anterior que seguía en el grupo 36 y se reclasificó a ' +
+            'resultados acumulados (3710VC). No es descuadre.',
+        },
+        equity_anchor_adjustment: {
+          ...MONEY_SCHEMA,
+          description:
+            'Histórico: brecha que R5 absorbía al anclar el patrimonio al ECP. Desde ' +
+            'tb-2026-09-24 vale 0; se conserva por compatibilidad.',
+        },
       },
       required: ['activo', 'pasivo', 'patrimonio', 'ingresos_netos', 'equation_delta'],
     },
@@ -109,6 +153,54 @@ const TRIAL_BALANCE_SCHEMA = {
     'findings',
     'preprocessor_version',
     'created_at',
+  ],
+} as const;
+
+// Detalle (GET /v1/trial-balances/{id}): base + motivos, discrepancias y
+// hallazgos del curador (allowlist de `serializeTrialBalanceDetail`).
+const TRIAL_BALANCE_DETAIL_SCHEMA = {
+  allOf: [
+    { $ref: '#/components/schemas/TrialBalance' },
+    {
+      type: 'object',
+      properties: {
+        validation_reasons: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Motivos por los que la remisión no es certificable (descuadres, importes ' +
+            'ilegibles, columnas ambiguas, códigos que no son cuentas PUC). Vacío si no hay.',
+        },
+        discrepancies: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+              reported: { type: 'number' },
+              calculated: { type: 'number' },
+              difference: { type: 'number' },
+              description: { type: 'string' },
+            },
+          },
+        },
+        curator_findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              code: { type: 'string' },
+              severity: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              norm_reference: { type: 'string' },
+              recommendation: { type: 'string' },
+            },
+          },
+        },
+      },
+      required: ['validation_reasons', 'discrepancies', 'curator_findings'],
+    },
   ],
 } as const;
 
@@ -261,7 +353,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           operationId: 'createTrialBalance',
           summary: 'Remitir un balance de prueba (CSV o filas) y validarlo',
           description:
-            'Idempotente vía header Idempotency-Key (TTL 24 h; replay devuelve la misma respuesta con Idempotent-Replayed: true). Un balance descuadrado NO es error: la remisión se crea con status=unbalanced y el descuadre viaja en control_totals.equation_delta.',
+            'Idempotente vía header Idempotency-Key (TTL 24 h; replay devuelve la misma respuesta con Idempotent-Replayed: true). Un balance descuadrado NO es error: la remisión se crea con status=unbalanced y el descuadre del archivo de origen (antes del Cierre Virtual) viaja en control_totals.equation_delta; status=unbalanced también cubre los motivos de integridad (ver validation_reasons en el detalle). csv y rows pasan por la misma normalización (convención de signos, hojas estructurales).',
           parameters: [
             {
               name: 'Idempotency-Key',
@@ -303,7 +395,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           summary: 'Detalle recomputado (discrepancias + findings del curator)',
           parameters: [ID_PARAM],
           responses: {
-            '200': jsonResponse('Detalle', { $ref: '#/components/schemas/TrialBalance' }),
+            '200': jsonResponse('Detalle', { $ref: '#/components/schemas/TrialBalanceDetail' }),
             default: PROBLEM_RESPONSE,
           },
         },
@@ -451,6 +543,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         Problem: PROBLEM_SCHEMA,
         Money: MONEY_SCHEMA,
         TrialBalance: TRIAL_BALANCE_SCHEMA,
+        TrialBalanceDetail: TRIAL_BALANCE_DETAIL_SCHEMA,
         WebhookEndpoint: WEBHOOK_ENDPOINT_SCHEMA,
         WebhookEnvelope: WEBHOOK_ENVELOPE_SCHEMA,
         TrialBalanceCreate: jsonSchema(TrialBalanceCreateSchema),

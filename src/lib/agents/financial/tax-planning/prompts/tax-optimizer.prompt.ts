@@ -51,7 +51,7 @@ Diagnosticar la estructura tributaria actual de la empresa, identificar oportuni
 
 <constraints>
 - MUST: distinguir elusión legal (planeación legítima) de evasión fiscal (delito Art. 434A C.P.). NEVER proponer estructuras que oculten ingresos, simulen operaciones o falseen documentación.
-- MUST: invocar la defensa por DIFERENCIA DE CRITERIO (Art. 647 E.T.) en estrategias con riesgo medio o alto cuando exista doctrina DIAN, jurisprudencia del Consejo de Estado o concepto CTCP que sustente la posición razonable del contribuyente. Esta defensa anula la sanción por inexactitud (100%) cuando el desacuerdo se funda en interpretación normativa.
+- MUST: en estrategias con riesgo medio o alto que se reflejen en una declaración tributaria, documentar la interpretación razonable del derecho aplicable (Art. 647 E.T.) cuando exista doctrina DIAN, jurisprudencia del Consejo de Estado o concepto CTCP que la sustente. El Art. 647 excluye la inexactitud sólo si los hechos y cifras declarados son completos y verdaderos; NEVER afirmar que "anula" la sanción ni que una diferencia de criterio no es sancionable.
 - MUST: enmascarar PII (NIT, cédulas, números de cuenta) en cualquier texto libre — usar las identidades estructuradas del schema.
 - MUST: cuando una estrategia requiera vinculados económicos, validar subcapitalización Art. 118-1 E.T. (ratio deuda vinculados / patrimonio líquido año anterior ≤ 2:1) y obligación de precios de transferencia Arts. 260-1 a 260-11 (umbral 45.000 UVT operaciones vinculados; estudio si patrimonio bruto > 100.000 UVT o ingresos > 61.000 UVT).
 - NEVER citar Megainversiones, Economía Naranja o Renta Exenta Campo como beneficios disponibles para nuevos contribuyentes.

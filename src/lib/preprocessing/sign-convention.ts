@@ -88,14 +88,26 @@ export interface SignConventionDetection {
 
 /**
  * Filas que se suman para detectar. Se prefieren las transaccionales; cuando el
- * archivo no marca ninguna (fixtures que sólo traen auxiliares sin la columna
- * "Transaccional") se cae a todas las filas hoja para no doble contar los
- * totales de Clase/Grupo.
+ * archivo no marca ninguna se usan las hojas ESTRUCTURALES (códigos que no son
+ * prefijo de otro código del archivo), para no doble contar los totales de
+ * Clase/Grupo/Cuenta.
+ *
+ * Auditoría 2026-09 (recalculo-07): antes se caía a `nivel Auxiliar o código
+ * de 6+ dígitos`. Un export algebraico a nivel Cuenta (4 dígitos), que el
+ * preprocesador sí suma por hojas estructurales, no tenía filas sumables: el
+ * detector no evaluaba ningún periodo y el archivo quedaba "natural".
  */
 function summableRows(rows: RawAccountRow[]): RawAccountRow[] {
   const transactional = rows.filter((r) => r.transactional);
   if (transactional.length > 0) return transactional;
-  return rows.filter((r) => r.level === 'Auxiliar' || r.code.length >= 6);
+  const sorted = [...new Set(rows.map((r) => r.code))].sort();
+  const parents = new Set<string>();
+  // En orden lexicográfico los descendientes de un código lo siguen de
+  // inmediato: basta mirar el siguiente para saber si es prefijo de otro.
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (sorted[i + 1].startsWith(sorted[i])) parents.add(sorted[i]);
+  }
+  return rows.filter((r) => !parents.has(r.code));
 }
 
 /**

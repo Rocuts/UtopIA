@@ -423,7 +423,11 @@ describe('ratios-kpis-07 — ROE/apalancamiento N/D con patrimonio no positivo',
     ).primary.controlTotals;
     expect(ct.roe).toBeCloseTo(33.33, 1); // 200 / 600
     expect(ct.apalancamientoFinanciero).toBeCloseTo(0.667, 2);
-    expect(ct.kpiNdMotivos).toEqual({});
+    // Sin motivo N/D para ROE ni apalancamiento. (IW2: otros KPIs de este
+    // balance mínimo —días de cartera sin 1305/1310, días de inventario sin
+    // costos— sí llevan su propio motivo.)
+    expect(ct.kpiNdMotivos?.roe).toBeUndefined();
+    expect(ct.kpiNdMotivos?.apalancamientoFinanciero).toBeUndefined();
   });
 });
 

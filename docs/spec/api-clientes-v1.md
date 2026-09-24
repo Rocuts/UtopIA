@@ -219,7 +219,7 @@ Respuesta `201 Created` + `Location` (y webhook `trial_balance.processed` al wor
 {
   "id": "tb_0698fq7yv7f7btkdjq8x2xz3ec",
   "object": "trial_balance",
-  "status": "unbalanced",
+  "status": "balanced",
   "period_label": "2025",
   "row_count": 184,
   "control_totals": {
@@ -234,8 +234,21 @@ Respuesta `201 Created` + `Location` (y webhook `trial_balance.processed` al wor
 }
 ```
 
-`GET /api/v1/trial-balances/{id}` añade `discrepancies[]` y `curator_findings[]` completos
-(recomputados). El CSV acepta los mismos alias de columnas del parser interno
+Semántica de `status` y `equation_delta` (contrato `tb-2026-09-24`, auditoría 2026-09,
+niif-preproceso-07):
+
+- `equation_delta` es el descuadre del **archivo de origen** (Activo − Pasivo − Patrimonio)
+  **antes del Cierre Virtual**: no cuenta el traslado del resultado del ejercicio (3605VC) ni
+  la reclasificación de un grupo 36 anterior (`reclassified_from_3605`). El curador ya no lo
+  absorbe (`virtual_close_adjustment` y `equity_anchor_adjustment` se conservan en 0 por
+  compatibilidad).
+- `status: "balanced"` exige `equation_delta = 0` **y** ningún motivo de integridad.
+  `status: "unbalanced"` cubre el descuadre y también los motivos de integridad aunque la
+  ecuación cuadre (importes ilegibles, columnas de saldo ambiguas, filas desplazadas, códigos
+  que no son cuentas PUC); el detalle los lista en `validation_reasons[]`.
+
+`GET /api/v1/trial-balances/{id}` añade `validation_reasons[]`, `discrepancies[]` y
+`curator_findings[]` completos (recomputados). El CSV acepta los mismos alias de columnas del parser interno
 (codigo/cuenta/débito/crédito/saldo por año). 422 `empty_trial_balance` si no se reconoce
 ninguna fila válida.
 

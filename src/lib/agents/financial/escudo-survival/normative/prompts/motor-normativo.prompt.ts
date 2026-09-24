@@ -24,7 +24,7 @@ import {
   RTF_THRESHOLD_UVT,
   UVT_2026_COP,
 } from '@/lib/accounting/tax-engine/constants';
-import { aproximarValorAbsolutoUvt } from '@/lib/tools/sanction-calculator';
+import { MIN_SANCTION } from '@/lib/tools/sanction-calculator';
 import { extractCalendarDigit } from '../../fiscal-anchor/dian-calendar';
 import { MOTOR_NORMATIVO_CATALOG } from '../catalog';
 import type {
@@ -152,7 +152,9 @@ export function buildMotorNormativoPrompt(
 ): string {
   const fmt = (n: number) => new Intl.NumberFormat('es-CO').format(n);
   const uvtFormatted = fmt(UVT_2026_COP);
-  const sancionMinima = fmt(aproximarValorAbsolutoUvt(10 * UVT_2026_COP));
+  // Fuente única: la constante del calculador de sanciones (10 UVT aproximado
+  // por el Art. 868 E.T. = $524.000 en 2026), no un literal ni un recálculo.
+  const sancionMinima = fmt(MIN_SANCTION);
 
   // ── 1. Guardrail estable (stable header — cache-friendly) ─────────────────
   const guardrail = `Eres el Motor Normativo del Agente Fiscal de El Escudo. Tu función es razonar sobre normas tributarias colombianas vigentes al año gravable 2026. Conoces el Estatuto Tributario, las leyes de reforma, la doctrina DIAN whitelisted, la jurisprudencia constitucional y del Consejo de Estado, las NIIF para PYMES, NIC y NIA aplicables en Colombia.
