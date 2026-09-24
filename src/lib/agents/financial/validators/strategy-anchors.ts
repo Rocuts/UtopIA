@@ -285,9 +285,17 @@ const DASHBOARD_ANCHORS: ReadonlyArray<{ keys: MoneyKey[]; re: RegExp }> = [
   { keys: ['activo'], re: /^(total )?activos?( totale?s?)?$/ },
   { keys: ['pasivo'], re: /^(total )?pasivos?( totale?s?)?$/ },
   { keys: ['patrimonio'], re: /^(total )?patrimonio( total)?$/ },
-  // "Ingresos operacionales" queda sin ancla a propósito: su perímetro (grupo
-  // 41 vs Clase 4) es una definición del preprocesador que puede cambiar.
-  { keys: ['ingresosNetos', 'ingresos'], re: /^(total )?ingresos( netos| totales)?$/ },
+  // Ingresos (re-auditoría fase 2, narrativa-14): "Ingresos operacionales" o
+  // "Ventas netas" quedaban sin ancla y una cifra inventada salía "no
+  // verificable" (la misma cifra en prosa sí sellaba). Se aceptan los tres
+  // perímetros que publica el preprocesador —operacionales netos (41 − 4175),
+  // netos y brutos de Clase 4—, igual que la prosa: vale cualquiera, así que el
+  // perímetro que el modelo eligió no produce un falso sello. "Ventas brutas"
+  // (41 antes de devoluciones) no es ninguno de ellos y sigue sin ancla.
+  {
+    keys: ['ingresosOperacionales', 'ingresosNetos', 'ingresos'],
+    re: /^(total )?(ingresos|ventas)( (operacionales|ordinarios|de actividades ordinarias))?( netos| netas| totales)?$/,
+  },
   { keys: ['utilidadBruta'], re: /^(utilidad|ganancia) bruta$/ },
   { keys: ['ebit'], re: /^((utilidad|ganancia|resultado) (operacional|operativa|operativo)|ebit)$/ },
   { keys: ['utilidadAntesImpuestos'], re: /^(utilidad|ganancia|resultado) antes de impuestos?$/ },
@@ -478,6 +486,35 @@ function fmtNumber(n: number): string {
   return n.toLocaleString('es-CO', { maximumFractionDigits: 4 });
 }
 
+function fmtPct(n: number): string {
+  return `${n.toFixed(1).replace('.', ',')} %`;
+}
+
+/**
+ * Una variación impresa ("12,5", "+13,3 pp", "-20,0 %", "66,7%") contra los
+ * valores admitidos, a la precisión impresa. Sin signo explícito se compara la
+ * magnitud: "20,0" en la columna de variación de una disminución no afirma un
+ * aumento. `null` = cuadra; 'base' = no hay valor admitido (base cero o N/D);
+ * 'mismatch' = no cuadra con ninguno; 'unparsable' = no es un número.
+ */
+function variationIssue(printedRaw: string, expected: number[]): null | 'base' | 'mismatch' | 'unparsable' {
+  const raw = printedRaw
+    .trim()
+    .replace(/\s*(?:p\.\s?p\.?|pp|puntos(?:\s+porcentuales)?|pts?\.?)\s*$/i, '')
+    .trim();
+  const printed = parsePrinted(raw);
+  if (printed.length === 0) return 'unparsable';
+  if (expected.length === 0) return 'base';
+  const signed = /^[+\-−]/.test(raw);
+  const ok = expected.some((e) =>
+    printed.some((p) => {
+      const tolerance = 0.5 * 10 ** -p.decimals + 1e-9 * Math.max(1, Math.abs(e));
+      return signed ? Math.abs(p.value - e) <= tolerance : Math.abs(Math.abs(p.value) - Math.abs(e)) <= tolerance;
+    }),
+  );
+  return ok ? null : 'mismatch';
+}
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -594,6 +631,31 @@ export function reconcileStrategyAnchors(
         ),
       );
     }
+    // Variación % = (actual − comparativo) / |comparativo| × 100, a la precisión
+    // impresa (narrativa-14: "87,5" por 12,5 salía verificado).
+    if (p !== undefined && c !== undefined && row.variationPct !== null && !isNd(row.variationPct)) {
+      const issue = variationIssue(row.variationPct, c === BigInt(0) ? [] : [(Number(p - c) / Number(c < BigInt(0) ? -c : c)) * 100]);
+      if (issue === 'base') {
+        verifiedCount += 1;
+        deviations.push(
+          t(
+            `${where}: la variación % ${row.variationPct} no tiene base (comparativo cero).`,
+            `${where}: the % change ${row.variationPct} has no base (zero comparative).`,
+          ),
+        );
+      } else if (issue === 'mismatch') {
+        verifiedCount += 1;
+        const expected = (Number(p - c) / Number(c < BigInt(0) ? -c : c)) * 100;
+        deviations.push(
+          t(
+            `${where}: la variación % ${row.variationPct} no es (actual − comparativo) / |comparativo| (${fmtPct(expected)}).`,
+            `${where}: the % change ${row.variationPct} is not (current − comparative) / |comparative| (${fmtPct(expected)}).`,
+          ),
+        );
+      } else if (issue === null) {
+        verifiedCount += 1;
+      }
+    }
   }
 
   /**
@@ -699,6 +761,38 @@ export function reconcileStrategyAnchors(
         kpiValue(sources.comparative, field),
         suffix,
       );
+    }
+    // Variación interanual del KPI anclado (narrativa-14: "+999,0 pp" en el ROE
+    // salía verificado). Se admite en puntos (actual − comparativo) o relativa
+    // (% sobre |comparativo|): el modelo usa una u otra según el indicador.
+    if (hasComparative && sources.comparative && kpi.yoyVariation !== null && !isNd(kpi.yoyVariation)) {
+      const cur = kpiValue(sources.primary, field);
+      const prev = kpiValue(sources.comparative, field);
+      if (cur === undefined || prev === undefined) {
+        unverifiable.push(`${where} — ${t('variación interanual', 'year-over-year change')}`);
+      } else {
+        const candidates =
+          cur === null || prev === null ? [] : [cur - prev, ...(prev === 0 ? [] : [((cur - prev) / Math.abs(prev)) * 100])];
+        const issue = variationIssue(kpi.yoyVariation, candidates);
+        if (issue !== 'unparsable') verifiedCount += 1;
+        if (issue === 'base') {
+          deviations.push(
+            t(
+              `${where}: la variación interanual ${kpi.yoyVariation} no tiene base (el preprocesador publica el indicador N/D en un periodo).`,
+              `${where}: the year-over-year change ${kpi.yoyVariation} has no base (the preprocessor publishes the ratio as N/A in one period).`,
+            ),
+          );
+        } else if (issue === 'mismatch') {
+          deviations.push(
+            t(
+              `${where}: la variación interanual ${kpi.yoyVariation} no es la del preprocesador (${fmtNumber(candidates[0])} puntos${candidates[1] !== undefined ? ` o ${fmtPct(candidates[1])}` : ''}).`,
+              `${where}: the year-over-year change ${kpi.yoyVariation} is not the preprocessor's (${fmtNumber(candidates[0])} points${candidates[1] !== undefined ? ` or ${fmtPct(candidates[1])}` : ''}).`,
+            ),
+          );
+        } else if (issue === 'unparsable') {
+          unverifiable.push(`${where} — ${t('variación interanual', 'year-over-year change')}`);
+        }
+      }
     }
   }
 
@@ -1016,7 +1110,231 @@ export function applyKpiAnchors(
     neutralized.push('DuPont');
   }
 
+  // La cifra que el modelo estimó para un KPI publicado N/D (o recalculado) no
+  // puede sobrevivir en la prosa de la misma Parte II (narrativa-15): se
+  // sustituye junto al nombre del KPI por N/D o por el valor del sistema.
+  const discarded = discardedKpiFigures(input, json);
+  if (discarded.length > 0) scrubStrategyProse(json, discarded, es ? 'es' : 'en');
+
   return { json, neutralized, recomputed };
+}
+
+// ---------------------------------------------------------------------------
+// Cifra descartada de un KPI en prosa (narrativa-15; R7 del HTML)
+// ---------------------------------------------------------------------------
+// Un KPI sin ancla se publica N/D y uno recomputable con el valor del sistema,
+// pero el modelo suele repetir su propia cifra en el comentario ejecutivo, los
+// títulos y diagnósticos de las recomendaciones o la solvencia ("El margen
+// EBITDA ajustado de 23,7 %…"). Se reconoce el nombre del KPI plegado
+// (mayúsculas, tildes y conectores "de/del/la…" indiferentes) y, en lo que le
+// sigue dentro de la misma frase, la cifra descartada a la precisión impresa
+// ("24 %" es 23,7 redondeado). No cuentan la banda sectorial, las cotas con
+// comparador ("> 10 %"), la cifra que el sistema sí publica ni un entero de un
+// dígito (demasiado ambiguo). El mismo reconocedor lo usa R7 del HTML
+// (`html-editor-validator.ts`).
+// ---------------------------------------------------------------------------
+
+const NAME_CONNECTORS = ['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'sobre', 'a', 'al', 'of', 'the', 'on', 'to'];
+
+const ACCENT_CLASS: Record<string, string> = {
+  a: '[aáàâä]',
+  e: '[eéèêë]',
+  i: '[iíìîï]',
+  o: '[oóòôö]',
+  u: '[uúùûü]',
+  n: '[nñ]',
+};
+
+function foldName(t: string): string {
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/**
+ * Mención del nombre de un KPI en texto (bandera `g`): sin distinguir
+ * mayúsculas ni tildes y con conectores opcionales entre sus palabras
+ * ("Margen EBITDA ajustado" ≈ "margen de EBITDA ajustado"). `null` si el
+ * nombre es demasiado corto para reconocerlo sin ambigüedad.
+ */
+export function kpiNamePattern(name: string): RegExp | null {
+  const tokens = foldName(name)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((w) => w.length > 0 && !NAME_CONNECTORS.includes(w));
+  if (tokens.length === 0 || tokens.join('').length < 3) return null;
+  const word = (w: string) => w.split('').map((ch) => ACCENT_CLASS[ch] ?? ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
+  const sep = `(?:[\\s\\-_/()]+(?:(?:${NAME_CONNECTORS.join('|')})[\\s\\-_/()]+)*)`;
+  return new RegExp(`(?<![\\p{L}\\d])${tokens.map(word).join(sep)}(?![\\p{L}\\d])`, 'giu');
+}
+
+/** Tramo tras el nombre hasta el fin de la frase (a lo sumo 160 caracteres). */
+export function kpiMentionWindow(text: string, from: number): string {
+  const rest = text.slice(from, from + 160);
+  const end = /[.;!?](?=\s|$)/.exec(rest);
+  return end ? rest.slice(0, end.index + 1) : rest;
+}
+
+/** Cifra impresa en prosa: signo, "$", número es-CO y unidad (sin paréntesis). */
+const FIGURE_TOKEN =
+  /(?<![\p{L}\d.,])([-−+]\s*)?(\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)(?![\d]|[.,]\d)(\s*(?:%|pp\b|p\.\s?p\.|puntos(?:\s+porcentuales)?\b|veces\b|x\b|d[ií]as\b|mil\s+millones\b|millones\b|MM\b|M\b))?/gu;
+
+/** Pesos de un número es-CO ("1.234.567,89", "23,7", "2.000"). */
+function esCoPesos(digits: string): { value: number; decimals: number } {
+  const [int, dec = ''] = digits.includes(',') ? digits.split(',') : [digits, ''];
+  const grouped = /^\d{1,3}(?:\.\d{3})+$/.test(int);
+  const whole = grouped ? int.replace(/\./g, '') : int;
+  const value = Number(`${whole}${dec ? `.${dec}` : ''}`);
+  return { value, decimals: dec.length };
+}
+
+/** ¿La unidad impresa tras el número es compatible con la del KPI? (sin unidad: sí). */
+function unitCompatible(unit: KpiJson['unit'], suffix: string): boolean {
+  if (!suffix) return true;
+  const percent = /^(?:%|pp|p\.\s?p\.|puntos(?:\s+porcentuales)?)$/.test(suffix);
+  const days = /^d[ií]as$/.test(suffix);
+  const times = /^(?:veces|x)$/.test(suffix);
+  const money = /^(?:m|mm|millones|mil\s+millones)$/.test(suffix);
+  switch (unit) {
+    case 'percent':
+      return percent;
+    case 'days':
+      return days;
+    case 'times':
+    case 'ratio':
+      return times;
+    case 'cop':
+      return money;
+    default:
+      return true;
+  }
+}
+
+/** Posiciones (en `tail`) de la cifra descartada impresa a su precisión. */
+export function discardedFigureHits(tail: string, d: DiscardedKpiFigure): Array<{ index: number; length: number }> {
+  let masked = tail;
+  const band = d.band.trim();
+  if (band) {
+    const lower = masked.toLowerCase();
+    const needle = band.toLowerCase();
+    let at = lower.indexOf(needle);
+    while (at >= 0) {
+      masked = masked.slice(0, at) + ' '.repeat(band.length) + masked.slice(at + band.length);
+      at = lower.indexOf(needle, at + band.length);
+    }
+  }
+  const hits: Array<{ index: number; length: number }> = [];
+  const cop = d.unit === 'cop';
+  const discardedPesos = cop ? Number(moneyOrUndefined(d.value) ?? NaN) / 100 : parsePrinted(d.value)[0]?.value;
+  if (discardedPesos === undefined || !Number.isFinite(discardedPesos)) return hits;
+  const publishedPesos =
+    d.published === null || isNd(d.published)
+      ? undefined
+      : cop
+        ? Number(moneyOrUndefined(d.published) ?? NaN) / 100
+        : parsePrinted(d.published)[0]?.value;
+  const re = new RegExp(FIGURE_TOKEN.source, FIGURE_TOKEN.flags);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(masked)) !== null) {
+    const [token, , dollar, digits, suffixRaw] = m;
+    if (/[<>≥≤]\s*$/.test(masked.slice(Math.max(0, m.index - 3), m.index))) continue; // cota de una banda
+    const suffix = (suffixRaw ?? '').trim().toLowerCase();
+    if (!unitCompatible(d.unit, suffix)) continue; // "23,7 días" no es un margen de 23,7 %
+    const scale = /^mil\s+millones$/.test(suffix) ? 1e9 : /^(?:m|mm|millones)$/.test(suffix) ? 1e6 : 1;
+    let candidates: Array<{ value: number; tolerance: number }>;
+    if (cop) {
+      if (!dollar && scale === 1) continue;
+      const { value, decimals } = esCoPesos(digits);
+      candidates = [{ value: value * scale, tolerance: Math.max(0.005, 0.5 * 10 ** -decimals * scale) }];
+    } else {
+      if (dollar || scale !== 1) continue;
+      candidates = parsePrinted(digits).map((p) => ({ value: p.value, tolerance: 0.5 * 10 ** -p.decimals }));
+      // Un entero de un dígito ("3 acciones", "5 veces") es demasiado ambiguo.
+      candidates = candidates.filter((c) => !(Number.isInteger(c.value) && c.tolerance === 0.5 && Math.abs(c.value) < 10));
+    }
+    const near = (target: number | undefined) =>
+      target !== undefined &&
+      Number.isFinite(target) &&
+      candidates.some((c) => Math.abs(Math.abs(c.value) - Math.abs(target)) <= c.tolerance + 1e-9 * Math.max(1, Math.abs(target)));
+    if (!near(discardedPesos) || near(publishedPesos)) continue;
+    hits.push({ index: m.index, length: token.length });
+  }
+  return hits;
+}
+
+/** Texto que el sistema publica en lugar de la cifra descartada. */
+function publishedText(d: DiscardedKpiFigure, language: 'es' | 'en'): string {
+  const nd = language === 'es' ? 'N/D' : 'N/A';
+  if (d.published === null || isNd(d.published)) return nd;
+  if (d.unit === 'cop') {
+    const c = moneyOrUndefined(d.published);
+    return c === undefined ? nd : formatCopFromCents(c);
+  }
+  if (d.unit === 'percent') return `${d.published} %`;
+  if (d.unit === 'days') return `${d.published} ${language === 'es' ? 'días' : 'days'}`;
+  if (d.unit === 'times') return `${d.published} ${language === 'es' ? 'veces' : 'times'}`;
+  return d.published;
+}
+
+/** Sustituye en `text` las cifras descartadas que siguen al nombre de su KPI. */
+export function scrubDiscardedKpiFigures(
+  text: string,
+  discarded: readonly DiscardedKpiFigure[],
+  language: 'es' | 'en' = 'es',
+): string {
+  let out = text;
+  for (const d of discarded) {
+    const re = kpiNamePattern(d.name);
+    if (!re) continue;
+    const edits: Array<{ start: number; end: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(out)) !== null) {
+      const from = m.index + m[0].length;
+      for (const h of discardedFigureHits(kpiMentionWindow(out, from), d)) {
+        edits.push({ start: from + h.index, end: from + h.index + h.length });
+      }
+    }
+    const replacement = publishedText(d, language);
+    let lastStart = Number.POSITIVE_INFINITY;
+    for (const e of edits.sort((a, b) => b.start - a.start)) {
+      if (e.end > lastStart) continue; // solapada con una ya sustituida
+      out = out.slice(0, e.start) + replacement + out.slice(e.end);
+      lastStart = e.start;
+    }
+  }
+  return out;
+}
+
+/** Prosa de la Parte II que llega al entregable (la misma que cruza `checkStrategyNarrative`, más títulos). */
+function scrubStrategyProse(json: StrategyReportJson, discarded: DiscardedKpiFigure[], language: 'es' | 'en'): void {
+  const fix = (v: string) => scrubDiscardedKpiFigures(v, discarded, language);
+  const dash = json.executiveDashboard;
+  if (dash) {
+    dash.executiveCommentary = fix(dash.executiveCommentary);
+    for (const r of dash.rows ?? []) r.commentary = fix(r.commentary);
+  }
+  for (const a of json.technicalAlerts ?? []) {
+    a.title = fix(a.title);
+    a.description = fix(a.description);
+  }
+  for (const k of json.kpis ?? []) k.diagnosis = fix(k.diagnosis);
+  if (json.dupontAnalysis) json.dupontAnalysis.drivingFactor = fix(json.dupontAnalysis.drivingFactor);
+  if (json.trends) json.trends.qualitativeCommentary = fix(json.trends.qualitativeCommentary);
+  if (json.breakEven) json.breakEven.classificationNote = fix(json.breakEven.classificationNote);
+  const pcf = json.projectedCashFlow;
+  if (pcf) {
+    pcf.solvencyNarrative = fix(pcf.solvencyNarrative);
+    pcf.assumptionsNote = fix(pcf.assumptionsNote);
+    for (const sc of pcf.scenarios ?? []) sc.assumptions = fix(sc.assumptions);
+  }
+  for (const r of json.recommendations ?? []) {
+    r.title = fix(r.title);
+    r.diagnosis = fix(r.diagnosis);
+    r.action = fix(r.action);
+    r.expectedImpact = fix(r.expectedImpact);
+  }
+  if (json.presumedCostWarning) {
+    json.presumedCostWarning.recommendedActions = json.presumedCostWarning.recommendedActions.map(fix);
+  }
+  for (const n of json.preparerNotes ?? []) n.body = fix(n.body);
 }
 
 /** Cifra del modelo que `applyKpiAnchors` no publica (KPI N/D o recalculado). */
@@ -1027,6 +1345,8 @@ export interface DiscardedKpiFigure {
   value: string;
   /** Banda sectorial del KPI: sus cotas no son la cifra descartada. */
   band: string;
+  /** Lo que el sistema publica en su lugar ("ND", el valor recalculado o `null`). */
+  published: string | null;
 }
 
 /**
@@ -1057,7 +1377,13 @@ export function discardedKpiFigures(
         const shownValue = parsePrinted(shown)[0]?.value;
         if (shownValue !== undefined && matchesAtPrintedPrecision(printed, shownValue)) continue;
       }
-      out.push({ name: kpi.name, unit: kpi.unit, value: emitted, band: kpi.benchmarkBand?.description ?? '' });
+      out.push({
+        name: kpi.name,
+        unit: kpi.unit,
+        value: emitted,
+        band: kpi.benchmarkBand?.description ?? '',
+        published: shown,
+      });
     }
   });
   return out;
