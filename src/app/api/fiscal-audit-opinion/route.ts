@@ -7,7 +7,7 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 import type { FiscalOpinionProgressEvent } from '@/lib/agents/financial/fiscal-opinion/types';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 
 // ---------------------------------------------------------------------------
@@ -72,16 +72,14 @@ export async function POST(req: Request) {
 
     // `preprocessed` (round-trip JSON de /niif) alimenta cifras deterministas
     // del dictamen (umbral SAGRILAFT, reclasificaciones, comparativos). Se
-    // revive y valida; si no es plausible se rechaza en vez de castear a ciegas.
-    const rawPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
-    let preprocessed: PreprocessedBalance | undefined;
-    if (rawPreprocessed !== undefined && rawPreprocessed !== null) {
-      const revived = revivePreprocessedBalance(rawPreprocessed);
-      if (!revived) {
-        return NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 });
-      }
-      preprocessed = revived;
-    }
+    // revive y se RE-DERIVA desde sus filas con el ledger confirmado de la
+    // petición (cross-dep P1): forma inválida → 400, totales alterados → 422.
+    const client = resolveClientPreprocessed(
+      (body as { preprocessed?: unknown }).preprocessed,
+      (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+    );
+    if (!client.ok) return client.response;
+    const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
 
     if (stream) {
       return handleStreaming(typedReport, typedAuditReport, language, instructions, preprocessed);

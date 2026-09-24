@@ -6,7 +6,7 @@ import type {
   NiifAnalysisResult,
 } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { requireAuthSession } from '@/lib/auth/require-session';
@@ -101,17 +101,15 @@ export async function POST(req: Request) {
     // /api/financial-audit/route.ts. `preprocessed` viene del round-trip JSON
     // de /niif: se valida estructuralmente y se reviven los BigInt (cents).
     const typedNiif = niifResult as unknown as NiifAnalysisResult;
-    let typedPp: PreprocessedBalance | undefined;
-    if (preprocessed !== undefined && preprocessed !== null) {
-      const revived = revivePreprocessedBalance(preprocessed);
-      if (!revived) {
-        return NextResponse.json(
-          { error: 'Invalid preprocessed format.' },
-          { status: 400 },
-        );
-      }
-      typedPp = revived;
-    }
+    // Cross-dep P1: el preprocesado de /niif (ya ajustado) se RE-DERIVA desde
+    // sus filas con el ledger confirmado que acompaña la petición; unos
+    // totales de control alterados → 422 antes de pagar al Director.
+    const client = resolveClientPreprocessed(
+      preprocessed,
+      (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+    );
+    if (!client.ok) return client.response;
+    const typedPp: PreprocessedBalance | undefined = client.preprocessed;
 
     if (stream) {
       return runWithTelemetryContext(telemetryCtx, () =>

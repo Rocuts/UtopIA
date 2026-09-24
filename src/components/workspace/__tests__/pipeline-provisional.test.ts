@@ -29,3 +29,4 @@ describe('buildConsolidationRequestBody — override provisional', () => {
     expect('provisional' in buildConsolidationRequestBody({ ...base, provisional: { active: false, reason: 'x' } })).toBe(false);
   });
 });
+

@@ -732,13 +732,18 @@ export function buildQualityRequestBody(args: {
   auditReport: BackendAuditReport | null;
   language: 'es' | 'en';
   preprocessed: unknown;
+  /**
+   * Ledger confirmado del Doctor de Datos: el servidor re-deriva el
+   * preprocesado (ya ajustado) desde sus filas con él (cross-dep P1).
+   */
+  adjustmentLedger?: AdjustmentLedger | null;
 }): Record<string, unknown> {
   return {
     report: args.report,
     auditReport: args.auditReport,
     language: args.language,
     ...(args.preprocessed !== null && args.preprocessed !== undefined
-      ? { preprocessed: args.preprocessed }
+      ? { preprocessed: args.preprocessed, ...htmlLedgerField(args.adjustmentLedger) }
       : {}),
   };
 }
@@ -1054,6 +1059,8 @@ export async function runAuditInBackground(args: {
   report: BackendFinancialReport;
   /** `context.preprocessed` de /niif; `null` si no está disponible. */
   preprocessed: unknown;
+  /** Ledger con el que /niif ajustó ese preprocesado (el servidor lo re-deriva). */
+  adjustmentLedger?: AdjustmentLedger | null;
   language: 'es' | 'en';
   signal: AbortSignal;
   callbacks: ParallelAuditCallbacks;
@@ -1067,7 +1074,7 @@ export async function runAuditInBackground(args: {
         report: args.report,
         language: args.language,
         ...(args.preprocessed !== null && args.preprocessed !== undefined
-          ? { preprocessed: args.preprocessed }
+          ? { preprocessed: args.preprocessed, ...htmlLedgerField(args.adjustmentLedger) }
           : {}),
       }),
       signal: args.signal,
@@ -2182,6 +2189,13 @@ export function PipelineWorkspace() {
     rawData: string;
     conversationId: string;
     strategyResult: StrategicAnalysisResult | null;
+    /**
+     * Ledger con el que /niif ajustó `preprocessed`. Una reanudación lo
+     * reenvía a /strategy, /governance y /consolidate, que re-derivan ese
+     * preprocesado desde sus filas con él (cross-dep P1): sin él, un informe
+     * honesto con ajustes recibiría 422 al reanudar tras una recarga.
+     */
+    adjustmentLedger: AdjustmentLedger | null;
   }
   const checkpointRef = useRef<NiifRunCheckpoint | null>(null);
   // Espejo en estado del ref anterior: la UI necesita saber si hay checkpoint
@@ -2235,11 +2249,12 @@ export function PipelineWorkspace() {
       // necesita para verificar el acta (sin él la sella, pipeline-flujo-03) y
       // /export y /html para cruzar contra el mismo balance que usó /niif.
       const storedPreprocessed = recallPreprocessedForResume(lastCompletedReport.conversationId);
+      const storedLedger = storedPreprocessed
+        ? recallAdjustmentLedgerForResume(lastCompletedReport.conversationId)
+        : null;
       if (storedPreprocessed) {
         setCachedPreprocessed(storedPreprocessed);
-        setResumedAdjustmentLedger(
-          recallAdjustmentLedgerForResume(lastCompletedReport.conversationId),
-        );
+        setResumedAdjustmentLedger(storedLedger);
       }
       // Reconstruimos el checkpoint NIIF para poder reanudar la sub-fase
       // faltante. `bindingTotals` es obligatorio en /strategy y /governance y
@@ -2256,6 +2271,7 @@ export function PipelineWorkspace() {
           strategyResult: missing.includes('strategy')
             ? null
             : lastCompletedReport.report.strategicAnalysis,
+          adjustmentLedger: storedLedger,
         };
         setHasCheckpoint(true);
       }
@@ -2386,7 +2402,11 @@ export function PipelineWorkspace() {
           })
         | null;
       const provisional = intakeWithExtras?.provisional;
-      const adjustmentLedger = intakeWithExtras?.adjustmentLedger;
+      // En una reanudación sin intake en memoria (recarga), el ledger es el
+      // del checkpoint: el mismo con el que /niif ajustó su preprocesado.
+      const adjustmentLedger =
+        intakeWithExtras?.adjustmentLedger ??
+        (start !== 'niif' ? (resumeCheckpoint as NiifRunCheckpoint).adjustmentLedger ?? undefined : undefined);
       // Ola 2 — hechos del negocio excluidos en la confirmación del intake
       // (Task 8). Se propaga a las 4 rutas del pipeline SOLO cuando hay
       // exclusiones, para que cada ruta netee la misma lista que confirmó el
@@ -2567,6 +2587,7 @@ export function PipelineWorkspace() {
         rawData: runRawData,
         conversationId: nextConvId,
         strategyResult,
+        adjustmentLedger: adjustmentLedger ?? null,
       };
       setHasCheckpoint(true);
       if (start === 'niif') {
@@ -2632,6 +2653,9 @@ export function PipelineWorkspace() {
             niifResult,
             bindingTotals: niifContext.bindingTotals,
             preprocessed: niifContext.preprocessed,
+            // El servidor re-deriva ese preprocesado (ya ajustado por /niif)
+            // desde sus filas con el MISMO ledger (cross-dep P1).
+            ...htmlLedgerField(adjustmentLedger),
             company: niifContext.company,
             language: runLanguage,
             instructions,
@@ -2670,6 +2694,7 @@ export function PipelineWorkspace() {
           strategyResult,
           bindingTotals: niifContext.bindingTotals,
           preprocessed: niifContext.preprocessed,
+          ...htmlLedgerField(adjustmentLedger),
           company: niifContext.company,
           language: runLanguage,
           instructions,
@@ -2825,6 +2850,7 @@ export function PipelineWorkspace() {
         const outcome = await runAuditInBackground({
           report: phase1Report,
           preprocessed: niifContext.preprocessed,
+          adjustmentLedger,
           language: runLanguage,
           signal: controller.signal,
           callbacks: {
@@ -2897,6 +2923,7 @@ export function PipelineWorkspace() {
                   auditReport: phase2Report,
                   language: runLanguage,
                   preprocessed: niifContext.preprocessed,
+                  adjustmentLedger,
                 }),
               ),
               signal: controller.signal,

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthSession } from '@/lib/auth/require-session';
 import { runQualityAudit } from '@/lib/agents/financial/quality/agent';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditReport } from '@/lib/agents/financial/audit/types';
@@ -13,7 +13,7 @@ import type { AuditReport } from '@/lib/agents/financial/audit/types';
 // Meta-audit: evaluates the ENTIRE pipeline output against 2026 best
 // practices (IASB, IFRS 18, ISO 25012, ISO 42001, CTCP Colombia).
 //
-// Input: { report, auditReport?, preprocessed?, language }
+// Input: { report, auditReport?, preprocessed?, adjustmentLedger?, language }
 // Output: QualityAssessment with 12-dimension scores + IFRS 18 readiness
 //
 // Auditoría 2026-09 (auditoria-calidad-11): el cuerpo se valida con Zod y
@@ -71,14 +71,14 @@ export async function POST(req: Request) {
       );
     }
 
-    let preprocessed: PreprocessedBalance | undefined;
-    if (parsed.data.preprocessed !== undefined && parsed.data.preprocessed !== null) {
-      const revived = revivePreprocessedBalance(parsed.data.preprocessed);
-      if (!revived) {
-        return NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 });
-      }
-      preprocessed = revived;
-    }
+    // Cross-dep P1: el preprocesado de /niif se re-deriva desde sus filas con
+    // el ledger confirmado de la petición; alterado → 422.
+    const client = resolveClientPreprocessed(
+      parsed.data.preprocessed,
+      (body as { adjustmentLedger?: unknown }).adjustmentLedger,
+    );
+    if (!client.ok) return client.response;
+    const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
 
     const raw = body as { report: unknown; auditReport?: unknown };
     const result = await runQualityAudit({

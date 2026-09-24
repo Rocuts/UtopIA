@@ -3,7 +3,7 @@ import { requireAuthSession } from '@/lib/auth/require-session';
 import { financialAuditRequestSchema } from '@/lib/validation/schemas';
 import { orchestrateAudit } from '@/lib/agents/financial/audit/orchestrator';
 import { deriveReportIntegrity } from '@/lib/agents/financial/audit/integrity';
-import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { AuditIntegrity, AuditProgressEvent } from '@/lib/agents/financial/audit/types';
@@ -49,15 +49,12 @@ export async function POST(req: Request) {
 
     const { report, language, auditFocus } = parsed.data;
 
-    const rawBody = body as { preprocessed?: unknown; report?: unknown };
-    let preprocessed: PreprocessedBalance | undefined;
-    if (rawBody.preprocessed !== undefined && rawBody.preprocessed !== null) {
-      const revived = revivePreprocessedBalance(rawBody.preprocessed);
-      if (!revived) {
-        return NextResponse.json({ error: 'Invalid preprocessed format.' }, { status: 400 });
-      }
-      preprocessed = revived;
-    }
+    const rawBody = body as { preprocessed?: unknown; report?: unknown; adjustmentLedger?: unknown };
+    // Cross-dep P1: el preprocesado de /niif se re-deriva desde sus filas con
+    // el ledger confirmado de la petición; alterado → 422 antes de auditar.
+    const client = resolveClientPreprocessed(rawBody.preprocessed, rawBody.adjustmentLedger);
+    if (!client.ok) return client.response;
+    const preprocessed: PreprocessedBalance | undefined = client.preprocessed;
     const integrity = deriveReportIntegrity(rawBody.report, preprocessed);
 
     const stream =

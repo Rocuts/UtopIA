@@ -16,6 +16,7 @@ import {
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
 import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
+import { resolveClientPreprocessed } from '@/lib/reports/client-preprocessed';
 import {
   revivePreprocessedBalance,
   toJsonSafe,
@@ -181,7 +182,9 @@ export async function POST(req: Request) {
     //  2. El `preprocessed` que reenvía el cliente (el del upload) sólo se usa
     //     si `rawData` no produce filas. Se valida estructuralmente y se
     //     reviven los BigInt (cents) — un shape inválido es 400, nunca cast
-    //     ciego.
+    //     ciego — y, antes de usarlo, se RE-DERIVA desde sus propias filas
+    //     (cross-dep P1): totales de control alterados → 422. Es el del
+    //     upload, sin ajustes: Stage 0 aplica después el ledger.
     //  3. Si ninguno existe, Stage 0 (`prepareFinancialContext`) decide: un
     //     balance tabular sin filas o con hojas en conflicto → 422 con motivo.
     const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
@@ -213,9 +216,16 @@ export async function POST(req: Request) {
       // objeto del cliente. Otros fallos caen al respaldo del cliente.
       if (err instanceof TrialBalanceIngestError) rawDataRejected = true;
     }
-    const preprocessed = rawDataRejected
-      ? undefined
-      : serverPreprocessed ?? clientPreprocessed;
+    let preprocessed: PreprocessedBalance | undefined;
+    if (!rawDataRejected) {
+      if (serverPreprocessed) {
+        preprocessed = serverPreprocessed;
+      } else if (clientPreprocessed) {
+        const client = resolveClientPreprocessed(bodyPreprocessed, null);
+        if (!client.ok) return client.response;
+        preprocessed = client.preprocessed;
+      }
+    }
 
     const stream =
       req.headers.get('X-Stream') === 'true' ||

@@ -15,7 +15,12 @@ import type {
 } from '@/lib/agents/repair/types';
 import { toFriendlyError } from '@/lib/agents/utils/gateway-errors';
 import { classifyError, formatErrorAsUserNote } from '@/lib/agents/financial/prompts/resilience-section0';
-import { revivePreprocessedBalance, toJsonSafe } from '@/lib/preprocessing/json-safe';
+import { preprocessedAnchorMismatches, toJsonSafe } from '@/lib/preprocessing/json-safe';
+import {
+  PREPROCESSED_MISMATCH_CODE,
+  resolveClientPreprocessed,
+} from '@/lib/reports/client-preprocessed';
+import { applyRequestConfirmations } from '@/lib/reports/ingest-confirmations';
 import { createSafeSse } from '@/lib/api/sse-safe';
 import { requireAuthSession } from '@/lib/auth/require-session';
 
@@ -28,12 +33,8 @@ const provisionalFlagSchema = z
   })
   .optional();
 
-// ---------------------------------------------------------------------------
-// Adjustment ledger (Phase 2 — Doctor de Datos). Inline en esta ruta porque
-// es un body opcional. La forma se duplica desde repair-chat/route.ts a
-// proposito (ambas son consumers independientes del mismo tipo `Adjustment`).
-// ---------------------------------------------------------------------------
-// Contrato único del ledger (incluye `period` del ajuste multiperiodo).
+// Adjustment ledger (Phase 2 — Doctor de Datos): contrato único de las rutas
+// financieras (`src/lib/reports/adjustment-ledger.ts`, incluye `period`).
 
 // ---------------------------------------------------------------------------
 // POST /api/financial-report
@@ -70,7 +71,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const { rawData, company, language, instructions } = parsed.data;
+    const { company, language, instructions } = parsed.data;
+    // Mismas confirmaciones de ingesta que /niif (unidad, vencimientos).
+    const confirmed = applyRequestConfirmations(body, parsed.data.rawData);
+    if (!confirmed.ok) return confirmed.response;
+    const rawData = confirmed.rawData;
 
     // Override del usuario (repair chat). Validamos opcionalmente — si viene
     // mal formado, devolvemos 400 para que el caller corrija en lugar de
@@ -110,41 +115,47 @@ export async function POST(req: Request) {
     }
     const adjustmentLedger = adjustmentLedgerParsed.data as AdjustmentLedger | undefined;
 
-    // Si el cliente nos paso un PreprocessedBalance completo (desde /api/upload),
-    // lo reusamos. Asi evitamos re-parsear el CSV y garantizamos que los totales
-    // vinculantes que vio el usuario en el upload son exactamente los que
-    // alimentan al orchestrator. Fallback: re-preprocesamos on-the-fly.
-    // Validacion estructural + revival de BigInt (cents) — un shape invalido
-    // es 400, nunca cast ciego que termina en TypeError 500.
-    const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
-    let preprocessed: PreprocessedBalance | undefined;
-    if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
-      const revived = revivePreprocessedBalance(bodyPreprocessed);
-      if (!revived) {
-        return NextResponse.json(
-          { error: 'Invalid preprocessed format.' },
-          { status: 400 },
-        );
-      }
-      preprocessed = revived;
-    } else {
-      // Mismo helper que /upload, /niif y /export (ingesta-01): CSV, bloques
-      // XLSX `[period=…]` y texto con el informe de validación antepuesto.
-      // Sin filas, el orquestador decide (balance tabular ilegible → 422).
-      const read = preprocessUploadedTrialBalanceText(rawData);
-      if (read.kind === 'rejected') {
+    // Preprocesado (cross-dep P1, mismo cruce que /export): el balance se lee
+    // de `rawData` con el helper de /upload, /niif y /export (ingesta-01: CSV,
+    // bloques XLSX `[period=…]`, informe de validación antepuesto) y es la
+    // fuente autoritativa. El `preprocessed` que manda el cliente (el del
+    // upload, sin ajustes: el orquestador aplica el ledger después) ya no se
+    // usa tal cual: forma inválida → 400; se RE-DERIVA desde sus filas y, si
+    // hay `rawData` legible, se cruza con él; totales distintos → 422. Sin
+    // filas en ninguno, el orquestador decide (balance tabular ilegible → 422).
+    const read = preprocessUploadedTrialBalanceText(rawData);
+    if (read.kind === 'rejected') {
+      return NextResponse.json(
+        {
+          error: 'El balance de prueba tiene inconsistencias criticas.',
+          code: 'BALANCE_VALIDATION_FAILED',
+          reasons: read.reasons,
+          suggestedAccounts: [],
+        },
+        { status: 422 },
+      );
+    }
+    const client = resolveClientPreprocessed((body as { preprocessed?: unknown }).preprocessed, null);
+    if (!client.ok) return client.response;
+    if (client.preprocessed && read.kind === 'ok') {
+      const mismatches = preprocessedAnchorMismatches(client.preprocessed, read.preprocessed);
+      if (mismatches.length > 0) {
         return NextResponse.json(
           {
-            error: 'El balance de prueba tiene inconsistencias criticas.',
-            code: 'BALANCE_VALIDATION_FAILED',
-            reasons: read.reasons,
-            suggestedAccounts: [],
+            error: 'El balance preprocesado enviado no corresponde al balance de la solicitud.',
+            code: PREPROCESSED_MISMATCH_CODE,
+            details: [
+              'Fuentes incoherentes — el balance preprocesado enviado no corresponde al balance de la ' +
+                'solicitud re-derivado por el servidor.',
+              ...mismatches,
+            ],
           },
           { status: 422 },
         );
       }
-      preprocessed = read.kind === 'ok' ? read.preprocessed : undefined;
     }
+    const preprocessed: PreprocessedBalance | undefined =
+      read.kind === 'ok' ? read.preprocessed : client.preprocessed;
 
     // Enhance data with validation report and clean auxiliary data
     const enhancedData = preprocessed
