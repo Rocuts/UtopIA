@@ -69,6 +69,11 @@ import {
   type StrategyAnchorSources,
   type StrategyQualifications,
 } from './validators/strategy-anchors';
+import {
+  checkGovernanceNarrative,
+  narrativeSourcesFromPreprocessed,
+  sealGovernanceNarrative,
+} from './validators/narrative-anchors';
 import type { NiifReportJson } from './contracts/niif-report';
 
 /** Serializa centavos a MoneyCop, o `undefined` si el ancla no existe. */
@@ -2752,6 +2757,26 @@ export async function runGovernancePhase(
       ].join('\n');
       governance.shareholderMinutes = `${seal}\n${governance.shareholderMinutes}`;
       governance.fullContent = `${seal}\n${governance.fullContent}`;
+    }
+  }
+
+  // Cifras citadas en la prosa de las notas y del acta (pendiente #2 de la
+  // auditoría integral 2026-09-24): la aritmética de arriba sólo cruza los
+  // campos estructurados; un "dividendo de $X" o "utilidad neta de $Y" en el
+  // desarrollo de los puntos o en una nota se contrasta aquí con el balance,
+  // el JSON NIIF y la MISMA aritmética del acta.
+  if (governance.json) {
+    const narrative = checkGovernanceNarrative(
+      governance.json,
+      narrativeSourcesFromPreprocessed(preprocessed, niifResult.json ?? null, { acta: actaEsperada }),
+      language,
+    );
+    if (narrative.motivos.length > 0) {
+      onProgress?.({
+        type: 'warning',
+        warnings: narrative.motivos.map((m) => `[Parte III — cifras en prosa] ${m}`),
+      });
+      sealGovernanceNarrative(governance, narrative, language);
     }
   }
 

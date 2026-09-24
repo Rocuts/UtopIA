@@ -36,6 +36,7 @@ import { formatCopFromCents } from '../contracts/money';
 import type { NiifReportJson } from '../contracts/niif-report';
 import type { StrategyReportJson } from '../contracts/strategy-report';
 import type { StrategicAnalysisResult, StrategyQualifications } from '../types';
+import { checkStrategyNarrative } from './narrative-anchors';
 
 // ---------------------------------------------------------------------------
 // Contratos
@@ -698,6 +699,18 @@ export function reconcileStrategyAnchors(
       unverifiable.push(t('Tendencias — Δ margen (pp)', 'Trends — margin Δ (pp)'));
     }
   }
+
+  // -- Cifras en prosa (pendiente #2 de la auditoría integral 2026-09-24) --
+  // Comentario ejecutivo, diagnósticos, recomendaciones y solvencia: una
+  // mención de un concepto anclado (utilidad neta, activos, patrimonio,
+  // efectivo, ingresos, EBITDA, ROE, fecha de corte) con otra cifra sella la
+  // Parte II igual que un rubro del dashboard. Proyecciones y referencias
+  // sectoriales no se juzgan.
+  const narrative = checkStrategyNarrative(json, sources, language);
+  verifiedCount += narrative.checked;
+  deviations.push(
+    ...narrative.motivos.map((m) => t(`Prosa — ${m}`, `Narrative — ${m}`)),
+  );
 
   // -- Sin ancla por construcción -----------------------------------------
   unverifiable.push(
