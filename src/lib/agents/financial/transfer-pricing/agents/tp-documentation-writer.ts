@@ -24,6 +24,8 @@ import type {
 } from '../types';
 import {
   notaSinMontosDelModelo,
+  textoSinMontosDeAjuste,
+  textosSinMontosDeAjuste,
   tpAjusteCopDeterminista,
   tpMotivoRango,
   type TpRangeCheck,
@@ -111,25 +113,40 @@ export function enforceTpDocumentation(
   // Ajuste en COP: "0" dentro del rango; fuera de él N/D (el contrato no trae
   // la base del PLI en COP por operación — fase 2, pendiente #8).
   const ajusteCop = tpAjusteCopDeterminista(check);
+  // Textos libres del modelo que hablan del ajuste: sin montos que el código
+  // no calculó cuando el ajuste en COP es N/D (I4-escudo 7). Los montos de las
+  // operaciones (transactionsDetail / transactionsOverview) no son el ajuste.
+  const sinMontos = (t: string) => textoSinMontosDeAjuste(t, ajusteCop, language);
   return {
     ...json,
+    executiveSummary: {
+      ...json.executiveSummary,
+      keyRisks: textosSinMontosDeAjuste(json.executiveSummary.keyRisks, ajusteCop, language),
+      keyRecommendations: textosSinMontosDeAjuste(json.executiveSummary.keyRecommendations, ajusteCop, language),
+    },
     localFile: {
       ...json.localFile,
+      economicAnalysisDetail: sinMontos(json.localFile.economicAnalysisDetail),
       conclusionsByOperation: json.localFile.conclusionsByOperation.map((c) => ({
         ...c,
         requiredAdjustmentCop: ajusteCop,
         fiscalImpactNote: notaSinMontosDelModelo(c.fiscalImpactNote, ajusteCop, language),
       })),
     },
-    formato1125Rows: json.formato1125Rows.map((r) => ({
-      ...r,
-      q1Percent: s ? s.q1 : null,
-      medianPercent: s ? s.median : null,
-      q3Percent: s ? s.q3 : null,
-      isWithinRange: check.isWithinRange === true,
-      adjustmentCop: ajusteCop,
-      remarks: check.conclusive ? r.remarks : [ilustrativa, r.remarks].filter(Boolean).join(' | '),
-    })),
+    formato1125Rows: json.formato1125Rows.map((r) => {
+      const remarks = r.remarks === null ? null : sinMontos(r.remarks);
+      return {
+        ...r,
+        q1Percent: s ? s.q1 : null,
+        medianPercent: s ? s.median : null,
+        q3Percent: s ? s.q3 : null,
+        isWithinRange: check.isWithinRange === true,
+        adjustmentCop: ajusteCop,
+        remarks: check.conclusive ? remarks : [ilustrativa, remarks].filter(Boolean).join(' | '),
+      };
+    }),
+    recommendations: json.recommendations.map((rec) => ({ ...rec, detail: sinMontos(rec.detail) })),
+    art647Defense: { ...json.art647Defense, rationale: sinMontos(json.art647Defense.rationale) },
   };
 }
 

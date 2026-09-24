@@ -261,9 +261,98 @@ export function notaSinMontosDelModelo(
 }
 
 /**
+ * La frase habla del ajuste de precios de transferencia o de su impacto
+ * fiscal (es/en). Un monto en una frase así lo escribió el modelo: sin la base
+ * del PLI en COP el código no calcula el ajuste.
+ */
+const MENCIONA_AJUSTE =
+  /\bajust|\badjust|mayor\s+(?:renta|impuesto)|impuesto\s+adicional|additional\s+(?:tax|taxable|income)|impacto\s+fiscal|tax\s+impact|renta\s+gravable\s+adicional/i;
+
+/** Abreviaturas que preceden a un número o a un nombre («Art. 260», «No. 5»). */
+const ABREVIATURA_ANTES_DE = /\b(?:Arts?|par|num|núm|lit|inc|No|Nro|Dr|Sr|Sra|pp|p|vs)$/i;
+
+/**
+ * Un punto cierra la frase si le sigue espacio y luego fin de texto o una
+ * mayúscula / signo de apertura, y no es una abreviatura que precede a un
+ * número o nombre. «E.T. La…» cierra; «Art. 260-4», «E.T. y …» y «1.234» no.
+ */
+function puntoCierraFrase(texto: string, i: number): boolean {
+  if (!/\s/.test(texto[i + 1] ?? ' ')) return false;
+  const siguiente = texto.slice(i + 1).match(/\S/)?.[0];
+  if (siguiente === undefined) return true;
+  if (!/[A-ZÁÉÍÓÚÑ¿¡("«“]/.test(siguiente)) return false;
+  return !ABREVIATURA_ANTES_DE.test(texto.slice(Math.max(0, i - 6), i));
+}
+
+/**
+ * Parte el texto en frases conservando separadores y espacios, de modo que
+ * unir los trozos reproduce el texto. Corta tras «! ? ;» seguidos de espacio,
+ * tras el punto que cierra frase (`puntoCierraFrase`) y en cada salto de línea.
+ */
+function trocearFrases(texto: string): string[] {
+  const trozos: string[] = [];
+  let ini = 0;
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+    let corte = ch === '\n';
+    if (!corte && /[!?;]/.test(ch)) corte = /\s/.test(texto[i + 1] ?? ' ');
+    if (!corte && ch === '.') corte = puntoCierraFrase(texto, i);
+    if (!corte) continue;
+    let fin = i + 1;
+    while (fin < texto.length && /[ \t]/.test(texto[fin])) fin++;
+    trozos.push(texto.slice(ini, fin));
+    ini = fin;
+    i = fin - 1;
+  }
+  if (ini < texto.length) trozos.push(texto.slice(ini));
+  return trozos;
+}
+
+/**
+ * Texto libre del modelo con el ajuste en COP N/D (I4-escudo 7): retira cada
+ * frase que menciona el ajuste o su impacto fiscal CON un monto y añade una
+ * sola vez el motivo en el idioma del informe. El resto del texto —incluidos
+ * los montos de las operaciones, que no son el ajuste— se conserva. Con el
+ * ajuste determinista ("0") el texto no se toca. Idempotente.
+ */
+export function textoSinMontosDeAjuste(
+  texto: string,
+  ajusteCop: string | null,
+  language: 'es' | 'en' = 'es',
+): string {
+  if (ajusteCop !== null || !texto) return texto;
+  const trozos = trocearFrases(texto);
+  const conservados = trozos.filter((t) => !(MONTO_EN_NOTA.test(t) && MENCIONA_AJUSTE.test(t)));
+  if (conservados.length === trozos.length) return texto;
+  const motivo = tpAjusteCopSinBaseMotivo(language);
+  const base = conservados.join('').trim();
+  if (!base) return motivo;
+  return base.includes(motivo) ? base : `${base} ${motivo}`;
+}
+
+/** Lista de textos libres: filtra cada uno y deja el motivo una sola vez. */
+export function textosSinMontosDeAjuste(
+  textos: readonly string[],
+  ajusteCop: string | null,
+  language: 'es' | 'en' = 'es',
+): string[] {
+  if (ajusteCop !== null) return [...textos];
+  const motivo = tpAjusteCopSinBaseMotivo(language);
+  const out: string[] = [];
+  for (const t of textos) {
+    const limpio = textoSinMontosDeAjuste(t, ajusteCop, language);
+    if (limpio === motivo && out.includes(motivo)) continue;
+    out.push(limpio);
+  }
+  return out;
+}
+
+/**
  * Sobrescribe `interquartileRange` y `armLengthConclusion` con el cálculo
  * determinista. El ajuste en COP sólo es determinable dentro del rango ("0");
- * fuera de él no hay base del PLI en COP en el contrato ⇒ null con motivo.
+ * fuera de él no hay base del PLI en COP en el contrato ⇒ null con motivo, y
+ * los textos libres del modelo sobre el ajuste (nota de impacto, `rationale`
+ * y notas técnicas) no publican montos que el código no calculó.
  */
 export function enforceComparableAnalysis(
   json: ComparableAnalysisReportJson,
@@ -290,6 +379,8 @@ export function enforceComparableAnalysis(
       requiredAdjustmentPercent: check.requiredAdjustmentPercent,
       requiredAdjustmentCop: ajusteCop,
       taxImpactNote: notaSinMontosDelModelo(json.armLengthConclusion.taxImpactNote, ajusteCop, language),
+      rationale: textoSinMontosDeAjuste(json.armLengthConclusion.rationale, ajusteCop, language),
     },
+    technicalNotes: textosSinMontosDeAjuste(json.technicalNotes, ajusteCop, language),
   };
 }
