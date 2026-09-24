@@ -11,9 +11,22 @@
  */
 
 import type { NiifReportIntake } from '@/types/platform';
+import {
+  escribirDirectivasIngesta,
+  leerDirectivasIngesta,
+  motivoCodigoVencimientoInvalido,
+  type UnidadMonetaria,
+  type Vencimiento,
+} from '@/lib/upload/ingest-directives';
 
 /** Etiqueta del balance en la lista de faltantes (compartida con el banner). */
 export const RAW_DATA_LABEL = 'Balance de prueba / datos contables';
+
+/**
+ * Etiqueta de la unidad pendiente de confirmar (P4-a): el archivo declara "en
+ * miles / millones" y sin la elección del usuario /niif respondería 422.
+ */
+export const UNIT_PENDING_LABEL = 'Unidad de las cifras (pesos / miles / millones)';
 
 /**
  * Datos contables efectivos de la corrida: gana lo extraído por OCR y, si no
@@ -55,6 +68,7 @@ type RequiredSubset = Pick<NiifReportIntake, 'company' | 'fiscalPeriod' | 'niifG
 export function collectMissingRequired(
   values: RequiredSubset,
   resolvedRawData: string,
+  opts: { unitPending?: boolean } = {},
 ): string[] {
   const missing: string[] = [];
   if (!values.company?.name?.trim()) missing.push('Razón Social');
@@ -62,6 +76,7 @@ export function collectMissingRequired(
   if (!values.fiscalPeriod) missing.push('Periodo Fiscal');
   if (!values.niifGroup) missing.push('Grupo NIIF');
   if (!resolvedRawData) missing.push(RAW_DATA_LABEL);
+  if (opts.unitPending) missing.push(UNIT_PENDING_LABEL);
   return missing;
 }
 
@@ -69,8 +84,59 @@ export function collectMissingRequired(
 export function isReviewStepValid(
   values: RequiredSubset,
   resolvedRawData: string,
+  opts: { unitPending?: boolean } = {},
 ): boolean {
-  return collectMissingRequired(values, resolvedRawData).length === 0;
+  return collectMissingRequired(values, resolvedRawData, opts).length === 0;
+}
+
+/**
+ * Datos contables que viajan al pipeline con las confirmaciones del intake
+ * (P4) escritas como directivas al inicio: `rawData` es la fuente que
+ * re-leen /niif, Stage 0 y /export, así que la confirmación no depende de que
+ * cada llamada reenvíe un campo aparte.
+ *
+ *  - `vencimientos`: excepciones de vencimiento declaradas en el intake; se
+ *    suman a las que ya traiga el texto (las del intake prevalecen).
+ *  - `unidadConfirmada`: unidad elegida para un balance PEGADO a mano (en un
+ *    archivo la confirma /api/upload y ya viene en el texto). `undefined`
+ *    conserva la del texto.
+ *
+ * Sin confirmaciones devuelve el texto intacto.
+ */
+export function applyIntakeDirectives(
+  rawData: string,
+  opts: {
+    vencimientos?: Readonly<Record<string, Vencimiento>> | null;
+    unidadConfirmada?: UnidadMonetaria | null;
+  },
+): string {
+  const venc = Object.entries(opts.vencimientos ?? {});
+  const unidad = opts.unidadConfirmada ?? undefined;
+  if (!rawData || (venc.length === 0 && unidad === undefined)) return rawData;
+  const actual = leerDirectivasIngesta(rawData);
+  const vencimientos =
+    venc.length > 0 ? { ...(actual.vencimientos ?? {}), ...Object.fromEntries(venc) } : undefined;
+  return escribirDirectivasIngesta(rawData, {
+    ...(unidad !== undefined ? { unidadConfirmada: unidad } : {}),
+    ...(vencimientos ? { vencimientos } : {}),
+  });
+}
+
+/**
+ * Normaliza y valida un código de excepción de vencimiento escrito en el
+ * intake (`12.05` → `1205`). Devuelve el código o el motivo del rechazo.
+ */
+export function parseMaturityOverrideCode(
+  input: string,
+):
+  | { ok: true; code: string }
+  | { ok: false; kind: 'format' | 'class'; reason: string } {
+  const code = input.replace(/[.\-\s]/g, '');
+  const reason = motivoCodigoVencimientoInvalido(code);
+  if (!reason) return { ok: true, code };
+  // `kind` elige el texto del diccionario (es/en) que ve el usuario; `reason`
+  // es el motivo del servidor, en español.
+  return { ok: false, kind: /^\d{2,20}$/.test(code) ? 'class' : 'format', reason };
 }
 
 /**

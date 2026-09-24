@@ -59,6 +59,8 @@ interface SiigoTrialBalanceResponse {
 const DEFAULT_BASE = 'https://api.siigo.com';
 const PARTNER_ID = 'UtopIA-NIIF';
 const PAGE_SIZE = 100;
+/** Tope de páginas: evita un ciclo sin fin si el API ignora `page`. */
+const MAX_PAGES = 1000;
 
 // ─── Retry helper ─────────────────────────────────────────────────────────────
 
@@ -176,10 +178,14 @@ export class SiigoNubeConnector extends BaseERPConnector {
     const token = await this.getAccessToken(credentials);
     const base = this.baseUrl(credentials);
     const results: SiigoTrialBalanceRow[] = [];
-    let page = 1;
+    let expectedTotal: number | null = null;
 
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (let page = 1; ; page++) {
+      if (page > MAX_PAGES) {
+        throw new Error(
+          `Siigo Nube /v1/test-balance-report: más de ${MAX_PAGES} páginas sin terminar la paginación.`,
+        );
+      }
       const body: Record<string, unknown> = { month, year, page, page_size: PAGE_SIZE };
       if (costCenter) body.cost_center = costCenter;
 
@@ -208,13 +214,25 @@ export class SiigoNubeConnector extends BaseERPConnector {
       }
 
       const data = (await res.json()) as SiigoTrialBalanceResponse;
-      results.push(...(data.results ?? []));
-
-      const fetched = (page - 1) * PAGE_SIZE + (data.results?.length ?? 0);
-      if (fetched >= data.total_results || !data.results?.length) break;
-      page++;
+      if (typeof data.total_results === 'number' && Number.isFinite(data.total_results)) {
+        expectedTotal = data.total_results;
+      }
+      const pageResults = data.results ?? [];
+      if (pageResults.length === 0) break;
+      results.push(...pageResults);
+      // ingesta-22: se cuentan las filas REALMENTE recibidas. Suponer
+      // `page_size = 100` sobreestimaba lo leído cuando el servidor limita el
+      // tamaño de página y cortaba páginas en silencio.
+      if (expectedTotal !== null && results.length >= expectedTotal) break;
     }
 
+    // Un balance con filas faltantes no cuadra y no se sabe cuáles faltan:
+    // error explícito en vez de un balance incompleto.
+    if (expectedTotal !== null && results.length !== expectedTotal) {
+      throw new Error(
+        `Siigo Nube /v1/test-balance-report: paginación incompleta (${results.length} de ${expectedTotal} filas).`,
+      );
+    }
     return results;
   }
 

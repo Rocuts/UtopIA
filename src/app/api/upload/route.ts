@@ -14,7 +14,14 @@ import {
   parseUploadedTrialBalanceText,
   TrialBalanceIngestError,
 } from '@/lib/preprocessing/raw-data';
-import { sanitizeSheetLabel, xlsxRowToCsvLine } from '@/lib/upload/xlsx-csv';
+import { sanitizeSheetLabel, xlsxRowToCsvLine, type XlsxNumberPrecision } from '@/lib/upload/xlsx-csv';
+import {
+  escribirDirectivasIngesta,
+  leerCampoUnidad,
+  leerDirectivasIngesta,
+  type UnidadMonetaria,
+  type UploadUnitInfo,
+} from '@/lib/upload/ingest-directives';
 import { generateText } from 'ai';
 import { MODELS } from '@/lib/config/models';
 import fs from 'fs';
@@ -367,7 +374,14 @@ async function extractTextFromImage(buffer: Buffer, filename: string): Promise<s
 }
 
 // Supported file types and their text extractors
-async function extractText(buffer: Buffer, filename: string): Promise<string> {
+async function extractText(
+  buffer: Buffer,
+  filename: string,
+  // P4-a: con la unidad confirmada en miles / millones las celdas numéricas
+  // del XLSX conservan todos sus decimales (dos decimales de la unidad no son
+  // centavos); en pesos se redondean al centavo como siempre.
+  xlsxPrecision: XlsxNumberPrecision = 'cents',
+): Promise<string> {
   const ext = path.extname(filename).toLowerCase();
 
   if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
@@ -496,7 +510,7 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
         // los convierte a texto y escapa cada campo segun RFC 4180: un nombre
         // de cuenta con coma ("Propiedades, planta y equipo") ya no desplaza
         // las columnas (ingesta-05).
-        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0);
+        const line = xlsxRowToCsvLine(row.values as unknown[], rows.length === 0, xlsxPrecision);
         // Filas sin ningún valor (sólo formato) no aportan: si quedaran
         // primeras, el parser las tomaría como encabezado.
         if (/^,*$/.test(line)) return;
@@ -664,14 +678,35 @@ interface ProcessDocumentResult {
    * como 422 si se intenta generar con este archivo.
    */
   ingestErrors: string[];
+  /**
+   * P4-a: unidad de los importes. `requiresConfirmation` = el archivo declara
+   * "en miles / millones" y el usuario aún no confirmó la unidad: el balance
+   * sigue bloqueado (motivo en `preprocessed…integrityReasons`) hasta que el
+   * cliente reenvíe el archivo con `unitMultiplier`. `null` si el documento no
+   * es un balance tabular.
+   */
+  unit: UploadUnitInfo | null;
   message: string;
+}
+
+/** Extensiones cuyo texto se preprocesa como balance de prueba. */
+const TABULAR_EXTENSIONS = new Set(['.csv', '.xlsx', '.xls']);
+
+interface ProcessDocumentOptions {
+  /**
+   * Unidad CONFIRMADA por el usuario (`unitMultiplier` de la solicitud). Se
+   * aplica en centavos exactos y viaja como directiva en `rawData`.
+   */
+  unidadConfirmada?: UnidadMonetaria | null;
 }
 
 async function processDocument(
   buffer: Buffer,
   filename: string,
   contextLabel: string,
+  options: ProcessDocumentOptions = {},
 ): Promise<ProcessDocumentResult> {
+  const unidadConfirmada = options.unidadConfirmada ?? null;
   // Validate extension before any processing
   const ext = path.extname(filename).toLowerCase();
   if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
@@ -682,9 +717,19 @@ async function processDocument(
     throw new UploadError('Archivo demasiado grande. Máximo 100MB.');
   }
 
+  // La confirmación de unidad sólo existe para balances tabulares: en un PDF
+  // o una imagen reprocesar volvería a facturar la lectura OCR sin efecto.
+  if (unidadConfirmada && !TABULAR_EXTENSIONS.has(ext)) {
+    throw new UploadError('unitMultiplier sólo aplica a balances CSV, XLSX o XLS.');
+  }
+
   let text: string;
   try {
-    text = await extractText(buffer, filename);
+    text = await extractText(
+      buffer,
+      filename,
+      unidadConfirmada === 'miles' || unidadConfirmada === 'millones' ? 'full' : 'cents',
+    );
   } catch (extractError) {
     // Return the specific error message so the frontend can display actionable feedback
     const message = extractError instanceof Error
@@ -692,6 +737,15 @@ async function processDocument(
       : 'Could not process file.';
     throw new UploadError(message);
   }
+
+  // Las directivas de ingesta (P4) sólo las escriben el servidor, con los
+  // campos de la solicitud (`unitMultiplier`), y el intake al enviar. Un
+  // archivo que ya las trae al inicio no puede confirmarse a sí mismo: la
+  // unidad se reexpresaría y el informe diría "por confirmación del usuario"
+  // sin que el usuario eligiera nada. Se descartan con aviso y la unidad
+  // declarada vuelve a pedir confirmación.
+  const directivasDelArchivo = leerDirectivasIngesta(text);
+  if (directivasDelArchivo.tieneDirectivas) text = directivasDelArchivo.resto;
 
   if (!text.trim()) {
     throw new UploadError(
@@ -709,11 +763,17 @@ async function processDocument(
   // resolver workspace, NO indexamos en el RAG global — el texto sigue
   // disponible para el agente via documentContext (per-conversacion).
   // -----------------------------------------------------------------
+  // Un reenvío con la unidad confirmada (P4-a) reprocesa un archivo que ya se
+  // indexó y copió en la primera subida: se omite para no duplicar fragmentos
+  // en el store vectorial (cada búsqueda los recuperaría dos veces).
+  const isUnitConfirmationReprocess = unidadConfirmada !== null;
   let workspaceId: string | undefined;
-  try {
-    workspaceId = (await getOrCreateWorkspace()).id;
-  } catch {
-    workspaceId = undefined;
+  if (!isUnitConfirmationReprocess) {
+    try {
+      workspaceId = (await getOrCreateWorkspace()).id;
+    } catch {
+      workspaceId = undefined;
+    }
   }
   const chunksCount = workspaceId
     ? await addDocumentsToStore([text], {
@@ -727,15 +787,18 @@ async function processDocument(
     invalidateVectorStore();
   }
 
-  // Save file copy (best-effort, non-critical)
-  try {
-    if (!fs.existsSync(uploadsPath)) {
-      fs.mkdirSync(uploadsPath, { recursive: true });
+  // Save file copy (best-effort, non-critical). El reenvío por confirmación de
+  // unidad no vuelve a copiar el archivo.
+  if (!isUnitConfirmationReprocess) {
+    try {
+      if (!fs.existsSync(uploadsPath)) {
+        fs.mkdirSync(uploadsPath, { recursive: true });
+      }
+      const safeName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
+    } catch {
+      // Non-critical on Vercel's read-only filesystem
     }
-    const safeName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    fs.writeFileSync(path.join(uploadsPath, safeName), buffer);
-  } catch {
-    // Non-critical on Vercel's read-only filesystem
   }
 
   // -----------------------------------------------------------------
@@ -752,12 +815,29 @@ async function processDocument(
   let preprocessed: PreprocessedBalance | null = null;
   let detectedPeriods: string[] = [];
   const ingestWarnings: string[] = [];
+  if (directivasDelArchivo.tieneDirectivas) {
+    ingestWarnings.push(
+      'El archivo traía líneas de confirmación de ingesta ([unidad-confirmada=…] / [vencimientos=…]) ' +
+        'al inicio y se ignoraron: la unidad de las cifras y las excepciones de vencimiento se ' +
+        'confirman en el formulario del informe.',
+    );
+  }
   const ingestErrors: string[] = [];
-  let extractedText = text;
-  if (['.csv', '.xlsx', '.xls'].includes(ext)) {
+  let unit: UploadUnitInfo | null = null;
+  // Con la unidad confirmada, `rawData` lleva la directiva: /niif, Stage 0 y
+  // /export re-derivan el balance desde este texto y leen la misma unidad.
+  const dataText = unidadConfirmada ? escribirDirectivasIngesta(text, { unidadConfirmada }) : text;
+  let extractedText = dataText;
+  if (TABULAR_EXTENSIONS.has(ext)) {
     try {
-      const parsed = parseUploadedTrialBalanceText(text);
+      const parsed = parseUploadedTrialBalanceText(dataText);
       ingestWarnings.push(...parsed.warnings);
+      unit = {
+        declared: parsed.unidad.declarada?.unidad ?? null,
+        declaredText: parsed.unidad.declarada?.texto ?? null,
+        confirmed: parsed.unidad.confirmada,
+        requiresConfirmation: parsed.unidad.declarada !== null && parsed.unidad.confirmada === null,
+      };
 
       if (parsed.rows.length > 10) {
         // ingesta-09 (cross-dep W3-A): las columnas de saldo inicial/anterior
@@ -770,7 +850,7 @@ async function processDocument(
             : pp.validationReport;
           detectedPeriods = pp.periods.map((p) => p.period);
           // Prepend validation report so chat agents receive validated data
-          extractedText = `${validationReport}\n\n---\n\nDATOS ORIGINALES:\n${text}`;
+          extractedText = `${validationReport}\n\n---\n\nDATOS ORIGINALES:\n${dataText}`;
           // Invalidate workspace-balance tag so ERP sync consumers and
           // cached dashboard queries pick up the freshly uploaded balance.
           // 'default' profile: 5 min stale / 15 min revalidate (same as
@@ -799,7 +879,7 @@ async function processDocument(
     filename,
     chunks: chunksCount,
     extractedText,
-    rawData: text,
+    rawData: dataText,
     validationReport,
     detectedCaseType,
     isTrialBalance: !!validationReport,
@@ -807,6 +887,7 @@ async function processDocument(
     detectedPeriods,
     ingestWarnings,
     ingestErrors,
+    unit,
     message: chunksCount > 0
       ? `Documento "${filename}" procesado en ${chunksCount} fragmentos e indexado.`
       : `Documento "${filename}" procesado exitosamente. Texto extraido disponible para consulta.`,
@@ -872,6 +953,11 @@ export async function POST(req: Request) {
         );
       }
       const { blobUrl, context, filename: bodyFilename } = parsed.data;
+      // P4-a: confirmación de unidad (campo opcional fuera del esquema base).
+      const unitField = leerCampoUnidad((body as { unitMultiplier?: unknown }).unitMultiplier);
+      if (!unitField.ok) {
+        return NextResponse.json({ error: unitField.error }, { status: 400 });
+      }
 
       // Anti-SSRF: solo aceptamos URLs de Vercel Blob. El host debe terminar
       // en `.vercel-storage.com` (cubre tambien `.blob.vercel-storage.com`).
@@ -930,7 +1016,9 @@ export async function POST(req: Request) {
       }
 
       try {
-        const result = await processDocument(buffer, filename, contextLabel);
+        const result = await processDocument(buffer, filename, contextLabel, {
+          unidadConfirmada: unitField.unidad,
+        });
         // toJsonSafe: `preprocessed.controlTotals.cents` es BigInt — sin la
         // conversion, JSON.stringify lanza y todo balance real devolvia 500.
         return NextResponse.json(toJsonSafe(result));
@@ -957,6 +1045,10 @@ export async function POST(req: Request) {
     if (!file) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
     }
+    const unitField = leerCampoUnidad(formData.get('unitMultiplier'));
+    if (!unitField.ok) {
+      return NextResponse.json({ error: unitField.error }, { status: 400 });
+    }
 
     // Validate extension before any processing
     const ext = path.extname(file.name).toLowerCase();
@@ -971,7 +1063,9 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     try {
-      const result = await processDocument(buffer, file.name, contextLabel);
+      const result = await processDocument(buffer, file.name, contextLabel, {
+        unidadConfirmada: unitField.unidad,
+      });
       return NextResponse.json(toJsonSafe(result));
     } catch (err) {
       if (err instanceof UploadError) {

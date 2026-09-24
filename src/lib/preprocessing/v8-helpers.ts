@@ -147,7 +147,10 @@ export type CoverageClassCode = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | 
  */
 export interface CoverageByClass {
   classCode: CoverageClassCode;
-  /** Cantidad de auxiliares (level === 'Auxiliar' o transactional) en la clase. */
+  /**
+   * Cantidad de auxiliares del archivo de origen (hojas o nivel Auxiliar con
+   * código PUC numérico) en la clase; sin las cuentas virtuales del curador.
+   */
   auxiliariesCount: number;
   /** Saldo total de la clase en centavos como string (MoneyCop convention). */
   totalSaldoCop: string;
@@ -183,6 +186,17 @@ function toMoneyCopString(pesos: number): string {
 }
 
 /**
+ * `true` si la cuenta es un auxiliar del ARCHIVO de origen: hoja (o nivel
+ * Auxiliar) con código PUC numérico. Las cuentas virtuales que inyecta el
+ * curador (R1 `2105ZZ-111005`, R8 `3605VC` / `3710VC`) no son auxiliares
+ * procesados (niif-preproceso-30): inflaban "Auxiliares procesados" del Slide
+ * 12. Su saldo sí cuenta en el total de la clase (post-curador).
+ */
+function isSourceAuxiliary(acc: { code: string; isLeaf: boolean; level: string }): boolean {
+  return (acc.isLeaf || acc.level === 'Auxiliar') && /^\d+$/.test(acc.code);
+}
+
+/**
  * Lookup tolerante: dado un código de clase PUC (incluyendo el caso especial
  * '25' que es un GRUPO dentro de Clase 2), devuelve los auxiliares de la
  * clase 1..9 estándar o los auxiliares del grupo 25xx para el caso laboral.
@@ -200,9 +214,7 @@ function collectClassAccounts(
     const class2 = snap.classes.find((c) => c.code === 2);
     if (!class2) return { auxiliariesCount: 0, total: 0 };
     const accounts25 = class2.accounts.filter((acc) => acc.code.startsWith('25'));
-    const auxiliariesCount = accounts25.filter(
-      (acc) => acc.isLeaf || acc.level === 'Auxiliar',
-    ).length;
+    const auxiliariesCount = accounts25.filter(isSourceAuxiliary).length;
     const total = accounts25.reduce((sum, acc) => sum + (acc.isLeaf ? acc.balance : 0), 0);
     return { auxiliariesCount, total };
   }
@@ -210,9 +222,7 @@ function collectClassAccounts(
   // Caso estándar 1..9: lookup directo por `code === parseInt(classCode)`.
   const cls = snap.classes.find((c) => c.code === parseInt(classCode, 10));
   if (!cls) return { auxiliariesCount: 0, total: 0 };
-  const auxiliariesCount = cls.accounts.filter(
-    (acc) => acc.isLeaf || acc.level === 'Auxiliar',
-  ).length;
+  const auxiliariesCount = cls.accounts.filter(isSourceAuxiliary).length;
   // `auxiliaryTotal` ya está pre-computado para clases 1..7; para 8/9 lo
   // derivamos sumando las hojas. Hacemos el cálculo manual de hojas para
   // garantizar coherencia con el conteo de auxiliares.

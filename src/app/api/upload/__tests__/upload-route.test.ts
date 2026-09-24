@@ -295,3 +295,147 @@ describe('/api/upload — códigos repetidos (ingesta-12)', () => {
     expect(r.preprocessed!.comparative!.controlTotals.activo).toBe(800_000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P4 (a) — unidad declarada "en miles / millones" con confirmación explícita.
+// Sin `unitMultiplier` el upload devuelve la unidad detectada y el motivo
+// bloqueante; con la confirmación reexpresa en centavos exactos y `rawData`
+// lleva la directiva que leen /niif, Stage 0 y /export.
+// ---------------------------------------------------------------------------
+describe('/api/upload — unidad declarada con confirmación (P4-a)', () => {
+  const CSV_MILES = [
+    'codigo,nombre,Saldo 2025 (miles de pesos)',
+    ...BASE.map(([c, n, v]) => `${c},"${n}",${v}`),
+  ].join('\n');
+
+  async function uploadWith(
+    bytes: string,
+    filename: string,
+    unitMultiplier: string,
+  ): Promise<{ status: number; json: UploadJson & { error?: string; unit?: unknown } }> {
+    const fd = new FormData();
+    fd.append('file', new File([new Blob([bytes])], filename));
+    fd.append('context', 'test');
+    fd.append('unitMultiplier', unitMultiplier);
+    const res = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: fd }));
+    return { status: res.status, json: (await res.json()) as UploadJson & { error?: string; unit?: unknown } };
+  }
+
+  it('sin confirmación: informa la unidad detectada y el balance sigue bloqueado con el motivo', async () => {
+    const r = (await upload(CSV_MILES, 'balance.csv')) as UploadJson & { unit?: unknown };
+    expect(r.unit).toEqual({
+      declared: 'miles',
+      declaredText: 'Saldo 2025 (miles de pesos)',
+      confirmed: null,
+      requiresConfirmation: true,
+    });
+    const primary = r.preprocessed!.primary as unknown as {
+      validation: { blocking: boolean; integrityReasons?: string[] };
+    };
+    expect(primary.validation.blocking).toBe(true);
+    expect(primary.validation.integrityReasons!.join(' ')).toMatch(/declara las cifras en miles de pesos/);
+    expect(r.rawData).toBe(CSV_MILES);
+  });
+
+  it('con unitMultiplier=1000: cifras × 1.000 exactas, nota visible y rawData con la directiva', async () => {
+    const { status, json } = await uploadWith(CSV_MILES, 'balance.csv', '1000');
+    expect(status).toBe(200);
+    expect(json.unit).toEqual({
+      declared: 'miles',
+      declaredText: 'Saldo 2025 (miles de pesos)',
+      confirmed: 'miles',
+      requiresConfirmation: false,
+    });
+    expect(json.rawData!.split('\n')[0]).toBe('[unidad-confirmada=miles]');
+    expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
+    expect(json.validationReport).toMatch(/reexpresadas de miles de pesos a pesos/);
+    // El servidor del informe re-deriva lo mismo desde rawData.
+    const reparsed = preprocessTrialBalance(parseUploadedTrialBalanceText(json.rawData!).rows);
+    expect(reparsed.primary.controlTotals.activo).toBe(1_000_000_000);
+    expect(reparsed.primary.validation.blocking).toBe(false);
+  });
+
+  it('un archivo que trae su propia directiva no se confirma a sí mismo', async () => {
+    // Sin la solicitud del usuario, la línea `[unidad-confirmada=millones]` del
+    // archivo reexpresaba × 1.000.000 y la nota decía "por confirmación del
+    // usuario". La directiva del archivo se descarta con aviso.
+    const conDirectiva = `[unidad-confirmada=millones]\n[vencimientos=1520:corriente]\n${CSV_MILES}`;
+    const r = (await upload(conDirectiva, 'balance.csv')) as UploadJson & { unit?: unknown };
+    expect(r.unit).toEqual({
+      declared: 'miles',
+      declaredText: 'Saldo 2025 (miles de pesos)',
+      confirmed: null,
+      requiresConfirmation: true,
+    });
+    expect(r.rawData).toBe(CSV_MILES);
+    expect(r.ingestWarnings!.join(' ')).toMatch(/se ignoraron/);
+    const primary = r.preprocessed!.primary as unknown as {
+      controlTotals: { activo: number };
+      validation: { blocking: boolean };
+    };
+    expect(primary.validation.blocking).toBe(true);
+    expect(primary.controlTotals.activo).toBe(1_000_000);
+
+    // La confirmación de la solicitud es la única que cuenta (sin conflicto
+    // con la directiva descartada del archivo).
+    const { status, json } = await uploadWith(conDirectiva, 'balance.csv', '1000');
+    expect(status).toBe(200);
+    expect(json.rawData).toBe(`[unidad-confirmada=miles]\n${CSV_MILES}`);
+    expect(json.preprocessed!.primary.controlTotals.activo).toBe(1_000_000_000);
+  });
+
+  it('XLSX en millones: la confirmación conserva los decimales de cada celda (centavos exactos)', async () => {
+    // Las celdas se serializaban a dos decimales de la unidad antes de
+    // reexpresar: 4232,848882125 millones → "4232.85" → $4.232.850.000 y
+    // 1,234 millones → "1.23" → $1.230.000, sin bloqueo (el balance cuadraba).
+    const buf = await xlsxOf([
+      {
+        name: 'Balance 2025',
+        header: ['codigo', 'nombre', 'Saldo 2025 (millones de pesos)'],
+        rows: [
+          ['11050501', 'Caja', 4232.848882125],
+          ['11100501', 'Bancos', 1.234],
+          ['13050501', 'Clientes', 0.1 + 0.2],
+          ['15200101', 'PPE', 500],
+          ['22050101', 'Proveedores', 150],
+          ['23359501', 'Otros', 100],
+          ['25050101', 'Salarios', 50],
+          ['24080101', 'IVA', 100],
+          ['31050501', 'Capital', 4234.382882125],
+          ['33050501', 'Reserva', 100],
+          ['14350101', 'Mercancías', 0],
+        ],
+      },
+    ]);
+    const fd = new FormData();
+    fd.append('file', new File([new Blob([new Uint8Array(buf)])], 'balance.xlsx'));
+    fd.append('context', 'test');
+    fd.append('unitMultiplier', '1000000');
+    const res = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: fd }));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as UploadJson & {
+      preprocessed: { primary: { controlTotals: { cents: { activo: string } }; validation: { blocking: boolean } } };
+    };
+    // 4.232.848.882,13 + 1.234.000 + 300.000 + 500.000.000
+    expect(String(json.preprocessed.primary.controlTotals.cents.activo)).toBe('473438288213');
+    expect(json.preprocessed.primary.validation.blocking).toBe(false);
+    expect(json.rawData).toContain('11100501,Bancos,1.2340');
+    // /niif re-deriva lo mismo desde rawData.
+    const reparsed = preprocessTrialBalance(parseUploadedTrialBalanceText(json.rawData!).rows);
+    expect(reparsed.primary.controlTotals.cents!.activo).toBe(BigInt(473438288213));
+  });
+
+  it('unitMultiplier inválido o en un documento no tabular: 400 explícito', async () => {
+    expect((await uploadWith(CSV_MILES, 'balance.csv', '100')).status).toBe(400);
+    const txt = await uploadWith('Acta de asamblea', 'acta.txt', '1000');
+    expect(txt.status).toBe(400);
+    expect(txt.json.error).toMatch(/sólo aplica a balances/);
+  });
+
+  it('documento no contable: unit es null', async () => {
+    const r = (await upload('Acta de asamblea\nSe aprueba el orden del día.', 'acta.txt')) as UploadJson & {
+      unit?: unknown;
+    };
+    expect(r.unit).toBeNull();
+  });
+});

@@ -36,6 +36,26 @@ function toText(content: string | Buffer): string {
   }
 }
 
+/**
+ * Fecha de entrada (mes y día, sin año) del campo :61: en el año que la deja
+ * más cerca de la fecha valor: el mismo, el anterior o el siguiente
+ * (ingesta-26). `null` si el mes o el día no forman una fecha válida.
+ */
+function entryDateNear(valueDate: Date, month: number, day: number): Date | null {
+  if (!(month >= 1 && month <= 12) || !(day >= 1 && day <= 31)) return null;
+  const year = valueDate.getUTCFullYear();
+  let best: Date | null = null;
+  for (const y of [year, year - 1, year + 1]) {
+    const d = new Date(Date.UTC(y, month - 1, day));
+    // Descarta desbordes (31-feb → 3-mar).
+    if (d.getUTCMonth() !== month - 1) continue;
+    if (!best || Math.abs(d.getTime() - valueDate.getTime()) < Math.abs(best.getTime() - valueDate.getTime())) {
+      best = d;
+    }
+  }
+  return best;
+}
+
 /** YYMMDD → Date UTC. Pivote de siglo SWIFT: 00-79 ⇒ 2000s, 80-99 ⇒ 1900s. */
 function parseSwiftDate(yymmdd: string): Date | undefined {
   const m = yymmdd.match(/^(\d{2})(\d{2})(\d{2})$/);
@@ -226,13 +246,13 @@ export const mt940Parser: BankStatementParser = {
             warnings.push(`Línea :61: con fecha/monto inválido omitida.`);
             break;
           }
-          // Fecha de entrada MMDD hereda el año de la fecha valor.
+          // Fecha de entrada MMDD: no trae año. Se toma el año que deja la
+          // entrada más cerca de la fecha valor (ingesta-26): valor 31-dic con
+          // entrada 02-ene es del año siguiente, no de enero del mismo año.
           let postedAt = valueDate;
           if (m[2]) {
-            const entry = new Date(
-              Date.UTC(valueDate.getUTCFullYear(), Number(m[2].slice(0, 2)) - 1, Number(m[2].slice(2))),
-            );
-            if (!Number.isNaN(entry.getTime())) postedAt = entry;
+            const entry = entryDateNear(valueDate, Number(m[2].slice(0, 2)), Number(m[2].slice(2)));
+            if (entry) postedAt = entry;
           }
           const { txType, customerRef, bankRef } = parseLine61Tail(m[6] ?? '');
           pendingTx = {

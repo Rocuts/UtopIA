@@ -15,8 +15,10 @@ import { getDb } from '@/lib/db/client';
 import { apiTrialBalances } from '@/lib/db/schema';
 import { normalizeSignConvention, type SignConvention } from '@/lib/preprocessing/sign-convention';
 import {
+  aplicarVencimientosDeclarados,
   parseTrialBalanceCSVWithMeta,
   preprocessTrialBalance,
+  reexpresarFilasPorUnidad,
   type PreprocessedBalance,
   type RawAccountRow,
 } from '@/lib/preprocessing/trial-balance';
@@ -41,8 +43,25 @@ import { TrialBalanceCreateSchema, type RawRowInput } from './schemas';
  * periodo (coherente con /niif); una unidad declarada "en miles/millones" sin
  * confirmar es un motivo de integridad; el riesgo de liquidez (AC < PC) ya no
  * es motivo bloqueante.
+ * tb-2026-09-24.3 (P4): parámetros opcionales `unit` (unidad confirmada; los
+ * importes en miles / millones se reexpresan en centavos exactos) y
+ * `maturity_overrides` (excepciones de vencimiento por cuenta); el recurso
+ * expone `unit` y el detalle `validation_notes` y `classification_note`.
  */
-export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24.2';
+export const PREPROCESSOR_CONTRACT_VERSION = 'tb-2026-09-24.3';
+
+/**
+ * Unidad de los importes de la remisión (P4-a). `declared` es la unidad
+ * distinta de pesos que declara el CSV (encabezado, título o nota al pie);
+ * `confirmed` la del parámetro `unit`. `requires_confirmation` = el CSV declara
+ * una unidad y no llegó `unit`: la remisión queda `unbalanced` con el motivo.
+ */
+export interface TrialBalanceUnitInfo {
+  declared: 'miles' | 'millones' | null;
+  declared_text: string | null;
+  confirmed: 'pesos' | 'miles' | 'millones' | null;
+  requires_confirmation: boolean;
+}
 
 export interface Money {
   amount: string;
@@ -78,8 +97,11 @@ export type BuildRowsResult =
        * metadatos de columna: lista vacía.
        */
       openingPeriods: string[];
+      /** P4-a: unidad declarada por el CSV y confirmada por `unit`. */
+      unit: TrialBalanceUnitInfo;
     }
-  | { ok: false; code: 'empty_trial_balance' };
+  | { ok: false; code: 'empty_trial_balance' }
+  | { ok: false; code: 'validation_failed'; errors: ProblemValidationError[] };
 
 /**
  * `csv` y `rows` pasan por la MISMA normalización determinista de signos
@@ -91,12 +113,29 @@ export function buildRawRowsFromInput(input: {
   csv?: string;
   rows?: RawRowInput[];
   period_label?: string;
+  unit?: 'pesos' | 'miles' | 'millones';
+  maturity_overrides?: Record<string, 'corriente' | 'no_corriente'>;
 }): BuildRowsResult {
+  // P4-b: excepciones de vencimiento, marcadas en las filas persistidas para
+  // que el recompute del detalle (`getTrialBalanceDetail`) las aplique igual.
+  const conVencimientos = (
+    rows: RawAccountRow[],
+  ): { ok: true; rows: RawAccountRow[] } | { ok: false; errors: ProblemValidationError[] } => {
+    const r = aplicarVencimientosDeclarados(rows, input.maturity_overrides);
+    if (r.errores.length > 0) {
+      return { ok: false, errors: r.errores.map((detail) => ({ detail, pointer: '/maturity_overrides' })) };
+    }
+    return { ok: true, rows: r.rows };
+  };
+
   if (input.csv) {
     const parsed = parseTrialBalanceCSVWithMeta(input.csv, {
       currentYear: input.period_label,
+      ...(input.unit ? { unidadConfirmada: input.unit } : {}),
     });
     if (parsed.rows.length === 0) return { ok: false, code: 'empty_trial_balance' };
+    const venc = conVencimientos(parsed.rows);
+    if (!venc.ok) return { ok: false, code: 'validation_failed', errors: venc.errors };
     const closing = new Set(
       parsed.balanceColumns.filter((c) => c.kind !== 'opening').map((c) => c.period),
     );
@@ -109,10 +148,16 @@ export function buildRawRowsFromInput(input: {
     ].sort();
     return {
       ok: true,
-      rows: parsed.rows,
+      rows: venc.rows,
       source: 'csv',
       signConvention: parsed.signConvention?.convention ?? 'natural',
       openingPeriods,
+      unit: {
+        declared: parsed.unidadDeclarada?.unidad ?? null,
+        declared_text: parsed.unidadDeclarada?.texto ?? null,
+        confirmed: parsed.unidadAplicada,
+        requires_confirmation: parsed.unidadDeclarada !== null && parsed.unidadAplicada === null,
+      },
     };
   }
 
@@ -127,12 +172,34 @@ export function buildRawRowsFromInput(input: {
   );
   if (mapped.length === 0) return { ok: false, code: 'empty_trial_balance' };
   const normalized = normalizeSignConvention(mapped);
+  // P4-a: filas en miles / millones → pesos en centavos exactos. Un importe
+  // que tras reexpresarlo excede 2^53 centavos es un error del campo (400),
+  // nunca una cifra aproximada.
+  const scaled = reexpresarFilasPorUnidad(normalized.rows, input.unit);
+  if (scaled.errores.length > 0) {
+    return {
+      ok: false,
+      code: 'validation_failed',
+      errors: scaled.errores.map((e) => ({
+        detail: e.message,
+        pointer: `/rows/${e.index}/balances_by_period/${e.period}`,
+      })),
+    };
+  }
+  const venc = conVencimientos(scaled.rows);
+  if (!venc.ok) return { ok: false, code: 'validation_failed', errors: venc.errors };
   return {
     ok: true,
-    rows: normalized.rows,
+    rows: venc.rows,
     source: 'rows',
     signConvention: normalized.detection.convention,
     openingPeriods: [],
+    unit: {
+      declared: null,
+      declared_text: null,
+      confirmed: input.unit ?? null,
+      requires_confirmation: false,
+    },
   };
 }
 
@@ -175,6 +242,11 @@ export interface TrialBalanceSummary {
    * devuelve tal como se guardaron; el detalle los recalcula).
    */
   sign_convention: SignConvention | null;
+  /**
+   * P4-a: unidad declarada / confirmada. Ausente en los summaries persistidos
+   * antes de tb-2026-09-24.3 (se serializa `null`).
+   */
+  unit?: TrialBalanceUnitInfo | null;
   control_totals: {
     activo: Money;
     pasivo: Money;
@@ -252,7 +324,7 @@ export function hasPersistentBlockingReasons(pre: PreprocessedBalance): boolean 
 
 export function summarize(
   pre: PreprocessedBalance,
-  meta: { signConvention?: SignConvention | null } = {},
+  meta: { signConvention?: SignConvention | null; unit?: TrialBalanceUnitInfo | null } = {},
 ): TrialBalanceSummary {
   const primary = pre.primary;
   const cents = primary.controlTotals.cents;
@@ -282,6 +354,7 @@ export function summarize(
     period_label: primary.period,
     row_count: pre.rawRows.length,
     sign_convention: meta.signConvention ?? null,
+    unit: meta.unit ?? null,
     control_totals: {
       activo: centsToMoney(activo),
       pasivo: centsToMoney(pasivo),
@@ -314,6 +387,7 @@ export function serializeTrialBalance(
     period_label: row.summary.period_label,
     row_count: row.summary.row_count,
     sign_convention: row.summary.sign_convention ?? null,
+    unit: row.summary.unit ?? null,
     control_totals: row.summary.control_totals,
     findings: row.summary.findings,
     preprocessor_version: row.preprocessorVersion,
@@ -333,6 +407,13 @@ export function serializeTrialBalanceDetail(
     // ambiguas, códigos que no son cuentas PUC, descuadres): sin ellos el
     // cliente no sabría por qué la remisión no es certificable.
     validation_reasons: [...primary.validation.reasons],
+    // Notas informativas (no bloquean): cifras reexpresadas por la unidad
+    // confirmada, excepciones de vencimiento, fecha de corte declarada, riesgo
+    // de liquidez… (P4).
+    validation_notes: [...primary.validation.adjustments],
+    // Supuesto de clasificación corriente / no corriente, con las excepciones
+    // de vencimiento aplicadas y su monto (P4-b / niif-preproceso-21).
+    classification_note: primary.controlTotals.clasificacionSupuesta ?? null,
     discrepancies: primary.discrepancies.map((d) => ({
       location: d.location,
       reported: d.reported,
@@ -380,11 +461,14 @@ export async function createTrialBalance(
 
   const built = buildRawRowsFromInput(parsed.data);
   if (!built.ok) {
+    if (built.code === 'validation_failed') {
+      return { status: 400, problem: 'validation_failed', errors: built.errors };
+    }
     return { status: 422, problem: 'empty_trial_balance' };
   }
 
   const pre = preprocessBuiltRows(built, parsed.data.period_label);
-  const summary = summarize(pre, { signConvention: built.signConvention });
+  const summary = summarize(pre, { signConvention: built.signConvention, unit: built.unit });
 
   const { id: publicId, uuid } = newTypeId(ID_PREFIXES.trialBalance);
   await db.insert(apiTrialBalances).values({
@@ -443,6 +527,9 @@ export async function getTrialBalanceDetail(
     signConvention:
       persisted?.sign_convention ??
       (normalized.detection.convention === 'algebraica' ? 'algebraica' : null),
+    // Las filas persistidas ya vienen reexpresadas; la unidad se lee del
+    // summary guardado (el CSV original no se conserva).
+    unit: persisted?.unit ?? null,
   });
 
   const base = serializeTrialBalance(publicId, {

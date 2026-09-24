@@ -136,9 +136,36 @@ curl -X POST $BASE/api/v1/trial-balances \
   `validation_reasons[]` (spec `api-clientes-v1` §7). El riesgo de liquidez (activo corriente
   < pasivo corriente) **no** bloquea ni cambia el `status` (contrato `tb-2026-09-24.2`).
   **Un balance descuadrado NO es error**: el propósito del recurso es reportarlo.
+- **`unit` (opcional, contrato `tb-2026-09-24.3`)**: `pesos` | `miles` | `millones`. Un CSV que
+  declara "en miles de pesos" / "en millones" (encabezado, título o nota al pie) queda
+  `unbalanced` hasta que se confirme la unidad; el recurso lo informa en
+  `unit: {declared, declared_text, confirmed, requires_confirmation}`. Con `unit: "miles"` o
+  `"millones"` cada importe (del `csv` o de `rows[]`) se reexpresa a pesos desde su texto
+  decimal en **centavos exactos** (sin coma flotante) y el detalle lo revela en
+  `validation_notes[]`. `unit: "pesos"` confirma que los importes ya están en pesos pese a la
+  leyenda. Un importe de `rows[]` que tras reexpresarlo excede 2^53 centavos es `400
+  validation_failed` con el puntero del campo.
+
+  ```json
+  {"csv": "codigo;nombre;saldo 2025 (miles de pesos)\n110505;Caja;1000\n…", "unit": "miles"}
+  ```
+- **`maturity_overrides` (opcional)**: excepciones de vencimiento por cuenta,
+  `{"1205": "no_corriente", "2105": "no_corriente"}` — sólo códigos de activo (clase 1) o pasivo
+  (clase 2), máximo 500; el código más específico prevalece. Sin ellas la clasificación
+  corriente / no corriente es por grupo PUC (supuesto revelado). Se aplican de forma
+  determinista, se persisten con las filas (el `GET` las recomputa igual) y el detalle las
+  revela con su monto en `classification_note`. No cambian los totales de sección ni el
+  `status`.
+- **Fecha de corte en el título del CSV (`tb-2026-09-24.3`)**: si el CSV declara el corte en
+  una fila de título ("Balance de prueba a junio 30 de 2025", "Corte: 30/06/2025") y la
+  columna de saldo sólo trae el año, el `period_label` de la respuesta es el corte `AAAA-MM`
+  (`2025-06`, P&G de 6 meses y KPIs anualizados) aunque se haya enviado `period_label: "2025"`;
+  `validation_notes[]` cita el texto del archivo. Un corte a diciembre deja el año.
 - `GET /v1/trial-balances/{id}` **recomputa** desde las filas crudas con el preprocesador
   vigente (filosofía anti-desync del repo: no se persiste el `PreprocessedBalance`) y añade
-  `validation_reasons[]` + `discrepancies[]` + `curator_findings[]`. `preprocessor_version`
+  `validation_reasons[]` + `validation_notes[]` (notas no bloqueantes: unidad reexpresada,
+  excepciones de vencimiento, fecha de corte declarada, riesgo de liquidez) +
+  `classification_note` + `discrepancies[]` + `curator_findings[]`. `preprocessor_version`
   viaja en cada respuesta.
 - Las filas crudas se guardan **cifradas** con el vault AES-256-GCM (Ley 1581 — la
   contabilidad puede contener nombres de personas naturales). El `summary` persistido no
