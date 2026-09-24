@@ -227,7 +227,7 @@ export type NiifAuditReportJson = z.infer<typeof NiifAuditReportSchema>;
 // Spec v2.1 Dictamen 2 — sub-schemas estructurados para el Auditor Tributario
 // ---------------------------------------------------------------------------
 // El dictamen v2.1 exige analisis numerados 2-9: renta (cascada), retenciones,
-// IVA/ICA, TMT, riesgos, calendario, opinion, acciones. Cada bloque vive como
+// IVA/ICA, TTD, riesgos, calendario, opinion, acciones. Cada bloque vive como
 // schema nullable en `TaxAuditReportSchema` para preservar el formato legacy.
 // ---------------------------------------------------------------------------
 
@@ -320,7 +320,8 @@ export const TmtStatusEnum = z.enum(['cumple', 'no_cumple', 'no_aplica', 'no_det
 export type TmtStatusJson = z.infer<typeof TmtStatusEnum>;
 
 /**
- * Analisis 5 — Tasa Minima de Tributacion (Ley 2277/2022).
+ * Analisis 5 — Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.;
+ * Ley 2277/2022).
  * Aplica a TODO contribuyente de renta de los Arts. 240 / 240-1 E.T. sin
  * umbral de activos o patrimonio; 'no_aplica' se reserva para las excepciones
  * legales del paragrafo 6 (RTE Art. 19, SIMPLE, ZESE, hoteles parag. 5, etc.).
@@ -334,7 +335,7 @@ export const TmtAnalysisSchema = z.object({
     .nullable()
     .describe('TTD = ID / UD x 100 (par. 6 Art. 240 E.T.). Null sin ID y UD depurados y ambito verificado; nunca impuesto contable / UAI.'),
   status: TmtStatusEnum,
-  reference: NormaRef.describe('Norma TMT. Ej: "Art. 240-1 E.T.; Ley 2277/2022"'),
+  reference: NormaRef.describe('Norma de la Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.). Ej: "Art. 240 par. 6 E.T.; Ley 2277/2022"'),
 });
 export type TmtAnalysisJson = z.infer<typeof TmtAnalysisSchema>;
 
@@ -423,10 +424,10 @@ export const TaxAuditReportSchema = z.object({
   ivaIcaAnalysis: IvaIcaAnalysisSchema
     .nullable()
     .describe('Analisis de IVA e ICA. Null si se omite formato v2.1.'),
-  /** Analisis 5 — Tasa Minima de Tributacion (paragrafo 6 Art. 240 E.T.). */
+  /** Analisis 5 — Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.). */
   tmtAnalysis: TmtAnalysisSchema
     .nullable()
-    .describe('Analisis TMT. Null si se omite formato v2.1.'),
+    .describe('Analisis de la Tasa de Tributación Depurada (TTD, Art. 240 par. 6 E.T.). Null si se omite formato v2.1.'),
   /** Analisis 6 — Riesgos tributarios priorizados. */
   riesgosTributarios: z
     .array(RiesgoTributarioSchema)
