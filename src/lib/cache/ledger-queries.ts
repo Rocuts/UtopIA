@@ -27,7 +27,7 @@
 // ---------------------------------------------------------------------------
 
 import 'server-only';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 // import { cacheLife, cacheTag } from 'next/cache'; // re-enable when cacheComponents flips
 
 import { getDb } from '@/lib/db/client';
@@ -99,6 +99,59 @@ export async function getCachedLedgerByPeriod(
     );
 
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// getLedgerTotalsByPeriods
+//
+// Sumas de débito/crédito por (periodo, cuenta) para un conjunto de periodos,
+// agregadas en SQL (numeric exacto). La usa el compositor del balance para
+// construir saldos ACUMULADOS (clases 1-3) y resultados del año (clases 4-7)
+// sin traer línea por línea (auditoría ratios-kpis-03).
+//
+// Estados: 'posted' y 'reversed'. Una reversión marca el original como
+// 'reversed' y postea el asiento inverso como 'posted'; incluir sólo 'posted'
+// dejaría el inverso sin su original y el saldo quedaría con signo contrario.
+// ---------------------------------------------------------------------------
+
+export interface LedgerPeriodTotal {
+  periodId: string;
+  accountId: string;
+  /** Σ débitos (string numeric exacto de Postgres). */
+  debit: string;
+  /** Σ créditos (string numeric exacto de Postgres). */
+  credit: string;
+}
+
+export async function getLedgerTotalsByPeriods(
+  workspaceId: string,
+  periodIds: string[],
+): Promise<LedgerPeriodTotal[]> {
+  if (periodIds.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      periodId: journalEntries.periodId,
+      accountId: journalLines.accountId,
+      debit: sql<string>`coalesce(sum(${journalLines.debit}), 0)`,
+      credit: sql<string>`coalesce(sum(${journalLines.credit}), 0)`,
+    })
+    .from(journalEntries)
+    .innerJoin(journalLines, eq(journalLines.entryId, journalEntries.id))
+    .where(
+      and(
+        eq(journalEntries.workspaceId, workspaceId),
+        inArray(journalEntries.periodId, periodIds),
+        inArray(journalEntries.status, ['posted', 'reversed']),
+      ),
+    )
+    .groupBy(journalEntries.periodId, journalLines.accountId);
+  return rows.map((r) => ({
+    periodId: r.periodId,
+    accountId: r.accountId,
+    debit: String(r.debit ?? '0'),
+    credit: String(r.credit ?? '0'),
+  }));
 }
 
 // ---------------------------------------------------------------------------
