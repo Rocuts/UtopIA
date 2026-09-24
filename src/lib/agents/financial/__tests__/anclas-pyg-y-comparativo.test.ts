@@ -50,12 +50,21 @@ import { NiifReportSchema, type NiifReportJson } from '@/lib/agents/financial/co
 
 const FIXTURES = path.resolve(process.cwd(), 'src/lib/preprocessing/__fixtures__');
 
-/** El único export de ERP real del repo: header en la fila 8, saldos firmados. */
+/**
+ * El único export de ERP real del repo: header en la fila 8, saldos firmados.
+ *
+ * Las celdas se entrecomillan (RFC 4180): nombres como "Anticipo Retención en
+ * la fuente 2,5%" traen coma. Auditoría 2026-09 (niif-preproceso-06): sin
+ * comillas esas filas corrían columnas, el balance quedaba descuadrado en
+ * −$5.014.078,19 (2025) y −$6.737.813,85 (2024), y R8 escondía la diferencia
+ * en 3710VC. R8 ya no absorbe residuales, así que la conversión debe ser fiel.
+ */
 async function loadRealBalance(): Promise<PreprocessedBalance> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(path.join(FIXTURES, 'grupo-empresarial-2tres-sas.xlsx'));
   const ws = wb.worksheets[0];
   const lines: string[] = [];
+  const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   ws.eachRow((row) => {
     const values = row.values as unknown[];
     lines.push(
@@ -63,10 +72,10 @@ async function loadRealBalance(): Promise<PreprocessedBalance> {
         .slice(1)
         .map((v) => {
           if (v === null || v === undefined) return '';
-          if (typeof v === 'string') return v;
+          if (typeof v === 'string') return csvCell(v);
           if (typeof v === 'number') return String(v);
           const o = v as { text?: string; result?: unknown };
-          return o.text ?? (o.result !== undefined ? String(o.result) : String(v));
+          return csvCell(o.text ?? (o.result !== undefined ? String(o.result) : String(v)));
         })
         .join(','),
     );
@@ -112,29 +121,32 @@ function informeCorrecto(): NiifReportJson {
       signatories: null,
     },
     balanceSheet: {
+      // Auditoría 2026-09: cifras del balance leído con CSV fiel (ver
+      // `loadRealBalance`). La corrida original partía de la lectura con
+      // columnas corridas y su renglón 37 incluía el tapón de R8 (−$5.014.078,19).
       assets: [
         linea('11', 'Efectivo y equivalentes de efectivo', '241367788864', 2),
-        linea('13', 'Deudores comerciales y otras cuentas por cobrar', '9817925895', 2),
+        linea('13', 'Deudores comerciales y otras cuentas por cobrar', '11302939292', 2),
         linea('14', 'Inventarios', '167021576929', 2),
         linea('15', 'Propiedades, planta y equipo', '6638628', 2),
         linea('18', 'Otros activos', '383953800', 2),
       ],
       liabilities: [
         linea('22', 'Proveedores', '180151828812', 2),
-        linea('23', 'Cuentas por pagar', '3059408350', 2),
+        linea('23', 'Cuentas por pagar', '3834412193', 2),
         linea('24', 'Impuestos, gravámenes y tasas', '10553782441', 2),
-        linea('28', 'Otros pasivos', '2488865359', 2),
+        linea('28', 'Otros pasivos', '2697467094', 2),
       ],
       equity: [
         linea('36', 'Resultados del ejercicio', '222849678973', 2),
-        linea('37', 'Resultados de ejercicios anteriores', '-505679819', 2),
+        linea('37', 'Resultados de ejercicios anteriores', '-4272000', 2),
       ],
-      totalAssetsPrimary: '418597884116',
-      totalAssetsComparative: '279820411750',
-      totalLiabilitiesPrimary: '196253884962',
-      totalLiabilitiesComparative: '123226317839',
-      totalEquityPrimary: '222343999154',
-      totalEquityComparative: '156594093911',
+      totalAssetsPrimary: '420082897513',
+      totalAssetsComparative: '282247951116',
+      totalLiabilitiesPrimary: '197237490540',
+      totalLiabilitiesComparative: '124980075820',
+      totalEquityPrimary: '222845406973',
+      totalEquityComparative: '157267875296',
       notes: [],
       modeBanner: null,
     },
@@ -187,10 +199,10 @@ function informeCorrecto(): NiifReportJson {
           primaColocacion: '0',
           reservaLegal: '0',
           otrasReservas: '0',
-          resultadosAcumulados: '-505679819',
+          resultadosAcumulados: '-4272000',
           resultadoEjercicio: '0',
           ori: '0',
-          total: '-505679819',
+          total: '-4272000',
         },
         {
           kind: 'profit_for_period',
@@ -211,10 +223,10 @@ function informeCorrecto(): NiifReportJson {
           primaColocacion: '0',
           reservaLegal: '0',
           otrasReservas: '0',
-          resultadosAcumulados: '-505679819',
+          resultadosAcumulados: '-4272000',
           resultadoEjercicio: '222849678973',
           ori: '0',
-          total: '222343999154',
+          total: '222845406973',
         },
       ],
       notes: [],

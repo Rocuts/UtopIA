@@ -667,9 +667,13 @@ describe('Wave 2.F7 — Test 7 — 14 KPIs determinísticos en controlTotals', (
       '210505,Bancos nacionales CP,Auxiliar,30000000',
       '220505,Proveedores nacionales,Auxiliar,30000000',
       '240405,Renta por pagar,Auxiliar,20000000',
-      // Patrimonio (no cuadra con PUC pero R8 ajusta la utilidad vía virtual close)
+      // Patrimonio. Auditoría 2026-09: el fixture anterior (3705 +$20M a nivel
+      // Cuenta, sin auxiliares) no cumplía A = P + K + utilidad y R8 escondía
+      // −$100M en 3710VC; ahora R8 no absorbe residuales. Con pérdidas
+      // acumuladas de $100M el balance cuadra y el patrimonio post-cierre
+      // sigue siendo $120M (100 − 100 + 120).
       '311505,Capital suscrito,Auxiliar,100000000',
-      '3705,Utilidades acumuladas,Cuenta,20000000',
+      '371005,Perdidas acumuladas,Auxiliar,-100000000',
       // P&L
       '410505,Ventas,Auxiliar,300000000',
       '510505,Sueldos admin,Auxiliar,20000000',

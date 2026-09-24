@@ -32,8 +32,13 @@ import {
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '../trial-balance';
 import type { PeriodSnapshot } from '../trial-balance';
 
+// `balanced`: si el archivo cumple A = P + K una vez trasladado el resultado.
+// El fixture del CFO trae un descuadre deliberado (379505 −$1.572M) que desde
+// la auditoría 2026-09 (niif-preproceso-06) R8 ya no absorbe: el residual
+// debe quedar expuesto — en centavos — y bloquear, no desaparecer.
 const FIXTURES = [
-  'elite-pulido-diamante.csv',
+  { file: 'elite-pulido-diamante.csv', balanced: false },
+  { file: 'patologicos/sin-comparativo.csv', balanced: true },
 ] as const;
 
 function loadPeriods(fixture: string): PeriodSnapshot[] {
@@ -49,7 +54,7 @@ function loadPeriods(fixture: string): PeriodSnapshot[] {
 }
 
 describe('ControlTotals — coherencia number / cents / raw tras el curator', () => {
-  for (const fixture of FIXTURES) {
+  for (const { file: fixture, balanced } of FIXTURES) {
     describe(fixture, () => {
       const periods = loadPeriods(fixture);
 
@@ -85,16 +90,31 @@ describe('ControlTotals — coherencia number / cents / raw tras el curator', ()
             }
           });
 
-          it('la ecuación patrimonial cuadra en centavos exactos', () => {
-            // Es la forma que el gate `auditReportEmittable` evalúa (V1) con
-            // tolerancia 0n. Cuadrar en float no basta.
-            expect(
-              equationGapCents(totals),
-              `Activo − (Pasivo + Patrimonio) ≠ 0 en centavos. ` +
-                `activo=${totals.cents!.activo} pasivo=${totals.cents!.pasivo} ` +
-                `patrimonio=${totals.cents!.patrimonio}`,
-            ).toBe(BigInt(0));
-          });
+          if (balanced) {
+            it('la ecuación patrimonial cuadra en centavos exactos', () => {
+              // Es la forma que el gate `auditReportEmittable` evalúa (V1) con
+              // tolerancia 0n. Cuadrar en float no basta.
+              expect(
+                equationGapCents(totals),
+                `Activo − (Pasivo + Patrimonio) ≠ 0 en centavos. ` +
+                  `activo=${totals.cents!.activo} pasivo=${totals.cents!.pasivo} ` +
+                  `patrimonio=${totals.cents!.patrimonio}`,
+              ).toBe(BigInt(0));
+              expect(snap.validation.blocking).toBe(false);
+            });
+          } else {
+            it('el descuadre del archivo queda expuesto en centavos exactos y bloquea', () => {
+              // El residual en cents (lo que evalúa el gate V1) coincide con
+              // el que R8 reporta como no explicado: no hay plug escondido.
+              const gap = equationGapCents(totals);
+              expect(gap).not.toBe(BigInt(0));
+              expect(centsToCanonical(gap)).toBe(
+                snap.virtualCloseAdjustment?.unexplainedResidualRaw,
+              );
+              expect(snap.summary.equationBalanced).toBe(false);
+              expect(snap.validation.blocking).toBe(true);
+            });
+          }
         });
       }
     });

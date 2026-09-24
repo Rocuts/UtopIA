@@ -217,10 +217,14 @@ describe('Wave 2.F4 — Fix #3 — 14 KPIs deterministicos en ControlTotals', ()
       '24,Impuestos,Grupo,20000000',
       '240405,Renta,Auxiliar,20000000',
       // Patrimonio
-      '3,Patrimonio,Clase,120000000',
+      // Auditoría 2026-09: el fixture anterior (3705 +$20M a nivel Cuenta, sin
+      // auxiliares) no cumplía A = P + K + utilidad; R8 escondía −$100M en
+      // 3710VC. Con pérdidas acumuladas de $100M el balance cuadra y el
+      // patrimonio post-cierre sigue siendo $120M (100 − 100 + 120).
+      '3,Patrimonio,Clase,0',
       '31,Capital social,Grupo,100000000',
       '311505,Capital suscrito,Auxiliar,100000000',
-      '3705,Utilidades acumuladas,Cuenta,20000000',
+      '371005,Perdidas acumuladas,Auxiliar,-100000000',
       // P&L: ingresos $300M, costo $150M, gastos $30M (51 admin + 53 financ).
       '4,Ingresos,Clase,300000000',
       '41,Ingresos operacionales,Grupo,300000000',

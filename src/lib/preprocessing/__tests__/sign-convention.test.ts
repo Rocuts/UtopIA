@@ -176,15 +176,20 @@ describe('parseTrialBalanceCSV — normalización automática', () => {
     expect(despues.activo).toBeCloseTo(antes.activo, 2); // clase 1 no se toca
   });
 
-  it('el patrimonio deja de estar inflado por el tapón de R8', async () => {
+  it('sin normalizar, el descuadre ya no se esconde como patrimonio: bloquea', async () => {
     const csv = await loadGrupo2TresCsv();
 
-    const antes = preprocessTrialBalance(parseRaw(csv)).primary.controlTotals.patrimonio;
+    const antes = preprocessTrialBalance(parseRaw(csv)).primary;
     const despues = preprocessTrialBalance(parseTrialBalanceCSV(csv)).primary.controlTotals
       .patrimonio;
 
-    // Antes: $6.144.148.261,02 — patrimonio mayor que el activo entero.
-    expect(antes).toBeGreaterThan(6_000_000_000);
+    // Hasta la auditoría 2026-09 R8 llevaba el descuadre de la lectura sin
+    // normalizar a 3710VC y el patrimonio salía en $6.144.148.261,02 (mayor
+    // que el activo entero). Ahora ese residual queda expuesto y bloquea: el
+    // patrimonio publicado es Σ clase 3 + resultado del ejercicio.
+    expect(antes.controlTotals.patrimonio).toBeLessThan(6_000_000_000);
+    expect(antes.virtualCloseAdjustment?.blocking).toBe(true);
+    expect(antes.validation.blocking).toBe(true);
     // Después: ~$2.223.439.991,54 = aportes ($42.720) + utilidad del ejercicio.
     expect(despues).toBeGreaterThan(2_200_000_000);
     expect(despues).toBeLessThan(2_300_000_000);
@@ -217,11 +222,13 @@ describe('parseTrialBalanceCSV — normalización automática', () => {
     const csv = loadEliteCsv();
     const ct = preprocessTrialBalance(parseTrialBalanceCSV(csv)).primary.controlTotals;
 
-    // Totales post-curator vigentes antes de esta corrección — si la
-    // normalización se disparara sobre un balance natural, cambiarían.
+    // Totales post-curator — si la normalización se disparara sobre un balance
+    // natural, cambiarían. El patrimonio es Σ clase 3 tras el cierre virtual
+    // ($815,5M); antes de la auditoría 2026-09 salía en $2.390M porque R5
+    // lo anclaba a un desglose parcial y R8 absorbía el descuadre del fixture.
     expect(ct.activo).toBeCloseTo(3_270_000_000, 2);
     expect(ct.pasivo).toBeCloseTo(880_000_000, 2);
-    expect(ct.patrimonio).toBeCloseTo(2_390_000_000, 2);
+    expect(ct.patrimonio).toBeCloseTo(815_500_000, 2);
   });
 
   it('respeta el opt-out explícito para los callers que ya normalizan', async () => {

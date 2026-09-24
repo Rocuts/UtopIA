@@ -1,25 +1,30 @@
 // ---------------------------------------------------------------------------
 // R8 — Cierre Virtual (Autonomía de Cierre)
 // ---------------------------------------------------------------------------
-// Garantiza Activo = Pasivo + Patrimonio en CUALQUIER balance de prueba —
-// incluso si proviene de un ERP a mitad de año (sin asiento de cierre) o si
-// trae 3605 con un saldo histórico que no coincide con el P&L del periodo.
+// Traslada el resultado del ejercicio que sigue en las clases 4-7 al
+// patrimonio (cuenta virtual 3605VC), para que un balance de prueba exportado
+// antes del asiento de cierre pueda presentarse sin esperar al contador.
 //
 // Contrato (ver `types.ts > VirtualCloseAdjustment` para la lista completa):
-//   - SIEMPRE muta el snapshot (a diferencia de R5, que sólo dispara si hay
-//     gap). La utilidad del ejercicio se ancla en patrimonio en cada corrida.
+//   - Con actividad P&L, SIEMPRE ancla la utilidad del P&G en 3605VC.
+//   - El grupo 36 del CSV (3605 utilidad / 3610 pérdida del ejercicio) se
+//     anula: si coincide con el P&G es el mismo resultado; si difiere, es un
+//     resultado anterior no trasladado y se reclasifica a 3710VC.
+//   - SÓLO cierra la diferencia explicada por ese traslado. Cualquier otro
+//     residual de Activo − Pasivo − Patrimonio (≠ 0 al centavo) queda visible
+//     como descuadre BLOQUEANTE con su monto. Auditoría 2026-09
+//     (niif-preproceso-06): la versión anterior llevaba TODO el residual a
+//     3710VC, de modo que una cuenta omitida o un error de captura se
+//     presentaba como patrimonio y la ecuación "cuadraba" por construcción.
 //   - Idempotente: ejecutar R8 dos veces sobre el mismo snapshot deja el
 //     mismo resultado (las cuentas virtuales `3605VC` / `3710VC` ya existentes
 //     se REEMPLAZAN, no se acumulan).
-//   - Trazabilidad: la cuenta `3605` original (si traía saldo) queda con
-//     `balance: 0` pero NO se elimina del array. La cuenta virtual
-//     `3710VC` registra explícitamente la reclasificación con audit trail.
+//   - Trazabilidad: la cuenta 36 original (si traía saldo) queda con
+//     `balance: 0` pero NO se elimina del array.
 //
 // Por qué R8 corre ANTES que R5:
-//   R5 ancla Total Patrimonio Balance ↔ Saldo Final ECP. Si R5 corriera antes
-//   que R8, vería un patrimonio sin la utilidad del periodo y absorbería todo
-//   el gap en `3710ZZ` (Ajustes de Convergencia) — semánticamente incorrecto.
-//   Tras R8, R5 sólo ve gaps reales de transición NIIF / redondeos.
+//   R5 contrasta el desglose patrimonial (ECP) con el total de la clase 3. Sin
+//   R8, vería un patrimonio sin la utilidad del periodo.
 // ---------------------------------------------------------------------------
 
 import type {
@@ -29,7 +34,15 @@ import type {
   ValidatedAccount,
 } from '../trial-balance';
 
-import { syncControlTotals } from './sync-control-totals';
+import {
+  ACTIVO_CORRIENTE_GROUPS,
+  ACTIVO_NO_CORRIENTE_GROUPS,
+  sumByGroups,
+  sumCurrentLiabilities,
+  sumNonCurrentLiabilities,
+} from './balance-groups';
+import { addCuratorBlocker, clearCuratorBlockers } from './curator-blockers';
+import { centsToCanonical, equationGapCents, syncControlTotals } from './sync-control-totals';
 import type { CuratorFinding, VirtualCloseAdjustment } from './types';
 
 const VIRTUAL_CURRENT_CODE = '3605VC';
@@ -38,14 +51,17 @@ const VIRTUAL_RETAINED_CODE = '3710VC';
 const VIRTUAL_RETAINED_NAME =
   'Resultados Acumulados — Cierre Virtual (curator R8)';
 
+/** Grupo PUC 36 — Resultados del ejercicio (3605 utilidad, 3610 pérdida). */
+const RESULT_GROUP_PREFIX = '36';
+
 /** Tolerancia para considerar la utilidad del CSV "coincidente" con el cálculo
- *  dinámico (no requiere reclasificación). $1.000 COP cubre redondeos típicos. */
+ *  dinámico (no requiere reclasificación). $1.000 COP cubre redondeos típicos.
+ *  Sólo decide la INTERPRETACIÓN del grupo 36 (resultado del periodo vs.
+ *  resultado anterior); no autoriza a absorber diferencias: el residual de la
+ *  ecuación se evalúa después al centavo exacto. */
 const UTILIDAD_MATCH_TOL = 1000;
 
-/** Tolerancia para considerar la diferencia residual como "centavos". $5.000
- *  COP cubre redondeos acumulados de un balance grande sin ocultar errores
- *  reales (que en COP típicamente son ≥ $50.000). */
-const CENTS_TOL = 5000;
+const ZERO_CENTS = BigInt(0);
 
 const PUC_CLASS_NAMES: Record<number, string> = {
   1: 'Activo',
@@ -137,46 +153,51 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
   }
 
   // -------------------------------------------------------------------------
-  // 3. Idempotencia: si ya existen 3605VC / 3710VC de una corrida previa,
-  //    los anulamos a 0 antes de recomputar (luego se reescriben).
+  // 3. Idempotencia: si ya existen 3605VC / 3710VC de una corrida previa, se
+  //    anulan antes de recomputar. El saldo de 3710VC es la reclasificación
+  //    de un grupo 36 histórico que la corrida previa ya anuló en el CSV: se
+  //    devuelve a la bolsa del grupo 36 para que esta corrida decida igual.
   // -------------------------------------------------------------------------
+  const previousAdjustment = snapshot.virtualCloseAdjustment;
+  let carriedRetained = 0;
   for (const acc of clasePatrimonio.accounts) {
-    if (acc.code === VIRTUAL_CURRENT_CODE || acc.code === VIRTUAL_RETAINED_CODE) {
+    if (acc.code === VIRTUAL_RETAINED_CODE) {
+      carriedRetained += acc.balance;
+      acc.balance = 0;
+    } else if (acc.code === VIRTUAL_CURRENT_CODE) {
       acc.balance = 0;
     }
   }
 
   // -------------------------------------------------------------------------
-  // 4. Detectar saldo en cuenta 3605 del CSV. Lectura del view: cualquier
-  //    cuenta cuyo código empiece con "3605" y que NO sea la virtual `3605VC`.
+  // 4. Saldo del grupo 36 del CSV: 3605 (utilidad) y 3610 (pérdida del
+  //    ejercicio). PUC D. 2650/1993: ambas son "Resultados del ejercicio".
+  //    Auditoría 2026-09 (niif-preproceso-12): leer sólo 3605 duplicaba la
+  //    pérdida registrada en 3610 y fabricaba una utilidad acumulada ficticia.
   // -------------------------------------------------------------------------
-  const csv3605Accounts = clasePatrimonio.accounts.filter(
-    (a) =>
-      a.code.startsWith('3605') &&
-      a.code !== VIRTUAL_CURRENT_CODE &&
-      a.balance !== 0,
+  const csvResultAccounts = clasePatrimonio.accounts.filter(
+    (a) => a.code.startsWith(RESULT_GROUP_PREFIX) && !isVirtualCode(a.code) && a.balance !== 0,
   );
-  const csvUtilidadEjercicio = csv3605Accounts.reduce(
-    (sum, a) => sum + a.balance,
-    0,
-  );
+  const csvUtilidadEjercicio =
+    csvResultAccounts.reduce((sum, a) => sum + a.balance, 0) + carriedRetained;
   const utilidadGap = Math.abs(csvUtilidadEjercicio - dynamicNetIncome);
   const reclassifiedFrom3605 =
     utilidadGap > UTILIDAD_MATCH_TOL && csvUtilidadEjercicio !== 0;
   const reclassifiedAmount = reclassifiedFrom3605 ? csvUtilidadEjercicio : 0;
 
   // -------------------------------------------------------------------------
-  // 5. SIEMPRE anular el saldo de cuentas 3605 del CSV: el sistema reemplaza
-  //    autoritativamente por su cálculo dinámico (3605VC inyectada abajo).
-  //    Hacerlo siempre — incluso cuando hay match — evita que el patrimonio
-  //    contenga la utilidad dos veces (una en 3605 real + otra en 3605VC).
+  // 5. Anular el grupo 36 del CSV: el sistema reemplaza autoritativamente el
+  //    resultado del periodo por su cálculo dinámico (3605VC). Hacerlo
+  //    siempre — incluso cuando hay match — evita que el patrimonio contenga
+  //    la utilidad dos veces.
   // -------------------------------------------------------------------------
-  for (const acc of csv3605Accounts) {
+  for (const acc of csvResultAccounts) {
     acc.balance = 0;
   }
 
   // -------------------------------------------------------------------------
-  // 6. Inyectar / actualizar cuenta virtual 3605VC con la utilidad dinámica.
+  // 6. Inyectar 3605VC con la utilidad dinámica y, si el grupo 36 traía un
+  //    resultado anterior no trasladado, 3710VC con ese monto.
   // -------------------------------------------------------------------------
   upsertVirtualAccount(
     clasePatrimonio,
@@ -184,71 +205,62 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
     VIRTUAL_CURRENT_NAME,
     dynamicNetIncome,
   );
-
-  // -------------------------------------------------------------------------
-  // 7. Recalcular control totals tras inyección de 3605VC y limpieza de 3605.
-  //    NOTA: aún no inyectamos 3710VC (se hace tras computar el residual).
-  // -------------------------------------------------------------------------
-  recomputeControlTotalsFromClasses(snapshot.controlTotals, snapshot.classes);
-
-  // -------------------------------------------------------------------------
-  // 8. Computar diferencia residual: Activo − (Pasivo + Patrimonio).
-  //    Tras anular 3605 viejo e inyectar 3605VC, el residual captura:
-  //      - Sustitución 3605 viejo ↔ utilidad dinámica (cuando reclassified).
-  //      - Utilidad escondida en 37xx que debió quedar en 36xx (post-cierre
-  //        donde el balance ya cuadraba antes de R8 — la inyección de 3605VC
-  //        debe compensarse contra acumulados para mantener cuadre).
-  //      - Redondeos acumulados.
-  //    SIEMPRE absorbemos el residual en 3710VC (la cuenta virtual del
-  //    cierre virtual). Si la magnitud es material (>1% activo), emitimos
-  //    finding 'alto' para que el auditor revise.
-  // -------------------------------------------------------------------------
-  const residualGapBeforeCents =
-    snapshot.controlTotals.activo -
-    snapshot.controlTotals.pasivo -
-    snapshot.controlTotals.patrimonio;
-
-  const centsAdjustment = residualGapBeforeCents;
-
-  if (centsAdjustment !== 0) {
+  if (reclassifiedFrom3605) {
     upsertVirtualAccount(
       clasePatrimonio,
       VIRTUAL_RETAINED_CODE,
       VIRTUAL_RETAINED_NAME,
-      centsAdjustment,
+      reclassifiedAmount,
     );
-    recomputeControlTotalsFromClasses(snapshot.controlTotals, snapshot.classes);
   }
 
   // -------------------------------------------------------------------------
-  // 9. Sobreescribir equityBreakdown.utilidadEjercicio (autoritativo).
-  //    Los downstream (pilares, agentes, Excel) ahora ven el cálculo dinámico.
-  //
-  //    NOTA crítica: NO sumamos `centsAdjustment` a `utilidadesAcumuladas`
-  //    en el breakdown. La cuenta virtual `3710VC` ya está en `classes[3]`
-  //    y se refleja en `controlTotals.patrimonio` (vía
-  //    `recomputeControlTotalsFromClasses`). Sumarlo al breakdown causaba
-  //    doble conteo en R5 (que reconstruye `ecpClosingBalance` desde el
-  //    breakdown). En su lugar, R5 lee `snapshot.virtualCloseAdjustment` y
-  //    añade `centsAdjustment` al sumar componentes patrimoniales.
+  // 7. Recalcular control totals (number + cents + raw) desde las clases.
   // -------------------------------------------------------------------------
-  snapshot.equityBreakdown.utilidadEjercicio = dynamicNetIncome;
+  recomputeControlTotalsFromClasses(snapshot.controlTotals, snapshot.classes);
 
   // -------------------------------------------------------------------------
-  // 10. Sincronizar summary.totalEquity con controlTotals.patrimonio (el
-  //     renderer Excel lee summary; los pilares leen controlTotals).
+  // 8. Residual de la ecuación, EXACTO en centavos (misma representación que
+  //    el gate V1 y que el API v1). El traslado del resultado es lo único que
+  //    R8 puede explicar: cualquier residual ≠ 0 es un descuadre del balance
+  //    recibido (cuenta omitida, subcuenta que no suma a su cuenta, error de
+  //    captura) y NO se convierte en patrimonio.
+  // -------------------------------------------------------------------------
+  const residualCents = equationGapCents(snapshot.controlTotals);
+  const residualGapBeforeCents = Number(residualCents) / 100;
+  const residualRaw = centsToCanonical(residualCents);
+  const blocking = residualCents !== ZERO_CENTS;
+
+  // -------------------------------------------------------------------------
+  // 9. equityBreakdown: el resultado del ejercicio es el dinámico y la
+  //    reclasificación del grupo 36 histórico es resultado de ejercicios
+  //    anteriores (Art. 151 C.Co. lee `utilidadesAcumuladas` para las
+  //    pérdidas pendientes de enjugar). Idempotente: se descuenta lo sumado
+  //    en una corrida previa.
+  // -------------------------------------------------------------------------
+  snapshot.equityBreakdown.utilidadEjercicio = dynamicNetIncome;
+  const previousReclass = previousAdjustment?.reclassifiedFrom3605
+    ? previousAdjustment.reclassifiedAmount
+    : 0;
+  if (reclassifiedFrom3605 || previousReclass !== 0) {
+    snapshot.equityBreakdown.utilidadesAcumuladas =
+      (snapshot.equityBreakdown.utilidadesAcumuladas ?? 0) - previousReclass + reclassifiedAmount;
+  }
+
+  // -------------------------------------------------------------------------
+  // 10. Sincronizar summary con controlTotals (el renderer Excel lee summary;
+  //     los pilares leen controlTotals). `equationBalanced` se decide al
+  //     centavo: una tolerancia en pesos dejaba pasar residuales que el gate
+  //     V1 (tolerancia 0n) luego rechazaba.
   // -------------------------------------------------------------------------
   snapshot.summary.totalEquity = snapshot.controlTotals.patrimonio;
-  snapshot.summary.equationBalance =
-    snapshot.controlTotals.activo -
-    snapshot.controlTotals.pasivo -
-    snapshot.controlTotals.patrimonio;
-  snapshot.summary.equationBalanced =
-    Math.abs(snapshot.summary.equationBalance) < 100;
+  snapshot.summary.equationBalance = residualGapBeforeCents;
+  snapshot.summary.equationBalanced = !blocking;
+
+  clearCuratorBlockers(snapshot, 'CUR-R8');
 
   // -------------------------------------------------------------------------
   // 11. Construir el adjustment + finding(s).
-  // -------------------------------------------------------------------------
   // -------------------------------------------------------------------------
   // Wave 2.F4 — Parte 3 ramificación R8: bifurcación de la nota según
   // `periodoTipo`. Si el período es 'cerrado' (Enero-Diciembre), la falta de
@@ -260,8 +272,9 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
   const periodoTipo = snapshot.periodoTipo ?? 'indeterminado';
   const justificationBase =
     'Cierre Virtual: traslado automático de utilidad transitoria (Clase 4 − 5 − 6 − 7) ' +
-    'a Patrimonio, garantizando ecuación contable Activo = Pasivo + Patrimonio sin requerir ' +
-    'asiento de cierre del contador. Compatible con balances de cualquier ERP en cualquier corte temporal.';
+    'a Patrimonio sin requerir asiento de cierre del contador. El traslado sólo explica ' +
+    'la diferencia originada en el resultado del ejercicio; cualquier otro descuadre ' +
+    'queda visible y bloquea la emisión.';
   const justificationNotaPeriodo =
     periodoTipo === 'cerrado'
       ? ` NOTA OBLIGATORIA — AJUSTE DE CIERRE (cuenta 3605, año cerrado ${snapshot.period}): ` +
@@ -282,7 +295,10 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
     reclassifiedFrom3605,
     reclassifiedAmount,
     residualGapBeforeCents,
-    centsAdjustment,
+    centsAdjustment: 0,
+    unexplainedResidual: residualGapBeforeCents,
+    unexplainedResidualRaw: residualRaw,
+    blocking,
     reconciledEquity: snapshot.controlTotals.patrimonio,
     virtualCurrentCode: VIRTUAL_CURRENT_CODE,
     virtualCurrentName: VIRTUAL_CURRENT_NAME,
@@ -298,16 +314,13 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
   findings.push({
     code: 'CUR-R8',
     severity: 'informativo',
-    title: 'Cierre Virtual aplicado — Patrimonio cuadrado en tiempo real',
+    title: 'Cierre Virtual aplicado — resultado del ejercicio trasladado al patrimonio',
     description:
       `Utilidad del ejercicio calculada dinámicamente: $${formatCOP(dynamicNetIncome)}. ` +
       `Inyectada en cuenta virtual ${VIRTUAL_CURRENT_CODE} (${VIRTUAL_CURRENT_NAME}) en Clase 3. ` +
       (reclassifiedFrom3605
-        ? `Saldo previo en 3605 ($${formatCOP(csvUtilidadEjercicio)}) reclasificado a ${VIRTUAL_RETAINED_CODE} ` +
-          `(${VIRTUAL_RETAINED_NAME}). `
-        : '') +
-      (centsAdjustment !== 0 && !reclassifiedFrom3605
-        ? `Ajuste de centavos: $${formatCOP(centsAdjustment)} absorbido en ${VIRTUAL_RETAINED_CODE}. `
+        ? `Saldo previo del grupo 36 ($${formatCOP(csvUtilidadEjercicio)}) reclasificado a ` +
+          `${VIRTUAL_RETAINED_CODE} (${VIRTUAL_RETAINED_NAME}). `
         : '') +
       `Total Patrimonio post-R8: $${formatCOP(snapshot.controlTotals.patrimonio)}.`,
     normReference: 'Marco Conceptual NIIF — Reconocimiento (4.37–4.53); NIC 1 párr. 16',
@@ -315,38 +328,49 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
       'El cierre virtual permite emitir reportes a cualquier corte temporal sin esperar al ' +
       'asiento contable de fin de ejercicio. El contador puede revisar la cuenta 3605VC para validar la utilidad inferida.',
     impact:
-      'Sin el cierre virtual, balances exportados a mitad de año mostrarían descuadre en la ecuación ' +
-      'patrimonial (utilidad atrapada en clases 4-7 sin trasladar a patrimonio). El cierre virtual elimina ' +
-      'esta dependencia operativa con el contador.',
+      'Sin el cierre virtual, balances exportados antes del asiento de cierre mostrarían la ' +
+      'utilidad atrapada en clases 4-7 sin trasladar a patrimonio.',
     period: snapshot.period,
   });
 
-  // Finding adicional severidad alta si el ajuste de centavos es material
-  // (>1% del activo). Significa que la utilidad estaba escondida en otra
-  // cuenta de patrimonio o el balance tenía un descuadre real previo a R8.
-  const materialThreshold = Math.max(
-    Math.abs(snapshot.controlTotals.activo) * 0.01,
-    1_000_000,
-  );
-  if (Math.abs(centsAdjustment) > materialThreshold && !reclassifiedFrom3605) {
+  // Descuadre no explicado por el resultado del ejercicio → BLOQUEANTE.
+  if (blocking) {
+    // Brecha del balance ANTES del traslado:
+    //   residual = brechaPrevia − utilidad + grupo36 − reclasificado
+    // Si esa brecha previa era 0, el balance recibido ya cuadraba sin las
+    // clases 4-7: el resultado está en otra cuenta de patrimonio o el P&G no
+    // corresponde al mismo corte.
+    const gapBeforeTransfer =
+      residualGapBeforeCents + dynamicNetIncome - csvUtilidadEjercicio + reclassifiedAmount;
+    const alreadyBalancedWithoutResult = pesosCents(gapBeforeTransfer) === ZERO_CENTS;
+    const hint = alreadyBalancedWithoutResult
+      ? ' El balance recibido ya cuadraba SIN el resultado de las clases 4-7: el resultado del ' +
+        'ejercicio parece estar incluido en otra cuenta de patrimonio (p. ej. 37xx) o las ' +
+        'clases 4-7 no corresponden al mismo corte.'
+      : '';
+    const message =
+      `[${snapshot.period}] Descuadre no explicado por el resultado del ejercicio: tras trasladar ` +
+      `la utilidad de las clases 4-7 ($${formatCOPExact(dynamicNetIncome)}) al patrimonio` +
+      (reclassifiedFrom3605
+        ? ` y reclasificar el saldo previo del grupo 36 ($${formatCOPExact(reclassifiedAmount)})`
+        : '') +
+      `, Activo − Pasivo − Patrimonio = $${formatCOPExact(residualGapBeforeCents)}. ` +
+      `El cierre virtual no absorbe esta diferencia.${hint} Revise cuentas omitidas, ` +
+      `subcuentas que no suman a su cuenta o errores de captura en el archivo.`;
+    addCuratorBlocker(snapshot, 'CUR-R8', message);
     findings.push({
       code: 'CUR-R8',
-      severity: 'alto',
-      title: 'Ajuste material en Resultados Acumulados durante Cierre Virtual',
-      description:
-        `R8 absorbió $${formatCOP(centsAdjustment)} en cuenta virtual ${VIRTUAL_RETAINED_CODE} ` +
-        `tras inyectar la utilidad dinámica de $${formatCOP(dynamicNetIncome)}. La magnitud supera ` +
-        `el 1% del activo ($${formatCOP(materialThreshold)}), lo cual sugiere que la utilidad del ` +
-        `periodo estaba escondida en otra cuenta de patrimonio (típicamente 3705/3710 acumulados) ` +
-        `o que el balance tenía un descuadre previo no detectado.`,
-      normReference: 'NIC 1 párr. 81-87 (presentación de resultados del periodo)',
+      severity: 'critico',
+      title: 'Descuadre del balance no explicado por el resultado del ejercicio',
+      description: message,
+      normReference:
+        'NIC 1 párr. 15 y 54 (presentación razonable del estado de situación financiera)',
       recommendation:
-        `Auditar el patrimonio del balance original: identificar si la utilidad del ejercicio ` +
-        `quedó previamente trasladada a Resultados Acumulados (3705/3710) sin pasar por 3605, ` +
-        `y si corresponde, ajustar manualmente para preservar la trazabilidad.`,
+        'Corregir el archivo de origen (o confirmar los saldos con el contador) y volver a ' +
+        'procesar. El sistema no convierte diferencias no identificadas en patrimonio.',
       impact:
-        'El usuario verá la utilidad correctamente en "Resultado del Ejercicio (Corte Actual)" ' +
-        'y un ajuste compensatorio en Resultados Acumulados, pero el origen contable del saldo previo merece auditoría.',
+        `El informe no es emitible: la ecuación Activo = Pasivo + Patrimonio no cierra por ` +
+        `$${formatCOPExact(residualGapBeforeCents)}.`,
       period: snapshot.period,
     });
   }
@@ -357,19 +381,20 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
     findings.push({
       code: 'CUR-R8',
       severity: 'medio',
-      title: 'Saldo histórico de 3605 reclasificado a Resultados Acumulados',
+      title: 'Saldo histórico del grupo 36 reclasificado a Resultados Acumulados',
       description:
-        `El balance de prueba traía $${formatCOP(csvUtilidadEjercicio)} en cuenta 3605 (Utilidad del Ejercicio) ` +
-        `que no coincide con la utilidad dinámica del periodo ($${formatCOP(dynamicNetIncome)}, ` +
-        `gap = $${formatCOP(utilidadGap)}). El curator interpretó el saldo previo como utilidad ` +
-        `acumulada de ejercicios anteriores y lo reclasificó a ${VIRTUAL_RETAINED_CODE}.`,
+        `El balance de prueba traía $${formatCOP(csvUtilidadEjercicio)} en el grupo 36 (3605/3610 — ` +
+        `Resultados del ejercicio) que no coincide con la utilidad dinámica del periodo ` +
+        `($${formatCOP(dynamicNetIncome)}, gap = $${formatCOP(utilidadGap)}). El curator ` +
+        `interpretó el saldo previo como resultado de ejercicios anteriores y lo reclasificó a ` +
+        `${VIRTUAL_RETAINED_CODE}.`,
       normReference: 'NIC 1 párr. 81-87 (presentación de resultados del periodo)',
       recommendation:
-        `Auditar el origen del saldo en 3605 al momento de la exportación: (a) si corresponde a ` +
-        `una utilidad del periodo previo NO trasladada a 3705/3710, manualmente reclasificar; ` +
+        `Auditar el origen del saldo en 36 al momento de la exportación: (a) si corresponde a ` +
+        `un resultado del periodo previo NO trasladado a 3705/3710, manualmente reclasificar; ` +
         `(b) si es un cierre de fin de año ya consolidado, distribuirlo formalmente a reservas y dividendos.`,
       impact:
-        'Sin reclasificación, el patrimonio incluiría dos veces la utilidad (la histórica de 3605 + la dinámica calculada).',
+        'Sin reclasificación, el patrimonio incluiría dos veces la utilidad (la histórica de 36 + la dinámica calculada).',
       period: snapshot.period,
     });
   }
@@ -380,6 +405,11 @@ export function runR8(snapshot: PeriodSnapshot): R8Result {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Cuentas inyectadas por el curator (`3605VC`, `3710VC`, `2105ZZ-…`). */
+function isVirtualCode(code: string): boolean {
+  return /VC|ZZ/i.test(code);
+}
 
 function upsertVirtualAccount(
   clase: PUCClass,
@@ -402,11 +432,6 @@ function upsertVirtualAccount(
     clase.accounts.push(virtualAccount);
   }
 }
-
-const ACTIVO_CORRIENTE_GROUPS = new Set(['11', '12', '13', '14']);
-const ACTIVO_NO_CORRIENTE_GROUPS = new Set(['15', '16', '17', '18', '19']);
-const PASIVO_CORRIENTE_GROUPS = new Set(['21', '22', '23', '24', '25', '26']);
-const PASIVO_NO_CORRIENTE_GROUPS = new Set(['27', '28', '29']);
 
 function recomputeControlTotalsFromClasses(
   totals: ControlTotals,
@@ -435,8 +460,8 @@ function recomputeControlTotalsFromClasses(
 
   totals.activoCorriente = sumByGroups(claseActivo, ACTIVO_CORRIENTE_GROUPS);
   totals.activoNoCorriente = sumByGroups(claseActivo, ACTIVO_NO_CORRIENTE_GROUPS);
-  totals.pasivoCorriente = sumByGroups(clasePasivo, PASIVO_CORRIENTE_GROUPS);
-  totals.pasivoNoCorriente = sumByGroups(clasePasivo, PASIVO_NO_CORRIENTE_GROUPS);
+  totals.pasivoCorriente = sumCurrentLiabilities(clasePasivo);
+  totals.pasivoNoCorriente = sumNonCurrentLiabilities(clasePasivo);
 
   // R8 mueve el resultado del ejercicio a patrimonio: es la mutación que más
   // desplaza los totales. Sin esta sincronización, `cents` y `raw` conservaban
@@ -445,14 +470,9 @@ function recomputeControlTotalsFromClasses(
   syncControlTotals(totals, classes);
 }
 
-function sumByGroups(cl: PUCClass | undefined, groups: Set<string>): number {
-  if (!cl) return 0;
-  let sum = 0;
-  for (const acc of cl.accounts) {
-    const grp = acc.code.length >= 2 ? acc.code.slice(0, 2) : acc.code;
-    if (groups.has(grp)) sum += acc.balance;
-  }
-  return sum;
+function pesosCents(value: number): bigint {
+  if (!Number.isFinite(value)) return ZERO_CENTS;
+  return BigInt(Math.round(value * 100));
 }
 
 function formatCOP(amount: number): string {
@@ -460,6 +480,16 @@ function formatCOP(amount: number): string {
   const formatted = abs.toLocaleString('es-CO', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
+  });
+  return amount < 0 ? `-${formatted}` : formatted;
+}
+
+/** Formato con centavos: los residuales bloqueantes se reportan exactos. */
+function formatCOPExact(amount: number): string {
+  const abs = Math.abs(amount);
+  const formatted = abs.toLocaleString('es-CO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
   return amount < 0 ? `-${formatted}` : formatted;
 }

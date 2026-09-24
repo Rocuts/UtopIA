@@ -293,43 +293,55 @@ export interface CashFlowClosureAdjustment {
 // si el ERP entrega un Clase 3 con un saldo histórico en 3605 que no
 // corresponde al P&L del periodo.
 //
-// La regla SIEMPRE se aplica:
+// Cuando hay actividad P&L la regla:
 //   1. Toma utilidad transitoria = Clase 4 - Clase 5 - Clase 6 - Clase 7
 //      (ya calculada en `controlTotals.utilidadNeta` por preprocesamiento).
-//   2. Reclasifica el saldo de la cuenta 3605 del CSV (si difiere de la
-//      utilidad transitoria) hacia una cuenta virtual `3710VC` (Resultados
-//      Acumulados — Cierre Virtual). Conserva trazabilidad: anula el saldo de
-//      3605 a 0 sin remover la fila, e inyecta `3710VC` con el monto.
+//   2. Lee el grupo 36 del CSV (3605 utilidad y 3610 pérdida del ejercicio).
+//      Si coincide con la utilidad transitoria, es el resultado del periodo y
+//      se reemplaza. Si difiere, es un resultado de ejercicios anteriores no
+//      trasladado y se reclasifica a la cuenta virtual `3710VC`. Conserva
+//      trazabilidad: anula el saldo de 36 a 0 sin remover la fila.
 //   3. Inyecta una cuenta virtual `3605VC` (Resultado del Ejercicio — Corte
 //      Actual) en Clase 3 con saldo = utilidad transitoria.
 //   4. Recalcula `controlTotals.patrimonio` y `summary.totalEquity`.
-//   5. Si tras la inyección queda una diferencia marginal por redondeo
-//      (≤ tolerancia centavos), la absorbe en `3710VC`.
+//   5. NO absorbe ninguna otra diferencia. Si tras los pasos 2-3
+//      Activo − Pasivo − Patrimonio ≠ 0 al centavo, el residual queda visible
+//      como descuadre BLOQUEANTE (`validation.curatorBlockingReasons`).
 //   6. Sobreescribe `equityBreakdown.utilidadEjercicio` con el cálculo
-//      dinámico (autoritativo para downstream: pilares Verdad/Valor, agentes
-//      NIIF, Excel export).
+//      dinámico y suma la reclasificación a `utilidadesAcumuladas`.
 //
 // Severidad de findings:
 //   - 'informativo' siempre (la regla siempre actúa por diseño).
-//   - 'medio' si tuvo que reclasificar saldo material de 3605 (auditor lo
+//   - 'medio' si tuvo que reclasificar saldo material de 36 (auditor lo
 //     debe revisar).
+//   - 'critico' si queda un residual no explicado (bloquea la emisión).
 // ---------------------------------------------------------------------------
 export interface VirtualCloseAdjustment {
   /** Utilidad transitoria calculada del P&L (Clase 4 − 5 − 6 − 7). */
   dynamicNetIncome: number;
-  /** Saldo histórico en cuenta 3605 leído del CSV (0 si no existía). */
+  /** Saldo del grupo 36 (3605 + 3610) leído del CSV (0 si no existía). */
   csvUtilidadEjercicio: number;
   /** Diferencia |dynamicNetIncome − csvUtilidadEjercicio|. */
   utilidadGap: number;
-  /** Si true, hubo que reclasificar saldo no-trivial de 3605 a 3710VC. */
+  /** Si true, hubo que reclasificar saldo no-trivial del grupo 36 a 3710VC. */
   reclassifiedFrom3605: boolean;
-  /** Monto reclasificado de 3605 hacia 3710VC (0 si no hubo). */
+  /** Monto reclasificado del grupo 36 hacia 3710VC (0 si no hubo). */
   reclassifiedAmount: number;
-  /** Diferencia residual de la ecuación tras inyectar 3605VC, antes del
-   *  ajuste de centavos. */
+  /** Activo − Pasivo − Patrimonio tras el traslado (pesos). Si ≠ 0 NO se
+   *  absorbe: queda como descuadre bloqueante. */
   residualGapBeforeCents: number;
-  /** Ajuste de centavos absorbido en 3710VC (puede ser negativo). */
+  /**
+   * Histórico: ajuste residual absorbido en 3710VC. Desde la auditoría
+   * 2026-09 R8 no absorbe residuales, así que siempre vale 0; se conserva
+   * por compatibilidad con consumidores que lo leen.
+   */
   centsAdjustment: number;
+  /** Residual no explicado por el resultado del ejercicio, en pesos. */
+  unexplainedResidual?: number;
+  /** Mismo residual en string canónica de centavos exactos (`-?\d+\.\d{2}`). */
+  unexplainedResidualRaw?: string;
+  /** True si el residual ≠ 0 y el snapshot quedó bloqueado. */
+  blocking?: boolean;
   /** Total Patrimonio FINAL post-R8 — autoritativo. */
   reconciledEquity: number;
   /** Cuenta virtual donde se imputa la utilidad del ejercicio. */

@@ -523,7 +523,9 @@ describe('runCurator (orchestrator)', () => {
       }),
       classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
       equity: {
-        capitalAutorizado: 200_000_000,
+        // 3105 = capital suscrito y pagado (PUC); `capitalAutorizado` es
+        // informativo y no suma al patrimonio.
+        capitalSuscritoPagado: 200_000_000,
         reservaLegal: 50_000_000,
         utilidadEjercicio: 100_000_000,
         utilidadesAcumuladas: 50_000_000,
@@ -555,6 +557,8 @@ describe('runCurator (orchestrator)', () => {
     expect(snap.findings?.missingTaxCausation ?? false).toBe(false);
     expect(snap.findings?.ppeWithoutDepreciation ?? false).toBe(false);
     expect(snap.findings?.costeoIncompleto ?? false).toBe(false);
+    // Y ninguna regla bloquea un balance sano.
+    expect(snap.validation.blocking).toBe(false);
   });
 
   it('SÍ muta el snapshot cuando R1 detecta saldos negativos materiales (contrato Pulido Diamante)', () => {
@@ -592,9 +596,11 @@ describe('runCurator (orchestrator)', () => {
     expect(virtual?.balance).toBe(10_000_000);
   });
 
-  it('SÍ muta controlTotals.patrimonio cuando R5 detecta brecha Balance↔ECP', () => {
-    // R5 contract: si ECP_sum != patrimonio (más allá de tolerancia), R5 ancla
-    // patrimonio al ECP_sum.
+  it('R5 NO reescribe el patrimonio cuando el desglose (ECP) no concilia: revela la brecha y bloquea', () => {
+    // Auditoría 2026-09 (recalculo-08): la versión anterior anclaba
+    // controlTotals.patrimonio al desglose, borrando del balance las cuentas
+    // de patrimonio que el desglose no mapeaba. El patrimonio publicado es
+    // Σ clase 3; una brecha con el ECP se revela y bloquea la emisión.
     const snap = makeSnapshot({
       period: '2026',
       controlTotals: makeControlTotals({
@@ -604,16 +610,21 @@ describe('runCurator (orchestrator)', () => {
       }),
       classes: [makeClass(1, [{ code: '110505', name: 'Caja', balance: 1_000_000_000 }])],
       equity: {
-        capitalAutorizado: 200_000_000,
+        capitalSuscritoPagado: 200_000_000,
         reservaLegal: 50_000_000,
         utilidadEjercicio: 100_000_000,
         utilidadesAcumuladas: 50_000_000,
         // Suma = 400M
       },
     });
-    runCurator(snap, null);
-    expect(snap.controlTotals.patrimonio).toBe(400_000_000);
-    expect(snap.equityBreakdown.convergenceAdjustment).toBe(300_000_000);
-    expect(snap.equityAnchorAdjustment).toBe(300_000_000);
+    const result = runCurator(snap, null);
+    expect(snap.controlTotals.patrimonio).toBe(100_000_000);
+    expect(snap.equityBreakdown.convergenceAdjustment).toBeUndefined();
+    expect(snap.equityAnchorAdjustment).toBeUndefined();
+    expect(result.convergenceAdjustment).toBeUndefined();
+    expect(snap.validation.blocking).toBe(true);
+    expect(snap.validation.curatorBlockingReasons?.some((r) => r.startsWith('[CUR-R5]'))).toBe(true);
+    expect(snap.validation.curatorBlockingReasons?.join(' ')).toContain('300.000.000,00');
+    expect(result.findings.some((f) => f.code === 'CUR-R5' && f.severity === 'critico')).toBe(true);
   });
 });

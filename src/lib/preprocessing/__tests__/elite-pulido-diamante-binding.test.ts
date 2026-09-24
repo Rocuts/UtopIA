@@ -91,12 +91,12 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
         text,
     ).toContain('## Cierre Virtual aplicado (Curator R8)');
 
-    // Sub-string 3: R5 (anclaje patrimonial) — NO debe aparecer: bajo la nueva
-    // arquitectura R8 absorbe el gap antes y deja la ecuación cuadrada, por
-    // lo que el guard de R5 lo deja pasar sin actuar.
+    // Sub-string 3: R5 (anclaje patrimonial) — NO debe aparecer: desde la
+    // auditoría 2026-09 R5 nunca reescribe el patrimonio (sólo revela una
+    // brecha desglose ↔ clase 3 y bloquea), así que no hay anclaje que pintar.
     expect(
       text,
-      'La seccion R5 NO deberia emitirse cuando R8 ya cuadró la ecuación. ' +
+      'La seccion R5 NO deberia emitirse: R5 ya no ancla el patrimonio. ' +
         'Output recibido:\n' +
         text,
     ).not.toContain('## Anclaje patrimonial aplicado (Curator R5)');
@@ -131,10 +131,13 @@ describe('ELITE Pulido Diamante — smoke del bloque vinculante (LLM-facing)', (
     expect(text).toMatch(/120505/);
     expect(text).toMatch(/159205/);
 
-    // R8: el residual absorbido en 3710VC ≈ $1.719,5M debe aparecer literal
-    // (formato es-CO: punto miles + coma decimal). El centsAdjustment es el
-    // único valor con esa magnitud que el renderer pinta.
-    expect(text).toMatch(/1\.719\.500\.000/);
+    // R8: la reclasificación del 3605 anterior ($145M → 3710VC) aparece
+    // literal (formato es-CO). Auditoría 2026-09: R8 ya no absorbe el
+    // descuadre del fixture (antes pintaba un "ajuste residual" de
+    // $1.719,5M); ese residual bloquea en el gate 422 y no se presenta al LLM
+    // como parte del patrimonio.
+    expect(text).toMatch(/145\.000\.000/);
+    expect(text).not.toMatch(/Ajuste residual absorbido/);
 
     // R7: el callout debe traer titulo y cuerpo (no vacios).
     expect(text).toMatch(/Texto literal del callout/);

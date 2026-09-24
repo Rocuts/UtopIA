@@ -1,142 +1,122 @@
 // ---------------------------------------------------------------------------
-// R5 — Anclaje patrimonial (Balance ↔ ECP)
+// R5 — Coherencia patrimonial (Balance ↔ desglose del ECP)
 // ---------------------------------------------------------------------------
-// El Balance presenta un Total Patrimonio que típicamente proviene de la
-// suma de cuentas Clase 3. El Estado de Cambios en el Patrimonio (ECP) lo
-// reconstruye desde un saldo inicial + movimientos del periodo y termina en
-// un "Saldo Final ECP" que DEBE coincidir con el Total Patrimonio del Balance
-// (NIC 1, párr. 106). En la práctica suele aparecer una pequeña brecha por
-// redondeo, ajustes de convergencia NIIF o revaluaciones; R5 la absorbe en
-// una línea automática `Ajustes de Convergencia / Resultados Acumulados`
-// imputada a una cuenta virtual `3710ZZ`.
+// El Balance presenta un Total Patrimonio = Σ de las cuentas de la clase 3. El
+// Estado de Cambios en el Patrimonio (ECP) se arma con los componentes de
+// `equityBreakdown` (capital, superávit, reservas, revalorización, resultados,
+// valorizaciones…). NIC 1 párr. 106: el saldo final de cada componente del
+// ECP debe coincidir con el Balance.
 //
-// La regla MUTA el snapshot:
-//   - `controlTotals.patrimonio` queda anclado al `ecpClosingBalance` (la
-//     versión autoritativa: ECP).
-//   - `equityBreakdown.convergenceAdjustment` recibe el gap (con signo).
-//   - `snapshot.equityAnchorAdjustment` lo refleja a nivel snapshot.
+// Auditoría 2026-09 (recalculo-08): la versión anterior ANCLABA
+// `controlTotals.patrimonio` a la suma del desglose. Como el desglose sólo
+// mapeaba 3105/3115/3120/3305/33/3605/3610/3705/3710, en balances sin P&G
+// (R8 no actúa) los grupos 32, 34, 35, 38 y otras 37xx desaparecían del
+// patrimonio publicado: un balance cuadrado de $250M salía con $150M.
 //
-// Solo dispara si la brecha excede `max(|activo| * 0.0001, $1.000)`.
+// Contrato vigente:
+//   - R5 NO muta el balance. El patrimonio publicado es SIEMPRE Σ clase 3.
+//   - El desglose cubre todos los grupos de la clase 3 (ver
+//     `extractEquityBreakdownForView`), así que en un balance sano la suma de
+//     componentes coincide al centavo con el total.
+//   - Si no coincide (p. ej. cuentas agregadas que no suman a sus auxiliares
+//     o una mutación posterior no reflejada en el desglose), la brecha se
+//     revela con su monto y BLOQUEA la emisión: un ECP que no concilia con el
+//     Balance no se puede firmar.
 // ---------------------------------------------------------------------------
 
-import type { PeriodSnapshot } from '../trial-balance';
+import type { EquityBreakdown, PeriodSnapshot } from '../trial-balance';
 
-import { syncControlTotals } from './sync-control-totals';
+import { addCuratorBlocker, clearCuratorBlockers } from './curator-blockers';
+import { centsToCanonical, pesosToCents } from './sync-control-totals';
 import type { ConvergenceAdjustment, CuratorFinding } from './types';
 
-const VIRTUAL_EQUITY_CODE = '3710ZZ';
-const VIRTUAL_EQUITY_NAME =
-  'Ajustes de Convergencia / Resultados Acumulados (curator)';
-const LEDGER_LINE_LABEL = 'Ajustes de Convergencia / Resultados Acumulados';
-
 export interface R5Result {
+  /**
+   * Histórico: ajuste absorbido por R5. Desde la auditoría 2026-09 R5 no
+   * absorbe brechas, así que queda siempre `undefined`.
+   */
   convergenceAdjustment?: ConvergenceAdjustment;
   findings: CuratorFinding[];
 }
+
+/**
+ * Componentes del desglose que SUMAN al patrimonio. `capitalAutorizado` es
+ * informativo (3105 ya es neto de lo no suscrito) y `convergenceAdjustment`
+ * es un histórico de R5.
+ */
+const EQUITY_COMPONENTS: ReadonlyArray<keyof EquityBreakdown> = [
+  'capitalSuscritoPagado',
+  'superavitCapital',
+  'reservaLegal',
+  'otrasReservas',
+  'revalorizacionPatrimonio',
+  'dividendosDecretadosEnAcciones',
+  'utilidadEjercicio',
+  'utilidadesAcumuladas',
+  'superavitValorizaciones',
+  'otrasCuentasPatrimonio',
+];
+
+const ZERO = BigInt(0);
 
 export function runR5(
   snapshot: PeriodSnapshot,
   _prev: PeriodSnapshot | null,
 ): R5Result {
   void _prev;
+  clearCuratorBlockers(snapshot, 'CUR-R5');
 
   const eb = snapshot.equityBreakdown;
-  const components: number[] = [];
-  if (eb.capitalAutorizado !== undefined) components.push(eb.capitalAutorizado);
-  if (eb.capitalSuscritoPagado !== undefined) components.push(eb.capitalSuscritoPagado);
-  if (eb.reservaLegal !== undefined) components.push(eb.reservaLegal);
-  if (eb.otrasReservas !== undefined) components.push(eb.otrasReservas);
-  if (eb.utilidadEjercicio !== undefined) components.push(eb.utilidadEjercicio);
-  if (eb.utilidadesAcumuladas !== undefined) components.push(eb.utilidadesAcumuladas);
+  let componentsFound = false;
+  let ecpCents = ZERO;
+  for (const key of EQUITY_COMPONENTS) {
+    const value = eb[key];
+    if (typeof value !== 'number') continue;
+    componentsFound = true;
+    ecpCents += pesosToCents(value);
+  }
 
   // Sin componentes detectados, el ECP no es construible — no aplicamos.
-  if (components.length === 0) return { findings: [] };
+  if (!componentsFound) return { findings: [] };
 
-  // Guard contra interacción con R8 (Cierre Virtual): si R8 ya cuadró la
-  // ecuación contable (Activo = Pasivo + Patrimonio), R5 NO debe re-anclar
-  // al breakdown — el breakdown puede no reflejar cuentas Clase 3 fuera
-  // del mapeo conocido (ej. 3795 "ajustes pendientes"), y forzar la
-  // igualdad rompería el cuadre que R8 logró. R5 fue diseñado para casos
-  // donde el balance crudo no incluía la utilidad del ejercicio; ese rol
-  // ahora lo cubre R8 autoritativamente.
-  const equationGap =
-    snapshot.controlTotals.activo -
-    snapshot.controlTotals.pasivo -
-    snapshot.controlTotals.patrimonio;
-  const equationTolerance = Math.max(
-    Math.abs(snapshot.controlTotals.activo) * 0.0001,
-    1000,
-  );
-  if (
-    snapshot.virtualCloseAdjustment !== undefined &&
-    Math.abs(equationGap) <= equationTolerance
-  ) {
-    return { findings: [] };
-  }
+  const patrimonioCents =
+    snapshot.controlTotals.cents?.patrimonio ?? pesosToCents(snapshot.controlTotals.patrimonio);
+  const gapCents = ecpCents - patrimonioCents;
+  if (gapCents === ZERO) return { findings: [] };
 
-  const ecpClosingBalance = components.reduce((s, n) => s + n, 0);
-  const balanceEquity = snapshot.controlTotals.patrimonio;
-  const gap = ecpClosingBalance - balanceEquity;
-
-  // Tolerancia: max(|activo| * 0.0001, $1.000).
-  const tolerance = Math.max(
-    Math.abs(snapshot.controlTotals.activo) * 0.0001,
-    1000,
-  );
-
-  if (Math.abs(gap) <= tolerance) {
-    return { findings: [] };
-  }
-
-  // Mutación: anclar el patrimonio al ECP, registrar gap, emitir finding.
-  snapshot.equityBreakdown.convergenceAdjustment = gap;
-  snapshot.controlTotals.patrimonio = ecpClosingBalance;
-  snapshot.equityAnchorAdjustment = gap;
-
-  // El patrimonio anclado NO proviene de sumar las cuentas del balance, así
-  // que `cents` y `raw` deben rederivarse del valor recién escrito. Sin esto,
-  // el gate `auditReportEmittable` (que compara en cents con tolerancia 0n)
-  // seguía viendo el patrimonio PRE-anclaje.
-  syncControlTotals(snapshot.controlTotals, snapshot.classes, ['patrimonio']);
-
-  const adjustment: ConvergenceAdjustment = {
-    gapCop: gap,
-    balanceEquity,
-    ecpClosingBalance,
-    reconciledEquity: ecpClosingBalance,
-    virtualAccountCode: VIRTUAL_EQUITY_CODE,
-    virtualAccountName: VIRTUAL_EQUITY_NAME,
-    ledgerLineLabel: LEDGER_LINE_LABEL,
-    justification:
-      'Anclaje patrimonial NIC 1 párr. 106 — alineamiento Saldo Final ECP con Total Patrimonio Balance.',
-  };
+  const ecp = formatCents(ecpCents);
+  const balance = formatCents(patrimonioCents);
+  const gap = formatCents(gapCents);
+  const message =
+    `[${snapshot.period}] El desglose del patrimonio para el Estado de Cambios en el ` +
+    `Patrimonio suma $${ecp} y el total de la clase 3 del balance es $${balance}: ` +
+    `diferencia $${gap}. El sistema no ajusta el patrimonio para forzar la ` +
+    `conciliación. Revise cuentas agregadas de la clase 3 que no suman a sus auxiliares.`;
+  addCuratorBlocker(snapshot, 'CUR-R5', message);
 
   const finding: CuratorFinding = {
     code: 'CUR-R5',
-    severity: 'alto',
-    title: 'Brecha de anclaje patrimonial Balance ↔ ECP absorbida en Resultados Acumulados',
-    description:
-      `Brecha entre Saldo Final ECP ($${formatCOP(ecpClosingBalance)}) y Total Patrimonio Balance ` +
-      `($${formatCOP(balanceEquity)}) absorbida en Resultados Acumulados. Ajuste: $${formatCOP(gap)} ` +
-      `imputado a cuenta virtual ${VIRTUAL_EQUITY_CODE} (${VIRTUAL_EQUITY_NAME}).`,
-    normReference: 'NIC 1 párr. 106',
+    severity: 'critico',
+    title: 'El desglose del patrimonio (ECP) no concilia con el Balance',
+    description: message,
+    normReference: 'NIC 1 párr. 106 (conciliación de cada componente del patrimonio)',
     recommendation:
-      `Documentar el origen del ajuste de convergencia en notas a los estados financieros. ` +
-      `Validar que la brecha provenga de transición NIIF, redondeos o revaluaciones legítimas.`,
+      'Corregir el archivo de origen para que cada cuenta del patrimonio coincida con la ' +
+      'suma de sus auxiliares y volver a procesar.',
     impact:
-      `Sin este anclaje, el Balance y el ECP presentarían cifras inconsistentes — el contador ` +
-      `público no podría firmarlos. La línea automática preserva la auditabilidad del ajuste.`,
+      `El informe no es emitible: el ECP y el Balance presentarían patrimonios distintos ` +
+      `(diferencia $${gap}).`,
     period: snapshot.period,
   };
 
-  return { convergenceAdjustment: adjustment, findings: [finding] };
+  return { findings: [finding] };
 }
 
-function formatCOP(amount: number): string {
-  const abs = Math.abs(amount);
-  const formatted = abs.toLocaleString('es-CO', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-  return amount < 0 ? `-${formatted}` : formatted;
+/** Centavos exactos → "$1.234.567,89" sin pasar por float. */
+function formatCents(cents: bigint): string {
+  const canonical = centsToCanonical(cents); // "-1234567.89"
+  const negative = canonical.startsWith('-');
+  const [intPart, frac] = (negative ? canonical.slice(1) : canonical).split('.');
+  const withDots = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${negative ? '-' : ''}${withDots},${frac}`;
 }
