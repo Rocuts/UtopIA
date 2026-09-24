@@ -10,10 +10,11 @@
 //
 // Decisión de negocio (coordinador): la utilidad bruta parte de los ingresos
 // operacionales netos = grupo 41 menos devoluciones 4175; el grupo 42 va debajo
-// de la utilidad operacional. Mientras las anclas del preprocesador no exponen
-// ese campo por separado, se recompone aquí de forma determinista desde las
-// cuentas hoja de la clase 4 del snapshot, con la misma fórmula del
-// preprocesador (magnitud del total firmado por grupo, nunca cuenta por cuenta).
+// de la utilidad operacional. El preprocesador expone ese valor como ancla
+// (`controlTotals.ingresosOperacionalesNetos`, WP04) y es la fuente preferida
+// (IW2). Sólo sin el ancla se recompone de forma determinista desde las hojas
+// de la clase 4 del snapshot con la misma fórmula (magnitud del total firmado
+// por grupo, nunca cuenta por cuenta) o se toma de los renglones 41xx del ERI.
 // ---------------------------------------------------------------------------
 
 import type { ControlTotals, PUCClass } from '@/lib/preprocessing/trial-balance';
@@ -33,7 +34,7 @@ export interface RevenueBreakdown {
   /** netosTotales − operacionalesNetos: grupo 42 y demás no operacionales. */
   noOperacionales: number | null;
   /** De dónde salió `operacionalesNetos`. */
-  source: 'puc-detail' | 'niif-json' | null;
+  source: 'control-totals' | 'puc-detail' | 'niif-json' | null;
 }
 
 interface SnapshotLike {
@@ -86,9 +87,11 @@ function fromNiifJson(json: NiifReportJson | null | undefined): bigint | null {
 /**
  * Descompone los ingresos del periodo para los entregables.
  *
- * Prioridad de `operacionalesNetos`: detalle PUC del snapshot (misma fuente que
- * el resto de KPIs) → renglones 41xx del ERI validado → `null` (N/D). Nunca cae
- * a la Σ de la clase 4.
+ * Prioridad de `operacionalesNetos`: ancla del preprocesador
+ * (`controlTotals.ingresosOperacionalesNetos`) → detalle PUC del snapshot →
+ * renglones 41xx del ERI validado → `null` (N/D). Nunca cae a la Σ de la
+ * clase 4. Si el snapshot trae clases pero ninguna hoja de la clase 4, el
+ * ancla (que valdría 0) no se usa: sin detalle de ingresos el valor es N/D.
  */
 export function revenueBreakdown(
   snapshot: SnapshotLike | null | undefined,
@@ -104,7 +107,16 @@ export function revenueBreakdown(
 
   let op: bigint | null = null;
   let source: RevenueBreakdown['source'] = null;
-  if (detail) {
+  const anclaOperacionales = ct?.ingresosOperacionalesNetos;
+  const snapshotSinClases = !Array.isArray(snapshot?.classes);
+  if (
+    typeof anclaOperacionales === 'number' &&
+    Number.isFinite(anclaOperacionales) &&
+    (detail !== null || snapshotSinClases)
+  ) {
+    op = toCents(anclaOperacionales);
+    source = 'control-totals';
+  } else if (detail) {
     op = detail.operacionales;
     source = 'puc-detail';
   } else {

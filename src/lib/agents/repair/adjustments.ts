@@ -31,9 +31,12 @@ import type {
   ControlTotalsRaw,
 } from '@/lib/preprocessing/trial-balance';
 import {
+  clientesNetosDeHojas,
   curatorFindingToDiscrepancy,
   extractEquityBreakdown,
+  ingresosClase4Cents,
   isRentaCreditAccount,
+  refreshDerivedKpis,
 } from '@/lib/preprocessing/trial-balance';
 import { runR8 } from '@/lib/preprocessing/curator-rules/r8-virtual-close';
 import type { Adjustment } from './types';
@@ -320,6 +323,12 @@ export function applyAdjustments(
     recomputeSnapshotTotals(snap);
     resyncVirtualClose(snap);
   }
+  // KPIs derivados con la misma función del preprocesador (IW2). Se refrescan
+  // TODOS los periodos en orden: los promedios del periodo siguiente dependen
+  // del patrimonio y el activo del anterior.
+  if (dirtySnapshots.size > 0) {
+    next.periods.forEach((snap, i) => refreshDerivedKpis(snap, i > 0 ? next.periods[i - 1] : null));
+  }
 
   return { balance: next, affected };
 }
@@ -385,30 +394,21 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
   const totalCosts = getClassTotal(6);
   const totalProduction = getClassTotal(7);
 
-  // Devoluciones 4175 — ESPEJO EXACTO de `trial-balance.ts`, incluida la guarda
-  // NIA 240 de más abajo. Este bloque es una segunda implementación de la misma
-  // regla contable: si diverge, un ajuste de reparación reescribe el P&L con
-  // otro criterio que el preprocesador y el bloque vinculante deja de cuadrar.
-  // La duplicación sin sincronizar ya fue la causa raíz de esta familia de
-  // defectos, así que cualquier cambio allí se replica aquí — arriba Y abajo.
+  // Devoluciones 4175 e ingresos operacionales (41 − 4175) con la MISMA
+  // función del preprocesador (`ingresosClase4Cents`). Antes este bloque era un
+  // espejo manual: si divergía, un ajuste de reparación reescribía el P&L con
+  // otro criterio que el preprocesador y el bloque vinculante dejaba de
+  // cuadrar. La guarda NIA 240 de más abajo sigue siendo la del preprocesador.
   const ZERO_BIG = BigInt(0);
-  const absBig = (v: bigint): bigint => (v < ZERO_BIG ? -v : v);
-  const cls4 = snap.classes.find((c) => c.code === 4);
-  let sumOrdinariasCents = ZERO_BIG;
-  let sumDevolucionesFirmadaCents = ZERO_BIG;
-  if (cls4) {
-    for (const acc of cls4.accounts) {
-      const c = toCents(Number(acc.balance) || 0);
-      if (normalizeCode(acc.code).startsWith('4175')) {
-        sumDevolucionesFirmadaCents += c;
-      } else {
-        sumOrdinariasCents += c;
-      }
-    }
-  }
-  const ingresosBrutoCents = absBig(sumOrdinariasCents);
-  const totalDevolucionesCents = absBig(sumDevolucionesFirmadaCents);
-  const ingresosNetosCents = ingresosBrutoCents - totalDevolucionesCents;
+  const hojas = snap.classes.flatMap((c) =>
+    c.accounts.map((a) => ({ code: normalizeCode(a.code), balance: Number(a.balance) || 0 })),
+  );
+  const {
+    ingresosBrutoCents,
+    totalDevolucionesCents,
+    ingresosNetosCents,
+    ingresosOperacionalesNetosCents,
+  } = ingresosClase4Cents(hojas);
   const totalDevoluciones = Number(totalDevolucionesCents) / 100;
   const ingresosNetos = Number(ingresosNetosCents) / 100;
 
@@ -489,6 +489,8 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
 
   const gastosTotales = totalExpenses + totalCosts + totalProduction;
   const efectivoCuenta11 = sumByGroupPrefixes('1', new Set(['11']));
+  const ingresosOperacionalesNetos = Number(ingresosOperacionalesNetosCents) / 100;
+  const utilidadBruta = ingresosOperacionalesNetos - (totalCosts + totalProduction);
 
   // -------------------------------------------------------------------------
   // cents + raw — recomputados desde los saldos AJUSTADOS, replicando las
@@ -556,13 +558,11 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
 
   const prevTotals = snap.controlTotals;
   snap.controlTotals = {
-    // Spread PRIMERO: preserva los campos derivados que este modulo NO
-    // recalcula (KPIs Wave 2.F4: ebit, ratios, promedios; impuestoRentaNeto
-    // R16; cashOpen del comparativo, ...). Mantienen su valor pre-ajuste —
-    // mejor contrato que perderlos (el bloque vinculante y los renderers los
-    // citan), aunque pueden quedar marginalmente desfasados si un ajuste
-    // toca sus cuentas base. Las claves explicitas de abajo SI se recalculan
-    // desde los saldos ajustados y sobreescriben al spread.
+    // Spread PRIMERO: preserva los campos que este modulo NO recalcula
+    // (impuestoRentaNeto R16, cashOpen del comparativo, ...). Las claves
+    // explicitas de abajo SI se recalculan desde los saldos ajustados y
+    // sobreescriben al spread; los ratios y promedios los refresca
+    // `refreshDerivedKpis` al final de `applyAdjustments`.
     ...prevTotals,
     activo: totalAssets,
     activoCorriente: sumByGroupPrefixes('1', ACTIVO_CORRIENTE_GROUPS),
@@ -581,6 +581,23 @@ function recomputeSnapshotTotals(snap: PeriodSnapshot): void {
     obligacionesLaborales25: sumByGroupPrefixes('2', new Set(['25'])),
     totalDevoluciones,
     ingresosNetos,
+    // Sub-bloque P&L de soporte de los KPIs (IW2): antes quedaba con su valor
+    // pre-ajuste y un ajuste al grupo 41 dejaba EBIT, márgenes y los ingresos
+    // operacionales que publican los entregables desfasados de la utilidad.
+    ingresosOperacionalesNetos,
+    otrosIngresosNoOperacionales: Number(ingresosNetosCents - ingresosOperacionalesNetosCents) / 100,
+    utilidadBruta,
+    ebit: utilidadBruta - sumByGroupPrefixes('5', new Set(['51'])) - sumByGroupPrefixes('5', new Set(['52'])),
+    inventarios14: sumByGroupPrefixes('1', new Set(['14'])),
+    proveedores22: sumByGroupPrefixes('2', new Set(['22'])),
+    costoVentas6: totalCosts,
+    costoProduccion7: totalProduction,
+    gastoFinanciero5305: Number(
+      hojas
+        .filter((h) => h.code.startsWith('5305'))
+        .reduce((acc, h) => acc + toCents(h.balance), ZERO_BIG),
+    ) / 100,
+    clientesNetos: clientesNetosDeHojas(hojas),
     cents,
     raw,
   };

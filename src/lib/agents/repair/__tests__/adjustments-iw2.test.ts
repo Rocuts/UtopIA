@@ -9,6 +9,9 @@
 //   - niif-preproceso-13: desglose del patrimonio con 3105 como "capital
 //     autorizado", sin los grupos 32/34/35/38 y con 3610 en acumuladas.
 // Ahora ambos usan la regla exportada por `trial-balance.ts`.
+// Además (IW2, ratios-kpis-04): el sub-bloque P&L (ingresos operacionales,
+// utilidad bruta, EBIT) y los KPIs quedaban con su valor PRE-ajuste; los
+// entregables que leen `ingresosOperacionalesNetos` se desfasaban.
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from 'vitest';
@@ -16,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { applyAdjustments } from '../adjustments';
 import type { Adjustment } from '../types';
 import { parseTrialBalanceCSV, preprocessTrialBalance } from '@/lib/preprocessing/trial-balance';
+import { revenueBreakdown } from '@/lib/export/revenue';
 
 // Libros cerrados: A 545M = P 104M + K 441M; P&G 200 − 150 = 50M = 3605.
 const CSV = [
@@ -112,5 +116,36 @@ describe('applyAdjustments — desglose del patrimonio del preprocesador (niif-p
     expect(eb).toEqual(original.primary.equityBreakdown);
     expect(eb.utilidadesAcumuladas).toBe(55_000_000);
     expect(eb.utilidadEjercicio).toBe(-5_000_000);
+  });
+});
+
+describe('applyAdjustments — P&L de soporte y KPIs con la función del preprocesador (IW2)', () => {
+  it('un ajuste al grupo 41 actualiza ingresos operacionales, EBIT, márgenes y la fuente de los entregables', () => {
+    const original = preprocessTrialBalance(parseTrialBalanceCSV(CSV));
+    expect(original.primary.controlTotals.ingresosOperacionalesNetos).toBe(200_000_000);
+
+    const { balance } = applyAdjustments(original, [
+      adj('a1', '413505', 100_000_000),
+      adj('a2', '130505', 100_000_000),
+    ]);
+    const s = balance.primary;
+    const ct = s.controlTotals;
+    expect(ct.ingresosOperacionalesNetos).toBe(300_000_000);
+    expect(ct.utilidadBruta).toBe(300_000_000);
+    expect(ct.ebit).toBe(150_000_000);
+    expect(ct.margenOperativo).toBeCloseTo(50, 6);
+    expect(ct.clientesNetos).toBe(100_000_000);
+
+    // Mismos valores que un preprocesado desde cero del balance ajustado.
+    const fresh = preprocessTrialBalance(
+      parseTrialBalanceCSV(
+        CSV.replace('410505,Ventas,Auxiliar,1,200000000', '410505,Ventas,Auxiliar,1,200000000\n413505,Ventas mayoristas,Auxiliar,1,100000000')
+          .concat('\n130505,Clientes,Auxiliar,1,100000000'),
+      ),
+    ).primary.controlTotals;
+    for (const k of ['ingresosOperacionalesNetos', 'ebit', 'margenOperativo', 'margenBruto', 'rotacionActivos', 'diasCartera'] as const) {
+      expect(ct[k]).toBeCloseTo(fresh[k] as number, 6);
+    }
+    expect(revenueBreakdown(s).operacionalesNetos).toBe(300_000_000);
   });
 });

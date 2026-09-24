@@ -1526,27 +1526,7 @@ export function preprocessTrialBalance(
   // propio post-curator. Determinístico, sin LLM.
   // -------------------------------------------------------------------------
   for (let i = 0; i < snapshots.length; i++) {
-    const snap = snapshots[i];
-    const prev = i > 0 ? snapshots[i - 1] : null;
-    const ct = snap.controlTotals;
-    const patrimonioPromedio =
-      prev !== null ? (ct.patrimonio + prev.controlTotals.patrimonio) / 2 : ct.patrimonio;
-    const activoPromedio =
-      prev !== null ? (ct.activo + prev.controlTotals.activo) / 2 : ct.activo;
-    ct.patrimonioPromedio = patrimonioPromedio;
-    ct.activoPromedio = activoPromedio;
-    Object.assign(
-      ct,
-      computeDerivedKpis(kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio)),
-    );
-    // EBITDA con la definición ÚNICA de `pillars/ebitda.ts` (ratios-kpis-05 /
-    // ratios-kpis-24): EBIT + D&A sobre las hojas del snapshot, sin las
-    // cuentas virtuales del curator. Sin grupo 41 es N/D con motivo.
-    const ebitda = computeEbitda(snap);
-    ct.ebitda = ebitda.ebitda;
-    if (ebitda.ebitda === null && ebitda.reason) {
-      ct.kpiNdMotivos = { ...ct.kpiNdMotivos, ebitda: `N/D — ${ebitda.reason}` };
-    }
+    refreshDerivedKpis(snapshots[i], i > 0 ? snapshots[i - 1] : null);
   }
 
   // -------------------------------------------------------------------------
@@ -1866,17 +1846,12 @@ function buildSnapshotForPeriod(
   // Fuente: spec v2 Parte 4.1 (ingresos netos = |Σ 41xx crédito| − |Σ 4175xx
   // débito|), NIIF 15 §47, PUC Decreto 2649/93 grupo 4175.
   // ---------------------------------------------------------------------------
-  const ZERO_BIG = BigInt(0);
-  const absBig = (v: bigint): bigint => (v < ZERO_BIG ? -v : v);
-  const clase4Leaves = leafRows.filter((r) => r.code.startsWith('4'));
-  const devolucionesAuxiliares = clase4Leaves.filter((r) => r.code.startsWith('4175'));
-  const ordinariasClase4 = clase4Leaves.filter((r) => !r.code.startsWith('4175'));
-  const sumFirmadaCents = (rows: typeof clase4Leaves): bigint =>
-    rows.reduce<bigint>((acc, r) => acc + toCents(r.balance), ZERO_BIG);
-
-  const ingresosBrutoCents = absBig(sumFirmadaCents(ordinariasClase4));
-  const totalDevolucionesCents = absBig(sumFirmadaCents(devolucionesAuxiliares));
-  const ingresosNetosCents = ingresosBrutoCents - totalDevolucionesCents;
+  const {
+    ingresosBrutoCents,
+    totalDevolucionesCents,
+    ingresosNetosCents,
+    ingresosOperacionalesNetosCents,
+  } = ingresosClase4Cents(leafRows);
   const totalDevoluciones = Number(totalDevolucionesCents) / 100;
   const ingresosNetos = Number(ingresosNetosCents) / 100;
 
@@ -2038,11 +2013,7 @@ function buildSnapshotForPeriod(
   const gastosAdmin52 = sumLeavesByGroupPrefixes(leafRows, '5', new Set(['52']));
   const costoVentas6 = totalCosts;
   const costoProduccion7 = totalProduction;
-  const sumOrdinariasCents = sumFirmadaCents(ordinariasClase4);
-  const signoOrdinarias = sumOrdinariasCents < ZERO_BIG ? BigInt(-1) : BigInt(1);
-  const ingresosOperacionales41Cents =
-    sumFirmadaCents(ordinariasClase4.filter((r) => r.code.startsWith('41'))) * signoOrdinarias;
-  const ingresosOperacionalesNetosCents = ingresosOperacionales41Cents - totalDevolucionesCents;
+  // `ingresosOperacionalesNetosCents` sale de `ingresosClase4Cents` (arriba).
   const otrosIngresosNoOperacionalesCents = ingresosNetosCents - ingresosOperacionalesNetosCents;
   const ingresosOperacionalesNetos = Number(ingresosOperacionalesNetosCents) / 100;
   const otrosIngresosNoOperacionales = Number(otrosIngresosNoOperacionalesCents) / 100;
@@ -2066,14 +2037,7 @@ function buildSnapshotForPeriod(
   // Cartera comercial neta (niif-preproceso-25): clientes 1305 + cuentas
   // corrientes comerciales 1310 − deterioro 1399 (contra-activo; se resta su
   // magnitud en cualquier convención). Sin 1305/1310 no hay cartera comercial.
-  const clientesLeaves = leafRows.filter(
-    (r) => r.code.startsWith('1305') || r.code.startsWith('1310'),
-  );
-  const clientesNetos =
-    clientesLeaves.length === 0
-      ? null
-      : sumLeavesPrecise(clientesLeaves) -
-        Math.abs(sumLeavesPrecise(leafRows.filter((r) => r.code.startsWith('1399'))));
+  const clientesNetos = clientesNetosDeHojas(leafRows);
   const mesesPeriodo = mesesDelPeriodo(period);
   const kpis = computeDerivedKpis({
     activoCorriente,
@@ -2788,6 +2752,97 @@ export function mesesDelPeriodo(periodLabel: string | null | undefined): number 
   return inferPeriodoTipo(s) === 'cerrado' ? 12 : null;
 }
 
+/** Hoja mínima (código + saldo del periodo) para los helpers de agregación. */
+interface HojaSaldo {
+  code: string;
+  balance: number;
+}
+
+/** Totales de la clase 4 en centavos (ver `ingresosClase4Cents`). */
+export interface IngresosClase4Cents {
+  /** |Σ firmada de las ordinarias (clase 4 sin 4175)|. */
+  ingresosBrutoCents: bigint;
+  /** |Σ firmada de las devoluciones 4175|. */
+  totalDevolucionesCents: bigint;
+  /** Ingresos netos de devoluciones (base de la utilidad neta). */
+  ingresosNetosCents: bigint;
+  /** Grupo 41 (sin 4175) − devoluciones 4175 (base de la utilidad bruta). */
+  ingresosOperacionalesNetosCents: bigint;
+}
+
+/**
+ * Ingresos de la clase 4 en centavos, con la regla del preprocesador: la
+ * magnitud sale del TOTAL firmado de cada bloque (ordinarias, devoluciones
+ * 4175), nunca cuenta por cuenta, y el grupo 41 se orienta con el signo del
+ * total ordinario (convención firmada o de magnitudes). Fuente única para
+ * `buildSnapshotForPeriod` y el Doctor de Datos (`repair/adjustments.ts`).
+ */
+export function ingresosClase4Cents(leaves: readonly HojaSaldo[]): IngresosClase4Cents {
+  const ZERO = BigInt(0);
+  const abs = (v: bigint): bigint => (v < ZERO ? -v : v);
+  let ordinarias = ZERO;
+  let grupo41 = ZERO;
+  let devoluciones = ZERO;
+  for (const r of leaves) {
+    if (!r.code.startsWith('4')) continue;
+    const cents = toCents(r.balance);
+    if (r.code.startsWith('4175')) {
+      devoluciones += cents;
+      continue;
+    }
+    ordinarias += cents;
+    if (r.code.startsWith('41')) grupo41 += cents;
+  }
+  const ingresosBrutoCents = abs(ordinarias);
+  const totalDevolucionesCents = abs(devoluciones);
+  const signoOrdinarias = ordinarias < ZERO ? BigInt(-1) : BigInt(1);
+  return {
+    ingresosBrutoCents,
+    totalDevolucionesCents,
+    ingresosNetosCents: ingresosBrutoCents - totalDevolucionesCents,
+    ingresosOperacionalesNetosCents: grupo41 * signoOrdinarias - totalDevolucionesCents,
+  };
+}
+
+/**
+ * Cartera comercial neta (niif-preproceso-25): clientes 1305 + cuentas
+ * corrientes comerciales 1310 − deterioro 1399 (contra-activo: se resta su
+ * magnitud en cualquier convención). `null` sin cuentas 1305/1310.
+ */
+export function clientesNetosDeHojas(leaves: readonly HojaSaldo[]): number | null {
+  const clientes = leaves.filter((r) => r.code.startsWith('1305') || r.code.startsWith('1310'));
+  if (clientes.length === 0) return null;
+  const deterioro = leaves.filter((r) => r.code.startsWith('1399'));
+  return sumLeavesPrecise(clientes) - Math.abs(sumLeavesPrecise(deterioro));
+}
+
+/**
+ * Recalcula los KPIs derivados de un snapshot (post-curator): promedios con
+ * el periodo anterior, ratios de `computeDerivedKpis` y EBITDA con la
+ * definición única de `pillars/ebitda.ts`. Lo usan `preprocessTrialBalance` y
+ * el Doctor de Datos tras aplicar ajustes, para que ambos publiquen lo mismo.
+ */
+export function refreshDerivedKpis(snap: PeriodSnapshot, prev: PeriodSnapshot | null): void {
+  const ct = snap.controlTotals;
+  const patrimonioPromedio =
+    prev !== null ? (ct.patrimonio + prev.controlTotals.patrimonio) / 2 : ct.patrimonio;
+  const activoPromedio = prev !== null ? (ct.activo + prev.controlTotals.activo) / 2 : ct.activo;
+  ct.patrimonioPromedio = patrimonioPromedio;
+  ct.activoPromedio = activoPromedio;
+  Object.assign(
+    ct,
+    computeDerivedKpis(kpiInputsFromTotals(ct, snap.period, patrimonioPromedio, activoPromedio)),
+  );
+  // EBITDA con la definición ÚNICA de `pillars/ebitda.ts` (ratios-kpis-05 /
+  // ratios-kpis-24): EBIT + D&A sobre las hojas del snapshot, sin las cuentas
+  // virtuales del curator. Sin grupo 41 es N/D con motivo.
+  const ebitda = computeEbitda(snap);
+  ct.ebitda = ebitda.ebitda;
+  if (ebitda.ebitda === null && ebitda.reason) {
+    ct.kpiNdMotivos = { ...ct.kpiNdMotivos, ebitda: `N/D — ${ebitda.reason}` };
+  }
+}
+
 /** Entradas de `computeDerivedKpis` desde un `controlTotals` ya construido. */
 function kpiInputsFromTotals(
   ct: ControlTotals,
@@ -3432,7 +3487,7 @@ function sumLeavesByGroupPrefixes(
  * para R16 (anticipo netting) y otros consumers que necesitan precisión cents
  * sin filtrar por grupo PUC.
  */
-function sumLeavesPrecise(leafRows: ViewRow[]): number {
+function sumLeavesPrecise(leafRows: ReadonlyArray<{ balance: number }>): number {
   let acc = BigInt(0);
   for (const r of leafRows) acc += toCents(r.balance);
   return Number(acc) / 100;
