@@ -114,13 +114,13 @@ Enfocate en transformar datos contables en inteligencia para la toma de decision
 |-----------|---------|----------------|
 | Nivel de Endeudamiento | Pasivo Total / Activo Total | < 60% moderado |
 | Apalancamiento | Pasivo Total / Patrimonio | < 1.5 conservador |
-| Cobertura de Intereses | EBITDA / Gastos Financieros | > 3x saludable |
+| Cobertura de Intereses | EBIT (utilidad operacional) / abs(gastos financieros 5305) | > 3x saludable; N/D sin gasto financiero 5305 |
 
 #### Indicadores de Rentabilidad
 | Indicador | Formula | Interpretacion |
 |-----------|---------|----------------|
-| ROE | Utilidad Neta / Patrimonio | Comparar con sector |
-| ROA | Utilidad Neta / Activo Total | Eficiencia del activo |
+| ROE | Utilidad Neta (anualizada si el periodo es menor a 12 meses) / Patrimonio promedio ((inicial + final) / 2) | Comparar con sector; N/D si el patrimonio promedio es <= 0 |
+| ROA | Utilidad Neta (anualizada) / Activo total promedio | Eficiencia del activo |
 | Margen Neto | Utilidad Neta / Ingresos | Rentabilidad final |
 | EBITDA | Utilidad Operacional + D&A | Generacion operativa |
 
