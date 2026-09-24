@@ -29,7 +29,8 @@ function pctOf(cents: bigint, pct: bigint): bigint {
 
 function ratePct(taxCents: bigint, baseCents: bigint): number | null {
   if (baseCents <= ZERO) return null;
-  return Math.round(Number((taxCents * BigInt(10_000)) / baseCents)) / 100;
+  // 2 decimales con redondeo half-up (escala ×10⁵ antes de dividir).
+  return Math.round(Number((taxCents * BigInt(100_000)) / baseCents) / 10) / 100;
 }
 
 export const TTD_ND_MOTIVO =
