@@ -27,6 +27,8 @@ vi.mock('@/lib/facts/report-facts', () => ({ getHechosEmpresaBlock: vi.fn(async 
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import type { NiifReportJson } from '../contracts/niif-report';
 import { CSV_R1, M, det, esfQueSigueElPrompt, preprocesarR1, sub } from '../__fixtures__/r1-anticipo-credito';
+import { linea } from '../__fixtures__/perdida-comparativo-w4a';
+import { realignEsfTermsFromSnapshot } from '../agents/reconcile-anchors';
 import { buildNiifValidatorOptions, runNiifPhase } from '../orchestrator';
 import { buildNiifAnalystPass1Prompt } from '../prompts/niif-analyst.prompt';
 import { validateNiifReportJson } from '../validators/niif-json-validator';
@@ -147,3 +149,77 @@ describe('ruta real — runNiifPhase con el LLM simulado sobre un balance con R1
     expect(phase.niif.fullContent).toMatch(/E21\. Estado de Situación Financiera — Pasivo \(periodo 2025\): "2805/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// I5-niif 2 — E27 sobre un ESF del modelo con R1: sustituir, no sellar
+// ---------------------------------------------------------------------------
+
+/** El modelo ubica el grupo 28 por el mapa PUC (no corriente), no por el origen de R1. */
+function esfConR1EnNoCorriente(pp: PreprocessedBalance): NiifReportJson {
+  const json = esfQueSigueElPrompt(pp);
+  json.balanceSheet.liabilities = [
+    det('21', 'Obligaciones financieras', 45, 40),
+    det('22', 'Proveedores', 25, 30),
+    sub('Total pasivo corriente', 70, 70),
+    det('28', 'Otros pasivos — saldo acreedor reclasificado de la cuenta 133005', 5, null),
+    linea(null, 'Total pasivo no corriente', M(5), null, { level: 3, isAbsolute: true }),
+  ];
+  return json;
+}
+
+describe('I5-niif 2 — realignEsfTermsFromSnapshot', () => {
+  it('sin E27 no toca nada', () => {
+    const pp = preprocesarR1();
+    const json = esfQueSigueElPrompt(pp);
+    const r = realignEsfTermsFromSnapshot(json, pp.primary, pp.comparative);
+    expect(r.replaced).toEqual([]);
+    expect(r.json).toBe(json);
+  });
+
+  it('sustituye sólo el pasivo, con la virtual de R1 en el bloque corriente', () => {
+    const pp = preprocesarR1();
+    const json = esfConR1EnNoCorriente(pp);
+    const r = realignEsfTermsFromSnapshot(json, pp.primary, pp.comparative);
+    expect(r.replaced).toEqual(['Pasivo']);
+    expect(r.mismatches.every((m) => m.startsWith('E27. Estado de Situación Financiera — Pasivo (periodo 2025)'))).toBe(true);
+    expect(r.unresolved).toEqual([]);
+    expect(r.json.balanceSheet.assets).toBe(json.balanceSheet.assets);
+    expect(r.json.balanceSheet.liabilities.map((l) => [l.account, l.label, l.amountPrimary])).toEqual([
+      ['21', 'Obligaciones financieras', M(45)],
+      ['22', 'Proveedores', M(25)],
+      ['28', 'Otros pasivos — saldo acreedor reclasificado de la cuenta 133005', M(5)],
+      [null, 'Total pasivo corriente', M(75)],
+    ]);
+  });
+
+  it('una brecha sólo en la columna comparativa también sustituye; sin columna comparativa, no', () => {
+    const pp = preprocesarR1();
+    const json = esfQueSigueElPrompt(pp);
+    json.balanceSheet.liabilities[3] = sub('Total pasivo corriente', 75, 71);
+    expect(realignEsfTermsFromSnapshot(json, pp.primary, pp.comparative).replaced).toEqual(['Pasivo']);
+    expect(realignEsfTermsFromSnapshot(json, pp.primary, null).replaced).toEqual([]);
+  });
+});
+
+describe('ruta real — E27 sobre un ESF del modelo con R1', () => {
+  it('el grupo 28 de R1 en el bloque no corriente se sustituye por la proyección y el informe sale limpio', async () => {
+    const pp = preprocesarR1();
+    const json = esfConR1EnNoCorriente(pp);
+    // Sin sustitución, E27 sellaba este ESF.
+    expect(
+      validateNiifReportJson(json, buildNiifValidatorOptions(pp)).errors.filter((e) => e.startsWith('E27.')).length,
+    ).toBeGreaterThan(0);
+    mockPasses(json);
+    const phase = await fase(pp);
+    expect(phase.niif.fullContent).not.toMatch(/E27\.|REPORTE CON SALVEDADES/);
+    expect(phase.niif.reconciliation?.clean).toBe(true);
+    const pasivo = phase.niif.json!.balanceSheet.liabilities;
+    expect(pasivo.map((l) => [l.account, l.amountPrimary, l.amountComparative])).toEqual([
+      ['21', M(45), M(40)],
+      ['22', M(25), M(30)],
+      ['28', M(5), null],
+      [null, M(75), M(70)],
+    ]);
+  });
+});
+

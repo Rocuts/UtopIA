@@ -36,6 +36,7 @@ import { toNiifAnalysisResult } from './renderer';
 import {
   reconcileAnchors,
   completeBreakdownFromSnapshot,
+  realignEsfTermsFromSnapshot,
   buildQualificationSeal,
   buildDegradationNotice,
   type ReconciliationOutcome,
@@ -359,6 +360,32 @@ export async function runNiifAnalyst(
   // Pass-2/3 los reciban como ancla.
   if (preprocessed?.primary) {
     pass1 = { ...pass1, curatorFlags: deterministicCuratorFlags(preprocessed.primary) };
+  }
+
+  // -- Plazo del ESF (E27) — I5-niif 2 --------------------------------------
+  // Un desglose del modelo que cuadra con su total pero ubica un grupo en el
+  // bloque de plazo equivocado (vencimiento declarado, virtual de R1) no pasa
+  // por el completado de arriba y sellaba el informe por E27. La partición
+  // corriente / no corriente es la del preprocesador: como con `lineGaps`, la
+  // sección se sustituye por la proyección determinista y se re-valida; lo que
+  // siga sin cuadrar lo sella el validador de `runNiifPhase`.
+  if (preprocessed?.primary) {
+    const comparativeShown =
+      preprocessed.comparative && preprocessed.comparativos_impracticables !== true
+        ? preprocessed.comparative
+        : null;
+    const realigned = realignEsfTermsFromSnapshot(pass1, preprocessed.primary, comparativeShown);
+    if (realigned.replaced.length > 0) {
+      pass1 = realigned.json;
+      onProgress?.({
+        type: 'stage_progress',
+        stage: 1,
+        detail:
+          `Clasificación corriente / no corriente del ${realigned.replaced.join(' y del ')} tomada del balance ` +
+          `preprocesado: los subtotales del analista no coincidían con los del preprocesador ` +
+          `(vencimientos declarados y reclasificaciones R1 incluidos).`,
+      });
+    }
   }
   const pass1Anchors = extractPass1Anchors(pass1);
 
