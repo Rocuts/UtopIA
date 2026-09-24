@@ -12,7 +12,6 @@ import { runStrategyDirector } from './agents/strategy-director';
 import { runGovernanceSpecialist } from './agents/governance-specialist';
 import {
   extractCompanyMetadata,
-  parseTrialBalanceCSV,
   preprocessTrialBalance,
   type ExtractedCompanyMetadata,
   type PreprocessedBalance,
@@ -20,6 +19,12 @@ import {
   type EquityBreakdown,
 } from '@/lib/preprocessing/trial-balance';
 import { deriveReportMode, type ReportMode } from '@/lib/preprocessing/v8-helpers';
+import {
+  extractUploadDataSection,
+  looksLikeTabularTrialBalance,
+  parseUploadedTrialBalanceText,
+  TrialBalanceIngestError,
+} from '@/lib/preprocessing/raw-data';
 import {
   auditReportEmittable,
   type AuditReportEmittableResult,
@@ -1342,17 +1347,49 @@ export async function prepareFinancialContext(
   // ---------------------------------------------------------------------------
   // Stage 0: Preprocess (idempotente) — genera los totales vinculantes
   // ---------------------------------------------------------------------------
+  // El rawData de la UI puede llegar con el informe de validación de
+  // /api/upload antepuesto (clientes anteriores al campo `rawData` del upload)
+  // o como bloques `[period=…]` de un XLSX. Se lee con el MISMO helper que el
+  // upload (`parseUploadedTrialBalanceText`) y el informe, que es texto
+  // derivado, no viaja al LLM como dato (ingesta-01).
+  const dataSection = extractUploadDataSection(effectiveRawData ?? '');
+  if (dataSection.hadValidationReport) {
+    effectiveRawData = dataSection.data;
+  }
   let preprocessed: unknown = options.preprocessed;
   if (!preprocessed) {
     try {
-      const rows = parseTrialBalanceCSV(effectiveRawData);
-      if (rows.length > 0) {
-        preprocessed = preprocessTrialBalance(rows);
+      const parsedRaw = parseUploadedTrialBalanceText(effectiveRawData ?? '');
+      for (const w of parsedRaw.warnings) {
+        onProgress?.({ type: 'stage_progress', stage: 1, detail: `Ingesta: ${w}` });
+      }
+      if (parsedRaw.rows.length > 0) {
+        preprocessed = preprocessTrialBalance(parsedRaw.rows);
       }
     } catch (err) {
+      if (err instanceof TrialBalanceIngestError) {
+        // Hojas/periodos incompatibles: no se elige una versión en silencio.
+        throw new BalanceValidationError(err.reasons, []);
+      }
       console.warn(
-        '[financial-orchestrator] Preprocess fallo, continuando sin bindingTotals:',
+        '[financial-orchestrator] Preprocess fallo:',
         err instanceof Error ? err.message : err,
+      );
+    }
+    // Un balance tabular que no produjo preprocesado NO continúa como si
+    // tuviera cifras vinculantes: sin filas no hay totales, gate ni anclas, y
+    // el informe saldría de lo que el LLM lea del texto. Se detiene con motivo
+    // (422). El texto no tabular (OCR de PDF/imagen) sigue su camino y el
+    // bloque vinculante declara explícitamente que no hay totales.
+    if (!preprocessed && looksLikeTabularTrialBalance(effectiveRawData ?? '')) {
+      throw new BalanceValidationError(
+        [
+          'No se pudieron leer las filas del balance de prueba: el archivo tiene códigos de cuenta ' +
+            'pero su primera fila no es un encabezado reconocible (código, nombre, saldo / débito / ' +
+            'crédito) o las cifras no se pudieron interpretar. Sin filas no hay totales vinculantes ' +
+            'para el informe. Deje el encabezado de columnas en la primera fila y vuelva a cargarlo.',
+        ],
+        [],
       );
     }
   }

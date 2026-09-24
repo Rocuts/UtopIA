@@ -64,6 +64,7 @@ import type {
 import type { QualityAssessment as BackendQualityAssessment } from '@/lib/agents/financial/quality/types';
 import type { ReportIterationTurn } from './types';
 import { consumeSSE, fetchSSEWithRetry } from '@/lib/sse/consume';
+import { recallUploadedPreprocessed } from '@/lib/upload/preprocessed-handoff';
 import {
   CLIENT_REPORT_MODEL_ID,
   detectMissingPhases,
@@ -2087,6 +2088,14 @@ export function PipelineWorkspace() {
         }
         if (excludedFactIds.length) {
           niifBody.excludedFactIds = excludedFactIds;
+        }
+        // ingesta-01 — el preprocesado del upload viaja sólo si `rawData` es
+        // exactamente el texto que lo produjo (handoff en memoria). El
+        // servidor re-deriva igualmente desde `rawData` y lo prefiere; este
+        // objeto es el respaldo cuando `rawData` no produce filas.
+        const uploadPreprocessed = recallUploadedPreprocessed(intake!.rawData);
+        if (uploadPreprocessed) {
+          niifBody.preprocessed = uploadPreprocessed;
         }
 
         // Reiniciamos el snapshot de la fase anterior (si hay un retry).

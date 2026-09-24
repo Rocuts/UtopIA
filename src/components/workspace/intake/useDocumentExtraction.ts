@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import type { CompanyMetadata } from '@/types/platform';
 import { uploadDocument } from '@/lib/upload/blob-client';
+import { rememberUploadedPreprocessed } from '@/lib/upload/preprocessed-handoff';
+import { pickNiifRawDataFromUpload } from './niifIntakeValidation';
 
 export type FieldConfidence = 'high' | 'medium' | 'none';
 
@@ -134,7 +136,12 @@ export function useDocumentExtraction() {
       // Subida completa — el servidor está procesando (OCR/RAG/preprocesado).
       setState(s => ({ ...s, status: 'extracting', progress: 100 }));
 
-      const rawText = data.extractedText || '';
+      // Dato tabular SIN el informe de validación: es lo que el pipeline NIIF
+      // re-parsea en servidor (ingesta-01). `extractedText` queda para el chat.
+      const rawText = pickNiifRawDataFromUpload(data);
+      // El preprocesado del upload se reenvía a /niif sólo mientras `rawData`
+      // siga siendo este mismo texto (handoff en memoria, no en localStorage).
+      rememberUploadedPreprocessed(rawText, data.preprocessed);
       const { fields, confidence } = extractCompanyFromText(rawText);
 
       // Extract fiscal period from text

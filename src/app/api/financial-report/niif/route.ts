@@ -7,10 +7,10 @@ import {
   BalanceValidationError,
 } from '@/lib/agents/financial/orchestrator';
 import {
-  parseTrialBalanceCSV,
   preprocessTrialBalance,
   type PreprocessedBalance,
 } from '@/lib/preprocessing/trial-balance';
+import { parseUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import {
   revivePreprocessedBalance,
   toJsonSafe,
@@ -169,13 +169,20 @@ export async function POST(req: Request) {
       ),
     };
 
-    // Reutiliza el `preprocessed` enviado por el cliente (idempotencia con
-    // /api/upload). Sino, lo re-procesamos aqui — `runNiifPhase` tambien sabe
-    // hacerlo internamente; lo precomputamos por consistencia con /route.ts.
-    // El payload del cliente se valida estructuralmente y se reviven los
-    // BigInt (cents) — un shape inválido es 400, nunca cast ciego.
+    // Procedencia del preprocesado (ingesta-01):
+    //  1. El servidor lo RE-DERIVA desde `rawData` con el mismo helper que usa
+    //     /api/upload (`parseUploadedTrialBalanceText`: CSV, bloques XLSX
+    //     `[period=…]` y texto con el informe de validación antepuesto). Es la
+    //     fuente autoritativa: `rawData` es lo que leen los agentes, así que
+    //     las anclas deben salir de ahí y no de un objeto que manda el cliente.
+    //  2. El `preprocessed` que reenvía el cliente (el del upload) sólo se usa
+    //     si `rawData` no produce filas. Se valida estructuralmente y se
+    //     reviven los BigInt (cents) — un shape inválido es 400, nunca cast
+    //     ciego.
+    //  3. Si ninguno existe, Stage 0 (`prepareFinancialContext`) decide: un
+    //     balance tabular sin filas o con hojas en conflicto → 422 con motivo.
     const bodyPreprocessed = (body as { preprocessed?: unknown }).preprocessed;
-    let preprocessed: PreprocessedBalance | undefined;
+    let clientPreprocessed: PreprocessedBalance | undefined;
     if (bodyPreprocessed !== undefined && bodyPreprocessed !== null) {
       const revived = revivePreprocessedBalance(bodyPreprocessed);
       if (!revived) {
@@ -184,11 +191,23 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      preprocessed = revived;
-    } else {
-      const rows = parseTrialBalanceCSV(rawData);
-      preprocessed = rows.length > 0 ? preprocessTrialBalance(rows) : undefined;
+      clientPreprocessed = revived;
     }
+    let serverPreprocessed: PreprocessedBalance | undefined;
+    let rawDataRejected = false;
+    try {
+      const parsedRaw = parseUploadedTrialBalanceText(rawData);
+      if (parsedRaw.rows.length > 0) {
+        serverPreprocessed = preprocessTrialBalance(parsedRaw.rows);
+      }
+    } catch {
+      // Conflicto de ingesta: Stage 0 lo re-detecta y responde 422 con los
+      // motivos. No se sustituye por el objeto del cliente.
+      rawDataRejected = true;
+    }
+    const preprocessed = rawDataRejected
+      ? undefined
+      : serverPreprocessed ?? clientPreprocessed;
 
     const stream =
       req.headers.get('X-Stream') === 'true' ||
