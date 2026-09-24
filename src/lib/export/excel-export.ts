@@ -116,7 +116,12 @@ function centsToPesos(value: string): number {
  */
 function fmtCopPesos(pesos: number): string {
   if (!Number.isFinite(pesos)) return 'N/D';
-  return formatCopFromCents(Math.round(pesos * 100), false);
+  // Pesos → centavos exactos por el texto decimal (redondeo simétrico al
+  // centavo y sin pasar por un `number` de centavos, que deja de ser exacto
+  // por encima de 2^53 — niif-contrato-22).
+  const fixed = pesos.toFixed(2);
+  if (!/^-?\d+\.\d{2}$/.test(fixed)) return 'N/D';
+  return formatCopFromCents(BigInt(fixed.replace('.', '')), false);
 }
 
 // ---------------------------------------------------------------------------
