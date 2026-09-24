@@ -106,7 +106,8 @@ asignable** a `FiscalRiskScore` — Backend puede asignarlo directo.
   PipelineWorkspace.tsx
     → captura fiscalSnapshot del SSE → report.fiscalSnapshot
     → setLastCompletedReport({ report, ... })   ⇒ localStorage  [persistencia cliente]
-    → POST /api/escudo/fiscal-anchor {fiscalSnapshot, company}  ⇒ DB  [persistencia multi-dispositivo]
+    → POST /api/escudo/fiscal-anchor {reportRef}  ⇒ DB  [persistencia multi-dispositivo]
+      (el servidor guarda el snapshot de la versión persistida, no el del navegador — §4.3)
 
 [El Escudo — al abrir]
   escudo/page.tsx
@@ -139,14 +140,32 @@ asignable** a `FiscalRiskScore` — Backend puede asignarlo directo.
   (FiscalSnapshot es JSON-safe: strings de centavos + numbers).
 
 ### 4.3 Endpoints de persistencia (NUEVOS — workspace-aware)
-Resolver `workspaceId` desde la cookie `utopia_workspace_id` reutilizando el helper
-existente (`src/lib/db/workspace.ts` o el usado por `src/app/api/upload/route.ts` /
-`repair-session/route.ts`). Sin workspace → 401.
+Resolver `workspaceId` desde la cookie `utopia_workspace_id` / sesión con
+`getCurrentWorkspaceId()` (`src/lib/db/workspace.ts`). Ninguno de los dos
+endpoints CREA el workspace. POST sin workspace → 401 `no_workspace`; GET sin
+workspace → 200 con el estado vacío.
+
+> **Actualizado el 2026-09-24 (tributario-modulos-24, procedencia servidor).**
+> El POST ya no acepta el `FiscalSnapshot` del navegador. Exige `reportRef`, la
+> referencia que devuelve `/api/financial-report/consolidate`. Guarda el
+> snapshot fiscal y el Âncora NIIF de ESA versión persistida del workspace, que
+> el servidor calculó desde el balance re-derivado (`resolvePersistedReport`,
+> `src/lib/reports/persisted-report-request.ts`). La versión anterior de este
+> contrato (`body: { fiscalSnapshot, company }`) queda sustituida.
 
 **`POST /api/escudo/fiscal-anchor/route.ts`**
 ```
-body: { fiscalSnapshot: FiscalSnapshot, company: { name?: string; nit?: string } }
-acción:
+body: { reportRef: { reportId: uuid, reportHash: sha256-hex } }
+  (cualquier otro campo del cuerpo, p. ej. un fiscalSnapshot, se ignora)
+errores:
+  - sin workspace                          → 401 { error:'no_workspace' }
+  - cuerpo > 1 MB                          → 413 { error:'payload_too_large' }
+  - JSON inválido                          → 400 { error:'invalid_json' }
+  - reportRef con forma inválida           → 400 { code:'REPORT_REF_INVALID' }
+  - reportRef ausente                      → 422 { error:'report_ref_required' }
+  - versión no encontrada / hash distinto  → status y code de loadFinancialReportVersion
+  - versión sin snapshot fiscal            → 422 { error:'no_fiscal_snapshot' }
+acción (con el fiscalSnapshot y el ancora de la versión persistida):
   - upsert fila `reports`: { workspaceId, kind:'escudo_fiscal', title:`Âncora Fiscal ${period}`,
     data: fiscalSnapshot (jsonb), controlTotals: null }
   - por cada fiscalSnapshot.anchor.alertas → mapear a Insight → upsertAlert(db, insight,
@@ -154,18 +173,25 @@ acción:
     warning→advertencia, info→informativo. triggerCode (≤8): 'ESC_A5','ESC_SF','ESC_V15',
     'ESC_F10','ESC_ICA' (mapear por codigo). dedupKey: `escudo:${period}:${codigo}`.
     El payload del Insight DEBE preservar codigo/mensaje/norma + titulo/impacto/accion.
-  → 200 { ok:true, reportId, alertsUpserted:number }
+  - si la versión trae `ancora` (A01..A19): upsert fila `reports`
+    { kind:'escudo_niif_ancora', title:`Âncora NIIF ${period}` } (fila separada).
+  → 200 { ok:true, reportId, alertsUpserted:number, sourceReportId }
 ```
+El cliente (`PipelineWorkspace.tsx`, capa 5) envía `{ reportRef }` sólo cuando
+hay versión persistida; es best-effort y no bloquea la UI.
 Leer `src/lib/notifications/insight-types.ts` para la forma exacta de `Insight`.
 
 **`GET /api/escudo/fiscal-anchor/route.ts`** (mismo archivo, export GET)
 ```
 query: ?period=2025 (opcional → última)
+  → sin workspace: 200 { hasData:false, fiscalSnapshot:null, ancora:null, alertas:[] }
   → última fila reports kind='escudo_fiscal' del workspace
+  → última fila reports kind='escudo_niif_ancora' del workspace
   → findPendingAlertsForWorkspace(db, workspaceId) filtradas pillar='escudo'
   → 200 {
-       hasData: boolean,
+       hasData: boolean,              // fiscalSnapshot !== null || ancora !== null
        fiscalSnapshot: FiscalSnapshot | null,
+       ancora: NiifAncora | null,
        alertas: AlertView[]
      }
 ```
