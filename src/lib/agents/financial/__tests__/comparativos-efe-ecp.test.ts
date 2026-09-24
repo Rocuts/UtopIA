@@ -526,3 +526,32 @@ describe('contrato — el comparativo del EFE/ECP no lo emite el modelo', () => 
     expect(r.warnings.some((w) => w.startsWith('E18c.'))).toBe(true);
   });
 });
+
+describe('E6 del periodo comparativo — ORI del ERI comparativo == Δ ORI del ECP comparativo (integración I2)', () => {
+  const pp = preprocesarTresCortes();
+
+  it('el informe honesto no dispara E6 en ninguno de los dos periodos', () => {
+    expect(validar(informeTresCortes(pp), pp).errors.filter((e) => e.startsWith('E6'))).toEqual([]);
+  });
+
+  it('un ORI comparativo en el ERI que el ECP comparativo no mueve es error E6 del periodo comparativo', () => {
+    const json = clonar(informeTresCortes(pp));
+    expect(json.equityChanges.comparativeRows).not.toBeNull();
+    json.incomeStatement.oriComparative = '100000';
+    const e6 = validar(json, pp).errors.filter((e) => e.startsWith('E6. ECP (periodo comparativo'));
+    expect(e6).toEqual([
+      'E6. ECP (periodo comparativo 2024): Δ(ORI) del ECP comparativo ($0,00) ≠ ORI del ERI comparativo ' +
+        '($1.000,00). Brecha: -$1.000,00. NIIF para las PYMES 6.3.',
+    ]);
+  });
+
+  it('sin ECP comparativo (dos cortes) o con ORI comparativo no presentado no se cruza', () => {
+    const pp2 = preprocesarTresCortes(csvDosCortes());
+    const dos = clonar(informeTresCortes(pp2));
+    dos.incomeStatement.oriComparative = '100000';
+    expect(validar(dos, pp2).errors.filter((e) => e.startsWith('E6. ECP (periodo comparativo'))).toEqual([]);
+    const tres = clonar(informeTresCortes(pp));
+    tres.incomeStatement.oriComparative = null;
+    expect(validar(tres, pp).errors.filter((e) => e.startsWith('E6. ECP (periodo comparativo'))).toEqual([]);
+  });
+});

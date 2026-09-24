@@ -13,7 +13,8 @@
 //   E3. EFE final = PUC 11 Balance (efectivo y equivalentes)
 //   E4. ECP saldo final = Patrimonio Balance
 //   E5. Coherencia Net Income ↔ Operating Profit ↔ Gross Profit
-//   E6. ORI Income Statement coincide con ORI Equity Changes
+//   E6. ORI Income Statement coincide con ORI Equity Changes (también en el
+//       periodo comparativo cuando hay ECP comparativo)
 //   E9. Comparativo completo: cuando comparativePeriod != null TODOS los
 //       6 totales *Comparative (3 Balance + 3 P&L) son non-null y cuadran la
 //       ecuación patrimonial al centavo. Si el preprocesador suministra
@@ -2313,6 +2314,22 @@ function comparativeStatementErrors(
               `(${etiqueta}) saldo final`,
             ),
           );
+        }
+        // E6 del periodo comparativo (integración I2): el ORI del ERI
+        // comparativo es la variación de la columna ORI del ECP comparativo
+        // (Δ grupo 38), igual que en el periodo actual (NIIF para las PYMES
+        // 6.3). Un ORI comparativo no presentado (null) o un P&G comparativo
+        // N/D (saldos de apertura) no se cruzan.
+        const oriCmp = json.incomeStatement.oriComparative;
+        if (!pygComparativeIsNd && oriCmp !== null) {
+          const oriDelta = parseMoneyCop(closing.ori) - parseMoneyCop(opening.ori);
+          const oriPnlCmp = parseMoneyCop(oriCmp);
+          if (oriDelta !== oriPnlCmp) {
+            errors.push(
+              `E6. ECP (${etiqueta}): Δ(ORI) del ECP comparativo (${fmtCop(oriDelta)}) ≠ ORI del ERI ` +
+                `comparativo (${fmtCop(oriPnlCmp)}). Brecha: ${fmtCop(oriDelta - oriPnlCmp)}. NIIF para las PYMES 6.3.`,
+            );
+          }
         }
         // E19 entre periodos: el saldo final del comparativo es el saldo
         // inicial del periodo, columna a columna (NIIF para las PYMES 6.3).
