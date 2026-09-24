@@ -35,6 +35,7 @@ import {
   type NiifReportJson,
 } from '../contracts/niif-report';
 import { buildNiifValidatorOptions } from '../orchestrator';
+import { buildNiifAnalystPass2Prompt } from '../prompts/niif-analyst.prompt';
 import { validateNiifReportJson } from '../validators/niif-json-validator';
 
 const M = (pesos: number) => (BigInt(pesos) * BigInt(100)).toString();
@@ -390,6 +391,37 @@ describe('validador — la columna comparativa cumple E2/E3/E11/E18/E23 y el ECP
 });
 
 describe('contrato — el comparativo del EFE/ECP no lo emite el modelo', () => {
+  it('el prompt del Pass-2 no pide cifras comparativas en el EFE ni en el ECP (revisión P2)', () => {
+    // Una restricción residual ("otherwise usar valores del periodo
+    // comparativo cuando existan") contradecía la regla de amountComparative
+    // = null en el EFE: el modelo recibía dos órdenes opuestas.
+    const pp = preprocesarTresCortes();
+    const json = informeTresCortes(pp);
+    const prompt = buildNiifAnalystPass2Prompt(
+      { name: json.company.name, nit: json.company.nit, niifGroup: 2, fiscalPeriod: '2025', comparativePeriod: '2024' } as never,
+      'es',
+      'COMPARATIVO_COMPLETO',
+      {
+        totalAssetsPrimary: json.balanceSheet.totalAssetsPrimary,
+        totalLiabilitiesPrimary: json.balanceSheet.totalLiabilitiesPrimary,
+        totalEquityPrimary: json.balanceSheet.totalEquityPrimary,
+        netIncomePrimary: json.incomeStatement.netIncomePrimary,
+        oriPrimary: '0',
+        totalAssetsComparative: json.balanceSheet.totalAssetsComparative,
+        totalLiabilitiesComparative: json.balanceSheet.totalLiabilitiesComparative,
+        totalEquityComparative: json.balanceSheet.totalEquityComparative,
+        grossProfitComparative: json.incomeStatement.grossProfitComparative,
+        operatingProfitComparative: json.incomeStatement.operatingProfitComparative,
+        netIncomeComparative: json.incomeStatement.netIncomeComparative,
+        oriComparative: '0',
+        curatorFlags: json.curatorFlags,
+      } as never,
+      pp,
+    );
+    expect(prompt).toMatch(/amountComparative = null en TODOS los renglones de cashFlow\.sections/);
+    expect(prompt).not.toMatch(/usar valores del periodo comparativo cuando existan/);
+  });
+
   it('el sub-schema de Pass-2 no contiene los campos comparativos (los adjunta el código)', () => {
     const cfShape = CashFlowAndEquitySubSchema.shape.cashFlow.shape as Record<string, unknown>;
     const ecShape = CashFlowAndEquitySubSchema.shape.equityChanges.shape as Record<string, unknown>;

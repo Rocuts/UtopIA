@@ -1356,7 +1356,7 @@ If TOTALES VINCULANTES contiene \`equityAnchorAdjustment\` ≠ 0 (curatorFlags.e
 
 If isComparative=true Y existe \`preprocessed.comparative.equityBreakdown\` then opening_balance del ECP toma SUS cifras (capital, superávit, reservas, resultadosAcumulados) y closing_balance compone las cifras del Pass-1 anchor (totalEquityPrimary) otherwise opening_balance.total=0 con kind=opening_balance y una nota en equityChanges.notes explicando la ausencia de comparativo (cite NIIF para PYMES, Secciones 3.14 y 10.21 si comparativosImpracticables=true).
 
-If comparativosImpracticables=true then cashFlow y equityChanges presentan amountComparative=null en todas las líneas otherwise usar valores del periodo comparativo cuando existan.
+cashFlow.sections[].lines llevan amountComparative=null y equityChanges.rows describe sólo el periodo actual, haya o no comparativo: la columna comparativa del EFE y el ECP del periodo comparativo los adjunta el código (o su nota de impracticabilidad).
 
 Los ajustes automáticos del curator que afecten EFE o ECP (R5 convergencia patrimonial, R6 ajuste de cierre EFE) se describen en equityChanges.notes o cashFlow.methodNote con el concepto, la norma NIIF y el papel de trabajo de origen. La mención al Art. 647 E.T. vive en una sola nota de Pass-3 (Corrección 9 spec v2.1).
 </constraints>
