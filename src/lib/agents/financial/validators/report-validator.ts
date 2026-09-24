@@ -712,6 +712,11 @@ export function detectInflatedCash(
   return null;
 }
 
+/** La Parte II declaró la proyección bloqueada por la puerta de liquidez. */
+function projectionBlocked(region: string): boolean {
+  return /proyecci[oó]n\s+bloqueada|alerta\s+de\s+liquidez/i.test(region);
+}
+
 /**
  * detectMissingWorkingCapital — WARNING si el Strategy Director no aplico el
  * ciclo de capital de trabajo (DSO, PUC 23, PUC 25) en el Paso 4.
@@ -732,6 +737,10 @@ export function detectMissingWorkingCapital(markdown: string): string | null {
 
   // Si no hay un Paso 4 (## 4. ...), no aplica este validator.
   if (!/##\s*4\./.test(region)) return null;
+  // Con la puerta de liquidez activada (AC < PC) la proyección se bloquea a
+  // propósito: no hay capital de trabajo que programar (falso aviso visible
+  // en /consolidate, re-auditoría 2026-09).
+  if (projectionBlocked(region)) return null;
 
   const wcSignals = [
     /\bdso\b/i,
@@ -773,6 +782,7 @@ export function detectMissingControlKPIs(markdown: string): string | null {
       : markdown;
 
   if (!/##\s*4\./.test(region)) return null;
+  if (projectionBlocked(region)) return null;
 
   const kpis: Array<{ label: string; pattern: RegExp }> = [
     { label: 'Margen de Caja Neto', pattern: /margen\s+de\s+caja\s+neto/i },
@@ -782,7 +792,8 @@ export function detectMissingControlKPIs(markdown: string): string | null {
     },
     {
       label: 'Tasa de Retorno sobre Flujo Acumulado',
-      pattern: /tasa\s+de\s+retorno\s+sobre\s+(?:el\s+)?flujo\s+acumulado/i,
+      // El adaptador de la Parte II rotula "Retorno sobre Flujo Acumulado".
+      pattern: /(?:tasa\s+de\s+)?retorno\s+sobre\s+(?:el\s+)?flujo\s+acumulado/i,
     },
   ];
 

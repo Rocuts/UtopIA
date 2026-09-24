@@ -175,6 +175,38 @@ describe('validateConsolidatedReport — informes honestos no se bloquean', () =
     ]);
   });
 
+  it('con la puerta de liquidez activada (AC < PC) no se avisa capital de trabajo ni KPIs ausentes', () => {
+    const md = [
+      '# PARTE I: NIIF',
+      '# PARTE II: ANALISIS ESTRATEGICO',
+      '## 4. PROYECCIONES',
+      '### 4.1 Gate de Liquidez',
+      '**Triggered:** ALERTA DE LIQUIDEZ: AC ($20.000.000,00) < PC ($70.000.000,00).',
+      '',
+      '_Proyección bloqueada. Resolver liquidez antes de proyectar._',
+      '# PARTE III: GOBIERNO',
+    ].join('\n');
+    const r = validateConsolidatedReport(md, PNC_TOTALS);
+    expect(r.warnings.filter((w) => /Working Capital|KPIs de Control/.test(w))).toEqual([]);
+  });
+
+  it('los 3 KPIs con el rótulo del adaptador ("Retorno sobre Flujo Acumulado") no generan aviso', () => {
+    const md = SANA.replace(
+      '- DSO usado: 30 días',
+      [
+        '- DSO usado: 30 días',
+        '### 4.8 KPIs de Control de Caja',
+        '| KPI | Año +1 | Año +2 | Año +3 |',
+        '|---|---:|---:|---:|',
+        '| Margen de Caja Neto | 10% | 11% | 12% |',
+        '| Días de Autonomía Financiera | 90 días | 95 días | 100 días |',
+        '| Retorno sobre Flujo Acumulado | 5% | 6% | 7% |',
+      ].join('\n'),
+    );
+    const r = validateConsolidatedReport(md, SANA_TOTALS);
+    expect(r.warnings.filter((w) => /KPIs de Control/.test(w))).toEqual([]);
+  });
+
   it('un Total Patrimonio del periodo actual con signo invertido sí descuadra la ecuación', () => {
     const r = validateConsolidatedReport(
       PNC.replace('| **Total patrimonio** | **($20.000.000,00)** |', '| **Total patrimonio** | **$20.000.000,00** |'),
