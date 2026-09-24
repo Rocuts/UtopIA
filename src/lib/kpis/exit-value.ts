@@ -23,7 +23,7 @@ import type {
   KpiResult,
 } from '@/types/kpis';
 import { KpiNoCalculableError } from './no-calculable';
-import { formatKpiCop, formatKpiMultiple, formatKpiRate, KPI_ND } from './format';
+import { formatKpiCop, formatKpiMultiple, formatKpiRate } from './format';
 
 /**
  * Múltiplos EBITDA de referencia internos (midpoints por industria). No tienen
@@ -38,26 +38,6 @@ export const INDUSTRY_MULTIPLES: Record<ExitValueIndustry, number> = {
   financial: 9,
   other: 6,
 };
-
-/**
- * Formateador COMPACTO heredado (`$X.YYM COP`). Ya no tiene consumidores de
- * UI: `ValorArea` usa `formatBigCop` (I4-escudo 6) y los KPIs de este módulo
- * publican el formato es-CO de `./format` (ratios-kpis-27). Sólo lo
- * re-exporta el barrel `src/lib/kpis/index.ts`; se retira cuando el barrel
- * deje de exportarlo. Un valor no finito es `N/D`, nunca `$0 COP`.
- *
- * @deprecated Usar `formatBigCop` de `@/lib/charts/format` (coma decimal,
- * `mil M`, paréntesis).
- */
-export function formatCop(n: number): string {
-  if (!Number.isFinite(n)) return KPI_ND;
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T COP`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B COP`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M COP`;
-  return `${sign}$${Math.round(abs).toLocaleString('es-CO')} COP`;
-}
 
 function severityFor(growthRate: number, equityValue: number): KpiResult['severity'] {
   if (equityValue <= 0 || growthRate < 0) return 'critical';

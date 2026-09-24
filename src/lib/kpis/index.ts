@@ -6,7 +6,7 @@
  */
 
 export { calculateTef } from './tax-efficiency';
-export { calculateExitValue, formatCop, INDUSTRY_MULTIPLES } from './exit-value';
+export { calculateExitValue, INDUSTRY_MULTIPLES } from './exit-value';
 export { calculateComplianceScore, COMPLIANCE_WEIGHTS } from './compliance-score';
 export { calculateRoiProbabilistic } from './roi-probabilistic';
 export { KpiNoCalculableError } from './no-calculable';
