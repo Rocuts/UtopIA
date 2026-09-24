@@ -185,7 +185,7 @@ describe('ESF determinista con excepciones de vencimiento (integración P4-b)', 
       [null, 'Total activo no corriente', '23000000'],
     ]);
     expectSubtotalsMatchControlTotals(done, pp.primary, 'amountPrimary');
-    // E21 ancla el grupo 12 por la unión de sus dos renglones.
+    // E21 ancla cada porción del grupo 12 a sus hojas con ese plazo.
     expect(validationErrors(done, pp)).toEqual([]);
   });
 
@@ -413,7 +413,7 @@ describe('buildDeterministicBreakdownByTerm — barrido de fixtures', () => {
     expect(conR1).toBeGreaterThan(0);
   });
 
-  it('E27 no dispara sobre el ESF completado por el código en ningún fixture (incluido el balance real)', async () => {
+  it('E27 y E21 (renglón a renglón, grupos partidos) no disparan sobre el ESF completado por el código en ningún fixture (incluido el balance real)', async () => {
     const fixtures = [...csvFixtures(), ['grupo-empresarial-2tres-sas.xlsx', await loadRealBalanceCsv()] as [string, string]];
     let checked = 0;
     for (const [name, csv] of fixtures) {
@@ -426,7 +426,8 @@ describe('buildDeterministicBreakdownByTerm — barrido de fixtures', () => {
       const done = completar(pp);
       if (!done.balanceSheet.assets.some((l) => l.account === null)) continue;
       checked++;
-      expect({ name, e27: validationErrors(done, pp).filter((m) => m.startsWith('E27.')) }).toEqual({ name, e27: [] });
+      // E21 sólo del ESF (`validationErrors`): el ERI del informe base es sintético.
+      expect({ name, e: validationErrors(done, pp).filter((m) => /^E2[17]\./.test(m)) }).toEqual({ name, e: [] });
     }
     expect(checked).toBeGreaterThanOrEqual(10);
   });

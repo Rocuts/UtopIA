@@ -74,6 +74,24 @@ export function csvTresCortesConValorizaciones(
     .replace('370505,', `381005,Superavit por valorizaciones de inversiones,Auxiliar,1,${a},${b},${c}\n370505,`);
 }
 
+/**
+ * El balance de tres cortes con una REVALUACIÓN de propiedades, planta y
+ * equipo registrada en el propio grupo 15 (152410) contra el superávit del
+ * grupo 38 (381005, ORI), sin grupo 19: modelo de revaluación (NIC 16 /
+ * Sección 17). Saldos para 2023, 2024 y 2025, en pesos (re-auditoría 2,
+ * recalculo-final2-03). La ecuación patrimonial cuadra en cada corte y el
+ * efectivo no cambia: el EFE debe ser el del balance sin revaluación.
+ */
+export function csvTresCortesConRevaluacion(
+  saldos: readonly [number, number, number],
+  csv = csvTresCortes(),
+): string {
+  const [a, b, c] = saldos;
+  return csv
+    .replace('159205,', `152410,Revaluacion equipo de oficina,Auxiliar,1,${a},${b},${c}\n159205,`)
+    .replace('370505,', `381005,Superavit por revaluacion ORI,Auxiliar,1,${a},${b},${c}\n370505,`);
+}
+
 export function preprocesarTresCortes(csv = csvTresCortes()): PreprocessedBalance {
   return preprocessTrialBalance(parseTrialBalanceCSV(csv));
 }
