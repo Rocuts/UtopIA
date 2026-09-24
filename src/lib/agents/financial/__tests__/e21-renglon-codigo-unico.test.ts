@@ -107,6 +107,21 @@ describe('E21 — un renglón con varios códigos es error (renglón puente)', (
     expect(puente.some((m) => /varios códigos PUC \(13, 1524\)/.test(m))).toBe(true);
   });
 
+  it('un renglón con el código de la CLASE ("2") que absorbe grupos sin renglón propio es E21', () => {
+    // Revisión F-contrato: "2 — Obligaciones financieras" con los proveedores
+    // (22) dentro cuadraba por construcción con lo que ningún otro renglón
+    // presentaba ($70M con obligaciones financieras reales de $45M).
+    const e = e21((j) => {
+      const l21 = esf(j, 'liabilities', '21');
+      const l22 = esf(j, 'liabilities', '22');
+      l21.account = '2';
+      l21.amountPrimary = add(l21.amountPrimary, BigInt(l22.amountPrimary));
+      l21.amountComparative = add(l21.amountComparative!, BigInt(l22.amountComparative!));
+      j.balanceSheet.liabilities = j.balanceSheet.liabilities.filter((l) => l !== l22);
+    });
+    expect(e.filter((m) => /"2 — Obligaciones financieras" lleva el código de la clase 2.*grupos 21, 22/.test(m))).toHaveLength(2);
+  });
+
   it('N1c: el traslado en la columna comparativa 2024 bajo el puente', () => {
     const e = e21((j) => {
       esf(j, 'assets', '13').amountComparative = add(esf(j, 'assets', '13').amountComparative!, -X);

@@ -2059,10 +2059,17 @@ function balanceLineAnchorErrors(
 
   const keys = [...byKey.keys()];
   const assigned = new Map<string, { total: bigint; current: bigint; nonCurrent: bigint; undetermined: bigint }>();
+  // Cuentas de grupo (código de 2+ dígitos) que absorbe un renglón con el
+  // código de la CLASE ("2"): el residuo de lo que ningún otro renglón
+  // presenta, con un rótulo que no las identifica (revisión F-contrato).
+  const absorbedByClassRow = new Map<string, Set<string>>();
   for (const leaf of leaves) {
     if (leaf.classCode !== classCode) continue;
     const k = mostSpecificKey(leaf.code, keys);
     if (k === null) continue;
+    if (k.length === 1 && leaf.code.length > 1 && leaf.cents !== ZERO) {
+      absorbedByClassRow.set(k, (absorbedByClassRow.get(k) ?? new Set<string>()).add(leaf.code.slice(0, 2)));
+    }
     const acc = assigned.get(k) ?? { total: ZERO, current: ZERO, nonCurrent: ZERO, undetermined: ZERO };
     acc.total += leaf.cents;
     if (leaf.term === 'current') acc.current += leaf.cents;
@@ -2082,6 +2089,19 @@ function balanceLineAnchorErrors(
 
   for (const [key, idx] of byKey) {
     const expected = assigned.get(key) ?? { total: ZERO, current: ZERO, nonCurrent: ZERO, undetermined: ZERO };
+    const absorbed = absorbedByClassRow.get(key);
+    if (absorbed) {
+      // Un código de clase no es un grupo ni una cuenta: su importe cuadra
+      // por construcción con lo que sobra y el rótulo lo decide el modelo
+      // ("2 — Obligaciones financieras" con los proveedores dentro).
+      out.push(
+        `E21. ${estado} (${etiqueta}): ${idx.map((i) => `"${rotulo(i)}"`).join(', ')} lleva el código de la ` +
+          `clase ${key}, no el de un grupo o una cuenta, y agrupa las cuentas de los grupos ` +
+          `${[...absorbed].sort().join(', ')} que ningún otro renglón presenta. Cada grupo va en su renglón ` +
+          `con su código PUC.`,
+      );
+      continue;
+    }
     if (idx.length === 1) {
       const emitted = signedLineAmount(lines[idx[0]] as StatementLineWithColumns, period);
       if (emitted === null) continue; // E15c: una celda ausente no se trata como cero.
