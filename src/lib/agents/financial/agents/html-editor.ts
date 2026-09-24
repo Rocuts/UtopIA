@@ -47,6 +47,7 @@ import { NiifReportSchema } from '../contracts/niif-report';
 import { validateNiifReportJson } from '../validators/niif-json-validator';
 import { withRetry } from '@/lib/agents/utils/retry';
 import { assertFinishedCleanlyOrThrow } from '../utils/finish-reason-check';
+import { revivePreprocessedBalance } from '@/lib/preprocessing/json-safe';
 import {
   reconcileBindingFigures,
   validateHtmlChecklist,
@@ -278,7 +279,13 @@ function runAllChecks(html: string, input: HtmlEditorInput): ChecklistFailure[] 
   }
 
   try {
-    failures.push(...reconcileBindingFigures(html, input));
+    // e2e-niif-11: con el preprocesado del mismo balance, R6 cruza también
+    // ingresos, EBITDA y ROE citados en prosa o abreviados.
+    const preprocessed =
+      input.preprocessed !== undefined && input.preprocessed !== null
+        ? revivePreprocessedBalance(input.preprocessed)
+        : null;
+    failures.push(...reconcileBindingFigures(html, { ...input, preprocessed }));
   } catch (err) {
     failures.push({
       rule: '§1.1 · Reconciliación JSON↔HTML',

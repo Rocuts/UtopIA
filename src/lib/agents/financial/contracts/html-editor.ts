@@ -249,6 +249,13 @@ export const HtmlEditorInputSchema = z.object({
   company: z.preprocess(normalizeHtmlCompanyInput, CompanyInfoSchema),
   metadata: HtmlEditorMetadataSchema,
   language: z.enum(['es', 'en']).default('es'),
+  /**
+   * Preprocesado JSON-safe que la UI ya envía (el mismo que usó /niif). No va
+   * al prompt: `runHtmlEditor` lo revive para que el validador cruce en prosa
+   * los conceptos que el JSON NIIF no trae (ingresos, EBITDA, ROE —
+   * e2e-niif-11). Sin él, esos cruces no se hacen (no se inventa ancla).
+   */
+  preprocessed: z.unknown(),
 });
 export type HtmlEditorInput = z.infer<typeof HtmlEditorInputSchema>;
 
