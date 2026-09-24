@@ -12,6 +12,7 @@ import {
   verifyFinancialReportVersion,
   type FinancialReportVersionData,
 } from './financial-report-version';
+import type { AdjustmentsTrail } from './adjustment-ledger';
 import type { ReportProvenance, ReportRef } from './report-ref';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,10 @@ export type LoadVersionOutcome =
       report: FinancialReport;
       preprocessed: PreprocessedBalance | undefined;
       provenance: ReportProvenance;
+      /** Ajustes confirmados aplicados al balance de la versión (null sin ajustes). */
+      adjustments: AdjustmentsTrail | null;
+      /** Idioma del informe persistido. */
+      language: 'es' | 'en';
     }
   | { ok: false; status: 404 | 409 | 503; code: string; error: string };
 
@@ -159,5 +164,7 @@ export async function loadFinancialReportVersion(
     report: verified.report,
     preprocessed: verified.preprocessed,
     provenance: provenanceOf(row.id, verified.data),
+    adjustments: verified.adjustments,
+    language: verified.language,
   };
 }

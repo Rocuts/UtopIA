@@ -95,7 +95,45 @@ describe('versión persistida', () => {
     const stored = jsonb(version());
     stored.report.niifAnalysis.json!.balanceSheet.totalAssetsPrimary = '99999900';
     const out = verifyFinancialReportVersion(stored);
-    expect(out).toEqual({ ok: false, reason: 'el informe persistido no coincide con su huella' });
+    // v2: la huella es la del sobre completo (el informe incluido).
+    expect(out).toEqual({ ok: false, reason: 'la versión persistida no coincide con su huella' });
+  });
+
+  it('R2-05: contrato, fecha, huella del archivo, ajustes o idioma alterados → la huella del sobre no coincide', () => {
+    const alter: Array<(d: Record<string, unknown>) => void> = [
+      (d) => void (d.contractVersion = 'contrato-inventado-9.9'),
+      (d) => void (d.preprocessorVersion = 'tb-0'),
+      (d) => void (d.createdAt = '1999-01-01T00:00:00.000Z'),
+      (d) => void (d.rawDataHash = 'd'.repeat(64)),
+      (d) => void (d.language = 'en'),
+      (d) => void (d.adjustments = { applied: [{ id: 'x', accountCode: '110505', amount: 1 }], affected: [] }),
+    ];
+    for (const change of alter) {
+      const stored = jsonb(version()) as unknown as Record<string, unknown>;
+      change(stored);
+      expect(verifyFinancialReportVersion(stored)).toEqual({
+        ok: false,
+        reason: 'la versión persistida no coincide con su huella',
+      });
+    }
+    // Balance alterado con su `sourceHash` recalculado: la huella del sobre lo ata.
+    const stored = jsonb(version()) as unknown as { preprocessed: { auxiliaryCount: number }; sourceHash: string };
+    stored.preprocessed.auxiliaryCount = 4242;
+    stored.sourceHash = canonicalHash(stored.preprocessed);
+    expect(verifyFinancialReportVersion(stored).ok).toBe(false);
+  });
+
+  it('R2-05: una versión v1 (huella sólo del informe) se sigue leyendo', () => {
+    const v = jsonb(version()) as unknown as Record<string, unknown> & { report: unknown };
+    const legacy: Record<string, unknown> = { ...v, format: 'utopia.financial-report-version.v1', reportHash: canonicalHash(v.report) };
+    delete legacy.adjustments;
+    delete legacy.language;
+    const out = verifyFinancialReportVersion(legacy);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.adjustments).toBeNull();
+      expect(out.language).toBe('es');
+    }
   });
 
   it('un balance alterado dentro de la fila no pasa la verificación de integridad', () => {

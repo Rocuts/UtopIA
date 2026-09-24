@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import type { FinancialReport } from '@/lib/agents/financial/types';
 import type { PreprocessedBalance } from '@/lib/preprocessing/trial-balance';
 import { loadFinancialReportVersion, resolveReportWorkspaceId } from './financial-report-store';
+import type { AdjustmentsTrail } from './adjustment-ledger';
 import { parseReportRef, type ReportProvenance } from './report-ref';
 
 export type PersistedReportResolution =
@@ -14,6 +15,10 @@ export type PersistedReportResolution =
       report: FinancialReport;
       preprocessed: PreprocessedBalance | undefined;
       provenance: ReportProvenance;
+      /** Ajustes confirmados aplicados al balance de la versión (null sin ajustes). */
+      adjustments: AdjustmentsTrail | null;
+      /** Idioma del informe persistido (idioma por defecto de las salidas). */
+      language: 'es' | 'en';
     };
 
 /**
@@ -51,5 +56,7 @@ export async function resolvePersistedReport(body: unknown): Promise<PersistedRe
     report: loaded.report,
     preprocessed: loaded.preprocessed,
     provenance: loaded.provenance,
+    adjustments: loaded.adjustments,
+    language: loaded.language,
   };
 }

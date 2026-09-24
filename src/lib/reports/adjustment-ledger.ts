@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { Adjustment } from '@/lib/agents/repair/types';
+import type { AdjustmentApplicationAffected } from '@/lib/agents/repair/adjustments';
 
 // ---------------------------------------------------------------------------
 // Contrato único del ledger del Doctor de Datos en las rutas financieras
@@ -64,4 +66,52 @@ export function unknownAdjustmentPeriodReasons(
     );
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Traza de ajustes aplicados (procedencia-R2-02)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ajustes confirmados que el servidor aplicó al balance y su detalle por
+ * cuenta (saldo previo y nuevo, periodo). La versión persistida la guarda y
+ * los artefactos la divulgan: consolidado (traza), anexo del PDF y del HTML, y
+ * el sello de procedencia.
+ */
+export interface AdjustmentsTrail {
+  applied: Adjustment[];
+  affected: AdjustmentApplicationAffected[];
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * Traza leída de una versión persistida: `null` si no hay ajustes, `undefined`
+ * si la forma es inválida (la versión no se usa: su integridad ya la ata la
+ * huella del sobre, así que una forma inválida es un defecto del almacenamiento).
+ */
+export function readAdjustmentsTrail(value: unknown): AdjustmentsTrail | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const v = value as { applied?: unknown; affected?: unknown };
+  if (!Array.isArray(v.applied) || !Array.isArray(v.affected)) return undefined;
+  for (const a of v.applied) {
+    const r = a as Record<string, unknown> | null;
+    if (!r || typeof r.id !== 'string' || typeof r.accountCode !== 'string' || !isFiniteNumber(r.amount)) return undefined;
+  }
+  for (const a of v.affected) {
+    const r = a as Record<string, unknown> | null;
+    if (
+      !r ||
+      typeof r.adjustmentId !== 'string' ||
+      typeof r.accountCode !== 'string' ||
+      !isFiniteNumber(r.oldBalance) ||
+      !isFiniteNumber(r.newBalance)
+    ) {
+      return undefined;
+    }
+  }
+  return v.applied.length === 0 ? null : (v as AdjustmentsTrail);
 }

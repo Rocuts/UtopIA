@@ -10,6 +10,8 @@
 //   - procedencia-R2-06: todo artefacto marcado BORRADOR (HTML no emitible,
 //     PDF con marca de agua) lleva la variante BORRADOR del sello y
 //     X-Report-Draft.
+//   - procedencia-R2-05: la referencia {reportId, reportHash} ata la versión
+//     entera (informe, balance, huellas, contrato, fecha, ajustes, idioma).
 //   - procedencia-R2-03 + e2e-niif2-06: /html sin referencia aplica el mismo
 //     gate que /export sin referencia (V1–V15, identidad II/III, prosa de la
 //     Parte I, post-proceso de la Parte II) antes de pagar el Editor Jefe.
@@ -58,6 +60,7 @@ import type { NiifReportJson } from '@/lib/agents/financial/contracts/niif-repor
 import type { StrategyReportJson } from '@/lib/agents/financial/contracts/strategy-report';
 import { preprocessUploadedTrialBalanceText } from '@/lib/preprocessing/raw-data';
 import { toJsonSafe } from '@/lib/preprocessing/json-safe';
+import { canonicalHash } from '@/lib/reports/canonical';
 import {
   PROVENANCE_COMPANY,
   PROVENANCE_CSV,
@@ -365,5 +368,69 @@ describe('R2-06 — variante BORRADOR del sello y X-Report-Draft', () => {
       expect(stamp.startsWith(title)).toBe(true);
       expect(stamp).toMatch(language === 'es' ? /COMPARATIVOS IMPRACTICABLES/ : /COMPARATIVES IMPRACTICABLE/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// procedencia-R2-05 — la referencia ata la versión entera, no sólo el informe
+// ---------------------------------------------------------------------------
+
+describe('R2-05 — fila alterada con huellas recalculadas', () => {
+  type Row = {
+    format: string;
+    reportHash: string;
+    preprocessed: { auxiliaryCount?: number };
+    sourceHash: string;
+    contractVersion: string;
+    createdAt: string;
+  };
+
+  it('balance, sourceHash, contrato o fecha alterados en la fila → 409 de integridad en /export y /html', async () => {
+    const alterations: Array<[string, (d: Row) => void]> = [
+      [
+        'balance con sourceHash recalculado',
+        (d) => {
+          d.preprocessed.auxiliaryCount = 4242;
+          d.sourceHash = canonicalHash(d.preprocessed);
+        },
+      ],
+      ['contrato', (d) => void (d.contractVersion = 'contrato-inventado-9.9')],
+      ['fecha', (d) => void (d.createdAt = '1999-01-01T00:00:00.000Z')],
+    ];
+    for (const [label, alter] of alterations) {
+      fake = makeReportsTableFake();
+      state.db = fake.db;
+      const out = await consolidateWith(makeProvenanceParts());
+      alter(fake.rows[0].data as Row);
+      const ex = await exportReport(req('/api/financial-report/export', { reportRef: out.reportRef, format: 'excel' }));
+      expect(ex.status, label).toBe(409);
+      expect(((await ex.json()) as { code: string }).code, label).toBe('REPORT_VERSION_INTEGRITY');
+      const h = await html(req('/api/financial-report/html', { reportRef: out.reportRef, language: 'es' }));
+      expect(h.status, label).toBe(409);
+    }
+    expect(generateFinancialExcel).not.toHaveBeenCalled();
+    expect(runHtmlEditor).not.toHaveBeenCalled();
+  });
+
+  it('control: la fila intacta sale verificada y una versión v1 (huella sólo del informe) se sigue leyendo', async () => {
+    const out = await consolidateWith(makeProvenanceParts());
+    const ok = await exportReport(req('/api/financial-report/export', { reportRef: out.reportRef, format: 'excel' }));
+    expect(ok.status).toBe(200);
+
+    // Versión persistida antes de esta ronda: formato v1, huella del informe.
+    const data = fake.rows[0].data as Row & { report: FinancialReport; adjustments?: unknown; language?: unknown };
+    const legacy: Record<string, unknown> = { ...data, format: 'utopia.financial-report-version.v1' };
+    delete legacy.adjustments;
+    delete legacy.language;
+    legacy.reportHash = canonicalHash(data.report);
+    fake.rows[0].data = legacy;
+    const res = await exportReport(
+      req('/api/financial-report/export', {
+        reportRef: { reportId: out.reportRef!.reportId, reportHash: legacy.reportHash },
+        format: 'excel',
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Report-Provenance')).toBe('verified');
   });
 });
