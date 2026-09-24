@@ -476,14 +476,21 @@ function decideVeredicto(
 // la cita (una afirmación en otra frase no la protege).
 // ---------------------------------------------------------------------------
 
-/** Abreviaturas cuyo punto no cierra la frase («Art.», «E.T.», «par.», …). */
-const ABREVIATURA_FINAL = /(?:\b(?:Arts?|par|num|lit|inc|No|Nro|núm|Dr|Sr|Sra|Ltda|pp|p|ss|cfr|vs|etc)|\bE\.T|\bS\.A(?:\.S)?|\bC\.E|\bC\.P|\bD\.O|\b[A-Z])$/i;
+/** Abreviaturas que preceden a un número o a un nombre («Art. 36-3», «No. 5»). */
+const ABREVIATURA_ANTES_DE = /\b(?:Arts?|par|num|núm|lit|inc|No|Nro|Dr|Sr|Sra|pp|p|cfr|vs)$/i;
 
+/**
+ * Un punto cierra la frase si le sigue espacio y luego fin de texto o una
+ * mayúscula / signo de apertura, y no es una abreviatura que precede a un
+ * número o nombre. «E.T. La…» cierra; «Art. 36-3», «E.T. y …» y «1.2.4» no.
+ */
 function esFinDeFrase(text: string, i: number): boolean {
   if (text[i] !== '.') return false;
-  const sig = text[i + 1];
-  if (sig !== undefined && !/\s/.test(sig)) return false; // «1.2.4», «E.T.»
-  return !ABREVIATURA_FINAL.test(text.slice(Math.max(0, i - 12), i));
+  if (!/\s/.test(text[i + 1] ?? ' ')) return false;
+  const siguiente = text.slice(i + 1).match(/\S/)?.[0];
+  if (siguiente === undefined) return true;
+  if (!/[A-ZÁÉÍÓÚÑ¿¡("«“]/.test(siguiente)) return false;
+  return !ABREVIATURA_ANTES_DE.test(text.slice(Math.max(0, i - 6), i));
 }
 
 const LIMITE_FRASE = /[\n;•!?]/;

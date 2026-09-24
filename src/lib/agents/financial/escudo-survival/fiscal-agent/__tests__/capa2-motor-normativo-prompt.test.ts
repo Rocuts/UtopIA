@@ -153,6 +153,9 @@ describe('(b) Art. 36-3 E.T.: derogado mencionado como derogado ⇒ advertencia;
       'The Art. 36-3 E.T. has not been repealed and remains in force.',
       // La afirmación de derogación está en OTRA frase: no protege a esta cita.
       'El Art. 36-3 E.T. permite capitalizar sin impuesto. La Ley 2277 de 2022 derogó otras normas.',
+      // «E.T.» al final de una frase la cierra: la derogación del Art. 158-3 no
+      // se extiende a la frase siguiente.
+      'La Ley 1819 de 2016 derogó el Art. 158-3 E.T. El Art. 36-3 E.T. permite capitalizar sin impuesto.',
     ]) {
       expect(veredicto(t, 'Art. 36-3 E.T.'), t).toBe('bloqueo');
     }
